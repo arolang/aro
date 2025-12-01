@@ -62,7 +62,7 @@ jobs:
           .build/release/aro check ./Examples/UserService
 
       - name: Upload artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v5
         with:
           name: aro-linux-amd64
           path: .build/release/aro
@@ -107,7 +107,7 @@ jobs:
           .build/release/aro check ./Examples/UserService
 
       - name: Upload artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v5
         with:
           name: aro-macos-arm64
           path: .build/release/aro
@@ -143,7 +143,7 @@ jobs:
           .build\release\aro.exe --help
 
       - name: Upload artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v5
         with:
           name: aro-windows-amd64
           path: .build/release/aro.exe
