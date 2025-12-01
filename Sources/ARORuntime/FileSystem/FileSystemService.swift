@@ -239,12 +239,15 @@ public final class AROFileSystemService: FileSystemService, FileMonitorService, 
     private func handleFileEvent(_ event: FileChangeEvent, eventBus: EventBus) {
         switch event {
         case .added(let url):
+            print("[FileMonitor] Created: \(url.path)")
             eventBus.publish(FileCreatedEvent(path: url.path))
 
         case .changed(let url):
+            print("[FileMonitor] Modified: \(url.path)")
             eventBus.publish(FileModifiedEvent(path: url.path))
 
         case .deleted(let url):
+            print("[FileMonitor] Deleted: \(url.path)")
             eventBus.publish(FileDeletedEvent(path: url.path))
         }
     }

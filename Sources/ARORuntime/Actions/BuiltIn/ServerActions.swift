@@ -212,12 +212,20 @@ public struct WatchAction: ActionImplementation {
         object: ObjectDescriptor,
         context: ExecutionContext
     ) async throws -> any Sendable {
-        // Get path to watch
+        // Get path to watch - check literal value first, then object specifiers, then result
         let path: String
-        if let resolvedPath: String = context.resolve(result.base) {
+        if let literalPath: String = context.resolve("_literal_") {
+            // Path provided via "with" clause: <Watch> the <x> for the <y> with "."
+            path = literalPath
+        } else if let specPath = object.specifiers.first {
+            // Path in object specifier
+            path = specPath
+        } else if let resolvedPath: String = context.resolve(result.base) {
+            // Path from resolved variable
             path = resolvedPath
         } else {
-            path = result.specifiers.first ?? result.base
+            // Fallback to current directory
+            path = "."
         }
 
         // Try file monitor service

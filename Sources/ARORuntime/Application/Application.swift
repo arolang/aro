@@ -51,6 +51,17 @@ public final class Application: @unchecked Sendable {
         self.openAPISpec = openAPISpec
         self.routeRegistry = openAPISpec.map { OpenAPIRouteRegistry(spec: $0) }
         self.runtime = Runtime()
+
+        // Register default services
+        registerDefaultServices()
+    }
+
+    /// Register default services for the runtime
+    private func registerDefaultServices() {
+        // Register file system service for file operations and monitoring
+        let fileSystemService = AROFileSystemService(eventBus: .shared)
+        runtime.register(service: fileSystemService as FileSystemService)
+        runtime.register(service: fileSystemService as FileMonitorService)
     }
 
     /// Initialize from source files
