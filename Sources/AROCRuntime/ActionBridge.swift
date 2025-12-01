@@ -892,3 +892,38 @@ public func aro_action_stop(
 
     return boxResult(true)
 }
+
+/// Keepalive action - blocks until SIGINT/SIGTERM
+@_cdecl("aro_action_keepalive")
+public func aro_action_keepalive(
+    _ contextPtr: UnsafeMutableRawPointer?,
+    _ resultPtr: UnsafeRawPointer?,
+    _ objectPtr: UnsafeRawPointer?
+) -> UnsafeMutableRawPointer? {
+    guard let ctxHandle = getContext(contextPtr) else { return nil }
+
+    // Set up signal handling
+    KeepaliveSignalHandler.shared.setup()
+
+    // Enter wait state
+    ctxHandle.context.enterWaitState()
+
+    // Emit event to signal we're waiting
+    ctxHandle.context.emit(CustomRuntimeEvent(
+        type: "wait.state.entered",
+        data: ""
+    ))
+
+    // Block until shutdown is signaled (synchronously for native code)
+    // Use a simple polling approach with sleep
+    while !ShutdownCoordinator.shared.isShuttingDownNow {
+        Thread.sleep(forTimeInterval: 0.1)
+    }
+
+    return boxResult(WaitResultBridge(completed: true, reason: "shutdown"))
+}
+
+struct WaitResultBridge: Sendable {
+    let completed: Bool
+    let reason: String
+}

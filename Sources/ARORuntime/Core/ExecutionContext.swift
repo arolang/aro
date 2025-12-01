@@ -200,6 +200,20 @@ public protocol ExecutionContext: AnyObject, Sendable {
     /// - Parameter featureSetName: Name of the child feature set
     /// - Returns: A new child context
     func createChild(featureSetName: String) -> ExecutionContext
+
+    // MARK: - Wait State Management
+
+    /// Enter wait state - signals the application should stay alive for events
+    func enterWaitState()
+
+    /// Wait for shutdown signal (blocks until application should terminate)
+    func waitForShutdown() async throws
+
+    /// Check if the context is in wait state
+    var isWaiting: Bool { get }
+
+    /// Signal that the wait should end
+    func signalShutdown()
 }
 
 // MARK: - Default Implementations

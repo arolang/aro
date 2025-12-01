@@ -30,6 +30,12 @@ public final class RuntimeContext: ExecutionContext, @unchecked Sendable {
     /// Event bus for event emission
     private let eventBus: EventBus?
 
+    /// Wait state flag
+    private var _isWaiting: Bool = false
+
+    /// Continuation for wait/shutdown signaling
+    private var shutdownContinuation: CheckedContinuation<Void, Error>?
+
     // MARK: - Metadata
 
     public let featureSetName: String
@@ -168,6 +174,38 @@ public final class RuntimeContext: ExecutionContext, @unchecked Sendable {
             eventBus: eventBus,
             parent: self
         )
+    }
+
+    // MARK: - Wait State Management
+
+    public func enterWaitState() {
+        lock.lock()
+        defer { lock.unlock() }
+        _isWaiting = true
+    }
+
+    public func waitForShutdown() async throws {
+        try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, Error>) in
+            lock.lock()
+            shutdownContinuation = continuation
+            lock.unlock()
+        }
+    }
+
+    public var isWaiting: Bool {
+        lock.lock()
+        defer { lock.unlock() }
+        return _isWaiting
+    }
+
+    public func signalShutdown() {
+        lock.lock()
+        let continuation = shutdownContinuation
+        shutdownContinuation = nil
+        _isWaiting = false
+        lock.unlock()
+
+        continuation?.resume(returning: ())
     }
 }
 

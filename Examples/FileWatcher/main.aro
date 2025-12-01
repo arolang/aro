@@ -6,7 +6,10 @@
     (* Watch the current directory *)
     <Watch> the <file-monitor> for the <directory> with ".".
 
-    <Log> the <ready: message> for the <console> with "Watching for file changes...".
+    <Log> the <ready: message> for the <console> with "Watching for file changes... Press Ctrl+C to stop.".
+
+    (* Keep the application running to process file events *)
+    <Keepalive> the <application> for the <events>.
 
     <Return> an <OK: status> for the <startup>.
 }
@@ -27,4 +30,9 @@
     <Extract> the <path> from the <event: path>.
     <Log> the <file-deleted: message> for the <console>.
     <Return> an <OK: status> for the <event>.
+}
+
+(Application-End: Success) {
+    <Log> the <shutdown: message> for the <console> with "File watcher stopped.".
+    <Return> an <OK: status> for the <shutdown>.
 }

@@ -200,6 +200,27 @@ Application lifecycle handlers:
 }
 ```
 
+### Long-Running Applications
+
+For applications that need to stay alive and process events (servers, file watchers, etc.), use the `<Keepalive>` action:
+
+```aro
+(Application-Start: File Watcher) {
+    <Log> the <startup: message> for the <console> with "Starting...".
+    <Watch> the <file-monitor> for the <directory> with ".".
+
+    (* Keep the application running to process events *)
+    <Keepalive> the <application> for the <events>.
+
+    <Return> an <OK: status> for the <startup>.
+}
+```
+
+The `<Keepalive>` action:
+- Blocks execution until a shutdown signal is received (SIGINT/SIGTERM)
+- Allows the event loop to process incoming events
+- Enables graceful shutdown with Ctrl+C
+
 ## Creating Custom Actions
 
 ```swift
@@ -269,17 +290,18 @@ Examples/
     ├── users.aro       # Feature sets (named after operationIds)
     └── events.aro      # Event handlers
 
-Proposals/              # 27 evolution proposals (ARO-0001 to ARO-0027)
+Proposals/              # 28 evolution proposals (ARO-0001 to ARO-0028)
 Documentation/          # Developer guides
 ```
 
 ## Language Proposals
 
-The `Proposals/` directory contains 27 evolution proposals:
+The `Proposals/` directory contains 28 evolution proposals:
 - **0001-0019**: Core language specification
 - **0020-0025**: Runtime architecture (execution, HTTP, files, sockets, actions)
 - **0026**: Native compilation (aro build)
 - **0027**: OpenAPI contract-first API development
+- **0028**: Long-running applications (Keepalive action)
 
 ## Concurrency
 

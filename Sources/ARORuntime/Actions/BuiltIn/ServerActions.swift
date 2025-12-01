@@ -381,6 +381,173 @@ public struct FileWatchStartedEvent: RuntimeEvent {
     }
 }
 
+/// Global shutdown coordinator for long-running applications
+public final class ShutdownCoordinator: @unchecked Sendable {
+    public static let shared = ShutdownCoordinator()
+
+    private let lock = NSLock()
+    private var waiters: [UUID: () -> Void] = [:]
+    private var isShuttingDown = false
+
+    private init() {}
+
+    /// Check if already shutting down (synchronous helper)
+    private func checkShuttingDown() -> Bool {
+        lock.lock()
+        defer { lock.unlock() }
+        return isShuttingDown
+    }
+
+    /// Public synchronous check for native code
+    public var isShuttingDownNow: Bool {
+        lock.lock()
+        defer { lock.unlock() }
+        return isShuttingDown
+    }
+
+    /// Register a waiter and return whether we should wait
+    private func registerWaiter(id: UUID, resume: @escaping () -> Void) -> Bool {
+        lock.lock()
+        defer { lock.unlock() }
+
+        if isShuttingDown {
+            return false // Don't wait, already shutting down
+        }
+
+        waiters[id] = resume
+        return true // Should wait
+    }
+
+    /// Wait for shutdown signal (blocks until signaled)
+    public func waitForShutdown() async {
+        // Quick check before setting up continuation
+        if checkShuttingDown() {
+            return
+        }
+
+        let id = UUID()
+
+        // Use withUnsafeContinuation for proper blocking
+        await withUnsafeContinuation { (continuation: UnsafeContinuation<Void, Never>) in
+            let shouldWait = self.registerWaiter(id: id) {
+                continuation.resume()
+            }
+
+            if !shouldWait {
+                continuation.resume()
+            }
+        }
+    }
+
+    /// Signal shutdown to all waiting tasks
+    public func signalShutdown() {
+        lock.lock()
+        isShuttingDown = true
+        let waiting = waiters
+        waiters.removeAll()
+        lock.unlock()
+
+        for (_, resume) in waiting {
+            resume()
+        }
+    }
+
+    /// Reset for new application run
+    public func reset() {
+        lock.lock()
+        isShuttingDown = false
+        waiters.removeAll()
+        lock.unlock()
+    }
+}
+
+/// Waits for events, keeping the application alive
+///
+/// The WaitForEvents action blocks execution until a shutdown signal is received,
+/// allowing the application to process events from started services.
+///
+/// ## Example
+/// ```
+/// <Keepalive> the <application> for the <events>.
+/// ```
+public struct WaitForEventsAction: ActionImplementation {
+    public static let role: ActionRole = .own
+    public static let verbs: Set<String> = ["keepalive", "block"]
+    public static let validPrepositions: Set<Preposition> = [.for]
+
+    public init() {}
+
+    public func execute(
+        result: ResultDescriptor,
+        object: ObjectDescriptor,
+        context: ExecutionContext
+    ) async throws -> any Sendable {
+        // Set up signal handling (idempotent)
+        KeepaliveSignalHandler.shared.setup()
+
+        // Enter wait state
+        context.enterWaitState()
+
+        // Emit event to signal we're waiting
+        context.emit(WaitStateEnteredEvent())
+
+        // Block until shutdown is signaled via the global coordinator
+        await ShutdownCoordinator.shared.waitForShutdown()
+
+        return WaitResult(completed: true, reason: "shutdown")
+    }
+}
+
+/// Signal handler for Keepalive action
+public final class KeepaliveSignalHandler: @unchecked Sendable {
+    public static let shared = KeepaliveSignalHandler()
+
+    private let lock = NSLock()
+    private var isSetup = false
+
+    private init() {}
+
+    /// Set up signal handlers (idempotent)
+    public func setup() {
+        lock.lock()
+        defer { lock.unlock() }
+
+        if isSetup { return }
+        isSetup = true
+
+        signal(SIGINT) { _ in
+            ShutdownCoordinator.shared.signalShutdown()
+            // Exit after a brief delay to allow cleanup
+            DispatchQueue.global().asyncAfter(deadline: .now() + 0.5) {
+                exit(0)
+            }
+        }
+
+        signal(SIGTERM) { _ in
+            ShutdownCoordinator.shared.signalShutdown()
+            DispatchQueue.global().asyncAfter(deadline: .now() + 0.5) {
+                exit(0)
+            }
+        }
+    }
+}
+
+/// Result of a wait operation
+public struct WaitResult: Sendable, Equatable {
+    public let completed: Bool
+    public let reason: String
+}
+
+/// Event emitted when entering wait state
+public struct WaitStateEnteredEvent: RuntimeEvent {
+    public static var eventType: String { "wait.state.entered" }
+    public let timestamp: Date
+
+    public init() {
+        self.timestamp = Date()
+    }
+}
+
 // MARK: - Preposition Extension
 
 extension Preposition {

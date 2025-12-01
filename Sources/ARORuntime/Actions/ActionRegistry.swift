@@ -76,6 +76,9 @@ public final class ActionRegistry: @unchecked Sendable {
 
         // File actions
         register(WatchAction.self)
+
+        // Wait action for long-running applications
+        register(WaitForEventsAction.self)
     }
 
     /// Register a custom action

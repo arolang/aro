@@ -118,6 +118,7 @@ public final class CCodeGenerator {
         extern AROValue aro_action_route(AROContext ctx, AROResultDescriptor* result, AROObjectDescriptor* object);
         extern AROValue aro_action_watch(AROContext ctx, AROResultDescriptor* result, AROObjectDescriptor* object);
         extern AROValue aro_action_stop(AROContext ctx, AROResultDescriptor* result, AROObjectDescriptor* object);
+        extern AROValue aro_action_keepalive(AROContext ctx, AROResultDescriptor* result, AROObjectDescriptor* object);
 
         // HTTP operations
         extern void* aro_http_server_create(ARORuntime runtime);

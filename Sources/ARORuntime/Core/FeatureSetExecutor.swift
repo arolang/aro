@@ -266,6 +266,12 @@ public final class Runtime: @unchecked Sendable {
         _ program: AnalyzedProgram,
         entryPoint: String = "Application-Start"
     ) async throws {
+        // Reset shutdown coordinator for new run
+        ShutdownCoordinator.shared.reset()
+
+        // Register for signal handling
+        RuntimeSignalHandler.shared.register(self)
+
         _ = try await run(program, entryPoint: entryPoint)
 
         // Keep running until stopped
@@ -277,6 +283,56 @@ public final class Runtime: @unchecked Sendable {
     /// Stop the runtime
     public func stop() {
         eventBus.publish(ApplicationStoppingEvent(reason: "stop requested"))
+
+        // Signal any waiting actions via the global coordinator
+        ShutdownCoordinator.shared.signalShutdown()
+
         isRunning = false
+    }
+}
+
+// MARK: - Signal Handler
+
+/// Thread-safe signal handler for runtime shutdown
+public final class RuntimeSignalHandler: @unchecked Sendable {
+    public static let shared = RuntimeSignalHandler()
+
+    private let lock = NSLock()
+    private var runtime: Runtime?
+    private var isSetup = false
+
+    private init() {}
+
+    /// Register a runtime for signal handling
+    public func register(_ runtime: Runtime) {
+        lock.lock()
+        defer { lock.unlock() }
+
+        self.runtime = runtime
+
+        if !isSetup {
+            setupSignalHandlers()
+            isSetup = true
+        }
+    }
+
+    /// Setup signal handlers (once)
+    private func setupSignalHandlers() {
+        signal(SIGINT) { _ in
+            RuntimeSignalHandler.shared.handleSignal()
+        }
+
+        signal(SIGTERM) { _ in
+            RuntimeSignalHandler.shared.handleSignal()
+        }
+    }
+
+    /// Handle shutdown signal
+    private func handleSignal() {
+        lock.lock()
+        let rt = runtime
+        lock.unlock()
+
+        rt?.stop()
     }
 }
