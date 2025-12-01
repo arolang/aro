@@ -1,0 +1,28 @@
+(* ============================================================
+   Hello World API - Application Entry Point
+   ============================================================
+   This is the main entry point for the Hello World API.
+   Every ARO application needs exactly ONE Application-Start.
+   ============================================================ *)
+
+(Application-Start: Hello World API) {
+    (* Log a startup message to the console *)
+    <Log> the <startup: message> for the <console> with "Hello World API starting...".
+
+    (* Start the HTTP server on port 8000 *)
+    (* The port matches what we defined in openapi.yaml *)
+    <Start> the <http-server> on <port> with 8000.
+
+    (* Log that we're ready to receive requests *)
+    <Log> the <ready: message> for the <console> with "Server running at http://localhost:8000".
+
+    (* Return OK to indicate successful startup *)
+    <Return> an <OK: status> for the <startup>.
+}
+
+(* Optional: Handle graceful shutdown *)
+(Application-End: Success) {
+    <Log> the <shutdown: message> for the <console> with "Shutting down Hello World API...".
+    <Stop> the <http-server> for the <application>.
+    <Return> an <OK: status> for the <shutdown>.
+}

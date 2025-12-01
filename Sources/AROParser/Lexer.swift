@@ -1,0 +1,471 @@
+// ============================================================
+// Lexer.swift
+// ARO Parser - Lexical Analysis
+// ============================================================
+
+import Foundation
+
+/// Tokenizes ARO source code
+public final class Lexer: @unchecked Sendable {
+    
+    // MARK: - Properties
+    
+    private let source: String
+    private var currentIndex: String.Index
+    private var location: SourceLocation
+    private var tokens: [Token] = []
+    
+    /// Keywords mapped to their token kinds
+    private static let keywords: [String: TokenKind] = [
+        // Core
+        "publish": .publish,
+        "as": .as,
+
+        // Control Flow (ARO-0004)
+        "if": .if,
+        "then": .then,
+        "else": .else,
+        "when": .when,
+        "match": .match,
+        "case": .case,
+        "otherwise": .otherwise,
+        "where": .where,
+
+        // Iteration (ARO-0005)
+        "for": .for,
+        "each": .each,
+        "in": .in,
+        "at": .atKeyword,
+        "while": .while,
+        "repeat": .repeat,
+        "until": .until,
+        "break": .break,
+        "continue": .continue,
+
+        // Types (ARO-0006)
+        "type": .type,
+        "enum": .enum,
+        "protocol": .protocol,
+
+        // Error Handling (ARO-0008)
+        "error": .error,
+        "try": .try,
+        "catch": .catch,
+        "finally": .finally,
+        "guard": .guard,
+        "defer": .defer,
+        "assert": .assert,
+        "precondition": .precondition,
+
+        // Logical Operators
+        "and": .and,
+        "or": .or,
+        "not": .not,
+        "is": .is,
+        "exists": .exists,
+        "defined": .defined,
+        "null": .nil,
+        "nil": .nil,
+        "none": .nil,
+        "empty": .empty,
+        "contains": .contains,
+        "matches": .matches,
+
+        // Boolean literals
+        "true": .true,
+        "false": .false
+    ]
+    
+    // MARK: - Initialization
+    
+    public init(source: String) {
+        self.source = source
+        self.currentIndex = source.startIndex
+        self.location = SourceLocation()
+    }
+    
+    // MARK: - Public Interface
+    
+    /// Tokenizes the entire source and returns all tokens
+    public func tokenize() throws -> [Token] {
+        tokens = []
+        
+        while !isAtEnd {
+            try scanToken()
+        }
+        
+        // Add EOF token
+        tokens.append(Token(
+            kind: .eof,
+            span: SourceSpan(at: location),
+            lexeme: ""
+        ))
+        
+        return tokens
+    }
+    
+    // MARK: - Scanner
+    
+    private func scanToken() throws {
+        skipWhitespaceAndComments()
+
+        guard !isAtEnd else { return }
+
+        let startLocation = location
+        let char = advance()
+
+        switch char {
+        case "(": addToken(.leftParen, start: startLocation)
+        case ")": addToken(.rightParen, start: startLocation)
+        case "{": addToken(.leftBrace, start: startLocation)
+        case "}": addToken(.rightBrace, start: startLocation)
+        case "[": addToken(.leftBracket, start: startLocation)
+        case "]": addToken(.rightBracket, start: startLocation)
+        case ",": addToken(.comma, start: startLocation)
+        case ";": addToken(.semicolon, start: startLocation)
+        case "@": addToken(.atSign, start: startLocation)
+        case "?": addToken(.question, start: startLocation)
+        case "*": addToken(.star, start: startLocation)
+        case "/": addToken(.slash, start: startLocation)
+        case "%": addToken(.percent, start: startLocation)
+        case ".": addToken(.dot, start: startLocation)
+
+        case ":":
+            if peek() == ":" {
+                _ = advance()
+                addToken(.doubleColon, start: startLocation)
+            } else {
+                addToken(.colon, start: startLocation)
+            }
+
+        case "<":
+            if peek() == "=" {
+                _ = advance()
+                addToken(.lessEqual, start: startLocation)
+            } else {
+                addToken(.leftAngle, start: startLocation)
+            }
+
+        case ">":
+            if peek() == "=" {
+                _ = advance()
+                addToken(.greaterEqual, start: startLocation)
+            } else {
+                addToken(.rightAngle, start: startLocation)
+            }
+
+        case "-":
+            if peek() == ">" {
+                _ = advance()
+                addToken(.arrow, start: startLocation)
+            } else if peek().isNumber {
+                try scanNumber(start: startLocation, negative: true)
+            } else {
+                addToken(.hyphen, start: startLocation)
+            }
+
+        case "+":
+            if peek() == "+" {
+                _ = advance()
+                addToken(.plusPlus, start: startLocation)
+            } else {
+                addToken(.plus, start: startLocation)
+            }
+
+        case "=":
+            if peek() == "=" {
+                _ = advance()
+                addToken(.equalEqual, start: startLocation)
+            } else if peek() == ">" {
+                _ = advance()
+                addToken(.fatArrow, start: startLocation)
+            } else {
+                addToken(.equals, start: startLocation)
+            }
+
+        case "!":
+            if peek() == "=" {
+                _ = advance()
+                addToken(.bangEqual, start: startLocation)
+            } else {
+                throw LexerError.unexpectedCharacter(char, at: startLocation)
+            }
+
+        case "\"", "'":
+            try scanString(quote: char, start: startLocation)
+
+        default:
+            if char.isLetter || char == "_" {
+                try scanIdentifierOrKeyword(start: startLocation)
+            } else if char.isNumber {
+                try scanNumber(start: startLocation, negative: false)
+            } else {
+                throw LexerError.unexpectedCharacter(char, at: startLocation)
+            }
+        }
+    }
+
+    // MARK: - String Scanning
+
+    private func scanString(quote: Character, start: SourceLocation) throws {
+        var value = ""
+
+        while !isAtEnd && peek() != quote {
+            let char = peek()
+            if char == "\n" {
+                throw LexerError.unterminatedString(at: start)
+            }
+            if char == "\\" {
+                _ = advance()
+                if isAtEnd {
+                    throw LexerError.unterminatedString(at: start)
+                }
+                let escaped = advance()
+                switch escaped {
+                case "n": value.append("\n")
+                case "r": value.append("\r")
+                case "t": value.append("\t")
+                case "\\": value.append("\\")
+                case "\"": value.append("\"")
+                case "'": value.append("'")
+                case "0": value.append("\0")
+                default:
+                    throw LexerError.invalidEscapeSequence(escaped, at: location)
+                }
+            } else {
+                value.append(advance())
+            }
+        }
+
+        if isAtEnd {
+            throw LexerError.unterminatedString(at: start)
+        }
+
+        _ = advance() // Closing quote
+        addToken(.stringLiteral(value), start: start)
+    }
+
+    // MARK: - Number Scanning
+
+    private func scanNumber(start: SourceLocation, negative: Bool) throws {
+        var numStr = negative ? "-" : ""
+
+        // Check for hex (0x) or binary (0b)
+        if !negative && previous() == "0" {
+            if peek() == "x" || peek() == "X" {
+                _ = advance()
+                try scanHexNumber(start: start)
+                return
+            } else if peek() == "b" || peek() == "B" {
+                _ = advance()
+                try scanBinaryNumber(start: start)
+                return
+            }
+            numStr.append("0")
+        } else if !negative {
+            numStr.append(previous())
+        }
+
+        // Scan integer part
+        while !isAtEnd && peek().isNumber {
+            numStr.append(advance())
+        }
+
+        // Check for decimal point
+        var isFloat = false
+        if !isAtEnd && peek() == "." && peekNext().isNumber {
+            isFloat = true
+            numStr.append(advance()) // .
+            while !isAtEnd && peek().isNumber {
+                numStr.append(advance())
+            }
+        }
+
+        // Check for exponent
+        if !isAtEnd && (peek() == "e" || peek() == "E") {
+            isFloat = true
+            numStr.append(advance()) // e or E
+            if !isAtEnd && (peek() == "+" || peek() == "-") {
+                numStr.append(advance())
+            }
+            while !isAtEnd && peek().isNumber {
+                numStr.append(advance())
+            }
+        }
+
+        if isFloat {
+            guard let value = Double(numStr) else {
+                throw LexerError.invalidNumber(numStr, at: start)
+            }
+            addToken(.floatLiteral(value), start: start)
+        } else {
+            guard let value = Int(numStr) else {
+                throw LexerError.invalidNumber(numStr, at: start)
+            }
+            addToken(.intLiteral(value), start: start)
+        }
+    }
+
+    private func scanHexNumber(start: SourceLocation) throws {
+        var hexStr = ""
+        while !isAtEnd && (peek().isHexDigit || peek() == "_") {
+            let char = advance()
+            if char != "_" {
+                hexStr.append(char)
+            }
+        }
+        guard !hexStr.isEmpty, let value = Int(hexStr, radix: 16) else {
+            throw LexerError.invalidNumber("0x" + hexStr, at: start)
+        }
+        addToken(.intLiteral(value), start: start)
+    }
+
+    private func scanBinaryNumber(start: SourceLocation) throws {
+        var binStr = ""
+        while !isAtEnd && (peek() == "0" || peek() == "1" || peek() == "_") {
+            let char = advance()
+            if char != "_" {
+                binStr.append(char)
+            }
+        }
+        guard !binStr.isEmpty, let value = Int(binStr, radix: 2) else {
+            throw LexerError.invalidNumber("0b" + binStr, at: start)
+        }
+        addToken(.intLiteral(value), start: start)
+    }
+
+    private func previous() -> Character {
+        let prevIndex = source.index(before: currentIndex)
+        return source[prevIndex]
+    }
+    
+    private func scanIdentifierOrKeyword(start: SourceLocation) throws {
+        // Continue consuming alphanumeric characters and underscores
+        while !isAtEnd && (peek().isLetter || peek().isNumber || peek() == "_") {
+            _ = advance()
+        }
+        
+        let lexeme = String(source[source.index(source.startIndex, offsetBy: start.offset)..<currentIndex])
+        let lowerLexeme = lexeme.lowercased()
+        
+        // Check for keywords first
+        if let keyword = Self.keywords[lowerLexeme] {
+            addToken(keyword, lexeme: lexeme, start: start)
+            return
+        }
+        
+        // Check for articles
+        if let article = Article(rawValue: lowerLexeme) {
+            addToken(.article(article), lexeme: lexeme, start: start)
+            return
+        }
+        
+        // Check for prepositions
+        if let preposition = Preposition(rawValue: lowerLexeme) {
+            addToken(.preposition(preposition), lexeme: lexeme, start: start)
+            return
+        }
+        
+        // Regular identifier
+        addToken(.identifier(lexeme), lexeme: lexeme, start: start)
+    }
+    
+    // MARK: - Whitespace and Comments
+    
+    private func skipWhitespaceAndComments() {
+        while !isAtEnd {
+            let char = peek()
+            
+            if char.isWhitespace {
+                _ = advance()
+            } else if char == "(" && peekNext() == "*" {
+                skipBlockComment()
+            } else if char == "/" && peekNext() == "/" {
+                skipLineComment()
+            } else {
+                break
+            }
+        }
+    }
+    
+    private func skipBlockComment() {
+        // Skip opening (*
+        _ = advance()
+        _ = advance()
+        
+        while !isAtEnd {
+            if peek() == "*" && peekNext() == ")" {
+                _ = advance()
+                _ = advance()
+                return
+            }
+            _ = advance()
+        }
+    }
+    
+    private func skipLineComment() {
+        while !isAtEnd && peek() != "\n" {
+            _ = advance()
+        }
+    }
+    
+    // MARK: - Character Access
+    
+    private var isAtEnd: Bool {
+        currentIndex >= source.endIndex
+    }
+    
+    private func peek() -> Character {
+        guard !isAtEnd else { return "\0" }
+        return source[currentIndex]
+    }
+    
+    private func peekNext() -> Character {
+        let nextIndex = source.index(after: currentIndex)
+        guard nextIndex < source.endIndex else { return "\0" }
+        return source[nextIndex]
+    }
+    
+    @discardableResult
+    private func advance() -> Character {
+        let char = source[currentIndex]
+        currentIndex = source.index(after: currentIndex)
+        location = location.advancing(past: char)
+        return char
+    }
+    
+    // MARK: - Token Creation
+    
+    private func addToken(_ kind: TokenKind, start: SourceLocation) {
+        let lexeme = String(source[source.index(source.startIndex, offsetBy: start.offset)..<currentIndex])
+        addToken(kind, lexeme: lexeme, start: start)
+    }
+    
+    private func addToken(_ kind: TokenKind, lexeme: String, start: SourceLocation) {
+        let span = SourceSpan(start: start, end: location)
+        tokens.append(Token(kind: kind, span: span, lexeme: lexeme))
+    }
+}
+
+// MARK: - Convenience Extension
+
+extension Lexer {
+    /// Creates a lexer and tokenizes the source in one step
+    public static func tokenize(_ source: String) throws -> [Token] {
+        try Lexer(source: source).tokenize()
+    }
+}
+
+// MARK: - Character Extension
+
+extension Character {
+    /// Returns true if this character is a valid hexadecimal digit
+    var isHexDigit: Bool {
+        switch self {
+        case "0"..."9", "a"..."f", "A"..."F":
+            return true
+        default:
+            return false
+        }
+    }
+}

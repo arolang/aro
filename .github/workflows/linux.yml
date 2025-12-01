@@ -1,0 +1,74 @@
+# =============================================================================
+# ARO Programming Language - Linux Build & Test
+# =============================================================================
+# Ensures ARO builds and tests pass on Linux (Ubuntu)
+# =============================================================================
+
+name: Linux Build
+
+on:
+  push:
+    branches:
+      - main
+      - 'release/**'
+  pull_request:
+    branches:
+      - main
+
+concurrency:
+  group: linux-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test-linux:
+    name: Test on Linux
+    runs-on: ubuntu-latest
+    container:
+      image: swift:6.0-jammy
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Cache Swift packages
+        uses: actions/cache@v4
+        with:
+          path: .build
+          key: linux-swift-${{ hashFiles('Package.resolved') }}
+          restore-keys: |
+            linux-swift-
+
+      - name: Build
+        run: swift build
+
+      - name: Run tests
+        run: swift test --parallel
+
+      - name: Build release
+        run: swift build -c release
+
+      - name: Verify CLI
+        run: |
+          .build/release/aro --help
+          .build/release/aro check ./Examples/HelloWorldAPI
+
+  build-linux-binary:
+    name: Build Linux Binary
+    needs: test-linux
+    runs-on: ubuntu-latest
+    if: github.event_name == 'push' && (github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/heads/release/'))
+    container:
+      image: swift:6.0-jammy
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Build static binary
+        run: |
+          swift build -c release --static-swift-stdlib
+
+      - name: Upload Linux binary
+        uses: actions/upload-artifact@v4
+        with:
+          name: aro-cli-linux-amd64
+          path: .build/release/aro
+          retention-days: 30

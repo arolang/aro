@@ -1,0 +1,314 @@
+# =============================================================================
+# ARO Programming Language - CI/CD Pipeline
+# =============================================================================
+# This workflow handles:
+# - Testing and building the ARO compiler
+# - Deploying the website to gh-pages
+# - Building and pushing Docker images with proper version tags
+# =============================================================================
+
+name: CI/CD Pipeline
+
+on:
+  push:
+    branches:
+      - main
+      - 'release/**'
+    tags:
+      - 'v*'
+  pull_request:
+    branches:
+      - main
+      - 'release/**'
+
+env:
+  REGISTRY: ghcr.io
+  IMAGE_NAME: ${{ github.repository }}
+
+# Cancel in-progress runs for the same branch
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  # ===========================================================================
+  # Stage 1: Test
+  # ===========================================================================
+  test:
+    name: Test
+    runs-on: macos-14
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Swift
+        uses: swift-actions/setup-swift@v2
+        with:
+          swift-version: '6.0'
+
+      - name: Cache Swift packages
+        uses: actions/cache@v4
+        with:
+          path: .build
+          key: ${{ runner.os }}-swift-${{ hashFiles('Package.resolved') }}
+          restore-keys: |
+            ${{ runner.os }}-swift-
+
+      - name: Run tests
+        run: swift test --parallel
+
+      - name: Upload test results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-results
+          path: .build/debug/*.xcresult
+          retention-days: 7
+
+  # ===========================================================================
+  # Stage 2: Build
+  # ===========================================================================
+  build:
+    name: Build
+    needs: test
+    runs-on: macos-14
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Swift
+        uses: swift-actions/setup-swift@v2
+        with:
+          swift-version: '6.0'
+
+      - name: Cache Swift packages
+        uses: actions/cache@v4
+        with:
+          path: .build
+          key: ${{ runner.os }}-swift-${{ hashFiles('Package.resolved') }}
+          restore-keys: |
+            ${{ runner.os }}-swift-
+
+      - name: Build release binary
+        run: swift build -c release
+
+      - name: Verify ARO CLI
+        run: |
+          .build/release/aro --help
+          .build/release/aro check ./Examples/HelloWorldAPI
+          .build/release/aro check ./Examples/UserService
+
+      - name: Upload build artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: aro-cli-macos
+          path: .build/release/aro
+          retention-days: 30
+
+  # ===========================================================================
+  # Stage 3: Build Website
+  # ===========================================================================
+  website:
+    name: Build Website
+    needs: test
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Build website
+        run: |
+          cd Website
+          chmod +x build.sh
+          ./build.sh
+
+      - name: Upload website artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: website
+          path: Website/dist
+          retention-days: 7
+
+  # ===========================================================================
+  # Stage 4: Deploy Website to gh-pages
+  # ===========================================================================
+  deploy-website:
+    name: Deploy Website
+    needs: [build, website]
+    runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+    permissions:
+      contents: write
+      pages: write
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Download website artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: website
+          path: dist
+
+      - name: Deploy to GitHub Pages
+        uses: peaceiris/actions-gh-pages@v4
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          publish_dir: ./dist
+          publish_branch: gh-pages
+          force_orphan: true
+          commit_message: |
+            Deploy website - ${{ github.sha }}
+
+            Triggered by: ${{ github.event_name }}
+            Commit: ${{ github.event.head_commit.message }}
+
+  # ===========================================================================
+  # Stage 5: Build and Push Docker Image
+  # ===========================================================================
+  docker:
+    name: Docker Build & Push
+    needs: [build]
+    runs-on: ubuntu-latest
+    if: github.event_name == 'push'
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v3
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Extract version info
+        id: version
+        run: |
+          # Determine the Docker tag based on branch/tag
+          if [[ "${{ github.ref_type }}" == "tag" ]]; then
+            # Tag push: v1.0.0 -> 1.0.0
+            VERSION="${{ github.ref_name }}"
+            VERSION="${VERSION#v}"  # Remove 'v' prefix
+            echo "tags=${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${VERSION},${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest" >> $GITHUB_OUTPUT
+            echo "version=${VERSION}" >> $GITHUB_OUTPUT
+          elif [[ "${{ github.ref }}" == refs/heads/release/* ]]; then
+            # Release branch: release/1.0 -> 1.0-rc-{run_number}
+            BRANCH="${{ github.ref_name }}"
+            VERSION="${BRANCH#release/}"
+            RC_VERSION="${VERSION}-rc-${{ github.run_number }}"
+            echo "tags=${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${RC_VERSION}" >> $GITHUB_OUTPUT
+            echo "version=${RC_VERSION}" >> $GITHUB_OUTPUT
+          elif [[ "${{ github.ref }}" == "refs/heads/main" ]]; then
+            # Main branch: nightly
+            echo "tags=${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:nightly" >> $GITHUB_OUTPUT
+            echo "version=nightly" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Extract metadata for Docker
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
+          tags: |
+            type=raw,value=${{ steps.version.outputs.version }}
+
+      - name: Build and push Docker image
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: ./Dockerfile
+          push: true
+          tags: ${{ steps.version.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          platforms: linux/amd64,linux/arm64
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+          build-args: |
+            VERSION=${{ steps.version.outputs.version }}
+            COMMIT_SHA=${{ github.sha }}
+
+      - name: Generate SBOM
+        uses: anchore/sbom-action@v0
+        with:
+          image: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ steps.version.outputs.version }}
+          format: spdx-json
+          output-file: sbom.spdx.json
+
+      - name: Upload SBOM
+        uses: actions/upload-artifact@v4
+        with:
+          name: sbom-${{ steps.version.outputs.version }}
+          path: sbom.spdx.json
+          retention-days: 90
+
+  # ===========================================================================
+  # Stage 6: Create Release (only on tags)
+  # ===========================================================================
+  release:
+    name: Create Release
+    needs: [docker]
+    runs-on: ubuntu-latest
+    if: github.ref_type == 'tag'
+    permissions:
+      contents: write
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Download macOS build
+        uses: actions/download-artifact@v4
+        with:
+          name: aro-cli-macos
+          path: artifacts/macos
+
+      - name: Package release assets
+        run: |
+          cd artifacts/macos
+          chmod +x aro
+          tar -czvf aro-macos-arm64.tar.gz aro
+          mv aro-macos-arm64.tar.gz ../
+
+      - name: Extract version from tag
+        id: version
+        run: |
+          VERSION="${{ github.ref_name }}"
+          VERSION="${VERSION#v}"
+          echo "version=${VERSION}" >> $GITHUB_OUTPUT
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v1
+        with:
+          name: ARO ${{ steps.version.outputs.version }}
+          draft: false
+          prerelease: ${{ contains(github.ref_name, '-') }}
+          generate_release_notes: true
+          files: |
+            artifacts/aro-macos-arm64.tar.gz
+          body: |
+            ## ARO Programming Language ${{ steps.version.outputs.version }}
+
+            ### Installation
+
+            **macOS (Apple Silicon)**
+            ```bash
+            curl -L https://github.com/${{ github.repository }}/releases/download/${{ github.ref_name }}/aro-macos-arm64.tar.gz | tar xz
+            sudo mv aro /usr/local/bin/
+            ```
+
+            **Docker**
+            ```bash
+            docker pull ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ steps.version.outputs.version }}
+            ```
+
+            ### What's Changed
+            See the automatically generated release notes below.

@@ -1,0 +1,12 @@
+{
+  "name": "aro-website",
+  "version": "1.0.0",
+  "description": "Website for the ARO Programming Language",
+  "scripts": {
+    "build": "node build.js",
+    "serve": "npx serve dist"
+  },
+  "devDependencies": {
+    "marked": "^11.0.0"
+  }
+}

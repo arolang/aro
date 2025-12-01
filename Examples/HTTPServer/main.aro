@@ -1,0 +1,28 @@
+(* HTTP Server Example - SwiftNIO-based web server *)
+
+(Application-Start: HTTP Server) {
+    <Log> the <startup: message> for the <console> with "Starting HTTP server on port 8080".
+
+    (* Start the HTTP server *)
+    <Start> the <http-server> on <port> with 8080.
+
+    (* Log when requests come in - handled by event system *)
+    <Log> the <ready: message> for the <console> with "Server ready to accept connections".
+
+    <Return> an <OK: status> for the <startup>.
+}
+
+(GET /: Root Handler) {
+    <Create> the <response: body> with { message: "Welcome to ARO!" }.
+    <Return> an <OK: status> with <response: body>.
+}
+
+(GET /health: Health Check) {
+    <Create> the <health: status> with { status: "healthy" }.
+    <Return> an <OK: status> with <health: status>.
+}
+
+(POST /echo: Echo Handler) {
+    <Extract> the <body> from the <request: body>.
+    <Return> an <OK: status> with <body>.
+}

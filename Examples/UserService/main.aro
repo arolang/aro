@@ -1,0 +1,57 @@
+(* User Service - Multi-file Application Example *)
+(* This file contains Application-Start and Application-End handlers *)
+
+(Application-Start: User Service) {
+    <Log> the <startup: message> for the <console> with "Starting User Service...".
+
+    (* Initialize HTTP server on port 8080 *)
+    <Start> the <http-server> on <port> with 8080.
+
+    (* Watch uploads directory for new files *)
+    <Watch> the <directory: "./uploads"> as <file-monitor>.
+
+    <Log> the <ready: message> for the <console> with "User Service ready on port 8080".
+    <Return> an <OK: status> for the <startup>.
+}
+
+(* Called on graceful shutdown (SIGTERM, SIGINT, or programmatic stop) *)
+(Application-End: Success) {
+    <Log> the <shutdown: message> for the <console> with "User Service shutting down...".
+
+    (* Gracefully stop accepting new requests *)
+    <Stop> the <http-server> for the <application>.
+
+    (* Close database connections *)
+    <Close> the <database-connections> for the <application>.
+
+    (* Flush any pending logs *)
+    <Flush> the <log-buffer> for the <system>.
+
+    <Log> the <shutdown: complete> for the <console> with "User Service stopped. Goodbye!".
+    <Return> an <OK: status> for the <shutdown>.
+}
+
+(* Called when application encounters a fatal error *)
+(Application-End: Error) {
+    <Extract> the <error> from the <shutdown: error>.
+    <Extract> the <code> from the <shutdown: code>.
+    <Extract> the <reason> from the <shutdown: reason>.
+
+    <Log> the <error: message> for the <console> with "FATAL: User Service crashed!".
+    <Log> the <error: details> for the <console> with "Reason: ${reason}".
+    <Log> the <error: code> for the <console> with "Exit code: ${code}".
+
+    (* Send alert to operations team *)
+    <Send> the <crash-alert> to the <ops-webhook> with {
+        service: "UserService",
+        error: <error>,
+        code: <code>,
+        reason: <reason>,
+        timestamp: <current-time>
+    }.
+
+    (* Attempt to close connections gracefully *)
+    <Close> the <database-connections> for the <application>.
+
+    <Return> an <OK: status> for the <error-handling>.
+}

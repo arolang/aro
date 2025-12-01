@@ -1,0 +1,42 @@
+# ============================================================
+# OpenAPI Contract for Hello World API
+# ============================================================
+# This file defines the API contract. The ARO runtime uses this
+# to route HTTP requests to the correct feature set handlers.
+# ============================================================
+
+openapi: 3.0.3
+info:
+  title: Hello World API
+  description: A simple API that returns "Hello World"
+  version: 1.0.0
+
+servers:
+  - url: http://localhost:8000
+    description: Local development server
+
+paths:
+  /hello:
+    get:
+      operationId: sayHello
+      summary: Say Hello
+      description: Returns a friendly "Hello World" greeting
+      responses:
+        '200':
+          description: Successful response with greeting
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HelloResponse'
+
+components:
+  schemas:
+    HelloResponse:
+      type: object
+      properties:
+        message:
+          type: string
+          description: The greeting message
+          example: Hello World
+      required:
+        - message

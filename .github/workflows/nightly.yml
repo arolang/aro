@@ -1,0 +1,141 @@
+# =============================================================================
+# ARO Programming Language - Nightly Build
+# =============================================================================
+# Runs comprehensive tests and builds nightly development snapshots
+# =============================================================================
+
+name: Nightly Build
+
+on:
+  schedule:
+    # Run at 2:00 AM UTC every day
+    - cron: '0 2 * * *'
+  workflow_dispatch:  # Allow manual trigger
+
+env:
+  REGISTRY: ghcr.io
+  IMAGE_NAME: ${{ github.repository }}
+
+jobs:
+  # ===========================================================================
+  # Comprehensive Testing
+  # ===========================================================================
+  comprehensive-test:
+    name: Comprehensive Tests
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: macos-14
+            swift: '6.0'
+            name: macOS
+          - os: ubuntu-latest
+            container: swift:6.0-jammy
+            name: Linux
+    runs-on: ${{ matrix.os }}
+    container: ${{ matrix.container }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Swift (macOS only)
+        if: runner.os == 'macOS'
+        uses: swift-actions/setup-swift@v2
+        with:
+          swift-version: ${{ matrix.swift }}
+
+      - name: Run all tests with coverage
+        run: |
+          swift test --parallel --enable-code-coverage
+
+      - name: Generate coverage report
+        if: runner.os == 'macOS'
+        run: |
+          xcrun llvm-cov export \
+            .build/debug/AROParserPackageTests.xctest/Contents/MacOS/AROParserPackageTests \
+            -instr-profile=.build/debug/codecov/default.profdata \
+            -format=lcov > coverage.lcov || true
+
+      - name: Upload coverage
+        if: runner.os == 'macOS'
+        uses: codecov/codecov-action@v4
+        continue-on-error: true
+        with:
+          files: coverage.lcov
+          fail_ci_if_error: false
+
+      - name: Test all examples
+        run: |
+          echo "Testing all example applications..."
+          for dir in Examples/*/; do
+            if [ -d "$dir" ]; then
+              echo "Checking: $dir"
+              .build/debug/aro check "$dir" || true
+            fi
+          done
+
+  # ===========================================================================
+  # Build Nightly Snapshot
+  # ===========================================================================
+  build-snapshot:
+    name: Build Nightly Snapshot
+    needs: comprehensive-test
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Generate nightly tag
+        id: tag
+        run: |
+          DATE=$(date +%Y%m%d)
+          echo "tag=nightly-${DATE}" >> $GITHUB_OUTPUT
+          echo "date=${DATE}" >> $GITHUB_OUTPUT
+
+      - name: Build and push nightly image
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          push: true
+          tags: |
+            ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:nightly
+            ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ steps.tag.outputs.tag }}
+          platforms: linux/amd64,linux/arm64
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+          build-args: |
+            VERSION=nightly-${{ steps.tag.outputs.date }}
+            COMMIT_SHA=${{ github.sha }}
+
+  # ===========================================================================
+  # Cleanup Old Nightly Images
+  # ===========================================================================
+  cleanup:
+    name: Cleanup Old Images
+    needs: build-snapshot
+    runs-on: ubuntu-latest
+    permissions:
+      packages: write
+    steps:
+      - name: Delete old nightly images
+        uses: actions/delete-package-versions@v5
+        continue-on-error: true
+        with:
+          package-name: aro
+          package-type: container
+          min-versions-to-keep: 10
+          delete-only-untagged-versions: false
+          ignore-versions: '^(latest|v\\d|\\d+\\.\\d+).*'
