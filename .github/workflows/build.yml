@@ -23,7 +23,7 @@ concurrency:
   cancel-in-progress: true
 
 env:
-  SWIFT_VERSION: '6.0.2'
+  SWIFT_VERSION: '6.2'
 
 jobs:
   # ===========================================================================
@@ -33,7 +33,7 @@ jobs:
     name: Linux
     runs-on: ubuntu-latest
     container:
-      image: swift:6.0.2-jammy
+      image: swift:6.2-jammy
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -124,9 +124,10 @@ jobs:
         uses: actions/checkout@v4
 
       - name: Setup Swift
-        uses: swift-actions/setup-swift@v2
+        uses: compnerd/gha-setup-swift@main
         with:
-          swift-version: ${{ env.SWIFT_VERSION }}
+          branch: swift-6.2-release
+          tag: 6.2-RELEASE
 
       - name: Cache Swift packages
         uses: actions/cache@v4
