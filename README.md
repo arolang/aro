@@ -1,15 +1,14 @@
-# ARO Parser & Runtime
+# The ARO Programming Language
 
-A Swift 6.0 implementation of a parser, compiler, and runtime for the **ARO** (Action Result Object) domain-specific language.
+Reference implementation of a parser, compiler, and runtime for the **ARO** programming language.
 
 ## Overview
 
-ARO is a declarative language for specifying business features in a human-readable format that can be compiled and executed. Features are expressed as Action-Result-Object statements.
+ARO is a declarative language for specifying business features in a human-readable format 
+that can be compiled and executed. Features are expressed as Action-Result-Object statements.
 
 ### Key Features
 
-- **Multi-File Applications**: All `.aro` files in a directory are automatically discovered and parsed
-- **No Imports Required**: All feature sets are globally visible within an application
 - **Event-Driven Execution**: Feature sets are triggered by events, not direct calls
 - **Application Lifecycle**: `Application-Start` (required), `Application-End: Success/Error` (optional)
 - **HTTP Server**: Built-in web server using SwiftNIO
