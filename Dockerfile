@@ -10,7 +10,7 @@
 # -----------------------------------------------------------------------------
 # Stage 1: Build Environment
 # -----------------------------------------------------------------------------
-FROM swift:6.0-jammy AS builder
+FROM swift:6.2-jammy AS builder
 
 # Build arguments for version info
 ARG VERSION=dev
@@ -88,7 +88,7 @@ CMD ["--help"]
 # -----------------------------------------------------------------------------
 # Stage 3: Development Environment (optional)
 # -----------------------------------------------------------------------------
-FROM swift:6.0-jammy AS dev
+FROM swift:6.2-jammy AS dev
 
 # Install development tools
 RUN apt-get update && apt-get install -y --no-install-recommends \
