@@ -12,13 +12,12 @@ aro run ./Examples/HTTPServer       # Run server (uses Keepalive action)
 aro compile ./MyApp   # Compile all .aro files in directory
 aro check ./MyApp     # Syntax check all .aro files
 aro build ./MyApp     # Compile to native binary (C code + object file)
-aro build ./MyApp --emit-c  # Generate C code only
 aro build ./MyApp --verbose --optimize  # Verbose build with optimizations
 ```
 
 ## Architecture
 
-This is a Swift 6.0 parser/compiler/runtime for ARO (Action Result Object), a DSL for expressing business features as Action-Result-Object statements.
+This is a Swift 6.2 parser/compiler/runtime for ARO (Action Result Object), a DSL for expressing business features as Action-Result-Object statements.
 
 ### Application Structure
 
@@ -134,6 +133,11 @@ paths:
 
 **Request Body**: Typed according to OpenAPI schema:
 - `<Extract> the <data> from the <request: body>.`
+
+### Happy Case
+Code contains only the happy case. Errors are handled by the runtime. For example when a user cannot be retrieved from the repository, the server just returns: `Can not retrieve the user from the user-repository where id = 530`.
+
+Do not use it for production code, it is terribly unsecure.
 
 ### Key Types
 
