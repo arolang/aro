@@ -36,7 +36,7 @@ jobs:
       image: swift:6.2-jammy
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
 
       - name: Cache Swift packages
         uses: actions/cache@v4
@@ -74,7 +74,7 @@ jobs:
     runs-on: macos-15
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
 
       - name: Setup Swift
         uses: swift-actions/setup-swift@v3
@@ -118,7 +118,7 @@ jobs:
     continue-on-error: true  # swift-nio-ssl Windows header issues
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
 
       - name: Setup Swift
         uses: compnerd/gha-setup-swift@main
@@ -158,7 +158,7 @@ jobs:
       contents: write
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
 
       - name: Download all artifacts
         uses: actions/download-artifact@v4
