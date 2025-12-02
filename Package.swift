@@ -63,7 +63,7 @@ let package = Package(
             ],
             path: "Sources/ARORuntime"
         ),
-        // Native compiler (C code generation)
+        // Native compiler (LLVM IR generation)
         .target(
             name: "AROCompiler",
             dependencies: [
