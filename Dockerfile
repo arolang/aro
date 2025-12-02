@@ -46,7 +46,7 @@ RUN swift test --parallel
 # -----------------------------------------------------------------------------
 # Stage 2: Runtime Environment
 # -----------------------------------------------------------------------------
-FROM ubuntu:22.04 AS runtime
+FROM ubuntu:24.04 AS runtime
 
 # Labels for container metadata
 LABEL org.opencontainers.image.title="ARO Programming Language"
