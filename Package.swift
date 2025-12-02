@@ -31,8 +31,8 @@ let package = Package(
         )
     ],
     dependencies: [
-        // SwiftNIO for HTTP server and sockets
-        .package(url: "https://github.com/apple/swift-nio.git", from: "2.65.0"),
+        // SwiftNIO for HTTP server and sockets (2.75.0+ for Swift 6 support)
+        .package(url: "https://github.com/apple/swift-nio.git", from: "2.75.0"),
         // AsyncHTTPClient for outgoing HTTP requests
         .package(url: "https://github.com/swift-server/async-http-client.git", from: "1.21.0"),
         // FileMonitor for file system watching
