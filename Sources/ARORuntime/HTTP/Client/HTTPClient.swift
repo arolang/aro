@@ -3,6 +3,8 @@
 // ARO Runtime - HTTP Client (AsyncHTTPClient)
 // ============================================================
 
+#if !os(Windows)
+
 import Foundation
 import AsyncHTTPClient
 import NIO
@@ -252,3 +254,5 @@ public struct HTTPClientErrorEvent: RuntimeEvent {
         self.error = error
     }
 }
+
+#endif  // !os(Windows)

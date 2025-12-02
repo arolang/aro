@@ -42,9 +42,7 @@ jobs:
         uses: actions/cache@v4
         with:
           path: .build
-          key: linux-swift-${{ env.SWIFT_VERSION }}-${{ hashFiles('Package.resolved') }}
-          restore-keys: |
-            linux-swift-${{ env.SWIFT_VERSION }}-
+          key: linux-swift-${{ env.SWIFT_VERSION }}-v3-${{ hashFiles('Package.resolved') }}
 
       - name: Build
         run: swift build -c debug
@@ -73,7 +71,7 @@ jobs:
   # ===========================================================================
   macos:
     name: macOS
-    runs-on: macos-14
+    runs-on: macos-15
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -81,15 +79,13 @@ jobs:
       - name: Setup Swift
         uses: swift-actions/setup-swift@v3
         with:
-          swift-version: "6.2.1"
+          swift-version: ${{ env.SWIFT_VERSION }}
 
       - name: Cache Swift packages
         uses: actions/cache@v4
         with:
           path: .build
-          key: macos-swift-${{ env.SWIFT_VERSION }}-${{ hashFiles('Package.resolved') }}
-          restore-keys: |
-            macos-swift-${{ env.SWIFT_VERSION }}-
+          key: macos-swift-${{ env.SWIFT_VERSION }}-v4-${{ hashFiles('Package.resolved') }}
 
       - name: Build
         run: swift build -c debug
@@ -119,6 +115,7 @@ jobs:
   windows:
     name: Windows
     runs-on: windows-latest
+    continue-on-error: true  # swift-nio-ssl Windows header issues
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4

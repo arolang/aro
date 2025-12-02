@@ -8,7 +8,7 @@
     <Start> the <http-server> on <port> with 8080.
 
     (* Watch uploads directory for new files *)
-    <Watch> the <directory: "./uploads"> as <file-monitor>.
+    <Watch> the <file-monitor> for the <directory> with "./uploads".
 
     <Log> the <ready: message> for the <console> with "User Service ready on port 8080".
     <Return> an <OK: status> for the <startup>.
@@ -25,33 +25,20 @@
     <Close> the <database-connections> for the <application>.
 
     (* Flush any pending logs *)
-    <Flush> the <log-buffer> for the <system>.
+    <Flush> the <log-buffer> for the <application>.
 
     <Log> the <shutdown: complete> for the <console> with "User Service stopped. Goodbye!".
     <Return> an <OK: status> for the <shutdown>.
 }
 
-(* Called when application encounters a fatal error *)
-(Application-End: Error) {
-    <Extract> the <error> from the <shutdown: error>.
-    <Extract> the <code> from the <shutdown: code>.
-    <Extract> the <reason> from the <shutdown: reason>.
+(* Called when application encounters a fatal failure *)
+(Application-End: Failure Handler) {
+    <Extract> the <failure> from the <shutdown: failure>.
 
-    <Log> the <error: message> for the <console> with "FATAL: User Service crashed!".
-    <Log> the <error: details> for the <console> with "Reason: ${reason}".
-    <Log> the <error: code> for the <console> with "Exit code: ${code}".
-
-    (* Send alert to operations team *)
-    <Send> the <crash-alert> to the <ops-webhook> with {
-        service: "UserService",
-        error: <error>,
-        code: <code>,
-        reason: <reason>,
-        timestamp: <current-time>
-    }.
+    <Log> the <failure: message> for the <console> with "FATAL: User Service crashed!".
 
     (* Attempt to close connections gracefully *)
     <Close> the <database-connections> for the <application>.
 
-    <Return> an <OK: status> for the <error-handling>.
+    <Return> an <OK: status> for the <failure-handling>.
 }

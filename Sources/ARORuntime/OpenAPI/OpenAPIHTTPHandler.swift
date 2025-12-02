@@ -3,6 +3,8 @@
 // ARO Runtime - OpenAPI-Aware HTTP Request Handling
 // ============================================================
 
+#if !os(Windows)
+
 import Foundation
 
 /// Handles HTTP requests using OpenAPI routing
@@ -125,3 +127,5 @@ public struct HTTPOperationEvent: RuntimeEvent {
 }
 
 // Note: HTTPRequestReceivedEvent and HTTPResponseSentEvent are defined in Events/EventTypes.swift
+
+#endif  // !os(Windows)

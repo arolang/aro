@@ -840,6 +840,7 @@ struct RouteResultBridge: Sendable {
     let success: Bool
 }
 
+#if !os(Windows)
 /// Global storage for active file watchers
 nonisolated(unsafe) private var activeWatchers: [UnsafeMutableRawPointer] = []
 private let activeWatcherLock = NSLock()
@@ -905,6 +906,22 @@ public func stopAllFileWatchers() {
         aro_file_watcher_destroy(watcher)
     }
 }
+#else
+// Windows stub - file watching not supported
+@_cdecl("aro_action_watch")
+public func aro_action_watch(
+    _ contextPtr: UnsafeMutableRawPointer?,
+    _ resultPtr: UnsafeRawPointer?,
+    _ objectPtr: UnsafeRawPointer?
+) -> UnsafeMutableRawPointer? {
+    print("[FileMonitor] Warning: File watching is not supported on Windows")
+    return boxResult(WatchResultBridge(path: ".", success: false))
+}
+
+public func stopAllFileWatchers() {
+    // No-op on Windows
+}
+#endif
 
 struct WatchResultBridge: Sendable {
     let path: String
