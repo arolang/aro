@@ -1,0 +1,212 @@
+name: Language Proposal
+description: Propose a new feature or change to the ARO language
+title: "[Proposal]: "
+labels: ["proposal", "triage"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        ## ARO Language Proposal
+
+        Thank you for contributing to ARO's evolution! This template follows the structure of our [existing proposals](https://github.com/KrisSimon/aro/tree/main/Proposals).
+
+        Before submitting, please:
+        - Search existing proposals to avoid duplicates
+        - Review [MISSING.md](https://github.com/KrisSimon/aro/blob/main/MISSING.md) for known gaps
+        - Consider the impact on existing ARO code
+
+  - type: input
+    id: title
+    attributes:
+      label: Proposal Title
+      description: A short, descriptive title (e.g., "Union Types", "Pattern Matching")
+      placeholder: "e.g., String Interpolation"
+    validations:
+      required: true
+
+  - type: textarea
+    id: abstract
+    attributes:
+      label: Abstract
+      description: A brief (2-3 sentence) summary of the proposal.
+      placeholder: |
+        This proposal introduces X to ARO, enabling Y and Z.
+    validations:
+      required: true
+
+  - type: textarea
+    id: motivation
+    attributes:
+      label: Motivation
+      description: |
+        Why is this change needed? What problem does it solve?
+        Include concrete use cases and examples of current pain points.
+      placeholder: |
+        Currently, ARO developers must...
+        This is problematic because...
+
+        Use case 1: ...
+        Use case 2: ...
+    validations:
+      required: true
+
+  - type: textarea
+    id: proposed-solution
+    attributes:
+      label: Proposed Solution
+      description: |
+        Describe your proposed solution in detail.
+        Include syntax examples, grammar (EBNF if possible), and semantics.
+      placeholder: |
+        ### Syntax
+
+        ```aro
+        (* Example ARO code showing the new feature *)
+        ```
+
+        ### Grammar (EBNF)
+
+        ```ebnf
+        new_construct = ... ;
+        ```
+
+        ### Semantics
+
+        The new construct behaves as follows...
+    validations:
+      required: true
+
+  - type: textarea
+    id: examples
+    attributes:
+      label: Detailed Examples
+      description: |
+        Provide complete, runnable examples showing the feature in use.
+        Show both simple and complex cases.
+      placeholder: |
+        ### Basic Example
+
+        ```aro
+        (Feature Name: Activity) {
+            (* Show the feature in action *)
+        }
+        ```
+
+        ### Advanced Example
+
+        ```aro
+        (* More complex usage *)
+        ```
+    validations:
+      required: true
+
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives Considered
+      description: What other approaches did you consider? Why is this proposal better?
+      placeholder: |
+        1. Alternative A: ...
+           Rejected because: ...
+
+        2. Alternative B: ...
+           Rejected because: ...
+
+  - type: dropdown
+    id: component
+    attributes:
+      label: Affected Components
+      description: Which parts of ARO would this change affect?
+      multiple: true
+      options:
+        - Parser (AROParser)
+        - Runtime (ARORuntime)
+        - Compiler (AROCompiler)
+        - Type System
+        - Standard Library
+        - CLI
+        - Documentation
+    validations:
+      required: true
+
+  - type: dropdown
+    id: breaking
+    attributes:
+      label: Breaking Change?
+      description: Would this change break existing ARO code?
+      options:
+        - "No - Fully backwards compatible"
+        - "Minor - Deprecates existing features"
+        - "Yes - Requires migration"
+    validations:
+      required: true
+
+  - type: textarea
+    id: compatibility
+    attributes:
+      label: Compatibility & Migration
+      description: |
+        If this is a breaking change, how would existing code be migrated?
+        What deprecation period would you suggest?
+      placeholder: |
+        ### Migration Path
+
+        Existing code using X would need to change to Y.
+
+        ### Deprecation Timeline
+
+        1. Version N: Introduce new syntax, old syntax emits warning
+        2. Version N+1: Old syntax emits error
+
+  - type: textarea
+    id: implementation
+    attributes:
+      label: Implementation Notes
+      description: |
+        Optional: Any thoughts on how this would be implemented?
+        Include Swift code snippets if relevant.
+      placeholder: |
+        The parser would need to:
+        1. ...
+
+        ```swift
+        // Example implementation sketch
+        ```
+
+  - type: dropdown
+    id: requires
+    attributes:
+      label: Dependencies
+      description: Does this proposal depend on other proposals?
+      multiple: true
+      options:
+        - "None"
+        - "ARO-0001: Core Syntax"
+        - "ARO-0006: Type System"
+        - "ARO-0007: Modules"
+        - "ARO-0008: Error Handling"
+        - "ARO-0011: Concurrency"
+        - "Other (specify in Additional Context)"
+
+  - type: textarea
+    id: additional
+    attributes:
+      label: Additional Context
+      description: |
+        Any other information, references to other languages, academic papers, etc.
+      placeholder: |
+        Similar features in other languages:
+        - Rust: ...
+        - TypeScript: ...
+
+        References:
+        - [Paper/Article](url)
+
+  - type: checkboxes
+    id: contribution
+    attributes:
+      label: Contribution
+      options:
+        - label: I would be willing to help implement this proposal
+        - label: I would be willing to write documentation for this feature
+        - label: I would be willing to write tests for this feature

@@ -1,0 +1,93 @@
+# =============================================================================
+# ARO Programming Language - Website Pipeline
+# =============================================================================
+# Builds and deploys the ARO website to GitHub Pages
+# =============================================================================
+
+name: Website
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - 'Website/**'
+      - '.github/workflows/website.yml'
+  pull_request:
+    branches:
+      - main
+    paths:
+      - 'Website/**'
+      - '.github/workflows/website.yml'
+  workflow_dispatch:
+
+concurrency:
+  group: website-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  # ===========================================================================
+  # Build Website
+  # ===========================================================================
+  build:
+    name: Build
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install dependencies
+        working-directory: Website
+        run: npm ci --ignore-scripts || npm install
+
+      - name: Build website
+        working-directory: Website
+        run: |
+          chmod +x build.sh
+          ./build.sh
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: website
+          path: Website/dist
+          retention-days: 7
+
+  # ===========================================================================
+  # Deploy to GitHub Pages
+  # ===========================================================================
+  deploy:
+    name: Deploy
+    needs: build
+    runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+    permissions:
+      contents: write
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Download artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: website
+          path: dist
+
+      - name: Setup Pages
+        uses: actions/configure-pages@v4
+
+      - name: Upload to GitHub Pages
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: dist
+
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4

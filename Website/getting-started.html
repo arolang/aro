@@ -1,0 +1,479 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <title>Get Started - ARO Programming Language</title>
+{{head}}
+    <style>
+        .guide-hero {
+            padding: 160px 24px 60px;
+            text-align: center;
+            background:
+                radial-gradient(ellipse at 50% 0%, rgba(16, 185, 129, 0.15) 0%, transparent 50%),
+                var(--color-bg);
+        }
+
+        .guide-hero h1 {
+            font-size: clamp(2.5rem, 5vw, 4rem);
+            font-weight: 700;
+            margin-bottom: 16px;
+        }
+
+        .guide-hero .lead {
+            font-size: 1.2rem;
+            color: var(--color-text-muted);
+            max-width: 600px;
+            margin: 0 auto;
+        }
+
+        .guide-content {
+            max-width: 900px;
+            margin: 0 auto;
+            padding: 60px 24px;
+        }
+
+        .step {
+            margin-bottom: 60px;
+            padding-bottom: 60px;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+        }
+
+        .step:last-child {
+            border-bottom: none;
+        }
+
+        .step-header {
+            display: flex;
+            align-items: center;
+            gap: 20px;
+            margin-bottom: 24px;
+        }
+
+        .step-number {
+            width: 48px;
+            height: 48px;
+            background: var(--gradient-primary);
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 1.2rem;
+            font-weight: 700;
+            flex-shrink: 0;
+        }
+
+        .step h2 {
+            font-size: 1.8rem;
+            font-weight: 600;
+        }
+
+        .step p {
+            font-size: 1.1rem;
+            color: var(--color-text-muted);
+            line-height: 1.7;
+            margin-bottom: 20px;
+        }
+
+        .step code {
+            font-family: var(--font-mono);
+            background: var(--color-bg-alt);
+            padding: 3px 8px;
+            border-radius: 4px;
+            font-size: 0.95rem;
+        }
+
+        .code-block {
+            background: var(--color-bg-alt);
+            border-radius: var(--radius-md);
+            overflow: hidden;
+            margin: 24px 0;
+            border: 1px solid rgba(255, 255, 255, 0.1);
+        }
+
+        .code-block-header {
+            display: flex;
+            align-items: center;
+            padding: 12px 16px;
+            background: rgba(0, 0, 0, 0.3);
+            border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+            gap: 8px;
+        }
+
+        .code-block-header .dot {
+            width: 10px;
+            height: 10px;
+            border-radius: 50%;
+        }
+
+        .code-block-header .dot.red { background: #ff5f56; }
+        .code-block-header .dot.yellow { background: #ffbd2e; }
+        .code-block-header .dot.green { background: #27ca40; }
+
+        .code-block-title {
+            margin-left: auto;
+            font-family: var(--font-mono);
+            font-size: 0.8rem;
+            color: var(--color-text-muted);
+        }
+
+        .code-block pre {
+            padding: 20px;
+            overflow-x: auto;
+            font-family: var(--font-mono);
+            font-size: 0.9rem;
+            line-height: 1.7;
+        }
+
+        .code-block .comment { color: #6b7280; }
+        .code-block .keyword { color: #7c3aed; }
+        .code-block .string { color: #10b981; }
+        .code-block .action { color: #7c3aed; font-weight: 600; }
+        .code-block .result { color: #06b6d4; }
+        .code-block .feature { color: #f472b6; }
+
+        .terminal {
+            background: #1a1a2e;
+            border-radius: var(--radius-md);
+            padding: 20px;
+            margin: 24px 0;
+            font-family: var(--font-mono);
+            font-size: 0.9rem;
+        }
+
+        .terminal-prompt {
+            color: #10b981;
+        }
+
+        .terminal-command {
+            color: var(--color-text);
+        }
+
+        .terminal-output {
+            color: var(--color-text-muted);
+            margin-top: 12px;
+        }
+
+        .file-tree {
+            background: var(--color-bg-alt);
+            border-radius: var(--radius-md);
+            padding: 24px;
+            margin: 24px 0;
+            font-family: var(--font-mono);
+            font-size: 0.9rem;
+            border: 1px solid rgba(255, 255, 255, 0.1);
+        }
+
+        .file-tree-item {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            padding: 6px 0;
+            color: var(--color-text-muted);
+        }
+
+        .file-tree-item.folder { color: var(--color-secondary); }
+        .file-tree-item.file-yaml { color: var(--color-warning); }
+        .file-tree-item.file-aro { color: var(--color-accent); }
+
+        .file-tree-item.indent-1 { padding-left: 24px; }
+        .file-tree-item.indent-2 { padding-left: 48px; }
+
+        .tip {
+            background: rgba(16, 185, 129, 0.1);
+            border-left: 4px solid var(--color-success);
+            padding: 20px 24px;
+            border-radius: 0 var(--radius-md) var(--radius-md) 0;
+            margin: 24px 0;
+        }
+
+        .tip-title {
+            font-weight: 600;
+            color: var(--color-success);
+            margin-bottom: 8px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .tip p {
+            margin-bottom: 0;
+            font-size: 1rem;
+        }
+
+        .next-steps {
+            background: var(--color-bg-alt);
+            border-radius: var(--radius-lg);
+            padding: 40px;
+            margin-top: 60px;
+            text-align: center;
+        }
+
+        .next-steps h3 {
+            font-size: 1.5rem;
+            margin-bottom: 16px;
+        }
+
+        .next-steps p {
+            color: var(--color-text-muted);
+            margin-bottom: 24px;
+        }
+
+        .next-links {
+            display: flex;
+            gap: 16px;
+            justify-content: center;
+            flex-wrap: wrap;
+        }
+    </style>
+</head>
+<body>
+    <nav class="nav">
+        <div class="nav-content">
+            <a href="/aro/" class="logo">
+                <span class="logo-aro">ARO</span>
+            </a>
+            <div class="nav-links">
+                <a href="fdd.html">The FDD Story</a>
+                <a href="getting-started.html" style="color: var(--color-text);">Get Started</a>
+                <a href="docs.html">Docs</a>
+                <a href="https://github.com/KrisSimon/aro" class="nav-github">GitHub</a>
+            </div>
+        </div>
+    </nav>
+
+    <header class="guide-hero">
+        <h1 class="gradient-text-third">Get Started with ARO</h1>
+        <p class="lead">
+            Build your first API in 5 minutes. No magic required—just features.
+        </p>
+    </header>
+
+    <main class="guide-content">
+        <div class="step">
+            <div class="step-header">
+                <div class="step-number">1</div>
+                <h2>Create Your Project</h2>
+            </div>
+
+            <p>
+                An ARO application is simply a folder containing <code>.aro</code> files and an
+                <code>openapi.yaml</code> contract. Let's create a Hello World API.
+            </p>
+
+            <div class="terminal">
+                <span class="terminal-prompt">$</span>
+                <span class="terminal-command"> mkdir HelloWorldAPI && cd HelloWorldAPI</span>
+            </div>
+
+            <p>Your project structure will look like this:</p>
+
+            <div class="file-tree">
+                <div class="file-tree-item folder">&#x1F4C1; HelloWorldAPI/</div>
+                <div class="file-tree-item file-yaml indent-1">&#x1F4C4; openapi.yaml</div>
+                <div class="file-tree-item file-aro indent-1">&#x1F4DC; main.aro</div>
+                <div class="file-tree-item file-aro indent-1">&#x1F4DC; hello.aro</div>
+            </div>
+        </div>
+
+        <div class="step">
+            <div class="step-header">
+                <div class="step-number">2</div>
+                <h2>Define Your API Contract</h2>
+            </div>
+
+            <p>
+                ARO uses <strong>contract-first development</strong>. Your <code>openapi.yaml</code> defines
+                what endpoints exist. The <code>operationId</code> maps directly to your ARO feature sets.
+            </p>
+
+            <div class="code-block">
+                <div class="code-block-header">
+                    <span class="dot red"></span>
+                    <span class="dot yellow"></span>
+                    <span class="dot green"></span>
+                    <span class="code-block-title">openapi.yaml</span>
+                </div>
+                <pre><span class="keyword">openapi:</span> <span class="string">3.0.3</span>
+<span class="keyword">info:</span>
+  <span class="keyword">title:</span> <span class="string">Hello World API</span>
+  <span class="keyword">version:</span> <span class="string">1.0.0</span>
+
+<span class="keyword">servers:</span>
+  - <span class="keyword">url:</span> <span class="string">http://localhost:8000</span>
+
+<span class="keyword">paths:</span>
+  <span class="string">/hello:</span>
+    <span class="keyword">get:</span>
+      <span class="keyword">operationId:</span> <span class="result">sayHello</span>  <span class="comment"># ← This maps to your ARO feature set!</span>
+      <span class="keyword">summary:</span> <span class="string">Say Hello</span>
+      <span class="keyword">responses:</span>
+        <span class="string">'200':</span>
+          <span class="keyword">description:</span> <span class="string">A friendly greeting</span></pre>
+            </div>
+
+            <div class="tip">
+                <div class="tip-title">&#x1F4A1; Key Insight</div>
+                <p>
+                    The <code>operationId</code> is the bridge between your API and your code.
+                    <code>sayHello</code> in the contract means you need a feature set named <code>sayHello</code>.
+                </p>
+            </div>
+        </div>
+
+        <div class="step">
+            <div class="step-header">
+                <div class="step-number">3</div>
+                <h2>Write Your Application Entry Point</h2>
+            </div>
+
+            <p>
+                Every ARO application needs exactly one <code>Application-Start</code> feature set.
+                This is where your application begins.
+            </p>
+
+            <div class="code-block">
+                <div class="code-block-header">
+                    <span class="dot red"></span>
+                    <span class="dot yellow"></span>
+                    <span class="dot green"></span>
+                    <span class="code-block-title">main.aro</span>
+                </div>
+                <pre><span class="comment">(* Application Entry Point *)</span>
+
+<span class="feature">(Application-Start: Hello World API)</span> {
+    <span class="comment">(* Log a startup message *)</span>
+    <span class="action">&lt;Log&gt;</span> the <span class="result">&lt;startup: message&gt;</span> for the <span class="result">&lt;console&gt;</span> with <span class="string">"Starting server..."</span>.
+
+    <span class="comment">(* Start the HTTP server on port 8000 *)</span>
+    <span class="action">&lt;Start&gt;</span> the <span class="result">&lt;http-server&gt;</span> on <span class="result">&lt;port&gt;</span> with <span class="string">8000</span>.
+
+    <span class="comment">(* Keep the application running to process HTTP requests *)</span>
+    <span class="action">&lt;Keepalive&gt;</span> the <span class="result">&lt;application&gt;</span> for the <span class="result">&lt;events&gt;</span>.
+
+    <span class="comment">(* Return OK to indicate successful startup *)</span>
+    <span class="action">&lt;Return&gt;</span> an <span class="result">&lt;OK: status&gt;</span> for the <span class="result">&lt;startup&gt;</span>.
+}</pre>
+            </div>
+        </div>
+
+        <div class="step">
+            <div class="step-header">
+                <div class="step-number">4</div>
+                <h2>Create Your Feature Handler</h2>
+            </div>
+
+            <p>
+                Now create the feature set that handles your API endpoint.
+                Remember: the feature set name must match the <code>operationId</code> from your contract.
+            </p>
+
+            <div class="code-block">
+                <div class="code-block-header">
+                    <span class="dot red"></span>
+                    <span class="dot yellow"></span>
+                    <span class="dot green"></span>
+                    <span class="code-block-title">hello.aro</span>
+                </div>
+                <pre><span class="comment">(* Handler for GET /hello *)</span>
+<span class="comment">(* Feature set name matches operationId from openapi.yaml *)</span>
+
+<span class="feature">(sayHello: Greeting API)</span> {
+    <span class="comment">(* Create our greeting message *)</span>
+    <span class="action">&lt;Create&gt;</span> the <span class="result">&lt;greeting&gt;</span> with <span class="string">"Hello, World!"</span>.
+
+    <span class="comment">(* Return it as a successful response *)</span>
+    <span class="action">&lt;Return&gt;</span> an <span class="result">&lt;OK: status&gt;</span> with <span class="result">&lt;greeting&gt;</span>.
+}</pre>
+            </div>
+
+            <div class="tip">
+                <div class="tip-title">&#x1F3AF; The ARO Pattern</div>
+                <p>
+                    Every statement follows: <strong>&lt;Action&gt;</strong> the <strong>&lt;Result&gt;</strong>
+                    <em>preposition</em> the <strong>&lt;Object&gt;</strong>.<br>
+                    It reads like English because it <em>is</em> English—structured for machines.
+                </p>
+            </div>
+        </div>
+
+        <div class="step">
+            <div class="step-header">
+                <div class="step-number">5</div>
+                <h2>Run Your Application</h2>
+            </div>
+
+            <p>
+                Check your syntax, then run your application:
+            </p>
+
+            <div class="terminal">
+                <span class="terminal-prompt">$</span>
+                <span class="terminal-command"> aro check ./HelloWorldAPI</span>
+                <div class="terminal-output">
+✅ No errors found in 2 file(s)
+                </div>
+            </div>
+
+            <div class="terminal">
+                <span class="terminal-prompt">$</span>
+                <span class="terminal-command"> aro run ./HelloWorldAPI</span>
+                <div class="terminal-output">
+Starting server...
+Server running at http://localhost:8000
+                </div>
+            </div>
+
+            <p>Test your API:</p>
+
+            <div class="terminal">
+                <span class="terminal-prompt">$</span>
+                <span class="terminal-command"> curl http://localhost:8000/hello</span>
+                <div class="terminal-output">
+{"message": "Hello, World!"}
+                </div>
+            </div>
+
+            <p>&#x1F389; <strong>That's it!</strong> You've built your first ARO application.</p>
+        </div>
+
+        <div class="next-steps">
+            <h3>What's Next?</h3>
+            <p>
+                You've just scratched the surface. ARO can handle complex APIs,
+                event-driven architectures, and AI-assisted development.
+            </p>
+            <div class="next-links">
+                <a href="docs.html" class="btn btn-primary">Read the Docs</a>
+                <a href="fdd.html" class="btn btn-secondary">Learn About FDD</a>
+            </div>
+        </div>
+    </main>
+
+    <footer class="footer">
+        <div class="container">
+            <div class="footer-content">
+                <div class="footer-brand">
+                    <span class="logo-aro">ARO</span>
+                    <p>The ARO Programming Language</p>
+                    <p class="footer-tagline">Speak Business. Write Code.</p>
+                </div>
+                <div class="footer-links">
+                    <div class="footer-col">
+                        <h4>Learn</h4>
+                        <a href="getting-started.html">Getting Started</a>
+                        <a href="docs.html">Documentation</a>
+                        <a href="fdd.html">FDD History</a>
+                    </div>
+                    <div class="footer-col">
+                        <h4>Community</h4>
+                        <a href="https://github.com/KrisSimon/aro">GitHub</a>
+                        <a href="https://github.com/KrisSimon/aro/issues">Issues</a>
+                    </div>
+                </div>
+            </div>
+            <div class="footer-bottom">
+                <p>Sometime this page should build with ARO. Obviously.</p>
+            </div>
+        </div>
+    </footer>
+</body>
+</html>

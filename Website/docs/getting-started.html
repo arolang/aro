@@ -1,0 +1,496 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <title>Getting Started - ARO Programming Language</title>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="../style.css">
+    <!-- Matomo -->
+    <script>
+        var _paq = window._paq = window._paq || [];
+        /* tracker methods like "setCustomDimension" should be called before "trackPageView" */
+        _paq.push(['trackPageView']);
+        _paq.push(['enableLinkTracking']);
+        (function() {
+            var u="//matomo.benjamin.ausdertechnik.de/";
+            _paq.push(['setTrackerUrl', u+'matomo.php']);
+            _paq.push(['setSiteId', '4']);
+            var d=document, g=d.createElement('script'), s=d.getElementsByTagName('script')[0];
+            g.async=true; g.src=u+'matomo.js'; s.parentNode.insertBefore(g,s);
+        })();
+    </script>
+    <!-- End Matomo Code -->
+
+    <style>
+        .doc-page {
+            padding: 120px 24px 80px;
+            max-width: 800px;
+            margin: 0 auto;
+        }
+
+        .doc-page h1 {
+            font-size: 2.5rem;
+            font-weight: 700;
+            margin-bottom: 24px;
+            letter-spacing: -0.02em;
+        }
+
+        .doc-page h2 {
+            font-size: 1.8rem;
+            font-weight: 600;
+            margin: 48px 0 16px;
+            padding-top: 24px;
+            border-top: 1px solid rgba(255, 255, 255, 0.1);
+        }
+
+        .doc-page h3 {
+            font-size: 1.4rem;
+            font-weight: 600;
+            margin: 32px 0 12px;
+            color: var(--color-secondary);
+        }
+
+        .doc-page p {
+            font-size: 1.1rem;
+            color: var(--color-text-muted);
+            line-height: 1.8;
+            margin-bottom: 16px;
+        }
+
+        .doc-page code {
+            font-family: var(--font-mono);
+            background: var(--color-bg-alt);
+            padding: 3px 8px;
+            border-radius: 4px;
+            font-size: 0.9rem;
+        }
+
+        .doc-page pre {
+            background: var(--color-bg-alt);
+            border-radius: var(--radius-md);
+            padding: 20px;
+            overflow-x: auto;
+            margin: 24px 0;
+            border: 1px solid rgba(255, 255, 255, 0.1);
+        }
+
+        .doc-page pre code {
+            background: none;
+            padding: 0;
+            font-size: 0.9rem;
+            line-height: 1.7;
+        }
+
+        .doc-page ul, .doc-page ol {
+            color: var(--color-text-muted);
+            margin: 16px 0 16px 24px;
+            line-height: 1.8;
+        }
+
+        .doc-page li {
+            margin-bottom: 8px;
+        }
+
+        .doc-page table {
+            width: 100%;
+            border-collapse: collapse;
+            margin: 24px 0;
+        }
+
+        .doc-page th, .doc-page td {
+            padding: 12px 16px;
+            text-align: left;
+            border: 1px solid rgba(255, 255, 255, 0.1);
+        }
+
+        .doc-page th {
+            background: var(--color-bg-alt);
+            font-weight: 600;
+        }
+
+        .doc-page blockquote {
+            border-left: 4px solid var(--color-primary);
+            padding-left: 20px;
+            margin: 24px 0;
+            color: var(--color-text);
+            font-style: italic;
+        }
+
+        .doc-page strong {
+            color: var(--color-text);
+        }
+
+        .doc-page em {
+            color: var(--color-secondary);
+        }
+
+        .doc-page a {
+            color: var(--color-primary);
+            text-decoration: none;
+        }
+
+        .doc-page a:hover {
+            text-decoration: underline;
+        }
+
+        .doc-page hr {
+            border: none;
+            border-top: 1px solid rgba(255, 255, 255, 0.1);
+            margin: 48px 0;
+        }
+    </style>
+</head>
+<body>
+    <nav class="nav">
+        <div class="nav-content">
+            <a href="/aro/" class="logo">
+                <span class="logo-aro">ARO</span>
+            </a>
+            <div class="nav-links">
+                <a href="../fdd.html">The FDD Story</a>
+                <a href="../getting-started.html">Get Started</a>
+                <a href="../docs.html">Docs</a>
+                <a href="https://github.com/KrisSimon/aro" class="nav-github">GitHub</a>
+            </div>
+        </div>
+    </nav>
+
+    <main class="doc-page">
+        <h1>Start with ARO</h1>
+<p>This guide will walk you through creating your first ARO application: a simple &quot;Hello World&quot; API server.</p>
+<hr>
+<h2>What is ARO?</h2>
+<p>ARO (Action-Result-Object) is a domain-specific language for building business applications. It uses natural language-like syntax to express business logic as a series of actions.</p>
+<p><strong>Key concepts:</strong></p>
+<ul>
+<li><strong>Contract-First</strong>: Your API is defined in an <code>openapi.yaml</code> file before any code</li>
+<li><strong>Feature Sets</strong>: Business logic is organized into named feature sets</li>
+<li><strong>Event-Driven</strong>: Feature sets are triggered by events (HTTP requests, custom events, etc.)</li>
+<li><strong>Natural Syntax</strong>: Code reads like English: <code>&lt;Action&gt; the &lt;Result&gt; for the &lt;Object&gt;</code></li>
+</ul>
+<hr>
+<h2>Project Structure</h2>
+<p>An ARO application is a directory containing <code>.aro</code> files and an <code>openapi.yaml</code> contract:</p>
+<pre><code>HelloWorldAPI/
+├── openapi.yaml      ← API contract (required for HTTP)
+├── main.aro          ← Application entry point
+└── hello.aro         ← Request handler
+</code></pre>
+<hr>
+<h2>Step 1: The OpenAPI Contract</h2>
+<p>Every ARO HTTP application starts with an <code>openapi.yaml</code> file. This is your <strong>contract</strong> - it defines what endpoints your API has.</p>
+<p><strong>openapi.yaml:</strong></p>
+<pre><code class="language-yaml">openapi: 3.0.3
+info:
+  title: Hello World API
+  description: A simple API that returns &quot;Hello World&quot;
+  version: 1.0.0
+
+servers:
+  - url: http://localhost:8000
+    description: Local development server
+
+paths:
+  /hello:
+    get:
+      operationId: sayHello       # ← This name maps to an ARO feature set
+      summary: Say Hello
+      description: Returns a friendly &quot;Hello World&quot; greeting
+      responses:
+        &#39;200&#39;:
+          description: Successful response with greeting
+          content:
+            application/json:
+              schema:
+                $ref: &#39;#/components/schemas/HelloResponse&#39;
+
+components:
+  schemas:
+    HelloResponse:
+      type: object
+      properties:
+        message:
+          type: string
+          example: Hello World
+      required:
+        - message
+</code></pre>
+<p><strong>Key Point:</strong> The <code>operationId: sayHello</code> is crucial. ARO uses this to route requests to the correct feature set.</p>
+<hr>
+<h2>Step 2: Application Entry Point</h2>
+<p>Every ARO application needs exactly ONE <code>Application-Start</code> feature set. This is where your application begins.</p>
+<p><strong>main.aro:</strong></p>
+<pre><code class="language-aro">(* Application Entry Point *)
+
+(Application-Start: Hello World API) {
+    (* Log a startup message *)
+    &lt;Log&gt; the &lt;startup: message&gt; for the &lt;console&gt; with &quot;Hello World API starting...&quot;.
+
+    (* Start the HTTP server on port 8000 *)
+    &lt;Start&gt; the &lt;http-server&gt; on &lt;port&gt; with 8000.
+
+    (* Log ready message *)
+    &lt;Log&gt; the &lt;ready: message&gt; for the &lt;console&gt; with &quot;Server running at http://localhost:8000&quot;.
+
+    (* Keep the application running to process HTTP requests *)
+    &lt;Keepalive&gt; the &lt;application&gt; for the &lt;events&gt;.
+
+    (* Return OK to indicate successful startup *)
+    &lt;Return&gt; an &lt;OK: status&gt; for the &lt;startup&gt;.
+}
+
+(* Optional: Handle graceful shutdown *)
+(Application-End: Success) {
+    &lt;Log&gt; the &lt;shutdown: message&gt; for the &lt;console&gt; with &quot;Shutting down...&quot;.
+    &lt;Stop&gt; the &lt;http-server&gt; for the &lt;application&gt;.
+    &lt;Return&gt; an &lt;OK: status&gt; for the &lt;shutdown&gt;.
+}
+</code></pre>
+<h3>Understanding the Syntax</h3>
+<table>
+<thead>
+<tr>
+<th>Element</th>
+<th>Meaning</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><code>(* ... *)</code></td>
+<td>Comment</td>
+</tr>
+<tr>
+<td><code>(Name: Activity) { }</code></td>
+<td>Feature set definition</td>
+</tr>
+<tr>
+<td><code>&lt;Action&gt;</code></td>
+<td>The verb (what to do)</td>
+</tr>
+<tr>
+<td><code>&lt;result: qualifier&gt;</code></td>
+<td>The result with optional qualifier</td>
+</tr>
+<tr>
+<td><code>for the &lt;object&gt;</code></td>
+<td>The target of the action</td>
+</tr>
+<tr>
+<td><code>with &quot;value&quot;</code></td>
+<td>Additional data</td>
+</tr>
+</tbody></table>
+<hr>
+<h2>Step 3: Request Handler</h2>
+<p>The request handler is a feature set whose name <strong>matches</strong> the <code>operationId</code> from your OpenAPI contract.</p>
+<p><strong>hello.aro:</strong></p>
+<pre><code class="language-aro">(* Request Handler for GET /hello *)
+
+(sayHello: Hello API) {
+    (* Create the greeting message *)
+    &lt;Create&gt; the &lt;greeting&gt; with &quot;Hello World&quot;.
+
+    (* Return an OK response with the greeting *)
+    &lt;Return&gt; an &lt;OK: status&gt; with &lt;greeting&gt;.
+}
+</code></pre>
+<p><strong>Important:</strong> The feature set name <code>sayHello</code> must exactly match the <code>operationId</code> in your OpenAPI contract. This is how ARO knows which code handles which endpoint.</p>
+<hr>
+<h2>Running Your Application</h2>
+<h3>Development Mode (Interpreted)</h3>
+<p>Run your application directly without compilation:</p>
+<pre><code class="language-bash"># From the project root
+aro run ./Examples/HelloWorldAPI
+</code></pre>
+<p>You should see:</p>
+<pre><code>Hello World API starting...
+Server running at http://localhost:8000
+</code></pre>
+<h3>Testing Your API</h3>
+<p>Open a new terminal and test with curl:</p>
+<pre><code class="language-bash">curl http://localhost:8000/hello
+</code></pre>
+<p>Expected response:</p>
+<pre><code class="language-json">{&quot;message&quot;: &quot;Hello World&quot;}
+</code></pre>
+<hr>
+<h2>Compiling Your Application</h2>
+<p>ARO can compile your application to a native binary for production deployment.</p>
+<h3>Check Syntax First</h3>
+<pre><code class="language-bash">aro check ./Examples/HelloWorldAPI
+</code></pre>
+<p>This validates all <code>.aro</code> files without running them.</p>
+<h3>Compile to Binary</h3>
+<pre><code class="language-bash">aro compile ./Examples/HelloWorldAPI
+</code></pre>
+<p>This produces a compiled report showing the structure of your application.</p>
+<h3>Build Native Binary</h3>
+<pre><code class="language-bash">aro build ./Examples/HelloWorldAPI
+</code></pre>
+<p>This creates a native executable in your application directory.</p>
+<hr>
+<h2>How It All Works Together</h2>
+<pre><code>┌─────────────────┐
+│  openapi.yaml   │  ← Defines: GET /hello → operationId: sayHello
+└────────┬────────┘
+         │
+         ▼
+┌─────────────────┐
+│    ARO Runtime  │  ← Loads contract, starts HTTP server
+└────────┬────────┘
+         │
+         ▼
+┌─────────────────┐
+│  HTTP Request   │  ← GET /hello
+│  arrives        │
+└────────┬────────┘
+         │
+         ▼
+┌─────────────────┐
+│ Route Registry  │  ← Matches /hello → sayHello
+└────────┬────────┘
+         │
+         ▼
+┌─────────────────┐
+│   sayHello      │  ← Feature set executes
+│   Feature Set   │
+└────────┬────────┘
+         │
+         ▼
+┌─────────────────┐
+│  HTTP Response  │  ← {&quot;message&quot;: &quot;Hello World&quot;}
+└─────────────────┘
+</code></pre>
+<hr>
+<h2>Key Concepts Summary</h2>
+<table>
+<thead>
+<tr>
+<th>Concept</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><strong>Contract-First</strong></td>
+<td>Define your API in <code>openapi.yaml</code> before writing code</td>
+</tr>
+<tr>
+<td><strong>operationId</strong></td>
+<td>Links HTTP endpoints to ARO feature sets</td>
+</tr>
+<tr>
+<td><strong>Application-Start</strong></td>
+<td>Required entry point; exactly one per application</td>
+</tr>
+<tr>
+<td><strong>Feature Set</strong></td>
+<td>Named block of business logic</td>
+</tr>
+<tr>
+<td><strong>Action Statements</strong></td>
+<td><code>&lt;Action&gt; the &lt;Result&gt; for the &lt;Object&gt;</code></td>
+</tr>
+</tbody></table>
+<hr>
+<h2>Common ARO Actions</h2>
+<table>
+<thead>
+<tr>
+<th>Action</th>
+<th>Role</th>
+<th>Example</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><code>&lt;Extract&gt;</code></td>
+<td>Request</td>
+<td>Get data from request/context</td>
+</tr>
+<tr>
+<td><code>&lt;Create&gt;</code></td>
+<td>Own</td>
+<td>Create new data</td>
+</tr>
+<tr>
+<td><code>&lt;Compute&gt;</code></td>
+<td>Own</td>
+<td>Calculate/transform data</td>
+</tr>
+<tr>
+<td><code>&lt;Validate&gt;</code></td>
+<td>Own</td>
+<td>Check data validity</td>
+</tr>
+<tr>
+<td><code>&lt;Store&gt;</code></td>
+<td>Export</td>
+<td>Save to repository</td>
+</tr>
+<tr>
+<td><code>&lt;Return&gt;</code></td>
+<td>Response</td>
+<td>Send response</td>
+</tr>
+<tr>
+<td><code>&lt;Log&gt;</code></td>
+<td>Export</td>
+<td>Write to console/log</td>
+</tr>
+<tr>
+<td><code>&lt;Start&gt;</code></td>
+<td>Export</td>
+<td>Start a service</td>
+</tr>
+<tr>
+<td><code>&lt;Stop&gt;</code></td>
+<td>Export</td>
+<td>Stop a service</td>
+</tr>
+</tbody></table>
+<hr>
+<h2>Next Steps</h2>
+<ol>
+<li><p><strong>Add more endpoints</strong>: Define new paths in <code>openapi.yaml</code> with unique <code>operationId</code> values, then create matching feature sets</p>
+</li>
+<li><p><strong>Accept parameters</strong>: Use path parameters (<code>/users/{id}</code>) and access them via <code>&lt;Extract&gt; the &lt;id&gt; from the &lt;pathParameters: id&gt;</code></p>
+</li>
+<li><p><strong>Handle request bodies</strong>: For POST/PUT endpoints, use <code>&lt;Extract&gt; the &lt;data&gt; from the &lt;request: body&gt;</code></p>
+</li>
+<li><p><strong>Add validation</strong>: Use <code>&lt;Validate&gt;</code> actions to check input data</p>
+</li>
+<li><p><strong>Connect to storage</strong>: Use <code>&lt;Store&gt;</code> and <code>&lt;Retrieve&gt;</code> with repositories</p>
+</li>
+</ol>
+<hr>
+<h2>Troubleshooting</h2>
+<h3>&quot;No openapi.yaml found&quot;</h3>
+<p>Make sure your application directory contains an <code>openapi.yaml</code> file. Without it, the HTTP server won&#39;t start.</p>
+<h3>&quot;Missing ARO feature set handlers&quot;</h3>
+<p>Your <code>operationId</code> values don&#39;t match any feature set names. Ensure each <code>operationId</code> in your contract has a matching feature set.</p>
+<h3>Server not responding</h3>
+<p>Check that the port (8000) is not already in use by another application.</p>
+<hr>
+<h2>Complete Example Files</h2>
+<p>The complete Hello World API example is available at:</p>
+<pre><code>Examples/HelloWorldAPI/
+├── openapi.yaml
+├── main.aro
+└── hello.aro
+</code></pre>
+<p>Run it with:</p>
+<pre><code class="language-bash">aro run ./Examples/HelloWorldAPI
+</code></pre>
+
+    </main>
+
+    <footer class="footer">
+        <div class="container">
+            <div class="footer-bottom">
+                <p>Sometime this page should build with ARO. Obviously.</p>
+            </div>
+        </div>
+    </footer>
+</body>
+</html>

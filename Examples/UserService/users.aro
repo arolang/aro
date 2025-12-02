@@ -1,0 +1,56 @@
+(* User API - HTTP Route Handlers *)
+(* Feature set names match operationIds from openapi.yaml *)
+(* Contract-first: Routes are defined in openapi.yaml, handlers here *)
+
+(* List all users - matches operationId: listUsers *)
+(listUsers: User API) {
+    <Retrieve> the <users> from the <user-repository>.
+    <Return> an <OK: status> with <users>.
+}
+
+(* Get user by ID - matches operationId: getUser *)
+(getUser: User API) {
+    <Extract> the <user-id> from the <pathParameters: id>.
+    <Retrieve> the <user> from the <user-repository>.
+    <Return> an <OK: status> with <user>.
+}
+
+(* Create user - matches operationId: createUser *)
+(createUser: User API) {
+    <Extract> the <user-data> from the <request: body>.
+    <Validate> the <user-data> for the <CreateUserRequest: schema>.
+
+    <Create> the <user> with <user-data>.
+    <Store> the <user> into the <user-repository>.
+
+    (* Emit event for other handlers to react *)
+    <Emit> a <UserCreated: event> with <user>.
+
+    <Return> a <Created: status> with <user>.
+}
+
+(* Update user - matches operationId: updateUser *)
+(updateUser: User API) {
+    <Extract> the <user-id> from the <pathParameters: id>.
+    <Extract> the <update-data> from the <request: body>.
+
+    <Retrieve> the <existing-user> from the <user-repository>.
+    <Merge> the <updated-user> from the <existing-user>.
+    <Store> the <updated-user> into the <user-repository>.
+
+    (* Emit update event *)
+    <Emit> a <UserUpdated: event> with <updated-user>.
+
+    <Return> an <OK: status> with <updated-user>.
+}
+
+(* Delete user - matches operationId: deleteUser *)
+(deleteUser: User API) {
+    <Extract> the <user-id> from the <pathParameters: id>.
+    <Delete> the <user> from the <user-repository>.
+
+    (* Emit deletion event *)
+    <Emit> a <UserDeleted: event> with <user-id>.
+
+    <Return> a <NoContent: status> for the <deletion>.
+}

@@ -1,0 +1,45 @@
+# =============================================================================
+# ARO Docker Build - Ignored Files
+# =============================================================================
+
+# Build artifacts
+.build/
+DerivedData/
+*.xcodeproj
+*.xcworkspace
+
+# IDE files
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# Git
+.git/
+.gitignore
+
+# Documentation (not needed in container)
+Documentation/
+Proposals/
+*.md
+!README.md
+
+# Website (separate deployment)
+Website/
+
+# GitHub Actions
+.github/
+
+# Testing artifacts
+*.xcresult
+coverage/
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Development files
+.env
+.env.*
+*.local
