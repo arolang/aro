@@ -58,10 +58,12 @@ public final class Application: @unchecked Sendable {
 
     /// Register default services for the runtime
     private func registerDefaultServices() {
+        #if !os(Windows)
         // Register file system service for file operations and monitoring
         let fileSystemService = AROFileSystemService(eventBus: .shared)
         runtime.register(service: fileSystemService as FileSystemService)
         runtime.register(service: fileSystemService as FileMonitorService)
+        #endif
     }
 
     /// Initialize from source files

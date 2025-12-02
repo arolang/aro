@@ -27,11 +27,11 @@ struct BuildCommand: AsyncParsableCommand {
     @Flag(name: .shortAndLong, help: "Enable verbose logging")
     var verbose: Bool = false
 
-    @Flag(name: .long, help: "Keep intermediate files (.c)")
+    @Flag(name: .long, help: "Keep intermediate files (.ll, .o)")
     var keepIntermediate: Bool = false
 
-    @Flag(name: .long, help: "Emit C code only (no compilation)")
-    var emitC: Bool = false
+    @Flag(name: .long, help: "Emit LLVM IR text instead of binary")
+    var emitLLVM: Bool = false
 
     func run() async throws {
         let resolvedPath = URL(fileURLWithPath: path)
@@ -128,46 +128,72 @@ struct BuildCommand: AsyncParsableCommand {
         // Determine output paths
         let baseName = output ?? appConfig.rootPath.lastPathComponent
         let buildDir = appConfig.rootPath.appendingPathComponent(".build")
-        let cPath = buildDir.appendingPathComponent("\(baseName).c")
+        let llPath = buildDir.appendingPathComponent("\(baseName).ll")
+        let objectPath = buildDir.appendingPathComponent("\(baseName).o").path
         let binaryPath = appConfig.rootPath.appendingPathComponent(baseName)
 
         // Create build directory
         try? FileManager.default.createDirectory(at: buildDir, withIntermediateDirectories: true)
 
-        // Generate C code
+        // Generate LLVM IR
         if verbose {
-            print("Generating C code...")
+            print("Generating LLVM IR...")
         }
 
-        let codeGenerator = CCodeGenerator()
-        let cCode: String
+        let codeGenerator = LLVMCodeGenerator()
+        let llvmResult: LLVMCodeGenerationResult
 
         do {
-            cCode = try codeGenerator.generate(program: mergedProgram)
+            llvmResult = try codeGenerator.generate(program: mergedProgram)
         } catch {
             print("Code generation error: \(error)")
             throw ExitCode.failure
         }
 
-        // Write C code
-        do {
-            try cCode.write(toFile: cPath.path, atomically: true, encoding: .utf8)
-            if verbose {
-                print("  Written: \(cPath.lastPathComponent)")
-            }
-        } catch {
-            print("Error writing C file: \(error)")
-            throw ExitCode.failure
+        if verbose {
+            print("  LLVM module generated")
         }
 
-        if emitC {
-            print("C code written to: \(cPath.path)")
+        // Write LLVM IR text if requested
+        if emitLLVM {
+            do {
+                try llvmResult.irText.write(toFile: llPath.path, atomically: true, encoding: .utf8)
+                print("LLVM IR written to: \(llPath.path)")
+            } catch {
+                print("Error writing LLVM IR: \(error)")
+                throw ExitCode.failure
+            }
             return
         }
 
-        // Compile C to binary
+        // Write LLVM IR to file for llc
+        do {
+            try llvmResult.irText.write(toFile: llPath.path, atomically: true, encoding: .utf8)
+            if verbose {
+                print("  LLVM IR written: \(llPath.lastPathComponent)")
+            }
+        } catch {
+            print("Error writing LLVM IR: \(error)")
+            throw ExitCode.failure
+        }
+
+        // Compile LLVM IR to object file using llc
         if verbose {
-            print("Compiling to native binary...")
+            print("Emitting object file...")
+        }
+
+        let emitter = LLVMEmitter()
+        let optLevel: LLVMEmitter.OptimizationLevel = optimize ? .o2 : .none
+
+        do {
+            try emitter.emitObject(irPath: llPath.path, to: objectPath, optimize: optLevel)
+            if verbose {
+                print("  Object file created")
+            }
+        } catch {
+            print("LLVM emission error: \(error)")
+            print("LLVM IR at: \(llPath.path) for debugging")
+            throw ExitCode.failure
         }
 
         // Find the AROCRuntime library
@@ -181,27 +207,15 @@ struct BuildCommand: AsyncParsableCommand {
             print("Using runtime: \(runtimeLibPath)")
         }
 
-        let cCompiler = CCompiler(runtimeLibraryPath: runtimeLibPath)
-        let objectPath = buildDir.appendingPathComponent("\(baseName).o").path
+        // Link to final executable
+        if verbose {
+            print("Linking executable...")
+        }
+
+        let linker = CCompiler(runtimeLibraryPath: runtimeLibPath)
 
         do {
-            // Compile C to object file
-            try cCompiler.compileToObject(
-                sourcePath: cPath.path,
-                outputPath: objectPath,
-                optimize: optimize
-            )
-
-            if verbose {
-                print("  Object file created")
-            }
-
-            // Link to final executable
-            if verbose {
-                print("Linking executable...")
-            }
-
-            try cCompiler.link(
+            try linker.link(
                 objectFiles: [objectPath],
                 outputPath: binaryPath.path,
                 outputType: .executable,
@@ -212,15 +226,16 @@ struct BuildCommand: AsyncParsableCommand {
                 print("  Executable created")
             }
         } catch {
-            print("Compilation error: \(error)")
-            print("Generated C code is at: \(cPath.path)")
+            print("Linking error: \(error)")
             throw ExitCode.failure
         }
 
         // Cleanup intermediate files
         if !keepIntermediate {
-            try? FileManager.default.removeItem(at: cPath)
+            try? FileManager.default.removeItem(at: llPath)
             try? FileManager.default.removeItem(atPath: objectPath)
+        } else if verbose {
+            print("  Intermediate files kept at: \(buildDir.path)")
         }
 
         let elapsed = Date().timeIntervalSince(startTime)

@@ -1,11 +1,138 @@
 // ============================================================
 // Linker.swift
-// AROCompiler - C Compilation and Linking
+// AROCompiler - LLVM Object Emission and Linking
 // ============================================================
 
 import Foundation
 
-/// Compiles and links C code with the ARO runtime
+/// Emits LLVM IR to object files using llc command-line tool
+public final class LLVMEmitter {
+    // MARK: - Properties
+
+    /// Optimization level
+    public enum OptimizationLevel: String {
+        case none = "-O0"
+        case o1 = "-O1"
+        case o2 = "-O2"
+        case o3 = "-O3"
+    }
+
+    // MARK: - Initialization
+
+    public init() {}
+
+    // MARK: - Object Emission
+
+    /// Emit LLVM IR to object file
+    /// - Parameters:
+    ///   - irPath: Path to LLVM IR file (.ll)
+    ///   - outputPath: Path for output object file
+    ///   - optimize: Optimization level
+    public func emitObject(
+        irPath: String,
+        to outputPath: String,
+        optimize: OptimizationLevel = .none
+    ) throws {
+        let llcPath = try findLLC()
+
+        var args = [llcPath]
+        args.append("-filetype=obj")
+        args.append(optimize.rawValue)
+        args.append("-o")
+        args.append(outputPath)
+        args.append(irPath)
+
+        try runProcess(args)
+    }
+
+    /// Emit LLVM IR to assembly
+    /// - Parameters:
+    ///   - irPath: Path to LLVM IR file (.ll)
+    ///   - outputPath: Path for output assembly file
+    public func emitAssembly(
+        irPath: String,
+        to outputPath: String
+    ) throws {
+        let llcPath = try findLLC()
+
+        var args = [llcPath]
+        args.append("-filetype=asm")
+        args.append("-o")
+        args.append(outputPath)
+        args.append(irPath)
+
+        try runProcess(args)
+    }
+
+    // MARK: - Private Methods
+
+    private func findLLC() throws -> String {
+        // Check common paths
+        let paths = [
+            "/opt/homebrew/opt/llvm/bin/llc",
+            "/usr/local/opt/llvm/bin/llc",
+            "/usr/bin/llc",
+            "/usr/local/bin/llc"
+        ]
+
+        for path in paths {
+            if FileManager.default.fileExists(atPath: path) {
+                return path
+            }
+        }
+
+        // Try to find in PATH
+        let process = Process()
+        process.executableURL = URL(fileURLWithPath: "/usr/bin/which")
+        process.arguments = ["llc"]
+
+        let pipe = Pipe()
+        process.standardOutput = pipe
+        process.standardError = FileHandle.nullDevice
+
+        do {
+            try process.run()
+            process.waitUntilExit()
+            let data = pipe.fileHandleForReading.readDataToEndOfFile()
+            if let path = String(data: data, encoding: .utf8)?.trimmingCharacters(in: .whitespacesAndNewlines),
+               !path.isEmpty {
+                return path
+            }
+        } catch {}
+
+        throw LinkerError.compilationFailed("llc not found. Please install LLVM: brew install llvm")
+    }
+
+    private func runProcess(_ args: [String]) throws {
+        guard !args.isEmpty else {
+            throw LinkerError.compilationFailed("No command specified")
+        }
+
+        let process = Process()
+        process.executableURL = URL(fileURLWithPath: args[0])
+        process.arguments = Array(args.dropFirst())
+
+        let outputPipe = Pipe()
+        let errorPipe = Pipe()
+        process.standardOutput = outputPipe
+        process.standardError = errorPipe
+
+        do {
+            try process.run()
+            process.waitUntilExit()
+        } catch {
+            throw LinkerError.compilationFailed("Failed to run llc: \(error)")
+        }
+
+        if process.terminationStatus != 0 {
+            let errorData = errorPipe.fileHandleForReading.readDataToEndOfFile()
+            let errorMessage = String(data: errorData, encoding: .utf8) ?? "Unknown error"
+            throw LinkerError.compilationFailed(errorMessage)
+        }
+    }
+}
+
+/// Compiles and links object files with the ARO runtime
 public final class CCompiler {
     // MARK: - Properties
 

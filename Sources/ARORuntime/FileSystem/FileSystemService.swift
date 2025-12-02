@@ -3,6 +3,8 @@
 // ARO Runtime - File System Service
 // ============================================================
 
+#if !os(Windows)
+
 import Foundation
 import FileMonitor
 import FileMonitorShared
@@ -344,3 +346,5 @@ public struct FileWatchStoppedEvent: RuntimeEvent {
         self.path = path
     }
 }
+
+#endif  // !os(Windows)

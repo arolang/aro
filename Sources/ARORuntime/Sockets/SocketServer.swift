@@ -3,6 +3,8 @@
 // ARO Runtime - Socket Server (SwiftNIO)
 // ============================================================
 
+#if !os(Windows)
+
 import Foundation
 import NIO
 
@@ -445,3 +447,5 @@ public struct SocketErrorEvent: RuntimeEvent {
         self.error = error
     }
 }
+
+#endif  // !os(Windows)

@@ -4,12 +4,17 @@
 // ============================================================
 
 import Foundation
+#if canImport(FoundationNetworking)
+import FoundationNetworking
+#endif
 import AROParser
 import ARORuntime
 
 #if os(macOS)
 import CoreServices
 #endif
+
+#if !os(Windows)
 
 // MARK: - HTTP Server Bridge
 
@@ -1071,3 +1076,5 @@ public func aro_socket_destroy(_ socketPtr: UnsafeMutableRawPointer?) {
     guard let ptr = socketPtr else { return }
     Unmanaged<SocketHandle>.fromOpaque(ptr).release()
 }
+
+#endif  // !os(Windows)

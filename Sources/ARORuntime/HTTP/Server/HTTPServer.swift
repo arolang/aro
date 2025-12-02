@@ -3,6 +3,8 @@
 // ARO Runtime - HTTP Server (SwiftNIO)
 // ============================================================
 
+#if !os(Windows)
+
 import Foundation
 import NIO
 import NIOHTTP1
@@ -316,3 +318,5 @@ public struct HTTPServerStoppedEvent: RuntimeEvent {
         self.timestamp = Date()
     }
 }
+
+#endif  // !os(Windows)

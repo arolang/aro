@@ -10,17 +10,25 @@ set -e
 
 echo "🏗️  Building ARO Website..."
 
-# Create dist directory
-mkdir -p dist
-mkdir -p dist/docs
+# Use Node.js build script if available (handles head partial injection)
+if command -v node &> /dev/null && [ -f "package.json" ]; then
+    echo "📦 Running Node.js build..."
+    npm run build
+else
+    echo "⚠️  Node.js not available, using basic copy (partials won't be processed)"
 
-# Copy static files
-echo "📄 Copying static files..."
-cp src/index.html dist/
-cp src/style.css dist/
-cp src/fdd.html dist/
-cp src/docs.html dist/
-cp src/getting-started.html dist/
+    # Create dist directory
+    mkdir -p dist
+    mkdir -p dist/docs
+
+    # Copy static files
+    echo "📄 Copying static files..."
+    cp src/index.html dist/
+    cp src/style.css dist/
+    cp src/fdd.html dist/
+    cp src/docs.html dist/
+    cp src/getting-started.html dist/
+fi
 
 # Create a simple 404 page
 cat > dist/404.html << 'EOF'

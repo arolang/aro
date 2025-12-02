@@ -11,12 +11,7 @@
 (* Get user by ID - matches operationId: getUser *)
 (getUser: User API) {
     <Extract> the <user-id> from the <pathParameters: id>.
-    <Retrieve> the <user> from the <user-repository> where id = <user-id>.
-
-    if <user> is empty then {
-        <Return> a <NotFound: status> for the <missing: user>.
-    }
-
+    <Retrieve> the <user> from the <user-repository>.
     <Return> an <OK: status> with <user>.
 }
 
@@ -39,13 +34,8 @@
     <Extract> the <user-id> from the <pathParameters: id>.
     <Extract> the <update-data> from the <request: body>.
 
-    <Retrieve> the <existing-user> from the <user-repository> where id = <user-id>.
-
-    if <existing-user> is empty then {
-        <Return> a <NotFound: status> for the <missing: user>.
-    }
-
-    <Transform> the <updated-user> from the <existing-user> with <update-data>.
+    <Retrieve> the <existing-user> from the <user-repository>.
+    <Merge> the <updated-user> from the <existing-user>.
     <Store> the <updated-user> into the <user-repository>.
 
     (* Emit update event *)
@@ -57,7 +47,7 @@
 (* Delete user - matches operationId: deleteUser *)
 (deleteUser: User API) {
     <Extract> the <user-id> from the <pathParameters: id>.
-    <Delete> the <user> from the <user-repository> where id = <user-id>.
+    <Delete> the <user> from the <user-repository>.
 
     (* Emit deletion event *)
     <Emit> a <UserDeleted: event> with <user-id>.

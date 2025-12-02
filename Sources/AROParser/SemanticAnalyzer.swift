@@ -202,7 +202,7 @@ public final class SemanticAnalyzer {
         case .own:
             // OWN: internal computation
             // Uses existing variables, may create new one
-            if !definedSymbols.contains(objectName) && !dependencies.contains(objectName) {
+            if !definedSymbols.contains(objectName) && !dependencies.contains(objectName) && !isKnownExternal(objectName) {
                 diagnostics.warning(
                     "Variable '\(objectName)' used before definition",
                     at: statement.object.noun.span.start
@@ -224,7 +224,7 @@ public final class SemanticAnalyzer {
         case .response:
             // RESPONSE: internal -> external
             // Side effect, uses existing variable
-            if !definedSymbols.contains(objectName) {
+            if !definedSymbols.contains(objectName) && !isKnownExternal(objectName) {
                 diagnostics.warning(
                     "Variable '\(objectName)' used before definition",
                     at: statement.object.noun.span.start
@@ -293,8 +293,18 @@ public final class SemanticAnalyzer {
     }
     
     private func isKnownExternal(_ name: String) -> Bool {
-        // These are typically provided by the framework
-        let knownExternals = ["request", "incoming-request", "context", "session"]
+        // These are typically provided by the framework/runtime
+        let knownExternals: Set<String> = [
+            // HTTP/Request context
+            "request", "incoming-request", "context", "session",
+            "pathparameters", "queryparameters", "headers",
+            // Runtime objects
+            "console", "application", "event",
+            // Service targets
+            "port", "host", "directory", "file", "events",
+            // Literals (internal representation)
+            "_literal_"
+        ]
         return knownExternals.contains(name.lowercased())
     }
 }

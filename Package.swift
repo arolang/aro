@@ -31,8 +31,8 @@ let package = Package(
         )
     ],
     dependencies: [
-        // SwiftNIO for HTTP server and sockets
-        .package(url: "https://github.com/apple/swift-nio.git", from: "2.65.0"),
+        // SwiftNIO for HTTP server and sockets (2.75.0+ for Swift 6 support)
+        .package(url: "https://github.com/apple/swift-nio.git", from: "2.75.0"),
         // AsyncHTTPClient for outgoing HTTP requests
         .package(url: "https://github.com/swift-server/async-http-client.git", from: "1.21.0"),
         // FileMonitor for file system watching
@@ -53,16 +53,17 @@ let package = Package(
             name: "ARORuntime",
             dependencies: [
                 "AROParser",
-                .product(name: "NIO", package: "swift-nio"),
-                .product(name: "NIOHTTP1", package: "swift-nio"),
-                .product(name: "NIOFoundationCompat", package: "swift-nio"),
-                .product(name: "AsyncHTTPClient", package: "async-http-client"),
-                .product(name: "FileMonitor", package: "FileMonitor"),
+                // swift-nio has Windows compatibility issues with Swift 6
+                .product(name: "NIO", package: "swift-nio", condition: .when(platforms: [.macOS, .iOS, .linux])),
+                .product(name: "NIOHTTP1", package: "swift-nio", condition: .when(platforms: [.macOS, .iOS, .linux])),
+                .product(name: "NIOFoundationCompat", package: "swift-nio", condition: .when(platforms: [.macOS, .iOS, .linux])),
+                .product(name: "AsyncHTTPClient", package: "async-http-client", condition: .when(platforms: [.macOS, .iOS, .linux])),
+                .product(name: "FileMonitor", package: "FileMonitor", condition: .when(platforms: [.macOS, .iOS, .linux])),
                 .product(name: "Yams", package: "Yams"),
             ],
             path: "Sources/ARORuntime"
         ),
-        // Native compiler (C code generation)
+        // Native compiler (LLVM IR generation)
         .target(
             name: "AROCompiler",
             dependencies: [
