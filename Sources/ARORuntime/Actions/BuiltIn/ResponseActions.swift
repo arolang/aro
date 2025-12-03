@@ -102,11 +102,47 @@ public struct SendAction: ActionImplementation {
 
         // Get data to send
         guard let data = context.resolveAny(result.base) else {
+            print("[SendAction] ERROR: Could not resolve data variable '\(result.base)'")
             throw ActionError.undefinedVariable(result.base)
         }
+        print("[SendAction] Data to send: \(type(of: data)) = \(data)")
 
-        // Get destination
-        let destination = object.base
+        // Get destination - could be a connection ID variable or literal
+        let destination: String
+        if let resolvedDest: String = context.resolve(object.base) {
+            destination = resolvedDest
+        } else {
+            destination = object.base
+        }
+        print("[SendAction] Destination: \(destination)")
+
+        // Try socket server service first (for socket connections)
+        #if !os(Windows)
+        if let socketServer = context.service(SocketServerService.self) {
+            print("[SendAction] Found SocketServerService, attempting to send...")
+            // Try to send to socket connection
+            do {
+                if let dataValue = data as? Data {
+                    print("[SendAction] Sending as Data (\(dataValue.count) bytes)")
+                    try await socketServer.send(data: dataValue, to: destination)
+                } else if let stringValue = data as? String {
+                    print("[SendAction] Sending as String")
+                    try await socketServer.send(string: stringValue, to: destination)
+                } else {
+                    // Convert to string
+                    print("[SendAction] Sending as converted String")
+                    try await socketServer.send(string: String(describing: data), to: destination)
+                }
+                print("[SendAction] Send succeeded!")
+                return SendResult(destination: destination, success: true)
+            } catch {
+                // Connection not found - fall through to other services
+                print("[SendAction] Socket send failed: \(error)")
+            }
+        } else {
+            print("[SendAction] SocketServerService NOT FOUND in context")
+        }
+        #endif
 
         // Try messaging service
         if let messagingService = context.service(MessagingService.self) {

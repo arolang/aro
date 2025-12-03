@@ -64,6 +64,9 @@ public final class ExecutionEngine: @unchecked Sendable {
         _ program: AnalyzedProgram,
         entryPoint: String = "Application-Start"
     ) async throws -> Response {
+        print("[ExecutionEngine] execute() called with entryPoint: \(entryPoint)")
+        fflush(stdout)
+
         // Find entry point
         guard let entryFeatureSet = program.featureSets.first(where: {
             $0.featureSet.name == entryPoint
@@ -82,6 +85,11 @@ public final class ExecutionEngine: @unchecked Sendable {
 
         // Register services in context
         services.registerAll(in: context)
+
+        // Wire up event handlers for Socket Event Handler feature sets
+        #if !os(Windows)
+        registerSocketEventHandlers(for: program, baseContext: context)
+        #endif
 
         // Execute entry point
         let executor = FeatureSetExecutor(
@@ -102,6 +110,120 @@ public final class ExecutionEngine: @unchecked Sendable {
             throw error
         }
     }
+
+    #if !os(Windows)
+    /// Register socket event handlers for feature sets with "Socket Event Handler" business activity
+    private func registerSocketEventHandlers(for program: AnalyzedProgram, baseContext: RuntimeContext) {
+        // Find all feature sets with "Socket Event Handler" business activity
+        let socketHandlers = program.featureSets.filter { analyzedFS in
+            analyzedFS.featureSet.businessActivity.contains("Socket Event Handler")
+        }
+
+        print("[ExecutionEngine] Found \(socketHandlers.count) socket event handlers")
+        fflush(stdout)
+
+        for analyzedFS in socketHandlers {
+            let featureSetName = analyzedFS.featureSet.name
+            let lowercaseName = featureSetName.lowercased()
+            print("[ExecutionEngine] Registering handler: \(featureSetName) (activity: \(analyzedFS.featureSet.businessActivity))")
+
+            // Determine which event type this handler should respond to
+            if lowercaseName.contains("data received") || lowercaseName.contains("data") {
+                print("[ExecutionEngine] -> Subscribing to DataReceivedEvent, eventBus=\(ObjectIdentifier(eventBus))")
+                fflush(stdout)
+                // Subscribe to DataReceivedEvent
+                eventBus.subscribe(to: DataReceivedEvent.self) { [weak self] event in
+                    guard let self = self else { return }
+                    print("[ExecutionEngine] DataReceivedEvent received! connectionId=\(event.connectionId), data=\(event.data.count) bytes")
+                    fflush(stdout)
+                    await self.executeSocketHandler(
+                        analyzedFS,
+                        program: program,
+                        baseContext: baseContext,
+                        eventData: [
+                            "packet": SocketPacket(
+                                connectionId: event.connectionId,
+                                data: event.data
+                            )
+                        ]
+                    )
+                }
+            } else if lowercaseName.contains("connected") {
+                // Subscribe to ClientConnectedEvent
+                eventBus.subscribe(to: ClientConnectedEvent.self) { [weak self] event in
+                    guard let self = self else { return }
+                    await self.executeSocketHandler(
+                        analyzedFS,
+                        program: program,
+                        baseContext: baseContext,
+                        eventData: [
+                            "connection": SocketConnection(
+                                id: event.connectionId,
+                                remoteAddress: event.remoteAddress
+                            )
+                        ]
+                    )
+                }
+            } else if lowercaseName.contains("disconnected") {
+                // Subscribe to ClientDisconnectedEvent
+                eventBus.subscribe(to: ClientDisconnectedEvent.self) { [weak self] event in
+                    guard let self = self else { return }
+                    await self.executeSocketHandler(
+                        analyzedFS,
+                        program: program,
+                        baseContext: baseContext,
+                        eventData: [
+                            "event": SocketDisconnectInfo(
+                                connectionId: event.connectionId,
+                                reason: event.reason
+                            )
+                        ]
+                    )
+                }
+            }
+        }
+    }
+
+    /// Execute a socket event handler feature set
+    private func executeSocketHandler(
+        _ analyzedFS: AnalyzedFeatureSet,
+        program: AnalyzedProgram,
+        baseContext: RuntimeContext,
+        eventData: [String: any Sendable]
+    ) async {
+        // Create child context for this event handler
+        let handlerContext = RuntimeContext(
+            featureSetName: analyzedFS.featureSet.name,
+            eventBus: eventBus,
+            parent: baseContext
+        )
+
+        // Bind event data to context
+        for (key, value) in eventData {
+            handlerContext.bind(key, value: value)
+        }
+
+        // Copy services from base context
+        services.registerAll(in: handlerContext)
+
+        // Execute the handler
+        let executor = FeatureSetExecutor(
+            actionRegistry: actionRegistry,
+            eventBus: eventBus,
+            globalSymbols: globalSymbols
+        )
+
+        do {
+            _ = try await executor.execute(analyzedFS, context: handlerContext)
+        } catch {
+            eventBus.publish(ErrorOccurredEvent(
+                error: String(describing: error),
+                context: analyzedFS.featureSet.name,
+                recoverable: true
+            ))
+        }
+    }
+    #endif
 
     /// Execute a specific feature set by name
     /// - Parameters:
@@ -203,9 +325,9 @@ public final class ServiceRegistry: @unchecked Sendable {
         lock.lock()
         defer { lock.unlock() }
 
-        for (_, service) in services {
-            // Use reflection to register each service
-            context.register(service)
+        for (typeId, service) in services {
+            // Preserve type ID to avoid type erasure
+            context.registerWithTypeId(typeId, service: service)
         }
     }
 }

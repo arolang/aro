@@ -253,6 +253,8 @@ public protocol HTTPServerService: Sendable {
 public protocol SocketServerService: Sendable {
     func start(port: Int) async throws
     func stop() async throws
+    func send(data: Data, to connectionId: String) async throws
+    func send(string: String, to connectionId: String) async throws
 }
 
 /// File monitor service protocol

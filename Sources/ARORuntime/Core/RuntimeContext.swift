@@ -127,6 +127,13 @@ public final class RuntimeContext: ExecutionContext, @unchecked Sendable {
         services[ObjectIdentifier(S.self)] = service
     }
 
+    /// Register a service with an explicit type ID (for preserving type info across type-erased collections)
+    public func registerWithTypeId(_ typeId: ObjectIdentifier, service: any Sendable) {
+        lock.lock()
+        defer { lock.unlock() }
+        services[typeId] = service
+    }
+
     // MARK: - Repository Access
 
     public func repository<T: Sendable>(named name: String) -> (any Repository<T>)? {

@@ -769,14 +769,35 @@ public func aro_action_start(
     let objectDesc = toObjectDescriptor(object)
 
     let serverType = resultDesc.base.lowercased()
-    let port = Int(objectDesc.specifiers.first ?? "8080") ?? 8080
+    let port = Int(objectDesc.specifiers.first ?? "9000") ?? 9000
 
-    ctxHandle.context.emit(CustomRuntimeEvent(
-        type: "service.start.requested",
-        data: "type=\(serverType),port=\(port)"
-    ))
+    var success = false
 
-    return boxResult(ServerStartResultBridge(serverType: serverType, success: true, port: port))
+    switch serverType {
+    case "socket-server", "socketserver":
+        #if !os(Windows)
+        // Actually start the native socket server
+        let result = aro_native_socket_server_start(Int32(port))
+        success = result == 0
+        #endif
+
+    case "http-server", "httpserver", "server":
+        // HTTP server not yet implemented for native binaries
+        ctxHandle.context.emit(CustomRuntimeEvent(
+            type: "http.server.start.requested",
+            data: "port=\(port)"
+        ))
+        success = true
+
+    default:
+        ctxHandle.context.emit(CustomRuntimeEvent(
+            type: "service.start.requested",
+            data: "type=\(serverType),port=\(port)"
+        ))
+        success = true
+    }
+
+    return boxResult(ServerStartResultBridge(serverType: serverType, success: success, port: port))
 }
 
 struct ServerStartResultBridge: Sendable {

@@ -72,6 +72,44 @@ public struct ExtractAction: ActionImplementation {
             return array[index]
         }
 
+        #if !os(Windows)
+        // Handle SocketPacket properties
+        if let packet = source as? SocketPacket {
+            switch key {
+            case "buffer", "data":
+                return packet.buffer
+            case "connection", "connectionId":
+                return packet.connection
+            default:
+                break
+            }
+        }
+
+        // Handle SocketConnection properties
+        if let conn = source as? SocketConnection {
+            switch key {
+            case "id":
+                return conn.id
+            case "remoteAddress":
+                return conn.remoteAddress
+            default:
+                break
+            }
+        }
+
+        // Handle SocketDisconnectInfo properties
+        if let info = source as? SocketDisconnectInfo {
+            switch key {
+            case "connectionId":
+                return info.connectionId
+            case "reason":
+                return info.reason
+            default:
+                break
+            }
+        }
+        #endif
+
         // Return original source if key not found but exists
         throw ActionError.propertyNotFound(property: key, on: String(describing: type(of: source)))
     }

@@ -156,6 +156,12 @@ public protocol ExecutionContext: AnyObject, Sendable {
     /// - Parameter service: The service instance to register
     func register<S: Sendable>(_ service: S)
 
+    /// Register a service with an explicit type ID (for preserving type info across type-erased collections)
+    /// - Parameters:
+    ///   - typeId: The ObjectIdentifier for the service type
+    ///   - service: The service instance to register
+    func registerWithTypeId(_ typeId: ObjectIdentifier, service: any Sendable)
+
     // MARK: - Repository Access
 
     /// Get a repository by name

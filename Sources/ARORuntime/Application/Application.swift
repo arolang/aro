@@ -63,6 +63,10 @@ public final class Application: @unchecked Sendable {
         let fileSystemService = AROFileSystemService(eventBus: .shared)
         runtime.register(service: fileSystemService as FileSystemService)
         runtime.register(service: fileSystemService as FileMonitorService)
+
+        // Register socket server service for TCP socket operations
+        let socketServer = AROSocketServer(eventBus: .shared)
+        runtime.register(service: socketServer as SocketServerService)
         #endif
     }
 

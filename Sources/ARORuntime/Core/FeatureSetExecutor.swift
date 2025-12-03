@@ -274,6 +274,9 @@ public final class Runtime: @unchecked Sendable {
 
         _ = try await run(program, entryPoint: entryPoint)
 
+        // Re-set isRunning since run() resets it in defer block
+        isRunning = true
+
         // Keep running until stopped
         while isRunning {
             try await Task.sleep(nanoseconds: 100_000_000) // 100ms

@@ -80,21 +80,25 @@ public final class AROSocketServer: SocketServerService, @unchecked Sendable {
     // MARK: - SocketServerService
 
     public func start(port: Int) async throws {
-        let handler = SocketHandler(
-            eventBus: eventBus,
-            onConnect: { [weak self] connectionId, channel in
-                self?.addConnection(connectionId, channel: channel)
-            },
-            onDisconnect: { [weak self] connectionId in
-                self?.removeConnection(connectionId)
-            }
-        )
+        // Capture references for use in closures
+        let server = self
+        let bus = self.eventBus
 
         let bootstrap = ServerBootstrap(group: group)
             .serverChannelOption(ChannelOptions.backlog, value: 256)
             .serverChannelOption(ChannelOptions.socketOption(.so_reuseaddr), value: 1)
             .childChannelInitializer { channel in
-                channel.pipeline.addHandler(handler)
+                // Create a NEW handler for each channel (handlers are stateful)
+                let handler = SocketHandler(
+                    eventBus: bus,
+                    onConnect: { connectionId, chan in
+                        server.addConnection(connectionId, channel: chan)
+                    },
+                    onDisconnect: { connectionId in
+                        server.removeConnection(connectionId)
+                    }
+                )
+                return channel.pipeline.addHandler(handler)
             }
             .childChannelOption(ChannelOptions.socketOption(.so_reuseaddr), value: 1)
             .childChannelOption(ChannelOptions.maxMessagesPerRead, value: 16)
@@ -133,9 +137,12 @@ public final class AROSocketServer: SocketServerService, @unchecked Sendable {
 
     /// Send data to a specific connection
     public func send(data: Data, to connectionId: String) async throws {
+        print("[AROSocketServer] send: looking for \(connectionId), instance: \(ObjectIdentifier(self)), total connections: \(connectionCount)")
         guard let channel = getConnection(connectionId) else {
+            print("[AROSocketServer] send FAILED: connection not found")
             throw SocketError.connectionNotFound(connectionId)
         }
+        print("[AROSocketServer] send: found channel, writing \(data.count) bytes")
 
         var buffer = channel.allocator.buffer(capacity: data.count)
         buffer.writeBytes(data)
@@ -174,7 +181,9 @@ public final class AROSocketServer: SocketServerService, @unchecked Sendable {
     private func addConnection(_ connectionId: String, channel: Channel) {
         lock.lock()
         connections[connectionId] = channel
+        let count = connections.count
         lock.unlock()
+        print("[AROSocketServer] addConnection: \(connectionId), total connections: \(count), instance: \(ObjectIdentifier(self))")
     }
 
     private func removeConnection(_ connectionId: String) {
@@ -226,10 +235,14 @@ private final class SocketHandler: ChannelInboundHandler, @unchecked Sendable {
         var buffer = unwrapInboundIn(data)
         guard let id = connectionId,
               let bytes = buffer.readBytes(length: buffer.readableBytes) else {
+            print("[SocketHandler] channelRead: no connectionId or bytes")
+            fflush(stdout)
             return
         }
 
         let receivedData = Data(bytes)
+        print("[SocketHandler] channelRead: publishing DataReceivedEvent for \(id), \(receivedData.count) bytes, eventBus=\(ObjectIdentifier(eventBus))")
+        fflush(stdout)
         eventBus.publish(DataReceivedEvent(connectionId: id, data: receivedData))
     }
 
@@ -421,6 +434,50 @@ public struct SocketServerStartedEvent: RuntimeEvent {
     public init(port: Int) {
         self.timestamp = Date()
         self.port = port
+    }
+}
+
+// Note: ClientConnectedEvent, ClientDisconnectedEvent, and DataReceivedEvent
+// are defined in EventTypes.swift to avoid duplication
+
+// MARK: - Socket Event Data Types
+
+/// Wrapper for socket packet data, used by feature sets to extract data
+public struct SocketPacket: Sendable {
+    public let connectionId: String
+    public let data: Data
+
+    /// Get the buffer (data) from the packet
+    public var buffer: Data { data }
+
+    /// Get the connection ID
+    public var connection: String { connectionId }
+
+    public init(connectionId: String, data: Data) {
+        self.connectionId = connectionId
+        self.data = data
+    }
+}
+
+/// Wrapper for socket connection info, used by feature sets
+public struct SocketConnection: Sendable {
+    public let id: String
+    public let remoteAddress: String
+
+    public init(id: String, remoteAddress: String) {
+        self.id = id
+        self.remoteAddress = remoteAddress
+    }
+}
+
+/// Wrapper for socket disconnect info, used by feature sets
+public struct SocketDisconnectInfo: Sendable {
+    public let connectionId: String
+    public let reason: String
+
+    public init(connectionId: String, reason: String) {
+        self.connectionId = connectionId
+        self.reason = reason
     }
 }
 
