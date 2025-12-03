@@ -770,6 +770,14 @@ public final class Parser {
         if case .article = token.kind {
             return advance()
         }
+        // ARO-0015: Accept keywords that are also test action verbs
+        // This allows <When>, <Then>, <Given>, <Assert> as action verbs
+        switch token.kind {
+        case .when, .then:
+            return advance()
+        default:
+            break
+        }
         throw ParserError.unexpectedToken(expected: message, got: token)
     }
     

@@ -290,22 +290,30 @@ struct BuildCommand: AsyncParsableCommand {
     private func mergePrograms(_ programs: [AnalyzedProgram]) -> AnalyzedProgram? {
         guard !programs.isEmpty else { return nil }
 
-        if programs.count == 1 {
-            return programs[0]
-        }
-
         var allFeatureSets: [AnalyzedFeatureSet] = []
         let globalRegistry = GlobalSymbolRegistry()
 
         for program in programs {
             allFeatureSets.append(contentsOf: program.featureSets)
 
-            for (name, info) in program.globalRegistry.allPublished {
+            for (_, info) in program.globalRegistry.allPublished {
                 globalRegistry.register(symbol: info.symbol, fromFeatureSet: info.featureSet)
             }
         }
 
-        let mergedASTFeatureSets = allFeatureSets.map { $0.featureSet }
+        // Filter out test feature sets (ARO-0015: Tests run only in interpreter mode)
+        // Test feature sets have business activity ending in "Test" or "Tests"
+        let productionFeatureSets = allFeatureSets.filter { fs in
+            let activity = fs.featureSet.businessActivity
+            return !activity.hasSuffix("Test") && !activity.hasSuffix("Tests")
+        }
+
+        if verbose && productionFeatureSets.count < allFeatureSets.count {
+            let testCount = allFeatureSets.count - productionFeatureSets.count
+            print("  Stripped \(testCount) test feature set(s) from binary")
+        }
+
+        let mergedASTFeatureSets = productionFeatureSets.map { $0.featureSet }
         let mergedAST = Program(
             featureSets: mergedASTFeatureSets,
             span: programs[0].program.span
@@ -313,7 +321,7 @@ struct BuildCommand: AsyncParsableCommand {
 
         return AnalyzedProgram(
             program: mergedAST,
-            featureSets: allFeatureSets,
+            featureSets: productionFeatureSets,
             globalRegistry: globalRegistry
         )
     }

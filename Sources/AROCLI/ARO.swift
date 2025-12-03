@@ -23,6 +23,7 @@ struct ARO: AsyncParsableCommand {
             Example:
               aro run ./Examples/HelloWorld     # Run with interpreter
               aro build ./Examples/HelloWorld   # Compile to native binary
+              aro test ./Examples/Calculator    # Run tests
               aro compile myapp.aro             # Compile and check syntax
               aro check myapp.aro               # Syntax check only
             """,
@@ -32,6 +33,7 @@ struct ARO: AsyncParsableCommand {
             BuildCommand.self,
             CompileCommand.self,
             CheckCommand.self,
+            TestCommand.self,
         ],
         defaultSubcommand: RunCommand.self
     )

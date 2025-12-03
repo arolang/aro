@@ -1,0 +1,72 @@
+(* ============================================================
+   Calculator Example with Tests
+
+   Demonstrates ARO testing framework (ARO-0015):
+   - Production code and test code in same file
+   - Tests identified by "Test" suffix in business activity
+   - Given/When/Then/Assert actions for BDD-style tests
+   - Tests run with: aro test ./Examples/Calculator
+   - Build strips tests: aro build ./Examples/Calculator
+   ============================================================ *)
+
+(* --- Application Entry Point --- *)
+
+(Application-Start: Calculator) {
+    <Log> the <message> for the <console> with "Calculator ready".
+    <Return> an <OK: status> for the <startup>.
+}
+
+(* --- Production Feature Sets ---
+   These read 'a' and 'b' directly from context.
+   Tests set these values using <Given>.
+*)
+
+(add-numbers: Calculator) {
+    <Create> the <sum> with <a>.
+    <Return> an <OK: status> with <sum>.
+}
+
+(subtract-numbers: Calculator) {
+    <Create> the <difference> with <a>.
+    <Return> an <OK: status> with <difference>.
+}
+
+(multiply-numbers: Calculator) {
+    <Create> the <product> with <a>.
+    <Return> an <OK: status> with <product>.
+}
+
+(* --- Test Feature Sets ---
+   These are identified by "Test" suffix in business activity.
+   They are:
+   - Executed by: aro test ./Examples/Calculator
+   - Stripped from binary by: aro build ./Examples/Calculator
+*)
+
+(add-positive-numbers: Calculator Test) {
+    <Given> the <a> with 5.
+    <Given> the <b> with 3.
+    <When> the <sum> from the <add-numbers>.
+    <Then> the <sum> with 8.
+}
+
+(add-zero: Calculator Test) {
+    <Given> the <a> with 10.
+    <Given> the <b> with 0.
+    <When> the <sum> from the <add-numbers>.
+    <Then> the <sum> with 10.
+}
+
+(subtract-basic: Calculator Test) {
+    <Given> the <a> with 10.
+    <Given> the <b> with 4.
+    <When> the <difference> from the <subtract-numbers>.
+    <Then> the <difference> with 6.
+}
+
+(multiply-basic: Calculator Test) {
+    <Given> the <a> with 6.
+    <Given> the <b> with 7.
+    <When> the <product> from the <multiply-numbers>.
+    <Then> the <product> with 42.
+}

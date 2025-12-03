@@ -87,6 +87,12 @@ public final class ActionRegistry: @unchecked Sendable {
 
         // State transition action
         register(AcceptAction.self)
+
+        // Test actions (Given/When/Then/Assert)
+        register(GivenAction.self)
+        register(WhenAction.self)
+        register(ThenAction.self)
+        register(AssertAction.self)
     }
 
     /// Register a custom action
