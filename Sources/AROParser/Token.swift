@@ -72,14 +72,12 @@ public enum TokenKind: Sendable, Equatable, CustomStringConvertible {
     case `protocol`         // protocol
 
     // Keywords - Error Handling (ARO-0008)
-    case error              // error
-    case `try`              // try
-    case `catch`            // catch
-    case finally            // finally
-    case `guard`            // guard
-    case `defer`            // defer
-    case assert             // assert
-    case precondition       // precondition
+    // Note: ARO has NO try-catch blocks. Errors are auto-generated from statements.
+    case error              // error (for <Throw> a <BadRequest: error>)
+    case `guard`            // guard (for validation patterns)
+    case `defer`            // defer (for cleanup)
+    case assert             // assert (for debug assertions)
+    case precondition       // precondition (for preconditions)
 
     // Keywords - Logical Operators
     case and                // and
@@ -169,9 +167,6 @@ public enum TokenKind: Sendable, Equatable, CustomStringConvertible {
         case .enum: return "enum"
         case .protocol: return "protocol"
         case .error: return "error"
-        case .try: return "try"
-        case .catch: return "catch"
-        case .finally: return "finally"
         case .guard: return "guard"
         case .defer: return "defer"
         case .assert: return "assert"
@@ -324,7 +319,7 @@ extension TokenKind {
     /// Checks if this is a keyword that starts a statement
     public var isStatementKeyword: Bool {
         switch self {
-        case .if, .match, .for, .parallel, .try, .guard, .defer, .assert, .precondition:
+        case .if, .match, .for, .parallel, .guard, .defer, .assert, .precondition:
             return true
         default:
             return false

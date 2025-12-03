@@ -6,8 +6,93 @@
 import Foundation
 import AROParser
 
+// MARK: - ARO Error (ARO-0008)
+
+/// ARO's core error type following "The Code Is The Error Message" philosophy.
+/// The error message is generated directly from the statement that failed.
+public struct AROError: Error, Sendable {
+    /// The generated error message (e.g., "Cannot retrieve the user from the user-repository where id = 530.")
+    public let message: String
+
+    /// The feature set where the error occurred
+    public let featureSet: String
+
+    /// The original statement text that failed
+    public let statement: String
+
+    /// Resolved variable values at the time of the error
+    public let resolvedValues: [String: String]
+
+    public init(
+        message: String,
+        featureSet: String,
+        statement: String,
+        resolvedValues: [String: String] = [:]
+    ) {
+        self.message = message
+        self.featureSet = featureSet
+        self.statement = statement
+        self.resolvedValues = resolvedValues
+    }
+
+    /// Generate an error message from an action statement
+    /// - Parameters:
+    ///   - verb: The action verb (e.g., "Retrieve")
+    ///   - result: The result variable name
+    ///   - preposition: The preposition used
+    ///   - object: The object description
+    ///   - condition: Optional condition clause
+    ///   - featureSet: The feature set name
+    /// - Returns: An AROError with the generated message
+    public static func fromStatement(
+        verb: String,
+        result: String,
+        preposition: String,
+        object: String,
+        condition: String? = nil,
+        featureSet: String,
+        resolvedValues: [String: String] = [:]
+    ) -> AROError {
+        var msg = "Cannot \(verb.lowercased()) the \(result) \(preposition) the \(object)"
+        if let cond = condition {
+            msg += " \(cond)"
+        }
+        msg += "."
+
+        // Substitute resolved values
+        var finalMsg = msg
+        for (key, value) in resolvedValues {
+            finalMsg = finalMsg.replacingOccurrences(of: "<\(key)>", with: "\(value)")
+        }
+
+        return AROError(
+            message: finalMsg,
+            featureSet: featureSet,
+            statement: "<\(verb)> the <\(result)> \(preposition) the <\(object)>\(condition.map { " \($0)" } ?? "").",
+            resolvedValues: resolvedValues
+        )
+    }
+}
+
+extension AROError: CustomStringConvertible {
+    public var description: String {
+        "[\(featureSet)] \(message)"
+    }
+}
+
+extension AROError: LocalizedError {
+    public var errorDescription: String? {
+        description
+    }
+}
+
+// MARK: - Action Error
+
 /// Errors that can occur during action execution
 public enum ActionError: Error, Sendable {
+    /// Statement execution failed - generates error from statement (ARO-0008)
+    case statementFailed(AROError)
+
     /// Variable not found in context
     case undefinedVariable(String)
 
@@ -65,6 +150,8 @@ public enum ActionError: Error, Sendable {
 extension ActionError: CustomStringConvertible {
     public var description: String {
         switch self {
+        case .statementFailed(let aroError):
+            return aroError.description
         case .undefinedVariable(let name):
             return "Undefined variable: '\(name)'"
         case .propertyNotFound(let prop, let type):

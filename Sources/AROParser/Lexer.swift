@@ -46,11 +46,8 @@ public final class Lexer: @unchecked Sendable {
         "enum": .enum,
         "protocol": .protocol,
 
-        // Error Handling (ARO-0008)
+        // Error Handling (ARO-0008) - No try/catch, errors are auto-generated
         "error": .error,
-        "try": .try,
-        "catch": .catch,
-        "finally": .finally,
         "guard": .guard,
         "defer": .defer,
         "assert": .assert,

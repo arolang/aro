@@ -205,7 +205,6 @@ struct TokenKindTests {
         #expect(TokenKind.match.isStatementKeyword == true)
         #expect(TokenKind.for.isStatementKeyword == true)
         #expect(TokenKind.parallel.isStatementKeyword == true)
-        #expect(TokenKind.try.isStatementKeyword == true)
         #expect(TokenKind.guard.isStatementKeyword == true)
         #expect(TokenKind.defer.isStatementKeyword == true)
         #expect(TokenKind.assert.isStatementKeyword == true)
@@ -530,16 +529,14 @@ struct LexerTokenizationTests {
 
     @Test("Tokenizes error handling keywords")
     func testErrorHandlingKeywords() throws {
-        let tokens = try Lexer.tokenize("error try catch finally guard defer assert precondition")
+        // ARO-0008: No try/catch/finally - errors are auto-generated from statements
+        let tokens = try Lexer.tokenize("error guard defer assert precondition")
 
         #expect(tokens[0].kind == .error)
-        #expect(tokens[1].kind == .try)
-        #expect(tokens[2].kind == .catch)
-        #expect(tokens[3].kind == .finally)
-        #expect(tokens[4].kind == .guard)
-        #expect(tokens[5].kind == .defer)
-        #expect(tokens[6].kind == .assert)
-        #expect(tokens[7].kind == .precondition)
+        #expect(tokens[1].kind == .guard)
+        #expect(tokens[2].kind == .defer)
+        #expect(tokens[3].kind == .assert)
+        #expect(tokens[4].kind == .precondition)
     }
 
     @Test("Tokenizes logical keywords")

@@ -174,17 +174,70 @@ public final class FeatureSetExecutor: @unchecked Sendable {
             throw ActionError.unknownAction(verb)
         }
 
-        // Execute action
-        let result = try await action.execute(
-            result: resultDescriptor,
-            object: objectDescriptor,
-            context: context
-        )
+        // Execute action with ARO-0008 error wrapping
+        do {
+            let result = try await action.execute(
+                result: resultDescriptor,
+                object: objectDescriptor,
+                context: context
+            )
 
-        // Bind result to context (unless it's a response action that already set the response)
-        if statement.action.semanticRole != .response {
-            context.bind(resultDescriptor.base, value: result)
+            // Bind result to context (unless it's a response action that already set the response)
+            if statement.action.semanticRole != .response {
+                context.bind(resultDescriptor.base, value: result)
+            }
+        } catch let aroError as AROError {
+            // Already an AROError, re-throw
+            throw ActionError.statementFailed(aroError)
+        } catch {
+            // Wrap other errors with statement context (ARO-0008: Code Is The Error Message)
+            let aroError = AROError.fromStatement(
+                verb: verb,
+                result: resultDescriptor.fullName,
+                preposition: statement.object.preposition.rawValue,
+                object: objectDescriptor.fullName,
+                condition: statement.whenCondition != nil ? "when <condition>" : nil,
+                featureSet: context.featureSetName,
+                resolvedValues: gatherResolvedValues(for: statement, context: context)
+            )
+            throw ActionError.statementFailed(aroError)
         }
+    }
+
+    /// Gather resolved variable values for error context
+    private func gatherResolvedValues(
+        for statement: AROStatement,
+        context: ExecutionContext
+    ) -> [String: String] {
+        var values: [String: String] = [:]
+
+        // Collect object base value
+        let objectBase = statement.object.noun.base
+        if let value = context.resolveAny(objectBase) {
+            values[objectBase] = String(describing: value)
+        }
+
+        // Collect object specifier values
+        for specifier in statement.object.noun.specifiers {
+            if let value = context.resolveAny(specifier) {
+                values[specifier] = String(describing: value)
+            }
+        }
+
+        // Collect result base value
+        let resultBase = statement.result.base
+        if let value = context.resolveAny(resultBase) {
+            values[resultBase] = String(describing: value)
+        }
+
+        // Collect result specifier values
+        for specifier in statement.result.specifiers {
+            if let value = context.resolveAny(specifier) {
+                values[specifier] = String(describing: value)
+            }
+        }
+
+        return values
     }
 
     private func executePublishStatement(
