@@ -277,6 +277,8 @@ public final class Runtime: @unchecked Sendable {
     private let engine: ExecutionEngine
     private let eventBus: EventBus
     private var _isRunning: Bool = false
+    private var _currentProgram: AnalyzedProgram?
+    private var _shutdownError: Error?
     private let lock = NSLock()
 
     // MARK: - Thread-safe helpers
@@ -290,6 +292,16 @@ public final class Runtime: @unchecked Sendable {
     private var isRunning: Bool {
         get { withLock { _isRunning } }
         set { withLock { _isRunning = newValue } }
+    }
+
+    private var currentProgram: AnalyzedProgram? {
+        get { withLock { _currentProgram } }
+        set { withLock { _currentProgram = newValue } }
+    }
+
+    private var shutdownError: Error? {
+        get { withLock { _shutdownError } }
+        set { withLock { _shutdownError = newValue } }
     }
 
     private func tryStartRunning() -> Bool {
@@ -350,10 +362,20 @@ public final class Runtime: @unchecked Sendable {
         // Reset shutdown coordinator for new run
         ShutdownCoordinator.shared.reset()
 
+        // Store the program for Application-End execution
+        currentProgram = program
+
         // Register for signal handling
         RuntimeSignalHandler.shared.register(self)
 
-        _ = try await run(program, entryPoint: entryPoint)
+        do {
+            _ = try await run(program, entryPoint: entryPoint)
+        } catch {
+            // Store error for Application-End: Error handler
+            shutdownError = error
+            await executeApplicationEnd(isError: true)
+            throw error
+        }
 
         // Re-set isRunning since run() resets it in defer block
         isRunning = true
@@ -361,6 +383,59 @@ public final class Runtime: @unchecked Sendable {
         // Keep running until stopped
         while isRunning {
             try await Task.sleep(nanoseconds: 100_000_000) // 100ms
+        }
+
+        // Execute Application-End handler on graceful shutdown
+        await executeApplicationEnd(isError: shutdownError != nil)
+    }
+
+    /// Execute Application-End handler if defined
+    /// - Parameter isError: Whether shutdown is due to an error
+    private func executeApplicationEnd(isError: Bool) async {
+        guard let program = currentProgram else { return }
+
+        // Find Application-End feature set
+        let businessActivity = isError ? "Error" : "Success"
+        guard let exitHandler = program.featureSets.first(where: { fs in
+            fs.featureSet.name == "Application-End" &&
+            fs.featureSet.businessActivity == businessActivity
+        }) else {
+            return // No exit handler defined
+        }
+
+        // Create context for exit handler
+        let context = RuntimeContext(
+            featureSetName: "Application-End",
+            eventBus: eventBus
+        )
+
+        // Bind shutdown context variables
+        if isError, let error = shutdownError {
+            context.bind("shutdown", value: [
+                "reason": String(describing: error),
+                "code": 1,
+                "error": String(describing: error)
+            ] as [String: any Sendable])
+        } else {
+            context.bind("shutdown", value: [
+                "reason": "graceful shutdown",
+                "code": 0,
+                "signal": "SIGTERM"
+            ] as [String: any Sendable])
+        }
+
+        // Execute the exit handler
+        let executor = FeatureSetExecutor(
+            actionRegistry: ActionRegistry.shared,
+            eventBus: eventBus,
+            globalSymbols: GlobalSymbolStorage()
+        )
+
+        do {
+            _ = try await executor.execute(exitHandler, context: context)
+        } catch {
+            // Log but don't propagate errors from exit handler
+            print("[Runtime] Application-End handler failed: \(error)")
         }
     }
 
