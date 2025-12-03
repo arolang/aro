@@ -2,7 +2,7 @@
 
 * Proposal: ARO-0027
 * Author: ARO Language Team
-* Status: **Draft**
+* Status: **Implemented**
 * Requires: ARO-0001, ARO-0021
 
 ## Abstract
@@ -420,8 +420,26 @@ Migration path:
 
 ---
 
+## Implementation Location
+
+The OpenAPI contract-first system is implemented in:
+
+- `Sources/ARORuntime/OpenAPI/OpenAPISpec.swift` - Complete OpenAPI 3.0 data structures (`OpenAPISpec`, `PathItem`, `Operation`, `Parameter`, `Schema`, etc.)
+- `Sources/ARORuntime/OpenAPI/OpenAPIRouteRegistry.swift` - Route matching with path parameter extraction (`PathPattern`, `RouteMatch`)
+- `Sources/ARORuntime/OpenAPI/OpenAPILoader.swift` - YAML/JSON loading using Yams library
+- `Sources/ARORuntime/OpenAPI/OpenAPIHTTPHandler.swift` - HTTP request handling via `HTTPOperationEvent`
+- `Sources/ARORuntime/OpenAPI/ContractValidator.swift` - Validates operationIds match feature set names
+- `Sources/ARORuntime/OpenAPI/SchemaBinding.swift` - Binds request body to context using OpenAPI schemas
+
+Examples:
+- `Examples/HelloWorldAPI/` - Simple Hello World API with contract
+- `Examples/UserService/` - Full CRUD user service
+
+---
+
 ## Revision History
 
 | Version | Date | Changes |
 |---------|------|---------|
 | 1.0 | 2024-01 | Initial specification |
+| 1.1 | 2024-12 | Implemented with full OpenAPI 3.0 support |
