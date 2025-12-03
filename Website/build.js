@@ -35,6 +35,12 @@ mainHtmlFiles.forEach(file => {
 // Process doc-template.html (stylesheet at parent level)
 processHtmlFile('src/doc-template.html', 'dist/doc-template.html', '../style.css');
 
+// Process docs subdirectory pages
+const docsSubPages = ['event-driven.html', 'state-transitions.html', 'data-pipelines.html', 'native-compilation.html'];
+docsSubPages.forEach(file => {
+    processHtmlFile(`src/docs/${file}`, `dist/docs/${file}`, '../style.css');
+});
+
 // Copy style.css
 if (fs.existsSync('src/style.css')) {
     fs.copyFileSync('src/style.css', 'dist/style.css');
