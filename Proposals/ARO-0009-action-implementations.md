@@ -2,7 +2,7 @@
 
 * Proposal: ARO-0009
 * Author: ARO Language Team
-* Status: **Draft**
+* Status: **Accepted**
 * Requires: ARO-0001, ARO-0006, ARO-0008
 
 ## Abstract
@@ -49,29 +49,32 @@ A three-layer architecture:
 
 ```swift
 /// Protocol for all action implementations
-public protocol Action: Sendable {
+public protocol ActionImplementation: Sendable {
     /// Semantic role of this action
-    static var semanticRole: ActionRole { get }
-    
-    /// Verbs that trigger this action
+    static var role: ActionRole { get }
+
+    /// Verbs that trigger this action (lowercase)
     static var verbs: Set<String> { get }
-    
-    /// Compatible prepositions
-    static var prepositions: Set<Preposition> { get }
-    
-    /// Execute the action
+
+    /// Valid prepositions for this action
+    static var validPrepositions: Set<Preposition> { get }
+
+    /// Default initializer (actions should be stateless)
+    init()
+
+    /// Execute the action asynchronously
     func execute(
         result: ResultDescriptor,
         object: ObjectDescriptor,
         context: ExecutionContext
-    ) async throws -> Any
+    ) async throws -> any Sendable
 }
 
-public enum ActionRole: Sendable {
-    case request    // External → Internal
-    case own        // Internal → Internal
-    case response   // Internal → External
-    case export     // Publish
+public enum ActionRole: String, Sendable, CaseIterable {
+    case request    // External → Internal (Extract, Retrieve, Receive)
+    case own        // Internal → Internal (Compute, Validate, Compare)
+    case response   // Internal → External (Return, Throw, Send)
+    case export     // Publish mechanism
 }
 ```
 
@@ -182,201 +185,203 @@ public final class RuntimeContext: ExecutionContext, @unchecked Sendable {
 
 ### 3. Built-in Actions
 
-#### 3.1 Extract Action
+ARO implements 24 built-in actions across four semantic roles:
+
+#### 3.1 REQUEST Actions (External → Internal)
+
+| Action | Verbs | Prepositions | Description |
+|--------|-------|--------------|-------------|
+| **Extract** | extract | from, via | Extract values from objects/structures |
+| **Retrieve** | retrieve | from | Retrieve data from repositories |
+| **Receive** | receive | from, via | Receive data from external sources |
+| **Fetch** | fetch | from | Fetch data from HTTP endpoints |
+| **Read** | read | from | Read data from files |
 
 ```swift
-/// Extracts a value from a source
-public struct ExtractAction: Action {
-    public static let semanticRole: ActionRole = .request
-    public static let verbs: Set<String> = ["extract", "parse", "get"]
-    public static let prepositions: Set<Preposition> = [.from, .via]
-    
+/// Example: ExtractAction
+public struct ExtractAction: ActionImplementation {
+    public static let role: ActionRole = .request
+    public static let verbs: Set<String> = ["extract"]
+    public static let validPrepositions: Set<Preposition> = [.from, .via]
+
+    public init() {}
+
     public func execute(
         result: ResultDescriptor,
         object: ObjectDescriptor,
         context: ExecutionContext
-    ) async throws -> Any {
-        // Get source object
-        guard let source: Any = context.resolve(object.base) else {
+    ) async throws -> any Sendable {
+        // Get source object and extract value using specifiers as key path
+        guard let source = context.resolveAny(object.base) else {
             throw ActionError.undefinedVariable(object.base)
         }
-        
-        // Build key path from specifiers
-        let keyPath = object.specifiers.joined(separator: ".")
-        
-        // Extract value
-        return try extractValue(from: source, path: keyPath)
-    }
-    
-    private func extractValue(from source: Any, path: String) throws -> Any {
-        // Mirror-based extraction for dynamic access
-        var current: Any = source
-        
-        for key in path.split(separator: ".").map(String.init) {
-            let mirror = Mirror(reflecting: current)
-            guard let child = mirror.children.first(where: { $0.label == key }) else {
-                throw ActionError.propertyNotFound(key, in: String(describing: type(of: current)))
-            }
-            current = child.value
-        }
-        
-        return current
+        let extracted = try extractValue(from: source, specifiers: object.specifiers)
+        context.bind(result.base, value: extracted)
+        return extracted
     }
 }
 ```
 
-#### 3.2 Retrieve Action
+#### 3.2 OWN Actions (Internal → Internal)
+
+| Action | Verbs | Prepositions | Description |
+|--------|-------|--------------|-------------|
+| **Compute** | compute, calculate, derive | from, for, with | Compute values |
+| **Validate** | validate, check, verify | for, against | Validate data |
+| **Compare** | compare | against, to, with | Compare values |
+| **Transform** | transform, convert | to, into | Transform data |
+| **Create** | create, make, build | with, from | Create new entities |
+| **Update** | update, modify, change | with, to | Update existing entities |
+| **Filter** | filter | from, by, where | Filter collections |
+| **Sort** | sort, order | by | Sort collections |
+| **Merge** | merge, combine | with, into | Merge collections |
+| **Delete** | delete, remove | from | Delete entities |
 
 ```swift
-/// Retrieves data from a repository
-public struct RetrieveAction: Action {
-    public static let semanticRole: ActionRole = .request
-    public static let verbs: Set<String> = ["retrieve", "fetch", "load", "find"]
-    public static let prepositions: Set<Preposition> = [.from]
-    
-    public func execute(
-        result: ResultDescriptor,
-        object: ObjectDescriptor,
-        context: ExecutionContext
-    ) async throws -> Any {
-        // Get repository name
-        let repoName = object.base
-        
-        guard let repository = context.repository(named: repoName) else {
-            throw ActionError.undefinedRepository(repoName)
-        }
-        
-        // Build query from result specifiers
-        let query = Query(type: result.base, fields: result.specifiers)
-        
-        return try await repository.find(query)
-    }
-}
-```
-
-#### 3.3 Compute Action
-
-```swift
-/// Computes a value from inputs
-public struct ComputeAction: Action {
-    public static let semanticRole: ActionRole = .own
+/// Example: ComputeAction
+public struct ComputeAction: ActionImplementation {
+    public static let role: ActionRole = .own
     public static let verbs: Set<String> = ["compute", "calculate", "derive"]
-    public static let prepositions: Set<Preposition> = [.from, .for, .with]
-    
+    public static let validPrepositions: Set<Preposition> = [.from, .for, .with]
+
+    public init() {}
+
     public func execute(
         result: ResultDescriptor,
         object: ObjectDescriptor,
         context: ExecutionContext
-    ) async throws -> Any {
-        // Get computation name from result specifiers
-        let computationName = result.specifiers.first ?? "identity"
-        
-        // Get input
-        guard let input: Any = context.resolve(object.base) else {
+    ) async throws -> any Sendable {
+        // Get input and compute result based on specifiers
+        guard let input = context.resolveAny(object.base) else {
             throw ActionError.undefinedVariable(object.base)
         }
-        
-        // Execute computation
-        return try context.compute(computationName, input: input)
+        let computed = try compute(operation: result.specifiers, input: input)
+        context.bind(result.base, value: computed)
+        return computed
     }
 }
 ```
 
-#### 3.4 Return Action
+#### 3.3 RESPONSE Actions (Internal → External)
+
+| Action | Verbs | Prepositions | Description |
+|--------|-------|--------------|-------------|
+| **Return** | return | for, with | Return response |
+| **Throw** | throw | for | Throw error |
+| **Send** | send | to, via | Send data externally |
+| **Log** | log, print | for, to | Log messages |
+| **Store** | store, save, persist | in, to | Store data |
+| **Write** | write | to | Write to files |
+| **Notify** | notify, alert | for | Send notifications |
 
 ```swift
-/// Returns a response
-public struct ReturnAction: Action {
-    public static let semanticRole: ActionRole = .response
-    public static let verbs: Set<String> = ["return", "respond", "send"]
-    public static let prepositions: Set<Preposition> = [.for, .to, .with]
-    
+/// Example: ReturnAction
+public struct ReturnAction: ActionImplementation {
+    public static let role: ActionRole = .response
+    public static let verbs: Set<String> = ["return"]
+    public static let validPrepositions: Set<Preposition> = [.for, .with]
+
+    public init() {}
+
     public func execute(
         result: ResultDescriptor,
         object: ObjectDescriptor,
         context: ExecutionContext
-    ) async throws -> Any {
-        let statusName = result.base
-        let reason = object.base
-        
+    ) async throws -> any Sendable {
         let response = Response(
-            status: statusName,
-            reason: reason,
+            status: result.base,
+            reason: object.base,
             data: gatherResponseData(context: context)
         )
-        
         context.setResponse(response)
         return response
     }
 }
 ```
 
-#### 3.5 Throw Action
+#### 3.4 EXPORT Actions
 
-```swift
-/// Throws an error
-public struct ThrowAction: Action {
-    public static let semanticRole: ActionRole = .response
-    public static let verbs: Set<String> = ["throw", "raise", "fail"]
-    public static let prepositions: Set<Preposition> = [.for]
-    
-    public func execute(
-        result: ResultDescriptor,
-        object: ObjectDescriptor,
-        context: ExecutionContext
-    ) async throws -> Any {
-        let errorType = result.base
-        let reason = object.base
-        
-        throw ActionError.thrown(
-            type: errorType,
-            reason: reason,
-            context: context.featureSetName
-        )
-    }
-}
-```
+| Action | Verbs | Prepositions | Description |
+|--------|-------|--------------|-------------|
+| **Publish** | publish | as | Publish variables globally |
+
+#### 3.5 SERVER Actions
+
+| Action | Verbs | Prepositions | Description |
+|--------|-------|--------------|-------------|
+| **Start** | start | on | Start services (HTTP, Socket) |
+| **Listen** | listen | on | Listen on ports |
+| **Route** | route | to | Configure routes |
+| **Watch** | watch | for | Watch files/directories |
+| **Keepalive** | keepalive, wait | for | Keep application running |
 
 ---
 
 ### 4. Action Registry
 
 ```swift
-/// Global registry of actions
-@MainActor
-public final class ActionRegistry {
+/// Global registry that binds action verbs to their implementations
+public final class ActionRegistry: @unchecked Sendable {
     public static let shared = ActionRegistry()
-    
-    private var actions: [String: any Action.Type] = [:]
-    
+
+    private let lock = NSLock()
+    private var actions: [String: any ActionImplementation.Type] = [:]
+
     private init() {
-        registerBuiltins()
+        registerBuiltIns()
     }
-    
-    private func registerBuiltins() {
+
+    private func registerBuiltIns() {
+        // REQUEST actions
         register(ExtractAction.self)
         register(RetrieveAction.self)
+        register(ReceiveAction.self)
+        register(FetchAction.self)
+        register(ReadAction.self)
+
+        // OWN actions
         register(ComputeAction.self)
-        register(ReturnAction.self)
-        register(ThrowAction.self)
         register(ValidateAction.self)
         register(CompareAction.self)
+        register(TransformAction.self)
         register(CreateAction.self)
         register(UpdateAction.self)
+        register(FilterAction.self)
+        register(SortAction.self)
+        register(MergeAction.self)
         register(DeleteAction.self)
+
+        // RESPONSE actions
+        register(ReturnAction.self)
+        register(ThrowAction.self)
+        register(SendAction.self)
         register(LogAction.self)
         register(StoreAction.self)
-        register(SendAction.self)
+        register(WriteAction.self)
         register(NotifyAction.self)
+
+        // EXPORT actions
+        register(PublishAction.self)
+
+        // SERVER actions
+        register(StartAction.self)
+        register(ListenAction.self)
+        register(RouteAction.self)
+        register(WatchAction.self)
+        register(WaitForEventsAction.self)
     }
-    
-    public func register<A: Action>(_ action: A.Type) {
+
+    public func register<A: ActionImplementation>(_ action: A.Type) {
+        lock.lock()
+        defer { lock.unlock() }
         for verb in A.verbs {
             actions[verb.lowercased()] = action
         }
     }
-    
-    public func action(for verb: String) -> (any Action)? {
+
+    public func action(for verb: String) -> (any ActionImplementation)? {
+        lock.lock()
+        defer { lock.unlock() }
         guard let actionType = actions[verb.lowercased()] else {
             return nil
         }
@@ -425,31 +430,33 @@ action SendEmail(recipient: String, subject: String, body: String) -> Bool {
 
 ```swift
 // Define custom action in Swift
-public struct SendEmailAction: Action {
-    public static let semanticRole: ActionRole = .response
+public struct SendEmailAction: ActionImplementation {
+    public static let role: ActionRole = .response
     public static let verbs: Set<String> = ["sendemail", "email"]
-    public static let prepositions: Set<Preposition> = [.to, .via]
-    
+    public static let validPrepositions: Set<Preposition> = [.to, .via]
+
+    public init() {}
+
     public func execute(
         result: ResultDescriptor,
         object: ObjectDescriptor,
         context: ExecutionContext
-    ) async throws -> Any {
+    ) async throws -> any Sendable {
         guard let emailService = context.service(EmailService.self) else {
             throw ActionError.missingService("EmailService")
         }
-        
-        guard let recipient: String = context.resolve(object.base) else {
-            throw ActionError.undefinedVariable(object.base)
-        }
-        
+
+        let recipient: String = try context.require(object.base)
+
         let email = Email(
             to: recipient,
-            subject: result.specifiers[safe: 0] ?? "No Subject",
-            body: result.specifiers[safe: 1] ?? ""
+            subject: result.specifiers.first ?? "No Subject",
+            body: result.specifiers.dropFirst().first ?? ""
         )
-        
-        return try await emailService.send(email)
+
+        let success = try await emailService.send(email)
+        context.bind(result.base, value: success)
+        return success
     }
 }
 
@@ -484,12 +491,12 @@ import ARORuntime
 public struct UserAuthentication: FeatureSet {
     public static let name = "User Authentication"
     public static let businessActivity = "Security"
-    
+
     public init() {}
-    
+
     public func execute(context: ExecutionContext) async throws -> Response {
         // <Extract> the <user: identifier> from the <request: parameters>
-        let user = try await ActionRegistry.shared
+        _ = try await ActionRegistry.shared
             .action(for: "Extract")!
             .execute(
                 result: ResultDescriptor(base: "user", specifiers: ["identifier"]),
@@ -500,10 +507,10 @@ public struct UserAuthentication: FeatureSet {
                 ),
                 context: context
             )
-        context.bind("user", to: user)
-        
+        // Result bound to "user" by action
+
         // <Retrieve> the <user: record> from the <user-repository>
-        let userRecord = try await ActionRegistry.shared
+        _ = try await ActionRegistry.shared
             .action(for: "Retrieve")!
             .execute(
                 result: ResultDescriptor(base: "user", specifiers: ["record"]),
@@ -514,10 +521,10 @@ public struct UserAuthentication: FeatureSet {
                 ),
                 context: context
             )
-        context.bind("userRecord", to: userRecord)
-        
+        // Result bound to "user" by action
+
         // <Compute> the <password: hash> for the <credentials>
-        let password = try await ActionRegistry.shared
+        _ = try await ActionRegistry.shared
             .action(for: "Compute")!
             .execute(
                 result: ResultDescriptor(base: "password", specifiers: ["hash"]),
@@ -528,8 +535,8 @@ public struct UserAuthentication: FeatureSet {
                 ),
                 context: context
             )
-        context.bind("password", to: password)
-        
+        // Result bound to "password" by action
+
         // <Return> an <OK: status> for a <valid: authentication>
         let response = try await ActionRegistry.shared
             .action(for: "Return")!
@@ -542,7 +549,7 @@ public struct UserAuthentication: FeatureSet {
                 ),
                 context: context
             ) as! Response
-        
+
         return response
     }
 }
