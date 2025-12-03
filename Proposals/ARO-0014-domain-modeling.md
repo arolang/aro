@@ -2,12 +2,12 @@
 
 * Proposal: ARO-0014
 * Author: ARO Language Team
-* Status: **Draft**
+* Status: **Implemented**
 * Requires: ARO-0001, ARO-0006, ARO-0012
 
 ## Abstract
 
-This proposal introduces Domain-Driven Design (DDD) constructs to ARO, enabling rich domain modeling with entities, value objects, aggregates, and bounded contexts.
+This proposal documents how ARO implements Domain-Driven Design (DDD) concepts through existing language features. ARO follows a "conventions over syntax" approach: types are defined in OpenAPI, behavior lives in feature sets, and DDD patterns emerge from their combination.
 
 ## Motivation
 
@@ -16,707 +16,783 @@ ARO is designed for business feature specification. DDD provides:
 1. **Ubiquitous Language**: Shared vocabulary between code and business
 2. **Rich Domain Model**: Entities, value objects, aggregates
 3. **Bounded Contexts**: Clear boundaries between domains
-4. **Strategic Design**: Context mapping, anti-corruption layers
+4. **Event-Driven Design**: Domain events for decoupling
+
+ARO implements these concepts without introducing new type syntax, staying consistent with ARO-0006's principle that all complex types come from OpenAPI schemas.
 
 ---
 
-### 1. Value Objects
+## Design Principle
 
-#### 1.1 Definition
+> **Types in OpenAPI, Behavior in Feature Sets**
 
-```ebnf
-value_object = "value" , identifier , "{" , { field_def } , "}" ;
-```
-
-**Example:**
-```
-value Money {
-    amount: Decimal;
-    currency: Currency;
-    
-    invariant amount >= 0 : "Amount must be non-negative";
-    
-    func add(other: Money) -> Money {
-        guard <currency> == <other>.currency else {
-            <Throw> a <CurrencyMismatchError>.
-        }
-        <Return> Money { 
-            amount: <amount> + <other>.amount, 
-            currency: <currency> 
-        }.
-    }
-    
-    func multiply(factor: Decimal) -> Money {
-        <Return> Money { 
-            amount: <amount> * <factor>, 
-            currency: <currency> 
-        }.
-    }
-}
-
-value Address {
-    street: String;
-    city: String;
-    state: String;
-    postalCode: String;
-    country: Country;
-    
-    invariant <postalCode> matches postalCodePattern(<country>)
-        : "Invalid postal code for country";
-}
-
-value EmailAddress {
-    value: String;
-    
-    invariant <value> matches "^[^@]+@[^@]+\\.[^@]+$"
-        : "Invalid email format";
-    
-    func domain() -> String {
-        <Return> <value>.split("@")[1].
-    }
-}
-
-value DateRange {
-    start: Date;
-    end: Date;
-    
-    invariant <start> <= <end> : "Start must be before end";
-    
-    func contains(date: Date) -> Bool {
-        <Return> <date> >= <start> and <date> <= <end>.
-    }
-    
-    func overlaps(other: DateRange) -> Bool {
-        <Return> <start> <= <other>.end and <end> >= <other>.start.
-    }
-}
-```
-
-#### 1.2 Value Object Semantics
-
-- **Immutable**: Cannot be modified after creation
-- **Equality**: Compared by value, not identity
-- **No Identity**: No ID field
-- **Self-Validating**: Invariants checked on creation
+ARO separates structure from behavior:
+- **OpenAPI schemas** define data structures (entities, value objects, aggregates)
+- **Feature sets** define behavior (domain services, event handlers, factories)
+- **Business Activity** defines bounded context
 
 ---
 
-### 2. Entities
+## DDD Concepts in ARO
 
-#### 2.1 Definition
-
-```ebnf
-entity = "entity" , identifier , "{" , { entity_member } , "}" ;
-entity_member = identity_field | field_def | method_def | invariant ;
-identity_field = "identity" , identifier , ":" , type_annotation , ";" ;
-```
-
-**Example:**
-```
-entity User {
-    identity id: UserId;
-    
-    email: EmailAddress;
-    name: PersonName;
-    passwordHash: String;
-    status: UserStatus;
-    roles: Set<Role>;
-    createdAt: DateTime;
-    updatedAt: DateTime?;
-    
-    invariant <roles> is not empty : "User must have at least one role";
-    
-    func changeEmail(newEmail: EmailAddress) {
-        <Set> the <email> to <newEmail>.
-        <Set> the <updatedAt> to now().
-        <Emit> UserEmailChanged { userId: <id>, newEmail: <newEmail> }.
-    }
-    
-    func addRole(role: Role) {
-        <Add> <role> to <roles>.
-        <Emit> UserRoleAdded { userId: <id>, role: <role> }.
-    }
-    
-    func hasPermission(permission: Permission) -> Bool {
-        <Return> <roles>.any(<r> => <r>.permissions.contains(<permission>)).
-    }
-}
-
-entity Product {
-    identity sku: SKU;
-    
-    name: String;
-    description: String;
-    price: Money;
-    category: Category;
-    inventory: InventoryLevel;
-    active: Bool;
-    
-    invariant <price>.amount > 0 : "Price must be positive";
-    
-    func adjustPrice(newPrice: Money, reason: String) {
-        <Emit> PriceChanged { 
-            sku: <sku>, 
-            oldPrice: <price>, 
-            newPrice: <newPrice>,
-            reason: <reason>
-        }.
-        <Set> the <price> to <newPrice>.
-    }
-}
-```
-
-#### 2.2 Entity Semantics
-
-- **Identity**: Unique identifier field
-- **Mutable**: State can change over time
-- **Lifecycle**: Created, modified, possibly deleted
-- **Equality**: Compared by identity, not value
+| DDD Concept | ARO Implementation |
+|-------------|-------------------|
+| Value Object | OpenAPI schema (no `id` field) |
+| Entity | OpenAPI schema with `id` field |
+| Aggregate | OpenAPI schema with nested objects |
+| Bounded Context | Business Activity in feature set header |
+| Domain Event | `<Emit>` action + Event Handler feature sets |
+| Repository | `<Retrieve>` and `<Store>` actions |
+| Domain Service | Feature set with business logic |
+| Factory | Feature set that creates objects |
 
 ---
 
-### 3. Aggregates
+## 1. Value Objects
 
-#### 3.1 Definition
+Value objects are immutable data structures defined by their attributes, not identity.
 
-```ebnf
-aggregate = "aggregate" , identifier , 
-            "{" , { aggregate_member } , "}" ;
+### Definition
 
-aggregate_member = "root" , entity 
-                 | entity 
-                 | value_object
-                 | invariant
-                 | command_handler
-                 | domain_event ;
+Define in `openapi.yaml` as a schema **without an `id` field**:
+
+```yaml
+components:
+  schemas:
+    Money:
+      type: object
+      properties:
+        amount:
+          type: number
+        currency:
+          type: string
+          enum: [USD, EUR, GBP]
+      required: [amount, currency]
+
+    Address:
+      type: object
+      properties:
+        street:
+          type: string
+        city:
+          type: string
+        postal-code:
+          type: string
+        country:
+          type: string
+      required: [street, city, country]
+
+    EmailAddress:
+      type: object
+      properties:
+        value:
+          type: string
+          format: email
+      required: [value]
 ```
 
-**Example:**
-```
-aggregate Order {
-    // Aggregate root
-    root entity OrderRoot {
-        identity id: OrderId;
-        
-        customerId: CustomerId;
-        status: OrderStatus;
-        items: List<OrderItem>;
-        shippingAddress: Address;
-        billingAddress: Address;
-        payment: PaymentInfo?;
-        totals: OrderTotals;
-        placedAt: DateTime?;
-        
-        invariant <items> is not empty when <status> != .draft
-            : "Placed order must have items";
-    }
-    
-    // Nested entity (only accessible through aggregate)
-    entity OrderItem {
-        identity lineId: LineId;
-        
-        productId: ProductId;
-        productName: String;
-        unitPrice: Money;
-        quantity: Quantity;
-        
-        func lineTotal() -> Money {
-            <Return> <unitPrice>.multiply(<quantity>.value).
-        }
-    }
-    
-    // Value objects
-    value OrderTotals {
-        subtotal: Money;
-        tax: Money;
-        shipping: Money;
-        discount: Money;
-        total: Money;
-    }
-    
-    // Aggregate-level invariants
-    invariant <totals>.total == 
-        <totals>.subtotal + <totals>.tax + <totals>.shipping - <totals>.discount
-        : "Totals must be consistent";
-    
-    // Commands
-    handle AddItem(productId: ProductId, quantity: Quantity) {
-        guard <status> is .draft else {
-            <Throw> an <OrderNotModifiableError>.
-        }
-        
-        <Create> the <item: OrderItem> with {
-            lineId: generateLineId(),
-            productId: <productId>,
-            productName: <lookup>(<productId>).name,
-            unitPrice: <lookup>(<productId>).price,
-            quantity: <quantity>
-        }.
-        
-        <Add> <item> to <items>.
-        <Recalculate> the <totals>.
-        
-        <Emit> ItemAddedToOrder { 
-            orderId: <id>, 
-            item: <item> 
-        }.
-    }
-    
-    handle RemoveItem(lineId: LineId) {
-        guard <status> is .draft else {
-            <Throw> an <OrderNotModifiableError>.
-        }
-        
-        <Remove> item where <item>.lineId == <lineId> from <items>.
-        <Recalculate> the <totals>.
-        
-        <Emit> ItemRemovedFromOrder { 
-            orderId: <id>, 
-            lineId: <lineId> 
-        }.
-    }
-    
-    handle PlaceOrder {
-        guard <items> is not empty else {
-            <Throw> an <EmptyOrderError>.
-        }
-        guard <payment> exists else {
-            <Throw> a <PaymentRequiredError>.
-        }
-        
-        <Set> the <status> to .placed.
-        <Set> the <placedAt> to now().
-        
-        <Emit> OrderPlaced {
-            orderId: <id>,
-            customerId: <customerId>,
-            items: <items>,
-            totals: <totals>
-        }.
-    }
+### Usage in ARO
+
+```aro
+(Create Order: Sales) {
+    <Create> the <shipping-cost: Money> with {
+        amount: 9.99,
+        currency: "USD"
+    }.
+
+    <Create> the <shipping-address: Address> with {
+        street: "123 Main St",
+        city: "Springfield",
+        postal-code: "12345",
+        country: "USA"
+    }.
 }
 ```
 
-#### 3.2 Aggregate Rules
+### Conventions
 
-1. **Single Root**: One entity is the aggregate root
-2. **Transactional Boundary**: All changes are atomic
-3. **Reference by ID**: Other aggregates referenced by ID only
-4. **Invariant Enforcement**: All invariants checked on save
+- Value objects are **immutable by convention** - create new instances instead of modifying
+- Compare by value, not reference
+- No `id` field (that makes it an entity)
 
 ---
 
-### 4. Repositories
+## 2. Entities
 
-#### 4.1 Definition
+Entities are objects with identity that persists over time.
 
-```ebnf
-repository = "repository" , identifier , 
-             "for" , aggregate_name ,
-             "{" , { repository_method } , "}" ;
+### Definition
+
+Define in `openapi.yaml` with a **required `id` field**:
+
+```yaml
+components:
+  schemas:
+    User:
+      type: object
+      properties:
+        id:
+          type: string
+        email:
+          type: string
+          format: email
+        name:
+          type: string
+        status:
+          type: string
+          enum: [active, inactive, suspended]
+        created-at:
+          type: string
+          format: date-time
+      required: [id, email, name]
+
+    Product:
+      type: object
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+        price:
+          $ref: '#/components/schemas/Money'
+        stock:
+          type: integer
+      required: [id, name, price]
 ```
 
-**Example:**
-```
-repository OrderRepository for Order {
-    find(id: OrderId) -> Order?;
-    
-    findByCustomer(customerId: CustomerId) -> List<Order>;
-    
-    findByStatus(status: OrderStatus) -> List<Order>;
-    
-    findPending() -> List<Order> {
-        <Return> findByStatus(.placed).
-    }
-    
-    save(order: Order);
-    
-    delete(id: OrderId);
-    
-    nextId() -> OrderId;
+### Usage in ARO
+
+```aro
+(Get User: User Management) {
+    <Extract> the <user-id> from the <pathParameters: id>.
+    <Retrieve> the <user: User> from the <user-repository>
+        where id = <user-id>.
+    <Return> an <OK: status> with <user>.
 }
 
-repository UserRepository for User {
-    find(id: UserId) -> User?;
-    
-    findByEmail(email: EmailAddress) -> User?;
-    
-    findByRole(role: Role) -> List<User>;
-    
-    exists(email: EmailAddress) -> Bool {
-        <Return> findByEmail(<email>) exists.
-    }
-    
-    save(user: User);
+(Update User Email: User Management) {
+    <Extract> the <user-id> from the <pathParameters: id>.
+    <Extract> the <new-email> from the <request: email>.
+
+    <Retrieve> the <user: User> from the <user-repository>
+        where id = <user-id>.
+
+    <Update> the <user: email> with <new-email>.
+    <Store> the <user> in the <user-repository>.
+
+    <Emit> a <UserEmailChanged: event> with <user>.
+    <Return> an <OK: status> with <user>.
 }
 ```
+
+### Conventions
+
+- Always has an `id` field (identity)
+- Can be modified over time
+- Compared by identity, not value
+- Typically stored in a repository
 
 ---
 
-### 5. Domain Services
+## 3. Aggregates
 
-#### 5.1 Definition
+Aggregates are clusters of entities and value objects with a root entity that controls access.
 
-```ebnf
-domain_service = "service" , identifier , 
-                 "{" , { service_method } , "}" ;
+### Definition
+
+Define the aggregate root with nested references:
+
+```yaml
+components:
+  schemas:
+    Order:
+      type: object
+      properties:
+        id:
+          type: string
+        customer-id:
+          type: string
+        status:
+          type: string
+          enum: [draft, placed, shipped, delivered, cancelled]
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/OrderItem'
+        shipping-address:
+          $ref: '#/components/schemas/Address'
+        totals:
+          $ref: '#/components/schemas/OrderTotals'
+        placed-at:
+          type: string
+          format: date-time
+      required: [id, customer-id, status, items]
+
+    OrderItem:
+      type: object
+      properties:
+        line-id:
+          type: string
+        product-id:
+          type: string
+        product-name:
+          type: string
+        unit-price:
+          $ref: '#/components/schemas/Money'
+        quantity:
+          type: integer
+      required: [line-id, product-id, quantity]
+
+    OrderTotals:
+      type: object
+      properties:
+        subtotal:
+          $ref: '#/components/schemas/Money'
+        tax:
+          $ref: '#/components/schemas/Money'
+        shipping:
+          $ref: '#/components/schemas/Money'
+        total:
+          $ref: '#/components/schemas/Money'
 ```
 
-**Example:**
+### Usage in ARO
+
+```aro
+(Add Item to Order: Sales) {
+    <Extract> the <order-id> from the <pathParameters: order-id>.
+    <Extract> the <product-id> from the <request: product-id>.
+    <Extract> the <quantity> from the <request: quantity>.
+
+    (* Load aggregate root *)
+    <Retrieve> the <order: Order> from the <order-repository>
+        where id = <order-id>.
+
+    (* Load related entity for item details *)
+    <Retrieve> the <product: Product> from the <product-repository>
+        where id = <product-id>.
+
+    (* Create nested entity *)
+    <Create> the <item: OrderItem> with {
+        line-id: generate-id(),
+        product-id: <product-id>,
+        product-name: <product: name>,
+        unit-price: <product: price>,
+        quantity: <quantity>
+    }.
+
+    (* Modify aggregate through root *)
+    <Update> the <order: items> with <item>.
+
+    (* Recalculate totals *)
+    <Compute> the <new-totals: OrderTotals> from the <order: items>.
+    <Update> the <order: totals> with <new-totals>.
+
+    (* Persist entire aggregate *)
+    <Store> the <order> in the <order-repository>.
+
+    <Emit> an <ItemAddedToOrder: event> with <order>.
+    <Return> an <OK: status> with <order>.
+}
 ```
-service PricingService {
-    calculateDiscount(order: Order, customer: Customer) -> Money {
-        <Set> the <discount> to Money.zero(<order>.currency).
-        
-        // Volume discount
-        if <order>.totals.subtotal.amount > 1000 then {
-            <Add> <order>.totals.subtotal.multiply(0.1) to <discount>.
-        }
-        
-        // Loyalty discount
-        if <customer>.loyaltyTier is .gold then {
-            <Add> <order>.totals.subtotal.multiply(0.05) to <discount>.
-        }
-        
-        <Return> <discount>.
-    }
-    
-    calculateShipping(order: Order, destination: Address) -> Money {
-        <Compute> the <weight> from <order>.items.sum(<i> => <i>.weight).
-        <Compute> the <zone> from shippingZone(<destination>).
-        <Return> shippingRate(<weight>, <zone>).
-    }
+
+### Aggregate Rules
+
+1. **Single Root**: The `Order` is the aggregate root
+2. **Access Through Root**: Modify `OrderItem` only through `Order`
+3. **Transactional Boundary**: Store the entire `Order` atomically
+4. **Reference by ID**: Other aggregates referenced by ID only (`customer-id`, `product-id`)
+
+---
+
+## 4. Bounded Contexts
+
+Bounded contexts define boundaries within which a domain model applies.
+
+### Definition
+
+In ARO, the **Business Activity** in the feature set header defines the bounded context:
+
+```aro
+(* Sales Context *)
+(Place Order: Sales) {
+    (* Sales-specific order handling *)
 }
 
-service OrderService {
-    <Require> <orderRepo: OrderRepository>.
-    <Require> <customerRepo: CustomerRepository>.
-    <Require> <pricingService: PricingService>.
-    <Require> <inventoryService: InventoryService>.
-    
-    placeOrder(orderId: OrderId) -> Order {
-        <Load> the <order> from <orderRepo>.
-        <Load> the <customer> from <customerRepo> 
-            with { id: <order>.customerId }.
-        
-        // Check inventory
-        for each <item> in <order>.items {
-            guard <inventoryService>.isAvailable(<item>.productId, <item>.quantity) else {
-                <Throw> an <InsufficientStockError> for <item>.
-            }
-        }
-        
-        // Calculate final pricing
-        <Compute> the <discount> from 
-            <pricingService>.calculateDiscount(<order>, <customer>).
-        <Apply> <discount> to <order>.
-        
-        // Place order
-        <Handle> PlaceOrder on <order>.
-        
-        // Reserve inventory
-        <Reserve> inventory for <order> via <inventoryService>.
-        
-        // Save
-        <Save> <order> to <orderRepo>.
-        
-        <Return> <order>.
-    }
+(Cancel Order: Sales) {
+    (* Sales-specific cancellation *)
+}
+
+(* Shipping Context *)
+(Create Shipment: Shipping) {
+    (* Shipping-specific logic *)
+}
+
+(Track Shipment: Shipping) {
+    (* Shipping-specific tracking *)
+}
+
+(* Inventory Context *)
+(Reserve Stock: Inventory) {
+    (* Inventory-specific reservation *)
+}
+
+(Update Stock Level: Inventory) {
+    (* Inventory-specific updates *)
+}
+```
+
+### Context Boundaries
+
+Each context may have its own view of shared concepts:
+
+```yaml
+# Sales context - Order with pricing focus
+components:
+  schemas:
+    Order:
+      properties:
+        id: { type: string }
+        customer-id: { type: string }
+        items: { ... }
+        totals: { ... }
+
+# Shipping context - Shipment with logistics focus
+    Shipment:
+      properties:
+        id: { type: string }
+        order-id: { type: string }  # Reference to Sales.Order
+        destination: { ... }
+        carrier: { ... }
+        tracking-number: { ... }
+```
+
+### Cross-Context Communication
+
+Use domain events to communicate between contexts:
+
+```aro
+(* Sales context places order *)
+(Place Order: Sales) {
+    <Handle> order placement...
+    <Emit> an <OrderPlaced: event> with <order>.
+    <Return> an <OK: status> with <order>.
+}
+
+(* Inventory context responds *)
+(Reserve Stock: OrderPlaced Handler) {
+    <Extract> the <order> from the <event: order>.
+    (* Reserve inventory for order items *)
+    <Return> an <OK: status> for the <reservation>.
+}
+
+(* Shipping context responds *)
+(Create Shipment: OrderPlaced Handler) {
+    <Extract> the <order> from the <event: order>.
+    (* Create shipment for order *)
+    <Return> an <OK: status> for the <shipment>.
 }
 ```
 
 ---
 
-### 6. Bounded Contexts
+## 5. Domain Events
 
-#### 6.1 Context Definition
+Domain events represent significant occurrences in the domain.
 
-```ebnf
-bounded_context = "context" , context_name ,
-                  "{" , { context_member } , "}" ;
+### Publishing Events
 
-context_member = aggregate | entity | value_object | service | repository ;
-```
+Use the `<Emit>` action to publish domain events:
 
-**Example:**
-```
-context Sales {
-    // Sales-specific models
-    aggregate Order { ... }
-    entity Customer { ... }
-    value Money { ... }
-    repository OrderRepository for Order { ... }
-    service OrderService { ... }
+```aro
+(Register User: User Management) {
+    <Extract> the <data> from the <request: body>.
+    <Create> the <user: User> with <data>.
+    <Store> the <user> in the <user-repository>.
+
+    (* Publish domain event *)
+    <Emit> a <UserRegistered: event> with <user>.
+
+    <Return> a <Created: status> with <user>.
 }
 
-context Inventory {
-    // Inventory-specific models
-    aggregate Product { ... }
-    entity StockLevel { ... }
-    value Quantity { ... }
-    repository ProductRepository for Product { ... }
-    service InventoryService { ... }
-}
+(Place Order: Sales) {
+    (* ... order placement logic ... *)
 
-context Shipping {
-    // Shipping-specific models
-    aggregate Shipment { ... }
-    value Address { ... }
-    value TrackingNumber { ... }
-    service ShippingService { ... }
+    (* Publish domain event *)
+    <Emit> an <OrderPlaced: event> with {
+        order-id: <order: id>,
+        customer-id: <order: customer-id>,
+        total: <order: totals: total>,
+        placed-at: now()
+    }.
+
+    <Return> an <OK: status> with <order>.
 }
 ```
 
-#### 6.2 Context Mapping
+### Subscribing to Events
 
-```
-context_map {
-    // Sales <-> Inventory relationship
-    Sales <-[Customer-Supplier]-> Inventory {
-        Sales.Order.items[*].productId -> Inventory.Product.sku;
-    }
-    
-    // Sales <-> Shipping relationship
-    Sales <-[Partnership]-> Shipping {
-        Sales.Order -> Shipping.Shipment;
-        Sales.Order.shippingAddress -> Shipping.Shipment.destination;
-    }
-    
-    // Anti-corruption layer
-    Sales <-[ACL]-> ExternalPaymentGateway {
-        translator PaymentTranslator {
-            Sales.Payment -> External.PaymentRequest;
-            External.PaymentResponse -> Sales.PaymentResult;
-        }
-    }
+Feature sets with `Handler` suffix subscribe to events:
+
+```aro
+(* Naming pattern: (Feature Name: EventName Handler) *)
+
+(Send Welcome Email: UserRegistered Handler) {
+    <Extract> the <user> from the <event: user>.
+    <Send> the <welcome-email> to the <user: email>.
+    <Return> an <OK: status> for the <notification>.
+}
+
+(Update Analytics: OrderPlaced Handler) {
+    <Extract> the <order-id> from the <event: order-id>.
+    <Extract> the <total> from the <event: total>.
+    <Log> the <message> for the <analytics> with "Order placed: " + <order-id>.
+    <Return> an <OK: status> for the <analytics>.
 }
 ```
 
 ---
 
-### 7. Specifications (Query Objects)
+## 6. Repositories (Data Access)
 
+Repositories provide access to aggregates and entities.
+
+### Usage
+
+ARO uses `<Retrieve>` and `<Store>` actions for repository operations:
+
+```aro
+(* Find by ID *)
+<Retrieve> the <order: Order> from the <order-repository>
+    where id = <order-id>.
+
+(* Find with filter *)
+<Retrieve> the <pending-orders: List<Order>> from the <order-repository>
+    where status = "pending".
+
+(* Save *)
+<Store> the <order> in the <order-repository>.
+
+(* Delete *)
+<Delete> the <order> from the <order-repository>.
 ```
-specification ActiveCustomers for Customer {
-    <Return> <customer>.status is .active 
-        and <customer>.lastOrderDate > now().minus(90.days).
+
+### Repository Naming Convention
+
+Use descriptive repository names that indicate the aggregate:
+
+- `user-repository` for `User` entities
+- `order-repository` for `Order` aggregates
+- `product-repository` for `Product` entities
+
+---
+
+## 7. Domain Services
+
+Domain services contain business logic that doesn't belong to a single entity.
+
+### Definition
+
+Feature sets naturally serve as domain services:
+
+```aro
+(Calculate Shipping Cost: Pricing) {
+    <Extract> the <order> from the <request: order>.
+    <Extract> the <destination> from the <request: destination>.
+
+    (* Business logic spanning multiple entities *)
+    <Compute> the <weight> from the <order: items>.
+    <Compute> the <zone> from the <destination>.
+    <Compute> the <shipping-cost: Money> from {
+        weight: <weight>,
+        zone: <zone>
+    }.
+
+    <Return> an <OK: status> with <shipping-cost>.
 }
 
-specification HighValueOrder for Order {
-    param threshold: Money = Money(1000, USD);
-    
-    <Return> <order>.totals.total >= <threshold>.
-}
+(Apply Discount: Pricing) {
+    <Extract> the <order> from the <request: order>.
+    <Extract> the <customer> from the <request: customer>.
 
-// Usage
-(Customer Report: Analytics) {
-    <Query> the <customers> from <customerRepo> 
-        matching ActiveCustomers.
-    
-    <Query> the <orders> from <orderRepo>
-        matching HighValueOrder(threshold: Money(5000, USD)).
+    (* Volume discount *)
+    <Compute> the <volume-discount> from the <order: totals: subtotal>
+        where amount > 1000.
+
+    (* Loyalty discount *)
+    <Compute> the <loyalty-discount> from the <customer: tier>
+        where tier is "gold".
+
+    <Compute> the <total-discount: Money> from {
+        volume: <volume-discount>,
+        loyalty: <loyalty-discount>
+    }.
+
+    <Return> an <OK: status> with <total-discount>.
 }
 ```
 
 ---
 
-### 8. Factories
+## 8. Factories
 
-```
-factory OrderFactory {
-    createOrder(customerId: CustomerId, items: List<OrderItemRequest>) -> Order {
-        <Create> the <order> with {
-            id: <orderRepo>.nextId(),
-            customerId: <customerId>,
-            status: .draft,
-            items: [],
-            totals: OrderTotals.zero()
-        }.
-        
-        for each <item> in <items> {
-            <Handle> AddItem(<item>.productId, <item>.quantity) on <order>.
+Factories create complex objects or aggregates.
+
+### Definition
+
+Feature sets that create objects serve as factories:
+
+```aro
+(Create Order: Sales) {
+    <Extract> the <customer-id> from the <request: customer-id>.
+    <Extract> the <items> from the <request: items>.
+
+    (* Factory logic - create aggregate with proper initialization *)
+    <Create> the <order: Order> with {
+        id: generate-id(),
+        customer-id: <customer-id>,
+        status: "draft",
+        items: [],
+        totals: {
+            subtotal: { amount: 0, currency: "USD" },
+            tax: { amount: 0, currency: "USD" },
+            shipping: { amount: 0, currency: "USD" },
+            total: { amount: 0, currency: "USD" }
         }
-        
-        <Return> <order>.
-    }
-    
-    reconstitute(snapshot: OrderSnapshot) -> Order {
-        // Rebuild from persistence
-        <Return> Order.fromSnapshot(<snapshot>).
-    }
+    }.
+
+    (* Add items through aggregate operations *)
+    <Process> each <item> in <items> {
+        <Update> the <order: items> with <item>.
+    }.
+
+    (* Calculate totals *)
+    <Compute> the <totals: OrderTotals> from the <order: items>.
+    <Update> the <order: totals> with <totals>.
+
+    <Store> the <order> in the <order-repository>.
+    <Return> a <Created: status> with <order>.
 }
 ```
 
 ---
 
-### 9. Complete Grammar Extension
+## Complete Example
 
-```ebnf
-(* Domain Modeling Grammar *)
+### openapi.yaml
 
-(* Value Object *)
-value_object = "value" , identifier , 
-               "{" , { value_member } , "}" ;
+```yaml
+openapi: 3.0.3
+info:
+  title: E-Commerce Domain
+  version: 1.0.0
 
-value_member = field_def | invariant | func_def ;
+components:
+  schemas:
+    # Value Objects
+    Money:
+      type: object
+      properties:
+        amount: { type: number }
+        currency: { type: string }
+      required: [amount, currency]
 
-invariant = "invariant" , condition , [ ":" , string_literal ] , ";" ;
+    Address:
+      type: object
+      properties:
+        street: { type: string }
+        city: { type: string }
+        postal-code: { type: string }
+        country: { type: string }
+      required: [street, city, country]
 
-func_def = "func" , identifier , "(" , [ param_list ] , ")" ,
-           [ "->" , type_annotation ] , block ;
+    # Entities
+    Customer:
+      type: object
+      properties:
+        id: { type: string }
+        name: { type: string }
+        email: { type: string }
+        tier: { type: string, enum: [standard, gold, platinum] }
+      required: [id, name, email]
 
-(* Entity *)
-entity = "entity" , identifier , "{" , { entity_member } , "}" ;
+    Product:
+      type: object
+      properties:
+        id: { type: string }
+        name: { type: string }
+        price: { $ref: '#/components/schemas/Money' }
+        stock: { type: integer }
+      required: [id, name, price]
 
-entity_member = identity_field | field_def | invariant | func_def ;
+    # Aggregates
+    Order:
+      type: object
+      properties:
+        id: { type: string }
+        customer-id: { type: string }
+        status: { type: string }
+        items:
+          type: array
+          items: { $ref: '#/components/schemas/OrderItem' }
+        shipping-address: { $ref: '#/components/schemas/Address' }
+        totals: { $ref: '#/components/schemas/OrderTotals' }
+      required: [id, customer-id, status]
 
-identity_field = "identity" , identifier , ":" , type_annotation , ";" ;
+    OrderItem:
+      type: object
+      properties:
+        line-id: { type: string }
+        product-id: { type: string }
+        product-name: { type: string }
+        unit-price: { $ref: '#/components/schemas/Money' }
+        quantity: { type: integer }
 
-(* Aggregate *)
-aggregate = "aggregate" , identifier , "{" , { aggregate_member } , "}" ;
+    OrderTotals:
+      type: object
+      properties:
+        subtotal: { $ref: '#/components/schemas/Money' }
+        tax: { $ref: '#/components/schemas/Money' }
+        shipping: { $ref: '#/components/schemas/Money' }
+        total: { $ref: '#/components/schemas/Money' }
+```
 
-aggregate_member = root_entity | entity | value_object 
-                 | invariant | command_handler ;
+### sales.aro
 
-root_entity = "root" , entity ;
+```aro
+(* ============================================================
+   Sales Bounded Context
+   ============================================================ *)
 
-command_handler = "handle" , identifier , 
-                  [ "(" , param_list , ")" ] , block ;
+(* Factory: Create new order *)
+(Create Order: Sales) {
+    <Extract> the <customer-id> from the <request: customer-id>.
 
-(* Repository *)
-repository = "repository" , identifier , "for" , identifier ,
-             "{" , { repository_method } , "}" ;
+    <Create> the <order: Order> with {
+        id: generate-id(),
+        customer-id: <customer-id>,
+        status: "draft",
+        items: [],
+        totals: { subtotal: { amount: 0, currency: "USD" } }
+    }.
 
-repository_method = identifier , "(" , [ param_list ] , ")" ,
-                    [ "->" , type_annotation ] , [ block ] , ";" ;
+    <Store> the <order> in the <order-repository>.
+    <Return> a <Created: status> with <order>.
+}
 
-(* Service *)
-domain_service = "service" , identifier , "{" , { service_member } , "}" ;
+(* Aggregate operation: Add item *)
+(Add Item: Sales) {
+    <Extract> the <order-id> from the <pathParameters: order-id>.
+    <Extract> the <product-id> from the <request: product-id>.
+    <Extract> the <quantity> from the <request: quantity>.
 
-service_member = require_stmt | service_method ;
+    <Retrieve> the <order: Order> from the <order-repository>
+        where id = <order-id>.
 
-service_method = identifier , "(" , [ param_list ] , ")" ,
-                 [ "->" , type_annotation ] , block ;
+    <Retrieve> the <product: Product> from the <product-repository>
+        where id = <product-id>.
 
-(* Bounded Context *)
-bounded_context = "context" , identifier , "{" , { context_member } , "}" ;
+    <Create> the <item: OrderItem> with {
+        line-id: generate-id(),
+        product-id: <product-id>,
+        product-name: <product: name>,
+        unit-price: <product: price>,
+        quantity: <quantity>
+    }.
 
-context_member = aggregate | entity | value_object 
-               | domain_service | repository ;
+    <Update> the <order: items> with <item>.
+    <Store> the <order> in the <order-repository>.
 
-(* Specification *)
-specification = "specification" , identifier , "for" , identifier ,
-                [ "{" , { param_def } , "}" ] , block ;
+    <Return> an <OK: status> with <order>.
+}
 
-(* Factory *)
-factory = "factory" , identifier , "{" , { factory_method } , "}" ;
+(* Domain operation: Place order *)
+(Place Order: Sales) {
+    <Extract> the <order-id> from the <pathParameters: order-id>.
 
-factory_method = identifier , "(" , [ param_list ] , ")" ,
-                 "->" , type_annotation , block ;
+    <Retrieve> the <order: Order> from the <order-repository>
+        where id = <order-id>.
+
+    <Validate> the <order: items> is not empty.
+
+    <Update> the <order: status> with "placed".
+    <Store> the <order> in the <order-repository>.
+
+    (* Publish domain event *)
+    <Emit> an <OrderPlaced: event> with <order>.
+
+    <Return> an <OK: status> with <order>.
+}
+```
+
+### inventory.aro
+
+```aro
+(* ============================================================
+   Inventory Bounded Context
+   ============================================================ *)
+
+(* Event Handler: Reserve stock when order placed *)
+(Reserve Stock: OrderPlaced Handler) {
+    <Extract> the <order> from the <event: order>.
+
+    (* Reserve inventory for each item *)
+    <Process> each <item> in <order: items> {
+        <Retrieve> the <product: Product> from the <product-repository>
+            where id = <item: product-id>.
+
+        <Compute> the <new-stock> from <product: stock> - <item: quantity>.
+        <Update> the <product: stock> with <new-stock>.
+        <Store> the <product> in the <product-repository>.
+    }.
+
+    <Emit> a <StockReserved: event> with <order: id>.
+    <Return> an <OK: status> for the <reservation>.
+}
+```
+
+### shipping.aro
+
+```aro
+(* ============================================================
+   Shipping Bounded Context
+   ============================================================ *)
+
+(* Event Handler: Create shipment when stock reserved *)
+(Create Shipment: StockReserved Handler) {
+    <Extract> the <order-id> from the <event: order-id>.
+
+    <Retrieve> the <order: Order> from the <order-repository>
+        where id = <order-id>.
+
+    <Create> the <shipment: Shipment> with {
+        id: generate-id(),
+        order-id: <order-id>,
+        destination: <order: shipping-address>,
+        status: "pending"
+    }.
+
+    <Store> the <shipment> in the <shipment-repository>.
+    <Return> an <OK: status> with <shipment>.
+}
 ```
 
 ---
 
-### 10. Complete Example
+## Summary
 
-```
-context ECommerce {
-    // Value Objects
-    value Money {
-        amount: Decimal;
-        currency: Currency;
-        
-        invariant <amount> >= 0;
-        
-        func add(other: Money) -> Money { ... }
-        func subtract(other: Money) -> Money { ... }
-        func multiply(factor: Decimal) -> Money { ... }
-        
-        static func zero(currency: Currency) -> Money {
-            <Return> Money { amount: 0, currency: <currency> }.
-        }
-    }
-    
-    value Quantity {
-        value: Int;
-        
-        invariant <value> > 0 : "Quantity must be positive";
-    }
-    
-    // Aggregate
-    aggregate Order {
-        root entity OrderRoot {
-            identity id: OrderId;
-            customerId: CustomerId;
-            items: List<OrderLine>;
-            status: OrderStatus;
-            total: Money;
-        }
-        
-        entity OrderLine {
-            identity lineId: LineId;
-            productId: ProductId;
-            quantity: Quantity;
-            unitPrice: Money;
-            
-            func lineTotal() -> Money {
-                <Return> <unitPrice>.multiply(<quantity>.value).
-            }
-        }
-        
-        handle AddLine(productId: ProductId, qty: Quantity, price: Money) {
-            <Create> the <line> with {
-                lineId: newLineId(),
-                productId: <productId>,
-                quantity: <qty>,
-                unitPrice: <price>
-            }.
-            <Add> <line> to <items>.
-            <Recalculate> <total>.
-        }
-        
-        handle Submit {
-            guard <items> is not empty.
-            <Set> <status> to .submitted.
-            <Emit> OrderSubmitted { orderId: <id>, total: <total> }.
-        }
-    }
-    
-    // Repository
-    repository OrderRepository for Order {
-        find(id: OrderId) -> Order?;
-        findByCustomer(customerId: CustomerId) -> List<Order>;
-        save(order: Order);
-        nextId() -> OrderId;
-    }
-    
-    // Domain Service
-    service CheckoutService {
-        <Require> <orderRepo: OrderRepository>.
-        <Require> <paymentService: PaymentService>.
-        
-        checkout(orderId: OrderId, payment: PaymentMethod) -> Receipt {
-            <Load> the <order> from <orderRepo> with { id: <orderId> }.
-            
-            <Process> the <payment-result> via <paymentService>
-                for <order>.total with <payment>.
-            
-            guard <payment-result>.success else {
-                <Throw> a <PaymentFailedError>.
-            }
-            
-            <Handle> Submit on <order>.
-            <Save> <order> to <orderRepo>.
-            
-            <Return> Receipt {
-                orderId: <order>.id,
-                amount: <order>.total,
-                transactionId: <payment-result>.transactionId
-            }.
-        }
-    }
-}
-```
+ARO implements DDD through conventions rather than syntax:
+
+| Pattern | Implementation |
+|---------|---------------|
+| Define types | OpenAPI schemas |
+| Define behavior | Feature sets |
+| Define context | Business Activity |
+| Communicate | Domain events |
+| Persist | Repository actions |
+
+This approach keeps ARO simple while supporting rich domain modeling.
 
 ---
 
@@ -724,4 +800,5 @@ context ECommerce {
 
 | Version | Date | Changes |
 |---------|------|---------|
-| 1.0 | 2024-01 | Initial specification |
+| 2.0 | 2024-12 | Simplified to document existing features |
+| 1.0 | 2024-01 | Initial specification with custom syntax |
