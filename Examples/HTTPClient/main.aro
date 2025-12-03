@@ -1,0 +1,18 @@
+(* HTTP Client Example - Fetching data from external API *)
+
+(Application-Start: HTTP Client Demo) {
+    <Log> the <startup: message> for the <console> with "HTTP Client Demo".
+    <Log> the <info: message> for the <console> with "Fetching weather data from Open-Meteo API...".
+
+    (* Create the API URL *)
+    <Create> the <api-url> with "https://api.open-meteo.com/v1/forecast?latitude=52.52&longitude=13.41&current_weather=true".
+
+    (* Make GET request *)
+    <Request> the <weather> from the <api-url>.
+
+    (* Log the response *)
+    <Log> the <response: message> for the <console> with "Weather data received:".
+    <Log> the <data: message> for the <console> with <weather>.
+
+    <Return> an <OK: status> for the <startup>.
+}

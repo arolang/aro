@@ -48,6 +48,7 @@ public final class ActionRegistry: @unchecked Sendable {
         register(RetrieveAction.self)
         register(ReceiveAction.self)
         register(FetchAction.self)
+        register(RequestAction.self)
         register(ReadAction.self)
 
         // OWN actions (Internal → Internal)

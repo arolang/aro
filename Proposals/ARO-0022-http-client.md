@@ -2,8 +2,8 @@
 
 * Proposal: ARO-0022
 * Author: ARO Language Team
-* Status: **Draft**
-* Requires: ARO-0020, ARO-0016
+* Status: **Implemented**
+* Requires: ARO-0020
 
 ## Abstract
 
@@ -13,120 +13,79 @@ This proposal defines HTTP client capabilities for ARO applications using AsyncH
 
 Applications often need to consume external APIs. ARO needs:
 
-1. **HTTP Requests**: Make GET, POST, PUT, DELETE requests
+1. **HTTP Requests**: Make GET, POST, PUT, DELETE, PATCH requests
 2. **Response Handling**: Parse and process HTTP responses
-3. **Error Handling**: Handle network errors gracefully
-4. **Integration**: Work with the event system
+3. **JSON Support**: Automatic JSON parsing for API responses
 
-## Proposed Solution
+---
 
-### 1. HTTP Request Actions
+## Syntax
 
-Use `<Fetch>` or `<Call>` for HTTP requests:
+### 1. GET Requests
+
+Use `<Request>` with `from` preposition for GET requests:
 
 ```aro
 (* GET request *)
-<Fetch> the <users> from the <api: /users>.
+<Request> the <response> from the <url>.
 
-(* POST request *)
-<Call> the <result> via <api: POST /users> with <user-data>.
-
-(* With full URL *)
-<Fetch> the <data> from "https://api.example.com/endpoint".
+(* With variable URL *)
+<Create> the <api-url> with "https://api.example.com/users".
+<Request> the <users> from the <api-url>.
 ```
 
-### 2. API Definition
+### 2. POST Requests
 
-Define external APIs:
+Use `<Request>` with `to` preposition for POST requests:
 
 ```aro
-api UserAPI {
-    baseUrl: "https://api.example.com/v1";
-    headers: {
-        "Authorization": "Bearer ${token}",
-        "Content-Type": "application/json"
-    };
-}
+(* POST request - body from context *)
+<Request> the <result> to the <url> with <data>.
+
+(* POST with JSON body *)
+<Create> the <user-data> with { name: "Alice", email: "alice@example.com" }.
+<Request> the <created-user> to the <api-url> with <user-data>.
 ```
 
-### 3. Request Methods
+### 3. Other HTTP Methods
+
+Use `<Request>` with `via` preposition and method specifier:
 
 ```aro
-(* GET *)
-<Fetch> the <users> from <UserAPI: GET /users>.
+(* PUT request *)
+<Request> the <result> via PUT the <url> with <data>.
 
-(* POST *)
-<Call> the <user> via <UserAPI: POST /users> with <data>.
+(* DELETE request *)
+<Request> the <result> via DELETE the <url>.
 
-(* PUT *)
-<Call> the <updated> via <UserAPI: PUT /users/{id}> with <data>.
-
-(* DELETE *)
-<Call> the <result> via <UserAPI: DELETE /users/{id}>.
-
-(* PATCH *)
-<Call> the <patched> via <UserAPI: PATCH /users/{id}> with <partial-data>.
-```
-
-### 4. Response Processing
-
-```aro
-<Fetch> the <response> from <api: /data>.
-<Extract> the <status-code> from the <response: statusCode>.
-<Extract> the <body> from the <response: body>.
-<Transform> the <json: data> from the <body>.
-```
-
-### 5. Error Handling
-
-```aro
-<Fetch> the <response> from <api: /resource>.
-
-if <response: statusCode> is 404 then {
-    <Throw> a <NotFoundError> for the <missing: resource>.
-}
-
-if <response: statusCode> >= 500 then {
-    <Throw> a <ServerError> for the <external: service>.
-}
-```
-
-### 6. AsyncHTTPClient Integration
-
-The runtime uses AsyncHTTPClient:
-
-```swift
-public final class AROHTTPClient: HTTPClientService {
-    private let client: HTTPClient
-
-    public func get(url: String) async throws -> any Sendable {
-        let request = HTTPClientRequest(url: url)
-        let response = try await client.execute(request, timeout: timeout)
-        return HTTPClientResponse(response)
-    }
-
-    public func post(url: String, body: any Sendable) async throws -> any Sendable {
-        var request = HTTPClientRequest(url: url)
-        request.method = .POST
-        request.body = .bytes(ByteBuffer(data: bodyData))
-        let response = try await client.execute(request, timeout: timeout)
-        return HTTPClientResponse(response)
-    }
-}
+(* PATCH request *)
+<Request> the <result> via PATCH the <url> with <partial-data>.
 ```
 
 ---
 
-## Grammar Extension
+## Response Data
 
-```ebnf
-(* API definition *)
-api_definition = "api" , identifier , "{" , api_config , "}" ;
-api_config = { api_property } ;
-api_property = property_name , ":" , value , ";" ;
+The `<Request>` action automatically:
+- Parses JSON responses into ARO maps/lists
+- Returns raw string for non-JSON responses
+- Binds response metadata to result variables
 
-(* API call in object clause *)
-api_call = api_name , ":" , [ http_method ] , route_path ;
+### Response Variables
+
+After a request, these variables are available:
+
+| Variable | Description |
+|----------|-------------|
+| `result` | Parsed response body (JSON as map/list, or string) |
+| `result.statusCode` | HTTP status code (e.g., 200, 404) |
+| `result.headers` | Response headers as map |
+| `result.isSuccess` | Boolean: true if status 200-299 |
+
+```aro
+<Request> the <response> from "https://api.example.com/users".
+<Extract> the <status> from the <response: statusCode>.
+<Extract> the <users> from the <response>.
 ```
 
 ---
@@ -134,39 +93,41 @@ api_call = api_name , ":" , [ http_method ] , route_path ;
 ## Complete Example
 
 ```aro
-(* Define external API *)
-api WeatherAPI {
-    baseUrl: "https://api.weather.com/v1";
-    headers: { "API-Key": "${WEATHER_API_KEY}" };
+(Fetch Weather: External API) {
+    <Create> the <api-url> with "https://api.open-meteo.com/v1/forecast?latitude=52.52&longitude=13.41&current_weather=true".
+    <Request> the <weather> from the <api-url>.
+    <Extract> the <temperature> from the <weather: current_weather temp>.
+    <Return> an <OK: status> with <temperature>.
 }
 
-(Get Weather: External Service) {
-    <Extract> the <city> from the <request: query city>.
-
-    (* Fetch weather data *)
-    <Fetch> the <weather-response> from <WeatherAPI: GET /weather?city=${city}>.
-
-    (* Check for errors *)
-    <Extract> the <status> from the <weather-response: statusCode>.
-
-    if <status> is not 200 then {
-        <Throw> a <WeatherError> for the <api: failure>.
-    }
-
-    (* Extract and return data *)
-    <Extract> the <weather-data> from the <weather-response: body>.
-    <Return> an <OK: status> with <weather-data>.
+(Create User: User API) {
+    <Extract> the <user-data> from the <request: body>.
+    <Request> the <created> to the <api-url> with <user-data>.
+    <Return> a <Created: status> with <created>.
 }
 ```
+
+---
+
+## Implementation Location
+
+The HTTP client is implemented in:
+
+- `Sources/ARORuntime/HTTP/Client/HTTPClient.swift` - AsyncHTTPClient wrapper
+- `Sources/ARORuntime/Actions/BuiltIn/RequestAction.swift` - Request action implementation
+
+Examples:
+- `Examples/HTTPClient/` - HTTP client example
 
 ---
 
 ## Implementation Notes
 
 - Uses AsyncHTTPClient for non-blocking requests
-- Supports timeout configuration
-- Emits events for request completion and errors
+- Supports timeout configuration (default 30 seconds)
+- Automatically parses JSON responses
 - Thread-safe for concurrent requests
+- Available on macOS, Linux (not Windows)
 
 ---
 
@@ -175,3 +136,4 @@ api WeatherAPI {
 | Version | Date | Changes |
 |---------|------|---------|
 | 1.0 | 2024-12 | Initial specification |
+| 2.0 | 2024-12 | Simplified: removed api definitions, use `<Request>` action with prepositions |
