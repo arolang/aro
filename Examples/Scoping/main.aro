@@ -21,8 +21,8 @@
     (* Emit event to trigger handlers *)
     <Emit> a <StartupComplete: event> for the <application>.
 
-    (* Keep application running *)
-    <Keepalive> the <application> for the <events>.
+    (* Keep application running until Ctrl+C *)
+    <Wait> for <shutdown-signal>.
 
     <Return> an <OK: status> for the <startup>.
 }

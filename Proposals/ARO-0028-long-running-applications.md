@@ -7,7 +7,7 @@
 
 ## Abstract
 
-This proposal introduces the `<Wait>` action for long-running ARO applications. Applications that need to stay alive to process events (HTTP servers, file watchers, socket servers) use `<Wait>` to signal they should not exit after `Application-Start` completes.
+This proposal introduces the `<Wait>` action for long-running ARO applications. Applications that need to stay alive to process events (HTTP servers, file watchers, socket servers) use `<Wait>` to block execution until a specific event occurs.
 
 ## Motivation
 
@@ -30,7 +30,7 @@ Currently, this application starts the file watcher and immediately exits becaus
 
 ### The `<Wait>` Action
 
-Introduce a `<Wait>` action that explicitly signals the application should remain running:
+Introduce a `<Wait>` action that blocks until a specific event occurs:
 
 ```aro
 (Application-Start: File Watcher) {
@@ -38,84 +38,85 @@ Introduce a `<Wait>` action that explicitly signals the application should remai
     <Watch> the <file-monitor> for the <directory> with ".".
     <Log> the <ready: message> for the <console> with "Watching for file changes...".
 
-    (* Keep the application running to process file events *)
-    <Wait> for <events>.
+    (* Block until Ctrl+C or SIGTERM *)
+    <Wait> for <shutdown-signal>.
 
     <Return> an <OK: status> for the <startup>.
 }
 ```
+
+### Syntax
+
+The `<Wait>` action takes a specific event name:
+
+| Syntax | Behavior |
+|--------|----------|
+| `<Wait> for <shutdown-signal>.` | Waits for SIGINT (Ctrl+C) or SIGTERM |
+| `<Wait> for <EventName>.` | Waits for a specific event to be emitted |
 
 ### Semantics
 
-The `<Wait>` action:
+#### Shutdown Signal
 
-1. **Blocks Execution**: Pauses the current feature set execution
+`<Wait> for <shutdown-signal>.` is the standard way to keep an application running:
+
+1. **Blocks Execution**: Pauses the current feature set until signal received
 2. **Enables Event Processing**: Allows the event bus to dispatch events to handlers
-3. **Respects Signals**: Terminates on SIGINT/SIGTERM, triggering `Application-End`
-4. **Is Cancellable**: Can be programmatically cancelled via events
-
-### Syntax Variants
+3. **Respects OS Signals**: Unblocks on SIGINT (Ctrl+C) or SIGTERM
+4. **Triggers Cleanup**: After unblocking, executes `Application-End: Success`
 
 ```aro
-(* Wait indefinitely for events *)
-<Wait> for <events>.
+(Application-Start: API Server) {
+    <Start> the <http-server> on <port> with 8080.
+    <Log> the <ready: message> for the <console> with "Server ready".
 
-(* Wait with a timeout (future extension) *)
-<Wait> for <events> with 30000.  (* 30 seconds *)
-
-(* Wait for a specific condition *)
-<Wait> for <shutdown-signal>.
-```
-
-### Interaction with Services
-
-When services are started (`<Start>`, `<Watch>`, `<Listen>`), they register with the runtime's service tracker. The `<Wait>` action monitors these services:
-
-| Service | Registration | Auto-Wait Behavior |
-|---------|--------------|-------------------|
-| HTTP Server | `<Start> the <http-server>` | Keeps alive until stopped |
-| File Monitor | `<Watch> the <file-monitor>` | Keeps alive until stopped |
-| Socket Server | `<Listen> on <socket>` | Keeps alive until stopped |
-
-### Complete Example
-
-```aro
-(* File Watcher Application *)
-
-(Application-Start: File Watcher) {
-    <Log> the <startup: message> for the <console> with "Starting file watcher".
-    <Watch> the <file-monitor> for the <directory> with ".".
-    <Log> the <ready: message> for the <console> with "Watching for changes...".
-
-    (* Block here until shutdown *)
-    <Wait> for <events>.
+    (* Wait for Ctrl+C *)
+    <Wait> for <shutdown-signal>.
 
     <Return> an <OK: status> for the <startup>.
 }
 
-(* Triggered when files are created *)
-(Handle File Created: File Event Handler) {
-    <Extract> the <path> from the <event: path>.
-    <Log> the <created: notification> for the <console>.
-    <Return> an <OK: status> for the <event>.
-}
-
-(* Triggered when files are modified *)
-(Handle File Modified: File Event Handler) {
-    <Extract> the <path> from the <event: path>.
-    <Log> the <modified: notification> for the <console>.
-    <Return> an <OK: status> for the <event>.
-}
-
-(* Graceful shutdown *)
 (Application-End: Success) {
     <Log> the <shutdown: message> for the <console> with "Shutting down...".
-    <Stop> the <file-monitor>.
+    <Stop> the <http-server>.
     <Return> an <OK: status> for the <shutdown>.
 }
 ```
 
-### HTTP Server Example
+#### Specific Events
+
+`<Wait> for <EventName>.` waits for a specific event:
+
+1. **Blocks Until Event**: Pauses until the named event is emitted
+2. **Executes Handler**: When event triggers, the matching handler executes
+3. **Waits for Completion**: Blocks until handler completes
+4. **Resumes/Ends**: After handler completes, execution resumes (program may end)
+
+```aro
+(Application-Start: One-Shot Processor) {
+    <Start> the <file-monitor> for the <directory> with "/incoming".
+    <Log> the <ready: message> for the <console> with "Waiting for file...".
+
+    (* Wait for a file to be created, then exit *)
+    <Wait> for <FileCreatedEvent>.
+
+    <Log> the <done: message> for the <console> with "File processed, exiting".
+    <Return> an <OK: status> for the <startup>.
+}
+
+(Handle File Created: File Event Handler) {
+    <Extract> the <path> from the <event: path>.
+    <Log> the <created: notification> for the <console> with <path>.
+    (* Process the file... *)
+    <Return> an <OK: status> for the <event>.
+}
+```
+
+---
+
+## Complete Examples
+
+### HTTP Server (Long-Running)
 
 ```aro
 (Application-Start: API Server) {
@@ -123,12 +124,74 @@ When services are started (`<Start>`, `<Watch>`, `<Listen>`), they register with
     <Start> the <http-server> on <port> with 8080.
     <Log> the <ready: message> for the <console> with "Server ready on port 8080".
 
-    (* Keep server running *)
-    <Wait> for <events>.
+    (* Keep server running until Ctrl+C *)
+    <Wait> for <shutdown-signal>.
 
     <Return> an <OK: status> for the <startup>.
 }
+
+(Application-End: Success) {
+    <Log> the <shutdown: message> for the <console> with "Shutting down...".
+    <Stop> the <http-server>.
+    <Return> an <OK: status> for the <shutdown>.
+}
 ```
+
+### File Watcher (Long-Running)
+
+```aro
+(Application-Start: File Watcher) {
+    <Log> the <startup: message> for the <console> with "Starting file watcher".
+    <Watch> the <file-monitor> for the <directory> with ".".
+    <Log> the <ready: message> for the <console> with "Watching for changes...".
+
+    (* Block until shutdown *)
+    <Wait> for <shutdown-signal>.
+
+    <Return> an <OK: status> for the <startup>.
+}
+
+(Handle File Created: File Event Handler) {
+    <Extract> the <path> from the <event: path>.
+    <Log> the <created: notification> for the <console>.
+    <Return> an <OK: status> for the <event>.
+}
+
+(Handle File Modified: File Event Handler) {
+    <Extract> the <path> from the <event: path>.
+    <Log> the <modified: notification> for the <console>.
+    <Return> an <OK: status> for the <event>.
+}
+
+(Application-End: Success) {
+    <Log> the <shutdown: message> for the <console> with "Shutting down...".
+    <Stop> the <file-monitor>.
+    <Return> an <OK: status> for the <shutdown>.
+}
+```
+
+### Socket Server (Long-Running)
+
+```aro
+(Application-Start: Echo Socket) {
+    <Log> the <message> for the <console> with "Starting echo socket on port 9000".
+    <Start> the <socket-server> on <port> with 9000.
+    <Log> the <message> for the <console> with "Socket server listening".
+
+    <Wait> for <shutdown-signal>.
+
+    <Return> an <OK: status> for the <startup>.
+}
+
+(Handle Data Received: Socket Event Handler) {
+    <Extract> the <data> from the <packet: buffer>.
+    <Extract> the <client> from the <packet: connection>.
+    <Send> the <data> to the <client>.
+    <Return> an <OK: status> for the <packet>.
+}
+```
+
+---
 
 ## Implementation
 
@@ -137,7 +200,7 @@ When services are started (`<Start>`, `<Watch>`, `<Listen>`), they register with
 ```swift
 public struct WaitAction: ActionImplementation {
     public static let role: ActionRole = .own
-    public static let verbs: Set<String> = ["wait", "await", "block"]
+    public static let verbs: Set<String> = ["wait"]
     public static let validPrepositions: Set<Preposition> = [.for]
 
     public func execute(
@@ -145,64 +208,71 @@ public struct WaitAction: ActionImplementation {
         object: ObjectDescriptor,
         context: ExecutionContext
     ) async throws -> any Sendable {
-        // Signal runtime to enter event loop
-        context.enterWaitState()
+        let eventName = object.base.lowercased()
 
-        // Block until shutdown signal or cancellation
-        try await context.waitForShutdown()
-
-        return "completed"
+        if eventName == "shutdown-signal" {
+            // Wait for SIGINT/SIGTERM
+            SignalHandler.shared.setup()
+            context.enterWaitState()
+            await ShutdownCoordinator.shared.waitForShutdown()
+            return WaitResult(completed: true, event: "shutdown-signal")
+        } else {
+            // Wait for specific event
+            await context.waitForEvent(named: eventName)
+            return WaitResult(completed: true, event: eventName)
+        }
     }
 }
 ```
 
 ### Runtime Changes
 
-The `RuntimeContext` gains:
+The `ExecutionContext` protocol includes:
 
 ```swift
 protocol ExecutionContext {
-    // ... existing methods ...
-
     /// Enter wait state - enables event processing
     func enterWaitState()
 
     /// Wait for shutdown signal
     func waitForShutdown() async throws
 
+    /// Wait for a specific event
+    func waitForEvent(named: String) async
+
     /// Check if in wait state
     var isWaiting: Bool { get }
 }
 ```
 
+---
+
 ## Backward Compatibility
 
-- Existing applications without `<Wait>` continue to work as before
-- The `--keep-alive` CLI flag is deprecated but still functional
-- Applications using `--keep-alive` should migrate to explicit `<Wait>`
+- The `<Keepalive>` verb is a synonym for `<Wait>` for backward compatibility
+- Existing applications using `<Keepalive> the <application> for the <events>.` continue to work
+- New applications should prefer the explicit `<Wait> for <shutdown-signal>.` syntax
 
-## Alternatives Considered
+---
 
-### 1. Implicit Wait
+## Implementation Location
 
-Services could automatically keep the application alive. Rejected because:
-- Less explicit and harder to reason about
-- Doesn't work for applications that start services then exit
+The Wait action is implemented in:
 
-### 2. Return Value Based
+- `Sources/ARORuntime/Actions/BuiltIn/ServerActions.swift` - `WaitForEventsAction` (verbs: "wait", "keepalive")
+- `Sources/ARORuntime/Actions/BuiltIn/ServerActions.swift` - `ShutdownCoordinator` for signal handling
+- `Sources/ARORuntime/Actions/BuiltIn/ServerActions.swift` - `KeepaliveSignalHandler` for SIGINT/SIGTERM
 
-Using `<Return> a <running: status>` to signal keep-alive. Rejected because:
-- Overloads the meaning of Return
-- Less clear intent
+Examples:
+- `Examples/HTTPServer/` - HTTP server with wait for shutdown
+- `Examples/FileWatcher/` - File monitor with wait for shutdown
+- `Examples/EchoSocket/` - Socket server with wait for shutdown
 
-### 3. Feature Set Annotation
+---
 
-Using `@keepalive` annotation. Rejected because:
-- Adds complexity to the language
-- Less flexible than an action
+## Revision History
 
-## Future Directions
-
-1. **Timeout Support**: `<Wait> for <events> with 30000.`
-2. **Conditional Wait**: `<Wait> for <specific-event>.`
-3. **Wait Groups**: Waiting for multiple conditions
+| Version | Date | Changes |
+|---------|------|---------|
+| 1.0 | 2024-12 | Initial specification |
+| 1.1 | 2024-12 | Implemented with shutdown-signal and event-specific wait |

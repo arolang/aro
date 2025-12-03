@@ -9,8 +9,8 @@
     (* Log when requests come in - handled by event system *)
     <Log> the <ready: message> for the <console> with "Server ready to accept connections".
 
-    (* Keep the application running to process HTTP requests *)
-    <Keepalive> the <application> for the <events>.
+    (* Keep the application running until Ctrl+C *)
+    <Wait> for <shutdown-signal>.
 
     <Return> an <OK: status> for the <startup>.
 }

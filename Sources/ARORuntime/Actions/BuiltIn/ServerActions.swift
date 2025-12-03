@@ -123,7 +123,7 @@ public struct StartAction: ActionImplementation {
 /// ```
 public struct ListenAction: ActionImplementation {
     public static let role: ActionRole = .own
-    public static let verbs: Set<String> = ["listen", "await", "wait"]
+    public static let verbs: Set<String> = ["listen", "await"]
     public static let validPrepositions: Set<Preposition> = [.on, .for, .to]
 
     public init() {}
@@ -484,16 +484,19 @@ public final class ShutdownCoordinator: @unchecked Sendable {
 
 /// Waits for events, keeping the application alive
 ///
-/// The WaitForEvents action blocks execution until a shutdown signal is received,
+/// The Wait action blocks execution until a shutdown signal is received,
 /// allowing the application to process events from started services.
 ///
 /// ## Example
 /// ```
-/// <Keepalive> the <application> for the <events>.
+/// <Wait> for <shutdown-signal>.
 /// ```
+///
+/// The `shutdown-signal` event is triggered by SIGINT (Ctrl+C) or SIGTERM.
+/// Legacy syntax `<Keepalive> the <application> for the <events>.` is still supported.
 public struct WaitForEventsAction: ActionImplementation {
     public static let role: ActionRole = .own
-    public static let verbs: Set<String> = ["keepalive", "block"]
+    public static let verbs: Set<String> = ["wait", "keepalive", "block"]
     public static let validPrepositions: Set<Preposition> = [.for]
 
     public init() {}
