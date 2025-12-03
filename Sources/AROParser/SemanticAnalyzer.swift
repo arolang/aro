@@ -198,6 +198,11 @@ public final class SemanticAnalyzer {
             return analyzeMatchStatement(match, builder: builder, definedSymbols: &definedSymbols)
         }
 
+        // ARO-0005: For-each loop
+        if let forEach = statement as? ForEachLoop {
+            return analyzeForEachLoop(forEach, builder: builder, definedSymbols: &definedSymbols)
+        }
+
         return (DataFlowInfo(), [])
     }
     
@@ -437,6 +442,99 @@ public final class SemanticAnalyzer {
                 sideEffects.append(contentsOf: flow.sideEffects)
                 dependencies.formUnion(newDeps)
             }
+        }
+
+        return (
+            DataFlowInfo(inputs: inputs, outputs: outputs, sideEffects: sideEffects),
+            dependencies
+        )
+    }
+
+    // ARO-0005: Analyze for-each loop
+    private func analyzeForEachLoop(
+        _ statement: ForEachLoop,
+        builder: SymbolTableBuilder,
+        definedSymbols: inout Set<String>
+    ) -> (DataFlowInfo, Set<String>) {
+        var inputs: Set<String> = []
+        var outputs: Set<String> = []
+        var sideEffects: [String] = []
+        var dependencies: Set<String> = []
+
+        // The collection variable must be defined
+        let collectionName = statement.collection.base
+        if !definedSymbols.contains(collectionName) && !isKnownExternal(collectionName) {
+            diagnostics.warning(
+                "Collection '\(collectionName)' used in for-each before definition",
+                at: statement.collection.span.start
+            )
+        }
+        inputs.insert(collectionName)
+
+        // Extract variables from filter condition if present
+        if let filter = statement.filter {
+            let filterVars = extractVariables(from: filter)
+            for varName in filterVars {
+                // Allow the item variable to be used in filter
+                if varName != statement.itemVariable && !definedSymbols.contains(varName) && !isKnownExternal(varName) {
+                    dependencies.insert(varName)
+                }
+                inputs.insert(varName)
+            }
+        }
+
+        // Create a new scope for the loop body
+        // The item variable is scoped to the loop body (shadows outer scope)
+        var loopDefinedSymbols = definedSymbols
+
+        // Define item variable in loop scope
+        builder.define(
+            name: statement.itemVariable,
+            definedAt: statement.span,
+            visibility: .internal,
+            source: .extracted(from: collectionName),
+            dataType: .custom("Any")
+        )
+        loopDefinedSymbols.insert(statement.itemVariable)
+
+        // Define index variable if present
+        if let indexVar = statement.indexVariable {
+            builder.define(
+                name: indexVar,
+                definedAt: statement.span,
+                visibility: .internal,
+                source: .computed,
+                dataType: .custom("Integer")
+            )
+            loopDefinedSymbols.insert(indexVar)
+        }
+
+        // Add parallel/concurrency as side effects
+        if statement.isParallel {
+            if let concurrency = statement.concurrency {
+                sideEffects.append("parallel:concurrency=\(concurrency)")
+            } else {
+                sideEffects.append("parallel")
+            }
+        }
+
+        // Analyze body statements
+        for bodyStatement in statement.body {
+            let (flow, newDeps) = analyzeStatement(
+                bodyStatement,
+                builder: builder,
+                definedSymbols: &loopDefinedSymbols
+            )
+            inputs.formUnion(flow.inputs)
+            outputs.formUnion(flow.outputs)
+            sideEffects.append(contentsOf: flow.sideEffects)
+            dependencies.formUnion(newDeps)
+        }
+
+        // Remove loop-scoped variables from outputs (they don't escape the loop)
+        outputs.remove(statement.itemVariable)
+        if let indexVar = statement.indexVariable {
+            outputs.remove(indexVar)
         }
 
         return (

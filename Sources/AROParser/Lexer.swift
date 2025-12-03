@@ -37,11 +37,8 @@ public final class Lexer: @unchecked Sendable {
         "each": .each,
         "in": .in,
         "at": .atKeyword,
-        "while": .while,
-        "repeat": .repeat,
-        "until": .until,
-        "break": .break,
-        "continue": .continue,
+        "parallel": .parallel,
+        "concurrency": .concurrency,
 
         // Types (ARO-0006)
         "type": .type,

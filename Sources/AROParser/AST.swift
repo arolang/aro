@@ -242,6 +242,62 @@ public struct MatchStatement: Statement {
     }
 }
 
+// MARK: - For-Each Loop (ARO-0005)
+
+/// For-each loop statement: for each <item> [at <index>] in <collection> [where <condition>] { ... }
+/// Also supports: parallel for each <item> in <collection> [with <concurrency: N>] { ... }
+public struct ForEachLoop: Statement {
+    public let itemVariable: String
+    public let indexVariable: String?
+    public let collection: QualifiedNoun
+    public let filter: (any Expression)?
+    public let isParallel: Bool
+    public let concurrency: Int?
+    public let body: [Statement]
+    public let span: SourceSpan
+
+    public init(
+        itemVariable: String,
+        indexVariable: String? = nil,
+        collection: QualifiedNoun,
+        filter: (any Expression)? = nil,
+        isParallel: Bool = false,
+        concurrency: Int? = nil,
+        body: [Statement],
+        span: SourceSpan
+    ) {
+        self.itemVariable = itemVariable
+        self.indexVariable = indexVariable
+        self.collection = collection
+        self.filter = filter
+        self.isParallel = isParallel
+        self.concurrency = concurrency
+        self.body = body
+        self.span = span
+    }
+
+    public var description: String {
+        var desc = isParallel ? "parallel " : ""
+        desc += "for each <\(itemVariable)>"
+        if let index = indexVariable {
+            desc += " at <\(index)>"
+        }
+        desc += " in <\(collection.fullName)>"
+        if let concurrency = concurrency {
+            desc += " with <concurrency: \(concurrency)>"
+        }
+        if filter != nil {
+            desc += " where ..."
+        }
+        desc += " { \(body.count) statements }"
+        return desc
+    }
+
+    public func accept<V: ASTVisitor>(_ visitor: V) throws -> V.Result {
+        try visitor.visit(self)
+    }
+}
+
 // MARK: - Action
 
 /// Represents an action verb with semantic classification
@@ -693,6 +749,7 @@ public protocol ASTVisitor {
     func visit(_ node: PublishStatement) throws -> Result
     func visit(_ node: RequireStatement) throws -> Result
     func visit(_ node: MatchStatement) throws -> Result
+    func visit(_ node: ForEachLoop) throws -> Result
 
     // Expression visitors (ARO-0002)
     func visit(_ node: LiteralExpression) throws -> Result
@@ -736,6 +793,12 @@ public extension ASTVisitor where Result == Void {
             for statement in otherwise {
                 try statement.accept(self)
             }
+        }
+    }
+
+    func visit(_ node: ForEachLoop) throws {
+        for statement in node.body {
+            try statement.accept(self)
         }
     }
 
@@ -865,6 +928,29 @@ public struct ASTPrinter: ASTVisitor {
             for statement in otherwise {
                 result += try! statement.accept(otherwisePrinter)
             }
+        }
+        return result
+    }
+
+    public func visit(_ node: ForEachLoop) -> String {
+        var result = "\(indentation())ForEachLoop\n"
+        result += "\(indentation())  Item: <\(node.itemVariable)>\n"
+        if let index = node.indexVariable {
+            result += "\(indentation())  Index: <\(index)>\n"
+        }
+        result += "\(indentation())  Collection: <\(node.collection.fullName)>\n"
+        result += "\(indentation())  Parallel: \(node.isParallel)\n"
+        if let concurrency = node.concurrency {
+            result += "\(indentation())  Concurrency: \(concurrency)\n"
+        }
+        if let filter = node.filter {
+            result += "\(indentation())  Filter: \(filter)\n"
+        }
+        var printer = self
+        printer.indent += 1
+        result += "\(indentation())  Body:\n"
+        for statement in node.body {
+            result += try! statement.accept(printer)
         }
         return result
     }

@@ -93,11 +93,19 @@ public final class Parser {
     
     // MARK: - Statement Parsing
 
-    /// Parses a statement (ARO, Publish, Require, or Match)
+    /// Parses a statement (ARO, Publish, Require, Match, or ForEach)
     private func parseStatement() throws -> Statement {
         // Check for match statement (ARO-0004) - starts with 'match' keyword
         if check(.match) {
             return try parseMatchStatement()
+        }
+
+        // Check for for-each loop (ARO-0005) - starts with 'for' or 'parallel for'
+        if check(.for) {
+            return try parseForEachLoop(isParallel: false)
+        }
+        if check(.parallel) {
+            return try parseParallelForEachLoop()
         }
 
         let startToken = try expect(.leftAngle, message: "'<'")
@@ -454,6 +462,83 @@ public final class Parser {
         throw ParserError.unexpectedToken(expected: "pattern (literal, <variable>, or _)", got: peek())
     }
 
+    // MARK: - For-Each Loop Parsing (ARO-0005)
+
+    /// Parses: "parallel" "for" "each" ...
+    private func parseParallelForEachLoop() throws -> ForEachLoop {
+        try expect(.parallel, message: "'parallel'")
+        return try parseForEachLoop(isParallel: true)
+    }
+
+    /// Parses: "for" "each" "<" item ">" ["at" "<" index ">"] "in" "<" collection ">" ["with" "<" "concurrency" ":" N ">"] ["where" condition] "{" statements "}"
+    private func parseForEachLoop(isParallel: Bool) throws -> ForEachLoop {
+        let startToken = try expect(.for, message: "'for'")
+        try expect(.each, message: "'each'")
+
+        // Parse item variable: <item>
+        try expect(.leftAngle, message: "'<'")
+        let itemVariable = try parseCompoundIdentifier()
+        try expect(.rightAngle, message: "'>'")
+
+        // Parse optional index: at <index>
+        var indexVariable: String? = nil
+        if check(.atKeyword) {
+            advance()
+            try expect(.leftAngle, message: "'<'")
+            indexVariable = try parseCompoundIdentifier()
+            try expect(.rightAngle, message: "'>'")
+        }
+
+        // Parse collection: in <collection>
+        try expect(.in, message: "'in'")
+        try expect(.leftAngle, message: "'<'")
+        let collection = try parseQualifiedNoun()
+        try expect(.rightAngle, message: "'>'")
+
+        // Parse optional concurrency limit (only for parallel): with <concurrency: N>
+        var concurrency: Int? = nil
+        if isParallel && check(.preposition(.with)) {
+            advance()
+            try expect(.leftAngle, message: "'<'")
+            try expect(.concurrency, message: "'concurrency'")
+            try expect(.colon, message: "':'")
+            let concurrencyToken = peek()
+            if case .intLiteral(let n) = concurrencyToken.kind {
+                advance()
+                concurrency = n
+            } else {
+                throw ParserError.unexpectedToken(expected: "integer for concurrency", got: concurrencyToken)
+            }
+            try expect(.rightAngle, message: "'>'")
+        }
+
+        // Parse optional filter: where <condition>
+        var filter: (any Expression)? = nil
+        if check(.where) {
+            advance()
+            filter = try parseExpression()
+        }
+
+        // Parse body: { statements }
+        try expect(.leftBrace, message: "'{'")
+        var body: [Statement] = []
+        while !check(.rightBrace) && !isAtEnd {
+            body.append(try parseStatement())
+        }
+        let endToken = try expect(.rightBrace, message: "'}'")
+
+        return ForEachLoop(
+            itemVariable: itemVariable,
+            indexVariable: indexVariable,
+            collection: collection,
+            filter: filter,
+            isParallel: isParallel,
+            concurrency: concurrency,
+            body: body,
+            span: startToken.span.merged(with: endToken.span)
+        )
+    }
+
     // MARK: - Qualified Noun Parsing
     
     /// Parses: base [ ":" specifier { specifier } ]
@@ -802,8 +887,21 @@ extension Parser {
                 actualOp = .isNot
             }
 
-            // Handle type check: <expr> is [a/an] TypeName
+            // Handle "is true", "is false", "is nil/null" as equality comparisons
             if actualOp == .is || actualOp == .isNot {
+                // Check if next token is a boolean literal or nil
+                switch peek().kind {
+                case .true, .false, .nil, .null:
+                    // Treat as equality comparison: <expr> == true/false/nil
+                    let right = try parsePrefix()
+                    let span = (left as? any Locatable)?.span.merged(with: (right as? any Locatable)?.span ?? token.span) ?? token.span
+                    let compOp: BinaryOperator = (actualOp == .isNot) ? .notEqual : .equal
+                    return BinaryExpression(left: left, op: compOp, right: right, span: span)
+                default:
+                    break
+                }
+
+                // Handle type check: <expr> is [a/an] TypeName
                 // Skip optional article
                 var hasArticle = false
                 if case .article = peek().kind {

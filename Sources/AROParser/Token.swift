@@ -62,11 +62,8 @@ public enum TokenKind: Sendable, Equatable, CustomStringConvertible {
     case each               // each
     case `in`               // in
     case atKeyword          // at (for indexed iteration)
-    case `while`            // while
-    case `repeat`           // repeat
-    case until              // until
-    case `break`            // Break
-    case `continue`         // Continue
+    case parallel           // parallel (for parallel for-each)
+    case concurrency        // concurrency (for concurrency limit)
 
     // Keywords - Types (ARO-0006)
     case type               // type
@@ -164,11 +161,8 @@ public enum TokenKind: Sendable, Equatable, CustomStringConvertible {
         case .each: return "each"
         case .in: return "in"
         case .atKeyword: return "at"
-        case .while: return "while"
-        case .repeat: return "repeat"
-        case .until: return "until"
-        case .break: return "Break"
-        case .continue: return "Continue"
+        case .parallel: return "parallel"
+        case .concurrency: return "concurrency"
         case .type: return "type"
         case .enum: return "enum"
         case .protocol: return "protocol"
@@ -328,7 +322,7 @@ extension TokenKind {
     /// Checks if this is a keyword that starts a statement
     public var isStatementKeyword: Bool {
         switch self {
-        case .if, .match, .for, .while, .repeat, .try, .guard, .defer, .assert, .precondition:
+        case .if, .match, .for, .parallel, .try, .guard, .defer, .assert, .precondition:
             return true
         default:
             return false

@@ -2,31 +2,35 @@
 
 * Proposal: ARO-0005
 * Author: ARO Language Team
-* Status: **Draft**
+* Status: **Accepted**
 * Requires: ARO-0001, ARO-0002, ARO-0003, ARO-0004
 
 ## Abstract
 
-This proposal introduces iteration constructs to ARO, enabling specifications to process collections, repeat operations, and handle sequences of data.
+This proposal introduces iteration constructs to ARO, enabling specifications to process collections in a deterministic, bounded manner.
 
 ## Motivation
 
 Many business operations involve:
 
 - Processing each item in a collection
-- Repeating until a condition is met
+- Filtering collections based on conditions
 - Aggregating results from multiple items
 - Transforming lists of data
 
+ARO provides iteration constructs that are:
+- **Deterministic**: Predictable execution order
+- **Bounded**: Always terminate (no infinite loops)
+- **Declarative**: Express intent, not control flow
+
 ## Proposed Solution
 
-Three iteration constructs:
+Two iteration constructs:
 
-1. **For-Each**: Iterate over collections
-2. **While**: Repeat while condition holds
-3. **Repeat-Until**: Repeat until condition becomes true
+1. **For-Each**: Iterate over collections (serial)
+2. **Parallel For-Each**: Iterate over collections (concurrent)
 
-Plus collection operations for functional-style processing.
+Plus collection actions for functional-style processing.
 
 ---
 
@@ -35,22 +39,28 @@ Plus collection operations for functional-style processing.
 #### 1.1 Syntax
 
 ```ebnf
-foreach_loop = "for" , "each" , "<" , item_name , ">" , 
+foreach_loop = "for" , "each" , "<" , item_name , ">" ,
+               [ "at" , "<" , index_name , ">" ] ,
                "in" , "<" , collection , ">" ,
                [ "where" , condition ] ,
                block ;
 
 item_name    = compound_identifier ;
+index_name   = compound_identifier ;
 collection   = qualified_noun ;
 ```
 
 **Format:**
-```
+```aro
 for each <item> in <collection> {
     <statements using item>
 }
 
 for each <item> in <collection> where <condition> {
+    <statements>
+}
+
+for each <item> at <index> in <collection> {
     <statements>
 }
 ```
@@ -59,45 +69,67 @@ for each <item> in <collection> where <condition> {
 
 ##### Basic Iteration
 
-```
+```aro
 (Order Processing: E-Commerce) {
-    <Retrieve> the <order: items> from the <order>.
-    
-    for each <item> in <order: items> {
-        <Validate> the <stock: availability> for the <item>.
+    <Retrieve> the <items> from the <order>.
+
+    for each <item> in <items> {
+        <Validate> the <availability> for the <item>.
         <Reserve> the <quantity> for the <item>.
     }
+
+    <Return> an <OK: status> for the <order>.
 }
 ```
 
-##### With Filter
+##### With Filter (replaces Break/Continue)
 
-```
+```aro
 (Notification: Communication) {
     <Retrieve> the <users> from the <user-repository>.
-    
+
+    (* Only process users with notifications enabled *)
     for each <user> in <users> where <user: notifications-enabled> is true {
         <Send> the <newsletter> to the <user: email>.
     }
+
+    <Return> an <OK: status> for the <notification>.
+}
+```
+
+##### Indexed Iteration
+
+```aro
+(Ranking: Display) {
+    <Sort> the <contestants> from the <competition> by <score>.
+
+    for each <contestant> at <rank> in <contestants> {
+        <Compute> the <position> from <rank> + 1.
+        <Display> the <result> for the <contestant> with <position>.
+    }
+
+    <Return> an <OK: status> for the <ranking>.
 }
 ```
 
 ##### Nested Loops
 
-```
+```aro
 (Report: Analytics) {
     <Retrieve> the <departments> from the <organization>.
-    
+
     for each <department> in <departments> {
         <Retrieve> the <employees> from the <department>.
-        
+
         for each <employee> in <employees> {
-            <Compute> the <performance: score> for the <employee>.
+            <Compute> the <score> for the <employee>.
             <Add> the <score> to the <department: metrics>.
         }
-        
-        <Generate> the <department: report> for the <department>.
+
+        <Generate> the <report> for the <department>.
     }
+
+    <Return> an <OK: status> for the <analytics>.
 }
 ```
 
@@ -107,305 +139,163 @@ for each <item> in <collection> where <condition> {
 - It shadows any outer variable with the same name
 - It is immutable within the loop
 
-```
-(Example: Scoping) {
-    <Set> the <item> to "outer".
-    
-    for each <item> in <items> {
-        // <item> refers to current collection element
-        <Process> the <item>.
-    }
-    
-    // <item> is "outer" again
-}
-```
-
 ---
 
-### 2. Indexed For-Each
+### 2. Parallel For-Each
+
+For concurrent processing of independent items:
 
 #### 2.1 Syntax
 
 ```ebnf
-indexed_foreach = "for" , "each" , "<" , item_name , ">" , 
-                  "at" , "<" , index_name , ">" ,
-                  "in" , "<" , collection , ">" ,
-                  block ;
+parallel_foreach = "parallel" , "for" , "each" , "<" , item_name , ">" ,
+                   "in" , "<" , collection , ">" ,
+                   [ "with" , "<" , "concurrency" , ":" , number , ">" ] ,
+                   [ "where" , condition ] ,
+                   block ;
 ```
 
 **Format:**
-```
-for each <item> at <index> in <collection> {
-    <statements>
+```aro
+parallel for each <item> in <items> {
+    <Process> the <result> for the <item>.
 }
-```
 
-#### 2.2 Example
-
-```
-(Ranking: Display) {
-    <Sort> the <contestants> by the <score: descending>.
-    
-    for each <contestant> at <rank> in <contestants> {
-        <Set> the <position> to <rank> + 1.
-        <Display> the <position> with the <contestant: name>.
-    }
-}
-```
-
----
-
-### 3. While Loop
-
-#### 3.1 Syntax
-
-```ebnf
-while_loop = "while" , condition , block ;
-```
-
-**Format:**
-```
-while <condition> {
-    <statements>
-}
-```
-
-#### 3.2 Examples
-
-##### Retry Logic
-
-```
-(API Client: Integration) {
-    <Set> the <attempts> to 0.
-    <Set> the <max-attempts> to 3.
-    <Set> the <success> to false.
-    
-    while <attempts> < <max-attempts> and <success> is false {
-        <Increment> the <attempts>.
-        <Call> the <external-api> for the <request>.
-        
-        if <response: status> is 200 then {
-            <Set> the <success> to true.
-            <Parse> the <data> from the <response>.
-        } else {
-            <Wait> for <retry-delay: seconds>.
-        }
-    }
-    
-    if <success> is false then {
-        <Throw> a <ServiceUnavailable: error> for the <request>.
-    }
-}
-```
-
-##### Processing Queue
-
-```
-(Queue Processor: Background) {
-    while <queue> is not empty {
-        <Dequeue> the <task> from the <queue>.
-        <Process> the <result> for the <task>.
-        <Mark> the <task> as <completed>.
-    }
-}
-```
-
----
-
-### 4. Repeat-Until Loop
-
-#### 4.1 Syntax
-
-```ebnf
-repeat_until = "repeat" , block , "until" , condition ;
-```
-
-**Format:**
-```
-repeat {
-    <statements>
-} until <condition>
-```
-
-#### 4.2 Semantics
-
-- Body executes **at least once**
-- Condition checked **after** each iteration
-- Loop exits when condition becomes true
-
-#### 4.3 Example
-
-```
-(Validation: Input) {
-    repeat {
-        <Prompt> the <user> for the <input>.
-        <Read> the <value> from the <user-input>.
-        <Validate> the <result> for the <value>.
-    } until <result> is <valid>
-    
-    <Process> the <value> for the <operation>.
-}
-```
-
----
-
-### 5. Loop Control
-
-#### 5.1 Break Statement
-
-Exit the innermost loop immediately:
-
-```ebnf
-break_statement = "<Break>" , "." ;
-```
-
-**Example:**
-```
-for each <item> in <items> {
-    if <item> is <target> then {
-        <Set> the <found> to <item>.
-        <Break>.
-    }
-}
-```
-
-#### 5.2 Continue Statement
-
-Skip to next iteration:
-
-```ebnf
-continue_statement = "<Continue>" , "." ;
-```
-
-**Example:**
-```
-for each <order> in <orders> {
-    if <order: status> is "cancelled" then {
-        <Continue>.
-    }
-    <Process> the <order>.
-}
-```
-
-#### 5.3 Labeled Loops
-
-For nested loop control:
-
-```ebnf
-labeled_loop = label , ":" , ( foreach_loop | while_loop | repeat_until ) ;
-break_to     = "<Break>" , "to" , label , "." ;
-continue_to  = "<Continue>" , "to" , label , "." ;
-label        = identifier ;
-```
-
-**Example:**
-```
-outer: for each <category> in <categories> {
-    for each <product> in <category: products> {
-        if <product> is <target> then {
-            <Set> the <result> to <product>.
-            <Break> to outer.
-        }
-    }
-}
-```
-
----
-
-### 6. Collection Operations
-
-Functional-style operations on collections:
-
-#### 6.1 Map
-
-```ebnf
-map_expression = "<" , collection , ">" , ".map(" , 
-                 "<" , item , ">" , "=>" , expression , ")" ;
-```
-
-**Example:**
-```
-<Compute> the <prices> from <items>.map(<item> => <item>.price * <item>.quantity).
-```
-
-#### 6.2 Filter
-
-```ebnf
-filter_expression = "<" , collection , ">" , ".filter(" , 
-                    "<" , item , ">" , "=>" , condition , ")" ;
-```
-
-**Example:**
-```
-<Compute> the <active-users> from <users>.filter(<user> => <user>.isActive is true).
-```
-
-#### 6.3 Reduce
-
-```ebnf
-reduce_expression = "<" , collection , ">" , ".reduce(" ,
-                    "<" , accumulator , ">" , "," , "<" , item , ">" ,
-                    "=>" , expression , "," , initial_value , ")" ;
-```
-
-**Example:**
-```
-<Compute> the <total> from <prices>.reduce(<sum>, <price> => <sum> + <price>, 0).
-```
-
-#### 6.4 Other Operations
-
-| Operation | Description | Example |
-|-----------|-------------|---------|
-| `.first()` | First element | `<items>.first()` |
-| `.last()` | Last element | `<items>.last()` |
-| `.count()` | Number of elements | `<items>.count()` |
-| `.sum()` | Sum of numbers | `<prices>.sum()` |
-| `.avg()` | Average | `<scores>.avg()` |
-| `.min()` | Minimum | `<values>.min()` |
-| `.max()` | Maximum | `<values>.max()` |
-| `.sort()` | Sort ascending | `<items>.sort()` |
-| `.reverse()` | Reverse order | `<items>.reverse()` |
-| `.distinct()` | Unique elements | `<items>.distinct()` |
-| `.take(n)` | First n elements | `<items>.take(10)` |
-| `.skip(n)` | Skip n elements | `<items>.skip(5)` |
-| `.any(cond)` | Any match condition | `<items>.any(<i> => <i> > 0)` |
-| `.all(cond)` | All match condition | `<items>.all(<i> => <i> > 0)` |
-| `.none(cond)` | None match condition | `<items>.none(<i> => <i> < 0)` |
-| `.find(cond)` | First matching | `<items>.find(<i> => <i>.id == 5)` |
-
----
-
-### 7. Parallel Iteration (Future)
-
-For concurrent processing:
-
-```
 parallel for each <item> in <items> with <concurrency: 4> {
-    <Process> the <item>.
+    <Fetch> the <data> from the <external-api>.
 }
+```
+
+#### 2.2 Examples
+
+##### Parallel Processing
+
+```aro
+(Image Processing: Media) {
+    <Retrieve> the <images> from the <upload-batch>.
+
+    parallel for each <image> in <images> {
+        <Resize> the <thumbnail> from the <image>.
+        <Store> the <thumbnail> in the <storage>.
+    }
+
+    <Return> an <OK: status> for the <processing>.
+}
+```
+
+##### With Concurrency Limit
+
+```aro
+(API Sync: Integration) {
+    <Retrieve> the <records> from the <database>.
+
+    (* Limit concurrent API calls to avoid rate limiting *)
+    parallel for each <record> in <records> with <concurrency: 4> {
+        <Sync> the <data> to the <external-api>.
+    }
+
+    <Return> an <OK: status> for the <sync>.
+}
+```
+
+#### 2.3 Semantics
+
+- Items are processed concurrently
+- Order of completion is non-deterministic
+- Each iteration is independent (no shared state)
+- Concurrency limit controls max parallel operations
+
+---
+
+### 3. Collection Actions
+
+ARO provides declarative actions for collection operations, replacing lambda-based functional methods:
+
+#### 3.1 Filter
+
+Select items matching a condition:
+
+```aro
+<Filter> the <active-users> from the <users> where <active> is true.
+<Filter> the <adults> from the <people> where <age> >= 18.
+```
+
+#### 3.2 Transform
+
+Apply transformation to each item:
+
+```aro
+<Transform> the <names> from the <users> with <name>.
+<Transform> the <totals> from the <items> with <price> * <quantity>.
+```
+
+#### 3.3 Aggregation
+
+Compute aggregate values:
+
+```aro
+<Sum> the <total> from the <prices>.
+<Count> the <amount> from the <items>.
+<Average> the <mean> from the <scores>.
+<Min> the <lowest> from the <values>.
+<Max> the <highest> from the <values>.
+```
+
+#### 3.4 Search
+
+Find specific items:
+
+```aro
+<Find> the <admin> from the <users> where <role> is "admin".
+<First> the <item> from the <queue>.
+<Last> the <entry> from the <log>.
+```
+
+#### 3.5 Ordering
+
+Sort and reorder collections:
+
+```aro
+<Sort> the <sorted-users> from the <users> by <name>.
+<Sort> the <ranked> from the <scores> by <value> descending.
+<Reverse> the <reversed> from the <items>.
+```
+
+#### 3.6 Selection
+
+Take or skip items:
+
+```aro
+<Take> the <top-ten> from the <results> with 10.
+<Skip> the <rest> from the <items> with 5.
+<Distinct> the <unique> from the <tags>.
+```
+
+#### 3.7 Predicates
+
+Check conditions across collections:
+
+```aro
+<Any> the <has-errors> from the <results> where <status> is "error".
+<All> the <all-valid> from the <inputs> where <valid> is true.
+<None> the <no-failures> from the <tests> where <passed> is false.
 ```
 
 ---
 
-### 8. Complete Grammar Extension
+### 4. Complete Grammar Extension
 
 ```ebnf
 (* Extends ARO-0004 *)
 
 (* Updated Statement *)
-statement = aro_statement 
+statement = aro_statement
           | guarded_statement
-          | publish_statement 
+          | publish_statement
           | require_statement
-          | conditional_block
           | match_expression
           | foreach_loop
-          | indexed_foreach
-          | while_loop
-          | repeat_until
-          | break_statement
-          | continue_statement ;
+          | parallel_foreach ;
 
 (* For-Each Loop *)
 foreach_loop = "for" , "each" , variable_reference ,
@@ -414,135 +304,62 @@ foreach_loop = "for" , "each" , variable_reference ,
                [ "where" , condition ] ,
                block ;
 
-(* While Loop *)
-while_loop = "while" , condition , block ;
+(* Parallel For-Each *)
+parallel_foreach = "parallel" , "for" , "each" , variable_reference ,
+                   "in" , variable_reference ,
+                   [ "with" , "<" , "concurrency" , ":" , integer , ">" ] ,
+                   [ "where" , condition ] ,
+                   block ;
 
-(* Repeat-Until *)
-repeat_until = "repeat" , block , "until" , condition ;
-
-(* Loop Control *)
-break_statement    = "<Break>" , [ "to" , identifier ] , "." ;
-continue_statement = "<Continue>" , [ "to" , identifier ] , "." ;
-
-(* Labeled Loop *)
-labeled_loop = identifier , ":" , 
-               ( foreach_loop | while_loop | repeat_until ) ;
-
-(* Collection Operations *)
-collection_op = variable_reference , "." , operation_name , 
-                "(" , [ lambda_or_args ] , ")" ;
-
-operation_name = "map" | "filter" | "reduce" | "first" | "last" 
-               | "count" | "sum" | "avg" | "min" | "max"
-               | "sort" | "reverse" | "distinct" 
-               | "take" | "skip" | "any" | "all" | "none" | "find" ;
-
-lambda_or_args = lambda_expression | expression_list ;
-
-lambda_expression = variable_reference , "=>" , expression
-                  | variable_reference , "," , variable_reference , 
-                    "=>" , expression ;
-
-expression_list = expression , { "," , expression } ;
-
-(* New Keywords *)
-keyword += "for" | "each" | "in" | "at" | "while" | "repeat" | "until" ;
+(* Keywords *)
+keyword += "for" | "each" | "in" | "at" | "parallel" | "concurrency" ;
 ```
 
 ---
 
-### 9. Complete Examples
+### 5. Complete Example
 
-#### Batch Processing
+```aro
+(Order Fulfillment: E-Commerce) {
+    <Require> the <order-repository> from the <framework>.
+    <Require> the <inventory> from the <framework>.
 
-```
-(Batch Processing: Data Pipeline) {
-    <Retrieve> the <pending-jobs> from the <job-queue>.
-    
-    for each <job> in <pending-jobs> {
-        <Mark> the <job> as <processing>.
-        
-        match <job: type> {
-            case "import" {
-                <Import> the <data> from the <job: source>.
+    (* Get pending orders *)
+    <Retrieve> the <orders> from the <order-repository>.
+    <Filter> the <pending-orders> from the <orders> where <status> is "pending".
+
+    (* Process each order *)
+    for each <order> in <pending-orders> {
+        <Retrieve> the <items> from the <order>.
+
+        (* Check all items are in stock *)
+        <All> the <in-stock> from the <items> where <inventory: available> > 0.
+
+        match <in-stock> {
+            case true {
+                (* Reserve inventory for all items *)
+                for each <item> in <items> {
+                    <Reserve> the <quantity> from the <inventory> for the <item>.
+                }
+
+                (* Update order status *)
+                <Update> the <order: status> to "processing".
+
+                (* Send confirmation in parallel *)
+                <Send> the <confirmation> to the <order: customer-email>.
             }
-            case "export" {
-                <Export> the <data> to the <job: destination>.
-            }
-            case "transform" {
-                <Transform> the <data> with the <job: rules>.
-            }
-            otherwise {
-                <Log> the <unknown-job-type: warning> for the <job>.
-                <Continue>.
+            case false {
+                <Update> the <order: status> to "backordered".
+                <Send> the <backorder-notice> to the <order: customer-email>.
             }
         }
-        
-        <Mark> the <job> as <completed>.
     }
-}
-```
 
-#### Shopping Cart Calculation
+    (* Calculate summary *)
+    <Count> the <processed-count> from the <pending-orders>.
+    <Log> the <summary> for the <console> with <processed-count>.
 
-```
-(Shopping Cart: E-Commerce) {
-    <Retrieve> the <cart: items> from the <session>.
-    
-    // Calculate subtotal using map/reduce
-    <Compute> the <subtotal> from 
-        <cart: items>
-            .map(<item> => <item>.price * <item>.quantity)
-            .sum().
-    
-    // Apply discounts
-    <Set> the <discount> to 0.
-    
-    for each <item> in <cart: items> where <item: has-discount> is true {
-        <Compute> the <item-discount> for the <item>.
-        <Add> the <item-discount> to the <discount>.
-    }
-    
-    // Calculate tax
-    <Compute> the <taxable-amount> from <subtotal> - <discount>.
-    <Compute> the <tax> from <taxable-amount> * 0.08.
-    
-    // Final total
-    <Compute> the <total> from <taxable-amount> + <tax>.
-    
-    <Return> the <cart: summary> with {
-        subtotal: <subtotal>,
-        discount: <discount>,
-        tax: <tax>,
-        total: <total>
-    }.
-}
-```
-
-#### Pagination
-
-```
-(Data Export: Reporting) {
-    <Set> the <page> to 1.
-    <Set> the <page-size> to 100.
-    <Set> the <has-more> to true.
-    
-    while <has-more> is true {
-        <Retrieve> the <records> from the <database> 
-            with { page: <page>, size: <page-size> }.
-        
-        if <records> is empty then {
-            <Set> the <has-more> to false.
-        } else {
-            for each <record> in <records> {
-                <Transform> the <row> from the <record>.
-                <Write> the <row> to the <export-file>.
-            }
-            <Increment> the <page>.
-        }
-    }
-    
-    <Close> the <export-file>.
+    <Return> an <OK: status> for the <fulfillment>.
 }
 ```
 
@@ -550,64 +367,26 @@ keyword += "for" | "each" | "in" | "at" | "while" | "repeat" | "until" ;
 
 ## Implementation Notes
 
-### AST Nodes
+### AST Node
 
 ```swift
 public struct ForEachLoop: Statement {
     let itemVariable: String
     let indexVariable: String?
     let collection: QualifiedNoun
-    let filter: Condition?
+    let filter: (any Expression)?
+    let isParallel: Bool
+    let concurrency: Int?
     let body: [Statement]
-    let label: String?
-    let span: SourceSpan
-}
-
-public struct WhileLoop: Statement {
-    let condition: Condition
-    let body: [Statement]
-    let label: String?
-    let span: SourceSpan
-}
-
-public struct RepeatUntil: Statement {
-    let body: [Statement]
-    let condition: Condition
-    let label: String?
-    let span: SourceSpan
-}
-
-public struct BreakStatement: Statement {
-    let targetLabel: String?
-    let span: SourceSpan
-}
-
-public struct ContinueStatement: Statement {
-    let targetLabel: String?
-    let span: SourceSpan
-}
-
-public struct CollectionOperation: Expression {
-    let collection: Expression
-    let operation: String
-    let arguments: [Expression]
-    let lambda: LambdaExpression?
-    let span: SourceSpan
-}
-
-public struct LambdaExpression {
-    let parameters: [String]
-    let body: Expression
     let span: SourceSpan
 }
 ```
 
 ### Semantic Checks
 
-1. **Infinite Loop Detection**: Warn if condition never changes
-2. **Break/Continue Validation**: Must be inside a loop
-3. **Label Resolution**: Labeled break/continue must match existing label
-4. **Collection Type Check**: Iteration target must be iterable
+1. **Collection Type Check**: Iteration target must be iterable
+2. **Variable Shadowing**: Warn if loop variable shadows outer scope
+3. **Parallel Safety**: Warn if parallel loop body has side effects on shared state
 
 ---
 
@@ -616,3 +395,4 @@ public struct LambdaExpression {
 | Version | Date | Changes |
 |---------|------|---------|
 | 1.0 | 2024-01 | Initial specification |
+| 2.0 | 2025-12 | Simplified: removed while, repeat-until, break, continue, labeled loops. Added collection actions. |

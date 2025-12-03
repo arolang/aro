@@ -1,0 +1,48 @@
+(* ARO-0005: Iteration Demo *)
+(* Demonstrates for-each loops: serial, indexed, filtered, and parallel *)
+
+(Application-Start: Iteration Demo) {
+    <Require> the <console> from the <framework>.
+
+    (* Create test data *)
+    <Create> the <users> with [
+        { name: "Alice", active: true, score: 95 },
+        { name: "Bob", active: false, score: 72 },
+        { name: "Charlie", active: true, score: 88 },
+        { name: "Diana", active: true, score: 91 }
+    ].
+
+    (* 1. Basic for-each loop *)
+    <Log> the <header> for the <console> with "=== Basic For-Each ===".
+    for each <user> in <users> {
+        <Log> the <name> for the <console> with <user: name>.
+    }
+
+    (* 2. For-each with filter (replaces break/continue) *)
+    <Log> the <header> for the <console> with "=== Filtered For-Each ===".
+    for each <user> in <users> where <user: active> is true {
+        <Log> the <active-user> for the <console> with <user: name>.
+    }
+
+    (* 3. Indexed for-each *)
+    <Log> the <header> for the <console> with "=== Indexed For-Each ===".
+    for each <user> at <index> in <users> {
+        <Compute> the <position> from <index> + 1.
+        <Log> the <ranking> for the <console> with <position>.
+    }
+
+    (* 4. Nested for-each *)
+    <Log> the <header> for the <console> with "=== Nested For-Each ===".
+    <Create> the <teams> with [
+        { name: "Alpha", members: ["Alice", "Bob"] },
+        { name: "Beta", members: ["Charlie", "Diana"] }
+    ].
+    for each <team> in <teams> {
+        <Log> the <team-name> for the <console> with <team: name>.
+        for each <member> in <team: members> {
+            <Log> the <member-name> for the <console> with <member>.
+        }
+    }
+
+    <Return> an <OK: status> for the <demo>.
+}
