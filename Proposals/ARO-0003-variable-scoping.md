@@ -91,7 +91,7 @@ Within the same scope, redefining a variable **overwrites** it:
 }
 ```
 
-In nested scopes, redefinition **shadows** the outer variable:
+In nested scopes, redefinition **do not shadow** the outer variable:
 
 ```
 (Example: Demo) {
@@ -101,7 +101,7 @@ In nested scopes, redefinition **shadows** the outer variable:
         <Set> the <count> to 20.    // Shadows outer count
         // count == 20 here
     }
-    // count == 10 here (outer variable unchanged)
+    // count == 20 here (outer variable changed)
 }
 ```
 
@@ -119,10 +119,8 @@ variable_reference = "<" , qualified_noun , ">" ;
 
 When resolving a variable reference, the compiler searches:
 
-1. **Current block scope** (innermost)
-2. **Enclosing block scopes** (outward)
-3. **Feature set scope**
-4. **Published/external scope** (global)
+1. **Feature set scope**
+2. **Published/external scope** (global)
 
 ```
 (Example: Scoping) {
@@ -133,24 +131,8 @@ When resolving a variable reference, the compiler searches:
         <Compute> the <z> from <x> + <y>.  // x from outer, y from current
     }
     
-    // <y> not accessible here (block scope ended)
+    // <y> is accessible here (block scope ending does not change the feature scope)
 }
-```
-
-#### 4.3 Qualified Access
-
-For explicit scope specification:
-
-```ebnf
-scoped_reference = scope_qualifier , "::" , variable_reference ;
-scope_qualifier  = "global" | "local" | feature_set_name ;
-```
-
-**Examples:**
-```
-global::<authenticated-user>       // Explicit global
-local::<user>                      // Explicit current scope
-UserAuth::<session-token>          // From specific feature set
 ```
 
 ---
@@ -168,15 +150,6 @@ UserAuth::<session-token>          // From specific feature set
 1. `internal-variable` must be defined in the current feature set
 2. `external-name` becomes accessible to all feature sets
 3. Both names can be used (alias created)
-
-#### 5.2 Publish with Restrictions
-
-Future extension for controlled access:
-
-```
-<Publish> as <user: readonly> <internal-user>.
-<Publish> as <config> <settings> to <Logging, Audit>.
-```
 
 ---
 
@@ -223,7 +196,6 @@ source            = "framework" | "environment" | feature_set_name ;
 
 | Scope | Lifetime |
 |-------|----------|
-| Block | Until block ends |
 | Feature Set | Until feature execution completes |
 | Global | Application lifetime |
 
@@ -478,6 +450,7 @@ statement         = aro_statement
 
 ## Revision History
 
-| Version | Date | Changes |
-|---------|------|---------|
-| 1.0 | 2024-01 | Initial specification |
+| Version | Date    | Changes               |
+|---------|---------|-----------------------|
+| 1.0     | 2025-12 | Initial specification |
+| 1.1     | 2025-12 | Simplify scope        |
