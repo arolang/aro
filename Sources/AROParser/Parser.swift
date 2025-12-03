@@ -607,27 +607,68 @@ public final class Parser {
     }
 
     // MARK: - Qualified Noun Parsing
-    
-    /// Parses: base [ ":" specifier { specifier } ]
+
+    /// Parses: base [ ":" type_annotation ]
+    /// Type annotation can be:
+    /// - Primitive: String, Integer, Float, Boolean
+    /// - Collection: List<T>, Map<K, V>
+    /// - OpenAPI schema: User, Order, etc.
     private func parseQualifiedNoun() throws -> QualifiedNoun {
         let startToken = peek()
         let base = try parseCompoundIdentifier()
-        var specifiers: [String] = []
-        
+        var typeAnnotation: String? = nil
+
         if check(.colon) {
             advance()
-            
-            // Parse space-separated specifiers
-            while peek().kind.isIdentifier {
-                specifiers.append(try parseCompoundIdentifier())
-            }
+
+            // Parse type annotation (ARO-0006)
+            typeAnnotation = try parseTypeAnnotation()
         }
-        
+
         return QualifiedNoun(
             base: base,
-            specifiers: specifiers,
+            typeAnnotation: typeAnnotation,
             span: startToken.span.merged(with: previous().span)
         )
+    }
+
+    /// Parses a type annotation: String | Integer | Float | Boolean | List<T> | Map<K,V> | SchemaName
+    /// Note: This function does NOT consume the closing `>` of the enclosing variable reference.
+    /// It only consumes `<` and `>` for generic type parameters like `List<User>`.
+    /// Type names can be hyphenated like "password-hash" for legacy compatibility.
+    private func parseTypeAnnotation() throws -> String {
+        // Parse compound identifier (may contain hyphens like "password-hash")
+        var typeStr = try parseCompoundIdentifier()
+
+        // Check for generic type parameters (List<T>, Map<K,V>)
+        // Only look for `<` immediately after the type name (no whitespace)
+        if check(.leftAngle) || check(.lessThan) {
+            advance()
+            typeStr += "<"
+
+            // Parse first type parameter
+            typeStr += try parseTypeAnnotation()
+
+            // Check for second type parameter (for Map<K, V>)
+            if check(.comma) {
+                advance()
+                typeStr += ", "
+                typeStr += try parseTypeAnnotation()
+            }
+
+            // Expect closing angle bracket for the generic (not the outer variable)
+            if check(.rightAngle) || check(.greaterThan) {
+                advance()
+                typeStr += ">"
+            } else {
+                throw ParserError.unexpectedToken(
+                    expected: "'>'",
+                    got: peek()
+                )
+            }
+        }
+
+        return typeStr
     }
     
     /// Parses: identifier { "-" identifier }

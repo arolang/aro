@@ -36,7 +36,7 @@ struct SymbolTests {
             definedAt: span,
             visibility: .published,
             source: .extracted(from: "request"),
-            dataType: .identifier
+            dataType: .schema("User")
         )
 
         let desc = symbol.description
@@ -112,40 +112,76 @@ struct SymbolSourceTests {
 
 // MARK: - Data Type Tests
 
-@Suite("Data Type Tests")
+@Suite("Data Type Tests (ARO-0006)")
 struct DataTypeTests {
 
     @Test("Data type descriptions")
     func testDataTypeDescriptions() {
+        // Primitives
         #expect(DataType.string.description == "String")
-        #expect(DataType.identifier.description == "Identifier")
-        #expect(DataType.hash.description == "Hash")
-        #expect(DataType.record.description == "Record")
-        #expect(DataType.status.description == "Status")
+        #expect(DataType.integer.description == "Integer")
+        #expect(DataType.float.description == "Float")
         #expect(DataType.boolean.description == "Boolean")
-        #expect(DataType.error.description == "Error")
-        #expect(DataType.custom("User").description == "User")
+
+        // Collections
+        #expect(DataType.list(.string).description == "List<String>")
+        #expect(DataType.map(key: .string, value: .integer).description == "Map<String, Integer>")
+
+        // Schema reference
+        #expect(DataType.schema("User").description == "User")
+
+        // Unknown
+        #expect(DataType.unknown.description == "Unknown")
     }
 
-    @Test("Data type inference from specifiers")
-    func testDataTypeInference() {
-        #expect(DataType.infer(from: ["identifier"]) == .identifier)
-        #expect(DataType.infer(from: ["id"]) == .identifier)
-        #expect(DataType.infer(from: ["hash"]) == .hash)
-        #expect(DataType.infer(from: ["checksum"]) == .hash)
-        #expect(DataType.infer(from: ["record"]) == .record)
-        #expect(DataType.infer(from: ["status"]) == .status)
-        #expect(DataType.infer(from: ["result"]) == .boolean)
-        #expect(DataType.infer(from: ["error"]) == .error)
-        #expect(DataType.infer(from: ["custom"]) == .custom("Custom"))
+    @Test("Data type parsing from type annotations (ARO-0006)")
+    func testDataTypeParsing() {
+        // Primitives
+        #expect(DataType.parse("String") == .string)
+        #expect(DataType.parse("Integer") == .integer)
+        #expect(DataType.parse("Float") == .float)
+        #expect(DataType.parse("Boolean") == .boolean)
+
+        // Collections
+        #expect(DataType.parse("List<String>") == .list(.string))
+        #expect(DataType.parse("List<User>") == .list(.schema("User")))
+        #expect(DataType.parse("Map<String, Integer>") == .map(key: .string, value: .integer))
+
+        // OpenAPI schema references
+        #expect(DataType.parse("User") == .schema("User"))
+        #expect(DataType.parse("OrderItem") == .schema("OrderItem"))
+
+        // Legacy inference returns nil for lowercase
         #expect(DataType.infer(from: []) == nil)
     }
 
     @Test("Data type equality")
     func testDataTypeEquality() {
         #expect(DataType.string == DataType.string)
-        #expect(DataType.custom("A") == DataType.custom("A"))
-        #expect(DataType.custom("A") != DataType.custom("B"))
+        #expect(DataType.schema("A") == DataType.schema("A"))
+        #expect(DataType.schema("A") != DataType.schema("B"))
+        #expect(DataType.list(.string) == DataType.list(.string))
+        #expect(DataType.list(.string) != DataType.list(.integer))
+    }
+
+    @Test("Data type assignment compatibility (ARO-0006)")
+    func testDataTypeCompatibility() {
+        // Same type
+        #expect(DataType.string.isAssignableTo(.string))
+        #expect(DataType.integer.isAssignableTo(.integer))
+
+        // Integer -> Float widening allowed
+        #expect(DataType.integer.isAssignableTo(.float))
+
+        // Float -> Integer NOT allowed
+        #expect(!DataType.float.isAssignableTo(.integer))
+
+        // Unknown can be assigned to anything
+        #expect(DataType.unknown.isAssignableTo(.string))
+        #expect(DataType.unknown.isAssignableTo(.schema("User")))
+
+        // Collection compatibility
+        #expect(DataType.list(.integer).isAssignableTo(.list(.float)))
     }
 }
 
@@ -573,17 +609,27 @@ struct SemanticAnalyzerComprehensiveTests {
         #expect(analyzed.featureSets.count == 2)
     }
 
-    @Test("Infers data type from specifiers")
-    func testDataTypeInference() throws {
+    @Test("Infers data type from type annotations (ARO-0006)")
+    func testDataTypeFromAnnotation() throws {
         let source = """
         (Test: Testing) {
-            <Extract> the <user: identifier> from the <request>.
+            <Extract> the <user: User> from the <request>.
+            <Extract> the <name: String> from the <user>.
+            <Extract> the <count: Integer> from the <data>.
         }
         """
         let analyzed = try SemanticAnalyzer.analyze(source)
 
-        let symbol = analyzed.featureSets[0].symbolTable.lookup("user")
-        #expect(symbol?.dataType == .identifier)
+        // Schema type
+        let userSymbol = analyzed.featureSets[0].symbolTable.lookup("user")
+        #expect(userSymbol?.dataType == .schema("User"))
+
+        // Primitive types
+        let nameSymbol = analyzed.featureSets[0].symbolTable.lookup("name")
+        #expect(nameSymbol?.dataType == .string)
+
+        let countSymbol = analyzed.featureSets[0].symbolTable.lookup("count")
+        #expect(countSymbol?.dataType == .integer)
     }
 }
 

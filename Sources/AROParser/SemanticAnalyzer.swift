@@ -253,12 +253,14 @@ public final class SemanticAnalyzer {
             inputs.insert(objectName)
             outputs.insert(resultName)
 
-            // ARO-0002: Infer type from expression if present
+            // ARO-0006: Infer type from type annotation or expression
             let dataType: DataType
-            if let expr = statement.expression {
+            if let annotatedType = statement.result.dataType {
+                dataType = annotatedType
+            } else if let expr = statement.expression {
                 dataType = inferExpressionType(expr)
             } else {
-                dataType = DataType.infer(from: statement.result.specifiers) ?? .custom("Any")
+                dataType = .unknown
             }
 
             builder.define(
@@ -282,12 +284,14 @@ public final class SemanticAnalyzer {
             inputs.insert(objectName)
             outputs.insert(resultName)
 
-            // ARO-0002: Infer type from expression if present
+            // ARO-0006: Infer type from type annotation or expression
             let dataType: DataType
-            if let expr = statement.expression {
+            if let annotatedType = statement.result.dataType {
+                dataType = annotatedType
+            } else if let expr = statement.expression {
                 dataType = inferExpressionType(expr)
             } else {
-                dataType = DataType.infer(from: statement.result.specifiers) ?? .custom("Any")
+                dataType = .unknown
             }
 
             builder.define(
@@ -493,7 +497,7 @@ public final class SemanticAnalyzer {
             definedAt: statement.span,
             visibility: .internal,
             source: .extracted(from: collectionName),
-            dataType: .custom("Any")
+            dataType: .unknown
         )
         loopDefinedSymbols.insert(statement.itemVariable)
 
@@ -504,7 +508,7 @@ public final class SemanticAnalyzer {
                 definedAt: statement.span,
                 visibility: .internal,
                 source: .computed,
-                dataType: .custom("Integer")
+                dataType: .integer
             )
             loopDefinedSymbols.insert(indexVar)
         }
@@ -638,29 +642,29 @@ public final class SemanticAnalyzer {
         }
     }
 
-    /// Infers the type of an expression
+    /// Infers the type of an expression (ARO-0006)
     private func inferExpressionType(_ expr: any Expression) -> DataType {
         switch expr {
         case let literal as LiteralExpression:
             switch literal.value {
             case .string: return .string
-            case .integer: return .custom("Integer")
-            case .float: return .custom("Float")
+            case .integer: return .integer
+            case .float: return .float
             case .boolean: return .boolean
-            case .null: return .custom("Null")
+            case .null: return .unknown
             }
 
         case is ArrayLiteralExpression:
-            return .custom("List")
+            return .list(.unknown)
 
         case is MapLiteralExpression:
-            return .custom("Map")
+            return .map(key: .string, value: .unknown)
 
         case let binary as BinaryExpression:
             // Infer type based on operator
             switch binary.op {
             case .add, .subtract, .multiply, .divide, .modulo:
-                return .custom("Number")
+                return .float  // Numeric operations return Float
             case .concat:
                 return .string
             case .equal, .notEqual, .lessThan, .greaterThan, .lessEqual, .greaterEqual,
@@ -669,10 +673,10 @@ public final class SemanticAnalyzer {
             }
 
         case is UnaryExpression:
-            return .custom("Any")
+            return .unknown
 
         case is VariableRefExpression:
-            return .custom("Any")
+            return .unknown
 
         case is TypeCheckExpression, is ExistenceExpression:
             return .boolean
@@ -681,7 +685,7 @@ public final class SemanticAnalyzer {
             return .string
 
         default:
-            return .custom("Any")
+            return .unknown
         }
     }
 }

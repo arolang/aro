@@ -374,26 +374,56 @@ public enum ActionSemanticRole: String, Sendable, CaseIterable {
 
 // MARK: - Qualified Noun
 
-/// A noun with optional specifiers (e.g., <user: identifier name>)
+/// A noun with optional type annotation (ARO-0006)
+///
+/// Examples:
+/// - `<user>` - Untyped variable
+/// - `<name: String>` - Primitive type annotation
+/// - `<items: List<Order>>` - Collection type annotation
+/// - `<user: User>` - OpenAPI schema type annotation
 public struct QualifiedNoun: Sendable, Equatable, CustomStringConvertible {
     public let base: String
-    public let specifiers: [String]
+    public let typeAnnotation: String?  // Raw type string (e.g., "String", "List<User>")
     public let span: SourceSpan
-    
-    public init(base: String, specifiers: [String] = [], span: SourceSpan) {
+
+    // Legacy support: specifiers are parsed from typeAnnotation
+    public var specifiers: [String] {
+        guard let type = typeAnnotation else { return [] }
+        return [type]
+    }
+
+    public init(base: String, typeAnnotation: String? = nil, span: SourceSpan) {
         self.base = base
-        self.specifiers = specifiers
+        self.typeAnnotation = typeAnnotation
         self.span = span
     }
-    
+
+    /// Legacy initializer for backwards compatibility (use when you have specifiers array)
+    public init(base: String, specifiers: [String], span: SourceSpan) {
+        self.base = base
+        self.typeAnnotation = specifiers.isEmpty ? nil : specifiers.joined(separator: " ")
+        self.span = span
+    }
+
     /// The full qualified name
     public var fullName: String {
-        if specifiers.isEmpty {
-            return base
+        if let type = typeAnnotation {
+            return "\(base): \(type)"
         }
-        return "\(base): \(specifiers.joined(separator: " "))"
+        return base
     }
-    
+
+    /// Get the parsed DataType (ARO-0006)
+    public var dataType: DataType? {
+        guard let type = typeAnnotation else { return nil }
+        return DataType.parse(type)
+    }
+
+    /// Check if this noun has a type annotation
+    public var hasTypeAnnotation: Bool {
+        typeAnnotation != nil
+    }
+
     public var description: String {
         fullName
     }

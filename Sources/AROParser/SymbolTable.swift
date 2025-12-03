@@ -67,45 +67,154 @@ public enum SymbolSource: Sendable, Equatable, CustomStringConvertible {
     }
 }
 
-// MARK: - Data Type
+// MARK: - Data Type (ARO-0006)
 
-/// Simple type system for symbols
-public enum DataType: Sendable, Equatable, CustomStringConvertible {
+/// Type system for ARO symbols
+///
+/// Primitives: String, Integer, Float, Boolean (built-in)
+/// Collections: List<T>, Map<K,V> (built-in)
+/// Complex: Schema references from openapi.yaml components
+public indirect enum DataType: Sendable, Equatable, CustomStringConvertible {
+    // Primitives (ARO-0006 Section 1)
     case string
-    case identifier
-    case hash
-    case record
-    case status
+    case integer
+    case float
     case boolean
-    case error
-    case custom(String)
-    
+
+    // Collections (ARO-0006 Section 2)
+    case list(DataType)
+    case map(key: DataType, value: DataType)
+
+    // OpenAPI schema reference (ARO-0006 Section 3)
+    case schema(String)
+
+    // Unknown/untyped
+    case unknown
+
     public var description: String {
         switch self {
         case .string: return "String"
-        case .identifier: return "Identifier"
-        case .hash: return "Hash"
-        case .record: return "Record"
-        case .status: return "Status"
+        case .integer: return "Integer"
+        case .float: return "Float"
         case .boolean: return "Boolean"
-        case .error: return "Error"
-        case .custom(let name): return name
+        case .list(let element): return "List<\(element)>"
+        case .map(let key, let value): return "Map<\(key), \(value)>"
+        case .schema(let name): return name
+        case .unknown: return "Unknown"
         }
     }
-    
-    /// Infers type from specifiers
-    public static func infer(from specifiers: [String]) -> DataType? {
-        guard let first = specifiers.first?.lowercased() else { return nil }
-        
-        switch first {
-        case "identifier", "id": return .identifier
-        case "hash", "checksum": return .hash
-        case "record": return .record
-        case "status": return .status
-        case "result": return .boolean
-        case "error": return .error
-        default: return .custom(first.capitalized)
+
+    /// Check if this is a primitive type
+    public var isPrimitive: Bool {
+        switch self {
+        case .string, .integer, .float, .boolean: return true
+        default: return false
         }
+    }
+
+    /// Check if this is a collection type
+    public var isCollection: Bool {
+        switch self {
+        case .list, .map: return true
+        default: return false
+        }
+    }
+
+    /// Check if this is an OpenAPI schema reference
+    public var isSchemaReference: Bool {
+        if case .schema = self { return true }
+        return false
+    }
+
+    /// Parse a type from a string (e.g., "String", "List<User>", "Map<String, Integer>")
+    public static func parse(_ typeString: String) -> DataType {
+        let trimmed = typeString.trimmingCharacters(in: .whitespaces)
+
+        // Primitives
+        switch trimmed {
+        case "String": return .string
+        case "Integer": return .integer
+        case "Float": return .float
+        case "Boolean": return .boolean
+        default: break
+        }
+
+        // List<T>
+        if trimmed.hasPrefix("List<") && trimmed.hasSuffix(">") {
+            let inner = String(trimmed.dropFirst(5).dropLast(1))
+            return .list(parse(inner))
+        }
+
+        // Map<K, V>
+        if trimmed.hasPrefix("Map<") && trimmed.hasSuffix(">") {
+            let inner = String(trimmed.dropFirst(4).dropLast(1))
+            // Split on comma, handling nested generics
+            if let commaIndex = findTopLevelComma(in: inner) {
+                let keyStr = String(inner[inner.startIndex..<commaIndex]).trimmingCharacters(in: .whitespaces)
+                let valueStr = String(inner[inner.index(after: commaIndex)...]).trimmingCharacters(in: .whitespaces)
+                return .map(key: parse(keyStr), value: parse(valueStr))
+            }
+        }
+
+        // OpenAPI schema reference
+        return .schema(trimmed)
+    }
+
+    /// Find the top-level comma in a generic type string
+    private static func findTopLevelComma(in str: String) -> String.Index? {
+        var depth = 0
+        for (index, char) in zip(str.indices, str) {
+            switch char {
+            case "<": depth += 1
+            case ">": depth -= 1
+            case "," where depth == 0: return index
+            default: break
+            }
+        }
+        return nil
+    }
+
+    /// Infer type from a literal value
+    public static func infer(from literal: Any) -> DataType {
+        switch literal {
+        case is String: return .string
+        case is Int: return .integer
+        case is Double: return .float
+        case is Bool: return .boolean
+        default: return .unknown
+        }
+    }
+
+    /// Check type compatibility (ARO-0006 Section 7.1)
+    public func isAssignableTo(_ target: DataType) -> Bool {
+        if self == target { return true }
+
+        // Integer -> Float widening allowed
+        if self == .integer && target == .float { return true }
+
+        // Collection element compatibility
+        if case .list(let selfElement) = self,
+           case .list(let targetElement) = target {
+            return selfElement.isAssignableTo(targetElement)
+        }
+
+        if case .map(let selfKey, let selfValue) = self,
+           case .map(let targetKey, let targetValue) = target {
+            return selfKey.isAssignableTo(targetKey) && selfValue.isAssignableTo(targetValue)
+        }
+
+        // Unknown is assignable to anything (for gradual typing)
+        if self == .unknown { return true }
+
+        return false
+    }
+
+    /// Legacy: Infer type from specifiers (backwards compatibility)
+    /// This is used when type annotation is provided as space-separated specifiers
+    public static func infer(from specifiers: [String]) -> DataType? {
+        guard let typeStr = specifiers.first else { return nil }
+        let parsed = parse(typeStr)
+        return parsed == .schema(typeStr) && typeStr.lowercased() == typeStr ? nil : parsed
     }
 }
 
