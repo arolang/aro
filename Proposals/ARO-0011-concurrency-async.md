@@ -2,7 +2,7 @@
 
 * Proposal: ARO-0011
 * Author: ARO Language Team
-* Status: **Accepted**
+* Status: **Implemented**
 * Requires: ARO-0001
 
 ## Abstract
