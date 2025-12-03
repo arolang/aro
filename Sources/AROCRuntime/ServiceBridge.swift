@@ -947,8 +947,30 @@ public func aro_file_watcher_destroy(_ watcherPtr: UnsafeMutableRawPointer?) {
 
 #if canImport(Darwin)
 import Darwin
+
+@inline(__always)
+private func systemClose(_ fd: Int32) -> Int32 {
+    Darwin.close(fd)
+}
+
+@inline(__always)
+private func systemSend(_ fd: Int32, _ buf: UnsafeRawPointer!, _ len: Int, _ flags: Int32) -> Int {
+    Darwin.send(fd, buf, len, flags)
+}
 #elseif canImport(Glibc)
 import Glibc
+
+@inline(__always)
+private func systemClose(_ fd: Int32) -> Int32 {
+    Glibc.close(fd)
+}
+
+@inline(__always)
+private func systemSend(_ fd: Int32, _ buf: UnsafeRawPointer!, _ len: Int, _ flags: Int32) -> Int {
+    Glibc.send(fd, buf, len, flags)
+}
+
+private let SOCK_STREAM = Int32(Glibc.SOCK_STREAM.rawValue)
 #endif
 
 /// Native TCP Socket Server using BSD sockets
@@ -1014,7 +1036,7 @@ public final class NativeSocketServer: @unchecked Sendable {
 
         guard bindResult == 0 else {
             print("[NativeSocketServer] Failed to bind to port \(port)")
-            Darwin.close(serverFd)
+            systemClose(serverFd)
             serverFd = -1
             return false
         }
@@ -1022,7 +1044,7 @@ public final class NativeSocketServer: @unchecked Sendable {
         // Listen
         guard listen(serverFd, 10) == 0 else {
             print("[NativeSocketServer] Failed to listen")
-            Darwin.close(serverFd)
+            systemClose(serverFd)
             serverFd = -1
             return false
         }
@@ -1049,12 +1071,12 @@ public final class NativeSocketServer: @unchecked Sendable {
 
         // Close all client connections
         for (_, fd) in conns {
-            Darwin.close(fd)
+            systemClose(fd)
         }
 
         // Close server socket
         if serverFd >= 0 {
-            Darwin.close(serverFd)
+            systemClose(serverFd)
             serverFd = -1
         }
 
@@ -1072,7 +1094,7 @@ public final class NativeSocketServer: @unchecked Sendable {
         lock.unlock()
 
         let result = data.withUnsafeBytes { buffer in
-            Darwin.send(fd, buffer.baseAddress!, data.count, 0)
+            systemSend(fd, buffer.baseAddress!, data.count, 0)
         }
 
         return result >= 0
@@ -1129,7 +1151,7 @@ public final class NativeSocketServer: @unchecked Sendable {
         connections.removeValue(forKey: connectionId)
         lock.unlock()
 
-        Darwin.close(fd)
+        systemClose(fd)
         disconnectHandler?(connectionId)
     }
 }
