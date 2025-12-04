@@ -192,7 +192,7 @@ ARO code:
 <Log> the <message> for the <console> with <user: name>.
 ```
 
-The runtime error message IS the error handling. See the [Error Handling](ErrorHandling.md) chapter for more details.
+The runtime error message IS the error handling. See the [Error Handling](errorhandling.html) chapter for more details.
 
 ## OpenAPI Without HTTP
 

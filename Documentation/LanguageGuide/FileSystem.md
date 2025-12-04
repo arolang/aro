@@ -366,6 +366,6 @@ Feature sets with business activity `File Event Handler` receive file events. Th
 
 ## Next Steps
 
-- [Sockets](Sockets.md) - TCP communication
-- [Events](Events.md) - Event-driven architecture
-- [Application Lifecycle](ApplicationLifecycle.md) - Startup and shutdown
+- [Sockets](sockets.html) - TCP communication
+- [Events](events.html) - Event-driven architecture
+- [Application Lifecycle](applicationlifecycle.html) - Startup and shutdown

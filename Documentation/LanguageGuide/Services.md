@@ -298,6 +298,6 @@ Compiled plugins are cached in `.aro-cache/` and only recompiled when source cha
 
 ## Next Steps
 
-- [Actions](Actions.md) - All built-in actions
-- [HTTP Services](HTTPServices.md) - Built-in HTTP server
-- [Events](Events.md) - Event-driven patterns
+- [Actions](actions.html) - All built-in actions
+- [HTTP Services](httpservices.html) - Built-in HTTP server
+- [Events](events.html) - Event-driven patterns

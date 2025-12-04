@@ -349,6 +349,6 @@ Only create variables you need:
 
 ## Next Steps
 
-- [Control Flow](ControlFlow.md) - Conditional logic
-- [Events](Events.md) - Event-driven data flow
-- [Feature Sets](FeatureSets.md) - Organizing code
+- [Control Flow](controlflow.html) - Conditional logic
+- [Events](events.html) - Event-driven data flow
+- [Feature Sets](featuresets.html) - Organizing code

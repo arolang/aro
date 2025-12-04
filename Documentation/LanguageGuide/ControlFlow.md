@@ -425,6 +425,6 @@ if <user: active> and <user: verified> then {
 
 ## Next Steps
 
-- [Events](Events.md) - Event-driven control flow
-- [Actions](Actions.md) - Actions that affect flow
-- [Feature Sets](FeatureSets.md) - Feature set structure
+- [Events](events.html) - Event-driven control flow
+- [Actions](actions.html) - Actions that affect flow
+- [Feature Sets](featuresets.html) - Feature set structure

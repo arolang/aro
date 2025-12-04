@@ -19,8 +19,8 @@ ARO is designed for building event-driven applications with clear, readable busi
 
 | Document | Description |
 |----------|-------------|
-| [Getting Started](GettingStarted.md) | Install ARO and write your first application |
-| [A Tour of ARO](LanguageTour.md) | A comprehensive introduction to ARO's features |
+| [Getting Started](getting-started.html) | Install ARO and write your first application |
+| [A Tour of ARO](language-tour.html) | A comprehensive introduction to ARO's features |
 
 ### Language Guide
 
@@ -28,19 +28,19 @@ Detailed documentation of ARO language features:
 
 | Chapter | Description |
 |---------|-------------|
-| [The Basics](LanguageGuide/TheBasics.md) | Fundamental concepts, syntax, and structure |
-| [Feature Sets](LanguageGuide/FeatureSets.md) | Defining and organizing feature sets |
-| [Actions](LanguageGuide/Actions.md) | Built-in actions and the ARO statement pattern |
-| [Variables and Data Flow](LanguageGuide/Variables.md) | Variable binding, scoping, and publishing |
-| [Type System](LanguageGuide/TypeSystem.md) | Primitives, collections, and OpenAPI types |
-| [Control Flow](LanguageGuide/ControlFlow.md) | Conditionals, guards, and branching |
-| [Error Handling](LanguageGuide/ErrorHandling.md) | The "Code Is The Error Message" philosophy |
-| [Concurrency](LanguageGuide/Concurrency.md) | Async feature sets, sync statements |
-| [Events](LanguageGuide/Events.md) | Event-driven programming and handlers |
-| [Application Lifecycle](LanguageGuide/ApplicationLifecycle.md) | Start, run, and shutdown |
-| [HTTP Services](LanguageGuide/HTTPServices.md) | HTTP server and client operations |
-| [File System](LanguageGuide/FileSystem.md) | File I/O and directory watching |
-| [Sockets](LanguageGuide/Sockets.md) | TCP communication |
+| [The Basics](guide/thebasics.html) | Fundamental concepts, syntax, and structure |
+| [Feature Sets](guide/featuresets.html) | Defining and organizing feature sets |
+| [Actions](guide/actions.html) | Built-in actions and the ARO statement pattern |
+| [Variables and Data Flow](guide/variables.html) | Variable binding, scoping, and publishing |
+| [Type System](guide/typesystem.html) | Primitives, collections, and OpenAPI types |
+| [Control Flow](guide/controlflow.html) | Conditionals, guards, and branching |
+| [Error Handling](guide/errorhandling.html) | The "Code Is The Error Message" philosophy |
+| [Concurrency](guide/concurrency.html) | Async feature sets, sync statements |
+| [Events](guide/events.html) | Event-driven programming and handlers |
+| [Application Lifecycle](guide/applicationlifecycle.html) | Start, run, and shutdown |
+| [HTTP Services](guide/httpservices.html) | HTTP server and client operations |
+| [File System](guide/filesystem.html) | File I/O and directory watching |
+| [Sockets](guide/sockets.html) | TCP communication |
 
 ### Language Reference
 
@@ -48,15 +48,15 @@ Formal language specification:
 
 | Document | Description |
 |----------|-------------|
-| [Grammar](LanguageReference/Grammar.md) | Complete EBNF grammar specification |
-| [Statements](LanguageReference/Statements.md) | Statement types and syntax |
-| [Actions Reference](LanguageReference/ActionsReference.md) | Complete action verb reference |
+| [Grammar](reference/grammar.html) | Complete EBNF grammar specification |
+| [Statements](reference/statements.html) | Statement types and syntax |
+| [Actions Reference](reference/actionsreference.html) | Complete action verb reference |
 
 ### Extending ARO
 
 | Document | Description |
 |----------|-------------|
-| [Action Developer Guide](ActionDeveloperGuide.md) | Creating custom actions in Swift |
+| [Action Developer Guide](action-developer-guide.html) | Creating custom actions in Swift |
 
 ## Quick Example
 
@@ -81,8 +81,8 @@ aro run ./HelloWorld
 
 ## Resources
 
-- [Evolution Proposals](../Proposals/README.md) - Language design proposals
-- [Examples](../Examples/) - Example applications
+- [Evolution Proposals](https://github.com/KrisSimon/aro/tree/main/Proposals) - Language design proposals
+- [Examples](https://github.com/KrisSimon/aro/tree/main/Examples) - Example applications
 - [GitHub Repository](https://github.com/KrisSimon/aro) - Source code
 
 ## Version

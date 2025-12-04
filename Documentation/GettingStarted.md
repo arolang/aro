@@ -101,6 +101,6 @@ aro build ./MyApp     # Compile to native binary
 
 ## Next Steps
 
-- [A Tour of ARO](LanguageTour.md)
-- [HTTP Services](LanguageGuide/HTTPServices.md)
-- [Events](LanguageGuide/Events.md)
+- [A Tour of ARO](language-tour.html)
+- [HTTP Services](guide/httpservices.html)
+- [Events](guide/events.html)
