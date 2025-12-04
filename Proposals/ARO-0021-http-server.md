@@ -118,9 +118,8 @@ The HTTP server starts automatically. The `Application-Start` feature set only n
     <Log> the <startup: message> for the <console> with "User API starting...".
 
     (* HTTP server starts automatically from openapi.yaml *)
-    (* No <Start> action needed *)
-
-    <Wait> for <shutdown-signal>.
+    (* Keep running to handle requests *)
+    <Keepalive> the <application> for the <events>.
 
     <Return> an <OK: status> for the <startup>.
 }
@@ -241,7 +240,7 @@ paths:
 ```aro
 (Application-Start: Hello World API) {
     <Log> the <startup: message> for the <console> with "Hello World API starting...".
-    <Wait> for <shutdown-signal>.
+    <Keepalive> the <application> for the <events>.
     <Return> an <OK: status> for the <startup>.
 }
 

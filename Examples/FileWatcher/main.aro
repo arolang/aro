@@ -9,7 +9,7 @@
     <Log> the <ready: message> for the <console> with "Watching for file changes... Press Ctrl+C to stop.".
 
     (* Keep the application running until Ctrl+C *)
-    <Wait> for <shutdown-signal>.
+    <Keepalive> the <application> for the <events>.
 
     <Return> an <OK: status> for the <startup>.
 }

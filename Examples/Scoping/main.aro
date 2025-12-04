@@ -22,7 +22,7 @@
     <Emit> a <StartupComplete: event> for the <application>.
 
     (* Keep application running until Ctrl+C *)
-    <Wait> for <shutdown-signal>.
+    <Keepalive> the <application> for the <events>.
 
     <Return> an <OK: status> for the <startup>.
 }

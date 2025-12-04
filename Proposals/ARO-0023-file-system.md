@@ -135,7 +135,7 @@ A file watcher application that monitors a directory and logs all file changes:
     <Log> the <ready: message> for the <console> with "Watching for file changes... Press Ctrl+C to stop.".
 
     (* Keep the application running until Ctrl+C *)
-    <Wait> for <shutdown-signal>.
+    <Keepalive> the <application> for the <events>.
 
     <Return> an <OK: status> for the <startup>.
 }
@@ -174,7 +174,7 @@ An application that processes files from an inbox directory:
 (Application-Start: File Processor) {
     <Log> the <startup: message> for the <console> with "Starting file processor".
     <Watch> the <file-monitor> for the <directory> with "./inbox".
-    <Wait> for <shutdown-signal>.
+    <Keepalive> the <application> for the <events>.
     <Return> an <OK: status> for the <startup>.
 }
 

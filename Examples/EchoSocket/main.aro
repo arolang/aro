@@ -9,7 +9,7 @@
     <Log> the <ready: message> for the <console> with "Socket server listening on port 9000".
 
     (* Keep the application running until Ctrl+C *)
-    <Wait> for <shutdown-signal>.
+    <Keepalive> the <application> for the <events>.
 
     <Return> an <OK: status> for the <startup>.
 }

@@ -97,62 +97,75 @@ Directories are created automatically when writing:
 
 ### Starting a Watcher
 
-Watch directories for changes:
+Watch directories for changes using the `<Watch>` action:
 
 ```aro
 (Application-Start: File Processor) {
-    <Watch> the <directory: "./inbox"> as <inbox-watcher>.
-    <Watch> the <directory: "./uploads"> as <upload-watcher>.
+    <Log> the <startup: message> for the <console> with "Starting file processor".
+
+    (* Watch the inbox directory for new files *)
+    <Watch> the <file-monitor> for the <directory> with "./inbox".
+
+    (* Keep running until shutdown *)
+    <Keepalive> the <application> for the <events>.
+
     <Return> an <OK: status> for the <startup>.
 }
 ```
+
+**Watch Syntax:**
+```aro
+<Watch> the <file-monitor> for the <directory> with "path".
+```
+
+The `<Watch>` action:
+- Monitors the specified directory recursively
+- Emits events when files are created, modified, or deleted
+- Runs asynchronously (does not block execution)
+- Continues until application shutdown
 
 ### File Events
 
 Watchers emit events when files change:
 
-| Event | When Triggered |
-|-------|----------------|
-| `FileCreated` | New file created |
-| `FileModified` | Existing file modified |
-| `FileDeleted` | File deleted |
-| `FileRenamed` | File renamed |
+| Event | When Triggered | Data |
+|-------|----------------|------|
+| `FileCreatedEvent` | New file created | `path` - file path |
+| `FileModifiedEvent` | Existing file modified | `path` - file path |
+| `FileDeletedEvent` | File deleted | `path` - file path |
 
-### Event Handlers
+### Event Handler Naming Convention
+
+Feature sets with business activity `File Event Handler` receive file events. The feature set name determines which event type it handles:
+
+| Feature Set Name | Handles Event |
+|------------------|---------------|
+| `Handle File Created` | `FileCreatedEvent` |
+| `Handle File Modified` | `FileModifiedEvent` |
+| `Handle File Deleted` | `FileDeletedEvent` |
+
+### Event Handler Examples
 
 ```aro
-(* New file created *)
-(Process New File: FileCreated Handler) {
+(* Handle new files *)
+(Handle File Created: File Event Handler) {
     <Extract> the <path> from the <event: path>.
-    <Log> the <message> for the <console> with "New file: ${path}".
-    <Read> the <content> from the <file: path>.
-    <Process> the <result> from the <content>.
-    <Return> an <OK: status> for the <processing>.
+    <Log> the <file-created: message> for the <console>.
+    <Return> an <OK: status> for the <event>.
 }
 
-(* File modified *)
-(Handle Modified: FileModified Handler) {
+(* Handle modified files *)
+(Handle File Modified: File Event Handler) {
     <Extract> the <path> from the <event: path>.
-    <Log> the <message> for the <console> with "Modified: ${path}".
-    <Read> the <content> from the <file: path>.
-    (* Process updated content *)
-    <Return> an <OK: status> for the <update>.
+    <Log> the <file-modified: message> for the <console>.
+    <Return> an <OK: status> for the <event>.
 }
 
-(* File deleted *)
-(Handle Deleted: FileDeleted Handler) {
+(* Handle deleted files *)
+(Handle File Deleted: File Event Handler) {
     <Extract> the <path> from the <event: path>.
-    <Log> the <message> for the <console> with "Deleted: ${path}".
-    (* Clean up related data *)
-    <Return> an <OK: status> for the <cleanup>.
-}
-
-(* File renamed *)
-(Handle Renamed: FileRenamed Handler) {
-    <Extract> the <old-path> from the <event: oldPath>.
-    <Extract> the <new-path> from the <event: newPath>.
-    <Log> the <message> for the <console> with "Renamed: ${old-path} -> ${new-path}".
-    <Return> an <OK: status> for the <rename>.
+    <Log> the <file-deleted: message> for the <console>.
+    <Return> an <OK: status> for the <event>.
 }
 ```
 
@@ -166,14 +179,15 @@ Watchers emit events when files change:
     <Read> the <config: JSON> from the <file: "./config.json">.
     <Publish> as <app-config> <config>.
 
-    (* Watch for changes *)
-    <Watch> the <directory: "."> as <config-watcher>.
+    (* Watch for config changes *)
+    <Watch> the <file-monitor> for the <directory> with ".".
 
     <Start> the <http-server> on port <config: port>.
+    <Wait> for <shutdown-signal>.
     <Return> an <OK: status> for the <startup>.
 }
 
-(Reload Config: FileModified Handler) {
+(Handle File Modified: File Event Handler) {
     <Extract> the <path> from the <event: path>.
 
     if <path> is "./config.json" then {
@@ -191,8 +205,9 @@ Watchers emit events when files change:
 
 ```aro
 (Application-Start: Upload Processor) {
-    <Watch> the <directory: "./uploads"> as <upload-watcher>.
+    <Watch> the <file-monitor> for the <directory> with "./uploads".
     <Start> the <http-server> on port 8080.
+    <Wait> for <shutdown-signal>.
     <Return> an <OK: status> for the <startup>.
 }
 
@@ -205,7 +220,7 @@ Watchers emit events when files change:
     <Return> a <Created: status> with { filename: <filename> }.
 }
 
-(Process Upload: FileCreated Handler) {
+(Handle File Created: File Event Handler) {
     <Extract> the <path> from the <event: path>.
 
     (* Only process files in uploads directory *)
