@@ -367,21 +367,7 @@ public final class PluginLoader: @unchecked Sendable {
     /// Get Windows error message
     private func getWindowsError() -> String {
         let errorCode = GetLastError()
-        var buffer: UnsafeMutablePointer<WCHAR>?
-        let length = FormatMessageW(
-            DWORD(FORMAT_MESSAGE_ALLOCATE_BUFFER | FORMAT_MESSAGE_FROM_SYSTEM | FORMAT_MESSAGE_IGNORE_INSERTS),
-            nil,
-            errorCode,
-            0,
-            UnsafeMutablePointer<WCHAR>(OpaquePointer(&buffer)),
-            0,
-            nil
-        )
-        defer { LocalFree(buffer) }
-        if length > 0, let buffer = buffer {
-            return String(decodingCString: buffer, as: UTF16.self)
-        }
-        return "Error code: \(errorCode)"
+        return "Windows error code: \(errorCode)"
     }
     #endif
 
@@ -429,7 +415,8 @@ public final class PluginLoader: @unchecked Sendable {
 
         for (name, handle) in loadedPlugins {
             #if os(Windows)
-            FreeLibrary(HMODULE(handle))
+            let hmodule = unsafeBitCast(handle, to: HMODULE.self)
+            FreeLibrary(hmodule)
             #else
             dlclose(handle)
             #endif
