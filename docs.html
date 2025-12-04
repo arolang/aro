@@ -8,6 +8,7 @@
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="style.css">
+    <link rel="stylesheet" href="animations.css">
     <!-- Matomo -->
     <script>
         var _paq = window._paq = window._paq || [];
@@ -176,13 +177,13 @@
 
     <header class="docs-hero">
         <h1 class="gradient-text">Documentation</h1>
-        <p class="lead">
+        <p class="lead animate-on-scroll">
             Everything you need to build amazing applications with ARO.
         </p>
     </header>
 
     <main class="docs-content">
-        <div class="quick-links">
+        <div class="quick-links animate-on-scroll glass-card">
             <h3>&#x26A1; Quick Links</h3>
             <div class="quick-links-grid">
                 <a href="getting-started.html" class="quick-link">
@@ -211,7 +212,7 @@
             </div>
 
             <div class="docs-grid">
-                <a href="getting-started.html" class="doc-card">
+                <a href="getting-started.html" class="doc-card animate-on-scroll stagger-1 hover-lift">
                     <div class="doc-card-icon">&#x1F331;</div>
                     <h3>Getting Started</h3>
                     <p>
@@ -221,7 +222,7 @@
                     <span class="doc-card-link">Start tutorial →</span>
                 </a>
 
-                <a href="fdd.html" class="doc-card">
+                <a href="fdd.html" class="doc-card animate-on-scroll stagger-2 hover-lift">
                     <div class="doc-card-icon">&#x1F4DA;</div>
                     <h3>The FDD Story</h3>
                     <p>
@@ -231,7 +232,7 @@
                     <span class="doc-card-link">Read the story →</span>
                 </a>
 
-                <a href="docs/language-tour.html" class="doc-card">
+                <a href="docs/language-tour.html" class="doc-card animate-on-scroll stagger-3 hover-lift">
                     <div class="doc-card-icon">&#x1F30D;</div>
                     <h3>Language Tour</h3>
                     <p>
@@ -250,7 +251,7 @@
             </div>
 
             <div class="docs-grid">
-                <a href="docs/guide/thebasics.html" class="doc-card">
+                <a href="docs/guide/thebasics.html" class="doc-card animate-on-scroll stagger-1 hover-lift">
                     <div class="doc-card-icon">&#x1F3AF;</div>
                     <h3>The Basics</h3>
                     <p>
@@ -260,7 +261,7 @@
                     <span class="doc-card-link">Learn basics →</span>
                 </a>
 
-                <a href="docs/guide/featuresets.html" class="doc-card">
+                <a href="docs/guide/featuresets.html" class="doc-card animate-on-scroll stagger-2 hover-lift">
                     <div class="doc-card-icon">&#x1F4E6;</div>
                     <h3>Feature Sets</h3>
                     <p>
@@ -270,7 +271,7 @@
                     <span class="doc-card-link">Learn feature sets →</span>
                 </a>
 
-                <a href="docs/guide/actions.html" class="doc-card">
+                <a href="docs/guide/actions.html" class="doc-card animate-on-scroll stagger-3 hover-lift">
                     <div class="doc-card-icon">&#x26A1;</div>
                     <h3>Actions</h3>
                     <p>
@@ -280,7 +281,7 @@
                     <span class="doc-card-link">Explore actions →</span>
                 </a>
 
-                <a href="docs/guide/applicationlifecycle.html" class="doc-card">
+                <a href="docs/guide/applicationlifecycle.html" class="doc-card animate-on-scroll stagger-4 hover-lift">
                     <div class="doc-card-icon">&#x1F504;</div>
                     <h3>Application Lifecycle</h3>
                     <p>
@@ -420,6 +421,9 @@
         </section>
     </main>
 
+    <!-- Progress Bar -->
+    <div class="progress-bar" id="progressBar"></div>
+
     <footer class="footer">
         <div class="container">
             <div class="footer-content">
@@ -432,6 +436,7 @@
                     <div class="footer-col">
                         <h4>Learn</h4>
                         <a href="getting-started.html">Getting Started</a>
+                        <a href="tutorial.html">Tutorial</a>
                         <a href="docs.html">Documentation</a>
                         <a href="fdd.html">FDD History</a>
                     </div>
@@ -448,5 +453,9 @@
             </div>
         </div>
     </footer>
+
+    <!-- Animation Scripts -->
+    <script src="animations.js"></script>
+
 </body>
 </html>

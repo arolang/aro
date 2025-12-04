@@ -8,6 +8,7 @@
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="../../style.css">
+    <link rel="stylesheet" href="../../animations.css">
     <!-- Matomo -->
     <script>
         var _paq = window._paq = window._paq || [];
@@ -182,7 +183,7 @@
         </div>
     </nav>
 
-    <main class="doc-page">
+    <main class="doc-page animate-on-scroll">
         <a href="../../docs.html" class="back-link">&#x2190; Back to Documentation</a>
         <h1>Concurrency</h1>
 <p>ARO&#39;s concurrency model is radically simple: <strong>feature sets are async, statements are sync</strong>. This chapter explains how ARO handles concurrent operations without requiring you to think about threads, locks, or async/await.</p>
@@ -404,12 +405,41 @@
 
     </main>
 
+    <!-- Progress Bar -->
+    <div class="progress-bar" id="progressBar"></div>
+
     <footer class="footer">
         <div class="container">
+            <div class="footer-content">
+                <div class="footer-brand">
+                    <span class="logo-aro">ARO</span>
+                    <p>The ARO Programming Language</p>
+                    <p class="footer-tagline">Speak Business. Write Code.</p>
+                </div>
+                <div class="footer-links">
+                    <div class="footer-col">
+                        <h4>Learn</h4>
+                        <a href="../../getting-started.html">Getting Started</a>
+                        <a href="../../tutorial.html">Tutorial</a>
+                        <a href="../../docs.html">Documentation</a>
+                        <a href="../../fdd.html">FDD History</a>
+                    </div>
+                    <div class="footer-col">
+                        <h4>Community</h4>
+                        <a href="https://github.com/KrisSimon/aro">GitHub</a>
+                        <a href="https://github.com/KrisSimon/aro/issues">Issues</a>
+                        <a href="../../disclaimer.html">Motivation & Disclaimer</a>
+                    </div>
+                </div>
+            </div>
             <div class="footer-bottom">
                 <p>Sometime this page should build with ARO. Obviously.</p>
             </div>
         </div>
     </footer>
+
+    <!-- Animation Scripts -->
+    <script src="../../animations.js"></script>
+
 </body>
 </html>

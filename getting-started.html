@@ -8,6 +8,7 @@
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="style.css">
+    <link rel="stylesheet" href="animations.css">
     <!-- Matomo -->
     <script>
         var _paq = window._paq = window._paq || [];
@@ -271,7 +272,7 @@
     </header>
 
     <main class="guide-content">
-        <div class="step">
+        <div class="step animate-on-scroll">
             <div class="step-header">
                 <div class="step-number">1</div>
                 <h2>Create Your Project</h2>
@@ -297,7 +298,7 @@
             </div>
         </div>
 
-        <div class="step">
+        <div class="step animate-on-scroll">
             <div class="step-header">
                 <div class="step-number">2</div>
                 <h2>Define Your API Contract</h2>
@@ -342,7 +343,7 @@
             </div>
         </div>
 
-        <div class="step">
+        <div class="step animate-on-scroll">
             <div class="step-header">
                 <div class="step-number">3</div>
                 <h2>Write Your Application Entry Point</h2>
@@ -378,7 +379,7 @@
             </div>
         </div>
 
-        <div class="step">
+        <div class="step animate-on-scroll">
             <div class="step-header">
                 <div class="step-number">4</div>
                 <h2>Create Your Feature Handler</h2>
@@ -418,7 +419,7 @@
             </div>
         </div>
 
-        <div class="step">
+        <div class="step animate-on-scroll">
             <div class="step-header">
                 <div class="step-number">5</div>
                 <h2>Run Your Application</h2>
@@ -458,7 +459,7 @@ Server running at http://localhost:8000
             <p>&#x1F389; <strong>That's it!</strong> You've built your first ARO application.</p>
         </div>
 
-        <div class="next-steps">
+        <div class="next-steps animate-on-scroll glass-card">
             <h3>What's Next?</h3>
             <p>
                 You've just scratched the surface. ARO can handle complex APIs,
@@ -470,6 +471,9 @@ Server running at http://localhost:8000
             </div>
         </div>
     </main>
+
+    <!-- Progress Bar -->
+    <div class="progress-bar" id="progressBar"></div>
 
     <footer class="footer">
         <div class="container">
@@ -483,6 +487,7 @@ Server running at http://localhost:8000
                     <div class="footer-col">
                         <h4>Learn</h4>
                         <a href="getting-started.html">Getting Started</a>
+                        <a href="tutorial.html">Tutorial</a>
                         <a href="docs.html">Documentation</a>
                         <a href="fdd.html">FDD History</a>
                     </div>
@@ -499,5 +504,9 @@ Server running at http://localhost:8000
             </div>
         </div>
     </footer>
+
+    <!-- Animation Scripts -->
+    <script src="animations.js"></script>
+
 </body>
 </html>

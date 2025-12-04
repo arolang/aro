@@ -8,6 +8,7 @@
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="style.css">
+    <link rel="stylesheet" href="animations.css">
     <!-- Matomo -->
     <script>
         var _paq = window._paq = window._paq || [];
@@ -302,14 +303,14 @@
             <span class="gradient-text-alt">The Forgotten</span><br>
             <span class="gradient-text">Methodology</span>
         </h1>
-        <p class="lead">
+        <p class="lead animate-on-scroll">
             In 1997, a brilliant idea was born: what if code could speak the language of business?
             Then the world forgot about it. Until now.
         </p>
     </header>
 
     <main class="story-content">
-        <section class="story-section">
+        <section class="story-section animate-on-scroll">
             <h2>&#x1F4D6; Once Upon a Time in Singapore...</h2>
 
             <p>
@@ -350,7 +351,7 @@
             </div>
         </section>
 
-        <section class="story-section">
+        <section class="story-section animate-on-scroll">
             <h2>&#x2728; The Magic Formula</h2>
 
             <p>
@@ -441,7 +442,7 @@
             </p>
         </section>
 
-        <section class="story-section">
+        <section class="story-section animate-on-scroll">
             <h2>&#x1F4A8; So What Happened?</h2>
 
             <p>
@@ -496,7 +497,7 @@
             </div>
         </section>
 
-        <section class="story-section">
+        <section class="story-section animate-on-scroll">
             <h2>&#x1F916; Why AI Changes Everything</h2>
 
             <p>
@@ -553,7 +554,7 @@
             </p>
         </section>
 
-        <section class="story-section">
+        <section class="story-section animate-on-scroll">
             <h2>&#x1F680; The Future is Features</h2>
 
             <p>
@@ -577,6 +578,9 @@
         </section>
     </main>
 
+    <!-- Progress Bar -->
+    <div class="progress-bar" id="progressBar"></div>
+
     <footer class="footer">
         <div class="container">
             <div class="footer-content">
@@ -589,6 +593,7 @@
                     <div class="footer-col">
                         <h4>Learn</h4>
                         <a href="getting-started.html">Getting Started</a>
+                        <a href="tutorial.html">Tutorial</a>
                         <a href="docs.html">Documentation</a>
                         <a href="fdd.html">FDD History</a>
                     </div>
@@ -605,5 +610,9 @@
             </div>
         </div>
     </footer>
+
+    <!-- Animation Scripts -->
+    <script src="animations.js"></script>
+
 </body>
 </html>

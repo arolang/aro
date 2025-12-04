@@ -8,6 +8,7 @@
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="style.css">
+    <link rel="stylesheet" href="animations.css">
     <!-- Matomo -->
     <script>
         var _paq = window._paq = window._paq || [];
@@ -311,7 +312,7 @@
     <main class="page-content">
 
         <!-- MOTIVATION SECTION -->
-        <div class="motivation-section">
+        <div class="motivation-section animate-on-scroll">
             <h3><span class="section-icon">&#x1F504;</span> Inverting the Relationship</h3>
             <p>
                 Here's the thing about AI code generation: we've been doing it backwards.
@@ -333,7 +334,7 @@
             </p>
         </div>
 
-        <div class="motivation-section accent-cyan">
+        <div class="motivation-section accent-cyan animate-on-scroll">
             <h3><span class="section-icon">&#x1F4AC;</span> Language as the Programming Method</h3>
             <p>
                 Most programming languages are designed for computers first, humans second. They have
@@ -351,7 +352,7 @@
             </p>
         </div>
 
-        <div class="quote-block">
+        <div class="quote-block animate-on-scroll">
             <blockquote>
                 "The best interface between humans and AI is... just talking. So we made a language where
                 talking <em>is</em> programming."
@@ -359,7 +360,7 @@
             <div class="attribution">— The ARO Philosophy (written by an AI, naturally)</div>
         </div>
 
-        <div class="motivation-section accent-green">
+        <div class="motivation-section accent-green animate-on-scroll">
             <h3><span class="section-icon">&#x1F3B8;</span> Vibe Coding: A Confession</h3>
             <p>
                 Let's be honest about what "vibe coding" really is. It's that magical state where you're
@@ -383,7 +384,7 @@
             </p>
         </div>
 
-        <div class="motivation-section accent-pink">
+        <div class="motivation-section accent-pink animate-on-scroll">
             <h3><span class="section-icon">&#x1F52E;</span> Where Could This Go?</h3>
             <p>
                 We're not going to pretend we have all the answers. This is an experiment, not a manifesto.
@@ -418,7 +419,7 @@
             <span>Now for the serious part</span>
         </div>
 
-        <div class="warning-banner">
+        <div class="warning-banner animate-on-scroll">
             <div class="warning-icon">&#x26A0;</div>
             <h2>Experimental Project</h2>
             <p>
@@ -492,6 +493,9 @@
         </div>
     </main>
 
+    <!-- Progress Bar -->
+    <div class="progress-bar" id="progressBar"></div>
+
     <footer class="footer">
         <div class="container">
             <div class="footer-content">
@@ -504,6 +508,7 @@
                     <div class="footer-col">
                         <h4>Learn</h4>
                         <a href="getting-started.html">Getting Started</a>
+                        <a href="tutorial.html">Tutorial</a>
                         <a href="docs.html">Documentation</a>
                         <a href="fdd.html">FDD History</a>
                     </div>
@@ -520,5 +525,9 @@
             </div>
         </div>
     </footer>
+
+    <!-- Animation Scripts -->
+    <script src="animations.js"></script>
+
 </body>
 </html>

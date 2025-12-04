@@ -8,6 +8,7 @@
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="style.css">
+    <link rel="stylesheet" href="animations.css">
     <!-- Matomo -->
     <script>
         var _paq = window._paq = window._paq || [];
@@ -83,30 +84,30 @@
 
     <section class="features-section">
         <div class="container">
-            <h2 class="section-title">
+            <h2 class="section-title animate-on-scroll">
                 <span class="gradient-text">Action.</span>
                 <span class="gradient-text-alt">Result.</span>
                 <span class="gradient-text-third">Object.</span>
             </h2>
-            <p class="section-subtitle">
+            <p class="section-subtitle animate-on-scroll">
                 Every statement in ARO follows the natural pattern of how we describe work.<br>
                 It's not magic. It's just really, really good design.
             </p>
 
             <div class="feature-cards">
-                <div class="feature-card">
+                <div class="feature-card animate-on-scroll stagger-1 hover-lift glass-card">
                     <div class="card-icon">&#x1F3AF;</div>
                     <h3>Features First</h3>
                     <p>Write code the way you write user stories. Each feature set maps directly to a business capability.</p>
                     <code>&lt;Extract&gt; the &lt;user&gt; from the &lt;request&gt;.</code>
                 </div>
-                <div class="feature-card">
+                <div class="feature-card animate-on-scroll stagger-2 hover-lift glass-card">
                     <div class="card-icon">&#x1F916;</div>
                     <h3>AI Native</h3>
                     <p>The first language designed from the ground up for AI collaboration. Natural language syntax that LLMs understand intuitively.</p>
                     <code>&lt;Validate&gt; the &lt;data&gt; against &lt;schema&gt;.</code>
                 </div>
-                <div class="feature-card">
+                <div class="feature-card animate-on-scroll stagger-3 hover-lift glass-card">
                     <div class="card-icon">&#x1F4DD;</div>
                     <h3>Contract First</h3>
                     <p>Your OpenAPI contract is your routing table. Define your API, and ARO handles the rest.</p>
@@ -120,27 +121,27 @@
         <div class="container">
             <div class="ai-content">
                 <div class="ai-text">
-                    <h2 class="gradient-text-alt">Why AI Needs<br>a New Language</h2>
-                    <p class="lead">
+                    <h2 class="gradient-text-alt animate-on-scroll">Why AI Needs<br>a New Language</h2>
+                    <p class="lead animate-on-scroll">
                         Think about it. When you ask an AI to write code, you describe what you want in natural language.
                         Then the AI translates that into Python, JavaScript, or Rust.
                     </p>
-                    <p>
+                    <p class="animate-on-scroll">
                         <strong>That translation step? It's where bugs are born.</strong>
                     </p>
-                    <p>
+                    <p class="animate-on-scroll">
                         ARO eliminates the gap. The language <em>is</em> the specification. When you write
                         <code>&lt;Store&gt; the &lt;user&gt; into the &lt;database&gt;</code>, there's no ambiguity.
                         The AI doesn't have to guess what you meant.
                     </p>
-                    <div class="ai-quote">
+                    <div class="ai-quote animate-on-scroll">
                         <blockquote>
                             "The best code is code that reads like a conversation between the business and the computer."
                         </blockquote>
                     </div>
                 </div>
-                <div class="ai-visual">
-                    <div class="comparison">
+                <div class="ai-visual animate-on-scroll">
+                    <div class="comparison glass-card">
                         <div class="comparison-old">
                             <h4>Traditional Flow</h4>
                             <div class="flow-items">
@@ -172,16 +173,19 @@
 
     <section class="cta-section">
         <div class="container">
-            <h2 class="cta-title gradient-text">Ready to Build?</h2>
-            <p class="cta-subtitle">
+            <h2 class="cta-title gradient-text animate-on-scroll">Ready to Build?</h2>
+            <p class="cta-subtitle animate-on-scroll">
                 Join the developers who are writing the future—one feature at a time.
             </p>
-            <div class="cta-buttons">
-                <a href="getting-started.html" class="btn btn-primary btn-large">Get Started Free</a>
-                <a href="fdd.html" class="btn btn-outline btn-large">Read the FDD Story</a>
+            <div class="cta-buttons animate-on-scroll">
+                <a href="getting-started.html" class="btn btn-primary btn-large hover-glow">Get Started Free</a>
+                <a href="fdd.html" class="btn btn-outline btn-large hover-lift">Read the FDD Story</a>
             </div>
         </div>
     </section>
+
+    <!-- Progress Bar -->
+    <div class="progress-bar" id="progressBar"></div>
 
     <footer class="footer">
         <div class="container">
@@ -212,5 +216,9 @@
             </div>
         </div>
     </footer>
+
+    <!-- Animation Scripts -->
+    <script src="animations.js"></script>
+
 </body>
 </html>
