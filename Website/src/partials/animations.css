@@ -299,6 +299,56 @@ html {
 }
 
 /* =============================================================================
+   GitHub Link with Stars
+   ============================================================================= */
+.nav-github {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 6px 12px;
+    background: rgba(255, 255, 255, 0.05);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    border-radius: 20px;
+    transition: all 0.3s var(--easing-smooth);
+}
+
+.nav-github:hover {
+    background: rgba(255, 255, 255, 0.1);
+    border-color: rgba(255, 255, 255, 0.2);
+    transform: translateY(-2px);
+}
+
+.nav-github svg {
+    width: 18px;
+    height: 18px;
+    fill: currentColor;
+}
+
+.github-stars {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    font-size: 0.85rem;
+    font-weight: 500;
+    color: var(--color-warning);
+}
+
+.github-stars svg {
+    width: 14px;
+    height: 14px;
+    fill: var(--color-warning);
+}
+
+.github-stars-count {
+    opacity: 0;
+    transition: opacity 0.3s ease;
+}
+
+.github-stars-count.loaded {
+    opacity: 1;
+}
+
+/* =============================================================================
    Responsive Adjustments
    ============================================================================= */
 @media (prefers-reduced-motion: reduce) {

@@ -144,6 +144,48 @@
     }
 
     // ==========================================================================
+    // GitHub Stars Fetcher
+    // ==========================================================================
+    function initGitHubStars() {
+        const starsCountEl = document.querySelector('.github-stars-count');
+        if (!starsCountEl) return;
+
+        // Check for cached value first (cache for 1 hour)
+        const cacheKey = 'github-stars-aro';
+        const cacheTimeKey = 'github-stars-aro-time';
+        const cached = localStorage.getItem(cacheKey);
+        const cacheTime = localStorage.getItem(cacheTimeKey);
+        const oneHour = 60 * 60 * 1000;
+
+        if (cached && cacheTime && (Date.now() - parseInt(cacheTime)) < oneHour) {
+            starsCountEl.textContent = cached;
+            starsCountEl.classList.add('loaded');
+            return;
+        }
+
+        // Fetch from GitHub API
+        fetch('https://api.github.com/repos/KrisSimon/aro')
+            .then(response => {
+                if (!response.ok) throw new Error('API error');
+                return response.json();
+            })
+            .then(data => {
+                const stars = data.stargazers_count;
+                const formatted = stars >= 1000 ? (stars / 1000).toFixed(1) + 'k' : stars.toString();
+                starsCountEl.textContent = formatted;
+                starsCountEl.classList.add('loaded');
+
+                // Cache the result
+                localStorage.setItem(cacheKey, formatted);
+                localStorage.setItem(cacheTimeKey, Date.now().toString());
+            })
+            .catch(() => {
+                // On error, hide the stars count gracefully
+                starsCountEl.style.display = 'none';
+            });
+    }
+
+    // ==========================================================================
     // Initialize All Animations
     // ==========================================================================
     function init() {
@@ -153,6 +195,7 @@
         initFloatingNav();
         initCardStagger();
         initNavScrollEffect();
+        initGitHubStars();
     }
 
     // Run on DOM ready
