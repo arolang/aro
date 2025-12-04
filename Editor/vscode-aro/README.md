@@ -56,31 +56,119 @@ Automatic matching for:
 
 Fold feature set bodies for better navigation in large files.
 
+---
+
 ## Installation
 
 ### From VS Code Marketplace
 
 1. Open VS Code
-2. Go to Extensions (Ctrl+Shift+X)
+2. Go to Extensions (`Ctrl+Shift+X` / `Cmd+Shift+X`)
 3. Search for "ARO Language"
-4. Click Install
+4. Click **Install**
 
-### Manual Installation
-
+Or install via command line:
 ```bash
-# Clone the repository
-git clone https://github.com/krissimon/aro.git
-cd aro/Editor/vscode-aro
-
-# Install as local extension
-code --install-extension .
+code --install-extension krissimon.aro-language
 ```
 
-### From VSIX Package
+### Install from VSIX Package
 
+If you have a pre-built `.vsix` file:
 ```bash
 code --install-extension aro-language-1.0.0.vsix
 ```
+
+### Install from Source (Development)
+
+```bash
+# Clone the repository
+git clone https://github.com/KrisSimon/aro.git
+cd aro/Editor/vscode-aro
+
+# Install in VS Code directly from folder
+code --install-extension .
+```
+
+---
+
+## Building from Source
+
+### Prerequisites
+
+- **Node.js** 18.x or later
+- **npm** 9.x or later
+- **VS Code** 1.74.0 or later
+
+### Build Steps
+
+```bash
+# Navigate to the extension directory
+cd Editor/vscode-aro
+
+# Install dependencies
+npm install
+
+# Compile TypeScript (if applicable)
+npm run compile
+
+# Package as VSIX
+npx vsce package
+
+# This creates: aro-language-1.0.0.vsix
+```
+
+### Development Mode
+
+To run the extension in development mode with hot reload:
+
+1. Open the `Editor/vscode-aro` folder in VS Code
+2. Press `F5` to launch the Extension Development Host
+3. Open any `.aro` file to test syntax highlighting and snippets
+4. Make changes to grammar or snippets
+5. Reload the Extension Development Host (`Ctrl+R` / `Cmd+R`)
+
+### Project Structure
+
+```
+vscode-aro/
+├── package.json              # Extension manifest
+├── language-configuration.json   # Bracket matching, comments
+├── syntaxes/
+│   └── aro.tmLanguage.json   # TextMate grammar for highlighting
+├── snippets/
+│   └── aro.code-snippets     # Code snippets
+└── README.md                 # This file
+```
+
+### Testing the Grammar
+
+1. Open VS Code with the extension loaded
+2. Open Command Palette (`Ctrl+Shift+P` / `Cmd+Shift+P`)
+3. Run "Developer: Inspect Editor Tokens and Scopes"
+4. Click on tokens in an `.aro` file to verify scopes
+
+---
+
+## Publishing
+
+### To VS Code Marketplace
+
+```bash
+# Login to Visual Studio Marketplace
+npx vsce login krissimon
+
+# Publish
+npx vsce publish
+```
+
+### To Open VSX Registry
+
+```bash
+npx ovsx publish -p <token>
+```
+
+---
 
 ## Usage
 
@@ -115,11 +203,30 @@ Create a file with the `.aro` extension and start writing ARO code:
 The extension automatically associates with:
 - `*.aro` - ARO source files
 
+---
+
+## Troubleshooting
+
+### Syntax highlighting not working
+
+1. Ensure the file has `.aro` extension
+2. Check that the extension is enabled
+3. Reload VS Code (`Ctrl+Shift+P` > "Developer: Reload Window")
+
+### Snippets not appearing
+
+1. Start typing the snippet prefix (e.g., `featureset`)
+2. Press `Ctrl+Space` to trigger IntelliSense
+3. Select the snippet and press `Tab`
+
+---
+
 ## Related Links
 
 - [ARO Language Website](https://krissimon.github.io/aro/)
-- [GitHub Repository](https://github.com/krissimon/aro)
-- [Language Proposals](https://github.com/krissimon/aro/tree/main/Proposals)
+- [GitHub Repository](https://github.com/KrisSimon/aro)
+- [Language Proposals](https://github.com/KrisSimon/aro/tree/main/Proposals)
+- [ARO-0030: IDE Integration Proposal](https://github.com/KrisSimon/aro/blob/main/Proposals/ARO-0030-ide-integration.md)
 
 ## License
 
