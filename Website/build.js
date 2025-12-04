@@ -18,6 +18,9 @@ const footerPartial = fs.readFileSync('src/partials/footer.html', 'utf8');
 fs.copyFileSync('src/partials/animations.css', 'dist/animations.css');
 fs.copyFileSync('src/partials/animations.js', 'dist/animations.js');
 
+// Copy social share image
+fs.copyFileSync('../Graphics/social.png', 'dist/social.png');
+
 // Process HTML file with partial injection
 function processHtmlFile(srcPath, destPath, basePath = '') {
     if (!fs.existsSync(srcPath)) return;
