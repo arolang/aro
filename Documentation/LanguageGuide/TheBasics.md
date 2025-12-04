@@ -374,6 +374,6 @@ The following words have special meaning in ARO:
 
 ## Next Steps
 
-- [Feature Sets](FeatureSets.md) - Organizing code into feature sets
-- [Actions](Actions.md) - Complete action reference
-- [Variables and Data Flow](Variables.md) - Data binding and scoping
+- [Feature Sets](featuresets.html) - Organizing code into feature sets
+- [Actions](actions.html) - Complete action reference
+- [Variables and Data Flow](variables.html) - Data binding and scoping

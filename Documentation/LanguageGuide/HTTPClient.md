@@ -96,5 +96,5 @@ The `<Request>` action automatically parses JSON responses. After a request, the
 
 ## See Also
 
-- [ARO-0022: HTTP Client](../../Proposals/ARO-0022-http-client.md) - Full specification
-- [Examples/HTTPClient](../../Examples/HTTPClient/) - Working example
+- [ARO-0022: HTTP Client](https://github.com/KrisSimon/aro/blob/main/Proposals/ARO-0022-http-client.md) - Full specification
+- [Examples/HTTPClient](https://github.com/KrisSimon/aro/tree/main/Examples/HTTPClient) - Working example

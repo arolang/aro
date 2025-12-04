@@ -416,6 +416,6 @@ Socket servers emit events for connection lifecycle:
 
 ## Next Steps
 
-- [Events](Events.md) - Event-driven patterns
-- [HTTP Services](HTTPServices.md) - HTTP communication
-- [Application Lifecycle](ApplicationLifecycle.md) - Startup and shutdown
+- [Events](events.html) - Event-driven patterns
+- [HTTP Services](httpservices.html) - HTTP communication
+- [Application Lifecycle](applicationlifecycle.html) - Startup and shutdown

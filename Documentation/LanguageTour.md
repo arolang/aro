@@ -555,8 +555,8 @@ paths:
 
 This tour has introduced you to ARO's key features. To learn more:
 
-- **[The Basics](LanguageGuide/TheBasics.md)** - Detailed syntax reference
-- **[Feature Sets](LanguageGuide/FeatureSets.md)** - Feature set patterns
-- **[Events](LanguageGuide/Events.md)** - Event-driven architecture
-- **[HTTP Services](LanguageGuide/HTTPServices.md)** - Building APIs
-- **[Action Developer Guide](ActionDeveloperGuide.md)** - Custom actions
+- **[The Basics](guide/thebasics.html)** - Detailed syntax reference
+- **[Feature Sets](guide/featuresets.html)** - Feature set patterns
+- **[Events](guide/events.html)** - Event-driven architecture
+- **[HTTP Services](guide/httpservices.html)** - Building APIs
+- **[Action Developer Guide](action-developer-guide.html)** - Custom actions

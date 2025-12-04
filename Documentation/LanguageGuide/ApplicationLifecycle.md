@@ -458,6 +458,6 @@ paths:
 
 ## Next Steps
 
-- [HTTP Services](HTTPServices.md) - HTTP server and client
-- [File System](FileSystem.md) - File operations and watching
-- [Events](Events.md) - Event-driven architecture
+- [HTTP Services](httpservices.html) - HTTP server and client
+- [File System](filesystem.html) - File operations and watching
+- [Events](events.html) - Event-driven architecture

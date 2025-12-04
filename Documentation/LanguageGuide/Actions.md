@@ -438,6 +438,6 @@ Pattern for event-driven updates:
 
 ## Next Steps
 
-- [Variables and Data Flow](Variables.md) - How data flows through actions
-- [Control Flow](ControlFlow.md) - Conditional execution
-- [Events](Events.md) - Event-driven patterns
+- [Variables and Data Flow](variables.html) - How data flows through actions
+- [Control Flow](controlflow.html) - Conditional execution
+- [Events](events.html) - Event-driven patterns

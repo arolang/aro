@@ -346,6 +346,6 @@ Follow a consistent pattern:
 
 ## Next Steps
 
-- [Actions](Actions.md) - Understanding and using actions
-- [Variables and Data Flow](Variables.md) - Variable binding and scoping
-- [Events](Events.md) - Event-driven programming
+- [Actions](actions.html) - Understanding and using actions
+- [Variables and Data Flow](variables.html) - Variable binding and scoping
+- [Events](events.html) - Event-driven programming

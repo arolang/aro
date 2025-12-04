@@ -286,6 +286,6 @@ Events may be delivered multiple times:
 
 ## Next Steps
 
-- [Application Lifecycle](ApplicationLifecycle.md) - Startup and shutdown events
-- [HTTP Services](HTTPServices.md) - Contract-first HTTP routing
-- [File System](FileSystem.md) - File system events
+- [Application Lifecycle](applicationlifecycle.html) - Startup and shutdown events
+- [HTTP Services](httpservices.html) - Contract-first HTTP routing
+- [File System](filesystem.html) - File system events

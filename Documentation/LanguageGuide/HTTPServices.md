@@ -147,6 +147,6 @@ For making outgoing HTTP requests:
 
 ## Next Steps
 
-- [File System](FileSystem.md) - File operations and monitoring
-- [Sockets](Sockets.md) - TCP communication
-- [Events](Events.md) - Event-driven patterns
+- [File System](filesystem.html) - File operations and monitoring
+- [Sockets](sockets.html) - TCP communication
+- [Events](events.html) - Event-driven patterns
