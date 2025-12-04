@@ -1,0 +1,300 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <title>Creating Custom Actions - ARO Programming Language</title>
+{{head}}
+    <style>
+        .doc-page { padding: 120px 24px 80px; max-width: 900px; margin: 0 auto; }
+        .doc-header { margin-bottom: 48px; }
+        .doc-header h1 { font-size: clamp(2rem, 5vw, 3rem); font-weight: 700; margin-bottom: 16px; letter-spacing: -0.02em; }
+        .doc-header .lead { font-size: 1.25rem; color: var(--color-text-muted); line-height: 1.7; }
+        .doc-page h2 { font-size: 1.8rem; font-weight: 600; margin: 48px 0 16px; padding-top: 24px; border-top: 1px solid rgba(255, 255, 255, 0.1); }
+        .doc-page h3 { font-size: 1.3rem; font-weight: 600; margin: 32px 0 12px; color: var(--color-secondary); }
+        .doc-page p { font-size: 1.1rem; color: var(--color-text-muted); line-height: 1.8; margin-bottom: 16px; }
+        .doc-page code { font-family: var(--font-mono); background: var(--color-bg-alt); padding: 3px 8px; border-radius: 4px; font-size: 0.9rem; color: var(--color-secondary); }
+        .doc-page pre { background: var(--color-bg-alt); border-radius: var(--radius-md); padding: 24px; overflow-x: auto; margin: 24px 0; border: 1px solid rgba(255, 255, 255, 0.1); }
+        .doc-page pre code { background: none; padding: 0; font-size: 0.9rem; line-height: 1.7; color: var(--color-text); }
+        .doc-page ul, .doc-page ol { color: var(--color-text-muted); margin: 16px 0 16px 24px; line-height: 1.8; }
+        .doc-page li { margin-bottom: 8px; }
+        .doc-page strong { color: var(--color-text); }
+        .doc-page table { width: 100%; border-collapse: collapse; margin: 24px 0; }
+        .doc-page th, .doc-page td { padding: 12px 16px; text-align: left; border: 1px solid rgba(255, 255, 255, 0.1); }
+        .doc-page th { background: var(--color-bg-alt); font-weight: 600; color: var(--color-text); }
+        .doc-page td { color: var(--color-text-muted); }
+        .highlight-box { background: rgba(124, 58, 237, 0.1); border: 1px solid rgba(124, 58, 237, 0.3); border-radius: var(--radius-md); padding: 24px; margin: 32px 0; }
+        .highlight-box h4 { color: var(--color-primary); font-size: 1.1rem; margin-bottom: 12px; }
+        .highlight-box p { margin-bottom: 0; }
+        .back-link { display: inline-flex; align-items: center; gap: 8px; color: var(--color-text-muted); text-decoration: none; font-size: 0.95rem; margin-bottom: 24px; transition: color 0.2s; }
+        .back-link:hover { color: var(--color-primary); }
+        .code-comment { color: #6b7280; }
+        .code-keyword { color: #7c3aed; font-weight: 600; }
+        .code-string { color: #10b981; }
+        .code-type { color: #06b6d4; }
+    </style>
+</head>
+<body>
+    <nav class="nav">
+        <div class="nav-content">
+            <a href="/aro/" class="logo"><span class="logo-aro">ARO</span></a>
+            <div class="nav-links">
+                <a href="../fdd.html">The FDD Story</a>
+                <a href="../getting-started.html">Get Started</a>
+                <a href="../docs.html" style="color: var(--color-text);">Docs</a>
+                <a href="../disclaimer.html">Motivation</a>
+                <a href="https://github.com/KrisSimon/aro" class="nav-github">GitHub</a>
+            </div>
+        </div>
+    </nav>
+
+    <main class="doc-page">
+        <a href="../docs.html" class="back-link">&#x2190; Back to Documentation</a>
+
+        <header class="doc-header">
+            <h1 class="gradient-text">Creating Custom Actions</h1>
+            <p class="lead">
+                Extend ARO with custom actions. Actions are the fundamental building blocks that
+                implement ARO verbs like <code>&lt;Extract&gt;</code>, <code>&lt;Create&gt;</code>,
+                <code>&lt;Return&gt;</code>, etc.
+            </p>
+        </header>
+
+        <h2>Understanding Actions</h2>
+        <p>In ARO, every statement follows the Action-Result-Object pattern:</p>
+
+        <pre><code>&lt;Verb&gt; the &lt;result&gt; from/to/with/for the &lt;object&gt;.</code></pre>
+
+        <p>Each verb maps to an action implementation that:</p>
+        <ol>
+            <li>Receives structured information about the statement</li>
+            <li>Executes business logic</li>
+            <li>Returns a result to be bound to a variable</li>
+        </ol>
+
+        <h2>The ActionImplementation Protocol</h2>
+        <pre><code><span class="code-keyword">public protocol</span> <span class="code-type">ActionImplementation</span>: <span class="code-type">Sendable</span> {
+    <span class="code-comment">/// The semantic role of this action</span>
+    <span class="code-keyword">static var</span> role: <span class="code-type">ActionRole</span> { <span class="code-keyword">get</span> }
+
+    <span class="code-comment">/// The verbs that trigger this action</span>
+    <span class="code-keyword">static var</span> verbs: <span class="code-type">Set</span>&lt;<span class="code-type">String</span>&gt; { <span class="code-keyword">get</span> }
+
+    <span class="code-comment">/// Valid prepositions for object clauses</span>
+    <span class="code-keyword">static var</span> validPrepositions: <span class="code-type">Set</span>&lt;<span class="code-type">Preposition</span>&gt; { <span class="code-keyword">get</span> }
+
+    <span class="code-comment">/// Required initializer</span>
+    <span class="code-keyword">init</span>()
+
+    <span class="code-comment">/// Execute the action</span>
+    <span class="code-keyword">func</span> execute(
+        result: <span class="code-type">ResultDescriptor</span>,
+        object: <span class="code-type">ObjectDescriptor</span>,
+        context: <span class="code-type">ExecutionContext</span>
+    ) <span class="code-keyword">async throws</span> -> <span class="code-keyword">any</span> <span class="code-type">Sendable</span>
+}</code></pre>
+
+        <h3>Key Points</h3>
+        <ul>
+            <li><strong>Sendable</strong>: Actions must be thread-safe</li>
+            <li><strong>Static properties</strong>: Define metadata at compile time</li>
+            <li><strong>Async/throws</strong>: Actions can be async and may throw errors</li>
+            <li><strong>Returns <code>any Sendable</code></strong>: Results must be sendable across concurrency domains</li>
+        </ul>
+
+        <h2>Action Roles</h2>
+        <p>Actions are categorized by semantic role:</p>
+
+        <table>
+            <thead>
+                <tr><th>Role</th><th>Description</th><th>Example Verbs</th></tr>
+            </thead>
+            <tbody>
+                <tr><td><code>request</code></td><td>Request data from external sources</td><td>Extract, Retrieve, Fetch</td></tr>
+                <tr><td><code>own</code></td><td>Create or modify owned data</td><td>Create, Compute, Transform, Validate</td></tr>
+                <tr><td><code>response</code></td><td>Send results or responses</td><td>Return, Respond, Reply</td></tr>
+                <tr><td><code>export</code></td><td>Export or publish data</td><td>Store, Publish, Log, Send</td></tr>
+            </tbody>
+        </table>
+
+        <h2>Step-by-Step: Creating a Custom Action</h2>
+
+        <h3>Step 1: Define Your Action</h3>
+        <pre><code><span class="code-keyword">import</span> ARORuntime
+
+<span class="code-keyword">public struct</span> <span class="code-type">EmailAction</span>: <span class="code-type">ActionImplementation</span> {
+    <span class="code-comment">// 1. Define the semantic role</span>
+    <span class="code-keyword">public static let</span> role: <span class="code-type">ActionRole</span> = .export
+
+    <span class="code-comment">// 2. Define verbs that trigger this action</span>
+    <span class="code-keyword">public static let</span> verbs: <span class="code-type">Set</span>&lt;<span class="code-type">String</span>&gt; = [<span class="code-string">"Email"</span>, <span class="code-string">"Mail"</span>]
+
+    <span class="code-comment">// 3. Define valid prepositions</span>
+    <span class="code-keyword">public static let</span> validPrepositions: <span class="code-type">Set</span>&lt;<span class="code-type">Preposition</span>&gt; = [.to, .with]
+
+    <span class="code-comment">// 4. Required initializer</span>
+    <span class="code-keyword">public init</span>() {}
+
+    <span class="code-comment">// 5. Implement execute</span>
+    <span class="code-keyword">public func</span> execute(
+        result: <span class="code-type">ResultDescriptor</span>,
+        object: <span class="code-type">ObjectDescriptor</span>,
+        context: <span class="code-type">ExecutionContext</span>
+    ) <span class="code-keyword">async throws</span> -> <span class="code-keyword">any</span> <span class="code-type">Sendable</span> {
+        <span class="code-comment">// Implementation here</span>
+    }
+}</code></pre>
+
+        <h3>Step 2: Implement the Execute Method</h3>
+        <pre><code><span class="code-keyword">public func</span> execute(
+    result: <span class="code-type">ResultDescriptor</span>,
+    object: <span class="code-type">ObjectDescriptor</span>,
+    context: <span class="code-type">ExecutionContext</span>
+) <span class="code-keyword">async throws</span> -> <span class="code-keyword">any</span> <span class="code-type">Sendable</span> {
+    <span class="code-comment">// Get required service</span>
+    <span class="code-keyword">guard let</span> emailService = context.service(<span class="code-type">EmailService</span>.<span class="code-keyword">self</span>) <span class="code-keyword">else</span> {
+        <span class="code-keyword">throw</span> <span class="code-type">ActionError</span>.serviceNotFound(<span class="code-string">"EmailService"</span>)
+    }
+
+    <span class="code-comment">// Get the email content</span>
+    <span class="code-keyword">let</span> content: <span class="code-type">EmailContent</span> = <span class="code-keyword">try</span> context.require(result.identifier)
+
+    <span class="code-comment">// Get the recipient from the object</span>
+    <span class="code-keyword">let</span> recipient: <span class="code-type">String</span>
+    <span class="code-keyword">switch</span> object.sourceType {
+    <span class="code-keyword">case</span> .variable:
+        recipient = <span class="code-keyword">try</span> context.require(object.identifier)
+    <span class="code-keyword">case</span> .literal:
+        recipient = object.identifier
+    <span class="code-keyword">default</span>:
+        <span class="code-keyword">throw</span> <span class="code-type">ActionError</span>.invalidObjectSource(object.sourceType)
+    }
+
+    <span class="code-comment">// Perform the action</span>
+    <span class="code-keyword">let</span> sendResult = <span class="code-keyword">try await</span> emailService.send(
+        content: content,
+        to: recipient
+    )
+
+    <span class="code-comment">// Emit event for observability</span>
+    context.emit(<span class="code-type">EmailSentEvent</span>(
+        recipient: recipient,
+        messageId: sendResult.messageId
+    ))
+
+    <span class="code-keyword">return</span> sendResult
+}</code></pre>
+
+        <h3>Step 3: Register Your Action</h3>
+        <pre><code><span class="code-comment">// In your application setup</span>
+<span class="code-type">ActionRegistry</span>.shared.register(<span class="code-type">EmailAction</span>.<span class="code-keyword">self</span>)</code></pre>
+
+        <h3>Step 4: Use in ARO</h3>
+        <pre><code>(Send Welcome Email: User Onboarding) {
+    &lt;Create&gt; the &lt;email-content&gt; with {
+        subject: <span class="code-string">"Welcome to our platform!"</span>,
+        body: <span class="code-string">"Thanks for signing up..."</span>
+    }.
+    &lt;Extract&gt; the &lt;user-email&gt; from the &lt;user: email&gt;.
+    &lt;Email&gt; the &lt;email-content&gt; to the &lt;user-email&gt;.
+    &lt;Return&gt; an &lt;OK: status&gt; for the &lt;email&gt;.
+}</code></pre>
+
+        <h2>Execution Context</h2>
+        <p>The <code>ExecutionContext</code> provides access to runtime services:</p>
+
+        <pre><code><span class="code-keyword">public protocol</span> <span class="code-type">ExecutionContext</span>: <span class="code-type">AnyObject</span>, <span class="code-type">Sendable</span> {
+    <span class="code-comment">// Variable Management</span>
+    <span class="code-keyword">func</span> resolve&lt;T: <span class="code-type">Sendable</span>&gt;(_ name: <span class="code-type">String</span>) -> T?
+    <span class="code-keyword">func</span> require&lt;T: <span class="code-type">Sendable</span>&gt;(_ name: <span class="code-type">String</span>) <span class="code-keyword">throws</span> -> T
+    <span class="code-keyword">func</span> bind(_ name: <span class="code-type">String</span>, value: <span class="code-keyword">any</span> <span class="code-type">Sendable</span>)
+    <span class="code-keyword">func</span> exists(_ name: <span class="code-type">String</span>) -> <span class="code-type">Bool</span>
+
+    <span class="code-comment">// Service Access</span>
+    <span class="code-keyword">func</span> service&lt;S&gt;(_ type: S.<span class="code-type">Type</span>) -> S?
+
+    <span class="code-comment">// Event Emission</span>
+    <span class="code-keyword">func</span> emit(_ event: <span class="code-keyword">any</span> <span class="code-type">RuntimeEvent</span>)
+
+    <span class="code-comment">// Metadata</span>
+    <span class="code-keyword">var</span> featureSetName: <span class="code-type">String</span> { <span class="code-keyword">get</span> }
+    <span class="code-keyword">var</span> executionId: <span class="code-type">String</span> { <span class="code-keyword">get</span> }
+}</code></pre>
+
+        <h2>Best Practices</h2>
+
+        <h3>Single Responsibility</h3>
+        <p>Each action should do one thing well:</p>
+        <pre><code><span class="code-comment">// Good: Focused action</span>
+<span class="code-keyword">public struct</span> <span class="code-type">HashPasswordAction</span>: <span class="code-type">ActionImplementation</span> { ... }
+
+<span class="code-comment">// Bad: Action doing too much</span>
+<span class="code-keyword">public struct</span> <span class="code-type">UserManagementAction</span>: <span class="code-type">ActionImplementation</span> { ... }</code></pre>
+
+        <h3>Fail Fast with Descriptive Errors</h3>
+        <pre><code><span class="code-keyword">public func</span> execute(...) <span class="code-keyword">async throws</span> -> <span class="code-keyword">any</span> <span class="code-type">Sendable</span> {
+    <span class="code-comment">// Validate required services</span>
+    <span class="code-keyword">guard let</span> service = context.service(<span class="code-type">MyService</span>.<span class="code-keyword">self</span>) <span class="code-keyword">else</span> {
+        <span class="code-keyword">throw</span> <span class="code-type">ActionError</span>.serviceNotFound(<span class="code-string">"MyService"</span>)
+    }
+
+    <span class="code-comment">// Validate required variables</span>
+    <span class="code-keyword">let</span> input: <span class="code-type">InputType</span> = <span class="code-keyword">try</span> context.require(result.identifier)
+
+    <span class="code-comment">// ... proceed with execution</span>
+}</code></pre>
+
+        <h3>Emit Events for Observability</h3>
+        <pre><code><span class="code-comment">// Emit events for significant operations</span>
+context.emit(<span class="code-type">PaymentProcessedEvent</span>(
+    amount: amount,
+    currency: currency,
+    transactionId: result.id
+))</code></pre>
+
+        <h2>Example: External API Action</h2>
+        <pre><code><span class="code-keyword">public struct</span> <span class="code-type">WeatherAction</span>: <span class="code-type">ActionImplementation</span> {
+    <span class="code-keyword">public static let</span> role: <span class="code-type">ActionRole</span> = .request
+    <span class="code-keyword">public static let</span> verbs: <span class="code-type">Set</span>&lt;<span class="code-type">String</span>&gt; = [<span class="code-string">"Weather"</span>, <span class="code-string">"Forecast"</span>]
+    <span class="code-keyword">public static let</span> validPrepositions: <span class="code-type">Set</span>&lt;<span class="code-type">Preposition</span>&gt; = [.forPrep]
+
+    <span class="code-keyword">public init</span>() {}
+
+    <span class="code-keyword">public func</span> execute(
+        result: <span class="code-type">ResultDescriptor</span>,
+        object: <span class="code-type">ObjectDescriptor</span>,
+        context: <span class="code-type">ExecutionContext</span>
+    ) <span class="code-keyword">async throws</span> -> <span class="code-keyword">any</span> <span class="code-type">Sendable</span> {
+        <span class="code-keyword">guard let</span> httpClient = context.service(<span class="code-type">HTTPClientService</span>.<span class="code-keyword">self</span>) <span class="code-keyword">else</span> {
+            <span class="code-keyword">throw</span> <span class="code-type">ActionError</span>.serviceNotFound(<span class="code-string">"HTTPClientService"</span>)
+        }
+
+        <span class="code-keyword">let</span> city: <span class="code-type">String</span> = <span class="code-keyword">try</span> context.require(object.identifier)
+        <span class="code-keyword">let</span> url = <span class="code-string">"https://api.weather.com/v1/forecast?city=\(city)"</span>
+        <span class="code-keyword">let</span> response = <span class="code-keyword">try await</span> httpClient.get(url: url)
+
+        context.bind(result.identifier, value: response)
+        <span class="code-keyword">return</span> response
+    }
+}</code></pre>
+
+        <p>Usage:</p>
+        <pre><code>&lt;Weather&gt; the &lt;forecast&gt; for the &lt;city&gt;.</code></pre>
+
+        <div class="highlight-box">
+            <h4>Summary</h4>
+            <p>
+                Creating custom actions involves implementing the <code>ActionImplementation</code> protocol,
+                defining role, verbs, and valid prepositions, implementing the async <code>execute</code> method,
+                and registering with <code>ActionRegistry</code>.
+            </p>
+        </div>
+    </main>
+
+    <footer class="footer">
+        <div class="container">
+            <div class="footer-bottom">
+                <p>Sometime this page should build with ARO. Obviously.</p>
+            </div>
+        </div>
+    </footer>
+</body>
+</html>

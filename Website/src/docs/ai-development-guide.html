@@ -1,0 +1,259 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <title>AI Development Guide - ARO Programming Language</title>
+{{head}}
+    <style>
+        .doc-page { padding: 120px 24px 80px; max-width: 900px; margin: 0 auto; }
+        .doc-header { margin-bottom: 48px; }
+        .doc-header h1 { font-size: clamp(2rem, 5vw, 3rem); font-weight: 700; margin-bottom: 16px; letter-spacing: -0.02em; }
+        .doc-header .lead { font-size: 1.25rem; color: var(--color-text-muted); line-height: 1.7; }
+        .doc-page h2 { font-size: 1.8rem; font-weight: 600; margin: 48px 0 16px; padding-top: 24px; border-top: 1px solid rgba(255, 255, 255, 0.1); }
+        .doc-page h3 { font-size: 1.3rem; font-weight: 600; margin: 32px 0 12px; color: var(--color-secondary); }
+        .doc-page p { font-size: 1.1rem; color: var(--color-text-muted); line-height: 1.8; margin-bottom: 16px; }
+        .doc-page code { font-family: var(--font-mono); background: var(--color-bg-alt); padding: 3px 8px; border-radius: 4px; font-size: 0.9rem; color: var(--color-secondary); }
+        .doc-page pre { background: var(--color-bg-alt); border-radius: var(--radius-md); padding: 24px; overflow-x: auto; margin: 24px 0; border: 1px solid rgba(255, 255, 255, 0.1); }
+        .doc-page pre code { background: none; padding: 0; font-size: 0.9rem; line-height: 1.7; color: var(--color-text); }
+        .doc-page ul, .doc-page ol { color: var(--color-text-muted); margin: 16px 0 16px 24px; line-height: 1.8; }
+        .doc-page li { margin-bottom: 8px; }
+        .doc-page strong { color: var(--color-text); }
+        .doc-page table { width: 100%; border-collapse: collapse; margin: 24px 0; }
+        .doc-page th, .doc-page td { padding: 12px 16px; text-align: left; border: 1px solid rgba(255, 255, 255, 0.1); }
+        .doc-page th { background: var(--color-bg-alt); font-weight: 600; color: var(--color-text); }
+        .doc-page td { color: var(--color-text-muted); }
+        .highlight-box { background: rgba(124, 58, 237, 0.1); border: 1px solid rgba(124, 58, 237, 0.3); border-radius: var(--radius-md); padding: 24px; margin: 32px 0; }
+        .highlight-box h4 { color: var(--color-primary); font-size: 1.1rem; margin-bottom: 12px; }
+        .highlight-box p { margin-bottom: 0; }
+        .back-link { display: inline-flex; align-items: center; gap: 8px; color: var(--color-text-muted); text-decoration: none; font-size: 0.95rem; margin-bottom: 24px; transition: color 0.2s; }
+        .back-link:hover { color: var(--color-primary); }
+        .code-comment { color: #6b7280; }
+        .code-keyword { color: #7c3aed; font-weight: 600; }
+        .code-string { color: #10b981; }
+        .terminal { background: #1a1a2e; border-radius: var(--radius-md); padding: 20px; margin: 24px 0; font-family: var(--font-mono); font-size: 0.9rem; }
+        .terminal-prompt { color: #10b981; }
+        .terminal-command { color: var(--color-text); }
+        .terminal-output { color: var(--color-text-muted); margin-top: 8px; }
+    </style>
+</head>
+<body>
+    <nav class="nav">
+        <div class="nav-content">
+            <a href="/aro/" class="logo"><span class="logo-aro">ARO</span></a>
+            <div class="nav-links">
+                <a href="../fdd.html">The FDD Story</a>
+                <a href="../getting-started.html">Get Started</a>
+                <a href="../docs.html" style="color: var(--color-text);">Docs</a>
+                <a href="../disclaimer.html">Motivation</a>
+                <a href="https://github.com/KrisSimon/aro" class="nav-github">GitHub</a>
+            </div>
+        </div>
+    </nav>
+
+    <main class="doc-page">
+        <a href="../docs.html" class="back-link">&#x2190; Back to Documentation</a>
+
+        <header class="doc-header">
+            <h1 class="gradient-text">AI Development Guide</h1>
+            <p class="lead">
+                How to use AI assistants effectively with ARO. This guide covers commands,
+                patterns, and best practices for AI-assisted development.
+            </p>
+        </header>
+
+        <div class="highlight-box">
+            <h4>CLAUDE.md</h4>
+            <p>
+                ARO includes a <code>CLAUDE.md</code> file in the repository root that provides
+                context for AI assistants like Claude Code. This ensures the AI understands
+                ARO's syntax and architecture.
+            </p>
+        </div>
+
+        <h2>Build Commands</h2>
+        <p>These are the commands you'll use most frequently when developing with ARO:</p>
+
+        <div class="terminal">
+            <span class="terminal-prompt">$</span> <span class="terminal-command">swift build</span>
+            <div class="terminal-output"># Build the ARO compiler and runtime</div>
+        </div>
+
+        <div class="terminal">
+            <span class="terminal-prompt">$</span> <span class="terminal-command">swift test</span>
+            <div class="terminal-output"># Run all tests</div>
+        </div>
+
+        <div class="terminal">
+            <span class="terminal-prompt">$</span> <span class="terminal-command">aro run ./Examples/UserService</span>
+            <div class="terminal-output"># Run a multi-file ARO application</div>
+        </div>
+
+        <div class="terminal">
+            <span class="terminal-prompt">$</span> <span class="terminal-command">aro build ./MyApp --optimize</span>
+            <div class="terminal-output"># Compile to native binary with optimizations</div>
+        </div>
+
+        <h2>Architecture Overview</h2>
+        <p>Understanding the project structure helps AI assistants provide better suggestions:</p>
+
+        <pre><code>Sources/
+&#x251C;&#x2500;&#x2500; AROParser/          <span class="code-comment"># Core parser library</span>
+&#x251C;&#x2500;&#x2500; ARORuntime/         <span class="code-comment"># Runtime execution (interpreter)</span>
+&#x2502;   &#x251C;&#x2500;&#x2500; Actions/        <span class="code-comment"># Action protocol, registry, built-ins</span>
+&#x2502;   &#x251C;&#x2500;&#x2500; Core/           <span class="code-comment"># ExecutionEngine, Context</span>
+&#x2502;   &#x251C;&#x2500;&#x2500; Events/         <span class="code-comment"># EventBus, event types</span>
+&#x2502;   &#x251C;&#x2500;&#x2500; HTTP/           <span class="code-comment"># Server (SwiftNIO), Client</span>
+&#x2502;   &#x251C;&#x2500;&#x2500; FileSystem/     <span class="code-comment"># File operations, FileMonitor</span>
+&#x2502;   &#x251C;&#x2500;&#x2500; Sockets/        <span class="code-comment"># TCP server/client</span>
+&#x2502;   &#x2514;&#x2500;&#x2500; OpenAPI/        <span class="code-comment"># Contract-first routing</span>
+&#x251C;&#x2500;&#x2500; AROCompiler/        <span class="code-comment"># Native compilation (C code generation)</span>
+&#x251C;&#x2500;&#x2500; AROCRuntime/        <span class="code-comment"># C-callable Swift runtime bridge</span>
+&#x2514;&#x2500;&#x2500; AROCLI/             <span class="code-comment"># CLI (run, compile, check, build)</span>
+
+Examples/
+&#x251C;&#x2500;&#x2500; HelloWorld/         <span class="code-comment"># Single-file example</span>
+&#x251C;&#x2500;&#x2500; HTTPServer/         <span class="code-comment"># HTTP server example</span>
+&#x251C;&#x2500;&#x2500; FileWatcher/        <span class="code-comment"># File monitoring example</span>
+&#x2514;&#x2500;&#x2500; UserService/        <span class="code-comment"># Multi-file application</span>
+
+Proposals/              <span class="code-comment"># 29 evolution proposals</span>
+Documentation/          <span class="code-comment"># Developer guides</span></code></pre>
+
+        <h2>Application Structure</h2>
+        <p>An ARO application is a directory containing <code>.aro</code> files:</p>
+
+        <pre><code>MyApp/
+&#x251C;&#x2500;&#x2500; openapi.yaml       <span class="code-comment"># OpenAPI contract (required for HTTP server)</span>
+&#x251C;&#x2500;&#x2500; main.aro           <span class="code-comment"># Contains Application-Start (required)</span>
+&#x251C;&#x2500;&#x2500; users.aro          <span class="code-comment"># Feature sets for user operations</span>
+&#x251C;&#x2500;&#x2500; orders.aro         <span class="code-comment"># Feature sets for order operations</span>
+&#x2514;&#x2500;&#x2500; events.aro         <span class="code-comment"># Event handler feature sets</span></code></pre>
+
+        <h3>Key Rules</h3>
+        <ul>
+            <li>All <code>.aro</code> files in the directory are automatically discovered and parsed</li>
+            <li>No imports needed - all feature sets are globally visible</li>
+            <li>Exactly ONE <code>Application-Start</code> feature set per application</li>
+            <li>Feature sets are triggered by <strong>events</strong>, not direct calls</li>
+            <li><strong>Contract-First HTTP</strong>: <code>openapi.yaml</code> is required for HTTP server</li>
+        </ul>
+
+        <h2>ARO Syntax Quick Reference</h2>
+
+        <h3>Feature Set</h3>
+        <pre><code>(Feature Name: Business Activity) {
+    &lt;Action&gt; the &lt;result&gt; from/with/to the &lt;object&gt;.
+    &lt;Return&gt; an &lt;OK: status&gt; with &lt;result&gt;.
+}</code></pre>
+
+        <h3>Comments</h3>
+        <pre><code><span class="code-comment">(* This is a comment *)</span>
+
+<span class="code-comment">(*
+   Multi-line comments
+   are also supported
+*)</span></code></pre>
+
+        <h3>Event Handlers</h3>
+        <pre><code><span class="code-comment">(* Feature sets named after operationIds handle HTTP requests *)</span>
+(listUsers: User API) { ... }
+(createUser: User API) { ... }
+
+<span class="code-comment">(* Handler suffix for domain events *)</span>
+(Send Email: UserCreated Handler) { ... }
+(Process File: FileCreated Handler) { ... }</code></pre>
+
+        <h3>Action Semantic Roles</h3>
+        <table>
+            <thead>
+                <tr><th>Role</th><th>Direction</th><th>Example Verbs</th></tr>
+            </thead>
+            <tbody>
+                <tr><td>REQUEST</td><td>External &#x2192; Internal</td><td>Extract, Retrieve, Fetch</td></tr>
+                <tr><td>OWN</td><td>Internal &#x2192; Internal</td><td>Create, Compute, Transform, Validate</td></tr>
+                <tr><td>RESPONSE</td><td>Internal &#x2192; External</td><td>Return, Throw</td></tr>
+                <tr><td>EXPORT</td><td>Internal &#x2192; External</td><td>Store, Publish, Log, Send, Emit</td></tr>
+            </tbody>
+        </table>
+
+        <h2>Happy Case Design</h2>
+        <p>
+            ARO code contains only the happy case. Errors are handled by the runtime.
+            For example, when a user cannot be retrieved from the repository, the server
+            returns: <code>Can not retrieve the user from the user-repository where id = 530</code>.
+        </p>
+
+        <div class="highlight-box">
+            <h4>Not for Production</h4>
+            <p>
+                This approach is terribly insecure for production code. ARO is designed for
+                prototyping and learning, not production deployments.
+            </p>
+        </div>
+
+        <h2>Creating Custom Actions</h2>
+        <p>When extending ARO with new actions, follow this pattern:</p>
+
+        <pre><code><span class="code-keyword">public struct</span> MyAction: ActionImplementation {
+    <span class="code-keyword">public static let</span> role: ActionRole = .own
+    <span class="code-keyword">public static let</span> verbs: Set&lt;String&gt; = [<span class="code-string">"MyVerb"</span>]
+    <span class="code-keyword">public static let</span> validPrepositions: Set&lt;Preposition&gt; = [.with, .from]
+
+    <span class="code-keyword">public init</span>() {}
+
+    <span class="code-keyword">public func</span> execute(
+        result: ResultDescriptor,
+        object: ObjectDescriptor,
+        context: ExecutionContext
+    ) <span class="code-keyword">async throws</span> -> <span class="code-keyword">any</span> Sendable {
+        <span class="code-comment">// Get input from context</span>
+        <span class="code-keyword">let</span> input: String = <span class="code-keyword">try</span> context.require(object.identifier)
+
+        <span class="code-comment">// Process and bind result</span>
+        <span class="code-keyword">let</span> output = process(input)
+        context.bind(result.identifier, value: output)
+
+        <span class="code-comment">// Emit event</span>
+        context.emit(MyEvent(value: output))
+
+        <span class="code-keyword">return</span> output
+    }
+}
+
+<span class="code-comment">// Register</span>
+ActionRegistry.shared.register(MyAction.<span class="code-keyword">self</span>)</code></pre>
+
+        <h2>Concurrency</h2>
+        <p>
+            All core types (<code>SymbolTable</code>, <code>Token</code>, AST nodes,
+            <code>ActionImplementation</code>) are <code>Sendable</code> for Swift 6.0
+            concurrency safety.
+        </p>
+
+        <h2>Tips for AI Assistants</h2>
+        <ul>
+            <li>Always reference the <code>CLAUDE.md</code> file for project context</li>
+            <li>Feature sets should be named after <code>operationId</code> values in <code>openapi.yaml</code></li>
+            <li>Use the <code>&lt;Keepalive&gt;</code> action for long-running servers</li>
+            <li>Remember that ARO code is the happy path - don't add error handling</li>
+            <li>Check the <code>Proposals/</code> directory for detailed language specifications</li>
+        </ul>
+
+        <div class="highlight-box">
+            <h4>Full Reference</h4>
+            <p>
+                For the complete AI development guide, see the
+                <a href="https://github.com/KrisSimon/aro/blob/main/CLAUDE.md">CLAUDE.md</a>
+                file in the repository.
+            </p>
+        </div>
+    </main>
+
+    <footer class="footer">
+        <div class="container">
+            <div class="footer-bottom">
+                <p>Sometime this page should build with ARO. Obviously.</p>
+            </div>
+        </div>
+    </footer>
+</body>
+</html>

@@ -1,0 +1,290 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <title>Feature Sets - ARO Programming Language</title>
+{{head}}
+    <style>
+        .doc-page { padding: 120px 24px 80px; max-width: 900px; margin: 0 auto; }
+        .doc-header { margin-bottom: 48px; }
+        .doc-header h1 { font-size: clamp(2rem, 5vw, 3rem); font-weight: 700; margin-bottom: 16px; letter-spacing: -0.02em; }
+        .doc-header .lead { font-size: 1.25rem; color: var(--color-text-muted); line-height: 1.7; }
+        .doc-page h2 { font-size: 1.8rem; font-weight: 600; margin: 48px 0 16px; padding-top: 24px; border-top: 1px solid rgba(255, 255, 255, 0.1); }
+        .doc-page h3 { font-size: 1.3rem; font-weight: 600; margin: 32px 0 12px; color: var(--color-secondary); }
+        .doc-page p { font-size: 1.1rem; color: var(--color-text-muted); line-height: 1.8; margin-bottom: 16px; }
+        .doc-page code { font-family: var(--font-mono); background: var(--color-bg-alt); padding: 3px 8px; border-radius: 4px; font-size: 0.9rem; color: var(--color-secondary); }
+        .doc-page pre { background: var(--color-bg-alt); border-radius: var(--radius-md); padding: 24px; overflow-x: auto; margin: 24px 0; border: 1px solid rgba(255, 255, 255, 0.1); }
+        .doc-page pre code { background: none; padding: 0; font-size: 0.9rem; line-height: 1.7; color: var(--color-text); }
+        .doc-page ul, .doc-page ol { color: var(--color-text-muted); margin: 16px 0 16px 24px; line-height: 1.8; }
+        .doc-page li { margin-bottom: 8px; }
+        .doc-page strong { color: var(--color-text); }
+        .highlight-box { background: rgba(124, 58, 237, 0.1); border: 1px solid rgba(124, 58, 237, 0.3); border-radius: var(--radius-md); padding: 24px; margin: 32px 0; }
+        .highlight-box h4 { color: var(--color-primary); font-size: 1.1rem; margin-bottom: 12px; }
+        .highlight-box p { margin-bottom: 0; }
+        .back-link { display: inline-flex; align-items: center; gap: 8px; color: var(--color-text-muted); text-decoration: none; font-size: 0.95rem; margin-bottom: 24px; transition: color 0.2s; }
+        .back-link:hover { color: var(--color-primary); }
+        .code-comment { color: #6b7280; }
+        .code-keyword { color: #7c3aed; font-weight: 600; }
+        .code-string { color: #10b981; }
+        .code-feature { color: #f472b6; }
+        .code-result { color: #06b6d4; }
+    </style>
+</head>
+<body>
+    <nav class="nav">
+        <div class="nav-content">
+            <a href="/aro/" class="logo"><span class="logo-aro">ARO</span></a>
+            <div class="nav-links">
+                <a href="../fdd.html">The FDD Story</a>
+                <a href="../getting-started.html">Get Started</a>
+                <a href="../docs.html" style="color: var(--color-text);">Docs</a>
+                <a href="../disclaimer.html">Motivation</a>
+                <a href="https://github.com/KrisSimon/aro" class="nav-github">GitHub</a>
+            </div>
+        </div>
+    </nav>
+
+    <main class="doc-page">
+        <a href="../docs.html" class="back-link">&#x2190; Back to Documentation</a>
+
+        <header class="doc-header">
+            <h1 class="gradient-text">Feature Sets</h1>
+            <p class="lead">
+                Feature sets are the primary organizational unit in ARO. They group related
+                statements that work together to accomplish a business goal.
+            </p>
+        </header>
+
+        <h2>Defining Feature Sets</h2>
+        <p>A feature set consists of a name, business activity, and body:</p>
+
+        <pre><code><span class="code-feature">(Feature Name: Business Activity)</span> {
+    <span class="code-comment">(* statements *)</span>
+}</code></pre>
+
+        <h3>Naming Guidelines</h3>
+        <p><strong>Feature Set Name</strong> - Describes what the feature does:</p>
+        <ul>
+            <li>Use action-oriented names: <code>Create User</code>, <code>Calculate Total</code>, <code>Send Notification</code></li>
+            <li>Be specific: <code>Validate Email Format</code> not just <code>Validate</code></li>
+            <li>Use business terminology: <code>Process Refund</code>, <code>Approve Order</code></li>
+        </ul>
+
+        <p><strong>Business Activity</strong> - Describes the domain context:</p>
+        <ul>
+            <li>Use noun phrases: <code>User Management</code>, <code>Order Processing</code></li>
+            <li>Group related features: All user features might use <code>User API</code></li>
+            <li>Be consistent across your application</li>
+        </ul>
+
+        <h2>Feature Set Categories</h2>
+
+        <h3>Application Lifecycle</h3>
+        <p>These special feature sets manage the application lifecycle:</p>
+
+        <pre><code><span class="code-comment">(* Entry point - exactly one per application *)</span>
+<span class="code-feature">(Application-Start: My Application)</span> {
+    <span class="code-keyword">&lt;Log&gt;</span> the <span class="code-result">&lt;message&gt;</span> for the &lt;console&gt; with <span class="code-string">"Starting..."</span>.
+    <span class="code-keyword">&lt;Start&gt;</span> the &lt;http-server&gt; on port 8080.
+    <span class="code-keyword">&lt;Return&gt;</span> an <span class="code-result">&lt;OK: status&gt;</span> for the &lt;startup&gt;.
+}
+
+<span class="code-comment">(* Called on graceful shutdown - optional *)</span>
+<span class="code-feature">(Application-End: Success)</span> {
+    <span class="code-keyword">&lt;Stop&gt;</span> the &lt;http-server&gt;.
+    <span class="code-keyword">&lt;Return&gt;</span> an <span class="code-result">&lt;OK: status&gt;</span> for the &lt;shutdown&gt;.
+}</code></pre>
+
+        <h3>HTTP Route Handlers (Contract-First)</h3>
+        <p>Feature sets named after OpenAPI <code>operationId</code> values handle HTTP requests:</p>
+
+        <pre><code><span class="code-comment">(* Feature sets named after operationIds in openapi.yaml *)</span>
+<span class="code-feature">(listUsers: User API)</span> {
+    <span class="code-keyword">&lt;Retrieve&gt;</span> the <span class="code-result">&lt;users&gt;</span> from the &lt;user-repository&gt;.
+    <span class="code-keyword">&lt;Return&gt;</span> an <span class="code-result">&lt;OK: status&gt;</span> with &lt;users&gt;.
+}
+
+<span class="code-feature">(createUser: User API)</span> {
+    <span class="code-keyword">&lt;Extract&gt;</span> the <span class="code-result">&lt;user-data&gt;</span> from the &lt;request: body&gt;.
+    <span class="code-keyword">&lt;Create&gt;</span> the <span class="code-result">&lt;user&gt;</span> with &lt;user-data&gt;.
+    <span class="code-keyword">&lt;Store&gt;</span> the &lt;user&gt; into the &lt;user-repository&gt;.
+    <span class="code-keyword">&lt;Return&gt;</span> a <span class="code-result">&lt;Created: status&gt;</span> with &lt;user&gt;.
+}
+
+<span class="code-feature">(getUser: User API)</span> {
+    <span class="code-keyword">&lt;Extract&gt;</span> the <span class="code-result">&lt;user-id&gt;</span> from the &lt;pathParameters: id&gt;.
+    <span class="code-keyword">&lt;Retrieve&gt;</span> the <span class="code-result">&lt;user&gt;</span> from the &lt;user-repository&gt; where id = &lt;user-id&gt;.
+    <span class="code-keyword">&lt;Return&gt;</span> an <span class="code-result">&lt;OK: status&gt;</span> with &lt;user&gt;.
+}</code></pre>
+
+        <h3>Event Handlers</h3>
+        <p>Feature sets with "Handler" in the business activity respond to events:</p>
+
+        <pre><code><span class="code-comment">(* Handle domain events *)</span>
+<span class="code-feature">(Send Welcome Email: UserCreated Handler)</span> {
+    <span class="code-keyword">&lt;Extract&gt;</span> the <span class="code-result">&lt;user&gt;</span> from the &lt;event: user&gt;.
+    <span class="code-keyword">&lt;Extract&gt;</span> the <span class="code-result">&lt;email&gt;</span> from the &lt;user: email&gt;.
+    <span class="code-keyword">&lt;Send&gt;</span> the &lt;welcome-email&gt; to the &lt;email&gt;.
+    <span class="code-keyword">&lt;Return&gt;</span> an <span class="code-result">&lt;OK: status&gt;</span> for the &lt;notification&gt;.
+}
+
+<span class="code-comment">(* Handle file system events *)</span>
+<span class="code-feature">(Process Upload: FileCreated Handler)</span> {
+    <span class="code-keyword">&lt;Extract&gt;</span> the <span class="code-result">&lt;path&gt;</span> from the &lt;event: path&gt;.
+    <span class="code-keyword">&lt;Read&gt;</span> the <span class="code-result">&lt;content&gt;</span> from the &lt;file: path&gt;.
+    <span class="code-keyword">&lt;Transform&gt;</span> the <span class="code-result">&lt;processed&gt;</span> from the &lt;content&gt;.
+    <span class="code-keyword">&lt;Return&gt;</span> an <span class="code-result">&lt;OK: status&gt;</span> for the &lt;processing&gt;.
+}</code></pre>
+
+        <h2>Feature Set Execution</h2>
+
+        <h3>Triggering</h3>
+        <p>Feature sets are <strong>never called directly</strong>. They're triggered by:</p>
+        <ol>
+            <li><strong>Application start</strong>: <code>Application-Start</code> runs once at startup</li>
+            <li><strong>HTTP requests</strong>: Route handlers match incoming requests via OpenAPI operationId</li>
+            <li><strong>Events</strong>: Event handlers respond to emitted events</li>
+            <li><strong>Application shutdown</strong>: <code>Application-End</code> runs during shutdown</li>
+        </ol>
+
+        <h3>Execution Flow</h3>
+        <p>Within a feature set, statements execute sequentially:</p>
+
+        <pre><code><span class="code-feature">(Process Order: Order Management)</span> {
+    <span class="code-comment">(* 1. Extract data *)</span>
+    <span class="code-keyword">&lt;Extract&gt;</span> the <span class="code-result">&lt;order-data&gt;</span> from the &lt;request: body&gt;.
+
+    <span class="code-comment">(* 2. Validate *)</span>
+    <span class="code-keyword">&lt;Validate&gt;</span> the &lt;order-data&gt; for the &lt;order-schema&gt;.
+
+    <span class="code-comment">(* 3. Create order *)</span>
+    <span class="code-keyword">&lt;Create&gt;</span> the <span class="code-result">&lt;order&gt;</span> with &lt;order-data&gt;.
+
+    <span class="code-comment">(* 4. Store *)</span>
+    <span class="code-keyword">&lt;Store&gt;</span> the &lt;order&gt; into the &lt;order-repository&gt;.
+
+    <span class="code-comment">(* 5. Emit event *)</span>
+    <span class="code-keyword">&lt;Emit&gt;</span> an <span class="code-result">&lt;OrderCreated: event&gt;</span> with &lt;order&gt;.
+
+    <span class="code-comment">(* 6. Return response *)</span>
+    <span class="code-keyword">&lt;Return&gt;</span> a <span class="code-result">&lt;Created: status&gt;</span> with &lt;order&gt;.
+}</code></pre>
+
+        <h3>Early Returns</h3>
+        <p>Use control flow to return early:</p>
+
+        <pre><code><span class="code-feature">(getUser: User API)</span> {
+    <span class="code-keyword">&lt;Extract&gt;</span> the <span class="code-result">&lt;user-id&gt;</span> from the &lt;pathParameters: id&gt;.
+    <span class="code-keyword">&lt;Retrieve&gt;</span> the <span class="code-result">&lt;user&gt;</span> from the &lt;user-repository&gt; where id = &lt;user-id&gt;.
+
+    if &lt;user&gt; is empty then {
+        <span class="code-keyword">&lt;Return&gt;</span> a <span class="code-result">&lt;NotFound: status&gt;</span> for the &lt;missing: user&gt;.
+    }
+
+    <span class="code-keyword">&lt;Return&gt;</span> an <span class="code-result">&lt;OK: status&gt;</span> with &lt;user&gt;.
+}</code></pre>
+
+        <h2>Organizing Feature Sets</h2>
+
+        <h3>By File</h3>
+        <p>Organize related feature sets in files:</p>
+
+        <pre><code>MyApp/
+&#x251C;&#x2500;&#x2500; openapi.yaml       <span class="code-comment"># Required for HTTP server</span>
+&#x251C;&#x2500;&#x2500; main.aro           <span class="code-comment"># Application lifecycle</span>
+&#x251C;&#x2500;&#x2500; users.aro          <span class="code-comment"># User CRUD operations</span>
+&#x251C;&#x2500;&#x2500; orders.aro         <span class="code-comment"># Order management</span>
+&#x251C;&#x2500;&#x2500; payments.aro       <span class="code-comment"># Payment processing</span>
+&#x251C;&#x2500;&#x2500; notifications.aro  <span class="code-comment"># Email/SMS handlers</span>
+&#x2514;&#x2500;&#x2500; events.aro         <span class="code-comment"># Domain event handlers</span></code></pre>
+
+        <h2>Cross-File Communication</h2>
+
+        <h3>Publishing Variables</h3>
+        <p>Make variables available to other feature sets:</p>
+
+        <pre><code><span class="code-comment">(* In config.aro *)</span>
+<span class="code-feature">(Load Configuration: Initialization)</span> {
+    <span class="code-keyword">&lt;Read&gt;</span> the <span class="code-result">&lt;config: JSON&gt;</span> from the &lt;file: <span class="code-string">"./config.json"</span>&gt;.
+    <span class="code-keyword">&lt;Publish&gt;</span> as &lt;app-config&gt; &lt;config&gt;.
+    <span class="code-keyword">&lt;Return&gt;</span> an <span class="code-result">&lt;OK: status&gt;</span> for the &lt;loading&gt;.
+}
+
+<span class="code-comment">(* In any other file *)</span>
+<span class="code-feature">(getSettings: Settings API)</span> {
+    <span class="code-keyword">&lt;Extract&gt;</span> the <span class="code-result">&lt;timeout&gt;</span> from the &lt;app-config: timeout&gt;.
+    <span class="code-keyword">&lt;Return&gt;</span> an <span class="code-result">&lt;OK: status&gt;</span> with &lt;timeout&gt;.
+}</code></pre>
+
+        <h3>Emitting Events</h3>
+        <p>Trigger other feature sets via events:</p>
+
+        <pre><code><span class="code-comment">(* In orders.aro *)</span>
+<span class="code-feature">(createOrder: Order API)</span> {
+    <span class="code-keyword">&lt;Create&gt;</span> the <span class="code-result">&lt;order&gt;</span> with &lt;order-data&gt;.
+    <span class="code-keyword">&lt;Store&gt;</span> the &lt;order&gt; into the &lt;order-repository&gt;.
+    <span class="code-keyword">&lt;Emit&gt;</span> an <span class="code-result">&lt;OrderCreated: event&gt;</span> with &lt;order&gt;.
+    <span class="code-keyword">&lt;Return&gt;</span> a <span class="code-result">&lt;Created: status&gt;</span> with &lt;order&gt;.
+}
+
+<span class="code-comment">(* In notifications.aro - automatically triggered *)</span>
+<span class="code-feature">(Send Confirmation: OrderCreated Handler)</span> {
+    <span class="code-keyword">&lt;Extract&gt;</span> the <span class="code-result">&lt;order&gt;</span> from the &lt;event: order&gt;.
+    <span class="code-keyword">&lt;Send&gt;</span> the &lt;confirmation-email&gt; to the &lt;order: customerEmail&gt;.
+    <span class="code-keyword">&lt;Return&gt;</span> an <span class="code-result">&lt;OK: status&gt;</span> for the &lt;notification&gt;.
+}</code></pre>
+
+        <h2>Best Practices</h2>
+
+        <h3>Single Responsibility</h3>
+        <p>Each feature set should do one thing well:</p>
+
+        <pre><code><span class="code-comment">(* Good - focused on one task *)</span>
+<span class="code-feature">(Validate Email Format: Validation)</span> {
+    <span class="code-keyword">&lt;Extract&gt;</span> the <span class="code-result">&lt;email&gt;</span> from the &lt;input: email&gt;.
+    <span class="code-keyword">&lt;Validate&gt;</span> the &lt;email&gt; for the &lt;email-pattern&gt;.
+    <span class="code-keyword">&lt;Return&gt;</span> an <span class="code-result">&lt;OK: status&gt;</span> for the &lt;validation&gt;.
+}
+
+<span class="code-comment">(* Avoid - too many responsibilities *)</span>
+<span class="code-feature">(Handle User: User Management)</span> {
+    <span class="code-comment">(* Don't mix validation, creation, notification, and logging *)</span>
+}</code></pre>
+
+        <h3>Consistent Structure</h3>
+        <p>Follow a consistent pattern:</p>
+
+        <pre><code><span class="code-feature">(Feature Name: Domain)</span> {
+    <span class="code-comment">(* 1. Extract/validate inputs *)</span>
+    <span class="code-keyword">&lt;Extract&gt;</span> the <span class="code-result">&lt;input&gt;</span> from the &lt;source&gt;.
+    <span class="code-keyword">&lt;Validate&gt;</span> the &lt;input&gt; for the &lt;schema&gt;.
+
+    <span class="code-comment">(* 2. Business logic *)</span>
+    <span class="code-keyword">&lt;Create&gt;</span> the <span class="code-result">&lt;result&gt;</span> with &lt;input&gt;.
+    <span class="code-keyword">&lt;Transform&gt;</span> the <span class="code-result">&lt;output&gt;</span> from the &lt;result&gt;.
+
+    <span class="code-comment">(* 3. Side effects *)</span>
+    <span class="code-keyword">&lt;Store&gt;</span> the &lt;output&gt; into the &lt;repository&gt;.
+    <span class="code-keyword">&lt;Emit&gt;</span> an <span class="code-result">&lt;Event: type&gt;</span> with &lt;output&gt;.
+
+    <span class="code-comment">(* 4. Return *)</span>
+    <span class="code-keyword">&lt;Return&gt;</span> an <span class="code-result">&lt;OK: status&gt;</span> with &lt;output&gt;.
+}</code></pre>
+
+        <div class="highlight-box">
+            <h4>Next Steps</h4>
+            <p>
+                <a href="actions.html">Actions</a> - Understanding and using actions<br>
+                <a href="application-lifecycle.html">Application Lifecycle</a> - Startup and shutdown
+            </p>
+        </div>
+    </main>
+
+    <footer class="footer">
+        <div class="container">
+            <div class="footer-bottom">
+                <p>Sometime this page should build with ARO. Obviously.</p>
+            </div>
+        </div>
+    </footer>
+</body>
+</html>

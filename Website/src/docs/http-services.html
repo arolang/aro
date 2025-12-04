@@ -1,0 +1,331 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <title>HTTP Services - ARO Programming Language</title>
+{{head}}
+    <style>
+        .doc-page { padding: 120px 24px 80px; max-width: 900px; margin: 0 auto; }
+        .doc-header { margin-bottom: 48px; }
+        .doc-header h1 { font-size: clamp(2rem, 5vw, 3rem); font-weight: 700; margin-bottom: 16px; letter-spacing: -0.02em; }
+        .doc-header .lead { font-size: 1.25rem; color: var(--color-text-muted); line-height: 1.7; }
+        .doc-page h2 { font-size: 1.8rem; font-weight: 600; margin: 48px 0 16px; padding-top: 24px; border-top: 1px solid rgba(255, 255, 255, 0.1); }
+        .doc-page h3 { font-size: 1.3rem; font-weight: 600; margin: 32px 0 12px; color: var(--color-secondary); }
+        .doc-page p { font-size: 1.1rem; color: var(--color-text-muted); line-height: 1.8; margin-bottom: 16px; }
+        .doc-page code { font-family: var(--font-mono); background: var(--color-bg-alt); padding: 3px 8px; border-radius: 4px; font-size: 0.9rem; color: var(--color-secondary); }
+        .doc-page pre { background: var(--color-bg-alt); border-radius: var(--radius-md); padding: 24px; overflow-x: auto; margin: 24px 0; border: 1px solid rgba(255, 255, 255, 0.1); }
+        .doc-page pre code { background: none; padding: 0; font-size: 0.9rem; line-height: 1.7; color: var(--color-text); }
+        .doc-page ul, .doc-page ol { color: var(--color-text-muted); margin: 16px 0 16px 24px; line-height: 1.8; }
+        .doc-page li { margin-bottom: 8px; }
+        .doc-page strong { color: var(--color-text); }
+        .doc-page table { width: 100%; border-collapse: collapse; margin: 24px 0; }
+        .doc-page th, .doc-page td { padding: 12px 16px; text-align: left; border: 1px solid rgba(255, 255, 255, 0.1); }
+        .doc-page th { background: var(--color-bg-alt); font-weight: 600; color: var(--color-text); }
+        .doc-page td { color: var(--color-text-muted); }
+        .highlight-box { background: rgba(124, 58, 237, 0.1); border: 1px solid rgba(124, 58, 237, 0.3); border-radius: var(--radius-md); padding: 24px; margin: 32px 0; }
+        .highlight-box h4 { color: var(--color-primary); font-size: 1.1rem; margin-bottom: 12px; }
+        .highlight-box p { margin-bottom: 0; }
+        .back-link { display: inline-flex; align-items: center; gap: 8px; color: var(--color-text-muted); text-decoration: none; font-size: 0.95rem; margin-bottom: 24px; transition: color 0.2s; }
+        .back-link:hover { color: var(--color-primary); }
+        .code-comment { color: #6b7280; }
+        .code-keyword { color: #7c3aed; font-weight: 600; }
+        .code-string { color: #10b981; }
+        .code-feature { color: #f472b6; }
+        .code-result { color: #06b6d4; }
+    </style>
+</head>
+<body>
+    <nav class="nav">
+        <div class="nav-content">
+            <a href="/aro/" class="logo"><span class="logo-aro">ARO</span></a>
+            <div class="nav-links">
+                <a href="../fdd.html">The FDD Story</a>
+                <a href="../getting-started.html">Get Started</a>
+                <a href="../docs.html" style="color: var(--color-text);">Docs</a>
+                <a href="../disclaimer.html">Motivation</a>
+                <a href="https://github.com/KrisSimon/aro" class="nav-github">GitHub</a>
+            </div>
+        </div>
+    </nav>
+
+    <main class="doc-page">
+        <a href="../docs.html" class="back-link">&#x2190; Back to Documentation</a>
+
+        <header class="doc-header">
+            <h1 class="gradient-text">HTTP Services</h1>
+            <p class="lead">
+                ARO provides built-in HTTP server and client capabilities. This chapter covers
+                how to build web APIs and make HTTP requests.
+            </p>
+        </header>
+
+        <h2>HTTP Server</h2>
+
+        <h3>Starting the Server</h3>
+        <p>Start an HTTP server in Application-Start:</p>
+
+        <pre><code><span class="code-feature">(Application-Start: Web API)</span> {
+    <span class="code-keyword">&lt;Start&gt;</span> the &lt;http-server&gt; on port 8080.
+    <span class="code-keyword">&lt;Keepalive&gt;</span> the &lt;application&gt; for the &lt;events&gt;.
+    <span class="code-keyword">&lt;Return&gt;</span> an <span class="code-result">&lt;OK: status&gt;</span> for the &lt;startup&gt;.
+}</code></pre>
+
+        <h3>Route Handlers (Contract-First)</h3>
+        <p>Define routes in <code>openapi.yaml</code> and implement feature sets named after operationIds:</p>
+
+        <pre><code><span class="code-feature">(listUsers: User API)</span> {
+    <span class="code-keyword">&lt;Retrieve&gt;</span> the <span class="code-result">&lt;users&gt;</span> from the &lt;user-repository&gt;.
+    <span class="code-keyword">&lt;Return&gt;</span> an <span class="code-result">&lt;OK: status&gt;</span> with &lt;users&gt;.
+}
+
+<span class="code-feature">(createUser: User API)</span> {
+    <span class="code-keyword">&lt;Extract&gt;</span> the <span class="code-result">&lt;user-data&gt;</span> from the &lt;request: body&gt;.
+    <span class="code-keyword">&lt;Create&gt;</span> the <span class="code-result">&lt;user&gt;</span> with &lt;user-data&gt;.
+    <span class="code-keyword">&lt;Store&gt;</span> the &lt;user&gt; into the &lt;user-repository&gt;.
+    <span class="code-keyword">&lt;Return&gt;</span> a <span class="code-result">&lt;Created: status&gt;</span> with &lt;user&gt;.
+}
+
+<span class="code-feature">(updateUser: User API)</span> {
+    <span class="code-keyword">&lt;Extract&gt;</span> the <span class="code-result">&lt;user-id&gt;</span> from the &lt;pathParameters: id&gt;.
+    <span class="code-keyword">&lt;Extract&gt;</span> the <span class="code-result">&lt;updates&gt;</span> from the &lt;request: body&gt;.
+    <span class="code-keyword">&lt;Retrieve&gt;</span> the <span class="code-result">&lt;user&gt;</span> from the &lt;user-repository&gt; where id = &lt;user-id&gt;.
+    <span class="code-keyword">&lt;Transform&gt;</span> the <span class="code-result">&lt;updated-user&gt;</span> from the &lt;user&gt; with &lt;updates&gt;.
+    <span class="code-keyword">&lt;Store&gt;</span> the &lt;updated-user&gt; into the &lt;user-repository&gt;.
+    <span class="code-keyword">&lt;Return&gt;</span> an <span class="code-result">&lt;OK: status&gt;</span> with &lt;updated-user&gt;.
+}
+
+<span class="code-feature">(deleteUser: User API)</span> {
+    <span class="code-keyword">&lt;Extract&gt;</span> the <span class="code-result">&lt;user-id&gt;</span> from the &lt;pathParameters: id&gt;.
+    <span class="code-keyword">&lt;Delete&gt;</span> the &lt;user&gt; from the &lt;user-repository&gt; where id = &lt;user-id&gt;.
+    <span class="code-keyword">&lt;Return&gt;</span> a <span class="code-result">&lt;NoContent: status&gt;</span> for the &lt;deletion&gt;.
+}</code></pre>
+
+        <h3>Request Data</h3>
+        <p>Access request data using qualified variables:</p>
+
+        <pre><code><span class="code-feature">(createUser: User API)</span> {
+    <span class="code-comment">(* Path parameters *)</span>
+    <span class="code-keyword">&lt;Extract&gt;</span> the <span class="code-result">&lt;id&gt;</span> from the &lt;pathParameters: id&gt;.
+
+    <span class="code-comment">(* Query string *)</span>
+    <span class="code-keyword">&lt;Extract&gt;</span> the <span class="code-result">&lt;page&gt;</span> from the &lt;queryParameters: page&gt;.
+    <span class="code-keyword">&lt;Extract&gt;</span> the <span class="code-result">&lt;limit&gt;</span> from the &lt;queryParameters: limit&gt;.
+
+    <span class="code-comment">(* Request body *)</span>
+    <span class="code-keyword">&lt;Extract&gt;</span> the <span class="code-result">&lt;data&gt;</span> from the &lt;request: body&gt;.
+
+    <span class="code-comment">(* Headers *)</span>
+    <span class="code-keyword">&lt;Extract&gt;</span> the <span class="code-result">&lt;auth-token&gt;</span> from the &lt;request: headers Authorization&gt;.
+    <span class="code-keyword">&lt;Extract&gt;</span> the <span class="code-result">&lt;content-type&gt;</span> from the &lt;request: headers Content-Type&gt;.
+
+    ...
+}</code></pre>
+
+        <h3>Response Status Codes</h3>
+        <p>Return appropriate status codes:</p>
+
+        <pre><code><span class="code-comment">(* 2xx Success *)</span>
+<span class="code-keyword">&lt;Return&gt;</span> an <span class="code-result">&lt;OK: status&gt;</span> with &lt;data&gt;.           <span class="code-comment">(* 200 *)</span>
+<span class="code-keyword">&lt;Return&gt;</span> a <span class="code-result">&lt;Created: status&gt;</span> with &lt;resource&gt;.   <span class="code-comment">(* 201 *)</span>
+<span class="code-keyword">&lt;Return&gt;</span> an <span class="code-result">&lt;Accepted: status&gt;</span> for &lt;async&gt;.     <span class="code-comment">(* 202 *)</span>
+<span class="code-keyword">&lt;Return&gt;</span> a <span class="code-result">&lt;NoContent: status&gt;</span> for &lt;deletion&gt;.  <span class="code-comment">(* 204 *)</span>
+
+<span class="code-comment">(* 4xx Client Errors *)</span>
+<span class="code-keyword">&lt;Return&gt;</span> a <span class="code-result">&lt;BadRequest: status&gt;</span> with &lt;errors&gt;.       <span class="code-comment">(* 400 *)</span>
+<span class="code-keyword">&lt;Return&gt;</span> an <span class="code-result">&lt;Unauthorized: status&gt;</span> for &lt;auth&gt;.       <span class="code-comment">(* 401 *)</span>
+<span class="code-keyword">&lt;Return&gt;</span> a <span class="code-result">&lt;Forbidden: status&gt;</span> for &lt;access&gt;.         <span class="code-comment">(* 403 *)</span>
+<span class="code-keyword">&lt;Return&gt;</span> a <span class="code-result">&lt;NotFound: status&gt;</span> for &lt;missing&gt;.         <span class="code-comment">(* 404 *)</span>
+
+<span class="code-comment">(* 5xx Server Errors *)</span>
+<span class="code-keyword">&lt;Return&gt;</span> an <span class="code-result">&lt;InternalError: status&gt;</span> for &lt;error&gt;.     <span class="code-comment">(* 500 *)</span></code></pre>
+
+        <h2>RESTful Patterns</h2>
+
+        <h3>Collection Resource</h3>
+        <pre><code><span class="code-comment">(* List all *)</span>
+<span class="code-feature">(listProducts: Product API)</span> {
+    <span class="code-keyword">&lt;Extract&gt;</span> the <span class="code-result">&lt;page&gt;</span> from the &lt;queryParameters: page&gt;.
+    <span class="code-keyword">&lt;Extract&gt;</span> the <span class="code-result">&lt;limit&gt;</span> from the &lt;queryParameters: limit&gt;.
+
+    <span class="code-keyword">&lt;Retrieve&gt;</span> the <span class="code-result">&lt;products&gt;</span> from the &lt;product-repository&gt;
+        with pagination &lt;page&gt; &lt;limit&gt;.
+
+    <span class="code-keyword">&lt;Return&gt;</span> an <span class="code-result">&lt;OK: status&gt;</span> with &lt;products&gt;.
+}
+
+<span class="code-comment">(* Create new *)</span>
+<span class="code-feature">(createProduct: Product API)</span> {
+    <span class="code-keyword">&lt;Extract&gt;</span> the <span class="code-result">&lt;product-data&gt;</span> from the &lt;request: body&gt;.
+    <span class="code-keyword">&lt;Validate&gt;</span> the &lt;product-data&gt; for the &lt;product-schema&gt;.
+    <span class="code-keyword">&lt;Create&gt;</span> the <span class="code-result">&lt;product&gt;</span> with &lt;product-data&gt;.
+    <span class="code-keyword">&lt;Store&gt;</span> the &lt;product&gt; into the &lt;product-repository&gt;.
+    <span class="code-keyword">&lt;Return&gt;</span> a <span class="code-result">&lt;Created: status&gt;</span> with &lt;product&gt;.
+}</code></pre>
+
+        <h3>Single Resource</h3>
+        <pre><code><span class="code-comment">(* Get one *)</span>
+<span class="code-feature">(getProduct: Product API)</span> {
+    <span class="code-keyword">&lt;Extract&gt;</span> the <span class="code-result">&lt;product-id&gt;</span> from the &lt;pathParameters: id&gt;.
+    <span class="code-keyword">&lt;Retrieve&gt;</span> the <span class="code-result">&lt;product&gt;</span> from the &lt;product-repository&gt; where id = &lt;product-id&gt;.
+
+    if &lt;product&gt; is empty then {
+        <span class="code-keyword">&lt;Return&gt;</span> a <span class="code-result">&lt;NotFound: status&gt;</span> for the &lt;missing: product&gt;.
+    }
+
+    <span class="code-keyword">&lt;Return&gt;</span> an <span class="code-result">&lt;OK: status&gt;</span> with &lt;product&gt;.
+}
+
+<span class="code-comment">(* Delete one *)</span>
+<span class="code-feature">(deleteProduct: Product API)</span> {
+    <span class="code-keyword">&lt;Extract&gt;</span> the <span class="code-result">&lt;product-id&gt;</span> from the &lt;pathParameters: id&gt;.
+    <span class="code-keyword">&lt;Retrieve&gt;</span> the <span class="code-result">&lt;product&gt;</span> from the &lt;product-repository&gt; where id = &lt;product-id&gt;.
+
+    if &lt;product&gt; is empty then {
+        <span class="code-keyword">&lt;Return&gt;</span> a <span class="code-result">&lt;NotFound: status&gt;</span> for the &lt;missing: product&gt;.
+    }
+
+    <span class="code-keyword">&lt;Delete&gt;</span> the &lt;product&gt; from the &lt;product-repository&gt; where id = &lt;product-id&gt;.
+    <span class="code-keyword">&lt;Return&gt;</span> a <span class="code-result">&lt;NoContent: status&gt;</span> for the &lt;deletion&gt;.
+}</code></pre>
+
+        <h3>Nested Resources</h3>
+        <pre><code><span class="code-comment">(* User's orders *)</span>
+<span class="code-feature">(listUserOrders: Order API)</span> {
+    <span class="code-keyword">&lt;Extract&gt;</span> the <span class="code-result">&lt;user-id&gt;</span> from the &lt;pathParameters: userId&gt;.
+    <span class="code-keyword">&lt;Retrieve&gt;</span> the <span class="code-result">&lt;orders&gt;</span> from the &lt;order-repository&gt; where userId = &lt;user-id&gt;.
+    <span class="code-keyword">&lt;Return&gt;</span> an <span class="code-result">&lt;OK: status&gt;</span> with &lt;orders&gt;.
+}
+
+<span class="code-comment">(* Specific order for user *)</span>
+<span class="code-feature">(getUserOrder: Order API)</span> {
+    <span class="code-keyword">&lt;Extract&gt;</span> the <span class="code-result">&lt;user-id&gt;</span> from the &lt;pathParameters: userId&gt;.
+    <span class="code-keyword">&lt;Extract&gt;</span> the <span class="code-result">&lt;order-id&gt;</span> from the &lt;pathParameters: orderId&gt;.
+    <span class="code-keyword">&lt;Retrieve&gt;</span> the <span class="code-result">&lt;order&gt;</span> from the &lt;order-repository&gt;
+        where id = &lt;order-id&gt; and userId = &lt;user-id&gt;.
+
+    if &lt;order&gt; is empty then {
+        <span class="code-keyword">&lt;Return&gt;</span> a <span class="code-result">&lt;NotFound: status&gt;</span> for the &lt;missing: order&gt;.
+    }
+
+    <span class="code-keyword">&lt;Return&gt;</span> an <span class="code-result">&lt;OK: status&gt;</span> with &lt;order&gt;.
+}</code></pre>
+
+        <h2>HTTP Client</h2>
+
+        <h3>Making Requests</h3>
+        <p>Make outgoing HTTP requests:</p>
+
+        <pre><code><span class="code-comment">(* Simple GET *)</span>
+<span class="code-keyword">&lt;Fetch&gt;</span> the <span class="code-result">&lt;data&gt;</span> from <span class="code-string">"https://api.example.com/resource"</span>.
+
+<span class="code-comment">(* GET with response handling *)</span>
+<span class="code-keyword">&lt;Fetch&gt;</span> the <span class="code-result">&lt;response&gt;</span> from <span class="code-string">"https://api.example.com/users"</span>.
+<span class="code-keyword">&lt;Extract&gt;</span> the <span class="code-result">&lt;users&gt;</span> from the &lt;response: body&gt;.</code></pre>
+
+        <h3>Request Methods</h3>
+        <pre><code><span class="code-comment">(* GET *)</span>
+<span class="code-keyword">&lt;Fetch&gt;</span> the <span class="code-result">&lt;users&gt;</span> from &lt;UserAPI: GET /users&gt;.
+
+<span class="code-comment">(* POST *)</span>
+<span class="code-keyword">&lt;Call&gt;</span> the <span class="code-result">&lt;result&gt;</span> via &lt;UserAPI: POST /users&gt; with &lt;user-data&gt;.
+
+<span class="code-comment">(* PUT *)</span>
+<span class="code-keyword">&lt;Call&gt;</span> the <span class="code-result">&lt;updated&gt;</span> via &lt;UserAPI: PUT /users/{id}&gt; with &lt;updates&gt;.
+
+<span class="code-comment">(* DELETE *)</span>
+<span class="code-keyword">&lt;Call&gt;</span> the <span class="code-result">&lt;result&gt;</span> via &lt;UserAPI: DELETE /users/{id}&gt;.</code></pre>
+
+        <h3>Response Handling</h3>
+        <pre><code><span class="code-feature">(Fetch External Data: External Service)</span> {
+    <span class="code-keyword">&lt;Fetch&gt;</span> the <span class="code-result">&lt;response&gt;</span> from <span class="code-string">"https://api.example.com/data"</span>.
+
+    <span class="code-keyword">&lt;Extract&gt;</span> the <span class="code-result">&lt;status-code&gt;</span> from the &lt;response: statusCode&gt;.
+    <span class="code-keyword">&lt;Extract&gt;</span> the <span class="code-result">&lt;body&gt;</span> from the &lt;response: body&gt;.
+
+    if &lt;status-code&gt; is not 200 then {
+        <span class="code-keyword">&lt;Log&gt;</span> the <span class="code-result">&lt;error: message&gt;</span> for the &lt;console&gt; with <span class="code-string">"API error: ${status-code}"</span>.
+        <span class="code-keyword">&lt;Return&gt;</span> a <span class="code-result">&lt;BadRequest: status&gt;</span> for the &lt;api: error&gt;.
+    }
+
+    <span class="code-keyword">&lt;Return&gt;</span> an <span class="code-result">&lt;OK: status&gt;</span> with &lt;body&gt;.
+}</code></pre>
+
+        <h2>Authentication</h2>
+
+        <h3>API Key</h3>
+        <pre><code><span class="code-feature">(getSecureData: Secure API)</span> {
+    <span class="code-keyword">&lt;Extract&gt;</span> the <span class="code-result">&lt;api-key&gt;</span> from the &lt;request: headers X-API-Key&gt;.
+
+    when &lt;api-key&gt; is empty {
+        <span class="code-keyword">&lt;Return&gt;</span> an <span class="code-result">&lt;Unauthorized: status&gt;</span> for the &lt;missing: api-key&gt;.
+    }
+
+    <span class="code-keyword">&lt;Validate&gt;</span> the &lt;api-key&gt; for the &lt;api-key-registry&gt;.
+
+    if &lt;validation&gt; is failed then {
+        <span class="code-keyword">&lt;Return&gt;</span> an <span class="code-result">&lt;Unauthorized: status&gt;</span> for the &lt;invalid: api-key&gt;.
+    }
+
+    <span class="code-keyword">&lt;Retrieve&gt;</span> the <span class="code-result">&lt;data&gt;</span> from the &lt;repository&gt;.
+    <span class="code-keyword">&lt;Return&gt;</span> an <span class="code-result">&lt;OK: status&gt;</span> with &lt;data&gt;.
+}</code></pre>
+
+        <h3>Bearer Token</h3>
+        <pre><code><span class="code-feature">(getProtectedResource: Protected API)</span> {
+    <span class="code-keyword">&lt;Extract&gt;</span> the <span class="code-result">&lt;auth-header&gt;</span> from the &lt;request: headers Authorization&gt;.
+
+    when &lt;auth-header&gt; is empty {
+        <span class="code-keyword">&lt;Return&gt;</span> an <span class="code-result">&lt;Unauthorized: status&gt;</span> for the &lt;missing: token&gt;.
+    }
+
+    <span class="code-keyword">&lt;Parse&gt;</span> the <span class="code-result">&lt;token&gt;</span> from the &lt;auth-header&gt; as <span class="code-string">"Bearer"</span>.
+    <span class="code-keyword">&lt;Validate&gt;</span> the &lt;token&gt; for the &lt;jwt-validator&gt;.
+
+    if &lt;token&gt; is invalid then {
+        <span class="code-keyword">&lt;Return&gt;</span> an <span class="code-result">&lt;Unauthorized: status&gt;</span> for the &lt;invalid: token&gt;.
+    }
+
+    <span class="code-keyword">&lt;Extract&gt;</span> the <span class="code-result">&lt;user-id&gt;</span> from the &lt;token: claims userId&gt;.
+    <span class="code-keyword">&lt;Return&gt;</span> an <span class="code-result">&lt;OK: status&gt;</span> with &lt;data&gt;.
+}</code></pre>
+
+        <h2>Best Practices</h2>
+
+        <h3>Validate Input</h3>
+        <pre><code><span class="code-feature">(createUser: User API)</span> {
+    <span class="code-keyword">&lt;Extract&gt;</span> the <span class="code-result">&lt;user-data&gt;</span> from the &lt;request: body&gt;.
+
+    <span class="code-comment">(* Always validate input *)</span>
+    <span class="code-keyword">&lt;Validate&gt;</span> the &lt;user-data&gt; for the &lt;user-schema&gt;.
+
+    if &lt;validation&gt; is failed then {
+        <span class="code-keyword">&lt;Return&gt;</span> a <span class="code-result">&lt;BadRequest: status&gt;</span> with &lt;validation: errors&gt;.
+    }
+
+    <span class="code-keyword">&lt;Create&gt;</span> the <span class="code-result">&lt;user&gt;</span> with &lt;user-data&gt;.
+    <span class="code-keyword">&lt;Return&gt;</span> a <span class="code-result">&lt;Created: status&gt;</span> with &lt;user&gt;.
+}</code></pre>
+
+        <h3>Use Appropriate Status Codes</h3>
+        <pre><code><span class="code-comment">(* Be specific with status codes *)</span>
+<span class="code-keyword">&lt;Return&gt;</span> a <span class="code-result">&lt;Created: status&gt;</span> with &lt;new-resource&gt;.    <span class="code-comment">(* Not just OK *)</span>
+<span class="code-keyword">&lt;Return&gt;</span> a <span class="code-result">&lt;NoContent: status&gt;</span> for the &lt;deletion&gt;.   <span class="code-comment">(* Not OK with empty body *)</span>
+<span class="code-keyword">&lt;Return&gt;</span> a <span class="code-result">&lt;NotFound: status&gt;</span> for the &lt;missing&gt;.    <span class="code-comment">(* Not BadRequest *)</span></code></pre>
+
+        <div class="highlight-box">
+            <h4>Next Steps</h4>
+            <p>
+                <a href="contract-first.html">Contract-First Development</a> - OpenAPI integration<br>
+                <a href="sockets.html">Sockets</a> - TCP communication
+            </p>
+        </div>
+    </main>
+
+    <footer class="footer">
+        <div class="container">
+            <div class="footer-bottom">
+                <p>Sometime this page should build with ARO. Obviously.</p>
+            </div>
+        </div>
+    </footer>
+</body>
+</html>

@@ -1,0 +1,372 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <title>Contract-First Development - ARO Programming Language</title>
+{{head}}
+    <style>
+        .doc-page { padding: 120px 24px 80px; max-width: 900px; margin: 0 auto; }
+        .doc-header { margin-bottom: 48px; }
+        .doc-header h1 { font-size: clamp(2rem, 5vw, 3rem); font-weight: 700; margin-bottom: 16px; letter-spacing: -0.02em; }
+        .doc-header .lead { font-size: 1.25rem; color: var(--color-text-muted); line-height: 1.7; }
+        .doc-page h2 { font-size: 1.8rem; font-weight: 600; margin: 48px 0 16px; padding-top: 24px; border-top: 1px solid rgba(255, 255, 255, 0.1); }
+        .doc-page h3 { font-size: 1.3rem; font-weight: 600; margin: 32px 0 12px; color: var(--color-secondary); }
+        .doc-page p { font-size: 1.1rem; color: var(--color-text-muted); line-height: 1.8; margin-bottom: 16px; }
+        .doc-page code { font-family: var(--font-mono); background: var(--color-bg-alt); padding: 3px 8px; border-radius: 4px; font-size: 0.9rem; color: var(--color-secondary); }
+        .doc-page pre { background: var(--color-bg-alt); border-radius: var(--radius-md); padding: 24px; overflow-x: auto; margin: 24px 0; border: 1px solid rgba(255, 255, 255, 0.1); }
+        .doc-page pre code { background: none; padding: 0; font-size: 0.9rem; line-height: 1.7; color: var(--color-text); }
+        .doc-page ul, .doc-page ol { color: var(--color-text-muted); margin: 16px 0 16px 24px; line-height: 1.8; }
+        .doc-page li { margin-bottom: 8px; }
+        .doc-page strong { color: var(--color-text); }
+        .doc-page table { width: 100%; border-collapse: collapse; margin: 24px 0; }
+        .doc-page th, .doc-page td { padding: 12px 16px; text-align: left; border: 1px solid rgba(255, 255, 255, 0.1); }
+        .doc-page th { background: var(--color-bg-alt); font-weight: 600; color: var(--color-text); }
+        .doc-page td { color: var(--color-text-muted); }
+        .highlight-box { background: rgba(124, 58, 237, 0.1); border: 1px solid rgba(124, 58, 237, 0.3); border-radius: var(--radius-md); padding: 24px; margin: 32px 0; }
+        .highlight-box h4 { color: var(--color-primary); font-size: 1.1rem; margin-bottom: 12px; }
+        .highlight-box p { margin-bottom: 0; }
+        .back-link { display: inline-flex; align-items: center; gap: 8px; color: var(--color-text-muted); text-decoration: none; font-size: 0.95rem; margin-bottom: 24px; transition: color 0.2s; }
+        .back-link:hover { color: var(--color-primary); }
+        .code-comment { color: #6b7280; }
+        .code-keyword { color: #7c3aed; font-weight: 600; }
+        .code-string { color: #10b981; }
+        .code-feature { color: #f472b6; }
+        .code-result { color: #06b6d4; }
+        .code-yaml { color: #f59e0b; }
+        .warning-box { background: rgba(245, 158, 11, 0.1); border: 1px solid rgba(245, 158, 11, 0.3); border-radius: var(--radius-md); padding: 24px; margin: 32px 0; }
+        .warning-box h4 { color: #f59e0b; font-size: 1.1rem; margin-bottom: 12px; }
+        .warning-box p { margin-bottom: 0; }
+    </style>
+</head>
+<body>
+    <nav class="nav">
+        <div class="nav-content">
+            <a href="/aro/" class="logo"><span class="logo-aro">ARO</span></a>
+            <div class="nav-links">
+                <a href="../fdd.html">The FDD Story</a>
+                <a href="../getting-started.html">Get Started</a>
+                <a href="../docs.html" style="color: var(--color-text);">Docs</a>
+                <a href="../disclaimer.html">Motivation</a>
+                <a href="https://github.com/KrisSimon/aro" class="nav-github">GitHub</a>
+            </div>
+        </div>
+    </nav>
+
+    <main class="doc-page">
+        <a href="../docs.html" class="back-link">&#x2190; Back to Documentation</a>
+
+        <header class="doc-header">
+            <h1 class="gradient-text">Contract-First Development</h1>
+            <p class="lead">
+                ARO uses OpenAPI contract-first API development, where an <code>openapi.yaml</code>
+                file becomes the source of truth for HTTP routing and request/response validation.
+            </p>
+        </header>
+
+        <div class="warning-box">
+            <h4>No Contract = No Server</h4>
+            <p>
+                Without an <code>openapi.yaml</code> file, the HTTP server does NOT start and no port is opened.
+                This enforces the contract-first approach.
+            </p>
+        </div>
+
+        <h2>Why Contract-First?</h2>
+        <p>Contract-first API development offers significant advantages:</p>
+        <ul>
+            <li><strong>Single Source of Truth</strong>: The OpenAPI specification defines the API contract</li>
+            <li><strong>Documentation-Driven</strong>: API is designed before implementation</li>
+            <li><strong>Type Safety</strong>: Request/response schemas are validated</li>
+            <li><strong>Tooling Integration</strong>: Generate clients, documentation, tests from spec</li>
+            <li><strong>Team Alignment</strong>: Frontend and backend teams agree on contract upfront</li>
+        </ul>
+
+        <h2>OpenAPI Contract File</h2>
+
+        <h3>Location</h3>
+        <pre><code>MyApp/
+&#x251C;&#x2500;&#x2500; <span class="code-yaml">openapi.yaml</span>          <span class="code-comment"># Required for HTTP server</span>
+&#x251C;&#x2500;&#x2500; main.aro
+&#x2514;&#x2500;&#x2500; users.aro</code></pre>
+
+        <p>Accepted filenames (in order of precedence):</p>
+        <ul>
+            <li><code>openapi.yaml</code></li>
+            <li><code>openapi.yml</code></li>
+            <li><code>openapi.json</code></li>
+        </ul>
+
+        <h3>Required Structure</h3>
+        <pre><code><span class="code-yaml">openapi:</span> 3.0.3
+<span class="code-yaml">info:</span>
+  <span class="code-yaml">title:</span> My API
+  <span class="code-yaml">version:</span> 1.0.0
+
+<span class="code-yaml">paths:</span>
+  <span class="code-yaml">/users:</span>
+    <span class="code-yaml">get:</span>
+      <span class="code-yaml">operationId:</span> listUsers    <span class="code-comment"># Maps to ARO feature set name</span>
+      <span class="code-yaml">responses:</span>
+        <span class="code-yaml">'200':</span>
+          <span class="code-yaml">description:</span> Success</code></pre>
+
+        <p><strong>Key Requirement</strong>: Every operation MUST have an <code>operationId</code>.
+        This maps directly to ARO feature set names.</p>
+
+        <h2>Feature Set Mapping</h2>
+
+        <h3>operationId to Feature Set</h3>
+        <p>Feature sets are named after OpenAPI <code>operationId</code> values:</p>
+
+        <pre><code><span class="code-comment"># openapi.yaml</span>
+<span class="code-yaml">paths:</span>
+  <span class="code-yaml">/users:</span>
+    <span class="code-yaml">get:</span>
+      <span class="code-yaml">operationId:</span> listUsers
+    <span class="code-yaml">post:</span>
+      <span class="code-yaml">operationId:</span> createUser
+  <span class="code-yaml">/users/{id}:</span>
+    <span class="code-yaml">get:</span>
+      <span class="code-yaml">operationId:</span> getUser</code></pre>
+
+        <pre><code><span class="code-comment">(* users.aro - Feature sets match operationIds *)</span>
+
+<span class="code-feature">(listUsers: User API)</span> {
+    <span class="code-keyword">&lt;Retrieve&gt;</span> the <span class="code-result">&lt;users&gt;</span> from the &lt;user-repository&gt;.
+    <span class="code-keyword">&lt;Return&gt;</span> an <span class="code-result">&lt;OK: status&gt;</span> with &lt;users&gt;.
+}
+
+<span class="code-feature">(createUser: User API)</span> {
+    <span class="code-keyword">&lt;Extract&gt;</span> the <span class="code-result">&lt;data&gt;</span> from the &lt;request: body&gt;.
+    <span class="code-keyword">&lt;Create&gt;</span> the <span class="code-result">&lt;user&gt;</span> with &lt;data&gt;.
+    <span class="code-keyword">&lt;Return&gt;</span> a <span class="code-result">&lt;Created: status&gt;</span> with &lt;user&gt;.
+}
+
+<span class="code-feature">(getUser: User API)</span> {
+    <span class="code-keyword">&lt;Extract&gt;</span> the <span class="code-result">&lt;id&gt;</span> from the &lt;pathParameters: id&gt;.
+    <span class="code-keyword">&lt;Retrieve&gt;</span> the <span class="code-result">&lt;user&gt;</span> from the &lt;user-repository&gt; where id = &lt;id&gt;.
+    <span class="code-keyword">&lt;Return&gt;</span> an <span class="code-result">&lt;OK: status&gt;</span> with &lt;user&gt;.
+}</code></pre>
+
+        <h3>Validation at Startup</h3>
+        <p>Missing handlers cause startup failure:</p>
+        <pre><code>Error: Missing ARO feature set handlers for the following operations:
+  - GET /users requires feature set named 'listUsers'
+  - POST /users requires feature set named 'createUser'
+
+Create feature sets with names matching the operationIds in your OpenAPI contract.</code></pre>
+
+        <h2>Path Parameters</h2>
+
+        <h3>Extraction</h3>
+        <p>Path parameters defined in OpenAPI are automatically extracted:</p>
+
+        <pre><code><span class="code-yaml">paths:</span>
+  <span class="code-yaml">/users/{id}:</span>
+    <span class="code-yaml">parameters:</span>
+      - <span class="code-yaml">name:</span> id
+        <span class="code-yaml">in:</span> path
+        <span class="code-yaml">required:</span> true
+        <span class="code-yaml">schema:</span>
+          <span class="code-yaml">type:</span> string</code></pre>
+
+        <pre><code><span class="code-feature">(getUser: User API)</span> {
+    <span class="code-keyword">&lt;Extract&gt;</span> the <span class="code-result">&lt;user-id&gt;</span> from the &lt;pathParameters: id&gt;.
+    <span class="code-comment">(* user-id contains the path parameter value *)</span>
+}</code></pre>
+
+        <h3>Available Context</h3>
+        <table>
+            <thead>
+                <tr><th>Variable</th><th>Description</th></tr>
+            </thead>
+            <tbody>
+                <tr><td><code>pathParameters</code></td><td>Dictionary of path parameters</td></tr>
+                <tr><td><code>pathParameters.{name}</code></td><td>Individual parameter</td></tr>
+                <tr><td><code>queryParameters</code></td><td>Dictionary of query parameters</td></tr>
+                <tr><td><code>request.body</code></td><td>Parsed request body</td></tr>
+                <tr><td><code>request.headers</code></td><td>Request headers</td></tr>
+            </tbody>
+        </table>
+
+        <h2>Schema Binding</h2>
+
+        <h3>Request Body Typing</h3>
+        <p>Request bodies are parsed according to OpenAPI schemas:</p>
+
+        <pre><code><span class="code-yaml">components:</span>
+  <span class="code-yaml">schemas:</span>
+    <span class="code-yaml">CreateUserRequest:</span>
+      <span class="code-yaml">type:</span> object
+      <span class="code-yaml">properties:</span>
+        <span class="code-yaml">name:</span>
+          <span class="code-yaml">type:</span> string
+          <span class="code-yaml">minLength:</span> 1
+        <span class="code-yaml">email:</span>
+          <span class="code-yaml">type:</span> string
+          <span class="code-yaml">format:</span> email
+      <span class="code-yaml">required:</span>
+        - name
+        - email</code></pre>
+
+        <pre><code><span class="code-feature">(createUser: User API)</span> {
+    <span class="code-keyword">&lt;Extract&gt;</span> the <span class="code-result">&lt;data&gt;</span> from the &lt;request: body&gt;.
+    <span class="code-comment">(* data is parsed and validated against CreateUserRequest schema *)</span>
+    <span class="code-comment">(* data.name and data.email are available *)</span>
+}</code></pre>
+
+        <h3>Validation</h3>
+        <p>Schema validation includes:</p>
+        <ul>
+            <li>Required properties</li>
+            <li>Type checking (string, number, boolean, array, object)</li>
+            <li>Format validation (email, date-time, uuid)</li>
+            <li>Constraints (minLength, maxLength, minimum, maximum, pattern)</li>
+        </ul>
+
+        <h2>HTTP Server Behavior</h2>
+
+        <h3>With Contract</h3>
+        <pre><code>$ aro run ./MyApp
+Loading openapi.yaml...
+Validating contract against feature sets...
+  &#x2713; listUsers -> GET /users
+  &#x2713; createUser -> POST /users
+  &#x2713; getUser -> GET /users/{id}
+HTTP Server started on port 8080</code></pre>
+
+        <h3>Without Contract</h3>
+        <pre><code>$ aro run ./MyApp
+No openapi.yaml found - HTTP server disabled
+Application running (no HTTP routes available)</code></pre>
+
+        <h2>Route Matching</h2>
+
+        <h3>Path Patterns</h3>
+        <table>
+            <thead>
+                <tr><th>OpenAPI Path</th><th>Matches</th><th>Path Parameters</th></tr>
+            </thead>
+            <tbody>
+                <tr><td><code>/users</code></td><td><code>/users</code></td><td>none</td></tr>
+                <tr><td><code>/users/{id}</code></td><td><code>/users/123</code></td><td><code>{id: "123"}</code></td></tr>
+                <tr><td><code>/users/{id}/orders/{orderId}</code></td><td><code>/users/123/orders/456</code></td><td><code>{id: "123", orderId: "456"}</code></td></tr>
+            </tbody>
+        </table>
+
+        <h3>Method Mapping</h3>
+        <table>
+            <thead>
+                <tr><th>HTTP Method</th><th>OpenAPI Field</th><th>Example operationId</th></tr>
+            </thead>
+            <tbody>
+                <tr><td>GET</td><td><code>get</code></td><td><code>listUsers</code>, <code>getUser</code></td></tr>
+                <tr><td>POST</td><td><code>post</code></td><td><code>createUser</code></td></tr>
+                <tr><td>PUT</td><td><code>put</code></td><td><code>updateUser</code></td></tr>
+                <tr><td>PATCH</td><td><code>patch</code></td><td><code>patchUser</code></td></tr>
+                <tr><td>DELETE</td><td><code>delete</code></td><td><code>deleteUser</code></td></tr>
+            </tbody>
+        </table>
+
+        <h2>Complete Example</h2>
+
+        <h3>openapi.yaml</h3>
+        <pre><code><span class="code-yaml">openapi:</span> 3.0.3
+<span class="code-yaml">info:</span>
+  <span class="code-yaml">title:</span> User Service API
+  <span class="code-yaml">version:</span> 1.0.0
+
+<span class="code-yaml">paths:</span>
+  <span class="code-yaml">/users:</span>
+    <span class="code-yaml">get:</span>
+      <span class="code-yaml">operationId:</span> listUsers
+      <span class="code-yaml">summary:</span> List all users
+      <span class="code-yaml">responses:</span>
+        <span class="code-yaml">'200':</span>
+          <span class="code-yaml">description:</span> List of users
+    <span class="code-yaml">post:</span>
+      <span class="code-yaml">operationId:</span> createUser
+      <span class="code-yaml">summary:</span> Create a user
+      <span class="code-yaml">requestBody:</span>
+        <span class="code-yaml">required:</span> true
+        <span class="code-yaml">content:</span>
+          <span class="code-yaml">application/json:</span>
+            <span class="code-yaml">schema:</span>
+              <span class="code-yaml">$ref:</span> '#/components/schemas/CreateUserRequest'
+      <span class="code-yaml">responses:</span>
+        <span class="code-yaml">'201':</span>
+          <span class="code-yaml">description:</span> User created
+
+  <span class="code-yaml">/users/{id}:</span>
+    <span class="code-yaml">parameters:</span>
+      - <span class="code-yaml">name:</span> id
+        <span class="code-yaml">in:</span> path
+        <span class="code-yaml">required:</span> true
+        <span class="code-yaml">schema:</span>
+          <span class="code-yaml">type:</span> string
+    <span class="code-yaml">get:</span>
+      <span class="code-yaml">operationId:</span> getUser
+      <span class="code-yaml">summary:</span> Get user by ID
+      <span class="code-yaml">responses:</span>
+        <span class="code-yaml">'200':</span>
+          <span class="code-yaml">description:</span> User found
+        <span class="code-yaml">'404':</span>
+          <span class="code-yaml">description:</span> User not found
+
+<span class="code-yaml">components:</span>
+  <span class="code-yaml">schemas:</span>
+    <span class="code-yaml">CreateUserRequest:</span>
+      <span class="code-yaml">type:</span> object
+      <span class="code-yaml">properties:</span>
+        <span class="code-yaml">name:</span>
+          <span class="code-yaml">type:</span> string
+        <span class="code-yaml">email:</span>
+          <span class="code-yaml">type:</span> string
+      <span class="code-yaml">required:</span>
+        - name
+        - email</code></pre>
+
+        <h3>users.aro</h3>
+        <pre><code><span class="code-comment">(* Feature sets named after operationIds *)</span>
+
+<span class="code-feature">(listUsers: User API)</span> {
+    <span class="code-keyword">&lt;Retrieve&gt;</span> the <span class="code-result">&lt;users&gt;</span> from the &lt;user-repository&gt;.
+    <span class="code-keyword">&lt;Return&gt;</span> an <span class="code-result">&lt;OK: status&gt;</span> with &lt;users&gt;.
+}
+
+<span class="code-feature">(getUser: User API)</span> {
+    <span class="code-keyword">&lt;Extract&gt;</span> the <span class="code-result">&lt;id&gt;</span> from the &lt;pathParameters: id&gt;.
+    <span class="code-keyword">&lt;Retrieve&gt;</span> the <span class="code-result">&lt;user&gt;</span> from the &lt;user-repository&gt; where id = &lt;id&gt;.
+
+    if &lt;user&gt; is empty then {
+        <span class="code-keyword">&lt;Return&gt;</span> a <span class="code-result">&lt;NotFound: status&gt;</span> for the &lt;request&gt;.
+    }
+
+    <span class="code-keyword">&lt;Return&gt;</span> an <span class="code-result">&lt;OK: status&gt;</span> with &lt;user&gt;.
+}
+
+<span class="code-feature">(createUser: User API)</span> {
+    <span class="code-keyword">&lt;Extract&gt;</span> the <span class="code-result">&lt;data&gt;</span> from the &lt;request: body&gt;.
+    <span class="code-keyword">&lt;Create&gt;</span> the <span class="code-result">&lt;user&gt;</span> with &lt;data&gt;.
+    <span class="code-keyword">&lt;Store&gt;</span> the &lt;user&gt; into the &lt;user-repository&gt;.
+    <span class="code-keyword">&lt;Emit&gt;</span> a <span class="code-result">&lt;UserCreated: event&gt;</span> with &lt;user&gt;.
+    <span class="code-keyword">&lt;Return&gt;</span> a <span class="code-result">&lt;Created: status&gt;</span> with &lt;user&gt;.
+}</code></pre>
+
+        <div class="highlight-box">
+            <h4>Next Steps</h4>
+            <p>
+                <a href="http-services.html">HTTP Services</a> - Building REST APIs with ARO<br>
+                <a href="feature-sets.html">Feature Sets</a> - Organizing your code
+            </p>
+        </div>
+    </main>
+
+    <footer class="footer">
+        <div class="container">
+            <div class="footer-bottom">
+                <p>Sometime this page should build with ARO. Obviously.</p>
+            </div>
+        </div>
+    </footer>
+</body>
+</html>

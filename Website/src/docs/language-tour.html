@@ -1,0 +1,255 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <title>A Tour of ARO - ARO Programming Language</title>
+{{head}}
+    <style>
+        .doc-page { padding: 120px 24px 80px; max-width: 900px; margin: 0 auto; }
+        .doc-header { margin-bottom: 48px; }
+        .doc-header h1 { font-size: clamp(2rem, 5vw, 3rem); font-weight: 700; margin-bottom: 16px; letter-spacing: -0.02em; }
+        .doc-header .lead { font-size: 1.25rem; color: var(--color-text-muted); line-height: 1.7; }
+        .doc-page h2 { font-size: 1.8rem; font-weight: 600; margin: 48px 0 16px; padding-top: 24px; border-top: 1px solid rgba(255, 255, 255, 0.1); }
+        .doc-page h3 { font-size: 1.3rem; font-weight: 600; margin: 32px 0 12px; color: var(--color-secondary); }
+        .doc-page p { font-size: 1.1rem; color: var(--color-text-muted); line-height: 1.8; margin-bottom: 16px; }
+        .doc-page code { font-family: var(--font-mono); background: var(--color-bg-alt); padding: 3px 8px; border-radius: 4px; font-size: 0.9rem; color: var(--color-secondary); }
+        .doc-page pre { background: var(--color-bg-alt); border-radius: var(--radius-md); padding: 24px; overflow-x: auto; margin: 24px 0; border: 1px solid rgba(255, 255, 255, 0.1); }
+        .doc-page pre code { background: none; padding: 0; font-size: 0.9rem; line-height: 1.7; color: var(--color-text); }
+        .doc-page ul, .doc-page ol { color: var(--color-text-muted); margin: 16px 0 16px 24px; line-height: 1.8; }
+        .doc-page li { margin-bottom: 8px; }
+        .doc-page strong { color: var(--color-text); }
+        .doc-page table { width: 100%; border-collapse: collapse; margin: 24px 0; }
+        .doc-page th, .doc-page td { padding: 12px 16px; text-align: left; border: 1px solid rgba(255, 255, 255, 0.1); }
+        .doc-page th { background: var(--color-bg-alt); font-weight: 600; color: var(--color-text); }
+        .doc-page td { color: var(--color-text-muted); }
+        .highlight-box { background: rgba(124, 58, 237, 0.1); border: 1px solid rgba(124, 58, 237, 0.3); border-radius: var(--radius-md); padding: 24px; margin: 32px 0; }
+        .highlight-box h4 { color: var(--color-primary); font-size: 1.1rem; margin-bottom: 12px; }
+        .highlight-box p { margin-bottom: 0; }
+        .back-link { display: inline-flex; align-items: center; gap: 8px; color: var(--color-text-muted); text-decoration: none; font-size: 0.95rem; margin-bottom: 24px; transition: color 0.2s; }
+        .back-link:hover { color: var(--color-primary); }
+        .code-comment { color: #6b7280; }
+        .code-keyword { color: #7c3aed; font-weight: 600; }
+        .code-string { color: #10b981; }
+        .code-feature { color: #f472b6; }
+        .code-result { color: #06b6d4; }
+    </style>
+</head>
+<body>
+    <nav class="nav">
+        <div class="nav-content">
+            <a href="/aro/" class="logo"><span class="logo-aro">ARO</span></a>
+            <div class="nav-links">
+                <a href="../fdd.html">The FDD Story</a>
+                <a href="../getting-started.html">Get Started</a>
+                <a href="../docs.html" style="color: var(--color-text);">Docs</a>
+                <a href="../disclaimer.html">Motivation</a>
+                <a href="https://github.com/KrisSimon/aro" class="nav-github">GitHub</a>
+            </div>
+        </div>
+    </nav>
+
+    <main class="doc-page">
+        <a href="../docs.html" class="back-link">&#x2190; Back to Documentation</a>
+
+        <header class="doc-header">
+            <h1 class="gradient-text">A Tour of ARO</h1>
+            <p class="lead">
+                A comprehensive overview of ARO through examples. By the end, you'll understand
+                how ARO programs are structured and how to build event-driven applications.
+            </p>
+        </header>
+
+        <h2>Hello, World!</h2>
+        <p>
+            Tradition suggests the first program in a new language should print "Hello, World!":
+        </p>
+
+        <pre><code><span class="code-feature">(Application-Start: Hello World)</span> {
+    <span class="code-keyword">&lt;Log&gt;</span> the <span class="code-result">&lt;message&gt;</span> for the &lt;console&gt; with <span class="code-string">"Hello, World!"</span>.
+    <span class="code-keyword">&lt;Return&gt;</span> an <span class="code-result">&lt;OK: status&gt;</span> for the &lt;startup&gt;.
+}</code></pre>
+
+        <p>
+            If you've programmed before, this syntax might look unusual. ARO is designed to read like
+            natural language while remaining precise and unambiguous.
+        </p>
+
+        <h2>Feature Sets</h2>
+        <p>
+            The fundamental unit of organization in ARO is the <strong>feature set</strong>.
+            A feature set groups related statements that accomplish a business goal:
+        </p>
+
+        <pre><code><span class="code-feature">(Calculate Order Total: Order Processing)</span> {
+    <span class="code-keyword">&lt;Extract&gt;</span> the <span class="code-result">&lt;items&gt;</span> from the &lt;order: lineItems&gt;.
+    <span class="code-keyword">&lt;Compute&gt;</span> the <span class="code-result">&lt;subtotal&gt;</span> for the &lt;items&gt;.
+    <span class="code-keyword">&lt;Compute&gt;</span> the <span class="code-result">&lt;tax&gt;</span> for the &lt;subtotal&gt;.
+    <span class="code-keyword">&lt;Compute&gt;</span> the <span class="code-result">&lt;total&gt;</span> from the &lt;subtotal&gt; with &lt;tax&gt;.
+    <span class="code-keyword">&lt;Return&gt;</span> an <span class="code-result">&lt;OK: status&gt;</span> with &lt;total&gt;.
+}</code></pre>
+
+        <p>Every feature set has:</p>
+        <ul>
+            <li>A <strong>name</strong> (<code>Calculate Order Total</code>)</li>
+            <li>A <strong>business activity</strong> (<code>Order Processing</code>)</li>
+            <li>A <strong>body</strong> containing statements</li>
+        </ul>
+
+        <h2>The ARO Statement</h2>
+        <p>ARO statements follow the <strong>Action-Result-Object</strong> pattern:</p>
+
+        <pre><code>&lt;Action&gt; the &lt;result&gt; preposition the &lt;object&gt;.</code></pre>
+
+        <p>For example:</p>
+
+        <pre><code><span class="code-keyword">&lt;Extract&gt;</span> the <span class="code-result">&lt;user-id&gt;</span> from the &lt;request: parameters&gt;.
+<span class="code-keyword">&lt;Retrieve&gt;</span> the <span class="code-result">&lt;user&gt;</span> from the &lt;user-repository&gt;.
+<span class="code-keyword">&lt;Create&gt;</span> the <span class="code-result">&lt;response&gt;</span> with &lt;user&gt;.
+<span class="code-keyword">&lt;Return&gt;</span> an <span class="code-result">&lt;OK: status&gt;</span> with &lt;response&gt;.</code></pre>
+
+        <p>Each statement:</p>
+        <ol>
+            <li>Performs an <strong>action</strong> (verb like Extract, Retrieve, Create)</li>
+            <li>Produces a <strong>result</strong> (variable to store the outcome)</li>
+            <li>Uses an <strong>object</strong> (source of data or target of action)</li>
+        </ol>
+
+        <h2>Variables and Qualifiers</h2>
+        <p>Variables in ARO use angle brackets and can have <strong>qualifiers</strong>:</p>
+
+        <pre><code>&lt;user&gt;                  <span class="code-comment">(* Simple variable *)</span>
+&lt;user: id&gt;              <span class="code-comment">(* Variable with qualifier *)</span>
+&lt;request: body&gt;         <span class="code-comment">(* Access nested property *)</span>
+&lt;user-repository&gt;       <span class="code-comment">(* Hyphenated names allowed *)</span></code></pre>
+
+        <h2>Actions by Role</h2>
+        <p>ARO actions are categorized by their semantic role:</p>
+
+        <h3>REQUEST Actions</h3>
+        <p>Bring data from external sources into your feature set:</p>
+
+        <pre><code><span class="code-keyword">&lt;Extract&gt;</span> the <span class="code-result">&lt;data&gt;</span> from the &lt;request: body&gt;.
+<span class="code-keyword">&lt;Retrieve&gt;</span> the <span class="code-result">&lt;user&gt;</span> from the &lt;user-repository&gt;.
+<span class="code-keyword">&lt;Fetch&gt;</span> the <span class="code-result">&lt;weather&gt;</span> from the &lt;weather-api&gt;.</code></pre>
+
+        <h3>OWN Actions</h3>
+        <p>Create or transform data within your feature set:</p>
+
+        <pre><code><span class="code-keyword">&lt;Create&gt;</span> the <span class="code-result">&lt;user&gt;</span> with &lt;user-data&gt;.
+<span class="code-keyword">&lt;Compute&gt;</span> the <span class="code-result">&lt;total&gt;</span> for the &lt;items&gt;.
+<span class="code-keyword">&lt;Transform&gt;</span> the <span class="code-result">&lt;dto&gt;</span> from the &lt;entity&gt;.</code></pre>
+
+        <h3>RESPONSE Actions</h3>
+        <p>Send results back from your feature set:</p>
+
+        <pre><code><span class="code-keyword">&lt;Return&gt;</span> an <span class="code-result">&lt;OK: status&gt;</span> with &lt;data&gt;.
+<span class="code-keyword">&lt;Return&gt;</span> a <span class="code-result">&lt;NotFound: status&gt;</span> for the &lt;missing: user&gt;.</code></pre>
+
+        <h3>EXPORT Actions</h3>
+        <p>Publish data or send to external systems:</p>
+
+        <pre><code><span class="code-keyword">&lt;Store&gt;</span> the &lt;user&gt; into the &lt;user-repository&gt;.
+<span class="code-keyword">&lt;Log&gt;</span> the <span class="code-result">&lt;message&gt;</span> for the &lt;console&gt;.
+<span class="code-keyword">&lt;Emit&gt;</span> a <span class="code-result">&lt;UserCreated: event&gt;</span> with &lt;user&gt;.</code></pre>
+
+        <h2>Prepositions</h2>
+        <p>Different prepositions convey different relationships:</p>
+
+        <table>
+            <thead>
+                <tr><th>Preposition</th><th>Meaning</th><th>Example</th></tr>
+            </thead>
+            <tbody>
+                <tr><td><code>from</code></td><td>Source of data</td><td><code>&lt;Extract&gt; the &lt;id&gt; from the &lt;request&gt;</code></td></tr>
+                <tr><td><code>for</code></td><td>Purpose/target</td><td><code>&lt;Compute&gt; the &lt;hash&gt; for the &lt;password&gt;</code></td></tr>
+                <tr><td><code>with</code></td><td>Additional data</td><td><code>&lt;Create&gt; the &lt;user&gt; with &lt;data&gt;</code></td></tr>
+                <tr><td><code>into</code></td><td>Storage destination</td><td><code>&lt;Store&gt; the &lt;user&gt; into the &lt;repository&gt;</code></td></tr>
+                <tr><td><code>to</code></td><td>Recipient</td><td><code>&lt;Send&gt; the &lt;message&gt; to the &lt;user&gt;</code></td></tr>
+            </tbody>
+        </table>
+
+        <h2>Event-Driven Programming</h2>
+        <p>
+            Feature sets don't call each other directly. Instead, they respond to <strong>events</strong>.
+        </p>
+
+        <h3>HTTP Events (Contract-First)</h3>
+        <p>Feature sets named after OpenAPI <code>operationId</code> values handle HTTP requests:</p>
+
+        <pre><code><span class="code-comment">(* Named after operationId in openapi.yaml *)</span>
+<span class="code-feature">(listUsers: User API)</span> {
+    <span class="code-keyword">&lt;Retrieve&gt;</span> the <span class="code-result">&lt;users&gt;</span> from the &lt;user-repository&gt;.
+    <span class="code-keyword">&lt;Return&gt;</span> an <span class="code-result">&lt;OK: status&gt;</span> with &lt;users&gt;.
+}
+
+<span class="code-feature">(createUser: User API)</span> {
+    <span class="code-keyword">&lt;Extract&gt;</span> the <span class="code-result">&lt;user-data&gt;</span> from the &lt;request: body&gt;.
+    <span class="code-keyword">&lt;Create&gt;</span> the <span class="code-result">&lt;user&gt;</span> with &lt;user-data&gt;.
+    <span class="code-keyword">&lt;Emit&gt;</span> a <span class="code-result">&lt;UserCreated: event&gt;</span> with &lt;user&gt;.
+    <span class="code-keyword">&lt;Return&gt;</span> a <span class="code-result">&lt;Created: status&gt;</span> with &lt;user&gt;.
+}</code></pre>
+
+        <h3>Domain Events</h3>
+        <p>Feature sets can emit and handle custom events:</p>
+
+        <pre><code><span class="code-comment">(* Handling an event *)</span>
+<span class="code-feature">(Send Confirmation: OrderPlaced Handler)</span> {
+    <span class="code-keyword">&lt;Extract&gt;</span> the <span class="code-result">&lt;order&gt;</span> from the &lt;event: order&gt;.
+    <span class="code-keyword">&lt;Extract&gt;</span> the <span class="code-result">&lt;email&gt;</span> from the &lt;order: customerEmail&gt;.
+    <span class="code-keyword">&lt;Send&gt;</span> the &lt;email&gt; to the &lt;email-service&gt;.
+    <span class="code-keyword">&lt;Return&gt;</span> an <span class="code-result">&lt;OK: status&gt;</span> for the &lt;notification&gt;.
+}</code></pre>
+
+        <h2>Multi-File Applications</h2>
+        <p>ARO applications can span multiple files without imports:</p>
+
+        <pre><code>MyApp/
+&#x251C;&#x2500;&#x2500; openapi.yaml      <span class="code-comment"># HTTP routes (required for HTTP)</span>
+&#x251C;&#x2500;&#x2500; main.aro          <span class="code-comment"># Application-Start</span>
+&#x251C;&#x2500;&#x2500; users.aro         <span class="code-comment"># User feature sets</span>
+&#x251C;&#x2500;&#x2500; orders.aro        <span class="code-comment"># Order feature sets</span>
+&#x2514;&#x2500;&#x2500; notifications.aro <span class="code-comment"># Event handlers</span></code></pre>
+
+        <p>All feature sets are automatically visible to each other.</p>
+
+        <h2>Control Flow</h2>
+        <p>ARO supports conditional logic:</p>
+
+        <pre><code><span class="code-feature">(getUser: User API)</span> {
+    <span class="code-keyword">&lt;Extract&gt;</span> the <span class="code-result">&lt;user-id&gt;</span> from the &lt;pathParameters: id&gt;.
+    <span class="code-keyword">&lt;Retrieve&gt;</span> the <span class="code-result">&lt;user&gt;</span> from the &lt;user-repository&gt; where id = &lt;user-id&gt;.
+
+    if &lt;user&gt; is empty then {
+        <span class="code-keyword">&lt;Return&gt;</span> a <span class="code-result">&lt;NotFound: status&gt;</span> for the &lt;missing: user&gt;.
+    }
+
+    <span class="code-keyword">&lt;Return&gt;</span> an <span class="code-result">&lt;OK: status&gt;</span> with &lt;user&gt;.
+}</code></pre>
+
+        <h2>Response Status Codes</h2>
+        <p>ARO maps return statuses to HTTP status codes:</p>
+
+        <pre><code><span class="code-keyword">&lt;Return&gt;</span> an <span class="code-result">&lt;OK: status&gt;</span> with &lt;data&gt;.           <span class="code-comment">(* 200 OK *)</span>
+<span class="code-keyword">&lt;Return&gt;</span> a <span class="code-result">&lt;Created: status&gt;</span> with &lt;resource&gt;.   <span class="code-comment">(* 201 Created *)</span>
+<span class="code-keyword">&lt;Return&gt;</span> a <span class="code-result">&lt;NoContent: status&gt;</span> for &lt;deletion&gt;.  <span class="code-comment">(* 204 No Content *)</span>
+<span class="code-keyword">&lt;Return&gt;</span> a <span class="code-result">&lt;BadRequest: status&gt;</span> for &lt;error&gt;.    <span class="code-comment">(* 400 Bad Request *)</span>
+<span class="code-keyword">&lt;Return&gt;</span> a <span class="code-result">&lt;NotFound: status&gt;</span> for &lt;missing&gt;.    <span class="code-comment">(* 404 Not Found *)</span></code></pre>
+
+        <div class="highlight-box">
+            <h4>Next Steps</h4>
+            <p>
+                This tour introduced ARO's key features. Continue with
+                <a href="the-basics.html">The Basics</a> for detailed syntax reference,
+                or explore <a href="feature-sets.html">Feature Sets</a> for organization patterns.
+            </p>
+        </div>
+    </main>
+
+    <footer class="footer">
+        <div class="container">
+            <div class="footer-bottom">
+                <p>Sometime this page should build with ARO. Obviously.</p>
+            </div>
+        </div>
+    </footer>
+</body>
+</html>

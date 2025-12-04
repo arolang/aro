@@ -1,0 +1,234 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <title>The Basics - ARO Programming Language</title>
+{{head}}
+    <style>
+        .doc-page { padding: 120px 24px 80px; max-width: 900px; margin: 0 auto; }
+        .doc-header { margin-bottom: 48px; }
+        .doc-header h1 { font-size: clamp(2rem, 5vw, 3rem); font-weight: 700; margin-bottom: 16px; letter-spacing: -0.02em; }
+        .doc-header .lead { font-size: 1.25rem; color: var(--color-text-muted); line-height: 1.7; }
+        .doc-page h2 { font-size: 1.8rem; font-weight: 600; margin: 48px 0 16px; padding-top: 24px; border-top: 1px solid rgba(255, 255, 255, 0.1); }
+        .doc-page h3 { font-size: 1.3rem; font-weight: 600; margin: 32px 0 12px; color: var(--color-secondary); }
+        .doc-page p { font-size: 1.1rem; color: var(--color-text-muted); line-height: 1.8; margin-bottom: 16px; }
+        .doc-page code { font-family: var(--font-mono); background: var(--color-bg-alt); padding: 3px 8px; border-radius: 4px; font-size: 0.9rem; color: var(--color-secondary); }
+        .doc-page pre { background: var(--color-bg-alt); border-radius: var(--radius-md); padding: 24px; overflow-x: auto; margin: 24px 0; border: 1px solid rgba(255, 255, 255, 0.1); }
+        .doc-page pre code { background: none; padding: 0; font-size: 0.9rem; line-height: 1.7; color: var(--color-text); }
+        .doc-page ul, .doc-page ol { color: var(--color-text-muted); margin: 16px 0 16px 24px; line-height: 1.8; }
+        .doc-page li { margin-bottom: 8px; }
+        .doc-page strong { color: var(--color-text); }
+        .doc-page table { width: 100%; border-collapse: collapse; margin: 24px 0; }
+        .doc-page th, .doc-page td { padding: 12px 16px; text-align: left; border: 1px solid rgba(255, 255, 255, 0.1); }
+        .doc-page th { background: var(--color-bg-alt); font-weight: 600; color: var(--color-text); }
+        .doc-page td { color: var(--color-text-muted); }
+        .highlight-box { background: rgba(124, 58, 237, 0.1); border: 1px solid rgba(124, 58, 237, 0.3); border-radius: var(--radius-md); padding: 24px; margin: 32px 0; }
+        .highlight-box h4 { color: var(--color-primary); font-size: 1.1rem; margin-bottom: 12px; }
+        .highlight-box p { margin-bottom: 0; }
+        .back-link { display: inline-flex; align-items: center; gap: 8px; color: var(--color-text-muted); text-decoration: none; font-size: 0.95rem; margin-bottom: 24px; transition: color 0.2s; }
+        .back-link:hover { color: var(--color-primary); }
+        .code-comment { color: #6b7280; }
+        .code-keyword { color: #7c3aed; font-weight: 600; }
+        .code-string { color: #10b981; }
+        .code-feature { color: #f472b6; }
+        .code-result { color: #06b6d4; }
+    </style>
+</head>
+<body>
+    <nav class="nav">
+        <div class="nav-content">
+            <a href="/aro/" class="logo"><span class="logo-aro">ARO</span></a>
+            <div class="nav-links">
+                <a href="../fdd.html">The FDD Story</a>
+                <a href="../getting-started.html">Get Started</a>
+                <a href="../docs.html" style="color: var(--color-text);">Docs</a>
+                <a href="../disclaimer.html">Motivation</a>
+                <a href="https://github.com/KrisSimon/aro" class="nav-github">GitHub</a>
+            </div>
+        </div>
+    </nav>
+
+    <main class="doc-page">
+        <a href="../docs.html" class="back-link">&#x2190; Back to Documentation</a>
+
+        <header class="doc-header">
+            <h1 class="gradient-text">The Basics</h1>
+            <p class="lead">
+                The fundamental building blocks of ARO: syntax, structure, and core concepts
+                you'll use in every program.
+            </p>
+        </header>
+
+        <h2>Source Files</h2>
+        <p>
+            ARO source files use the <code>.aro</code> extension. An application is a directory
+            containing one or more <code>.aro</code> files:
+        </p>
+
+        <pre><code>MyApp/
+&#x251C;&#x2500;&#x2500; openapi.yaml    <span class="code-comment"># Required for HTTP server</span>
+&#x251C;&#x2500;&#x2500; main.aro
+&#x251C;&#x2500;&#x2500; users.aro
+&#x2514;&#x2500;&#x2500; events.aro</code></pre>
+
+        <p>All files in the directory are automatically compiled together. No import statements needed.</p>
+
+        <h2>Comments</h2>
+        <p>ARO uses Pascal-style block comments:</p>
+
+        <pre><code><span class="code-comment">(* This is a comment *)</span>
+
+<span class="code-comment">(*
+   Multi-line comments
+   are also supported
+*)</span>
+
+<span class="code-comment">(* Comments can contain (* nested comments *) *)</span></code></pre>
+
+        <h2>Feature Sets</h2>
+        <p>
+            A <strong>feature set</strong> is the primary organizational unit in ARO.
+            It groups related statements that accomplish a business goal:
+        </p>
+
+        <pre><code><span class="code-feature">(Feature Name: Business Activity)</span> {
+    <span class="code-comment">(* statements go here *)</span>
+}</code></pre>
+
+        <h3>Example</h3>
+
+        <pre><code><span class="code-feature">(Validate User Credentials: Authentication)</span> {
+    <span class="code-keyword">&lt;Extract&gt;</span> the <span class="code-result">&lt;username&gt;</span> from the &lt;request: body username&gt;.
+    <span class="code-keyword">&lt;Extract&gt;</span> the <span class="code-result">&lt;password&gt;</span> from the &lt;request: body password&gt;.
+    <span class="code-keyword">&lt;Retrieve&gt;</span> the <span class="code-result">&lt;user&gt;</span> from the &lt;user-repository&gt; where username = &lt;username&gt;.
+    <span class="code-keyword">&lt;Compare&gt;</span> the &lt;password&gt; against the &lt;user: passwordHash&gt;.
+    <span class="code-keyword">&lt;Return&gt;</span> an <span class="code-result">&lt;OK: status&gt;</span> with &lt;user&gt;.
+}</code></pre>
+
+        <h2>Statements</h2>
+        <p>Every statement follows the <strong>Action-Result-Object</strong> pattern:</p>
+
+        <pre><code>&lt;Action&gt; [article] &lt;result&gt; preposition [article] &lt;object&gt; [modifiers].</code></pre>
+
+        <table>
+            <thead>
+                <tr><th>Component</th><th>Description</th><th>Example</th></tr>
+            </thead>
+            <tbody>
+                <tr><td>Action</td><td>The verb/operation</td><td><code>&lt;Extract&gt;</code>, <code>&lt;Create&gt;</code></td></tr>
+                <tr><td>Article</td><td>Optional: a, an, the</td><td><code>the</code>, <code>a</code>, <code>an</code></td></tr>
+                <tr><td>Result</td><td>The output variable</td><td><code>&lt;user&gt;</code>, <code>&lt;data: processed&gt;</code></td></tr>
+                <tr><td>Preposition</td><td>Relationship word</td><td><code>from</code>, <code>to</code>, <code>with</code></td></tr>
+                <tr><td>Object</td><td>The input/target</td><td><code>&lt;request: body&gt;</code></td></tr>
+                <tr><td>Modifiers</td><td>Additional clauses</td><td><code>where id = &lt;user-id&gt;</code></td></tr>
+            </tbody>
+        </table>
+
+        <p>Every statement ends with a period (<code>.</code>).</p>
+
+        <h2>Variables</h2>
+        <p>Variables are denoted with angle brackets and hold values during execution.</p>
+
+        <h3>Simple Variables</h3>
+        <pre><code>&lt;user&gt;
+&lt;order&gt;
+&lt;total&gt;</code></pre>
+
+        <h3>Qualified Variables</h3>
+        <p>Add context with a colon and qualifier:</p>
+        <pre><code>&lt;user: id&gt;           <span class="code-comment">(* The id property of user *)</span>
+&lt;request: body&gt;      <span class="code-comment">(* The body of the request *)</span>
+&lt;order: lineItems&gt;   <span class="code-comment">(* The lineItems of an order *)</span></code></pre>
+
+        <h3>Compound Names</h3>
+        <pre><code>&lt;user-id&gt;
+&lt;order-total&gt;
+&lt;customer-email&gt;</code></pre>
+
+        <h2>Prepositions</h2>
+        <p>Prepositions define the relationship between result and object:</p>
+
+        <table>
+            <thead>
+                <tr><th>Preposition</th><th>Meaning</th><th>Example</th></tr>
+            </thead>
+            <tbody>
+                <tr><td><code>from</code></td><td>Data source</td><td><code>&lt;Extract&gt; the &lt;id&gt; from the &lt;request&gt;</code></td></tr>
+                <tr><td><code>to</code></td><td>Destination</td><td><code>&lt;Send&gt; the &lt;email&gt; to the &lt;user&gt;</code></td></tr>
+                <tr><td><code>for</code></td><td>Purpose/benefit</td><td><code>&lt;Compute&gt; the &lt;hash&gt; for the &lt;password&gt;</code></td></tr>
+                <tr><td><code>with</code></td><td>Accompaniment</td><td><code>&lt;Create&gt; the &lt;user&gt; with &lt;data&gt;</code></td></tr>
+                <tr><td><code>into</code></td><td>Storage target</td><td><code>&lt;Store&gt; the &lt;user&gt; into the &lt;repository&gt;</code></td></tr>
+                <tr><td><code>against</code></td><td>Comparison</td><td><code>&lt;Compare&gt; the &lt;a&gt; against the &lt;b&gt;</code></td></tr>
+                <tr><td><code>on</code></td><td>Location/port</td><td><code>&lt;Start&gt; the &lt;server&gt; on port 8080</code></td></tr>
+            </tbody>
+        </table>
+
+        <h2>Literals</h2>
+
+        <h3>String Literals</h3>
+        <pre><code><span class="code-keyword">&lt;Log&gt;</span> the <span class="code-result">&lt;message&gt;</span> for the &lt;console&gt; with <span class="code-string">"Hello, World!"</span>.</code></pre>
+
+        <h3>String Interpolation</h3>
+        <pre><code><span class="code-keyword">&lt;Create&gt;</span> the <span class="code-result">&lt;greeting&gt;</span> with <span class="code-string">"Hello, ${user-name}!"</span>.</code></pre>
+
+        <h3>Object Literals</h3>
+        <pre><code><span class="code-keyword">&lt;Create&gt;</span> the <span class="code-result">&lt;user&gt;</span> with {
+    name: <span class="code-string">"John Doe"</span>,
+    email: <span class="code-string">"john@example.com"</span>,
+    role: <span class="code-string">"admin"</span>
+}.</code></pre>
+
+        <h2>Special Feature Sets</h2>
+
+        <h3>Application-Start</h3>
+        <p>The required entry point:</p>
+        <pre><code><span class="code-feature">(Application-Start: My Application)</span> {
+    <span class="code-comment">(* Initialization code *)</span>
+    <span class="code-keyword">&lt;Return&gt;</span> an <span class="code-result">&lt;OK: status&gt;</span> for the &lt;startup&gt;.
+}</code></pre>
+
+        <h3>Application-End</h3>
+        <p>Optional exit handlers:</p>
+        <pre><code><span class="code-feature">(Application-End: Success)</span> {
+    <span class="code-comment">(* Cleanup on graceful shutdown *)</span>
+    <span class="code-keyword">&lt;Return&gt;</span> an <span class="code-result">&lt;OK: status&gt;</span> for the &lt;shutdown&gt;.
+}
+
+<span class="code-feature">(Application-End: Error)</span> {
+    <span class="code-comment">(* Cleanup on error *)</span>
+    <span class="code-keyword">&lt;Return&gt;</span> an <span class="code-result">&lt;OK: status&gt;</span> for the &lt;error-handling&gt;.
+}</code></pre>
+
+        <h3>Event Handlers</h3>
+        <p>Feature sets with "Handler" in the business activity:</p>
+        <pre><code><span class="code-feature">(Send Email: UserCreated Handler)</span> { ... }
+<span class="code-feature">(Process File: FileCreated Handler)</span> { ... }
+<span class="code-feature">(Log Connection: ClientConnected Handler)</span> { ... }</code></pre>
+
+        <h2>Reserved Words</h2>
+        <p>The following words have special meaning in ARO:</p>
+
+        <ul>
+            <li><strong>Articles</strong>: <code>a</code>, <code>an</code>, <code>the</code></li>
+            <li><strong>Prepositions</strong>: <code>from</code>, <code>to</code>, <code>for</code>, <code>with</code>, <code>into</code>, <code>against</code>, <code>via</code>, <code>on</code>, <code>as</code></li>
+            <li><strong>Control Flow</strong>: <code>if</code>, <code>then</code>, <code>else</code>, <code>when</code>, <code>where</code>, <code>and</code>, <code>or</code>, <code>not</code>, <code>is</code></li>
+            <li><strong>Status</strong>: <code>OK</code>, <code>Created</code>, <code>NoContent</code>, <code>BadRequest</code>, <code>NotFound</code>, <code>Forbidden</code></li>
+        </ul>
+
+        <div class="highlight-box">
+            <h4>Next Steps</h4>
+            <p>
+                <a href="feature-sets.html">Feature Sets</a> - Organizing code into feature sets<br>
+                <a href="actions.html">Actions</a> - Complete action reference
+            </p>
+        </div>
+    </main>
+
+    <footer class="footer">
+        <div class="container">
+            <div class="footer-bottom">
+                <p>Sometime this page should build with ARO. Obviously.</p>
+            </div>
+        </div>
+    </footer>
+</body>
+</html>

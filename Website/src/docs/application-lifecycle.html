@@ -1,0 +1,301 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <title>Application Lifecycle - ARO Programming Language</title>
+{{head}}
+    <style>
+        .doc-page { padding: 120px 24px 80px; max-width: 900px; margin: 0 auto; }
+        .doc-header { margin-bottom: 48px; }
+        .doc-header h1 { font-size: clamp(2rem, 5vw, 3rem); font-weight: 700; margin-bottom: 16px; letter-spacing: -0.02em; }
+        .doc-header .lead { font-size: 1.25rem; color: var(--color-text-muted); line-height: 1.7; }
+        .doc-page h2 { font-size: 1.8rem; font-weight: 600; margin: 48px 0 16px; padding-top: 24px; border-top: 1px solid rgba(255, 255, 255, 0.1); }
+        .doc-page h3 { font-size: 1.3rem; font-weight: 600; margin: 32px 0 12px; color: var(--color-secondary); }
+        .doc-page p { font-size: 1.1rem; color: var(--color-text-muted); line-height: 1.8; margin-bottom: 16px; }
+        .doc-page code { font-family: var(--font-mono); background: var(--color-bg-alt); padding: 3px 8px; border-radius: 4px; font-size: 0.9rem; color: var(--color-secondary); }
+        .doc-page pre { background: var(--color-bg-alt); border-radius: var(--radius-md); padding: 24px; overflow-x: auto; margin: 24px 0; border: 1px solid rgba(255, 255, 255, 0.1); }
+        .doc-page pre code { background: none; padding: 0; font-size: 0.9rem; line-height: 1.7; color: var(--color-text); }
+        .doc-page ul, .doc-page ol { color: var(--color-text-muted); margin: 16px 0 16px 24px; line-height: 1.8; }
+        .doc-page li { margin-bottom: 8px; }
+        .doc-page strong { color: var(--color-text); }
+        .doc-page table { width: 100%; border-collapse: collapse; margin: 24px 0; }
+        .doc-page th, .doc-page td { padding: 12px 16px; text-align: left; border: 1px solid rgba(255, 255, 255, 0.1); }
+        .doc-page th { background: var(--color-bg-alt); font-weight: 600; color: var(--color-text); }
+        .doc-page td { color: var(--color-text-muted); }
+        .highlight-box { background: rgba(124, 58, 237, 0.1); border: 1px solid rgba(124, 58, 237, 0.3); border-radius: var(--radius-md); padding: 24px; margin: 32px 0; }
+        .highlight-box h4 { color: var(--color-primary); font-size: 1.1rem; margin-bottom: 12px; }
+        .highlight-box p { margin-bottom: 0; }
+        .back-link { display: inline-flex; align-items: center; gap: 8px; color: var(--color-text-muted); text-decoration: none; font-size: 0.95rem; margin-bottom: 24px; transition: color 0.2s; }
+        .back-link:hover { color: var(--color-primary); }
+        .code-comment { color: #6b7280; }
+        .code-keyword { color: #7c3aed; font-weight: 600; }
+        .code-string { color: #10b981; }
+        .code-feature { color: #f472b6; }
+        .code-result { color: #06b6d4; }
+        .lifecycle-visual {
+            background: var(--color-bg-alt);
+            border-radius: var(--radius-md);
+            padding: 24px;
+            margin: 24px 0;
+            font-family: var(--font-mono);
+            font-size: 0.85rem;
+            line-height: 1.6;
+            color: var(--color-text-muted);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+        }
+    </style>
+</head>
+<body>
+    <nav class="nav">
+        <div class="nav-content">
+            <a href="/aro/" class="logo"><span class="logo-aro">ARO</span></a>
+            <div class="nav-links">
+                <a href="../fdd.html">The FDD Story</a>
+                <a href="../getting-started.html">Get Started</a>
+                <a href="../docs.html" style="color: var(--color-text);">Docs</a>
+                <a href="../disclaimer.html">Motivation</a>
+                <a href="https://github.com/KrisSimon/aro" class="nav-github">GitHub</a>
+            </div>
+        </div>
+    </nav>
+
+    <main class="doc-page">
+        <a href="../docs.html" class="back-link">&#x2190; Back to Documentation</a>
+
+        <header class="doc-header">
+            <h1 class="gradient-text">Application Lifecycle</h1>
+            <p class="lead">
+                ARO applications have a well-defined lifecycle from startup to shutdown.
+                This chapter explains how to manage your application's lifecycle.
+            </p>
+        </header>
+
+        <h2>Lifecycle Overview</h2>
+
+        <div class="lifecycle-visual">
+1. Load all .aro files<br>
+2. Compile and validate<br>
+3. Register feature sets with event bus<br>
+4. Execute Application-Start<br>
+5. Enter event loop<br>
+&nbsp;&nbsp;&nbsp;&#x2193;<br>
+&nbsp;&nbsp;&nbsp;Handle Events (HTTP, Files, Sockets, Domain Events)<br>
+&nbsp;&nbsp;&nbsp;&#x2193; (shutdown signal)<br>
+6. Stop accepting new events<br>
+7. Wait for pending events<br>
+8. Execute Application-End<br>
+9. Stop services<br>
+10. Exit
+        </div>
+
+        <h2>Application-Start</h2>
+        <p>The entry point for every ARO application.</p>
+
+        <h3>Requirements</h3>
+        <ul>
+            <li><strong>Exactly one</strong> per application</li>
+            <li>Must be named <code>Application-Start</code></li>
+            <li>Must return a status</li>
+        </ul>
+
+        <h3>Basic Example</h3>
+        <pre><code><span class="code-feature">(Application-Start: My Application)</span> {
+    <span class="code-keyword">&lt;Log&gt;</span> the <span class="code-result">&lt;startup: message&gt;</span> for the &lt;console&gt; with <span class="code-string">"Starting application..."</span>.
+    <span class="code-keyword">&lt;Return&gt;</span> an <span class="code-result">&lt;OK: status&gt;</span> for the &lt;startup&gt;.
+}</code></pre>
+
+        <h3>Full Example</h3>
+        <pre><code><span class="code-feature">(Application-Start: E-Commerce Platform)</span> {
+    <span class="code-keyword">&lt;Log&gt;</span> the <span class="code-result">&lt;startup: message&gt;</span> for the &lt;console&gt; with <span class="code-string">"Starting E-Commerce Platform..."</span>.
+
+    <span class="code-comment">(* Load configuration *)</span>
+    <span class="code-keyword">&lt;Read&gt;</span> the <span class="code-result">&lt;config: JSON&gt;</span> from the &lt;file: <span class="code-string">"./config.json"</span>&gt;.
+    <span class="code-keyword">&lt;Publish&gt;</span> as &lt;app-config&gt; &lt;config&gt;.
+
+    <span class="code-comment">(* Start HTTP server *)</span>
+    <span class="code-keyword">&lt;Start&gt;</span> the &lt;http-server&gt; on port &lt;config: server port&gt;.
+
+    <span class="code-comment">(* Start file watcher for uploads *)</span>
+    <span class="code-keyword">&lt;Watch&gt;</span> the &lt;directory: <span class="code-string">"./uploads"</span>&gt; as &lt;upload-watcher&gt;.
+
+    <span class="code-comment">(* Keep the application running *)</span>
+    <span class="code-keyword">&lt;Keepalive&gt;</span> the &lt;application&gt; for the &lt;events&gt;.
+
+    <span class="code-keyword">&lt;Log&gt;</span> the <span class="code-result">&lt;ready: message&gt;</span> for the &lt;console&gt; with <span class="code-string">"Platform ready"</span>.
+    <span class="code-keyword">&lt;Return&gt;</span> an <span class="code-result">&lt;OK: status&gt;</span> for the &lt;startup&gt;.
+}</code></pre>
+
+        <h2>Application-End</h2>
+        <p>Exit handlers for cleanup when the application stops.</p>
+
+        <h3>Success Handler</h3>
+        <p>Called on graceful shutdown (SIGTERM, SIGINT, or programmatic stop):</p>
+
+        <pre><code><span class="code-feature">(Application-End: Success)</span> {
+    <span class="code-keyword">&lt;Log&gt;</span> the <span class="code-result">&lt;shutdown: message&gt;</span> for the &lt;console&gt; with <span class="code-string">"Shutting down gracefully..."</span>.
+
+    <span class="code-comment">(* Stop accepting new requests *)</span>
+    <span class="code-keyword">&lt;Stop&gt;</span> the &lt;http-server&gt;.
+
+    <span class="code-comment">(* Flush logs *)</span>
+    <span class="code-keyword">&lt;Flush&gt;</span> the &lt;log-buffer&gt;.
+
+    <span class="code-keyword">&lt;Log&gt;</span> the <span class="code-result">&lt;shutdown: complete&gt;</span> for the &lt;console&gt; with <span class="code-string">"Shutdown complete. Goodbye!"</span>.
+    <span class="code-keyword">&lt;Return&gt;</span> an <span class="code-result">&lt;OK: status&gt;</span> for the &lt;shutdown&gt;.
+}</code></pre>
+
+        <h3>Error Handler</h3>
+        <p>Called when the application crashes or encounters a fatal error:</p>
+
+        <pre><code><span class="code-feature">(Application-End: Error)</span> {
+    <span class="code-keyword">&lt;Extract&gt;</span> the <span class="code-result">&lt;error&gt;</span> from the &lt;shutdown: error&gt;.
+    <span class="code-keyword">&lt;Extract&gt;</span> the <span class="code-result">&lt;reason&gt;</span> from the &lt;shutdown: reason&gt;.
+
+    <span class="code-keyword">&lt;Log&gt;</span> the <span class="code-result">&lt;error: message&gt;</span> for the &lt;console&gt; with <span class="code-string">"FATAL ERROR: ${reason}"</span>.
+
+    <span class="code-keyword">&lt;Return&gt;</span> an <span class="code-result">&lt;OK: status&gt;</span> for the &lt;error-handling&gt;.
+}</code></pre>
+
+        <h3>Shutdown Context</h3>
+        <p>Available variables in Application-End handlers:</p>
+
+        <table>
+            <thead>
+                <tr><th>Variable</th><th>Description</th><th>Available In</th></tr>
+            </thead>
+            <tbody>
+                <tr><td><code>&lt;shutdown: reason&gt;</code></td><td>Human-readable reason</td><td>Both</td></tr>
+                <tr><td><code>&lt;shutdown: code&gt;</code></td><td>Exit code (0 = success)</td><td>Both</td></tr>
+                <tr><td><code>&lt;shutdown: signal&gt;</code></td><td>Signal name (SIGTERM, etc.)</td><td>Success</td></tr>
+                <tr><td><code>&lt;shutdown: error&gt;</code></td><td>Error object</td><td>Error only</td></tr>
+            </tbody>
+        </table>
+
+        <h3>Rules</h3>
+        <ul>
+            <li>Both handlers are <strong>optional</strong></li>
+            <li>At most <strong>one of each</strong> per application</li>
+            <li>Error handler only runs on errors</li>
+            <li>Success handler only runs on graceful shutdown</li>
+        </ul>
+
+        <h2>Keeping Applications Alive</h2>
+        <p>For servers that should run indefinitely, use the <code>&lt;Keepalive&gt;</code> action:</p>
+
+        <pre><code><span class="code-feature">(Application-Start: My Server)</span> {
+    <span class="code-keyword">&lt;Start&gt;</span> the &lt;http-server&gt; on port 8080.
+    <span class="code-keyword">&lt;Keepalive&gt;</span> the &lt;application&gt; for the &lt;events&gt;.
+    <span class="code-keyword">&lt;Return&gt;</span> an <span class="code-result">&lt;OK: status&gt;</span> for the &lt;startup&gt;.
+}</code></pre>
+
+        <p>The <code>&lt;Keepalive&gt;</code> action blocks until interrupted (Ctrl+C or kill signal).</p>
+
+        <h2>Service Initialization</h2>
+
+        <h3>HTTP Server</h3>
+        <pre><code><span class="code-feature">(Application-Start: Web Server)</span> {
+    <span class="code-keyword">&lt;Start&gt;</span> the &lt;http-server&gt; on port 8080.
+    <span class="code-keyword">&lt;Keepalive&gt;</span> the &lt;application&gt; for the &lt;events&gt;.
+    <span class="code-keyword">&lt;Return&gt;</span> an <span class="code-result">&lt;OK: status&gt;</span> for the &lt;startup&gt;.
+}
+
+<span class="code-feature">(Application-End: Success)</span> {
+    <span class="code-keyword">&lt;Stop&gt;</span> the &lt;http-server&gt;.
+    <span class="code-keyword">&lt;Return&gt;</span> an <span class="code-result">&lt;OK: status&gt;</span> for the &lt;shutdown&gt;.
+}</code></pre>
+
+        <h3>File Watcher</h3>
+        <pre><code><span class="code-feature">(Application-Start: File Processor)</span> {
+    <span class="code-keyword">&lt;Watch&gt;</span> the &lt;directory: <span class="code-string">"./inbox"</span>&gt; as &lt;file-watcher&gt;.
+    <span class="code-keyword">&lt;Keepalive&gt;</span> the &lt;application&gt; for the &lt;events&gt;.
+    <span class="code-keyword">&lt;Return&gt;</span> an <span class="code-result">&lt;OK: status&gt;</span> for the &lt;startup&gt;.
+}</code></pre>
+
+        <h3>Socket Server</h3>
+        <pre><code><span class="code-feature">(Application-Start: Socket Server)</span> {
+    <span class="code-keyword">&lt;Listen&gt;</span> on port 9000 as &lt;socket-server&gt;.
+    <span class="code-keyword">&lt;Keepalive&gt;</span> the &lt;application&gt; for the &lt;events&gt;.
+    <span class="code-keyword">&lt;Return&gt;</span> an <span class="code-result">&lt;OK: status&gt;</span> for the &lt;startup&gt;.
+}</code></pre>
+
+        <h3>Multiple Services</h3>
+        <pre><code><span class="code-feature">(Application-Start: Full Stack)</span> {
+    <span class="code-comment">(* HTTP API *)</span>
+    <span class="code-keyword">&lt;Start&gt;</span> the &lt;http-server&gt; on port 8080.
+
+    <span class="code-comment">(* WebSocket server *)</span>
+    <span class="code-keyword">&lt;Listen&gt;</span> on port 8081 as &lt;websocket-server&gt;.
+
+    <span class="code-comment">(* File watcher *)</span>
+    <span class="code-keyword">&lt;Watch&gt;</span> the &lt;directory: <span class="code-string">"./uploads"</span>&gt; as &lt;upload-watcher&gt;.
+
+    <span class="code-comment">(* Keep the application running *)</span>
+    <span class="code-keyword">&lt;Keepalive&gt;</span> the &lt;application&gt; for the &lt;events&gt;.
+
+    <span class="code-keyword">&lt;Return&gt;</span> an <span class="code-result">&lt;OK: status&gt;</span> for the &lt;startup&gt;.
+}
+
+<span class="code-feature">(Application-End: Success)</span> {
+    <span class="code-comment">(* Stop in reverse order *)</span>
+    <span class="code-keyword">&lt;Stop&gt;</span> the &lt;upload-watcher&gt;.
+    <span class="code-keyword">&lt;Close&gt;</span> the &lt;websocket-server&gt;.
+    <span class="code-keyword">&lt;Stop&gt;</span> the &lt;http-server&gt;.
+
+    <span class="code-keyword">&lt;Return&gt;</span> an <span class="code-result">&lt;OK: status&gt;</span> for the &lt;shutdown&gt;.
+}</code></pre>
+
+        <h2>Best Practices</h2>
+
+        <h3>Initialize Early, Fail Fast</h3>
+        <pre><code><span class="code-feature">(Application-Start: Fail Fast)</span> {
+    <span class="code-comment">(* Check critical config first *)</span>
+    <span class="code-keyword">&lt;Read&gt;</span> the <span class="code-result">&lt;config&gt;</span> from the &lt;file: <span class="code-string">"./config.json"</span>&gt;.
+
+    when &lt;config: database&gt; is empty {
+        <span class="code-keyword">&lt;Log&gt;</span> the <span class="code-result">&lt;error&gt;</span> for the &lt;console&gt; with <span class="code-string">"Missing database configuration"</span>.
+        <span class="code-keyword">&lt;Throw&gt;</span> a &lt;ConfigurationError&gt; for the &lt;missing: database&gt;.
+    }
+
+    <span class="code-comment">(* Then initialize services *)</span>
+    <span class="code-keyword">&lt;Start&gt;</span> the &lt;http-server&gt; on port &lt;config: port&gt;.
+
+    <span class="code-keyword">&lt;Return&gt;</span> an <span class="code-result">&lt;OK: status&gt;</span> for the &lt;startup&gt;.
+}</code></pre>
+
+        <h3>Log Lifecycle Events</h3>
+        <pre><code><span class="code-feature">(Application-Start: Observable App)</span> {
+    <span class="code-keyword">&lt;Log&gt;</span> the <span class="code-result">&lt;lifecycle: event&gt;</span> for the &lt;console&gt; with <span class="code-string">"APPLICATION_STARTING"</span>.
+
+    <span class="code-keyword">&lt;Start&gt;</span> the &lt;http-server&gt; on port 8080.
+
+    <span class="code-keyword">&lt;Log&gt;</span> the <span class="code-result">&lt;lifecycle: event&gt;</span> for the &lt;console&gt; with <span class="code-string">"APPLICATION_READY"</span>.
+    <span class="code-keyword">&lt;Return&gt;</span> an <span class="code-result">&lt;OK: status&gt;</span> for the &lt;startup&gt;.
+}
+
+<span class="code-feature">(Application-End: Success)</span> {
+    <span class="code-keyword">&lt;Log&gt;</span> the <span class="code-result">&lt;lifecycle: event&gt;</span> for the &lt;console&gt; with <span class="code-string">"APPLICATION_STOPPING"</span>.
+
+    <span class="code-keyword">&lt;Stop&gt;</span> the &lt;http-server&gt;.
+
+    <span class="code-keyword">&lt;Log&gt;</span> the <span class="code-result">&lt;lifecycle: event&gt;</span> for the &lt;console&gt; with <span class="code-string">"APPLICATION_STOPPED"</span>.
+    <span class="code-keyword">&lt;Return&gt;</span> an <span class="code-result">&lt;OK: status&gt;</span> for the &lt;shutdown&gt;.
+}</code></pre>
+
+        <div class="highlight-box">
+            <h4>Next Steps</h4>
+            <p>
+                <a href="http-services.html">HTTP Services</a> - HTTP server and client<br>
+                <a href="sockets.html">Sockets</a> - TCP communication<br>
+                <a href="event-driven.html">Events</a> - Event-driven architecture
+            </p>
+        </div>
+    </main>
+
+    <footer class="footer">
+        <div class="container">
+            <div class="footer-bottom">
+                <p>Sometime this page should build with ARO. Obviously.</p>
+            </div>
+        </div>
+    </footer>
+</body>
+</html>

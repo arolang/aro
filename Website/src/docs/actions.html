@@ -1,0 +1,274 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <title>Actions - ARO Programming Language</title>
+{{head}}
+    <style>
+        .doc-page { padding: 120px 24px 80px; max-width: 900px; margin: 0 auto; }
+        .doc-header { margin-bottom: 48px; }
+        .doc-header h1 { font-size: clamp(2rem, 5vw, 3rem); font-weight: 700; margin-bottom: 16px; letter-spacing: -0.02em; }
+        .doc-header .lead { font-size: 1.25rem; color: var(--color-text-muted); line-height: 1.7; }
+        .doc-page h2 { font-size: 1.8rem; font-weight: 600; margin: 48px 0 16px; padding-top: 24px; border-top: 1px solid rgba(255, 255, 255, 0.1); }
+        .doc-page h3 { font-size: 1.3rem; font-weight: 600; margin: 32px 0 12px; color: var(--color-secondary); }
+        .doc-page p { font-size: 1.1rem; color: var(--color-text-muted); line-height: 1.8; margin-bottom: 16px; }
+        .doc-page code { font-family: var(--font-mono); background: var(--color-bg-alt); padding: 3px 8px; border-radius: 4px; font-size: 0.9rem; color: var(--color-secondary); }
+        .doc-page pre { background: var(--color-bg-alt); border-radius: var(--radius-md); padding: 24px; overflow-x: auto; margin: 24px 0; border: 1px solid rgba(255, 255, 255, 0.1); }
+        .doc-page pre code { background: none; padding: 0; font-size: 0.9rem; line-height: 1.7; color: var(--color-text); }
+        .doc-page ul, .doc-page ol { color: var(--color-text-muted); margin: 16px 0 16px 24px; line-height: 1.8; }
+        .doc-page li { margin-bottom: 8px; }
+        .doc-page strong { color: var(--color-text); }
+        .doc-page table { width: 100%; border-collapse: collapse; margin: 24px 0; }
+        .doc-page th, .doc-page td { padding: 12px 16px; text-align: left; border: 1px solid rgba(255, 255, 255, 0.1); }
+        .doc-page th { background: var(--color-bg-alt); font-weight: 600; color: var(--color-text); }
+        .doc-page td { color: var(--color-text-muted); }
+        .highlight-box { background: rgba(124, 58, 237, 0.1); border: 1px solid rgba(124, 58, 237, 0.3); border-radius: var(--radius-md); padding: 24px; margin: 32px 0; }
+        .highlight-box h4 { color: var(--color-primary); font-size: 1.1rem; margin-bottom: 12px; }
+        .highlight-box p { margin-bottom: 0; }
+        .back-link { display: inline-flex; align-items: center; gap: 8px; color: var(--color-text-muted); text-decoration: none; font-size: 0.95rem; margin-bottom: 24px; transition: color 0.2s; }
+        .back-link:hover { color: var(--color-primary); }
+        .code-comment { color: #6b7280; }
+        .code-keyword { color: #7c3aed; font-weight: 600; }
+        .code-string { color: #10b981; }
+        .code-feature { color: #f472b6; }
+        .code-result { color: #06b6d4; }
+    </style>
+</head>
+<body>
+    <nav class="nav">
+        <div class="nav-content">
+            <a href="/aro/" class="logo"><span class="logo-aro">ARO</span></a>
+            <div class="nav-links">
+                <a href="../fdd.html">The FDD Story</a>
+                <a href="../getting-started.html">Get Started</a>
+                <a href="../docs.html" style="color: var(--color-text);">Docs</a>
+                <a href="../disclaimer.html">Motivation</a>
+                <a href="https://github.com/KrisSimon/aro" class="nav-github">GitHub</a>
+            </div>
+        </div>
+    </nav>
+
+    <main class="doc-page">
+        <a href="../docs.html" class="back-link">&#x2190; Back to Documentation</a>
+
+        <header class="doc-header">
+            <h1 class="gradient-text">Actions</h1>
+            <p class="lead">
+                Actions are the verbs of ARO. They describe what operation to perform on data.
+                This chapter covers all built-in actions and how to use them effectively.
+            </p>
+        </header>
+
+        <h2>Action Categories</h2>
+        <p>ARO actions are organized by their <strong>semantic role</strong> - the direction of data flow:</p>
+
+        <table>
+            <thead>
+                <tr><th>Role</th><th>Direction</th><th>Purpose</th></tr>
+            </thead>
+            <tbody>
+                <tr><td>REQUEST</td><td>External &#x2192; Internal</td><td>Bring data into the feature set</td></tr>
+                <tr><td>OWN</td><td>Internal &#x2192; Internal</td><td>Transform data within the feature set</td></tr>
+                <tr><td>RESPONSE</td><td>Internal &#x2192; External</td><td>Send results back</td></tr>
+                <tr><td>EXPORT</td><td>Internal &#x2192; External</td><td>Publish or persist data</td></tr>
+            </tbody>
+        </table>
+
+        <h2>REQUEST Actions</h2>
+        <p>These actions bring data from external sources into your feature set.</p>
+
+        <h3>Extract</h3>
+        <p>Pull data from a structured source:</p>
+        <pre><code><span class="code-keyword">&lt;Extract&gt;</span> the <span class="code-result">&lt;user-id&gt;</span> from the &lt;request: parameters&gt;.
+<span class="code-keyword">&lt;Extract&gt;</span> the <span class="code-result">&lt;body&gt;</span> from the &lt;request: body&gt;.
+<span class="code-keyword">&lt;Extract&gt;</span> the <span class="code-result">&lt;email&gt;</span> from the &lt;user: email&gt;.
+<span class="code-keyword">&lt;Extract&gt;</span> the <span class="code-result">&lt;items&gt;</span> from the &lt;order: lineItems&gt;.</code></pre>
+
+        <h3>Retrieve</h3>
+        <p>Fetch data from a repository or data store:</p>
+        <pre><code><span class="code-keyword">&lt;Retrieve&gt;</span> the <span class="code-result">&lt;user&gt;</span> from the &lt;user-repository&gt;.
+<span class="code-keyword">&lt;Retrieve&gt;</span> the <span class="code-result">&lt;user&gt;</span> from the &lt;user-repository&gt; where id = &lt;user-id&gt;.
+<span class="code-keyword">&lt;Retrieve&gt;</span> the <span class="code-result">&lt;orders&gt;</span> from the &lt;order-repository&gt; where status = <span class="code-string">"pending"</span>.</code></pre>
+
+        <h3>Fetch</h3>
+        <p>Make HTTP requests to external APIs:</p>
+        <pre><code><span class="code-keyword">&lt;Fetch&gt;</span> the <span class="code-result">&lt;data&gt;</span> from <span class="code-string">"https://api.example.com/resource"</span>.
+<span class="code-keyword">&lt;Fetch&gt;</span> the <span class="code-result">&lt;users&gt;</span> from &lt;UserAPI: GET /users&gt;.
+<span class="code-keyword">&lt;Fetch&gt;</span> the <span class="code-result">&lt;weather&gt;</span> from &lt;WeatherAPI: GET /forecast?city=${city}&gt;.</code></pre>
+
+        <h3>Read</h3>
+        <p>Read from files:</p>
+        <pre><code><span class="code-keyword">&lt;Read&gt;</span> the <span class="code-result">&lt;content&gt;</span> from the &lt;file: <span class="code-string">"./data.txt"</span>&gt;.
+<span class="code-keyword">&lt;Read&gt;</span> the <span class="code-result">&lt;config: JSON&gt;</span> from the &lt;file: <span class="code-string">"./config.json"</span>&gt;.
+<span class="code-keyword">&lt;Read&gt;</span> the <span class="code-result">&lt;data: bytes&gt;</span> from the &lt;file: <span class="code-string">"./image.png"</span>&gt;.</code></pre>
+
+        <h2>OWN Actions</h2>
+        <p>These actions create or transform data within your feature set.</p>
+
+        <h3>Create</h3>
+        <p>Create new data structures:</p>
+        <pre><code><span class="code-keyword">&lt;Create&gt;</span> the <span class="code-result">&lt;user&gt;</span> with &lt;user-data&gt;.
+<span class="code-keyword">&lt;Create&gt;</span> the <span class="code-result">&lt;response&gt;</span> with { message: <span class="code-string">"Success"</span>, code: 200 }.
+<span class="code-keyword">&lt;Create&gt;</span> the <span class="code-result">&lt;order&gt;</span> with {
+    items: &lt;items&gt;,
+    total: &lt;total&gt;,
+    customer: &lt;customer-id&gt;
+}.</code></pre>
+
+        <h3>Compute</h3>
+        <p>Perform calculations:</p>
+        <pre><code><span class="code-keyword">&lt;Compute&gt;</span> the <span class="code-result">&lt;total&gt;</span> for the &lt;items&gt;.
+<span class="code-keyword">&lt;Compute&gt;</span> the <span class="code-result">&lt;hash&gt;</span> for the &lt;password&gt;.
+<span class="code-keyword">&lt;Compute&gt;</span> the <span class="code-result">&lt;tax&gt;</span> for the &lt;subtotal&gt;.
+<span class="code-keyword">&lt;Compute&gt;</span> the <span class="code-result">&lt;average&gt;</span> for the &lt;values&gt;.</code></pre>
+
+        <h3>Transform</h3>
+        <p>Convert or map data:</p>
+        <pre><code><span class="code-keyword">&lt;Transform&gt;</span> the <span class="code-result">&lt;dto&gt;</span> from the &lt;entity&gt;.
+<span class="code-keyword">&lt;Transform&gt;</span> the <span class="code-result">&lt;response&gt;</span> from the &lt;data&gt;.
+<span class="code-keyword">&lt;Transform&gt;</span> the <span class="code-result">&lt;updated-user&gt;</span> from the &lt;user&gt; with &lt;updates&gt;.</code></pre>
+
+        <h3>Validate</h3>
+        <p>Check data against rules:</p>
+        <pre><code><span class="code-keyword">&lt;Validate&gt;</span> the &lt;user-data&gt; for the &lt;user-schema&gt;.
+<span class="code-keyword">&lt;Validate&gt;</span> the &lt;email&gt; for the &lt;email-pattern&gt;.
+
+if &lt;validation&gt; is failed then {
+    <span class="code-keyword">&lt;Return&gt;</span> a <span class="code-result">&lt;BadRequest: status&gt;</span> with &lt;validation: errors&gt;.
+}</code></pre>
+
+        <h3>Compare</h3>
+        <p>Compare values:</p>
+        <pre><code><span class="code-keyword">&lt;Compare&gt;</span> the &lt;password-hash&gt; against the &lt;stored-hash&gt;.
+<span class="code-keyword">&lt;Compare&gt;</span> the &lt;signature&gt; against the &lt;expected-signature&gt;.</code></pre>
+
+        <h2>RESPONSE Actions</h2>
+        <p>These actions send results back from your feature set.</p>
+
+        <h3>Return</h3>
+        <p>Return a result with status:</p>
+        <pre><code><span class="code-comment">(* Success responses *)</span>
+<span class="code-keyword">&lt;Return&gt;</span> an <span class="code-result">&lt;OK: status&gt;</span> with &lt;data&gt;.
+<span class="code-keyword">&lt;Return&gt;</span> a <span class="code-result">&lt;Created: status&gt;</span> with &lt;resource&gt;.
+<span class="code-keyword">&lt;Return&gt;</span> a <span class="code-result">&lt;NoContent: status&gt;</span> for the &lt;deletion&gt;.
+
+<span class="code-comment">(* Error responses *)</span>
+<span class="code-keyword">&lt;Return&gt;</span> a <span class="code-result">&lt;BadRequest: status&gt;</span> with &lt;errors&gt;.
+<span class="code-keyword">&lt;Return&gt;</span> a <span class="code-result">&lt;NotFound: status&gt;</span> for the &lt;missing: resource&gt;.
+<span class="code-keyword">&lt;Return&gt;</span> a <span class="code-result">&lt;Forbidden: status&gt;</span> for the &lt;unauthorized: access&gt;.</code></pre>
+
+        <p><strong>Status Codes:</strong></p>
+        <table>
+            <thead>
+                <tr><th>Status</th><th>HTTP Code</th><th>Use Case</th></tr>
+            </thead>
+            <tbody>
+                <tr><td>OK</td><td>200</td><td>Successful GET, PUT, PATCH</td></tr>
+                <tr><td>Created</td><td>201</td><td>Successful POST creating resource</td></tr>
+                <tr><td>NoContent</td><td>204</td><td>Successful DELETE</td></tr>
+                <tr><td>BadRequest</td><td>400</td><td>Invalid input</td></tr>
+                <tr><td>Unauthorized</td><td>401</td><td>Missing/invalid auth</td></tr>
+                <tr><td>Forbidden</td><td>403</td><td>Insufficient permissions</td></tr>
+                <tr><td>NotFound</td><td>404</td><td>Resource not found</td></tr>
+                <tr><td>InternalError</td><td>500</td><td>Server error</td></tr>
+            </tbody>
+        </table>
+
+        <h2>EXPORT Actions</h2>
+        <p>These actions publish data or send to external systems.</p>
+
+        <h3>Store</h3>
+        <p>Save to a repository:</p>
+        <pre><code><span class="code-keyword">&lt;Store&gt;</span> the &lt;user&gt; into the &lt;user-repository&gt;.
+<span class="code-keyword">&lt;Store&gt;</span> the &lt;order&gt; into the &lt;order-repository&gt;.
+<span class="code-keyword">&lt;Store&gt;</span> the &lt;log-entry&gt; into the &lt;audit-log&gt;.</code></pre>
+
+        <h3>Publish</h3>
+        <p>Make variables globally available:</p>
+        <pre><code><span class="code-keyword">&lt;Publish&gt;</span> as &lt;current-user&gt; &lt;user&gt;.
+<span class="code-keyword">&lt;Publish&gt;</span> as &lt;app-config&gt; &lt;config&gt;.</code></pre>
+
+        <h3>Log</h3>
+        <p>Write to logs:</p>
+        <pre><code><span class="code-keyword">&lt;Log&gt;</span> the <span class="code-result">&lt;message&gt;</span> for the &lt;console&gt; with <span class="code-string">"User logged in"</span>.
+<span class="code-keyword">&lt;Log&gt;</span> the <span class="code-result">&lt;error: message&gt;</span> for the &lt;console&gt; with &lt;error&gt;.</code></pre>
+
+        <h3>Send</h3>
+        <p>Send data to external destinations:</p>
+        <pre><code><span class="code-keyword">&lt;Send&gt;</span> the &lt;email&gt; to the &lt;user: email&gt;.
+<span class="code-keyword">&lt;Send&gt;</span> the &lt;notification&gt; to the &lt;push-service&gt;.
+<span class="code-keyword">&lt;Send&gt;</span> the &lt;data&gt; to the &lt;connection&gt;.</code></pre>
+
+        <h3>Emit</h3>
+        <p>Emit domain events:</p>
+        <pre><code><span class="code-keyword">&lt;Emit&gt;</span> a <span class="code-result">&lt;UserCreated: event&gt;</span> with &lt;user&gt;.
+<span class="code-keyword">&lt;Emit&gt;</span> an <span class="code-result">&lt;OrderPlaced: event&gt;</span> with &lt;order&gt;.
+<span class="code-keyword">&lt;Emit&gt;</span> a <span class="code-result">&lt;PaymentProcessed: event&gt;</span> with &lt;payment&gt;.</code></pre>
+
+        <h3>Delete</h3>
+        <p>Remove data:</p>
+        <pre><code><span class="code-keyword">&lt;Delete&gt;</span> the &lt;user&gt; from the &lt;user-repository&gt; where id = &lt;user-id&gt;.
+<span class="code-keyword">&lt;Delete&gt;</span> the &lt;file: <span class="code-string">"./temp.txt"</span>&gt;.</code></pre>
+
+        <h2>Service Actions</h2>
+        <p>These actions interact with runtime services.</p>
+
+        <h3>Start / Stop</h3>
+        <pre><code><span class="code-keyword">&lt;Start&gt;</span> the &lt;http-server&gt; on port 8080.
+<span class="code-keyword">&lt;Stop&gt;</span> the &lt;http-server&gt;.</code></pre>
+
+        <h3>Watch</h3>
+        <p>Monitor a directory:</p>
+        <pre><code><span class="code-keyword">&lt;Watch&gt;</span> the &lt;directory: <span class="code-string">"./uploads"</span>&gt; as &lt;file-monitor&gt;.</code></pre>
+
+        <h3>Listen / Connect</h3>
+        <pre><code><span class="code-keyword">&lt;Listen&gt;</span> on port 9000 as &lt;socket-server&gt;.
+<span class="code-keyword">&lt;Connect&gt;</span> to &lt;host: <span class="code-string">"localhost"</span>&gt; on port 5432 as &lt;database&gt;.</code></pre>
+
+        <h2>Action Patterns</h2>
+
+        <h3>Extract-Process-Return</h3>
+        <p>Common pattern for request handlers:</p>
+        <pre><code><span class="code-feature">(createUser: User API)</span> {
+    <span class="code-comment">(* Extract *)</span>
+    <span class="code-keyword">&lt;Extract&gt;</span> the <span class="code-result">&lt;user-data&gt;</span> from the &lt;request: body&gt;.
+
+    <span class="code-comment">(* Process *)</span>
+    <span class="code-keyword">&lt;Validate&gt;</span> the &lt;user-data&gt; for the &lt;user-schema&gt;.
+    <span class="code-keyword">&lt;Create&gt;</span> the <span class="code-result">&lt;user&gt;</span> with &lt;user-data&gt;.
+    <span class="code-keyword">&lt;Store&gt;</span> the &lt;user&gt; into the &lt;user-repository&gt;.
+
+    <span class="code-comment">(* Return *)</span>
+    <span class="code-keyword">&lt;Return&gt;</span> a <span class="code-result">&lt;Created: status&gt;</span> with &lt;user&gt;.
+}</code></pre>
+
+        <h3>Extract-Emit Pattern</h3>
+        <p>Pattern for event-driven updates:</p>
+        <pre><code><span class="code-feature">(createOrder: Order API)</span> {
+    <span class="code-keyword">&lt;Extract&gt;</span> the <span class="code-result">&lt;order-data&gt;</span> from the &lt;request: body&gt;.
+    <span class="code-keyword">&lt;Create&gt;</span> the <span class="code-result">&lt;order&gt;</span> with &lt;order-data&gt;.
+    <span class="code-keyword">&lt;Store&gt;</span> the &lt;order&gt; into the &lt;order-repository&gt;.
+
+    <span class="code-comment">(* Emit for other handlers *)</span>
+    <span class="code-keyword">&lt;Emit&gt;</span> an <span class="code-result">&lt;OrderCreated: event&gt;</span> with &lt;order&gt;.
+
+    <span class="code-keyword">&lt;Return&gt;</span> a <span class="code-result">&lt;Created: status&gt;</span> with &lt;order&gt;.
+}</code></pre>
+
+        <div class="highlight-box">
+            <h4>Next Steps</h4>
+            <p>
+                <a href="feature-sets.html">Feature Sets</a> - How data flows through actions<br>
+                <a href="custom-actions.html">Creating Custom Actions</a> - Extend ARO with your own actions
+            </p>
+        </div>
+    </main>
+
+    <footer class="footer">
+        <div class="container">
+            <div class="footer-bottom">
+                <p>Sometime this page should build with ARO. Obviously.</p>
+            </div>
+        </div>
+    </footer>
+</body>
+</html>
