@@ -1,0 +1,220 @@
+{
+  "Feature Set": {
+    "prefix": "featureset",
+    "body": [
+      "(${1:feature-name}: ${2:Business Activity}) {",
+      "    $0",
+      "}"
+    ],
+    "description": "Create a new feature set"
+  },
+  "Application Start": {
+    "prefix": "appstart",
+    "body": [
+      "(Application-Start: ${1:App Name}) {",
+      "    <Log> the <startup: message> for the <console> with \"${2:Starting...}\".",
+      "    $0",
+      "    <Return> an <OK: status> for the <startup>.",
+      "}"
+    ],
+    "description": "Application entry point"
+  },
+  "Application End Success": {
+    "prefix": "appendsuccess",
+    "body": [
+      "(Application-End: Success) {",
+      "    <Log> the <shutdown: message> for the <console> with \"${1:Shutting down...}\".",
+      "    $0",
+      "    <Return> an <OK: status> for the <shutdown>.",
+      "}"
+    ],
+    "description": "Graceful shutdown handler"
+  },
+  "Application End Error": {
+    "prefix": "appenderror",
+    "body": [
+      "(Application-End: Error) {",
+      "    <Extract> the <error> from the <shutdown: error>.",
+      "    <Log> the <error: message> for the <console> with <error>.",
+      "    $0",
+      "    <Return> an <OK: status> for the <error-handling>.",
+      "}"
+    ],
+    "description": "Error shutdown handler"
+  },
+  "HTTP Handler": {
+    "prefix": "httphandler",
+    "body": [
+      "(${1:operationId}: ${2:API Name}) {",
+      "    $0",
+      "    <Return> an <OK: status> with <${3:result}>.",
+      "}"
+    ],
+    "description": "HTTP route handler (operationId from openapi.yaml)"
+  },
+  "Event Handler": {
+    "prefix": "eventhandler",
+    "body": [
+      "(${1:Handler Name}: ${2:EventName} Handler) {",
+      "    <Extract> the <${3:data}> from the <event: ${3:data}>.",
+      "    $0",
+      "    <Return> an <OK: status> for the <${4:processing}>.",
+      "}"
+    ],
+    "description": "Event handler feature set"
+  },
+  "Test Feature Set": {
+    "prefix": "test",
+    "body": [
+      "(${1:test-name}: ${2:Component} Test) {",
+      "    <Given> the <${3:input}> with ${4:value}.",
+      "    <When> the <${5:result}> from the <${6:feature}>.",
+      "    <Then> the <${5:result}> with ${7:expected}.",
+      "}"
+    ],
+    "description": "BDD-style test feature set"
+  },
+  "Extract Action": {
+    "prefix": "extract",
+    "body": "<Extract> the <${1:result}> from the <${2:source}>.",
+    "description": "Extract data from source"
+  },
+  "Retrieve Action": {
+    "prefix": "retrieve",
+    "body": "<Retrieve> the <${1:result}> from the <${2:repository}>.",
+    "description": "Retrieve data from repository"
+  },
+  "Create Action": {
+    "prefix": "create",
+    "body": "<Create> the <${1:result}> with ${2:value}.",
+    "description": "Create a new value"
+  },
+  "Compute Action": {
+    "prefix": "compute",
+    "body": "<Compute> the <${1:result}> from ${2:expression}.",
+    "description": "Compute a value from expression"
+  },
+  "Validate Action": {
+    "prefix": "validate",
+    "body": "<Validate> the <${1:result}> for the <${2:input}>.",
+    "description": "Validate input"
+  },
+  "Transform Action": {
+    "prefix": "transform",
+    "body": "<Transform> the <${1:result}> from the <${2:source}>.",
+    "description": "Transform data"
+  },
+  "Set Action": {
+    "prefix": "set",
+    "body": "<Set> the <${1:variable}> to ${2:value}.",
+    "description": "Set a variable value"
+  },
+  "Return OK": {
+    "prefix": "returnok",
+    "body": "<Return> an <OK: status> ${1|with,for|} ${2:the <result>}.",
+    "description": "Return OK status"
+  },
+  "Return Created": {
+    "prefix": "returncreated",
+    "body": "<Return> a <Created: status> with <${1:result}>.",
+    "description": "Return Created status"
+  },
+  "Return Error": {
+    "prefix": "returnerror",
+    "body": "<Return> an <Error: status> for the <${1:failure}>.",
+    "description": "Return Error status"
+  },
+  "Throw Action": {
+    "prefix": "throw",
+    "body": "<Throw> the <${1:error}> for the <${2:reason}>.",
+    "description": "Throw an error"
+  },
+  "Log Action": {
+    "prefix": "log",
+    "body": "<Log> the <${1:message}> for the <console> with \"${2:text}\".",
+    "description": "Log message to console"
+  },
+  "Send Action": {
+    "prefix": "send",
+    "body": "<Send> the <${1:message}> to the <${2:destination}>.",
+    "description": "Send message"
+  },
+  "Emit Event": {
+    "prefix": "emit",
+    "body": "<Emit> a <${1:EventName}: event> with <${2:data}>.",
+    "description": "Emit a domain event"
+  },
+  "Store Action": {
+    "prefix": "store",
+    "body": "<Store> the <${1:data}> into the <${2:repository}>.",
+    "description": "Store data in repository"
+  },
+  "Start Server": {
+    "prefix": "startserver",
+    "body": "<Start> the <http-server> on <port> with ${1:8080}.",
+    "description": "Start HTTP server"
+  },
+  "Keepalive": {
+    "prefix": "keepalive",
+    "body": "<Keepalive> the <application> for the <events>.",
+    "description": "Keep application running for events"
+  },
+  "Watch Files": {
+    "prefix": "watch",
+    "body": "<Watch> the <file-monitor> for the <directory> with \"${1:.}\".",
+    "description": "Watch directory for file changes"
+  },
+  "Given": {
+    "prefix": "given",
+    "body": "<Given> the <${1:variable}> with ${2:value}.",
+    "description": "Test setup - Given"
+  },
+  "When": {
+    "prefix": "when",
+    "body": "<When> the <${1:result}> from the <${2:feature}>.",
+    "description": "Test action - When"
+  },
+  "Then": {
+    "prefix": "then",
+    "body": "<Then> the <${1:result}> with ${2:expected}.",
+    "description": "Test assertion - Then"
+  },
+  "Assert": {
+    "prefix": "assert",
+    "body": "<Assert> the <${1:value}> with ${2:expected}.",
+    "description": "Test assertion - Assert"
+  },
+  "Block Comment": {
+    "prefix": "comment",
+    "body": "(* ${1:Comment text} *)",
+    "description": "Block comment"
+  },
+  "Publish": {
+    "prefix": "publish",
+    "body": "<Publish> as <${1:external-name}> <${2:internal-variable}>.",
+    "description": "Publish variable globally"
+  },
+  "Fetch HTTP": {
+    "prefix": "fetch",
+    "body": "<Fetch> the <${1:response}> from the <http-client> with \"${2:https://api.example.com}\".",
+    "description": "Fetch data from HTTP endpoint"
+  },
+  "Match Expression": {
+    "prefix": "match",
+    "body": [
+      "match <${1:value}> {",
+      "    when ${2:pattern} -> $0",
+      "}"
+    ],
+    "description": "Pattern matching expression"
+  },
+  "For Each": {
+    "prefix": "foreach",
+    "body": [
+      "for each <${1:item}> in <${2:collection}> {",
+      "    $0",
+      "}"
+    ],
+    "description": "Iterate over collection"
+  }
+}

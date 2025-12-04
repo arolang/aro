@@ -1,0 +1,62 @@
+{
+  "name": "aro-language",
+  "displayName": "ARO Language",
+  "description": "Language support for ARO - Action Result Object programming language",
+  "version": "1.0.0",
+  "publisher": "krissimon",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/krissimon/aro"
+  },
+  "engines": {
+    "vscode": "^1.74.0"
+  },
+  "categories": [
+    "Programming Languages",
+    "Snippets"
+  ],
+  "keywords": [
+    "aro",
+    "action-result-object",
+    "dsl",
+    "business-logic"
+  ],
+  "icon": "images/aro-icon.png",
+  "contributes": {
+    "languages": [
+      {
+        "id": "aro",
+        "aliases": ["ARO", "aro"],
+        "extensions": [".aro"],
+        "configuration": "./language-configuration.json"
+      }
+    ],
+    "grammars": [
+      {
+        "language": "aro",
+        "scopeName": "source.aro",
+        "path": "./syntaxes/aro.tmLanguage.json"
+      }
+    ],
+    "snippets": [
+      {
+        "language": "aro",
+        "path": "./snippets/aro.code-snippets"
+      }
+    ]
+  },
+  "main": "./out/extension.js",
+  "activationEvents": [
+    "onLanguage:aro"
+  ],
+  "scripts": {
+    "vscode:prepublish": "npm run compile",
+    "compile": "tsc -p ./",
+    "watch": "tsc -watch -p ./"
+  },
+  "devDependencies": {
+    "@types/vscode": "^1.74.0",
+    "@types/node": "^18.0.0",
+    "typescript": "^5.0.0"
+  }
+}

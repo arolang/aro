@@ -1,0 +1,61 @@
+<idea-plugin>
+    <id>com.krissimon.aro</id>
+    <name>ARO Language</name>
+    <version>1.0.0</version>
+    <vendor email="kris@example.com" url="https://krissimon.github.io/aro/">Kris Simon</vendor>
+
+    <description><![CDATA[
+        <p>Language support for <b>ARO</b> (Action Result Object) - a declarative programming language for expressing business features.</p>
+
+        <h3>Features</h3>
+        <ul>
+            <li><b>Syntax Highlighting</b> - Full highlighting for ARO code</li>
+            <li><b>Code Completion</b> - Live templates for common patterns</li>
+            <li><b>Bracket Matching</b> - Match braces, parentheses, and angle brackets</li>
+            <li><b>Comment Support</b> - Block comments with (* *)</li>
+            <li><b>File Icon</b> - Distinct icon for .aro files</li>
+        </ul>
+
+        <h3>ARO Syntax</h3>
+        <pre>
+(Application-Start: My Service) {
+    &lt;Log&gt; the &lt;message&gt; for the &lt;console&gt; with "Starting...".
+    &lt;Return&gt; an &lt;OK: status&gt; for the &lt;startup&gt;.
+}
+        </pre>
+
+        <p>See <a href="https://krissimon.github.io/aro/">ARO Documentation</a> for more information.</p>
+    ]]></description>
+
+    <change-notes><![CDATA[
+        <h3>1.0.0</h3>
+        <ul>
+            <li>Initial release</li>
+            <li>Syntax highlighting via TextMate grammar</li>
+            <li>Live templates for common patterns</li>
+            <li>Bracket matching and comment toggling</li>
+        </ul>
+    ]]></change-notes>
+
+    <idea-version since-build="223"/>
+
+    <depends>com.intellij.modules.platform</depends>
+    <depends>org.jetbrains.plugins.textmate</depends>
+
+    <extensions defaultExtensionNs="com.intellij">
+        <!-- File type registration -->
+        <fileType
+                name="ARO"
+                implementationClass="com.intellij.openapi.fileTypes.PlainTextFileType"
+                fieldName="INSTANCE"
+                language="ARO"
+                extensions="aro"/>
+
+        <!-- TextMate bundle for syntax highlighting -->
+        <textmate.bundleProvider implementation="com.krissimon.aro.AROTextMateBundleProvider"/>
+
+        <!-- Live templates -->
+        <defaultLiveTemplates file="/liveTemplates/ARO.xml"/>
+        <liveTemplateContext implementation="com.krissimon.aro.AROTemplateContextType"/>
+    </extensions>
+</idea-plugin>

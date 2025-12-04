@@ -1,0 +1,180 @@
+<templateSet group="ARO">
+    <template name="fs" value="($NAME$: $ACTIVITY$) {&#10;    $END$&#10;}" description="Feature Set" toReformat="true" toShortenFQNames="true">
+        <variable name="NAME" expression="" defaultValue="&quot;feature-name&quot;" alwaysStopAt="true"/>
+        <variable name="ACTIVITY" expression="" defaultValue="&quot;Business Activity&quot;" alwaysStopAt="true"/>
+        <context>
+            <option name="ARO" value="true"/>
+            <option name="OTHER" value="true"/>
+        </context>
+    </template>
+
+    <template name="appstart" value="(Application-Start: $NAME$) {&#10;    &lt;Log&gt; the &lt;startup: message&gt; for the &lt;console&gt; with &quot;$MESSAGE$&quot;.&#10;    $END$&#10;    &lt;Return&gt; an &lt;OK: status&gt; for the &lt;startup&gt;.&#10;}" description="Application Start" toReformat="true" toShortenFQNames="true">
+        <variable name="NAME" expression="" defaultValue="&quot;My App&quot;" alwaysStopAt="true"/>
+        <variable name="MESSAGE" expression="" defaultValue="&quot;Starting...&quot;" alwaysStopAt="true"/>
+        <context>
+            <option name="ARO" value="true"/>
+            <option name="OTHER" value="true"/>
+        </context>
+    </template>
+
+    <template name="appendsuccess" value="(Application-End: Success) {&#10;    &lt;Log&gt; the &lt;shutdown: message&gt; for the &lt;console&gt; with &quot;$MESSAGE$&quot;.&#10;    $END$&#10;    &lt;Return&gt; an &lt;OK: status&gt; for the &lt;shutdown&gt;.&#10;}" description="Application End Success" toReformat="true" toShortenFQNames="true">
+        <variable name="MESSAGE" expression="" defaultValue="&quot;Shutting down...&quot;" alwaysStopAt="true"/>
+        <context>
+            <option name="ARO" value="true"/>
+            <option name="OTHER" value="true"/>
+        </context>
+    </template>
+
+    <template name="appenderror" value="(Application-End: Error) {&#10;    &lt;Extract&gt; the &lt;error&gt; from the &lt;shutdown: error&gt;.&#10;    &lt;Log&gt; the &lt;error: message&gt; for the &lt;console&gt; with &lt;error&gt;.&#10;    $END$&#10;    &lt;Return&gt; an &lt;OK: status&gt; for the &lt;error-handling&gt;.&#10;}" description="Application End Error" toReformat="true" toShortenFQNames="true">
+        <context>
+            <option name="ARO" value="true"/>
+            <option name="OTHER" value="true"/>
+        </context>
+    </template>
+
+    <template name="http" value="($OPID$: $API$) {&#10;    $END$&#10;    &lt;Return&gt; an &lt;OK: status&gt; with &lt;$RESULT$&gt;.&#10;}" description="HTTP Handler" toReformat="true" toShortenFQNames="true">
+        <variable name="OPID" expression="" defaultValue="&quot;operationId&quot;" alwaysStopAt="true"/>
+        <variable name="API" expression="" defaultValue="&quot;API Name&quot;" alwaysStopAt="true"/>
+        <variable name="RESULT" expression="" defaultValue="&quot;result&quot;" alwaysStopAt="true"/>
+        <context>
+            <option name="ARO" value="true"/>
+            <option name="OTHER" value="true"/>
+        </context>
+    </template>
+
+    <template name="event" value="($NAME$: $EVENT$ Handler) {&#10;    &lt;Extract&gt; the &lt;$DATA$&gt; from the &lt;event: $DATA$&gt;.&#10;    $END$&#10;    &lt;Return&gt; an &lt;OK: status&gt; for the &lt;processing&gt;.&#10;}" description="Event Handler" toReformat="true" toShortenFQNames="true">
+        <variable name="NAME" expression="" defaultValue="&quot;Handler Name&quot;" alwaysStopAt="true"/>
+        <variable name="EVENT" expression="" defaultValue="&quot;EventName&quot;" alwaysStopAt="true"/>
+        <variable name="DATA" expression="" defaultValue="&quot;data&quot;" alwaysStopAt="true"/>
+        <context>
+            <option name="ARO" value="true"/>
+            <option name="OTHER" value="true"/>
+        </context>
+    </template>
+
+    <template name="test" value="($NAME$: $COMPONENT$ Test) {&#10;    &lt;Given&gt; the &lt;$INPUT$&gt; with $VALUE$.&#10;    &lt;When&gt; the &lt;$RESULT$&gt; from the &lt;$FEATURE$&gt;.&#10;    &lt;Then&gt; the &lt;$RESULT$&gt; with $EXPECTED$.&#10;}" description="Test Feature Set" toReformat="true" toShortenFQNames="true">
+        <variable name="NAME" expression="" defaultValue="&quot;test-name&quot;" alwaysStopAt="true"/>
+        <variable name="COMPONENT" expression="" defaultValue="&quot;Component&quot;" alwaysStopAt="true"/>
+        <variable name="INPUT" expression="" defaultValue="&quot;input&quot;" alwaysStopAt="true"/>
+        <variable name="VALUE" expression="" defaultValue="&quot;value&quot;" alwaysStopAt="true"/>
+        <variable name="RESULT" expression="" defaultValue="&quot;result&quot;" alwaysStopAt="true"/>
+        <variable name="FEATURE" expression="" defaultValue="&quot;feature&quot;" alwaysStopAt="true"/>
+        <variable name="EXPECTED" expression="" defaultValue="&quot;expected&quot;" alwaysStopAt="true"/>
+        <context>
+            <option name="ARO" value="true"/>
+            <option name="OTHER" value="true"/>
+        </context>
+    </template>
+
+    <template name="extract" value="&lt;Extract&gt; the &lt;$RESULT$&gt; from the &lt;$SOURCE$&gt;." description="Extract Action" toReformat="true" toShortenFQNames="true">
+        <variable name="RESULT" expression="" defaultValue="&quot;result&quot;" alwaysStopAt="true"/>
+        <variable name="SOURCE" expression="" defaultValue="&quot;source&quot;" alwaysStopAt="true"/>
+        <context>
+            <option name="ARO" value="true"/>
+            <option name="OTHER" value="true"/>
+        </context>
+    </template>
+
+    <template name="retrieve" value="&lt;Retrieve&gt; the &lt;$RESULT$&gt; from the &lt;$REPOSITORY$&gt;." description="Retrieve Action" toReformat="true" toShortenFQNames="true">
+        <variable name="RESULT" expression="" defaultValue="&quot;result&quot;" alwaysStopAt="true"/>
+        <variable name="REPOSITORY" expression="" defaultValue="&quot;repository&quot;" alwaysStopAt="true"/>
+        <context>
+            <option name="ARO" value="true"/>
+            <option name="OTHER" value="true"/>
+        </context>
+    </template>
+
+    <template name="create" value="&lt;Create&gt; the &lt;$RESULT$&gt; with $VALUE$." description="Create Action" toReformat="true" toShortenFQNames="true">
+        <variable name="RESULT" expression="" defaultValue="&quot;result&quot;" alwaysStopAt="true"/>
+        <variable name="VALUE" expression="" defaultValue="&quot;value&quot;" alwaysStopAt="true"/>
+        <context>
+            <option name="ARO" value="true"/>
+            <option name="OTHER" value="true"/>
+        </context>
+    </template>
+
+    <template name="compute" value="&lt;Compute&gt; the &lt;$RESULT$&gt; from $EXPR$." description="Compute Action" toReformat="true" toShortenFQNames="true">
+        <variable name="RESULT" expression="" defaultValue="&quot;result&quot;" alwaysStopAt="true"/>
+        <variable name="EXPR" expression="" defaultValue="&quot;expression&quot;" alwaysStopAt="true"/>
+        <context>
+            <option name="ARO" value="true"/>
+            <option name="OTHER" value="true"/>
+        </context>
+    </template>
+
+    <template name="returnok" value="&lt;Return&gt; an &lt;OK: status&gt; with &lt;$RESULT$&gt;." description="Return OK" toReformat="true" toShortenFQNames="true">
+        <variable name="RESULT" expression="" defaultValue="&quot;result&quot;" alwaysStopAt="true"/>
+        <context>
+            <option name="ARO" value="true"/>
+            <option name="OTHER" value="true"/>
+        </context>
+    </template>
+
+    <template name="returncreated" value="&lt;Return&gt; a &lt;Created: status&gt; with &lt;$RESULT$&gt;." description="Return Created" toReformat="true" toShortenFQNames="true">
+        <variable name="RESULT" expression="" defaultValue="&quot;result&quot;" alwaysStopAt="true"/>
+        <context>
+            <option name="ARO" value="true"/>
+            <option name="OTHER" value="true"/>
+        </context>
+    </template>
+
+    <template name="log" value="&lt;Log&gt; the &lt;$NAME$: message&gt; for the &lt;console&gt; with &quot;$TEXT$&quot;." description="Log Action" toReformat="true" toShortenFQNames="true">
+        <variable name="NAME" expression="" defaultValue="&quot;info&quot;" alwaysStopAt="true"/>
+        <variable name="TEXT" expression="" defaultValue="&quot;message&quot;" alwaysStopAt="true"/>
+        <context>
+            <option name="ARO" value="true"/>
+            <option name="OTHER" value="true"/>
+        </context>
+    </template>
+
+    <template name="emit" value="&lt;Emit&gt; a &lt;$EVENT$: event&gt; with &lt;$DATA$&gt;." description="Emit Event" toReformat="true" toShortenFQNames="true">
+        <variable name="EVENT" expression="" defaultValue="&quot;EventName&quot;" alwaysStopAt="true"/>
+        <variable name="DATA" expression="" defaultValue="&quot;data&quot;" alwaysStopAt="true"/>
+        <context>
+            <option name="ARO" value="true"/>
+            <option name="OTHER" value="true"/>
+        </context>
+    </template>
+
+    <template name="keepalive" value="&lt;Keepalive&gt; the &lt;application&gt; for the &lt;events&gt;." description="Keepalive Action" toReformat="true" toShortenFQNames="true">
+        <context>
+            <option name="ARO" value="true"/>
+            <option name="OTHER" value="true"/>
+        </context>
+    </template>
+
+    <template name="given" value="&lt;Given&gt; the &lt;$VAR$&gt; with $VALUE$." description="Test Given" toReformat="true" toShortenFQNames="true">
+        <variable name="VAR" expression="" defaultValue="&quot;variable&quot;" alwaysStopAt="true"/>
+        <variable name="VALUE" expression="" defaultValue="&quot;value&quot;" alwaysStopAt="true"/>
+        <context>
+            <option name="ARO" value="true"/>
+            <option name="OTHER" value="true"/>
+        </context>
+    </template>
+
+    <template name="when" value="&lt;When&gt; the &lt;$RESULT$&gt; from the &lt;$FEATURE$&gt;." description="Test When" toReformat="true" toShortenFQNames="true">
+        <variable name="RESULT" expression="" defaultValue="&quot;result&quot;" alwaysStopAt="true"/>
+        <variable name="FEATURE" expression="" defaultValue="&quot;feature&quot;" alwaysStopAt="true"/>
+        <context>
+            <option name="ARO" value="true"/>
+            <option name="OTHER" value="true"/>
+        </context>
+    </template>
+
+    <template name="then" value="&lt;Then&gt; the &lt;$RESULT$&gt; with $EXPECTED$." description="Test Then" toReformat="true" toShortenFQNames="true">
+        <variable name="RESULT" expression="" defaultValue="&quot;result&quot;" alwaysStopAt="true"/>
+        <variable name="EXPECTED" expression="" defaultValue="&quot;expected&quot;" alwaysStopAt="true"/>
+        <context>
+            <option name="ARO" value="true"/>
+            <option name="OTHER" value="true"/>
+        </context>
+    </template>
+
+    <template name="comment" value="(* $TEXT$ *)" description="Block Comment" toReformat="true" toShortenFQNames="true">
+        <variable name="TEXT" expression="" defaultValue="&quot;Comment&quot;" alwaysStopAt="true"/>
+        <context>
+            <option name="ARO" value="true"/>
+            <option name="OTHER" value="true"/>
+        </context>
+    </template>
+</templateSet>

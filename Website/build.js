@@ -45,7 +45,7 @@ function processHtmlFile(srcPath, destPath, basePath = '') {
 }
 
 // Process main HTML files (at root level)
-const mainHtmlFiles = ['index.html', 'fdd.html', 'docs.html', 'getting-started.html', 'disclaimer.html', 'tutorial.html'];
+const mainHtmlFiles = ['index.html', 'fdd.html', 'docs.html', 'getting-started.html', 'disclaimer.html', 'tutorial.html', 'download.html'];
 mainHtmlFiles.forEach(file => {
     processHtmlFile(`src/${file}`, `dist/${file}`, '');
 });
