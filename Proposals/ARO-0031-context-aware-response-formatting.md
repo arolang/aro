@@ -215,8 +215,8 @@ public enum OutputContext: String, Sendable, Equatable, CaseIterable {
 Formats responses differently based on context:
 
 - `formatForMachine()` - Compact JSON with sorted keys
-- `formatForHuman()` - Readable plaintext with status line
-- `formatForDeveloper()` - Diagnostic output with type annotations
+- `formatForHuman()` - Readable plaintext with dot notation for nested objects
+- `formatForDeveloper()` - Formatted table with type annotations
 
 ### ExecutionContext Integration
 
@@ -281,3 +281,4 @@ This proposal:
 |---------|------|---------|
 | 1.0 | 2025-12 | Initial specification and implementation |
 | 1.1 | 2025-12 | Added detailed examples, format specification, benefits, and alternatives |
+| 1.2 | 2025-12 | Human output uses dot notation; Developer output uses formatted table |
