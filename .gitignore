@@ -20,3 +20,4 @@
 /Examples/DataPipeline/DataPipeline
 /Examples/CustomPlugin/plugins/GreetingService.dylib
 /Examples/ContextAware/ContextAware
+/Examples/FileWatcher/FileWatcher
