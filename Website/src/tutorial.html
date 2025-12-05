@@ -1513,18 +1513,6 @@ $ curl http://localhost:8080/hello?name=Developer
                 <div class="concept-card animate-on-scroll" style="transition-delay: 0.2s;">
                     <div class="concept-icon">
                         <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                            <path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/>
-                            <polyline points="14 2 14 8 20 8"/>
-                            <line x1="16" y1="13" x2="8" y2="13"/>
-                            <line x1="16" y1="17" x2="8" y2="17"/>
-                        </svg>
-                    </div>
-                    <h4>Developer Context</h4>
-                    <p><code>aro test</code> &mdash; Detailed diagnostics with types for debugging.</p>
-                </div>
-                <div class="concept-card animate-on-scroll" style="transition-delay: 0.3s;">
-                    <div class="concept-icon">
-                        <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                             <polyline points="16 18 22 12 16 6"/>
                             <polyline points="8 6 2 12 8 18"/>
                         </svg>
@@ -1574,30 +1562,6 @@ $ curl http://localhost:8080/hello?name=Developer
 <span class="comment">[OK]</span> success
   user.id: 123
   user.name: Alice</pre>
-                </div>
-            </div>
-
-            <p class="section-text animate-on-scroll">
-                When run via <code>aro test</code>, developers see diagnostic details:
-            </p>
-
-            <div class="code-block animate-on-scroll">
-                <div class="code-header">
-                    <div class="code-dots">
-                        <span class="code-dot red"></span>
-                        <span class="code-dot yellow"></span>
-                        <span class="code-dot green"></span>
-                    </div>
-                    <span class="code-lang">Developer Context</span>
-                </div>
-                <div class="code-content">
-<pre><span class="comment">LOG[console]</span> getUser: User retrieved
-<span class="keyword">Response&lt;OK&gt;</span> {
-  reason: <span class="string">"success"</span>
-  data: {
-    user: <span class="variable">Dict</span> { id: <span class="variable">Int</span>(123), name: <span class="variable">String</span>("Alice") }
-  }
-}</pre>
                 </div>
             </div>
 
