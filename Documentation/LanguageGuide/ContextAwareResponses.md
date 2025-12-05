@@ -74,7 +74,8 @@ The runtime automatically detects context:
 ```
 [getUser] User retrieved
 [OK] success
-  user: {id: 123, name: Alice}
+  user.id: 123
+  user.name: Alice
 ```
 
 ### HTTP Response (Machine)

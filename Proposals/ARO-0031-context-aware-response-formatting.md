@@ -108,21 +108,22 @@ Compact JSON for API responses:
 
 ### Human Context (Plaintext KV)
 
-Readable key-value pairs for console:
+Readable key-value pairs for console using dot notation for nested objects:
 
 ```
 [OK] success
   message: Hello, Developer!
-  tags: [greeting, demo]
+  tags: demo, greeting
   timestamp: 1733318400
-  user: {id: 42, name: Developer}
+  user.id: 42
+  user.name: Developer
 ```
 
 Human output follows these rules:
 - Status line first: `[STATUS] reason`
 - Indented data fields
-- Nested objects inline with braces
-- Arrays inline with brackets
+- Nested objects use dot notation (`user.name` not `user: {name: ...}`)
+- Arrays as sorted, comma-separated values
 - No quotes around simple strings
 
 ### Developer Context (Diagnostic)
@@ -157,10 +158,10 @@ Extract values with standard Unix tools - no JSON parsers required:
 # Human-readable output is immediately scannable
 $ aro run ./MyAPI
 [OK] success
-  greeting: {message: Hello, Developer!}
+  greeting.message: Hello, Developer!
 
 # Pipe-friendly for simple extraction
-$ aro run ./MyAPI | grep 'message:'
+$ aro run ./MyAPI | grep 'greeting.message:'
 ```
 
 ### 2. Pipeline-Friendly

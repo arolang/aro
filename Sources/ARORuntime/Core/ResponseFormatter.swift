@@ -40,19 +40,89 @@ public struct ResponseFormatter: Sendable {
         return toJSONString(json)
     }
 
-    /// Format for human consumption (readable text)
+    /// Format for human consumption (readable text with dot notation for nested objects)
     private static func formatForHuman(_ response: Response) -> String {
         var lines: [String] = []
         lines.append("[\(response.status)] \(response.reason)")
 
         if !response.data.isEmpty {
-            for (key, value) in response.data.sorted(by: { $0.key < $1.key }) {
-                let valueStr = formatValueForHuman(value)
-                lines.append("  \(key): \(valueStr)")
+            let flattenedPairs = flattenForHuman(response.data, prefix: "")
+            for (key, value) in flattenedPairs.sorted(by: { $0.0 < $1.0 }) {
+                lines.append("  \(key): \(value)")
             }
         }
 
         return lines.joined(separator: "\n")
+    }
+
+    /// Flatten nested structures using dot notation for human output
+    private static func flattenForHuman(_ data: [String: AnySendable], prefix: String) -> [(String, String)] {
+        var result: [(String, String)] = []
+
+        for (key, value) in data {
+            let fullKey = prefix.isEmpty ? key : "\(prefix).\(key)"
+            let unwrapped = unwrapAnySendable(value)
+
+            if let dict = unwrapped as? [String: any Sendable] {
+                // Recursively flatten nested dictionaries
+                let nestedPairs = flattenValueForHuman(dict, prefix: fullKey)
+                result.append(contentsOf: nestedPairs)
+            } else if let array = unwrapped as? [any Sendable] {
+                // Arrays as comma-separated values
+                let items = array.map { formatSimpleValueForHuman($0) }
+                result.append((fullKey, items.sorted().joined(separator: ", ")))
+            } else {
+                result.append((fullKey, formatSimpleValueForHuman(unwrapped)))
+            }
+        }
+
+        return result
+    }
+
+    /// Flatten any Sendable value with dot notation
+    private static func flattenValueForHuman(_ value: any Sendable, prefix: String) -> [(String, String)] {
+        var result: [(String, String)] = []
+
+        if let dict = value as? [String: any Sendable] {
+            for (key, val) in dict {
+                let fullKey = prefix.isEmpty ? key : "\(prefix).\(key)"
+
+                if let nestedDict = val as? [String: any Sendable] {
+                    result.append(contentsOf: flattenValueForHuman(nestedDict, prefix: fullKey))
+                } else if let array = val as? [any Sendable] {
+                    let items = array.map { formatSimpleValueForHuman($0) }
+                    result.append((fullKey, items.sorted().joined(separator: ", ")))
+                } else {
+                    result.append((fullKey, formatSimpleValueForHuman(val)))
+                }
+            }
+        } else {
+            result.append((prefix, formatSimpleValueForHuman(value)))
+        }
+
+        return result
+    }
+
+    /// Format a simple (non-nested) value for human output
+    private static func formatSimpleValueForHuman(_ value: any Sendable) -> String {
+        if let anySendable = value as? AnySendable {
+            return formatSimpleValueForHuman(unwrapAnySendable(anySendable))
+        }
+
+        switch value {
+        case let str as String:
+            return str
+        case let int as Int:
+            return String(int)
+        case let double as Double:
+            return String(format: "%.2f", double)
+        case let bool as Bool:
+            return bool ? "true" : "false"
+        case let response as Response:
+            return "[\(response.status)] \(response.reason)"
+        default:
+            return String(describing: value)
+        }
     }
 
     /// Format for developer consumption (diagnostic)
