@@ -144,6 +144,50 @@
     }
 
     // ==========================================================================
+    // Mobile Menu Toggle
+    // ==========================================================================
+    function initMobileMenu() {
+        const navToggle = document.querySelector('.nav-toggle');
+        const mobileMenu = document.querySelector('.mobile-menu');
+
+        if (!navToggle || !mobileMenu) return;
+
+        function toggleMenu() {
+            navToggle.classList.toggle('active');
+            mobileMenu.classList.toggle('active');
+            document.body.classList.toggle('menu-open');
+        }
+
+        function closeMenu() {
+            navToggle.classList.remove('active');
+            mobileMenu.classList.remove('active');
+            document.body.classList.remove('menu-open');
+        }
+
+        // Toggle menu on button click
+        navToggle.addEventListener('click', toggleMenu);
+
+        // Close menu when clicking a link
+        mobileMenu.querySelectorAll('a').forEach(link => {
+            link.addEventListener('click', closeMenu);
+        });
+
+        // Close menu on escape key
+        document.addEventListener('keydown', (e) => {
+            if (e.key === 'Escape' && mobileMenu.classList.contains('active')) {
+                closeMenu();
+            }
+        });
+
+        // Close menu when resizing to desktop
+        window.addEventListener('resize', () => {
+            if (window.innerWidth > 768 && mobileMenu.classList.contains('active')) {
+                closeMenu();
+            }
+        });
+    }
+
+    // ==========================================================================
     // GitHub Stars Fetcher
     // ==========================================================================
     function initGitHubStars() {
@@ -195,6 +239,7 @@
         initFloatingNav();
         initCardStagger();
         initNavScrollEffect();
+        initMobileMenu();
         initGitHubStars();
     }
 

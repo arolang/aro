@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-    <title>Error Handling - ARO Programming Language</title>
+    <title>Context-Aware Response Formatting - ARO Programming Language</title>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <meta name="description" content="ARO - The programming language where features become code. Built for humans, perfected for AI.">
@@ -205,207 +205,153 @@
 
     <main class="doc-page">
         <a href="../../docs.html" class="back-link">&#x2190; Back to Documentation</a>
-        <h1>Error Handling</h1>
-<p>ARO has a unique approach to error handling: <strong>the code is the error message</strong>. You write only the happy path, and the runtime automatically generates descriptive error messages from your code.</p>
-<h2>The Philosophy</h2>
-<p>ARO is designed for how project managers think about software: describe what should happen, not what could go wrong. Edge cases and error handling are abstracted away.</p>
-<p><strong>The fundamental principle</strong>: Every ARO statement describes the ideal outcome. When that outcome cannot be achieved, the statement itself becomes the error message.</p>
-<h2>Security Warning</h2>
-<p><strong>ARO is not secure for production use.</strong></p>
-<p>Error messages expose everything: variable names, values, conditions, and internal state. For example:</p>
-<pre><code class="language-aro">&lt;Retrieve&gt; the &lt;user&gt; from the &lt;user-repository&gt; where password = &lt;password&gt;.
-</code></pre>
-<p>If this fails, the error message will be:</p>
-<pre><code>Cannot retrieve the user from the user-repository where password = &quot;hunter2&quot;.
-</code></pre>
-<p>This is by design. ARO prioritizes clarity and debugging over security.</p>
+        <h1>Context-Aware Response Formatting</h1>
+<p>ARO automatically formats responses and log output based on the execution context. The same code produces different output formats depending on how it&#39;s invoked.</p>
+<h2>Execution Contexts</h2>
+<p>ARO recognizes three execution contexts:</p>
+<table>
+<thead>
+<tr>
+<th>Context</th>
+<th>Trigger</th>
+<th>Output Format</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><strong>Human</strong></td>
+<td><code>aro run</code>, CLI execution</td>
+<td>Readable text</td>
+</tr>
+<tr>
+<td><strong>Machine</strong></td>
+<td>HTTP API, events</td>
+<td>JSON/structured data</td>
+</tr>
+<tr>
+<td><strong>Developer</strong></td>
+<td><code>aro test</code>, debug mode</td>
+<td>Detailed diagnostics</td>
+</tr>
+</tbody></table>
 <h2>How It Works</h2>
-<h3>The Happy Path</h3>
-<p>In ARO, you only write the successful case:</p>
-<pre><code class="language-aro">(Get User: User API) {
-    &lt;Extract&gt; the &lt;id&gt; from the &lt;pathParameters: id&gt;.
+<h3>Human Context (Default)</h3>
+<p>When you run ARO from the command line, output is formatted for readability:</p>
+<pre><code class="language-aro">(Application-Start: Example) {
+    &lt;Log&gt; the &lt;message&gt; for the &lt;console&gt; with &quot;Hello, World!&quot;.
+    &lt;Return&gt; an &lt;OK: status&gt; for the &lt;startup&gt;.
+}
+</code></pre>
+<p>Running with <code>aro run</code>:</p>
+<pre><code>[Application-Start] Hello, World!
+</code></pre>
+<h3>Machine Context</h3>
+<p>When code runs via HTTP request or event handler, output is structured data:</p>
+<pre><code class="language-json">{&quot;level&quot;:&quot;info&quot;,&quot;source&quot;:&quot;Application-Start&quot;,&quot;message&quot;:&quot;Hello, World!&quot;}
+</code></pre>
+<p>This format is ideal for:</p>
+<ul>
+<li>API responses</li>
+<li>Log aggregation systems</li>
+<li>Programmatic consumption</li>
+</ul>
+<h3>Developer Context</h3>
+<p>During test execution, output includes diagnostic information:</p>
+<pre><code>LOG[console] Application-Start: Hello, World!
+</code></pre>
+<p>This format helps with:</p>
+<ul>
+<li>Debugging test failures</li>
+<li>Understanding data flow</li>
+<li>Tracing execution</li>
+</ul>
+<h2>Automatic Detection</h2>
+<p>The runtime automatically detects context:</p>
+<table>
+<thead>
+<tr>
+<th>Entry Point</th>
+<th>Context</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><code>aro run</code> command</td>
+<td>Human</td>
+</tr>
+<tr>
+<td><code>aro test</code> command</td>
+<td>Developer</td>
+</tr>
+<tr>
+<td>HTTP route handler</td>
+<td>Machine</td>
+</tr>
+<tr>
+<td>Event dispatch</td>
+<td>Machine</td>
+</tr>
+<tr>
+<td><code>--debug</code> flag</td>
+<td>Developer</td>
+</tr>
+</tbody></table>
+<h2>Example: Same Code, Different Contexts</h2>
+<pre><code class="language-aro">(getUser: User API) {
     &lt;Retrieve&gt; the &lt;user&gt; from the &lt;user-repository&gt; where id = &lt;id&gt;.
+    &lt;Log&gt; the &lt;status&gt; for the &lt;console&gt; with &quot;User retrieved&quot;.
     &lt;Return&gt; an &lt;OK: status&gt; with &lt;user&gt;.
 }
 </code></pre>
-<p>This code assumes:</p>
-<ul>
-<li>The path parameter exists</li>
-<li>The user can be found</li>
-<li>Everything works</li>
-</ul>
-<h3>Automatic Error Generation</h3>
-<p>When any step fails, the runtime generates an error message from the statement:</p>
-<table>
-<thead>
-<tr>
-<th>Statement</th>
-<th>Generated Error</th>
-</tr>
-</thead>
-<tbody><tr>
-<td><code>&lt;Extract&gt; the &lt;id&gt; from the &lt;pathParameters: id&gt;.</code></td>
-<td><code>Cannot extract the id from the pathParameters: id.</code></td>
-</tr>
-<tr>
-<td><code>&lt;Retrieve&gt; the &lt;user&gt; from the &lt;user-repository&gt; where id = &lt;id&gt;.</code></td>
-<td><code>Cannot retrieve the user from the user-repository where id = 530.</code></td>
-</tr>
-<tr>
-<td><code>&lt;Validate&gt; the &lt;email&gt; for the &lt;format&gt;.</code></td>
-<td><code>Cannot validate the email for the format.</code></td>
-</tr>
-</tbody></table>
-<p>The runtime substitutes resolved variable values into the error message.</p>
-<h3>Conditions in Errors</h3>
-<p>When a statement includes conditions, they appear in the error:</p>
-<pre><code class="language-aro">&lt;Retrieve&gt; the &lt;order&gt; from the &lt;order-repository&gt; where userId = &lt;userId&gt; and status = &quot;pending&quot;.
+<h3>CLI Output (Human)</h3>
+<pre><code>[getUser] User retrieved
+[OK] success
+  user: {id: 123, name: Alice}
 </code></pre>
-<p>Error:</p>
-<pre><code>Cannot retrieve the order from the order-repository where userId = 42 and status = &quot;pending&quot;.
-</code></pre>
-<h2>The Error Message Is the Code</h2>
-<p>This design has a profound implication: <strong>your code is your documentation</strong>.</p>
-<p>When you read an ARO statement:</p>
-<pre><code class="language-aro">&lt;Retrieve&gt; the &lt;user&gt; from the &lt;user-repository&gt; where id = &lt;id&gt;.
-</code></pre>
-<p>You know exactly what the error message will be. There&#39;s no separate error handling code to maintain, no error message strings to keep in sync.</p>
-<p>The line of code says exactly what you see in your logs.</p>
-<h2>HTTP Response Mapping</h2>
-<p>The runtime automatically maps errors to appropriate HTTP responses:</p>
-<table>
-<thead>
-<tr>
-<th>Error Source</th>
-<th>HTTP Status</th>
-<th>Response Body</th>
-</tr>
-</thead>
-<tbody><tr>
-<td><code>&lt;Extract&gt;</code> failures</td>
-<td>400 Bad Request</td>
-<td><code>{ &quot;error&quot;: &quot;Cannot extract...&quot; }</code></td>
-</tr>
-<tr>
-<td><code>&lt;Retrieve&gt;</code> failures</td>
-<td>404 Not Found</td>
-<td><code>{ &quot;error&quot;: &quot;Cannot retrieve...&quot; }</code></td>
-</tr>
-<tr>
-<td><code>&lt;Validate&gt;</code> failures</td>
-<td>422 Unprocessable</td>
-<td><code>{ &quot;error&quot;: &quot;Cannot validate...&quot; }</code></td>
-</tr>
-<tr>
-<td>System failures</td>
-<td>500 Internal Error</td>
-<td><code>{ &quot;error&quot;: &quot;Cannot...&quot; }</code></td>
-</tr>
-</tbody></table>
-<h2>Examples</h2>
-<h3>User Registration</h3>
-<pre><code class="language-aro">(Register User: User API) {
-    &lt;Extract&gt; the &lt;data&gt; from the &lt;request: body&gt;.
-    &lt;Validate&gt; the &lt;data: email&gt; for the &lt;email-format&gt;.
-    &lt;Validate&gt; the &lt;data: password&gt; for the &lt;password-strength&gt;.
-    &lt;Create&gt; the &lt;user&gt; with &lt;data&gt;.
-    &lt;Store&gt; the &lt;user&gt; in the &lt;user-repository&gt;.
-    &lt;Return&gt; a &lt;Created: status&gt; with &lt;user&gt;.
+<h3>HTTP Response (Machine)</h3>
+<pre><code class="language-json">{
+  &quot;status&quot;: &quot;OK&quot;,
+  &quot;reason&quot;: &quot;success&quot;,
+  &quot;data&quot;: {
+    &quot;user&quot;: {&quot;id&quot;: 123, &quot;name&quot;: &quot;Alice&quot;}
+  }
 }
 </code></pre>
-<p>Possible errors:</p>
-<ul>
-<li><code>Cannot extract the data from the request: body.</code></li>
-<li><code>Cannot validate the data: email for the email-format.</code></li>
-<li><code>Cannot validate the data: password for the password-strength.</code></li>
-<li><code>Cannot create the user with { email: &quot;bad&quot;, password: &quot;123&quot; }.</code></li>
-<li><code>Cannot store the user in the user-repository.</code></li>
-</ul>
-<h3>Payment Processing</h3>
-<pre><code class="language-aro">(Process Payment: Checkout) {
-    &lt;Retrieve&gt; the &lt;order&gt; from the &lt;order-repository&gt; where id = &lt;orderId&gt;.
-    &lt;Retrieve&gt; the &lt;paymentMethod&gt; from the &lt;payment-repository&gt; where userId = &lt;userId&gt;.
-    &lt;Charge&gt; the &lt;amount&gt; to the &lt;paymentMethod&gt;.
-    &lt;Update&gt; the &lt;order: status&gt; to &quot;paid&quot;.
-    &lt;Return&gt; an &lt;OK: status&gt; with &lt;receipt&gt;.
+<h3>Test Output (Developer)</h3>
+<pre><code>LOG[console] getUser: User retrieved
+Response&lt;OK&gt; {
+  reason: &quot;success&quot;
+  data: {
+    user: Dict { id: Int(123), name: String(&quot;Alice&quot;) }
+  }
 }
 </code></pre>
-<p>Possible errors:</p>
-<ul>
-<li><code>Cannot retrieve the order from the order-repository where id = 12345.</code></li>
-<li><code>Cannot retrieve the paymentMethod from the payment-repository where userId = 67.</code></li>
-<li><code>Cannot charge the amount to the paymentMethod.</code></li>
-<li><code>Cannot update the order: status to &quot;paid&quot;.</code></li>
-</ul>
-<h2>Why This Approach?</h2>
-<h3>Simplicity</h3>
-<p>Error handling traditionally accounts for 40-60% of code. In ARO, it&#39;s 0%. You describe what should happen, not what could go wrong.</p>
-<h3>Perfect Error Messages</h3>
-<p>Error messages are always accurate because they ARE the code. No stale error strings, no mismatched messages.</p>
-<h3>Project Manager Friendly</h3>
-<p>ARO code reads like requirements:</p>
-<ul>
-<li>&quot;Retrieve the user from the repository&quot;</li>
-<li>&quot;Validate the email for the format&quot;</li>
-<li>&quot;Store the order in the database&quot;</li>
-</ul>
-<h3>Debugging Paradise</h3>
-<p>When something fails, the error tells you exactly what line failed and with what values. No stack traces to decode.</p>
-<h2>Explicit Error Handling (Optional)</h2>
-<p>For custom behavior, ARO provides the <code>&lt;Throw&gt;</code> action:</p>
-<pre><code class="language-aro">(Delete User: User API) {
-    &lt;Retrieve&gt; the &lt;user&gt; from the &lt;user-repository&gt; where id = &lt;id&gt;.
-
-    if &lt;user: role&gt; is &quot;admin&quot; then {
-        &lt;Throw&gt; a &lt;Forbidden: error&gt; for the &lt;admin-deletion&gt;.
-    }
-
-    &lt;Delete&gt; the &lt;user&gt; from the &lt;user-repository&gt;.
-    &lt;Return&gt; an &lt;OK: status&gt;.
-}
+<h2>Benefits</h2>
+<ol>
+<li><strong>Write Once</strong>: No need for separate formatting code</li>
+<li><strong>Automatic Adaptation</strong>: Output suits the consumer automatically</li>
+<li><strong>Consistent Behavior</strong>: Same logic, appropriate presentation</li>
+<li><strong>Debug Friendly</strong>: Rich diagnostics during development</li>
+</ol>
+<h2>Integration with Actions</h2>
+<h3>Log Action</h3>
+<p>The <code>&lt;Log&gt;</code> action respects output context:</p>
+<pre><code class="language-aro">&lt;Log&gt; the &lt;message&gt; for the &lt;console&gt; with &lt;value&gt;.
 </code></pre>
-<p>But this is rarely needed. Automatic error handling covers most cases.</p>
-<h2>What ARO Does Not Provide</h2>
-<p>ARO explicitly does <strong>not</strong> provide:</p>
 <ul>
-<li>Try-catch blocks</li>
-<li>Error types or hierarchies</li>
-<li>Error propagation control</li>
-<li>Retry logic</li>
-<li>Circuit breakers</li>
-<li>Fallback values</li>
+<li><strong>Human</strong>: <code>[FeatureSetName] value</code></li>
+<li><strong>Machine</strong>: <code>{&quot;level&quot;:&quot;info&quot;,&quot;source&quot;:&quot;FeatureSetName&quot;,&quot;message&quot;:&quot;value&quot;}</code></li>
+<li><strong>Developer</strong>: <code>LOG[console] FeatureSetName: value</code></li>
 </ul>
-<p>These are implementation concerns. If you need them, handle them in the runtime/framework layer.</p>
-<h2>Summary</h2>
-<table>
-<thead>
-<tr>
-<th>Concept</th>
-<th>Details</th>
-</tr>
-</thead>
-<tbody><tr>
-<td>Happy path only</td>
-<td>Write what should happen</td>
-</tr>
-<tr>
-<td>Automatic errors</td>
-<td>Runtime generates from code</td>
-</tr>
-<tr>
-<td>Values exposed</td>
-<td>Debugging over security</td>
-</tr>
-<tr>
-<td>HTTP mapping</td>
-<td>Automatic status codes</td>
-</tr>
-<tr>
-<td>Optional throw</td>
-<td><code>&lt;Throw&gt;</code> for custom errors</td>
-</tr>
-</tbody></table>
-<p>The line of code says exactly what you see in your logs. That is how you wrote it.</p>
+<h3>Return Action</h3>
+<p>The <code>&lt;Return&gt;</code> action sets the response, which is formatted based on context:</p>
+<pre><code class="language-aro">&lt;Return&gt; an &lt;OK: status&gt; with &lt;result&gt;.
+</code></pre>
+<p>Response formatting is handled by the ResponseFormatter, which adapts output for each context.</p>
+<h2>See Also</h2>
+<ul>
+<li><a href="Actions.md">Actions</a> - Built-in action reference</li>
+<li><a href="HTTPServices.md">HTTP Services</a> - API development</li>
+<li><a href="../LanguageReference/Testing.md">Testing</a> - Test framework</li>
+</ul>
 
     </main>
 

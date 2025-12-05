@@ -1,0 +1,492 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <title>Download - ARO Programming Language</title>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="description" content="ARO - The programming language where features become code. Built for humans, perfected for AI.">
+    <!-- Open Graph / Social Share -->
+    <meta property="og:type" content="website">
+    <meta property="og:url" content="https://krissimon.github.io/aro/">
+    <meta property="og:title" content="ARO - The Language AI Was Waiting For">
+    <meta property="og:description" content="ARO is the programming language where features become code. Built for humans. Perfected for AI.">
+    <meta property="og:image" content="https://krissimon.github.io/aro/social.png">
+    <!-- Twitter Card -->
+    <meta name="twitter:card" content="summary_large_image">
+    <meta name="twitter:title" content="ARO - The Language AI Was Waiting For">
+    <meta name="twitter:description" content="ARO is the programming language where features become code. Built for humans. Perfected for AI.">
+    <meta name="twitter:image" content="https://krissimon.github.io/aro/social.png">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="style.css">
+    <link rel="stylesheet" href="animations.css">
+    <!-- Matomo -->
+    <script>
+        var _paq = window._paq = window._paq || [];
+        /* tracker methods like "setCustomDimension" should be called before "trackPageView" */
+        _paq.push(['trackPageView']);
+        _paq.push(['enableLinkTracking']);
+        (function() {
+            var u="//matomo.benjamin.ausdertechnik.de/";
+            _paq.push(['setTrackerUrl', u+'matomo.php']);
+            _paq.push(['setSiteId', '4']);
+            var d=document, g=d.createElement('script'), s=d.getElementsByTagName('script')[0];
+            g.async=true; g.src=u+'matomo.js'; s.parentNode.insertBefore(g,s);
+        })();
+    </script>
+    <!-- End Matomo Code -->
+
+    <style>
+        .download-hero {
+            padding: 160px 24px 60px;
+            text-align: center;
+            background:
+                radial-gradient(ellipse at 50% 0%, rgba(16, 185, 129, 0.15) 0%, transparent 50%),
+                var(--color-bg);
+        }
+
+        .download-hero h1 {
+            font-size: clamp(2.5rem, 5vw, 4rem);
+            font-weight: 700;
+            margin-bottom: 16px;
+        }
+
+        .download-hero .lead {
+            font-size: 1.2rem;
+            color: var(--color-text-muted);
+            max-width: 600px;
+            margin: 0 auto;
+        }
+
+        .download-content {
+            max-width: 1000px;
+            margin: 0 auto;
+            padding: 60px 24px;
+        }
+
+        .download-section {
+            margin-bottom: 60px;
+        }
+
+        .download-section h2 {
+            font-size: 1.8rem;
+            font-weight: 600;
+            margin-bottom: 24px;
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+
+        .download-section h2 .icon {
+            font-size: 1.4rem;
+        }
+
+        .download-section p {
+            font-size: 1.1rem;
+            color: var(--color-text-muted);
+            line-height: 1.7;
+            margin-bottom: 20px;
+        }
+
+        .download-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+            gap: 24px;
+            margin-top: 32px;
+        }
+
+        .download-card {
+            background: var(--color-bg-alt);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            border-radius: var(--radius-md);
+            padding: 32px;
+            transition: transform 0.3s ease, border-color 0.3s ease;
+        }
+
+        .download-card:hover {
+            transform: translateY(-4px);
+            border-color: var(--color-emerald);
+        }
+
+        .download-card .platform-icon {
+            font-size: 2.5rem;
+            margin-bottom: 16px;
+        }
+
+        .download-card h3 {
+            font-size: 1.3rem;
+            font-weight: 600;
+            margin-bottom: 8px;
+        }
+
+        .download-card .platform-desc {
+            color: var(--color-text-muted);
+            margin-bottom: 20px;
+            font-size: 0.95rem;
+        }
+
+        .download-card .download-btn {
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            background: var(--gradient-primary);
+            color: var(--color-text);
+            padding: 12px 24px;
+            border-radius: var(--radius-sm);
+            text-decoration: none;
+            font-weight: 500;
+            transition: opacity 0.2s ease;
+        }
+
+        .download-card .download-btn:hover {
+            opacity: 0.9;
+        }
+
+        .download-card .download-btn svg {
+            width: 16px;
+            height: 16px;
+        }
+
+        .download-card .version {
+            display: block;
+            margin-top: 12px;
+            font-size: 0.85rem;
+            color: var(--color-text-muted);
+        }
+
+        .editor-section {
+            background: rgba(16, 185, 129, 0.05);
+            border: 1px solid rgba(16, 185, 129, 0.2);
+            border-radius: var(--radius-md);
+            padding: 40px;
+            margin-top: 40px;
+        }
+
+        .editor-section h2 {
+            color: var(--color-emerald);
+        }
+
+        .editor-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 24px;
+            margin-top: 24px;
+        }
+
+        .editor-card {
+            background: var(--color-bg);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            border-radius: var(--radius-sm);
+            padding: 24px;
+            display: flex;
+            align-items: flex-start;
+            gap: 16px;
+        }
+
+        .editor-card .editor-icon {
+            font-size: 2rem;
+            flex-shrink: 0;
+        }
+
+        .editor-card h3 {
+            font-size: 1.1rem;
+            font-weight: 600;
+            margin-bottom: 8px;
+        }
+
+        .editor-card p {
+            color: var(--color-text-muted);
+            font-size: 0.95rem;
+            margin-bottom: 12px;
+        }
+
+        .editor-card .editor-link {
+            color: var(--color-emerald);
+            text-decoration: none;
+            font-size: 0.9rem;
+            display: inline-flex;
+            align-items: center;
+            gap: 4px;
+        }
+
+        .editor-card .editor-link:hover {
+            text-decoration: underline;
+        }
+
+        .feature-list {
+            list-style: none;
+            padding: 0;
+            margin: 16px 0;
+        }
+
+        .feature-list li {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            padding: 8px 0;
+            color: var(--color-text-muted);
+            font-size: 0.95rem;
+        }
+
+        .feature-list li::before {
+            content: "✓";
+            color: var(--color-emerald);
+            font-weight: bold;
+        }
+
+        .build-source {
+            background: var(--color-bg-alt);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            border-radius: var(--radius-md);
+            padding: 32px;
+            margin-top: 40px;
+        }
+
+        .build-source h3 {
+            font-size: 1.2rem;
+            font-weight: 600;
+            margin-bottom: 16px;
+        }
+
+        .build-source code {
+            font-family: var(--font-mono);
+            background: rgba(0, 0, 0, 0.3);
+            padding: 3px 8px;
+            border-radius: 4px;
+            font-size: 0.9rem;
+        }
+
+        .code-block {
+            background: rgba(0, 0, 0, 0.4);
+            border-radius: var(--radius-sm);
+            padding: 16px 20px;
+            margin: 16px 0;
+            overflow-x: auto;
+        }
+
+        .code-block pre {
+            margin: 0;
+            font-family: var(--font-mono);
+            font-size: 0.9rem;
+            line-height: 1.6;
+        }
+    </style>
+</head>
+<body>
+    <nav class="nav">
+        <div class="nav-content">
+            <a href="/aro/" class="logo">
+                <span class="logo-aro">ARO</span>
+            </a>
+            <div class="nav-links">
+                <a href="fdd.html">The FDD Story</a>
+                <a href="getting-started.html">Get Started</a>
+                <a href="tutorial.html">Tutorial</a>
+                <a href="docs.html">Docs</a>
+                <a href="download.html" class="nav-active">Download</a>
+                <a href="https://github.com/KrisSimon/aro" class="nav-github">
+                    <svg viewBox="0 0 16 16" fill="currentColor"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z"/></svg>
+                    <span class="github-stars">
+                        <svg viewBox="0 0 16 16"><path d="M8 .25a.75.75 0 01.673.418l1.882 3.815 4.21.612a.75.75 0 01.416 1.279l-3.046 2.97.719 4.192a.75.75 0 01-1.088.791L8 12.347l-3.766 1.98a.75.75 0 01-1.088-.79l.72-4.194L.818 6.374a.75.75 0 01.416-1.28l4.21-.611L7.327.668A.75.75 0 018 .25z"/></svg>
+                        <span class="github-stars-count"></span>
+                    </span>
+                </a>
+            </div>
+            <button class="nav-toggle" aria-label="Toggle menu">
+                <span></span>
+                <span></span>
+                <span></span>
+            </button>
+        </div>
+    </nav>
+
+    <div class="mobile-menu">
+        <a href="fdd.html">The FDD Story</a>
+        <a href="getting-started.html">Get Started</a>
+        <a href="tutorial.html">Tutorial</a>
+        <a href="docs.html">Docs</a>
+        <a href="download.html">Download</a>
+        <a href="https://github.com/KrisSimon/aro" class="nav-github">GitHub</a>
+    </div>
+
+    <header class="download-hero">
+        <h1><span class="gradient-text">Download ARO</span></h1>
+        <p class="lead">Get the ARO CLI and IDE extensions to start building feature-driven applications.</p>
+    </header>
+
+    <main class="download-content">
+        <!-- CLI Downloads -->
+        <section class="download-section">
+            <h2><span class="icon">&#x1F4E6;</span> ARO Command-Line Interface</h2>
+            <p>
+                The ARO CLI lets you run, build, compile, and test ARO applications.
+                Download the pre-built binary for your platform or build from source.
+            </p>
+
+            <div class="download-grid">
+                <div class="download-card">
+                    <div class="platform-icon">&#x1F34E;</div>
+                    <h3>macOS</h3>
+                    <p class="platform-desc">Universal binary for Apple Silicon and Intel Macs</p>
+                    <a href="https://github.com/KrisSimon/aro/releases/latest" class="download-btn">
+                        <svg viewBox="0 0 16 16" fill="currentColor"><path d="M2.75 14A1.75 1.75 0 011 12.25v-2.5a.75.75 0 011.5 0v2.5c0 .138.112.25.25.25h10.5a.25.25 0 00.25-.25v-2.5a.75.75 0 011.5 0v2.5A1.75 1.75 0 0113.25 14H2.75z"/><path d="M7.25 7.689V2a.75.75 0 011.5 0v5.689l1.97-1.969a.749.749 0 111.06 1.06l-3.25 3.25a.749.749 0 01-1.06 0L4.22 6.78a.749.749 0 111.06-1.06l1.97 1.969z"/></svg>
+                        Download for macOS
+                    </a>
+                    <span class="version">aro-macos-universal.tar.gz</span>
+                </div>
+
+                <div class="download-card">
+                    <div class="platform-icon">&#x1F427;</div>
+                    <h3>Linux</h3>
+                    <p class="platform-desc">64-bit binary for Ubuntu, Debian, and other distributions</p>
+                    <a href="https://github.com/KrisSimon/aro/releases/latest" class="download-btn">
+                        <svg viewBox="0 0 16 16" fill="currentColor"><path d="M2.75 14A1.75 1.75 0 011 12.25v-2.5a.75.75 0 011.5 0v2.5c0 .138.112.25.25.25h10.5a.25.25 0 00.25-.25v-2.5a.75.75 0 011.5 0v2.5A1.75 1.75 0 0113.25 14H2.75z"/><path d="M7.25 7.689V2a.75.75 0 011.5 0v5.689l1.97-1.969a.749.749 0 111.06 1.06l-3.25 3.25a.749.749 0 01-1.06 0L4.22 6.78a.749.749 0 111.06-1.06l1.97 1.969z"/></svg>
+                        Download for Linux
+                    </a>
+                    <span class="version">aro-linux-x86_64.tar.gz</span>
+                </div>
+
+                <div class="download-card">
+                    <div class="platform-icon">&#x1FA9F;</div>
+                    <h3>Windows</h3>
+                    <p class="platform-desc">64-bit executable for Windows 10 and later</p>
+                    <a href="https://github.com/KrisSimon/aro/releases/latest" class="download-btn">
+                        <svg viewBox="0 0 16 16" fill="currentColor"><path d="M2.75 14A1.75 1.75 0 011 12.25v-2.5a.75.75 0 011.5 0v2.5c0 .138.112.25.25.25h10.5a.25.25 0 00.25-.25v-2.5a.75.75 0 011.5 0v2.5A1.75 1.75 0 0113.25 14H2.75z"/><path d="M7.25 7.689V2a.75.75 0 011.5 0v5.689l1.97-1.969a.749.749 0 111.06 1.06l-3.25 3.25a.749.749 0 01-1.06 0L4.22 6.78a.749.749 0 111.06-1.06l1.97 1.969z"/></svg>
+                        Download for Windows
+                    </a>
+                    <span class="version">aro-windows-x86_64.zip</span>
+                </div>
+            </div>
+
+            <div class="build-source">
+                <h3>Build from Source</h3>
+                <p>Alternatively, build ARO from source using Swift:</p>
+                <div class="code-block">
+                    <pre>git clone https://github.com/KrisSimon/aro.git
+cd aro
+swift build -c release
+# Binary is at .build/release/aro</pre>
+                </div>
+                <p>Requires <code>Swift 6.0</code> or later.</p>
+            </div>
+        </section>
+
+        <!-- IDE Extensions -->
+        <section class="download-section editor-section">
+            <h2><span class="icon">&#x1F4DD;</span> IDE Extensions</h2>
+            <p>
+                Enhance your ARO development experience with syntax highlighting and code snippets.
+            </p>
+
+            <div class="editor-grid">
+                <div class="editor-card">
+                    <div class="editor-icon">&#x1F4BB;</div>
+                    <div>
+                        <h3>Visual Studio Code</h3>
+                        <p>Full syntax highlighting and smart snippets for VS Code.</p>
+                        <ul class="feature-list">
+                            <li>Syntax highlighting for all ARO elements</li>
+                            <li>40+ code snippets for common patterns</li>
+                            <li>Bracket matching and auto-closing</li>
+                            <li>Code folding for feature sets</li>
+                        </ul>
+                        <a href="https://marketplace.visualstudio.com/items?itemName=krissimon.aro-language" class="editor-link">
+                            Install from Marketplace &#x2192;
+                        </a>
+                    </div>
+                </div>
+
+                <div class="editor-card">
+                    <div class="editor-icon">&#x1F9E0;</div>
+                    <div>
+                        <h3>IntelliJ IDEA</h3>
+                        <p>TextMate-based highlighting with live templates for JetBrains IDEs.</p>
+                        <ul class="feature-list">
+                            <li>Syntax highlighting via TextMate</li>
+                            <li>Live templates for quick coding</li>
+                            <li>Works with all JetBrains IDEs</li>
+                            <li>File type association</li>
+                        </ul>
+                        <a href="https://plugins.jetbrains.com/plugin/com.krissimon.aro" class="editor-link">
+                            Install from JetBrains Marketplace &#x2192;
+                        </a>
+                    </div>
+                </div>
+            </div>
+
+            <div style="margin-top: 24px; padding: 16px; background: rgba(0,0,0,0.2); border-radius: 8px;">
+                <p style="margin: 0; font-size: 0.95rem; color: var(--color-text-muted);">
+                    <strong>Manual Installation:</strong> Extensions are also available in the
+                    <a href="https://github.com/KrisSimon/aro/tree/main/Editor" style="color: var(--color-emerald);">Editor</a>
+                    directory of the GitHub repository.
+                </p>
+            </div>
+        </section>
+
+        <!-- Quick Start -->
+        <section class="download-section">
+            <h2><span class="icon">&#x1F680;</span> Quick Start</h2>
+            <p>After installing, verify your installation and run your first ARO application:</p>
+
+            <div class="code-block">
+                <pre><span style="color: #888;"># Check version</span>
+aro --version
+
+<span style="color: #888;"># Run an example</span>
+aro run ./Examples/HelloWorld
+
+<span style="color: #888;"># Run tests</span>
+aro test ./Examples/Calculator
+
+<span style="color: #888;"># Compile to native binary</span>
+aro build ./Examples/HelloWorld</pre>
+            </div>
+
+            <p>
+                Ready to learn more? Check out the
+                <a href="getting-started.html" style="color: var(--color-emerald);">Getting Started Guide</a>
+                or dive into the
+                <a href="tutorial.html" style="color: var(--color-emerald);">Tutorial</a>.
+            </p>
+        </section>
+    </main>
+
+    <!-- Progress Bar -->
+    <div class="progress-bar" id="progressBar"></div>
+
+    <footer class="footer">
+        <div class="container">
+            <div class="footer-content">
+                <div class="footer-brand">
+                    <span class="logo-aro">ARO</span>
+                    <p>The ARO Programming Language</p>
+                    <p class="footer-tagline">Speak Business. Write Code.</p>
+                </div>
+                <div class="footer-links">
+                    <div class="footer-col">
+                        <h4>Learn</h4>
+                        <a href="getting-started.html">Getting Started</a>
+                        <a href="tutorial.html">Tutorial</a>
+                        <a href="docs.html">Documentation</a>
+                        <a href="download.html">Download</a>
+                    </div>
+                    <div class="footer-col">
+                        <h4>Community</h4>
+                        <a href="https://github.com/KrisSimon/aro">GitHub</a>
+                        <a href="https://github.com/KrisSimon/aro/issues">Issues</a>
+                        <a href="disclaimer.html">Motivation & Disclaimer</a>
+                    </div>
+                </div>
+            </div>
+            <div class="footer-bottom">
+                <p>Sometime this page should build with ARO. Obviously.</p>
+            </div>
+        </div>
+    </footer>
+
+    <!-- Animation Scripts -->
+    <script src="animations.js"></script>
+
+</body>
+</html>
