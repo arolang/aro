@@ -1,0 +1,136 @@
+# Context-Aware Response Formatting
+
+ARO automatically formats responses and log output based on the execution context. The same code produces different output formats depending on how it's invoked.
+
+## Execution Contexts
+
+ARO recognizes three execution contexts:
+
+| Context | Trigger | Output Format |
+|---------|---------|---------------|
+| **Human** | `aro run`, CLI execution | Readable text |
+| **Machine** | HTTP API, events | JSON/structured data |
+| **Developer** | `aro test`, debug mode | Detailed diagnostics |
+
+## How It Works
+
+### Human Context (Default)
+
+When you run ARO from the command line, output is formatted for readability:
+
+```aro
+(Application-Start: Example) {
+    <Log> the <message> for the <console> with "Hello, World!".
+    <Return> an <OK: status> for the <startup>.
+}
+```
+
+Running with `aro run`:
+
+```
+[Application-Start] Hello, World!
+```
+
+### Machine Context
+
+When code runs via HTTP request or event handler, output is structured data:
+
+```json
+{"level":"info","source":"Application-Start","message":"Hello, World!"}
+```
+
+### Developer Context
+
+During test execution, output includes diagnostic information:
+
+```
+LOG[console] Application-Start: Hello, World!
+```
+
+## Automatic Detection
+
+The runtime automatically detects context:
+
+| Entry Point | Context |
+|-------------|---------|
+| `aro run` command | Human |
+| `aro test` command | Developer |
+| HTTP route handler | Machine |
+| Event dispatch | Machine |
+| `--debug` flag | Developer |
+
+## Example: Same Code, Different Contexts
+
+```aro
+(getUser: User API) {
+    <Retrieve> the <user> from the <user-repository> where id = <id>.
+    <Log> the <status> for the <console> with "User retrieved".
+    <Return> an <OK: status> with <user>.
+}
+```
+
+### CLI Output (Human)
+
+```
+[getUser] User retrieved
+[OK] success
+  user: {id: 123, name: Alice}
+```
+
+### HTTP Response (Machine)
+
+```json
+{
+  "status": "OK",
+  "reason": "success",
+  "data": {
+    "user": {"id": 123, "name": "Alice"}
+  }
+}
+```
+
+### Test Output (Developer)
+
+```
+LOG[console] getUser: User retrieved
+Response<OK> {
+  reason: "success"
+  data: {
+    user: Dict { id: Int(123), name: String("Alice") }
+  }
+}
+```
+
+## Benefits
+
+1. **Write Once**: No need for separate formatting code
+2. **Automatic Adaptation**: Output suits the consumer automatically
+3. **Consistent Behavior**: Same logic, appropriate presentation
+4. **Debug Friendly**: Rich diagnostics during development
+
+## Integration with Actions
+
+### Log Action
+
+The `<Log>` action respects output context:
+
+```aro
+<Log> the <message> for the <console> with <value>.
+```
+
+- **Human**: `[FeatureSetName] value`
+- **Machine**: `{"level":"info","source":"FeatureSetName","message":"value"}`
+- **Developer**: `LOG[console] FeatureSetName: value`
+
+### Return Action
+
+The `<Return>` action sets the response, which is formatted based on context:
+
+```aro
+<Return> an <OK: status> with <result>.
+```
+
+## See Also
+
+- [Actions](Actions.md) - Built-in action reference
+- [HTTP Services](HTTPServices.md) - API development

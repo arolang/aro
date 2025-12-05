@@ -466,9 +466,20 @@ public func aro_action_create(
     let resultDesc = toResultDescriptor(result)
     let objectDesc = toObjectDescriptor(object)
 
-    let sourceData = ctxHandle.context.resolveAny(objectDesc.base) ?? ""
+    // Get source value - check _literal_ first (from "with" clause),
+    // then expression, then fall back to object base variable
+    let sourceData: any Sendable
+    if let literal = ctxHandle.context.resolveAny("_literal_") {
+        sourceData = literal
+    } else if let expr = ctxHandle.context.resolveAny("_expression_") {
+        sourceData = expr
+    } else if let value = ctxHandle.context.resolveAny(objectDesc.base) {
+        sourceData = value
+    } else {
+        sourceData = ""
+    }
 
-    // Bind the actual value directly, not a wrapper struct
+    // Bind the actual value directly to result variable
     ctxHandle.context.bind(resultDesc.base, value: sourceData)
     return boxResult(sourceData)
 }
@@ -607,16 +618,27 @@ public func aro_action_log(
 
     let resultDesc = toResultDescriptor(result)
 
+    // Get message to log
+    // Priority: 1. with clause literal, 2. expression, 3. result variable, 4. result name
     let message: String
-    if let value: String = ctxHandle.context.resolve(resultDesc.base) {
+    if let literal = ctxHandle.context.resolveAny("_literal_") {
+        // Message from "with" clause (string literal)
+        message = String(describing: literal)
+    } else if let expr = ctxHandle.context.resolveAny("_expression_") {
+        // Message from "with" clause (expression)
+        message = String(describing: expr)
+    } else if let value: String = ctxHandle.context.resolve(resultDesc.base) {
+        // Message from variable
         message = value
     } else if let value = ctxHandle.context.resolveAny(resultDesc.base) {
+        // Message from any variable type
         message = String(describing: value)
     } else {
-        message = resultDesc.base
+        // Fallback to result name
+        message = resultDesc.fullName
     }
 
-    print("[ARO] \(message)")
+    print("[\(ctxHandle.context.featureSetName)] \(message)")
     return boxResult(message)
 }
 

@@ -367,4 +367,19 @@ public final class TestContext: ExecutionContext, TestExecutionContext, @uncheck
 
         continuation?.resume(returning: ())
     }
+
+    // MARK: - Output Context
+
+    /// Test contexts always use developer output context
+    public var outputContext: OutputContext {
+        .developer
+    }
+
+    public var isDebugMode: Bool {
+        true
+    }
+
+    public var isTestMode: Bool {
+        true
+    }
 }

@@ -212,8 +212,20 @@ public struct LogAction: ActionImplementation {
             return LogResult(message: message, target: target)
         }
 
-        // Fallback to print
-        print("[\(context.featureSetName)] \(message)")
+        // Fallback to print with context-aware formatting
+        let formattedMessage: String
+        switch context.outputContext {
+        case .machine:
+            // JSON format for machine consumption
+            formattedMessage = "{\"level\":\"info\",\"source\":\"\(context.featureSetName)\",\"message\":\"\(message.replacingOccurrences(of: "\"", with: "\\\""))\"}"
+        case .human:
+            // Readable format for CLI/console
+            formattedMessage = "[\(context.featureSetName)] \(message)"
+        case .developer:
+            // Diagnostic format for testing/debugging
+            formattedMessage = "LOG[\(target)] \(context.featureSetName): \(message)"
+        }
+        print(formattedMessage)
 
         return LogResult(message: message, target: target)
     }

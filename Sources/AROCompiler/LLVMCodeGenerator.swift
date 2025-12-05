@@ -98,6 +98,7 @@ public final class LLVMCodeGenerator {
         emit("declare ptr @aro_context_create(ptr)")
         emit("declare ptr @aro_context_create_named(ptr, ptr)")
         emit("declare void @aro_context_destroy(ptr)")
+        emit("declare i32 @aro_load_plugins(ptr)")
         emit("")
 
         // Variable operations
@@ -143,6 +144,11 @@ public final class LLVMCodeGenerator {
         emit("declare i32 @aro_file_exists(ptr)")
         emit("declare i32 @aro_file_delete(ptr)")
         emit("")
+
+        // Standard C library functions
+        emit("; Standard C library")
+        emit("declare i32 @strcmp(ptr, ptr)")
+        emit("")
     }
 
     // MARK: - String Constants
@@ -161,6 +167,8 @@ public final class LLVMCodeGenerator {
         // Always register these strings for main
         registerString("Application-Start")
         registerString("_literal_")
+        registerString("_expression_")
+        registerString(".")  // For plugin loading from current directory
     }
 
     private func collectStringsFromStatement(_ statement: Statement) {
@@ -178,10 +186,42 @@ public final class LLVMCodeGenerator {
             if case .string(let s) = aroStatement.literalValue {
                 registerString(s)
             }
+
+            // Collect strings from expressions (ARO-0002)
+            if let expression = aroStatement.expression {
+                collectStringsFromExpression(expression)
+            }
         } else if let publishStatement = statement as? PublishStatement {
             registerString(publishStatement.externalName)
             registerString(publishStatement.internalVariable)
+        } else if let matchStatement = statement as? MatchStatement {
+            registerString(matchStatement.subject.base)
+            for caseClause in matchStatement.cases {
+                if case .literal(let literalValue) = caseClause.pattern {
+                    if case .string(let s) = literalValue {
+                        registerString(s)
+                    }
+                }
+                for bodyStatement in caseClause.body {
+                    collectStringsFromStatement(bodyStatement)
+                }
+            }
+            if let otherwiseBody = matchStatement.otherwise {
+                for bodyStatement in otherwiseBody {
+                    collectStringsFromStatement(bodyStatement)
+                }
+            }
         }
+    }
+
+    private func collectStringsFromExpression(_ expression: any AROParser.Expression) {
+        if let literalExpr = expression as? LiteralExpression {
+            if case .string(let s) = literalExpr.value {
+                registerString(s)
+            }
+        }
+        // For complex expressions (binary, etc.), we could recurse, but for now
+        // we only support simple literal expressions in native compilation
     }
 
     private func registerString(_ str: String) {
@@ -241,6 +281,8 @@ public final class LLVMCodeGenerator {
             try generateAROStatement(aroStatement, index: index)
         } else if let publishStatement = statement as? PublishStatement {
             try generatePublishStatement(publishStatement, index: index)
+        } else if let matchStatement = statement as? MatchStatement {
+            try generateMatchStatement(matchStatement, index: index)
         }
     }
 
@@ -254,6 +296,11 @@ public final class LLVMCodeGenerator {
         // If there's a literal value, bind it first
         if let literalValue = statement.literalValue {
             try emitLiteralBinding(literalValue, prefix: prefix)
+        }
+
+        // If there's an expression (ARO-0002), bind it to _expression_
+        if let expression = statement.expression {
+            try emitExpressionBinding(expression, prefix: prefix)
         }
 
         // Allocate result descriptor
@@ -350,6 +397,34 @@ public final class LLVMCodeGenerator {
         }
     }
 
+    private func emitExpressionBinding(_ expression: any AROParser.Expression, prefix: String) throws {
+        let exprNameStr = stringConstants["_expression_"]!
+
+        // Handle literal expressions (most common case for "with" clause)
+        if let literalExpr = expression as? LiteralExpression {
+            switch literalExpr.value {
+            case .string(let s):
+                let strConst = stringConstants[s]!
+                emit("  call void @aro_variable_bind_string(ptr %ctx, ptr \(exprNameStr), ptr \(strConst))")
+
+            case .integer(let i):
+                emit("  call void @aro_variable_bind_int(ptr %ctx, ptr \(exprNameStr), i64 \(i))")
+
+            case .float(let f):
+                let bits = f.bitPattern
+                emit("  call void @aro_variable_bind_double(ptr %ctx, ptr \(exprNameStr), double 0x\(String(bits, radix: 16, uppercase: true)))")
+
+            case .boolean(let b):
+                emit("  call void @aro_variable_bind_bool(ptr %ctx, ptr \(exprNameStr), i32 \(b ? 1 : 0))")
+
+            case .null:
+                break
+            }
+        }
+        // TODO: Handle complex expressions (binary, variable references, etc.)
+        // For now, only literal expressions are supported in native compilation
+    }
+
     private func generatePublishStatement(_ statement: PublishStatement, index: Int) throws {
         let prefix = "p\(index)"
 
@@ -390,6 +465,92 @@ public final class LLVMCodeGenerator {
         emit("")
     }
 
+    // MARK: - Match Statement Generation (ARO-0004)
+
+    private func generateMatchStatement(_ statement: MatchStatement, index: Int) throws {
+        let prefix = "m\(index)"
+        let subjectName = statement.subject.base
+
+        emit("  ; match <\(subjectName)>")
+
+        // Resolve the subject value
+        let subjectStr = stringConstants[subjectName]!
+        emit("  %\(prefix)_subject_val = call ptr @aro_variable_resolve(ptr %ctx, ptr \(subjectStr))")
+        emit("  %\(prefix)_subject_str = call ptr @aro_value_as_string(ptr %\(prefix)_subject_val)")
+
+        // Generate labels for each case and the end
+        let caseLabels = statement.cases.enumerated().map { "\(prefix)_case\($0.offset)" }
+        let otherwiseLabel = "\(prefix)_otherwise"
+        let endLabel = "\(prefix)_end"
+
+        // Jump to first case
+        if !statement.cases.isEmpty {
+            emit("  br label %\(caseLabels[0])_check")
+        } else if statement.otherwise != nil {
+            emit("  br label %\(otherwiseLabel)")
+        } else {
+            emit("  br label %\(endLabel)")
+        }
+        emit("")
+
+        // Generate each case
+        for (caseIndex, caseClause) in statement.cases.enumerated() {
+            let caseLabel = caseLabels[caseIndex]
+            let nextLabel = caseIndex + 1 < statement.cases.count ?
+                "\(caseLabels[caseIndex + 1])_check" :
+                (statement.otherwise != nil ? otherwiseLabel : endLabel)
+
+            // Case check block
+            emit("\(caseLabel)_check:")
+
+            switch caseClause.pattern {
+            case .literal(let literalValue):
+                switch literalValue {
+                case .string(let s):
+                    let patternStr = stringConstants[s]!
+                    emit("  %\(caseLabel)_cmp = call i32 @strcmp(ptr %\(prefix)_subject_str, ptr \(patternStr))")
+                    emit("  %\(caseLabel)_match = icmp eq i32 %\(caseLabel)_cmp, 0")
+                case .integer(let i):
+                    emit("  %\(caseLabel)_int_ptr = alloca i64")
+                    emit("  %\(caseLabel)_int_ok = call i32 @aro_value_as_int(ptr %\(prefix)_subject_val, ptr %\(caseLabel)_int_ptr)")
+                    emit("  %\(caseLabel)_int_val = load i64, ptr %\(caseLabel)_int_ptr")
+                    emit("  %\(caseLabel)_match = icmp eq i64 %\(caseLabel)_int_val, \(i)")
+                default:
+                    // For other patterns, just skip to next
+                    emit("  %\(caseLabel)_match = icmp eq i32 0, 1")  // Always false
+                }
+            case .wildcard:
+                emit("  %\(caseLabel)_match = icmp eq i32 1, 1")  // Always true
+            case .variable:
+                emit("  %\(caseLabel)_match = icmp eq i32 0, 1")  // TODO: variable comparison
+            }
+
+            emit("  br i1 %\(caseLabel)_match, label %\(caseLabel)_body, label %\(nextLabel)")
+            emit("")
+
+            // Case body block
+            emit("\(caseLabel)_body:")
+            for (bodyIndex, bodyStatement) in caseClause.body.enumerated() {
+                try generateStatement(bodyStatement, index: index * 100 + caseIndex * 10 + bodyIndex)
+            }
+            emit("  br label %\(endLabel)")
+            emit("")
+        }
+
+        // Otherwise block
+        if let otherwiseBody = statement.otherwise {
+            emit("\(otherwiseLabel):")
+            for (bodyIndex, bodyStatement) in otherwiseBody.enumerated() {
+                try generateStatement(bodyStatement, index: index * 100 + 90 + bodyIndex)
+            }
+            emit("  br label %\(endLabel)")
+            emit("")
+        }
+
+        // End block
+        emit("\(endLabel):")
+    }
+
     // MARK: - Main Function Generation
 
     private func generateMain(program: AnalyzedProgram) throws {
@@ -418,6 +579,10 @@ public final class LLVMCodeGenerator {
         emit("")
 
         emit("runtime_ok:")
+        // Load plugins from current directory (supports custom services)
+        let pluginDirStr = stringConstants["."]!
+        emit("  %plugin_result = call i32 @aro_load_plugins(ptr \(pluginDirStr))")
+        emit("")
         // Create named context
         emit("  %ctx = call ptr @aro_context_create_named(ptr %runtime, ptr \(appStartStr))")
 

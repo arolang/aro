@@ -6,3 +6,12 @@
 /Examples/HelloWorld/HelloWorld
 .DS_Store
 /.swiftpm
+/Editor/intellij-aro/gradlew.bat
+/Editor/intellij-aro/gradlew
+/Editor/intellij-aro/gradle
+/Editor/intellij-aro/build
+/Editor/intellij-aro/.idea
+/Editor/intellij-aro/.gradle
+/Examples/Conditionals/Conditionals
+/.aro-cache
+/Examples/CustomPlugin/CustomPlugin

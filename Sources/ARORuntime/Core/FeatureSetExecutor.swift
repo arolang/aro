@@ -114,8 +114,13 @@ public final class FeatureSetExecutor: @unchecked Sendable {
             try await executeAROStatement(aroStatement, context: context)
         } else if let publishStatement = statement as? PublishStatement {
             try await executePublishStatement(publishStatement, context: context)
+        } else if let matchStatement = statement as? MatchStatement {
+            try await executeMatchStatement(matchStatement, context: context)
+        } else if let requireStatement = statement as? RequireStatement {
+            try await executeRequireStatement(requireStatement, context: context)
+        } else if let forEachLoop = statement as? ForEachLoop {
+            try await executeForEachLoop(forEachLoop, context: context)
         }
-        // Other statement types can be added here
     }
 
     private func executeAROStatement(
@@ -277,6 +282,239 @@ public final class FeatureSetExecutor: @unchecked Sendable {
             internalName: statement.internalVariable,
             featureSet: context.featureSetName
         ))
+    }
+
+    // MARK: - Match Statement Execution (ARO-0004)
+
+    private func executeMatchStatement(
+        _ statement: MatchStatement,
+        context: ExecutionContext
+    ) async throws {
+        // Resolve the subject value
+        guard let subjectValue = context.resolveAny(statement.subject.base) else {
+            throw ActionError.undefinedVariable(statement.subject.base)
+        }
+
+        // Try each case in order
+        for caseClause in statement.cases {
+            if try await matchesPattern(caseClause.pattern, against: subjectValue, context: context) {
+                // Check guard condition if present
+                if let guardCondition = caseClause.guardCondition {
+                    let guardResult = try await expressionEvaluator.evaluate(guardCondition, context: context)
+                    guard let boolResult = guardResult as? Bool, boolResult else {
+                        continue // Guard failed, try next case
+                    }
+                }
+
+                // Execute the case body
+                for bodyStatement in caseClause.body {
+                    try await executeStatement(bodyStatement, context: context)
+                    // Check if we have a response
+                    if context.getResponse() != nil {
+                        return
+                    }
+                }
+                return // Case matched, don't try other cases
+            }
+        }
+
+        // No case matched, execute otherwise if present
+        if let otherwiseBody = statement.otherwise {
+            for bodyStatement in otherwiseBody {
+                try await executeStatement(bodyStatement, context: context)
+                if context.getResponse() != nil {
+                    return
+                }
+            }
+        }
+    }
+
+    /// Check if a pattern matches a value
+    private func matchesPattern(
+        _ pattern: Pattern,
+        against value: any Sendable,
+        context: ExecutionContext
+    ) async throws -> Bool {
+        switch pattern {
+        case .literal(let literalValue):
+            return matchesLiteral(literalValue, against: value)
+        case .variable(let noun):
+            // Resolve variable and compare
+            if let varValue = context.resolveAny(noun.base) {
+                return valuesEqual(varValue, value)
+            }
+            return false
+        case .wildcard:
+            return true
+        }
+    }
+
+    /// Check if a literal value matches a runtime value
+    private func matchesLiteral(_ literal: LiteralValue, against value: any Sendable) -> Bool {
+        switch literal {
+        case .string(let s):
+            if let valueString = value as? String {
+                return s == valueString
+            }
+            return false
+        case .integer(let i):
+            if let valueInt = value as? Int {
+                return i == valueInt
+            }
+            return false
+        case .float(let f):
+            if let valueFloat = value as? Double {
+                return f == valueFloat
+            }
+            return false
+        case .boolean(let b):
+            if let valueBool = value as? Bool {
+                return b == valueBool
+            }
+            return false
+        case .null:
+            // Check for nil-like values
+            if let optionalValue = value as? (any Sendable)? {
+                return optionalValue == nil
+            }
+            return false
+        }
+    }
+
+    /// Check if two values are equal
+    private func valuesEqual(_ a: any Sendable, _ b: any Sendable) -> Bool {
+        // Try various type comparisons
+        if let aString = a as? String, let bString = b as? String {
+            return aString == bString
+        }
+        if let aInt = a as? Int, let bInt = b as? Int {
+            return aInt == bInt
+        }
+        if let aDouble = a as? Double, let bDouble = b as? Double {
+            return aDouble == bDouble
+        }
+        if let aBool = a as? Bool, let bBool = b as? Bool {
+            return aBool == bBool
+        }
+        // Fall back to string comparison
+        return String(describing: a) == String(describing: b)
+    }
+
+    // MARK: - Require Statement Execution (ARO-0003)
+
+    private func executeRequireStatement(
+        _ statement: RequireStatement,
+        context: ExecutionContext
+    ) async throws {
+        // Require statements are typically handled at analysis/setup time
+        // At runtime, we just verify the dependency is available
+        switch statement.source {
+        case .framework:
+            // Framework dependencies are auto-bound (console, http-server, etc.)
+            // These are typically already available in the context
+            break
+        case .environment:
+            // Environment variables
+            if let envValue = ProcessInfo.processInfo.environment[statement.variableName] {
+                context.bind(statement.variableName, value: envValue)
+            }
+        case .featureSet(let name):
+            // Cross-feature-set dependency - resolve from global symbols
+            if let value = globalSymbols.resolveAny(statement.variableName) {
+                context.bind(statement.variableName, value: value)
+            }
+            // If not found, the dependency might be provided later
+            _ = name // Suppress unused warning
+        }
+    }
+
+    // MARK: - For-Each Loop Execution (ARO-0005)
+
+    private func executeForEachLoop(
+        _ loop: ForEachLoop,
+        context: ExecutionContext
+    ) async throws {
+        // Resolve the collection
+        guard let collectionValue = context.resolveAny(loop.collection.base) else {
+            throw ActionError.undefinedVariable(loop.collection.base)
+        }
+
+        // Convert to array
+        let items: [any Sendable]
+        if let array = collectionValue as? [any Sendable] {
+            items = array
+        } else if let array = collectionValue as? [String] {
+            items = array
+        } else if let array = collectionValue as? [Int] {
+            items = array
+        } else if let array = collectionValue as? [Double] {
+            items = array
+        } else {
+            // Single item
+            items = [collectionValue]
+        }
+
+        // Execute loop body for each item
+        if loop.isParallel {
+            // Parallel execution
+            let concurrency = loop.concurrency ?? items.count
+            try await withThrowingTaskGroup(of: Void.self) { group in
+                var activeCount = 0
+                for (index, item) in items.enumerated() {
+                    // Check filter condition if present
+                    if let filter = loop.filter {
+                        context.bind(loop.itemVariable, value: item)
+                        let filterResult = try await expressionEvaluator.evaluate(filter, context: context)
+                        guard let passes = filterResult as? Bool, passes else {
+                            continue
+                        }
+                    }
+
+                    group.addTask {
+                        // Create a child context for this iteration
+                        let childContext = context.createChild(featureSetName: context.featureSetName)
+                        childContext.bind(loop.itemVariable, value: item)
+                        if let indexVar = loop.indexVariable {
+                            childContext.bind(indexVar, value: index)
+                        }
+
+                        for bodyStatement in loop.body {
+                            try await self.executeStatement(bodyStatement, context: childContext)
+                        }
+                    }
+
+                    activeCount += 1
+                    if activeCount >= concurrency {
+                        try await group.next()
+                        activeCount -= 1
+                    }
+                }
+            }
+        } else {
+            // Sequential execution
+            for (index, item) in items.enumerated() {
+                // Check filter condition if present
+                if let filter = loop.filter {
+                    context.bind(loop.itemVariable, value: item)
+                    let filterResult = try await expressionEvaluator.evaluate(filter, context: context)
+                    guard let passes = filterResult as? Bool, passes else {
+                        continue
+                    }
+                }
+
+                context.bind(loop.itemVariable, value: item)
+                if let indexVar = loop.indexVariable {
+                    context.bind(indexVar, value: index)
+                }
+
+                for bodyStatement in loop.body {
+                    try await executeStatement(bodyStatement, context: context)
+                    if context.getResponse() != nil {
+                        return
+                    }
+                }
+            }
+        }
     }
 }
 

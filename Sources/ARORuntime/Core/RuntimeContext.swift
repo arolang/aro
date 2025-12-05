@@ -36,6 +36,9 @@ public final class RuntimeContext: ExecutionContext, @unchecked Sendable {
     /// Continuation for wait/shutdown signaling
     private var shutdownContinuation: CheckedContinuation<Void, Error>?
 
+    /// Output context for formatting
+    private let _outputContext: OutputContext
+
     // MARK: - Metadata
 
     public let featureSetName: String
@@ -47,15 +50,18 @@ public final class RuntimeContext: ExecutionContext, @unchecked Sendable {
     /// Initialize a new runtime context
     /// - Parameters:
     ///   - featureSetName: Name of the feature set being executed
+    ///   - outputContext: Output context for formatting (defaults to .human)
     ///   - eventBus: Optional event bus for event emission
     ///   - parent: Optional parent context for nested execution
     public init(
         featureSetName: String,
+        outputContext: OutputContext = .human,
         eventBus: EventBus? = nil,
         parent: ExecutionContext? = nil
     ) {
         self.featureSetName = featureSetName
         self.executionId = UUID().uuidString
+        self._outputContext = outputContext
         self.eventBus = eventBus
         self.parent = parent
     }
@@ -178,6 +184,7 @@ public final class RuntimeContext: ExecutionContext, @unchecked Sendable {
     public func createChild(featureSetName: String) -> ExecutionContext {
         RuntimeContext(
             featureSetName: featureSetName,
+            outputContext: _outputContext,
             eventBus: eventBus,
             parent: self
         )
@@ -214,6 +221,20 @@ public final class RuntimeContext: ExecutionContext, @unchecked Sendable {
 
         continuation?.resume(returning: ())
     }
+
+    // MARK: - Output Context
+
+    public var outputContext: OutputContext {
+        _outputContext
+    }
+
+    public var isDebugMode: Bool {
+        _outputContext == .developer
+    }
+
+    public var isTestMode: Bool {
+        _outputContext == .developer
+    }
 }
 
 // MARK: - Convenience Extensions
@@ -230,15 +251,21 @@ extension RuntimeContext {
     /// Create a context with initial bindings
     /// - Parameters:
     ///   - featureSetName: Name of the feature set
+    ///   - outputContext: Output context for formatting
     ///   - eventBus: Optional event bus
     ///   - initialBindings: Initial variable bindings
     /// - Returns: A new context with the bindings
     public static func with(
         featureSetName: String,
+        outputContext: OutputContext = .human,
         eventBus: EventBus? = nil,
         initialBindings: [String: any Sendable]
     ) -> RuntimeContext {
-        let context = RuntimeContext(featureSetName: featureSetName, eventBus: eventBus)
+        let context = RuntimeContext(
+            featureSetName: featureSetName,
+            outputContext: outputContext,
+            eventBus: eventBus
+        )
         context.bindAll(initialBindings)
         return context
     }

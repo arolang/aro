@@ -220,6 +220,17 @@ public protocol ExecutionContext: AnyObject, Sendable {
 
     /// Signal that the wait should end
     func signalShutdown()
+
+    // MARK: - Output Context
+
+    /// The output context for formatting responses and logs
+    var outputContext: OutputContext { get }
+
+    /// Whether execution is in debug mode
+    var isDebugMode: Bool { get }
+
+    /// Whether execution is in test mode
+    var isTestMode: Bool { get }
 }
 
 // MARK: - Default Implementations

@@ -387,3 +387,23 @@ struct CustomRuntimeEvent: RuntimeEvent {
         self.data = data
     }
 }
+
+// MARK: - Plugin Loading
+
+/// Load plugins from a directory
+/// - Parameter dirPath: Path to the directory containing the plugins/ folder
+/// - Returns: 0 on success, non-zero on failure
+@_cdecl("aro_load_plugins")
+public func aro_load_plugins(_ dirPath: UnsafePointer<CChar>?) -> Int32 {
+    guard let dirPath = dirPath else { return -1 }
+
+    let directory = URL(fileURLWithPath: String(cString: dirPath))
+
+    do {
+        try PluginLoader.shared.loadPlugins(from: directory)
+        return 0
+    } catch {
+        print("[ARO] Plugin loading error: \(error)")
+        return 1
+    }
+}
