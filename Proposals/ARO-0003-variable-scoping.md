@@ -44,7 +44,7 @@ visibility = "internal" | "published" | "external" ;
 | Visibility | Description | Accessible From |
 |------------|-------------|-----------------|
 | `internal` | Default, private to feature set | Same feature set only |
-| `published` | Exported via `<Publish>` | Any feature set |
+| `published` | Exported via `<Publish>` | Feature sets in same business activity |
 | `external` | Defined outside (framework/runtime) | Any feature set |
 
 ---
@@ -283,46 +283,84 @@ Data Flow:
 
 ### 10. Cross-Feature-Set Access
 
+**Important:** Published variables are only accessible to feature sets within the **same business activity**. This enforces modularity and prevents unintended coupling between different business domains.
+
 #### 10.1 Accessing Published Variables
 
-```
-(Authentication: Security) {
+```aro
+(* All feature sets share the same business activity: "User Management" *)
+
+(Authentication: User Management) {
     <Extract> the <user> from the <request>.
     <Validate> the <credentials> for the <user>.
     <Publish> as <authenticated-user> <user>.
 }
 
-(Order Processing: Business) {
-    // Can access published variable
+(Order Retrieval: User Management) {
+    (* Can access published variable - same business activity *)
     <Retrieve> the <orders> for the <authenticated-user>.
+    <Return> an <OK: status> with <orders>.
+}
+
+(Audit Logging: User Management) {
+    (* Can access published variable - same business activity *)
+    <Log> the <action> for the <authenticated-user>.
+    <Return> an <OK: status> for the <audit>.
 }
 ```
 
 #### 10.2 Dependency Graph
 
-The compiler builds a dependency graph between feature sets:
+The compiler builds a dependency graph between feature sets **within the same business activity**:
 
 ```
-┌─────────────────┐
-│ Authentication  │
-│                 │
-│ publishes:      │
-│   authenticated-│──────┐
-│   user          │      │
-└─────────────────┘      │
-                         ▼
-┌─────────────────┐    ┌─────────────────┐
-│ Order Processing│◄───│ Audit Logging   │
-│                 │    │                 │
-│ requires:       │    │ requires:       │
-│   authenticated-│    │   authenticated-│
-│   user          │    │   user          │
-└─────────────────┘    └─────────────────┘
+Business Activity: "User Management"
+┌─────────────────────────────────────────────────────────────┐
+│                                                             │
+│  ┌─────────────────┐                                        │
+│  │ Authentication  │                                        │
+│  │                 │                                        │
+│  │ publishes:      │                                        │
+│  │   authenticated-│──────┬─────────────────┐               │
+│  │   user          │      │                 │               │
+│  └─────────────────┘      │                 │               │
+│                           ▼                 ▼               │
+│  ┌─────────────────┐    ┌─────────────────┐                 │
+│  │ Order Retrieval │    │ Audit Logging   │                 │
+│  │                 │    │                 │                 │
+│  │ requires:       │    │ requires:       │                 │
+│  │   authenticated-│    │   authenticated-│                 │
+│  │   user          │    │   user          │                 │
+│  └─────────────────┘    └─────────────────┘                 │
+│                                                             │
+└─────────────────────────────────────────────────────────────┘
 ```
 
-#### 10.3 Execution Order
+#### 10.3 Cross-Activity Isolation
 
-Published variables are resolved at runtime within the same execution context. If a feature set accesses a published variable that hasn't been set yet, the runtime will report an error:
+Feature sets with different business activities **cannot** access each other's published variables:
+
+```aro
+(Authentication: Security) {
+    <Publish> as <authenticated-user> <user>.
+}
+
+(Order Processing: Commerce) {
+    (* ERROR: Cannot access 'authenticated-user' - different business activity *)
+    <Retrieve> the <orders> for the <authenticated-user>.
+}
+```
+
+This produces a compile-time error:
+```
+Error: Variable 'authenticated-user' is not accessible.
+Published variables are only visible within the same business activity.
+'authenticated-user' is published in "Security" but accessed from "Commerce".
+```
+
+#### 10.4 Execution Order
+
+Published variables are resolved at runtime within the same execution context and business activity. If a feature set accesses a published variable that hasn't been set yet, the runtime will report an error:
 
 ```
 Error: Variable 'authenticated-user' is not available.
@@ -361,6 +399,7 @@ statement         = aro_statement
 ```aro
 (*
  * Demonstrates all scoping concepts
+ * Note: Both feature sets share the same business activity
  *)
 
 (User Service: User Management) {
@@ -373,19 +412,19 @@ statement         = aro_statement
     <Retrieve> the <user: record> from the <database>.
     <Create> the <access-level> with "full".
 
-    (* Publish for other features *)
+    (* Publish for other features in same business activity *)
     <Publish> as <current-user> <user>.
     <Return> an <OK: status> with <user>.
 }
 
-(Audit Service: Compliance Handler) {
-    (* Access published variable from event chain *)
+(Audit Service: User Management) {
+    (* Access published variable - same business activity *)
     <Log> the <action> for the <current-user>.
     <Return> an <OK: status> for the <audit>.
 }
 ```
 
-**Note:** Published variables are available within the same execution context (event chain). When `User Service` publishes `<current-user>`, any feature set triggered in the same event chain can access it.
+**Note:** Published variables are available within the same business activity and execution context (event chain). When `User Service` publishes `<current-user>`, only feature sets with the same business activity (`User Management`) triggered in the same event chain can access it.
 
 ---
 
@@ -418,3 +457,4 @@ statement         = aro_statement
 | 1.0     | 2025-12 | Initial specification                                |
 | 1.1     | 2025-12 | Simplify to two scope levels (Global + Feature Set)  |
 | 1.2     | 2025-12 | Remove block scopes, `::` syntax; fix Require syntax |
+| 1.3     | 2025-12 | Clarify cross-feature-set access limited to same business activity |
