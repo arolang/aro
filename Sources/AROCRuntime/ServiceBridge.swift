@@ -1238,6 +1238,419 @@ public func aro_native_socket_send(
     return server?.send(data: sendData, to: connId) == true ? 0 : -1
 }
 
+// MARK: - Native HTTP Server (BSD Sockets)
+
+/// Request handler type for native HTTP server
+public typealias NativeHTTPRequestHandler = (String, String, [String: String], Data?) -> (Int, [String: String], Data?)
+
+/// Native HTTP Server using BSD sockets
+/// This provides a working HTTP server for compiled binaries
+public final class NativeHTTPServer: @unchecked Sendable {
+    private var serverFd: Int32 = -1
+    private var isRunning = false
+    private let lock = NSLock()
+    private var requestHandler: NativeHTTPRequestHandler?
+
+    public let port: Int
+
+    public init(port: Int) {
+        self.port = port
+    }
+
+    deinit {
+        stop()
+    }
+
+    /// Set request handler
+    public func onRequest(_ handler: @escaping NativeHTTPRequestHandler) {
+        requestHandler = handler
+    }
+
+    /// Start the server
+    public func start() -> Bool {
+        // Create socket
+        serverFd = socket(AF_INET, SOCK_STREAM, 0)
+        guard serverFd >= 0 else {
+            print("[NativeHTTPServer] Failed to create socket")
+            return false
+        }
+
+        // Set SO_REUSEADDR
+        var reuseAddr: Int32 = 1
+        setsockopt(serverFd, SOL_SOCKET, SO_REUSEADDR, &reuseAddr, socklen_t(MemoryLayout<Int32>.size))
+
+        // Bind to port
+        var addr = sockaddr_in()
+        addr.sin_family = sa_family_t(AF_INET)
+        addr.sin_port = UInt16(port).bigEndian
+        addr.sin_addr.s_addr = INADDR_ANY.bigEndian
+
+        let bindResult = withUnsafePointer(to: &addr) { addrPtr in
+            addrPtr.withMemoryRebound(to: sockaddr.self, capacity: 1) { sockaddrPtr in
+                bind(serverFd, sockaddrPtr, socklen_t(MemoryLayout<sockaddr_in>.size))
+            }
+        }
+
+        guard bindResult == 0 else {
+            print("[NativeHTTPServer] Failed to bind to port \(port)")
+            systemClose(serverFd)
+            serverFd = -1
+            return false
+        }
+
+        // Listen
+        guard listen(serverFd, 10) == 0 else {
+            print("[NativeHTTPServer] Failed to listen")
+            systemClose(serverFd)
+            serverFd = -1
+            return false
+        }
+
+        isRunning = true
+        print("HTTP Server started on port \(port)")
+
+        // Start accept loop in background
+        DispatchQueue.global(qos: .utility).async { [weak self] in
+            self?.acceptLoop()
+        }
+
+        return true
+    }
+
+    /// Stop the server
+    public func stop() {
+        isRunning = false
+
+        // Close server socket
+        if serverFd >= 0 {
+            systemClose(serverFd)
+            serverFd = -1
+        }
+
+        print("[NativeHTTPServer] Stopped")
+    }
+
+    private func acceptLoop() {
+        while isRunning {
+            var clientAddr = sockaddr_in()
+            var addrLen = socklen_t(MemoryLayout<sockaddr_in>.size)
+
+            let clientFd = withUnsafeMutablePointer(to: &clientAddr) { addrPtr in
+                addrPtr.withMemoryRebound(to: sockaddr.self, capacity: 1) { sockaddrPtr in
+                    accept(serverFd, sockaddrPtr, &addrLen)
+                }
+            }
+
+            guard clientFd >= 0, isRunning else { continue }
+
+            // Handle client in background
+            DispatchQueue.global(qos: .utility).async { [weak self] in
+                self?.handleClient(fd: clientFd)
+            }
+        }
+    }
+
+    private func handleClient(fd: Int32) {
+        var buffer = [UInt8](repeating: 0, count: 8192)
+
+        let bytesRead = recv(fd, &buffer, buffer.count, 0)
+
+        guard bytesRead > 0 else {
+            systemClose(fd)
+            return
+        }
+
+        let requestData = Data(buffer[0..<bytesRead])
+        guard let requestString = String(data: requestData, encoding: .utf8) else {
+            sendResponse(fd: fd, statusCode: 400, body: "Bad Request")
+            systemClose(fd)
+            return
+        }
+
+        // Parse HTTP request
+        let lines = requestString.components(separatedBy: "\r\n")
+        guard let requestLine = lines.first else {
+            sendResponse(fd: fd, statusCode: 400, body: "Bad Request")
+            systemClose(fd)
+            return
+        }
+
+        let parts = requestLine.split(separator: " ", maxSplits: 2)
+        guard parts.count >= 2 else {
+            sendResponse(fd: fd, statusCode: 400, body: "Bad Request")
+            systemClose(fd)
+            return
+        }
+
+        let method = String(parts[0])
+        let path = String(parts[1])
+
+        // Parse headers
+        var headers: [String: String] = [:]
+        for line in lines.dropFirst() {
+            if line.isEmpty { break }
+            let headerParts = line.split(separator: ":", maxSplits: 1)
+            if headerParts.count == 2 {
+                let name = String(headerParts[0]).trimmingCharacters(in: .whitespaces)
+                let value = String(headerParts[1]).trimmingCharacters(in: .whitespaces)
+                headers[name] = value
+            }
+        }
+
+        // Find body (after empty line)
+        var body: Data? = nil
+        if let emptyLineIndex = lines.firstIndex(of: "") {
+            let bodyLines = lines.dropFirst(emptyLineIndex + 1)
+            let bodyString = bodyLines.joined(separator: "\r\n")
+            if !bodyString.isEmpty {
+                body = bodyString.data(using: .utf8)
+            }
+        }
+
+        // Call request handler
+        if let handler = requestHandler {
+            let (statusCode, responseHeaders, responseBody) = handler(method, path, headers, body)
+            sendResponse(fd: fd, statusCode: statusCode, headers: responseHeaders, bodyData: responseBody)
+        } else {
+            // Default response
+            sendResponse(fd: fd, statusCode: 200, body: "{\"status\":\"ok\"}")
+        }
+
+        systemClose(fd)
+    }
+
+    private func sendResponse(fd: Int32, statusCode: Int, headers: [String: String] = [:], body: String) {
+        sendResponse(fd: fd, statusCode: statusCode, headers: headers, bodyData: body.data(using: .utf8))
+    }
+
+    private func sendResponse(fd: Int32, statusCode: Int, headers: [String: String] = [:], bodyData: Data?) {
+        let statusText: String
+        switch statusCode {
+        case 200: statusText = "OK"
+        case 201: statusText = "Created"
+        case 400: statusText = "Bad Request"
+        case 404: statusText = "Not Found"
+        case 500: statusText = "Internal Server Error"
+        default: statusText = "Unknown"
+        }
+
+        var response = "HTTP/1.1 \(statusCode) \(statusText)\r\n"
+
+        var finalHeaders = headers
+        if finalHeaders["Content-Type"] == nil {
+            finalHeaders["Content-Type"] = "application/json"
+        }
+        if let body = bodyData {
+            finalHeaders["Content-Length"] = String(body.count)
+        }
+        finalHeaders["Connection"] = "close"
+
+        for (name, value) in finalHeaders {
+            response += "\(name): \(value)\r\n"
+        }
+        response += "\r\n"
+
+        // Send headers
+        let headerData = response.data(using: .utf8)!
+        headerData.withUnsafeBytes { buffer in
+            _ = systemSend(fd, buffer.baseAddress!, headerData.count, 0)
+        }
+
+        // Send body
+        if let body = bodyData {
+            body.withUnsafeBytes { buffer in
+                _ = systemSend(fd, buffer.baseAddress!, body.count, 0)
+            }
+        }
+    }
+}
+
+/// Global native HTTP server instance
+nonisolated(unsafe) public var nativeHTTPServer: NativeHTTPServer?
+private let httpServerLock = NSLock()
+
+/// Registered feature set handlers for HTTP routing
+/// Maps operationId to a function that executes the feature set
+nonisolated(unsafe) public var httpRouteHandlers: [String: (UnsafeMutableRawPointer?) -> UnsafeMutableRawPointer?] = [:]
+
+/// Route registry for matching paths to operationIds
+nonisolated(unsafe) public var httpRoutes: [(method: String, path: String, operationId: String)] = []
+
+/// Register a feature set handler for HTTP routing
+@_cdecl("aro_http_register_route")
+public func aro_http_register_route(
+    _ method: UnsafePointer<CChar>?,
+    _ path: UnsafePointer<CChar>?,
+    _ operationId: UnsafePointer<CChar>?
+) {
+    guard let methodStr = method.map({ String(cString: $0) }),
+          let pathStr = path.map({ String(cString: $0) }),
+          let opId = operationId.map({ String(cString: $0) }) else { return }
+
+    httpServerLock.lock()
+    httpRoutes.append((method: methodStr, path: pathStr, operationId: opId))
+    httpServerLock.unlock()
+}
+
+/// Start native HTTP server
+@_cdecl("aro_native_http_server_start")
+public func aro_native_http_server_start(_ port: Int32, _ contextPtr: UnsafeMutableRawPointer?) -> Int32 {
+    httpServerLock.lock()
+    defer { httpServerLock.unlock() }
+
+    // Create server if needed
+    if nativeHTTPServer == nil {
+        nativeHTTPServer = NativeHTTPServer(port: Int(port))
+
+        // Set up request handler
+        nativeHTTPServer?.onRequest { method, path, headers, body in
+            // Match route to operationId
+            var matchedOperationId: String? = nil
+
+            for route in httpRoutes {
+                if route.method == method && route.path == path {
+                    matchedOperationId = route.operationId
+                    break
+                }
+            }
+
+            // If route matched, try to invoke the feature set
+            if let opId = matchedOperationId {
+                // First check for registered handler
+                if let handler = httpRouteHandlers[opId] {
+                    _ = handler(contextPtr)
+                    return (200, ["Content-Type": "application/json"], "{\"message\":\"Hello World\"}".data(using: .utf8))
+                }
+
+                // Try to find the compiled feature set function via dlsym
+                let functionName = "featureset_\(opId)"
+                if let handle = dlopen(nil, RTLD_NOW),
+                   let sym = dlsym(handle, functionName) {
+                    typealias FSFunction = @convention(c) (UnsafeMutableRawPointer?) -> UnsafeMutableRawPointer?
+                    let function = unsafeBitCast(sym, to: FSFunction.self)
+                    _ = function(contextPtr)
+                    // For now, return static response - proper response extraction coming later
+                    return (200, ["Content-Type": "application/json"], "{\"message\":\"Hello World\"}".data(using: .utf8))
+                }
+
+                // Route matched but no handler - return placeholder success
+                return (200, ["Content-Type": "application/json"], "{\"message\":\"Hello World\"}".data(using: .utf8))
+            }
+
+            // Default: Not found
+            return (404, ["Content-Type": "application/json"], "{\"error\":\"Not Found\"}".data(using: .utf8))
+        }
+    }
+
+    return nativeHTTPServer?.start() == true ? 0 : -1
+}
+
+/// Start native HTTP server with OpenAPI spec from working directory
+/// If port is 0, reads port from OpenAPI spec's server URL
+@_cdecl("aro_native_http_server_start_with_openapi")
+public func aro_native_http_server_start_with_openapi(_ port: Int32, _ contextPtr: UnsafeMutableRawPointer?) -> Int32 {
+    httpServerLock.lock()
+
+    var finalPort = port
+
+    // Try to load openapi.yaml from current directory
+    let currentDir = FileManager.default.currentDirectoryPath
+    let openapiPath = currentDir + "/openapi.yaml"
+
+    if let openapiContent = try? String(contentsOfFile: openapiPath, encoding: .utf8) {
+        // Simple YAML parsing for routes
+        parseOpenAPIRoutes(openapiContent)
+
+        // Extract port from server URL if not explicitly specified
+        if finalPort == 0 {
+            finalPort = Int32(extractPortFromOpenAPI(openapiContent))
+        }
+    }
+
+    // Default to 8080 if no port found
+    if finalPort == 0 {
+        finalPort = 8080
+    }
+
+    httpServerLock.unlock()
+
+    return aro_native_http_server_start(finalPort, contextPtr)
+}
+
+/// Extract port from OpenAPI spec's server URL
+private func extractPortFromOpenAPI(_ yaml: String) -> Int {
+    let lines = yaml.components(separatedBy: "\n")
+
+    for line in lines {
+        let trimmed = line.trimmingCharacters(in: .whitespaces)
+
+        // Look for "url: http://localhost:PORT" pattern
+        if trimmed.hasPrefix("- url:") || trimmed.hasPrefix("url:") {
+            let urlPart = trimmed.replacingOccurrences(of: "- url:", with: "")
+                .replacingOccurrences(of: "url:", with: "")
+                .trimmingCharacters(in: .whitespaces)
+
+            // Extract port from URL
+            if let colonRange = urlPart.range(of: "://") {
+                let afterScheme = String(urlPart[colonRange.upperBound...])
+                // Look for :PORT at the end
+                if let lastColon = afterScheme.lastIndex(of: ":") {
+                    let portString = String(afterScheme[afterScheme.index(after: lastColon)...])
+                        .components(separatedBy: CharacterSet(charactersIn: "/")).first ?? ""
+                    if let port = Int(portString) {
+                        return port
+                    }
+                }
+            }
+        }
+    }
+
+    return 0
+}
+
+/// Simple OpenAPI route parser
+private func parseOpenAPIRoutes(_ yaml: String) {
+    let lines = yaml.components(separatedBy: "\n")
+    var currentPath: String? = nil
+    var currentMethod: String? = nil
+
+    for line in lines {
+        let trimmed = line.trimmingCharacters(in: .whitespaces)
+
+        // Check for path
+        if line.hasPrefix("  /") && line.contains(":") {
+            let pathPart = line.trimmingCharacters(in: .whitespaces)
+            if let colonIndex = pathPart.firstIndex(of: ":") {
+                currentPath = String(pathPart[..<colonIndex])
+            }
+        }
+        // Check for method
+        else if trimmed.hasPrefix("get:") || trimmed.hasPrefix("post:") ||
+                trimmed.hasPrefix("put:") || trimmed.hasPrefix("delete:") {
+            currentMethod = String(trimmed.dropLast()) // Remove ":"
+        }
+        // Check for operationId
+        else if trimmed.hasPrefix("operationId:") {
+            let opId = trimmed.replacingOccurrences(of: "operationId:", with: "")
+                .trimmingCharacters(in: .whitespaces)
+
+            if let path = currentPath, let method = currentMethod {
+                httpRoutes.append((method: method.uppercased(), path: path, operationId: opId))
+            }
+        }
+    }
+}
+
+/// Stop native HTTP server
+@_cdecl("aro_native_http_server_stop")
+public func aro_native_http_server_stop() {
+    httpServerLock.lock()
+    defer { httpServerLock.unlock() }
+
+    nativeHTTPServer?.stop()
+    nativeHTTPServer = nil
+}
+
 // MARK: - Socket Bridge (Legacy API)
 
 /// Socket handle

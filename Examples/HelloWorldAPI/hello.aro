@@ -10,9 +10,9 @@
 
 (sayHello: Hello API) {
     (* Create the greeting message *)
-    <Create> the <greeting> with "Hello World".
+    <Create> the <message> with "Hello World".
 
     (* Return an OK response with our greeting *)
     (* The response will be JSON: {"message": "Hello World"} *)
-    <Return> an <OK: status> with <greeting>.
+    <Return> an <OK: status> with { message: <message> }.
 }

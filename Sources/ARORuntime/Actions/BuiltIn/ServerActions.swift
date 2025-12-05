@@ -48,10 +48,23 @@ public struct StartAction: ActionImplementation {
     }
 
     private func startHTTPServer(object: ObjectDescriptor, context: ExecutionContext) async throws -> any Sendable {
-        // Get port from object specifiers or resolve from context
+        // Get port from:
+        // 1. Explicit port in ARO code (object specifiers or literal)
+        // 2. OpenAPI spec (contract is source of truth)
+        // 3. Default to 8080
         let port: Int
+
+        // Check for explicit port in code
         if let portSpec = object.specifiers.first, let p = Int(portSpec) {
             port = p
+        } else if let literalPort = context.resolveAny("_literal_") as? Int {
+            port = literalPort
+        } else if let literalStr = context.resolveAny("_literal_") as? String, let p = Int(literalStr) {
+            port = p
+        } else if let specService = context.service(OpenAPISpecService.self),
+                  let openAPIPort = specService.serverPort {
+            // Get port from OpenAPI contract (source of truth)
+            port = openAPIPort
         } else {
             let portStr = object.base.components(separatedBy: CharacterSet.decimalDigits.inverted).joined()
             if let p = Int(portStr) {

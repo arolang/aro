@@ -876,7 +876,15 @@ public func aro_action_start(
     let objectDesc = toObjectDescriptor(object)
 
     let serverType = resultDesc.base.lowercased()
-    let port = Int(objectDesc.specifiers.first ?? "9000") ?? 9000
+    let objectBase = objectDesc.base.lowercased()
+
+    // If object is "contract", read port from OpenAPI spec (pass 0 to indicate this)
+    let port: Int
+    if objectBase == "contract" {
+        port = 0  // Signal to read from OpenAPI spec
+    } else {
+        port = Int(objectDesc.specifiers.first ?? "9000") ?? 9000
+    }
 
     var success = false
 
@@ -889,12 +897,17 @@ public func aro_action_start(
         #endif
 
     case "http-server", "httpserver", "server":
-        // HTTP server not yet implemented for native binaries
+        #if !os(Windows)
+        // Start native HTTP server with OpenAPI routing
+        let result = aro_native_http_server_start_with_openapi(Int32(port), contextPtr)
+        success = result == 0
+        #else
         ctxHandle.context.emit(CustomRuntimeEvent(
             type: "http.server.start.requested",
             data: "port=\(port)"
         ))
         success = true
+        #endif
 
     default:
         ctxHandle.context.emit(CustomRuntimeEvent(

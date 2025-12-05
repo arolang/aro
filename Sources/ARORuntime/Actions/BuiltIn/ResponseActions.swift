@@ -54,13 +54,14 @@ public struct ReturnAction: ActionImplementation {
             }
         }
 
-        // Include object.base value if resolvable
-        if let value = context.resolveAny(object.base) {
+        // Include object.base value if resolvable (skip internal names already handled above)
+        let internalNames: Set<String> = ["_expression_", "_literal_", "status", "response"]
+        if !internalNames.contains(object.base), let value = context.resolveAny(object.base) {
             flattenValue(value, into: &data, prefix: object.base, context: context)
         }
 
-        // Include object specifiers as data references
-        for specifier in object.specifiers {
+        // Include object specifiers as data references (skip internal names)
+        for specifier in object.specifiers where !internalNames.contains(specifier) {
             if let value = context.resolveAny(specifier) {
                 flattenValue(value, into: &data, prefix: specifier, context: context)
             }

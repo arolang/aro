@@ -10,6 +10,9 @@ import NIO
 import NIOHTTP1
 import NIOFoundationCompat
 
+/// Request handler type for processing HTTP requests
+public typealias HTTPRequestHandler = @Sendable (HTTPRequest) async -> HTTPResponse
+
 /// HTTP Server implementation using SwiftNIO
 ///
 /// Provides an event-driven HTTP server that integrates with ARO's
@@ -21,6 +24,9 @@ public final class AROHTTPServer: HTTPServerService, @unchecked Sendable {
     private var channel: Channel?
     private let group: MultiThreadedEventLoopGroup
     private let lock = NSLock()
+
+    /// Request handler for processing requests through feature sets
+    private var requestHandler: HTTPRequestHandler?
 
     /// Current port the server is listening on
     public private(set) var port: Int = 0
@@ -62,15 +68,26 @@ public final class AROHTTPServer: HTTPServerService, @unchecked Sendable {
         try? group.syncShutdownGracefully()
     }
 
+    // MARK: - Request Handler Configuration
+
+    /// Set the request handler for processing incoming HTTP requests
+    public func setRequestHandler(_ handler: @escaping HTTPRequestHandler) {
+        lock.lock()
+        defer { lock.unlock() }
+        self.requestHandler = handler
+    }
+
     // MARK: - HTTPServerService
 
     public func start(port: Int) async throws {
+        let handler = withLock { requestHandler }
+
         let bootstrap = ServerBootstrap(group: group)
             .serverChannelOption(ChannelOptions.backlog, value: 256)
             .serverChannelOption(ChannelOptions.socketOption(.so_reuseaddr), value: 1)
             .childChannelInitializer { channel in
                 channel.pipeline.configureHTTPServerPipeline().flatMap {
-                    channel.pipeline.addHandler(HTTPHandler(eventBus: self.eventBus))
+                    channel.pipeline.addHandler(HTTPHandler(eventBus: self.eventBus, requestHandler: handler))
                 }
             }
             .childChannelOption(ChannelOptions.socketOption(.so_reuseaddr), value: 1)
@@ -106,12 +123,14 @@ private final class HTTPHandler: ChannelInboundHandler, @unchecked Sendable {
     typealias OutboundOut = HTTPServerResponsePart
 
     private let eventBus: EventBus
+    private let requestHandler: HTTPRequestHandler?
     private var requestHead: HTTPRequestHead?
     private var bodyBuffer: ByteBuffer?
-    private let startTime = Date()
+    private var startTime = Date()
 
-    init(eventBus: EventBus) {
+    init(eventBus: EventBus, requestHandler: HTTPRequestHandler?) {
         self.eventBus = eventBus
+        self.requestHandler = requestHandler
     }
 
     func channelRead(context: ChannelHandlerContext, data: NIOAny) {
@@ -121,6 +140,7 @@ private final class HTTPHandler: ChannelInboundHandler, @unchecked Sendable {
         case .head(let head):
             requestHead = head
             bodyBuffer = context.channel.allocator.buffer(capacity: 0)
+            startTime = Date()
 
         case .body(var buffer):
             bodyBuffer?.writeBuffer(&buffer)
@@ -131,20 +151,65 @@ private final class HTTPHandler: ChannelInboundHandler, @unchecked Sendable {
             let requestId = UUID().uuidString
             let bodyData = bodyBuffer.flatMap { Data(buffer: $0) }
 
+            // Parse query parameters from URI
+            var queryParams: [String: String] = [:]
+            if let questionMark = head.uri.firstIndex(of: "?") {
+                let queryString = String(head.uri[head.uri.index(after: questionMark)...])
+                for pair in queryString.split(separator: "&") {
+                    let parts = pair.split(separator: "=", maxSplits: 1)
+                    if parts.count == 2 {
+                        let key = String(parts[0]).removingPercentEncoding ?? String(parts[0])
+                        let value = String(parts[1]).removingPercentEncoding ?? String(parts[1])
+                        queryParams[key] = value
+                    }
+                }
+            }
+
+            // Extract path without query string
+            let path: String
+            if let questionMark = head.uri.firstIndex(of: "?") {
+                path = String(head.uri[..<questionMark])
+            } else {
+                path = head.uri
+            }
+
+            // Create HTTP request
+            let request = HTTPRequest(
+                id: requestId,
+                method: head.method.rawValue,
+                path: path,
+                headers: Dictionary(head.headers.map { ($0.name, $0.value) }) { _, last in last },
+                body: bodyData,
+                queryParameters: queryParams
+            )
+
             // Emit HTTP request event
             let event = HTTPRequestReceivedEvent(
                 requestId: requestId,
-                method: head.method.rawValue,
-                path: head.uri,
-                headers: Dictionary(head.headers.map { ($0.name, $0.value) }) { _, last in last },
-                body: bodyData
+                method: request.method,
+                path: request.path,
+                headers: request.headers,
+                body: request.body
             )
             eventBus.publish(event)
 
-            // For now, return a simple response
-            // In a full implementation, this would wait for the ARO program to respond
-            let response = createResponse(for: head, requestId: requestId)
-            writeResponse(context: context, response: response, requestId: requestId)
+            // Handle the request
+            if let handler = requestHandler {
+                // Use the request handler (async feature set execution)
+                let eventLoop = context.eventLoop
+                let ctxBox = NIOLoopBound(context, eventLoop: eventLoop)
+
+                Task {
+                    let response = await handler(request)
+                    eventLoop.execute {
+                        self.writeResponse(context: ctxBox.value, response: response, requestId: requestId)
+                    }
+                }
+            } else {
+                // No handler - return default response
+                let response = createDefaultResponse(for: head, requestId: requestId)
+                writeResponse(context: context, response: response, requestId: requestId)
+            }
 
             // Reset for next request
             requestHead = nil
@@ -152,7 +217,7 @@ private final class HTTPHandler: ChannelInboundHandler, @unchecked Sendable {
         }
     }
 
-    private func createResponse(for head: HTTPRequestHead, requestId: String) -> HTTPResponse {
+    private func createDefaultResponse(for head: HTTPRequestHead, requestId: String) -> HTTPResponse {
         HTTPResponse(
             statusCode: 200,
             headers: ["Content-Type": "application/json", "X-Request-ID": requestId],

@@ -9,12 +9,14 @@
     (* Log a startup message to the console *)
     <Log> the <startup: message> for the <console> with "Hello World API starting...".
 
-    (* Start the HTTP server on port 8000 *)
-    (* The port matches what we defined in openapi.yaml *)
-    <Start> the <http-server> on <port> with 8000.
+    (* Start the HTTP server - port is read from openapi.yaml (contract is source of truth) *)
+    <Start> the <http-server> for the <contract>.
 
     (* Log that we're ready to receive requests *)
-    <Log> the <ready: message> for the <console> with "Server running at http://localhost:8000".
+    <Log> the <ready: message> for the <console> with "Server ready - waiting for requests...".
+
+    (* Keep the application running to handle incoming HTTP requests *)
+    <Keepalive> the <application> for the <events>.
 
     (* Return OK to indicate successful startup *)
     <Return> an <OK: status> for the <startup>.

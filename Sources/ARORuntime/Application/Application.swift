@@ -31,6 +31,11 @@ public final class Application: @unchecked Sendable {
     /// Route registry built from OpenAPI spec
     public let routeRegistry: OpenAPIRouteRegistry?
 
+    /// HTTP server instance for setting request handler
+    #if !os(Windows)
+    private var httpServer: AROHTTPServer?
+    #endif
+
     /// Whether HTTP server is enabled (requires OpenAPI contract)
     public var isHTTPEnabled: Bool {
         return openAPISpec != nil
@@ -67,7 +72,18 @@ public final class Application: @unchecked Sendable {
         // Register socket server service for TCP socket operations
         let socketServer = AROSocketServer(eventBus: .shared)
         runtime.register(service: socketServer as SocketServerService)
+
+        // Register HTTP server service for web APIs
+        let server = AROHTTPServer(eventBus: .shared)
+        self.httpServer = server
+        runtime.register(service: server as HTTPServerService)
         #endif
+
+        // Register OpenAPI spec service if contract exists
+        if let spec = openAPISpec {
+            let specService = OpenAPISpecService(spec: spec)
+            runtime.register(service: specService)
+        }
     }
 
     /// Initialize from source files
@@ -121,6 +137,11 @@ public final class Application: @unchecked Sendable {
             throw ApplicationError.noPrograms
         }
 
+        // Set up HTTP request handler if OpenAPI contract exists
+        #if !os(Windows)
+        setupHTTPRequestHandler(for: mainProgram)
+        #endif
+
         return try await runtime.run(mainProgram, entryPoint: entryPoint)
     }
 
@@ -130,6 +151,11 @@ public final class Application: @unchecked Sendable {
             throw ApplicationError.noPrograms
         }
 
+        // Set up HTTP request handler if OpenAPI contract exists
+        #if !os(Windows)
+        setupHTTPRequestHandler(for: mainProgram)
+        #endif
+
         try await runtime.runAndKeepAlive(mainProgram, entryPoint: entryPoint)
     }
 
@@ -137,6 +163,201 @@ public final class Application: @unchecked Sendable {
     public func stop() {
         runtime.stop()
     }
+
+    #if !os(Windows)
+    /// Set up the HTTP request handler for routing requests to feature sets
+    private func setupHTTPRequestHandler(for program: AnalyzedProgram) {
+        guard let routeRegistry = routeRegistry,
+              let httpServer = httpServer else {
+            return // No OpenAPI contract or HTTP server
+        }
+
+        // Create a request handler that routes to feature sets
+        let handler: HTTPRequestHandler = { [weak self] request in
+            guard let self = self else {
+                return HTTPResponse.serverError
+            }
+
+            // Match the request to an operation
+            guard let match = routeRegistry.match(method: request.method, path: request.path) else {
+                print("[Application] No route found for \(request.method) \(request.path)")
+                return HTTPResponse(
+                    statusCode: 404,
+                    headers: ["Content-Type": "application/json"],
+                    body: "{\"error\":\"Not Found\",\"path\":\"\(request.path)\"}".data(using: .utf8)
+                )
+            }
+
+            print("[Application] Matched route: \(match.operationId) for \(request.method) \(request.path)")
+
+            // Find the feature set by operationId
+            guard let featureSet = program.featureSets.first(where: {
+                $0.featureSet.name == match.operationId
+            }) else {
+                print("[Application] Feature set not found: \(match.operationId)")
+                return HTTPResponse(
+                    statusCode: 501,
+                    headers: ["Content-Type": "application/json"],
+                    body: "{\"error\":\"Not Implemented\",\"operationId\":\"\(match.operationId)\"}".data(using: .utf8)
+                )
+            }
+
+            // Execute the feature set
+            do {
+                let response = try await self.executeFeatureSet(featureSet, request: request, pathParams: match.pathParameters)
+                return self.convertToHTTPResponse(response)
+            } catch {
+                print("[Application] Feature set execution error: \(error)")
+                return HTTPResponse(
+                    statusCode: 500,
+                    headers: ["Content-Type": "application/json"],
+                    body: "{\"error\":\"\(String(describing: error).replacingOccurrences(of: "\"", with: "\\\""))\"}".data(using: .utf8)
+                )
+            }
+        }
+
+        httpServer.setRequestHandler(handler)
+        print("[Application] HTTP request handler configured with \(routeRegistry.operationIds.count) routes")
+    }
+
+    /// Execute a feature set for an HTTP request
+    private func executeFeatureSet(
+        _ analyzedFeatureSet: AnalyzedFeatureSet,
+        request: HTTPRequest,
+        pathParams: [String: String]
+    ) async throws -> Response {
+        // Create execution context for this request
+        let context = RuntimeContext(
+            featureSetName: analyzedFeatureSet.featureSet.name,
+            businessActivity: analyzedFeatureSet.featureSet.businessActivity,
+            eventBus: .shared
+        )
+
+        // Bind request data to context
+        context.bind("request", value: [
+            "method": request.method,
+            "path": request.path,
+            "headers": request.headers,
+            "body": request.bodyString ?? "",
+            "queryParameters": request.queryParameters
+        ] as [String: any Sendable])
+
+        // Bind path parameters
+        context.bind("pathParameters", value: pathParams)
+
+        // Bind query parameters
+        context.bind("queryParameters", value: request.queryParameters)
+
+        // Parse JSON body if present
+        if let body = request.body,
+           let contentType = request.headers["Content-Type"],
+           contentType.contains("application/json") {
+            if let json = try? JSONSerialization.jsonObject(with: body) as? [String: Any] {
+                // Convert to Sendable dictionary
+                var sendableDict: [String: any Sendable] = [:]
+                for (key, value) in json {
+                    if let str = value as? String {
+                        sendableDict[key] = str
+                    } else if let num = value as? Int {
+                        sendableDict[key] = num
+                    } else if let num = value as? Double {
+                        sendableDict[key] = num
+                    } else if let bool = value as? Bool {
+                        sendableDict[key] = bool
+                    } else {
+                        sendableDict[key] = String(describing: value)
+                    }
+                }
+                context.bind("body", value: sendableDict)
+            }
+        }
+
+        // Create executor and run
+        let executor = FeatureSetExecutor(
+            actionRegistry: .shared,
+            eventBus: .shared,
+            globalSymbols: GlobalSymbolStorage()
+        )
+
+        return try await executor.execute(analyzedFeatureSet, context: context)
+    }
+
+    /// Convert ARO Response to HTTP Response
+    private func convertToHTTPResponse(_ response: Response) -> HTTPResponse {
+        let headers = ["Content-Type": "application/json"]
+
+        // Build JSON response body from Response.data
+        var jsonBody: [String: Any] = [:]
+
+        // Include response data - convert AnySendable values to regular values
+        for (key, anySendable) in response.data {
+            if let str: String = anySendable.get() {
+                jsonBody[key] = str
+            } else if let int: Int = anySendable.get() {
+                jsonBody[key] = int
+            } else if let double: Double = anySendable.get() {
+                jsonBody[key] = double
+            } else if let bool: Bool = anySendable.get() {
+                jsonBody[key] = bool
+            } else {
+                // Fallback: stringify
+                jsonBody[key] = String(describing: anySendable)
+            }
+        }
+
+        // If no data, include status info
+        if jsonBody.isEmpty {
+            jsonBody["status"] = response.status
+            if !response.reason.isEmpty {
+                jsonBody["reason"] = response.reason
+            }
+        }
+
+        // Map status string to HTTP status code
+        let statusCode = mapStatusToHTTPCode(response.status)
+
+        let bodyData: Data?
+        if let jsonData = try? JSONSerialization.data(withJSONObject: jsonBody, options: [.sortedKeys]) {
+            bodyData = jsonData
+        } else {
+            bodyData = "{\"status\":\"\(response.status)\"}".data(using: .utf8)
+        }
+
+        return HTTPResponse(
+            statusCode: statusCode,
+            headers: headers,
+            body: bodyData
+        )
+    }
+
+    /// Map ARO status string to HTTP status code
+    private func mapStatusToHTTPCode(_ status: String) -> Int {
+        switch status.lowercased() {
+        case "ok", "success":
+            return 200
+        case "created":
+            return 201
+        case "accepted":
+            return 202
+        case "nocontent", "no-content":
+            return 204
+        case "badrequest", "bad-request", "invalid":
+            return 400
+        case "unauthorized":
+            return 401
+        case "forbidden":
+            return 403
+        case "notfound", "not-found":
+            return 404
+        case "conflict":
+            return 409
+        case "error", "servererror", "server-error":
+            return 500
+        default:
+            return 200
+        }
+    }
+    #endif
 
     // MARK: - Private
 

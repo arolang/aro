@@ -121,6 +121,26 @@ extension OpenAPILoadError: CustomStringConvertible {
 // MARK: - OpenAPI Spec Extensions
 
 extension OpenAPISpec {
+    /// Extract port from the first server URL
+    /// e.g., "http://localhost:8000" → 8000
+    public var serverPort: Int? {
+        guard let serverURL = servers?.first?.url,
+              let url = URL(string: serverURL),
+              let port = url.port else {
+            return nil
+        }
+        return port
+    }
+
+    /// Extract host from the first server URL
+    public var serverHost: String? {
+        guard let serverURL = servers?.first?.url,
+              let url = URL(string: serverURL) else {
+            return nil
+        }
+        return url.host
+    }
+
     public func validate() throws {
         guard openapi.hasPrefix("3.") else {
             throw OpenAPILoadError.invalidVersion(openapi)
