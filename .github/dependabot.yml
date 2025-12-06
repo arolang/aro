@@ -1,8 +1,5 @@
-# =============================================================================
-# Dependabot Configuration
-# =============================================================================
-# Keeps dependencies up to date automatically
-# =============================================================================
+# Dependabot configuration for Uitsmijter
+# https://docs.github.com/en/code-security/dependabot/dependabot-version-updates/configuration-options-for-the-dependabot.yml-file
 
 version: 2
 updates:
@@ -12,12 +9,27 @@ updates:
     schedule:
       interval: "weekly"
       day: "monday"
-    open-pull-requests-limit: 5
-    commit-message:
-      prefix: "deps(swift):"
+      time: "16:30"
+    open-pull-requests-limit: 20
     labels:
       - "dependencies"
       - "swift"
+    commit-message:
+      prefix: "(Update: Swift) "
+      include: "scope"
+    reviewers:
+      - "KrisSimon"
+    assignees:
+      - "KrisSimon"
+    # Prioritize security updates
+    groups:
+      security-updates:
+        patterns:
+          - "*"
+        update-types:
+          - major
+          - minor
+          - patch
 
   # GitHub Actions
   - package-ecosystem: "github-actions"
@@ -25,21 +37,16 @@ updates:
     schedule:
       interval: "weekly"
       day: "monday"
+      time: "16:10"
     open-pull-requests-limit: 5
-    commit-message:
-      prefix: "deps(actions):"
     labels:
       - "dependencies"
       - "github-actions"
-
-  # Docker base images
-  - package-ecosystem: "docker"
-    directory: "/"
-    schedule:
-      interval: "weekly"
-      day: "monday"
     commit-message:
-      prefix: "deps(docker):"
-    labels:
-      - "dependencies"
-      - "docker"
+      prefix: "Update: Actions"
+      include: "scope"
+    reviewers:
+      - "KrisSimon"
+    assignees:
+      - "KrisSimon"
+
