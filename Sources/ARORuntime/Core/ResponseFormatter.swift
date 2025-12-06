@@ -230,8 +230,9 @@ public struct ResponseFormatter: Sendable {
         case let bool as Bool:
             return bool ? "true" : "false"
         case let dict as [String: any Sendable]:
-            let items = dict.map { "\($0.key): \(formatValueForHuman($0.value))" }
-            return "{ \(items.joined(separator: ", ")) }"
+            let items = dict.sorted(by: { $0.key < $1.key })
+                .map { "\($0.key): \(formatValueForHuman($0.value))" }
+            return items.joined(separator: "\n")
         case let array as [any Sendable]:
             let items = array.map { formatValueForHuman($0) }
             return "[\(items.joined(separator: ", "))]"

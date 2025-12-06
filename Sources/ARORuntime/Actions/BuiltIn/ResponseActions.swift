@@ -304,16 +304,16 @@ public struct LogAction: ActionImplementation {
         let message: String
         if let literal = context.resolveAny("_literal_") {
             // Message from "with" clause (string literal)
-            message = String(describing: literal)
+            message = ResponseFormatter.formatValue(literal, for: context.outputContext)
         } else if let expr = context.resolveAny("_expression_") {
             // Message from "with" clause (expression)
-            message = String(describing: expr)
+            message = ResponseFormatter.formatValue(expr, for: context.outputContext)
         } else if let value: String = context.resolve(result.base) {
             // Message from variable
             message = value
         } else if let value = context.resolveAny(result.base) {
             // Message from any variable type
-            message = String(describing: value)
+            message = ResponseFormatter.formatValue(value, for: context.outputContext)
         } else {
             // Fallback to result name
             message = result.fullName

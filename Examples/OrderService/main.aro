@@ -4,17 +4,14 @@
 (Application-Start: Order Service) {
     <Log> the <startup: message> for the <console> with "Starting Order Service...".
 
-    (* Initialize HTTP server on port 8080 *)
-    <Start> the <http-server> on <port> with 8080.
+    (* Start HTTP server from OpenAPI contract *)
+    <Start> the <http-server> for the <contract>.
 
-    <Log> the <ready: message> for the <console> with "Order Service ready on port 8080".
+    <Log> the <ready: message> for the <console> with "Order Service ready".
     <Log> the <info: message> for the <console> with "Order lifecycle: draft -> placed -> paid -> shipped -> delivered".
-    <Return> an <OK: status> for the <startup>.
-}
 
-(Application-End: Success) {
-    <Log> the <shutdown: message> for the <console> with "Order Service shutting down...".
-    <Stop> the <http-server> for the <application>.
-    <Log> the <shutdown: complete> for the <console> with "Order Service stopped.".
-    <Return> an <OK: status> for the <shutdown>.
+    (* Keep the application running until Ctrl+C *)
+    <Keepalive> the <application> for the <events>.
+
+    <Return> an <OK: status> for the <startup>.
 }

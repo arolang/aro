@@ -109,6 +109,30 @@ private func boxResult(_ value: any Sendable) -> UnsafeMutableRawPointer {
     return UnsafeMutableRawPointer(Unmanaged.passRetained(boxed).toOpaque())
 }
 
+/// Format a value for human-readable output (key: value format for dictionaries)
+private func formatValueForHuman(_ value: Any) -> String {
+    switch value {
+    case let str as String:
+        return str
+    case let int as Int:
+        return String(int)
+    case let double as Double:
+        return String(format: "%.2f", double)
+    case let bool as Bool:
+        return bool ? "true" : "false"
+    case let dict as [String: Any]:
+        // Format as newline-separated key: value pairs (sorted by key)
+        let items = dict.sorted(by: { $0.key < $1.key })
+            .map { "\($0.key): \(formatValueForHuman($0.value))" }
+        return items.joined(separator: "\n")
+    case let array as [Any]:
+        let items = array.map { formatValueForHuman($0) }
+        return "[\(items.joined(separator: ", "))]"
+    default:
+        return String(describing: value)
+    }
+}
+
 // MARK: - REQUEST Actions
 
 /// Extract action - extract data from a source
@@ -375,6 +399,25 @@ public func aro_action_compute(
 
     let resultDesc = toResultDescriptor(result)
     let objectDesc = toObjectDescriptor(object)
+
+    // Check if _expression_ was set (binary expression like <index> + 1)
+    // If so, use that as the computed value directly
+    if let exprResult = ctxHandle.context.resolveAny("_expression_") {
+        // Skip if it's an empty string (cleared from previous use)
+        let isEmptyString: Bool
+        if let str = exprResult as? String, str.isEmpty {
+            isEmptyString = true
+        } else {
+            isEmptyString = false
+        }
+
+        if !isEmptyString {
+            ctxHandle.context.bind(resultDesc.base, value: exprResult)
+            // Clear _expression_ after use
+            ctxHandle.context.bind("_expression_", value: "" as any Sendable)
+            return boxResult(exprResult)
+        }
+    }
 
     let input = ctxHandle.context.resolveAny(objectDesc.base)
     let computationName = resultDesc.specifiers.first ?? "identity"
@@ -938,16 +981,16 @@ public func aro_action_log(
     let message: String
     if let literal = ctxHandle.context.resolveAny("_literal_") {
         // Message from "with" clause (string literal)
-        message = String(describing: literal)
+        message = formatValueForHuman(literal)
     } else if let expr = ctxHandle.context.resolveAny("_expression_") {
         // Message from "with" clause (expression)
-        message = String(describing: expr)
+        message = formatValueForHuman(expr)
     } else if let value: String = ctxHandle.context.resolve(resultDesc.base) {
         // Message from variable
         message = value
     } else if let value = ctxHandle.context.resolveAny(resultDesc.base) {
         // Message from any variable type
-        message = String(describing: value)
+        message = formatValueForHuman(value)
     } else {
         // Fallback to result name
         message = resultDesc.fullName

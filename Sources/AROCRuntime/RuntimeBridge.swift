@@ -302,13 +302,20 @@ private func convertToSendable(_ value: Any) -> any Sendable {
     switch value {
     case let str as String:
         return str
-    // Check Bool BEFORE Int - NSNumber/CFBoolean can match both
-    case let bool as Bool:
-        return bool
-    case let int as Int:
-        return int
-    case let double as Double:
-        return double
+    // Check for actual CFBoolean type to distinguish from NSNumber integers
+    // CFBoolean is a distinct type for true/false in JSON, NSNumber(1) is an integer
+    case let nsNumber as NSNumber:
+        // Check if it's actually a boolean type (CFBoolean)
+        if CFGetTypeID(nsNumber) == CFBooleanGetTypeID() {
+            return nsNumber.boolValue
+        }
+        // Check if it has a decimal point (is a double)
+        let objCType = String(cString: nsNumber.objCType)
+        if objCType == "d" || objCType == "f" {
+            return nsNumber.doubleValue
+        }
+        // Otherwise treat as integer
+        return nsNumber.intValue
     case let dict as [String: Any]:
         var result: [String: any Sendable] = [:]
         for (k, v) in dict {
@@ -380,9 +387,21 @@ private func evaluateExpressionJSON(_ expr: [String: Any], context: RuntimeConte
         return convertToSendable(lit)
     }
 
-    // Variable reference
+    // Variable reference (with optional specifiers)
     if let varName = expr["$var"] as? String {
-        return context.resolveAny(varName) ?? ""
+        var value = context.resolveAny(varName) ?? ""
+
+        // Handle specifiers for expressions like <user: active>
+        if let specs = expr["$specs"] as? [String] {
+            for spec in specs {
+                if let dict = value as? [String: any Sendable], let propVal = dict[spec] {
+                    value = propVal
+                } else {
+                    return "" // Property not found
+                }
+            }
+        }
+        return value
     }
 
     // Binary expression
@@ -454,10 +473,17 @@ private func evaluateBinaryOp(op: String, left: any Sendable, right: any Sendabl
         return l + r
 
     // Comparison
-    case "==":
+    case "==", "is":
+        // "is" is used for equality comparison with true/false
+        if let lb = left as? Bool, let rb = right as? Bool {
+            return lb == rb
+        }
         return asString(left) == asString(right)
 
-    case "!=":
+    case "!=", "isNot":
+        if let lb = left as? Bool, let rb = right as? Bool {
+            return lb != rb
+        }
         return asString(left) != asString(right)
 
     case "<":
@@ -761,4 +787,123 @@ public func aro_load_precompiled_plugins() -> Int32 {
         print("[ARO] Plugin loading error: \(error)")
         return 1
     }
+}
+
+// MARK: - Array/Collection Operations for ForEach
+
+/// Get the count of elements in an array value
+/// - Parameter valuePtr: Value handle (must be an array)
+/// - Returns: Number of elements, or -1 if not an array
+@_cdecl("aro_array_count")
+public func aro_array_count(_ valuePtr: UnsafeMutableRawPointer?) -> Int64 {
+    guard let ptr = valuePtr else { return -1 }
+    let boxed = Unmanaged<AROCValue>.fromOpaque(ptr).takeUnretainedValue()
+
+    if let array = boxed.value as? [any Sendable] {
+        return Int64(array.count)
+    }
+    return -1
+}
+
+/// Get an element from an array value at the specified index
+/// - Parameters:
+///   - valuePtr: Value handle (must be an array)
+///   - index: Zero-based index
+/// - Returns: Value handle for the element (must be freed with aro_value_free), or NULL if out of bounds
+@_cdecl("aro_array_get")
+public func aro_array_get(
+    _ valuePtr: UnsafeMutableRawPointer?,
+    _ index: Int64
+) -> UnsafeMutableRawPointer? {
+    guard let ptr = valuePtr else { return nil }
+    let boxed = Unmanaged<AROCValue>.fromOpaque(ptr).takeUnretainedValue()
+
+    guard let array = boxed.value as? [any Sendable],
+          index >= 0 && index < array.count else { return nil }
+
+    let element = array[Int(index)]
+    let boxedElement = AROCValue(value: element)
+    return UnsafeMutableRawPointer(Unmanaged.passRetained(boxedElement).toOpaque())
+}
+
+/// Bind a value to a variable name in the context
+/// - Parameters:
+///   - contextPtr: Context handle
+///   - name: Variable name (C string)
+///   - valuePtr: Value handle from aro_array_get or aro_variable_resolve
+@_cdecl("aro_variable_bind_value")
+public func aro_variable_bind_value(
+    _ contextPtr: UnsafeMutableRawPointer?,
+    _ name: UnsafePointer<CChar>?,
+    _ valuePtr: UnsafeMutableRawPointer?
+) {
+    guard let ctxPtr = contextPtr,
+          let nameStr = name.map({ String(cString: $0) }),
+          let valPtr = valuePtr else { return }
+
+    let contextHandle = Unmanaged<AROCContextHandle>.fromOpaque(ctxPtr).takeUnretainedValue()
+    let boxed = Unmanaged<AROCValue>.fromOpaque(valPtr).takeUnretainedValue()
+
+    contextHandle.context.bind(nameStr, value: boxed.value)
+}
+
+/// Get a property from a dictionary value
+/// - Parameters:
+///   - valuePtr: Value handle (must be a dictionary)
+///   - property: Property name (C string)
+/// - Returns: Value handle for the property (must be freed with aro_value_free), or NULL if not found
+@_cdecl("aro_dict_get")
+public func aro_dict_get(
+    _ valuePtr: UnsafeMutableRawPointer?,
+    _ property: UnsafePointer<CChar>?
+) -> UnsafeMutableRawPointer? {
+    guard let ptr = valuePtr,
+          let propStr = property.map({ String(cString: $0) }) else { return nil }
+
+    let boxed = Unmanaged<AROCValue>.fromOpaque(ptr).takeUnretainedValue()
+
+    if let dict = boxed.value as? [String: any Sendable],
+       let value = dict[propStr] {
+        let boxedValue = AROCValue(value: value)
+        return UnsafeMutableRawPointer(Unmanaged.passRetained(boxedValue).toOpaque())
+    }
+
+    return nil
+}
+
+/// Evaluate a filter expression (where clause) for a value
+/// - Parameters:
+///   - contextPtr: Context handle
+///   - filterJSON: JSON-encoded filter expression
+/// - Returns: 1 if filter passes, 0 if not
+@_cdecl("aro_evaluate_filter")
+public func aro_evaluate_filter(
+    _ contextPtr: UnsafeMutableRawPointer?,
+    _ filterJSON: UnsafePointer<CChar>?
+) -> Int32 {
+    guard let ptr = contextPtr,
+          let jsonStr = filterJSON.map({ String(cString: $0) }) else { return 0 }
+
+    let contextHandle = Unmanaged<AROCContextHandle>.fromOpaque(ptr).takeUnretainedValue()
+
+    // Parse and evaluate the expression
+    guard let data = jsonStr.data(using: .utf8),
+          let parsed = try? JSONSerialization.jsonObject(with: data, options: []) as? [String: Any] else {
+        return 0
+    }
+
+    let result = evaluateExpressionJSON(parsed, context: contextHandle.context)
+
+    // Convert result to bool
+    if let b = result as? Bool {
+        return b ? 1 : 0
+    }
+    if let i = result as? Int {
+        return i != 0 ? 1 : 0
+    }
+    if let s = result as? String {
+        return s.lowercased() == "true" ? 1 : 0
+    }
+
+    return 0
 }

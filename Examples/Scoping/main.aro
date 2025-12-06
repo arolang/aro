@@ -11,18 +11,24 @@
     <Create> the <app-name> with "Scoping Demo".
     <Create> the <version> with "1.0".
 
-    (* Log startup *)
-    <Log> the <startup-message> for the <console> with <app-name>.
+    (* Log startup using variables *)
+    <Log> the <startup-message> for the <console> with "Starting application...".
+    <Log> the <name-message> for the <console> with <app-name>.
+    <Log> the <version-message> for the <console> with <version>.
 
-    (* Publish for other feature sets in the event chain *)
-    <Publish> as <application-name> <app-name>.
-    <Publish> as <application-version> <version>.
+    (* Demonstrate nested object scoping *)
+    <Create> the <config> with {
+        name: "Scoping Demo",
+        version: "1.0",
+        settings: {
+            debug: true,
+            timeout: 30
+        }
+    }.
 
-    (* Emit event to trigger handlers *)
-    <Emit> a <StartupComplete: event> for the <application>.
-
-    (* Keep application running until Ctrl+C *)
-    <Keepalive> the <application> for the <events>.
+    <Log> the <config-message> for the <console> with "Configuration:".
+    <Log> the <config-name> for the <console> with <config: name>.
+    <Log> the <config-version> for the <console> with <config: version>.
 
     <Return> an <OK: status> for the <startup>.
 }
