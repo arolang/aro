@@ -1,0 +1,78 @@
+
+#
+name: "CodeQL"
+
+on:
+  push:
+    branches: [ "main" ]
+    paths:
+      - 'Sources/**'
+      - '.github/workflows/**'
+      - '.github/codeql-config.yml'
+  pull_request:
+    branches: [ "main" ]
+    paths:
+      - 'Sources/**'
+      - '.github/workflows/**'
+      - '.github/codeql-config.yml'
+  schedule:
+    - cron: '45 14 * * 2'
+
+jobs:
+  analyze:
+    name: Analyze (${{ matrix.language }})
+    # Runner size impacts CodeQL analysis time. To learn more, please see:
+    #   - https://gh.io/recommended-hardware-resources-for-running-codeql
+    #   - https://gh.io/supported-runners-and-hardware-resources
+    #   - https://gh.io/using-larger-runners (GitHub.com only)
+    # Consider using larger runners or machines with greater resources for possible analysis time improvements.
+    runs-on: macos-15
+    permissions:
+      # required for all workflows
+      security-events: write
+
+      # required to fetch internal or private CodeQL packs
+      packages: read
+
+      # only required for workflows in private repositories
+      actions: read
+      contents: read
+
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+        - language: actions
+          build-mode: none
+        - language: swift
+          build-mode: manual
+
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v6
+
+    # Install Swift 6.2 for Swift language analysis
+    - name: Setup Swift 6.2
+      if: matrix.language == 'swift'
+      uses: swift-actions/setup-swift@v3
+      with:
+        swift-version: "6.2"
+
+    # Initializes the CodeQL tools for scanning.
+    - name: Initialize CodeQL
+      uses: github/codeql-action/init@v4
+      with:
+        languages: ${{ matrix.language }}
+        build-mode: ${{ matrix.build-mode }}
+        config-file: .github/codeql-config.yml
+
+    # Manual build step for Swift
+    - name: Build Swift project
+      if: matrix.language == 'swift'
+      run: |
+        swift build
+
+    - name: Perform CodeQL Analysis
+      uses: github/codeql-action/analyze@v4
+      with:
+        category: "/language:${{matrix.language}}"
