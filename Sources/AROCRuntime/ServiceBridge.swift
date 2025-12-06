@@ -1469,6 +1469,97 @@ public final class NativeHTTPServer: @unchecked Sendable {
 nonisolated(unsafe) public var nativeHTTPServer: NativeHTTPServer?
 private let httpServerLock = NSLock()
 
+// MARK: - JSON Conversion Helpers
+
+/// Unwrap AnySendable for JSON serialization (uses get<T>() to access private value)
+/// If the value is a JSON string, parse it back to an object
+private func unwrapAnySendableForJSON(_ anySendable: AnySendable) -> Any {
+    // Try each concrete type using the public get<T>() method
+    if let str: String = anySendable.get() {
+        // Check if the string is JSON - if so, parse it
+        if str.hasPrefix("{") || str.hasPrefix("[") {
+            if let jsonData = str.data(using: .utf8),
+               let parsed = try? JSONSerialization.jsonObject(with: jsonData) {
+                return parsed
+            }
+        }
+        return str
+    }
+    if let int: Int = anySendable.get() {
+        return int
+    }
+    if let double: Double = anySendable.get() {
+        return double
+    }
+    if let bool: Bool = anySendable.get() {
+        return bool
+    }
+    if let dict: [String: any Sendable] = anySendable.get() {
+        var result: [String: Any] = [:]
+        for (k, v) in dict {
+            result[k] = unwrapSendableForJSON(v)
+        }
+        return result
+    }
+    if let array: [any Sendable] = anySendable.get() {
+        return array.map { unwrapSendableForJSON($0) }
+    }
+    // Fallback for unknown types
+    return "{}"
+}
+
+/// Unwrap any Sendable value for JSON serialization
+private func unwrapSendableForJSON(_ value: any Sendable) -> Any {
+    switch value {
+    case let str as String:
+        return str
+    case let int as Int:
+        return int
+    case let double as Double:
+        return double
+    case let bool as Bool:
+        return bool
+    case let dict as [String: any Sendable]:
+        var result: [String: Any] = [:]
+        for (k, v) in dict {
+            result[k] = unwrapSendableForJSON(v)
+        }
+        return result
+    case let array as [any Sendable]:
+        return array.map { unwrapSendableForJSON($0) }
+    case let anySendable as AnySendable:
+        return unwrapAnySendableForJSON(anySendable)
+    default:
+        return String(describing: value)
+    }
+}
+
+/// Convert Any (from JSON) to Sendable
+private func convertAnyToSendable(_ value: Any) -> any Sendable {
+    switch value {
+    case let str as String:
+        return str
+    case let int as Int:
+        return int
+    case let double as Double:
+        return double
+    case let bool as Bool:
+        return bool
+    case let dict as [String: Any]:
+        var result: [String: any Sendable] = [:]
+        for (k, v) in dict {
+            result[k] = convertAnyToSendable(v)
+        }
+        return result
+    case let array as [Any]:
+        return array.map { convertAnyToSendable($0) }
+    case is NSNull:
+        return "" // Represent null as empty string
+    default:
+        return String(describing: value)
+    }
+}
+
 /// Registered feature set handlers for HTTP routing
 /// Maps operationId to a function that executes the feature set
 nonisolated(unsafe) public var httpRouteHandlers: [String: (UnsafeMutableRawPointer?) -> UnsafeMutableRawPointer?] = [:]
@@ -1524,12 +1615,74 @@ public func aro_native_http_server_start(_ port: Int32, _ contextPtr: UnsafeMuta
                 }
             }
 
+            // Helper function to extract response from context and serialize as JSON
+            func getContextResponse(_ ctxPtr: UnsafeMutableRawPointer?) -> (Int, [String: String], Data?) {
+                guard let ptr = ctxPtr else {
+                    return (500, ["Content-Type": "application/json"], "{\"error\":\"No context\"}".data(using: .utf8))
+                }
+                let ctxHandle = Unmanaged<AROCContextHandle>.fromOpaque(ptr).takeUnretainedValue()
+                if let response = ctxHandle.context.getResponse() {
+                    // Convert Response.data to JSON, returning just the data portion
+                    let statusCode = response.status.lowercased() == "ok" ? 200 :
+                                   response.status.lowercased() == "created" ? 201 :
+                                   response.status.lowercased() == "error" ? 400 : 200
+
+                    // Build JSON from response data
+                    var jsonDict: [String: Any] = [:]
+                    for (key, anySendable) in response.data {
+                        jsonDict[key] = unwrapAnySendableForJSON(anySendable)
+                    }
+
+                    // If no data, include status as fallback
+                    if jsonDict.isEmpty {
+                        jsonDict["status"] = response.status
+                    }
+
+                    if let jsonData = try? JSONSerialization.data(withJSONObject: jsonDict, options: [.sortedKeys]) {
+                        return (statusCode, ["Content-Type": "application/json"], jsonData)
+                    }
+                }
+                return (200, ["Content-Type": "application/json"], "{\"status\":\"ok\"}".data(using: .utf8))
+            }
+
+            // Helper to bind request data to context
+            func bindRequestToContext(_ ctxPtr: UnsafeMutableRawPointer?, body: Data?, headers: [String: String], path: String) {
+                guard let ptr = ctxPtr else { return }
+                let ctxHandle = Unmanaged<AROCContextHandle>.fromOpaque(ptr).takeUnretainedValue()
+
+                // Bind request as a dictionary with body, headers, etc.
+                var requestDict: [String: any Sendable] = [:]
+
+                // Parse body as JSON if possible, otherwise as string
+                if let bodyData = body {
+                    if let json = try? JSONSerialization.jsonObject(with: bodyData),
+                       let dict = json as? [String: Any] {
+                        // Body is JSON - convert to Sendable dict
+                        var bodyDict: [String: any Sendable] = [:]
+                        for (k, v) in dict {
+                            bodyDict[k] = convertAnyToSendable(v)
+                        }
+                        requestDict["body"] = bodyDict
+                    } else if let bodyStr = String(data: bodyData, encoding: .utf8) {
+                        requestDict["body"] = bodyStr
+                    }
+                }
+
+                requestDict["path"] = path
+                requestDict["headers"] = headers
+
+                ctxHandle.context.bind("request", value: requestDict)
+            }
+
             // If route matched, try to invoke the feature set
             if let opId = matchedOperationId {
+                // Bind request data to context before invoking handler
+                bindRequestToContext(contextPtr, body: body, headers: headers, path: path)
+
                 // First check for registered handler
                 if let handler = httpRouteHandlers[opId] {
                     _ = handler(contextPtr)
-                    return (200, ["Content-Type": "application/json"], "{\"message\":\"Hello World\"}".data(using: .utf8))
+                    return getContextResponse(contextPtr)
                 }
 
                 // Try to find the compiled feature set function via dlsym
@@ -1539,12 +1692,11 @@ public func aro_native_http_server_start(_ port: Int32, _ contextPtr: UnsafeMuta
                     typealias FSFunction = @convention(c) (UnsafeMutableRawPointer?) -> UnsafeMutableRawPointer?
                     let function = unsafeBitCast(sym, to: FSFunction.self)
                     _ = function(contextPtr)
-                    // For now, return static response - proper response extraction coming later
-                    return (200, ["Content-Type": "application/json"], "{\"message\":\"Hello World\"}".data(using: .utf8))
+                    return getContextResponse(contextPtr)
                 }
 
                 // Route matched but no handler - return placeholder success
-                return (200, ["Content-Type": "application/json"], "{\"message\":\"Hello World\"}".data(using: .utf8))
+                return (200, ["Content-Type": "application/json"], "{\"status\":\"ok\"}".data(using: .utf8))
             }
 
             // Default: Not found

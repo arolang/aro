@@ -35,13 +35,33 @@ public struct ReturnAction: ActionImplementation {
         // Gather any data to include in response
         var data: [String: AnySendable] = [:]
 
-        // Check for expression from "with" clause (e.g., with { user: <user>, ... })
+        // Check for expression from "with" clause (e.g., with { user: <user>, ... } or with <variable>)
         // Note: When with clause contains variable references, it's parsed as expression
         if let expr = context.resolveAny("_expression_") {
             if let dict = expr as? [String: any Sendable] {
+                // Map literal: { key: value, ... } - preserve nested structure
                 for (key, value) in dict {
                     flattenValue(value, into: &data, prefix: key, context: context)
                 }
+            } else if let str = expr as? String {
+                // Simple variable that contains a JSON string - try to parse it
+                if let jsonData = str.data(using: .utf8),
+                   let parsed = try? JSONSerialization.jsonObject(with: jsonData),
+                   let dict = parsed as? [String: Any] {
+                    // Variable contains JSON object - use it directly as response data
+                    for (key, value) in dict {
+                        addAnyValue(value, into: &data, key: key)
+                    }
+                } else {
+                    // Plain string value
+                    data["value"] = AnySendable(str)
+                }
+            } else if let int = expr as? Int {
+                data["value"] = AnySendable(int)
+            } else if let double = expr as? Double {
+                data["value"] = AnySendable(double)
+            } else if let bool = expr as? Bool {
+                data["value"] = AnySendable(bool)
             }
         }
 
@@ -129,6 +149,39 @@ public struct ReturnAction: ActionImplementation {
             return bool ? "true" : "false"
         default:
             return String(describing: value)
+        }
+    }
+
+    /// Add a value from JSON parsing (Any type) into the data dictionary
+    /// Nested structures are serialized as JSON strings since AnySendable requires Equatable
+    private func addAnyValue(_ value: Any, into data: inout [String: AnySendable], key: String) {
+        switch value {
+        case let str as String:
+            data[key] = AnySendable(str)
+        case let int as Int:
+            data[key] = AnySendable(int)
+        case let double as Double:
+            data[key] = AnySendable(double)
+        case let bool as Bool:
+            data[key] = AnySendable(bool)
+        case let dict as [String: Any]:
+            // Nested dict - serialize as JSON string (will be parsed back for HTTP response)
+            if let jsonData = try? JSONSerialization.data(withJSONObject: dict),
+               let jsonString = String(data: jsonData, encoding: .utf8) {
+                data[key] = AnySendable(jsonString)
+            } else {
+                data[key] = AnySendable(String(describing: dict))
+            }
+        case let array as [Any]:
+            // Array - serialize as JSON string
+            if let jsonData = try? JSONSerialization.data(withJSONObject: array),
+               let jsonString = String(data: jsonData, encoding: .utf8) {
+                data[key] = AnySendable(jsonString)
+            } else {
+                data[key] = AnySendable(String(describing: array))
+            }
+        default:
+            data[key] = AnySendable(String(describing: value))
         }
     }
 }

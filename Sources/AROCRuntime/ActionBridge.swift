@@ -263,6 +263,103 @@ public func aro_action_read(
     return boxResult(content)
 }
 
+/// Request action - make HTTP request
+@_cdecl("aro_action_request")
+public func aro_action_request(
+    _ contextPtr: UnsafeMutableRawPointer?,
+    _ resultPtr: UnsafeRawPointer?,
+    _ objectPtr: UnsafeRawPointer?
+) -> UnsafeMutableRawPointer? {
+    guard let ctxHandle = getContext(contextPtr),
+          let result = resultPtr,
+          let object = objectPtr else { return nil }
+
+    let resultDesc = toResultDescriptor(result)
+    let objectDesc = toObjectDescriptor(object)
+
+    // Get URL from object - resolve variable or use literal
+    let url: String
+    if let resolvedURL: String = ctxHandle.context.resolve(objectDesc.base) {
+        url = resolvedURL
+    } else {
+        url = objectDesc.base
+    }
+
+    // Determine HTTP method from specifiers or default to GET
+    let method = objectDesc.specifiers.first {
+        ["GET", "POST", "PUT", "DELETE", "PATCH"].contains($0.uppercased())
+    }?.uppercased() ?? "GET"
+
+    // Make synchronous HTTP request using URLSession
+    var responseData: Data?
+    var responseError: Error?
+
+    let semaphore = DispatchSemaphore(value: 0)
+
+    guard let requestURL = URL(string: url) else {
+        print("[Request] Error: Invalid URL: \(url)")
+        return nil
+    }
+
+    var request = URLRequest(url: requestURL)
+    request.httpMethod = method
+    request.timeoutInterval = 30
+
+    URLSession.shared.dataTask(with: request) { data, response, error in
+        responseData = data
+        responseError = error
+        semaphore.signal()
+    }.resume()
+
+    semaphore.wait()
+
+    if let error = responseError {
+        print("[Request] Error: \(error)")
+        return nil
+    }
+
+    // Parse response as JSON or string
+    if let data = responseData {
+        if let json = try? JSONSerialization.jsonObject(with: data) {
+            // Recursively convert to Sendable dictionary
+            let sendableResult = convertToSendable(json)
+            ctxHandle.context.bind(resultDesc.base, value: sendableResult)
+            return boxResult(sendableResult)
+        } else if let string = String(data: data, encoding: .utf8) {
+            ctxHandle.context.bind(resultDesc.base, value: string)
+            return boxResult(string)
+        }
+    }
+
+    return nil
+}
+
+/// Recursively convert JSON objects to Sendable types
+private func convertToSendable(_ value: Any) -> any Sendable {
+    switch value {
+    case let str as String:
+        return str
+    case let int as Int:
+        return int
+    case let double as Double:
+        return double
+    case let bool as Bool:
+        return bool
+    case let dict as [String: Any]:
+        var sendableDict: [String: any Sendable] = [:]
+        for (key, val) in dict {
+            sendableDict[key] = convertToSendable(val)
+        }
+        return sendableDict
+    case let array as [Any]:
+        return array.map { convertToSendable($0) }
+    case is NSNull:
+        return Optional<String>.none as Any as! (any Sendable)
+    default:
+        return String(describing: value)
+    }
+}
+
 // MARK: - OWN Actions
 
 /// Compute action
@@ -540,12 +637,35 @@ public func aro_action_return(
 
     var data: [String: AnySendable] = [:]
 
-    // Check for expression from "with" clause (e.g., with { user: <user>, ... })
+    // Check for expression from "with" clause (e.g., with { user: <user>, ... } or with <variable>)
     if let expr = ctxHandle.context.resolveAny("_expression_") {
         if let dict = expr as? [String: any Sendable] {
+            // Map literal: { key: value, ... } - preserve nested structure
             for (key, value) in dict {
-                flattenValue(value, into: &data, prefix: key, context: ctxHandle.context)
+                addValuePreservingStructure(value, into: &data, key: key, context: ctxHandle.context)
             }
+        } else if let str = expr as? String {
+            // Simple variable that contains a JSON string - try to parse it
+            if let jsonData = str.data(using: .utf8),
+               let parsed = try? JSONSerialization.jsonObject(with: jsonData),
+               let dict = parsed as? [String: Any] {
+                // Variable contains JSON object - use it directly as response data
+                for (key, value) in dict {
+                    addAnyValuePreservingStructure(value, into: &data, key: key)
+                }
+            } else {
+                // Plain string value
+                data["value"] = AnySendable(str)
+            }
+        } else if let int = expr as? Int {
+            data["value"] = AnySendable(int)
+        } else if let double = expr as? Double {
+            data["value"] = AnySendable(double)
+        } else if let bool = expr as? Bool {
+            data["value"] = AnySendable(bool)
+        } else {
+            // Fallback - convert to string
+            data["value"] = AnySendable(String(describing: expr))
         }
     }
 
@@ -553,20 +673,25 @@ public func aro_action_return(
     if let literal = ctxHandle.context.resolveAny("_literal_") {
         if let dict = literal as? [String: any Sendable] {
             for (key, value) in dict {
-                flattenValue(value, into: &data, prefix: key, context: ctxHandle.context)
+                addValuePreservingStructure(value, into: &data, key: key, context: ctxHandle.context)
             }
         }
     }
 
-    // Include object.base value if resolvable
-    if let value = ctxHandle.context.resolveAny(objectDesc.base) {
-        flattenValue(value, into: &data, prefix: objectDesc.base, context: ctxHandle.context)
+    // Skip internal names when processing object.base
+    let internalNames: Set<String> = ["_expression_", "_literal_", "status", "response"]
+
+    // Include object.base value if resolvable (skip internal names)
+    if !internalNames.contains(objectDesc.base) {
+        if let value = ctxHandle.context.resolveAny(objectDesc.base) {
+            addValuePreservingStructure(value, into: &data, key: objectDesc.base, context: ctxHandle.context)
+        }
     }
 
-    // Include object specifiers as data references
-    for specifier in objectDesc.specifiers {
+    // Include object specifiers as data references (skip internal names)
+    for specifier in objectDesc.specifiers where !internalNames.contains(specifier) {
         if let value = ctxHandle.context.resolveAny(specifier) {
-            flattenValue(value, into: &data, prefix: specifier, context: ctxHandle.context)
+            addValuePreservingStructure(value, into: &data, key: specifier, context: ctxHandle.context)
         }
     }
 
@@ -584,7 +709,112 @@ public func aro_action_return(
     return boxResult(response)
 }
 
+/// Add a value to the data dictionary, preserving nested structure (no flattening)
+/// Nested dicts/arrays are serialized as JSON strings since AnySendable requires Equatable
+private func addValuePreservingStructure(
+    _ value: any Sendable,
+    into data: inout [String: AnySendable],
+    key: String,
+    context: RuntimeContext
+) {
+    switch value {
+    case let str as String:
+        // Check if it's a variable reference that can be resolved
+        if let resolved = context.resolveAny(str) {
+            addValuePreservingStructure(resolved, into: &data, key: key, context: context)
+        } else {
+            // Check if the string is JSON - if so, store as-is (will be parsed later)
+            data[key] = AnySendable(str)
+        }
+    case let int as Int:
+        data[key] = AnySendable(int)
+    case let double as Double:
+        data[key] = AnySendable(double)
+    case let bool as Bool:
+        data[key] = AnySendable(bool)
+    case let dict as [String: any Sendable]:
+        // Serialize nested dictionaries as JSON strings for storage
+        if let jsonData = try? JSONSerialization.data(withJSONObject: convertSendableToAny(dict)),
+           let jsonStr = String(data: jsonData, encoding: .utf8) {
+            data[key] = AnySendable(jsonStr)
+        } else {
+            data[key] = AnySendable(String(describing: dict))
+        }
+    case let array as [any Sendable]:
+        // Serialize arrays as JSON strings for storage
+        if let jsonData = try? JSONSerialization.data(withJSONObject: array.map { convertSendableToAny($0) }),
+           let jsonStr = String(data: jsonData, encoding: .utf8) {
+            data[key] = AnySendable(jsonStr)
+        } else {
+            data[key] = AnySendable(String(describing: array))
+        }
+    default:
+        data[key] = AnySendable(String(describing: value))
+    }
+}
+
+/// Add a value from Any (JSON parsed) to the data dictionary
+private func addAnyValuePreservingStructure(
+    _ value: Any,
+    into data: inout [String: AnySendable],
+    key: String
+) {
+    switch value {
+    case let str as String:
+        data[key] = AnySendable(str)
+    case let int as Int:
+        data[key] = AnySendable(int)
+    case let double as Double:
+        data[key] = AnySendable(double)
+    case let bool as Bool:
+        data[key] = AnySendable(bool)
+    case let dict as [String: Any]:
+        // Serialize nested dictionaries as JSON strings
+        if let jsonData = try? JSONSerialization.data(withJSONObject: dict),
+           let jsonStr = String(data: jsonData, encoding: .utf8) {
+            data[key] = AnySendable(jsonStr)
+        } else {
+            data[key] = AnySendable(String(describing: dict))
+        }
+    case let array as [Any]:
+        // Serialize arrays as JSON strings
+        if let jsonData = try? JSONSerialization.data(withJSONObject: array),
+           let jsonStr = String(data: jsonData, encoding: .utf8) {
+            data[key] = AnySendable(jsonStr)
+        } else {
+            data[key] = AnySendable(String(describing: array))
+        }
+    default:
+        data[key] = AnySendable(String(describing: value))
+    }
+}
+
+/// Convert Sendable value to Any for JSON serialization
+private func convertSendableToAny(_ value: any Sendable) -> Any {
+    switch value {
+    case let str as String:
+        return str
+    case let int as Int:
+        return int
+    case let double as Double:
+        return double
+    case let bool as Bool:
+        return bool
+    case let dict as [String: any Sendable]:
+        var result: [String: Any] = [:]
+        for (k, v) in dict {
+            result[k] = convertSendableToAny(v)
+        }
+        return result
+    case let array as [any Sendable]:
+        return array.map { convertSendableToAny($0) }
+    default:
+        return String(describing: value)
+    }
+}
+
 /// Flatten a value into the data dictionary using dot notation for nested objects
+/// (kept for backward compatibility with non-HTTP contexts)
 private func flattenValue(
     _ value: any Sendable,
     into data: inout [String: AnySendable],

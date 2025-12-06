@@ -292,7 +292,17 @@ public final class Application: @unchecked Sendable {
         // Include response data - convert AnySendable values to regular values
         for (key, anySendable) in response.data {
             if let str: String = anySendable.get() {
-                jsonBody[key] = str
+                // Check if the string is JSON - if so, parse it as a nested object
+                if (str.hasPrefix("{") || str.hasPrefix("[")) {
+                    if let jsonData = str.data(using: .utf8),
+                       let parsed = try? JSONSerialization.jsonObject(with: jsonData) {
+                        jsonBody[key] = parsed
+                    } else {
+                        jsonBody[key] = str
+                    }
+                } else {
+                    jsonBody[key] = str
+                }
             } else if let int: Int = anySendable.get() {
                 jsonBody[key] = int
             } else if let double: Double = anySendable.get() {

@@ -1,0 +1,98 @@
+# ============================================================
+# OpenAPI Contract for HTTP Server Example
+# ============================================================
+# This file defines the API contract. The ARO runtime uses this
+# to route HTTP requests to the correct feature set handlers.
+# ============================================================
+
+openapi: 3.0.3
+info:
+  title: HTTP Server Example API
+  description: A simple HTTP server demonstrating ARO's contract-first approach
+  version: 1.0.0
+
+servers:
+  - url: http://localhost:8080
+    description: Local development server
+
+paths:
+  /welcome:
+    get:
+      operationId: handleRoot
+      summary: Welcome endpoint
+      description: Returns a welcome message
+      responses:
+        '200':
+          description: Welcome message
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MessageResponse'
+
+  /health:
+    get:
+      operationId: checkHealth
+      summary: Health check
+      description: Returns the server health status
+      responses:
+        '200':
+          description: Server is healthy
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HealthResponse'
+
+  /echo:
+    post:
+      operationId: echoMessage
+      summary: Echo endpoint
+      description: Echoes back the request body
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/EchoRequest'
+      responses:
+        '200':
+          description: Echoed message
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EchoResponse'
+
+components:
+  schemas:
+    MessageResponse:
+      type: object
+      properties:
+        message:
+          type: string
+          example: Welcome to ARO!
+      required:
+        - message
+
+    HealthResponse:
+      type: object
+      properties:
+        status:
+          type: string
+          example: healthy
+      required:
+        - status
+
+    EchoRequest:
+      type: object
+      properties:
+        message:
+          type: string
+      required:
+        - message
+
+    EchoResponse:
+      type: object
+      properties:
+        echo:
+          type: string
+      required:
+        - echo
