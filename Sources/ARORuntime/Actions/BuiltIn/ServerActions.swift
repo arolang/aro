@@ -103,13 +103,24 @@ public struct StartAction: ActionImplementation {
             port = 9000 // default
         }
 
+        // Try using the SocketServerService (interpreter mode with NIO)
         if let socketService = context.service(SocketServerService.self) {
             try await socketService.start(port: port)
             return ServerStartResult(serverType: "socket-server", success: true, port: port)
         }
 
+        // For compiled binaries, use the native socket server (BSD sockets)
+        #if !os(Windows)
+        let result = aro_native_socket_server_start(Int32(port))
+        if result == 0 {
+            return ServerStartResult(serverType: "socket-server", success: true, port: port)
+        } else {
+            throw ActionError.runtimeError("Failed to start socket server on port \(port)")
+        }
+        #else
         context.emit(SocketServerStartRequestedEvent(port: port))
         return ServerStartResult(serverType: "socket-server", success: true, port: port)
+        #endif
     }
 
     private func startFileMonitor(object: ObjectDescriptor, context: ExecutionContext) async throws -> any Sendable {
