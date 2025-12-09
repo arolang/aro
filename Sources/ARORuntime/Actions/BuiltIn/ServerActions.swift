@@ -274,16 +274,73 @@ public struct WatchAction: ActionImplementation {
             path = "."
         }
 
-        // Try file monitor service
+        // Try file monitor service (interpreter mode)
         if let fileMonitorService = context.service(FileMonitorService.self) {
             try await fileMonitorService.watch(path: path)
             return WatchResult(path: path, success: true)
         }
 
-        // Emit watch event
+        // For compiled binaries, use native file watcher
+        #if !os(Windows)
+        let started = NativeFileWatcher.shared.startWatching(path: path)
+        if started {
+            return WatchResult(path: path, success: true)
+        }
+        #endif
+
+        // Emit watch event as fallback
         context.emit(FileWatchStartedEvent(path: path))
 
         return WatchResult(path: path, success: true)
+    }
+}
+
+/// Native file watcher wrapper for compiled binaries
+public final class NativeFileWatcher: @unchecked Sendable {
+    public static let shared = NativeFileWatcher()
+
+    private let lock = NSLock()
+    private var watcherPtr: UnsafeMutableRawPointer?
+
+    private init() {}
+
+    /// Start watching a path
+    public func startWatching(path: String) -> Bool {
+        lock.lock()
+        defer { lock.unlock() }
+
+        // Stop any existing watcher
+        if let ptr = watcherPtr {
+            aro_file_watcher_stop(ptr)
+            aro_file_watcher_destroy(ptr)
+            watcherPtr = nil
+        }
+
+        // Create and start new watcher
+        guard let ptr = path.withCString({ aro_file_watcher_create($0) }) else {
+            return false
+        }
+
+        let result = aro_file_watcher_start(ptr)
+        if result == 0 {
+            watcherPtr = ptr
+            return true
+        } else {
+            aro_file_watcher_destroy(ptr)
+            return false
+        }
+    }
+
+    /// Stop watching
+    public func stopWatching() {
+        lock.lock()
+        defer { lock.unlock() }
+
+        if let ptr = watcherPtr {
+            aro_file_watcher_stop(ptr)
+            aro_file_watcher_destroy(ptr)
+            watcherPtr = nil
+        }
     }
 }
 
@@ -446,6 +503,10 @@ public final class ShutdownCoordinator: @unchecked Sendable {
     private var waiters: [UUID: () -> Void] = [:]
     private var isShuttingDown = false
 
+    /// Semaphore for synchronous waiting (used by compiled binaries)
+    private var syncSemaphore: DispatchSemaphore?
+    private var syncWaiterCount = 0
+
     private init() {}
 
     /// Check if already shutting down (synchronous helper)
@@ -475,7 +536,7 @@ public final class ShutdownCoordinator: @unchecked Sendable {
         return true // Should wait
     }
 
-    /// Wait for shutdown signal (blocks until signaled)
+    /// Wait for shutdown signal (blocks until signaled) - async version
     public func waitForShutdown() async {
         // Quick check before setting up continuation
         if checkShuttingDown() {
@@ -496,16 +557,63 @@ public final class ShutdownCoordinator: @unchecked Sendable {
         }
     }
 
+    /// Wait for shutdown signal synchronously (blocks the calling thread)
+    /// This is used by compiled binaries where async/await may not work correctly
+    /// Uses RunLoop to allow event processing (FSEvents, timers, etc.)
+    public func waitForShutdownSync() {
+        // Quick check before blocking
+        if checkShuttingDown() {
+            return
+        }
+
+        // Register as sync waiter
+        lock.lock()
+        if syncSemaphore == nil {
+            syncSemaphore = DispatchSemaphore(value: 0)
+        }
+        syncWaiterCount += 1
+        let sem = syncSemaphore!
+        lock.unlock()
+
+        // Run the RunLoop to allow event processing (FSEvents, dispatch queues, etc.)
+        // Check periodically if shutdown was signaled
+        while !isShuttingDownNow {
+            // Process events for a short time
+            let result = RunLoop.current.run(mode: .default, before: Date(timeIntervalSinceNow: 0.1))
+
+            // If RunLoop had no sources and exited, try with semaphore timeout
+            if !result {
+                // Try to acquire semaphore with timeout to allow checking shutdown flag
+                let waitResult = sem.wait(timeout: .now() + .milliseconds(100))
+                if waitResult == .success {
+                    // Semaphore was signaled
+                    break
+                }
+            }
+        }
+    }
+
     /// Signal shutdown to all waiting tasks
     public func signalShutdown() {
         lock.lock()
         isShuttingDown = true
         let waiting = waiters
         waiters.removeAll()
+        let syncCount = syncWaiterCount
+        let sem = syncSemaphore
+        syncWaiterCount = 0
         lock.unlock()
 
+        // Resume async waiters
         for (_, resume) in waiting {
             resume()
+        }
+
+        // Signal sync waiters
+        if let sem = sem {
+            for _ in 0..<syncCount {
+                sem.signal()
+            }
         }
     }
 
@@ -514,6 +622,8 @@ public final class ShutdownCoordinator: @unchecked Sendable {
         lock.lock()
         isShuttingDown = false
         waiters.removeAll()
+        syncWaiterCount = 0
+        syncSemaphore = nil
         lock.unlock()
     }
 }

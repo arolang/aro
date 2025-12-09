@@ -396,7 +396,28 @@ public func aro_action_keepalive(
     _ resultPtr: UnsafeRawPointer?,
     _ objectPtr: UnsafeRawPointer?
 ) -> UnsafeMutableRawPointer? {
-    return executeAction(verb: "keepalive", contextPtr: contextPtr, resultPtr: resultPtr, objectPtr: objectPtr)
+    guard let ctxHandle = getContext(contextPtr),
+          let result = resultPtr else { return nil }
+
+    let resultDesc = toResultDescriptor(result)
+
+    // Set up signal handling
+    KeepaliveSignalHandler.shared.setup()
+
+    // Enter wait state
+    ctxHandle.context.enterWaitState()
+
+    // Emit event
+    ctxHandle.context.emit(WaitStateEnteredEvent())
+
+    // Use synchronous wait - this properly blocks the current thread
+    // until SIGINT/SIGTERM is received
+    ShutdownCoordinator.shared.waitForShutdownSync()
+
+    // Return result
+    let waitResult = WaitResult(completed: true, reason: "shutdown")
+    ctxHandle.context.bind(resultDesc.base, value: waitResult)
+    return boxResult(waitResult)
 }
 
 // MARK: - External Service Actions
