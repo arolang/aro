@@ -396,7 +396,24 @@ public func aro_action_keepalive(
     _ resultPtr: UnsafeRawPointer?,
     _ objectPtr: UnsafeRawPointer?
 ) -> UnsafeMutableRawPointer? {
-    return executeAction(verb: "keepalive", contextPtr: contextPtr, resultPtr: resultPtr, objectPtr: objectPtr)
+    guard let ctxHandle = getContext(contextPtr) else { return nil }
+
+    // Reset shutdown state in case it was set from a previous run
+    ShutdownCoordinator.shared.reset()
+
+    // Set up signal handling for SIGINT/SIGTERM
+    KeepaliveSignalHandler.shared.setup()
+
+    // Enter wait state on the context
+    ctxHandle.context.enterWaitState()
+
+    // Use Thread.sleep in a loop to wait for shutdown signal
+    // This is more reliable than RunLoop which may exit without sources
+    while !ShutdownCoordinator.shared.isShuttingDownNow {
+        Thread.sleep(forTimeInterval: 0.1)
+    }
+    let result = WaitResult(completed: true, reason: "shutdown")
+    return boxResult(result)
 }
 
 // MARK: - External Service Actions
