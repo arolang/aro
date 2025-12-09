@@ -44,7 +44,7 @@ jobs:
         uses: actions/cache@v4
         with:
           path: .build
-          key: linux-swift-${{ env.SWIFT_VERSION }}-test-${{ hashFiles('Package.swift') }}
+          key: linux-swift-${{ env.SWIFT_VERSION }}-test-${{ hashFiles('Package.resolved') }}
 
       - name: Run tests
         run: swift test --parallel
@@ -66,7 +66,7 @@ jobs:
         uses: actions/cache@v4
         with:
           path: .build
-          key: linux-swift-${{ env.SWIFT_VERSION }}-v3-${{ hashFiles('Package.swift') }}
+          key: linux-swift-${{ env.SWIFT_VERSION }}-v3-${{ hashFiles('Package.resolved') }}
 
       - name: Build
         run: swift build -c debug
@@ -110,7 +110,7 @@ jobs:
         uses: actions/cache@v4
         with:
           path: .build
-          key: macos-swift-${{ env.SWIFT_VERSION }}-v4-${{ hashFiles('Package.swift') }}
+          key: macos-swift-${{ env.SWIFT_VERSION }}-v4-${{ hashFiles('Package.resolved') }}
 
       - name: Build
         run: swift build -c debug
