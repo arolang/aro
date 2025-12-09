@@ -177,7 +177,11 @@ public final class AROHTTPClient: HTTPClientService, @unchecked Sendable {
     }
 }
 
+#endif  // !os(Windows)
+
 // MARK: - HTTP Client Response
+// These types are available on all platforms (including Windows)
+// so that URLSessionHTTPClient can use them
 
 /// Response from HTTP client request
 public struct HTTPClientResponse: Sendable {
@@ -254,5 +258,3 @@ public struct HTTPClientErrorEvent: RuntimeEvent {
         self.error = error
     }
 }
-
-#endif  // !os(Windows)

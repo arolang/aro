@@ -351,16 +351,6 @@ public struct HTTPResponse: Sendable {
     public static let serverError = HTTPResponse(statusCode: 500)
 }
 
-/// HTTP Errors
-public enum HTTPError: Error, Sendable {
-    case noBody
-    case invalidJSON
-    case connectionFailed
-    case timeout
-    case serverError(Int)
-    case custom(String)
-}
-
 // MARK: - HTTP Server Events
 
 /// Event emitted when HTTP server starts
@@ -386,3 +376,16 @@ public struct HTTPServerStoppedEvent: RuntimeEvent {
 }
 
 #endif  // !os(Windows)
+
+// MARK: - HTTP Errors
+// Available on all platforms (including Windows)
+
+/// HTTP Errors
+public enum HTTPError: Error, Sendable {
+    case noBody
+    case invalidJSON
+    case connectionFailed
+    case timeout
+    case serverError(Int)
+    case custom(String)
+}

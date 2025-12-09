@@ -37,11 +37,11 @@ public final class AROAsyncRuntime: @unchecked Sendable {
     #if !os(Windows)
     /// NIO event loop group for async I/O
     private let eventLoopGroup: MultiThreadedEventLoopGroup
+    #endif
 
     /// Active task group for feature set executions
     private var activeTasks: [UUID: Task<Void, Never>] = [:]
     private let taskLock = NSLock()
-    #endif
 
     /// Shutdown flag
     private var isShuttingDown = false
