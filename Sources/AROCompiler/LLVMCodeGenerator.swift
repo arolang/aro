@@ -102,6 +102,7 @@ public final class LLVMCodeGenerator {
         emit("declare ptr @aro_context_create(ptr)")
         emit("declare ptr @aro_context_create_named(ptr, ptr)")
         emit("declare void @aro_context_destroy(ptr)")
+        emit("declare void @aro_context_print_response(ptr)")
         emit("declare i32 @aro_load_precompiled_plugins()")
         emit("")
 
@@ -1100,6 +1101,9 @@ public final class LLVMCodeGenerator {
         emit("ctx_ok:")
         // Execute Application-Start
         emit("  %result = call ptr @\(entryFuncName)(ptr %ctx)")
+
+        // Print the response (if any) before cleanup
+        emit("  call void @aro_context_print_response(ptr %ctx)")
 
         // Check if result needs to be freed
         emit("  %result_null = icmp eq ptr %result, null")

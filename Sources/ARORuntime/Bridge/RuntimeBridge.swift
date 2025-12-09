@@ -166,6 +166,20 @@ public func aro_context_destroy(_ contextPtr: UnsafeMutableRawPointer?) {
     Unmanaged<AROCContextHandle>.fromOpaque(ptr).release()
 }
 
+/// Print the response from the context (for compiled binaries)
+/// - Parameter contextPtr: Context handle
+@_cdecl("aro_context_print_response")
+public func aro_context_print_response(_ contextPtr: UnsafeMutableRawPointer?) {
+    guard let ptr = contextPtr else { return }
+
+    let contextHandle = Unmanaged<AROCContextHandle>.fromOpaque(ptr).takeUnretainedValue()
+
+    if let response = contextHandle.context.getResponse() {
+        // Use human-readable format for CLI output
+        print(response.format(for: .human))
+    }
+}
+
 // MARK: - Variable Binding
 
 /// Bind a string variable in the context
