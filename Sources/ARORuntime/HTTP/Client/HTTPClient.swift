@@ -3,9 +3,9 @@
 // ARO Runtime - HTTP Client (AsyncHTTPClient)
 // ============================================================
 
-#if !os(Windows)
-
 import Foundation
+
+#if !os(Windows)
 import AsyncHTTPClient
 import NIO
 import NIOHTTP1
