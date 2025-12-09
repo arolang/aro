@@ -6,6 +6,10 @@
 import Foundation
 import AROParser
 
+#if canImport(Darwin)
+import CoreFoundation
+#endif
+
 /// Extracts a value from a source object
 ///
 /// The Extract action is a REQUEST action that pulls data from an external
@@ -72,6 +76,37 @@ public struct ExtractAction: ActionImplementation {
             return array[index]
         }
 
+        // If source is a String, try to parse it as various formats
+        if let stringSource = source as? String {
+            if let value = extractFromString(stringSource, key: key) {
+                return value
+            }
+        }
+
+        // If source is a LogResult, try to extract from its message
+        if let logResult = source as? LogResult {
+            // First check if we want a property of LogResult itself
+            switch key {
+            case "message":
+                return logResult.message
+            case "target":
+                return logResult.target
+            default:
+                // Try to extract from the message content
+                if let value = extractFromString(logResult.message, key: key) {
+                    return value
+                }
+            }
+        }
+
+        // If source is Data, try to parse it as various formats
+        if let dataSource = source as? Data {
+            if let stringSource = String(data: dataSource, encoding: .utf8),
+               let value = extractFromString(stringSource, key: key) {
+                return value
+            }
+        }
+
         #if !os(Windows)
         // Handle SocketPacket properties
         if let packet = source as? SocketPacket {
@@ -81,7 +116,11 @@ public struct ExtractAction: ActionImplementation {
             case "connection", "connectionId":
                 return packet.connection
             default:
-                break
+                // Try to parse the packet data as string and extract from it
+                if let stringData = String(data: packet.data, encoding: .utf8),
+                   let value = extractFromString(stringData, key: key) {
+                    return value
+                }
             }
         }
 
@@ -112,6 +151,159 @@ public struct ExtractAction: ActionImplementation {
 
         // Return original source if key not found but exists
         throw ActionError.propertyNotFound(property: key, on: String(describing: type(of: source)))
+    }
+
+    /// Extract a value from a string that might be JSON, form data, or key-value format
+    private func extractFromString(_ source: String, key: String) -> (any Sendable)? {
+        let trimmed = source.trimmingCharacters(in: .whitespacesAndNewlines)
+
+        // Try JSON parsing first (most common for HTTP APIs)
+        if trimmed.hasPrefix("{") || trimmed.hasPrefix("[") {
+            if let jsonValue = extractFromJSON(trimmed, key: key) {
+                return jsonValue
+            }
+        }
+
+        // Try form-urlencoded format: key=value&key2=value2
+        if trimmed.contains("=") && !trimmed.contains(":") {
+            if let formValue = extractFromFormData(trimmed, key: key) {
+                return formValue
+            }
+        }
+
+        // Try key-value format: "key: value" or "key:value" (socket/text protocols)
+        if trimmed.contains(":") {
+            if let kvValue = extractFromKeyValue(trimmed, key: key) {
+                return kvValue
+            }
+        }
+
+        // Try simple "key value" format (space-separated)
+        if let simpleValue = extractFromSimpleFormat(trimmed, key: key) {
+            return simpleValue
+        }
+
+        return nil
+    }
+
+    /// Extract value from JSON string
+    private func extractFromJSON(_ jsonString: String, key: String) -> (any Sendable)? {
+        guard let data = jsonString.data(using: .utf8),
+              let parsed = try? JSONSerialization.jsonObject(with: data, options: []) else {
+            return nil
+        }
+
+        // Handle JSON object
+        if let dict = parsed as? [String: Any], let value = dict[key] {
+            return convertJSONValue(value)
+        }
+
+        // Handle JSON array with numeric key
+        if let array = parsed as? [Any], let index = Int(key), index >= 0, index < array.count {
+            return convertJSONValue(array[index])
+        }
+
+        return nil
+    }
+
+    /// Convert JSON value to Sendable
+    private func convertJSONValue(_ value: Any) -> any Sendable {
+        switch value {
+        case let str as String:
+            return str
+        case let num as NSNumber:
+            let objCType = String(cString: num.objCType)
+            #if canImport(Darwin)
+            // On Darwin, check if it's actually a boolean type (CFBoolean)
+            if CFGetTypeID(num) == CFBooleanGetTypeID() {
+                return num.boolValue
+            }
+            #else
+            // On Linux, NSNumber from JSON booleans have objCType "c" (char)
+            if objCType == "c" || objCType == "B" {
+                let intVal = num.intValue
+                if intVal == 0 || intVal == 1 {
+                    return num.boolValue
+                }
+            }
+            #endif
+            // Check if it's a double
+            if objCType == "d" || objCType == "f" {
+                return num.doubleValue
+            }
+            return num.intValue
+        case let dict as [String: Any]:
+            var result: [String: any Sendable] = [:]
+            for (k, v) in dict {
+                result[k] = convertJSONValue(v)
+            }
+            return result
+        case let array as [Any]:
+            return array.map { convertJSONValue($0) }
+        case let bool as Bool:
+            return bool
+        default:
+            return String(describing: value)
+        }
+    }
+
+    /// Extract value from form-urlencoded data: key=value&key2=value2
+    private func extractFromFormData(_ formData: String, key: String) -> (any Sendable)? {
+        let pairs = formData.split(separator: "&")
+        for pair in pairs {
+            let parts = pair.split(separator: "=", maxSplits: 1)
+            if parts.count == 2 {
+                let pairKey = String(parts[0]).trimmingCharacters(in: .whitespaces)
+                    .removingPercentEncoding ?? String(parts[0])
+                if pairKey == key {
+                    let value = String(parts[1]).trimmingCharacters(in: .whitespaces)
+                        .removingPercentEncoding ?? String(parts[1])
+                    return value
+                }
+            }
+        }
+        return nil
+    }
+
+    /// Extract value from key-value format: "key: value" or multiline "key: value\nkey2: value2"
+    private func extractFromKeyValue(_ kvString: String, key: String) -> (any Sendable)? {
+        // Handle multiline key-value
+        let lines = kvString.split(whereSeparator: { $0.isNewline })
+
+        for line in lines {
+            let parts = line.split(separator: ":", maxSplits: 1)
+            if parts.count == 2 {
+                let lineKey = String(parts[0]).trimmingCharacters(in: .whitespaces)
+                if lineKey.lowercased() == key.lowercased() {
+                    return String(parts[1]).trimmingCharacters(in: .whitespaces)
+                }
+            }
+        }
+
+        // Try single-line format: "key: value"
+        if lines.count == 1 {
+            let parts = kvString.split(separator: ":", maxSplits: 1)
+            if parts.count == 2 {
+                let lineKey = String(parts[0]).trimmingCharacters(in: .whitespaces)
+                if lineKey.lowercased() == key.lowercased() {
+                    return String(parts[1]).trimmingCharacters(in: .whitespaces)
+                }
+            }
+        }
+
+        return nil
+    }
+
+    /// Extract value from simple "command value" format (e.g., "say hello")
+    private func extractFromSimpleFormat(_ text: String, key: String) -> (any Sendable)? {
+        let parts = text.split(separator: " ", maxSplits: 1)
+        if parts.count == 2 {
+            let command = String(parts[0]).lowercased()
+            if command == key.lowercased() {
+                return String(parts[1]).trimmingCharacters(in: .whitespacesAndNewlines)
+            }
+        }
+        return nil
     }
 }
 
