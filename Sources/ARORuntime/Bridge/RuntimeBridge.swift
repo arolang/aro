@@ -9,6 +9,10 @@
 import Foundation
 import AROParser
 
+#if canImport(Darwin)
+import CoreFoundation
+#endif
+
 #if !os(Windows)
 import NIO
 #endif
@@ -333,15 +337,29 @@ private func convertToSendable(_ value: Any) -> any Sendable {
     switch value {
     case let str as String:
         return str
+    case let bool as Bool:
+        return bool
     // Check for actual CFBoolean type to distinguish from NSNumber integers
     // CFBoolean is a distinct type for true/false in JSON, NSNumber(1) is an integer
     case let nsNumber as NSNumber:
-        // Check if it's actually a boolean type (CFBoolean)
+        let objCType = String(cString: nsNumber.objCType)
+        #if canImport(Darwin)
+        // On Darwin, check if it's actually a boolean type (CFBoolean)
         if CFGetTypeID(nsNumber) == CFBooleanGetTypeID() {
             return nsNumber.boolValue
         }
+        #else
+        // On Linux, NSNumber from JSON booleans have objCType "c" (char)
+        // and values 0 or 1, but we can't reliably distinguish from small integers.
+        // Use objCType check: "c" with 0/1 suggests boolean, but this is heuristic.
+        if objCType == "c" || objCType == "B" {
+            let intVal = nsNumber.intValue
+            if intVal == 0 || intVal == 1 {
+                return nsNumber.boolValue
+            }
+        }
+        #endif
         // Check if it has a decimal point (is a double)
-        let objCType = String(cString: nsNumber.objCType)
         if objCType == "d" || objCType == "f" {
             return nsNumber.doubleValue
         }

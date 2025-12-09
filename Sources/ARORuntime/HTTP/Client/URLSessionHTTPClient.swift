@@ -8,6 +8,9 @@
 // binaries where NIO event loops may not be properly available.
 
 import Foundation
+#if canImport(FoundationNetworking)
+import FoundationNetworking
+#endif
 
 /// URLSession-based HTTP Client
 ///
