@@ -29,9 +29,31 @@ env:
 
 jobs:
   # ===========================================================================
+  # Run Tests (Gate for all builds)
+  # ===========================================================================
+  test:
+    name: Test
+    runs-on: ubuntu-latest
+    container:
+      image: swift:6.2-jammy
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v6
+
+      - name: Cache Swift packages
+        uses: actions/cache@v4
+        with:
+          path: .build
+          key: linux-swift-${{ env.SWIFT_VERSION }}-test-${{ hashFiles('Package.resolved') }}
+
+      - name: Run tests
+        run: swift test --parallel
+
+  # ===========================================================================
   # Linux Build & Test
   # ===========================================================================
   linux:
+    needs: test
     name: Linux
     runs-on: ubuntu-latest
     container:
@@ -72,6 +94,7 @@ jobs:
   # macOS Build & Test
   # ===========================================================================
   macos:
+    needs: test
     name: macOS
     runs-on: macos-15
     steps:
@@ -115,6 +138,7 @@ jobs:
   # Windows Build & Test
   # ===========================================================================
   windows:
+    needs: test
     name: Windows
     permissions:
       contents: read
