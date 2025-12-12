@@ -1,0 +1,267 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <title>Repositories - ARO Programming Language</title>
+{{head}}
+    <style>
+        .doc-page { padding: 120px 24px 80px; max-width: 900px; margin: 0 auto; }
+        .doc-header { margin-bottom: 48px; }
+        .doc-header h1 { font-size: clamp(2rem, 5vw, 3rem); font-weight: 700; margin-bottom: 16px; letter-spacing: -0.02em; }
+        .doc-header .lead { font-size: 1.25rem; color: var(--color-text-muted); line-height: 1.7; }
+        .doc-page h2 { font-size: 1.8rem; font-weight: 600; margin: 48px 0 16px; padding-top: 24px; border-top: 1px solid rgba(255, 255, 255, 0.1); }
+        .doc-page h3 { font-size: 1.3rem; font-weight: 600; margin: 32px 0 12px; color: var(--color-secondary); }
+        .doc-page p { font-size: 1.1rem; color: var(--color-text-muted); line-height: 1.8; margin-bottom: 16px; }
+        .doc-page code { font-family: var(--font-mono); background: var(--color-bg-alt); padding: 3px 8px; border-radius: 4px; font-size: 0.9rem; color: var(--color-secondary); }
+        .doc-page pre { background: var(--color-bg-alt); border-radius: var(--radius-md); padding: 24px; overflow-x: auto; margin: 24px 0; border: 1px solid rgba(255, 255, 255, 0.1); }
+        .doc-page pre code { background: none; padding: 0; font-size: 0.9rem; line-height: 1.7; color: var(--color-text); }
+        .doc-page ul, .doc-page ol { color: var(--color-text-muted); margin: 16px 0 16px 24px; line-height: 1.8; }
+        .doc-page li { margin-bottom: 8px; }
+        .doc-page strong { color: var(--color-text); }
+        .doc-page table { width: 100%; border-collapse: collapse; margin: 24px 0; }
+        .doc-page th, .doc-page td { padding: 12px 16px; text-align: left; border: 1px solid rgba(255, 255, 255, 0.1); }
+        .doc-page th { background: var(--color-bg-alt); font-weight: 600; color: var(--color-text); }
+        .doc-page td { color: var(--color-text-muted); }
+        .highlight-box { background: rgba(124, 58, 237, 0.1); border: 1px solid rgba(124, 58, 237, 0.3); border-radius: var(--radius-md); padding: 24px; margin: 32px 0; }
+        .highlight-box h4 { color: var(--color-primary); font-size: 1.1rem; margin-bottom: 12px; }
+        .highlight-box p { margin-bottom: 0; }
+        .back-link { display: inline-flex; align-items: center; gap: 8px; color: var(--color-text-muted); text-decoration: none; font-size: 0.95rem; margin-bottom: 24px; transition: color 0.2s; }
+        .back-link:hover { color: var(--color-primary); }
+        .code-comment { color: #6b7280; }
+        .code-keyword { color: #7c3aed; font-weight: 600; }
+        .code-string { color: #10b981; }
+        .code-feature { color: #f472b6; }
+        .code-result { color: #06b6d4; }
+    </style>
+</head>
+<body>
+    <nav class="nav">
+        <div class="nav-content">
+            <a href="/aro/" class="logo"><span class="logo-aro">ARO</span></a>
+            <div class="nav-links">
+                <a href="../fdd.html">The FDD Story</a>
+                <a href="../getting-started.html">Get Started</a>
+                <a href="../docs.html" style="color: var(--color-text);">Docs</a>
+                <a href="../disclaimer.html">Motivation</a>
+                <a href="https://github.com/KrisSimon/aro" class="nav-github">
+                    <svg viewBox="0 0 16 16" fill="currentColor"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z"/></svg>
+                    <span class="github-stars">
+                        <svg viewBox="0 0 16 16"><path d="M8 .25a.75.75 0 01.673.418l1.882 3.815 4.21.612a.75.75 0 01.416 1.279l-3.046 2.97.719 4.192a.75.75 0 01-1.088.791L8 12.347l-3.766 1.98a.75.75 0 01-1.088-.79l.72-4.194L.818 6.374a.75.75 0 01.416-1.28l4.21-.611L7.327.668A.75.75 0 018 .25z"/></svg>
+                        <span class="github-stars-count"></span>
+                    </span>
+                </a>
+            </div>
+        </div>
+    </nav>
+
+    <main class="doc-page">
+        <a href="../docs.html" class="back-link">&#x2190; Back to Documentation</a>
+
+        <header class="doc-header">
+            <h1 class="gradient-text">Repositories</h1>
+            <p class="lead">
+                In-memory storage that persists across HTTP requests and event handlers.
+                Store, retrieve, and manage collections of data with simple actions.
+            </p>
+        </header>
+
+        <h2>What is a Repository?</h2>
+        <p>
+            A <strong>repository</strong> in ARO is an in-memory collection that persists for the
+            lifetime of your application. Unlike regular variables that exist only within a single
+            feature set execution, repositories maintain their data across multiple HTTP requests
+            and event handlers.
+        </p>
+
+        <p>
+            Repositories are identified by names ending in <code>-repository</code>. This naming
+            convention tells ARO to use persistent storage instead of ephemeral variable binding.
+        </p>
+
+        <div class="highlight-box">
+            <h4>Key Characteristics</h4>
+            <p>
+                <strong>Persistent:</strong> Data survives across requests<br>
+                <strong>Scoped:</strong> Isolated by business activity<br>
+                <strong>Thread-safe:</strong> Safe for concurrent access<br>
+                <strong>In-memory:</strong> Fast but not durable across restarts
+            </p>
+        </div>
+
+        <h2>Repository Operations</h2>
+
+        <h3>Store</h3>
+        <p>Add data to a repository using the <code>Store</code> action:</p>
+
+        <pre><code><span class="code-comment">(* Store a user object in the user-repository *)</span>
+<span class="code-keyword">&lt;Store&gt;</span> the <span class="code-result">&lt;user&gt;</span> into the &lt;user-repository&gt;.
+
+<span class="code-comment">(* Store a message *)</span>
+<span class="code-keyword">&lt;Store&gt;</span> the <span class="code-result">&lt;message&gt;</span> into the &lt;message-repository&gt;.</code></pre>
+
+        <p>
+            Each <code>Store</code> operation appends the value to the repository's collection.
+            Repositories act like append-only lists by default.
+        </p>
+
+        <h3>Retrieve</h3>
+        <p>Get data from a repository using the <code>Retrieve</code> action:</p>
+
+        <pre><code><span class="code-comment">(* Retrieve all users from the repository *)</span>
+<span class="code-keyword">&lt;Retrieve&gt;</span> the <span class="code-result">&lt;users&gt;</span> from the &lt;user-repository&gt;.
+
+<span class="code-comment">(* Retrieve the last stored message *)</span>
+<span class="code-keyword">&lt;Retrieve&gt;</span> the <span class="code-result">&lt;message&gt;</span> from the &lt;message-repository: last&gt;.
+
+<span class="code-comment">(* Retrieve the first stored message *)</span>
+<span class="code-keyword">&lt;Retrieve&gt;</span> the <span class="code-result">&lt;message&gt;</span> from the &lt;message-repository: first&gt;.</code></pre>
+
+        <h3>Specifiers</h3>
+        <p>
+            Use specifiers to retrieve specific items from a repository:
+        </p>
+
+        <table>
+            <thead>
+                <tr><th>Specifier</th><th>Description</th><th>Example</th></tr>
+            </thead>
+            <tbody>
+                <tr>
+                    <td><code>:last</code></td>
+                    <td>Get the most recently stored item</td>
+                    <td><code>&lt;message-repository: last&gt;</code></td>
+                </tr>
+                <tr>
+                    <td><code>:first</code></td>
+                    <td>Get the oldest stored item</td>
+                    <td><code>&lt;message-repository: first&gt;</code></td>
+                </tr>
+                <tr>
+                    <td><em>(none)</em></td>
+                    <td>Get all items as a list</td>
+                    <td><code>&lt;user-repository&gt;</code></td>
+                </tr>
+            </tbody>
+        </table>
+
+        <h3>Delete</h3>
+        <p>Remove data from a repository:</p>
+
+        <pre><code><span class="code-comment">(* Delete a specific user from the repository *)</span>
+<span class="code-keyword">&lt;Delete&gt;</span> the <span class="code-result">&lt;user&gt;</span> from the &lt;user-repository&gt;.
+
+<span class="code-comment">(* Clear all sessions for a user *)</span>
+<span class="code-keyword">&lt;Delete&gt;</span> the <span class="code-result">&lt;sessions&gt;</span> from the &lt;session-repository&gt;.</code></pre>
+
+        <h2>Complete Example</h2>
+        <p>
+            Here's a complete example showing a simple user service with repository storage:
+        </p>
+
+        <pre><code><span class="code-comment">(* List all users *)</span>
+<span class="code-feature">(listUsers: User API)</span> {
+    <span class="code-keyword">&lt;Retrieve&gt;</span> the <span class="code-result">&lt;users&gt;</span> from the &lt;user-repository&gt;.
+    <span class="code-keyword">&lt;Return&gt;</span> an <span class="code-result">&lt;OK: status&gt;</span> with &lt;users&gt;.
+}
+
+<span class="code-comment">(* Create a new user *)</span>
+<span class="code-feature">(createUser: User API)</span> {
+    <span class="code-keyword">&lt;Extract&gt;</span> the <span class="code-result">&lt;user-data&gt;</span> from the &lt;request: body&gt;.
+    <span class="code-keyword">&lt;Create&gt;</span> the <span class="code-result">&lt;user&gt;</span> with &lt;user-data&gt;.
+    <span class="code-keyword">&lt;Store&gt;</span> the &lt;user&gt; into the &lt;user-repository&gt;.
+    <span class="code-keyword">&lt;Return&gt;</span> a <span class="code-result">&lt;Created: status&gt;</span> with &lt;user&gt;.
+}
+
+<span class="code-comment">(* Delete a user *)</span>
+<span class="code-feature">(deleteUser: User API)</span> {
+    <span class="code-keyword">&lt;Extract&gt;</span> the <span class="code-result">&lt;user-id&gt;</span> from the &lt;pathParameters: id&gt;.
+    <span class="code-keyword">&lt;Delete&gt;</span> the <span class="code-result">&lt;user&gt;</span> from the &lt;user-repository&gt;.
+    <span class="code-keyword">&lt;Return&gt;</span> a <span class="code-result">&lt;NoContent: status&gt;</span> for the &lt;deletion&gt;.
+}</code></pre>
+
+        <h2>Chat Application Example</h2>
+        <p>
+            Repositories are great for real-time applications. Here's how to use them in a chat app:
+        </p>
+
+        <pre><code><span class="code-comment">(* GET /status - Return the last posted message *)</span>
+<span class="code-feature">(getStatus: Simple Chat API)</span> {
+    <span class="code-keyword">&lt;Retrieve&gt;</span> the <span class="code-result">&lt;message&gt;</span> from the &lt;message-repository: last&gt;.
+    <span class="code-keyword">&lt;Return&gt;</span> an <span class="code-result">&lt;OK: status&gt;</span> with { message: &lt;message&gt; }.
+}
+
+<span class="code-comment">(* POST /status - Store and broadcast a message *)</span>
+<span class="code-feature">(postStatus: Simple Chat API)</span> {
+    <span class="code-keyword">&lt;Extract&gt;</span> the <span class="code-result">&lt;message&gt;</span> from the &lt;body: message&gt;.
+    <span class="code-keyword">&lt;Store&gt;</span> the &lt;message&gt; into the &lt;message-repository&gt;.
+    <span class="code-keyword">&lt;Broadcast&gt;</span> the &lt;message&gt; to the &lt;socket-server&gt;.
+    <span class="code-keyword">&lt;Return&gt;</span> a <span class="code-result">&lt;Created: status&gt;</span> with { message: &lt;message&gt; }.
+}</code></pre>
+
+        <h2>Repository Naming Convention</h2>
+        <p>
+            Any variable name ending in <code>-repository</code> is automatically treated as
+            persistent storage:
+        </p>
+
+        <pre><code><span class="code-comment">(* These are repositories (persistent) *)</span>
+&lt;user-repository&gt;
+&lt;message-repository&gt;
+&lt;order-repository&gt;
+&lt;session-repository&gt;
+
+<span class="code-comment">(* These are regular variables (ephemeral) *)</span>
+&lt;user&gt;
+&lt;message&gt;
+&lt;order&gt;</code></pre>
+
+        <h2>Business Activity Scope</h2>
+        <p>
+            Repositories are scoped by <strong>business activity</strong> (the second part of a
+            feature set name). This means different parts of your application can have separate
+            repositories with the same name:
+        </p>
+
+        <pre><code><span class="code-comment">(* This user-repository is scoped to "User API" *)</span>
+<span class="code-feature">(listUsers: User API)</span> {
+    <span class="code-keyword">&lt;Retrieve&gt;</span> the <span class="code-result">&lt;users&gt;</span> from the &lt;user-repository&gt;.
+    ...
+}
+
+<span class="code-comment">(* This user-repository is scoped to "Admin API" - separate storage! *)</span>
+<span class="code-feature">(listAdminUsers: Admin API)</span> {
+    <span class="code-keyword">&lt;Retrieve&gt;</span> the <span class="code-result">&lt;users&gt;</span> from the &lt;user-repository&gt;.
+    ...
+}</code></pre>
+
+        <div class="highlight-box">
+            <h4>When to Use Repositories</h4>
+            <p>
+                <strong>Good for:</strong> Session data, caches, message queues, temporary collections,
+                prototyping, and testing.<br><br>
+                <strong>Not for:</strong> Production data that must survive restarts. Use a real
+                database for persistent storage.
+            </p>
+        </div>
+
+        <h2>Events</h2>
+        <p>
+            Repository operations emit events that other feature sets can handle:
+        </p>
+
+        <ul>
+            <li><code>data.stored</code> - Emitted when data is stored in a repository</li>
+            <li><code>data.deleted</code> - Emitted when data is deleted from a repository</li>
+        </ul>
+
+        <pre><code><span class="code-comment">(* Handle user creation events *)</span>
+<span class="code-feature">(Log User Created: DataStored Handler)</span> {
+    <span class="code-keyword">&lt;Extract&gt;</span> the <span class="code-result">&lt;repository&gt;</span> from the &lt;event: repository&gt;.
+    <span class="code-keyword">&lt;Log&gt;</span> the <span class="code-result">&lt;log-entry&gt;</span> with "Data stored in " + &lt;repository&gt;.
+    <span class="code-keyword">&lt;Return&gt;</span> an <span class="code-result">&lt;OK: status&gt;</span> for the &lt;logging&gt;.
+}</code></pre>
+
+    </main>
+
+{{footer}}
+</body>
+</html>
