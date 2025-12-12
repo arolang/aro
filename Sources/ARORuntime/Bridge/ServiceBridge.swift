@@ -2077,4 +2077,398 @@ public func aro_socket_destroy(_ socketPtr: UnsafeMutableRawPointer?) {
     Unmanaged<SocketHandle>.fromOpaque(ptr).release()
 }
 
+#else  // os(Windows)
+
+// ============================================================
+// Windows Stubs
+// ============================================================
+// These stub functions allow code to compile on Windows even though
+// the full native implementations are not yet available.
+
+// MARK: - File Watcher Stubs (Windows)
+
+/// Create a file watcher (Windows stub - not yet implemented)
+@_cdecl("aro_file_watcher_create")
+public func aro_file_watcher_create(_ path: UnsafePointer<CChar>?) -> UnsafeMutableRawPointer? {
+    print("[FileMonitor] File watching not yet supported on Windows")
+    return nil
+}
+
+/// Start watching for file changes (Windows stub)
+@_cdecl("aro_file_watcher_start")
+public func aro_file_watcher_start(_ watcherPtr: UnsafeMutableRawPointer?) -> Int32 {
+    return -1  // Not supported
+}
+
+/// Stop watching (Windows stub)
+@_cdecl("aro_file_watcher_stop")
+public func aro_file_watcher_stop(_ watcherPtr: UnsafeMutableRawPointer?) {
+    // No-op on Windows
+}
+
+/// Destroy file watcher (Windows stub)
+@_cdecl("aro_file_watcher_destroy")
+public func aro_file_watcher_destroy(_ watcherPtr: UnsafeMutableRawPointer?) {
+    // No-op on Windows
+}
+
+// MARK: - Native Socket Server Stubs (Windows)
+
+/// Start native socket server (Windows stub)
+@_cdecl("aro_native_socket_server_start")
+public func aro_native_socket_server_start(_ port: Int32) -> Int32 {
+    print("[NativeSocketServer] Socket server not yet supported on Windows")
+    return -1
+}
+
+/// Stop native socket server (Windows stub)
+@_cdecl("aro_native_socket_server_stop")
+public func aro_native_socket_server_stop() {
+    // No-op on Windows
+}
+
+/// Send data to a connection (Windows stub)
+@_cdecl("aro_native_socket_send")
+public func aro_native_socket_send(
+    _ connectionId: UnsafePointer<CChar>?,
+    _ data: UnsafePointer<UInt8>?,
+    _ length: Int
+) -> Int32 {
+    return -1  // Not supported
+}
+
+/// Broadcast data to all connections (Windows stub)
+@_cdecl("aro_native_socket_broadcast")
+public func aro_native_socket_broadcast(
+    _ data: UnsafePointer<UInt8>?,
+    _ length: Int
+) -> Int32 {
+    return -1  // Not supported
+}
+
+/// Broadcast data to all connections except sender (Windows stub)
+@_cdecl("aro_native_socket_broadcast_excluding")
+public func aro_native_socket_broadcast_excluding(
+    _ senderId: UnsafePointer<CChar>?,
+    _ data: UnsafePointer<UInt8>?,
+    _ length: Int
+) -> Int32 {
+    return -1  // Not supported
+}
+
+// MARK: - Native HTTP Server Stubs (Windows)
+
+/// Start native HTTP server (Windows stub)
+@_cdecl("aro_native_http_server_start")
+public func aro_native_http_server_start(_ port: Int32, _ contextPtr: UnsafeMutableRawPointer?) -> Int32 {
+    print("[NativeHTTPServer] HTTP server not yet supported on Windows")
+    return -1
+}
+
+/// Start native HTTP server with OpenAPI spec (Windows stub)
+@_cdecl("aro_native_http_server_start_with_openapi")
+public func aro_native_http_server_start_with_openapi(_ port: Int32, _ contextPtr: UnsafeMutableRawPointer?) -> Int32 {
+    print("[NativeHTTPServer] HTTP server not yet supported on Windows")
+    return -1
+}
+
+/// Stop native HTTP server (Windows stub)
+@_cdecl("aro_native_http_server_stop")
+public func aro_native_http_server_stop() {
+    // No-op on Windows
+}
+
+/// Register a route handler (Windows stub)
+@_cdecl("aro_http_register_route")
+public func aro_http_register_route(
+    _ method: UnsafePointer<CChar>?,
+    _ path: UnsafePointer<CChar>?,
+    _ operationId: UnsafePointer<CChar>?
+) {
+    // No-op on Windows
+}
+
+/// Set the embedded OpenAPI spec (Windows stub)
+@_cdecl("aro_set_embedded_openapi")
+public func aro_set_embedded_openapi(_ specPtr: UnsafePointer<CChar>?) {
+    // No-op on Windows
+}
+
+// MARK: - HTTP Client Stubs (Windows)
+
+/// Create an HTTP request (Windows stub)
+@_cdecl("aro_http_request_create")
+public func aro_http_request_create(_ url: UnsafePointer<CChar>?) -> UnsafeMutableRawPointer? {
+    return nil
+}
+
+/// Set request method (Windows stub)
+@_cdecl("aro_http_request_set_method")
+public func aro_http_request_set_method(
+    _ requestPtr: UnsafeMutableRawPointer?,
+    _ method: UnsafePointer<CChar>?
+) {
+    // No-op
+}
+
+/// Set request header (Windows stub)
+@_cdecl("aro_http_request_set_header")
+public func aro_http_request_set_header(
+    _ requestPtr: UnsafeMutableRawPointer?,
+    _ name: UnsafePointer<CChar>?,
+    _ value: UnsafePointer<CChar>?
+) {
+    // No-op
+}
+
+/// Set request body (Windows stub)
+@_cdecl("aro_http_request_set_body")
+public func aro_http_request_set_body(
+    _ requestPtr: UnsafeMutableRawPointer?,
+    _ body: UnsafePointer<UInt8>?,
+    _ length: Int
+) {
+    // No-op
+}
+
+/// Execute the HTTP request (Windows stub)
+@_cdecl("aro_http_request_execute")
+public func aro_http_request_execute(_ requestPtr: UnsafeMutableRawPointer?) -> UnsafeMutableRawPointer? {
+    return nil
+}
+
+/// Get response status code (Windows stub)
+@_cdecl("aro_http_response_status")
+public func aro_http_response_status(_ responsePtr: UnsafeMutableRawPointer?) -> Int32 {
+    return 0
+}
+
+/// Get response body (Windows stub)
+@_cdecl("aro_http_response_body")
+public func aro_http_response_body(
+    _ responsePtr: UnsafeMutableRawPointer?,
+    _ outLength: UnsafeMutablePointer<Int>?
+) -> UnsafePointer<UInt8>? {
+    outLength?.pointee = 0
+    return nil
+}
+
+/// Free HTTP request (Windows stub)
+@_cdecl("aro_http_request_destroy")
+public func aro_http_request_destroy(_ requestPtr: UnsafeMutableRawPointer?) {
+    // No-op
+}
+
+/// Free HTTP response (Windows stub)
+@_cdecl("aro_http_response_destroy")
+public func aro_http_response_destroy(_ responsePtr: UnsafeMutableRawPointer?) {
+    // No-op
+}
+
+// MARK: - HTTP Server Stubs (Windows)
+
+/// Create an HTTP server (Windows stub)
+@_cdecl("aro_http_server_create")
+public func aro_http_server_create(_ runtimePtr: UnsafeMutableRawPointer?) -> UnsafeMutableRawPointer? {
+    return nil
+}
+
+/// Start the HTTP server (Windows stub)
+@_cdecl("aro_http_server_start")
+public func aro_http_server_start(
+    _ serverPtr: UnsafeMutableRawPointer?,
+    _ host: UnsafePointer<CChar>?,
+    _ port: Int32
+) -> Int32 {
+    return -1
+}
+
+/// Stop the HTTP server (Windows stub)
+@_cdecl("aro_http_server_stop")
+public func aro_http_server_stop(_ serverPtr: UnsafeMutableRawPointer?) {
+    // No-op
+}
+
+/// Destroy the HTTP server (Windows stub)
+@_cdecl("aro_http_server_destroy")
+public func aro_http_server_destroy(_ serverPtr: UnsafeMutableRawPointer?) {
+    // No-op
+}
+
+/// Register a route handler (Windows stub)
+@_cdecl("aro_http_server_route")
+public func aro_http_server_route(
+    _ serverPtr: UnsafeMutableRawPointer?,
+    _ method: UnsafePointer<CChar>?,
+    _ path: UnsafePointer<CChar>?,
+    _ handler: (@convention(c) (UnsafeMutableRawPointer?, UnsafeMutableRawPointer?) -> UnsafeMutableRawPointer?)?
+) {
+    // No-op
+}
+
+// MARK: - File System Stubs (Windows)
+// Note: Basic file operations use Foundation and should work on Windows.
+// These stubs are for API consistency.
+
+/// Read a file (Windows - uses Foundation)
+@_cdecl("aro_file_read")
+public func aro_file_read(
+    _ path: UnsafePointer<CChar>?,
+    _ outLength: UnsafeMutablePointer<Int>?
+) -> UnsafeMutablePointer<CChar>? {
+    guard let pathStr = path.map({ String(cString: $0) }) else { return nil }
+
+    do {
+        let content = try String(contentsOfFile: pathStr, encoding: .utf8)
+        outLength?.pointee = content.utf8.count
+        return strdup(content)
+    } catch {
+        return nil
+    }
+}
+
+/// Write a file (Windows - uses Foundation)
+@_cdecl("aro_file_write")
+public func aro_file_write(
+    _ path: UnsafePointer<CChar>?,
+    _ content: UnsafePointer<CChar>?
+) -> Int32 {
+    guard let pathStr = path.map({ String(cString: $0) }),
+          let contentStr = content.map({ String(cString: $0) }) else { return -1 }
+
+    do {
+        try contentStr.write(toFile: pathStr, atomically: true, encoding: .utf8)
+        return 0
+    } catch {
+        return -1
+    }
+}
+
+/// Check if file exists (Windows - uses Foundation)
+@_cdecl("aro_file_exists")
+public func aro_file_exists(_ path: UnsafePointer<CChar>?) -> Int32 {
+    guard let pathStr = path.map({ String(cString: $0) }) else { return 0 }
+    return FileManager.default.fileExists(atPath: pathStr) ? 1 : 0
+}
+
+/// Delete a file (Windows - uses Foundation)
+@_cdecl("aro_file_delete")
+public func aro_file_delete(_ path: UnsafePointer<CChar>?) -> Int32 {
+    guard let pathStr = path.map({ String(cString: $0) }) else { return -1 }
+
+    do {
+        try FileManager.default.removeItem(atPath: pathStr)
+        return 0
+    } catch {
+        return -1
+    }
+}
+
+/// Create a directory (Windows - uses Foundation)
+@_cdecl("aro_directory_create")
+public func aro_directory_create(
+    _ path: UnsafePointer<CChar>?,
+    _ recursive: Int32
+) -> Int32 {
+    guard let pathStr = path.map({ String(cString: $0) }) else { return -1 }
+
+    do {
+        try FileManager.default.createDirectory(
+            atPath: pathStr,
+            withIntermediateDirectories: recursive != 0,
+            attributes: nil
+        )
+        return 0
+    } catch {
+        return -1
+    }
+}
+
+/// List directory contents (Windows - uses Foundation)
+@_cdecl("aro_directory_list")
+public func aro_directory_list(
+    _ path: UnsafePointer<CChar>?,
+    _ outCount: UnsafeMutablePointer<Int>?
+) -> UnsafeMutablePointer<UnsafeMutablePointer<CChar>?>? {
+    guard let pathStr = path.map({ String(cString: $0) }) else { return nil }
+
+    do {
+        let entries = try FileManager.default.contentsOfDirectory(atPath: pathStr)
+        outCount?.pointee = entries.count
+
+        let result = UnsafeMutablePointer<UnsafeMutablePointer<CChar>?>.allocate(capacity: entries.count)
+        for (i, entry) in entries.enumerated() {
+            result[i] = strdup(entry)
+        }
+        return result
+    } catch {
+        return nil
+    }
+}
+
+// MARK: - Socket Stubs (Windows)
+
+/// Create a TCP server socket (Windows stub)
+@_cdecl("aro_socket_server_create")
+public func aro_socket_server_create(
+    _ host: UnsafePointer<CChar>?,
+    _ port: Int32
+) -> UnsafeMutableRawPointer? {
+    return nil
+}
+
+/// Create a TCP client socket (Windows stub)
+@_cdecl("aro_socket_client_create")
+public func aro_socket_client_create() -> UnsafeMutableRawPointer? {
+    return nil
+}
+
+/// Connect client to server (Windows stub)
+@_cdecl("aro_socket_connect")
+public func aro_socket_connect(
+    _ socketPtr: UnsafeMutableRawPointer?,
+    _ host: UnsafePointer<CChar>?,
+    _ port: Int32
+) -> Int32 {
+    return -1
+}
+
+/// Start listening (Windows stub)
+@_cdecl("aro_socket_listen")
+public func aro_socket_listen(_ socketPtr: UnsafeMutableRawPointer?) -> Int32 {
+    return -1
+}
+
+/// Send data on socket (Windows stub)
+@_cdecl("aro_socket_send")
+public func aro_socket_send(
+    _ socketPtr: UnsafeMutableRawPointer?,
+    _ data: UnsafePointer<UInt8>?,
+    _ length: Int
+) -> Int {
+    return -1
+}
+
+/// Receive data from socket (Windows stub)
+@_cdecl("aro_socket_recv")
+public func aro_socket_recv(
+    _ socketPtr: UnsafeMutableRawPointer?,
+    _ buffer: UnsafeMutablePointer<UInt8>?,
+    _ maxLength: Int
+) -> Int {
+    return -1
+}
+
+/// Close socket (Windows stub)
+@_cdecl("aro_socket_close")
+public func aro_socket_close(_ socketPtr: UnsafeMutableRawPointer?) {
+    // No-op
+}
+
+/// Destroy socket (Windows stub)
+@_cdecl("aro_socket_destroy")
+public func aro_socket_destroy(_ socketPtr: UnsafeMutableRawPointer?) {
+    // No-op
+}
+
 #endif  // !os(Windows)
