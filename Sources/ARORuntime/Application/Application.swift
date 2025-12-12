@@ -63,6 +63,9 @@ public final class Application: @unchecked Sendable {
 
     /// Register default services for the runtime
     private func registerDefaultServices() {
+        // Register repository storage service for persistent in-memory storage
+        runtime.register(service: InMemoryRepositoryStorage.shared as RepositoryStorageService)
+
         #if !os(Windows)
         // Register file system service for file operations and monitoring
         let fileSystemService = AROFileSystemService(eventBus: .shared)
@@ -232,6 +235,9 @@ public final class Application: @unchecked Sendable {
             businessActivity: analyzedFeatureSet.featureSet.businessActivity,
             eventBus: .shared
         )
+
+        // Register repository storage service for persistent in-memory storage
+        context.register(InMemoryRepositoryStorage.shared as RepositoryStorageService)
 
         // Bind request data to context
         context.bind("request", value: [

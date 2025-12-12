@@ -1740,8 +1740,11 @@ public func aro_native_http_server_start(_ port: Int32, _ contextPtr: UnsafeMuta
                             bodyDict[k] = convertAnyToSendable(v)
                         }
                         requestDict["body"] = bodyDict
+                        // Also bind body directly for <Extract> the <x> from the <body: field>.
+                        ctxHandle.context.bind("body", value: bodyDict)
                     } else if let bodyStr = String(data: bodyData, encoding: .utf8) {
                         requestDict["body"] = bodyStr
+                        ctxHandle.context.bind("body", value: bodyStr)
                     }
                 }
 

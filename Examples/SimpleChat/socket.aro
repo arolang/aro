@@ -4,23 +4,10 @@
     <Log> the <connection: info> for the <console> with "Chat client connected".
 
     (* Send welcome message to the new client *)
-    <Create> the <welcome> with "Welcome to Simple Chat! Messages are broadcast to all clients.\n".
+    <Create> the <welcome> with "Welcome to Simple Chat! You will receive messages when posted via HTTP.\n".
     <Send> the <welcome> to the <client-id>.
 
     <Return> an <OK: status> for the <connection>.
-}
-
-(* Socket: Data received - broadcast to all clients *)
-(Handle Data Received: Socket Event Handler) {
-    <Extract> the <data> from the <packet: buffer>.
-    <Extract> the <sender> from the <packet: connection>.
-
-    (* Broadcast the message to ALL connected clients *)
-    <Broadcast> the <data> to the <socket-server>.
-
-    <Log> the <broadcast: done> for the <console> with "Message broadcast to all clients".
-
-    <Return> an <OK: status> for the <packet>.
 }
 
 (* Socket: Client disconnected *)

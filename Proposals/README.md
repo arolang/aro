@@ -116,6 +116,12 @@ This directory contains the complete language specification for ARO (Action Resu
 | [0024](ARO-0024-sockets.md) | Socket Communication | Draft | TCP server/client, bidirectional |
 | [0025](ARO-0025-action-extension-interface.md) | Action Extension Interface | Draft | Custom action development |
 
+### Data Persistence
+
+| Proposal | Title | Status | Description |
+|----------|-------|--------|-------------|
+| [0032](ARO-0032-repositories.md) | Repositories | Implemented | In-memory persistent storage scoped to business activity |
+
 ---
 
 ## Dependency Graph
@@ -148,7 +154,8 @@ This directory contains the complete language specification for ARO (Action Resu
  ├── 0022 HTTP Client
  ├── 0023 File System
  ├── 0024 Socket Communication
- └── 0025 Action Extension Interface
+ ├── 0025 Action Extension Interface
+ └── 0032 Repositories
 ```
 
 ---

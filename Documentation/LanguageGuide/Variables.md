@@ -296,6 +296,71 @@ Use `<Transform>` with `with` to create modified copies:
 (* user is still { name: "John", status: "pending" } *)
 ```
 
+## Repositories
+
+Repositories are special variables that persist across HTTP requests and event handlers within the same business activity. They provide in-memory storage for application state.
+
+### Repository Naming
+
+Repository names must end with `-repository`:
+
+```aro
+<message-repository>      (* Valid repository *)
+<user-repository>         (* Valid repository *)
+<order-repository>        (* Valid repository *)
+<messages>                (* NOT a repository - regular variable *)
+```
+
+### Storing Data
+
+Use `<Store>` to save data to a repository:
+
+```aro
+(POST /messages: Chat API) {
+    <Extract> the <message> from the <request: body>.
+    <Store> the <message> into the <message-repository>.
+    <Return> a <Created: status> with <message>.
+}
+```
+
+Data is appended to the repository as a list.
+
+### Retrieving Data
+
+Use `<Retrieve>` to fetch data from a repository:
+
+```aro
+(GET /messages: Chat API) {
+    <Retrieve> the <messages> from the <message-repository>.
+    <Return> an <OK: status> with <messages>.
+}
+```
+
+Returns all items in the repository, or an empty list if empty.
+
+### Business Activity Scoping
+
+Repositories are scoped to their business activity:
+
+```aro
+(* Both share "Chat API" - same repository *)
+(postMessage: Chat API) {
+    <Store> the <msg> into the <message-repository>.
+}
+
+(getMessages: Chat API) {
+    <Retrieve> the <msgs> from the <message-repository>.
+}
+
+(* Different activity - different repository! *)
+(logError: Logging API) {
+    (* This is a separate message-repository *)
+    <Store> the <error> into the <message-repository>.
+}
+```
+
+For more details, see [Repositories](repositories.html).
+
 ## Best Practices
 
 ### Descriptive Names

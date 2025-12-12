@@ -145,15 +145,24 @@ private func executeAction(
         context: ctxHandle.context
     )
 
-    // Bind result if we got one
+    // Check semantic role - response/export actions don't bind their results
+    // to avoid overwriting the variable they're outputting
+    let semanticRole = ActionSemanticRole.classify(verb: verb)
+    let shouldBindResult = semanticRole != .response && semanticRole != .export
+
+    // Bind result if we got one (and action type allows it)
     if let value = actionResult {
-        ctxHandle.context.bind(resultDesc.base, value: value)
+        if shouldBindResult {
+            ctxHandle.context.bind(resultDesc.base, value: value)
+        }
         return boxResult(value)
     }
 
     // Return empty string on failure
     let fallback = ""
-    ctxHandle.context.bind(resultDesc.base, value: fallback)
+    if shouldBindResult {
+        ctxHandle.context.bind(resultDesc.base, value: fallback)
+    }
     return boxResult(fallback)
 }
 
@@ -423,7 +432,7 @@ public func aro_action_broadcast(
     }
 
     let broadcastResult = BroadcastResult(success: count >= 0, clientCount: Int(count))
-    ctxHandle.context.bind(resultDesc.base, value: broadcastResult)
+    // Don't bind result - broadcast is a response action, shouldn't overwrite the source variable
     return boxResult(broadcastResult)
 }
 

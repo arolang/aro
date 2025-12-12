@@ -61,7 +61,7 @@ public struct ExtractAction: ActionImplementation {
     }
 
     private func extractProperty(from source: any Sendable, key: String) throws -> any Sendable {
-        // Try dictionary access
+        // Try dictionary access (any Sendable values)
         if let dict = source as? [String: any Sendable], let value = dict[key] {
             return value
         }
@@ -69,6 +69,23 @@ public struct ExtractAction: ActionImplementation {
         // Try string dictionary access
         if let dict = source as? [String: String], let value = dict[key] {
             return value
+        }
+
+        // Try generic dictionary access (handles type-erased dictionaries)
+        if let dict = source as? Dictionary<String, Any> {
+            if let value = dict[key] {
+                // Convert common types
+                if let str = value as? String {
+                    return str
+                } else if let num = value as? Int {
+                    return num
+                } else if let num = value as? Double {
+                    return num
+                } else if let b = value as? Bool {
+                    return b
+                }
+                return String(describing: value)
+            }
         }
 
         // Try array index access
@@ -308,6 +325,17 @@ public struct ExtractAction: ActionImplementation {
 }
 
 /// Retrieves data from a repository
+///
+/// When the source name ends with `-repository`, the data is retrieved from
+/// the RepositoryStorage service, which persists across HTTP requests
+/// within the same business activity.
+///
+/// ## Examples
+/// ```
+/// <Retrieve> the <messages> from the <message-repository>.
+/// <Retrieve> the <message> from the <message-repository: last>.
+/// <Retrieve> the <message> from the <message-repository: first>.
+/// ```
 public struct RetrieveAction: ActionImplementation {
     public static let role: ActionRole = .request
     public static let verbs: Set<String> = ["retrieve", "fetch", "load", "find"]
@@ -325,7 +353,47 @@ public struct RetrieveAction: ActionImplementation {
         // Get repository name
         let repoName = object.base
 
-        // Try to resolve as a variable (repositories are not directly supported yet)
+        // Check if this is a repository (ends with -repository)
+        if InMemoryRepositoryStorage.isRepositoryName(repoName) {
+            // Retrieve from repository storage service
+            let values: [any Sendable]
+            if let storage = context.service(RepositoryStorageService.self) {
+                values = await storage.retrieve(
+                    from: repoName,
+                    businessActivity: context.businessActivity
+                )
+            } else {
+                // Fallback to shared instance if service not registered
+                values = await InMemoryRepositoryStorage.shared.retrieve(
+                    from: repoName,
+                    businessActivity: context.businessActivity
+                )
+            }
+
+            // Check for specifiers like "first" or "last"
+            if let specifier = object.specifiers.first?.lowercased() {
+                switch specifier {
+                case "last":
+                    // Return last element or empty string if empty
+                    return values.last ?? ""
+                case "first":
+                    // Return first element or empty string if empty
+                    return values.first ?? ""
+                default:
+                    // Try numeric index
+                    if let index = Int(specifier), index >= 0, index < values.count {
+                        return values[index]
+                    }
+                    // Unknown specifier - return all values
+                    return values
+                }
+            }
+
+            // No specifier - return the list of values (empty list if repository is empty)
+            return values
+        }
+
+        // Try to resolve as a regular variable
         if let source = context.resolveAny(repoName) {
             return source
         }

@@ -445,7 +445,7 @@ public enum ActionSemanticRole: String, Sendable, CaseIterable {
         let lower = verb.lowercased()
         
         let requestVerbs = ["extract", "parse", "retrieve", "fetch", "read", "receive", "get", "load"]
-        let responseVerbs = ["return", "throw", "send", "emit", "respond", "output", "write"]
+        let responseVerbs = ["return", "throw", "send", "emit", "respond", "output", "write", "store", "save", "persist", "log", "print", "debug", "notify", "alert", "signal", "broadcast"]
         let exportVerbs = ["publish", "export", "expose", "share"]
         
         if requestVerbs.contains(lower) { return .request }

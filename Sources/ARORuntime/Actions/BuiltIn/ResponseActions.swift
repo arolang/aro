@@ -348,6 +348,15 @@ public struct LogAction: ActionImplementation {
 }
 
 /// Stores data to a repository
+///
+/// When the target name ends with `-repository`, the data is stored in
+/// the RepositoryStorage service, which persists across HTTP requests
+/// within the same business activity.
+///
+/// ## Example
+/// ```
+/// <Store> the <message> into the <message-repository>.
+/// ```
 public struct StoreAction: ActionImplementation {
     public static let role: ActionRole = .response
     public static let verbs: Set<String> = ["store", "save", "persist"]
@@ -369,6 +378,25 @@ public struct StoreAction: ActionImplementation {
 
         // Get repository name
         let repoName = object.base
+
+        // Check if this is a repository (ends with -repository)
+        if InMemoryRepositoryStorage.isRepositoryName(repoName) {
+            // Store in repository storage service
+            if let storage = context.service(RepositoryStorageService.self) {
+                await storage.store(
+                    value: data,
+                    in: repoName,
+                    businessActivity: context.businessActivity
+                )
+            } else {
+                // Fallback to shared instance if service not registered
+                await InMemoryRepositoryStorage.shared.store(
+                    value: data,
+                    in: repoName,
+                    businessActivity: context.businessActivity
+                )
+            }
+        }
 
         // Emit store event
         context.emit(DataStoredEvent(repository: repoName, dataType: String(describing: type(of: data))))

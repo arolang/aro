@@ -1,2 +1,0 @@
-(* Event handlers - placeholder for future use *)
-(* Currently empty - event broadcasting requires runtime support for shared state *)

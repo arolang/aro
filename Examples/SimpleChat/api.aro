@@ -1,13 +1,19 @@
 (* GET /status - Return the last posted message *)
 (getStatus: Simple Chat API) {
-    <Retrieve> the <messages> from the <message-repository>.
-    <Return> an <OK: status> with { messages: <messages> }.
+    <Retrieve> the <message> from the <message-repository: last>.
+    <Return> an <OK: status> with { message: <message> }.
 }
 
-(* POST /status - Store the message and return it *)
+(* POST /status - Store the message and broadcast to socket clients *)
 (postStatus: Simple Chat API) {
-    <Extract> the <data> from the <request: body>.
-    <Extract> the <message> from the <data: message>.
+    (* body is pre-bound as parsed JSON dictionary *)
+    <Extract> the <message> from the <body: message>.
+
+    (* Store in repository *)
     <Store> the <message> into the <message-repository>.
-    <Return> a <Created: status> with { stored: <message> }.
+
+    (* Broadcast to all connected socket clients *)
+    <Broadcast> the <message> to the <socket-server>.
+
+    <Return> a <Created: status> with { message: <message> }.
 }
