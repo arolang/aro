@@ -239,12 +239,27 @@ public final class Application: @unchecked Sendable {
         // Register repository storage service for persistent in-memory storage
         context.register(InMemoryRepositoryStorage.shared as RepositoryStorageService)
 
+        // Parse JSON body if present
+        var bodyValue: any Sendable = request.bodyString ?? ""
+        if let body = request.body,
+           let contentType = request.headers["Content-Type"],
+           contentType.contains("application/json") {
+            if let json = try? JSONSerialization.jsonObject(with: body) as? [String: Any] {
+                // Convert to Sendable dictionary
+                var sendableDict: [String: any Sendable] = [:]
+                for (key, value) in json {
+                    sendableDict[key] = convertJSONValueToSendable(value)
+                }
+                bodyValue = sendableDict
+            }
+        }
+
         // Bind request data to context
         context.bind("request", value: [
             "method": request.method,
             "path": request.path,
             "headers": request.headers,
-            "body": request.bodyString ?? "",
+            "body": bodyValue,
             "queryParameters": request.queryParameters
         ] as [String: any Sendable])
 
@@ -254,28 +269,9 @@ public final class Application: @unchecked Sendable {
         // Bind query parameters
         context.bind("queryParameters", value: request.queryParameters)
 
-        // Parse JSON body if present
-        if let body = request.body,
-           let contentType = request.headers["Content-Type"],
-           contentType.contains("application/json") {
-            if let json = try? JSONSerialization.jsonObject(with: body) as? [String: Any] {
-                // Convert to Sendable dictionary
-                var sendableDict: [String: any Sendable] = [:]
-                for (key, value) in json {
-                    if let str = value as? String {
-                        sendableDict[key] = str
-                    } else if let num = value as? Int {
-                        sendableDict[key] = num
-                    } else if let num = value as? Double {
-                        sendableDict[key] = num
-                    } else if let bool = value as? Bool {
-                        sendableDict[key] = bool
-                    } else {
-                        sendableDict[key] = String(describing: value)
-                    }
-                }
-                context.bind("body", value: sendableDict)
-            }
+        // Also bind body directly for convenience
+        if let parsedBody = bodyValue as? [String: any Sendable] {
+            context.bind("body", value: parsedBody)
         }
 
         // Create executor and run
@@ -376,6 +372,25 @@ public final class Application: @unchecked Sendable {
     #endif
 
     // MARK: - Private
+
+    /// Convert a JSON value (Any) to Sendable, recursively handling nested structures
+    private func convertJSONValueToSendable(_ value: Any) -> any Sendable {
+        if let str = value as? String { return str }
+        if let num = value as? Int { return num }
+        if let num = value as? Double { return num }
+        if let bool = value as? Bool { return bool }
+        if let array = value as? [Any] {
+            return array.map { convertJSONValueToSendable($0) }
+        }
+        if let dict = value as? [String: Any] {
+            var result: [String: any Sendable] = [:]
+            for (k, v) in dict {
+                result[k] = convertJSONValueToSendable(v)
+            }
+            return result
+        }
+        return String(describing: value)
+    }
 
     private func mergedProgram() -> AnalyzedProgram? {
         guard !programs.isEmpty else { return nil }

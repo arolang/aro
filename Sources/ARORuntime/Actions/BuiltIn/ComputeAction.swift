@@ -316,6 +316,17 @@ public struct CreateAction: ActionImplementation {
         // Get the source value - this is what we're creating from
         // The source can be a literal, a variable, or structured data
         if let sourceValue = context.resolveAny(object.base) {
+            // Check if we're creating a typed entity (e.g., <order: Order>)
+            // In this case, we should generate an ID if not present
+            if !result.specifiers.isEmpty {
+                // Creating a typed entity - ensure it has an ID
+                if var dict = sourceValue as? [String: any Sendable] {
+                    if dict["id"] == nil {
+                        dict["id"] = generateEntityId()
+                    }
+                    return dict
+                }
+            }
             // Return the actual value directly - this gets bound to result.base
             // by the FeatureSetExecutor
             return sourceValue
@@ -324,13 +335,20 @@ public struct CreateAction: ActionImplementation {
         // If no source found, return empty string as default
         return ""
     }
+
+    /// Generate a unique entity ID
+    private func generateEntityId() -> String {
+        let timestamp = UInt64(Date().timeIntervalSince1970 * 1000)
+        let random = UInt32.random(in: 0..<UInt32.max)
+        return String(format: "%llx%08x", timestamp, random)
+    }
 }
 
 /// Updates an existing entity
 public struct UpdateAction: ActionImplementation {
     public static let role: ActionRole = .own
     public static let verbs: Set<String> = ["update", "modify", "change", "set"]
-    public static let validPrepositions: Set<Preposition> = [.with, .to, .for]
+    public static let validPrepositions: Set<Preposition> = [.with, .to, .for, .from]
 
     public init() {}
 
@@ -346,14 +364,95 @@ public struct UpdateAction: ActionImplementation {
             throw ActionError.undefinedVariable(result.base)
         }
 
-        // Get update data
-        guard let updates = context.resolveAny(object.base) else {
-            throw ActionError.undefinedVariable(object.base)
+        // Get update value - check _literal_ first (for "draft"), then resolve from object
+        let updateValue: any Sendable
+        if let literal = context.resolveAny("_literal_") {
+            updateValue = literal
+        } else if let resolved = context.resolveAny(object.base) {
+            // If object has specifiers, extract the nested property
+            if !object.specifiers.isEmpty {
+                if let dict = resolved as? [String: any Sendable] {
+                    // Extract nested property from the source object
+                    var current: any Sendable = dict
+                    for specifier in object.specifiers {
+                        if let currentDict = current as? [String: any Sendable],
+                           let nested = currentDict[specifier] {
+                            current = nested
+                        } else {
+                            throw ActionError.propertyNotFound(property: specifier, on: object.base)
+                        }
+                    }
+                    updateValue = current
+                } else {
+                    throw ActionError.propertyNotFound(property: object.specifiers.first ?? "", on: object.base)
+                }
+            } else {
+                updateValue = resolved
+            }
+        } else {
+            // Treat as literal value
+            updateValue = object.base
         }
 
-        // Perform update (simplified: just return the updates)
-        // The updates value is already `any Sendable` from resolveAny
-        return updates
+        // Check if we're updating a specific field (e.g., <order: status>)
+        if let fieldName = result.specifiers.first {
+            // Update specific field in the entity
+            var updatedEntity: [String: any Sendable]
+
+            if let dict = entity as? [String: any Sendable] {
+                updatedEntity = dict
+            } else if let dict = entity as? [String: Any] {
+                // Convert to Sendable dictionary
+                updatedEntity = [:]
+                for (key, value) in dict {
+                    updatedEntity[key] = convertToSendable(value)
+                }
+            } else {
+                // Create dictionary from entity using reflection
+                updatedEntity = [:]
+                let mirror = Mirror(reflecting: entity)
+                for child in mirror.children {
+                    if let label = child.label {
+                        updatedEntity[label] = convertToSendable(child.value)
+                    }
+                }
+            }
+
+            // Update the field
+            updatedEntity[fieldName] = updateValue
+
+            // Bind the updated entity back
+            context.bind(result.base, value: updatedEntity)
+            return updatedEntity
+        }
+
+        // No field specifier - merge updates into entity or replace
+        if let entityDict = entity as? [String: any Sendable],
+           let updateDict = updateValue as? [String: any Sendable] {
+            var merged = entityDict
+            for (key, value) in updateDict {
+                merged[key] = value
+            }
+            context.bind(result.base, value: merged)
+            return merged
+        }
+
+        // Fallback: return the update value
+        return updateValue
+    }
+
+    private func convertToSendable(_ value: Any) -> any Sendable {
+        if let s = value as? String { return s }
+        if let i = value as? Int { return i }
+        if let d = value as? Double { return d }
+        if let b = value as? Bool { return b }
+        if let arr = value as? [Any] { return arr.map { convertToSendable($0) } as [any Sendable] }
+        if let dict = value as? [String: Any] {
+            var result: [String: any Sendable] = [:]
+            for (k, v) in dict { result[k] = convertToSendable(v) }
+            return result
+        }
+        return String(describing: value)
     }
 }
 

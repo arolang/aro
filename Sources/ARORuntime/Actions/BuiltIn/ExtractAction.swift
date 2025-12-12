@@ -355,19 +355,43 @@ public struct RetrieveAction: ActionImplementation {
 
         // Check if this is a repository (ends with -repository)
         if InMemoryRepositoryStorage.isRepositoryName(repoName) {
+            // Check for where clause (bound by FeatureSetExecutor)
+            let whereField: String? = context.resolve("_where_field_")
+            let whereValue = context.resolveAny("_where_value_")
+
             // Retrieve from repository storage service
-            let values: [any Sendable]
+            var values: [any Sendable]
             if let storage = context.service(RepositoryStorageService.self) {
-                values = await storage.retrieve(
-                    from: repoName,
-                    businessActivity: context.businessActivity
-                )
+                if let field = whereField, let matchValue = whereValue {
+                    // Filtered retrieval with where clause
+                    values = await storage.retrieve(
+                        from: repoName,
+                        businessActivity: context.businessActivity,
+                        where: field,
+                        equals: matchValue
+                    )
+                } else {
+                    // Retrieve all
+                    values = await storage.retrieve(
+                        from: repoName,
+                        businessActivity: context.businessActivity
+                    )
+                }
             } else {
                 // Fallback to shared instance if service not registered
-                values = await InMemoryRepositoryStorage.shared.retrieve(
-                    from: repoName,
-                    businessActivity: context.businessActivity
-                )
+                if let field = whereField, let matchValue = whereValue {
+                    values = await InMemoryRepositoryStorage.shared.retrieve(
+                        from: repoName,
+                        businessActivity: context.businessActivity,
+                        where: field,
+                        equals: matchValue
+                    )
+                } else {
+                    values = await InMemoryRepositoryStorage.shared.retrieve(
+                        from: repoName,
+                        businessActivity: context.businessActivity
+                    )
+                }
             }
 
             // Check for specifiers like "first" or "last"
@@ -387,6 +411,12 @@ public struct RetrieveAction: ActionImplementation {
                     // Unknown specifier - return all values
                     return values
                 }
+            }
+
+            // If where clause was used and we got exactly one result, return it directly
+            // (not as an array) since we're looking for a specific entity
+            if whereField != nil && values.count == 1 {
+                return values[0]
             }
 
             // No specifier - return the list of values (empty list if repository is empty)

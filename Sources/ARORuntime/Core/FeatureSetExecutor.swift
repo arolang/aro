@@ -190,10 +190,18 @@ public final class FeatureSetExecutor: @unchecked Sendable {
             // NOTE: We only do early return for simple assignment actions, NOT for
             // comparison/assertion actions like Then/Assert that need to run.
             if statement.object.noun.base == "_expression_" {
-                // Check if the action needs to be executed (e.g., Then, Assert for testing)
-                // These actions need to compare values, not just bind them
+                // Check if the action needs to be executed
+                // These actions need to run even with expression shortcut:
+                // - "then", "assert" for testing
+                // - "update", "modify", "change", "set" when they have specifiers (field-level updates)
+                // - "create", "make", "build" when they have specifiers (typed entities need ID generation)
                 let testVerbs: Set<String> = ["then", "assert"]
-                if !testVerbs.contains(verb.lowercased()) {
+                let updateVerbs: Set<String> = ["update", "modify", "change", "set"]
+                let createVerbs: Set<String> = ["create", "make", "build", "construct"]
+                let needsExecution = testVerbs.contains(verb.lowercased()) ||
+                    (updateVerbs.contains(verb.lowercased()) && !resultDescriptor.specifiers.isEmpty) ||
+                    (createVerbs.contains(verb.lowercased()) && !resultDescriptor.specifiers.isEmpty)
+                if !needsExecution {
                     context.bind(resultDescriptor.base, value: expressionValue)
 
                     // Still need to get the action for side effects (like Return, Log, etc.)

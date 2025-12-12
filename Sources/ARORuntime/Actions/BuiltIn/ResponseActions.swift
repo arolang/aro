@@ -43,6 +43,15 @@ public struct ReturnAction: ActionImplementation {
                 for (key, value) in dict {
                     flattenValue(value, into: &data, prefix: key, context: context)
                 }
+            } else if let array = expr as? [any Sendable] {
+                // Array value - serialize to JSON
+                let jsonArray = array.map { convertSendableToJSON($0) }
+                if let jsonData = try? JSONSerialization.data(withJSONObject: jsonArray),
+                   let jsonString = String(data: jsonData, encoding: .utf8) {
+                    data["data"] = AnySendable(jsonString)
+                } else {
+                    data["data"] = AnySendable("[]")
+                }
             } else if let str = expr as? String {
                 // Simple variable that contains a JSON string - try to parse it
                 if let jsonData = str.data(using: .utf8),
@@ -125,9 +134,14 @@ public struct ReturnAction: ActionImplementation {
                 flattenValue(nestedValue, into: &data, prefix: nestedPrefix, context: context)
             }
         case let array as [any Sendable]:
-            // Arrays become comma-separated values
-            let items = array.map { formatArrayItem($0, context: context) }
-            data[prefix] = AnySendable(items.joined(separator: ", "))
+            // Arrays are serialized as JSON strings
+            let jsonArray = array.map { convertSendableToJSON($0) }
+            if let jsonData = try? JSONSerialization.data(withJSONObject: jsonArray),
+               let jsonString = String(data: jsonData, encoding: .utf8) {
+                data[prefix] = AnySendable(jsonString)
+            } else {
+                data[prefix] = AnySendable("[]")
+            }
         default:
             data[prefix] = AnySendable(String(describing: value))
         }
@@ -147,6 +161,30 @@ public struct ReturnAction: ActionImplementation {
             return String(double)
         case let bool as Bool:
             return bool ? "true" : "false"
+        default:
+            return String(describing: value)
+        }
+    }
+
+    /// Convert a Sendable value to a JSON-compatible type
+    private func convertSendableToJSON(_ value: any Sendable) -> Any {
+        switch value {
+        case let str as String:
+            return str
+        case let int as Int:
+            return int
+        case let double as Double:
+            return double
+        case let bool as Bool:
+            return bool
+        case let dict as [String: any Sendable]:
+            var result: [String: Any] = [:]
+            for (k, v) in dict {
+                result[k] = convertSendableToJSON(v)
+            }
+            return result
+        case let array as [any Sendable]:
+            return array.map { convertSendableToJSON($0) }
         default:
             return String(describing: value)
         }

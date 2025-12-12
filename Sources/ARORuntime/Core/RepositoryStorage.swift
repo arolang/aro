@@ -78,6 +78,28 @@ private actor RepositoryStorageActor {
         if storage[key] == nil {
             storage[key] = []
         }
+
+        // Check if value has an "id" field - if so, update existing entry with same id
+        if let dict = value as? [String: any Sendable],
+           let id = dict["id"] {
+            // Look for existing entry with same id
+            if let index = storage[key]?.firstIndex(where: { existing in
+                if let existingDict = existing as? [String: any Sendable],
+                   let existingId = existingDict["id"] {
+                    return isEqual(existingId, id)
+                }
+                return false
+            }) {
+                // Update existing entry
+                storage[key]?[index] = value
+                #if DEBUG
+                print("[RepositoryStorage] Updated value with id '\(id)' in '\(key.repository)' (activity: '\(key.businessActivity)')")
+                #endif
+                return
+            }
+        }
+
+        // No id or no matching entry - append new value
         storage[key]?.append(value)
 
         #if DEBUG
