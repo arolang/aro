@@ -74,6 +74,7 @@ public final class ActionRegistry: @unchecked Sendable {
 
         // EXPORT actions
         register(PublishAction.self)
+        register(EmitAction.self)
 
         // Server actions
         register(StartAction.self)

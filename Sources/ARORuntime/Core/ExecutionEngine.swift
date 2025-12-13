@@ -91,6 +91,9 @@ public final class ExecutionEngine: @unchecked Sendable {
         registerSocketEventHandlers(for: program, baseContext: context)
         #endif
 
+        // Wire up domain event handlers (e.g., "UserCreated Handler", "OrderPlaced Handler")
+        registerDomainEventHandlers(for: program, baseContext: context)
+
         // Execute entry point
         let executor = FeatureSetExecutor(
             actionRegistry: actionRegistry,
@@ -222,6 +225,96 @@ public final class ExecutionEngine: @unchecked Sendable {
         }
     }
     #endif
+
+    /// Register domain event handlers for feature sets with "Handler" business activity pattern
+    /// For example: "UserCreated Handler", "OrderPlaced Handler"
+    private func registerDomainEventHandlers(for program: AnalyzedProgram, baseContext: RuntimeContext) {
+        // Find all feature sets with "*Handler" business activity (but not Socket/File event handlers)
+        let domainHandlers = program.featureSets.filter { analyzedFS in
+            let activity = analyzedFS.featureSet.businessActivity
+            return activity.hasSuffix("Handler") &&
+                   !activity.contains("Socket Event Handler") &&
+                   !activity.contains("File") &&
+                   !activity.contains("Application-End")
+        }
+
+        print("[ExecutionEngine] Found \(domainHandlers.count) domain event handlers")
+
+        for analyzedFS in domainHandlers {
+            let activity = analyzedFS.featureSet.businessActivity
+
+            // Extract event type from business activity
+            // e.g., "UserCreated Handler" -> "UserCreated"
+            let eventType = activity
+                .replacingOccurrences(of: " Handler", with: "")
+                .trimmingCharacters(in: .whitespaces)
+
+            print("[ExecutionEngine] Registering domain handler: \(analyzedFS.featureSet.name) for event: \(eventType)")
+
+            // Subscribe to DomainEvent and filter by eventType
+            eventBus.subscribe(to: DomainEvent.self) { [weak self] event in
+                guard let self = self else { return }
+
+                // Only handle events that match this handler's event type
+                if event.domainEventType == eventType {
+                    print("[ExecutionEngine] DomainEvent '\(eventType)' received, triggering handler: \(analyzedFS.featureSet.name)")
+                    await self.executeDomainEventHandler(
+                        analyzedFS,
+                        program: program,
+                        baseContext: baseContext,
+                        event: event
+                    )
+                }
+            }
+        }
+    }
+
+    /// Execute a domain event handler feature set
+    private func executeDomainEventHandler(
+        _ analyzedFS: AnalyzedFeatureSet,
+        program: AnalyzedProgram,
+        baseContext: RuntimeContext,
+        event: DomainEvent
+    ) async {
+        // Create child context for this event handler with its business activity
+        let handlerContext = RuntimeContext(
+            featureSetName: analyzedFS.featureSet.name,
+            businessActivity: analyzedFS.featureSet.businessActivity,
+            eventBus: eventBus,
+            parent: baseContext
+        )
+
+        // Bind event payload to context as "event" with nested access
+        // e.g., <Extract> the <user> from the <event: user>
+        handlerContext.bind("event", value: event.payload)
+
+        // Also bind payload keys directly for convenience
+        for (key, value) in event.payload {
+            handlerContext.bind("event:\(key)", value: value)
+        }
+
+        // Copy services from base context
+        services.registerAll(in: handlerContext)
+
+        // Execute the handler
+        let executor = FeatureSetExecutor(
+            actionRegistry: actionRegistry,
+            eventBus: eventBus,
+            globalSymbols: globalSymbols
+        )
+
+        do {
+            _ = try await executor.execute(analyzedFS, context: handlerContext)
+            print("[ExecutionEngine] Domain handler '\(analyzedFS.featureSet.name)' completed successfully")
+        } catch {
+            print("[ExecutionEngine] Domain handler '\(analyzedFS.featureSet.name)' failed: \(error)")
+            eventBus.publish(ErrorOccurredEvent(
+                error: String(describing: error),
+                context: analyzedFS.featureSet.name,
+                recoverable: true
+            ))
+        }
+    }
 
     /// Execute a specific feature set by name
     /// - Parameters:

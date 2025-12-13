@@ -11,14 +11,13 @@
 (* Get user by ID - matches operationId: getUser *)
 (getUser: User API) {
     <Extract> the <user-id> from the <pathParameters: id>.
-    <Retrieve> the <user> from the <user-repository>.
+    <Retrieve> the <user> from the <user-repository> where <id> is <user-id>.
     <Return> an <OK: status> with <user>.
 }
 
 (* Create user - matches operationId: createUser *)
 (createUser: User API) {
     <Extract> the <user-data> from the <request: body>.
-    <Validate> the <user-data> for the <CreateUserRequest: schema>.
 
     <Create> the <user> with <user-data>.
     <Store> the <user> into the <user-repository>.
@@ -34,20 +33,20 @@
     <Extract> the <user-id> from the <pathParameters: id>.
     <Extract> the <update-data> from the <request: body>.
 
-    <Retrieve> the <existing-user> from the <user-repository>.
-    <Merge> the <updated-user> from the <existing-user>.
-    <Store> the <updated-user> into the <user-repository>.
+    <Retrieve> the <existing-user> from the <user-repository> where <id> is <user-id>.
+    <Merge> the <existing-user> with <update-data>.
+    <Store> the <existing-user> into the <user-repository>.
 
     (* Emit update event *)
-    <Emit> a <UserUpdated: event> with <updated-user>.
+    <Emit> a <UserUpdated: event> with <existing-user>.
 
-    <Return> an <OK: status> with <updated-user>.
+    <Return> an <OK: status> with <existing-user>.
 }
 
 (* Delete user - matches operationId: deleteUser *)
 (deleteUser: User API) {
     <Extract> the <user-id> from the <pathParameters: id>.
-    <Delete> the <user> from the <user-repository>.
+    <Delete> the <user> from the <user-repository> where <id> is <user-id>.
 
     (* Emit deletion event *)
     <Emit> a <UserDeleted: event> with <user-id>.

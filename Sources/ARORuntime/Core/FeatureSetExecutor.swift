@@ -184,6 +184,12 @@ public final class FeatureSetExecutor: @unchecked Sendable {
             let expressionValue = try await expressionEvaluator.evaluate(expression, context: context)
             context.bind("_expression_", value: expressionValue)
 
+            // Store the original expression name if it's a simple variable reference
+            // This allows EmitAction to use the variable name as payload key
+            if let varRef = expression as? VariableRefExpression {
+                context.bind("_expression_name_", value: varRef.noun.base)
+            }
+
             // For expressions, directly bind the result to the expression value
             // This handles cases like: <Set> the <x> to 30 * 2.
             // or: <Compute> the <total> from <price> * <quantity>.

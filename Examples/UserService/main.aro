@@ -4,13 +4,17 @@
 (Application-Start: User Service) {
     <Log> the <startup: message> for the <console> with "Starting User Service...".
 
-    (* Initialize HTTP server on port 8080 *)
-    <Start> the <http-server> on <port> with 8080.
+    (* Start HTTP server from OpenAPI contract *)
+    <Start> the <http-server> for the <contract>.
 
-    (* Watch uploads directory for new files *)
-    <Watch> the <file-monitor> for the <directory> with "./uploads".
+    (* Watch the user files directory for external changes *)
+    <Watch> the <file-monitor> for the <directory> with "./data/users".
 
     <Log> the <ready: message> for the <console> with "User Service ready on port 8080".
+
+    (* Keep the application running until Ctrl+C *)
+    <Keepalive> the <application> for the <events>.
+
     <Return> an <OK: status> for the <startup>.
 }
 

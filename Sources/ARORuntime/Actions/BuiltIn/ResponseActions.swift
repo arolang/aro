@@ -253,8 +253,8 @@ public struct ThrowAction: ActionImplementation {
 /// Sends data to an external destination
 public struct SendAction: ActionImplementation {
     public static let role: ActionRole = .response
-    public static let verbs: Set<String> = ["send", "emit", "dispatch"]
-    public static let validPrepositions: Set<Preposition> = [.to, .via]
+    public static let verbs: Set<String> = ["send", "dispatch"]
+    public static let validPrepositions: Set<Preposition> = [.to, .via, .with]
 
     public init() {}
 
@@ -463,14 +463,26 @@ public struct WriteAction: ActionImplementation {
         if let value: String = context.resolve(result.base) {
             content = value
         } else if let value = context.resolveAny(result.base) {
-            content = String(describing: value)
+            // Try to serialize as JSON if it's a dictionary
+            if let dict = value as? [String: Any] {
+                if let jsonData = try? JSONSerialization.data(withJSONObject: dict, options: [.prettyPrinted, .sortedKeys]),
+                   let jsonString = String(data: jsonData, encoding: .utf8) {
+                    content = jsonString
+                } else {
+                    content = String(describing: value)
+                }
+            } else {
+                content = String(describing: value)
+            }
         } else {
             content = ""
         }
 
-        // Get file path
+        // Get file path - check specifiers first (e.g., <file: file-path>), then base
         let path: String
-        if let resolvedPath: String = context.resolve(object.base) {
+        if let specifier = object.specifiers.first, let resolvedPath: String = context.resolve(specifier) {
+            path = resolvedPath
+        } else if let resolvedPath: String = context.resolve(object.base) {
             path = resolvedPath
         } else {
             path = object.base
@@ -671,4 +683,99 @@ public struct NotificationSentEvent: RuntimeEvent {
         self.message = message
         self.target = target
     }
+}
+
+// MARK: - Domain Events
+
+/// A custom domain event emitted by ARO code
+/// The eventType is dynamically set based on the event name in the ARO statement
+public struct DomainEvent: RuntimeEvent {
+    /// The event type (e.g., "UserCreated", "OrderPlaced")
+    public let domainEventType: String
+
+    /// Static event type for routing - uses "domain.*" prefix
+    public static var eventType: String { "domain" }
+
+    /// Timestamp when the event occurred
+    public let timestamp: Date
+
+    /// The payload data attached to the event
+    public let payload: [String: any Sendable]
+
+    public init(eventType: String, payload: [String: any Sendable]) {
+        self.domainEventType = eventType
+        self.timestamp = Date()
+        self.payload = payload
+    }
+}
+
+/// Emits a domain event to trigger event handlers
+///
+/// The Emit action publishes custom domain events that can be handled
+/// by feature sets with matching "Handler" business activity.
+///
+/// ## Example
+/// ```
+/// <Emit> a <UserCreated: event> with <user>.
+/// ```
+/// This triggers feature sets with business activity "UserCreated Handler"
+public struct EmitAction: ActionImplementation {
+    public static let role: ActionRole = .export
+    public static let verbs: Set<String> = ["emit"]
+    public static let validPrepositions: Set<Preposition> = [.with, .to]
+
+    public init() {}
+
+    public func execute(
+        result: ResultDescriptor,
+        object: ObjectDescriptor,
+        context: ExecutionContext
+    ) async throws -> any Sendable {
+        try validatePreposition(object.preposition)
+
+        // Get event type from result (e.g., "UserCreated" from <UserCreated: event>)
+        let eventType = result.base
+
+        // Get payload data from object or literal
+        // Always wrap the value with the variable name as key
+        // e.g., <Emit> a <UserCreated: event> with <user> -> payload: {"user": <user value>}
+        var payload: [String: any Sendable] = [:]
+
+        // Determine the key name for the payload
+        // If we have _expression_name_, use it (for variable references like <user>)
+        // Otherwise fall back to object.base
+        let payloadKey: String
+        if let expressionName: String = context.resolve("_expression_name_") {
+            payloadKey = expressionName
+        } else if object.base != "_expression_" {
+            payloadKey = object.base
+        } else {
+            payloadKey = "data" // Default fallback
+        }
+
+        // Check for literal value first (from "with" clause)
+        if let literalValue = context.resolveAny("_literal_") {
+            payload[payloadKey] = literalValue
+        } else if let payloadValue = context.resolveAny(object.base) {
+            // Named variable payload - wrap with the payload key
+            // This allows handlers to extract with: <Extract> the <user> from the <event: user>
+            payload[payloadKey] = payloadValue
+        }
+
+        // Create and emit the domain event
+        let event = DomainEvent(eventType: eventType, payload: payload)
+
+        print("[EmitAction] Emitting domain event: \(eventType) with payload: \(payload)")
+
+        // Emit to event bus
+        context.emit(event)
+
+        return EmitResult(eventType: eventType, success: true)
+    }
+}
+
+/// Result of an emit operation
+public struct EmitResult: Sendable, Equatable {
+    public let eventType: String
+    public let success: Bool
 }

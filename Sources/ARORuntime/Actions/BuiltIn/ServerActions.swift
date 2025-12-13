@@ -18,7 +18,7 @@ import AROParser
 public struct StartAction: ActionImplementation {
     public static let role: ActionRole = .own
     public static let verbs: Set<String> = ["start", "initialize", "boot"]
-    public static let validPrepositions: Set<Preposition> = [.with, .on]
+    public static let validPrepositions: Set<Preposition> = [.with, .on, .for]
 
     public init() {}
 

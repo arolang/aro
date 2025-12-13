@@ -569,7 +569,7 @@ public struct SortAction: ActionImplementation {
 public struct MergeAction: ActionImplementation {
     public static let role: ActionRole = .own
     public static let verbs: Set<String> = ["merge", "combine", "join", "concat"]
-    public static let validPrepositions: Set<Preposition> = [.with, .into]
+    public static let validPrepositions: Set<Preposition> = [.with, .into, .from]
 
     public init() {}
 
