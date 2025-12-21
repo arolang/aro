@@ -418,22 +418,25 @@ public struct StoreAction: ActionImplementation {
         let repoName = object.base
 
         // Check if this is a repository (ends with -repository)
+        var storedData: any Sendable = data
         if InMemoryRepositoryStorage.isRepositoryName(repoName) {
             // Store in repository storage service
             if let storage = context.service(RepositoryStorageService.self) {
-                await storage.store(
+                storedData = await storage.store(
                     value: data,
                     in: repoName,
                     businessActivity: context.businessActivity
                 )
             } else {
                 // Fallback to shared instance if service not registered
-                await InMemoryRepositoryStorage.shared.store(
+                storedData = await InMemoryRepositoryStorage.shared.store(
                     value: data,
                     in: repoName,
                     businessActivity: context.businessActivity
                 )
             }
+            // Update the context variable with stored data (which includes auto-generated id)
+            context.bind(result.base, value: storedData)
         }
 
         // Emit store event
@@ -464,16 +467,7 @@ public struct WriteAction: ActionImplementation {
             content = value
         } else if let value = context.resolveAny(result.base) {
             // Try to serialize as JSON if it's a dictionary
-            if let dict = value as? [String: Any] {
-                if let jsonData = try? JSONSerialization.data(withJSONObject: dict, options: [.prettyPrinted, .sortedKeys]),
-                   let jsonString = String(data: jsonData, encoding: .utf8) {
-                    content = jsonString
-                } else {
-                    content = String(describing: value)
-                }
-            } else {
-                content = String(describing: value)
-            }
+            content = serializeToJSON(value)
         } else {
             content = ""
         }
@@ -495,6 +489,71 @@ public struct WriteAction: ActionImplementation {
         }
 
         throw ActionError.missingService("FileSystemService")
+    }
+
+    /// Serialize a value to JSON string, handling both [String: Any] and [String: any Sendable]
+    private func serializeToJSON(_ value: any Sendable) -> String {
+        // Try direct [String: Any] cast first (fastest path)
+        if let dict = value as? [String: Any] {
+            if let jsonData = try? JSONSerialization.data(withJSONObject: dict, options: [.prettyPrinted, .sortedKeys]),
+               let jsonString = String(data: jsonData, encoding: .utf8) {
+                return jsonString
+            }
+        }
+
+        // Handle [String: any Sendable] by converting to [String: Any]
+        if let sendableDict = value as? [String: any Sendable] {
+            let converted = convertToJSONSerializable(sendableDict)
+            if let jsonData = try? JSONSerialization.data(withJSONObject: converted, options: [.prettyPrinted, .sortedKeys]),
+               let jsonString = String(data: jsonData, encoding: .utf8) {
+                return jsonString
+            }
+        }
+
+        // Handle arrays
+        if let array = value as? [any Sendable] {
+            let converted = array.map { convertValueToJSONSerializable($0) }
+            if let jsonData = try? JSONSerialization.data(withJSONObject: converted, options: [.prettyPrinted, .sortedKeys]),
+               let jsonString = String(data: jsonData, encoding: .utf8) {
+                return jsonString
+            }
+        }
+
+        // Fallback to string description
+        return String(describing: value)
+    }
+
+    /// Convert [String: any Sendable] to [String: Any] for JSON serialization
+    private func convertToJSONSerializable(_ dict: [String: any Sendable]) -> [String: Any] {
+        var result: [String: Any] = [:]
+        for (key, value) in dict {
+            result[key] = convertValueToJSONSerializable(value)
+        }
+        return result
+    }
+
+    /// Convert a single Sendable value to a JSON-serializable value
+    private func convertValueToJSONSerializable(_ value: any Sendable) -> Any {
+        switch value {
+        case let str as String:
+            return str
+        case let int as Int:
+            return int
+        case let double as Double:
+            return double
+        case let bool as Bool:
+            return bool
+        case let dict as [String: any Sendable]:
+            return convertToJSONSerializable(dict)
+        case let dict as [String: Any]:
+            return dict
+        case let array as [any Sendable]:
+            return array.map { convertValueToJSONSerializable($0) }
+        case let array as [Any]:
+            return array
+        default:
+            return String(describing: value)
+        }
     }
 }
 

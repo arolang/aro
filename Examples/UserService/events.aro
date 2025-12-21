@@ -1,14 +1,24 @@
 (* Event Handlers - Bidirectional User-File Sync *)
 (* User updates are written to files, file changes sync back to repository *)
 
-(* Handler 1: Log when a user is updated via API *)
+(* Handler 1: Write user data to file when created via API *)
+(Write New User File: UserCreated Handler) {
+    <Extract> the <user> from the <event: user>.
+    <Extract> the <name> from the <user: name>.
+    <Compute> the <file-path> from "./data/users/" ++ <name> ++ ".json".
+    <Write> the <user> to the <file: file-path>.
+    <Log> the <file-write: message> for the <console> with "New user file created".
+    <Return> an <OK: status> for the <file-write>.
+}
+
+(* Handler 2: Log when a user is updated via API *)
 (Log User Update: UserUpdated Handler) {
     <Extract> the <user> from the <event: existing-user>.
     <Log> the <audit: message> for the <console> with "User was updated".
     <Return> an <OK: status> for the <audit>.
 }
 
-(* Handler 2: Write user data to file when updated via API *)
+(* Handler 3: Write user data to file when updated via API *)
 (Write User File: UserUpdated Handler) {
     <Extract> the <user> from the <event: existing-user>.
     <Extract> the <name> from the <user: name>.
@@ -18,7 +28,7 @@
     <Return> an <OK: status> for the <file-write>.
 }
 
-(* Handler 3: Sync user data from file when file is externally modified *)
+(* Handler 4: Sync user data from file when file is externally modified *)
 (Handle File Modified: File Event Handler) {
     <Extract> the <path> from the <event: path>.
     <Read> the <content> from the <file: path>.
@@ -28,7 +38,7 @@
     <Return> an <OK: status> for the <sync>.
 }
 
-(* Handler 4: Delete user from repository when file is removed *)
+(* Handler 5: Delete user from repository when file is removed *)
 (Handle File Deleted: File Event Handler) {
     <Extract> the <path> from the <event: path>.
     <Extract> the <filename> from the <path: filename>.

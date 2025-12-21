@@ -23,7 +23,7 @@ Complete reference for all built-in actions in ARO.
 | **Filter** | OWN | Select matching elements | `<Filter> the <active> from the <users> where status = "active".` |
 | **Reduce** | OWN | Aggregate collection | `<Reduce> the <total> from the <items> with sum(<amount>).` |
 | **Sort** | OWN | Order collection | `<Sort> the <users> by <name>.` |
-| **Merge** | OWN | Combine data | `<Merge> the <combined> from <a> and <b>.` |
+| **Merge** | OWN | Combine data | `<Merge> the <existing-user> with <update-data>.` |
 | **Return** | RESPONSE | Return result | `<Return> an <OK: status> with <data>.` |
 | **Throw** | RESPONSE | Throw error | `<Throw> a <NotFound: error> for the <user>.` |
 | **Log** | EXPORT | Write to logs | `<Log> the <msg> for the <console> with "Done".` |
@@ -350,6 +350,43 @@ Sets configuration values.
 ```
 
 **Valid Prepositions:** `with`
+
+---
+
+### Merge
+
+Combines two data structures together. The source values are merged into the target, with source values overwriting target values for matching keys.
+
+**Syntax:**
+```aro
+<Merge> the <target> with <source>.
+<Merge> the <target> from <source>.
+```
+
+**Examples:**
+```aro
+(* Merge update data into existing entity *)
+<Retrieve> the <existing-user> from the <user-repository> where id = <id>.
+<Extract> the <update-data> from the <request: body>.
+<Merge> the <existing-user> with <update-data>.
+<Store> the <existing-user> into the <user-repository>.
+
+(* Combine configuration objects *)
+<Merge> the <defaults> with <overrides>.
+
+(* Concatenate arrays *)
+<Merge> the <all-items> with <new-items>.
+
+(* Concatenate strings *)
+<Merge> the <greeting> with <name>.
+```
+
+**Supported Types:**
+- **Dictionaries**: Source keys overwrite target keys; other target keys preserved
+- **Arrays**: Source elements appended to target array
+- **Strings**: Source string concatenated to target string
+
+**Valid Prepositions:** `with`, `into`, `from`
 
 ---
 
@@ -788,7 +825,7 @@ The `Keepalive` action blocks execution until a shutdown signal is received (SIG
 | Filter | OWN | from, where |
 | Reduce | OWN | from, with |
 | Sort | OWN | by |
-| Merge | OWN | from |
+| Merge | OWN | with, into, from |
 | Set | OWN | to |
 | Configure | OWN | with |
 | Return | RESPONSE | with, for |

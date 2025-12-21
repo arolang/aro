@@ -16,7 +16,9 @@ public protocol RepositoryStorageService: Sendable {
     ///   - value: The value to store
     ///   - repository: Repository name (must end with -repository)
     ///   - businessActivity: The business activity scope
-    func store(value: any Sendable, in repository: String, businessActivity: String) async
+    /// - Returns: The stored value (with auto-generated id if applicable)
+    @discardableResult
+    func store(value: any Sendable, in repository: String, businessActivity: String) async -> any Sendable
 
     /// Retrieve all values from a repository
     /// - Parameters:
@@ -60,9 +62,8 @@ public protocol RepositoryStorageService: Sendable {
     func clear(repository: String, businessActivity: String) async
 }
 
-/// Storage key combining business activity and repository name
+/// Storage key for repository name only (repositories are application-scoped)
 private struct StorageKey: Hashable, Sendable {
-    let businessActivity: String
     let repository: String
 }
 
@@ -74,15 +75,54 @@ private actor RepositoryStorageActor {
     /// Application-scope exported repositories
     private var applicationScope: [String: StorageKey] = [:]
 
-    func store(value: any Sendable, key: StorageKey) {
+    func store(value: any Sendable, key: StorageKey) -> any Sendable {
         if storage[key] == nil {
             storage[key] = []
         }
 
-        // Check if value has an "id" field - if so, update existing entry with same id
-        if let dict = value as? [String: any Sendable],
+        #if DEBUG
+        print("[RepositoryStorage] Storing value of type: \(type(of: value))")
+        #endif
+
+        // Handle dictionary values - ensure id exists and handle updates
+        var valueToStore = value
+        if var dict = value as? [String: any Sendable] {
+            // First, check if we can find an existing entry by "name" to preserve its "id"
+            if let name = dict["name"], dict["id"] == nil {
+                if let existingIndex = storage[key]?.firstIndex(where: { existing in
+                    if let existingDict = existing as? [String: any Sendable],
+                       let existingName = existingDict["name"] {
+                        return isEqual(existingName, name)
+                    }
+                    return false
+                }), let existingDict = storage[key]?[existingIndex] as? [String: any Sendable],
+                   let existingId = existingDict["id"] {
+                    // Use the existing entry's id
+                    dict["id"] = existingId
+                    valueToStore = dict
+                    // Update the existing entry
+                    storage[key]?[existingIndex] = valueToStore
+                    #if DEBUG
+                    print("[RepositoryStorage] Updated value with name '\(name)' (preserved id '\(existingId)') in '\(key.repository)'")
+                    #endif
+                    return valueToStore
+                }
+            }
+
+            // If no "id" field exists, generate one
+            if dict["id"] == nil {
+                let generatedId = UUID().uuidString
+                dict["id"] = generatedId
+                valueToStore = dict
+                #if DEBUG
+                print("[RepositoryStorage] Auto-generated id '\(generatedId)' for entry")
+                #endif
+            }
+        }
+
+        // Check if value has an "id" field - if so, try to update existing entry by id
+        if let dict = valueToStore as? [String: any Sendable],
            let id = dict["id"] {
-            // Look for existing entry with same id
             if let index = storage[key]?.firstIndex(where: { existing in
                 if let existingDict = existing as? [String: any Sendable],
                    let existingId = existingDict["id"] {
@@ -90,28 +130,30 @@ private actor RepositoryStorageActor {
                 }
                 return false
             }) {
-                // Update existing entry
-                storage[key]?[index] = value
+                // Update existing entry by id
+                storage[key]?[index] = valueToStore
                 #if DEBUG
-                print("[RepositoryStorage] Updated value with id '\(id)' in '\(key.repository)' (activity: '\(key.businessActivity)')")
+                print("[RepositoryStorage] Updated value with id '\(id)' in '\(key.repository)'")
                 #endif
-                return
+                return valueToStore
             }
         }
 
-        // No id or no matching entry - append new value
-        storage[key]?.append(value)
+        // No matching entry found - append new value
+        storage[key]?.append(valueToStore)
 
         #if DEBUG
-        print("[RepositoryStorage] Stored value in '\(key.repository)' (activity: '\(key.businessActivity)'). Count: \(storage[key]?.count ?? 0)")
+        print("[RepositoryStorage] Stored value in '\(key.repository)'. Count: \(storage[key]?.count ?? 0)")
         #endif
+
+        return valueToStore
     }
 
     func retrieve(key: StorageKey) -> [any Sendable] {
         let values = storage[key] ?? []
 
         #if DEBUG
-        print("[RepositoryStorage] Retrieved \(values.count) values from '\(key.repository)' (activity: '\(key.businessActivity)')")
+        print("[RepositoryStorage] Retrieved \(values.count) values from '\(key.repository)'")
         #endif
 
         return values
@@ -137,7 +179,7 @@ private actor RepositoryStorageActor {
         applicationScope[name] = key
 
         #if DEBUG
-        print("[RepositoryStorage] Exported '\(key.repository)' from '\(key.businessActivity)' as '\(name)'")
+        print("[RepositoryStorage] Exported '\(key.repository)' as '\(name)'")
         #endif
     }
 
@@ -149,7 +191,7 @@ private actor RepositoryStorageActor {
         storage[key] = nil
 
         #if DEBUG
-        print("[RepositoryStorage] Cleared '\(key.repository)' (activity: '\(key.businessActivity)')")
+        print("[RepositoryStorage] Cleared '\(key.repository)'")
         #endif
     }
 
@@ -158,12 +200,13 @@ private actor RepositoryStorageActor {
         if let exportedKey = applicationScope[repository] {
             return exportedKey
         }
-        return StorageKey(businessActivity: businessActivity, repository: repository)
+        // Repositories are now application-scoped (not business-activity-scoped)
+        return StorageKey(repository: repository)
     }
 
-    func allRepositories() -> [(businessActivity: String, repository: String, count: Int)] {
+    func allRepositories() -> [(repository: String, count: Int)] {
         return storage.map { (key, values) in
-            (businessActivity: key.businessActivity, repository: key.repository, count: values.count)
+            (repository: key.repository, count: values.count)
         }
     }
 
@@ -210,9 +253,10 @@ public final class InMemoryRepositoryStorage: RepositoryStorageService, Sendable
 
     // MARK: - RepositoryStorageService
 
-    public func store(value: any Sendable, in repository: String, businessActivity: String) async {
+    @discardableResult
+    public func store(value: any Sendable, in repository: String, businessActivity: String) async -> any Sendable {
         let key = await actor.resolveKey(repository: repository, businessActivity: businessActivity)
-        await actor.store(value: value, key: key)
+        return await actor.store(value: value, key: key)
     }
 
     public func retrieve(from repository: String, businessActivity: String) async -> [any Sendable] {
@@ -231,7 +275,7 @@ public final class InMemoryRepositoryStorage: RepositoryStorageService, Sendable
     }
 
     public func export(repository: String, from businessActivity: String, as name: String) async {
-        let key = StorageKey(businessActivity: businessActivity, repository: repository)
+        let key = StorageKey(repository: repository)
         await actor.export(key: key, as: name)
     }
 
@@ -248,7 +292,7 @@ public final class InMemoryRepositoryStorage: RepositoryStorageService, Sendable
     // MARK: - Debug/Testing
 
     /// Get all repository names (for debugging)
-    public func allRepositories() async -> [(businessActivity: String, repository: String, count: Int)] {
+    public func allRepositories() async -> [(repository: String, count: Int)] {
         return await actor.allRepositories()
     }
 

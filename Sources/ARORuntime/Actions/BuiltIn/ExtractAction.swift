@@ -41,8 +41,23 @@ public struct ExtractAction: ActionImplementation {
             throw ActionError.undefinedVariable(object.base)
         }
 
-        // If no specifiers, return the source directly (it's already any Sendable)
+        // If no specifiers, check if source needs parsing (e.g., JSON string)
         if object.specifiers.isEmpty {
+            // If source is a string containing JSON, parse it
+            if let stringSource = source as? String {
+                #if DEBUG
+                print("[ExtractAction] Attempting to parse JSON string: \(stringSource.prefix(100))")
+                #endif
+                if let parsed = parseJSONString(stringSource) {
+                    #if DEBUG
+                    print("[ExtractAction] Successfully parsed JSON to: \(type(of: parsed))")
+                    #endif
+                    return parsed
+                }
+                #if DEBUG
+                print("[ExtractAction] Failed to parse JSON, returning source as-is")
+                #endif
+            }
             return source
         }
 
@@ -171,6 +186,38 @@ public struct ExtractAction: ActionImplementation {
     }
 
     /// Extract a value from a string that might be JSON, form data, or key-value format
+    /// Parse a JSON string into a dictionary or array (for Parse action with no key)
+    private func parseJSONString(_ source: String) -> (any Sendable)? {
+        let trimmed = source.trimmingCharacters(in: .whitespacesAndNewlines)
+
+        guard trimmed.hasPrefix("{") || trimmed.hasPrefix("["),
+              let data = trimmed.data(using: .utf8),
+              let parsed = try? JSONSerialization.jsonObject(with: data, options: []) else {
+            return nil
+        }
+
+        // Handle JSON object
+        if let dict = parsed as? [String: Any] {
+            return convertJSONDict(dict)
+        }
+
+        // Handle JSON array
+        if let array = parsed as? [Any] {
+            return array.map { convertJSONValue($0) }
+        }
+
+        return nil
+    }
+
+    /// Convert a JSON dictionary to a Sendable dictionary
+    private func convertJSONDict(_ dict: [String: Any]) -> [String: any Sendable] {
+        var result: [String: any Sendable] = [:]
+        for (key, value) in dict {
+            result[key] = convertJSONValue(value)
+        }
+        return result
+    }
+
     private func extractFromString(_ source: String, key: String) -> (any Sendable)? {
         let trimmed = source.trimmingCharacters(in: .whitespacesAndNewlines)
 
@@ -513,10 +560,22 @@ public struct ReadAction: ActionImplementation {
             throw ActionError.missingService("FileSystemService")
         }
 
-        // Get file path
-        guard let path: String = context.resolve(object.base) else {
+        // Get file path - handle <file: path-variable> pattern
+        let path: String
+        if object.base == "file", let specifier = object.specifiers.first {
+            // Pattern: <file: path-variable> - resolve the specifier as the path
+            if let resolvedPath: String = context.resolve(specifier) {
+                path = resolvedPath
+            } else {
+                // Use specifier as literal path
+                path = specifier
+            }
+        } else if let resolvedPath: String = context.resolve(object.base) {
+            // Pattern: <path-variable> - resolve base as path
+            path = resolvedPath
+        } else {
             // Use object base as literal path
-            return try await fileService.read(path: object.base)
+            path = object.base
         }
 
         return try await fileService.read(path: path)

@@ -94,6 +94,9 @@ public final class ExecutionEngine: @unchecked Sendable {
         // Wire up domain event handlers (e.g., "UserCreated Handler", "OrderPlaced Handler")
         registerDomainEventHandlers(for: program, baseContext: context)
 
+        // Wire up file event handlers (e.g., "Handle File Modified: File Event Handler")
+        registerFileEventHandlers(for: program, baseContext: context)
+
         // Execute entry point
         let executor = FeatureSetExecutor(
             actionRegistry: actionRegistry,
@@ -234,7 +237,7 @@ public final class ExecutionEngine: @unchecked Sendable {
             let activity = analyzedFS.featureSet.businessActivity
             return activity.hasSuffix("Handler") &&
                    !activity.contains("Socket Event Handler") &&
-                   !activity.contains("File") &&
+                   !activity.contains("File Event Handler") &&
                    !activity.contains("Application-End")
         }
 
@@ -308,6 +311,111 @@ public final class ExecutionEngine: @unchecked Sendable {
             print("[ExecutionEngine] Domain handler '\(analyzedFS.featureSet.name)' completed successfully")
         } catch {
             print("[ExecutionEngine] Domain handler '\(analyzedFS.featureSet.name)' failed: \(error)")
+            eventBus.publish(ErrorOccurredEvent(
+                error: String(describing: error),
+                context: analyzedFS.featureSet.name,
+                recoverable: true
+            ))
+        }
+    }
+
+    /// Register file event handlers for feature sets with "File Event Handler" business activity
+    private func registerFileEventHandlers(for program: AnalyzedProgram, baseContext: RuntimeContext) {
+        // Find all feature sets with "File Event Handler" business activity
+        let fileHandlers = program.featureSets.filter { analyzedFS in
+            analyzedFS.featureSet.businessActivity.contains("File Event Handler")
+        }
+
+        print("[ExecutionEngine] Found \(fileHandlers.count) file event handlers")
+
+        for analyzedFS in fileHandlers {
+            let featureSetName = analyzedFS.featureSet.name
+            let lowercaseName = featureSetName.lowercased()
+            print("[ExecutionEngine] Registering file handler: \(featureSetName)")
+
+            // Determine which file event type this handler should respond to
+            if lowercaseName.contains("created") {
+                eventBus.subscribe(to: FileCreatedEvent.self) { [weak self] event in
+                    guard let self = self else { return }
+                    print("[ExecutionEngine] FileCreatedEvent received: \(event.path)")
+                    await self.executeFileEventHandler(
+                        analyzedFS,
+                        program: program,
+                        baseContext: baseContext,
+                        eventData: ["path": event.path]
+                    )
+                }
+            } else if lowercaseName.contains("modified") {
+                eventBus.subscribe(to: FileModifiedEvent.self) { [weak self] event in
+                    guard let self = self else { return }
+                    // Skip temp files (hidden files starting with .)
+                    let filename = (event.path as NSString).lastPathComponent
+                    guard !filename.hasPrefix(".") else {
+                        print("[ExecutionEngine] Skipping temp file: \(event.path)")
+                        return
+                    }
+                    print("[ExecutionEngine] FileModifiedEvent received: \(event.path)")
+                    await self.executeFileEventHandler(
+                        analyzedFS,
+                        program: program,
+                        baseContext: baseContext,
+                        eventData: ["path": event.path]
+                    )
+                }
+            } else if lowercaseName.contains("deleted") {
+                eventBus.subscribe(to: FileDeletedEvent.self) { [weak self] event in
+                    guard let self = self else { return }
+                    print("[ExecutionEngine] FileDeletedEvent received: \(event.path)")
+                    await self.executeFileEventHandler(
+                        analyzedFS,
+                        program: program,
+                        baseContext: baseContext,
+                        eventData: ["path": event.path]
+                    )
+                }
+            }
+        }
+    }
+
+    /// Execute a file event handler feature set
+    private func executeFileEventHandler(
+        _ analyzedFS: AnalyzedFeatureSet,
+        program: AnalyzedProgram,
+        baseContext: RuntimeContext,
+        eventData: [String: any Sendable]
+    ) async {
+        // Create child context for this event handler with its own business activity
+        let handlerContext = RuntimeContext(
+            featureSetName: analyzedFS.featureSet.name,
+            businessActivity: analyzedFS.featureSet.businessActivity,
+            eventBus: eventBus,
+            parent: baseContext
+        )
+
+        // Bind event data to context as "event" with nested access
+        // e.g., <Extract> the <path> from the <event: path>
+        handlerContext.bind("event", value: eventData)
+
+        // Also bind event keys directly for convenience
+        for (key, value) in eventData {
+            handlerContext.bind("event:\(key)", value: value)
+        }
+
+        // Copy services from base context
+        services.registerAll(in: handlerContext)
+
+        // Execute the handler
+        let executor = FeatureSetExecutor(
+            actionRegistry: actionRegistry,
+            eventBus: eventBus,
+            globalSymbols: globalSymbols
+        )
+
+        do {
+            _ = try await executor.execute(analyzedFS, context: handlerContext)
+            print("[ExecutionEngine] File handler '\(analyzedFS.featureSet.name)' completed successfully")
+        } catch {
+            print("[ExecutionEngine] File handler '\(analyzedFS.featureSet.name)' failed: \(error)")
             eventBus.publish(ErrorOccurredEvent(
                 error: String(describing: error),
                 context: analyzedFS.featureSet.name,

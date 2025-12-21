@@ -596,6 +596,8 @@ public struct MergeAction: ActionImplementation {
             for (key, value) in sourceDict {
                 targetDict[key] = value
             }
+            // Bind merged result back to the target variable
+            context.bind(result.base, value: targetDict)
             return targetDict
         }
 
@@ -603,13 +605,18 @@ public struct MergeAction: ActionImplementation {
         if var targetArray = target as? [any Sendable],
            let sourceArray = source as? [any Sendable] {
             targetArray.append(contentsOf: sourceArray)
+            // Bind merged result back to the target variable
+            context.bind(result.base, value: targetArray)
             return targetArray
         }
 
         // Merge strings
         if let targetStr = target as? String,
            let sourceStr = source as? String {
-            return targetStr + sourceStr
+            let merged = targetStr + sourceStr
+            // Bind merged result back to the target variable
+            context.bind(result.base, value: merged)
+            return merged
         }
 
         // Return target if types don't match
