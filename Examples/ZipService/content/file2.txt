@@ -1,0 +1,2 @@
+Hello from file 2!
+This is another test file for the ARO Zip plugin demo.

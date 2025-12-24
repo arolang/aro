@@ -1,0 +1,280 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <title>External Services - ARO Programming Language</title>
+{{head}}
+    <style>
+        .doc-page { padding: 120px 24px 80px; max-width: 900px; margin: 0 auto; }
+        .doc-header { margin-bottom: 48px; }
+        .doc-header h1 { font-size: clamp(2rem, 5vw, 3rem); font-weight: 700; margin-bottom: 16px; letter-spacing: -0.02em; }
+        .doc-header .lead { font-size: 1.25rem; color: var(--color-text-muted); line-height: 1.7; }
+        .doc-page h2 { font-size: 1.8rem; font-weight: 600; margin: 48px 0 16px; padding-top: 24px; border-top: 1px solid rgba(255, 255, 255, 0.1); }
+        .doc-page h3 { font-size: 1.3rem; font-weight: 600; margin: 32px 0 12px; color: var(--color-secondary); }
+        .doc-page p { font-size: 1.1rem; color: var(--color-text-muted); line-height: 1.8; margin-bottom: 16px; }
+        .doc-page code { font-family: var(--font-mono); background: var(--color-bg-alt); padding: 3px 8px; border-radius: 4px; font-size: 0.9rem; color: var(--color-secondary); }
+        .doc-page pre { background: var(--color-bg-alt); border-radius: var(--radius-md); padding: 24px; overflow-x: auto; margin: 24px 0; border: 1px solid rgba(255, 255, 255, 0.1); }
+        .doc-page pre code { background: none; padding: 0; font-size: 0.9rem; line-height: 1.7; color: var(--color-text); }
+        .doc-page ul, .doc-page ol { color: var(--color-text-muted); margin: 16px 0 16px 24px; line-height: 1.8; }
+        .doc-page li { margin-bottom: 8px; }
+        .doc-page strong { color: var(--color-text); }
+        .doc-page table { width: 100%; border-collapse: collapse; margin: 24px 0; }
+        .doc-page th, .doc-page td { padding: 12px 16px; text-align: left; border: 1px solid rgba(255, 255, 255, 0.1); }
+        .doc-page th { background: var(--color-bg-alt); font-weight: 600; color: var(--color-text); }
+        .doc-page td { color: var(--color-text-muted); }
+        .highlight-box { background: rgba(124, 58, 237, 0.1); border: 1px solid rgba(124, 58, 237, 0.3); border-radius: var(--radius-md); padding: 24px; margin: 32px 0; }
+        .highlight-box h4 { color: var(--color-primary); font-size: 1.1rem; margin-bottom: 12px; }
+        .highlight-box p { margin-bottom: 0; }
+        .back-link { display: inline-flex; align-items: center; gap: 8px; color: var(--color-text-muted); text-decoration: none; font-size: 0.95rem; margin-bottom: 24px; transition: color 0.2s; }
+        .back-link:hover { color: var(--color-primary); }
+        .code-comment { color: #6b7280; }
+        .code-keyword { color: #7c3aed; font-weight: 600; }
+        .code-string { color: #10b981; }
+        .code-feature { color: #f472b6; }
+        .code-result { color: #06b6d4; }
+    </style>
+</head>
+<body>
+    <nav class="nav">
+        <div class="nav-content">
+            <a href="/aro/" class="logo"><span class="logo-aro">ARO</span></a>
+            <div class="nav-links">
+                <a href="../fdd.html">The FDD Story</a>
+                <a href="../getting-started.html">Get Started</a>
+                <a href="../docs.html" style="color: var(--color-text);">Docs</a>
+                <a href="../disclaimer.html">Motivation</a>
+                <a href="../download.html">Download</a>
+                <a href="https://github.com/KrisSimon/aro" class="nav-github">
+                    <svg viewBox="0 0 16 16" fill="currentColor"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z"/></svg>
+                    <span class="github-stars">
+                        <svg viewBox="0 0 16 16"><path d="M8 .25a.75.75 0 01.673.418l1.882 3.815 4.21.612a.75.75 0 01.416 1.279l-3.046 2.97.719 4.192a.75.75 0 01-1.088.791L8 12.347l-3.766 1.98a.75.75 0 01-1.088-.79l.72-4.194L.818 6.374a.75.75 0 01.416-1.28l4.21-.611L7.327.668A.75.75 0 018 .25z"/></svg>
+                        <span class="github-stars-count"></span>
+                    </span>
+                </a>
+            </div>
+        </div>
+    </nav>
+
+    <main class="doc-page">
+        <a href="../docs.html" class="back-link">&#x2190; Back to Documentation</a>
+
+        <header class="doc-header">
+            <h1 class="gradient-text">External Services</h1>
+            <p class="lead">
+                ARO integrates with external libraries and APIs through Services. This chapter covers
+                the Call action, built-in services, and creating custom plugins.
+            </p>
+        </header>
+
+        <div class="highlight-box">
+            <h4>One Action, Many Services</h4>
+            <p>
+                All external integrations use the same pattern: <code>&lt;Call&gt; the &lt;result&gt; from the &lt;service: method&gt; with { args }</code>.
+                HTTP APIs, databases, file processors - they all work the same way.
+            </p>
+        </div>
+
+        <h2>The Call Action</h2>
+
+        <h3>Syntax</h3>
+        <pre><code><span class="code-keyword">&lt;Call&gt;</span> the <span class="code-result">&lt;result&gt;</span> from the &lt;service: method&gt; with { key: value, ... }.</code></pre>
+
+        <table>
+            <thead>
+                <tr><th>Component</th><th>Description</th></tr>
+            </thead>
+            <tbody>
+                <tr><td><code>result</code></td><td>Variable to store the result</td></tr>
+                <tr><td><code>service</code></td><td>Service name (e.g., <code>http</code>, <code>postgres</code>, <code>zip</code>)</td></tr>
+                <tr><td><code>method</code></td><td>Method to invoke (e.g., <code>get</code>, <code>query</code>, <code>compress</code>)</td></tr>
+                <tr><td><code>args</code></td><td>Key-value arguments passed to the method</td></tr>
+            </tbody>
+        </table>
+
+        <h2>Built-in HTTP Service</h2>
+
+        <p>The <code>http</code> service is built-in and provides HTTP client capabilities.</p>
+
+        <h3>GET Request</h3>
+        <pre><code><span class="code-keyword">&lt;Call&gt;</span> the <span class="code-result">&lt;response&gt;</span> from the &lt;http: get&gt; with {
+    url: <span class="code-string">"https://api.example.com/users"</span>
+}.</code></pre>
+
+        <h3>GET with Headers</h3>
+        <pre><code><span class="code-keyword">&lt;Call&gt;</span> the <span class="code-result">&lt;response&gt;</span> from the &lt;http: get&gt; with {
+    url: <span class="code-string">"https://api.example.com/protected"</span>,
+    headers: { <span class="code-string">"Authorization"</span>: <span class="code-string">"Bearer token123"</span> }
+}.</code></pre>
+
+        <h3>POST Request</h3>
+        <pre><code><span class="code-keyword">&lt;Call&gt;</span> the <span class="code-result">&lt;response&gt;</span> from the &lt;http: post&gt; with {
+    url: <span class="code-string">"https://api.example.com/users"</span>,
+    body: { name: <span class="code-string">"Alice"</span>, email: <span class="code-string">"alice@example.com"</span> },
+    headers: { <span class="code-string">"Content-Type"</span>: <span class="code-string">"application/json"</span> }
+}.</code></pre>
+
+        <h3>HTTP Methods Reference</h3>
+        <table>
+            <thead>
+                <tr><th>Method</th><th>Arguments</th><th>Description</th></tr>
+            </thead>
+            <tbody>
+                <tr><td><code>get</code></td><td><code>url</code>, <code>headers?</code></td><td>HTTP GET request</td></tr>
+                <tr><td><code>post</code></td><td><code>url</code>, <code>body</code>, <code>headers?</code></td><td>HTTP POST request</td></tr>
+                <tr><td><code>put</code></td><td><code>url</code>, <code>body</code>, <code>headers?</code></td><td>HTTP PUT request</td></tr>
+                <tr><td><code>patch</code></td><td><code>url</code>, <code>body</code>, <code>headers?</code></td><td>HTTP PATCH request</td></tr>
+                <tr><td><code>delete</code></td><td><code>url</code>, <code>headers?</code></td><td>HTTP DELETE request</td></tr>
+            </tbody>
+        </table>
+
+        <h3>Response Format</h3>
+        <pre><code>{
+    <span class="code-string">"status"</span>: 200,
+    <span class="code-string">"headers"</span>: { <span class="code-string">"Content-Type"</span>: <span class="code-string">"application/json"</span> },
+    <span class="code-string">"body"</span>: { ... }
+}</code></pre>
+
+        <h2>Plugin System</h2>
+
+        <p>Add custom services via plugins. Plugins can be single Swift files or Swift packages with dependencies.</p>
+
+        <h3>Plugin Structure</h3>
+        <p><strong>Simple Plugin (single file):</strong></p>
+        <pre><code>MyApp/
+├── main.aro
+└── plugins/
+    └── GreetingService.swift</code></pre>
+
+        <p><strong>Package Plugin (with dependencies):</strong></p>
+        <pre><code>MyApp/
+├── main.aro
+└── plugins/
+    └── ZipPlugin/
+        ├── Package.swift
+        └── Sources/ZipPlugin/
+            └── ZipService.swift</code></pre>
+
+        <h3>Writing a Plugin</h3>
+        <p>Plugins use a C-compatible JSON interface:</p>
+
+        <pre><code><span class="code-comment">// plugins/GreetingService.swift</span>
+import Foundation
+
+<span class="code-comment">/// Plugin initialization - returns service metadata as JSON</span>
+@_cdecl(<span class="code-string">"aro_plugin_init"</span>)
+public func pluginInit() -> UnsafePointer&lt;CChar&gt; {
+    let metadata = <span class="code-string">"""
+    {"services": [{"name": "greeting", "symbol": "greeting_call"}]}
+    """</span>
+    return UnsafePointer(strdup(metadata)!)
+}
+
+<span class="code-comment">/// Service entry point - C-callable interface</span>
+@_cdecl(<span class="code-string">"greeting_call"</span>)
+public func greetingCall(
+    _ methodPtr: UnsafePointer&lt;CChar&gt;,
+    _ argsPtr: UnsafePointer&lt;CChar&gt;,
+    _ resultPtr: UnsafeMutablePointer&lt;UnsafeMutablePointer&lt;CChar&gt;?&gt;
+) -> Int32 {
+    let method = String(cString: methodPtr)
+    let argsJSON = String(cString: argsPtr)
+
+    <span class="code-comment">// Parse arguments from JSON</span>
+    var args: [String: Any] = [:]
+    if let data = argsJSON.data(using: .utf8),
+       let parsed = try? JSONSerialization.jsonObject(with: data) as? [String: Any] {
+        args = parsed
+    }
+
+    <span class="code-comment">// Execute method</span>
+    let name = args[<span class="code-string">"name"</span>] as? String ?? <span class="code-string">"World"</span>
+    let result = <span class="code-string">"Hello, \(name)!"</span>
+
+    <span class="code-comment">// Return result as JSON</span>
+    let resultJSON = <span class="code-string">"{\"result\": \"\(result)\"}"</span>
+    resultPtr.pointee = strdup(resultJSON)
+    return 0  <span class="code-comment">// 0 = success</span>
+}</code></pre>
+
+        <h3>Package Plugin with Dependencies</h3>
+        <p>For plugins that need external libraries (e.g., Zip, databases):</p>
+
+        <pre><code><span class="code-comment">// plugins/ZipPlugin/Package.swift</span>
+<span class="code-comment">// swift-tools-version:5.9</span>
+import PackageDescription
+
+let package = Package(
+    name: <span class="code-string">"ZipPlugin"</span>,
+    platforms: [.macOS(.v13)],
+    products: [
+        .library(name: <span class="code-string">"ZipPlugin"</span>, type: .dynamic, targets: [<span class="code-string">"ZipPlugin"</span>])
+    ],
+    dependencies: [
+        .package(url: <span class="code-string">"https://github.com/marmelroy/Zip.git"</span>, from: <span class="code-string">"2.1.0"</span>)
+    ],
+    targets: [
+        .target(name: <span class="code-string">"ZipPlugin"</span>, dependencies: [<span class="code-string">"Zip"</span>])
+    ]
+)</code></pre>
+
+        <h3>Using Plugin Services</h3>
+        <pre><code><span class="code-feature">(Application-Start: Plugin Demo)</span> {
+    <span class="code-keyword">&lt;Call&gt;</span> the <span class="code-result">&lt;greeting&gt;</span> from the &lt;greeting: hello&gt; with {
+        name: <span class="code-string">"ARO Developer"</span>
+    }.
+
+    <span class="code-keyword">&lt;Log&gt;</span> the <span class="code-result">&lt;message&gt;</span> for the &lt;console&gt; with &lt;greeting&gt;.
+    <span class="code-keyword">&lt;Return&gt;</span> an <span class="code-result">&lt;OK: status&gt;</span> for the &lt;startup&gt;.
+}</code></pre>
+
+        <h3>How Plugins Work</h3>
+        <ol>
+            <li>ARO scans <code>./plugins/</code> directory</li>
+            <li>For <code>.swift</code> files: compiles to <code>.dylib</code> using <code>swiftc</code></li>
+            <li>For directories with <code>Package.swift</code>: builds using <code>swift build</code></li>
+            <li>Loads dynamic library via <code>dlopen</code></li>
+            <li>Calls <code>aro_plugin_init</code> to get service metadata (JSON)</li>
+            <li>Registers each service with the symbol from metadata</li>
+        </ol>
+        <p>Compiled plugins are cached in <code>.aro-cache/</code> and only recompiled when source changes.</p>
+
+        <h2>Creating Custom Services (Swift)</h2>
+
+        <p>For compiled ARO applications, you can register services directly in Swift:</p>
+
+        <pre><code>public struct PostgresService: AROService {
+    public static let name = <span class="code-string">"postgres"</span>
+
+    public init() throws { <span class="code-comment">/* connection setup */</span> }
+
+    public func call(_ method: String, args: [String: any Sendable]) async throws -> any Sendable {
+        switch method {
+        case <span class="code-string">"query"</span>:
+            let sql = args[<span class="code-string">"sql"</span>] as! String
+            return try await executeQuery(sql)
+        default:
+            throw ServiceError.unknownMethod(method, service: Self.name)
+        }
+    }
+}
+
+<span class="code-comment">// Register at startup</span>
+try ExternalServiceRegistry.shared.register(PostgresService())</code></pre>
+
+        <div class="highlight-box">
+            <h4>Next Steps</h4>
+            <p>
+                <a href="http-services.html">HTTP Services</a> - Built-in HTTP server<br>
+                <a href="action-developer-guide.html">Creating Custom Actions</a> - Extend ARO with new actions
+            </p>
+        </div>
+    </main>
+
+    <footer class="footer">
+        <div class="container">
+            <div class="footer-bottom">
+                <p>Sometime this page should build with ARO. Obviously.</p>
+            </div>
+        </div>
+    </footer>
+</body>
+</html>

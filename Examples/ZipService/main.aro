@@ -1,0 +1,21 @@
+(* ZipService - Demonstrates using a plugin with external dependencies *)
+
+(Application-Start: Zip Service Demo) {
+    <Log> the <message> for the <console> with "Testing zip plugin...".
+
+    (* Zip the files in content folder *)
+    <Call> the <result> from the <zip: compress> with {
+        files: ["Examples/ZipService/content/file1.txt", "Examples/ZipService/content/file2.txt"],
+        output: "Examples/ZipService/content/archive.zip"
+    }.
+
+    <Log> the <message> for the <console> with "Zip result:".
+    <Log> the <message> for the <console> with <result>.
+
+    <Return> an <OK: status> for the <startup>.
+}
+
+(Application-End: Success) {
+    <Log> the <message> for the <console> with "Zip service demo completed.".
+    <Return> an <OK: status> for the <shutdown>.
+}

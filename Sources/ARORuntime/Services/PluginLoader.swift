@@ -98,20 +98,36 @@ public final class PluginLoader: @unchecked Sendable {
         // Create cache directory if needed
         try FileManager.default.createDirectory(at: cacheDir, withIntermediateDirectories: true)
 
-        // Find all .swift files in plugins directory
+        // Find all .swift files and subdirectories in plugins directory
         let contents = try FileManager.default.contentsOfDirectory(
             at: pluginsDir,
-            includingPropertiesForKeys: [.contentModificationDateKey],
+            includingPropertiesForKeys: [.contentModificationDateKey, .isDirectoryKey],
             options: [.skipsHiddenFiles]
         )
 
+        // Load single-file Swift plugins
         let swiftFiles = contents.filter { $0.pathExtension == "swift" }
-
         for swiftFile in swiftFiles {
             do {
                 try loadPlugin(from: swiftFile)
             } catch {
                 print("[PluginLoader] Warning: Failed to load \(swiftFile.lastPathComponent): \(error)")
+            }
+        }
+
+        // Load Swift package plugins (directories with Package.swift)
+        for item in contents {
+            var isDirectory: ObjCBool = false
+            if FileManager.default.fileExists(atPath: item.path, isDirectory: &isDirectory),
+               isDirectory.boolValue {
+                let packageSwift = item.appendingPathComponent("Package.swift")
+                if FileManager.default.fileExists(atPath: packageSwift.path) {
+                    do {
+                        try loadPackagePlugin(from: item)
+                    } catch {
+                        print("[PluginLoader] Warning: Failed to load package plugin \(item.lastPathComponent): \(error)")
+                    }
+                }
             }
         }
     }
@@ -181,15 +197,15 @@ public final class PluginLoader: @unchecked Sendable {
         // Create output plugins directory
         try FileManager.default.createDirectory(at: outputPluginsDir, withIntermediateDirectories: true)
 
-        // Find all .swift files in source plugins directory
+        // Find all .swift files and subdirectories in source plugins directory
         let contents = try FileManager.default.contentsOfDirectory(
             at: sourcePluginsDir,
-            includingPropertiesForKeys: nil,
+            includingPropertiesForKeys: [.isDirectoryKey],
             options: [.skipsHiddenFiles]
         )
 
+        // Compile single-file Swift plugins
         let swiftFiles = contents.filter { $0.pathExtension == "swift" }
-
         for swiftFile in swiftFiles {
             let pluginName = swiftFile.deletingPathExtension().lastPathComponent
             let outputPath = outputPluginsDir.appendingPathComponent("\(pluginName).\(libraryExtension)")
@@ -199,6 +215,26 @@ public final class PluginLoader: @unchecked Sendable {
                 print("[PluginLoader] Compiled plugin: \(pluginName) -> plugins/\(outputPath.lastPathComponent)")
             } catch {
                 print("[PluginLoader] Warning: Failed to compile \(swiftFile.lastPathComponent): \(error)")
+            }
+        }
+
+        // Compile Swift package plugins
+        for item in contents {
+            var isDirectory: ObjCBool = false
+            if FileManager.default.fileExists(atPath: item.path, isDirectory: &isDirectory),
+               isDirectory.boolValue {
+                let packageSwift = item.appendingPathComponent("Package.swift")
+                if FileManager.default.fileExists(atPath: packageSwift.path) {
+                    let pluginName = item.lastPathComponent
+                    let outputPath = outputPluginsDir.appendingPathComponent("lib\(pluginName).\(libraryExtension)")
+
+                    do {
+                        try compilePackagePlugin(source: item, output: outputPath)
+                        print("[PluginLoader] Compiled package plugin: \(pluginName) -> plugins/\(outputPath.lastPathComponent)")
+                    } catch {
+                        print("[PluginLoader] Warning: Failed to compile package plugin \(pluginName): \(error)")
+                    }
+                }
             }
         }
     }
@@ -347,6 +383,113 @@ public final class PluginLoader: @unchecked Sendable {
         }
 
         print("[PluginLoader] Compiled: \(output.lastPathComponent)")
+    }
+
+    /// Load a Swift package plugin
+    /// - Parameter packageDir: Path to the package directory containing Package.swift
+    private func loadPackagePlugin(from packageDir: URL) throws {
+        let pluginName = packageDir.lastPathComponent
+        print("[PluginLoader] Building package plugin: \(pluginName)")
+
+        #if os(Windows)
+        let libraryExtension = "dll"
+        #elseif os(Linux)
+        let libraryExtension = "so"
+        #else
+        let libraryExtension = "dylib"
+        #endif
+
+        // Build the package using swift build
+        let process = Process()
+        process.executableURL = URL(fileURLWithPath: "/usr/bin/swift")
+        process.currentDirectoryURL = packageDir
+        process.arguments = ["build", "-c", "release"]
+
+        let pipe = Pipe()
+        process.standardError = pipe
+        process.standardOutput = pipe
+
+        try process.run()
+        process.waitUntilExit()
+
+        if process.terminationStatus != 0 {
+            let errorData = pipe.fileHandleForReading.readDataToEndOfFile()
+            let errorMessage = String(data: errorData, encoding: .utf8) ?? "Unknown error"
+            throw PluginError.compilationFailed(pluginName, message: errorMessage)
+        }
+
+        // Find the built dynamic library in .build/release/
+        let buildDir = packageDir.appendingPathComponent(".build/release")
+        let dylibPath = buildDir.appendingPathComponent("lib\(pluginName).\(libraryExtension)")
+
+        guard FileManager.default.fileExists(atPath: dylibPath.path) else {
+            // Try without lib prefix
+            let altPath = buildDir.appendingPathComponent("\(pluginName).\(libraryExtension)")
+            if FileManager.default.fileExists(atPath: altPath.path) {
+                try loadDylib(at: altPath, name: pluginName)
+                print("[PluginLoader] Loaded package plugin: \(pluginName)")
+                return
+            }
+            throw PluginError.loadFailed(pluginName, message: "Built library not found at \(dylibPath.path)")
+        }
+
+        try loadDylib(at: dylibPath, name: pluginName)
+        print("[PluginLoader] Loaded package plugin: \(pluginName)")
+    }
+
+    /// Compile a Swift package plugin to a dynamic library
+    /// - Parameters:
+    ///   - source: Path to the package directory
+    ///   - output: Output path for the compiled library
+    private func compilePackagePlugin(source: URL, output: URL) throws {
+        let pluginName = source.lastPathComponent
+        print("[PluginLoader] Building package plugin for distribution: \(pluginName)")
+
+        // Build the package using swift build
+        let process = Process()
+        process.executableURL = URL(fileURLWithPath: "/usr/bin/swift")
+        process.currentDirectoryURL = source
+        process.arguments = ["build", "-c", "release"]
+
+        let pipe = Pipe()
+        process.standardError = pipe
+        process.standardOutput = pipe
+
+        try process.run()
+        process.waitUntilExit()
+
+        if process.terminationStatus != 0 {
+            let errorData = pipe.fileHandleForReading.readDataToEndOfFile()
+            let errorMessage = String(data: errorData, encoding: .utf8) ?? "Unknown error"
+            throw PluginError.compilationFailed(pluginName, message: errorMessage)
+        }
+
+        #if os(Windows)
+        let libraryExtension = "dll"
+        #elseif os(Linux)
+        let libraryExtension = "so"
+        #else
+        let libraryExtension = "dylib"
+        #endif
+
+        // Find and copy the built dynamic library
+        let buildDir = source.appendingPathComponent(".build/release")
+        var builtLibPath = buildDir.appendingPathComponent("lib\(pluginName).\(libraryExtension)")
+
+        if !FileManager.default.fileExists(atPath: builtLibPath.path) {
+            // Try without lib prefix
+            builtLibPath = buildDir.appendingPathComponent("\(pluginName).\(libraryExtension)")
+        }
+
+        guard FileManager.default.fileExists(atPath: builtLibPath.path) else {
+            throw PluginError.loadFailed(pluginName, message: "Built library not found at \(builtLibPath.path)")
+        }
+
+        // Copy to output location
+        if FileManager.default.fileExists(atPath: output.path) {
+            try FileManager.default.removeItem(at: output)
+        }
+        try FileManager.default.copyItem(at: builtLibPath, to: output)
     }
 
     /// Load a dynamic library and register its services

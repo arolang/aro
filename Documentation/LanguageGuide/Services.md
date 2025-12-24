@@ -176,60 +176,134 @@ When ARO is distributed as a pre-compiled binary, users can add custom services 
 
 ### Plugin Structure
 
+Plugins can be either single Swift files or Swift packages with dependencies:
+
+**Simple Plugin (single file):**
 ```
 MyApp/
 ├── main.aro
 ├── openapi.yaml
-├── plugins/                    # Custom services
-│   └── MyService.swift
-└── aro.yaml
+└── plugins/
+    └── MyService.swift
+```
+
+**Package Plugin (with dependencies):**
+```
+MyApp/
+├── main.aro
+├── openapi.yaml
+└── plugins/
+    └── MyPlugin/
+        ├── Package.swift
+        └── Sources/MyPlugin/
+            └── MyService.swift
 ```
 
 ### Writing a Plugin
 
+Plugins use a C-compatible JSON interface:
+
 ```swift
-// plugins/MyService.swift
+// plugins/GreetingService.swift
 import Foundation
 
-@_cdecl("aro_plugin_register")
-public func register(_ registry: UnsafeMutableRawPointer) {
-    let reg = AROPluginRegistry(registry)
-    reg.registerService("myservice", MyService())
+/// Plugin initialization - returns service metadata as JSON
+@_cdecl("aro_plugin_init")
+public func pluginInit() -> UnsafePointer<CChar> {
+    let metadata = """
+    {"services": [{"name": "greeting", "symbol": "greeting_call"}]}
+    """
+    return UnsafePointer(strdup(metadata)!)
 }
 
-struct MyService: AROPluginService {
-    func call(_ method: String, args: [String: Any]) throws -> Any {
-        switch method {
-        case "greet":
-            let name = args["name"] as? String ?? "World"
-            return "Hello, \(name)!"
-        default:
-            throw NSError(domain: "Plugin", code: 1)
-        }
+/// Service entry point - C-callable interface
+@_cdecl("greeting_call")
+public func greetingCall(
+    _ methodPtr: UnsafePointer<CChar>,
+    _ argsPtr: UnsafePointer<CChar>,
+    _ resultPtr: UnsafeMutablePointer<UnsafeMutablePointer<CChar>?>
+) -> Int32 {
+    let method = String(cString: methodPtr)
+    let argsJSON = String(cString: argsPtr)
+
+    // Parse arguments
+    var args: [String: Any] = [:]
+    if let data = argsJSON.data(using: .utf8),
+       let parsed = try? JSONSerialization.jsonObject(with: data) as? [String: Any] {
+        args = parsed
     }
+
+    // Execute method
+    let name = args["name"] as? String ?? "World"
+    let result: String
+
+    switch method.lowercased() {
+    case "hello":
+        result = "Hello, \(name)!"
+    case "goodbye":
+        result = "Goodbye, \(name)!"
+    default:
+        let errorJSON = "{\"error\": \"Unknown method: \(method)\"}"
+        resultPtr.pointee = strdup(errorJSON)
+        return 1
+    }
+
+    // Return result as JSON
+    let resultJSON = "{\"result\": \"\(result)\"}"
+    resultPtr.pointee = strdup(resultJSON)
+    return 0
 }
 ```
 
-### Plugin Configuration
+### Package Plugin with Dependencies
 
-```yaml
-# aro.yaml
-plugins:
-  - source: plugins/MyService.swift
-  - source: plugins/CacheService.swift
+For plugins that need external libraries, use a Swift package:
 
-  # Pre-compiled plugins
-  - library: /path/to/CustomPlugin.dylib
+```swift
+// plugins/ZipPlugin/Package.swift
+// swift-tools-version:5.9
+import PackageDescription
+
+let package = Package(
+    name: "ZipPlugin",
+    platforms: [.macOS(.v13)],
+    products: [
+        .library(name: "ZipPlugin", type: .dynamic, targets: ["ZipPlugin"])
+    ],
+    dependencies: [
+        .package(url: "https://github.com/marmelroy/Zip.git", from: "2.1.0")
+    ],
+    targets: [
+        .target(name: "ZipPlugin", dependencies: ["Zip"])
+    ]
+)
 ```
 
 ### How Plugins Work
 
 1. ARO scans `./plugins/` directory
-2. Compiles `.swift` files to `.dylib` using `swiftc`
-3. Loads via `dlopen`
-4. Calls `aro_plugin_register` entry point
+2. For `.swift` files: compiles to `.dylib` using `swiftc`
+3. For directories with `Package.swift`: builds using `swift build`
+4. Loads dynamic library via `dlopen`
+5. Calls `aro_plugin_init` to get service metadata (JSON)
+6. Registers each service with the symbol from metadata
 
 Compiled plugins are cached in `.aro-cache/` and only recompiled when source changes.
+
+### Plugin Metadata Format
+
+The `aro_plugin_init` function returns JSON:
+
+```json
+{
+  "services": [
+    {"name": "greeting", "symbol": "greeting_call"}
+  ]
+}
+```
+
+- `name`: Service name used in ARO code (`<greeting: hello>`)
+- `symbol`: C function symbol to call
 
 ### Using Plugin Services
 
