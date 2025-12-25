@@ -79,14 +79,29 @@ public struct AcceptAction: ActionImplementation {
             )
         }
 
-        // Update the state and return the updated object
-        return try updateState(
+        // Update the state
+        let updatedObject = try updateState(
             targetObject: targetObject,
             fieldName: fieldName,
             toState: toState,
             objectName: objectName,
             context: context
         )
+
+        // Extract entity ID for the event
+        let entityId = extractEntityId(from: updatedObject)
+
+        // Emit StateTransitionEvent for observers
+        context.emit(StateTransitionEvent(
+            fieldName: fieldName,
+            objectName: objectName,
+            fromState: fromState,
+            toState: toState,
+            entityId: entityId,
+            entity: updatedObject
+        ))
+
+        return updatedObject
     }
 
     /// Parse the state transition from the result descriptor
@@ -173,6 +188,24 @@ public struct AcceptAction: ActionImplementation {
             property: fieldName,
             on: objectName
         )
+    }
+
+    /// Extract entity ID from the object if it has an "id" field
+    private func extractEntityId(from object: any Sendable) -> String? {
+        if let dict = object as? [String: any Sendable],
+           let id = dict["id"] {
+            return String(describing: id)
+        }
+        if let dict = object as? [String: Any],
+           let id = dict["id"] {
+            return String(describing: id)
+        }
+        // Try reflection for custom types
+        let mirror = Mirror(reflecting: object)
+        if let child = mirror.children.first(where: { $0.label == "id" }) {
+            return String(describing: child.value)
+        }
+        return nil
     }
 
     /// Update the state field on the target object

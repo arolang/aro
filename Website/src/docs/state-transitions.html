@@ -365,6 +365,67 @@ components:
             <li>Field exists on the object</li>
         </ul>
 
+        <h2>State Observers</h2>
+        <p>
+            State observers react to transitions after they occur. Use them for audit logging,
+            notifications, analytics, and side effects.
+        </p>
+
+        <h3>Observer Pattern</h3>
+        <p>
+            A feature set becomes a state observer when its business activity ends with <code>StateObserver</code>.
+            Add an optional transition filter in angle brackets to observe only specific transitions:
+        </p>
+
+        <pre><code><span class="code-comment">(* Observe ALL status field transitions *)</span>
+<span class="code-feature">(Audit Status: status StateObserver)</span> {
+    <span class="code-keyword">&lt;Extract&gt;</span> the <span class="code-result">&lt;fromState&gt;</span> from the &lt;transition: fromState&gt;.
+    <span class="code-keyword">&lt;Extract&gt;</span> the <span class="code-result">&lt;toState&gt;</span> from the &lt;transition: toState&gt;.
+    <span class="code-keyword">&lt;Extract&gt;</span> the <span class="code-result">&lt;orderId&gt;</span> from the &lt;transition: entityId&gt;.
+    <span class="code-keyword">&lt;Log&gt;</span> the &lt;audit&gt; for the &lt;console&gt;
+        with <span class="code-string">"Order ${orderId}: ${fromState} -> ${toState}"</span>.
+    <span class="code-keyword">&lt;Return&gt;</span> an <span class="code-result">&lt;OK: status&gt;</span> for the &lt;audit&gt;.
+}
+
+<span class="code-comment">(* Observe ONLY draft->placed transition *)</span>
+<span class="code-feature">(Notify Placed: status StateObserver&lt;draft_to_placed&gt;)</span> {
+    <span class="code-keyword">&lt;Extract&gt;</span> the <span class="code-result">&lt;orderId&gt;</span> from the &lt;transition: entityId&gt;.
+    <span class="code-keyword">&lt;Log&gt;</span> the &lt;notification&gt; for the &lt;console&gt;
+        with <span class="code-string">"Order ${orderId} has been placed!"</span>.
+    <span class="code-keyword">&lt;Return&gt;</span> an <span class="code-result">&lt;OK: status&gt;</span> for the &lt;notification&gt;.
+}</code></pre>
+
+        <h3>Transition Data</h3>
+        <p>
+            Observers access transition information via the <code>&lt;transition&gt;</code> object:
+        </p>
+
+        <ul>
+            <li><code>transition: fieldName</code> - The field that changed (e.g., "status")</li>
+            <li><code>transition: objectName</code> - The object type (e.g., "order")</li>
+            <li><code>transition: fromState</code> - Previous state value</li>
+            <li><code>transition: toState</code> - New state value</li>
+            <li><code>transition: entityId</code> - Entity ID if available</li>
+            <li><code>transition: entity</code> - Full object after transition</li>
+        </ul>
+
+        <h3>Use Cases</h3>
+        <ul>
+            <li><strong>Audit logging</strong> - Record all state changes for compliance</li>
+            <li><strong>Notifications</strong> - Alert customers when orders ship</li>
+            <li><strong>Analytics</strong> - Track state transition metrics</li>
+            <li><strong>Side effects</strong> - Trigger downstream processes</li>
+        </ul>
+
+        <div class="highlight-box">
+            <h4>Observer Semantics</h4>
+            <p>
+                Observers execute <em>after</em> the transition succeeds. Multiple observers
+                can react to the same transition. Observers run in isolation - failures
+                don't affect the <code>&lt;Accept&gt;</code> action or other observers.
+            </p>
+        </div>
+
         <div class="highlight-box">
             <h4>Learn More</h4>
             <p>

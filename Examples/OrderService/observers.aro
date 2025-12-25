@@ -1,0 +1,60 @@
+(* State Observers for Order Management *)
+(* Demonstrates reactive handling of state transitions *)
+(* See ARO-0013 v2.1: State Observers *)
+
+(* =================================================================== *)
+(* Audit ALL order status changes - no filter                          *)
+(* This observer runs for EVERY status transition                      *)
+(* =================================================================== *)
+(Audit Order Status: status StateObserver) {
+    <Extract> the <orderId> from the <transition: entityId>.
+    <Extract> the <fromState> from the <transition: fromState>.
+    <Extract> the <toState> from the <transition: toState>.
+    <Extract> the <objectName> from the <transition: objectName>.
+
+    <Log> the <audit: message> for the <console>
+        with "[AUDIT] ${objectName} ${orderId}: ${fromState} -> ${toState}".
+
+    <Return> an <OK: status> for the <audit>.
+}
+
+(* =================================================================== *)
+(* Notify ONLY when order is placed - specific transition filter       *)
+(* Only triggers on: draft -> placed                                   *)
+(* =================================================================== *)
+(Notify Order Placed: status StateObserver<draft_to_placed>) {
+    <Extract> the <orderId> from the <transition: entityId>.
+
+    <Log> the <notification: message> for the <console>
+        with "[NOTIFY] Order ${orderId} has been placed!".
+
+    <Return> an <OK: status> for the <notification>.
+}
+
+(* =================================================================== *)
+(* Notify ONLY when order ships - specific transition filter           *)
+(* Only triggers on: paid -> shipped                                   *)
+(* =================================================================== *)
+(Notify Shipped: status StateObserver<paid_to_shipped>) {
+    <Extract> the <order> from the <transition: entity>.
+    <Extract> the <orderId> from the <transition: entityId>.
+    <Extract> the <tracking> from the <order: trackingNumber>.
+
+    <Log> the <notification: message> for the <console>
+        with "[NOTIFY] Order ${orderId} shipped! Tracking: ${tracking}".
+
+    <Return> an <OK: status> for the <notification>.
+}
+
+(* =================================================================== *)
+(* Track ONLY deliveries - specific transition filter                  *)
+(* Only triggers on: shipped -> delivered                              *)
+(* =================================================================== *)
+(Track Delivery: status StateObserver<shipped_to_delivered>) {
+    <Extract> the <orderId> from the <transition: entityId>.
+
+    <Log> the <analytics: message> for the <console>
+        with "[ANALYTICS] Order ${orderId} successfully delivered".
+
+    <Return> an <OK: status> for the <analytics>.
+}

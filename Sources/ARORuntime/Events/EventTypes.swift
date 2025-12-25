@@ -224,3 +224,49 @@ public struct FeatureSetCompletedEvent: RuntimeEvent {
         self.durationMs = durationMs
     }
 }
+
+// MARK: - State Transition Events
+
+/// Event emitted when a state transition is accepted via the Accept action
+///
+/// StateObservers can subscribe to this event to react to state changes.
+/// The event includes both the old and new states, plus entity context.
+public struct StateTransitionEvent: RuntimeEvent {
+    public static var eventType: String { "state.transition" }
+    public let timestamp: Date
+
+    /// The field name that transitioned (e.g., "status")
+    public let fieldName: String
+
+    /// The object name containing the field (e.g., "order")
+    public let objectName: String
+
+    /// The state before transition
+    public let fromState: String
+
+    /// The state after transition
+    public let toState: String
+
+    /// Entity ID if available (extracted from object's "id" field)
+    public let entityId: String?
+
+    /// The full object after transition (for context)
+    public let entity: (any Sendable)?
+
+    public init(
+        fieldName: String,
+        objectName: String,
+        fromState: String,
+        toState: String,
+        entityId: String? = nil,
+        entity: (any Sendable)? = nil
+    ) {
+        self.timestamp = Date()
+        self.fieldName = fieldName
+        self.objectName = objectName
+        self.fromState = fromState
+        self.toState = toState
+        self.entityId = entityId
+        self.entity = entity
+    }
+}

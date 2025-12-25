@@ -219,6 +219,92 @@ All handlers execute independently when the event is emitted.
 | `DataReceived` | Data received from client |
 | `ClientDisconnected` | TCP client disconnects |
 
+## State Transition Events
+
+State transition events are emitted automatically when the `<Accept>` action successfully transitions a state field. These events enable reactive programming around state changes.
+
+### StateObserver Pattern
+
+Feature sets become state observers when their business activity matches the pattern:
+
+```aro
+(Feature Name: fieldName StateObserver)                      (* All transitions on field *)
+(Feature Name: fieldName StateObserver<from_to_target>)      (* Specific transition only *)
+```
+
+The `fieldName` filters which field's transitions to observe. The optional `<from_to_target>` filter restricts to a specific transition.
+
+### Example: Audit Logging (All Transitions)
+
+```aro
+(* Observe all status changes *)
+(Audit Order Status: status StateObserver) {
+    <Extract> the <orderId> from the <transition: entityId>.
+    <Extract> the <fromState> from the <transition: fromState>.
+    <Extract> the <toState> from the <transition: toState>.
+
+    <Log> the <audit: message> for the <console>
+        with "[AUDIT] Order ${orderId}: ${fromState} -> ${toState}".
+
+    <Return> an <OK: status> for the <audit>.
+}
+```
+
+### Example: Shipping Notification (Specific Transition)
+
+```aro
+(* Notify ONLY when order ships (paid -> shipped) *)
+(Send Shipping Notice: status StateObserver<paid_to_shipped>) {
+    <Extract> the <order> from the <transition: entity>.
+    <Extract> the <email> from the <order: customerEmail>.
+    <Extract> the <tracking> from the <order: trackingNumber>.
+
+    <Send> the <notification> to the <email> with {
+        subject: "Your order has shipped!",
+        body: "Track your package: ${tracking}"
+    }.
+
+    <Return> an <OK: status> for the <notification>.
+}
+```
+
+### Transition Data Fields
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `transition: fieldName` | String | The field that changed (e.g., "status") |
+| `transition: objectName` | String | The object type (e.g., "order") |
+| `transition: fromState` | String | Previous state value |
+| `transition: toState` | String | New state value |
+| `transition: entityId` | String? | ID from object's "id" field, if present |
+| `transition: entity` | Object | Full object after transition |
+
+### Multiple Observers
+
+Multiple observers can react to the same transition:
+
+```aro
+(* Observer 1: Audit all transitions *)
+(Log Transitions: status StateObserver) {
+    <Log> the <message> for the <console> with "State changed".
+    <Return> an <OK: status> for the <logging>.
+}
+
+(* Observer 2: Only on draft -> placed *)
+(Notify Placed: status StateObserver<draft_to_placed>) {
+    <Send> the <webhook> to the <order-service>.
+    <Return> an <OK: status> for the <notification>.
+}
+
+(* Observer 3: Only on shipped -> delivered *)
+(Track Delivery: status StateObserver<shipped_to_delivered>) {
+    <Increment> the <delivery-counter> by 1.
+    <Return> an <OK: status> for the <analytics>.
+}
+```
+
+All matching observers execute independently when a transition occurs.
+
 ## Long-Running Applications
 
 For applications that need to stay alive to process events (servers, file watchers, etc.), use the `<Keepalive>` action:

@@ -122,4 +122,87 @@ Document event contracts. The payload of an event is a contract between emitters
 
 ---
 
+## 8.10 State Observers
+
+State observers are a specialized form of event handler that react to state transitions. When the Accept action successfully transitions a state field, it emits a StateTransitionEvent that observers can handle.
+
+<div style="float: right; margin: 0 0 1em 1.5em;">
+<svg width="200" height="200" viewBox="0 0 200 200" xmlns="http://www.w3.org/2000/svg">
+  <!-- Accept Action -->
+  <rect x="60" y="10" width="80" height="35" rx="4" fill="#dbeafe" stroke="#3b82f6" stroke-width="2"/>
+  <text x="100" y="25" text-anchor="middle" font-family="sans-serif" font-size="8" font-weight="bold" fill="#1e40af">&lt;Accept&gt;</text>
+  <text x="100" y="38" text-anchor="middle" font-family="monospace" font-size="7" fill="#3b82f6">draft → placed</text>
+  <!-- Arrow to event -->
+  <line x1="100" y1="45" x2="100" y2="65" stroke="#f59e0b" stroke-width="2"/>
+  <polygon points="100,70 95,62 105,62" fill="#f59e0b"/>
+  <!-- StateTransitionEvent -->
+  <rect x="35" y="70" width="130" height="25" rx="4" fill="#fef3c7" stroke="#f59e0b" stroke-width="2"/>
+  <text x="100" y="87" text-anchor="middle" font-family="sans-serif" font-size="8" font-weight="bold" fill="#92400e">StateTransitionEvent</text>
+  <!-- Fan-out arrows -->
+  <line x1="55" y1="95" x2="35" y2="120" stroke="#22c55e" stroke-width="2"/>
+  <polygon points="35,125 43,118 39,126" fill="#22c55e"/>
+  <line x1="100" y1="95" x2="100" y2="120" stroke="#22c55e" stroke-width="2"/>
+  <polygon points="100,125 95,117 105,117" fill="#22c55e"/>
+  <line x1="145" y1="95" x2="165" y2="120" stroke="#22c55e" stroke-width="2"/>
+  <polygon points="165,125 157,118 161,126" fill="#22c55e"/>
+  <!-- Observers -->
+  <rect x="5" y="130" width="60" height="35" rx="4" fill="#dcfce7" stroke="#22c55e" stroke-width="2"/>
+  <text x="35" y="145" text-anchor="middle" font-family="sans-serif" font-size="7" font-weight="bold" fill="#166534">Audit</text>
+  <text x="35" y="157" text-anchor="middle" font-family="sans-serif" font-size="6" fill="#22c55e">all transitions</text>
+  <rect x="70" y="130" width="60" height="35" rx="4" fill="#dcfce7" stroke="#22c55e" stroke-width="2"/>
+  <text x="100" y="145" text-anchor="middle" font-family="sans-serif" font-size="7" font-weight="bold" fill="#166534">Notify</text>
+  <text x="100" y="157" text-anchor="middle" font-family="sans-serif" font-size="6" fill="#22c55e">&lt;draft_to_placed&gt;</text>
+  <rect x="135" y="130" width="60" height="35" rx="4" fill="#dcfce7" stroke="#22c55e" stroke-width="2"/>
+  <text x="165" y="145" text-anchor="middle" font-family="sans-serif" font-size="7" font-weight="bold" fill="#166534">Track</text>
+  <text x="165" y="157" text-anchor="middle" font-family="sans-serif" font-size="6" fill="#22c55e">&lt;shipped_to_delivered&gt;</text>
+  <!-- Label -->
+  <text x="100" y="185" text-anchor="middle" font-family="sans-serif" font-size="7" fill="#6b7280">matching observers run after transition</text>
+</svg>
+</div>
+
+State observers bridge the gap between state machines and event-driven architecture. The Accept action manages the "what"—validating and applying state transitions. Observers manage the "then what"—reacting to those transitions with side effects like audit logging, notifications, or analytics.
+
+The observer pattern is declared through business activity naming. A feature set with business activity "status StateObserver" observes all transitions on fields named "status." Adding a transition filter like "status StateObserver<draft_to_placed>" restricts the observer to only that specific transition. A feature set with just "StateObserver" observes all state transitions regardless of field name.
+
+```aro
+(* Observe ALL status transitions *)
+(Audit Order Status: status StateObserver) {
+    <Extract> the <orderId> from the <transition: entityId>.
+    <Extract> the <fromState> from the <transition: fromState>.
+    <Extract> the <toState> from the <transition: toState>.
+
+    <Log> the <audit: message> for the <console>
+        with "[AUDIT] Order ${orderId}: ${fromState} -> ${toState}".
+
+    <Return> an <OK: status> for the <audit>.
+}
+
+(* Observe ONLY when order is placed *)
+(Notify Order Placed: status StateObserver<draft_to_placed>) {
+    <Extract> the <orderId> from the <transition: entityId>.
+    <Log> the <notification> for the <console>
+        with "Order ${orderId} has been placed!".
+    <Return> an <OK: status> for the <notification>.
+}
+
+(* Observe ONLY when order ships *)
+(Send Shipping Notification: status StateObserver<paid_to_shipped>) {
+    <Extract> the <order> from the <transition: entity>.
+    <Extract> the <tracking> from the <order: trackingNumber>.
+
+    <Log> the <notification> for the <console>
+        with "Order shipped! Tracking: ${tracking}".
+
+    <Return> an <OK: status> for the <notification>.
+}
+```
+
+Within an observer, the transition data is available through the "transition" identifier. You extract specific fields using the familiar qualifier syntax. The fromState and toState fields tell you what changed. The fieldName and objectName provide context about where the change occurred. The entityId offers a convenient way to identify the affected entity. The entity field gives you the complete object after the transition if you need additional context.
+
+Observers execute after the Accept action succeeds. If Accept throws because the current state does not match the expected state, no event is emitted and no observers run. This ensures observers only react to valid transitions. Observers themselves run in isolation—if one observer fails, other observers for the same transition still execute. The failure is logged but does not affect the original Accept action or other observers.
+
+The separation between Accept and observers creates a clean architecture. Accept is synchronous and transactional—it validates and applies the state change atomically. Observers are asynchronous and independent—they react to the change with side effects that do not affect the core state transition. This separation makes the system more testable, more maintainable, and more extensible.
+
+---
+
 *Next: Chapter 9 — Application Lifecycle*

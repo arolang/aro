@@ -237,22 +237,103 @@ Invalid transitions fail with descriptive errors.
 
 ---
 
-## 5. Grammar Extension
+## 5. State Observers
+
+State observers react to state transitions after they occur. They are feature sets with a "StateObserver" business activity pattern.
+
+### 5.1 Observer Pattern
+
+```
+(Feature Name: fieldName StateObserver)           (* Observe all transitions on field *)
+(Feature Name: fieldName StateObserver<from_to_target>)  (* Observe specific transition *)
+```
+
+The `fieldName` filters to specific fields. The optional `<from_to_target>` filter restricts to a specific transition.
+
+### 5.2 Syntax Examples
+
+```aro
+(* Observe ALL status field transitions *)
+(Audit Status Changes: status StateObserver) {
+    <Extract> the <fromState> from the <transition: fromState>.
+    <Extract> the <toState> from the <transition: toState>.
+    <Extract> the <orderId> from the <transition: entityId>.
+    <Log> the <audit: message> for the <console>
+        with "Order ${orderId}: ${fromState} -> ${toState}".
+    <Return> an <OK: status> for the <audit>.
+}
+
+(* Observe ONLY draft->placed transition *)
+(Notify Order Placed: status StateObserver<draft_to_placed>) {
+    <Extract> the <orderId> from the <transition: entityId>.
+    <Log> the <notification> for the <console>
+        with "Order ${orderId} has been placed!".
+    <Return> an <OK: status> for the <notification>.
+}
+
+(* Observe all state transitions on any field *)
+(Log All Transitions: StateObserver) {
+    <Extract> the <field> from the <transition: fieldName>.
+    <Extract> the <object> from the <transition: objectName>.
+    <Extract> the <from> from the <transition: fromState>.
+    <Extract> the <to> from the <transition: toState>.
+    <Log> the <message> for the <console>
+        with "${object}.${field}: ${from} -> ${to}".
+    <Return> an <OK: status> for the <logging>.
+}
+```
+
+### 5.3 Transition Data
+
+Observers access transition data via the `transition` object:
+
+| Field | Description |
+|-------|-------------|
+| `transition: fieldName` | Field that transitioned (e.g., "status") |
+| `transition: objectName` | Object containing the field (e.g., "order") |
+| `transition: fromState` | State before transition |
+| `transition: toState` | State after transition |
+| `transition: entityId` | Entity ID if available (from object's "id" field) |
+| `transition: entity` | Full object after transition |
+
+### 5.4 Use Cases
+
+- **Audit logging**: Record all state changes for compliance
+- **Notifications**: Send alerts when orders ship or payments fail
+- **Analytics**: Track state transition metrics
+- **Side effects**: Trigger downstream processes after transitions
+
+### 5.5 Execution Semantics
+
+- Observers execute **after** the transition is accepted
+- Multiple observers can respond to the same transition
+- Observers run in isolation; failures don't affect the Accept action
+- Observers run in undefined order
+
+---
+
+## 6. Grammar Extension
 
 ```ebnf
+(* Accept Action *)
 accept_statement = "<Accept>" , "the" , "<" , transition_spec , ">" ,
                    "on" , "<" , qualified_noun , ">" , "." ;
 
 transition_spec = "transition" , ":" , state_transition ;
 
 state_transition = identifier , "_to_" , identifier ;
+
+(* State Observer Business Activity *)
+state_observer_activity = [ field_name , " " ] , "StateObserver" , [ "<" , state_transition , ">" ] ;
+
+field_name = identifier ;  (* Optional: filters to specific field *)
 ```
 
 Note: The syntax uses `_to_` as the separator because `to` is a reserved preposition in ARO.
 
 ---
 
-## 6. Non-Goals
+## 7. Non-Goals
 
 This proposal explicitly does **not** provide:
 
@@ -273,6 +354,7 @@ These add complexity without matching ARO's philosophy. Use standard ARO control
 |---------|--------------|
 | State definition | OpenAPI enum |
 | State transition | `<Accept> the <transition: from_to_target>` |
+| State observer | `(Name: fieldName StateObserver[<transition>])` |
 | Validation | Runtime checks current state |
 | Error messages | "Cannot accept state X->Y on Z" |
 | Complex logic | Use `if`/`match` |
@@ -285,3 +367,4 @@ These add complexity without matching ARO's philosophy. Use standard ARO control
 |---------|------|---------|
 | 1.0 | 2024-01 | Initial specification with complex state machines |
 | 2.0 | 2025-12 | Complete rewrite: simplified to state objects with Accept action |
+| 2.1 | 2025-12 | Added State Observers for reactive state change handling with optional transition filter |

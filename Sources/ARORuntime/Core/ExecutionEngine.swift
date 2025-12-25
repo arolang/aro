@@ -96,6 +96,9 @@ public final class ExecutionEngine: @unchecked Sendable {
         // Wire up file event handlers (e.g., "Handle File Modified: File Event Handler")
         registerFileEventHandlers(for: program, baseContext: context)
 
+        // Wire up state transition observers (e.g., "Audit Changes: status StateObserver")
+        registerStateObservers(for: program, baseContext: context)
+
         // Execute entry point
         let executor = FeatureSetExecutor(
             actionRegistry: actionRegistry,
@@ -385,6 +388,139 @@ public final class ExecutionEngine: @unchecked Sendable {
         services.registerAll(in: handlerContext)
 
         // Execute the handler
+        let executor = FeatureSetExecutor(
+            actionRegistry: actionRegistry,
+            eventBus: eventBus,
+            globalSymbols: globalSymbols
+        )
+
+        do {
+            _ = try await executor.execute(analyzedFS, context: handlerContext)
+        } catch {
+            eventBus.publish(ErrorOccurredEvent(
+                error: String(describing: error),
+                context: analyzedFS.featureSet.name,
+                recoverable: true
+            ))
+        }
+    }
+
+    /// Register state transition observers for feature sets with "StateObserver" business activity
+    /// Supports optional transition filter: "status StateObserver<draft_to_placed>"
+    /// For example: "Audit Changes: status StateObserver", "Notify Placed: status StateObserver<draft_to_placed>"
+    private func registerStateObservers(for program: AnalyzedProgram, baseContext: RuntimeContext) {
+        // Find all feature sets with "StateObserver" business activity
+        let stateObservers = program.featureSets.filter { analyzedFS in
+            analyzedFS.featureSet.businessActivity.contains("StateObserver")
+        }
+
+        for analyzedFS in stateObservers {
+            let activity = analyzedFS.featureSet.businessActivity
+
+            // Parse: "status StateObserver" or "status StateObserver<draft_to_placed>"
+            var fieldName = ""
+            var transitionFilter: String? = nil
+
+            if let angleStart = activity.firstIndex(of: "<"),
+               let angleEnd = activity.firstIndex(of: ">") {
+                // Has transition filter: "status StateObserver<draft_to_placed>"
+                transitionFilter = String(activity[activity.index(after: angleStart)..<angleEnd])
+                let beforeAngle = String(activity[..<angleStart])
+                fieldName = beforeAngle
+                    .replacingOccurrences(of: " StateObserver", with: "")
+                    .replacingOccurrences(of: "StateObserver", with: "")
+                    .trimmingCharacters(in: .whitespaces)
+                    .lowercased()
+            } else {
+                // No filter: "status StateObserver"
+                fieldName = activity
+                    .replacingOccurrences(of: " StateObserver", with: "")
+                    .replacingOccurrences(of: "StateObserver", with: "")
+                    .trimmingCharacters(in: .whitespaces)
+                    .lowercased()
+            }
+
+            // Capture as constants for Sendable closure
+            let capturedFieldName = fieldName
+            let capturedTransitionFilter = transitionFilter
+
+            // Subscribe to StateTransitionEvent and filter by field name and optional transition
+            eventBus.subscribe(to: StateTransitionEvent.self) { [weak self] event in
+                guard let self = self else { return }
+
+                // Match field name (empty = match all fields)
+                let fieldMatches = capturedFieldName.isEmpty || event.fieldName.lowercased() == capturedFieldName
+
+                // Match transition filter if specified
+                let transitionMatches: Bool
+                if let filter = capturedTransitionFilter {
+                    let expectedTransition = "\(event.fromState)_to_\(event.toState)"
+                    transitionMatches = expectedTransition.lowercased() == filter.lowercased()
+                } else {
+                    transitionMatches = true  // No filter = match all transitions
+                }
+
+                let shouldHandle = fieldMatches && transitionMatches
+
+                if shouldHandle {
+                    await self.executeStateObserver(
+                        analyzedFS,
+                        program: program,
+                        baseContext: baseContext,
+                        event: event
+                    )
+                }
+            }
+        }
+    }
+
+    /// Execute a state observer feature set
+    private func executeStateObserver(
+        _ analyzedFS: AnalyzedFeatureSet,
+        program: AnalyzedProgram,
+        baseContext: RuntimeContext,
+        event: StateTransitionEvent
+    ) async {
+        // Create child context for this observer with its own business activity
+        let handlerContext = RuntimeContext(
+            featureSetName: analyzedFS.featureSet.name,
+            businessActivity: analyzedFS.featureSet.businessActivity,
+            eventBus: eventBus,
+            parent: baseContext
+        )
+
+        // Bind transition data to context as "transition" with nested access
+        // e.g., <Extract> the <fromState> from the <transition: fromState>
+        var transitionData: [String: any Sendable] = [
+            "fieldName": event.fieldName,
+            "objectName": event.objectName,
+            "fromState": event.fromState,
+            "toState": event.toState
+        ]
+        if let entityId = event.entityId {
+            transitionData["entityId"] = entityId
+        }
+        if let entity = event.entity {
+            transitionData["entity"] = entity
+        }
+        handlerContext.bind("transition", value: transitionData)
+
+        // Also bind transition keys directly for convenience
+        handlerContext.bind("transition:fieldName", value: event.fieldName)
+        handlerContext.bind("transition:objectName", value: event.objectName)
+        handlerContext.bind("transition:fromState", value: event.fromState)
+        handlerContext.bind("transition:toState", value: event.toState)
+        if let entityId = event.entityId {
+            handlerContext.bind("transition:entityId", value: entityId)
+        }
+        if let entity = event.entity {
+            handlerContext.bind("transition:entity", value: entity)
+        }
+
+        // Copy services from base context
+        services.registerAll(in: handlerContext)
+
+        // Execute the observer
         let executor = FeatureSetExecutor(
             actionRegistry: actionRegistry,
             eventBus: eventBus,
