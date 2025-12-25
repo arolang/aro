@@ -30,6 +30,8 @@
 17. **Native Compilation** — `aro build` and the C runtime
 18. **Multi-file Applications** — Project structure
 19. **Patterns & Practices** — Real-world architectures
+20. **State Machines** — Lifecycle management with the Accept action
+21. **Modules and Imports** — Modular architecture and cross-module visibility
 
 ## Appendices
 - A: Action Reference (all 24 built-in actions)
