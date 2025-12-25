@@ -100,7 +100,71 @@ Configuration can be hardcoded in your ARO statements or loaded from external fi
 
 ---
 
-## 14.8 Best Practices
+## 14.8 Practical Example: Services in Action
+
+Here is a complete example demonstrating multiple built-in services working together. This application watches a directory for configuration changes and uses the HTTP client to report them to an external monitoring service.
+
+```aro
+(* Config Monitor - Watch files and report changes via HTTP *)
+
+(Application-Start: Config Monitor) {
+    <Log> the <message> for the <console> with "Starting configuration monitor...".
+
+    (* Load the monitoring endpoint from environment or config *)
+    <Create> the <webhook-url> with "https://monitoring.example.com/webhook".
+
+    (* Start watching the config directory *)
+    <Watch> the <file-monitor> for the <directory> with "./config".
+
+    <Log> the <message> for the <console> with "Watching ./config for changes...".
+
+    (* Keep running until shutdown signal *)
+    <Keepalive> the <application> for the <events>.
+
+    <Return> an <OK: status> for the <startup>.
+}
+
+(Report Config Change: File Event Handler) {
+    (* Extract the changed file path *)
+    <Extract> the <path> from the <event: path>.
+    <Extract> the <event-type> from the <event: type>.
+
+    <Log> the <message> for the <console> with "Config changed:".
+    <Log> the <message> for the <console> with <path>.
+
+    (* Build notification payload *)
+    <Create> the <notification> with {
+        file: <path>,
+        change: <event-type>,
+        timestamp: "now"
+    }.
+
+    (* Send to monitoring webhook *)
+    <Send> the <notification> to the <webhook-url>.
+
+    <Log> the <message> for the <console> with "Change reported to monitoring service.".
+
+    <Return> an <OK: status> for the <event>.
+}
+
+(Application-End: Success) {
+    <Log> the <message> for the <console> with "Config monitor stopped.".
+    <Return> an <OK: status> for the <shutdown>.
+}
+```
+
+This example shows:
+
+- **File system service**: The `Watch` action starts monitoring the `./config` directory
+- **HTTP client**: The `Send` action posts change notifications to an external webhook
+- **Lifecycle management**: `Keepalive` keeps the app running, `Application-End` provides graceful shutdown
+- **Event handling**: The File Event Handler processes each file change event
+
+> **See also:** `Examples/FileWatcher` and `Examples/HTTPClient` for standalone examples of each service.
+
+---
+
+## 14.9 Best Practices
 
 Start all services during Application-Start. Centralizing service startup in one place makes it clear what your application depends on and ensures consistent initialization order.
 

@@ -38,6 +38,62 @@ This systematic construction means that choosing good names in your code automat
 
 This connection between code quality and error message quality creates a positive incentive. Writing readable code with descriptive names not only helps human readers understand the code but also produces better error messages that help during debugging and troubleshooting.
 
+### Error Message Examples
+
+Here is ARO code followed by the runtime error messages it produces when operations fail:
+
+**Code:**
+```aro
+(getUser: User API) {
+    <Extract> the <id> from the <pathParameters: id>.
+    <Retrieve> the <user> from the <user-repository> where id = <id>.
+    <Return> an <OK: status> with <user>.
+}
+```
+
+**When user ID 530 does not exist:**
+```
+Runtime Error: Cannot retrieve the user from the user-repository where id = 530
+  Feature: getUser
+  Statement: <Retrieve> the <user> from the <user-repository> where id = <id>
+```
+
+**When pathParameters does not contain id:**
+```
+Runtime Error: Cannot extract the id from the pathParameters
+  Feature: getUser
+  Statement: <Extract> the <id> from the <pathParameters: id>
+  Cause: Key 'id' not found in pathParameters
+```
+
+**Another example with validation:**
+```aro
+(createOrder: Order API) {
+    <Extract> the <data> from the <request: body>.
+    <Validate> the <data> against the <order-schema>.
+    <Store> the <order> in the <order-repository>.
+    <Return> a <Created: status> with <order>.
+}
+```
+
+**When validation fails:**
+```
+Runtime Error: Cannot validate the data against the order-schema
+  Feature: createOrder
+  Statement: <Validate> the <data> against the <order-schema>
+  Cause: Validation failed
+```
+
+**When the repository is unavailable:**
+```
+Runtime Error: Cannot store the order in the order-repository
+  Feature: createOrder
+  Statement: <Store> the <order> in the <order-repository>
+  Cause: Connection refused
+```
+
+The pattern is consistent: the statement's natural language structure becomes the error message, with context about which feature failed and what caused the failure.
+
 ---
 
 ## 7.4 Why This Works

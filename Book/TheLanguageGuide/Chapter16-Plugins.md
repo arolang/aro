@@ -38,6 +38,135 @@ Action implementations follow the same patterns described for custom actions. Ea
 
 Testing follows standard Swift testing practices. You create test targets that depend on your plugin and test the action implementations. Because actions have a well-defined interface, they are straightforward to test with mock contexts and assertions on outputs.
 
+### Complete Example: ZipPlugin
+
+Here is a complete plugin that provides file compression using an external library. This example demonstrates the full plugin structure including Package.swift, the service implementation, and usage from ARO.
+
+**Directory Structure:**
+
+```
+ZipService/
+├── main.aro                              # ARO application using the plugin
+├── content/                              # Files to compress
+│   ├── file1.txt
+│   └── file2.txt
+└── plugins/
+    └── ZipPlugin/
+        ├── Package.swift                 # Plugin manifest
+        └── Sources/ZipPlugin/
+            └── ZipService.swift          # Plugin implementation
+```
+
+**Package.swift** — Plugin manifest with external dependency:
+
+```swift
+// swift-tools-version:5.9
+import PackageDescription
+
+let package = Package(
+    name: "ZipPlugin",
+    platforms: [.macOS(.v13)],
+    products: [
+        .library(name: "ZipPlugin", type: .dynamic, targets: ["ZipPlugin"])
+    ],
+    dependencies: [
+        .package(url: "https://github.com/marmelroy/Zip.git", from: "2.1.0")
+    ],
+    targets: [
+        .target(name: "ZipPlugin", dependencies: ["Zip"])
+    ]
+)
+```
+
+**ZipService.swift** — Plugin implementation with three methods:
+
+```swift
+import Foundation
+import Zip
+
+// Plugin initialization - returns service metadata as JSON
+@_cdecl("aro_plugin_init")
+public func pluginInit() -> UnsafePointer<CChar> {
+    let metadata = """
+    {"services": [{"name": "zip", "symbol": "zip_call"}]}
+    """
+    return UnsafePointer(strdup(metadata)!)
+}
+
+// Main entry point for the zip service
+@_cdecl("zip_call")
+public func zipCall(
+    _ methodPtr: UnsafePointer<CChar>,
+    _ argsPtr: UnsafePointer<CChar>,
+    _ resultPtr: UnsafeMutablePointer<UnsafeMutablePointer<CChar>?>
+) -> Int32 {
+    let method = String(cString: methodPtr)
+    let argsJSON = String(cString: argsPtr)
+
+    // Parse arguments and execute method
+    do {
+        let args = try parseJSON(argsJSON)
+        let result = try executeMethod(method, args: args)
+        resultPtr.pointee = encodeJSON(result).withCString { strdup($0) }
+        return 0
+    } catch {
+        resultPtr.pointee = "{\"error\": \"\(error)\"}".withCString { strdup($0) }
+        return 1
+    }
+}
+
+private func executeMethod(_ method: String, args: [String: Any]) throws -> [String: Any] {
+    switch method.lowercased() {
+    case "compress", "zip":
+        guard let files = args["files"] as? [String],
+              let output = args["output"] as? String else {
+            throw PluginError.missingArgument
+        }
+        let fileURLs = files.map { URL(fileURLWithPath: $0) }
+        try Zip.zipFiles(paths: fileURLs, zipFilePath: URL(fileURLWithPath: output), password: nil, progress: nil)
+        return ["success": true, "output": output, "filesCompressed": files.count]
+
+    case "decompress", "unzip":
+        guard let archive = args["archive"] as? String else {
+            throw PluginError.missingArgument
+        }
+        let destination = args["destination"] as? String ?? "."
+        try Zip.unzipFile(URL(fileURLWithPath: archive), destination: URL(fileURLWithPath: destination), overwrite: true, password: nil)
+        return ["success": true, "destination": destination]
+
+    default:
+        throw PluginError.unknownMethod(method)
+    }
+}
+
+enum PluginError: Error {
+    case missingArgument, unknownMethod(String)
+}
+```
+
+**main.aro** — Using the plugin in an ARO application:
+
+```aro
+(* ZipService - Demonstrates using a plugin with external dependencies *)
+
+(Application-Start: Zip Service Demo) {
+    <Log> the <message> for the <console> with "Testing zip plugin...".
+
+    (* Compress files into a zip archive *)
+    <Call> the <result> from the <zip: compress> with {
+        files: ["content/file1.txt", "content/file2.txt"],
+        output: "content/archive.zip"
+    }.
+
+    <Log> the <message> for the <console> with "Zip result:".
+    <Log> the <message> for the <console> with <result>.
+
+    <Return> an <OK: status> for the <startup>.
+}
+```
+
+> **Source:** See `Examples/ZipService` in the ARO repository for the complete working example.
+
 ---
 
 ## 16.4 Using Plugins

@@ -58,6 +58,86 @@ Event chains occur when handlers emit additional events. An OrderPlaced event mi
 
 The saga pattern uses event chains to implement long-running processes that span multiple steps. A refund saga might involve reversing a payment, restoring inventory, updating the order status, and notifying the customer. Each step emits an event that triggers the next step. If a step fails, compensation events can trigger rollback of previous steps.
 
+### Complete Saga Example: Order Processing
+
+Here is a complete order processing saga showing event-driven choreography:
+
+```aro
+(* Step 1: HTTP handler creates order and starts the saga *)
+(createOrder: Order API) {
+    <Extract> the <order-data> from the <request: body>.
+    <Create> the <order> with <order-data>.
+    <Store> the <order> in the <order-repository>.
+
+    (* Emit event to start the saga *)
+    <Emit> an <OrderPlaced: event> with <order>.
+
+    <Return> a <Created: status> with <order>.
+}
+
+(* Step 2: Reserve inventory when order is placed *)
+(Reserve Inventory: OrderPlaced Handler) {
+    <Extract> the <order> from the <event: order>.
+    <Extract> the <items> from the <order: items>.
+
+    (* Reserve each item in inventory *)
+    <Retrieve> the <inventory> from the <inventory-service> for <items>.
+    <Update> the <inventory> with { reserved: true }.
+    <Store> the <inventory> in the <inventory-service>.
+
+    (* Continue the saga *)
+    <Emit> an <InventoryReserved: event> with <order>.
+}
+
+(* Step 3: Process payment after inventory is reserved *)
+(Process Payment: InventoryReserved Handler) {
+    <Extract> the <order> from the <event: order>.
+    <Extract> the <amount> from the <order: total>.
+    <Extract> the <payment-method> from the <order: paymentMethod>.
+
+    (* Charge the customer *)
+    <Send> the <charge-request> to the <payment-gateway> with {
+        amount: <amount>,
+        method: <payment-method>
+    }.
+
+    (* Continue the saga *)
+    <Emit> a <PaymentProcessed: event> with <order>.
+}
+
+(* Step 4: Ship order after payment succeeds *)
+(Ship Order: PaymentProcessed Handler) {
+    <Extract> the <order> from the <event: order>.
+
+    (* Update order status and create shipment *)
+    <Update> the <order> with { status: "shipped" }.
+    <Store> the <order> in the <order-repository>.
+    <Send> the <shipment-request> to the <shipping-service> with <order>.
+
+    (* Final event in the happy path *)
+    <Emit> an <OrderShipped: event> with <order>.
+}
+
+(* Notification handler - runs in parallel with saga *)
+(Notify Customer: OrderShipped Handler) {
+    <Extract> the <order> from the <event: order>.
+    <Extract> the <email> from the <order: customerEmail>.
+
+    <Send> the <shipping-notification> to the <email-service> with {
+        to: <email>,
+        template: "order-shipped",
+        order: <order>
+    }.
+
+    <Return> an <OK: status> for the <notification>.
+}
+```
+
+This saga demonstrates:
+- **Event chain**: OrderPlaced → InventoryReserved → PaymentProcessed → OrderShipped
+- **Decoupling**: Each handler focuses on one step, unaware of the others
+- **Fan-out**: Multiple handlers can listen to the same event (e.g., OrderShipped triggers both shipping and notifications)
+
 Fan-out occurs when multiple handlers react to the same event. An OrderPlaced event might trigger handlers for inventory, payment, notifications, analytics, and fraud checking. All these handlers run when the event is emitted. Each handler focuses on its specific concern, and together they implement the complete response to a new order.
 
 ---

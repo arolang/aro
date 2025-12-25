@@ -68,6 +68,99 @@ Organization by technical concern groups code by what it does technically. HTTP 
 
 Many applications combine these strategies. Domain directories at the top level, with technical concerns separated within each domain. Or feature directories with shared utilities factored out. The right organization depends on your team and your application.
 
+### Complete Application Layout Example
+
+Here is a complete e-commerce API organized by domain:
+
+```
+ecommerce-api/
+├── openapi.yaml              # API contract (required for HTTP server)
+├── main.aro                  # Application lifecycle only
+├── products/
+│   └── products.aro          # Product CRUD operations
+├── orders/
+│   ├── orders.aro            # Order CRUD operations
+│   └── order-events.aro      # Order event handlers
+├── inventory/
+│   └── inventory.aro         # Stock management
+└── notifications/
+    └── notifications.aro     # Email/notification handlers
+```
+
+**main.aro** — Lifecycle only, no business logic:
+```aro
+(Application-Start: E-commerce API) {
+    <Log> the <message> for the <console> with "Starting e-commerce API...".
+    <Start> the <http-server> on port 8080.
+    <Keepalive> the <application> for the <events>.
+    <Return> an <OK: status> for the <startup>.
+}
+
+(Application-End: Success) {
+    <Stop> the <http-server>.
+    <Log> the <message> for the <console> with "E-commerce API stopped.".
+    <Return> an <OK: status> for the <shutdown>.
+}
+```
+
+**products/products.aro** — Product domain:
+```aro
+(listProducts: Product API) {
+    <Retrieve> the <products> from the <product-repository>.
+    <Return> an <OK: status> with <products>.
+}
+
+(getProduct: Product API) {
+    <Extract> the <id> from the <pathParameters: id>.
+    <Retrieve> the <product> from the <product-repository> where id = <id>.
+    <Return> an <OK: status> with <product>.
+}
+```
+
+**orders/orders.aro** — Order domain:
+```aro
+(createOrder: Order API) {
+    <Extract> the <order-data> from the <request: body>.
+    <Create> the <order> with <order-data>.
+    <Store> the <order> in the <order-repository>.
+    <Emit> an <OrderPlaced: event> with <order>.
+    <Return> a <Created: status> with <order>.
+}
+```
+
+**orders/order-events.aro** — Separated event handlers:
+```aro
+(Reserve Stock: OrderPlaced Handler) {
+    <Extract> the <order> from the <event: order>.
+    <Extract> the <items> from the <order: items>.
+    <Update> the <inventory> for <items> with { reserved: true }.
+    <Emit> an <StockReserved: event> with <order>.
+}
+```
+
+**notifications/notifications.aro** — Cross-domain event handlers:
+```aro
+(Send Order Confirmation: OrderPlaced Handler) {
+    <Extract> the <order> from the <event: order>.
+    <Extract> the <email> from the <order: customerEmail>.
+    <Send> the <confirmation-email> to the <email-service> with {
+        to: <email>,
+        template: "order-confirmation",
+        order: <order>
+    }.
+    <Return> an <OK: status> for the <notification>.
+}
+```
+
+Key points in this layout:
+- **main.aro** contains only lifecycle handlers
+- **Each domain** has its own directory
+- **Event handlers** are separated from emitters
+- **Cross-domain handlers** (notifications) have their own location
+- **No imports needed** — all feature sets are globally visible
+
+> **See also:** `Examples/UserService` for a working multi-file application.
+
 ---
 
 ## 18.6 Recommended Patterns

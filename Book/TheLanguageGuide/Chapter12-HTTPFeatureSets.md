@@ -86,6 +86,100 @@ When listing nested resources, include the parent identifier in your repository 
 
 The nesting expresses ownership and access control. A request for /users/123/orders/456 should only succeed if order 456 actually belongs to user 123. Your where clause should include both constraints to enforce this relationship.
 
+### Complete Nested Resource Example
+
+Here is a complete example for managing order items as a nested resource under orders:
+
+**OpenAPI specification (partial):**
+```yaml
+paths:
+  /orders/{orderId}/items:
+    get:
+      operationId: listOrderItems
+    post:
+      operationId: createOrderItem
+  /orders/{orderId}/items/{itemId}:
+    get:
+      operationId: getOrderItem
+    put:
+      operationId: updateOrderItem
+    delete:
+      operationId: deleteOrderItem
+```
+
+**ARO handlers:**
+```aro
+(* List all items for an order *)
+(listOrderItems: Order API) {
+    <Extract> the <order-id> from the <pathParameters: orderId>.
+
+    (* Verify order exists *)
+    <Retrieve> the <order> from the <order-repository> where id = <order-id>.
+
+    (* Get items for this order *)
+    <Retrieve> the <items> from the <item-repository> where orderId = <order-id>.
+
+    <Return> an <OK: status> with <items>.
+}
+
+(* Get a specific item, verifying it belongs to the order *)
+(getOrderItem: Order API) {
+    <Extract> the <order-id> from the <pathParameters: orderId>.
+    <Extract> the <item-id> from the <pathParameters: itemId>.
+
+    (* Retrieve with both constraints to enforce ownership *)
+    <Retrieve> the <item> from the <item-repository>
+        where id = <item-id> and orderId = <order-id>.
+
+    <Return> an <OK: status> with <item>.
+}
+
+(* Create a new item for an order *)
+(createOrderItem: Order API) {
+    <Extract> the <order-id> from the <pathParameters: orderId>.
+    <Extract> the <item-data> from the <request: body>.
+
+    (* Verify order exists before adding item *)
+    <Retrieve> the <order> from the <order-repository> where id = <order-id>.
+
+    (* Create item with parent reference *)
+    <Create> the <item> with {
+        orderId: <order-id>,
+        productId: <item-data>.productId,
+        quantity: <item-data>.quantity,
+        price: <item-data>.price
+    }.
+
+    <Store> the <item> in the <item-repository>.
+
+    (* Recalculate order total *)
+    <Emit> an <OrderItemAdded: event> with { order: <order>, item: <item> }.
+
+    <Return> a <Created: status> with <item>.
+}
+
+(* Delete an item from an order *)
+(deleteOrderItem: Order API) {
+    <Extract> the <order-id> from the <pathParameters: orderId>.
+    <Extract> the <item-id> from the <pathParameters: itemId>.
+
+    (* Verify ownership before deletion *)
+    <Retrieve> the <item> from the <item-repository>
+        where id = <item-id> and orderId = <order-id>.
+
+    <Delete> the <item> from the <item-repository>.
+
+    <Emit> an <OrderItemRemoved: event> with { orderId: <order-id>, itemId: <item-id> }.
+
+    <Return> a <NoContent: status> for the <deletion>.
+}
+```
+
+Key patterns in this example:
+- **Parent verification**: Always verify the parent exists before creating nested resources
+- **Ownership enforcement**: Include both parent and child IDs in where clauses
+- **Event emission**: Notify other handlers when nested resources change
+
 Deep nesting (more than two levels) can make URLs unwieldy and logic complex. Consider whether deep nesting is necessary or whether flatter alternatives would serve your API design better.
 
 ---
