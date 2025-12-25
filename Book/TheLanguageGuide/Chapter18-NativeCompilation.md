@@ -1,4 +1,4 @@
-# Chapter 17: Native Compilation
+# Chapter 18: Native Compilation
 
 *"From script to standalone binary."*
 
@@ -144,4 +144,4 @@ Deploy the OpenAPI specification and other required files alongside the binary. 
 
 ---
 
-*Next: Chapter 18 — Multi-file Applications*
+*Next: Chapter 19 — Multi-file Applications*

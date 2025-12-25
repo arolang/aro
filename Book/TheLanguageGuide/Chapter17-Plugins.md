@@ -1,4 +1,4 @@
-# Chapter 16: Plugins
+# Chapter 17: Plugins
 
 *"Share your actions with the world."*
 
@@ -233,4 +233,4 @@ Keep dependencies minimal. Each dependency you add is a dependency your users mu
 
 ---
 
-*Next: Chapter 17 — Native Compilation*
+*Next: Chapter 18 — Native Compilation*

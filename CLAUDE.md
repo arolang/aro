@@ -221,6 +221,34 @@ Application lifecycle handlers:
 }
 ```
 
+### Computations
+
+The Compute action transforms data using built-in operations:
+
+| Operation | Description | Example |
+|-----------|-------------|---------|
+| `length` / `count` | Count elements | `<Compute> the <len: length> from <text>.` |
+| `uppercase` | Convert to UPPERCASE | `<Compute> the <upper: uppercase> from <text>.` |
+| `lowercase` | Convert to lowercase | `<Compute> the <lower: lowercase> from <text>.` |
+| `hash` | Compute hash value | `<Compute> the <hash: hash> from <password>.` |
+| Arithmetic | +, -, *, /, % | `<Compute> the <total> from <price> * <qty>.` |
+
+**Qualifier-as-Name Syntax**: When you need multiple results of the same operation, use the qualifier to specify the operation while the base becomes the variable name:
+
+```aro
+(* Old syntax: 'length' is both the variable name AND the operation *)
+<Compute> the <length> from the <message>.
+
+(* New syntax: variable name and operation are separate *)
+<Compute> the <first-length: length> from the <first-message>.
+<Compute> the <second-length: length> from the <second-message>.
+
+(* Now both values are available *)
+<Compare> the <first-length> against the <second-length>.
+```
+
+See `Proposals/ARO-0035-qualifier-as-name.md` for the full specification.
+
 ### Long-Running Applications
 
 For applications that need to stay alive and process events (servers, file watchers, etc.), use the `<Keepalive>` action:
@@ -302,6 +330,7 @@ Sources/
 
 Examples/
 ├── HelloWorld/         # Single-file example
+├── Computations/       # Compute operations and qualifier-as-name syntax
 ├── HTTPServer/         # HTTP server example
 ├── FileWatcher/        # File monitoring example
 ├── EchoSocket/         # Socket example
@@ -311,18 +340,20 @@ Examples/
     ├── users.aro       # Feature sets (named after operationIds)
     └── events.aro      # Event handlers
 
-Proposals/              # 28 evolution proposals (ARO-0001 to ARO-0028)
+Proposals/              # 35 evolution proposals (ARO-0001 to ARO-0035)
 Documentation/          # Developer guides
 ```
 
 ## Language Proposals
 
-The `Proposals/` directory contains 28 evolution proposals:
+The `Proposals/` directory contains 35 evolution proposals:
 - **0001-0019**: Core language specification
 - **0020-0025**: Runtime architecture (execution, HTTP, files, sockets, actions)
 - **0026**: Native compilation (aro build)
 - **0027**: OpenAPI contract-first API development
 - **0028**: Long-running applications (Keepalive action)
+- **0029-0034**: Additional features (file monitoring, IDE, responses, repositories, system exec, LSP)
+- **0035**: Qualifier-as-name syntax for computed results
 
 ## Concurrency
 

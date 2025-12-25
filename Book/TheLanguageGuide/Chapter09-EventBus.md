@@ -1,4 +1,4 @@
-# Chapter 8: The Event Bus
+# Chapter 9: The Event Bus
 
 *"In an event-driven system, everything is a reaction."*
 
@@ -122,4 +122,4 @@ Document event contracts. The payload of an event is a contract between emitters
 
 ---
 
-*Next: Chapter 9 — Application Lifecycle*
+*Next: Chapter 10 — Application Lifecycle*

@@ -1,4 +1,4 @@
-# Chapter 10: Custom Events
+# Chapter 11: Custom Events
 
 *"Design your domain events like you design your domain model."*
 
@@ -186,4 +186,4 @@ Avoid circular event chains. If event A triggers a handler that emits event B, a
 
 ---
 
-*Next: Chapter 11 — OpenAPI Integration*
+*Next: Chapter 12 — OpenAPI Integration*
