@@ -213,7 +213,7 @@ Feature sets with business activity `File Event Handler` receive file events. Th
 
 (POST /upload: Upload API) {
     <Extract> the <file-data> from the <request: body>.
-    <Extract> the <filename> from the <request: headers filename>.
+    <Extract> the <filename> from the <request: headers.filename>.
 
     <Write> the <file-data> to the <file: "./uploads/${filename}">.
 
@@ -322,8 +322,8 @@ Feature sets with business activity `File Event Handler` receive file events. Th
 
 ```aro
 (POST /upload: Upload API) {
-    <Extract> the <filename> from the <request: headers filename>.
-    <Extract> the <content-type> from the <request: headers Content-Type>.
+    <Extract> the <filename> from the <request: headers.filename>.
+    <Extract> the <content-type> from the <request: headers.Content-Type>.
 
     (* Validate file type *)
     when <content-type> is not "image/png" and <content-type> is not "image/jpeg" {

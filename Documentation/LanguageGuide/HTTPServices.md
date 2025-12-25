@@ -116,7 +116,7 @@ The HTTP server starts automatically. Use `<Keepalive>` to keep the application 
 ### Request Headers
 
 ```aro
-<Extract> the <auth-token> from the <request: headers Authorization>.
+<Extract> the <auth-token> from the <request: headers.Authorization>.
 ```
 
 ## Response Status Codes

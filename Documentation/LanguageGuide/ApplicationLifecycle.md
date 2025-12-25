@@ -62,10 +62,10 @@ The entry point for every ARO application.
     <Publish> as <app-config> <config>.
 
     (* Initialize database connection *)
-    <Connect> to <host: "${config.database.host}"> on port <config: database port> as <database>.
+    <Connect> to <host: "${config.database.host}"> on port <config: database.port> as <database>.
 
     (* Start HTTP server *)
-    <Start> the <http-server> on port <config: server port>.
+    <Start> the <http-server> on port <config: server.port>.
 
     (* Start file watcher for uploads *)
     <Watch> the <directory: "./uploads"> as <upload-watcher>.
@@ -402,7 +402,7 @@ paths:
     }
 
     (* Then initialize services *)
-    <Connect> to <config: database url> as <database>.
+    <Connect> to <config: database.url> as <database>.
     <Start> the <http-server> on port <config: port>.
 
     <Return> an <OK: status> for the <startup>.

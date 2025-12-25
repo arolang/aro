@@ -126,7 +126,7 @@ Event handlers have access to the event that triggered them through the `event` 
 
 File event handlers have access to file system event details: the path of the file that changed, the type of change that occurred (created, modified, deleted), and other relevant metadata depending on the file system implementation.
 
-You access context data using the Extract action with qualifiers. The expression `<pathParameters: id>` means "the id property of the pathParameters object." The expression `<event: user: email>` means "the email property of the user property of the event object." Qualifiers chain to allow navigation into nested structures.
+You access context data using the Extract action with qualifiers. The expression `<pathParameters: id>` means "the id property of the pathParameters object." The expression `<event: user.email>` means "the email property of the user property of the event object." Qualifiers chain to allow navigation into nested structures.
 
 ---
 

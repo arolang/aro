@@ -106,13 +106,13 @@ The context object provides data that is available to handlers based on how they
 
 When you reference a variable, you can use qualifiers to access nested properties within that variable's value. The qualifier path is written after the variable name, separated by colons. This allows you to navigate into structured data without creating intermediate bindings.
 
-Accessing a property uses a single qualifier: referencing something like `user: name` accesses the name property of the user object. Accessing a deeply nested property chains qualifiers: referencing something like `order: customer: address: city` navigates three levels deep to get the city from the customer's address on the order.
+Accessing a property uses a single qualifier: referencing something like `user: name` accesses the name property of the user object. Accessing a deeply nested property chains qualifiers: referencing something like `order: customer.address.city` navigates three levels deep to get the city from the customer's address on the order.
 
-Array indexing works similarly. You can access a specific element by index: referencing `items: 0` gets the first element of the items array. You can combine array access with property access: referencing `items: 0: name` gets the name property of the first item.
+Array indexing works similarly. You can access a specific element by index: referencing `items: 0` gets the first element of the items array. You can combine array access with property access: referencing `items: 0.name` gets the name property of the first item.
 
 Qualifiers work on the result of Extract actions, Create actions, and any other action that produces structured data. They also work on context objects like pathParameters, queryParameters, headers, and event payloads. This allows you to extract specific pieces of complex structures without binding the entire structure to an intermediate name.
 
-The qualifier syntax reads naturally when the values have descriptive names. If you have a user with an address that has a city, then `user: address: city` reads almost like natural language describing what you want. This is another aspect of ARO's design philosophy of making code read like descriptions of intent rather than instructions to a computer.
+The qualifier syntax reads naturally when the values have descriptive names. If you have a user with an address that has a city, then `user: address.city` reads almost like natural language describing what you want. This is another aspect of ARO's design philosophy of making code read like descriptions of intent rather than instructions to a computer.
 
 ---
 
