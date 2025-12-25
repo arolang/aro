@@ -175,11 +175,40 @@ jobs:
           retention-days: 30
 
   # ===========================================================================
+  # Generate Documentation PDF
+  # ===========================================================================
+  documentation:
+    needs: test
+    name: Documentation
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v6
+
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y pandoc weasyprint fonts-ibm-plex
+
+      - name: Build PDF
+        run: |
+          cd Book/TheLanguageGuide
+          chmod +x build-pdf.sh
+          ./build-pdf.sh
+
+      - name: Upload PDF artifact
+        uses: actions/upload-artifact@v6
+        with:
+          name: aro-language-guide
+          path: Book/TheLanguageGuide/output/ARO-Language-Guide.pdf
+          retention-days: 30
+
+  # ===========================================================================
   # Create Release (only on tags)
   # ===========================================================================
   release:
     name: Create Release
-    needs: [linux, macos, windows]
+    needs: [linux, macos, windows, documentation]
     runs-on: ubuntu-latest
     if: github.ref_type == 'tag'
     permissions:
@@ -230,6 +259,7 @@ jobs:
             artifacts/aro-linux-amd64.tar.gz
             artifacts/aro-macos-arm64.tar.gz
             artifacts/aro-windows-amd64.zip
+            artifacts/aro-language-guide/ARO-Language-Guide.pdf
           body: |
             ## ARO Programming Language ${{ steps.version.outputs.version }}
 
@@ -240,6 +270,12 @@ jobs:
             | Linux | x86_64 | [aro-linux-amd64.tar.gz](https://github.com/${{ github.repository }}/releases/download/${{ github.ref_name }}/aro-linux-amd64.tar.gz) |
             | macOS | Apple Silicon | [aro-macos-arm64.tar.gz](https://github.com/${{ github.repository }}/releases/download/${{ github.ref_name }}/aro-macos-arm64.tar.gz) |
             | Windows | x86_64 | [aro-windows-amd64.zip](https://github.com/${{ github.repository }}/releases/download/${{ github.ref_name }}/aro-windows-amd64.zip) |
+
+            ### Documentation
+
+            | Document | Download |
+            |----------|----------|
+            | ARO Language Guide | [ARO-Language-Guide.pdf](https://github.com/${{ github.repository }}/releases/download/${{ github.ref_name }}/ARO-Language-Guide.pdf) |
 
             ### Installation
 

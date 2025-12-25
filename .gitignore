@@ -34,3 +34,7 @@
 /Examples/HTTPServer/HTTPServer
 .idea
 /Examples/OrderService/OrderService
+/Examples/ModulesExample/ModuleA/ModuleA
+/Examples/ModulesExample/ModuleB/ModuleB
+/Examples/ModulesExample/Combined/Combined
+/Book/TheLanguageGuide/output

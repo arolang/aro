@@ -2,6 +2,23 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
+## Source of Truth
+
+The project must always be in sync. When there are conflicts or discrepancies, the priority order for truth is:
+
+1. **Proposals** (`Proposals/`) - The authoritative specification
+2. **Code** (`Sources/`) - The implementation
+3. **Documentation** (`Documentation/`, `OVERVIEW.md`, `README.md`) - Developer docs
+4. **Website** (`Website/`) - Public website
+5. **Book** (`Book/`) - The Language Guide
+
+When updating any layer, ensure all lower-priority layers are updated to match.
+
+## Documentation Style
+
+- **Proposals** (`Proposals/`): Use ASCII art for diagrams
+- **Book** (`Book/`): Use SVG for diagrams
+
 ## Build Commands
 
 ```bash
@@ -11,7 +28,7 @@ aro run ./Examples/UserService      # Run multi-file application
 aro run ./Examples/HTTPServer       # Run server (uses Keepalive action)
 aro compile ./MyApp   # Compile all .aro files in directory
 aro check ./MyApp     # Syntax check all .aro files
-aro build ./MyApp     # Compile to native binary (C code + object file)
+aro build ./MyApp     # Compile to native binary (LLVM IR + object file)
 aro build ./MyApp --verbose --optimize  # Verbose build with optimizations
 ```
 
@@ -274,9 +291,9 @@ Sources/
 │   ├── Sockets/        # TCP server/client
 │   ├── OpenAPI/        # Contract-first routing (OpenAPISpec, RouteRegistry)
 │   └── Application/    # App lifecycle, ApplicationLoader
-├── AROCompiler/        # Native compilation (C code generation)
-│   ├── CCodeGenerator.swift  # AST to C transformation
-│   └── Linker.swift    # C compilation wrapper
+├── AROCompiler/        # Native compilation (LLVM code generation)
+│   ├── LLVMCodeGenerator.swift  # AST to LLVM IR transformation
+│   └── Linker.swift    # Compilation and linking
 ├── AROCRuntime/        # C-callable Swift runtime bridge
 │   ├── RuntimeBridge.swift   # Core runtime C interface
 │   ├── ActionBridge.swift    # All 24 actions via @_cdecl

@@ -1,0 +1,21 @@
+openapi: 3.0.3
+info:
+  title: Module B API
+  version: 1.0.0
+  description: A standalone module providing the /module-b endpoint
+
+paths:
+  /module-b:
+    get:
+      operationId: getModuleB
+      summary: Get greeting from Module B
+      responses:
+        '200':
+          description: Greeting from Module B
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string

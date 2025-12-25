@@ -1,0 +1,15 @@
+(* Combined Application *)
+(* Imports Module A and Module B to provide both endpoints *)
+
+import ../ModuleA
+import ../ModuleB
+
+(Application-Start: Combined) {
+    <Log> the <startup: message> for the <console> with "Combined application starting...".
+    <Start> the <http-server> for the <contract>.
+    <Keepalive> the <application> for the <events>.
+    <Return> an <OK: status> for the <startup>.
+}
+
+(* The getModuleA and getModuleB feature sets are imported from ModuleA and ModuleB *)
+(* No need to redefine them here *)

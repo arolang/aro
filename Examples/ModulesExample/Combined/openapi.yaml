@@ -1,0 +1,36 @@
+openapi: 3.0.3
+info:
+  title: Combined API
+  version: 1.0.0
+  description: A combined application that imports Module A and Module B
+
+paths:
+  /module-a:
+    get:
+      operationId: getModuleA
+      summary: Get greeting from Module A
+      responses:
+        '200':
+          description: Greeting from Module A
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+
+  /module-b:
+    get:
+      operationId: getModuleB
+      summary: Get greeting from Module B
+      responses:
+        '200':
+          description: Greeting from Module B
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string

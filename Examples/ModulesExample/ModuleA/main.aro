@@ -1,0 +1,14 @@
+(* Module A - Standalone Application *)
+(* Provides the /module-a endpoint *)
+
+(Application-Start: ModuleA) {
+    <Log> the <startup: message> for the <console> with "Module A starting...".
+    <Start> the <http-server> for the <contract>.
+    <Keepalive> the <application> for the <events>.
+    <Return> an <OK: status> for the <startup>.
+}
+
+(getModuleA: ModuleA API) {
+    <Create> the <response> with { message: "Hello from Module A" }.
+    <Return> an <OK: status> with <response>.
+}

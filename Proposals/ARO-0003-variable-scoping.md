@@ -22,17 +22,24 @@ Clear scoping rules are essential for:
 
 ### 1. Scope Hierarchy
 
-ARO has two scope levels:
+ARO has three scope levels:
 
 ```
-┌─────────────────────────────────────────────────────────────┐
-│                      Global Scope                           │
-│  (Published variables, external dependencies)               │
-│  ┌───────────────────────────────────────────────────────┐ │
-│  │                  Feature Set Scope                     │ │
-│  │  (Variables defined in the feature set)               │ │
-│  └───────────────────────────────────────────────────────┘ │
-└─────────────────────────────────────────────────────────────┘
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                              Global Scope                                   │
+│                 (external dependencies, environment)                        │
+│                                                                             │
+│  ┌─────────────────────────────────┐  ┌─────────────────────────────────┐  │
+│  │  Business Activity: User Mgmt   │  │  Business Activity: Orders      │  │
+│  │  (published variables here)     │  │  (published variables here)     │  │
+│  │                                 │  │                                 │  │
+│  │  ┌───────────┐ ┌───────────┐   │  │  ┌───────────┐ ┌───────────┐   │  │
+│  │  │ Feature   │ │ Feature   │   │  │  │ Feature   │ │ Feature   │   │  │
+│  │  │ Set       │ │ Set       │   │  │  │ Set       │ │ Set       │   │  │
+│  │  │ (local)   │ │ (local)   │   │  │  │ (local)   │ │ (local)   │   │  │
+│  │  └───────────┘ └───────────┘   │  │  └───────────┘ └───────────┘   │  │
+│  └─────────────────────────────────┘  └─────────────────────────────────┘  │
+└─────────────────────────────────────────────────────────────────────────────┘
 ```
 
 ### 2. Visibility Levels

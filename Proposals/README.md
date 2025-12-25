@@ -222,4 +222,4 @@ Each proposal follows the Swift Evolution format:
 
 ---
 
-*Last updated: December 2024*
+*Last updated: December 2025*
