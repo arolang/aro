@@ -28,13 +28,22 @@ struct ARO: AsyncParsableCommand {
               aro check myapp.aro               # Syntax check only
             """,
         version: "1.0.0",
-        subcommands: [
+        subcommands: subcommandsList,
+        defaultSubcommand: RunCommand.self
+    )
+
+    // LSP command is only available on non-Windows platforms
+    private static var subcommandsList: [any ParsableCommand.Type] {
+        var commands: [any ParsableCommand.Type] = [
             RunCommand.self,
             BuildCommand.self,
             CompileCommand.self,
             CheckCommand.self,
             TestCommand.self,
-        ],
-        defaultSubcommand: RunCommand.self
-    )
+        ]
+        #if !os(Windows)
+        commands.append(LSPCommand.self)
+        #endif
+        return commands
+    }
 }

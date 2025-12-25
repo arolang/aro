@@ -21,8 +21,9 @@ java {
 
 dependencies {
     intellijPlatform {
-        intellijIdeaCommunity("2024.1")
+        intellijIdeaCommunity("2024.2")
         bundledPlugin("org.jetbrains.plugins.textmate")
+        plugin("com.redhat.devtools.lsp4ij:0.9.0")
         pluginVerifier()
         instrumentationTools()
     }
@@ -32,7 +33,7 @@ intellijPlatform {
     pluginConfiguration {
         name = "ARO Language Support"
         ideaVersion {
-            sinceBuild = "241"
+            sinceBuild = "242"
             untilBuild = "251.*"
         }
     }

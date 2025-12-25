@@ -1,7 +1,7 @@
 <idea-plugin>
     <id>com.krissimon.aro</id>
     <name>ARO Language</name>
-    <version>1.0.0</version>
+    <version>1.1.0</version>
     <vendor email="kris@example.com" url="https://krissimon.github.io/aro/">Kris Simon</vendor>
 
     <description><![CDATA[
@@ -10,11 +10,15 @@
         <h3>Features</h3>
         <ul>
             <li><b>Syntax Highlighting</b> - Full highlighting for ARO code</li>
-            <li><b>Code Completion</b> - Live templates for common patterns</li>
+            <li><b>Language Server</b> - Real-time diagnostics, hover info, go to definition</li>
+            <li><b>Code Completion</b> - Smart completions and live templates</li>
+            <li><b>Find References</b> - Find all usages of symbols</li>
+            <li><b>Document Outline</b> - Navigate feature sets and statements</li>
             <li><b>Bracket Matching</b> - Match braces, parentheses, and angle brackets</li>
             <li><b>Comment Support</b> - Block comments with (* *)</li>
-            <li><b>File Icon</b> - Distinct icon for .aro files</li>
         </ul>
+
+        <p><b>Note:</b> Requires the <code>aro</code> CLI to be installed and available in PATH.</p>
 
         <h3>ARO Syntax</h3>
         <pre>
@@ -28,6 +32,17 @@
     ]]></description>
 
     <change-notes><![CDATA[
+        <h3>1.1.0</h3>
+        <ul>
+            <li>Added Language Server Protocol (LSP) support</li>
+            <li>Real-time diagnostics (errors and warnings)</li>
+            <li>Go to definition</li>
+            <li>Find references</li>
+            <li>Hover information (types, documentation)</li>
+            <li>Code completion</li>
+            <li>Document outline (symbols)</li>
+        </ul>
+
         <h3>1.0.0</h3>
         <ul>
             <li>Initial release</li>
@@ -37,10 +52,11 @@
         </ul>
     ]]></change-notes>
 
-    <idea-version since-build="241" until-build="251.*"/>
+    <idea-version since-build="242" until-build="251.*"/>
 
     <depends>com.intellij.modules.platform</depends>
     <depends>org.jetbrains.plugins.textmate</depends>
+    <depends>com.redhat.devtools.lsp4ij</depends>
 
     <extensions defaultExtensionNs="com.intellij">
         <!-- TextMate bundle for syntax highlighting (handles file type association via bundle) -->
@@ -49,5 +65,18 @@
         <!-- Live templates -->
         <defaultLiveTemplates file="/liveTemplates/ARO.xml"/>
         <liveTemplateContext implementation="com.krissimon.aro.AROTemplateContextType"/>
+    </extensions>
+
+    <!-- LSP4IJ Language Server Registration -->
+    <extensions defaultExtensionNs="com.redhat.devtools.lsp4ij">
+        <server id="aro"
+                name="ARO Language Server"
+                factoryClass="com.krissimon.aro.AROLspServerDescriptor">
+            <description><![CDATA[
+                Provides language intelligence for ARO files including diagnostics,
+                hover information, go to definition, and code completion.
+            ]]></description>
+        </server>
+        <languageMapping language="aro" serverId="aro"/>
     </extensions>
 </idea-plugin>
