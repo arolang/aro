@@ -349,105 +349,124 @@
 
         <!-- MOTIVATION SECTION -->
         <div class="motivation-section animate-on-scroll">
-            <h3><span class="section-icon">&#x1F504;</span> Inverting the Relationship</h3>
+            <h3><span class="section-icon">&#x1F512;</span> The Power of Constraints</h3>
             <p>
-                Here's the thing about AI code generation: we've been doing it backwards.
+                Every programmer eventually discovers a counterintuitive truth: <strong>sometimes the best code
+                is the code you couldn't write.</strong>
             </p>
             <p>
-                The traditional flow goes like this: <em>Human thinks in natural language</em> &#x2192;
-                <em>Human translates to code</em> &#x2192; <em>Computer executes</em>. Then LLMs came along
-                and we thought: "Great! Now the AI can do that middle translation step!" So we ask AI to
-                write Python, JavaScript, or Rust, and it dutifully converts our fuzzy human thoughts into
-                precise machine instructions.
+                General-purpose languages like Python, JavaScript, and Go are magnificent tools. They let you
+                express almost anything. But "almost anything" is precisely the problem. When a language permits
+                infinite variation, every codebase becomes a unique dialect.
             </p>
             <p>
-                But what if we're still thinking about this wrong? What if instead of teaching AI to speak
-                <em>computer</em>, we taught computers to speak <em>human</em>?
+                ARO takes a different path. It deliberately limits what you can express. No arbitrary control flow.
+                No exception handling. Just 24 verbs, a fixed grammar, and a commitment to the happy path.
+                This design philosophy has historical precedent:
             </p>
             <p>
-                <strong>ARO is that experiment.</strong> Instead of: "Dear AI, please write me some JavaScript,"
-                we asked: "What if the code itself was the conversation?"
+                <strong>SQL</strong> (1974): You can't write loops. You describe <em>what</em> you want.
+                Result: the most successful data language in history. <strong>Make</strong> (1976): You declare
+                dependencies, not control flow. Result: still building software 50 years later.
+                <strong>Terraform</strong> (2014): You declare desired state. Result: infrastructure-as-code
+                became an industry. <strong>Dhall</strong> (2016): You can't write Turing-complete programs.
+                Result: configuration that actually validates.
+            </p>
+            <p>
+                These languages succeeded <em>because</em> of their constraints, not despite them.
+                When a language says "no" to complexity, it creates space for clarity.
             </p>
         </div>
 
         <div class="motivation-section accent-cyan animate-on-scroll">
-            <h3><span class="section-icon">&#x1F4AC;</span> Language as the Programming Method</h3>
+            <h3><span class="section-icon">&#x1F4D6;</span> Code That Reads Like Documentation</h3>
             <p>
-                Most programming languages are designed for computers first, humans second. They have
-                syntax that makes sense to parsers, compilers, and CPUs. We humans just have to... deal with it.
+                ARO's fixed grammar—<code>&lt;Action&gt; the &lt;Result&gt; preposition the &lt;Object&gt;</code>—means
+                every statement follows the same structure. There's no style guide debate. The grammar <em>is</em>
+                the style guide.
             </p>
             <p>
-                ARO flips the script. The syntax <em>is</em> the specification. When you write
-                <code>&lt;Extract&gt; the &lt;user&gt; from the &lt;request&gt;</code>, there's no ambiguity.
-                The AI doesn't have to guess what you meant. A project manager can read it. A developer can
-                execute it. The computer can run it.
+                Consider this feature set:
             </p>
             <p>
-                It's the same sentence doing three jobs. That's not laziness—that's <em>efficiency</em>.
-                (Okay, maybe a little laziness. But the good kind.)
+                <code>&lt;Extract&gt; the &lt;data&gt; from the &lt;request: body&gt;.</code><br>
+                <code>&lt;Validate&gt; the &lt;data&gt; against the &lt;user: schema&gt;.</code><br>
+                <code>&lt;Create&gt; the &lt;user&gt; with &lt;data&gt;.</code><br>
+                <code>&lt;Return&gt; a &lt;Created: status&gt; with &lt;user&gt;.</code>
+            </p>
+            <p>
+                A business analyst can read this. A compliance officer can audit it. A new developer can understand
+                it in seconds. The code <em>is</em> the documentation.
+            </p>
+            <p>
+                A team of five developers writing ARO will produce code that looks like it was written by one person.
+                A team of five developers writing TypeScript will produce five dialects.
             </p>
         </div>
 
         <div class="quote-block animate-on-scroll">
             <blockquote>
-                "The best interface between humans and AI is... just talking. So we made a language where
-                talking <em>is</em> programming."
+                "The most powerful thing a language can do is say no."
             </blockquote>
-            <div class="attribution">— The ARO Philosophy (written by an AI, naturally)</div>
+            <div class="attribution">— The ARO Philosophy</div>
         </div>
 
         <div class="motivation-section accent-green animate-on-scroll">
-            <h3><span class="section-icon">&#x1F3B8;</span> Vibe Coding: A Confession</h3>
+            <h3><span class="section-icon">&#x2728;</span> The Happy Path Philosophy</h3>
             <p>
-                Let's be honest about what "vibe coding" really is. It's that magical state where you're
-                in flow with an AI, and code just... emerges. You describe what you want, the AI suggests
-                something, you refine it, and somehow a working system materializes.
+                ARO code contains only the success case. You write what should happen when everything works.
+                The runtime handles errors, reporting them in business terms: <em>"Cannot retrieve the user
+                from the user-repository where id = 530."</em>
             </p>
             <p>
-                The problem? That vibe is fragile. The AI hallucinates. You lose context. The code works
-                but you're not quite sure <em>why</em>. It's like pair programming with a very enthusiastic
-                but occasionally confused colleague who has read every Stack Overflow post ever written.
+                This isn't naive optimism—it's a deliberate trade-off. Consider the bug equation:
+            </p>
+            <p style="text-align: center; font-family: monospace; font-size: 1.1rem;">
+                Bugs &#x221D; (API Surface) × (Complexity) × (Mutability)
             </p>
             <p>
-                ARO is our attempt to <strong>formalize the vibe</strong>. When the language itself is
-                readable English, you always know what's happening. When you ask the AI to write ARO,
-                you get back something you can actually understand. The bridge between your intent and
-                the AI's output becomes... well, readable.
+                ARO attacks all three factors: <strong>Smaller API surface</strong>—24 actions vs. infinite
+                function possibilities. <strong>Reduced complexity</strong>—no control flow means fewer execution
+                paths. <strong>Limited mutability</strong>—actions transform and return; they don't mutate shared state.
             </p>
             <p>
-                Think of it as vibe coding with guardrails. Or maybe vibe coding for people who still
-                want to understand their own code in the morning.
+                A typical Express.js endpoint might span 500 lines with request parsing, authentication, validation,
+                error handling, logging. Each conditional doubles the test matrix. The equivalent ARO feature set
+                might be 15 lines. The test matrix is manageable.
             </p>
         </div>
 
         <div class="motivation-section accent-pink animate-on-scroll">
-            <h3><span class="section-icon">&#x1F52E;</span> Where Could This Go?</h3>
+            <h3><span class="section-icon">&#x1F3AF;</span> Where ARO Fits</h3>
             <p>
-                We're not going to pretend we have all the answers. This is an experiment, not a manifesto.
-                But here are some fun possibilities we think about late at night:
+                Not every domain is equally suited to ARO's constraints. Here's an honest assessment:
             </p>
             <div class="vision-grid">
                 <div class="vision-card">
-                    <div class="icon">&#x1F4DD;</div>
-                    <h4>Specs That Run</h4>
-                    <p>What if your requirements document was also your working prototype?</p>
+                    <div class="icon">&#x2705;</div>
+                    <h4>Excellent</h4>
+                    <p><strong>Business Logic &amp; CRUD APIs.</strong> ARO's natural home. Extract, validate, transform, persist, return.</p>
                 </div>
                 <div class="vision-card">
-                    <div class="icon">&#x1F91D;</div>
-                    <h4>True Collaboration</h4>
-                    <p>Business analysts and developers literally speaking the same language.</p>
+                    <div class="icon">&#x2705;</div>
+                    <h4>Good</h4>
+                    <p><strong>DevOps &amp; Infrastructure.</strong> Declarative actions map well to infrastructure verbs.</p>
                 </div>
                 <div class="vision-card">
-                    <div class="icon">&#x1F9E0;</div>
-                    <h4>AI-Native Dev</h4>
-                    <p>Languages designed from day one for human-AI collaboration.</p>
+                    <div class="icon">&#x26A0;</div>
+                    <h4>Not Ideal</h4>
+                    <p><strong>Real-time systems.</strong> Microsecond precision requires low-level control.</p>
                 </div>
                 <div class="vision-card">
-                    <div class="icon">&#x1F680;</div>
-                    <h4>The Unknown</h4>
-                    <p>Honestly? We have no idea. That's what makes it fun.</p>
+                    <div class="icon">&#x274C;</div>
+                    <h4>Look Elsewhere</h4>
+                    <p><strong>Algorithmic work &amp; ML.</strong> Iteration and exploration are fundamental.</p>
                 </div>
             </div>
+            <p style="margin-top: 24px;">
+                The trade-off favors constraints when: team size exceeds 5, regulatory environments demand
+                auditability, systems are long-lived, or AI agents will modify the code.
+            </p>
         </div>
 
         <!-- DISCLAIMER SECTION -->
