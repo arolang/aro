@@ -305,6 +305,101 @@ Multiple observers can react to the same transition:
 
 All matching observers execute independently when a transition occurs.
 
+## Custom Domain Events
+
+Beyond built-in events, you can define and emit your own domain events:
+
+### Emitting Events
+
+Use the `<Emit>` action to publish custom events:
+
+```aro
+(createUser: User API) {
+    <Extract> the <data> from the <request: body>.
+    <Create> the <user> with <data>.
+    <Store> the <user> in the <user-repository>.
+
+    (* Emit a domain event *)
+    <Emit> a <UserCreated: event> with <user>.
+
+    <Return> a <Created: status> with <user>.
+}
+```
+
+### Handling Custom Events
+
+Handle custom events using the `Handler` pattern:
+
+```aro
+(* Send welcome email when user is created *)
+(Send Welcome: UserCreated Handler) {
+    <Extract> the <user> from the <event: user>.
+    <Extract> the <email> from the <user: email>.
+    <Send> the <welcome-email> to the <email-service> with <user>.
+    <Return> an <OK: status> for the <notification>.
+}
+
+(* Update analytics when user is created *)
+(Track Signup: UserCreated Handler) {
+    <Extract> the <user> from the <event: user>.
+    <Send> the <signup-event> to the <analytics-service> with <user>.
+    <Return> an <OK: status> for the <analytics>.
+}
+```
+
+### Event Chains
+
+Handlers can emit additional events, creating processing chains:
+
+```aro
+(* OrderPlaced triggers inventory reservation *)
+(Reserve Stock: OrderPlaced Handler) {
+    <Extract> the <order> from the <event: order>.
+    <Update> the <inventory> for the <order: items>.
+    <Emit> an <InventoryReserved: event> with <order>.
+    <Return> an <OK: status> for the <reservation>.
+}
+
+(* InventoryReserved triggers payment processing *)
+(Process Payment: InventoryReserved Handler) {
+    <Extract> the <order> from the <event: order>.
+    <Send> the <charge> to the <payment-gateway> with <order>.
+    <Emit> a <PaymentProcessed: event> with <order>.
+    <Return> an <OK: status> for the <payment>.
+}
+```
+
+### Circular Event Chain Detection
+
+The ARO compiler detects circular event chains at compile time. If handlers form a cycle where events trigger each other indefinitely, the compiler reports an error:
+
+```
+error: Circular event chain detected: OrderPlaced → InventoryReserved → OrderPlaced
+  hint: Event handlers form an infinite loop that will exhaust resources
+  hint: Consider breaking the chain by using different event types or adding termination conditions
+```
+
+**Example of a circular chain (will not compile):**
+
+```aro
+(* BAD: Creates infinite loop *)
+(Handle Alpha: EventAlpha Handler) {
+    <Emit> the <EventBeta: event> for the <trigger>.
+    <Return> an <OK: status> for the <handler>.
+}
+
+(Handle Beta: EventBeta Handler) {
+    <Emit> the <EventAlpha: event> for the <trigger>.  (* Triggers Alpha again! *)
+    <Return> an <OK: status> for the <handler>.
+}
+```
+
+**Breaking cycles:**
+
+- Use different event types that don't loop back
+- Design linear workflows where each step moves forward
+- Move repeated logic into a single handler
+
 ## Long-Running Applications
 
 For applications that need to stay alive to process events (servers, file watchers, etc.), use the `<Keepalive>` action:

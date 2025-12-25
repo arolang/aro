@@ -86,22 +86,31 @@ public final class SemanticAnalyzer {
     /// Analyzes the entire program
     public func analyze(_ program: Program) -> AnalyzedProgram {
         var analyzedSets: [AnalyzedFeatureSet] = []
-        
+
+        // Check for duplicate feature set names
+        detectDuplicateFeatureSetNames(program.featureSets)
+
         for featureSet in program.featureSets {
             let analyzed = analyzeFeatureSet(featureSet)
             analyzedSets.append(analyzed)
-            
+
             // Register published symbols
             for symbol in analyzed.symbolTable.publishedSymbols.values {
                 globalRegistry.register(symbol: symbol, fromFeatureSet: featureSet.name)
             }
         }
-        
+
         // Second pass: verify external dependencies
         for analyzed in analyzedSets {
             verifyDependencies(analyzed)
         }
-        
+
+        // Third pass: detect circular event chains
+        detectCircularEventChains(analyzedSets)
+
+        // Fourth pass: detect orphaned event emissions
+        detectOrphanedEventEmissions(analyzedSets)
+
         return AnalyzedProgram(
             program: program,
             featureSets: analyzedSets,
@@ -140,6 +149,9 @@ public final class SemanticAnalyzer {
                 dependencies.insert(require.variableName)
             }
         }
+
+        // Check for code quality issues (empty, unreachable code, missing return)
+        checkCodeQuality(featureSet)
 
         // Detect unused variables (ARO-0003)
         let symbolTable = builder.build()
@@ -563,7 +575,197 @@ public final class SemanticAnalyzer {
             }
         }
     }
-    
+
+    // MARK: - Duplicate Feature Set Detection
+
+    /// Detects duplicate feature set names
+    private func detectDuplicateFeatureSetNames(_ featureSets: [FeatureSet]) {
+        var seen: [String: SourceLocation] = [:]
+
+        for featureSet in featureSets {
+            let name = featureSet.name
+            if let firstLocation = seen[name] {
+                diagnostics.error(
+                    "Duplicate feature set name '\(name)'",
+                    at: featureSet.span.start,
+                    hints: [
+                        "A feature set with this name was already defined at line \(firstLocation.line)",
+                        "Each feature set must have a unique name"
+                    ]
+                )
+            } else {
+                seen[name] = featureSet.span.start
+            }
+        }
+    }
+
+    // MARK: - Circular Event Chain Detection
+
+    /// Detects circular event chains that would cause infinite loops at runtime
+    private func detectCircularEventChains(_ featureSets: [AnalyzedFeatureSet]) {
+        let analyzer = EventChainAnalyzer()
+        let cycles = analyzer.detectCycles(in: featureSets)
+
+        for cycle in cycles {
+            diagnostics.error(
+                "Circular event chain detected: \(cycle.description)",
+                at: cycle.location,
+                hints: [
+                    "Event handlers form an infinite loop that will exhaust resources",
+                    "Consider breaking the chain by using different event types or adding termination conditions"
+                ]
+            )
+        }
+    }
+
+    // MARK: - Orphaned Event Detection
+
+    /// Detects events that are emitted but have no corresponding handler
+    private func detectOrphanedEventEmissions(_ featureSets: [AnalyzedFeatureSet]) {
+        // Collect all handled event types
+        var handledEvents: Set<String> = []
+        for analyzed in featureSets {
+            let activity = analyzed.featureSet.businessActivity
+            if activity.hasSuffix(" Handler") {
+                // Extract event type from handler name
+                let eventType = activity
+                    .replacingOccurrences(of: " Handler", with: "")
+                    .trimmingCharacters(in: .whitespaces)
+
+                // Exclude system handlers
+                if eventType != "Socket Event" && eventType != "File Event" {
+                    handledEvents.insert(eventType)
+                }
+            }
+        }
+
+        // Collect all emitted events and check for orphans
+        for analyzed in featureSets {
+            let emittedEvents = findEmittedEventsWithLocations(in: analyzed.featureSet.statements)
+
+            for (eventType, location) in emittedEvents {
+                if !handledEvents.contains(eventType) {
+                    diagnostics.warning(
+                        "Event '\(eventType)' is emitted but no handler exists",
+                        at: location,
+                        hints: [
+                            "Create a handler with business activity '\(eventType) Handler'",
+                            "Or remove this Emit statement if the event is not needed"
+                        ]
+                    )
+                }
+            }
+        }
+    }
+
+    /// Finds all emitted events with their source locations
+    private func findEmittedEventsWithLocations(in statements: [Statement]) -> [(String, SourceLocation)] {
+        var events: [(String, SourceLocation)] = []
+
+        for statement in statements {
+            collectEmittedEventsWithLocations(from: statement, into: &events)
+        }
+
+        return events
+    }
+
+    /// Recursively collects emitted events with locations from a statement
+    private func collectEmittedEventsWithLocations(from statement: Statement, into events: inout [(String, SourceLocation)]) {
+        if let aro = statement as? AROStatement {
+            if aro.action.verb.lowercased() == "emit" {
+                events.append((aro.result.base, aro.span.start))
+            }
+        }
+
+        if let match = statement as? MatchStatement {
+            for caseClause in match.cases {
+                for bodyStatement in caseClause.body {
+                    collectEmittedEventsWithLocations(from: bodyStatement, into: &events)
+                }
+            }
+            if let otherwise = match.otherwise {
+                for bodyStatement in otherwise {
+                    collectEmittedEventsWithLocations(from: bodyStatement, into: &events)
+                }
+            }
+        }
+
+        if let forEach = statement as? ForEachLoop {
+            for bodyStatement in forEach.body {
+                collectEmittedEventsWithLocations(from: bodyStatement, into: &events)
+            }
+        }
+    }
+
+    // MARK: - Code Quality Checks
+
+    /// Checks for code quality issues in a feature set
+    private func checkCodeQuality(_ featureSet: FeatureSet) {
+        let statements = featureSet.statements
+
+        // Check for empty feature set
+        if statements.isEmpty {
+            diagnostics.warning(
+                "Feature set '\(featureSet.name)' has no statements",
+                at: featureSet.span.start,
+                hints: ["Add statements or remove this empty feature set"]
+            )
+            return
+        }
+
+        // Check for unreachable code after Return/Throw
+        var foundTerminator = false
+        var terminatorLocation: SourceLocation?
+
+        for statement in statements {
+            if foundTerminator {
+                diagnostics.warning(
+                    "Unreachable code after Return/Throw statement",
+                    at: statement.span.start,
+                    hints: [
+                        "This code will never execute",
+                        "The Return/Throw at line \(terminatorLocation?.line ?? 0) exits the feature set"
+                    ]
+                )
+                break  // Only report once
+            }
+
+            if let aro = statement as? AROStatement {
+                let verb = aro.action.verb.lowercased()
+                if verb == "return" || verb == "throw" {
+                    foundTerminator = true
+                    terminatorLocation = aro.span.start
+                }
+            }
+        }
+
+        // Check for missing Return statement (excluding Application-End handlers)
+        let activity = featureSet.businessActivity
+        let isLifecycleHandler = activity.hasPrefix("Application-End")
+
+        if !isLifecycleHandler && !foundTerminator {
+            // Check if there's any Return/Throw in the code
+            let hasAnyReturn = statements.contains { stmt in
+                if let aro = stmt as? AROStatement {
+                    let verb = aro.action.verb.lowercased()
+                    return verb == "return" || verb == "throw"
+                }
+                return false
+            }
+
+            if !hasAnyReturn {
+                diagnostics.warning(
+                    "Feature set '\(featureSet.name)' has no Return or Throw statement",
+                    at: featureSet.span.end,
+                    hints: [
+                        "Feature sets should end with a Return statement",
+                        "Add: <Return> an <OK: status> for the <result>."
+                    ]
+                )
+            }
+        }
+    }
+
     private func isKnownExternal(_ name: String) -> Bool {
         // These are typically provided by the framework/runtime
         let knownExternals: Set<String> = [

@@ -94,6 +94,14 @@ The advantage of chains over monolithic handlers is modularity. Each step can be
 
 Be cautious of circular chains where A triggers B triggers A. This creates an infinite loop that will exhaust resources. Design your event flows to be acyclic, with clear beginning and end points.
 
+> **Compiler Check**: The ARO compiler detects circular event chains at compile time. If your handlers form a cycle (for example, `Alpha Handler` emits `Beta` and `Beta Handler` emits `Alpha`), you will receive an error:
+> ```
+> error: Circular event chain detected: Alpha -> Beta -> Alpha
+>   hint: Event handlers form an infinite loop that will exhaust resources
+>   hint: Consider breaking the chain by using different event types or adding termination conditions
+> ```
+> This static analysis catches cycles before your code runs, preventing runtime infinite loops.
+
 ---
 
 ## 9.8 Error Handling in Events
@@ -116,7 +124,7 @@ Keep handlers focused on single responsibilities. A handler that sends email and
 
 Design handlers for idempotency when possible. Events might be delivered more than once in some scenarios—retries after transient failures, replays for recovery, or duplicate emissions due to bugs. If handlers can safely process the same event multiple times without causing incorrect behavior, your system is more resilient.
 
-Avoid circular event chains. If event A triggers handler B which emits event A, you have an infinite loop. Map out your event flows to ensure they are directed acyclic graphs. Each event should lead forward through the workflow, not backward to create cycles.
+Avoid circular event chains. If event A triggers handler B which emits event A, you have an infinite loop. The compiler will catch these cycles and report them as errors during `aro check`. Map out your event flows to ensure they are directed acyclic graphs. Each event should lead forward through the workflow, not backward to create cycles.
 
 Document event contracts. The payload of an event is a contract between emitters and handlers. Document what fields are included, their types, and their meanings. When you change an event's structure, update all handlers to accommodate the change.
 
