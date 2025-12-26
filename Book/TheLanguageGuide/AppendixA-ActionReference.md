@@ -16,7 +16,7 @@ Extracts data from a structure.
 ```aro
 <Extract> the <user-id> from the <pathParameters: id>.
 <Extract> the <body> from the <request: body>.
-<Extract> the <name> from the <user: profile: name>.
+<Extract> the <name> from the <user: profile.name>.
 ```
 
 ---
@@ -87,7 +87,7 @@ General-purpose retrieval action.
 
 ```aro
 <Get> the <value> from the <cache> with <key>.
-<Get> the <setting> from the <config: database: host>.
+<Get> the <setting> from the <config: database.host>.
 ```
 
 ---

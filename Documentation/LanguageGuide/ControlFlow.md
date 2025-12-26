@@ -211,7 +211,7 @@ match <value> {
 ```aro
 (PUT /orders/{id}/status: Order API) {
     <Extract> the <order-id> from the <request: parameters>.
-    <Extract> the <new-status> from the <request: body status>.
+    <Extract> the <new-status> from the <request: body.status>.
     <Retrieve> the <order> from the <repository> where id = <order-id>.
 
     match <new-status> {
@@ -357,9 +357,9 @@ Check error conditions early:
 ```aro
 (* Good - fail fast *)
 (POST /transfer: Banking) {
-    <Extract> the <amount> from the <request: body amount>.
-    <Extract> the <from-account> from the <request: body from>.
-    <Extract> the <to-account> from the <request: body to>.
+    <Extract> the <amount> from the <request: body.amount>.
+    <Extract> the <from-account> from the <request: body.from>.
+    <Extract> the <to-account> from the <request: body.to>.
 
     when <amount> <= 0 {
         <Return> a <BadRequest: status> for the <invalid: amount>.

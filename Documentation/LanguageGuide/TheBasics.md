@@ -90,8 +90,8 @@ A **feature set** is the primary organizational unit in ARO. It groups related s
 
 ```aro
 (Validate User Credentials: Authentication) {
-    <Extract> the <username> from the <request: body username>.
-    <Extract> the <password> from the <request: body password>.
+    <Extract> the <username> from the <request: body.username>.
+    <Extract> the <password> from the <request: body.password>.
     <Retrieve> the <user> from the <user-repository> where username = <username>.
     <Compare> the <password> against the <user: passwordHash>.
     <Return> an <OK: status> with <user>.

@@ -62,8 +62,8 @@ struct ASTNodeTests {
         #expect(simpleNoun.description == "user")
 
         let qualifiedNoun = QualifiedNoun(base: "user", specifiers: ["id", "name"], span: span)
-        #expect(qualifiedNoun.fullName == "user: id name")
-        #expect(qualifiedNoun.description == "user: id name")
+        #expect(qualifiedNoun.fullName == "user: id.name")
+        #expect(qualifiedNoun.description == "user: id.name")
     }
 
     @Test("ObjectClause creation and external reference")
@@ -239,7 +239,7 @@ struct AROStatementParsingTests {
     func testQualifiedResult() throws {
         let source = """
         (Test: Test) {
-            <Extract> the <user: id name> from the <request>.
+            <Extract> the <user: id.name> from the <request>.
         }
         """
         let program = try Parser.parse(source)

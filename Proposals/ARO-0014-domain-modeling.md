@@ -423,7 +423,7 @@ Use the `<Emit>` action to publish domain events:
     <Emit> an <OrderPlaced: event> with {
         order-id: <order: id>,
         customer-id: <order: customer-id>,
-        total: <order: totals: total>,
+        total: <order: totals.total>,
         placed-at: now()
     }.
 
@@ -517,7 +517,7 @@ Feature sets naturally serve as domain services:
     <Extract> the <customer> from the <request: customer>.
 
     (* Volume discount *)
-    <Compute> the <volume-discount> from the <order: totals: subtotal>
+    <Compute> the <volume-discount> from the <order: totals.subtotal>
         where amount > 1000.
 
     (* Loyalty discount *)

@@ -48,7 +48,7 @@ The object is the input or context for the action. It appears after the preposit
 
 Objects are introduced by prepositions, and the choice of preposition is significant. The preposition communicates the relationship between the action and its object. Different prepositions imply different types of operations, and the runtime uses this information to understand data flow.
 
-Like results, objects can include qualifiers. When you write an object like "request: body" you are specifying that you want the body property of the request. Qualifiers allow you to navigate into nested structures. You can chain qualifiers to access deeply nested properties, writing something like "user: address: city" to access the city property of the address property of the user.
+Like results, objects can include qualifiers. When you write an object like "request: body" you are specifying that you want the body property of the request. Qualifiers allow you to navigate into nested structures. You can chain qualifiers to access deeply nested properties, writing something like "user: address.city" to access the city property of the address property of the user.
 
 The distinction between results and objects is fundamental. Results are outputs—the values produced by actions, which become available for subsequent statements. Objects are inputs—the values consumed by actions, which must have been produced by previous statements or be available from the execution context. This input-output distinction is how data flows through a feature set.
 
