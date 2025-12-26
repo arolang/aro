@@ -6,6 +6,40 @@
 import Foundation
 import AROParser
 
+// MARK: - Helper Functions
+
+/// Resolves the operation name from a result descriptor.
+///
+/// This function enables two syntax patterns:
+/// 1. **New syntax** `<variable: operation>`: specifier defines the operation, base is the variable name
+/// 2. **Legacy syntax** `<operation>`: base is both the variable name and operation (for known operations)
+///
+/// - Parameters:
+///   - result: The result descriptor from the statement
+///   - knownOperations: Set of known operation names for backward compatibility
+///   - fallback: Default value if no operation can be determined
+/// - Returns: The operation name to use
+private func resolveOperationName(
+    from result: ResultDescriptor,
+    knownOperations: Set<String>,
+    fallback: String
+) -> String {
+    // Priority 1: Explicit specifier (new syntax: <var: operation>)
+    if let specifier = result.specifiers.first {
+        return specifier
+    }
+
+    // Priority 2: Base name if it's a known operation (legacy syntax: <operation>)
+    if knownOperations.contains(result.base.lowercased()) {
+        return result.base
+    }
+
+    // Priority 3: Fallback default
+    return fallback
+}
+
+// MARK: - Compute Actions
+
 /// Computes a value from inputs
 ///
 /// The Compute action is an OWN action that performs internal computation.
@@ -35,8 +69,9 @@ public struct ComputeAction: ActionImplementation {
             throw ActionError.undefinedVariable(object.base)
         }
 
-        // Computation name from result specifiers
-        let computationName = result.specifiers.first ?? "identity"
+        // Computation name from result specifiers or base (for backward compatibility)
+        let knownComputations: Set<String> = ["hash", "length", "count", "uppercase", "lowercase", "identity"]
+        let computationName = resolveOperationName(from: result, knownOperations: knownComputations, fallback: "identity")
 
         // Look up computation service
         if let computeService = context.service(ComputationService.self) {
@@ -105,8 +140,9 @@ public struct ValidateAction: ActionImplementation {
             throw ActionError.undefinedVariable(object.base)
         }
 
-        // Validation rule from result specifiers
-        let ruleName = result.specifiers.first ?? "required"
+        // Validation rule from result specifiers or base (for backward compatibility)
+        let knownRules: Set<String> = ["required", "exists", "nonempty", "email", "numeric"]
+        let ruleName = resolveOperationName(from: result, knownOperations: knownRules, fallback: "required")
 
         // Look up validation service
         if let validationService = context.service(ValidationService.self) {
@@ -255,8 +291,9 @@ public struct TransformAction: ActionImplementation {
             throw ActionError.undefinedVariable(object.base)
         }
 
-        // Transformation type from result specifiers
-        let transformType = result.specifiers.first ?? "identity"
+        // Transformation type from result specifiers or base (for backward compatibility)
+        let knownTransforms: Set<String> = ["string", "int", "integer", "double", "float", "bool", "boolean", "json", "identity"]
+        let transformType = resolveOperationName(from: result, knownOperations: knownTransforms, fallback: "identity")
 
         switch transformType.lowercased() {
         case "string":
@@ -541,8 +578,9 @@ public struct SortAction: ActionImplementation {
             throw ActionError.undefinedVariable(object.base)
         }
 
-        // Sort order from result specifiers
-        let order = result.specifiers.first ?? "ascending"
+        // Sort order from result specifiers or base (for backward compatibility)
+        let knownOrders: Set<String> = ["ascending", "descending"]
+        let order = resolveOperationName(from: result, knownOperations: knownOrders, fallback: "ascending")
         let ascending = order.lowercased() != "descending"
 
         // Handle string array sorting

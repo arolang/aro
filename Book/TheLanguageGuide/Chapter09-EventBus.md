@@ -1,10 +1,10 @@
-# Chapter 8: The Event Bus
+# Chapter 9: The Event Bus
 
 *"In an event-driven system, everything is a reaction."*
 
 ---
 
-## 8.1 Events, Not Calls
+## 9.1 Events, Not Calls
 
 ARO is fundamentally event-driven. Feature sets do not call each other directly—they react to events. This is a crucial architectural distinction that shapes how you design and reason about ARO applications.
 
@@ -18,7 +18,7 @@ The event bus is the runtime component that makes this work. It receives events 
 
 ---
 
-## 8.2 How the Event Bus Works
+## 9.2 How the Event Bus Works
 
 <div style="float: left; margin: 0 1.5em 1em 0;">
 <svg width="200" height="220" viewBox="0 0 200 220" xmlns="http://www.w3.org/2000/svg">  <!-- Emitter -->  <rect x="60" y="10" width="80" height="35" rx="4" fill="#dbeafe" stroke="#3b82f6" stroke-width="2"/>  <text x="100" y="25" text-anchor="middle" font-family="sans-serif" font-size="9" font-weight="bold" fill="#1e40af">Feature Set</text>  <text x="100" y="38" text-anchor="middle" font-family="monospace" font-size="8" fill="#3b82f6">&lt;Emit&gt;</text>  <!-- Arrow down to bus -->  <line x1="100" y1="45" x2="100" y2="70" stroke="#6b7280" stroke-width="2"/>  <polygon points="100,70 95,62 105,62" fill="#6b7280"/>  <!-- Event Bus -->  <rect x="30" y="75" width="140" height="30" rx="4" fill="#fef3c7" stroke="#f59e0b" stroke-width="2"/>  <text x="100" y="95" text-anchor="middle" font-family="sans-serif" font-size="10" font-weight="bold" fill="#92400e">EVENT BUS</text>  <!-- Fan-out arrows -->  <line x1="55" y1="105" x2="35" y2="140" stroke="#22c55e" stroke-width="2"/>  <polygon points="35,140 43,135 39,143" fill="#22c55e"/>  <line x1="100" y1="105" x2="100" y2="140" stroke="#22c55e" stroke-width="2"/>  <polygon points="100,140 95,132 105,132" fill="#22c55e"/>  <line x1="145" y1="105" x2="165" y2="140" stroke="#22c55e" stroke-width="2"/>  <polygon points="165,140 157,135 161,143" fill="#22c55e"/>  <!-- Handler 1 -->  <rect x="5" y="145" width="60" height="35" rx="4" fill="#dcfce7" stroke="#22c55e" stroke-width="2"/>  <text x="35" y="160" text-anchor="middle" font-family="sans-serif" font-size="8" font-weight="bold" fill="#166534">Handler A</text>  <text x="35" y="172" text-anchor="middle" font-family="sans-serif" font-size="7" fill="#22c55e">email</text>  <!-- Handler 2 -->  <rect x="70" y="145" width="60" height="35" rx="4" fill="#dcfce7" stroke="#22c55e" stroke-width="2"/>  <text x="100" y="160" text-anchor="middle" font-family="sans-serif" font-size="8" font-weight="bold" fill="#166534">Handler B</text>  <text x="100" y="172" text-anchor="middle" font-family="sans-serif" font-size="7" fill="#22c55e">analytics</text>  <!-- Handler 3 -->  <rect x="135" y="145" width="60" height="35" rx="4" fill="#dcfce7" stroke="#22c55e" stroke-width="2"/>  <text x="165" y="160" text-anchor="middle" font-family="sans-serif" font-size="8" font-weight="bold" fill="#166534">Handler C</text>  <text x="165" y="172" text-anchor="middle" font-family="sans-serif" font-size="7" fill="#22c55e">audit</text>  <!-- Isolated label -->  <text x="100" y="200" text-anchor="middle" font-family="sans-serif" font-size="8" fill="#6b7280">handlers run in isolation</text>  <text x="100" y="212" text-anchor="middle" font-family="sans-serif" font-size="8" fill="#6b7280">order not guaranteed</text></svg>
@@ -34,7 +34,7 @@ Handler execution is isolated. Each handler runs in its own context with its own
 
 ---
 
-## 8.3 Event Matching
+## 9.3 Event Matching
 
 Handlers are matched to events based on their business activity. The standard pattern is that the business activity ends with "Handler" preceded by the event name. When a feature set declares its business activity as "UserCreated Handler," it becomes a handler for events named "UserCreated."
 
@@ -46,7 +46,7 @@ You can have multiple handlers for the same event. When UserCreated is emitted, 
 
 ---
 
-## 8.4 Emitting Events
+## 9.4 Emitting Events
 
 The Emit action publishes an event to the bus. The action takes an event type and a payload. The event type appears in the result position with an "event" qualifier. The payload follows the "with" preposition and can be any value—a simple variable, an object literal, or a complex expression.
 
@@ -58,7 +58,7 @@ A single feature set can emit multiple events. This is common when different sub
 
 ---
 
-## 8.5 Accessing Event Data
+## 9.5 Accessing Event Data
 
 Within a handler, the event is available through the special "event" identifier. You use the Extract action to pull specific data out of the event payload into local bindings.
 
@@ -70,7 +70,7 @@ The extraction patterns for events follow the same qualifier syntax used elsewhe
 
 ---
 
-## 8.6 Multiple Handlers and Execution
+## 9.6 Multiple Handlers and Execution
 
 When multiple handlers register for the same event type, all of them execute when that event is emitted. This parallel reaction is one of the most powerful aspects of event-driven architecture because it allows independent modules to respond to the same stimulus without coordinating with each other.
 
@@ -82,7 +82,7 @@ Handlers may execute concurrently if the runtime determines that they are indepe
 
 ---
 
-## 8.7 Event Chains
+## 9.7 Event Chains
 
 Events can trigger handlers that emit additional events, creating chains of processing. This pattern allows you to break complex workflows into discrete steps that execute in sequence.
 
@@ -96,7 +96,7 @@ Be cautious of circular chains where A triggers B triggers A. This creates an in
 
 ---
 
-## 8.8 Error Handling in Events
+## 9.8 Error Handling in Events
 
 Error handling for events differs from synchronous execution. When a handler fails, the error is logged with full context, but the failure does not propagate to the emitter or to other handlers. Each handler succeeds or fails independently.
 
@@ -108,7 +108,7 @@ The runtime logs all handler failures. You can configure alerts based on these l
 
 ---
 
-## 8.9 Best Practices
+## 9.9 Best Practices
 
 Name events for business meaning rather than technical operations. The event name should describe what happened in domain terms that non-technical stakeholders would understand. "CustomerRegistered" tells you about a business occurrence. "DatabaseRowInserted" tells you about an implementation detail.
 
@@ -122,7 +122,7 @@ Document event contracts. The payload of an event is a contract between emitters
 
 ---
 
-## 8.10 State Observers
+## 9.10 State Observers
 
 State observers are a specialized form of event handler that react to state transitions. When the Accept action successfully transitions a state field, it emits a StateTransitionEvent that observers can handle.
 
@@ -205,4 +205,4 @@ The separation between Accept and observers creates a clean architecture. Accept
 
 ---
 
-*Next: Chapter 9 — Application Lifecycle*
+*Next: Chapter 10 — Application Lifecycle*
