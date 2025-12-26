@@ -420,26 +420,40 @@ public struct StoreAction: ActionImplementation {
         // Check if this is a repository (ends with -repository)
         var storedData: any Sendable = data
         if InMemoryRepositoryStorage.isRepositoryName(repoName) {
-            // Store in repository storage service
+            // Store in repository storage service with change tracking
+            let storeResult: RepositoryStoreResult
             if let storage = context.service(RepositoryStorageService.self) {
-                storedData = await storage.store(
+                storeResult = await storage.storeWithChangeInfo(
                     value: data,
                     in: repoName,
                     businessActivity: context.businessActivity
                 )
             } else {
                 // Fallback to shared instance if service not registered
-                storedData = await InMemoryRepositoryStorage.shared.store(
+                storeResult = await InMemoryRepositoryStorage.shared.storeWithChangeInfo(
                     value: data,
                     in: repoName,
                     businessActivity: context.businessActivity
                 )
             }
+
+            storedData = storeResult.storedValue
+
             // Update the context variable with stored data (which includes auto-generated id)
             context.bind(result.base, value: storedData)
+
+            // Emit repository change event for observers
+            let changeType: RepositoryChangeType = storeResult.isUpdate ? .updated : .created
+            context.emit(RepositoryChangedEvent(
+                repositoryName: repoName,
+                changeType: changeType,
+                entityId: storeResult.entityId,
+                newValue: storeResult.storedValue,
+                oldValue: storeResult.oldValue
+            ))
         }
 
-        // Emit store event
+        // Emit store event (legacy)
         context.emit(DataStoredEvent(repository: repoName, dataType: String(describing: type(of: data))))
 
         return StoreResult(repository: repoName, success: true)

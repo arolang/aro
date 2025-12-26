@@ -5,6 +5,45 @@
 
 import Foundation
 
+// MARK: - Repository Store Result
+
+/// Result of a repository store operation, including change tracking information
+public struct RepositoryStoreResult: Sendable {
+    /// The value that was stored (with auto-generated id if applicable)
+    public let storedValue: any Sendable
+
+    /// The old value if this was an update (nil for creates)
+    public let oldValue: (any Sendable)?
+
+    /// Whether this was an update (true) or create (false)
+    public let isUpdate: Bool
+
+    /// The entity ID if available
+    public let entityId: String?
+
+    public init(storedValue: any Sendable, oldValue: (any Sendable)?, isUpdate: Bool, entityId: String?) {
+        self.storedValue = storedValue
+        self.oldValue = oldValue
+        self.isUpdate = isUpdate
+        self.entityId = entityId
+    }
+}
+
+/// Result of a repository delete operation
+public struct RepositoryDeleteResult: Sendable {
+    /// Items that were deleted
+    public let deletedItems: [any Sendable]
+
+    /// Number of items deleted
+    public var count: Int { deletedItems.count }
+
+    public init(deletedItems: [any Sendable]) {
+        self.deletedItems = deletedItems
+    }
+}
+
+// MARK: - Repository Storage Protocol
+
 /// Protocol for repository storage services
 ///
 /// Repositories provide persistent in-memory storage that survives across
@@ -19,6 +58,14 @@ public protocol RepositoryStorageService: Sendable {
     /// - Returns: The stored value (with auto-generated id if applicable)
     @discardableResult
     func store(value: any Sendable, in repository: String, businessActivity: String) async -> any Sendable
+
+    /// Store a value with change tracking information
+    /// - Parameters:
+    ///   - value: The value to store
+    ///   - repository: Repository name (must end with -repository)
+    ///   - businessActivity: The business activity scope
+    /// - Returns: RepositoryStoreResult containing stored value, old value (if update), and change type
+    func storeWithChangeInfo(value: any Sendable, in repository: String, businessActivity: String) async -> RepositoryStoreResult
 
     /// Retrieve all values from a repository
     /// - Parameters:
@@ -60,6 +107,28 @@ public protocol RepositoryStorageService: Sendable {
     ///   - repository: Repository name
     ///   - businessActivity: The business activity scope
     func clear(repository: String, businessActivity: String) async
+
+    /// Delete items from a repository matching a condition
+    /// - Parameters:
+    ///   - repository: Repository name
+    ///   - businessActivity: The business activity scope
+    ///   - field: Field name to match
+    ///   - value: Value to match against
+    /// - Returns: RepositoryDeleteResult containing the deleted items
+    func delete(
+        from repository: String,
+        businessActivity: String,
+        where field: String,
+        equals value: any Sendable
+    ) async -> RepositoryDeleteResult
+
+    /// Find an item by ID
+    /// - Parameters:
+    ///   - repository: Repository name
+    ///   - businessActivity: The business activity scope
+    ///   - id: The ID to search for
+    /// - Returns: The item if found, nil otherwise
+    func findById(in repository: String, businessActivity: String, id: String) async -> (any Sendable)?
 }
 
 /// Storage key for repository name only (repositories are application-scoped)
@@ -75,7 +144,7 @@ private actor RepositoryStorageActor {
     /// Application-scope exported repositories
     private var applicationScope: [String: StorageKey] = [:]
 
-    func store(value: any Sendable, key: StorageKey) -> any Sendable {
+    func store(value: any Sendable, key: StorageKey) -> RepositoryStoreResult {
         if storage[key] == nil {
             storage[key] = []
         }
@@ -86,6 +155,8 @@ private actor RepositoryStorageActor {
 
         // Handle dictionary values - ensure id exists and handle updates
         var valueToStore = value
+        var entityId: String? = nil
+
         if var dict = value as? [String: any Sendable] {
             // First, check if we can find an existing entry by "name" to preserve its "id"
             if let name = dict["name"], dict["id"] == nil {
@@ -97,15 +168,18 @@ private actor RepositoryStorageActor {
                     return false
                 }), let existingDict = storage[key]?[existingIndex] as? [String: any Sendable],
                    let existingId = existingDict["id"] {
+                    // Capture old value before update
+                    let oldValue = storage[key]?[existingIndex]
                     // Use the existing entry's id
                     dict["id"] = existingId
                     valueToStore = dict
+                    entityId = existingId as? String
                     // Update the existing entry
                     storage[key]?[existingIndex] = valueToStore
                     #if DEBUG
                     print("[RepositoryStorage] Updated value with name '\(name)' (preserved id '\(existingId)') in '\(key.repository)'")
                     #endif
-                    return valueToStore
+                    return RepositoryStoreResult(storedValue: valueToStore, oldValue: oldValue, isUpdate: true, entityId: entityId)
                 }
             }
 
@@ -114,15 +188,19 @@ private actor RepositoryStorageActor {
                 let generatedId = UUID().uuidString
                 dict["id"] = generatedId
                 valueToStore = dict
+                entityId = generatedId
                 #if DEBUG
                 print("[RepositoryStorage] Auto-generated id '\(generatedId)' for entry")
                 #endif
+            } else {
+                entityId = dict["id"] as? String
             }
         }
 
         // Check if value has an "id" field - if so, try to update existing entry by id
         if let dict = valueToStore as? [String: any Sendable],
            let id = dict["id"] {
+            entityId = id as? String
             if let index = storage[key]?.firstIndex(where: { existing in
                 if let existingDict = existing as? [String: any Sendable],
                    let existingId = existingDict["id"] {
@@ -130,12 +208,14 @@ private actor RepositoryStorageActor {
                 }
                 return false
             }) {
+                // Capture old value before update
+                let oldValue = storage[key]?[index]
                 // Update existing entry by id
                 storage[key]?[index] = valueToStore
                 #if DEBUG
                 print("[RepositoryStorage] Updated value with id '\(id)' in '\(key.repository)'")
                 #endif
-                return valueToStore
+                return RepositoryStoreResult(storedValue: valueToStore, oldValue: oldValue, isUpdate: true, entityId: entityId)
             }
         }
 
@@ -146,7 +226,7 @@ private actor RepositoryStorageActor {
         print("[RepositoryStorage] Stored value in '\(key.repository)'. Count: \(storage[key]?.count ?? 0)")
         #endif
 
-        return valueToStore
+        return RepositoryStoreResult(storedValue: valueToStore, oldValue: nil, isUpdate: false, entityId: entityId)
     }
 
     func retrieve(key: StorageKey) -> [any Sendable] {
@@ -215,6 +295,48 @@ private actor RepositoryStorageActor {
         applicationScope.removeAll()
     }
 
+    func delete(key: StorageKey, field: String, matchValue: any Sendable) -> RepositoryDeleteResult {
+        guard var values = storage[key] else {
+            return RepositoryDeleteResult(deletedItems: [])
+        }
+
+        var deletedItems: [any Sendable] = []
+
+        // Find and remove matching items
+        values.removeAll { value in
+            if let dict = value as? [String: any Sendable],
+               let fieldValue = dict[field] {
+                if isEqual(fieldValue, matchValue) {
+                    deletedItems.append(value)
+                    return true
+                }
+            }
+            return false
+        }
+
+        storage[key] = values
+
+        #if DEBUG
+        print("[RepositoryStorage] Deleted \(deletedItems.count) items from '\(key.repository)' where \(field) = \(matchValue)")
+        #endif
+
+        return RepositoryDeleteResult(deletedItems: deletedItems)
+    }
+
+    func findById(key: StorageKey, id: String) -> (any Sendable)? {
+        guard let values = storage[key] else {
+            return nil
+        }
+
+        return values.first { value in
+            if let dict = value as? [String: any Sendable],
+               let valueId = dict["id"] as? String {
+                return valueId == id
+            }
+            return false
+        }
+    }
+
     /// Compare two Sendable values for equality
     private func isEqual(_ lhs: any Sendable, _ rhs: any Sendable) -> Bool {
         // Compare strings
@@ -256,6 +378,12 @@ public final class InMemoryRepositoryStorage: RepositoryStorageService, Sendable
     @discardableResult
     public func store(value: any Sendable, in repository: String, businessActivity: String) async -> any Sendable {
         let key = await actor.resolveKey(repository: repository, businessActivity: businessActivity)
+        let result = await actor.store(value: value, key: key)
+        return result.storedValue
+    }
+
+    public func storeWithChangeInfo(value: any Sendable, in repository: String, businessActivity: String) async -> RepositoryStoreResult {
+        let key = await actor.resolveKey(repository: repository, businessActivity: businessActivity)
         return await actor.store(value: value, key: key)
     }
 
@@ -287,6 +415,21 @@ public final class InMemoryRepositoryStorage: RepositoryStorageService, Sendable
     public func clear(repository: String, businessActivity: String) async {
         let key = await actor.resolveKey(repository: repository, businessActivity: businessActivity)
         await actor.clear(key: key)
+    }
+
+    public func delete(
+        from repository: String,
+        businessActivity: String,
+        where field: String,
+        equals value: any Sendable
+    ) async -> RepositoryDeleteResult {
+        let key = await actor.resolveKey(repository: repository, businessActivity: businessActivity)
+        return await actor.delete(key: key, field: field, matchValue: value)
+    }
+
+    public func findById(in repository: String, businessActivity: String, id: String) async -> (any Sendable)? {
+        let key = await actor.resolveKey(repository: repository, businessActivity: businessActivity)
+        return await actor.findById(key: key, id: id)
     }
 
     // MARK: - Debug/Testing

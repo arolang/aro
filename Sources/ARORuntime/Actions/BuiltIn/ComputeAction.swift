@@ -663,6 +663,18 @@ public struct MergeAction: ActionImplementation {
 }
 
 /// Deletes an entity or value
+///
+/// Supports deleting from:
+/// - Dictionaries: removes the key
+/// - Arrays: removes by index
+/// - Repositories: removes items matching the where clause
+///
+/// ## Examples
+/// ```
+/// <Delete> the <key> from the <dictionary>.
+/// <Delete> the <0> from the <array>.
+/// <Delete> the <user> from the <user-repository> where id = <userId>.
+/// ```
 public struct DeleteAction: ActionImplementation {
     public static let role: ActionRole = .own
     public static let verbs: Set<String> = ["delete", "remove", "destroy", "clear"]
@@ -677,9 +689,20 @@ public struct DeleteAction: ActionImplementation {
     ) async throws -> any Sendable {
         try validatePreposition(object.preposition)
 
+        let targetName = object.base
+
+        // Check if this is a repository (ends with -repository)
+        if InMemoryRepositoryStorage.isRepositoryName(targetName) {
+            return try await deleteFromRepository(
+                result: result,
+                repositoryName: targetName,
+                context: context
+            )
+        }
+
         // Get the source containing the item to delete
-        guard let source = context.resolveAny(object.base) else {
-            throw ActionError.undefinedVariable(object.base)
+        guard let source = context.resolveAny(targetName) else {
+            throw ActionError.undefinedVariable(targetName)
         }
 
         // Key to delete from result specifiers
@@ -698,9 +721,74 @@ public struct DeleteAction: ActionImplementation {
         }
 
         // Emit delete event
-        context.emit(DataDeletedEvent(target: result.base, source: object.base))
+        context.emit(DataDeletedEvent(target: result.base, source: targetName))
 
         return DeleteResult(target: result.base, success: true)
+    }
+
+    private func deleteFromRepository(
+        result: ResultDescriptor,
+        repositoryName: String,
+        context: ExecutionContext
+    ) async throws -> any Sendable {
+        // Check for where clause (bound by FeatureSetExecutor)
+        let whereField: String? = context.resolve("_where_field_")
+        let whereValue = context.resolveAny("_where_value_")
+
+        guard let field = whereField, let matchValue = whereValue else {
+            throw ActionError.runtimeError(
+                "Delete from repository requires a where clause: <Delete> the <item> from the <\(repositoryName)> where field = <value>."
+            )
+        }
+
+        // Delete from repository storage service
+        let deleteResult: RepositoryDeleteResult
+        if let storage = context.service(RepositoryStorageService.self) {
+            deleteResult = await storage.delete(
+                from: repositoryName,
+                businessActivity: context.businessActivity,
+                where: field,
+                equals: matchValue
+            )
+        } else {
+            // Fallback to shared instance
+            deleteResult = await InMemoryRepositoryStorage.shared.delete(
+                from: repositoryName,
+                businessActivity: context.businessActivity,
+                where: field,
+                equals: matchValue
+            )
+        }
+
+        // Emit repository change events for each deleted item
+        for deletedItem in deleteResult.deletedItems {
+            let entityId: String?
+            if let dict = deletedItem as? [String: any Sendable] {
+                entityId = dict["id"] as? String
+            } else {
+                entityId = nil
+            }
+
+            context.emit(RepositoryChangedEvent(
+                repositoryName: repositoryName,
+                changeType: .deleted,
+                entityId: entityId,
+                newValue: nil,
+                oldValue: deletedItem
+            ))
+        }
+
+        // Emit legacy delete event
+        context.emit(DataDeletedEvent(target: result.base, source: repositoryName))
+
+        // Bind the deleted items to the result variable
+        if deleteResult.deletedItems.count == 1 {
+            context.bind(result.base, value: deleteResult.deletedItems[0])
+        } else {
+            context.bind(result.base, value: deleteResult.deletedItems)
+        }
+
+        return DeleteResult(target: result.base, success: deleteResult.count > 0)
     }
 }
 
