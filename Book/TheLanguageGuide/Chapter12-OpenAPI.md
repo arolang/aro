@@ -1,4 +1,4 @@
-# Chapter 11: OpenAPI Integration
+# Chapter 12: OpenAPI Integration
 
 *"Your contract is your router."*
 
@@ -120,4 +120,4 @@ Keep your specification and implementation synchronized. When you change the API
 
 ---
 
-*Next: Chapter 12 — HTTP Feature Sets*
+*Next: Chapter 13 — HTTP Feature Sets*

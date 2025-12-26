@@ -1,4 +1,4 @@
-# Chapter 18: Multi-file Applications
+# Chapter 19: Multi-file Applications
 
 *"Organize by domain, not by technical layer."*
 
@@ -205,4 +205,4 @@ Test files can follow the same organization as production code. Test files for u
 
 ---
 
-*Next: Chapter 19 — Patterns & Practices*
+*Next: Chapter 20 — Patterns & Practices*

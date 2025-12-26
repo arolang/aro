@@ -264,6 +264,114 @@ Returns an empty string if the repository is empty or index is out of bounds.
 }
 ```
 
+### 9. Repository Observers
+
+Repository observers allow feature sets to react automatically to repository changes, with access to both old and new values.
+
+#### 9.1 Observer Syntax
+
+Observers are feature sets with business activity pattern `{repository-name} Observer`:
+
+```aro
+(* Audit all user changes *)
+(Audit Changes: user-repository Observer) {
+    <Extract> the <changeType> from the <event: changeType>.
+    <Extract> the <newValue> from the <event: newValue>.
+    <Extract> the <oldValue> from the <event: oldValue>.
+
+    <Log> the <audit: message> for the <console> with <changeType>.
+    <Return> an <OK: status> for the <audit>.
+}
+```
+
+#### 9.2 Event Payload
+
+When a repository changes, observers receive an event with:
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `repositoryName` | String | e.g., "user-repository" |
+| `changeType` | String | "created", "updated", or "deleted" |
+| `entityId` | String? | ID of changed entity (if available) |
+| `newValue` | Any? | New value (nil for deletes) |
+| `oldValue` | Any? | Previous value (nil for creates) |
+| `timestamp` | Date | When the change occurred |
+
+#### 9.3 Change Types
+
+Observers are triggered for:
+
+- **created**: New item stored in repository
+- **updated**: Existing item modified (matched by id)
+- **deleted**: Item removed from repository
+
+```aro
+(Handle User Updates: user-repository Observer) {
+    <Extract> the <changeType> from the <event: changeType>.
+
+    (* Only process updates *)
+    <Compare> the <changeType> equals "updated".
+
+    <Extract> the <oldName> from the <event: oldValue: name>.
+    <Extract> the <newName> from the <event: newValue: name>.
+
+    <Log> the <update: message> for the <console>
+        with "User renamed from " + <oldName> + " to " + <newName>.
+
+    <Return> an <OK: status> for the <update>.
+}
+```
+
+#### 9.4 Delete Operation
+
+To delete items from a repository and trigger observers:
+
+```aro
+<Delete> the <user> from the <user-repository> where id = <userId>.
+```
+
+The deleted items are emitted as `RepositoryChangedEvent` with `changeType: "deleted"`.
+
+#### 9.5 Observer Diagram
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│                     Feature Set Execution                        │
+├─────────────────────────────────────────────────────────────────┤
+│                                                                  │
+│   <Store> the <user> into the <user-repository>.                │
+│                    │                                             │
+│                    ▼                                             │
+│   ┌────────────────────────────────────────┐                    │
+│   │   RepositoryStorage.storeWithChangeInfo │                    │
+│   │   - Captures old value (if update)      │                    │
+│   │   - Returns StoreResult                 │                    │
+│   └────────────────────────────────────────┘                    │
+│                    │                                             │
+│                    ▼                                             │
+│   ┌────────────────────────────────────────┐                    │
+│   │   Emit RepositoryChangedEvent           │                    │
+│   │   - changeType: created | updated       │                    │
+│   │   - newValue: stored data               │                    │
+│   │   - oldValue: previous data (if any)    │                    │
+│   └────────────────────────────────────────┘                    │
+│                    │                                             │
+│                    ▼                                             │
+│   ┌────────────────────────────────────────┐                    │
+│   │          EventBus                       │                    │
+│   │   - Routes to matching observers        │                    │
+│   └────────────────────────────────────────┘                    │
+│                    │                                             │
+│        ┌──────────┴──────────┐                                  │
+│        ▼                     ▼                                  │
+│   ┌──────────────┐    ┌──────────────┐                          │
+│   │ Audit Changes│    │ Send Email   │                          │
+│   │   Observer   │    │   Observer   │                          │
+│   └──────────────┘    └──────────────┘                          │
+│                                                                  │
+└─────────────────────────────────────────────────────────────────┘
+```
+
 ## Implementation
 
 ### Runtime Architecture
@@ -356,11 +464,11 @@ This proposal is **backwards compatible**:
 
 1. **Persistent Repositories**: Optional persistence to disk/database
 2. **Repository Schemas**: Type validation for stored data
-3. **Repository Events**: Emit events on store/retrieve operations
-4. **Repository Limits**: Maximum size and TTL for cached data
+3. **Repository Limits**: Maximum size and TTL for cached data
 
 ## Revision History
 
 | Version | Date | Changes |
 |---------|------|---------|
 | 1.0 | 2025-12 | Initial specification |
+| 1.1 | 2025-12 | Added Repository Observers (Section 9) |

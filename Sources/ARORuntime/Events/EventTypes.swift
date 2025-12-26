@@ -224,3 +224,51 @@ public struct FeatureSetCompletedEvent: RuntimeEvent {
         self.durationMs = durationMs
     }
 }
+
+// MARK: - Repository Events
+
+/// Change type for repository operations
+public enum RepositoryChangeType: String, Sendable {
+    case created = "created"
+    case updated = "updated"
+    case deleted = "deleted"
+}
+
+/// Event emitted when a repository item changes
+///
+/// Repository observers can subscribe to this event to react to changes.
+/// The event includes both the old and new values for comparison.
+public struct RepositoryChangedEvent: RuntimeEvent {
+    public static var eventType: String { "repository.changed" }
+    public let timestamp: Date
+
+    /// Repository name (e.g., "user-repository")
+    public let repositoryName: String
+
+    /// Type of change: created, updated, or deleted
+    public let changeType: RepositoryChangeType
+
+    /// Entity ID (nil for non-dictionary values)
+    public let entityId: String?
+
+    /// The new value (nil for deletes)
+    public let newValue: (any Sendable)?
+
+    /// The old value (nil for creates)
+    public let oldValue: (any Sendable)?
+
+    public init(
+        repositoryName: String,
+        changeType: RepositoryChangeType,
+        entityId: String? = nil,
+        newValue: (any Sendable)? = nil,
+        oldValue: (any Sendable)? = nil
+    ) {
+        self.timestamp = Date()
+        self.repositoryName = repositoryName
+        self.changeType = changeType
+        self.entityId = entityId
+        self.newValue = newValue
+        self.oldValue = oldValue
+    }
+}
