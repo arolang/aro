@@ -1,4 +1,4 @@
-# Chapter 8: The Event Bus
+# Chapter 9: The Event Bus
 
 *"In an event-driven system, everything is a reaction."*
 
@@ -122,7 +122,7 @@ Document event contracts. The payload of an event is a contract between emitters
 
 ---
 
-## 8.10 Repository Observers
+## 9.10 Repository Observers
 
 Repository observers are a specialized form of event handlers that react to changes in repository data. When items are stored, updated, or deleted from a repository, observers automatically receive the change details including both old and new values.
 
@@ -175,4 +175,4 @@ The design enables domain-driven patterns where each bounded context can observe
 
 ---
 
-*Next: Chapter 9 — Application Lifecycle*
+*Next: Chapter 10 — Application Lifecycle*

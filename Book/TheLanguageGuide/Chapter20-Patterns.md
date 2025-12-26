@@ -1,4 +1,4 @@
-# Chapter 19: Patterns & Practices
+# Chapter 20: Patterns & Practices
 
 *"Good patterns emerge from solving real problems."*
 
@@ -158,4 +158,4 @@ Document the non-obvious. Code should be self-documenting for basic behavior. Co
 
 ---
 
-*Next: Chapter 20 — Modules and Imports*
+*Next: Chapter 21 — Modules and Imports*

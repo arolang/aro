@@ -1,0 +1,85 @@
+(* ============================================================
+   Computations Example
+   Demonstrates built-in compute operations and the
+   qualifier-as-name syntax for naming computed results
+   ============================================================ *)
+
+(Application-Start: Computation Demo) {
+    <Log> the <startup: message> for the <console> with "=== ARO Computations Demo ===".
+
+    (* --------------------------------------------------------
+       String Length Operations
+       Using qualifier-as-name to get distinct variable names
+       -------------------------------------------------------- *)
+    <Create> the <greeting> with "Hello, World!".
+    <Create> the <farewell> with "Goodbye!".
+
+    (* Old syntax: variable name IS the operation *)
+    <Compute> the <length> from the <greeting>.
+    <Log> the <result: message> for the <console> with "Greeting length (old syntax): ".
+    <Log> the <result: message> for the <console> with <length>.
+
+    (* New syntax: variable name and operation are separate *)
+    <Compute> the <greeting-length: length> from the <greeting>.
+    <Compute> the <farewell-length: length> from the <farewell>.
+    <Log> the <result: message> for the <console> with "Greeting length (new syntax): ".
+    <Log> the <result: message> for the <console> with <greeting-length>.
+    <Log> the <result: message> for the <console> with "Farewell length: ".
+    <Log> the <result: message> for the <console> with <farewell-length>.
+
+    (* --------------------------------------------------------
+       Case Transformations
+       -------------------------------------------------------- *)
+    <Create> the <mixedText> with "Hello ARO Developer".
+
+    <Compute> the <upperText: uppercase> from the <mixedText>.
+    <Compute> the <lowerText: lowercase> from the <mixedText>.
+
+    <Log> the <result: message> for the <console> with "Original: ".
+    <Log> the <result: message> for the <console> with <mixedText>.
+    <Log> the <result: message> for the <console> with "Uppercase: ".
+    <Log> the <result: message> for the <console> with <upperText>.
+    <Log> the <result: message> for the <console> with "Lowercase: ".
+    <Log> the <result: message> for the <console> with <lowerText>.
+
+    (* --------------------------------------------------------
+       Hashing
+       -------------------------------------------------------- *)
+    <Create> the <password> with "secret123".
+    <Compute> the <password-hash: hash> from the <password>.
+    <Log> the <result: message> for the <console> with "Password hash: ".
+    <Log> the <result: message> for the <console> with <password-hash>.
+
+    (* --------------------------------------------------------
+       Arithmetic Computations
+       -------------------------------------------------------- *)
+    <Create> the <price> with 100.
+    <Create> the <quantity> with 3.
+
+    <Compute> the <subtotal> from <price> * <quantity>.
+    <Compute> the <tax> from <subtotal> * 0.08.
+    <Compute> the <total> from <subtotal> + <tax>.
+
+    <Log> the <result: message> for the <console> with "Price: ".
+    <Log> the <result: message> for the <console> with <price>.
+    <Log> the <result: message> for the <console> with "Quantity: ".
+    <Log> the <result: message> for the <console> with <quantity>.
+    <Log> the <result: message> for the <console> with "Subtotal: ".
+    <Log> the <result: message> for the <console> with <subtotal>.
+    <Log> the <result: message> for the <console> with "Tax (8%): ".
+    <Log> the <result: message> for the <console> with <tax>.
+    <Log> the <result: message> for the <console> with "Total: ".
+    <Log> the <result: message> for the <console> with <total>.
+
+    (* --------------------------------------------------------
+       Collection Counting
+       -------------------------------------------------------- *)
+    <Create> the <items> with ["apple", "banana", "cherry", "date"].
+    <Compute> the <item-count: count> from the <items>.
+    <Log> the <result: message> for the <console> with "Number of items: ".
+    <Log> the <result: message> for the <console> with <item-count>.
+
+    <Log> the <result: message> for the <console> with "=== Demo Complete ===".
+
+    <Return> an <OK: status> for the <demo>.
+}

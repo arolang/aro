@@ -1,4 +1,4 @@
-# Chapter 14: Built-in Services
+# Chapter 15: Built-in Services
 
 *"Batteries included."*
 
@@ -178,4 +178,4 @@ Configure services appropriately for your environment. Development might use per
 
 ---
 
-*Next: Chapter 15 — Custom Actions*
+*Next: Chapter 16 — Custom Actions*

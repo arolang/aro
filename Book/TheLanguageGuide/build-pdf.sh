@@ -141,7 +141,7 @@ body {
     font-family: 'IBM Plex Serif', 'Palatino Linotype', 'Book Antiqua', Palatino, Georgia, serif;
     line-height: 1.65;
     color: var(--text-color);
-    background-color: var(--bg-color);
+   
     max-width: 42rem;
     margin: 0 auto;
     padding: 2rem;

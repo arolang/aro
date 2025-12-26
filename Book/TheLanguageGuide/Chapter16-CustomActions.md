@@ -1,4 +1,4 @@
-# Chapter 15: Custom Actions
+# Chapter 16: Custom Actions
 
 *"When 24 actions aren't enough, write your own."*
 
@@ -136,4 +136,4 @@ Test actions independently. Because actions have a well-defined interface, they 
 
 ---
 
-*Next: Chapter 16 — Plugins*
+*Next: Chapter 17 — Plugins*
