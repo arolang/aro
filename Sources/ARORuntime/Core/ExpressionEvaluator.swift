@@ -221,12 +221,12 @@ public struct ExpressionEvaluator: Sendable {
         let base = try await evaluate(expr.base, context: context)
         let index = try await evaluate(expr.index, context: context)
 
-        // Array subscript
+        // Array subscript (0 = most recent element)
         if let array = base as? [any Sendable], let i = index as? Int {
             guard i >= 0 && i < array.count else {
                 throw ExpressionError.indexOutOfBounds(i, count: array.count)
             }
-            return array[i]
+            return array[array.count - 1 - i]
         }
 
         // Dictionary subscript with string key

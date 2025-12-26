@@ -714,9 +714,9 @@ public struct DeleteAction: ActionImplementation {
             return dict
         }
 
-        // Delete from array by index
+        // Delete from array by index (0 = most recent element)
         if var array = source as? [any Sendable], let index = Int(keyToDelete), index >= 0, index < array.count {
-            array.remove(at: index)
+            array.remove(at: array.count - 1 - index)
             return array
         }
 

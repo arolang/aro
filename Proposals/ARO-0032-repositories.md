@@ -210,12 +210,18 @@ Use specifiers or filtering for single items:
 (* First stored value *)
 <Retrieve> the <oldest> from the <user-repository: first>.
 
-(* By numeric index (0-based) *)
-<Retrieve> the <second> from the <user-repository: 1>.
+(* By numeric index - 0 = most recent *)
+<Retrieve> the <newest> from the <user-repository: 0>.
+<Retrieve> the <second-newest> from the <user-repository: 1>.
 
 (* By predicate *)
 <Retrieve> the <user> from the <user-repository> where id = "123".
 ```
+
+Numeric indices count from most recently added:
+- Index 0 = most recently stored (same result as `last`)
+- Index 1 = second most recently stored
+- Index N = Nth element from end
 
 Returns an empty string if the repository is empty or index is out of bounds.
 
