@@ -1,10 +1,10 @@
-# Chapter 21: Modules and Imports
+# Chapter 22: Modules and Imports
 
 *"Compose applications from small, understandable pieces."*
 
 ---
 
-## 20.1 Application Composition
+## 22.1 Application Composition
 
 <div style="text-align: center; margin: 2em 0;">
 <svg width="400" height="140" viewBox="0 0 400 140" xmlns="http://www.w3.org/2000/svg">  <!-- Module A -->  <rect x="30" y="20" width="100" height="50" rx="5" fill="#dbeafe" stroke="#3b82f6" stroke-width="2"/>  <text x="80" y="40" text-anchor="middle" font-family="sans-serif" font-size="10" font-weight="bold" fill="#1e40af">Module A</text>  <text x="80" y="55" text-anchor="middle" font-family="monospace" font-size="8" fill="#3b82f6">/module-a</text>  <!-- Module B -->  <rect x="270" y="20" width="100" height="50" rx="5" fill="#dcfce7" stroke="#22c55e" stroke-width="2"/>  <text x="320" y="40" text-anchor="middle" font-family="sans-serif" font-size="10" font-weight="bold" fill="#166534">Module B</text>  <text x="320" y="55" text-anchor="middle" font-family="monospace" font-size="8" fill="#22c55e">/module-b</text>  <!-- Arrows -->  <line x1="80" y1="70" x2="160" y2="100" stroke="#6b7280" stroke-width="2"/>  <polygon points="160,100 152,95 152,105" fill="#6b7280"/>  <line x1="320" y1="70" x2="240" y2="100" stroke="#6b7280" stroke-width="2"/>  <polygon points="240,100 248,95 248,105" fill="#6b7280"/>  <!-- Combined -->  <rect x="150" y="100" width="100" height="35" rx="5" fill="#e0e7ff" stroke="#6366f1" stroke-width="2"/>  <text x="200" y="118" text-anchor="middle" font-family="sans-serif" font-size="10" font-weight="bold" fill="#4338ca">Combined</text>  <text x="200" y="130" text-anchor="middle" font-family="monospace" font-size="7" fill="#6366f1">import ../A ../B</text>  <!-- Labels -->  <text x="115" y="85" text-anchor="middle" font-family="sans-serif" font-size="7" fill="#9ca3af">import</text>  <text x="285" y="85" text-anchor="middle" font-family="sans-serif" font-size="7" fill="#9ca3af">import</text></svg>
@@ -18,7 +18,7 @@ This design reflects how project managers think about systems. Applications are 
 
 ---
 
-## 20.2 Import Syntax
+## 22.2 Import Syntax
 
 The import statement appears at the top of an ARO file, before any feature sets:
 
@@ -42,7 +42,7 @@ There is no need to specify what you want from the imported application. Everyth
 
 ---
 
-## 20.3 No Visibility Modifiers
+## 22.3 No Visibility Modifiers
 
 ARO explicitly rejects visibility modifiers. There is no `public`, `private`, or `internal`.
 
@@ -61,7 +61,7 @@ When you import an application, you are saying: I want this application's capabi
 
 ---
 
-## 20.4 The ModulesExample
+## 22.4 The ModulesExample
 
 The `Examples/ModulesExample` directory demonstrates application composition with three directories:
 
@@ -152,7 +152,7 @@ The `getModuleA` and `getModuleB` feature sets come from the imported applicatio
 
 ---
 
-## 20.5 Building Standalone Binaries
+## 22.5 Building Standalone Binaries
 
 Each module produces its own standalone binary:
 
@@ -174,7 +174,7 @@ The Combined binary includes all code from both imported modules. The resulting 
 
 ---
 
-## 20.6 Distributed Services Pattern
+## 22.6 Distributed Services Pattern
 
 <div style="float: right; margin: 0 0 1em 1.5em;">
 <svg width="160" height="200" viewBox="0 0 160 200" xmlns="http://www.w3.org/2000/svg">  <!-- Auth -->  <rect x="10" y="10" width="60" height="35" rx="4" fill="#dbeafe" stroke="#3b82f6" stroke-width="1.5"/>  <text x="40" y="28" text-anchor="middle" font-family="sans-serif" font-size="8" font-weight="bold" fill="#1e40af">Auth</text>  <text x="40" y="40" text-anchor="middle" font-family="monospace" font-size="6" fill="#3b82f6">:8081</text>  <!-- Users -->  <rect x="90" y="10" width="60" height="35" rx="4" fill="#dcfce7" stroke="#22c55e" stroke-width="1.5"/>  <text x="120" y="28" text-anchor="middle" font-family="sans-serif" font-size="8" font-weight="bold" fill="#166534">Users</text>  <text x="120" y="40" text-anchor="middle" font-family="monospace" font-size="6" fill="#22c55e">:8082</text>  <!-- Orders -->  <rect x="10" y="60" width="60" height="35" rx="4" fill="#fef3c7" stroke="#f59e0b" stroke-width="1.5"/>  <text x="40" y="78" text-anchor="middle" font-family="sans-serif" font-size="8" font-weight="bold" fill="#92400e">Orders</text>  <text x="40" y="90" text-anchor="middle" font-family="monospace" font-size="6" fill="#f59e0b">:8083</text>  <!-- Payments -->  <rect x="90" y="60" width="60" height="35" rx="4" fill="#f3e8ff" stroke="#a855f7" stroke-width="1.5"/>  <text x="120" y="78" text-anchor="middle" font-family="sans-serif" font-size="8" font-weight="bold" fill="#7c3aed">Payments</text>  <text x="120" y="90" text-anchor="middle" font-family="monospace" font-size="6" fill="#a855f7">:8084</text>  <!-- Arrows to gateway -->  <line x1="40" y1="45" x2="70" y2="130" stroke="#6b7280" stroke-width="1"/>  <line x1="120" y1="45" x2="90" y2="130" stroke="#6b7280" stroke-width="1"/>  <line x1="40" y1="95" x2="70" y2="130" stroke="#6b7280" stroke-width="1"/>  <line x1="120" y1="95" x2="90" y2="130" stroke="#6b7280" stroke-width="1"/>  <!-- Gateway -->  <rect x="35" y="130" width="90" height="40" rx="4" fill="#e0e7ff" stroke="#6366f1" stroke-width="2"/>  <text x="80" y="150" text-anchor="middle" font-family="sans-serif" font-size="9" font-weight="bold" fill="#4338ca">Gateway</text>  <text x="80" y="163" text-anchor="middle" font-family="monospace" font-size="7" fill="#6366f1">:8080</text>  <!-- Label -->  <text x="80" y="190" text-anchor="middle" font-family="sans-serif" font-size="7" fill="#9ca3af">imports all services</text></svg>
@@ -204,7 +204,7 @@ For development, you might run the gateway monolith. For production, you might r
 
 ---
 
-## 20.7 Sharing Data Between Applications
+## 22.7 Sharing Data Between Applications
 
 When you import an application, you get access to its published variables within the same business activity. The Publish action (see ARO-0003) makes values available to feature sets sharing that business activity:
 
@@ -233,7 +233,7 @@ import ../auth-service
 
 ---
 
-## 20.8 What Is Not Imported
+## 22.8 What Is Not Imported
 
 When you import an application, its Application-Start feature set is not executed. Only the importing application's Application-Start runs. The imported feature sets become available, but lifecycle management remains with the importing application.
 
@@ -243,7 +243,7 @@ Similarly, Application-End handlers from imported applications are not triggered
 
 ---
 
-## 20.9 Circular Imports
+## 22.9 Circular Imports
 
 Circular imports are technically allowed:
 
@@ -265,7 +265,7 @@ However, circular dependencies usually indicate poor architecture. If two applic
 
 ---
 
-## 20.10 What Is Not Provided
+## 22.10 What Is Not Provided
 
 ARO deliberately omits many features found in other module systems:
 
@@ -281,7 +281,7 @@ These are implementation concerns that add complexity without matching how ARO a
 
 ---
 
-## 20.11 Summary
+## 22.11 Summary
 
 The import system embodies ARO's philosophy of simplicity:
 

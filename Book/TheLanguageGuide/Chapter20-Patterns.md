@@ -158,4 +158,4 @@ Document the non-obvious. Code should be self-documenting for basic behavior. Co
 
 ---
 
-*Next: Chapter 21 — Modules and Imports*
+*Next: Chapter 21 — State Machines*
