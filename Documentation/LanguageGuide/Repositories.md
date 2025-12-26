@@ -156,9 +156,12 @@ Use specifiers to retrieve a single item from a repository:
 (* Get the first stored item *)
 <Retrieve> the <message> from the <message-repository: first>.
 
-(* Get by numeric index (0-based) *)
-<Retrieve> the <message> from the <message-repository: 0>.
+(* Get by numeric index - 0 = most recent *)
+<Retrieve> the <latest> from the <message-repository: 0>.
+<Retrieve> the <second-latest> from the <message-repository: 1>.
 ```
+
+Numeric indices count from most recently added (0 = newest, 1 = second newest, etc.).
 
 This is useful when you only need one item, like the latest message in a chat:
 

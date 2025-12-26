@@ -103,9 +103,9 @@ public struct ExtractAction: ActionImplementation {
             }
         }
 
-        // Try array index access
+        // Try array index access (0 = most recent element)
         if let array = source as? [any Sendable], let index = Int(key), index >= 0, index < array.count {
-            return array[index]
+            return array[array.count - 1 - index]
         }
 
         // If source is a String, try to parse it as various formats
@@ -451,9 +451,9 @@ public struct RetrieveAction: ActionImplementation {
                     // Return first element or empty string if empty
                     return values.first ?? ""
                 default:
-                    // Try numeric index
+                    // Try numeric index (0 = most recent element)
                     if let index = Int(specifier), index >= 0, index < values.count {
-                        return values[index]
+                        return values[values.count - 1 - index]
                     }
                     // Unknown specifier - return all values
                     return values
