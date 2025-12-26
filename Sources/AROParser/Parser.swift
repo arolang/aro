@@ -908,6 +908,7 @@ public final class Parser {
     
     /// Parses space-separated compound identifiers as a single string
     /// Each compound identifier can contain hyphens (e.g., "Application-Start Entry Point")
+    /// Also supports angle bracket suffixes for filters (e.g., "status StateObserver<draft_to_placed>")
     private func parseIdentifierSequence() throws -> String {
         var parts: [String] = []
 
@@ -925,6 +926,21 @@ public final class Parser {
                     break
                 }
             }
+
+            // Handle angle bracket filter suffix (e.g., StateObserver<draft_to_placed>)
+            if check(.leftAngle) || check(.lessThan) {
+                advance() // consume <
+                compound += "<"
+                // Collect everything until >
+                while !check(.rightAngle) && !check(.greaterThan) && !isAtEnd {
+                    compound += advance().lexeme
+                }
+                if check(.rightAngle) || check(.greaterThan) {
+                    advance() // consume >
+                    compound += ">"
+                }
+            }
+
             parts.append(compound)
         }
 
@@ -1147,6 +1163,13 @@ extension Parser {
 
         case .interpolationStart:
             return try parseInterpolatedString(firstSegment: nil, startSpan: token.span)
+
+        // Bare identifier (e.g., in string interpolation ${name})
+        case .identifier(let name):
+            advance()
+            // Create a QualifiedNoun for the identifier
+            let noun = QualifiedNoun(base: name, typeAnnotation: nil, span: token.span)
+            return VariableRefExpression(noun: noun, span: token.span)
 
         default:
             throw ParserError.unexpectedToken(expected: "expression", got: token)
@@ -1401,14 +1424,10 @@ extension Parser {
 
             case .interpolationStart:
                 advance()
-                // The next token should be the expression content as a stringSegment
-                // We need to re-lex and parse this content
-                if case .stringSegment(let exprStr) = peek().kind {
-                    advance()
-                    // Parse the expression string
-                    let exprTokens = try Lexer.tokenize(exprStr)
-                    let exprParser = Parser(tokens: exprTokens, diagnostics: diagnostics)
-                    let expr = try exprParser.parseExpression()
+                // Parse the expression directly from the token stream
+                // The Lexer has already tokenized the expression content
+                if !check(.interpolationEnd) {
+                    let expr = try parseExpression()
                     parts.append(.interpolation(expr))
                 }
                 // Consume interpolationEnd
