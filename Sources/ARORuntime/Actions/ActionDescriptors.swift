@@ -24,7 +24,7 @@ public struct ResultDescriptor: Sendable, Equatable, CustomStringConvertible {
 
     /// Full qualified name for display
     public var fullName: String {
-        specifiers.isEmpty ? base : "\(base): \(specifiers.joined(separator: " "))"
+        specifiers.isEmpty ? base : "\(base): \(specifiers.joined(separator: "."))"
     }
 
     /// Initialize from AST QualifiedNoun
@@ -73,7 +73,7 @@ public struct ObjectDescriptor: Sendable, Equatable, CustomStringConvertible {
 
     /// Full qualified name for display
     public var fullName: String {
-        specifiers.isEmpty ? base : "\(base): \(specifiers.joined(separator: " "))"
+        specifiers.isEmpty ? base : "\(base): \(specifiers.joined(separator: "."))"
     }
 
     /// Key path for nested access (e.g., "request.parameters.userId")

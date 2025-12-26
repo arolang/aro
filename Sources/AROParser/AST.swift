@@ -469,16 +469,15 @@ public struct QualifiedNoun: Sendable, Equatable, CustomStringConvertible {
     public let typeAnnotation: String?  // Raw type string (e.g., "String", "List<User>")
     public let span: SourceSpan
 
-    // Legacy support: specifiers are parsed from typeAnnotation
-    // For backwards compatibility, split by spaces unless it's a generic type
+    // Specifiers are parsed from typeAnnotation as dot-separated property path
     public var specifiers: [String] {
         guard let type = typeAnnotation else { return [] }
         // If it contains < it's a generic type like List<User>, return as single element
         if type.contains("<") {
             return [type]
         }
-        // Otherwise split by spaces for legacy multi-specifier syntax
-        return type.split(separator: " ").map(String.init)
+        // Split by dots for property path syntax (e.g., "customer.address.city")
+        return type.split(separator: ".").map(String.init)
     }
 
     public init(base: String, typeAnnotation: String? = nil, span: SourceSpan) {
@@ -487,10 +486,10 @@ public struct QualifiedNoun: Sendable, Equatable, CustomStringConvertible {
         self.span = span
     }
 
-    /// Legacy initializer for backwards compatibility (use when you have specifiers array)
+    /// Initializer for when you have a specifiers array (joins with dots)
     public init(base: String, specifiers: [String], span: SourceSpan) {
         self.base = base
-        self.typeAnnotation = specifiers.isEmpty ? nil : specifiers.joined(separator: " ")
+        self.typeAnnotation = specifiers.isEmpty ? nil : specifiers.joined(separator: ".")
         self.span = span
     }
 

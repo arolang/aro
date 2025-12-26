@@ -233,14 +233,14 @@ specifier      = compound_identifier ;
 ```
 <user>                          (* simple noun *)
 <user: identifier>              (* with one specifier *)
-<user: first-name last-name>    (* with multiple specifiers *)
+<user: first-name.last-name>    (* with multiple specifiers *)
 <incoming-request: parameters>  (* compound base with specifier *)
 ```
 
 **Semantics:**
 - The `base` identifies the primary concept
 - Specifiers refine or qualify the base
-- Multiple specifiers are space-separated
+- Multiple specifiers are dot-separated
 
 ### 6. Publish Statement
 

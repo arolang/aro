@@ -875,11 +875,18 @@ public final class Parser {
                 )
             }
         } else {
-            // Legacy support: parse additional space-separated specifiers
-            // e.g., <user: id name> where "id" and "name" are both specifiers
-            while peek().kind.isIdentifier {
-                typeStr += " "
-                typeStr += try parseCompoundIdentifier()
+            // Parse dot-separated property path
+            // e.g., <user: profile.name> where "profile" and "name" form a property path
+            while check(.dot) {
+                // Peek ahead to distinguish member access from statement-ending dot
+                let nextIdx = current + 1
+                if nextIdx < tokens.count, tokens[nextIdx].kind.isIdentifier {
+                    advance() // consume dot
+                    typeStr += "."
+                    typeStr += try parseCompoundIdentifier()
+                } else {
+                    break
+                }
             }
         }
 

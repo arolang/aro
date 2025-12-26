@@ -79,7 +79,7 @@ Pulls data from a structured source.
 ```aro
 <Extract> the <user-id> from the <request: parameters>.
 <Extract> the <body> from the <request: body>.
-<Extract> the <token> from the <request: headers Authorization>.
+<Extract> the <token> from the <request: headers.Authorization>.
 <Extract> the <email> from the <user: email>.
 <Extract> the <order> from the <event: order>.
 ```
