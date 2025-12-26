@@ -295,11 +295,59 @@
             added, removed, or modified independently.
         </p>
 
+        <h2>Repository Observers</h2>
+        <p>
+            Repository observers are a special kind of event handler that automatically react to repository changes.
+            When data is stored, updated, or deleted from a repository, observers receive the change details
+            including both old and new values.
+        </p>
+
+        <h3>Observer Syntax</h3>
+        <p>
+            Create an observer by naming your feature set's business activity as <code>{repository-name} Observer</code>:
+        </p>
+
+        <pre><code><span class="code-comment">(* Audit all user changes *)</span>
+<span class="code-feature">(Audit Changes: user-repository Observer)</span> {
+    <span class="code-keyword">&lt;Extract&gt;</span> the <span class="code-result">&lt;changeType&gt;</span> from the <span class="code-result">&lt;event: changeType&gt;</span>.
+    <span class="code-keyword">&lt;Extract&gt;</span> the <span class="code-result">&lt;newValue&gt;</span> from the <span class="code-result">&lt;event: newValue&gt;</span>.
+    <span class="code-keyword">&lt;Extract&gt;</span> the <span class="code-result">&lt;oldValue&gt;</span> from the <span class="code-result">&lt;event: oldValue&gt;</span>.
+
+    <span class="code-keyword">&lt;Log&gt;</span> the &lt;audit: message&gt; for the &lt;console&gt; with &lt;changeType&gt;.
+    <span class="code-keyword">&lt;Return&gt;</span> an <span class="code-result">&lt;OK: status&gt;</span> for the &lt;audit&gt;.
+}</code></pre>
+
+        <h3>Event Payload</h3>
+        <p>
+            Observers receive an event with the following fields:
+        </p>
+        <ul>
+            <li><strong>repositoryName</strong> - The repository name (e.g., "user-repository")</li>
+            <li><strong>changeType</strong> - "created", "updated", or "deleted"</li>
+            <li><strong>entityId</strong> - ID of the changed entity (if available)</li>
+            <li><strong>newValue</strong> - The new value (nil for deletes)</li>
+            <li><strong>oldValue</strong> - The previous value (nil for creates)</li>
+            <li><strong>timestamp</strong> - When the change occurred</li>
+        </ul>
+
+        <h3>Deleting from Repositories</h3>
+        <p>
+            Use the <code>&lt;Delete&gt;</code> action with a <code>where</code> clause to remove items:
+        </p>
+
+        <pre><code><span class="code-feature">(deleteUser: User API)</span> {
+    <span class="code-keyword">&lt;Extract&gt;</span> the <span class="code-result">&lt;userId&gt;</span> from the &lt;pathParameters: id&gt;.
+    <span class="code-keyword">&lt;Delete&gt;</span> the <span class="code-result">&lt;user&gt;</span> from the &lt;user-repository&gt; where id = &lt;userId&gt;.
+    <span class="code-keyword">&lt;Return&gt;</span> an <span class="code-result">&lt;OK: status&gt;</span> with { deleted: &lt;userId&gt; }.
+}</code></pre>
+
         <div class="highlight-box">
             <h4>Learn More</h4>
             <p>
                 See the full event dispatch specification in
-                <a href="https://github.com/KrisSimon/aro/blob/main/Proposals/ARO-0012-events-reactive.md">ARO-0012: Simple Event Dispatch</a>.
+                <a href="https://github.com/KrisSimon/aro/blob/main/Proposals/ARO-0012-events-reactive.md">ARO-0012: Simple Event Dispatch</a>
+                and repository observers in
+                <a href="https://github.com/KrisSimon/aro/blob/main/Proposals/ARO-0032-repositories.md">ARO-0032: Repositories</a>.
             </p>
         </div>
     </main>
