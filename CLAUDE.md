@@ -88,6 +88,7 @@ Feature sets are triggered by events based on their **business activity**:
 |---------------------------|--------------|
 | `operationId` (e.g., `listUsers`) | HTTP route match via OpenAPI contract |
 | `{EventName} Handler` | Custom domain events |
+| `{repository-name} Observer` | Repository changes (store/update/delete) |
 | `File Event Handler` | File system events |
 | `Socket Event Handler` | Socket events |
 
@@ -334,11 +335,16 @@ Examples/
 ├── HTTPServer/         # HTTP server example
 ├── FileWatcher/        # File monitoring example
 ├── EchoSocket/         # Socket example
-└── UserService/        # Multi-file application example
-    ├── openapi.yaml    # OpenAPI contract (defines HTTP routes)
+├── UserService/        # Multi-file application example
+│   ├── openapi.yaml    # OpenAPI contract (defines HTTP routes)
+│   ├── main.aro        # Application-Start
+│   ├── users.aro       # Feature sets (named after operationIds)
+│   └── events.aro      # Event handlers
+└── RepositoryObserver/ # Repository observers example
+    ├── openapi.yaml    # API contract
     ├── main.aro        # Application-Start
-    ├── users.aro       # Feature sets (named after operationIds)
-    └── events.aro      # Event handlers
+    ├── api.aro         # CRUD operations
+    └── observers.aro   # Repository change observers
 
 Proposals/              # 35 evolution proposals (ARO-0001 to ARO-0035)
 Documentation/          # Developer guides

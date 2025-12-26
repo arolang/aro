@@ -96,6 +96,9 @@ public final class ExecutionEngine: @unchecked Sendable {
         // Wire up file event handlers (e.g., "Handle File Modified: File Event Handler")
         registerFileEventHandlers(for: program, baseContext: context)
 
+        // Wire up repository observers (e.g., "user-repository Observer")
+        registerRepositoryObservers(for: program, baseContext: context)
+
         // Wire up state transition observers (e.g., "Audit Changes: status StateObserver")
         registerStateObservers(for: program, baseContext: context)
 
@@ -405,6 +408,42 @@ public final class ExecutionEngine: @unchecked Sendable {
         }
     }
 
+    /// Register repository observers for feature sets with "Observer" business activity pattern
+    /// For example: "user-repository Observer", "order-repository Observer"
+    private func registerRepositoryObservers(for program: AnalyzedProgram, baseContext: RuntimeContext) {
+        // Find all feature sets with "*-repository Observer" business activity
+        let observers = program.featureSets.filter { analyzedFS in
+            let activity = analyzedFS.featureSet.businessActivity
+            return activity.hasSuffix("Observer") &&
+                   activity.contains("-repository")
+        }
+
+        for analyzedFS in observers {
+            let activity = analyzedFS.featureSet.businessActivity
+
+            // Extract repository name from business activity
+            // e.g., "user-repository Observer" -> "user-repository"
+            let repositoryName = activity
+                .replacingOccurrences(of: " Observer", with: "")
+                .trimmingCharacters(in: .whitespaces)
+
+            // Subscribe to RepositoryChangedEvent and filter by repositoryName
+            eventBus.subscribe(to: RepositoryChangedEvent.self) { [weak self] event in
+                guard let self = self else { return }
+
+                // Only handle events that match this observer's repository
+                if event.repositoryName == repositoryName {
+                    await self.executeRepositoryObserver(
+                        analyzedFS,
+                        program: program,
+                        baseContext: baseContext,
+                        event: event
+                    )
+                }
+            }
+        }
+    }
+
     /// Register state transition observers for feature sets with "StateObserver" business activity
     /// Supports optional transition filter: "status StateObserver<draft_to_placed>"
     /// For example: "Audit Changes: status StateObserver", "Notify Placed: status StateObserver<draft_to_placed>"
@@ -471,6 +510,70 @@ public final class ExecutionEngine: @unchecked Sendable {
                     )
                 }
             }
+        }
+    }
+
+    /// Execute a repository observer feature set
+    private func executeRepositoryObserver(
+        _ analyzedFS: AnalyzedFeatureSet,
+        program: AnalyzedProgram,
+        baseContext: RuntimeContext,
+        event: RepositoryChangedEvent
+    ) async {
+        // Create child context for this observer with its own business activity
+        let observerContext = RuntimeContext(
+            featureSetName: analyzedFS.featureSet.name,
+            businessActivity: analyzedFS.featureSet.businessActivity,
+            eventBus: eventBus,
+            parent: baseContext
+        )
+
+        // Build event payload for the observer
+        var eventPayload: [String: any Sendable] = [
+            "repositoryName": event.repositoryName,
+            "changeType": event.changeType.rawValue,
+            "timestamp": event.timestamp
+        ]
+
+        if let entityId = event.entityId {
+            eventPayload["entityId"] = entityId
+        }
+
+        if let newValue = event.newValue {
+            eventPayload["newValue"] = newValue
+        }
+
+        if let oldValue = event.oldValue {
+            eventPayload["oldValue"] = oldValue
+        }
+
+        // Bind event payload to context as "event" with nested access
+        // e.g., <Extract> the <changeType> from the <event: changeType>
+        observerContext.bind("event", value: eventPayload)
+
+        // Also bind event keys directly for convenience
+        for (key, value) in eventPayload {
+            observerContext.bind("event:\(key)", value: value)
+        }
+
+        // Copy services from base context
+        services.registerAll(in: observerContext)
+
+        // Execute the observer
+        let executor = FeatureSetExecutor(
+            actionRegistry: actionRegistry,
+            eventBus: eventBus,
+            globalSymbols: globalSymbols
+        )
+
+        do {
+            _ = try await executor.execute(analyzedFS, context: observerContext)
+        } catch {
+            eventBus.publish(ErrorOccurredEvent(
+                error: String(describing: error),
+                context: analyzedFS.featureSet.name,
+                recoverable: true
+            ))
         }
     }
 

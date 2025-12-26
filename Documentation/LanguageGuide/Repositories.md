@@ -268,6 +268,106 @@ curl http://localhost:8080/status
 # Response: {"message":"World!"}
 ```
 
+## Deleting from Repositories
+
+Use the `<Delete>` action with a `where` clause to remove items from a repository:
+
+```aro
+<Delete> the <user> from the <user-repository> where id = <userId>.
+```
+
+### Example: Deleting a User
+
+```aro
+(deleteUser: User API) {
+    <Extract> the <userId> from the <pathParameters: id>.
+    <Delete> the <user> from the <user-repository> where id = <userId>.
+    <Return> an <OK: status> with { deleted: <userId> }.
+}
+```
+
+The deleted item(s) are bound to the result variable (`user` in this example).
+
+## Repository Observers
+
+Repository observers are feature sets that automatically react to repository changes. They receive access to both old and new values, enabling audit logging, synchronization, and reactive patterns.
+
+### Observer Syntax
+
+Create an observer by naming your feature set's business activity as `{repository-name} Observer`:
+
+```aro
+(Audit Changes: user-repository Observer) {
+    <Extract> the <changeType> from the <event: changeType>.
+    <Extract> the <newValue> from the <event: newValue>.
+    <Extract> the <oldValue> from the <event: oldValue>.
+
+    <Log> the <audit: message> for the <console> with <changeType>.
+    <Return> an <OK: status> for the <audit>.
+}
+```
+
+### Event Payload
+
+Observers receive an event with the following fields:
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `repositoryName` | String | The repository name (e.g., "user-repository") |
+| `changeType` | String | "created", "updated", or "deleted" |
+| `entityId` | String? | ID of the changed entity (if available) |
+| `newValue` | Any? | The new value (nil for deletes) |
+| `oldValue` | Any? | The previous value (nil for creates) |
+| `timestamp` | Date | When the change occurred |
+
+### Change Types
+
+Observers are triggered for three types of changes:
+
+- **created**: New item stored (no previous value existed with matching ID)
+- **updated**: Existing item modified (matched by ID)
+- **deleted**: Item removed using `<Delete>` action
+
+### Example: Tracking User Changes
+
+```aro
+(Track User Changes: user-repository Observer) {
+    <Extract> the <changeType> from the <event: changeType>.
+    <Extract> the <entityId> from the <event: entityId>.
+
+    <Compare> the <changeType> equals "updated".
+
+    <Extract> the <oldName> from the <event: oldValue: name>.
+    <Extract> the <newName> from the <event: newValue: name>.
+
+    <Log> the <change: message> for the <console>
+        with "User " + <entityId> + " renamed from " + <oldName> + " to " + <newName>.
+
+    <Return> an <OK: status> for the <tracking>.
+}
+```
+
+### Multiple Observers
+
+You can have multiple observers for the same repository:
+
+```aro
+(* Audit logging observer *)
+(Log All Changes: user-repository Observer) {
+    <Extract> the <changeType> from the <event: changeType>.
+    <Log> the <audit: message> for the <console> with <changeType>.
+    <Return> an <OK: status>.
+}
+
+(* Email notification observer *)
+(Notify Admin: user-repository Observer) {
+    <Extract> the <changeType> from the <event: changeType>.
+    <Compare> the <changeType> equals "deleted".
+    <Send> the <notification> to the <admin-email>.
+    <Return> an <OK: status>.
+}
+```
+
 ## Lifetime and Persistence
 
 ### Application Lifetime
