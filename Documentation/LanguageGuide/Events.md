@@ -7,17 +7,19 @@ ARO is fundamentally event-driven. Feature sets respond to events rather than be
 In ARO, feature sets are **triggered by events**, not called directly:
 
 ```
-┌─────────────────────────────────────────────────────────────┐
-│                        Event Bus                            │
-├─────────────────────────────────────────────────────────────┤
-│                                                             │
-│  HTTPRequest ───► (listUsers: User API)  [via operationId] │
-│                                                             │
-│  FileCreated ───► (Process: FileCreated Handler)           │
-│                                                             │
-│  ClientConnected ─► (Handle: ClientConnected Handler)      │
-│                                                             │
-└─────────────────────────────────────────────────────────────┘
+┌───────────────────────────────────────────────────────────────────┐
+│                           Event Bus                               │
+├───────────────────────────────────────────────────────────────────┤
+│                                                                   │
+│  HTTPRequest ──────► (listUsers: User API)  [via operationId]    │
+│                                                                   │
+│  FileCreated ──────► (Process: FileCreated Handler)              │
+│                                                                   │
+│  ClientConnected ──► (Handle: ClientConnected Handler)           │
+│                                                                   │
+│  RepositoryChanged ► (Audit: user-repository Observer)           │
+│                                                                   │
+└───────────────────────────────────────────────────────────────────┘
 ```
 
 ## Event Types
@@ -128,6 +130,68 @@ Triggered by TCP connections:
 }
 ```
 
+### Repository Observers
+
+Repository observers automatically react to changes in repositories. They enable reactive programming patterns where code responds to data mutations without explicit coupling.
+
+**Naming Pattern:**
+```aro
+(Feature Name: {repository-name} Observer)
+```
+
+The `{repository-name}` must match a repository name (ending in `-repository`).
+
+**Trigger Conditions:**
+
+| Change Type | When Triggered |
+|-------------|----------------|
+| `created` | New item stored via `<Store>` action |
+| `updated` | Existing item replaced via `<Store>` action (matching ID) |
+| `deleted` | Item removed via `<Delete>` action |
+
+**Event Payload Fields:**
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `event: repositoryName` | String | Repository name (e.g., "user-repository") |
+| `event: changeType` | String | "created", "updated", or "deleted" |
+| `event: entityId` | String? | ID of entity (if has "id" field) |
+| `event: newValue` | Any? | New value (nil for deletes) |
+| `event: oldValue` | Any? | Previous value (nil for creates) |
+| `event: timestamp` | Date | When the change occurred |
+
+**Example: Audit Logging**
+
+```aro
+(Audit Changes: user-repository Observer) {
+    <Extract> the <changeType> from the <event: changeType>.
+    <Extract> the <entityId> from the <event: entityId>.
+    <Extract> the <repositoryName> from the <event: repositoryName>.
+
+    <Log> the <audit: message> for the <console>
+        with "[AUDIT] " + <repositoryName> + ": " + <changeType> + " (id: " + <entityId> + ")".
+
+    <Return> an <OK: status> for the <audit>.
+}
+```
+
+**Example: Change Tracking**
+
+```aro
+(Track Updates: user-repository Observer) {
+    <Extract> the <changeType> from the <event: changeType>.
+    <Extract> the <oldValue> from the <event: oldValue>.
+    <Extract> the <newValue> from the <event: newValue>.
+
+    <Log> the <message> for the <console> with "User changed: " + <changeType>.
+
+    (* Compare old and new values for updates *)
+    <Return> an <OK: status> for the <tracking>.
+}
+```
+
+Multiple observers can respond to the same repository—they all execute independently and concurrently.
+
 ## Handling Events
 
 ### Handler Naming
@@ -218,6 +282,12 @@ All handlers execute independently when the event is emitted.
 | `ClientConnected` | TCP client connects |
 | `DataReceived` | Data received from client |
 | `ClientDisconnected` | TCP client disconnects |
+
+### Repository Events
+
+| Event | When Triggered |
+|-------|----------------|
+| `RepositoryChanged` | Item created, updated, or deleted in repository |
 
 ## State Transition Events
 
