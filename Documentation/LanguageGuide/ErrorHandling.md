@@ -163,9 +163,7 @@ For custom behavior, ARO provides the `<Throw>` action:
 (Delete User: User API) {
     <Retrieve> the <user> from the <user-repository> where id = <id>.
 
-    if <user: role> is "admin" then {
-        <Throw> a <Forbidden: error> for the <admin-deletion>.
-    }
+    <Throw> a <Forbidden: error> for the <admin-deletion> when <user: role> is "admin".
 
     <Delete> the <user> from the <user-repository>.
     <Return> an <OK: status>.

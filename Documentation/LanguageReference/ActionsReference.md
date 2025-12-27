@@ -238,10 +238,8 @@ The Exec action returns a structured result with the following fields:
 
 (* With error handling *)
 <Exec> the <result> for the <disk-check> with "df -h".
-if <result.error> = true then {
-    <Log> the <error> for the <console> with <result.message>.
-    <Return> an <Error: status> for the <result>.
-}
+<Log> the <error> for the <console> with <result.message> when <result.error> = true.
+<Return> an <Error: status> for the <result> when <result.error> = true.
 <Return> an <OK: status> for the <result>.
 
 (* Using a variable for the command *)

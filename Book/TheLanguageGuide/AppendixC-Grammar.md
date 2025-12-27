@@ -197,7 +197,7 @@ any_character = (* any Unicode character *) ;
 ### Keywords
 
 ```
-publish, require, import, as, if, then, else, when, match, case, otherwise,
+publish, require, import, as, when, match, case, otherwise,
 where, for, each, in, at, parallel, concurrency, type, enum, protocol,
 error, guard, defer, assert, precondition, and, or, not, is, exists,
 defined, null, nil, none, empty, contains, matches, true, false

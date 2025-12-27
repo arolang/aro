@@ -137,9 +137,7 @@ Validation can fail, which should be handled:
 
 ```aro
 <Validate> the <input> for the <schema>.
-if <validation> is failed then {
-    <Return> a <BadRequest: status> with <validation: errors>.
-}
+<Return> a <BadRequest: status> with <validation: errors> when <validation> is failed.
 ```
 
 ### Compare

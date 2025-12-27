@@ -210,9 +210,7 @@ Use control flow to return early:
     <Extract> the <user-id> from the <pathParameters: id>.
     <Retrieve> the <user> from the <user-repository> where id = <user-id>.
 
-    if <user> is empty then {
-        <Return> a <NotFound: status> for the <missing: user>.
-    }
+    <Return> a <NotFound: status> for the <missing: user> when <user> is empty.
 
     <Return> an <OK: status> with <user>.
 }

@@ -226,11 +226,8 @@ Socket servers emit events for connection lifecycle:
         }
         case "auth" {
             <Validate> the <payload> for the <auth-schema>.
-            if <validation> is success then {
-                <Send> the <auth-success> to the <connection> with { type: "auth_ok" }.
-            } else {
-                <Send> the <auth-failed> to the <connection> with { type: "auth_fail" }.
-            }
+            <Send> the <auth-success> to the <connection> with { type: "auth_ok" } when <validation> is success.
+            <Send> the <auth-failed> to the <connection> with { type: "auth_fail" } when <validation> is not success.
         }
         case "subscribe" {
             <Extract> the <channel> from the <payload: channel>.
@@ -344,11 +341,9 @@ Socket servers emit events for connection lifecycle:
     <Extract> the <client-id> from the <request: parameters>.
     <Retrieve> the <client> from the <client-registry> where id = <client-id>.
 
-    if <client> is not empty then {
-        <Send> the <kick-notice> to the <client: connection> with "You have been disconnected".
-        <Close> the <client: connection>.
-        <Delete> the <client> from the <client-registry> where id = <client-id>.
-    }
+    <Send> the <kick-notice> to the <client: connection> with "You have been disconnected" when <client> is not empty.
+    <Close> the <client: connection> when <client> is not empty.
+    <Delete> the <client> from the <client-registry> where id = <client-id> when <client> is not empty.
 
     <Return> an <OK: status> for the <kick>.
 }
@@ -362,10 +357,8 @@ Socket servers emit events for connection lifecycle:
 (Connect to Server: Client Setup) {
     <Connect> to <host: "server.example.com"> on port 9000 as <server>.
 
-    if <server> is empty then {
-        <Log> the <error> for the <console> with "Failed to connect to server".
-        <Return> a <ServiceUnavailable: status> for the <connection: error>.
-    }
+    <Log> the <error> for the <console> with "Failed to connect to server" when <server> is empty.
+    <Return> a <ServiceUnavailable: status> for the <connection: error> when <server> is empty.
 
     <Return> an <OK: status> for the <connection>.
 }
@@ -380,17 +373,13 @@ Socket servers emit events for connection lifecycle:
     (* Validate data format *)
     <Parse> the <message: JSON> from the <raw-data>.
 
-    if <message> is empty then {
-        <Log> the <warning> for the <console> with "Invalid message format".
-        <Return> an <OK: status> for the <validation>.
-    }
+    <Log> the <warning> for the <console> with "Invalid message format" when <message> is empty.
+    <Return> an <OK: status> for the <validation> when <message> is empty.
 
     <Validate> the <message> for the <message-schema>.
 
-    if <validation> is failed then {
-        <Send> the <error> to the <event: connection> with { error: "Invalid message" }.
-        <Return> an <OK: status> for the <validation>.
-    }
+    <Send> the <error> to the <event: connection> with { error: "Invalid message" } when <validation> is failed.
+    <Return> an <OK: status> for the <validation> when <validation> is failed.
 
     (* Process valid message *)
     <Process> the <result> from the <message>.

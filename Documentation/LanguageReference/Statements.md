@@ -21,7 +21,7 @@ The fundamental statement type following the Action-Result-Object pattern.
 | Result | Yes | Output variable |
 | Preposition | Yes | Relationship word |
 | Object | Yes | Input/target |
-| Modifiers | No | where, with, on clauses |
+| Modifiers | No | where, with, on, when clauses |
 
 ### Examples
 
@@ -58,22 +58,14 @@ Makes a variable globally accessible across feature sets.
 <Publish> as <app-config> <config>.
 ```
 
-## Conditional Statement (if-then-else)
+## Guarded Statement (when)
 
-Executes statements based on a condition.
+Conditionally executes a statement based on a condition. If the condition is false, the statement is skipped.
 
 ### Syntax
 
 ```
-if <condition> then {
-    (* statements *)
-}
-
-if <condition> then {
-    (* statements if true *)
-} else {
-    (* statements if false *)
-}
+<Action> the <result> preposition the <object> when <condition>.
 ```
 
 ### Conditions
@@ -84,6 +76,8 @@ if <condition> then {
 | `<var> is not <value>` | Inequality |
 | `<var> is empty` | Null/empty check |
 | `<var> is not empty` | Has value |
+| `<var> exists` | Value exists |
+| `<var> is null` | Null check |
 | `<var> > <value>` | Greater than |
 | `<var> < <value>` | Less than |
 | `<var> >= <value>` | Greater or equal |
@@ -95,51 +89,40 @@ if <condition> then {
 ### Examples
 
 ```aro
-if <user> is empty then {
-    <Return> a <NotFound: status> for the <missing: user>.
-}
+(* Return not found only when user is empty *)
+<Return> a <NotFound: status> for the <missing: user> when <user> is empty.
 
-if <user: role> is "admin" then {
-    <Return> an <OK: status> with <admin-data>.
-} else {
-    <Return> an <OK: status> with <user-data>.
-}
+(* Send notification only when user has email *)
+<Send> the <notification> to the <user: email> when <user: email> exists.
 
-if <count> > 0 and <count> < 100 then {
-    <Process> the <items> for the <batch>.
-}
+(* Log admin access only for admins *)
+<Log> the <admin-access> for the <audit> when <user: role> == "admin".
+
+(* Early exit on invalid input *)
+<Return> a <BadRequest: status> for the <invalid: amount> when <amount> <= 0.
+
+(* Combined conditions *)
+<Grant> the <access> for the <user> when <user: active> is true and <user: verified> is true.
 ```
 
-## Guard Statement (when)
-
-Provides early exit for preconditions.
-
-### Syntax
-
-```
-when <condition> {
-    (* exit statements *)
-}
-```
-
-### Example
+### Usage Pattern
 
 ```aro
 (PUT /users/{id}: User API) {
     <Extract> the <user-id> from the <request: parameters>.
     <Extract> the <updates> from the <request: body>.
 
-    when <user-id> is empty {
-        <Return> a <BadRequest: status> for the <missing: id>.
-    }
-
-    when <updates> is empty {
-        <Return> a <BadRequest: status> for the <missing: data>.
-    }
+    (* Early exit guards *)
+    <Return> a <BadRequest: status> for the <missing: id> when <user-id> is empty.
+    <Return> a <BadRequest: status> for the <missing: data> when <updates> is empty.
 
     (* Continue with valid input *)
     <Retrieve> the <user> from the <repository> where id = <user-id>.
-    ...
+    <Return> a <NotFound: status> for the <missing: user> when <user> is empty.
+
+    <Transform> the <updated-user> from the <user> with <updates>.
+    <Store> the <updated-user> into the <repository>.
+    <Return> an <OK: status> with <updated-user>.
 }
 ```
 
@@ -157,8 +140,18 @@ match <variable> {
     case <value2> {
         (* statements *)
     }
-    default {
+    otherwise {
         (* fallback statements *)
+    }
+}
+```
+
+### Case with Guard
+
+```
+match <variable> {
+    case <value> where <condition> {
+        (* statements *)
     }
 }
 ```
@@ -178,8 +171,29 @@ match <status> {
         <Log> the <message> for the <console> with "Order delivered".
         <Emit> an <OrderDelivered: event> with <order>.
     }
-    default {
+    otherwise {
         <Log> the <warning> for the <console> with "Unknown status".
+    }
+}
+```
+
+### Pattern Matching with Guards
+
+```aro
+match <user: subscription> {
+    case <premium> where <user: credits> > 0 {
+        <Grant> the <premium-features> for the <user>.
+        <Deduct> the <credit> from the <user: account>.
+    }
+    case <premium> {
+        <Notify> the <user> about the <low-credits>.
+        <Grant> the <basic-features> for the <user>.
+    }
+    case <basic> {
+        <Grant> the <basic-features> for the <user>.
+    }
+    otherwise {
+        <Redirect> the <user> to the <subscription-page>.
     }
 }
 ```
@@ -318,6 +332,24 @@ Specifies ports for network operations.
 <Connect> to <host: "localhost"> on port 5432 as <database>.
 ```
 
+## When Clause
+
+Conditionally executes a statement.
+
+### Syntax
+
+```
+<Action> the <result> preposition the <object> when <condition>.
+```
+
+### Examples
+
+```aro
+<Return> a <NotFound: status> for the <user> when <user> is empty.
+<Log> the <warning> for the <console> with "Low stock" when <stock> < 10.
+<Send> the <alert> to the <admin: email> when <errors> > <threshold>.
+```
+
 ## Statement Order
 
 Statements execute sequentially from top to bottom:
@@ -357,10 +389,12 @@ All statements end with a period (`.`):
 <Extract> the <data> from the <request>
 ```
 
-Control flow blocks use braces without periods:
+Match blocks use braces without periods on closing brace:
 
 ```aro
-if <condition> then {
-    <Return> a <NotFound: status>.  (* Period on inner statement *)
+match <status> {
+    case "active" {
+        <Return> an <OK: status>.  (* Period on inner statement *)
+    }
 }  (* No period on closing brace *)
 ```

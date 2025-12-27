@@ -331,9 +331,7 @@ When an unhandled error occurs:
 (Application-Start: Config with Defaults) {
     <Extract> the <port> from the <environment: PORT>.
 
-    if <port> is empty then {
-        <Set> the <port> to 8080.
-    }
+    <Set> the <port> to 8080 when <port> is empty.
 
     <Start> the <http-server> on port <port>.
     <Return> an <OK: status> for the <startup>.
@@ -379,11 +377,8 @@ paths:
     <Check> the <database-connection>.
     <Check> the <cache-connection>.
 
-    if <checks: allPassed> then {
-        <Return> an <OK: status> with { ready: true }.
-    } else {
-        <Return> a <ServiceUnavailable: status> with { ready: false }.
-    }
+    <Return> a <ServiceUnavailable: status> with { ready: false } when <checks: allPassed> is false.
+    <Return> an <OK: status> with { ready: true }.
 }
 ```
 

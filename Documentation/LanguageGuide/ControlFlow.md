@@ -1,40 +1,45 @@
 # Control Flow
 
-ARO provides control flow constructs for conditional execution and early returns. This chapter covers how to make decisions in your feature sets.
+ARO provides control flow constructs for conditional execution. This chapter covers how to make decisions in your feature sets using guarded statements and match expressions.
 
-## If-Then-Else
+## When Guards
 
-The primary conditional construct in ARO:
+The `when` clause conditionally executes a single statement. If the condition is false, the statement is skipped and execution continues to the next statement.
+
+### Syntax
 
 ```aro
-if <condition> then {
-    (* statements if true *)
-}
+<Action> the <result> preposition the <object> when <condition>.
 ```
 
-With else:
+### Basic Guards
 
 ```aro
-if <condition> then {
-    (* statements if true *)
-} else {
-    (* statements if false *)
-}
-```
+(getUser: User API) {
+    <Extract> the <user-id> from the <pathParameters: id>.
+    <Retrieve> the <user> from the <user-repository> where id = <user-id>.
 
-### Basic Conditions
-
-```aro
-(GET /users/{id}: User API) {
-    <Extract> the <user-id> from the <request: parameters>.
-    <Retrieve> the <user> from the <repository> where id = <user-id>.
-
-    if <user> is empty then {
-        <Return> a <NotFound: status> for the <missing: user>.
-    }
+    (* Return NotFound only when user is empty *)
+    <Return> a <NotFound: status> for the <missing: user> when <user> is empty.
 
     <Return> an <OK: status> with <user>.
 }
+```
+
+### Guard Examples
+
+```aro
+(* Only return OK when count is not zero *)
+<Return> an <OK: status> with <items> when <count> is not 0.
+
+(* Send notification only when user has email *)
+<Send> the <notification> to the <user: email> when <user: email> exists.
+
+(* Log admin access only for admins *)
+<Log> the <admin-access> for the <audit> when <user: role> == "admin".
+
+(* Return error when validation fails *)
+<Return> a <BadRequest: status> for the <invalid: input> when <validation> is failed.
 ```
 
 ### Comparison Operators
@@ -45,144 +50,32 @@ if <condition> then {
 | `is not` | Inequality |
 | `is empty` | Null/empty check |
 | `is not empty` | Has value |
+| `exists` | Value exists |
+| `is defined` | Value is defined |
+| `is null` | Value is null |
 | `>` | Greater than |
 | `<` | Less than |
 | `>=` | Greater than or equal |
 | `<=` | Less than or equal |
-
-### Examples
-
-```aro
-if <count> is 0 then {
-    <Return> a <NotFound: status> for the <empty: list>.
-}
-
-if <user: role> is "admin" then {
-    <Return> an <OK: status> with <admin-data>.
-} else {
-    <Return> an <OK: status> with <user-data>.
-}
-
-if <order: total> > 100 then {
-    <Compute> the <discount> for the <order>.
-    <Transform> the <discounted-order> from the <order> with <discount>.
-}
-
-if <stock> < <required> then {
-    <Return> a <BadRequest: status> for the <insufficient: stock>.
-}
-```
-
-### Nested Conditions
-
-```aro
-if <user> is not empty then {
-    if <user: active> is true then {
-        if <user: role> is "admin" then {
-            <Return> an <OK: status> with <admin-view>.
-        } else {
-            <Return> an <OK: status> with <user-view>.
-        }
-    } else {
-        <Return> a <Forbidden: status> for the <inactive: user>.
-    }
-} else {
-    <Return> a <NotFound: status> for the <missing: user>.
-}
-```
+| `==` | Strict equality |
+| `!=` | Strict inequality |
 
 ### Boolean Operators
 
 Combine conditions with `and`, `or`, `not`:
 
 ```aro
-if <user: active> is true and <user: verified> is true then {
-    <Return> an <OK: status> with <user>.
-}
+(* Multiple conditions with and *)
+<Return> an <OK: status> with <user> when <user: active> is true and <user: verified> is true.
 
-if <stock> is empty or <stock> < <required> then {
-    <Return> a <BadRequest: status> for the <unavailable: product>.
-}
+(* Either condition with or *)
+<Return> a <BadRequest: status> for the <unavailable: product> when <stock> is empty or <stock> < <required>.
 
-if not <user: banned> then {
-    <Allow> the <access> for the <user>.
-}
-```
+(* Negation *)
+<Allow> the <access> for the <user> when not <user: banned>.
 
-## When Guards
-
-Guards provide early exit for preconditions:
-
-```aro
-when <condition> {
-    (* exit statements *)
-}
-```
-
-### Basic Guards
-
-```aro
-(PUT /users/{id}: User API) {
-    <Extract> the <user-id> from the <request: parameters>.
-    <Extract> the <updates> from the <request: body>.
-
-    when <user-id> is empty {
-        <Return> a <BadRequest: status> for the <missing: id>.
-    }
-
-    when <updates> is empty {
-        <Return> a <BadRequest: status> for the <missing: data>.
-    }
-
-    (* Continue with valid input *)
-    <Retrieve> the <user> from the <repository> where id = <user-id>.
-
-    when <user> is empty {
-        <Return> a <NotFound: status> for the <missing: user>.
-    }
-
-    <Transform> the <updated-user> from the <user> with <updates>.
-    <Store> the <updated-user> into the <repository>.
-    <Return> an <OK: status> with <updated-user>.
-}
-```
-
-### Guard vs If
-
-Use **guards** for:
-- Input validation
-- Preconditions
-- Early exits on error
-
-Use **if-then-else** for:
-- Business logic branches
-- Multiple outcomes
-- Computed decisions
-
-```aro
-(Process Payment: Payment Service) {
-    <Extract> the <payment-data> from the <request: body>.
-
-    (* Guards for validation *)
-    when <payment-data: amount> <= 0 {
-        <Return> a <BadRequest: status> for the <invalid: amount>.
-    }
-
-    when <payment-data: cardNumber> is empty {
-        <Return> a <BadRequest: status> for the <missing: card>.
-    }
-
-    (* Business logic with if *)
-    <Process> the <result> for the <payment-data>.
-
-    if <result: success> is true then {
-        <Emit> a <PaymentSucceeded: event> with <result>.
-        <Return> an <OK: status> with <result>.
-    } else {
-        <Emit> a <PaymentFailed: event> with <result>.
-        <Return> a <BadRequest: status> with <result: error>.
-    }
-}
+(* Complex condition *)
+<Grant> the <admin-features> for the <user> when (<user: role> is "admin" or <user: is-owner> is true) and <resource: public> is false.
 ```
 
 ## Match Expressions
@@ -191,28 +84,25 @@ Pattern matching for multiple cases:
 
 ```aro
 match <value> {
-    case "pending" {
-        (* handle pending *)
+    case <pattern> {
+        (* handle this case *)
     }
-    case "approved" {
-        (* handle approved *)
+    case <pattern> where <condition> {
+        (* handle case with guard *)
     }
-    case "rejected" {
-        (* handle rejected *)
-    }
-    default {
-        (* handle other cases *)
+    otherwise {
+        (* handle all other cases *)
     }
 }
 ```
 
-### Example
+### Simple Value Matching
 
 ```aro
 (PUT /orders/{id}/status: Order API) {
-    <Extract> the <order-id> from the <request: parameters>.
+    <Extract> the <order-id> from the <pathParameters: id>.
     <Extract> the <new-status> from the <request: body.status>.
-    <Retrieve> the <order> from the <repository> where id = <order-id>.
+    <Retrieve> the <order> from the <order-repository> where id = <order-id>.
 
     match <new-status> {
         case "confirmed" {
@@ -229,44 +119,78 @@ match <value> {
         case "cancelled" {
             <Emit> an <OrderCancelled: event> with <order>.
         }
-        default {
+        otherwise {
             <Return> a <BadRequest: status> for the <invalid: status>.
         }
     }
 
     <Transform> the <updated-order> from the <order> with { status: <new-status> }.
-    <Store> the <updated-order> into the <repository>.
+    <Store> the <updated-order> into the <order-repository>.
     <Return> an <OK: status> with <updated-order>.
 }
 ```
 
-## Early Returns
-
-Use return statements to exit early:
+### HTTP Method Routing
 
 ```aro
-(GET /users/{id}: User API) {
-    <Extract> the <user-id> from the <request: parameters>.
-
-    (* Early return on invalid input *)
-    if <user-id> is empty then {
-        <Return> a <BadRequest: status> for the <missing: id>.
+match <http: method> {
+    case "GET" {
+        <Retrieve> the <resource> from the <database>.
     }
-
-    <Retrieve> the <user> from the <repository> where id = <user-id>.
-
-    (* Early return on not found *)
-    if <user> is empty then {
-        <Return> a <NotFound: status> for the <missing: user>.
+    case "POST" {
+        <Create> the <resource> in the <database>.
     }
-
-    (* Early return on forbidden *)
-    if <user: private> is true and <current-user: id> is not <user-id> then {
-        <Return> a <Forbidden: status> for the <private: profile>.
+    case "PUT" {
+        <Update> the <resource> in the <database>.
     }
+    case "DELETE" {
+        <Remove> the <resource> from the <database>.
+    }
+    otherwise {
+        <Return> a <MethodNotAllowed: error> for the <request>.
+    }
+}
+```
 
-    (* Normal return *)
-    <Return> an <OK: status> with <user>.
+### Pattern Matching with Guards
+
+```aro
+match <user: subscription> {
+    case <premium> where <user: credits> > 0 {
+        <Grant> the <premium-features> for the <user>.
+        <Deduct> the <credit> from the <user: account>.
+    }
+    case <premium> {
+        <Notify> the <user> about the <low-credits>.
+        <Grant> the <basic-features> for the <user>.
+    }
+    case <basic> {
+        <Grant> the <basic-features> for the <user>.
+    }
+    otherwise {
+        <Redirect> the <user> to the <subscription-page>.
+    }
+}
+```
+
+### Status Code Handling
+
+```aro
+match <status-code> {
+    case 200 {
+        <Parse> the <response: body> from the <http-response>.
+        <Return> the <data> for the <request>.
+    }
+    case 404 {
+        <Return> a <NotFound: error> for the <request>.
+    }
+    case 500 {
+        <Log> the <server-error> for the <monitoring>.
+        <Return> a <ServerError> for the <request>.
+    }
+    otherwise {
+        <Return> an <UnknownError> for the <request>.
+    }
 }
 ```
 
@@ -279,12 +203,10 @@ Use return statements to exit early:
     <Extract> the <user-data> from the <request: body>.
     <Validate> the <user-data> for the <user-schema>.
 
-    if <validation> is failed then {
-        <Return> a <BadRequest: status> with <validation: errors>.
-    }
+    <Return> a <BadRequest: status> with <validation: errors> when <validation> is failed.
 
     <Create> the <user> with <user-data>.
-    <Store> the <user> into the <repository>.
+    <Store> the <user> into the <user-repository>.
     <Return> a <Created: status> with <user>.
 }
 ```
@@ -293,12 +215,10 @@ Use return statements to exit early:
 
 ```aro
 (GET /products/{id}: Product API) {
-    <Extract> the <product-id> from the <request: parameters>.
-    <Retrieve> the <product> from the <repository> where id = <product-id>.
+    <Extract> the <product-id> from the <pathParameters: id>.
+    <Retrieve> the <product> from the <product-repository> where id = <product-id>.
 
-    if <product> is empty then {
-        <Return> a <NotFound: status> for the <missing: product>.
-    }
+    <Return> a <NotFound: status> for the <missing: product> when <product> is empty.
 
     <Return> an <OK: status> with <product>.
 }
@@ -308,19 +228,42 @@ Use return statements to exit early:
 
 ```aro
 (DELETE /posts/{id}: Post API) {
-    <Extract> the <post-id> from the <request: parameters>.
-    <Retrieve> the <post> from the <repository> where id = <post-id>.
+    <Extract> the <post-id> from the <pathParameters: id>.
+    <Retrieve> the <post> from the <post-repository> where id = <post-id>.
 
-    if <post> is empty then {
-        <Return> a <NotFound: status> for the <missing: post>.
-    }
+    <Return> a <NotFound: status> for the <missing: post> when <post> is empty.
 
-    if <post: authorId> is not <current-user: id> and <current-user: role> is not "admin" then {
-        <Return> a <Forbidden: status> for the <unauthorized: deletion>.
-    }
+    <Return> a <Forbidden: status> for the <unauthorized: deletion>
+        when <post: authorId> is not <current-user: id> and <current-user: role> is not "admin".
 
-    <Delete> the <post> from the <repository> where id = <post-id>.
+    <Delete> the <post> from the <post-repository> where id = <post-id>.
     <Return> a <NoContent: status> for the <deletion>.
+}
+```
+
+### Fail Fast with Guards
+
+Check error conditions early with guarded returns:
+
+```aro
+(POST /transfer: Banking) {
+    <Extract> the <amount> from the <request: body.amount>.
+    <Extract> the <from-account> from the <request: body.from>.
+    <Extract> the <to-account> from the <request: body.to>.
+
+    (* Early exits for invalid input *)
+    <Return> a <BadRequest: status> for the <invalid: amount> when <amount> <= 0.
+    <Return> a <BadRequest: status> for the <same: accounts> when <from-account> is <to-account>.
+
+    <Retrieve> the <source> from the <account-repository> where id = <from-account>.
+
+    <Return> a <NotFound: status> for the <missing: source-account> when <source> is empty.
+    <Return> a <BadRequest: status> for the <insufficient: funds> when <source: balance> < <amount>.
+
+    (* Now proceed with transfer *)
+    <Retrieve> the <destination> from the <account-repository> where id = <to-account>.
+    <Transfer> the <amount> from the <source> to the <destination>.
+    <Return> an <OK: status> for the <transfer>.
 }
 ```
 
@@ -332,95 +275,120 @@ Use return statements to exit early:
     <Create> the <order> with <order-data>.
 
     (* Conditional discount *)
-    if <order: total> >= 100 then {
-        <Compute> the <discount> with <order: total> * 0.1.
-        <Transform> the <order> from the <order> with { discount: <discount> }.
-    }
+    <Compute> the <discount> with <order: total> * 0.1 when <order: total> >= 100.
+    <Transform> the <order> from the <order> with { discount: <discount> } when <discount> exists.
 
     (* Conditional express shipping *)
-    if <order: express> is true then {
-        <Compute> the <express-fee> for the <order>.
-        <Transform> the <order> from the <order> with { shippingFee: <express-fee> }.
-    }
+    <Compute> the <express-fee> for the <order> when <order: express> is true.
+    <Transform> the <order> from the <order> with { shippingFee: <express-fee> } when <express-fee> exists.
 
-    <Store> the <order> into the <repository>.
+    <Store> the <order> into the <order-repository>.
     <Return> a <Created: status> with <order>.
+}
+```
+
+## Complete Example
+
+```aro
+(User Authentication: Security) {
+    <Require> the <request> from the <framework>.
+    <Require> the <user-repository> from the <framework>.
+
+    (* Extract credentials *)
+    <Extract> the <username> from the <request: body>.
+    <Extract> the <password> from the <request: body>.
+
+    (* Validate input - guarded return *)
+    <Return> a <BadRequest: error> for the <request>
+        when <username> is empty or <password> is empty.
+
+    (* Look up user *)
+    <Retrieve> the <user> from the <user-repository>.
+
+    (* Handle user not found - guarded statements *)
+    <Log> the <failed-login: attempt> for the <username> when <user> is null.
+    <Return> an <Unauthorized: error> for the <request> when <user> is null.
+
+    (* Check account status with match *)
+    match <user: status> {
+        case "locked" {
+            <Return> an <AccountLocked: error> for the <request>.
+        }
+        case "pending" {
+            <Send> the <verification-email> to the <user: email>.
+            <Return> a <PendingVerification: status> for the <request>.
+        }
+        case "active" {
+            (* Verify password *)
+            <Compute> the <password-hash> for the <password>.
+
+            match <password-hash> {
+                case <user: password-hash> {
+                    <Create> the <session-token> for the <user>.
+                    <Log> the <successful-login> for the <user>.
+                    <Return> an <OK: status> with the <session-token>.
+                }
+                otherwise {
+                    <Increment> the <failed-attempts> for the <user>.
+                    <Lock> the <user: account> for the <security-policy>
+                        when <failed-attempts> >= 5.
+                    <Return> an <Unauthorized: error> for the <request>.
+                }
+            }
+        }
+        otherwise {
+            <Return> an <InvalidAccountStatus: error> for the <request>.
+        }
+    }
 }
 ```
 
 ## Best Practices
 
-### Fail Fast
+### Use Guards for Early Exits
 
-Check error conditions early:
+Guards with `when` are ideal for:
+- Input validation
+- Preconditions
+- Error returns
 
 ```aro
-(* Good - fail fast *)
-(POST /transfer: Banking) {
-    <Extract> the <amount> from the <request: body.amount>.
-    <Extract> the <from-account> from the <request: body.from>.
-    <Extract> the <to-account> from the <request: body.to>.
+(* Good - guards for early exit *)
+<Return> a <BadRequest: status> for the <missing: id> when <user-id> is empty.
+<Return> a <NotFound: status> for the <missing: user> when <user> is empty.
+<Return> a <Forbidden: status> for the <private: profile> when <user: private> is true.
 
-    when <amount> <= 0 {
-        <Return> a <BadRequest: status> for the <invalid: amount>.
-    }
+(* Continue with main logic *)
+<Return> an <OK: status> with <user>.
+```
 
-    when <from-account> is <to-account> {
-        <Return> a <BadRequest: status> for the <same: accounts>.
-    }
+### Use Match for Multiple Outcomes
 
-    <Retrieve> the <source> from the <account-repository> where id = <from-account>.
+Match expressions are ideal for:
+- Status handling
+- Role-based logic
+- State machines
+- Multiple distinct cases
 
-    when <source> is empty {
-        <Return> a <NotFound: status> for the <missing: source-account>.
-    }
-
-    when <source: balance> < <amount> {
-        <Return> a <BadRequest: status> for the <insufficient: funds>.
-    }
-
-    (* Now proceed with transfer *)
-    ...
+```aro
+(* Good - match for multiple cases *)
+match <order: status> {
+    case "pending" { ... }
+    case "processing" { ... }
+    case "shipped" { ... }
+    case "delivered" { ... }
+    otherwise { ... }
 }
 ```
 
-### Keep Nesting Shallow
-
-```aro
-(* Avoid - deep nesting *)
-if <a> then {
-    if <b> then {
-        if <c> then {
-            (* hard to follow *)
-        }
-    }
-}
-
-(* Better - use guards and early returns *)
-when not <a> {
-    <Return> a <BadRequest: status>.
-}
-when not <b> {
-    <Return> a <BadRequest: status>.
-}
-when not <c> {
-    <Return> a <BadRequest: status>.
-}
-(* proceed with logic *)
-```
-
-### Be Explicit
+### Be Explicit in Conditions
 
 ```aro
 (* Good - explicit conditions *)
-if <user: active> is true and <user: verified> is true then {
-    ...
-}
+<Grant> the <access> for the <user> when <user: active> is true and <user: verified> is true.
 
 (* Avoid - implicit truthiness *)
-if <user: active> and <user: verified> then {
-    ...
-}
+<Grant> the <access> for the <user> when <user: active> and <user: verified>.
 ```
 
 ## Next Steps
