@@ -85,10 +85,8 @@ Triggered by file system changes:
 (* File modified *)
 (Reload Config: FileModified Handler) {
     <Extract> the <path> from the <event: path>.
-    if <path> is "./config.json" then {
-        <Read> the <config> from the <file: path>.
-        <Publish> as <app-config> <config>.
-    }
+    <Read> the <config> from the <file: path> when <path> is "./config.json".
+    <Publish> as <app-config> <config> when <path> is "./config.json".
     <Return> an <OK: status> for the <reload>.
 }
 
@@ -560,10 +558,8 @@ Events may be delivered multiple times:
     (* Check if already processed *)
     <Retrieve> the <existing> from the <processed-files> where path = <path>.
 
-    if <existing> is not empty then {
-        (* Already processed - skip *)
-        <Return> an <OK: status> for the <idempotent>.
-    }
+    (* Already processed - skip *)
+    <Return> an <OK: status> for the <idempotent> when <existing> is not empty.
 
     (* Process file *)
     <Read> the <content> from the <file: path>.

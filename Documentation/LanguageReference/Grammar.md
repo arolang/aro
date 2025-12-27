@@ -250,16 +250,15 @@ program = feature_set
 = "<Extract>" , "the" , "<user-id>" , "from" , "the" , "<request: parameters>" , "."
 ```
 
-### Conditional Parse
+### Guarded Statement Parse
 
 ```
-"if <user> is empty then { <Return> a <NotFound: status>. }"
+"<Return> a <NotFound: status> for the <user> when <user> is empty."
 
-= conditional_statement
-= "if" , condition , "then" , block
-= "if" , existence_check , "then" , "{" , aro_statement , "}"
-= "if" , variable , "is empty" , "then" , "{" , aro_statement , "}"
-= "if" , "<user>" , "is empty" , "then" , "{" , "<Return>" , "a" , "<NotFound: status>" , ... , "}"
+= guarded_statement
+= aro_statement_base , "when" , condition , "."
+= action , result , preposition , object , "when" , existence_check , "."
+= "<Return>" , "a" , "<NotFound: status>" , "for" , "the" , "<user>" , "when" , "<user>" , "is empty" , "."
 ```
 
 ## Precedence

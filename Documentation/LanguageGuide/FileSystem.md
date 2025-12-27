@@ -41,13 +41,11 @@ ARO provides built-in file system operations for reading, writing, and watching 
 (Load Config: Configuration) {
     <Read> the <config: JSON> from the <file: "./config.json">.
 
-    if <config> is empty then {
-        <Log> the <warning> for the <console> with "Config not found, using defaults".
-        <Create> the <config> with {
-            port: 8080,
-            debug: false
-        }.
-    }
+    <Log> the <warning> for the <console> with "Config not found, using defaults" when <config> is empty.
+    <Create> the <config> with {
+        port: 8080,
+        debug: false
+    } when <config> is empty.
 
     <Publish> as <app-config> <config>.
     <Return> an <OK: status> for the <loading>.
@@ -190,12 +188,10 @@ Feature sets with business activity `File Event Handler` receive file events. Th
 (Handle File Modified: File Event Handler) {
     <Extract> the <path> from the <event: path>.
 
-    if <path> is "./config.json" then {
-        <Log> the <message> for the <console> with "Reloading configuration...".
-        <Read> the <new-config: JSON> from the <file: "./config.json">.
-        <Publish> as <app-config> <new-config>.
-        <Log> the <message> for the <console> with "Configuration reloaded".
-    }
+    <Log> the <message> for the <console> with "Reloading configuration..." when <path> is "./config.json".
+    <Read> the <new-config: JSON> from the <file: "./config.json"> when <path> is "./config.json".
+    <Publish> as <app-config> <new-config> when <path> is "./config.json".
+    <Log> the <message> for the <console> with "Configuration reloaded" when <path> is "./config.json".
 
     <Return> an <OK: status> for the <reload>.
 }
@@ -224,13 +220,11 @@ Feature sets with business activity `File Event Handler` receive file events. Th
     <Extract> the <path> from the <event: path>.
 
     (* Only process files in uploads directory *)
-    if <path> starts with "./uploads/" then {
-        <Read> the <content> from the <file: path>.
-        <Transform> the <processed> from the <content>.
-        <Write> the <processed> to the <file: "./processed/${filename}">.
-        <Delete> the <file: path>.
-        <Log> the <message> for the <console> with "Processed: ${path}".
-    }
+    <Read> the <content> from the <file: path> when <path> starts with "./uploads/".
+    <Transform> the <processed> from the <content> when <path> starts with "./uploads/".
+    <Write> the <processed> to the <file: "./processed/${filename}"> when <path> starts with "./uploads/".
+    <Delete> the <file: path> when <path> starts with "./uploads/".
+    <Log> the <message> for the <console> with "Processed: ${path}" when <path> starts with "./uploads/".
 
     <Return> an <OK: status> for the <processing>.
 }
@@ -307,11 +301,9 @@ Feature sets with business activity `File Event Handler` receive file events. Th
 (Load Data: Initialization) {
     <Read> the <data: JSON> from the <file: "./data.json">.
 
-    if <data> is empty then {
-        (* Handle missing file *)
-        <Create> the <data> with { items: [] }.
-        <Write> the <data: JSON> to the <file: "./data.json">.
-    }
+    (* Handle missing file *)
+    <Create> the <data> with { items: [] } when <data> is empty.
+    <Write> the <data: JSON> to the <file: "./data.json"> when <data> is empty.
 
     <Publish> as <app-data> <data>.
     <Return> an <OK: status> for the <loading>.

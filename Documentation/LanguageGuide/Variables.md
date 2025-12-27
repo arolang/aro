@@ -176,10 +176,8 @@ Data can flow through different paths:
     <Extract> the <user-id> from the <request: parameters>.
     <Retrieve> the <user> from the <repository> where id = <user-id>.
 
-    if <user> is empty then {
-        (* Error path *)
-        <Return> a <NotFound: status> for the <missing: user>.
-    }
+    (* Error path *)
+    <Return> a <NotFound: status> for the <missing: user> when <user> is empty.
 
     (* Success path *)
     <Transform> the <user-response> from the <user>.

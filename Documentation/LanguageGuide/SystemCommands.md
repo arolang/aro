@@ -48,9 +48,7 @@ Every `<Exec>` action returns a structured result object:
 <Log> the <exit: code> for the <console> with <result.exitCode>.
 
 (* Check for errors *)
-if <result.error> = true then {
-    <Log> the <error: message> for the <console> with <result.message>.
-}
+<Log> the <error: message> for the <console> with <result.message> when <result.error> = true.
 ```
 
 ## Error Handling
@@ -61,10 +59,8 @@ if <result.error> = true then {
 (Check Disk Space: System Monitor) {
     <Exec> the <result> for the <disk-check> with "df -h".
 
-    if <result.error> = true then {
-        <Log> the <error> for the <console> with <result.message>.
-        <Return> an <Error: status> with <result>.
-    }
+    <Log> the <error> for the <console> with <result.message> when <result.error> = true.
+    <Return> an <Error: status> with <result> when <result.error> = true.
 
     <Return> an <OK: status> with <result>.
 }
@@ -76,14 +72,10 @@ if <result.error> = true then {
 (Git Status: Version Control) {
     <Exec> the <result> for the <git> with "git status --porcelain".
 
-    if <result.exitCode> != 0 then {
-        <Log> the <warning> for the <console> with "Not a git repository".
-        <Return> a <BadRequest: status> with { error: "Not a git repository" }.
-    }
+    <Log> the <warning> for the <console> with "Not a git repository" when <result.exitCode> != 0.
+    <Return> a <BadRequest: status> with { error: "Not a git repository" } when <result.exitCode> != 0.
 
-    if <result.output> is empty then {
-        <Return> an <OK: status> with { message: "Working tree clean" }.
-    }
+    <Return> an <OK: status> with { message: "Working tree clean" } when <result.output> is empty.
 
     <Return> an <OK: status> with { changes: <result.output> }.
 }
@@ -99,9 +91,7 @@ Commands that exceed the timeout return with `exitCode: -1`:
     timeout: 5000
 }.
 
-if <result.exitCode> = -1 then {
-    <Log> the <timeout> for the <console> with "Command timed out".
-}
+<Log> the <timeout> for the <console> with "Command timed out" when <result.exitCode> = -1.
 ```
 
 ## Configuration Options
@@ -205,9 +195,7 @@ output:
         timeout: 120000
     }.
 
-    if <install.error> = true then {
-        <Return> an <Error: status> with <install>.
-    }
+    <Return> an <Error: status> with <install> when <install.error> = true.
 
     <Log> the <step> for the <console> with "Running tests...".
     <Exec> the <test> for the <npm> with {
@@ -215,9 +203,7 @@ output:
         workingDirectory: "./app"
     }.
 
-    if <test.error> = true then {
-        <Return> an <Error: status> with <test>.
-    }
+    <Return> an <Error: status> with <test> when <test.error> = true.
 
     <Log> the <step> for the <console> with "Building...".
     <Exec> the <build> for the <npm> with {
@@ -238,12 +224,10 @@ output:
         timeout: 5000
     }.
 
-    if <curl.error> = true then {
-        <Return> a <ServiceUnavailable: status> with {
-            service: "api",
-            error: <curl.message>
-        }.
-    }
+    <Return> a <ServiceUnavailable: status> with {
+        service: "api",
+        error: <curl.message>
+    } when <curl.error> = true.
 
     <Return> an <OK: status> with { healthy: true }.
 }
@@ -261,9 +245,7 @@ output:
     <Extract> the <name> from the <queryParameters: name>.
     <Exec> the <result> for the <check> with "pgrep -l ${name}".
 
-    if <result.error> = true then {
-        <Return> an <OK: status> with { running: false, process: <name> }.
-    }
+    <Return> an <OK: status> with { running: false, process: <name> } when <result.error> = true.
 
     <Return> an <OK: status> with { running: true, process: <name>, pids: <result.output> }.
 }
@@ -281,9 +263,7 @@ Be cautious when constructing commands from user input:
 
 (* SAFER - validate input first *)
 <Validate> the <path> for the <userInput> against "^[a-zA-Z0-9_/.-]+$".
-if <path> is not <valid> then {
-    <Return> a <BadRequest: status> with "Invalid path characters".
-}
+<Return> a <BadRequest: status> with "Invalid path characters" when <path> is not <valid>.
 <Exec> the <result> for the <command> with "ls ${path}".
 ```
 

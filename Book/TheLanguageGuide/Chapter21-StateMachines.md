@@ -375,12 +375,14 @@ Another approach is conditional logic using standard control flow:
         where <id> is <order-id>.
 
     (* Check current state and apply appropriate transition *)
-    if <order: status> is "draft" {
-        <Accept> the <transition: draft_to_cancelled> on <order: status>.
-    }
-    if <order: status> is "placed" {
-        <Accept> the <transition: placed_to_cancelled> on <order: status>.
-        <Emit> a <RefundRequired: event> with <order>.
+    match <order: status> {
+        case "draft" {
+            <Accept> the <transition: draft_to_cancelled> on <order: status>.
+        }
+        case "placed" {
+            <Accept> the <transition: placed_to_cancelled> on <order: status>.
+            <Emit> a <RefundRequired: event> with <order>.
+        }
     }
 
     <Store> the <order> into the <order-repository>.
