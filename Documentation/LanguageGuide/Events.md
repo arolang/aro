@@ -208,6 +208,44 @@ Examples:
 (Log Connection: ClientConnected Handler) { ... }
 ```
 
+### State-Guarded Handlers
+
+Handlers can filter events based on entity field values from the payload:
+
+```aro
+(* Only handle when order.status is "paid" *)
+(Process Payment: OrderUpdated Handler<status:paid>) {
+    <Extract> the <order> from the <event: order>.
+    (* This only runs when order.status == "paid" *)
+    <Return> an <OK: status> for the <processing>.
+}
+```
+
+**Guard Syntax:**
+- `<field:value>` - Match exact value
+- `<field:value1,value2>` - Match any of the values (OR)
+- `<field1:value;field2:value>` - Match both conditions (AND)
+- `<entity.field:value>` - Match nested field
+
+**Example with Multiple Values (OR):**
+```aro
+(* Handles orders in either "paid" or "shipped" state *)
+(Ship Order: OrderUpdated Handler<status:paid,shipped>) {
+    <Extract> the <order> from the <event: order>.
+    <Return> an <OK: status> for the <shipping>.
+}
+```
+
+**Example with AND Logic:**
+```aro
+(* Only premium customers with delivered orders *)
+(VIP Reward: OrderUpdated Handler<status:delivered;tier:premium>) {
+    <Extract> the <order> from the <event: order>.
+    <Send> the <reward> to the <order: email>.
+    <Return> an <OK: status> for the <reward>.
+}
+```
+
 ### Accessing Event Data
 
 Use `<Extract>` to get event data:

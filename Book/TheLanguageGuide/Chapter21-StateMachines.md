@@ -449,6 +449,44 @@ The feature set that changes state is responsible for emitting events. Handlers 
 
 This pattern also supports saga-style workflows where a state change in one entity triggers state changes in others, each with its own validation.
 
+### 21.9.1 State-Guarded Handlers
+
+Sometimes you want handlers to only execute when an entity is in a specific state. Rather than checking the state inside the handler, you can filter events at the handler definition using state guards:
+
+```aro
+(* Only process orders that are in "paid" state *)
+(Process Paid Order: OrderUpdated Handler<status:paid>) {
+    <Extract> the <order> from the <event: order>.
+    (* This handler only runs when order.status == "paid" *)
+    <Process> the <fulfillment> for the <order>.
+    <Return> an <OK: status> for the <processing>.
+}
+```
+
+State guards use angle bracket syntax after "Handler":
+
+- `<field:value>` - Match when field equals value
+- `<field:value1,value2>` - Match when field equals any value (OR logic)
+- `<field1:value;field2:value>` - Match when both conditions are true (AND logic)
+
+```aro
+(* Handle orders that are paid OR shipped *)
+(Track Fulfillment: OrderUpdated Handler<status:paid,shipped>) {
+    <Extract> the <order> from the <event: order>.
+    <Log> the <message> for the <console> with "Tracking update".
+    <Return> an <OK: status> for the <tracking>.
+}
+
+(* Only premium customers with delivered orders *)
+(VIP Reward: OrderUpdated Handler<status:delivered;tier:premium>) {
+    <Extract> the <order> from the <event: order>.
+    <Send> the <reward> to the <order: email>.
+    <Return> an <OK: status> for the <reward>.
+}
+```
+
+State guards enable guaranteed ordering through state-based filtering. Instead of relying on event order, you can ensure handlers only execute when the entity has reached a specific state.
+
 ---
 
 ## 21.10 Best Practices

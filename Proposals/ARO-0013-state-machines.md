@@ -348,6 +348,48 @@ These add complexity without matching ARO's philosophy. Use standard ARO control
 
 ---
 
+## 8. State Guards vs State Observers
+
+ARO provides two complementary mechanisms for reacting to state:
+
+| Pattern | Syntax | Trigger |
+|---------|--------|---------|
+| StateObserver | `fieldName StateObserver<from_to_target>` | State transitions via Accept action |
+| Handler Guard | `EventName Handler<field:value>` | Any domain event with matching payload |
+
+### 8.1 StateObserver: Reacting to Transitions
+
+StateObservers react to state transitions performed by the `<Accept>` action. The filter specifies a transition (from_to_target):
+
+```aro
+(* Triggers when Accept transitions order from paid to shipped *)
+(Track Shipment: status StateObserver<paid_to_shipped>) {
+    <Extract> the <orderId> from the <transition: entityId>.
+    <Log> the <message> for the <console> with "Order shipped: " + <orderId>.
+    <Return> an <OK: status> for the <tracking>.
+}
+```
+
+### 8.2 Handler Guard: Filtering by Payload State
+
+Handler guards filter domain events by payload field values. The filter specifies field-value pairs (field:value,value2 for OR, semicolon for AND):
+
+```aro
+(* Triggers when any OrderUpdated event has status=shipped in payload *)
+(Notify Shipped: OrderUpdated Handler<status:shipped>) {
+    <Extract> the <order> from the <event: order>.
+    <Send> the <notification> to the <order: email>.
+    <Return> an <OK: status> for the <notification>.
+}
+```
+
+### 8.3 When to Use Each
+
+- **StateObserver**: Use when you need to react to a specific state transition (A→B), not just the current state
+- **Handler Guard**: Use when you want to filter events by the current entity state, regardless of how it got there
+
+---
+
 ## Summary
 
 | Concept | ARO Approach |
@@ -355,6 +397,7 @@ These add complexity without matching ARO's philosophy. Use standard ARO control
 | State definition | OpenAPI enum |
 | State transition | `<Accept> the <transition: from_to_target>` |
 | State observer | `(Name: fieldName StateObserver[<transition>])` |
+| Handler guard | `(Name: EventName Handler<field:value>)` |
 | Validation | Runtime checks current state |
 | Error messages | "Cannot accept state X->Y on Z" |
 | Complex logic | Use `if`/`match` |
@@ -368,3 +411,4 @@ These add complexity without matching ARO's philosophy. Use standard ARO control
 | 1.0 | 2024-01 | Initial specification with complex state machines |
 | 2.0 | 2025-12 | Complete rewrite: simplified to state objects with Accept action |
 | 2.1 | 2025-12 | Added State Observers for reactive state change handling with optional transition filter |
+| 2.2 | 2025-12 | Added section clarifying State Guards vs State Observers |

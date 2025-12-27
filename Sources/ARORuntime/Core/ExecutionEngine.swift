@@ -231,38 +231,54 @@ public final class ExecutionEngine: @unchecked Sendable {
 
     /// Register domain event handlers for feature sets with "Handler" business activity pattern
     /// For example: "UserCreated Handler", "OrderPlaced Handler"
+    /// Supports state guards: "UserCreated Handler<status:active>"
     private func registerDomainEventHandlers(for program: AnalyzedProgram, baseContext: RuntimeContext) {
         // Find all feature sets with "*Handler" business activity (but not Socket/File event handlers)
+        // Also match handlers with state guards like "Handler<status:paid>"
         let domainHandlers = program.featureSets.filter { analyzedFS in
             let activity = analyzedFS.featureSet.businessActivity
-            return activity.hasSuffix("Handler") &&
-                   !activity.contains("Socket Event Handler") &&
-                   !activity.contains("File Event Handler") &&
-                   !activity.contains("Application-End")
+            let hasHandler = activity.contains(" Handler")
+            let isSpecialHandler = activity.contains("Socket Event Handler") ||
+                                   activity.contains("File Event Handler") ||
+                                   activity.contains("Application-End")
+            return hasHandler && !isSpecialHandler
         }
 
         for analyzedFS in domainHandlers {
             let activity = analyzedFS.featureSet.businessActivity
 
-            // Extract event type from business activity
+            // Extract event type from business activity (before "Handler" or "Handler<")
             // e.g., "UserCreated Handler" -> "UserCreated"
-            let eventType = activity
-                .replacingOccurrences(of: " Handler", with: "")
-                .trimmingCharacters(in: .whitespaces)
+            // e.g., "UserCreated Handler<status:active>" -> "UserCreated"
+            let eventType: String
+            if let handlerRange = activity.range(of: " Handler") {
+                eventType = String(activity[..<handlerRange.lowerBound])
+                    .trimmingCharacters(in: .whitespaces)
+            } else {
+                continue // Invalid pattern
+            }
 
-            // Subscribe to DomainEvent and filter by eventType
+            // Parse state guards from angle brackets
+            let guardSet = StateGuardSet.parse(from: activity)
+
+            // Subscribe to DomainEvent and filter by eventType and guards
             eventBus.subscribe(to: DomainEvent.self) { [weak self] event in
                 guard let self = self else { return }
 
                 // Only handle events that match this handler's event type
-                if event.domainEventType == eventType {
-                    await self.executeDomainEventHandler(
-                        analyzedFS,
-                        program: program,
-                        baseContext: baseContext,
-                        event: event
-                    )
+                guard event.domainEventType == eventType else { return }
+
+                // Apply state guards if present
+                if !guardSet.isEmpty {
+                    guard guardSet.allMatch(payload: event.payload) else { return }
                 }
+
+                await self.executeDomainEventHandler(
+                    analyzedFS,
+                    program: program,
+                    baseContext: baseContext,
+                    event: event
+                )
             }
         }
     }
@@ -410,36 +426,61 @@ public final class ExecutionEngine: @unchecked Sendable {
 
     /// Register repository observers for feature sets with "Observer" business activity pattern
     /// For example: "user-repository Observer", "order-repository Observer"
+    /// Supports state guards: "user-repository Observer<status:active>"
     private func registerRepositoryObservers(for program: AnalyzedProgram, baseContext: RuntimeContext) {
         // Find all feature sets with "*-repository Observer" business activity
+        // Also match observers with state guards like "Observer<status:active>"
         let observers = program.featureSets.filter { analyzedFS in
             let activity = analyzedFS.featureSet.businessActivity
-            return activity.hasSuffix("Observer") &&
+            return activity.contains(" Observer") &&
                    activity.contains("-repository")
         }
 
         for analyzedFS in observers {
             let activity = analyzedFS.featureSet.businessActivity
 
-            // Extract repository name from business activity
+            // Extract repository name from business activity (before "Observer")
             // e.g., "user-repository Observer" -> "user-repository"
-            let repositoryName = activity
-                .replacingOccurrences(of: " Observer", with: "")
-                .trimmingCharacters(in: .whitespaces)
+            // e.g., "user-repository Observer<status:active>" -> "user-repository"
+            let repositoryName: String
+            if let observerRange = activity.range(of: " Observer") {
+                repositoryName = String(activity[..<observerRange.lowerBound])
+                    .trimmingCharacters(in: .whitespaces)
+            } else {
+                continue // Invalid pattern
+            }
 
-            // Subscribe to RepositoryChangedEvent and filter by repositoryName
+            // Parse state guards from angle brackets
+            let guardSet = StateGuardSet.parse(from: activity)
+
+            // Subscribe to RepositoryChangedEvent and filter by repositoryName and guards
             eventBus.subscribe(to: RepositoryChangedEvent.self) { [weak self] event in
                 guard let self = self else { return }
 
                 // Only handle events that match this observer's repository
-                if event.repositoryName == repositoryName {
-                    await self.executeRepositoryObserver(
-                        analyzedFS,
-                        program: program,
-                        baseContext: baseContext,
-                        event: event
-                    )
+                guard event.repositoryName == repositoryName else { return }
+
+                // Apply state guards if present (check newValue for creates/updates, oldValue for deletes)
+                if !guardSet.isEmpty {
+                    let entityToCheck: [String: any Sendable]?
+                    if let newValue = event.newValue as? [String: any Sendable] {
+                        entityToCheck = newValue
+                    } else if let oldValue = event.oldValue as? [String: any Sendable] {
+                        entityToCheck = oldValue
+                    } else {
+                        entityToCheck = nil
+                    }
+
+                    guard let entity = entityToCheck,
+                          guardSet.allMatch(payload: entity) else { return }
                 }
+
+                await self.executeRepositoryObserver(
+                    analyzedFS,
+                    program: program,
+                    baseContext: baseContext,
+                    event: event
+                )
             }
         }
     }

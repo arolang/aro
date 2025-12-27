@@ -231,6 +231,69 @@ In receiving feature sets, the `<event>` variable contains the dispatched data:
 
 ---
 
+### 6. State-Guarded Event Handlers
+
+Event handlers can filter events based on entity field values from the event payload. Guards are specified using angle bracket syntax after "Handler".
+
+#### 6.1 Basic Guard Syntax
+
+```aro
+(* Only handle OrderUpdated when status is "paid" *)
+(Process Payment: OrderUpdated Handler<status:paid>) {
+    <Extract> the <order> from the <event: order>.
+    (* This only runs when order.status == "paid" *)
+    <Process> the <payment> for the <order>.
+    <Return> an <OK: status> for the <processing>.
+}
+```
+
+#### 6.2 OR Logic with Comma Separator
+
+Multiple values for the same field are separated by commas:
+
+```aro
+(* Handle when status is paid OR shipped *)
+(Track Fulfillment: OrderUpdated Handler<status:paid,shipped>) {
+    <Extract> the <order> from the <event: order>.
+    <Log> the <message> for the <console> with "Fulfillment update".
+    <Return> an <OK: status> for the <tracking>.
+}
+```
+
+#### 6.3 AND Logic with Semicolon
+
+Multiple conditions within the same angle brackets use semicolon for AND logic:
+
+```aro
+(* Only handle premium customers with completed orders *)
+(VIP Notification: OrderUpdated Handler<status:delivered;tier:premium>) {
+    <Extract> the <order> from the <event: order>.
+    <Send> the <vip-reward> to the <order: email>.
+    <Return> an <OK: status> for the <notification>.
+}
+```
+
+#### 6.4 Nested Field Access
+
+Use dot notation for nested fields:
+
+```aro
+(* Access nested entity.status field *)
+(Handle Active Users: UserUpdated Handler<user.status:active>) {
+    <Extract> the <user> from the <event: user>.
+    <Return> an <OK: status> for the <handling>.
+}
+```
+
+#### 6.5 Guard Semantics
+
+- Guards are evaluated **before** handler execution
+- All guards must match for the handler to execute (AND logic across guards)
+- Field values are compared case-insensitively
+- Non-matching events are silently skipped
+
+---
+
 ## Grammar Extension
 
 ```ebnf
@@ -241,6 +304,13 @@ emit_statement = "<Emit>" , [ article , "<" , event_type , ">" ] ,
 
 event_type = identifier ;       (* Optional: References OpenAPI schema *)
 feature_set_name = identifier ; (* Target feature set name *)
+
+(* State-Guarded Handlers *)
+guarded_handler = event_type , "Handler" , [ state_guard_block ] ;
+state_guard_block = "<" , state_guard , { ";" , state_guard } , ">" ;
+state_guard = field_path , ":" , value_list ;
+field_path = identifier , { "." , identifier } ;
+value_list = identifier , { "," , identifier } ;
 ```
 
 ---
@@ -252,3 +322,4 @@ feature_set_name = identifier ; (* Target feature set name *)
 | 1.0 | 2024-01 | Initial specification |
 | 2.0 | 2025-12 | Simplified: removed subscriptions, handlers, event streams. Direct dispatch to feature sets. |
 | 2.1 | 2025-12 | Further simplified: no metadata, no builders. Events emitted directly to feature set names. |
+| 2.2 | 2025-12 | Added state-guarded handlers for filtering events by entity field values. |

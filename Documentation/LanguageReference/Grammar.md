@@ -206,10 +206,16 @@ application_start = "(" , "Application-Start" , ":" , business_activity , ")" , 
 application_end_success = "(" , "Application-End" , ":" , "Success" , ")" , block ;
 application_end_error = "(" , "Application-End" , ":" , "Error" , ")" , block ;
 
-(* Event handlers *)
-event_handler = "(" , handler_name , ":" , event_type , "Handler" , ")" , block ;
+(* Event handlers with optional state guards *)
+event_handler = "(" , handler_name , ":" , event_type , "Handler" , [ state_guard_block ] , ")" , block ;
 handler_name = identifier , { identifier } ;
 event_type = identifier ;
+
+(* State guards for filtering events by payload field values *)
+state_guard_block = "<" , state_guard , { ";" , state_guard } , ">" ;
+state_guard = field_path , ":" , value_list ;
+field_path = identifier , { "." , identifier } ;
+value_list = identifier , { "," , identifier } ;
 ```
 
 ## API Definitions
