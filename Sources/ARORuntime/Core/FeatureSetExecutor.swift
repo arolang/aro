@@ -249,6 +249,8 @@ public final class FeatureSetExecutor: @unchecked Sendable {
                 context.bind(literalName, value: convertLiteralArray(elements))
             case .object(let fields):
                 context.bind(literalName, value: convertLiteralObject(fields))
+            case .regex(let pattern, let flags):
+                context.bind(literalName, value: ["pattern": pattern, "flags": flags])
             }
         }
 
@@ -433,6 +435,9 @@ public final class FeatureSetExecutor: @unchecked Sendable {
             return false
         case .wildcard:
             return true
+        case .regex(let pattern, let flags):
+            guard let stringValue = value as? String else { return false }
+            return regexMatches(stringValue, pattern: pattern, flags: flags)
         }
     }
 
@@ -468,6 +473,26 @@ public final class FeatureSetExecutor: @unchecked Sendable {
         case .array, .object:
             // Complex types - use string comparison for now
             return String(describing: convertLiteralValue(literal)) == String(describing: value)
+        case .regex(let pattern, let flags):
+            guard let stringValue = value as? String else { return false }
+            return regexMatches(stringValue, pattern: pattern, flags: flags)
+        }
+    }
+
+    /// Check if a string matches a regex pattern with flags
+    private func regexMatches(_ string: String, pattern: String, flags: String) -> Bool {
+        var options: NSRegularExpression.Options = []
+        if flags.contains("i") { options.insert(.caseInsensitive) }
+        if flags.contains("s") { options.insert(.dotMatchesLineSeparators) }
+        if flags.contains("m") { options.insert(.anchorsMatchLines) }
+
+        do {
+            let regex = try NSRegularExpression(pattern: pattern, options: options)
+            let range = NSRange(string.startIndex..., in: string)
+            return regex.firstMatch(in: string, range: range) != nil
+        } catch {
+            // Invalid regex pattern - return false
+            return false
         }
     }
 
@@ -481,6 +506,7 @@ public final class FeatureSetExecutor: @unchecked Sendable {
         case .null: return ""
         case .array(let elements): return convertLiteralArray(elements)
         case .object(let fields): return convertLiteralObject(fields)
+        case .regex(let pattern, let flags): return ["pattern": pattern, "flags": flags]
         }
     }
 

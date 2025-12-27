@@ -138,6 +138,77 @@ This saga demonstrates:
 - **Decoupling**: Each handler focuses on one step, unaware of the others
 - **Fan-out**: Multiple handlers can listen to the same event (e.g., OrderShipped triggers both shipping and notifications)
 
+### Alternative: State-Driven Saga with Observers
+
+The same order processing can be implemented using **state transitions** and **observers**. The HTTP handler drives the workflow through state transitions, while observers react automatically to perform side effects. This approach is more declarative and reduces boilerplate.
+
+First, define the order states in your OpenAPI schema:
+
+```yaml
+# openapi.yaml (excerpt)
+components:
+  schemas:
+    OrderStatus:
+      type: string
+      enum: [draft, placed, paid, shipped]
+```
+
+Then implement the workflow:
+
+```aro
+(* HTTP handler drives the entire workflow through state transitions *)
+(processOrder: Order API) {
+    <Extract> the <order-data> from the <request: body>.
+    <Create> the <order> with <order-data>.
+
+    (* Each Accept triggers its observers *)
+    <Accept> the <transition: draft_to_placed> on <order: status>.
+    <Accept> the <transition: placed_to_paid> on <order: status>.
+    <Accept> the <transition: paid_to_shipped> on <order: status>.
+
+    <Store> the <order> into the <order-repository>.
+    <Return> a <Created: status> with <order>.
+}
+
+(* Observers react to state transitions with side effects *)
+(Reserve Inventory: status StateObserver<draft_to_placed>) {
+    <Extract> the <order> from the <transition: entity>.
+    <Retrieve> the <inventory> from the <inventory-service> for <order: items>.
+    <Update> the <inventory> with { reserved: true }.
+    <Store> the <inventory> into the <inventory-service>.
+}
+
+(Process Payment: status StateObserver<placed_to_paid>) {
+    <Extract> the <order> from the <transition: entity>.
+    <Send> the <charge> to the <payment-gateway> with {
+        amount: <order: total>,
+        method: <order: paymentMethod>
+    }.
+}
+
+(Ship Order: status StateObserver<paid_to_shipped>) {
+    <Extract> the <order> from the <transition: entity>.
+    <Send> the <shipment> to the <shipping-service> with <order>.
+}
+
+(Notify Customer: status StateObserver<paid_to_shipped>) {
+    <Extract> the <order> from the <transition: entity>.
+    <Send> the <notification> to the <email-service> with {
+        to: <order: customerEmail>,
+        template: "order-shipped"
+    }.
+}
+```
+
+This state-driven approach demonstrates:
+- **Centralized flow**: The HTTP handler drives the workflow through sequential `<Accept>` calls
+- **Implicit triggers**: Observers fire automatically when state transitions occur
+- **Focused observers**: Each observer handles one side effect, no event emission needed
+- **Same fan-out**: Multiple observers react to `paid_to_shipped` (shipping and notification)
+- **Less code**: ~35 lines vs ~70 lines in the event-driven version
+
+Both approaches achieve the same result. Choose explicit events when you need rich custom payloads or complex choreography. Choose state observers when your workflow maps naturally to state transitions and observers need only the entity itself.
+
 Fan-out occurs when multiple handlers react to the same event. An OrderPlaced event might trigger handlers for inventory, payment, notifications, analytics, and fraud checking. All these handlers run when the event is emitted. Each handler focuses on its specific concern, and together they implement the complete response to a new order.
 
 ---

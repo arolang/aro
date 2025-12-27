@@ -96,6 +96,7 @@ public enum TokenKind: Sendable, Equatable, CustomStringConvertible {
     case stringLiteral(String)
     case intLiteral(Int)
     case floatLiteral(Double)
+    case regexLiteral(pattern: String, flags: String)  // /pattern/flags
     case `true`             // true
     case `false`            // false
     case `nil`              // nil/null/none
@@ -185,6 +186,7 @@ public enum TokenKind: Sendable, Equatable, CustomStringConvertible {
         case .stringLiteral(let value): return "string(\"\(value)\")"
         case .intLiteral(let value): return "int(\(value))"
         case .floatLiteral(let value): return "float(\(value))"
+        case .regexLiteral(let pattern, let flags): return "regex(/\(pattern)/\(flags))"
         case .true: return "true"
         case .false: return "false"
         case .nil: return "nil"
@@ -289,10 +291,10 @@ extension TokenKind {
         return nil
     }
 
-    /// Checks if this is a literal (string, number, bool, nil)
+    /// Checks if this is a literal (string, number, bool, nil, regex)
     public var isLiteral: Bool {
         switch self {
-        case .stringLiteral, .intLiteral, .floatLiteral, .true, .false, .nil:
+        case .stringLiteral, .intLiteral, .floatLiteral, .regexLiteral, .true, .false, .nil:
             return true
         default:
             return false
