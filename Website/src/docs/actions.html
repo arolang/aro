@@ -77,6 +77,10 @@
                 <tr><td>OWN</td><td>Internal &#x2192; Internal</td><td>Transform data within the feature set</td></tr>
                 <tr><td>RESPONSE</td><td>Internal &#x2192; External</td><td>Send results back</td></tr>
                 <tr><td>EXPORT</td><td>Internal &#x2192; External</td><td>Publish or persist data</td></tr>
+                <tr><td>FILE</td><td>Internal &#x2194; File System</td><td>File and directory operations</td></tr>
+                <tr><td>SERVICE</td><td>Internal &#x2194; Services</td><td>Manage runtime services</td></tr>
+                <tr><td>STATE</td><td>Internal State</td><td>State machine transitions</td></tr>
+                <tr><td>TEST</td><td>Verification</td><td>Testing and assertions</td></tr>
             </tbody>
         </table>
 
@@ -107,6 +111,31 @@
         <pre><code><span class="code-keyword">&lt;Read&gt;</span> the <span class="code-result">&lt;content&gt;</span> from the &lt;file: <span class="code-string">"./data.txt"</span>&gt;.
 <span class="code-keyword">&lt;Read&gt;</span> the <span class="code-result">&lt;config: JSON&gt;</span> from the &lt;file: <span class="code-string">"./config.json"</span>&gt;.
 <span class="code-keyword">&lt;Read&gt;</span> the <span class="code-result">&lt;data: bytes&gt;</span> from the &lt;file: <span class="code-string">"./image.png"</span>&gt;.</code></pre>
+
+        <h3>Receive</h3>
+        <p>Receive data from sockets or streams:</p>
+        <pre><code><span class="code-keyword">&lt;Receive&gt;</span> the <span class="code-result">&lt;message&gt;</span> from the &lt;socket&gt;.
+<span class="code-keyword">&lt;Receive&gt;</span> the <span class="code-result">&lt;data&gt;</span> from the &lt;event&gt;.</code></pre>
+
+        <h3>Request</h3>
+        <p>Make HTTP requests with method control:</p>
+        <pre><code><span class="code-comment">(* GET request *)</span>
+<span class="code-keyword">&lt;Request&gt;</span> the <span class="code-result">&lt;data&gt;</span> from the &lt;api-url&gt;.
+
+<span class="code-comment">(* POST request with data *)</span>
+<span class="code-keyword">&lt;Request&gt;</span> the <span class="code-result">&lt;result&gt;</span> to the &lt;api-url&gt; with &lt;payload&gt;.
+
+<span class="code-comment">(* Explicit method *)</span>
+<span class="code-keyword">&lt;Request&gt;</span> the <span class="code-result">&lt;result&gt;</span> via PUT the &lt;url&gt; with &lt;update&gt;.</code></pre>
+
+        <h3>Exec</h3>
+        <p>Execute shell commands (ARO-0033):</p>
+        <pre><code><span class="code-keyword">&lt;Exec&gt;</span> the <span class="code-result">&lt;result&gt;</span> for the &lt;command&gt; with <span class="code-string">"ls -la"</span>.
+<span class="code-keyword">&lt;Exec&gt;</span> the <span class="code-result">&lt;output&gt;</span> on the &lt;system&gt; with {
+    command: <span class="code-string">"npm install"</span>,
+    workingDirectory: <span class="code-string">"/app"</span>,
+    timeout: 60000
+}.</code></pre>
 
         <h2>OWN Actions</h2>
         <p>These actions create or transform data within your feature set.</p>
@@ -148,6 +177,42 @@ if &lt;validation&gt; is failed then {
         <pre><code><span class="code-keyword">&lt;Compare&gt;</span> the &lt;password-hash&gt; against the &lt;stored-hash&gt;.
 <span class="code-keyword">&lt;Compare&gt;</span> the &lt;signature&gt; against the &lt;expected-signature&gt;.</code></pre>
 
+        <h3>Update</h3>
+        <p>Modify existing data:</p>
+        <pre><code><span class="code-keyword">&lt;Update&gt;</span> the &lt;user&gt; with &lt;changes&gt;.
+<span class="code-keyword">&lt;Update&gt;</span> the &lt;order: status&gt; with <span class="code-string">"shipped"</span>.</code></pre>
+
+        <h3>Sort</h3>
+        <p>Order collections:</p>
+        <pre><code><span class="code-keyword">&lt;Sort&gt;</span> the <span class="code-result">&lt;sorted-users&gt;</span> from the &lt;users&gt; by &lt;name&gt;.
+<span class="code-keyword">&lt;Sort&gt;</span> the <span class="code-result">&lt;ordered&gt;</span> from the &lt;items&gt; by &lt;price&gt; with <span class="code-string">"desc"</span>.</code></pre>
+
+        <h3>Split</h3>
+        <p>Split strings by regex delimiter (ARO-0037):</p>
+        <pre><code><span class="code-keyword">&lt;Split&gt;</span> the <span class="code-result">&lt;parts&gt;</span> from the &lt;csv-line&gt; by /,/.
+<span class="code-keyword">&lt;Split&gt;</span> the <span class="code-result">&lt;words&gt;</span> from the &lt;sentence&gt; by /\s+/.
+<span class="code-keyword">&lt;Split&gt;</span> the <span class="code-result">&lt;tokens&gt;</span> from the &lt;code&gt; by /[;,]+/.</code></pre>
+
+        <h3>Merge</h3>
+        <p>Combine data structures:</p>
+        <pre><code><span class="code-keyword">&lt;Merge&gt;</span> the &lt;existing-user&gt; with &lt;update-data&gt;.
+<span class="code-keyword">&lt;Merge&gt;</span> the <span class="code-result">&lt;combined&gt;</span> from &lt;list1&gt; with &lt;list2&gt;.</code></pre>
+
+        <h3>Filter</h3>
+        <p>Select matching elements from collections:</p>
+        <pre><code><span class="code-keyword">&lt;Filter&gt;</span> the <span class="code-result">&lt;active-users&gt;</span> from the &lt;users&gt; where &lt;status&gt; = <span class="code-string">"active"</span>.
+<span class="code-keyword">&lt;Filter&gt;</span> the <span class="code-result">&lt;expensive&gt;</span> from the &lt;products&gt; where &lt;price&gt; > 100.</code></pre>
+
+        <h3>Map</h3>
+        <p>Transform collection elements:</p>
+        <pre><code><span class="code-keyword">&lt;Map&gt;</span> the <span class="code-result">&lt;names&gt;</span> from the &lt;users: name&gt;.
+<span class="code-keyword">&lt;Map&gt;</span> the <span class="code-result">&lt;emails&gt;</span> from the &lt;customers: email&gt;.</code></pre>
+
+        <h3>Reduce</h3>
+        <p>Aggregate collections:</p>
+        <pre><code><span class="code-keyword">&lt;Reduce&gt;</span> the <span class="code-result">&lt;total&gt;</span> from the &lt;items&gt; with sum(&lt;price&gt;).
+<span class="code-keyword">&lt;Reduce&gt;</span> the <span class="code-result">&lt;count&gt;</span> from the &lt;orders&gt; with count().</code></pre>
+
         <h2>RESPONSE Actions</h2>
         <p>These actions send results back from your feature set.</p>
 
@@ -179,6 +244,12 @@ if &lt;validation&gt; is failed then {
                 <tr><td>InternalError</td><td>500</td><td>Server error</td></tr>
             </tbody>
         </table>
+
+        <h3>Throw</h3>
+        <p>Throw an error:</p>
+        <pre><code><span class="code-keyword">&lt;Throw&gt;</span> a <span class="code-result">&lt;ValidationError&gt;</span> for the &lt;invalid: input&gt;.
+<span class="code-keyword">&lt;Throw&gt;</span> a <span class="code-result">&lt;NotFoundError&gt;</span> for the &lt;missing: user&gt;.
+<span class="code-keyword">&lt;Throw&gt;</span> an <span class="code-result">&lt;AuthError&gt;</span> with <span class="code-string">"Invalid credentials"</span>.</code></pre>
 
         <h2>EXPORT Actions</h2>
         <p>These actions publish data or send to external systems.</p>
@@ -216,12 +287,57 @@ if &lt;validation&gt; is failed then {
         <pre><code><span class="code-keyword">&lt;Delete&gt;</span> the &lt;user&gt; from the &lt;user-repository&gt; where id = &lt;user-id&gt;.
 <span class="code-keyword">&lt;Delete&gt;</span> the &lt;file: <span class="code-string">"./temp.txt"</span>&gt;.</code></pre>
 
+        <h3>Write</h3>
+        <p>Write content to files:</p>
+        <pre><code><span class="code-keyword">&lt;Write&gt;</span> the &lt;content&gt; to the &lt;file: <span class="code-string">"./output.txt"</span>&gt;.
+<span class="code-keyword">&lt;Write&gt;</span> the &lt;data: JSON&gt; to the &lt;file: <span class="code-string">"./data.json"</span>&gt;.</code></pre>
+
+        <h3>Append</h3>
+        <p>Append content to files:</p>
+        <pre><code><span class="code-keyword">&lt;Append&gt;</span> the &lt;log-line&gt; to the &lt;file: <span class="code-string">"./app.log"</span>&gt;.
+<span class="code-keyword">&lt;Append&gt;</span> the &lt;entry&gt; to the &lt;file: <span class="code-string">"./data.csv"</span>&gt;.</code></pre>
+
+        <h2>File Operations</h2>
+        <p>Actions for file system operations (ARO-0036).</p>
+
+        <h3>List</h3>
+        <p>List directory contents:</p>
+        <pre><code><span class="code-keyword">&lt;Create&gt;</span> the &lt;dir-path&gt; with <span class="code-string">"./uploads"</span>.
+<span class="code-keyword">&lt;List&gt;</span> the <span class="code-result">&lt;entries&gt;</span> from the &lt;directory: dir-path&gt;.
+<span class="code-keyword">&lt;List&gt;</span> the <span class="code-result">&lt;aro-files&gt;</span> from the &lt;directory: src-path&gt; matching <span class="code-string">"*.aro"</span>.
+<span class="code-keyword">&lt;List&gt;</span> the <span class="code-result">&lt;all-files&gt;</span> from the &lt;directory: path&gt; recursively.</code></pre>
+
+        <h3>Stat</h3>
+        <p>Get file or directory metadata:</p>
+        <pre><code><span class="code-keyword">&lt;Stat&gt;</span> the <span class="code-result">&lt;info&gt;</span> for the &lt;file: <span class="code-string">"./document.pdf"</span>&gt;.
+<span class="code-keyword">&lt;Stat&gt;</span> the <span class="code-result">&lt;dir-info&gt;</span> for the &lt;directory: <span class="code-string">"./src"</span>&gt;.</code></pre>
+
+        <h3>Exists</h3>
+        <p>Check if a file or directory exists:</p>
+        <pre><code><span class="code-keyword">&lt;Exists&gt;</span> the <span class="code-result">&lt;found&gt;</span> for the &lt;file: <span class="code-string">"./config.json"</span>&gt;.
+<span class="code-keyword">&lt;Exists&gt;</span> the <span class="code-result">&lt;dir-exists&gt;</span> for the &lt;directory: <span class="code-string">"./output"</span>&gt;.</code></pre>
+
+        <h3>CreateDirectory</h3>
+        <p>Create directories (with parent directories):</p>
+        <pre><code><span class="code-keyword">&lt;CreateDirectory&gt;</span> the <span class="code-result">&lt;output-dir&gt;</span> to the &lt;path: <span class="code-string">"./output/reports/2024"</span>&gt;.</code></pre>
+
+        <h3>Copy</h3>
+        <p>Copy files or directories:</p>
+        <pre><code><span class="code-keyword">&lt;Copy&gt;</span> the &lt;file: <span class="code-string">"./template.txt"</span>&gt; to the &lt;destination: <span class="code-string">"./copy.txt"</span>&gt;.
+<span class="code-keyword">&lt;Copy&gt;</span> the &lt;directory: <span class="code-string">"./src"</span>&gt; to the &lt;destination: <span class="code-string">"./backup/src"</span>&gt;.</code></pre>
+
+        <h3>Move</h3>
+        <p>Move or rename files and directories:</p>
+        <pre><code><span class="code-keyword">&lt;Move&gt;</span> the &lt;file: <span class="code-string">"./draft.txt"</span>&gt; to the &lt;destination: <span class="code-string">"./final.txt"</span>&gt;.
+<span class="code-keyword">&lt;Move&gt;</span> the &lt;directory: <span class="code-string">"./temp"</span>&gt; to the &lt;destination: <span class="code-string">"./processed"</span>&gt;.</code></pre>
+
         <h2>Service Actions</h2>
         <p>These actions interact with runtime services.</p>
 
-        <h3>Start / Stop</h3>
+        <h3>Start</h3>
+        <p>Start a service:</p>
         <pre><code><span class="code-keyword">&lt;Start&gt;</span> the &lt;http-server&gt; on port 8080.
-<span class="code-keyword">&lt;Stop&gt;</span> the &lt;http-server&gt;.</code></pre>
+<span class="code-keyword">&lt;Start&gt;</span> the &lt;scheduler&gt;.</code></pre>
 
         <h3>Watch</h3>
         <p>Monitor a directory:</p>
@@ -230,6 +346,48 @@ if &lt;validation&gt; is failed then {
         <h3>Listen / Connect</h3>
         <pre><code><span class="code-keyword">&lt;Listen&gt;</span> on port 9000 as &lt;socket-server&gt;.
 <span class="code-keyword">&lt;Connect&gt;</span> to &lt;host: <span class="code-string">"localhost"</span>&gt; on port 5432 as &lt;database&gt;.</code></pre>
+
+        <h3>Close</h3>
+        <p>Close connections:</p>
+        <pre><code><span class="code-keyword">&lt;Close&gt;</span> the &lt;connection&gt;.
+<span class="code-keyword">&lt;Close&gt;</span> the &lt;socket-server&gt;.</code></pre>
+
+        <h3>Broadcast</h3>
+        <p>Send to all connections:</p>
+        <pre><code><span class="code-keyword">&lt;Broadcast&gt;</span> the &lt;message&gt; to the &lt;socket-server&gt;.
+<span class="code-keyword">&lt;Broadcast&gt;</span> the &lt;notification&gt; to the &lt;chat-server&gt; with <span class="code-string">"User joined"</span>.</code></pre>
+
+        <h3>Call</h3>
+        <p>Call external APIs (ARO-0016):</p>
+        <pre><code><span class="code-keyword">&lt;Call&gt;</span> the <span class="code-result">&lt;result&gt;</span> via &lt;UserAPI: POST /users&gt; with &lt;user-data&gt;.
+<span class="code-keyword">&lt;Call&gt;</span> the <span class="code-result">&lt;response&gt;</span> via &lt;PaymentAPI: POST /charge&gt; with &lt;payment&gt;.</code></pre>
+
+        <h3>Keepalive</h3>
+        <p>Keep application running for events (ARO-0028):</p>
+        <pre><code><span class="code-keyword">&lt;Keepalive&gt;</span> the &lt;application&gt; for the &lt;events&gt;.</code></pre>
+        <p>Blocks until shutdown signal (SIGINT/SIGTERM), essential for servers and file watchers.</p>
+
+        <h2>State Actions</h2>
+        <p>Actions for state machine transitions.</p>
+
+        <h3>Accept</h3>
+        <p>Accept a state transition:</p>
+        <pre><code><span class="code-keyword">&lt;Accept&gt;</span> the &lt;order: placed&gt;.
+<span class="code-keyword">&lt;Accept&gt;</span> the &lt;payment: approved&gt;.</code></pre>
+
+        <h2>Test Actions</h2>
+        <p>Actions for testing and assertions.</p>
+
+        <h3>Given / When / Then</h3>
+        <p>BDD-style test structure:</p>
+        <pre><code><span class="code-keyword">&lt;Given&gt;</span> the &lt;user&gt; with { name: <span class="code-string">"Test"</span> }.
+<span class="code-keyword">&lt;When&gt;</span> the &lt;action&gt; is performed.
+<span class="code-keyword">&lt;Then&gt;</span> the &lt;result&gt; should be &lt;expected&gt;.</code></pre>
+
+        <h3>Assert</h3>
+        <p>Assert conditions:</p>
+        <pre><code><span class="code-keyword">&lt;Assert&gt;</span> the &lt;value&gt; equals &lt;expected&gt;.
+<span class="code-keyword">&lt;Assert&gt;</span> the &lt;list&gt; contains &lt;item&gt;.</code></pre>
 
         <h2>Action Patterns</h2>
 
