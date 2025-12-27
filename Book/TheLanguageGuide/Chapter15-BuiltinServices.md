@@ -46,15 +46,126 @@ Error handling follows the same happy path philosophy as other ARO operations. I
 
 ## 14.4 File System Service
 
-The file system service provides operations for reading, writing, and monitoring files. It handles the mechanics of file I/O while you focus on what data to read or write.
+The file system service provides comprehensive operations for reading, writing, and managing files and directories. It handles the mechanics of file I/O while you focus on what data to read or write.
+
+### Reading Files
 
 Reading files uses the Read action with a file path. The action reads the file contents and binds them to a result. For JSON files, the content is parsed into a structured object. For text files, the content is a string. The path can be relative to the application directory or absolute.
 
-Writing files uses the Write action with data and a path. The action serializes the data and writes it to the specified location. You can control the encoding and whether to create parent directories if they do not exist.
+```aro
+<Read> the <content> from the <file: "./README.md">.
+<Read> the <config: JSON> from the <file: "./config.json">.
+<Read> the <image: bytes> from the <file: "./logo.png">.
+```
 
-Additional operations check whether files exist, list directory contents, and delete files. These operations support file management tasks that applications commonly need.
+### Writing Files
+
+Writing files uses the Write action with data and a path. The action serializes the data and writes it to the specified location. Parent directories are created automatically if they do not exist.
+
+```aro
+<Write> the <report> to the <file: "./output/report.txt">.
+<Write> the <data: JSON> to the <file: "./export.json">.
+```
+
+### Appending to Files
+
+The Append action adds content to the end of an existing file, creating the file if it does not exist.
+
+```aro
+<Append> the <log-line> to the <file: "./logs/app.log">.
+```
+
+### Checking File Existence
+
+The Exists action checks whether a file or directory exists at a given path.
+
+```aro
+<Exists> the <found> for the <file: "./config.json">.
+
+when <found> is false {
+    <Log> the <warning> for the <console> with "Config not found!".
+}
+```
+
+### Getting File Information
+
+The Stat action retrieves detailed metadata about a file or directory, including size, modification dates, and permissions.
+
+```aro
+<Stat> the <info> for the <file: "./document.pdf">.
+<Log> the <size> for the <console> with <info: size>.
+<Log> the <modified> for the <console> with <info: modified>.
+```
+
+The result contains: name, path, size (bytes), isFile, isDirectory, created, modified, accessed, and permissions.
+
+### Listing Directory Contents
+
+The List action retrieves the contents of a directory. You can filter by glob pattern and list recursively.
+
+```aro
+(* List all files in a directory *)
+<Create> the <uploads-path> with "./uploads".
+<List> the <entries> from the <directory: uploads-path>.
+
+(* Filter with glob pattern *)
+<Create> the <src-path> with "./src".
+<List> the <aro-files> from the <directory: src-path> matching "*.aro".
+
+(* List recursively *)
+<Create> the <project-path> with "./project".
+<List> the <all-files> from the <directory: project-path> recursively.
+```
+
+Each entry contains: name, path, size, isFile, isDirectory, and modified.
+
+### Creating Directories
+
+The CreateDirectory action creates a directory, including any necessary parent directories.
+
+```aro
+<CreateDirectory> the <output-dir> to the <path: "./output/reports/2024">.
+```
+
+### Copying Files and Directories
+
+The Copy action copies a file or directory to a new location. Directory copies are recursive by default.
+
+```aro
+<Copy> the <file: "./template.txt"> to the <destination: "./copy.txt">.
+<Copy> the <directory: "./src"> to the <destination: "./backup/src">.
+```
+
+### Moving and Renaming
+
+The Move action moves or renames a file or directory.
+
+```aro
+<Move> the <file: "./draft.txt"> to the <destination: "./final.txt">.
+<Move> the <file: "./inbox/report.pdf"> to the <destination: "./archive/report.pdf">.
+```
+
+### Deleting Files
+
+The Delete action removes a file from the file system.
+
+```aro
+<Delete> the <file: "./temp/cache.json">.
+```
+
+### File Watching
 
 File watching monitors a directory for changes and emits events when files are created, modified, or deleted. You start watching during Application-Start by specifying the directory to monitor. When changes occur, the runtime emits File Event events that your handlers can process. This is useful for applications that need to react to external file changes—configuration reloading, data import, file synchronization.
+
+```aro
+<Watch> the <file-monitor> for the <directory> with "./data".
+```
+
+Event handlers are named according to the event type: `Handle File Created`, `Handle File Modified`, or `Handle File Deleted`.
+
+### Cross-Platform Behavior
+
+File operations work consistently across macOS, Linux, and Windows. Path separators use `/` in ARO code and are translated appropriately for each platform. Hidden files (those starting with `.` on Unix or with the hidden attribute on Windows) are included in listings by default.
 
 ---
 

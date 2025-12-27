@@ -1003,8 +1003,9 @@ public final class Parser {
         }
         // ARO-0015: Accept keywords that are also test action verbs
         // This allows <When>, <Then>, <Given>, <Assert> as action verbs
+        // ARO-0036: Accept "exists" as action verb for file existence checks
         switch token.kind {
-        case .when, .then:
+        case .when, .then, .exists:
             return advance()
         default:
             break

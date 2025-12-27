@@ -1,0 +1,451 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <title>File Operations - ARO Programming Language</title>
+{{head}}
+    <style>
+        .doc-page {
+            padding: 120px 24px 80px;
+            max-width: 900px;
+            margin: 0 auto;
+        }
+
+        .doc-header {
+            margin-bottom: 48px;
+        }
+
+        .doc-header h1 {
+            font-size: clamp(2rem, 5vw, 3rem);
+            font-weight: 700;
+            margin-bottom: 16px;
+            letter-spacing: -0.02em;
+        }
+
+        .doc-header .lead {
+            font-size: 1.25rem;
+            color: var(--color-text-muted);
+            line-height: 1.7;
+        }
+
+        .doc-page h2 {
+            font-size: 1.8rem;
+            font-weight: 600;
+            margin: 48px 0 16px;
+            padding-top: 24px;
+            border-top: 1px solid rgba(255, 255, 255, 0.1);
+        }
+
+        .doc-page h3 {
+            font-size: 1.3rem;
+            font-weight: 600;
+            margin: 32px 0 12px;
+            color: var(--color-secondary);
+        }
+
+        .doc-page p {
+            font-size: 1.1rem;
+            color: var(--color-text-muted);
+            line-height: 1.8;
+            margin-bottom: 16px;
+        }
+
+        .doc-page code {
+            font-family: var(--font-mono);
+            background: var(--color-bg-alt);
+            padding: 3px 8px;
+            border-radius: 4px;
+            font-size: 0.9rem;
+            color: var(--color-secondary);
+        }
+
+        .doc-page pre {
+            background: var(--color-bg-alt);
+            border-radius: var(--radius-md);
+            padding: 24px;
+            overflow-x: auto;
+            margin: 24px 0;
+            border: 1px solid rgba(255, 255, 255, 0.1);
+        }
+
+        .doc-page pre code {
+            background: none;
+            padding: 0;
+            font-size: 0.9rem;
+            line-height: 1.7;
+            color: var(--color-text);
+        }
+
+        .doc-page ul {
+            color: var(--color-text-muted);
+            margin: 16px 0 16px 24px;
+            line-height: 1.8;
+        }
+
+        .doc-page li {
+            margin-bottom: 8px;
+        }
+
+        .doc-page strong {
+            color: var(--color-text);
+        }
+
+        .doc-page em {
+            color: var(--color-secondary);
+            font-style: normal;
+        }
+
+        .doc-page table {
+            width: 100%;
+            border-collapse: collapse;
+            margin: 24px 0;
+        }
+
+        .doc-page th, .doc-page td {
+            padding: 12px 16px;
+            text-align: left;
+            border: 1px solid rgba(255, 255, 255, 0.1);
+        }
+
+        .doc-page th {
+            background: var(--color-bg-alt);
+            font-weight: 600;
+            color: var(--color-text);
+        }
+
+        .doc-page td {
+            color: var(--color-text-muted);
+        }
+
+        .doc-page td code {
+            font-size: 0.85rem;
+        }
+
+        .highlight-box {
+            background: rgba(124, 58, 237, 0.1);
+            border: 1px solid rgba(124, 58, 237, 0.3);
+            border-radius: var(--radius-md);
+            padding: 24px;
+            margin: 32px 0;
+        }
+
+        .highlight-box h4 {
+            color: var(--color-primary);
+            font-size: 1.1rem;
+            margin-bottom: 12px;
+        }
+
+        .highlight-box p {
+            margin-bottom: 0;
+        }
+
+        .code-comment { color: #6b7280; }
+        .code-keyword { color: #7c3aed; font-weight: 600; }
+        .code-string { color: #10b981; }
+        .code-feature { color: #f472b6; }
+        .code-result { color: #06b6d4; }
+
+        .back-link {
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            color: var(--color-text-muted);
+            text-decoration: none;
+            font-size: 0.95rem;
+            margin-bottom: 24px;
+            transition: color 0.2s;
+        }
+
+        .back-link:hover {
+            color: var(--color-primary);
+        }
+
+        .action-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+            gap: 16px;
+            margin: 24px 0;
+        }
+
+        .action-card {
+            background: var(--color-bg-alt);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            border-radius: var(--radius-md);
+            padding: 20px;
+        }
+
+        .action-card h4 {
+            color: var(--color-secondary);
+            font-size: 1rem;
+            margin-bottom: 8px;
+        }
+
+        .action-card p {
+            font-size: 0.95rem;
+            margin-bottom: 0;
+        }
+    </style>
+</head>
+<body>
+    <nav class="nav">
+        <div class="nav-content">
+            <a href="/aro/" class="logo">
+                <span class="logo-aro">ARO</span>
+            </a>
+            <div class="nav-links">
+                <a href="../fdd.html">The FDD Story</a>
+                <a href="../getting-started.html">Get Started</a>
+                <a href="../docs.html" style="color: var(--color-text);">Docs</a>
+                <a href="../disclaimer.html">Motivation</a>
+                <a href="../download.html">Download</a>
+                <a href="https://github.com/KrisSimon/aro" class="nav-github">
+                    <svg viewBox="0 0 16 16" fill="currentColor"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z"/></svg>
+                    <span class="github-stars">
+                        <svg viewBox="0 0 16 16"><path d="M8 .25a.75.75 0 01.673.418l1.882 3.815 4.21.612a.75.75 0 01.416 1.279l-3.046 2.97.719 4.192a.75.75 0 01-1.088.791L8 12.347l-3.766 1.98a.75.75 0 01-1.088-.79l.72-4.194L.818 6.374a.75.75 0 01.416-1.28l4.21-.611L7.327.668A.75.75 0 018 .25z"/></svg>
+                        <span class="github-stars-count"></span>
+                    </span>
+                </a>
+            </div>
+        </div>
+    </nav>
+
+    <main class="doc-page">
+        <a href="../docs.html" class="back-link">&#x2190; Back to Documentation</a>
+
+        <header class="doc-header">
+            <h1 class="gradient-text">File Operations</h1>
+            <p class="lead">
+                Read, write, copy, move, and manage files and directories with simple, cross-platform actions.
+                Works seamlessly on macOS, Linux, and Windows.
+            </p>
+        </header>
+
+        <div class="highlight-box">
+            <h4>Cross-Platform by Design</h4>
+            <p>
+                All file operations use forward slashes (<code>/</code>) in paths, automatically translated on Windows.
+                No platform-specific code needed.
+            </p>
+        </div>
+
+        <div class="action-grid">
+            <div class="action-card">
+                <h4>Read / Write</h4>
+                <p>Read and write text, JSON, or binary files.</p>
+            </div>
+            <div class="action-card">
+                <h4>List / Stat</h4>
+                <p>List directory contents and get file metadata.</p>
+            </div>
+            <div class="action-card">
+                <h4>Copy / Move</h4>
+                <p>Copy and move files or directories.</p>
+            </div>
+            <div class="action-card">
+                <h4>Exists / CreateDirectory</h4>
+                <p>Check existence and create directories.</p>
+            </div>
+        </div>
+
+        <h2>Reading and Writing Files</h2>
+
+        <h3>Read Files</h3>
+        <pre><code><span class="code-comment">(* Read text file *)</span>
+<span class="code-keyword">&lt;Read&gt;</span> the <span class="code-result">&lt;content&gt;</span> from the &lt;file: <span class="code-string">"./README.md"</span>&gt;.
+
+<span class="code-comment">(* Read JSON file - automatically parsed *)</span>
+<span class="code-keyword">&lt;Read&gt;</span> the <span class="code-result">&lt;config: JSON&gt;</span> from the &lt;file: <span class="code-string">"./config.json"</span>&gt;.
+
+<span class="code-comment">(* Read binary file *)</span>
+<span class="code-keyword">&lt;Read&gt;</span> the <span class="code-result">&lt;image: bytes&gt;</span> from the &lt;file: <span class="code-string">"./logo.png"</span>&gt;.</code></pre>
+
+        <h3>Write Files</h3>
+        <pre><code><span class="code-comment">(* Write text - creates parent directories automatically *)</span>
+<span class="code-keyword">&lt;Write&gt;</span> the <span class="code-result">&lt;report&gt;</span> to the &lt;file: <span class="code-string">"./output/report.txt"</span>&gt;.
+
+<span class="code-comment">(* Write JSON *)</span>
+<span class="code-keyword">&lt;Write&gt;</span> the <span class="code-result">&lt;data: JSON&gt;</span> to the &lt;file: <span class="code-string">"./export.json"</span>&gt;.</code></pre>
+
+        <h3>Append to Files</h3>
+        <pre><code><span class="code-comment">(* Append to log file *)</span>
+<span class="code-keyword">&lt;Append&gt;</span> the <span class="code-result">&lt;log-line&gt;</span> to the &lt;file: <span class="code-string">"./logs/app.log"</span>&gt;.</code></pre>
+
+        <h2>Directory Operations</h2>
+
+        <h3>List Directory Contents</h3>
+        <pre><code><span class="code-comment">(* List all entries *)</span>
+<span class="code-keyword">&lt;List&gt;</span> the <span class="code-result">&lt;entries&gt;</span> in the &lt;directory: <span class="code-string">"./uploads"</span>&gt;.
+
+<span class="code-comment">(* Filter with glob pattern *)</span>
+<span class="code-keyword">&lt;List&gt;</span> the <span class="code-result">&lt;aro-files&gt;</span> in the &lt;directory: <span class="code-string">"./src"</span>&gt; matching <span class="code-string">"*.aro"</span>.
+
+<span class="code-comment">(* List recursively *)</span>
+<span class="code-keyword">&lt;List&gt;</span> the <span class="code-result">&lt;all-files&gt;</span> in the &lt;directory: <span class="code-string">"./project"</span>&gt; recursively.</code></pre>
+
+        <p>Each entry includes:</p>
+        <ul>
+            <li><code>name</code> - file or directory name</li>
+            <li><code>path</code> - full path</li>
+            <li><code>size</code> - size in bytes</li>
+            <li><code>isFile</code> / <code>isDirectory</code> - type flags</li>
+            <li><code>modified</code> - last modification date</li>
+        </ul>
+
+        <h3>Check Existence</h3>
+        <pre><code><span class="code-comment">(* Check if file exists *)</span>
+<span class="code-keyword">&lt;Exists&gt;</span> the <span class="code-result">&lt;found&gt;</span> for the &lt;file: <span class="code-string">"./config.json"</span>&gt;.
+
+when &lt;found&gt; is false {
+    <span class="code-keyword">&lt;Log&gt;</span> the <span class="code-result">&lt;warning&gt;</span> for the &lt;console&gt; with <span class="code-string">"Config not found!"</span>.
+}
+
+<span class="code-comment">(* Check if directory exists *)</span>
+<span class="code-keyword">&lt;Exists&gt;</span> the <span class="code-result">&lt;dir-exists&gt;</span> for the &lt;directory: <span class="code-string">"./output"</span>&gt;.</code></pre>
+
+        <h3>Create Directories</h3>
+        <pre><code><span class="code-comment">(* Create directory with all parent directories *)</span>
+<span class="code-keyword">&lt;CreateDirectory&gt;</span> the <span class="code-result">&lt;output-dir&gt;</span> to the &lt;path: <span class="code-string">"./output/reports/2024"</span>&gt;.</code></pre>
+
+        <h3>Get File Metadata</h3>
+        <pre><code><span class="code-comment">(* Get detailed file stats *)</span>
+<span class="code-keyword">&lt;Stat&gt;</span> the <span class="code-result">&lt;info&gt;</span> for the &lt;file: <span class="code-string">"./document.pdf"</span>&gt;.
+
+<span class="code-keyword">&lt;Log&gt;</span> the <span class="code-result">&lt;size&gt;</span> for the &lt;console&gt; with &lt;info: size&gt;.
+<span class="code-keyword">&lt;Log&gt;</span> the <span class="code-result">&lt;modified&gt;</span> for the &lt;console&gt; with &lt;info: modified&gt;.</code></pre>
+
+        <h2>Copy and Move</h2>
+
+        <h3>Copy Files</h3>
+        <pre><code><span class="code-comment">(* Copy a file *)</span>
+<span class="code-keyword">&lt;Copy&gt;</span> the &lt;file: <span class="code-string">"./template.txt"</span>&gt; to the &lt;destination: <span class="code-string">"./copy.txt"</span>&gt;.
+
+<span class="code-comment">(* Copy a directory - recursive by default *)</span>
+<span class="code-keyword">&lt;Copy&gt;</span> the &lt;directory: <span class="code-string">"./src"</span>&gt; to the &lt;destination: <span class="code-string">"./backup/src"</span>&gt;.</code></pre>
+
+        <h3>Move and Rename</h3>
+        <pre><code><span class="code-comment">(* Rename a file *)</span>
+<span class="code-keyword">&lt;Move&gt;</span> the &lt;file: <span class="code-string">"./draft.txt"</span>&gt; to the &lt;destination: <span class="code-string">"./final.txt"</span>&gt;.
+
+<span class="code-comment">(* Move to different directory *)</span>
+<span class="code-keyword">&lt;Move&gt;</span> the &lt;file: <span class="code-string">"./inbox/report.pdf"</span>&gt; to the &lt;destination: <span class="code-string">"./archive/report.pdf"</span>&gt;.</code></pre>
+
+        <h2>Complete Example</h2>
+        <p>
+            Here's a complete example that demonstrates file operations:
+        </p>
+
+        <pre><code><span class="code-feature">(Application-Start: File Operations Demo)</span> {
+    <span class="code-keyword">&lt;Log&gt;</span> the <span class="code-result">&lt;title&gt;</span> for the &lt;console&gt; with <span class="code-string">"=== File Operations ==="</span>.
+
+    <span class="code-comment">(* Check and create output directory *)</span>
+    <span class="code-keyword">&lt;Exists&gt;</span> the <span class="code-result">&lt;dir-exists&gt;</span> for the &lt;directory: <span class="code-string">"./demo-output"</span>&gt;.
+
+    when &lt;dir-exists&gt; is false {
+        <span class="code-keyword">&lt;CreateDirectory&gt;</span> the <span class="code-result">&lt;output&gt;</span> to the &lt;path: <span class="code-string">"./demo-output"</span>&gt;.
+        <span class="code-keyword">&lt;Log&gt;</span> the <span class="code-result">&lt;created&gt;</span> for the &lt;console&gt; with <span class="code-string">"Created directory"</span>.
+    }
+
+    <span class="code-comment">(* Write a file *)</span>
+    <span class="code-keyword">&lt;Write&gt;</span> the <span class="code-result">&lt;content&gt;</span> to the &lt;file: <span class="code-string">"./demo-output/hello.txt"</span>&gt;
+        with <span class="code-string">"Hello from ARO!"</span>.
+
+    <span class="code-comment">(* Append to it *)</span>
+    <span class="code-keyword">&lt;Append&gt;</span> the <span class="code-result">&lt;line&gt;</span> to the &lt;file: <span class="code-string">"./demo-output/hello.txt"</span>&gt;
+        with <span class="code-string">"\nAppended line."</span>.
+
+    <span class="code-comment">(* Get stats *)</span>
+    <span class="code-keyword">&lt;Stat&gt;</span> the <span class="code-result">&lt;info&gt;</span> for the &lt;file: <span class="code-string">"./demo-output/hello.txt"</span>&gt;.
+    <span class="code-keyword">&lt;Log&gt;</span> the <span class="code-result">&lt;size&gt;</span> for the &lt;console&gt; with <span class="code-string">"Size: &lt;info: size&gt; bytes"</span>.
+
+    <span class="code-comment">(* Copy the file *)</span>
+    <span class="code-keyword">&lt;Copy&gt;</span> the &lt;file: <span class="code-string">"./demo-output/hello.txt"</span>&gt;
+        to the &lt;destination: <span class="code-string">"./demo-output/hello-copy.txt"</span>&gt;.
+
+    <span class="code-comment">(* List directory *)</span>
+    <span class="code-keyword">&lt;List&gt;</span> the <span class="code-result">&lt;files&gt;</span> in the &lt;directory: <span class="code-string">"./demo-output"</span>&gt;.
+
+    <span class="code-keyword">&lt;Log&gt;</span> the <span class="code-result">&lt;done&gt;</span> for the &lt;console&gt; with <span class="code-string">"=== Complete ==="</span>.
+    <span class="code-keyword">&lt;Return&gt;</span> an <span class="code-result">&lt;OK: status&gt;</span> for the &lt;demo&gt;.
+}</code></pre>
+
+        <h2>Actions Reference</h2>
+
+        <table>
+            <thead>
+                <tr>
+                    <th>Action</th>
+                    <th>Description</th>
+                    <th>Prepositions</th>
+                </tr>
+            </thead>
+            <tbody>
+                <tr>
+                    <td><code>Read</code></td>
+                    <td>Read file contents</td>
+                    <td><code>from</code></td>
+                </tr>
+                <tr>
+                    <td><code>Write</code></td>
+                    <td>Write to file (overwrite)</td>
+                    <td><code>to</code></td>
+                </tr>
+                <tr>
+                    <td><code>Append</code></td>
+                    <td>Append to file</td>
+                    <td><code>to</code>, <code>into</code></td>
+                </tr>
+                <tr>
+                    <td><code>List</code></td>
+                    <td>List directory contents</td>
+                    <td><code>in</code>, <code>from</code></td>
+                </tr>
+                <tr>
+                    <td><code>Stat</code></td>
+                    <td>Get file/directory metadata</td>
+                    <td><code>for</code></td>
+                </tr>
+                <tr>
+                    <td><code>Exists</code></td>
+                    <td>Check existence</td>
+                    <td><code>for</code></td>
+                </tr>
+                <tr>
+                    <td><code>CreateDirectory</code></td>
+                    <td>Create directory</td>
+                    <td><code>to</code>, <code>for</code></td>
+                </tr>
+                <tr>
+                    <td><code>Copy</code></td>
+                    <td>Copy file/directory</td>
+                    <td><code>to</code></td>
+                </tr>
+                <tr>
+                    <td><code>Move</code></td>
+                    <td>Move/rename</td>
+                    <td><code>to</code></td>
+                </tr>
+                <tr>
+                    <td><code>Delete</code></td>
+                    <td>Delete file</td>
+                    <td>none</td>
+                </tr>
+            </tbody>
+        </table>
+
+        <div class="highlight-box">
+            <h4>Learn More</h4>
+            <p>
+                See the full file operations specification in
+                <a href="https://github.com/KrisSimon/aro/blob/main/Proposals/ARO-0036-native-file-operations.md">ARO-0036: Native File Operations</a>.
+            </p>
+        </div>
+    </main>
+
+    <footer class="footer">
+        <div class="container">
+            <div class="footer-bottom">
+                <p>Sometime this page should build with ARO. Obviously.</p>
+            </div>
+        </div>
+    </footer>
+</body>
+</html>

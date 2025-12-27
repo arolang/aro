@@ -159,6 +159,196 @@ public final class AROFileSystemService: FileSystemService, FileMonitorService, 
         }
     }
 
+    // MARK: - ARO-0036: Extended File Operations
+
+    /// Get file or directory stats
+    public func stat(path: String) async throws -> FileInfo {
+        guard fileManager.fileExists(atPath: path) else {
+            throw FileSystemError.fileNotFound(path)
+        }
+
+        let url = URL(fileURLWithPath: path)
+        let attributes = try fileManager.attributesOfItem(atPath: path)
+
+        let fileType = attributes[.type] as? FileAttributeType
+        let isDirectory = fileType == .typeDirectory
+        let size = (attributes[.size] as? Int) ?? 0
+        let created = attributes[.creationDate] as? Date
+        let modified = attributes[.modificationDate] as? Date
+        let posixPermissions = attributes[.posixPermissions] as? Int
+
+        return FileInfo(
+            name: url.lastPathComponent,
+            path: url.path,
+            size: size,
+            isFile: !isDirectory,
+            isDirectory: isDirectory,
+            created: created,
+            modified: modified,
+            accessed: nil,  // Not available via FileManager
+            permissions: posixPermissions.map { formatPermissions($0) }
+        )
+    }
+
+    /// Format Unix permissions as string (e.g., "rwxr-xr-x")
+    private func formatPermissions(_ mode: Int) -> String {
+        let chars = ["---", "--x", "-w-", "-wx", "r--", "r-x", "rw-", "rwx"]
+        let owner = (mode >> 6) & 0o7
+        let group = (mode >> 3) & 0o7
+        let other = mode & 0o7
+        return chars[owner] + chars[group] + chars[other]
+    }
+
+    /// List directory with optional pattern matching
+    public func list(directory: String, pattern: String? = nil, recursive: Bool = false) async throws -> [FileInfo] {
+        guard fileManager.fileExists(atPath: directory) else {
+            throw FileSystemError.directoryNotFound(directory)
+        }
+
+        var isDir: ObjCBool = false
+        guard fileManager.fileExists(atPath: directory, isDirectory: &isDir), isDir.boolValue else {
+            throw FileSystemError.directoryNotFound(directory)
+        }
+
+        var results: [FileInfo] = []
+        let directoryURL = URL(fileURLWithPath: directory)
+
+        if recursive {
+            let enumerator = fileManager.enumerator(
+                at: directoryURL,
+                includingPropertiesForKeys: [.isDirectoryKey, .fileSizeKey, .creationDateKey, .contentModificationDateKey],
+                options: []
+            )
+
+            while let url = enumerator?.nextObject() as? URL {
+                if let info = try? await statURL(url), matchesPattern(info.name, pattern: pattern) {
+                    results.append(info)
+                }
+            }
+        } else {
+            let contents = try fileManager.contentsOfDirectory(at: directoryURL, includingPropertiesForKeys: [.isDirectoryKey, .fileSizeKey, .creationDateKey, .contentModificationDateKey])
+
+            for url in contents {
+                if let info = try? await statURL(url), matchesPattern(info.name, pattern: pattern) {
+                    results.append(info)
+                }
+            }
+        }
+
+        return results
+    }
+
+    /// Get stats from URL
+    private func statURL(_ url: URL) async throws -> FileInfo {
+        let resourceValues = try url.resourceValues(forKeys: [.isDirectoryKey, .fileSizeKey, .creationDateKey, .contentModificationDateKey])
+
+        let isDirectory = resourceValues.isDirectory ?? false
+        let size = resourceValues.fileSize ?? 0
+        let created = resourceValues.creationDate
+        let modified = resourceValues.contentModificationDate
+
+        return FileInfo(
+            name: url.lastPathComponent,
+            path: url.path,
+            size: size,
+            isFile: !isDirectory,
+            isDirectory: isDirectory,
+            created: created,
+            modified: modified,
+            accessed: nil,
+            permissions: nil
+        )
+    }
+
+    /// Check if filename matches glob pattern
+    private func matchesPattern(_ name: String, pattern: String?) -> Bool {
+        guard let pattern = pattern, !pattern.isEmpty else {
+            return true
+        }
+
+        // Convert glob pattern to regex
+        var regex = "^"
+        for char in pattern {
+            switch char {
+            case "*":
+                regex += ".*"
+            case "?":
+                regex += "."
+            case ".":
+                regex += "\\."
+            case "[", "]":
+                regex += String(char)
+            default:
+                regex += String(char)
+            }
+        }
+        regex += "$"
+
+        return (try? NSRegularExpression(pattern: regex, options: .caseInsensitive))?.firstMatch(
+            in: name,
+            options: [],
+            range: NSRange(name.startIndex..., in: name)
+        ) != nil
+    }
+
+    /// Check if path exists and return type
+    public func existsWithType(path: String) -> (exists: Bool, isDirectory: Bool) {
+        var isDir: ObjCBool = false
+        let exists = fileManager.fileExists(atPath: path, isDirectory: &isDir)
+        return (exists, isDir.boolValue)
+    }
+
+    /// Copy file or directory
+    public func copy(source: String, destination: String) async throws {
+        guard fileManager.fileExists(atPath: source) else {
+            throw FileSystemError.fileNotFound(source)
+        }
+
+        // Create destination parent directory if needed
+        let destURL = URL(fileURLWithPath: destination)
+        let destDir = destURL.deletingLastPathComponent()
+        if !fileManager.fileExists(atPath: destDir.path) {
+            try fileManager.createDirectory(at: destDir, withIntermediateDirectories: true)
+        }
+
+        // Remove destination if exists
+        if fileManager.fileExists(atPath: destination) {
+            try fileManager.removeItem(atPath: destination)
+        }
+
+        do {
+            try fileManager.copyItem(atPath: source, toPath: destination)
+        } catch {
+            throw FileSystemError.copyError(source, destination, error.localizedDescription)
+        }
+    }
+
+    /// Move file or directory
+    public func move(source: String, destination: String) async throws {
+        guard fileManager.fileExists(atPath: source) else {
+            throw FileSystemError.fileNotFound(source)
+        }
+
+        // Create destination parent directory if needed
+        let destURL = URL(fileURLWithPath: destination)
+        let destDir = destURL.deletingLastPathComponent()
+        if !fileManager.fileExists(atPath: destDir.path) {
+            try fileManager.createDirectory(at: destDir, withIntermediateDirectories: true)
+        }
+
+        // Remove destination if exists
+        if fileManager.fileExists(atPath: destination) {
+            try fileManager.removeItem(atPath: destination)
+        }
+
+        do {
+            try fileManager.moveItem(atPath: source, toPath: destination)
+            eventBus.publish(FileRenamedEvent(oldPath: source, newPath: destination))
+        } catch {
+            throw FileSystemError.moveError(source, destination, error.localizedDescription)
+        }
+    }
+
     // MARK: - FileMonitorService
 
     // MARK: - Thread-safe helpers
@@ -255,6 +445,70 @@ public final class AROFileSystemService: FileSystemService, FileMonitorService, 
     }
 }
 
+// MARK: - File Info
+
+/// Information about a file or directory
+public struct FileInfo: Sendable, Equatable {
+    public let name: String
+    public let path: String
+    public let size: Int
+    public let isFile: Bool
+    public let isDirectory: Bool
+    public let created: Date?
+    public let modified: Date?
+    public let accessed: Date?
+    public let permissions: String?
+
+    public init(
+        name: String,
+        path: String,
+        size: Int,
+        isFile: Bool,
+        isDirectory: Bool,
+        created: Date?,
+        modified: Date?,
+        accessed: Date?,
+        permissions: String?
+    ) {
+        self.name = name
+        self.path = path
+        self.size = size
+        self.isFile = isFile
+        self.isDirectory = isDirectory
+        self.created = created
+        self.modified = modified
+        self.accessed = accessed
+        self.permissions = permissions
+    }
+
+    /// Convert to dictionary for ARO context binding
+    public func toDictionary() -> [String: any Sendable] {
+        let dateFormatter = ISO8601DateFormatter()
+        var dict: [String: any Sendable] = [
+            "name": name,
+            "path": path,
+            "size": size,
+            "isFile": isFile,
+            "isDirectory": isDirectory
+        ]
+
+        if let created = created {
+            dict["created"] = dateFormatter.string(from: created)
+        }
+        if let modified = modified {
+            dict["modified"] = dateFormatter.string(from: modified)
+        }
+        if let accessed = accessed {
+            dict["accessed"] = dateFormatter.string(from: accessed)
+        }
+        if let permissions = permissions {
+            dict["permissions"] = permissions
+        }
+
+        return dict
+    }
+}
+
 // MARK: - File System Errors
 
 /// Errors that can occur during file system operations
@@ -268,6 +522,9 @@ public enum FileSystemError: Error, Sendable {
     case listError(String, String)
     case createDirectoryError(String, String)
     case permissionDenied(String)
+    case copyError(String, String, String)
+    case moveError(String, String, String)
+    case statError(String, String)
 }
 
 extension FileSystemError: CustomStringConvertible {
@@ -291,6 +548,12 @@ extension FileSystemError: CustomStringConvertible {
             return "Error creating directory \(path): \(reason)"
         case .permissionDenied(let path):
             return "Permission denied: \(path)"
+        case .copyError(let source, let destination, let reason):
+            return "Error copying \(source) to \(destination): \(reason)"
+        case .moveError(let source, let destination, let reason):
+            return "Error moving \(source) to \(destination): \(reason)"
+        case .statError(let path, let reason):
+            return "Error getting stats for \(path): \(reason)"
         }
     }
 }

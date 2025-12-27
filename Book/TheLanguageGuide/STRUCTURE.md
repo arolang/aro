@@ -35,6 +35,6 @@
 22. **Modules and Imports** — Modular architecture and cross-module visibility
 
 ## Appendices
-- A: Action Reference (all 24 built-in actions)
+- A: Action Reference (all 31 built-in actions)
 - B: Preposition Semantics
 - C: Grammar Specification

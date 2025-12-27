@@ -595,4 +595,13 @@ public protocol FileSystemService: Sendable {
     func read(path: String) async throws -> String
     func write(path: String, content: String) async throws
     func exists(path: String) -> Bool
+
+    // ARO-0036: Extended file operations
+    func stat(path: String) async throws -> FileInfo
+    func list(directory: String, pattern: String?, recursive: Bool) async throws -> [FileInfo]
+    func existsWithType(path: String) -> (exists: Bool, isDirectory: Bool)
+    func createDirectory(path: String) async throws
+    func copy(source: String, destination: String) async throws
+    func move(source: String, destination: String) async throws
+    func append(path: String, content: String) async throws
 }

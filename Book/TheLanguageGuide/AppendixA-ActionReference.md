@@ -106,6 +106,52 @@ Loads resources or configuration.
 
 ---
 
+### List
+**Role:** REQUEST
+**Verbs:** `List`
+**Prepositions:** `from`
+
+Lists directory contents with optional pattern matching.
+
+```aro
+<Create> the <uploads-path> with "./uploads".
+<List> the <entries> from the <directory: uploads-path>.
+<List> the <aro-files> from the <directory: src-path> matching "*.aro".
+<List> the <all-files> from the <directory: project-path> recursively.
+```
+
+---
+
+### Stat
+**Role:** REQUEST
+**Verbs:** `Stat`
+**Prepositions:** `for`
+
+Gets file or directory metadata (size, dates, permissions).
+
+```aro
+<Stat> the <info> for the <file: "./document.pdf">.
+<Stat> the <dir-info> for the <directory: "./src">.
+```
+
+Result includes: name, path, size, isFile, isDirectory, created, modified, accessed, permissions.
+
+---
+
+### Exists
+**Role:** REQUEST
+**Verbs:** `Exists`
+**Prepositions:** `for`
+
+Checks whether a file or directory exists.
+
+```aro
+<Exists> the <found> for the <file: "./config.json">.
+<Exists> the <dir-exists> for the <directory: "./output">.
+```
+
+---
+
 ## OWN Actions (Internal → Internal)
 
 ### Create
@@ -376,13 +422,68 @@ Sends data to a destination.
 **Verbs:** `Delete`
 **Prepositions:** `from`
 
-Deletes data from a repository.
+Deletes data from a repository or file.
 
 ```aro
 <Delete> the <user> from the <user-repository> where <id> is <user-id>.
-<Delete> the <file> with <path>.
+<Delete> the <file: "./temp/cache.json">.
 ```
 *Source: [Examples/UserService/users.aro:49](../Examples/UserService/users.aro)*
+
+---
+
+### Append
+**Role:** EXPORT
+**Verbs:** `Append`
+**Prepositions:** `to`
+
+Appends content to a file, creating it if it doesn't exist.
+
+```aro
+<Append> the <log-line> to the <file: "./logs/app.log">.
+<Append> the <entry> to the <file: "./data/records.csv">.
+```
+
+---
+
+### Copy
+**Role:** EXPORT
+**Verbs:** `Copy`
+**Prepositions:** `to`
+
+Copies a file or directory to a destination.
+
+```aro
+<Copy> the <file: "./template.txt"> to the <destination: "./copy.txt">.
+<Copy> the <directory: "./src"> to the <destination: "./backup/src">.
+```
+
+---
+
+### Move
+**Role:** EXPORT
+**Verbs:** `Move`
+**Prepositions:** `to`
+
+Moves or renames a file or directory.
+
+```aro
+<Move> the <file: "./draft.txt"> to the <destination: "./final.txt">.
+<Move> the <file: "./inbox/report.pdf"> to the <destination: "./archive/report.pdf">.
+```
+
+---
+
+### CreateDirectory
+**Role:** EXPORT
+**Verbs:** `CreateDirectory`
+**Prepositions:** `to`
+
+Creates a directory, including parent directories.
+
+```aro
+<CreateDirectory> the <output-dir> to the <path: "./output/reports/2024">.
+```
 
 ---
 
@@ -460,6 +561,9 @@ Keeps the application running.
 | Receive | REQUEST | from |
 | Get | REQUEST | from |
 | Load | REQUEST | from |
+| List | REQUEST | from |
+| Stat | REQUEST | for |
+| Exists | REQUEST | for |
 | Create | OWN | with |
 | Compute | OWN | for, from, with |
 | Validate | OWN | against, for |
@@ -479,3 +583,7 @@ Keeps the application running.
 | Write | EXPORT | to |
 | Send | EXPORT | to |
 | Delete | EXPORT | from |
+| Append | EXPORT | to |
+| Copy | EXPORT | to |
+| Move | EXPORT | to |
+| CreateDirectory | EXPORT | to |
