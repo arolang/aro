@@ -182,7 +182,31 @@ Use events for cross-cutting concerns. Audit logging, analytics, notifications, 
 
 Test handlers in isolation. Because handlers are independent feature sets with well-defined inputs (the event), they are straightforward to test. Construct a mock event with the expected payload, invoke the handler, and verify the behavior. This unit testing approach scales to complex systems.
 
-Avoid circular event chains. If event A triggers a handler that emits event B, and event B triggers a handler that emits event A, you have an infinite loop. Map your event flows to ensure they form directed acyclic graphs with clear start and end points.
+Avoid circular event chains. If event A triggers a handler that emits event B, and event B triggers a handler that emits event A, you have an infinite loop. The ARO compiler detects these cycles at compile time and reports them as errors, so you will catch this problem before your code runs. Map your event flows to ensure they form directed acyclic graphs with clear start and end points.
+
+---
+
+## 10.8 Compiler Validation
+
+The ARO compiler performs static analysis on your event handlers to detect potential issues before runtime.
+
+**Circular Event Chain Detection**: The compiler builds a graph of event flows by analyzing which handlers emit which events. If a cycle is detected (for example, `Alpha Handler` emits `Beta` and `Beta Handler` emits `Alpha`), the compiler reports an error:
+
+```
+error: Circular event chain detected: Alpha -> Beta -> Alpha
+  hint: Event handlers form an infinite loop that will exhaust resources
+  hint: Consider breaking the chain by using different event types or adding termination conditions
+```
+
+This check examines all Emit statements, including those inside Match statements and ForEach loops, treating any potential emission path as part of the event flow graph.
+
+**Breaking Cycles**: If you need handlers to communicate back and forth, consider these approaches:
+- Use a termination condition based on data in the event payload
+- Design a linear workflow where each step moves forward, not backward
+- Introduce a new event type that represents a terminal state
+- Move the repeated logic into a single handler rather than chaining
+
+The goal is to ensure that every event chain has a clear end point where no further events are emitted.
 
 ---
 

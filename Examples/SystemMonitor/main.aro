@@ -6,7 +6,7 @@
 
 (Application-Start: System Monitor) {
     <Log> the <startup: message> for the <console> with "System Monitor API starting...".
-    <Start> the <http-server> on port 8080.
+    <Start> the <http-server> for the <contract>.
     <Log> the <ready: message> for the <console> with "Server running at http://localhost:8080".
     <Log> the <info: message> for the <console> with "Endpoints:".
     <Log> the <endpoint: message> for the <console> with "  GET /exec?cmd=<command>  - Execute any command".
@@ -21,18 +21,14 @@
 (executeCommand: System Monitor API) {
     <Extract> the <cmd> from the <queryParameters: cmd>.
 
-    (* Validate command is provided *)
-    if <cmd> = "" then {
-        <Return> a <BadRequest: status> with { error: true, message: "Missing 'cmd' parameter" }.
-    }
+    (* Validate command is provided - return early if empty *)
+    <Return> a <BadRequest: status> with "Missing 'cmd' parameter" when <cmd> == "".
 
     (* Execute the command *)
     <Exec> the <result> for the <command> with <cmd>.
 
-    (* Return result - formatted as JSON for HTTP, plaintext for console *)
-    if <result: error> = true then {
-        <Return> a <ServerError: status> with <result>.
-    }
+    (* Return error if command failed *)
+    <Return> a <ServerError: status> with <result> when <result: error> == true.
 
     <Return> an <OK: status> with <result>.
 }
@@ -42,17 +38,14 @@
     <Extract> the <path> from the <queryParameters: path>.
 
     (* Default to current directory if not specified *)
-    if <path> = "" then {
-        <Create> the <path> with ".".
-    }
+    <Create> the <directory> with ".".
+    <Create> the <directory> with <path> when <path> != "".
 
     (* Build and execute ls command *)
-    <Create> the <command> with "ls -la ${path}".
+    <Create> the <command> with "ls -la ${directory}".
     <Exec> the <result> for the <listing> with <command>.
 
-    if <result: error> = true then {
-        <Return> a <NotFound: status> with <result>.
-    }
+    <Return> a <NotFound: status> with <result> when <result: error> == true.
 
     <Return> an <OK: status> with <result>.
 }
@@ -61,9 +54,7 @@
 (checkDisk: System Monitor API) {
     <Exec> the <result> for the <disk-check> with "df -h".
 
-    if <result: error> = true then {
-        <Return> a <ServerError: status> with <result>.
-    }
+    <Return> a <ServerError: status> with <result> when <result: error> == true.
 
     <Return> an <OK: status> with <result>.
 }
@@ -72,9 +63,7 @@
 (listProcesses: System Monitor API) {
     <Exec> the <result> for the <process-list> with "ps aux | head -20".
 
-    if <result: error> = true then {
-        <Return> a <ServerError: status> with <result>.
-    }
+    <Return> a <ServerError: status> with <result> when <result: error> == true.
 
     <Return> an <OK: status> with <result>.
 }

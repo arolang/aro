@@ -251,6 +251,20 @@ extension TokenKind {
         return false
     }
 
+    /// Checks if this token can be used as an identifier in contexts like business activity names.
+    /// Includes actual identifiers plus keywords that are valid words (e.g., "Error").
+    public var isIdentifierLike: Bool {
+        switch self {
+        case .identifier:
+            return true
+        // Keywords that can appear in business activity names
+        case .error, .match, .case, .otherwise, .`if`, .`else`:
+            return true
+        default:
+            return false
+        }
+    }
+
     /// Extracts the identifier value if this is an identifier
     public var identifierValue: String? {
         if case .identifier(let value) = self { return value }

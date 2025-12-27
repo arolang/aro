@@ -86,22 +86,31 @@ public final class SemanticAnalyzer {
     /// Analyzes the entire program
     public func analyze(_ program: Program) -> AnalyzedProgram {
         var analyzedSets: [AnalyzedFeatureSet] = []
-        
+
+        // Check for duplicate feature set names
+        detectDuplicateFeatureSetNames(program.featureSets)
+
         for featureSet in program.featureSets {
             let analyzed = analyzeFeatureSet(featureSet)
             analyzedSets.append(analyzed)
-            
+
             // Register published symbols
             for symbol in analyzed.symbolTable.publishedSymbols.values {
                 globalRegistry.register(symbol: symbol, fromFeatureSet: featureSet.name)
             }
         }
-        
+
         // Second pass: verify external dependencies
         for analyzed in analyzedSets {
             verifyDependencies(analyzed)
         }
-        
+
+        // Third pass: detect circular event chains
+        detectCircularEventChains(analyzedSets)
+
+        // Fourth pass: detect orphaned event emissions
+        detectOrphanedEventEmissions(analyzedSets)
+
         return AnalyzedProgram(
             program: program,
             featureSets: analyzedSets,
@@ -141,6 +150,9 @@ public final class SemanticAnalyzer {
             }
         }
 
+        // Check for code quality issues (empty, unreachable code, missing return)
+        checkCodeQuality(featureSet)
+
         // Detect unused variables (ARO-0003)
         let symbolTable = builder.build()
         var usedVariables: Set<String> = []
@@ -155,6 +167,10 @@ public final class SemanticAnalyzer {
             if case .alias = symbol.source { continue }
             // Skip external dependencies
             if symbol.visibility == .external { continue }
+
+            // Skip service bindings that are side-effect producing
+            // (e.g., http-server, file-monitor, database-connections)
+            if isSideEffectBinding(name) { continue }
 
             if !usedVariables.contains(name) {
                 diagnostics.warning(
@@ -220,6 +236,13 @@ public final class SemanticAnalyzer {
         let resultName = statement.result.base
         let objectName = statement.object.noun.base
 
+        // Track object qualifier as input if it looks like a variable reference
+        // (e.g., <file: file-path> where file-path is a variable)
+        if let objectQualifier = statement.object.noun.typeAnnotation,
+           looksLikeVariable(objectQualifier) {
+            inputs.insert(objectQualifier)
+        }
+
         // ARO-0002: Extract variables from expression if present
         if let expr = statement.expression {
             let exprVars = extractVariables(from: expr)
@@ -235,6 +258,17 @@ public final class SemanticAnalyzer {
         if let whenExpr = statement.whenCondition {
             let condVars = extractVariables(from: whenExpr)
             for varName in condVars {
+                if !definedSymbols.contains(varName) && !isKnownExternal(varName) {
+                    dependencies.insert(varName)
+                }
+                inputs.insert(varName)
+            }
+        }
+
+        // ARO-0018: Extract variables from where clause if present
+        if let whereClause = statement.whereClause {
+            let whereVars = extractVariables(from: whereClause.value)
+            for varName in whereVars {
                 if !definedSymbols.contains(varName) && !isKnownExternal(varName) {
                     dependencies.insert(varName)
                 }
@@ -305,14 +339,20 @@ public final class SemanticAnalyzer {
 
         case .response:
             // RESPONSE: internal -> external
-            // Side effect, uses existing variable
-            if !isKnownExternal(objectName) && !definedSymbols.contains(objectName) {
-                diagnostics.warning(
-                    "Variable '\(objectName)' used before definition",
-                    at: statement.object.noun.span.start
-                )
+            // Side effect. For Return/Throw, the object is typically a semantic label
+            // (e.g., "for the <startup>"), not a variable requiring definition.
+            // We don't warn about undefined objects in response actions.
+            if definedSymbols.contains(objectName) || isKnownExternal(objectName) {
+                inputs.insert(objectName)
             }
-            inputs.insert(objectName)
+            // For Store/Write/Emit/Save actions, the result is the data being exported,
+            // so it should be tracked as an input (being used)
+            let exportDataVerbs = ["store", "write", "emit", "save", "persist", "send"]
+            if exportDataVerbs.contains(statement.action.verb.lowercased()) {
+                if definedSymbols.contains(resultName) {
+                    inputs.insert(resultName)
+                }
+            }
             sideEffects.append("\(statement.action.verb):\(resultName)")
 
         case .export:
@@ -563,7 +603,207 @@ public final class SemanticAnalyzer {
             }
         }
     }
-    
+
+    // MARK: - Duplicate Feature Set Detection
+
+    /// Detects duplicate feature set names
+    /// Note: Application-End handlers use both name and business activity to allow
+    /// Application-End: Success and Application-End: Error to coexist.
+    private func detectDuplicateFeatureSetNames(_ featureSets: [FeatureSet]) {
+        var seen: [String: SourceLocation] = [:]
+
+        for featureSet in featureSets {
+            // For Application-End handlers, include business activity in the key
+            // to allow both Application-End: Success and Application-End: Error
+            let key: String
+            if featureSet.name == "Application-End" {
+                key = "\(featureSet.name):\(featureSet.businessActivity)"
+            } else {
+                key = featureSet.name
+            }
+
+            if let firstLocation = seen[key] {
+                diagnostics.error(
+                    "Duplicate feature set name '\(featureSet.name)'",
+                    at: featureSet.span.start,
+                    hints: [
+                        "A feature set with this name was already defined at line \(firstLocation.line)",
+                        "Each feature set must have a unique name"
+                    ]
+                )
+            } else {
+                seen[key] = featureSet.span.start
+            }
+        }
+    }
+
+    // MARK: - Circular Event Chain Detection
+
+    /// Detects circular event chains that would cause infinite loops at runtime
+    private func detectCircularEventChains(_ featureSets: [AnalyzedFeatureSet]) {
+        let analyzer = EventChainAnalyzer()
+        let cycles = analyzer.detectCycles(in: featureSets)
+
+        for cycle in cycles {
+            diagnostics.error(
+                "Circular event chain detected: \(cycle.description)",
+                at: cycle.location,
+                hints: [
+                    "Event handlers form an infinite loop that will exhaust resources",
+                    "Consider breaking the chain by using different event types or adding termination conditions"
+                ]
+            )
+        }
+    }
+
+    // MARK: - Orphaned Event Detection
+
+    /// Detects events that are emitted but have no corresponding handler
+    private func detectOrphanedEventEmissions(_ featureSets: [AnalyzedFeatureSet]) {
+        // Collect all handled event types
+        var handledEvents: Set<String> = []
+        for analyzed in featureSets {
+            let activity = analyzed.featureSet.businessActivity
+            if activity.hasSuffix(" Handler") {
+                // Extract event type from handler name
+                let eventType = activity
+                    .replacingOccurrences(of: " Handler", with: "")
+                    .trimmingCharacters(in: .whitespaces)
+
+                // Exclude system handlers
+                if eventType != "Socket Event" && eventType != "File Event" {
+                    handledEvents.insert(eventType)
+                }
+            }
+        }
+
+        // Collect all emitted events and check for orphans
+        for analyzed in featureSets {
+            let emittedEvents = findEmittedEventsWithLocations(in: analyzed.featureSet.statements)
+
+            for (eventType, location) in emittedEvents {
+                if !handledEvents.contains(eventType) {
+                    diagnostics.warning(
+                        "Event '\(eventType)' is emitted but no handler exists",
+                        at: location,
+                        hints: [
+                            "Create a handler with business activity '\(eventType) Handler'",
+                            "Or remove this Emit statement if the event is not needed"
+                        ]
+                    )
+                }
+            }
+        }
+    }
+
+    /// Finds all emitted events with their source locations
+    private func findEmittedEventsWithLocations(in statements: [Statement]) -> [(String, SourceLocation)] {
+        var events: [(String, SourceLocation)] = []
+
+        for statement in statements {
+            collectEmittedEventsWithLocations(from: statement, into: &events)
+        }
+
+        return events
+    }
+
+    /// Recursively collects emitted events with locations from a statement
+    private func collectEmittedEventsWithLocations(from statement: Statement, into events: inout [(String, SourceLocation)]) {
+        if let aro = statement as? AROStatement {
+            if aro.action.verb.lowercased() == "emit" {
+                events.append((aro.result.base, aro.span.start))
+            }
+        }
+
+        if let match = statement as? MatchStatement {
+            for caseClause in match.cases {
+                for bodyStatement in caseClause.body {
+                    collectEmittedEventsWithLocations(from: bodyStatement, into: &events)
+                }
+            }
+            if let otherwise = match.otherwise {
+                for bodyStatement in otherwise {
+                    collectEmittedEventsWithLocations(from: bodyStatement, into: &events)
+                }
+            }
+        }
+
+        if let forEach = statement as? ForEachLoop {
+            for bodyStatement in forEach.body {
+                collectEmittedEventsWithLocations(from: bodyStatement, into: &events)
+            }
+        }
+    }
+
+    // MARK: - Code Quality Checks
+
+    /// Checks for code quality issues in a feature set
+    private func checkCodeQuality(_ featureSet: FeatureSet) {
+        let statements = featureSet.statements
+
+        // Check for empty feature set
+        if statements.isEmpty {
+            diagnostics.warning(
+                "Feature set '\(featureSet.name)' has no statements",
+                at: featureSet.span.start,
+                hints: ["Add statements or remove this empty feature set"]
+            )
+            return
+        }
+
+        // Check for unreachable code after Return/Throw
+        var foundTerminator = false
+        var terminatorLocation: SourceLocation?
+
+        for statement in statements {
+            if foundTerminator {
+                diagnostics.warning(
+                    "Unreachable code after Return/Throw statement",
+                    at: statement.span.start,
+                    hints: [
+                        "This code will never execute",
+                        "The Return/Throw at line \(terminatorLocation?.line ?? 0) exits the feature set"
+                    ]
+                )
+                break  // Only report once
+            }
+
+            if let aro = statement as? AROStatement {
+                let verb = aro.action.verb.lowercased()
+                if verb == "return" || verb == "throw" {
+                    foundTerminator = true
+                    terminatorLocation = aro.span.start
+                }
+            }
+        }
+
+        // Check for missing Return statement (excluding Application-End handlers)
+        let activity = featureSet.businessActivity
+        let isLifecycleHandler = activity.hasPrefix("Application-End")
+
+        if !isLifecycleHandler && !foundTerminator {
+            // Check if there's any Return/Throw in the code
+            let hasAnyReturn = statements.contains { stmt in
+                if let aro = stmt as? AROStatement {
+                    let verb = aro.action.verb.lowercased()
+                    return verb == "return" || verb == "throw"
+                }
+                return false
+            }
+
+            if !hasAnyReturn {
+                diagnostics.warning(
+                    "Feature set '\(featureSet.name)' has no Return or Throw statement",
+                    at: featureSet.span.end,
+                    hints: [
+                        "Feature sets should end with a Return statement",
+                        "Add: <Return> an <OK: status> for the <result>."
+                    ]
+                )
+            }
+        }
+    }
+
     private func isKnownExternal(_ name: String) -> Bool {
         // These are typically provided by the framework/runtime
         let knownExternals: Set<String> = [
@@ -571,15 +811,56 @@ public final class SemanticAnalyzer {
             "request", "incoming-request", "context", "session",
             "pathparameters", "queryparameters", "headers",
             // Runtime objects
-            "console", "application", "event",
+            "console", "application", "event", "shutdown",
             // Service targets
-            "port", "host", "directory", "file", "events",
+            "port", "host", "directory", "file", "events", "contract",
+            // Repository pattern (any *-repository is external)
+            "repository",
             // Literals (internal representation)
             "_literal_",
             // Expression placeholders (ARO-0002)
             "_expression_"
         ]
+        // Also treat anything ending in "-repository" as external
+        if name.lowercased().hasSuffix("-repository") {
+            return true
+        }
         return knownExternals.contains(name.lowercased())
+    }
+
+    /// Determines if a variable name represents a side-effect producing binding.
+    /// These are service bindings that are defined but "used" through their side effects.
+    private func isSideEffectBinding(_ name: String) -> Bool {
+        let sideEffectPatterns: Set<String> = [
+            // HTTP server/client
+            "http-server", "http-client", "server", "client",
+            // File system
+            "file-monitor", "file-watcher",
+            // Database
+            "database-connections", "database", "db-connection",
+            // Sockets
+            "socket-server", "socket-client",
+            // Buffers/caches
+            "log-buffer", "cache",
+            // Application lifecycle
+            "application"
+        ]
+        return sideEffectPatterns.contains(name.lowercased())
+    }
+
+    /// Determines if a qualifier looks like a variable reference rather than a type name.
+    /// Variable references typically use kebab-case (contain hyphens) while type names use PascalCase.
+    private func looksLikeVariable(_ name: String) -> Bool {
+        // Contains hyphen = likely a variable (e.g., "file-path", "user-id")
+        if name.contains("-") {
+            return true
+        }
+        // All lowercase = likely a variable (e.g., "path", "id")
+        if name == name.lowercased() && !name.isEmpty {
+            return true
+        }
+        // PascalCase or contains special chars like < = likely a type (e.g., "String", "List<User>")
+        return false
     }
 
     // MARK: - Expression Analysis (ARO-0002)

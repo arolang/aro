@@ -39,3 +39,11 @@
 /Examples/ModulesExample/Combined/Combined
 /Book/TheLanguageGuide/output
 /Examples/Computations/Computations
+/Examples/ZipService/ZipService
+/Examples/ZipService/plugins/libZipPlugin.dylib
+/Examples/DirectoryLister/DirectoryLister
+/Examples/Calculator/Calculator
+/Examples/ZipService/plugins/ZipPlugin/.build
+/Examples/UserService/UserService
+/Examples/SystemMonitor/SystemMonitor
+/Examples/RepositoryObserver/RepositoryObserver
