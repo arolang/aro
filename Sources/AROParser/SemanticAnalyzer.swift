@@ -168,6 +168,10 @@ public final class SemanticAnalyzer {
             // Skip external dependencies
             if symbol.visibility == .external { continue }
 
+            // Skip service bindings that are side-effect producing
+            // (e.g., http-server, file-monitor, database-connections)
+            if isSideEffectBinding(name) { continue }
+
             if !usedVariables.contains(name) {
                 diagnostics.warning(
                     "Variable '\(name)' is defined but never used",
@@ -232,6 +236,13 @@ public final class SemanticAnalyzer {
         let resultName = statement.result.base
         let objectName = statement.object.noun.base
 
+        // Track object qualifier as input if it looks like a variable reference
+        // (e.g., <file: file-path> where file-path is a variable)
+        if let objectQualifier = statement.object.noun.typeAnnotation,
+           looksLikeVariable(objectQualifier) {
+            inputs.insert(objectQualifier)
+        }
+
         // ARO-0002: Extract variables from expression if present
         if let expr = statement.expression {
             let exprVars = extractVariables(from: expr)
@@ -247,6 +258,17 @@ public final class SemanticAnalyzer {
         if let whenExpr = statement.whenCondition {
             let condVars = extractVariables(from: whenExpr)
             for varName in condVars {
+                if !definedSymbols.contains(varName) && !isKnownExternal(varName) {
+                    dependencies.insert(varName)
+                }
+                inputs.insert(varName)
+            }
+        }
+
+        // ARO-0018: Extract variables from where clause if present
+        if let whereClause = statement.whereClause {
+            let whereVars = extractVariables(from: whereClause.value)
+            for varName in whereVars {
                 if !definedSymbols.contains(varName) && !isKnownExternal(varName) {
                     dependencies.insert(varName)
                 }
@@ -317,14 +339,20 @@ public final class SemanticAnalyzer {
 
         case .response:
             // RESPONSE: internal -> external
-            // Side effect, uses existing variable
-            if !isKnownExternal(objectName) && !definedSymbols.contains(objectName) {
-                diagnostics.warning(
-                    "Variable '\(objectName)' used before definition",
-                    at: statement.object.noun.span.start
-                )
+            // Side effect. For Return/Throw, the object is typically a semantic label
+            // (e.g., "for the <startup>"), not a variable requiring definition.
+            // We don't warn about undefined objects in response actions.
+            if definedSymbols.contains(objectName) || isKnownExternal(objectName) {
+                inputs.insert(objectName)
             }
-            inputs.insert(objectName)
+            // For Store/Write/Emit/Save actions, the result is the data being exported,
+            // so it should be tracked as an input (being used)
+            let exportDataVerbs = ["store", "write", "emit", "save", "persist", "send"]
+            if exportDataVerbs.contains(statement.action.verb.lowercased()) {
+                if definedSymbols.contains(resultName) {
+                    inputs.insert(resultName)
+                }
+            }
             sideEffects.append("\(statement.action.verb):\(resultName)")
 
         case .export:
@@ -579,14 +607,24 @@ public final class SemanticAnalyzer {
     // MARK: - Duplicate Feature Set Detection
 
     /// Detects duplicate feature set names
+    /// Note: Application-End handlers use both name and business activity to allow
+    /// Application-End: Success and Application-End: Error to coexist.
     private func detectDuplicateFeatureSetNames(_ featureSets: [FeatureSet]) {
         var seen: [String: SourceLocation] = [:]
 
         for featureSet in featureSets {
-            let name = featureSet.name
-            if let firstLocation = seen[name] {
+            // For Application-End handlers, include business activity in the key
+            // to allow both Application-End: Success and Application-End: Error
+            let key: String
+            if featureSet.name == "Application-End" {
+                key = "\(featureSet.name):\(featureSet.businessActivity)"
+            } else {
+                key = featureSet.name
+            }
+
+            if let firstLocation = seen[key] {
                 diagnostics.error(
-                    "Duplicate feature set name '\(name)'",
+                    "Duplicate feature set name '\(featureSet.name)'",
                     at: featureSet.span.start,
                     hints: [
                         "A feature set with this name was already defined at line \(firstLocation.line)",
@@ -594,7 +632,7 @@ public final class SemanticAnalyzer {
                     ]
                 )
             } else {
-                seen[name] = featureSet.span.start
+                seen[key] = featureSet.span.start
             }
         }
     }
@@ -773,15 +811,56 @@ public final class SemanticAnalyzer {
             "request", "incoming-request", "context", "session",
             "pathparameters", "queryparameters", "headers",
             // Runtime objects
-            "console", "application", "event",
+            "console", "application", "event", "shutdown",
             // Service targets
-            "port", "host", "directory", "file", "events",
+            "port", "host", "directory", "file", "events", "contract",
+            // Repository pattern (any *-repository is external)
+            "repository",
             // Literals (internal representation)
             "_literal_",
             // Expression placeholders (ARO-0002)
             "_expression_"
         ]
+        // Also treat anything ending in "-repository" as external
+        if name.lowercased().hasSuffix("-repository") {
+            return true
+        }
         return knownExternals.contains(name.lowercased())
+    }
+
+    /// Determines if a variable name represents a side-effect producing binding.
+    /// These are service bindings that are defined but "used" through their side effects.
+    private func isSideEffectBinding(_ name: String) -> Bool {
+        let sideEffectPatterns: Set<String> = [
+            // HTTP server/client
+            "http-server", "http-client", "server", "client",
+            // File system
+            "file-monitor", "file-watcher",
+            // Database
+            "database-connections", "database", "db-connection",
+            // Sockets
+            "socket-server", "socket-client",
+            // Buffers/caches
+            "log-buffer", "cache",
+            // Application lifecycle
+            "application"
+        ]
+        return sideEffectPatterns.contains(name.lowercased())
+    }
+
+    /// Determines if a qualifier looks like a variable reference rather than a type name.
+    /// Variable references typically use kebab-case (contain hyphens) while type names use PascalCase.
+    private func looksLikeVariable(_ name: String) -> Bool {
+        // Contains hyphen = likely a variable (e.g., "file-path", "user-id")
+        if name.contains("-") {
+            return true
+        }
+        // All lowercase = likely a variable (e.g., "path", "id")
+        if name == name.lowercased() && !name.isEmpty {
+            return true
+        }
+        // PascalCase or contains special chars like < = likely a type (e.g., "String", "List<User>")
+        return false
     }
 
     // MARK: - Expression Analysis (ARO-0002)

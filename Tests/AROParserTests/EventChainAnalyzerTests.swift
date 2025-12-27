@@ -177,11 +177,14 @@ struct EventChainAnalyzerTests {
         let source = """
         (Handle Alpha: EventAlpha Handler) {
             <Extract> the <status> from the <event: status>.
-            <Match> the <status>:
-                case <success>:
+            match <status> {
+                case "success" {
                     <Emit> the <EventBeta: event> for the <trigger>.
-                otherwise:
+                }
+                otherwise {
                     <Log> the <message> for the <console>.
+                }
+            }
             <Return> an <OK: status> for the <handler>.
         }
 

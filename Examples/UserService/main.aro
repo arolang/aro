@@ -36,13 +36,13 @@
 }
 
 (* Called when application encounters a fatal failure *)
-(Application-End: Failure Handler) {
-    <Extract> the <failure> from the <shutdown: failure>.
+(Application-End: Error) {
+    <Extract> the <error> from the <shutdown: error>.
 
-    <Log> the <failure: message> for the <console> with "FATAL: User Service crashed!".
+    <Log> the <error: message> for the <console> with "FATAL: User Service crashed!".
 
     (* Attempt to close connections gracefully *)
     <Close> the <database-connections> for the <application>.
 
-    <Return> an <OK: status> for the <failure-handling>.
+    <Return> an <OK: status> for the <error-handling>.
 }
