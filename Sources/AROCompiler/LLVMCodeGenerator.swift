@@ -135,7 +135,9 @@ public final class LLVMCodeGenerator {
             // Data pipeline actions (ARO-0018)
             "filter", "reduce", "map",
             // System exec action (ARO-0033)
-            "exec", "shell"
+            "exec", "shell",
+            // Repository actions
+            "delete", "merge", "close", "flush"
         ]
         for action in actions {
             emit("declare ptr @aro_action_\(action)(ptr, ptr, ptr)")
@@ -488,7 +490,13 @@ public final class LLVMCodeGenerator {
     // MARK: - Feature Set Generation
 
     private func generateFeatureSet(_ featureSet: AnalyzedFeatureSet) throws {
-        let funcName = mangleFeatureSetName(featureSet.featureSet.name)
+        // For Application-End handlers, include business activity to differentiate Success vs Error
+        let funcName: String
+        if featureSet.featureSet.name == "Application-End" {
+            funcName = mangleFeatureSetName(featureSet.featureSet.name + "_" + featureSet.featureSet.businessActivity)
+        } else {
+            funcName = mangleFeatureSetName(featureSet.featureSet.name)
+        }
 
         emit("; Feature Set: \(featureSet.featureSet.name)")
         emit("; Business Activity: \(featureSet.featureSet.businessActivity)")

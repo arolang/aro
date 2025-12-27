@@ -912,13 +912,13 @@ public final class Parser {
     private func parseIdentifierSequence() throws -> String {
         var parts: [String] = []
 
-        while peek().kind.isIdentifier {
+        while peek().kind.isIdentifierLike {
             // Parse compound identifier (handles hyphens)
             var compound = advance().lexeme
             while check(.hyphen) {
                 advance()
                 compound += "-"
-                if peek().kind.isIdentifier {
+                if peek().kind.isIdentifierLike {
                     compound += advance().lexeme
                 } else {
                     // Put back the hyphen conceptually by breaking
@@ -992,8 +992,8 @@ public final class Parser {
     
     private func expectIdentifier(message: String) throws -> Token {
         let token = peek()
-        // Accept identifier tokens
-        if token.kind.isIdentifier {
+        // Accept identifier tokens and identifier-like keywords (e.g., "error")
+        if token.kind.isIdentifierLike {
             return advance()
         }
         // Also accept articles (a, an, the) as identifiers when inside <...>

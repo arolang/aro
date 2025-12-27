@@ -889,4 +889,11 @@ public final class RuntimeSignalHandler: @unchecked Sendable {
 
         rt?.stop()
     }
+
+    /// Reset for testing (clears registered runtime)
+    public func reset() {
+        lock.lock()
+        defer { lock.unlock() }
+        runtime = nil
+    }
 }
