@@ -26,8 +26,8 @@ struct ListActionTests {
 
     @Test("List action valid prepositions")
     func testListActionPrepositions() {
-        #expect(ListAction.validPrepositions.contains(.in))
         #expect(ListAction.validPrepositions.contains(.from))
+        #expect(ListAction.validPrepositions.count == 1)
     }
 }
 
