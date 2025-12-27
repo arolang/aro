@@ -36,7 +36,17 @@ business_activity = identifier | compound_identifier ;
 ## Statements
 
 ```ebnf
-statement = aro_statement | publish_statement ;
+statement = aro_statement | publish_statement | match_statement ;
+
+match_statement = "match" expression "{" { case_clause } [ otherwise_clause ] "}" ;
+
+case_clause = "case" pattern "{" { statement } "}" ;
+
+otherwise_clause = "otherwise" "{" { statement } "}" ;
+
+pattern = literal_value | variable_ref | wildcard | regex_literal ;
+
+wildcard = "_" ;
 
 aro_statement = action article result object_clause
                 [ literal_value ]
@@ -164,6 +174,16 @@ object_literal = "{" [ object_field { "," object_field } ] "}" ;
 
 object_field = identifier ":" expression
              | identifier ":" variable_ref ;
+
+regex_literal = "/" regex_body "/" [ regex_flags ] ;
+
+regex_body = { regex_char | escape_sequence } ;
+
+regex_char = ? any character except "/" and newline ? ;
+
+escape_sequence = "\\" ? any character ? ;
+
+regex_flags = { "i" | "s" | "m" | "g" } ;
 ```
 
 ---

@@ -935,6 +935,7 @@ public final class SemanticAnalyzer {
             case .null: return .unknown
             case .array: return .list(.unknown)
             case .object: return .map(key: .string, value: .unknown)
+            case .regex: return .string  // Regex patterns are treated as string type for matching
             }
 
         case is ArrayLiteralExpression:

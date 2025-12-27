@@ -258,10 +258,16 @@ public final class LLVMCodeGenerator {
         } else if let matchStatement = statement as? MatchStatement {
             registerString(matchStatement.subject.base)
             for caseClause in matchStatement.cases {
-                if case .literal(let literalValue) = caseClause.pattern {
+                switch caseClause.pattern {
+                case .literal(let literalValue):
                     if case .string(let s) = literalValue {
                         registerString(s)
                     }
+                case .regex(let pattern, let flags):
+                    registerString(pattern)
+                    registerString(flags)
+                default:
+                    break
                 }
                 for bodyStatement in caseClause.body {
                     collectStringsFromStatement(bodyStatement)
@@ -459,6 +465,12 @@ public final class LLVMCodeGenerator {
                 "\"\(key)\":\(literalToJSON(value))"
             }.joined(separator: ",")
             return "{\(pairsJson)}"
+        case .regex(let pattern, let flags):
+            // Convert regex to JSON object with pattern and flags
+            let escapedPattern = pattern
+                .replacingOccurrences(of: "\\", with: "\\\\")
+                .replacingOccurrences(of: "\"", with: "\\\"")
+            return "{\"pattern\":\"\(escapedPattern)\",\"flags\":\"\(flags)\"}"
         }
     }
 
@@ -662,6 +674,12 @@ public final class LLVMCodeGenerator {
             let jsonString = literalToJSON(literal)
             let jsonConst = stringConstants[jsonString]!
             emit("  call void @aro_variable_bind_dict(ptr %ctx, ptr \(literalNameStr), ptr \(jsonConst))")
+
+        case .regex:
+            // Bind regex as JSON object with pattern and flags
+            let jsonString = literalToJSON(literal)
+            let jsonConst = stringConstants[jsonString]!
+            emit("  call void @aro_variable_bind_dict(ptr %ctx, ptr \(literalNameStr), ptr \(jsonConst))")
         }
     }
 
@@ -696,6 +714,12 @@ public final class LLVMCodeGenerator {
 
             case .object:
                 // Bind object as JSON string
+                let jsonString = literalToJSON(literalExpr.value)
+                let jsonConst = stringConstants[jsonString]!
+                emit("  call void @aro_variable_bind_dict(ptr %ctx, ptr \(exprNameStr), ptr \(jsonConst))")
+
+            case .regex:
+                // Bind regex as JSON object with pattern and flags
                 let jsonString = literalToJSON(literalExpr.value)
                 let jsonConst = stringConstants[jsonString]!
                 emit("  call void @aro_variable_bind_dict(ptr %ctx, ptr \(exprNameStr), ptr \(jsonConst))")
@@ -915,6 +939,11 @@ public final class LLVMCodeGenerator {
                 emit("  %\(caseLabel)_match = icmp eq i32 1, 1")  // Always true
             case .variable:
                 emit("  %\(caseLabel)_match = icmp eq i32 0, 1")  // TODO: variable comparison
+            case .regex(let pattern, let flags):
+                // Register pattern and flags as strings
+                let patternStr = stringConstants[pattern]!
+                let flagsStr = stringConstants[flags]!
+                emit("  %\(caseLabel)_match = call i1 @aro_regex_matches(ptr %\(prefix)_subject_str, ptr \(patternStr), ptr \(flagsStr))")
             }
 
             emit("  br i1 %\(caseLabel)_match, label %\(caseLabel)_body, label %\(nextLabel)")

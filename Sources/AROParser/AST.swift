@@ -293,12 +293,14 @@ public enum Pattern: Sendable, CustomStringConvertible {
     case literal(LiteralValue)
     case variable(QualifiedNoun)
     case wildcard
+    case regex(pattern: String, flags: String)
 
     public var description: String {
         switch self {
         case .literal(let value): return value.description
         case .variable(let noun): return "<\(noun.fullName)>"
         case .wildcard: return "_"
+        case .regex(let pattern, let flags): return "/\(pattern)/\(flags)"
         }
     }
 }
@@ -528,6 +530,7 @@ public indirect enum LiteralValue: Sendable, Equatable, CustomStringConvertible 
     case null
     case array([LiteralValue])
     case object([(String, LiteralValue)])
+    case regex(pattern: String, flags: String)
 
     public var description: String {
         switch self {
@@ -542,6 +545,7 @@ public indirect enum LiteralValue: Sendable, Equatable, CustomStringConvertible 
         case .object(let fields):
             let items = fields.map { "\($0.0): \($0.1.description)" }.joined(separator: ", ")
             return "{\(items)}"
+        case .regex(let pattern, let flags): return "/\(pattern)/\(flags)"
         }
     }
 
@@ -560,6 +564,8 @@ public indirect enum LiteralValue: Sendable, Equatable, CustomStringConvertible 
                 if keyA != keyB || valA != valB { return false }
             }
             return true
+        case (.regex(let patternA, let flagsA), .regex(let patternB, let flagsB)):
+            return patternA == patternB && flagsA == flagsB
         default: return false
         }
     }

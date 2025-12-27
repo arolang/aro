@@ -9,11 +9,12 @@ import Foundation
 public final class Lexer: @unchecked Sendable {
     
     // MARK: - Properties
-    
+
     private let source: String
     private var currentIndex: String.Index
     private var location: SourceLocation
     private var tokens: [Token] = []
+    private var lastTokenKind: TokenKind?
     
     /// Keywords mapped to their token kinds
     private static let keywords: [String: TokenKind] = [
@@ -122,7 +123,31 @@ public final class Lexer: @unchecked Sendable {
         case "@": addToken(.atSign, start: startLocation)
         case "?": addToken(.question, start: startLocation)
         case "*": addToken(.star, start: startLocation)
-        case "/": addToken(.slash, start: startLocation)
+        case "/":
+            // Check if this could be a regex literal
+            // Regex starts with / and contains at least one character before closing /
+            // Don't try regex after dots (used in import paths like ../../shared/common)
+            // or after identifiers (division: a / b)
+            let isAfterIdentifier: Bool
+            if case .identifier = lastTokenKind {
+                isAfterIdentifier = true
+            } else {
+                isAfterIdentifier = false
+            }
+            let shouldTryRegex = !isAtEnd &&
+                peek() != " " && peek() != "\n" && peek() != "\t" &&
+                lastTokenKind != .dot &&
+                !isAfterIdentifier
+            if shouldTryRegex {
+                // Try to scan as regex - if we find a closing /, it's a regex
+                if let regexResult = tryScanRegex(start: startLocation) {
+                    addToken(.regexLiteral(pattern: regexResult.pattern, flags: regexResult.flags), start: startLocation)
+                } else {
+                    addToken(.slash, start: startLocation)
+                }
+            } else {
+                addToken(.slash, start: startLocation)
+            }
         case "%": addToken(.percent, start: startLocation)
         case ".": addToken(.dot, start: startLocation)
 
@@ -480,7 +505,70 @@ public final class Lexer: @unchecked Sendable {
         let prevIndex = source.index(before: currentIndex)
         return source[prevIndex]
     }
-    
+
+    // MARK: - Regex Scanning
+
+    /// Attempts to scan a regex literal. Returns pattern and flags if successful, nil otherwise.
+    /// This method saves and restores state if the scan fails.
+    private func tryScanRegex(start: SourceLocation) -> (pattern: String, flags: String)? {
+        // Save current position for backtracking
+        let savedIndex = currentIndex
+        let savedLocation = location
+
+        var pattern = ""
+        var foundClosingSlash = false
+
+        // Scan pattern until closing /
+        while !isAtEnd {
+            let char = peek()
+
+            // Newline means this isn't a regex literal
+            if char == "\n" {
+                currentIndex = savedIndex
+                location = savedLocation
+                return nil
+            }
+
+            // Escaped character
+            if char == "\\" {
+                pattern.append(advance())
+                if !isAtEnd && peek() != "\n" {
+                    pattern.append(advance())
+                }
+                continue
+            }
+
+            // Closing slash
+            if char == "/" {
+                _ = advance()  // consume /
+                foundClosingSlash = true
+                break
+            }
+
+            pattern.append(advance())
+        }
+
+        // Must have a closing slash and non-empty pattern
+        if !foundClosingSlash || pattern.isEmpty {
+            currentIndex = savedIndex
+            location = savedLocation
+            return nil
+        }
+
+        // Scan optional flags (i, s, m, g)
+        var flags = ""
+        while !isAtEnd {
+            let char = peek()
+            if char == "i" || char == "s" || char == "m" || char == "g" {
+                flags.append(advance())
+            } else {
+                break
+            }
+        }
+
+        return (pattern: pattern, flags: flags)
+    }
+
     private func scanIdentifierOrKeyword(start: SourceLocation) throws {
         // Continue consuming alphanumeric characters and underscores
         while !isAtEnd && (peek().isLetter || peek().isNumber || peek() == "_") {
@@ -586,6 +674,7 @@ public final class Lexer: @unchecked Sendable {
     private func addToken(_ kind: TokenKind, lexeme: String, start: SourceLocation) {
         let span = SourceSpan(start: start, end: location)
         tokens.append(Token(kind: kind, span: span, lexeme: lexeme))
+        lastTokenKind = kind
     }
 }
 

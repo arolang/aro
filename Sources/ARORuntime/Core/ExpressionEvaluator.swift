@@ -118,6 +118,9 @@ public struct ExpressionEvaluator: Sendable {
                 dict[key] = evaluateLiteral(value)
             }
             return dict
+        case .regex(let pattern, let flags):
+            // Return regex as a dictionary for use with matches operator
+            return ["pattern": pattern, "flags": flags]
         }
     }
 
@@ -360,11 +363,31 @@ public struct ExpressionEvaluator: Sendable {
     }
 
     private func matchesPattern(_ value: any Sendable, _ pattern: any Sendable) -> Bool {
-        guard let str = value as? String, let patternStr = pattern as? String else {
+        guard let str = value as? String else {
             return false
         }
+
+        var patternStr: String
+        var flags: String = ""
+
+        // Check if pattern is a regex literal (dictionary with pattern and flags)
+        if let regexDict = pattern as? [String: any Sendable],
+           let p = regexDict["pattern"] as? String {
+            patternStr = p
+            flags = (regexDict["flags"] as? String) ?? ""
+        } else if let p = pattern as? String {
+            patternStr = p
+        } else {
+            return false
+        }
+
+        var options: NSRegularExpression.Options = []
+        if flags.contains("i") { options.insert(.caseInsensitive) }
+        if flags.contains("s") { options.insert(.dotMatchesLineSeparators) }
+        if flags.contains("m") { options.insert(.anchorsMatchLines) }
+
         do {
-            let regex = try NSRegularExpression(pattern: patternStr)
+            let regex = try NSRegularExpression(pattern: patternStr, options: options)
             let range = NSRange(str.startIndex..., in: str)
             return regex.firstMatch(in: str, range: range) != nil
         } catch {
