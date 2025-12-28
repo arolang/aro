@@ -73,28 +73,29 @@ struct ExistsActionTests {
     }
 }
 
-// MARK: - CreateDirectory Action Tests
+// MARK: - Make Action Tests
 
-@Suite("CreateDirectory Action Tests")
-struct CreateDirectoryActionTests {
+@Suite("Make Action Tests")
+struct MakeActionTests {
 
-    @Test("CreateDirectory action role is own")
-    func testCreateDirectoryActionRole() {
-        #expect(CreateDirectoryAction.role == .own)
+    @Test("Make action role is own")
+    func testMakeActionRole() {
+        #expect(MakeAction.role == .own)
     }
 
-    @Test("CreateDirectory action verbs")
-    func testCreateDirectoryActionVerbs() {
-        #expect(CreateDirectoryAction.verbs.contains("createdirectory"))
-        #expect(CreateDirectoryAction.verbs.contains("mkdir"))
-        #expect(CreateDirectoryAction.verbs.contains("make"))
+    @Test("Make action verbs - make is canonical")
+    func testMakeActionVerbs() {
+        #expect(MakeAction.verbs.contains("make"))
+        #expect(MakeAction.verbs.contains("touch"))
+        #expect(MakeAction.verbs.contains("createdirectory"))
+        #expect(MakeAction.verbs.contains("mkdir"))
     }
 
-    @Test("CreateDirectory action valid prepositions")
-    func testCreateDirectoryActionPrepositions() {
-        #expect(CreateDirectoryAction.validPrepositions.contains(.to))
-        #expect(CreateDirectoryAction.validPrepositions.contains(.for))
-        #expect(CreateDirectoryAction.validPrepositions.contains(.at))
+    @Test("Make action valid prepositions")
+    func testMakeActionPrepositions() {
+        #expect(MakeAction.validPrepositions.contains(.to))
+        #expect(MakeAction.validPrepositions.contains(.for))
+        #expect(MakeAction.validPrepositions.contains(.at))
     }
 }
 
@@ -168,11 +169,20 @@ struct AppendActionTests {
 @Suite("File Action Result Types")
 struct FileActionResultTypeTests {
 
-    @Test("CreateDirectoryResult creation")
-    func testCreateDirectoryResult() {
-        let result = CreateDirectoryResult(path: "/test/dir", success: true)
+    @Test("MakeResult creation for directory")
+    func testMakeResultDirectory() {
+        let result = MakeResult(path: "/test/dir", success: true, isFile: false)
         #expect(result.path == "/test/dir")
         #expect(result.success == true)
+        #expect(result.isFile == false)
+    }
+
+    @Test("MakeResult creation for file")
+    func testMakeResultFile() {
+        let result = MakeResult(path: "/test/file.txt", success: true, isFile: true)
+        #expect(result.path == "/test/file.txt")
+        #expect(result.success == true)
+        #expect(result.isFile == true)
     }
 
     @Test("CopyResult creation")

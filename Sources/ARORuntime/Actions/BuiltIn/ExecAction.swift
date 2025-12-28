@@ -1,5 +1,5 @@
 // ============================================================
-// ExecAction.swift
+// ExecuteAction.swift
 // ARO Runtime - System Command Execution Action (ARO-0033)
 // ============================================================
 
@@ -109,27 +109,27 @@ public struct ExecConfig: Sendable {
     }
 }
 
-// MARK: - Exec Action
+// MARK: - Execute Action
 
 /// Executes shell commands on the host system
 ///
-/// The Exec action runs shell commands and returns structured results with
+/// The Execute action runs shell commands and returns structured results with
 /// error status, message, output, and exit code. Results are formatted
 /// according to the execution context (JSON for HTTP, plaintext for console).
 ///
 /// ## Syntax
 /// ```aro
 /// (* Simple command *)
-/// <Exec> the <result> for the <command> with "ls -la".
+/// <Execute> the <result> for the <command> with "ls -la".
 ///
 /// (* With working directory *)
-/// <Exec> the <result> on the <system> with {
+/// <Execute> the <result> on the <system> with {
 ///     command: "npm install",
 ///     workingDirectory: "/app"
 /// }.
 ///
 /// (* With timeout and environment *)
-/// <Exec> the <result> for the <build> with {
+/// <Execute> the <result> for the <build> with {
 ///     command: "make release",
 ///     environment: { CC: "clang" },
 ///     timeout: 60000
@@ -146,9 +146,15 @@ public struct ExecConfig: Sendable {
 ///     command: String     // Executed command
 /// }
 /// ```
-public struct ExecAction: ActionImplementation {
+///
+/// ## Verbs
+/// - `execute` (canonical)
+/// - `exec` (synonym)
+/// - `shell` (synonym)
+/// - `run-command` (synonym)
+public struct ExecuteAction: ActionImplementation {
     public static let role: ActionRole = .request
-    public static let verbs: Set<String> = ["exec", "shell"]
+    public static let verbs: Set<String> = ["execute", "exec", "shell", "run-command"]
     public static let validPrepositions: Set<Preposition> = [.on, .with, .for]
 
     public init() {}

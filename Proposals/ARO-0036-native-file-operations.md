@@ -129,18 +129,21 @@ Returns a boolean: `true` if the path exists and matches the expected type (file
 
 ---
 
-## 4. CreateDirectory Action
+## 4. Make Action
 
-Create a directory with all intermediate directories.
+Create a file or directory at the specified path.
 
-**Verbs:** `createdirectory`, `mkdir`, `make`
+**Verbs:** `make` (canonical), `touch`, `createdirectory`, `mkdir`
 **Prepositions:** `at`, `to`, `for`
 
 ```aro
-(* Natural syntax with "make" verb *)
+(* Create a directory *)
 <Make> the <directory> at the <path: "./output/reports/2024">.
 
-(* Traditional syntax *)
+(* Create or touch a file *)
+<Touch> the <file> at the <path: "./logs/app.log">.
+
+(* Legacy syntax still works *)
 <CreateDirectory> the <output-dir> at the <path: "./output/reports/2024">.
 
 (* Check and create *)
@@ -151,8 +154,10 @@ Create a directory with all intermediate directories.
 
 ### Behavior
 
-- Creates all intermediate directories (like `mkdir -p`)
-- Succeeds silently if directory already exists
+- When result is `<directory>`: Creates all intermediate directories (like `mkdir -p`)
+- When result is `<file>`: Creates empty file or updates modification time (like `touch`)
+- Succeeds silently if path already exists
+- Creates parent directories automatically
 - Runtime error on permission failure
 
 ---

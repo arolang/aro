@@ -330,6 +330,25 @@ public final class AROFileSystemService: FileSystemService, FileMonitorService, 
         }
     }
 
+    /// Touch a file (create or update modification time)
+    public func touch(path: String) async throws {
+        let url = URL(fileURLWithPath: path)
+
+        // Create parent directory if needed
+        let parentDir = url.deletingLastPathComponent().path
+        if !fileManager.fileExists(atPath: parentDir) {
+            try fileManager.createDirectory(atPath: parentDir, withIntermediateDirectories: true, attributes: nil)
+        }
+
+        if fileManager.fileExists(atPath: path) {
+            // Update modification time
+            try fileManager.setAttributes([.modificationDate: Date()], ofItemAtPath: path)
+        } else {
+            // Create empty file
+            fileManager.createFile(atPath: path, contents: nil, attributes: nil)
+        }
+    }
+
     // MARK: - ARO-0036: Extended File Operations
 
     /// Get file or directory stats
@@ -757,6 +776,25 @@ public final class AROFileSystemService: FileSystemService, @unchecked Sendable 
             try fileManager.createDirectory(atPath: path, withIntermediateDirectories: true, attributes: nil)
         } catch {
             throw FileSystemError.createDirectoryError(path, error.localizedDescription)
+        }
+    }
+
+    /// Touch a file (create or update modification time)
+    public func touch(path: String) async throws {
+        let url = URL(fileURLWithPath: path)
+
+        // Create parent directory if needed
+        let parentDir = url.deletingLastPathComponent().path
+        if !fileManager.fileExists(atPath: parentDir) {
+            try fileManager.createDirectory(atPath: parentDir, withIntermediateDirectories: true, attributes: nil)
+        }
+
+        if fileManager.fileExists(atPath: path) {
+            // Update modification time
+            try fileManager.setAttributes([.modificationDate: Date()], ofItemAtPath: path)
+        } else {
+            // Create empty file
+            fileManager.createFile(atPath: path, contents: nil, attributes: nil)
         }
     }
 

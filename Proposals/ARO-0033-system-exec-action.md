@@ -1,4 +1,4 @@
-# ARO-0033: System Exec Action
+# ARO-0033: System Execute Action
 
 * Proposal: ARO-0033
 * Author: ARO Language Team
@@ -7,7 +7,7 @@
 
 ## Abstract
 
-This proposal introduces the `<Exec>` action for executing shell commands on the host system. The action provides a structured result object with consistent fields (`error`, `message`, `output`) and integrates with ARO's context-aware response formatting (ARO-0031) for optimal display across different execution contexts.
+This proposal introduces the `<Execute>` action for executing shell commands on the host system. The action provides a structured result object with consistent fields (`error`, `message`, `output`) and integrates with ARO's context-aware response formatting (ARO-0031) for optimal display across different execution contexts.
 
 ## Motivation
 
@@ -30,14 +30,14 @@ Currently, ARO applications cannot execute arbitrary system commands. This propo
 
 | Property | Value |
 |----------|-------|
-| **Action** | Exec |
-| **Verbs** | `exec`, `execute`, `run-command`, `shell` |
+| **Action** | Execute |
+| **Verbs** | `execute` (canonical), `exec`, `shell`, `run-command` |
 | **Role** | REQUEST (External → Internal) |
 | **Prepositions** | `on`, `with`, `for` |
 
 ### Result Object Structure
 
-Every `<Exec>` action returns a structured result object:
+Every `<Execute>` action returns a structured result object:
 
 ```typescript
 {
@@ -53,22 +53,22 @@ Every `<Exec>` action returns a structured result object:
 
 ```aro
 (* Basic execution *)
-<Exec> the <result> for the <command> with "ls -la".
+<Execute> the <result> for the <command> with "ls -la".
 
 (* Execute with working directory *)
-<Exec> the <result> on the <system> with {
+<Execute> the <result> on the <system> with {
     command: "npm install",
     workingDirectory: "/app"
 }.
 
 (* Execute with environment variables *)
-<Exec> the <result> for the <build> with {
+<Execute> the <result> for the <build> with {
     command: "make release",
     environment: { CC: "clang", CFLAGS: "-O2" }
 }.
 
 (* Execute with timeout *)
-<Exec> the <result> for the <health-check> with {
+<Execute> the <result> for the <health-check> with {
     command: "curl -s http://localhost:8080/health",
     timeout: 5000
 }.
@@ -162,7 +162,7 @@ Following ARO-0031, the `<Exec>` result formats differently based on execution c
     <Create> the <command> with "ls -la ${directory}".
 
     (* Execute the command *)
-    <Exec> the <result> for the <listing> with <command>.
+    <Execute> the <result> for the <listing> with <command>.
 
     (* Check for errors *)
     if <result: error> = true then {
@@ -181,7 +181,7 @@ Following ARO-0031, the `<Exec>` result formats differently based on execution c
 
 (* Console-only version for CLI usage *)
 (Application-Start: Quick List) {
-    <Exec> the <result> for the <listing> with "ls -la".
+    <Execute> the <result> for the <listing> with "ls -la".
 
     if <result: error> = true then {
         <Log> the <error: message> for the <console> with <result: message>.
@@ -238,7 +238,7 @@ When a command fails, the result object captures the error state:
 
 ```aro
 (checkDiskSpace: System Monitor) {
-    <Exec> the <result> for the <disk-check> with "df -h /nonexistent".
+    <Execute> the <result> for the <disk-check> with "df -h /nonexistent".
 
     (* result.error will be true, result.output contains stderr *)
     if <result: error> = true then {
@@ -267,9 +267,9 @@ When a command fails, the result object captures the error state:
 ### Swift Action Implementation
 
 ```swift
-public struct ExecAction: ActionImplementation {
+public struct ExecuteAction: ActionImplementation {
     public static let role: ActionRole = .request
-    public static let verbs: Set<String> = ["exec", "execute", "run-command", "shell"]
+    public static let verbs: Set<String> = ["execute", "exec", "shell", "run-command"]
     public static let validPrepositions: Set<Preposition> = [.on, .with, .for]
 
     public init() {}
@@ -385,25 +385,25 @@ public struct ExecConfig: Sendable {
 
 ```swift
 // In ActionRegistry.registerBuiltIns()
-register(ExecAction.self)
+register(ExecuteAction.self)
 ```
 
 ## Security Considerations
 
 ### 1. Command Injection Prevention
 
-The `<Exec>` action should validate and sanitize input when commands are constructed from user data:
+The `<Execute>` action should validate and sanitize input when commands are constructed from user data:
 
 ```aro
 (* DANGEROUS - user input directly in command *)
-<Exec> the <result> for the <command> with "ls ${userInput}".
+<Execute> the <result> for the <command> with "ls ${userInput}".
 
 (* SAFER - validate input first *)
 <Validate> the <path> for the <userInput> against "^[a-zA-Z0-9_/.-]+$".
 if <path> is not <valid> then {
     <Return> a <BadRequest: status> with "Invalid path characters".
 }
-<Exec> the <result> for the <command> with "ls ${path}".
+<Execute> the <result> for the <command> with "ls ${path}".
 ```
 
 ### 2. Sandboxing (Future)
@@ -411,7 +411,7 @@ if <path> is not <valid> then {
 Future versions may support sandboxing options:
 
 ```aro
-<Exec> the <result> for the <command> with {
+<Execute> the <result> for the <command> with {
     command: "npm install",
     sandbox: {
         network: false,
@@ -424,7 +424,7 @@ Future versions may support sandboxing options:
 
 ### 3. Audit Logging
 
-All `<Exec>` commands are logged with:
+All `<Execute>` commands are logged with:
 - Timestamp
 - Feature set name
 - Command executed

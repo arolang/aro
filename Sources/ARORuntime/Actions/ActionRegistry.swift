@@ -92,7 +92,7 @@ public final class ActionRegistry: @unchecked Sendable {
         register(ListAction.self)
         register(StatAction.self)
         register(ExistsAction.self)
-        register(CreateDirectoryAction.self)
+        register(MakeAction.self)
         register(CopyAction.self)
         register(MoveAction.self)
         register(AppendAction.self)
@@ -117,8 +117,8 @@ public final class ActionRegistry: @unchecked Sendable {
         // External service actions (ARO-0016)
         register(CallAction.self)
 
-        // System exec action (ARO-0033)
-        register(ExecAction.self)
+        // System execute action (ARO-0033)
+        register(ExecuteAction.self)
     }
 
     /// Register a custom action

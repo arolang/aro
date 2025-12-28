@@ -452,7 +452,7 @@ struct CreateActionTests {
         #expect(CreateAction.verbs.contains("create"))
         #expect(CreateAction.verbs.contains("build"))
         #expect(CreateAction.verbs.contains("construct"))
-        // Note: "make" verb moved to CreateDirectoryAction for filesystem operations
+        // Note: "make" verb moved to MakeAction for filesystem operations
     }
 
     @Test("Create returns source value")

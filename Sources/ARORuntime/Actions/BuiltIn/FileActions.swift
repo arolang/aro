@@ -199,18 +199,25 @@ public struct ExistsAction: ActionImplementation {
     }
 }
 
-// MARK: - CreateDirectory Action
+// MARK: - Make Action
 
-/// Creates a directory with all intermediate directories
+/// Creates a file or directory at the specified path
 ///
 /// ## Example
 /// ```
 /// <Make> the <directory> at the <path: "./output/reports/2024">.
+/// <Touch> the <file> at the <path: "./output/log.txt">.
 /// <CreateDirectory> the <output-dir> to the <path: "./output">.
 /// ```
-public struct CreateDirectoryAction: ActionImplementation {
+///
+/// ## Verbs
+/// - `make` (canonical)
+/// - `touch` (synonym)
+/// - `createdirectory` (synonym)
+/// - `mkdir` (synonym)
+public struct MakeAction: ActionImplementation {
     public static let role: ActionRole = .own
-    public static let verbs: Set<String> = ["createdirectory", "mkdir", "make"]
+    public static let verbs: Set<String> = ["make", "touch", "createdirectory", "mkdir"]
     public static let validPrepositions: Set<Preposition> = [.to, .for, .at]
 
     public init() {}
@@ -233,7 +240,7 @@ public struct CreateDirectoryAction: ActionImplementation {
         } else if let specifier = object.specifiers.first {
             path = specifier
         } else {
-            throw ActionError.runtimeError("CreateDirectory requires a path")
+            throw ActionError.runtimeError("Make requires a path")
         }
 
         // Get file service
@@ -241,21 +248,30 @@ public struct CreateDirectoryAction: ActionImplementation {
             throw ActionError.missingService("FileSystemService")
         }
 
-        // Create directory
-        try await fileService.createDirectory(path: path)
+        // Determine if creating file or directory based on result.base
+        let isFile = result.base == "file"
+
+        if isFile {
+            // Touch creates or updates a file
+            try await fileService.touch(path: path)
+        } else {
+            // Create directory (default behavior)
+            try await fileService.createDirectory(path: path)
+        }
 
         // Bind result
-        let resultValue = CreateDirectoryResult(path: path, success: true)
+        let resultValue = MakeResult(path: path, success: true, isFile: isFile)
         context.bind(result.base, value: path)
 
         return resultValue
     }
 }
 
-/// Result of a create directory operation
-public struct CreateDirectoryResult: Sendable, Equatable {
+/// Result of a make operation (file or directory creation)
+public struct MakeResult: Sendable, Equatable {
     public let path: String
     public let success: Bool
+    public let isFile: Bool
 }
 
 // MARK: - Copy Action
