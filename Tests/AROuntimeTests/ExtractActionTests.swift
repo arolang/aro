@@ -190,6 +190,127 @@ struct ExtractActionTests {
             #expect(error.localizedDescription.contains("nonexistent"))
         }
     }
+
+    // MARK: - ARO-0038: List Element Access Tests
+
+    @Test("Extract :first from array returns first element")
+    func testExtractFirstFromArray() async throws {
+        let action = ExtractAction()
+        let context = RuntimeContext(featureSetName: "Test")
+        context.bind("items", value: ["apple", "banana", "cherry"] as [any Sendable])
+
+        let (result, object) = createDescriptors(resultSpecifiers: ["first"], objectBase: "items")
+        let value = try await action.execute(result: result, object: object, context: context)
+
+        #expect(value as? String == "apple")
+    }
+
+    @Test("Extract :last from array returns last element")
+    func testExtractLastFromArray() async throws {
+        let action = ExtractAction()
+        let context = RuntimeContext(featureSetName: "Test")
+        context.bind("items", value: ["apple", "banana", "cherry"] as [any Sendable])
+
+        let (result, object) = createDescriptors(resultSpecifiers: ["last"], objectBase: "items")
+        let value = try await action.execute(result: result, object: object, context: context)
+
+        #expect(value as? String == "cherry")
+    }
+
+    @Test("Extract numeric index 0 returns last element (reverse indexing)")
+    func testExtractIndex0FromArray() async throws {
+        let action = ExtractAction()
+        let context = RuntimeContext(featureSetName: "Test")
+        context.bind("items", value: ["apple", "banana", "cherry"] as [any Sendable])
+
+        let (result, object) = createDescriptors(resultSpecifiers: ["0"], objectBase: "items")
+        let value = try await action.execute(result: result, object: object, context: context)
+
+        #expect(value as? String == "cherry")
+    }
+
+    @Test("Extract numeric index 1 returns second-to-last element")
+    func testExtractIndex1FromArray() async throws {
+        let action = ExtractAction()
+        let context = RuntimeContext(featureSetName: "Test")
+        context.bind("items", value: ["apple", "banana", "cherry"] as [any Sendable])
+
+        let (result, object) = createDescriptors(resultSpecifiers: ["1"], objectBase: "items")
+        let value = try await action.execute(result: result, object: object, context: context)
+
+        #expect(value as? String == "banana")
+    }
+
+    @Test("Extract range from array returns subset")
+    func testExtractRangeFromArray() async throws {
+        let action = ExtractAction()
+        let context = RuntimeContext(featureSetName: "Test")
+        context.bind("items", value: ["a", "b", "c", "d", "e"] as [any Sendable])
+
+        // Range 1-3 should return elements at reverse indices 1, 2, 3 = ["d", "c", "b"]
+        let (result, object) = createDescriptors(resultSpecifiers: ["1-3"], objectBase: "items")
+        let value = try await action.execute(result: result, object: object, context: context)
+
+        let arr = value as? [any Sendable]
+        #expect(arr?.count == 3)
+        #expect(arr?[0] as? String == "d")
+        #expect(arr?[1] as? String == "c")
+        #expect(arr?[2] as? String == "b")
+    }
+
+    @Test("Extract pick from array returns specific elements")
+    func testExtractPickFromArray() async throws {
+        let action = ExtractAction()
+        let context = RuntimeContext(featureSetName: "Test")
+        context.bind("items", value: ["a", "b", "c", "d", "e"] as [any Sendable])
+
+        // Pick 0,2,4 should return elements at reverse indices 0, 2, 4 = ["e", "c", "a"]
+        let (result, object) = createDescriptors(resultSpecifiers: ["0,2,4"], objectBase: "items")
+        let value = try await action.execute(result: result, object: object, context: context)
+
+        let arr = value as? [any Sendable]
+        #expect(arr?.count == 3)
+        #expect(arr?[0] as? String == "e")
+        #expect(arr?[1] as? String == "c")
+        #expect(arr?[2] as? String == "a")
+    }
+
+    @Test("Extract :first from empty array returns empty string")
+    func testExtractFirstFromEmptyArray() async throws {
+        let action = ExtractAction()
+        let context = RuntimeContext(featureSetName: "Test")
+        context.bind("items", value: [] as [any Sendable])
+
+        let (result, object) = createDescriptors(resultSpecifiers: ["first"], objectBase: "items")
+        let value = try await action.execute(result: result, object: object, context: context)
+
+        #expect(value as? String == "")
+    }
+
+    @Test("Extract :last from empty array returns empty string")
+    func testExtractLastFromEmptyArray() async throws {
+        let action = ExtractAction()
+        let context = RuntimeContext(featureSetName: "Test")
+        context.bind("items", value: [] as [any Sendable])
+
+        let (result, object) = createDescriptors(resultSpecifiers: ["last"], objectBase: "items")
+        let value = try await action.execute(result: result, object: object, context: context)
+
+        #expect(value as? String == "")
+    }
+
+    @Test("Extract with no result specifier returns full array")
+    func testExtractNoSpecifierReturnsFullArray() async throws {
+        let action = ExtractAction()
+        let context = RuntimeContext(featureSetName: "Test")
+        context.bind("items", value: ["a", "b", "c"] as [any Sendable])
+
+        let (result, object) = createDescriptors(objectBase: "items")
+        let value = try await action.execute(result: result, object: object, context: context)
+
+        let arr = value as? [any Sendable]
+        #expect(arr?.count == 3)
+    }
 }
 
 // MARK: - Retrieve Action Tests

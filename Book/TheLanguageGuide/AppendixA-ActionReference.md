@@ -80,6 +80,7 @@ Pulls data from a structured source.
 **Syntax:**
 ```aro
 <Extract> the <result> from the <source: property>.
+<Extract> the <result: specifier> from the <list>.
 ```
 
 **Examples:**
@@ -90,6 +91,35 @@ Pulls data from a structured source.
 <Extract> the <email> from the <user: email>.
 <Extract> the <order> from the <event: order>.
 ```
+
+**List Element Access (ARO-0038):**
+
+Extract specific elements from arrays using result specifiers:
+
+```aro
+(* Keywords *)
+<Extract> the <item: first> from the <list>.
+<Extract> the <item: last> from the <list>.
+
+(* Numeric index: 0 = last, 1 = second-to-last *)
+<Extract> the <item: 0> from the <list>.
+<Extract> the <item: 1> from the <list>.
+
+(* Range: elements 2, 3, 4, 5 *)
+<Extract> the <subset: 2-5> from the <list>.
+
+(* Pick: elements at indices 0, 3, 7 *)
+<Extract> the <selection: 0,3,7> from the <list>.
+```
+
+| Specifier | Returns |
+|-----------|---------|
+| `first` | First element |
+| `last` | Last element |
+| `0` | Last element (reverse indexing) |
+| `n` | Element at (count - 1 - n) |
+| `2-5` | Array of elements |
+| `0,3,7` | Array of elements |
 
 **Valid Prepositions:** `from`
 

@@ -41,28 +41,101 @@ public struct ExtractAction: ActionImplementation {
             throw ActionError.undefinedVariable(object.base)
         }
 
-        // If no specifiers, check if source needs parsing (e.g., JSON string)
-        if object.specifiers.isEmpty {
+        // First, apply any object specifiers for nested property access
+        var resolvedSource = source
+        if !object.specifiers.isEmpty {
+            resolvedSource = try extractValue(from: source, path: object.specifiers)
+        } else if let stringSource = source as? String {
             // If source is a string containing JSON, parse it
-            if let stringSource = source as? String {
+            #if DEBUG
+            print("[ExtractAction] Attempting to parse JSON string: \(stringSource.prefix(100))")
+            #endif
+            if let parsed = parseJSONString(stringSource) {
                 #if DEBUG
-                print("[ExtractAction] Attempting to parse JSON string: \(stringSource.prefix(100))")
+                print("[ExtractAction] Successfully parsed JSON to: \(type(of: parsed))")
                 #endif
-                if let parsed = parseJSONString(stringSource) {
-                    #if DEBUG
-                    print("[ExtractAction] Successfully parsed JSON to: \(type(of: parsed))")
-                    #endif
-                    return parsed
-                }
-                #if DEBUG
-                print("[ExtractAction] Failed to parse JSON, returning source as-is")
-                #endif
+                resolvedSource = parsed
             }
-            return source
         }
 
-        // Extract nested value using specifiers as path
-        return try extractValue(from: source, path: object.specifiers)
+        // ARO-0038: Check result specifiers for list element access
+        if let array = resolvedSource as? [any Sendable],
+           let specifier = result.specifiers.first {
+            return extractFromList(array, specifier: specifier)
+        }
+
+        return resolvedSource
+    }
+
+    // MARK: - ARO-0038: List Element Access
+
+    /// Extracts element(s) from a list using specifier patterns
+    /// Supports: first, last, numeric index, ranges (3-5), picks (3,5,7)
+    private func extractFromList(_ array: [any Sendable], specifier: String) -> any Sendable {
+        let spec = specifier.lowercased()
+
+        // Keyword access: first, last
+        switch spec {
+        case "last":
+            return array.last ?? ""
+        case "first":
+            return array.first ?? ""
+        default:
+            break
+        }
+
+        // Range access: "3-5" = elements from index 3 to 5
+        if spec.contains("-"), !spec.hasPrefix("-") {
+            if let range = parseRange(spec) {
+                return extractRange(from: array, range: range)
+            }
+        }
+
+        // Pick access: "3,5,7" = elements at specific indices
+        if spec.contains(",") {
+            let indices = spec.split(separator: ",").compactMap { Int($0.trimmingCharacters(in: .whitespaces)) }
+            if !indices.isEmpty {
+                return indices.compactMap { idx -> (any Sendable)? in
+                    guard idx >= 0, idx < array.count else { return nil }
+                    return array[array.count - 1 - idx]
+                }
+            }
+        }
+
+        // Single numeric index (0 = last element, reverse indexing per ARO-0032)
+        if let index = Int(spec), index >= 0, index < array.count {
+            return array[array.count - 1 - index]
+        }
+
+        // Unknown specifier - return full array
+        return array
+    }
+
+    /// Parses a range specifier like "3-5"
+    private func parseRange(_ spec: String) -> (start: Int, end: Int)? {
+        let parts = spec.split(separator: "-")
+        guard parts.count == 2,
+              let start = Int(parts[0].trimmingCharacters(in: .whitespaces)),
+              let end = Int(parts[1].trimmingCharacters(in: .whitespaces)),
+              start >= 0, end >= 0 else { return nil }
+        return (start, end)
+    }
+
+    /// Extracts a range of elements from an array (reverse indexed)
+    private func extractRange(from array: [any Sendable], range: (start: Int, end: Int)) -> [any Sendable] {
+        let (start, end) = range
+        let minIdx = min(start, end)
+        let maxIdx = max(start, end)
+        var result: [any Sendable] = []
+
+        for i in minIdx...maxIdx {
+            let forwardIdx = array.count - 1 - i
+            if forwardIdx >= 0, forwardIdx < array.count {
+                result.append(array[forwardIdx])
+            }
+        }
+
+        return result
     }
 
     private func extractValue(from source: any Sendable, path: [String]) throws -> any Sendable {

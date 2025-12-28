@@ -1,0 +1,33 @@
+(* DirectoryReplicator - Replicates directory structure from template *)
+(* Reads ../template and creates matching empty directories in current location *)
+(* Uses ARO-0038 list element access to extract relative paths from Split results *)
+
+(Application-Start: Directory Replicator) {
+    (* Define template source path *)
+    <Create> the <template-path> with "../template".
+
+    <Log> the <start> for the <console> with "Scanning template directory...".
+
+    (* List all entries recursively from template - use specifier for recursive *)
+    <List> the <all-entries: recursively> from the <directory: template-path>.
+
+    (* Process each directory entry *)
+    for each <entry> in <all-entries> where <entry: isDirectory> is true {
+        (* Extract the full path *)
+        <Extract> the <full-path> from the <entry: path>.
+
+        (* Split to remove template/ prefix from absolute path *)
+        <Split> the <path-parts> from the <full-path> by /template\//.
+
+        (* ARO-0038: Get the last element (relative path) using result specifier *)
+        <Extract> the <relative-path: last> from the <path-parts>.
+
+        (* Create the directory in current location *)
+        <Make> the <created> to the <path: relative-path>.
+
+        <Log> the <status> for the <console> with <relative-path>.
+    }
+
+    <Log> the <done> for the <console> with "Directory structure replicated.".
+    <Return> an <OK: status> for the <replication>.
+}
