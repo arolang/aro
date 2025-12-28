@@ -230,7 +230,7 @@ public struct ExtractAction: ActionImplementation {
 | **Validate** | validate, check, verify | for, against | Validate data |
 | **Compare** | compare | against, to, with | Compare values |
 | **Transform** | transform, convert | to, into | Transform data |
-| **Create** | create, make, build | with, from | Create new entities |
+| **Create** | create, build, construct | with, from | Create new entities |
 | **Update** | update, modify, change | with, to | Update existing entities |
 | **Filter** | filter | from, by, where | Filter collections |
 | **Sort** | sort, order | by | Sort collections |

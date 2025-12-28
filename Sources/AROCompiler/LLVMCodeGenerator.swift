@@ -1237,6 +1237,7 @@ public final class LLVMCodeGenerator {
         case .against: return 7
         case .on: return 8
         case .by: return 9
+        case .at: return 10
         }
     }
 
