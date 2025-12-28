@@ -206,8 +206,20 @@ public final class Parser {
 
         // Parse result
         try expect(.leftAngle, message: "'<'")
-        let result = try parseQualifiedNoun()
+        var result = try parseQualifiedNoun()
         try expect(.rightAngle, message: "'>'")
+
+        // ARO-0038: Check for optional 'as Type' annotation after result
+        // Syntax: <result> as Type  (alternative to <result: Type>)
+        if check(.as) {
+            advance()
+            let typeAnnotation = try parseTypeAnnotation()
+            result = QualifiedNoun(
+                base: result.base,
+                typeAnnotation: typeAnnotation,
+                span: result.span
+            )
+        }
 
         // Parse preposition
         // Note: "for" is lexed as .for keyword (for iteration) but also used as a preposition

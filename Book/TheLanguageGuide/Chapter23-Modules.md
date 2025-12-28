@@ -1,4 +1,4 @@
-# Chapter 22: Modules and Imports
+# Chapter 23: Modules and Imports
 
 *"Compose applications from small, understandable pieces."*
 

@@ -1,10 +1,10 @@
-# Chapter 12: OpenAPI Integration
+# Chapter 13: OpenAPI Integration
 
 *"Your contract is your router."*
 
 ---
 
-## 12.1 Contract-First Development
+## 11.1 Contract-First Development
 
 <div style="float: right; margin: 0 0 1em 1.5em;">
 <svg width="180" height="200" viewBox="0 0 180 200" xmlns="http://www.w3.org/2000/svg">  <!-- OpenAPI file -->  <rect x="50" y="10" width="80" height="45" rx="4" fill="#fef3c7" stroke="#f59e0b" stroke-width="2"/>  <text x="90" y="28" text-anchor="middle" font-family="monospace" font-size="9" font-weight="bold" fill="#92400e">openapi.yaml</text>  <text x="90" y="42" text-anchor="middle" font-family="sans-serif" font-size="8" fill="#b45309">operationId:</text>  <text x="90" y="52" text-anchor="middle" font-family="monospace" font-size="7" fill="#d97706">listUsers</text>  <!-- Arrow down -->  <line x1="90" y1="55" x2="90" y2="75" stroke="#6b7280" stroke-width="2"/>  <polygon points="90,75 85,67 95,67" fill="#6b7280"/>  <!-- Router box -->  <rect x="40" y="80" width="100" height="30" rx="4" fill="#e0e7ff" stroke="#6366f1" stroke-width="2"/>  <text x="90" y="100" text-anchor="middle" font-family="sans-serif" font-size="9" font-weight="bold" fill="#4338ca">Route Matcher</text>  <!-- Arrow down -->  <line x1="90" y1="110" x2="90" y2="130" stroke="#6b7280" stroke-width="2"/>  <polygon points="90,130 85,122 95,122" fill="#6b7280"/>  <!-- Feature Set -->  <rect x="30" y="135" width="120" height="50" rx="4" fill="#dcfce7" stroke="#22c55e" stroke-width="2"/>  <text x="90" y="152" text-anchor="middle" font-family="monospace" font-size="8" fill="#166534">(listUsers: User API)</text>  <text x="90" y="165" text-anchor="middle" font-family="sans-serif" font-size="8" fill="#22c55e">&lt;Retrieve&gt;...</text>  <text x="90" y="178" text-anchor="middle" font-family="sans-serif" font-size="8" fill="#22c55e">&lt;Return&gt;...</text>  <!-- Label -->  <text x="90" y="198" text-anchor="middle" font-family="sans-serif" font-size="7" fill="#9ca3af">name = operationId</text></svg>
@@ -20,7 +20,7 @@ This design ensures that your API cannot drift from its documentation. If the sp
 
 ---
 
-## 12.2 The OpenAPI Requirement
+## 11.2 The OpenAPI Requirement
 
 ARO's HTTP server depends on the presence of an OpenAPI specification file. The file must be named openapi.yaml and must be located in the application directory alongside your ARO source files. Without this file, no HTTP server starts. No port is opened. No requests are received.
 
@@ -32,7 +32,7 @@ If you are building an application that does not expose an HTTP API—a file pro
 
 ---
 
-## 12.3 Operation Identifiers
+## 11.3 Operation Identifiers
 
 The operationId is the key that connects HTTP routes to feature sets. When you define an operation in your OpenAPI specification, you assign it an operationId. When you implement the handler in ARO, you create a feature set with that identifier as its name.
 
@@ -44,7 +44,7 @@ When a request arrives that matches a path and method in your specification, ARO
 
 ---
 
-## 12.4 Route Matching
+## 11.4 Route Matching
 
 ARO matches incoming HTTP requests to operations through a two-step process. First, it matches the request path against the path templates in the specification. Second, it matches the HTTP method against the methods defined for that path. The combination of path and method identifies a unique operation.
 
@@ -56,7 +56,7 @@ Requests that do not match any path receive a 404 response. Requests that match 
 
 ---
 
-## 12.5 Starting the Server
+## 11.5 Starting the Server
 
 The HTTP server starts when you execute the Start action with the http-server identifier and the contract preposition. This tells the runtime to read the OpenAPI specification, configure routing based on its contents, and begin accepting requests on the configured port.
 
@@ -68,7 +68,33 @@ The server starts synchronously during initialization. If the port is already in
 
 ---
 
-## 12.6 Schema Validation
+## 11.6 Request Context
+
+When a feature set handles an HTTP request, it has access to information about that request through special context identifiers. You use the Extract action to pull specific pieces of information into local bindings.
+
+Path parameters are values extracted from the URL based on the path template. If your template is /users/{id} and the request URL is /users/123, the path parameter "id" has the value "123". You access this through the pathParameters identifier with the parameter name as a qualifier.
+
+Query parameters are the key-value pairs in the URL's query string. A request to /users?limit=10&offset=20 has query parameters "limit" and "offset". You access these through the queryParameters identifier. Query parameters are optional by default; extracting a parameter that was not provided produces an empty or missing value rather than an error.
+
+The request body is the content sent with POST, PUT, and PATCH requests. For JSON content, the runtime parses the body into a structured object that you can extract and navigate. You access the body through the request identifier with "body" as the qualifier.
+
+Headers are the HTTP headers sent with the request. Authentication tokens, content types, and other metadata arrive as headers. You access these through the headers identifier with the header name as a qualifier. Header names are case-insensitive per the HTTP specification.
+
+---
+
+## 11.7 Response Mapping
+
+ARO maps return statements to HTTP responses based on the status qualifier you provide. The qualifier determines the HTTP status code, and the payload becomes the response body.
+
+Common status qualifiers include OK for 200 responses, Created for 201 responses when a resource is created, Accepted for 202 when processing is deferred, and NoContent for 204 when there is no response body. Error statuses include BadRequest for 400, NotFound for 404, and Conflict for 409.
+
+The payload you provide with the response becomes the response body, typically serialized as JSON. You can return a single object, an array, or an object literal that you construct inline. The runtime handles serialization and sets appropriate content-type headers.
+
+If your feature set fails rather than returning normally, the runtime generates an error response. The status code depends on the type of failure—not found errors become 404, validation errors become 400, internal errors become 500. The response body contains the error message generated from the failed statement.
+
+---
+
+## 11.8 Validation
 
 OpenAPI specifications can include schemas that define the structure and constraints of request bodies and responses. ARO can validate incoming requests against these schemas, rejecting invalid requests before they reach your feature set.
 
@@ -80,7 +106,7 @@ Schema validation provides a first line of defense against malformed requests. I
 
 ---
 
-## 12.7 Best Practices
+## 11.9 Best Practices
 
 Design your API specification before writing implementation code. Think about what resources your API exposes, what operations clients need to perform, and what data structures are involved. Write this design down in OpenAPI format. Then implement feature sets to fulfill the specification.
 
@@ -94,8 +120,4 @@ Keep your specification and implementation synchronized. When you change the API
 
 ---
 
-> **See Chapter 13** for detailed coverage of HTTP feature sets, including request data access, CRUD operations, response patterns, and authentication.
-
----
-
-*Next: Chapter 13 — HTTP Feature Sets*
+*Next: Chapter 14 — HTTP Feature Sets*

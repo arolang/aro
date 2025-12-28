@@ -142,7 +142,7 @@ A formatting plugin might provide:
 
 The syntax remains consistent regardless of whether the operation is built-in or plugin-provided. This uniformity means you can start with built-in operations and add plugins later without changing how your code reads.
 
-See Chapter 16 for the full plugin development guide.
+See Chapter 17 for the full plugin development guide.
 
 ---
 
@@ -186,4 +186,4 @@ Each pattern follows the read-transform-bind rhythm. Data flows forward, transfo
 
 ---
 
-*Next: Chapter 8 — The Happy Path*
+*Next: Chapter 8 — Understanding Qualifiers*

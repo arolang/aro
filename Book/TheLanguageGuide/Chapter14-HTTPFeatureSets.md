@@ -1,10 +1,10 @@
-# Chapter 13: HTTP Feature Sets
+# Chapter 14: HTTP Feature Sets
 
 *"Every endpoint tells a story."*
 
 ---
 
-## 13.1 HTTP Handler Basics
+## 12.1 HTTP Handler Basics
 
 HTTP feature sets handle requests routed through the OpenAPI contract. When a request matches a path and method defined in your specification, the corresponding feature set executes with the request data available for extraction.
 
@@ -16,7 +16,7 @@ The business activity (the text after the colon in the feature set declaration) 
 
 ---
 
-## 13.2 CRUD Operations
+## 12.2 CRUD Operations
 
 Most HTTP APIs implement CRUD operations—Create, Read, Update, and Delete—for their resources. Each operation has a characteristic pattern in ARO.
 
@@ -32,7 +32,7 @@ Delete operations remove resources. They extract the identifier from the path, d
 
 ---
 
-## 13.3 Request Data Access
+## 12.3 Request Data Access
 
 HTTP handlers have access to various parts of the incoming request through special context identifiers. Each type of request data has its own identifier and access pattern.
 
@@ -48,7 +48,7 @@ The full request object provides access to additional information including the 
 
 ---
 
-## 13.4 Response Patterns
+## 12.4 Response Patterns
 
 ARO provides a variety of status qualifiers for different response scenarios. Choosing the right status communicates the outcome clearly to clients.
 
@@ -62,7 +62,7 @@ Collection responses often include pagination metadata. Beyond the data array, i
 
 ---
 
-## 13.5 Authentication and Authorization
+## 12.5 Authentication and Authorization
 
 Many APIs require authentication to identify the caller and authorization to verify permissions. ARO handles these concerns through request data extraction and validation.
 
@@ -76,7 +76,7 @@ Custom actions can encapsulate complex authentication and authorization logic. A
 
 ---
 
-## 13.6 Nested Resources
+## 12.6 Nested Resources
 
 APIs often model relationships between resources through nested URL paths. A user has orders; an order belongs to a user. The path /users/{userId}/orders represents the orders belonging to a specific user.
 
@@ -184,7 +184,7 @@ Deep nesting (more than two levels) can make URLs unwieldy and logic complex. Co
 
 ---
 
-## 13.7 Best Practices
+## 12.7 Best Practices
 
 Keep handlers focused on single responsibilities. A handler that retrieves a user should not also retrieve their orders, payments, and statistics. If clients need aggregated data, provide a separate endpoint or use a pattern like GraphQL that's designed for flexible queries.
 
@@ -198,4 +198,4 @@ Return appropriate status codes. Use Created for successful POST requests that c
 
 ---
 
-*Next: Chapter 14 — Advanced HTTP Patterns*
+*Next: Chapter 15 — Request/Response Patterns*

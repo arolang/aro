@@ -1,10 +1,10 @@
-# Chapter 15: Built-in Services
+# Chapter 16: Built-in Services
 
 *"Batteries included."*
 
 ---
 
-## 14.1 Available Services
+## 16.1 Available Services
 
 ARO provides five built-in services that handle common infrastructure concerns: an HTTP server for serving web requests, an HTTP client for making outbound requests, a file system service for reading and writing files, and socket services for TCP communication.
 
@@ -16,7 +16,7 @@ The services are designed to be sufficient for most application needs while rema
 
 ---
 
-## 14.2 HTTP Server
+## 16.2 HTTP Server
 
 The HTTP server handles incoming HTTP requests based on your OpenAPI specification. It provides a production-capable server built on SwiftNIO that efficiently handles concurrent connections.
 
@@ -30,7 +30,7 @@ Stopping the server during shutdown allows it to complete in-flight requests gra
 
 ---
 
-## 14.3 HTTP Client
+## 16.3 HTTP Client
 
 The HTTP client makes outbound HTTP requests to external services. It provides a high-performance client built on AsyncHTTPClient that handles connection pooling, timeouts, and retries.
 
@@ -44,7 +44,7 @@ Error handling follows the same happy path philosophy as other ARO operations. I
 
 ---
 
-## 14.4 File System Service
+## 16.4 File System Service
 
 The file system service provides comprehensive operations for reading, writing, and managing files and directories. It handles the mechanics of file I/O while you focus on what data to read or write.
 
@@ -158,11 +158,7 @@ The Delete action removes a file from the file system.
 File watching monitors a directory for changes and emits events when files are created, modified, or deleted. You start watching during Application-Start by specifying the directory to monitor. When changes occur, the runtime emits File Event events that your handlers can process. This is useful for applications that need to react to external file changes—configuration reloading, data import, file synchronization.
 
 ```aro
-(* Start file monitor with directory path *)
-<Start> the <file-monitor> with ".".
-
-(* Or with configuration object *)
-<Start> the <file-monitor> with { directory: "./data" }.
+<Watch> the <file-monitor> for the <directory> with "./data".
 ```
 
 Event handlers are named according to the event type: `Handle File Created`, `Handle File Modified`, or `Handle File Deleted`.
@@ -173,7 +169,7 @@ File operations work consistently across macOS, Linux, and Windows. Path separat
 
 ---
 
-## 14.5 Socket Services
+## 16.5 Socket Services
 
 The socket server and client provide low-level TCP communication for applications that need more control than HTTP offers or that need to communicate using custom protocols.
 
@@ -187,7 +183,7 @@ For most web applications, HTTP is the appropriate choice. Use sockets when you 
 
 ---
 
-## 14.6 Service Lifecycle
+## 16.6 Service Lifecycle
 
 Services have a lifecycle that mirrors the application lifecycle. They start during Application-Start, run during the application's lifetime, and stop during Application-End.
 
@@ -201,7 +197,7 @@ The error shutdown handler (Application-End: Error) should also stop services, a
 
 ---
 
-## 14.7 Service Configuration
+## 16.7 Service Configuration
 
 Services accept configuration options that control their behavior. These options are passed when starting or using the service.
 
@@ -215,7 +211,7 @@ Configuration can be hardcoded in your ARO statements or loaded from external fi
 
 ---
 
-## 14.8 Practical Example: Services in Action
+## 16.8 Practical Example: Services in Action
 
 Here is a complete example demonstrating multiple built-in services working together. This application watches a directory for configuration changes and uses the HTTP client to report them to an external monitoring service.
 
@@ -229,7 +225,7 @@ Here is a complete example demonstrating multiple built-in services working toge
     <Create> the <webhook-url> with "https://monitoring.example.com/webhook".
 
     (* Start watching the config directory *)
-    <Start> the <file-monitor> with { directory: "./config" }.
+    <Watch> the <file-monitor> for the <directory> with "./config".
 
     <Log> the <message> for the <console> with "Watching ./config for changes...".
 
@@ -270,7 +266,7 @@ Here is a complete example demonstrating multiple built-in services working toge
 
 This example shows:
 
-- **File system service**: The `Start` action with `<file-monitor>` starts monitoring the `./config` directory
+- **File system service**: The `Watch` action starts monitoring the `./config` directory
 - **HTTP client**: The `Send` action posts change notifications to an external webhook
 - **Lifecycle management**: `Keepalive` keeps the app running, `Application-End` provides graceful shutdown
 - **Event handling**: The File Event Handler processes each file change event
@@ -279,7 +275,7 @@ This example shows:
 
 ---
 
-## 14.9 Best Practices
+## 16.9 Best Practices
 
 Start all services during Application-Start. Centralizing service startup in one place makes it clear what your application depends on and ensures consistent initialization order.
 
@@ -293,4 +289,4 @@ Configure services appropriately for your environment. Development might use per
 
 ---
 
-*Next: Chapter 16 — Custom Actions*
+*Next: Chapter 17 — Custom Actions*

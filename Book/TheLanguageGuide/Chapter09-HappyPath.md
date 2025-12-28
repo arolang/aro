@@ -1,4 +1,4 @@
-# Chapter 8: The Happy Path
+# Chapter 9: The Happy Path
 
 *"Optimism is a strategy, not naivety."*
 
@@ -164,4 +164,4 @@ Design your domain model so that validation can be expressed through structure r
 
 ---
 
-*Next: Chapter 9 — The Event Bus*
+*Next: Chapter 10 — The Event Bus*
