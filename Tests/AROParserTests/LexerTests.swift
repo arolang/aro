@@ -250,12 +250,13 @@ struct PrepositionTests {
         #expect(Preposition.via.rawValue == "via")
         #expect(Preposition.with.rawValue == "with")
         #expect(Preposition.on.rawValue == "on")
+        #expect(Preposition.at.rawValue == "at")
         #expect(Preposition.by.rawValue == "by")
     }
 
     @Test("All cases are iterable")
     func testAllCases() {
-        #expect(Preposition.allCases.count == 9)
+        #expect(Preposition.allCases.count == 10)
     }
 
     @Test("External source detection works correctly")
@@ -268,6 +269,7 @@ struct PrepositionTests {
         #expect(Preposition.into.indicatesExternalSource == false)
         #expect(Preposition.with.indicatesExternalSource == false)
         #expect(Preposition.on.indicatesExternalSource == false)
+        #expect(Preposition.at.indicatesExternalSource == false)
         #expect(Preposition.by.indicatesExternalSource == false)
     }
 }
