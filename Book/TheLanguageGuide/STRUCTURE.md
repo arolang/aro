@@ -9,6 +9,7 @@
 4. **Anatomy of a Statement** — `<Action> the <Result> preposition the <Object>`
 5. **Feature Sets** — Naming, business activities, scoping
 6. **Data Flow** — Semantic roles (REQUEST, OWN, RESPONSE, EXPORT)
+6A. **Export Actions** — Choosing between Store, Emit, and Publish
 7. **Computations** — Transform and compute data with built-in operations
 8. **Understanding Qualifiers** — Operation selectors vs field navigation
 9. **The Happy Path** — Why there's no error handling (and why that's okay)

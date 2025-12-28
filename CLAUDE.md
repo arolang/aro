@@ -8,7 +8,7 @@ The project must always be in sync. When there are conflicts or discrepancies, t
 
 1. **Proposals** (`Proposals/`) - The authoritative specification
 2. **Code** (`Sources/`) - The implementation
-3. **Documentation** (`wiki/`, `OVERVIEW.md`, `README.md`) - Developer docs (wiki submodule)
+3. **Documentation** ([Wiki](https://github.com/KrisSimon/aro/wiki), `OVERVIEW.md`, `README.md`) - Developer docs
 4. **Website** (`Website/`) - Public website
 5. **Book** (`Book/`) - The Language Guide
 
@@ -304,7 +304,7 @@ public struct MyAction: ActionImplementation {
 ActionRegistry.shared.register(MyAction.self)
 ```
 
-See `wiki/Action-Developer-Guide.md` for full guide.
+See the [Action Developer Guide](https://github.com/KrisSimon/aro/wiki/Action-Developer-Guide) for full guide.
 
 ## Project Structure
 
@@ -347,7 +347,6 @@ Examples/
     └── observers.aro   # Repository change observers
 
 Proposals/              # 35 evolution proposals (ARO-0001 to ARO-0035)
-wiki/                   # Developer guides (git submodule → aro.wiki.git)
 ```
 
 ## Language Proposals
