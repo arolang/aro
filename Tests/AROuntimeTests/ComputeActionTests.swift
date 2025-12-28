@@ -450,9 +450,9 @@ struct CreateActionTests {
     @Test("Create action verbs")
     func testCreateActionVerbs() {
         #expect(CreateAction.verbs.contains("create"))
-        #expect(CreateAction.verbs.contains("make"))
         #expect(CreateAction.verbs.contains("build"))
         #expect(CreateAction.verbs.contains("construct"))
+        // Note: "make" verb moved to CreateDirectoryAction for filesystem operations
     }
 
     @Test("Create returns source value")

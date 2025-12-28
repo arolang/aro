@@ -338,7 +338,7 @@ public struct TransformAction: ActionImplementation {
 /// Creates a new entity
 public struct CreateAction: ActionImplementation {
     public static let role: ActionRole = .own
-    public static let verbs: Set<String> = ["create", "make", "build", "construct"]
+    public static let verbs: Set<String> = ["create", "build", "construct"]
     public static let validPrepositions: Set<Preposition> = [.with, .from, .for]
 
     public init() {}
