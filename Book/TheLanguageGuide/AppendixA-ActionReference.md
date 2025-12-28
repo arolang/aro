@@ -42,11 +42,11 @@ Complete reference for all built-in actions in ARO.
 | **Publish** | EXPORT | Make globally available | `<Publish> as <config> <settings>.` |
 | **Notify** | EXPORT | Send notification | `<Notify> the <alert> to the <admin>.` |
 | **Delete** | EXPORT | Remove data | `<Delete> the <user> from the <users> where id = <id>.` |
-| **Start** | SERVICE | Start a service | `<Start> the <http-server> on port 8080.` |
+| **Start** | SERVICE | Start a service | `<Start> the <http-server> with <contract>.` |
+| **Stop** | SERVICE | Stop a service | `<Stop> the <http-server> with <application>.` |
 | **Listen** | SERVICE | Listen for connections | `<Listen> on port 9000 as <socket-server>.` |
 | **Connect** | SERVICE | Connect to service | `<Connect> to <host: "db"> on port 5432.` |
 | **Close** | SERVICE | Close connection | `<Close> the <connection>.` |
-| **Watch** | SERVICE | Monitor directory | `<Watch> the <dir: "./uploads"> as <monitor>.` |
 | **Broadcast** | SERVICE | Send to all connections | `<Broadcast> the <msg> to the <server>.` |
 | **Route** | SERVICE | Define HTTP route | `<Route> the <handler> for "/api/users".` |
 | **Keepalive** | SERVICE | Keep app running | `<Keepalive> the <app> for the <events>.` |
@@ -779,40 +779,49 @@ Removes data.
 
 ### Start
 
-Starts a service.
+Starts a service. All services use the standardized `with` preposition.
 
 **Syntax:**
 ```aro
-<Start> the <service> [on port <number>].
+(* HTTP server from OpenAPI contract *)
+<Start> the <http-server> with <contract>.
+
+(* Socket server with port configuration *)
+<Start> the <socket-server> with { port: 9000 }.
+
+(* File monitor with directory path *)
+<Start> the <file-monitor> with ".".
+<Start> the <file-monitor> with { directory: "./data" }.
 ```
 
 **Examples:**
 ```aro
-<Start> the <http-server> on port 8080.
-<Start> the <scheduler>.
-<Start> the <background-worker>.
+<Start> the <http-server> with <contract>.
+<Start> the <socket-server> with { port: 9000 }.
+<Start> the <file-monitor> with "./uploads".
 ```
 
-**Valid Prepositions:** `on`
+**Valid Prepositions:** `with`
 
 ---
 
-### Watch
+### Stop
 
-Monitors a directory.
+Stops a service gracefully.
 
 **Syntax:**
 ```aro
-<Watch> the <directory: path> as <name>.
+<Stop> the <service> with <application>.
 ```
 
 **Examples:**
 ```aro
-<Watch> the <directory: "./uploads"> as <file-monitor>.
-<Watch> the <directory: "./config"> as <config-watcher>.
+<Stop> the <http-server> with <application>.
+<Stop> the <socket-server> with <application>.
+<Stop> the <file-monitor> with <application>.
 ```
 
-**Valid Prepositions:** `as`
+**Valid Prepositions:** `with`
 
 ---
 
@@ -982,8 +991,8 @@ The `Keepalive` action blocks execution until a shutdown signal is received (SIG
 | Copy | FILE | to |
 | Move | FILE | to |
 | Append | FILE | to |
-| Start | SERVICE | on |
-| Watch | SERVICE | as |
+| Start | SERVICE | with |
+| Stop | SERVICE | with |
 | Listen | SERVICE | on, as |
 | Connect | SERVICE | to, on, as |
 | Close | SERVICE | - |

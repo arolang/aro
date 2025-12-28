@@ -80,7 +80,7 @@ Articles are syntactic sugar for readability and do not affect semantics.
 Prepositions connect ARO components and carry semantic meaning:
 
 ```ebnf
-preposition = "from" | "for" | "against" | "to" | "into" | "via" | "with" ;
+preposition = "from" | "for" | "against" | "to" | "into" | "via" | "with" | "on" | "at" | "by" ;
 ```
 
 | Preposition | Semantic Meaning |
@@ -92,6 +92,9 @@ preposition = "from" | "for" | "against" | "to" | "into" | "via" | "with" ;
 | `into` | Transformation target |
 | `via` | Through/using |
 | `with` | Accompaniment/using |
+| `on` | Location/attachment (e.g., "on port 8080") |
+| `at` | Location/path (e.g., "at the path") |
+| `by` | Delimiter/criterion (e.g., "by /pattern/") |
 
 ### 6. Delimiters
 

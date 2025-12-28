@@ -4,7 +4,7 @@
     <Log> the <startup: message> for the <console> with "Starting echo socket on port 9000".
 
     (* Start TCP socket server *)
-    <Start> the <socket-server> on <port> with 9000.
+    <Start> the <socket-server> with { port: 9000 }.
 
     <Log> the <ready: message> for the <console> with "Socket server listening on port 9000".
 
