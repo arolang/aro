@@ -62,6 +62,41 @@ Use `<Request>` with `via` preposition and method specifier:
 <Request> the <result> via PATCH the <url> with <partial-data>.
 ```
 
+### 4. Config Object Syntax
+
+Use `with { ... }` to specify custom headers, method, body, and timeout:
+
+```aro
+(* POST with custom headers *)
+<Request> the <response> from the <api-url> with {
+    method: "POST",
+    headers: { "Content-Type": "application/json", "Authorization": "Bearer token" },
+    body: <data>,
+    timeout: 60
+}.
+
+(* GET with authorization header *)
+<Request> the <protected-data> from the <api-url> with {
+    headers: { "Authorization": "Bearer my-token" }
+}.
+
+(* POST with custom timeout *)
+<Request> the <result> from the <api-url> with {
+    method: "POST",
+    body: { name: "Alice", email: "alice@example.com" },
+    timeout: 120
+}.
+```
+
+**Config Options:**
+
+| Option | Type | Description |
+|--------|------|-------------|
+| `method` | String | HTTP method: GET, POST, PUT, DELETE, PATCH |
+| `headers` | Map | Custom HTTP headers |
+| `body` | String/Map | Request body (auto-serialized to JSON if map) |
+| `timeout` | Number | Request timeout in seconds (default: 30) |
+
 ---
 
 ## Response Data
@@ -137,3 +172,4 @@ Examples:
 |---------|------|---------|
 | 1.0 | 2024-12 | Initial specification |
 | 2.0 | 2024-12 | Simplified: removed api definitions, use `<Request>` action with prepositions |
+| 3.0 | 2025-12 | Added config object syntax for headers, body, method, and timeout |
