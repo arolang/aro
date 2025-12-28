@@ -5,10 +5,10 @@
     <Log> the <startup: message> for the <console> with "Starting User Service...".
 
     (* Start HTTP server from OpenAPI contract *)
-    <Start> the <http-server> for the <contract>.
+    <Start> the <http-server> with <contract>.
 
-    (* Watch the user files directory for external changes *)
-    <Watch> the <file-monitor> for the <directory> with "./data/users".
+    (* Start file monitor for the user files directory *)
+    <Start> the <file-monitor> with { directory: "./data/users" }.
 
     <Log> the <ready: message> for the <console> with "User Service ready on port 8080".
 
@@ -23,13 +23,10 @@
     <Log> the <shutdown: message> for the <console> with "User Service shutting down...".
 
     (* Gracefully stop accepting new requests *)
-    <Stop> the <http-server> for the <application>.
+    <Stop> the <http-server> with <application>.
 
     (* Close database connections *)
     <Close> the <database-connections> for the <application>.
-
-    (* Flush any pending logs *)
-    <Flush> the <log-buffer> for the <application>.
 
     <Log> the <shutdown: complete> for the <console> with "User Service stopped. Goodbye!".
     <Return> an <OK: status> for the <shutdown>.

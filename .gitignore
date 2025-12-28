@@ -47,3 +47,6 @@
 /Examples/UserService/UserService
 /Examples/SystemMonitor/SystemMonitor
 /Examples/RepositoryObserver/RepositoryObserver
+/demo-output
+/Examples/Split/.build
+/Examples/Split/Split

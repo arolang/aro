@@ -203,14 +203,14 @@ Application lifecycle handlers:
 (* Entry point - exactly one per application *)
 (Application-Start: My App) {
     <Log> the <startup: message> for the <console> with "Starting...".
-    <Start> the <http-server> on port 8080.
+    <Start> the <http-server> with <contract>.
     <Return> an <OK: status> for the <startup>.
 }
 
 (* Exit handler for graceful shutdown - optional, at most one *)
 (Application-End: Success) {
     <Log> the <shutdown: message> for the <console> with "Shutting down...".
-    <Stop> the <http-server>.
+    <Stop> the <http-server> with <application>.
     <Return> an <OK: status> for the <shutdown>.
 }
 
@@ -257,7 +257,7 @@ For applications that need to stay alive and process events (servers, file watch
 ```aro
 (Application-Start: File Watcher) {
     <Log> the <startup: message> for the <console> with "Starting...".
-    <Watch> the <file-monitor> for the <directory> with ".".
+    <Start> the <file-monitor> with ".".
 
     (* Keep the application running to process events *)
     <Keepalive> the <application> for the <events>.

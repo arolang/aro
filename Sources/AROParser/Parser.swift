@@ -272,6 +272,18 @@ public final class Parser {
             whereClause = try parseWhereClause()
         }
 
+        // Parse optional by clause (ARO-0037): `by /pattern/flags`
+        var byClause: ByClause?
+        if case .preposition(.by) = peek().kind {
+            let byToken = advance() // consume 'by'
+            if case .regexLiteral(let pattern, let flags) = peek().kind {
+                advance() // consume regex literal
+                byClause = ByClause(pattern: pattern, flags: flags, span: byToken.span.merged(with: previous().span))
+            } else {
+                throw ParserError.unexpectedToken(expected: "regex literal after 'by'", got: peek())
+            }
+        }
+
         // Parse optional when clause (ARO-0004): `when <condition>`
         var whenCondition: (any Expression)?
         if check(.when) {
@@ -289,6 +301,7 @@ public final class Parser {
             expression: expression,
             aggregation: aggregation,
             whereClause: whereClause,
+            byClause: byClause,
             whenCondition: whenCondition,
             span: startToken.span.merged(with: endToken.span)
         )
@@ -325,7 +338,7 @@ public final class Parser {
     /// Check if the token is a literal value
     private func isLiteralToken(_ token: Token) -> Bool {
         switch token.kind {
-        case .stringLiteral, .intLiteral, .floatLiteral, .true, .false, .nil, .null:
+        case .stringLiteral, .intLiteral, .floatLiteral, .regexLiteral, .true, .false, .nil, .null:
             return true
         default:
             return false
@@ -433,7 +446,7 @@ public final class Parser {
         return WhereClause(field: field, op: op, value: value, span: startSpan.merged(with: value.span))
     }
 
-    /// Parses a literal value (string, number, boolean, null)
+    /// Parses a literal value (string, number, boolean, null, regex)
     private func parseLiteralValue() throws -> LiteralValue {
         let token = peek()
         switch token.kind {
@@ -446,6 +459,9 @@ public final class Parser {
         case .floatLiteral(let f):
             advance()
             return .float(f)
+        case .regexLiteral(let pattern, let flags):
+            advance()
+            return .regex(pattern: pattern, flags: flags)
         case .true:
             advance()
             return .boolean(true)
@@ -712,12 +728,18 @@ public final class Parser {
         return statements
     }
 
-    /// Parses a pattern: literal | <variable> | _
+    /// Parses a pattern: literal | <variable> | _ | /regex/flags
     private func parsePattern() throws -> Pattern {
         // Check for wildcard
         if case .identifier("_") = peek().kind {
             advance()
             return .wildcard
+        }
+
+        // Check for regex literal
+        if case .regexLiteral(let pattern, let flags) = peek().kind {
+            advance()
+            return .regex(pattern: pattern, flags: flags)
         }
 
         // Check for literal
@@ -734,7 +756,7 @@ public final class Parser {
             return .variable(noun)
         }
 
-        throw ParserError.unexpectedToken(expected: "pattern (literal, <variable>, or _)", got: peek())
+        throw ParserError.unexpectedToken(expected: "pattern (literal, <variable>, _, or /regex/)", got: peek())
     }
 
     // MARK: - For-Each Loop Parsing (ARO-0005)
@@ -1127,6 +1149,10 @@ extension Parser {
         case .nil, .null:
             advance()
             return LiteralExpression(value: .null, span: token.span)
+
+        case .regexLiteral(let pattern, let flags):
+            advance()
+            return LiteralExpression(value: .regex(pattern: pattern, flags: flags), span: token.span)
 
         // Variable reference: <name>
         case .leftAngle:

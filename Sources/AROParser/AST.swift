@@ -107,6 +107,8 @@ public struct AROStatement: Statement {
     public let aggregation: AggregationClause?
     /// Optional where clause (ARO-0018) - for Filter: `where <field> is "value"`
     public let whereClause: WhereClause?
+    /// Optional by clause (ARO-0037) - for Split: `by /delimiter/`
+    public let byClause: ByClause?
     /// Optional when condition (ARO-0004) - for guarded statements
     public let whenCondition: (any Expression)?
     public let span: SourceSpan
@@ -119,6 +121,7 @@ public struct AROStatement: Statement {
         expression: (any Expression)? = nil,
         aggregation: AggregationClause? = nil,
         whereClause: WhereClause? = nil,
+        byClause: ByClause? = nil,
         whenCondition: (any Expression)? = nil,
         span: SourceSpan
     ) {
@@ -129,6 +132,7 @@ public struct AROStatement: Statement {
         self.expression = expression
         self.aggregation = aggregation
         self.whereClause = whereClause
+        self.byClause = byClause
         self.whenCondition = whenCondition
         self.span = span
     }
@@ -146,6 +150,9 @@ public struct AROStatement: Statement {
         }
         if let where_ = whereClause {
             desc += " where \(where_)"
+        }
+        if let by = byClause {
+            desc += " \(by)"
         }
         if let when = whenCondition {
             desc += " when \(when)"
@@ -248,6 +255,28 @@ public struct WhereClause: Sendable, CustomStringConvertible {
     }
 }
 
+// MARK: - By Clause (ARO-0037)
+
+/// A by clause for regex-based splitting: by /pattern/flags
+public struct ByClause: Sendable, CustomStringConvertible {
+    public let pattern: String
+    public let flags: String
+    public let span: SourceSpan
+
+    public init(pattern: String, flags: String, span: SourceSpan) {
+        self.pattern = pattern
+        self.flags = flags
+        self.span = span
+    }
+
+    public var description: String {
+        if flags.isEmpty {
+            return "by /\(pattern)/"
+        }
+        return "by /\(pattern)/\(flags)"
+    }
+}
+
 // MARK: - Require Statement (ARO-0003)
 
 /// Source for a required dependency
@@ -293,12 +322,14 @@ public enum Pattern: Sendable, CustomStringConvertible {
     case literal(LiteralValue)
     case variable(QualifiedNoun)
     case wildcard
+    case regex(pattern: String, flags: String)
 
     public var description: String {
         switch self {
         case .literal(let value): return value.description
         case .variable(let noun): return "<\(noun.fullName)>"
         case .wildcard: return "_"
+        case .regex(let pattern, let flags): return "/\(pattern)/\(flags)"
         }
     }
 }
@@ -528,6 +559,7 @@ public indirect enum LiteralValue: Sendable, Equatable, CustomStringConvertible 
     case null
     case array([LiteralValue])
     case object([(String, LiteralValue)])
+    case regex(pattern: String, flags: String)
 
     public var description: String {
         switch self {
@@ -542,6 +574,7 @@ public indirect enum LiteralValue: Sendable, Equatable, CustomStringConvertible 
         case .object(let fields):
             let items = fields.map { "\($0.0): \($0.1.description)" }.joined(separator: ", ")
             return "{\(items)}"
+        case .regex(let pattern, let flags): return "/\(pattern)/\(flags)"
         }
     }
 
@@ -560,6 +593,8 @@ public indirect enum LiteralValue: Sendable, Equatable, CustomStringConvertible 
                 if keyA != keyB || valA != valB { return false }
             }
             return true
+        case (.regex(let patternA, let flagsA), .regex(let patternB, let flagsB)):
+            return patternA == patternB && flagsA == flagsB
         default: return false
         }
     }

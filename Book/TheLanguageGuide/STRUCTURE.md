@@ -34,7 +34,18 @@
 21. **State Machines** — Lifecycle management with the Accept action
 22. **Modules and Imports** — Modular architecture and cross-module visibility
 
+## Part VII: Advanced Topics
+23. **Control Flow** — Guards, match expressions, conditional execution
+24. **Data Pipelines** — Map, Filter, Reduce for collection processing
+25. **Repositories** — Persistent in-memory storage and observers
+26. **System Commands** — Shell execution with the Exec action
+27. **HTTP Client** — Making requests to external services
+28. **Concurrency** — Feature sets are async, statements are sync
+29. **Context-Aware Responses** — Human, machine, and developer output formatting
+30. **Type System** — Primitives, collections, and OpenAPI schemas
+
 ## Appendices
-- A: Action Reference (all 31 built-in actions)
+- A: Action Reference (all 50 built-in actions)
 - B: Preposition Semantics
 - C: Grammar Specification
+- D: Statements Reference

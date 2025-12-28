@@ -54,25 +54,22 @@ The distinction between results and objects is fundamental. Results are outputs�
 
 ## 4.5 Prepositions: The Relationships Between Things
 
-Prepositions are small words that carry large meaning. In ARO, prepositions connect actions to their objects while communicating the nature of that connection. The language supports eight prepositions, each with distinct semantics.
+Prepositions are small words that carry large meaning. In ARO, prepositions connect actions to their objects while communicating the nature of that connection. The language supports eight prepositions:
 
-The preposition "from" indicates source extraction. When you use "from," you are telling the reader that data flows from the object toward the result. The object is where the data originates; the result is where the data lands. This preposition appears with actions like Extract, Retrieve, Fetch, and Read—all actions that pull data from somewhere.
-
-The preposition "with" indicates accompaniment or provision. When you use "with," you are telling the reader that the object provides data to the action. This is different from "from" in a subtle but important way. "From" implies that the data is being extracted out of the object. "With" implies that the object is being provided as input without necessarily extracting from it. This preposition appears with actions like Create, Return, and Emit—actions where you provide a value to accompany the operation.
-
-The preposition "for" indicates purpose or target. When you use "for," you are telling the reader that the action is performed on behalf of or for the benefit of the object. This preposition appears with actions like Compute, where you compute something for a given input, and with Return, where you return a status for a particular condition.
-
-The preposition "to" indicates destination. When you use "to," you are telling the reader that data flows from the result toward the object. This is the opposite direction from "from." The preposition appears with actions like Send, where you send something to a destination.
-
-The preposition "into" indicates insertion or transformation. When you use "into," you are telling the reader that the result is being placed into the object. This preposition appears with Store, where you store data into a repository.
-
-The preposition "against" indicates comparison or validation. When you use "against," you are telling the reader that the result is being compared to or validated against the object. This preposition appears with Validate and Compare, where you check something against a reference.
-
-The preposition "via" indicates an intermediate channel. When you use "via," you are telling the reader that the operation goes through the object as an intermediary. This preposition is less common but useful for expressing operations that use proxies or channels.
-
-The preposition "on" indicates location or attachment. When you use "on," you are telling the reader that the action occurs at a particular location. This preposition appears with Start, where you start a server on a particular port.
+| Preposition | Meaning | Common Actions |
+|-------------|---------|----------------|
+| `from` | Source extraction | Extract, Retrieve, Fetch, Read |
+| `with` | Accompaniment/provision | Create, Return, Emit |
+| `for` | Purpose/target | Compute, Return, Log |
+| `to` | Destination | Send, Write |
+| `into` | Insertion | Store |
+| `against` | Comparison/validation | Validate, Compare |
+| `via` | Intermediate channel | Fetch (with proxy) |
+| `on` | Location/attachment | Start |
 
 Choosing the right preposition makes your code clearer and more accurate. When you extract a user identifier from the path parameters, "from" is the natural choice. When you create a user with provided data, "with" is the natural choice. When you store a user into a repository, "into" is the natural choice. Let the semantics of your operation guide your choice of preposition.
+
+> **See Appendix B** for complete preposition semantics with examples.
 
 ## 4.6 Articles: The Grammar Connectors
 

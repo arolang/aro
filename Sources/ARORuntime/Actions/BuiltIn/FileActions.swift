@@ -205,12 +205,13 @@ public struct ExistsAction: ActionImplementation {
 ///
 /// ## Example
 /// ```
-/// <CreateDirectory> the <output-dir> to the <path: "./output/reports/2024">.
+/// <Make> the <directory> at the <path: "./output/reports/2024">.
+/// <CreateDirectory> the <output-dir> to the <path: "./output">.
 /// ```
 public struct CreateDirectoryAction: ActionImplementation {
     public static let role: ActionRole = .own
-    public static let verbs: Set<String> = ["createdirectory", "mkdir"]
-    public static let validPrepositions: Set<Preposition> = [.to, .for]
+    public static let verbs: Set<String> = ["createdirectory", "mkdir", "make"]
+    public static let validPrepositions: Set<Preposition> = [.to, .for, .at]
 
     public init() {}
 

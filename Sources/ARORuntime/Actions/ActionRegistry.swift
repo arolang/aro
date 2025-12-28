@@ -60,6 +60,7 @@ public final class ActionRegistry: @unchecked Sendable {
         register(UpdateAction.self)
         // FilterAction is registered below in data pipeline actions
         register(SortAction.self)
+        register(SplitAction.self)
         register(MergeAction.self)
         register(DeleteAction.self)
 
@@ -78,6 +79,7 @@ public final class ActionRegistry: @unchecked Sendable {
 
         // Server actions
         register(StartAction.self)
+        register(StopAction.self)
         register(ListenAction.self)
         register(RouteAction.self)
 
@@ -85,9 +87,6 @@ public final class ActionRegistry: @unchecked Sendable {
         register(ConnectAction.self)
         register(BroadcastAction.self)
         register(CloseAction.self)
-
-        // File actions
-        register(WatchAction.self)
 
         // File operations (ARO-0036)
         register(ListAction.self)

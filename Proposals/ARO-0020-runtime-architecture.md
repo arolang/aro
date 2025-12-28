@@ -59,7 +59,6 @@ Applications can define **exit handlers** that execute when the application term
 (Application-End: Success) {
     <Log> the <shutdown: message> for the <console> with "Application shutting down gracefully".
     <Close> the <database-connections>.
-    <Flush> the <log-buffers>.
     <Return> an <OK: status> for the <shutdown>.
 }
 

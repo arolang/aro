@@ -1,0 +1,24 @@
+(* Split Action Example - ARO-0037 *)
+(* Demonstrates splitting strings using regex delimiters *)
+
+(Application-Start: Split Demo) {
+    (* Split CSV data by comma *)
+    <Create> the <csv-line> with "apple,banana,cherry,date".
+    <Split> the <fruits> from the <csv-line> by /,/.
+    <Log> the <fruits-message> for the <console> with "Fruits:".
+    <Log> the <fruits-list> for the <console> with <fruits>.
+
+    (* Split by whitespace *)
+    <Create> the <sentence> with "Hello   World  ARO".
+    <Split> the <words> from the <sentence> by /\s+/.
+    <Log> the <words-message> for the <console> with "Words:".
+    <Log> the <words-list> for the <console> with <words>.
+
+    (* Split by multiple delimiters *)
+    <Create> the <data> with "one;two,three four".
+    <Split> the <parts> from the <data> by /[;,\s]+/.
+    <Log> the <parts-message> for the <console> with "Parts:".
+    <Log> the <parts-list> for the <console> with <parts>.
+
+    <Return> an <OK: status> for the <demo>.
+}

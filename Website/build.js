@@ -54,7 +54,23 @@ mainHtmlFiles.forEach(file => {
 processHtmlFile('src/doc-template.html', 'dist/doc-template.html', '../');
 
 // Process docs subdirectory pages (one level deep)
-const docsSubPages = ['event-driven.html', 'state-transitions.html', 'data-pipelines.html', 'native-compilation.html', 'language-proposals.html'];
+const docsSubPages = [
+    'event-driven.html',
+    'state-transitions.html',
+    'data-pipelines.html',
+    'native-compilation.html',
+    'language-proposals.html',
+    'the-basics.html',
+    'feature-sets.html',
+    'actions.html',
+    'application-lifecycle.html',
+    'contract-first.html',
+    'custom-actions.html',
+    'http-services.html',
+    'sockets.html',
+    'services.html',
+    'file-operations.html'
+];
 docsSubPages.forEach(file => {
     processHtmlFile(`src/docs/${file}`, `dist/docs/${file}`, '../');
 });
