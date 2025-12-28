@@ -9,6 +9,7 @@
 
 <p align="center">
   <a href="https://krissimon.github.io/aro/">Website</a> ·
+  <a href="https://github.com/KrisSimon/aro/wiki">Documentation</a> ·
   <a href="https://github.com/KrisSimon/ARO-Lang/releases">Language Guide (PDF)</a> ·
   <a href="https://github.com/KrisSimon/ARO-Lang/discussions">Discussions</a> ·
   <a href="https://github.com/KrisSimon/ARO-Lang/issues">Issues</a>
