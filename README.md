@@ -96,7 +96,7 @@ HTTP server and client, file system operations with directory watching, and TCP 
 
 ### Extensible Actions
 
-When the 24 built in actions are not enough, write custom actions in Swift or distribute them as plugins through Swift Package Manager.
+When the 51 built in actions are not enough, write custom actions in Swift or distribute them as plugins through Swift Package Manager.
 
 ### Happy Path Philosophy
 
@@ -134,11 +134,11 @@ For a detailed look at the implementation, see [OVERVIEW.md](./OVERVIEW.md).
 
 ## Building from Source
 
-ARO is written in Swift 6.0 and uses Swift Package Manager.
+ARO is written in Swift 6.2 and uses Swift Package Manager.
 
 ### macOS
 
-Xcode 16 or later includes Swift 6.0.
+Xcode 16.3 or later includes Swift 6.2.
 
 ```bash
 git clone https://github.com/KrisSimon/ARO-Lang.git
@@ -150,7 +150,7 @@ The binary is at `.build/release/aro`.
 
 ### Linux
 
-Install Swift 6.0 from [swift.org](https://swift.org/download/).
+Install Swift 6.2 from [swift.org](https://swift.org/download/).
 
 ```bash
 git clone https://github.com/KrisSimon/ARO-Lang.git
@@ -162,7 +162,7 @@ The binary is at `.build/release/aro`.
 
 ### Windows
 
-Install Swift 6.0 from [swift.org](https://swift.org/download/). Ensure the Swift toolchain is in your PATH.
+Install Swift 6.2 from [swift.org](https://swift.org/download/). Ensure the Swift toolchain is in your PATH.
 
 ```powershell
 git clone https://github.com/KrisSimon/ARO-Lang.git
@@ -184,13 +184,32 @@ The `Examples/` directory contains working applications:
 
 | Example | Description |
 |---------|-------------|
-| HelloWorld | Minimal single file application |
-| HTTPServer | Web server with OpenAPI routing |
-| FileWatcher | Directory monitoring with event handlers |
-| EchoSocket | TCP server echoing messages |
-| UserService | Multi file application with events |
-| ModulesExample | Application composition with imports |
 | Calculator | Test framework demonstration |
+| Computations | Arithmetic and data transformations |
+| Conditionals | Conditional logic and branching |
+| ContextAware | Context-aware feature sets |
+| CustomPlugin | Custom action plugin example |
+| DataPipeline | Data pipeline processing |
+| DirectoryLister | Directory listing operations |
+| EchoSocket | TCP server echoing messages |
+| Expressions | Expression evaluation |
+| ExternalService | External service integration |
+| FileOperations | File system operations |
+| FileWatcher | Directory monitoring with event handlers |
+| HTTPClient | HTTP client requests |
+| HTTPServer | Web server with OpenAPI routing |
+| HelloWorld | Minimal single file application |
+| HelloWorldAPI | Simple HTTP API example |
+| Iteration | Loop and iteration patterns |
+| ModulesExample | Application composition with imports |
+| OrderService | Order management service |
+| RepositoryObserver | Repository change observers |
+| Scoping | Variable scoping demonstration |
+| SimpleChat | Simple chat application |
+| Split | String splitting operations |
+| SystemMonitor | System monitoring example |
+| UserService | Multi file application with events |
+| ZipService | ZIP file operations |
 
 Run any example with:
 
