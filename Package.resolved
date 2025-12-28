@@ -1,5 +1,5 @@
 {
-  "originHash" : "375d9151b12f69e730b79cec4ca6f2a2734d70dfcb707bf55f7df9b0b2cbc7a8",
+  "originHash" : "2a8ab0850ee528722361c47fef0c299524d409811e3ded5c179234cc1c20a048",
   "pins" : [
     {
       "identity" : "async-http-client",
@@ -13,10 +13,10 @@
     {
       "identity" : "filemonitor",
       "kind" : "remoteSourceControl",
-      "location" : "https://github.com/aus-der-Technik/FileMonitor.git",
+      "location" : "https://github.com/KrisSimon/FileMonitor.git",
       "state" : {
-        "revision" : "5adbe8f2383eac5148475ef84977806bbd33e8d7",
-        "version" : "1.2.1"
+        "revision" : "20e90f32e5c88f840e83dc1bb3bf6db096a80d13",
+        "version" : "2.0.0"
       }
     },
     {

@@ -15,8 +15,8 @@ platformDependencies = [
     .package(url: "https://github.com/apple/swift-nio.git", from: "2.75.0"),
     // AsyncHTTPClient for outgoing HTTP requests
     .package(url: "https://github.com/swift-server/async-http-client.git", from: "1.21.0"),
-    // FileMonitor for file system watching
-    .package(url: "https://github.com/aus-der-Technik/FileMonitor.git", from: "1.0.0"),
+    // FileMonitor for file system watching (using fork with Windows support)
+    .package(url: "https://github.com/KrisSimon/FileMonitor.git", from: "2.0.0"),
 ]
 runtimePlatformDependencies = [
     .product(name: "NIO", package: "swift-nio"),
