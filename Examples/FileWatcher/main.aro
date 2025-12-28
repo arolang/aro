@@ -3,8 +3,8 @@
 (Application-Start: File Watcher) {
     <Log> the <startup: message> for the <console> with "Starting file watcher".
 
-    (* Watch the current directory *)
-    <Watch> the <file-monitor> for the <directory> with ".".
+    (* Start file monitor for the current directory *)
+    <Start> the <file-monitor> with ".".
 
     <Log> the <ready: message> for the <console> with "Watching for file changes... Press Ctrl+C to stop.".
 

@@ -9,16 +9,19 @@ import AROParser
 /// Starts a server or service
 ///
 /// The Start action initializes and starts servers, services, or other
-/// long-running components.
+/// long-running components. All services use the `with` preposition for
+/// configuration.
 ///
-/// ## Example
-/// ```
-/// <Start> the <http-server> on port 8080.
+/// ## Examples
+/// ```aro
+/// <Start> the <http-server> with <contract>.
+/// <Start> the <socket-server> with { port: 9000 }.
+/// <Start> the <file-monitor> with { directory: "." }.
 /// ```
 public struct StartAction: ActionImplementation {
     public static let role: ActionRole = .own
-    public static let verbs: Set<String> = ["start", "initialize", "boot"]
-    public static let validPrepositions: Set<Preposition> = [.with, .on, .for]
+    public static let verbs: Set<String> = ["start"]
+    public static let validPrepositions: Set<Preposition> = [.with]
 
     public init() {}
 
@@ -136,15 +139,147 @@ public struct StartAction: ActionImplementation {
     }
 
     private func startFileMonitor(object: ObjectDescriptor, context: ExecutionContext) async throws -> any Sendable {
-        let path = object.base
+        // Get path from various sources with the standardized "with" syntax:
+        // 1. From literal string: <Start> the <file-monitor> with ".".
+        // 2. From object property: <Start> the <file-monitor> with { directory: "." }.
+        // 3. From variable: <Start> the <file-monitor> with <config>.
+        let path: String
+
+        if let literalPath: String = context.resolve("_literal_") {
+            // Direct string literal
+            path = literalPath
+        } else if let objectConfig = context.resolveAny("_object_") as? [String: Any],
+                  let dirPath = objectConfig["directory"] as? String {
+            // Object literal with directory property
+            path = dirPath
+        } else if let exprValue = context.resolveAny("_expression_") as? [String: Any],
+                  let dirPath = exprValue["directory"] as? String {
+            // Expression that resolved to object
+            path = dirPath
+        } else if let specPath = object.specifiers.first {
+            // Object specifier (fallback)
+            path = specPath
+        } else {
+            // Default to current directory
+            path = "."
+        }
 
         if let fileMonitorService = context.service(FileMonitorService.self) {
             try await fileMonitorService.watch(path: path)
             return ServerStartResult(serverType: "file-monitor", success: true, path: path)
         }
 
+        // For compiled binaries, use native file watcher
+        #if !os(Windows)
+        let started = NativeFileWatcher.shared.startWatching(path: path)
+        if started {
+            return ServerStartResult(serverType: "file-monitor", success: true, path: path)
+        }
+        #endif
+
         context.emit(FileMonitorStartRequestedEvent(path: path))
         return ServerStartResult(serverType: "file-monitor", success: true, path: path)
+    }
+}
+
+/// Stops a server or service
+///
+/// The Stop action gracefully stops servers, services, or other
+/// long-running components.
+///
+/// ## Examples
+/// ```aro
+/// <Stop> the <http-server> with <application>.
+/// <Stop> the <socket-server> with <application>.
+/// <Stop> the <file-monitor> with <application>.
+/// ```
+public struct StopAction: ActionImplementation {
+    public static let role: ActionRole = .own
+    public static let verbs: Set<String> = ["stop"]
+    public static let validPrepositions: Set<Preposition> = [.with]
+
+    public init() {}
+
+    public func execute(
+        result: ResultDescriptor,
+        object: ObjectDescriptor,
+        context: ExecutionContext
+    ) async throws -> any Sendable {
+        // Determine what to stop based on result
+        let serviceType = result.base.lowercased()
+
+        switch serviceType {
+        case "http-server", "httpserver", "server":
+            return try await stopHTTPServer(context: context)
+
+        case "socket-server", "socketserver":
+            return try await stopSocketServer(context: context)
+
+        case "file-monitor", "filemonitor", "watcher":
+            return stopFileMonitor()
+
+        default:
+            // Generic service stop
+            context.emit(ServiceStoppedEvent(serviceName: serviceType))
+            return ServerStopResult(serverType: serviceType, success: true)
+        }
+    }
+
+    private func stopHTTPServer(context: ExecutionContext) async throws -> any Sendable {
+        if let httpServerService = context.service(HTTPServerService.self) {
+            try await httpServerService.stop()
+            return ServerStopResult(serverType: "http-server", success: true)
+        }
+
+        #if !os(Windows)
+        aro_native_http_server_stop()
+        #endif
+
+        return ServerStopResult(serverType: "http-server", success: true)
+    }
+
+    private func stopSocketServer(context: ExecutionContext) async throws -> any Sendable {
+        if let socketService = context.service(SocketServerService.self) {
+            try await socketService.stop()
+            return ServerStopResult(serverType: "socket-server", success: true)
+        }
+
+        #if !os(Windows)
+        aro_native_socket_server_stop()
+        #endif
+
+        return ServerStopResult(serverType: "socket-server", success: true)
+    }
+
+    private func stopFileMonitor() -> any Sendable {
+        #if !os(Windows)
+        NativeFileWatcher.shared.stopWatching()
+        #endif
+
+        return ServerStopResult(serverType: "file-monitor", success: true)
+    }
+}
+
+/// Result of a service stop operation
+public struct ServerStopResult: Sendable, Equatable {
+    public let serverType: String
+    public let success: Bool
+
+    public init(serverType: String, success: Bool) {
+        self.serverType = serverType
+        self.success = success
+    }
+}
+
+/// Event emitted when a service stops
+public struct ServiceStoppedEvent: RuntimeEvent {
+    public static var eventType: String { "service.stopped" }
+    public let timestamp: Date
+    public let serviceName: String
+
+    public init(serviceName: String) {
+        self.timestamp = Date()
+        self.serviceName = serviceName
     }
 }
 
@@ -235,63 +370,6 @@ public struct RouteAction: ActionImplementation {
         context.emit(RouteRequestedEvent(requestType: String(describing: type(of: request)), router: routerName))
 
         return RouteResult(router: routerName, success: true)
-    }
-}
-
-/// Watches a file or directory for changes
-///
-/// The Watch action sets up file system monitoring for changes.
-///
-/// ## Example
-/// ```
-/// <Watch> the <directory: "./watched"> as <file-monitor>.
-/// ```
-public struct WatchAction: ActionImplementation {
-    public static let role: ActionRole = .own
-    public static let verbs: Set<String> = ["watch", "monitor", "observe"]
-    public static let validPrepositions: Set<Preposition> = [.for, .on]
-
-    public init() {}
-
-    public func execute(
-        result: ResultDescriptor,
-        object: ObjectDescriptor,
-        context: ExecutionContext
-    ) async throws -> any Sendable {
-        // Get path to watch - check literal value first, then object specifiers, then result
-        let path: String
-        if let literalPath: String = context.resolve("_literal_") {
-            // Path provided via "with" clause: <Watch> the <x> for the <y> with "."
-            path = literalPath
-        } else if let specPath = object.specifiers.first {
-            // Path in object specifier
-            path = specPath
-        } else if let resolvedPath: String = context.resolve(result.base) {
-            // Path from resolved variable
-            path = resolvedPath
-        } else {
-            // Fallback to current directory
-            path = "."
-        }
-
-        // Try file monitor service (interpreter mode)
-        if let fileMonitorService = context.service(FileMonitorService.self) {
-            try await fileMonitorService.watch(path: path)
-            return WatchResult(path: path, success: true)
-        }
-
-        // For compiled binaries, use native file watcher
-        #if !os(Windows)
-        let started = NativeFileWatcher.shared.startWatching(path: path)
-        if started {
-            return WatchResult(path: path, success: true)
-        }
-        #endif
-
-        // Emit watch event as fallback
-        context.emit(FileWatchStartedEvent(path: path))
-
-        return WatchResult(path: path, success: true)
     }
 }
 
@@ -396,12 +474,6 @@ public struct ListenResult: Sendable, Equatable {
 /// Result of a route operation
 public struct RouteResult: Sendable, Equatable {
     public let router: String
-    public let success: Bool
-}
-
-/// Result of a watch operation
-public struct WatchResult: Sendable, Equatable {
-    public let path: String
     public let success: Bool
 }
 

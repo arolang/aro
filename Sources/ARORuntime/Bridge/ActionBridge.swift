@@ -564,15 +564,6 @@ public func aro_action_close(
     return executeAction(verb: "close", contextPtr: contextPtr, resultPtr: resultPtr, objectPtr: objectPtr)
 }
 
-@_cdecl("aro_action_flush")
-public func aro_action_flush(
-    _ contextPtr: UnsafeMutableRawPointer?,
-    _ resultPtr: UnsafeRawPointer?,
-    _ objectPtr: UnsafeRawPointer?
-) -> UnsafeMutableRawPointer? {
-    return executeAction(verb: "flush", contextPtr: contextPtr, resultPtr: resultPtr, objectPtr: objectPtr)
-}
-
 // MARK: - File Operations (ARO-0036)
 
 @_cdecl("aro_action_list")
