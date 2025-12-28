@@ -4,7 +4,7 @@
 
 ---
 
-## 9.1 The Three Phases
+## 10.1 The Three Phases
 
 <div style="text-align: center; margin: 2em 0;">
 <svg width="480" height="120" viewBox="0 0 480 120" xmlns="http://www.w3.org/2000/svg">  <!-- Startup Phase -->  <rect x="20" y="35" width="120" height="50" rx="6" fill="#dbeafe" stroke="#3b82f6" stroke-width="2"/>  <text x="80" y="55" text-anchor="middle" font-family="sans-serif" font-size="12" font-weight="bold" fill="#1e40af">STARTUP</text>  <text x="80" y="72" text-anchor="middle" font-family="monospace" font-size="9" fill="#3b82f6">Application-Start</text>  <!-- Arrow 1 -->  <line x1="140" y1="60" x2="175" y2="60" stroke="#6b7280" stroke-width="2"/>  <polygon points="175,60 165,55 165,65" fill="#6b7280"/>  <!-- Execution Phase -->  <rect x="180" y="35" width="120" height="50" rx="6" fill="#dcfce7" stroke="#22c55e" stroke-width="2"/>  <text x="240" y="55" text-anchor="middle" font-family="sans-serif" font-size="12" font-weight="bold" fill="#166534">EXECUTION</text>  <text x="240" y="72" text-anchor="middle" font-family="monospace" font-size="9" fill="#22c55e">Keepalive + Events</text>  <!-- Arrow 2 -->  <line x1="300" y1="60" x2="335" y2="60" stroke="#6b7280" stroke-width="2"/>  <polygon points="335,60 325,55 325,65" fill="#6b7280"/>  <!-- Shutdown Phase -->  <rect x="340" y="35" width="120" height="50" rx="6" fill="#fee2e2" stroke="#ef4444" stroke-width="2"/>  <text x="400" y="55" text-anchor="middle" font-family="sans-serif" font-size="12" font-weight="bold" fill="#991b1b">SHUTDOWN</text>  <text x="400" y="72" text-anchor="middle" font-family="monospace" font-size="9" fill="#ef4444">Application-End</text>  <!-- Phase labels -->  <text x="80" y="105" text-anchor="middle" font-family="sans-serif" font-size="9" fill="#6b7280">Initialize</text>  <text x="240" y="105" text-anchor="middle" font-family="sans-serif" font-size="9" fill="#6b7280">Process Events</text>  <text x="400" y="105" text-anchor="middle" font-family="sans-serif" font-size="9" fill="#6b7280">Cleanup</text>  <!-- Top labels -->  <text x="80" y="22" text-anchor="middle" font-family="sans-serif" font-size="9" fill="#9ca3af">required</text>  <text x="240" y="22" text-anchor="middle" font-family="sans-serif" font-size="9" fill="#9ca3af">servers only</text>  <text x="400" y="22" text-anchor="middle" font-family="sans-serif" font-size="9" fill="#9ca3af">optional</text></svg>
@@ -22,7 +22,7 @@ Each phase has a corresponding feature set that you can define to handle its res
 
 ---
 
-## 9.2 Application-Start
+## 10.2 Application-Start
 
 Every ARO application must have exactly one feature set named `Application-Start`. This is where execution begins. The runtime looks for this feature set when the application launches and executes it to initialize the application. Without an Application-Start feature set, there is nothing to execute, and the application cannot run.
 
@@ -36,7 +36,7 @@ The startup feature set must return a status to indicate whether initialization 
 
 ---
 
-## 9.3 The Keepalive Action
+## 10.3 The Keepalive Action
 
 For applications that need to continue running after startup to process ongoing events, the Keepalive action is essential. Without it, the runtime executes the startup feature set, reaches the return statement, and terminates the application. This is fine for batch applications that do their work during startup, but servers and daemons need to stay running.
 
@@ -48,7 +48,7 @@ Applications that do not use Keepalive execute their startup statements and imme
 
 ---
 
-## 9.4 Application-End: Success
+## 10.4 Application-End: Success
 
 The success shutdown handler runs when the application terminates normally. This means the user sent a shutdown signal, the application called for shutdown programmatically, or any other clean termination occurred. It is an opportunity to perform cleanup that should happen on every normal exit.
 
@@ -62,7 +62,7 @@ The shutdown handler receives no special input—unlike error shutdown, there is
 
 ---
 
-## 9.5 Application-End: Error
+## 10.5 Application-End: Error
 
 The error shutdown handler runs when the application terminates due to an unhandled error. This means an exception occurred that was not caught by any handler, a fatal condition was detected, or some other error situation triggered abnormal termination.
 
@@ -76,7 +76,7 @@ The distinction between success and error shutdown allows you to handle these ca
 
 ---
 
-## 9.6 Shutdown Signals
+## 10.6 Shutdown Signals
 
 The operating system communicates with processes through signals. ARO handles the common shutdown signals appropriately.
 
@@ -90,7 +90,7 @@ The shutdown process has a timeout. If the shutdown handlers do not complete wit
 
 ---
 
-## 9.7 Startup Errors
+## 10.7 Startup Errors
 
 If the Application-Start feature set fails, the application cannot proceed. The runtime logs the error with full context, invokes the error shutdown handler if one exists, and terminates the process with a non-zero exit code.
 
@@ -102,7 +102,7 @@ Designing for startup resilience involves validating assumptions early. If your 
 
 ---
 
-## 9.8 Best Practices
+## 10.8 Best Practices
 
 Always use Keepalive for server applications. If your application starts an HTTP server, file watcher, socket listener, or any other service that should run continuously, the Keepalive action is necessary to prevent immediate termination after startup.
 

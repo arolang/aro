@@ -256,11 +256,54 @@ if flags.contains("m") { options.insert(.anchorsMatchLines) }
 
 ---
 
-## 9. Future Work
+## 9. Split Action
+
+The Split action divides a string into parts using a regex delimiter:
+
+```aro
+<Split> the <parts> from the <string> by /delimiter/.
+```
+
+### Syntax
+
+```aro
+(* Split by comma *)
+<Split> the <fields> from the <csv-line> by /,/.
+
+(* Split by whitespace *)
+<Split> the <words> from the <sentence> by /\s+/.
+
+(* Split by multiple delimiters *)
+<Split> the <tokens> from the <code> by /[;,\s]+/.
+
+(* Case-insensitive split *)
+<Split> the <sections> from the <text> by /SECTION/i.
+```
+
+### Behavior
+
+- Returns an array of strings between delimiter matches
+- Empty strings are included when delimiters are adjacent
+- If no match is found, returns the original string as a single-element array
+- Supports all regex flags: `i`, `s`, `m`
+
+### Example
+
+```aro
+(parseCSV: Data Pipeline) {
+    <Create> the <line> with "apple,banana,cherry".
+    <Split> the <fruits> from the <line> by /,/.
+    (* fruits = ["apple", "banana", "cherry"] *)
+    <Return> an <OK: status> with <fruits>.
+}
+```
+
+---
+
+## 10. Future Work
 
 - **Capture Groups**: Extract matched substrings
 - **Replace Action**: `<Replace> the <result> in <string> matching /pattern/ with <replacement>`
-- **Split by Regex**: `<Split> the <parts> from <string> by /delimiter/`
 
 ---
 
@@ -269,6 +312,7 @@ if flags.contains("m") { options.insert(.anchorsMatchLines) }
 ARO-0037 adds regex literal syntax `/pattern/flags` for:
 - Match statement case patterns
 - Where clause `matches` operator
+- Split action with `by /delimiter/` clause
 - Flags: `i` (case-insensitive), `s` (dotall), `m` (multiline), `g` (global)
 
 This enables expressive pattern matching while maintaining ARO's readable syntax.

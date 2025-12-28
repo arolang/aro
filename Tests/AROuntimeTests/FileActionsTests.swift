@@ -87,12 +87,14 @@ struct CreateDirectoryActionTests {
     func testCreateDirectoryActionVerbs() {
         #expect(CreateDirectoryAction.verbs.contains("createdirectory"))
         #expect(CreateDirectoryAction.verbs.contains("mkdir"))
+        #expect(CreateDirectoryAction.verbs.contains("make"))
     }
 
     @Test("CreateDirectory action valid prepositions")
     func testCreateDirectoryActionPrepositions() {
         #expect(CreateDirectoryAction.validPrepositions.contains(.to))
         #expect(CreateDirectoryAction.validPrepositions.contains(.for))
+        #expect(CreateDirectoryAction.validPrepositions.contains(.at))
     }
 }
 

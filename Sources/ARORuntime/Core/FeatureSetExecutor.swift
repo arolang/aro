@@ -271,6 +271,12 @@ public final class FeatureSetExecutor: @unchecked Sendable {
             context.bind("_where_value_", value: whereValue)
         }
 
+        // ARO-0037: Bind by clause if present (for Split action)
+        if let byClause = statement.byClause {
+            context.bind("_by_pattern_", value: byClause.pattern)
+            context.bind("_by_flags_", value: byClause.flags)
+        }
+
         // Get action implementation
         guard let action = actionRegistry.action(for: verb) else {
             throw ActionError.unknownAction(verb)

@@ -637,3 +637,14 @@ public func aro_action_append(
 ) -> UnsafeMutableRawPointer? {
     return executeAction(verb: "append", contextPtr: contextPtr, resultPtr: resultPtr, objectPtr: objectPtr)
 }
+
+// MARK: - String Actions (ARO-0037)
+
+@_cdecl("aro_action_split")
+public func aro_action_split(
+    _ contextPtr: UnsafeMutableRawPointer?,
+    _ resultPtr: UnsafeRawPointer?,
+    _ objectPtr: UnsafeRawPointer?
+) -> UnsafeMutableRawPointer? {
+    return executeAction(verb: "split", contextPtr: contextPtr, resultPtr: resultPtr, objectPtr: objectPtr)
+}

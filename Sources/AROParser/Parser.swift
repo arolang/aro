@@ -272,6 +272,18 @@ public final class Parser {
             whereClause = try parseWhereClause()
         }
 
+        // Parse optional by clause (ARO-0037): `by /pattern/flags`
+        var byClause: ByClause?
+        if case .preposition(.by) = peek().kind {
+            let byToken = advance() // consume 'by'
+            if case .regexLiteral(let pattern, let flags) = peek().kind {
+                advance() // consume regex literal
+                byClause = ByClause(pattern: pattern, flags: flags, span: byToken.span.merged(with: previous().span))
+            } else {
+                throw ParserError.unexpectedToken(expected: "regex literal after 'by'", got: peek())
+            }
+        }
+
         // Parse optional when clause (ARO-0004): `when <condition>`
         var whenCondition: (any Expression)?
         if check(.when) {
@@ -289,6 +301,7 @@ public final class Parser {
             expression: expression,
             aggregation: aggregation,
             whereClause: whereClause,
+            byClause: byClause,
             whenCondition: whenCondition,
             span: startToken.span.merged(with: endToken.span)
         )

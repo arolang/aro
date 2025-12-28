@@ -60,6 +60,7 @@ public final class ActionRegistry: @unchecked Sendable {
         register(UpdateAction.self)
         // FilterAction is registered below in data pipeline actions
         register(SortAction.self)
+        register(SplitAction.self)
         register(MergeAction.self)
         register(DeleteAction.self)
 

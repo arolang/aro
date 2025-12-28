@@ -131,16 +131,22 @@ Returns a boolean: `true` if the path exists and matches the expected type (file
 
 ## 4. CreateDirectory Action
 
-Create a directory with all intermediate directories:
+Create a directory with all intermediate directories.
+
+**Verbs:** `createdirectory`, `mkdir`, `make`
+**Prepositions:** `at`, `to`, `for`
 
 ```aro
-(* Create directory - creates parents automatically *)
+(* Natural syntax with "make" verb *)
+<Make> the <directory> at the <path: "./output/reports/2024">.
+
+(* Traditional syntax *)
 <CreateDirectory> the <output-dir> at the <path: "./output/reports/2024">.
 
 (* Check and create *)
 <Exists> the <exists> for the <directory: "./cache">.
 
-<CreateDirectory> the <cache-dir> at the <path: "./cache"> when <exists> is false.
+<Make> the <cache-dir> at the <path: "./cache"> when <exists> is false.
 ```
 
 ### Behavior

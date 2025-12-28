@@ -1,326 +1,303 @@
 # Appendix C: Grammar Specification
 
-*Formal grammar of the ARO language.*
-
----
+This appendix provides the complete formal grammar specification for ARO using Extended Backus-Naur Form (EBNF).
 
 ## Notation
 
-This appendix uses Extended Backus-Naur Form (EBNF):
-
-- `=` defines a rule
-- `|` means "or"
-- `[ ]` means optional (0 or 1)
-- `{ }` means repetition (0 or more)
-- `" "` encloses literal text
-- `(* *)` is a comment
-
----
+| Symbol | Meaning |
+|--------|---------|
+| `=` | Definition |
+| `,` | Concatenation |
+| `\|` | Alternative |
+| `[ ]` | Optional (0 or 1) |
+| `{ }` | Repetition (0 or more) |
+| `( )` | Grouping |
+| `" "` | Terminal string |
+| `' '` | Terminal character |
+| `(* *)` | Comment |
 
 ## Program Structure
 
 ```ebnf
-program = { import_declaration } { feature_set } ;
+(* Top-level program *)
+program = { feature_set } ;
 
-import_declaration = "import" string_literal ;
+(* Feature set definition *)
+feature_set = "(" , feature_name , ":" , business_activity , ")" , block ;
 
-feature_set = "(" feature_name ":" business_activity ")" "{" { statement } "}" ;
+feature_name = identifier | route_pattern ;
+business_activity = identifier , { identifier } ;
 
-feature_name = identifier | compound_identifier ;
+(* Route patterns for HTTP handlers *)
+route_pattern = http_method , route_path ;
+http_method = "GET" | "POST" | "PUT" | "DELETE" | "PATCH" ;
+route_path = "/" , { path_segment , "/" } , [ path_segment ] ;
+path_segment = identifier | path_parameter ;
+path_parameter = "{" , identifier , "}" ;
 
-business_activity = identifier | compound_identifier ;
+(* Block of statements *)
+block = "{" , { statement } , "}" ;
 ```
-
----
 
 ## Statements
 
 ```ebnf
-statement = aro_statement | publish_statement | match_statement ;
+(* Statement types *)
+statement = aro_statement
+          | publish_statement
+          | conditional_statement
+          | guard_statement
+          | match_statement ;
 
-match_statement = "match" expression "{" { case_clause } [ otherwise_clause ] "}" ;
+(* Core ARO statement: Action-Result-Object *)
+aro_statement = action , [ article ] , result , preposition , [ article ] , object , [ modifiers ] , "." ;
 
-case_clause = "case" pattern "{" { statement } "}" ;
+(* Publish statement *)
+publish_statement = "<Publish>" , "as" , alias , variable , "." ;
 
-otherwise_clause = "otherwise" "{" { statement } "}" ;
+(* Conditional statements *)
+conditional_statement = "if" , condition , "then" , block , [ "else" , block ] ;
 
-pattern = literal_value | variable_ref | wildcard | regex_literal ;
+(* Guard statements *)
+guard_statement = "when" , condition , block ;
 
-wildcard = "_" ;
-
-aro_statement = action article result object_clause
-                [ literal_value ]
-                [ expression_clause ]
-                [ aggregation_clause ]
-                [ where_clause ]
-                [ when_clause ]
-                "." ;
-
-publish_statement = "<Publish>" "as" identifier result "." ;
-
-action = "<" verb ">" ;
-
-verb = identifier ;
-
-result = "<" qualified_noun ">" ;
-
-object_clause = preposition article "<" qualified_noun ">" ;
-
-qualified_noun = identifier [ ":" qualifier ] ;
-
-qualifier = identifier { ":" identifier } ;
+(* Match statements *)
+match_statement = "match" , variable , "{" , { match_case } , [ default_case ] , "}" ;
+match_case = "case" , pattern , block ;
+pattern = literal | regex_literal | variable ;
+default_case = "default" , block | "otherwise" , block ;
 ```
 
----
-
-## Prepositions and Articles
+## Actions and Objects
 
 ```ebnf
-preposition = "from" | "with" | "for" | "to" | "into"
-            | "against" | "via" | "on" ;
+(* Action - the verb *)
+action = "<" , action_verb , ">" ;
+action_verb = identifier ;
 
-article = "the" | "a" | "an" ;
+(* Result - what is produced *)
+result = variable | typed_variable ;
+
+(* Object - the source or target *)
+object = variable
+       | typed_variable
+       | literal
+       | file_reference
+       | api_reference
+       | repository_reference ;
+
+(* Modifiers *)
+modifiers = where_clause | with_clause | on_clause ;
+where_clause = "where" , condition , { "and" , condition } ;
+with_clause = "with" , ( variable | object_literal | literal ) ;
+on_clause = "on" , "port" , number ;
 ```
 
----
-
-## Clauses
+## Variables and Types
 
 ```ebnf
-literal_value = string_literal | number_literal | boolean_literal
-              | array_literal | object_literal ;
+(* Variable forms *)
+variable = "<" , identifier , ">" ;
+typed_variable = "<" , identifier , ":" , type_hint , ">" ;
+qualified_variable = "<" , identifier , ":" , qualifier , ">" ;
 
-expression_clause = expression ;
+(* Type hints *)
+type_hint = "JSON" | "bytes" | "List" | "String" | "Number" | "Boolean" | "Date" | identifier ;
 
-aggregation_clause = "with" aggregation_function ;
+(* Qualifier for accessing properties *)
+qualifier = identifier , { identifier } ;
 
-where_clause = "where" condition ;
-
-when_clause = "when" condition ;
-
-aggregation_function = identifier "(" [ identifier ] ")" ;
+(* Alias for publishing *)
+alias = "<" , identifier , ">" ;
 ```
 
----
-
-## Expressions
+## References
 
 ```ebnf
-expression = logical_or_expr ;
+(* File reference *)
+file_reference = "<" , "file:" , ( string_literal | variable ) , ">" ;
 
-logical_or_expr = logical_and_expr { "or" logical_and_expr } ;
+(* Directory reference *)
+directory_reference = "<" , "directory:" , string_literal , ">" ;
 
-logical_and_expr = equality_expr { "and" equality_expr } ;
+(* API reference *)
+api_reference = "<" , api_name , ":" , [ http_method ] , route_path , ">" ;
+api_name = identifier ;
 
-equality_expr = comparison_expr { ( "==" | "!=" | "is" ) comparison_expr } ;
+(* Repository reference *)
+repository_reference = "<" , identifier , "-repository" , ">" ;
 
-comparison_expr = additive_expr { ( "<" | ">" | "<=" | ">=" ) additive_expr } ;
-
-additive_expr = multiplicative_expr { ( "+" | "-" ) multiplicative_expr } ;
-
-multiplicative_expr = unary_expr { ( "*" | "/" | "%" ) unary_expr } ;
-
-unary_expr = [ "not" | "-" ] primary_expr ;
-
-primary_expr = variable_ref
-             | literal_value
-             | function_call
-             | "(" expression ")" ;
-
-variable_ref = "<" qualified_noun ">" ;
-
-function_call = identifier "(" [ expression { "," expression } ] ")" ;
+(* Host reference *)
+host_reference = "<" , "host:" , string_literal , ">" ;
 ```
-
----
 
 ## Conditions
 
 ```ebnf
-condition = expression
-          | comparison
-          | existence_check
-          | containment_check ;
+(* Condition expressions *)
+condition = comparison | existence_check | boolean_condition ;
 
-comparison = variable_ref comparison_op expression ;
+(* Comparisons *)
+comparison = variable , comparison_op , ( variable | literal | regex_literal ) ;
+comparison_op = "is" | "is not" | ">" | "<" | ">=" | "<=" | "matches" | "contains" ;
 
-comparison_op = "is" | "==" | "!=" | "<" | ">" | "<=" | ">=" ;
+(* Existence checks *)
+existence_check = variable , ( "is empty" | "is not empty" ) ;
 
-existence_check = variable_ref "exists"
-                | variable_ref "is" "defined" ;
+(* Boolean combinations *)
+boolean_condition = condition , boolean_op , condition ;
+boolean_op = "and" | "or" ;
 
-containment_check = variable_ref "contains" expression
-                  | variable_ref "matches" expression ;
+(* Negation *)
+negation = "not" , condition ;
 ```
-
----
 
 ## Literals
 
 ```ebnf
-string_literal = '"' { character } '"' ;
+(* Literal values *)
+literal = string_literal | number | boolean | object_literal ;
 
-number_literal = integer_literal | float_literal ;
+(* String literal *)
+string_literal = '"' , { string_char | interpolation } , '"' ;
+string_char = (* any character except " and $ *) | escape_sequence ;
+escape_sequence = "\\" , ( '"' | "\\" | "n" | "t" | "r" ) ;
+interpolation = "${" , ( identifier | qualified_variable ) , "}" ;
 
-integer_literal = [ "-" ] digit { digit } ;
+(* Number literal *)
+number = [ "-" ] , digit , { digit } , [ "." , digit , { digit } ] ;
 
-float_literal = [ "-" ] digit { digit } "." digit { digit } ;
+(* Boolean literal *)
+boolean = "true" | "false" ;
 
-boolean_literal = "true" | "false" ;
+(* Object literal *)
+object_literal = "{" , [ property , { "," , property } ] , "}" ;
+property = property_name , ":" , ( literal | variable ) ;
+property_name = identifier | string_literal ;
 
-array_literal = "[" [ expression { "," expression } ] "]" ;
-
-object_literal = "{" [ object_field { "," object_field } ] "}" ;
-
-object_field = identifier ":" expression
-             | identifier ":" variable_ref ;
-
-regex_literal = "/" regex_body "/" [ regex_flags ] ;
-
-regex_body = { regex_char | escape_sequence } ;
-
-regex_char = ? any character except "/" and newline ? ;
-
-escape_sequence = "\\" ? any character ? ;
-
+(* Regex literal *)
+regex_literal = "/" , regex_body , "/" , [ regex_flags ] ;
+regex_body = { regex_char | regex_escape } ;
+regex_char = (* any character except "/" and newline *) ;
+regex_escape = "\\" , (* any character *) ;
 regex_flags = { "i" | "s" | "m" | "g" } ;
 ```
 
----
+### Regex Flags
 
-## Identifiers
+| Flag | Description |
+|------|-------------|
+| `i` | Case insensitive matching |
+| `s` | Dot matches newlines (dotall) |
+| `m` | Multiline mode (^ and $ match line boundaries) |
+| `g` | Global (reserved for future replace operations) |
+
+## Lexical Elements
 
 ```ebnf
-identifier = letter { letter | digit | "_" } ;
+(* Identifier *)
+identifier = letter , { letter | digit | "-" } ;
 
-compound_identifier = identifier { "-" identifier } ;
+(* Article *)
+article = "a" | "an" | "the" ;
 
+(* Preposition *)
+preposition = "from" | "to" | "for" | "with" | "into" | "against" | "via" | "on" | "as" ;
+
+(* Basic character classes *)
 letter = "a" | "b" | ... | "z" | "A" | "B" | ... | "Z" ;
+digit = "0" | "1" | ... | "9" ;
 
-digit = "0" | "1" | "2" | "3" | "4" | "5" | "6" | "7" | "8" | "9" ;
+(* Whitespace (ignored) *)
+whitespace = " " | "\t" | "\n" | "\r" ;
+
+(* Comment *)
+comment = "(*" , { any_char } , "*)" ;
 ```
 
----
-
-## Comments
+## Special Feature Sets
 
 ```ebnf
-comment = "(*" { any_character } "*)" ;
+(* Application lifecycle *)
+application_start = "(" , "Application-Start" , ":" , business_activity , ")" , block ;
+application_end_success = "(" , "Application-End" , ":" , "Success" , ")" , block ;
+application_end_error = "(" , "Application-End" , ":" , "Error" , ")" , block ;
 
-any_character = (* any Unicode character *) ;
+(* Event handlers *)
+event_handler = "(" , handler_name , ":" , event_type , "Handler" , ")" , block ;
+handler_name = identifier , { identifier } ;
+event_type = identifier ;
 ```
 
----
+## API Definitions
 
-## Tokens
-
-### Keywords
-
-```
-publish, require, import, as, when, match, case, otherwise,
-where, for, each, in, at, parallel, concurrency, type, enum, protocol,
-error, guard, defer, assert, precondition, and, or, not, is, exists,
-defined, null, nil, none, empty, contains, matches, true, false
+```ebnf
+(* API definition block *)
+api_definition = "api" , identifier , "{" , { api_property } , "}" ;
+api_property = property_name , ":" , ( string_literal | object_literal ) , ";" ;
 ```
 
-### Prepositions
+## Complete Examples
+
+### Minimal Program
 
 ```
-from, for, against, to, into, via, with, on
+program = feature_set
+        = "(" , "Application-Start" , ":" , "Test" , ")" , block
+        = "(" , "Application-Start" , ":" , "Test" , ")" , "{" , statement , "}"
+        = "(" , "Application-Start" , ":" , "Test" , ")" , "{" , aro_statement , "}"
+        = "(" , "Application-Start" , ":" , "Test" , ")" , "{" ,
+            "<Return>" , "an" , "<OK: status>" , "for" , "the" , "<startup>" , "." ,
+          "}"
 ```
 
-### Articles
+### ARO Statement Parse
 
 ```
-the, a, an
+"<Extract> the <user-id> from the <request: parameters>."
+
+= aro_statement
+= action , article , result , preposition , article , object , "."
+= "<Extract>" , "the" , "<user-id>" , "from" , "the" , "<request: parameters>" , "."
 ```
 
-### Operators
+### Guarded Statement Parse
 
 ```
-+   -   *   /   %
-==  !=  <   >   <=  >=
-and or  not is
+"<Return> a <NotFound: status> for the <user> when <user> is empty."
+
+= guarded_statement
+= aro_statement_base , "when" , condition , "."
+= action , result , preposition , object , "when" , existence_check , "."
+= "<Return>" , "a" , "<NotFound: status>" , "for" , "the" , "<user>" , "when" , "<user>" , "is empty" , "."
 ```
 
-### Delimiters
+## Precedence
 
-```
-<   >   (   )   {   }   [   ]
-:   .   ,   "
-```
+Operator precedence (highest to lowest):
 
----
+1. Parentheses `( )`
+2. `not`
+3. Comparisons (`is`, `is not`, `>`, `<`, `>=`, `<=`)
+4. `and`
+5. `or`
 
-## Example Parse Tree
+## Reserved Words
 
-For the statement:
+The following identifiers are reserved:
 
-```aro
-<Extract> the <user-id: String> from the <pathParameters: id>.
-```
+**Articles:** `a`, `an`, `the`
 
-<div style="text-align: center; margin: 2em 0;">
-<svg width="420" height="220" viewBox="0 0 420 220" xmlns="http://www.w3.org/2000/svg">  <!-- Root node -->  <rect x="160" y="5" width="100" height="22" rx="4" fill="#1f2937" stroke="#1f2937" stroke-width="2"/>  <text x="210" y="20" text-anchor="middle" font-family="monospace" font-size="10" fill="#ffffff">aro_statement</text>  <!-- Level 1 connectors -->  <line x1="180" y1="27" x2="50" y2="55" stroke="#9ca3af" stroke-width="1"/>  <line x1="195" y1="27" x2="130" y2="55" stroke="#9ca3af" stroke-width="1"/>  <line x1="210" y1="27" x2="210" y2="55" stroke="#9ca3af" stroke-width="1"/>  <line x1="225" y1="27" x2="290" y2="55" stroke="#9ca3af" stroke-width="1"/>  <line x1="240" y1="27" x2="380" y2="55" stroke="#9ca3af" stroke-width="1"/>  <!-- Level 1 nodes -->  <!-- Action -->  <rect x="10" y="55" width="80" height="22" rx="3" fill="#dbeafe" stroke="#3b82f6" stroke-width="1.5"/>  <text x="50" y="70" text-anchor="middle" font-family="monospace" font-size="9" fill="#1e40af">&lt;Extract&gt;</text>  <text x="50" y="90" text-anchor="middle" font-family="sans-serif" font-size="7" fill="#6b7280">action</text>  <!-- Article 1 -->  <rect x="100" y="55" width="55" height="22" rx="3" fill="#f3f4f6" stroke="#9ca3af" stroke-width="1"/>  <text x="127" y="70" text-anchor="middle" font-family="monospace" font-size="9" fill="#374151">"the"</text>  <text x="127" y="90" text-anchor="middle" font-family="sans-serif" font-size="7" fill="#6b7280">article</text>  <!-- Result -->  <rect x="165" y="55" width="90" height="22" rx="3" fill="#dcfce7" stroke="#22c55e" stroke-width="1.5"/>  <text x="210" y="70" text-anchor="middle" font-family="monospace" font-size="9" fill="#166534">result</text>  <!-- Object clause -->  <rect x="265" y="55" width="90" height="22" rx="3" fill="#fce7f3" stroke="#ec4899" stroke-width="1.5"/>  <text x="310" y="70" text-anchor="middle" font-family="monospace" font-size="9" fill="#9d174d">object_clause</text>  <!-- Period -->  <rect x="365" y="55" width="40" height="22" rx="3" fill="#1f2937" stroke="#1f2937" stroke-width="1"/>  <text x="385" y="70" text-anchor="middle" font-family="monospace" font-size="12" fill="#ffffff">"."</text>  <text x="385" y="90" text-anchor="middle" font-family="sans-serif" font-size="7" fill="#6b7280">terminator</text>  <!-- Result children -->  <line x1="210" y1="77" x2="210" y2="105" stroke="#22c55e" stroke-width="1"/>  <rect x="165" y="105" width="90" height="22" rx="3" fill="#dcfce7" stroke="#22c55e" stroke-width="1"/>  <text x="210" y="120" text-anchor="middle" font-family="monospace" font-size="8" fill="#166534">qualified_noun</text>  <line x1="190" y1="127" x2="165" y2="150" stroke="#22c55e" stroke-width="1"/>  <line x1="230" y1="127" x2="255" y2="150" stroke="#22c55e" stroke-width="1"/>  <rect x="120" y="150" width="90" height="20" rx="3" fill="#d1fae5" stroke="#10b981" stroke-width="1"/>  <text x="165" y="164" text-anchor="middle" font-family="monospace" font-size="8" fill="#047857">"user-id"</text>  <text x="165" y="182" text-anchor="middle" font-family="sans-serif" font-size="7" fill="#6b7280">identifier</text>  <rect x="220" y="150" width="70" height="20" rx="3" fill="#d1fae5" stroke="#10b981" stroke-width="1"/>  <text x="255" y="164" text-anchor="middle" font-family="monospace" font-size="8" fill="#047857">"String"</text>  <text x="255" y="182" text-anchor="middle" font-family="sans-serif" font-size="7" fill="#6b7280">qualifier</text>  <!-- Object clause children -->  <line x1="295" y1="77" x2="295" y2="95" stroke="#ec4899" stroke-width="1"/>  <line x1="310" y1="77" x2="340" y2="95" stroke="#ec4899" stroke-width="1"/>  <line x1="325" y1="77" x2="385" y2="95" stroke="#ec4899" stroke-width="1"/>  <text x="295" y="108" text-anchor="middle" font-family="monospace" font-size="7" fill="#9d174d">"from"</text>  <text x="340" y="108" text-anchor="middle" font-family="monospace" font-size="7" fill="#9d174d">"the"</text>  <rect x="355" y="115" width="60" height="18" rx="2" fill="#fce7f3" stroke="#ec4899" stroke-width="1"/>  <text x="385" y="128" text-anchor="middle" font-family="monospace" font-size="7" fill="#9d174d">qual_noun</text>  <line x1="370" y1="133" x2="350" y2="150" stroke="#ec4899" stroke-width="1"/>  <line x1="400" y1="133" x2="410" y2="150" stroke="#ec4899" stroke-width="1"/>  <text x="340" y="165" text-anchor="middle" font-family="monospace" font-size="7" fill="#be185d">"pathParameters"</text>  <text x="410" y="165" text-anchor="middle" font-family="monospace" font-size="7" fill="#be185d">"id"</text></svg>
-</div>
+**Prepositions:** `from`, `to`, `for`, `with`, `into`, `against`, `via`, `on`, `as`
 
----
+**Control Flow:** `if`, `then`, `else`, `when`, `match`, `case`, `default`, `where`, `and`, `or`, `not`, `is`
 
-## Operator Precedence
+**Literals:** `true`, `false`, `empty`
 
-From lowest to highest:
+**Status Codes:** `OK`, `Created`, `Accepted`, `NoContent`, `BadRequest`, `Unauthorized`, `Forbidden`, `NotFound`, `Conflict`, `InternalError`, `ServiceUnavailable`
 
-| Precedence | Operators | Associativity |
-|------------|-----------|---------------|
-| 1 | `or` | Left |
-| 2 | `and` | Left |
-| 3 | `not` | Right (unary) |
-| 4 | `is`, `==`, `!=` | Left |
-| 5 | `<`, `>`, `<=`, `>=` | Left |
-| 6 | `+`, `-` | Left |
-| 7 | `*`, `/`, `%` | Left |
-| 8 | `-` (unary) | Right |
+**Special:** `Application-Start`, `Application-End`, `Success`, `Error`, `Handler`
 
----
+## File Encoding
 
-## Lexical Conventions
-
-### Whitespace
-
-Whitespace (spaces, tabs, newlines) is ignored between tokens.
-
-### Line Continuation
-
-Statements can span multiple lines:
-
-```aro
-<Return> an <OK: status> with {
-    data: <users>,
-    total: <count>,
-    page: <page>
-}.
-```
-
-### String Escapes
-
-Within string literals:
-
-| Escape | Meaning |
-|--------|---------|
-| `\"` | Double quote |
-| `\\` | Backslash |
-| `\n` | Newline |
-| `\t` | Tab |
-| `\r` | Carriage return |
-
----
-
-## Reserved for Future Use
-
-These tokens are reserved and may not be used as identifiers:
-
-```
-class, struct, func, let, var, return, throw, try, catch, finally,
-async, await, yield, break, continue, switch, default, private,
-public, internal, static, self, super, init, deinit
-```
+ARO source files must be encoded in UTF-8. The `.aro` file extension is required.

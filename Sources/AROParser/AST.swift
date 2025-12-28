@@ -107,6 +107,8 @@ public struct AROStatement: Statement {
     public let aggregation: AggregationClause?
     /// Optional where clause (ARO-0018) - for Filter: `where <field> is "value"`
     public let whereClause: WhereClause?
+    /// Optional by clause (ARO-0037) - for Split: `by /delimiter/`
+    public let byClause: ByClause?
     /// Optional when condition (ARO-0004) - for guarded statements
     public let whenCondition: (any Expression)?
     public let span: SourceSpan
@@ -119,6 +121,7 @@ public struct AROStatement: Statement {
         expression: (any Expression)? = nil,
         aggregation: AggregationClause? = nil,
         whereClause: WhereClause? = nil,
+        byClause: ByClause? = nil,
         whenCondition: (any Expression)? = nil,
         span: SourceSpan
     ) {
@@ -129,6 +132,7 @@ public struct AROStatement: Statement {
         self.expression = expression
         self.aggregation = aggregation
         self.whereClause = whereClause
+        self.byClause = byClause
         self.whenCondition = whenCondition
         self.span = span
     }
@@ -146,6 +150,9 @@ public struct AROStatement: Statement {
         }
         if let where_ = whereClause {
             desc += " where \(where_)"
+        }
+        if let by = byClause {
+            desc += " \(by)"
         }
         if let when = whenCondition {
             desc += " when \(when)"
@@ -245,6 +252,28 @@ public struct WhereClause: Sendable, CustomStringConvertible {
 
     public var description: String {
         "<\(field)> \(op) \(value)"
+    }
+}
+
+// MARK: - By Clause (ARO-0037)
+
+/// A by clause for regex-based splitting: by /pattern/flags
+public struct ByClause: Sendable, CustomStringConvertible {
+    public let pattern: String
+    public let flags: String
+    public let span: SourceSpan
+
+    public init(pattern: String, flags: String, span: SourceSpan) {
+        self.pattern = pattern
+        self.flags = flags
+        self.span = span
+    }
+
+    public var description: String {
+        if flags.isEmpty {
+            return "by /\(pattern)/"
+        }
+        return "by /\(pattern)/\(flags)"
     }
 }
 
