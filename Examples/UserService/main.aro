@@ -28,9 +28,6 @@
     (* Close database connections *)
     <Close> the <database-connections> for the <application>.
 
-    (* Flush any pending logs *)
-    <Flush> the <log-buffer> for the <application>.
-
     <Log> the <shutdown: complete> for the <console> with "User Service stopped. Goodbye!".
     <Return> an <OK: status> for the <shutdown>.
 }

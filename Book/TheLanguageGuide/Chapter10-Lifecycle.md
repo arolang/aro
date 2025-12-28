@@ -16,7 +16,7 @@ The startup phase initializes resources, establishes connections, and prepares t
 
 The execution phase is where the application does its actual work. For batch applications, this might be a single sequence of operations. For servers and daemons, this is an ongoing process of handling events, requests, and other stimuli. The execution phase can last indefinitely for long-running applications.
 
-The shutdown phase cleans up resources, closes connections, and prepares the application to terminate. This is when pending work is completed, buffers are flushed, and the application transitions from a running system back to inert code. Proper shutdown prevents resource leaks and data loss.
+The shutdown phase cleans up resources, closes connections, and prepares the application to terminate. This is when pending work is completed, buffers are cleared, and the application transitions from a running system back to inert code. Proper shutdown prevents resource leaks and data loss.
 
 Each phase has a corresponding feature set that you can define to handle its responsibilities. The startup phase uses `Application-Start`, which is required. The shutdown phase uses `Application-End: Success` for normal shutdown and `Application-End: Error` for error shutdown, both of which are optional.
 
@@ -54,7 +54,7 @@ The success shutdown handler runs when the application terminates normally. This
 
 The handler is optional. If you do not define one, the application terminates without any cleanup phase. For simple applications that do not hold external resources, this is fine. For applications with database connections, open files, or other resources that should be closed properly, defining a success handler is important.
 
-Typical cleanup tasks include stopping services so they stop accepting new work, draining any pending operations so they complete rather than being lost, closing database connections so they are returned to connection pools, flushing log buffers so no messages are lost, and performing any other resource release that should happen on shutdown.
+Typical cleanup tasks include stopping services so they stop accepting new work, draining any pending operations so they complete rather than being lost, closing database connections so they are returned to connection pools, clearing log buffers so no messages are lost, and performing any other resource release that should happen on shutdown.
 
 The handler should be designed to complete reasonably quickly. Shutdown has a default timeout, and if the handler takes too long, the process is terminated forcibly. If you have long-running cleanup tasks, consider whether they can be shortened or made asynchronous.
 

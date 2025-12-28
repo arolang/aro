@@ -137,7 +137,7 @@ public final class LLVMCodeGenerator {
             // System exec action (ARO-0033)
             "exec", "shell",
             // Repository actions
-            "delete", "merge", "close", "flush"
+            "delete", "merge", "close"
         ]
         for action in actions {
             emit("declare ptr @aro_action_\(action)(ptr, ptr, ptr)")
