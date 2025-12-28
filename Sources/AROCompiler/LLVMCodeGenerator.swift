@@ -137,7 +137,9 @@ public final class LLVMCodeGenerator {
             // System exec action (ARO-0033)
             "exec", "shell",
             // Repository actions
-            "delete", "merge", "close", "flush"
+            "delete", "merge", "close", "flush",
+            // String action (ARO-0037)
+            "split"
         ]
         for action in actions {
             emit("declare ptr @aro_action_\(action)(ptr, ptr, ptr)")
@@ -251,6 +253,14 @@ public final class LLVMCodeGenerator {
                 registerString(whereClause.op.rawValue)
                 // Where value expression
                 collectStringsFromExpression(whereClause.value)
+            }
+
+            // ARO-0037: Collect by clause strings (for Split action)
+            if let byClause = aroStatement.byClause {
+                registerString("_by_pattern_")
+                registerString("_by_flags_")
+                registerString(byClause.pattern)
+                registerString(byClause.flags)
             }
         } else if let publishStatement = statement as? PublishStatement {
             registerString(publishStatement.externalName)
@@ -571,6 +581,11 @@ public final class LLVMCodeGenerator {
             try emitWhereClauseBinding(whereClause, prefix: prefix)
         }
 
+        // ARO-0037: Bind by clause if present (for Split action)
+        if let byClause = statement.byClause {
+            emitByClauseBinding(byClause, prefix: prefix)
+        }
+
         // Allocate result descriptor
         emit("  %\(prefix)_result_desc = alloca %AROResultDescriptor")
 
@@ -839,6 +854,19 @@ public final class LLVMCodeGenerator {
             emit("  %\(prefix)_where_var = call ptr @aro_variable_resolve(ptr %ctx, ptr \(varNameStr))")
             emit("  call void @aro_variable_bind_value(ptr %ctx, ptr \(whereValueNameStr), ptr %\(prefix)_where_var)")
         }
+    }
+
+    /// Emit LLVM IR to bind by clause context variables (ARO-0037)
+    /// Binds _by_pattern_, _by_flags_ for Split action
+    private func emitByClauseBinding(_ byClause: ByClause, prefix: String) {
+        let patternNameStr = stringConstants["_by_pattern_"]!
+        let patternValueStr = stringConstants[byClause.pattern]!
+        let flagsNameStr = stringConstants["_by_flags_"]!
+        let flagsValueStr = stringConstants[byClause.flags]!
+
+        emit("  ; ARO-0037: Bind by clause: /\(byClause.pattern)/\(byClause.flags)")
+        emit("  call void @aro_variable_bind_string(ptr %ctx, ptr \(patternNameStr), ptr \(patternValueStr))")
+        emit("  call void @aro_variable_bind_string(ptr %ctx, ptr \(flagsNameStr), ptr \(flagsValueStr))")
     }
 
     private func generatePublishStatement(_ statement: PublishStatement, index: Int) throws {
