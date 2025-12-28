@@ -1,10 +1,10 @@
-# Chapter 18: Native Compilation
+# Chapter 19: Native Compilation
 
 *"From script to standalone binary."*
 
 ---
 
-## 17.1 What Is Native Compilation?
+## 19.1 What Is Native Compilation?
 
 ARO can compile applications to standalone native binaries that run without the ARO runtime installed. This transforms your application from an interpreted script into a self-contained executable that can be deployed anywhere the target platform runs.
 
@@ -16,7 +16,7 @@ Native binaries also provide some intellectual property protection. While not im
 
 ---
 
-## 17.2 The Build Command
+## 19.2 The Build Command
 
 The aro build command compiles an ARO application to a native binary. You provide the path to your application directory, and the compiler produces an executable.
 
@@ -30,7 +30,7 @@ Verbose output shows what the compiler is doing at each step: discovering source
 
 ---
 
-## 17.3 The Compilation Pipeline
+## 19.3 The Compilation Pipeline
 
 <div style="text-align: center; margin: 2em 0;">
 <svg width="500" height="180" viewBox="0 0 500 180" xmlns="http://www.w3.org/2000/svg">  <!-- Row 1 -->  <!-- Discovery -->  <rect x="10" y="20" width="70" height="45" rx="4" fill="#f3e8ff" stroke="#a855f7" stroke-width="2"/>  <text x="45" y="38" text-anchor="middle" font-family="sans-serif" font-size="9" font-weight="bold" fill="#7c3aed">DISCOVER</text>  <text x="45" y="52" text-anchor="middle" font-family="sans-serif" font-size="8" fill="#9333ea">.aro files</text>  <!-- Arrow -->  <line x1="80" y1="42" x2="95" y2="42" stroke="#9ca3af" stroke-width="1.5"/>  <polygon points="95,42 89,38 89,46" fill="#9ca3af"/>  <!-- Parse -->  <rect x="100" y="20" width="70" height="45" rx="4" fill="#dbeafe" stroke="#3b82f6" stroke-width="2"/>  <text x="135" y="38" text-anchor="middle" font-family="sans-serif" font-size="9" font-weight="bold" fill="#1e40af">PARSE</text>  <text x="135" y="52" text-anchor="middle" font-family="sans-serif" font-size="8" fill="#3b82f6">→ AST</text>  <!-- Arrow -->  <line x1="170" y1="42" x2="185" y2="42" stroke="#9ca3af" stroke-width="1.5"/>  <polygon points="185,42 179,38 179,46" fill="#9ca3af"/>  <!-- Semantic -->  <rect x="190" y="20" width="70" height="45" rx="4" fill="#dcfce7" stroke="#22c55e" stroke-width="2"/>  <text x="225" y="38" text-anchor="middle" font-family="sans-serif" font-size="9" font-weight="bold" fill="#166534">ANALYZE</text>  <text x="225" y="52" text-anchor="middle" font-family="sans-serif" font-size="8" fill="#22c55e">semantics</text>  <!-- Arrow -->  <line x1="260" y1="42" x2="275" y2="42" stroke="#9ca3af" stroke-width="1.5"/>  <polygon points="275,42 269,38 269,46" fill="#9ca3af"/>  <!-- Code Gen -->  <rect x="280" y="20" width="70" height="45" rx="4" fill="#fef3c7" stroke="#f59e0b" stroke-width="2"/>  <text x="315" y="38" text-anchor="middle" font-family="sans-serif" font-size="9" font-weight="bold" fill="#92400e">GENERATE</text>  <text x="315" y="52" text-anchor="middle" font-family="sans-serif" font-size="8" fill="#f59e0b">→ LLVM IR</text>  <!-- Arrow -->  <line x1="350" y1="42" x2="365" y2="42" stroke="#9ca3af" stroke-width="1.5"/>  <polygon points="365,42 359,38 359,46" fill="#9ca3af"/>  <!-- Compile -->  <rect x="370" y="20" width="55" height="45" rx="4" fill="#fee2e2" stroke="#ef4444" stroke-width="2"/>  <text x="397" y="38" text-anchor="middle" font-family="sans-serif" font-size="9" font-weight="bold" fill="#991b1b">COMPILE</text>  <text x="397" y="52" text-anchor="middle" font-family="sans-serif" font-size="8" fill="#ef4444">llc</text>  <!-- Arrow -->  <line x1="425" y1="42" x2="440" y2="42" stroke="#9ca3af" stroke-width="1.5"/>  <polygon points="440,42 434,38 434,46" fill="#9ca3af"/>  <!-- Link -->  <rect x="445" y="20" width="45" height="45" rx="4" fill="#1f2937" stroke="#1f2937" stroke-width="2"/>  <text x="467" y="38" text-anchor="middle" font-family="sans-serif" font-size="9" font-weight="bold" fill="#ffffff">LINK</text>  <text x="467" y="52" text-anchor="middle" font-family="sans-serif" font-size="8" fill="#9ca3af">binary</text>  <!-- Bottom: File representations -->  <text x="45" y="85" text-anchor="middle" font-family="monospace" font-size="8" fill="#6b7280">*.aro</text>  <text x="135" y="85" text-anchor="middle" font-family="monospace" font-size="8" fill="#6b7280">AST</text>  <text x="225" y="85" text-anchor="middle" font-family="monospace" font-size="8" fill="#6b7280">validated</text>  <text x="315" y="85" text-anchor="middle" font-family="monospace" font-size="8" fill="#6b7280">*.ll</text>  <text x="397" y="85" text-anchor="middle" font-family="monospace" font-size="8" fill="#6b7280">*.o</text>  <text x="467" y="85" text-anchor="middle" font-family="monospace" font-size="8" fill="#6b7280">MyApp</text>  <!-- Runtime library connection -->  <rect x="370" y="110" width="120" height="35" rx="4" fill="#e0e7ff" stroke="#6366f1" stroke-width="1" stroke-dasharray="4,2"/>  <text x="430" y="125" text-anchor="middle" font-family="sans-serif" font-size="9" fill="#4338ca">ARO Runtime Library</text>  <text x="430" y="138" text-anchor="middle" font-family="monospace" font-size="8" fill="#6366f1">libaro.a</text>  <!-- Dashed line to Link -->  <line x1="430" y1="110" x2="467" y2="65" stroke="#6366f1" stroke-width="1" stroke-dasharray="3,2"/></svg>
@@ -52,7 +52,7 @@ Linking combines the object code with the ARO runtime library to produce the fin
 
 ---
 
-## 17.4 Runtime Requirements
+## 19.4 Runtime Requirements
 
 Native binaries link against the ARO runtime library, which provides implementations of actions and services. This library is included in every binary.
 
@@ -64,7 +64,7 @@ Dynamically loaded plugins are not supported in native builds. All actions must 
 
 ---
 
-## 17.5 Binary Size and Performance
+## 19.5 Binary Size and Performance
 
 Native binaries have characteristic size and performance profiles that differ from interpreted execution.
 
@@ -78,7 +78,7 @@ Memory usage is typically lower for native binaries because they do not maintain
 
 ---
 
-## 17.6 Deployment
+## 19.6 Deployment
 
 Native binaries simplify deployment because they have minimal runtime dependencies. The binary, the OpenAPI specification (if using HTTP), and any data files are all you need to deploy.
 
@@ -90,7 +90,7 @@ Cloud deployment to platforms that accept binaries—EC2, GCE, bare metal—is s
 
 ---
 
-## 17.7 Debugging
+## 19.7 Debugging
 
 Debugging native binaries requires different tools than debugging interpreted execution. The runtime's verbose output is not available; instead, you use traditional native debugging tools.
 
@@ -104,7 +104,7 @@ Logging becomes more important when detailed runtime output is not available. In
 
 ---
 
-## 17.8 Output Formatting
+## 19.8 Output Formatting
 
 Native binaries produce cleaner output than interpreted execution. This difference is intentional and reflects the different contexts in which each mode is used.
 
@@ -130,7 +130,7 @@ Response formatting remains unchanged between modes. The `[OK]` status prefix an
 
 ---
 
-## 17.9 Development Workflow
+## 19.9 Development Workflow
 
 Development typically uses interpreted execution for rapid iteration. The interpreted mode has faster turnaround—you change code and immediately run the updated version without a compile step. Verbose output shows what the runtime does, aiding debugging and understanding.
 
@@ -142,7 +142,7 @@ Release processes should produce native binaries with release optimizations. Tag
 
 ---
 
-## 17.10 Limitations
+## 19.10 Limitations
 
 Native compilation has limitations compared to interpreted execution.
 
@@ -156,7 +156,7 @@ The compilation step adds time to the development cycle. For rapid iteration, th
 
 ---
 
-## 17.11 Best Practices
+## 19.11 Best Practices
 
 Use interpreted mode during development for fast iteration and detailed diagnostics. Switch to native compilation for deployment testing and release.
 

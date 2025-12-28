@@ -1,10 +1,10 @@
-# Chapter 16: Custom Actions
+# Chapter 17: Custom Actions
 
 *"When 24 actions aren't enough, write your own."*
 
 ---
 
-## 15.1 When to Create Custom Actions
+## 17.1 When to Create Custom Actions
 
 ARO's built-in actions cover common operations, but real applications often need capabilities beyond the standard set. Custom actions extend the language with domain-specific operations while maintaining ARO's declarative style.
 
@@ -18,7 +18,7 @@ Create custom actions when you want domain-specific operations that make your AR
 
 ---
 
-## 15.2 The Escape Hatch Pattern
+## 17.2 The Escape Hatch Pattern
 
 No constrained language survives contact with reality without an extension mechanism. This is the pattern that made other constrained languages successful: Terraform has providers, Ansible has modules, Make has recipes—and ARO has actions.
 
@@ -32,7 +32,7 @@ The rest of this chapter focuses on implementing custom actions—the fundamenta
 
 ---
 
-## 15.3 The Action Protocol
+## 17.3 The Action Protocol
 
 Every custom action implements the ActionImplementation protocol. This protocol defines the structure that the runtime expects: a role indicating data flow direction, a set of verbs that trigger the action, valid prepositions that can appear with the action, and an execute method that performs the work.
 
@@ -46,7 +46,7 @@ The execute method does the actual work. It receives descriptors for the result 
 
 ---
 
-## 15.4 Accessing the Context
+## 17.4 Accessing the Context
 
 The execution context is your interface to the ARO runtime. Through it, you access values bound by previous statements, bind new values for subsequent statements, and interact with the event system.
 
@@ -60,7 +60,7 @@ The event bus is accessible through the context for emitting events. Your action
 
 ---
 
-## 15.5 Implementing an Action
+## 17.5 Implementing an Action
 
 Implementing a custom action follows a consistent pattern. You define a struct that conforms to ActionImplementation, specify the required static properties, and implement the execute method.
 
@@ -74,7 +74,7 @@ In the execute method, retrieve inputs from the context, perform your operation,
 
 ---
 
-## 15.6 Error Handling
+## 17.6 Error Handling
 
 Custom actions report errors by throwing Swift exceptions. The runtime catches these exceptions and converts them to ARO error messages that follow the happy path philosophy.
 
@@ -86,7 +86,7 @@ The runtime integrates your errors with its error handling system. HTTP handlers
 
 ---
 
-## 15.7 Async Operations
+## 17.7 Async Operations
 
 Custom actions can be asynchronous, which is essential for I/O operations. The execute method is declared async, so you can await async operations within it.
 
@@ -98,7 +98,7 @@ Timeouts and cancellation should be considered for long-running operations. If y
 
 ---
 
-## 15.8 Thread Safety
+## 17.8 Thread Safety
 
 Actions must be thread-safe because the runtime may execute them concurrently. Swift's Sendable protocol, which ActionImplementation requires, helps enforce this.
 
@@ -110,7 +110,7 @@ Avoid mutable shared state. If your action needs configuration, receive it durin
 
 ---
 
-## 15.9 Registration
+## 17.9 Registration
 
 Custom actions must be registered with the action registry before they can be used. Registration tells the runtime which action implementation handles which verbs.
 
@@ -122,7 +122,7 @@ Once registered, your action's verbs become available in ARO code. Statements us
 
 ---
 
-## 15.10 Best Practices
+## 17.10 Best Practices
 
 Single responsibility keeps actions focused and testable. Each action should do one thing well. If an action is doing multiple distinct operations, consider splitting it into multiple actions.
 
@@ -136,4 +136,4 @@ Test actions independently. Because actions have a well-defined interface, they 
 
 ---
 
-*Next: Chapter 17 — Plugins*
+*Next: Chapter 18 — Plugins*

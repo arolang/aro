@@ -1,4 +1,4 @@
-# Chapter 21: State Machines
+# Chapter 22: State Machines
 
 *"A business object is only as valid as its current state."*
 
@@ -392,39 +392,6 @@ Another approach is conditional logic using standard control flow:
 
 The choice depends on whether the different cancellation paths have different side effects. If cancelling a placed order requires a refund but cancelling a draft does not, separate feature sets make the distinction clear.
 
-### 21.7.1 Regular Expression Patterns
-
-Match statements also support regex patterns for flexible string matching. Use forward slashes to delimit a regex pattern:
-
-```aro
-match <message.text> {
-    case /^ERROR:/i {
-        <Log> the <error: alert> for the <console> with <message.text>.
-        <Emit> an <AlertTriggered: event> with <message>.
-    }
-    case /^WARN:/i {
-        <Log> the <warning: message> for the <console> with <message.text>.
-    }
-    case /^[A-Z]{3}-\d{4}$/ {
-        (* Matches ticket IDs like "ABC-1234" *)
-        <Process> the <ticket-reference> from the <message>.
-    }
-    otherwise {
-        <Log> the <info: message> for the <console> with <message.text>.
-    }
-}
-```
-
-Regex literals support flags after the closing slash:
-
-| Flag | Description |
-|------|-------------|
-| `i` | Case insensitive |
-| `s` | Dot matches newlines |
-| `m` | Multiline (^ and $ match line boundaries) |
-
-Common patterns include format validation (email, phone numbers, identifiers), prefix/suffix matching, and extracting structured data from text. Use `^` and `$` anchors when you need full-string matching rather than substring matching.
-
 ---
 
 ## 21.8 What ARO Does Not Do
@@ -540,4 +507,4 @@ State guards enable guaranteed ordering through state-based filtering. Instead o
 
 ---
 
-*Next: Chapter 22 — Modules and Imports*
+*Next: Chapter 23 — Modules and Imports*

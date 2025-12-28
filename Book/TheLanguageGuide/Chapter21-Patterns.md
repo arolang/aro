@@ -1,10 +1,10 @@
-# Chapter 20: Patterns & Practices
+# Chapter 21: Patterns & Practices
 
 *"Good patterns emerge from solving real problems."*
 
 ---
 
-## 19.1 CRUD Patterns
+## 21.1 CRUD Patterns
 
 Most business applications need to create, read, update, and delete resources. These CRUD operations follow predictable patterns in ARO that you can apply consistently across your domains.
 
@@ -22,7 +22,7 @@ The delete operation extracts the identifier, deletes the matching record, emits
 
 ---
 
-## 19.2 Event Sourcing
+## 21.2 Event Sourcing
 
 Event sourcing stores the history of changes rather than current state. Instead of updating a record in place, you append an event describing what happened. Current state is computed by replaying events from the beginning.
 
@@ -38,7 +38,7 @@ Event sourcing adds complexity compared to simple CRUD. It is most valuable when
 
 ---
 
-## 19.3 The Saga Pattern
+## 21.3 The Saga Pattern
 
 <div style="float: left; margin: 0 1.5em 1em 0;">
 <svg width="160" height="180" viewBox="0 0 160 180" xmlns="http://www.w3.org/2000/svg">  <!-- Title -->  <text x="80" y="15" text-anchor="middle" font-family="sans-serif" font-size="10" font-weight="bold" fill="#166534">Saga Flow</text>  <!-- Step 1 -->  <rect x="50" y="25" width="60" height="22" rx="3" fill="#dcfce7" stroke="#22c55e" stroke-width="1.5"/>  <text x="80" y="40" text-anchor="middle" font-family="sans-serif" font-size="8" fill="#166534">Step 1</text>  <line x1="80" y1="47" x2="80" y2="57" stroke="#22c55e" stroke-width="1.5"/>  <polygon points="80,57 76,52 84,52" fill="#22c55e"/>  <!-- Step 2 -->  <rect x="50" y="60" width="60" height="22" rx="3" fill="#dcfce7" stroke="#22c55e" stroke-width="1.5"/>  <text x="80" y="75" text-anchor="middle" font-family="sans-serif" font-size="8" fill="#166534">Step 2</text>  <line x1="80" y1="82" x2="80" y2="92" stroke="#22c55e" stroke-width="1.5"/>  <polygon points="80,92 76,87 84,87" fill="#22c55e"/>  <!-- Step 3 (fails) -->  <rect x="50" y="95" width="60" height="22" rx="3" fill="#fee2e2" stroke="#ef4444" stroke-width="1.5"/>  <text x="80" y="110" text-anchor="middle" font-family="sans-serif" font-size="8" fill="#991b1b">Step 3 ✗</text>  <!-- Compensation arrows -->  <line x1="50" y1="106" x2="25" y2="106" stroke="#ef4444" stroke-width="1" stroke-dasharray="3,2"/>  <line x1="25" y1="106" x2="25" y2="40" stroke="#ef4444" stroke-width="1" stroke-dasharray="3,2"/>  <polygon points="25,40 21,46 29,46" fill="#ef4444"/>  <!-- Compensation boxes -->  <rect x="5" y="125" width="45" height="18" rx="2" fill="#fef3c7" stroke="#f59e0b" stroke-width="1"/>  <text x="27" y="137" text-anchor="middle" font-family="sans-serif" font-size="6" fill="#92400e">undo 2</text>  <rect x="55" y="125" width="45" height="18" rx="2" fill="#fef3c7" stroke="#f59e0b" stroke-width="1"/>  <text x="77" y="137" text-anchor="middle" font-family="sans-serif" font-size="6" fill="#92400e">undo 1</text>  <!-- Labels -->  <text x="80" y="158" text-anchor="middle" font-family="sans-serif" font-size="7" fill="#9ca3af">compensate on failure</text></svg>
@@ -58,7 +58,7 @@ Use sagas when you need to coordinate actions across multiple services or when s
 
 ---
 
-## 19.4 The Gateway Pattern
+## 21.4 The Gateway Pattern
 
 API gateways aggregate data from multiple backend services into unified responses. Rather than having clients make multiple calls and combine results, the gateway handles this coordination.
 
@@ -72,7 +72,7 @@ The gateway pattern can also handle cross-cutting concerns like authentication, 
 
 ---
 
-## 19.5 Command Query Responsibility Segregation
+## 21.5 Command Query Responsibility Segregation
 
 <div style="float: right; margin: 0 0 1em 1.5em;">
 <svg width="180" height="160" viewBox="0 0 180 160" xmlns="http://www.w3.org/2000/svg">  <!-- Title -->  <text x="90" y="15" text-anchor="middle" font-family="sans-serif" font-size="10" font-weight="bold" fill="#374151">CQRS</text>  <!-- Command side -->  <rect x="10" y="30" width="70" height="25" rx="3" fill="#fee2e2" stroke="#ef4444" stroke-width="1.5"/>  <text x="45" y="46" text-anchor="middle" font-family="sans-serif" font-size="8" font-weight="bold" fill="#991b1b">Commands</text>  <line x1="45" y1="55" x2="45" y2="75" stroke="#ef4444" stroke-width="1.5"/>  <polygon points="45,75 40,68 50,68" fill="#ef4444"/>  <rect x="10" y="80" width="70" height="25" rx="3" fill="#fef3c7" stroke="#f59e0b" stroke-width="1.5"/>  <text x="45" y="96" text-anchor="middle" font-family="sans-serif" font-size="8" fill="#92400e">Write Store</text>  <!-- Query side -->  <rect x="100" y="30" width="70" height="25" rx="3" fill="#dbeafe" stroke="#3b82f6" stroke-width="1.5"/>  <text x="135" y="46" text-anchor="middle" font-family="sans-serif" font-size="8" font-weight="bold" fill="#1e40af">Queries</text>  <line x1="135" y1="55" x2="135" y2="75" stroke="#3b82f6" stroke-width="1.5"/>  <polygon points="135,75 130,68 140,68" fill="#3b82f6"/>  <rect x="100" y="80" width="70" height="25" rx="3" fill="#dcfce7" stroke="#22c55e" stroke-width="1.5"/>  <text x="135" y="96" text-anchor="middle" font-family="sans-serif" font-size="8" fill="#166534">Read Model</text>  <!-- Sync arrow -->  <line x1="80" y1="92" x2="100" y2="92" stroke="#9ca3af" stroke-width="1" stroke-dasharray="3,2"/>  <polygon points="100,92 95,89 95,95" fill="#9ca3af"/>  <text x="90" y="118" text-anchor="middle" font-family="sans-serif" font-size="7" fill="#9ca3af">events sync</text>  <!-- Labels -->  <text x="45" y="140" text-anchor="middle" font-family="sans-serif" font-size="7" fill="#ef4444">consistency</text>  <text x="135" y="140" text-anchor="middle" font-family="sans-serif" font-size="7" fill="#3b82f6">optimized</text></svg>
@@ -90,7 +90,7 @@ CQRS adds complexity because you maintain multiple representations of data that 
 
 ---
 
-## 19.6 Error Handling Patterns
+## 21.6 Error Handling Patterns
 
 ARO's happy path philosophy means you do not write explicit error handling, but you can still respond to errors through event-driven patterns.
 
@@ -104,7 +104,7 @@ Circuit breaker patterns can protect against cascading failures when backend ser
 
 ---
 
-## 19.7 Security Patterns
+## 21.7 Security Patterns
 
 Authentication verifies caller identity. Security-sensitive endpoints extract authentication tokens, validate them against an authentication service, and extract identity claims. Subsequent operations use the validated identity.
 
@@ -118,7 +118,7 @@ These patterns compose together. A secured endpoint might extract and validate a
 
 ---
 
-## 19.8 Performance Patterns
+## 21.8 Performance Patterns
 
 Caching reduces load on backend services by storing frequently accessed data. A cache-aware handler first checks the cache. On cache hit, it returns immediately. On cache miss, it fetches from the source, stores in the cache, and returns. Time-to-live settings control cache freshness.
 
@@ -132,7 +132,7 @@ Pagination prevents unbounded result sets. List operations return limited pages 
 
 ---
 
-## 19.9 Best Practices Summary
+## 21.9 Best Practices Summary
 
 These practices have emerged from experience building ARO applications and reflect lessons learned about what works well.
 
@@ -158,4 +158,4 @@ Document the non-obvious. Code should be self-documenting for basic behavior. Co
 
 ---
 
-*Next: Chapter 21 — State Machines*
+*Next: Chapter 22 — State Machines*

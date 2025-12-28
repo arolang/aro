@@ -1,10 +1,10 @@
-# Chapter 17: Plugins
+# Chapter 18: Plugins
 
 *"Share your actions with the world."*
 
 ---
 
-## 16.1 What Are Plugins?
+## 18.1 What Are Plugins?
 
 Plugins are Swift packages that provide custom actions for ARO applications. They allow you to package related actions together, share them across projects, and distribute them to other developers through Swift Package Manager.
 
@@ -16,7 +16,7 @@ The benefits of the plugin approach include reusability across projects, indepen
 
 ---
 
-## 16.2 Plugin Structure
+## 18.2 Plugin Structure
 
 A plugin follows standard Swift package conventions with a few ARO-specific requirements. The package contains source files implementing actions, a registration function that the runtime calls, and optionally tests and documentation.
 
@@ -28,7 +28,7 @@ The registration function has a specific name that the runtime looks for: aro_pl
 
 ---
 
-## 16.3 Creating a Plugin
+## 18.3 Creating a Plugin
 
 Creating a plugin begins with setting up a Swift package. The package manifest specifies the ARO runtime as a dependency and configures the library product as dynamic. Any additional dependencies your actions need are also specified here.
 
@@ -169,7 +169,7 @@ enum PluginError: Error {
 
 ---
 
-## 16.4 Using Plugins
+## 18.4 Using Plugins
 
 Using a plugin in your application involves adding it as a dependency and optionally loading it at runtime. The simplest approach is compile-time linking where the plugin is a package dependency.
 
@@ -181,7 +181,7 @@ Once a plugin is loaded, its actions are indistinguishable from built-in actions
 
 ---
 
-## 16.5 Plugin Design
+## 18.5 Plugin Design
 
 Good plugin design follows several principles that make plugins useful and maintainable.
 
@@ -195,7 +195,7 @@ Error handling should produce clear messages. When your plugin's actions fail, u
 
 ---
 
-## 16.6 Documentation
+## 18.6 Documentation
 
 Plugin documentation is essential for users to effectively use your actions. Without documentation, users must read source code to understand what actions are available and how to use them.
 
@@ -207,7 +207,7 @@ Consider including an example application that demonstrates your plugin in conte
 
 ---
 
-## 16.7 Publishing
+## 18.7 Publishing
 
 Publishing a plugin makes it available to other developers. Swift Package Manager works with Git repositories, so publishing means tagging releases in a repository.
 
@@ -219,7 +219,7 @@ Announce your plugin in relevant communities—forums, social media, newsletters
 
 ---
 
-## 16.8 Best Practices
+## 18.8 Best Practices
 
 Choose verb names that read naturally and avoid conflicts. Prefixing with your domain is safer than using generic names. "Geocode" might conflict with another plugin; "MapboxGeocode" is distinctive.
 
@@ -233,4 +233,4 @@ Keep dependencies minimal. Each dependency you add is a dependency your users mu
 
 ---
 
-*Next: Chapter 18 — Native Compilation*
+*Next: Chapter 19 — Native Compilation*
