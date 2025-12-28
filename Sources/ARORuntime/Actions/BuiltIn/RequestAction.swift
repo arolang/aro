@@ -13,11 +13,19 @@ import AROParser
 ///
 /// ## Syntax
 /// ```aro
-/// (* GET request *)
+/// (* Simple GET request *)
 /// <Request> the <response> from <url>.
 ///
 /// (* POST request *)
 /// <Request> the <response> to <url> with <data>.
+///
+/// (* With config object for custom headers, method, timeout *)
+/// <Request> the <response> from <url> with {
+///     method: "POST",
+///     headers: { "Content-Type": "application/json", "Authorization": "Bearer token" },
+///     body: <data>,
+///     timeout: 60
+/// }.
 /// ```
 ///
 /// ## Example
@@ -32,7 +40,7 @@ import AROParser
 public struct RequestAction: ActionImplementation {
     public static let role: ActionRole = .request
     public static let verbs: Set<String> = ["request", "http"]
-    public static let validPrepositions: Set<Preposition> = [.from, .to, .via]
+    public static let validPrepositions: Set<Preposition> = [.from, .to, .via, .with]
 
     public init() {}
 
@@ -59,12 +67,20 @@ public struct RequestAction: ActionImplementation {
             urlClient = newClient
         }
 
+        // Extract config from with { ... } clause
+        let config = getConfig(context: context)
+        let configMethod = config["method"] as? String
+        let configHeaders = extractHeaders(from: config)
+        let configBody = config["body"]
+        let configTimeout = extractTimeout(from: config)
+
         // Determine URL
         let url: String
         if let resolvedUrl: String = context.resolve(object.base) {
             url = resolvedUrl
-        } else if let literalUrl = context.resolveAny("_literal_") as? String,
+        } else if config.isEmpty, let literalUrl = context.resolveAny("_literal_") as? String,
                   literalUrl.hasPrefix("http") {
+            // Only use _literal_ as URL if no config (backwards compatibility)
             url = literalUrl
         } else {
             // Use object base as literal URL
@@ -76,44 +92,45 @@ public struct RequestAction: ActionImplementation {
             throw ActionError.runtimeError("Invalid URL: \(url). URL must start with http:// or https://")
         }
 
-        // Determine method based on preposition
-        let response: HTTPClientResponse
-        switch object.preposition {
-        case .from:
-            // GET request
-            response = try await urlClient.get(url: url)
-
-        case .to:
-            // POST request
-            let body = getRequestBody(context: context)
-            response = try await urlClient.post(url: url, headers: [:], body: body)
-
-        case .via:
-            // Determine method from specifiers
-            let method = object.specifiers.first?.uppercased() ?? "GET"
-            let body = getRequestBody(context: context)
-
-            switch method {
-            case "GET":
-                response = try await urlClient.get(url: url)
-            case "POST":
-                response = try await urlClient.post(url: url, headers: [:], body: body)
-            case "PUT":
-                response = try await urlClient.put(url: url, headers: [:], body: body)
-            case "DELETE":
-                response = try await urlClient.delete(url: url)
-            case "PATCH":
-                response = try await urlClient.patch(url: url, headers: [:], body: body)
-            default:
-                response = try await urlClient.get(url: url)
+        // Determine HTTP method (config overrides preposition)
+        let method: String
+        if let m = configMethod?.uppercased() {
+            method = m
+        } else {
+            method = switch object.preposition {
+            case .from: "GET"
+            case .to: "POST"
+            case .via: object.specifiers.first?.uppercased() ?? "GET"
+            case .with: "GET"  // Default for standalone with
+            default: "GET"
             }
+        }
 
+        // Get request body (from config or legacy)
+        let body: Data?
+        if let b = configBody {
+            body = convertToData(b)
+        } else if config.isEmpty {
+            body = getRequestBody(context: context)
+        } else {
+            body = nil
+        }
+
+        // Make the request
+        let response: HTTPClientResponse
+        switch method {
+        case "GET":
+            response = try await urlClient.get(url: url, headers: configHeaders, timeout: configTimeout)
+        case "POST":
+            response = try await urlClient.post(url: url, headers: configHeaders, body: body, timeout: configTimeout)
+        case "PUT":
+            response = try await urlClient.put(url: url, headers: configHeaders, body: body, timeout: configTimeout)
+        case "DELETE":
+            response = try await urlClient.delete(url: url, headers: configHeaders, timeout: configTimeout)
+        case "PATCH":
+            response = try await urlClient.patch(url: url, headers: configHeaders, body: body, timeout: configTimeout)
         default:
-            throw ActionError.invalidPreposition(
-                action: "request",
-                received: object.preposition,
-                expected: Self.validPrepositions
-            )
+            response = try await urlClient.get(url: url, headers: configHeaders, timeout: configTimeout)
         }
 
         // Parse response body as JSON if possible
@@ -145,7 +162,67 @@ public struct RequestAction: ActionImplementation {
         #endif
     }
 
-    /// Get request body from context
+    // MARK: - Private Helpers
+
+    /// Extract config object from context (_expression_ or _literal_)
+    private func getConfig(context: ExecutionContext) -> [String: any Sendable] {
+        if let config = context.resolveAny("_expression_") as? [String: any Sendable] {
+            return config
+        }
+        if let config = context.resolveAny("_literal_") as? [String: any Sendable] {
+            return config
+        }
+        return [:]
+    }
+
+    /// Extract headers from config, handling nested maps
+    private func extractHeaders(from config: [String: any Sendable]) -> [String: String] {
+        guard let headersValue = config["headers"] else { return [:] }
+
+        var headers: [String: String] = [:]
+
+        if let headersDict = headersValue as? [String: String] {
+            headers = headersDict
+        } else if let headersDict = headersValue as? [String: any Sendable] {
+            for (key, value) in headersDict {
+                headers[key] = String(describing: value)
+            }
+        }
+
+        return headers
+    }
+
+    /// Extract timeout from config
+    private func extractTimeout(from config: [String: any Sendable]) -> TimeInterval? {
+        if let timeout = config["timeout"] as? Int {
+            return TimeInterval(timeout)
+        }
+        if let timeout = config["timeout"] as? Double {
+            return timeout
+        }
+        return nil
+    }
+
+    /// Convert a value to Data for request body
+    private func convertToData(_ value: any Sendable) -> Data? {
+        if let data = value as? Data {
+            return data
+        } else if let string = value as? String {
+            return string.data(using: .utf8)
+        } else if let dict = value as? [String: Any] {
+            return try? JSONSerialization.data(withJSONObject: dict)
+        } else if let dict = value as? [String: any Sendable] {
+            // Convert Sendable dict to Any dict for serialization
+            var anyDict: [String: Any] = [:]
+            for (key, val) in dict {
+                anyDict[key] = val
+            }
+            return try? JSONSerialization.data(withJSONObject: anyDict)
+        }
+        return nil
+    }
+
+    /// Get request body from context (legacy support)
     private func getRequestBody(context: ExecutionContext) -> Data? {
         // Check for literal value from "with" clause
         if let literal = context.resolveAny("_literal_") {
@@ -191,4 +268,3 @@ public struct RequestAction: ActionImplementation {
         return String(describing: value)
     }
 }
-

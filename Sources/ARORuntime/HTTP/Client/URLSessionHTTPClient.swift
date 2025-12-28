@@ -61,43 +61,51 @@ public final class URLSessionHTTPClient: HTTPClientService, @unchecked Sendable 
     // MARK: - Extended API
 
     /// Perform a GET request
-    public func get(url: String, headers: [String: String] = [:]) async throws -> HTTPClientResponse {
-        try await performRequest(method: "GET", url: url, headers: headers, body: nil)
+    public func get(
+        url: String,
+        headers: [String: String] = [:],
+        timeout: TimeInterval? = nil
+    ) async throws -> HTTPClientResponse {
+        try await performRequest(method: "GET", url: url, headers: headers, body: nil, timeout: timeout)
     }
 
     /// Perform a POST request
     public func post(
         url: String,
         headers: [String: String] = [:],
-        body: Data?
+        body: Data?,
+        timeout: TimeInterval? = nil
     ) async throws -> HTTPClientResponse {
-        try await performRequest(method: "POST", url: url, headers: headers, body: body)
+        try await performRequest(method: "POST", url: url, headers: headers, body: body, timeout: timeout)
     }
 
     /// Perform a PUT request
     public func put(
         url: String,
         headers: [String: String] = [:],
-        body: Data?
+        body: Data?,
+        timeout: TimeInterval? = nil
     ) async throws -> HTTPClientResponse {
-        try await performRequest(method: "PUT", url: url, headers: headers, body: body)
+        try await performRequest(method: "PUT", url: url, headers: headers, body: body, timeout: timeout)
     }
 
     /// Perform a DELETE request
     public func delete(
         url: String,
-        headers: [String: String] = [:]
+        headers: [String: String] = [:],
+        timeout: TimeInterval? = nil
     ) async throws -> HTTPClientResponse {
-        try await performRequest(method: "DELETE", url: url, headers: headers, body: nil)
+        try await performRequest(method: "DELETE", url: url, headers: headers, body: nil, timeout: timeout)
     }
 
     /// Perform a PATCH request
     public func patch(
         url: String,
         headers: [String: String] = [:],
-        body: Data?
+        body: Data?,
+        timeout: TimeInterval? = nil
     ) async throws -> HTTPClientResponse {
-        try await performRequest(method: "PATCH", url: url, headers: headers, body: body)
+        try await performRequest(method: "PATCH", url: url, headers: headers, body: body, timeout: timeout)
     }
 
     // MARK: - Private
@@ -106,7 +114,8 @@ public final class URLSessionHTTPClient: HTTPClientService, @unchecked Sendable 
         method: String,
         url: String,
         headers: [String: String],
-        body: Data?
+        body: Data?,
+        timeout: TimeInterval? = nil
     ) async throws -> HTTPClientResponse {
         guard let requestURL = URL(string: url) else {
             throw HTTPError.custom("Invalid URL: \(url)")
@@ -116,7 +125,7 @@ public final class URLSessionHTTPClient: HTTPClientService, @unchecked Sendable 
 
         var request = URLRequest(url: requestURL)
         request.httpMethod = method
-        request.timeoutInterval = timeout
+        request.timeoutInterval = timeout ?? self.timeout
 
         for (name, value) in headers {
             request.setValue(value, forHTTPHeaderField: name)

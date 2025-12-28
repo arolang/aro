@@ -46,6 +46,36 @@ Use `via` preposition with method specifier for PUT, DELETE, PATCH:
 <Request> the <result> via PATCH the <url> with <partial-data>.
 ```
 
+## Config Object Syntax
+
+For full control over requests, use a config object with the `with { ... }` clause:
+
+```aro
+(* POST with custom headers and timeout *)
+<Request> the <response> from the <api-url> with {
+    method: "POST",
+    headers: { "Content-Type": "application/json", "Authorization": "Bearer token" },
+    body: <data>,
+    timeout: 60
+}.
+
+(* GET with authorization header *)
+<Request> the <protected-data> from the <api-url> with {
+    headers: { "Authorization": "Bearer my-token" }
+}.
+```
+
+**Config Options:**
+
+| Option | Type | Description |
+|--------|------|-------------|
+| `method` | String | HTTP method: GET, POST, PUT, DELETE, PATCH |
+| `headers` | Map | Custom HTTP headers |
+| `body` | String/Map | Request body (auto-serialized to JSON if map) |
+| `timeout` | Number | Request timeout in seconds (default: 30) |
+
+The config `method` overrides the preposition-based method detection. This allows you to use `from` (which defaults to GET) while specifying POST in the config.
+
 ## Response Handling
 
 The `<Request>` action automatically parses JSON responses. After a request, these variables are available:
