@@ -46,6 +46,7 @@ This is verbose and error-prone. The file extension already indicates the intend
 | `.txt` | Plain Text | Key=value format |
 | `.sql` | SQL | INSERT statements |
 | `.log` | Log | Date-prefixed log entries |
+| `.env` | Environment | KEY=VALUE format with uppercase keys |
 | `.obj` | Binary | Raw binary data |
 | (unknown) | Binary | Default for unknown extensions |
 
@@ -338,7 +339,32 @@ Date-prefixed log entries. Each entry gets an ISO8601 timestamp.
 
 **Objects:** Objects are serialized as JSON in the log entry.
 
-### 2.13 Binary (.obj, unknown)
+### 2.13 Environment (.env)
+
+Environment files use KEY=VALUE format with uppercase keys. Nested objects are flattened using underscores as separators.
+
+**Input Object:**
+```json
+{
+  "database": { "host": "localhost", "port": 5432 },
+  "apiKey": "secret123"
+}
+```
+
+**Output (.env):**
+```env
+API_KEY=secret123
+DATABASE_HOST=localhost
+DATABASE_PORT=5432
+```
+
+**Syntax:**
+```aro
+<Write> the <config> to "./.env".
+<Read> the <settings> from "./.env".
+```
+
+### 2.14 Binary (.obj, unknown)
 
 Raw binary data. Used for unknown extensions as the safe default.
 
@@ -379,6 +405,7 @@ Use the `as String` qualifier to bypass format detection and read raw content:
 | `.csv` | Array of Maps (header row = keys) |
 | `.tsv` | Array of Maps (header row = keys) |
 | `.txt` | Map (parses key=value lines) |
+| `.env` | Map (parses KEY=VALUE lines) |
 | `.obj`, unknown | Binary Data |
 
 ---

@@ -557,3 +557,126 @@ final class LogFormatTests: XCTestCase {
         XCTAssertEqual(result as? String, log)
     }
 }
+
+// MARK: - Environment File Format Tests
+
+final class EnvFormatTests: XCTestCase {
+
+    func testDetectEnv() {
+        XCTAssertEqual(FileFormat.detect(from: "config.env"), .env)
+        XCTAssertEqual(FileFormat.detect(from: ".env"), .env)
+        XCTAssertEqual(FileFormat.detect(from: "/path/to/.env"), .env)
+    }
+
+    func testEnvSupportsDeserialization() {
+        XCTAssertTrue(FileFormat.env.supportsDeserialization)
+    }
+
+    func testEnvDisplayName() {
+        XCTAssertEqual(FileFormat.env.displayName, "Environment")
+    }
+
+    func testSerializeEnvFlatObject() {
+        let data: [String: any Sendable] = [
+            "host": "localhost",
+            "port": 8080,
+            "debug": true
+        ]
+
+        let result = FormatSerializer.serialize(data, format: .env, variableName: "config")
+
+        XCTAssertTrue(result.contains("DEBUG=true"))
+        XCTAssertTrue(result.contains("HOST=localhost"))
+        XCTAssertTrue(result.contains("PORT=8080"))
+    }
+
+    func testSerializeEnvNestedObject() {
+        let data: [String: any Sendable] = [
+            "database": [
+                "host": "localhost",
+                "port": 5432
+            ] as [String: any Sendable],
+            "apiKey": "secret123"
+        ]
+
+        let result = FormatSerializer.serialize(data, format: .env, variableName: "config")
+
+        XCTAssertTrue(result.contains("API_KEY=secret123") || result.contains("APIKEY=secret123"))
+        XCTAssertTrue(result.contains("DATABASE_HOST=localhost"))
+        XCTAssertTrue(result.contains("DATABASE_PORT=5432"))
+    }
+
+    func testSerializeEnvUppercaseKeys() {
+        let data: [String: any Sendable] = [
+            "myKey": "value"
+        ]
+
+        let result = FormatSerializer.serialize(data, format: .env, variableName: "config")
+
+        XCTAssertTrue(result.contains("MYKEY=value"))
+        XCTAssertFalse(result.contains("myKey"))
+    }
+
+    func testDeserializeEnvBasic() {
+        let env = """
+        HOST=localhost
+        PORT=8080
+        DEBUG=true
+        """
+
+        let result = FormatDeserializer.deserialize(env, format: .env)
+        let dict = result as? [String: any Sendable]
+
+        XCTAssertNotNil(dict)
+        XCTAssertEqual(dict?["HOST"] as? String, "localhost")
+        XCTAssertEqual(dict?["PORT"] as? Int, 8080)
+        XCTAssertEqual(dict?["DEBUG"] as? Bool, true)
+    }
+
+    func testDeserializeEnvWithComments() {
+        let env = """
+        # Database configuration
+        DB_HOST=localhost
+        # Port number
+        DB_PORT=5432
+        """
+
+        let result = FormatDeserializer.deserialize(env, format: .env)
+        let dict = result as? [String: any Sendable]
+
+        XCTAssertNotNil(dict)
+        XCTAssertEqual(dict?["DB_HOST"] as? String, "localhost")
+        XCTAssertEqual(dict?["DB_PORT"] as? Int, 5432)
+        XCTAssertNil(dict?["# Database configuration"])
+    }
+
+    func testDeserializeEnvWithQuotedValues() {
+        let env = """
+        NAME="John Doe"
+        PATH='/usr/local/bin'
+        """
+
+        let result = FormatDeserializer.deserialize(env, format: .env)
+        let dict = result as? [String: any Sendable]
+
+        XCTAssertNotNil(dict)
+        XCTAssertEqual(dict?["NAME"] as? String, "John Doe")
+        XCTAssertEqual(dict?["PATH"] as? String, "/usr/local/bin")
+    }
+
+    func testDeserializeEnvWithEmptyLines() {
+        let env = """
+        KEY1=value1
+
+        KEY2=value2
+
+        """
+
+        let result = FormatDeserializer.deserialize(env, format: .env)
+        let dict = result as? [String: any Sendable]
+
+        XCTAssertNotNil(dict)
+        XCTAssertEqual(dict?["KEY1"] as? String, "value1")
+        XCTAssertEqual(dict?["KEY2"] as? String, "value2")
+    }
+}

@@ -50,6 +50,8 @@ public struct FormatSerializer: Sendable {
             return serializeSQL(value, tableName: variableName)
         case .log:
             return serializeLog(value)
+        case .env:
+            return serializeEnv(value)
         case .binary:
             // Binary format: convert to string representation
             if let str = value as? String {
@@ -620,6 +622,67 @@ public struct FormatSerializer: Sendable {
             return buildJSONManuallyAny(array)
         default:
             return String(describing: value)
+        }
+    }
+
+    // MARK: - Environment File Serialization
+
+    private static func serializeEnv(_ value: any Sendable) -> String {
+        var lines: [String] = []
+        flattenToEnv(value, prefix: "", into: &lines)
+        return lines.sorted().joined(separator: "\n")
+    }
+
+    private static func flattenToEnv(
+        _ value: any Sendable,
+        prefix: String,
+        into lines: inout [String]
+    ) {
+        switch value {
+        case let dict as [String: any Sendable]:
+            for key in dict.keys.sorted() {
+                let envKey = prefix.isEmpty ? key : "\(prefix)_\(key)"
+                flattenToEnv(dict[key]!, prefix: envKey, into: &lines)
+            }
+        case let dict as [String: Any]:
+            for key in dict.keys.sorted() {
+                let envKey = prefix.isEmpty ? key : "\(prefix)_\(key)"
+                flattenToEnvAny(dict[key]!, prefix: envKey, into: &lines)
+            }
+        case let str as String:
+            lines.append("\(prefix.uppercased())=\(str)")
+        case let int as Int:
+            lines.append("\(prefix.uppercased())=\(int)")
+        case let double as Double:
+            lines.append("\(prefix.uppercased())=\(double)")
+        case let bool as Bool:
+            lines.append("\(prefix.uppercased())=\(bool)")
+        case let array as [any Sendable]:
+            // Flatten arrays with numeric indices
+            for (index, item) in array.enumerated() {
+                let envKey = prefix.isEmpty ? "\(index)" : "\(prefix)_\(index)"
+                flattenToEnv(item, prefix: envKey, into: &lines)
+            }
+        default:
+            lines.append("\(prefix.uppercased())=\(String(describing: value))")
+        }
+    }
+
+    private static func flattenToEnvAny(
+        _ value: Any,
+        prefix: String,
+        into lines: inout [String]
+    ) {
+        switch value {
+        case let dict as [String: Any]:
+            for key in dict.keys.sorted() {
+                let envKey = prefix.isEmpty ? key : "\(prefix)_\(key)"
+                flattenToEnvAny(dict[key]!, prefix: envKey, into: &lines)
+            }
+        case let sendable as (any Sendable):
+            flattenToEnv(sendable, prefix: prefix, into: &lines)
+        default:
+            lines.append("\(prefix.uppercased())=\(String(describing: value))")
         }
     }
 

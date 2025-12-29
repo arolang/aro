@@ -40,6 +40,8 @@ public struct FormatDeserializer: Sendable {
             return deserializeCSV(content, delimiter: delimiter, hasHeader: hasHeader, quoteChar: quoteChar)
         case .text:
             return deserializeText(content)
+        case .env:
+            return deserializeEnv(content)
         case .markdown, .html, .sql, .log, .binary:
             // These formats don't support deserialization - return raw string
             return content
@@ -752,6 +754,60 @@ public struct FormatDeserializer: Sendable {
         }
         if trimmed == "true" { return true }
         if trimmed == "false" { return false }
+
+        return trimmed
+    }
+
+    // MARK: - Environment File Deserialization
+
+    private static func deserializeEnv(_ content: String) -> any Sendable {
+        var result: [String: any Sendable] = [:]
+        let lines = content.split(separator: "\n", omittingEmptySubsequences: false).map { String($0) }
+
+        for line in lines {
+            let trimmed = line.trimmingCharacters(in: .whitespaces)
+
+            // Skip empty lines and comments
+            if trimmed.isEmpty || trimmed.hasPrefix("#") {
+                continue
+            }
+
+            // Parse KEY=VALUE
+            if let equalsIndex = trimmed.firstIndex(of: "=") {
+                let key = String(trimmed[..<equalsIndex])
+                let value = String(trimmed[trimmed.index(after: equalsIndex)...])
+                result[key] = parseEnvValue(value)
+            }
+        }
+
+        return result
+    }
+
+    private static func parseEnvValue(_ value: String) -> any Sendable {
+        // Remove surrounding quotes if present
+        var trimmed = value
+        if (trimmed.hasPrefix("\"") && trimmed.hasSuffix("\"")) ||
+           (trimmed.hasPrefix("'") && trimmed.hasSuffix("'")) {
+            trimmed = String(trimmed.dropFirst().dropLast())
+        }
+
+        // Try to parse as Int
+        if let intValue = Int(trimmed) {
+            return intValue
+        }
+
+        // Try to parse as Double
+        if let doubleValue = Double(trimmed) {
+            return doubleValue
+        }
+
+        // Try to parse as Bool
+        if trimmed.lowercased() == "true" {
+            return true
+        }
+        if trimmed.lowercased() == "false" {
+            return false
+        }
 
         return trimmed
     }

@@ -77,6 +77,7 @@ ARO supports thirteen file formats out of the box. Each format has specific char
 | `.txt` | Plain Text | Simple key-value data |
 | `.sql` | SQL | Database backup, migration |
 | `.log` | Log | Application logs, audit trails |
+| `.env` | Environment | Configuration with uppercase keys |
 | `.obj` or unknown | Binary | Raw data, unknown formats |
 
 ---
@@ -270,6 +271,32 @@ When writing an array, each element becomes a separate log entry:
 2025-12-29T10:30:45Z: Listening on port 8080
 ```
 
+### Environment Files
+
+Environment files use KEY=VALUE format with uppercase keys. Nested objects are flattened with underscore separators.
+
+```aro
+<Create> the <config> with {
+    "database": { "host": "localhost", "port": 5432 },
+    "apiKey": "secret123"
+}.
+<Write> the <config> to "./.env".
+```
+
+**Output (.env):**
+```
+API_KEY=secret123
+DATABASE_HOST=localhost
+DATABASE_PORT=5432
+```
+
+Environment files can also be read back:
+
+```aro
+<Read> the <settings> from "./.env".
+(* Returns { "API_KEY": "secret123", "DATABASE_HOST": "localhost", ... } *)
+```
+
 ### Plain Text
 
 Plain text output produces key=value pairs, one per line. Nested objects use dot notation.
@@ -356,6 +383,7 @@ Each format parses to an appropriate data structure:
 | CSV | Array of Objects |
 | TSV | Array of Objects |
 | Plain Text | Object |
+| Environment | Object |
 | Binary | Raw Data |
 
 ### Bypassing Format Detection

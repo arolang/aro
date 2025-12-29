@@ -263,6 +263,11 @@
                 <code>.log</code>
             </div>
             <div class="format-card">
+                <h4>Environment</h4>
+                <p>KEY=VALUE format with uppercase keys and underscore nesting.</p>
+                <code>.env</code>
+            </div>
+            <div class="format-card">
                 <h4>Plain Text / Binary</h4>
                 <p>Key=value format or raw binary data.</p>
                 <code>.txt .obj</code>
@@ -336,6 +341,9 @@
 
 <span class="code-comment">(* Log file with timestamp *)</span>
 <span class="code-keyword">&lt;Write&gt;</span> the <span class="code-result">&lt;message&gt;</span> to <span class="code-string">"./app.log"</span> with <span class="code-string">"Server started"</span>.
+
+<span class="code-comment">(* Environment file - uppercase keys with underscore nesting *)</span>
+<span class="code-keyword">&lt;Write&gt;</span> the <span class="code-result">&lt;config&gt;</span> to <span class="code-string">"./.env"</span>.
 
 <span class="code-comment">(* Plain text key=value *)</span>
 <span class="code-keyword">&lt;Write&gt;</span> the <span class="code-result">&lt;config&gt;</span> to <span class="code-string">"./output/config.txt"</span>.</code></pre>
@@ -445,6 +453,12 @@
                     <td>Log</td>
                     <td>Date-prefixed entries</td>
                     <td>String</td>
+                </tr>
+                <tr>
+                    <td><code>.env</code></td>
+                    <td>Environment</td>
+                    <td>KEY=VALUE format</td>
+                    <td>Object</td>
                 </tr>
                 <tr>
                     <td><code>.obj</code> or unknown</td>
