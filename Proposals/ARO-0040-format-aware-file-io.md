@@ -45,6 +45,7 @@ This is verbose and error-prone. The file extension already indicates the intend
 | `.html` | HTML | HTML table elements |
 | `.txt` | Plain Text | Key=value format |
 | `.sql` | SQL | INSERT statements |
+| `.log` | Log | Date-prefixed log entries |
 | `.obj` | Binary | Raw binary data |
 | (unknown) | Binary | Default for unknown extensions |
 
@@ -308,7 +309,36 @@ INSERT INTO users (id, name) VALUES (2, 'Bob');
 INSERT INTO user (id, name) VALUES (1, 'Alice');
 ```
 
-### 2.12 Binary (.obj, unknown)
+### 2.12 Log (.log)
+
+Date-prefixed log entries. Each entry gets an ISO8601 timestamp.
+
+**Single Message:**
+```aro
+<Write> the <message> to "./app.log" with "Server started".
+```
+
+**Output:**
+```
+2025-12-29T10:30:45Z: Server started
+```
+
+**Array of Messages:**
+```aro
+<Create> the <events> with ["User login", "File uploaded", "Session ended"].
+<Write> the <events> to "./events.log".
+```
+
+**Output:**
+```
+2025-12-29T10:30:45Z: User login
+2025-12-29T10:30:45Z: File uploaded
+2025-12-29T10:30:45Z: Session ended
+```
+
+**Objects:** Objects are serialized as JSON in the log entry.
+
+### 2.13 Binary (.obj, unknown)
 
 Raw binary data. Used for unknown extensions as the safe default.
 

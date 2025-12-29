@@ -496,3 +496,64 @@ final class CSVOptionsTests: XCTestCase {
         XCTAssertEqual(array[0]["name"] as? String, "Alice, Bob")
     }
 }
+
+// MARK: - Log Format Tests
+
+final class LogFormatTests: XCTestCase {
+
+    func testDetectLog() {
+        XCTAssertEqual(FileFormat.detect(from: "app.log"), .log)
+        XCTAssertEqual(FileFormat.detect(from: "server.log"), .log)
+        XCTAssertEqual(FileFormat.detect(from: "/var/logs/system.log"), .log)
+    }
+
+    func testLogSupportsDeserialization() {
+        // Log format is write-only
+        XCTAssertFalse(FileFormat.log.supportsDeserialization)
+    }
+
+    func testLogDisplayName() {
+        XCTAssertEqual(FileFormat.log.displayName, "Log")
+    }
+
+    func testSerializeLogString() {
+        let message = "Server started"
+        let result = FormatSerializer.serialize(message, format: .log, variableName: "message")
+
+        // Should have ISO8601 timestamp followed by message
+        XCTAssertTrue(result.contains(": Server started"))
+        // Should start with a date (year)
+        XCTAssertTrue(result.hasPrefix("20"))
+    }
+
+    func testSerializeLogArray() {
+        let messages: [any Sendable] = ["Event 1", "Event 2", "Event 3"]
+        let result = FormatSerializer.serialize(messages, format: .log, variableName: "events")
+
+        let lines = result.split(separator: "\n")
+        XCTAssertEqual(lines.count, 3)
+
+        // Each line should have timestamp and message
+        XCTAssertTrue(lines[0].contains(": Event 1"))
+        XCTAssertTrue(lines[1].contains(": Event 2"))
+        XCTAssertTrue(lines[2].contains(": Event 3"))
+    }
+
+    func testSerializeLogObject() {
+        let data: [String: any Sendable] = ["user": "Alice", "action": "login"]
+        let result = FormatSerializer.serialize(data, format: .log, variableName: "event")
+
+        // Object should be serialized as JSON
+        XCTAssertTrue(result.contains(": {"))
+        XCTAssertTrue(result.contains("\"user\""))
+        XCTAssertTrue(result.contains("\"action\""))
+    }
+
+    func testDeserializeLogReturnsRawString() {
+        let log = "2025-12-29T10:30:45Z: Server started"
+        let result = FormatDeserializer.deserialize(log, format: .log)
+
+        // Log format doesn't deserialize - returns raw string
+        XCTAssertEqual(result as? String, log)
+    }
+}

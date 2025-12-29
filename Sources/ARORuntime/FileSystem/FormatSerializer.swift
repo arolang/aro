@@ -48,6 +48,8 @@ public struct FormatSerializer: Sendable {
             return serializeText(value)
         case .sql:
             return serializeSQL(value, tableName: variableName)
+        case .log:
+            return serializeLog(value)
         case .binary:
             // Binary format: convert to string representation
             if let str = value as? String {
@@ -563,6 +565,61 @@ public struct FormatSerializer: Sendable {
             return "NULL"
         default:
             return "'\(escapeSQL(String(describing: value)))'"
+        }
+    }
+
+    // MARK: - Log Serialization
+
+    private static func serializeLog(_ value: any Sendable) -> String {
+        let dateFormatter = ISO8601DateFormatter()
+        let timestamp = dateFormatter.string(from: Date())
+
+        switch value {
+        case let array as [any Sendable]:
+            // Multiple log entries - each gets its own timestamp
+            return array.map { entry in
+                let message = logStringValue(entry)
+                return "\(timestamp): \(message)"
+            }.joined(separator: "\n")
+        case let array as [Any]:
+            return array.map { entry in
+                let message = logStringValueAny(entry)
+                return "\(timestamp): \(message)"
+            }.joined(separator: "\n")
+        case let str as String:
+            return "\(timestamp): \(str)"
+        case let dict as [String: any Sendable]:
+            return "\(timestamp): \(buildJSONManually(dict))"
+        case let dict as [String: Any]:
+            return "\(timestamp): \(buildJSONManuallyAny(dict))"
+        default:
+            return "\(timestamp): \(String(describing: value))"
+        }
+    }
+
+    private static func logStringValue(_ value: any Sendable) -> String {
+        switch value {
+        case let str as String:
+            return str
+        case let dict as [String: any Sendable]:
+            return buildJSONManually(dict)
+        case let array as [any Sendable]:
+            return buildJSONManually(array)
+        default:
+            return String(describing: value)
+        }
+    }
+
+    private static func logStringValueAny(_ value: Any) -> String {
+        switch value {
+        case let str as String:
+            return str
+        case let dict as [String: Any]:
+            return buildJSONManuallyAny(dict)
+        case let array as [Any]:
+            return buildJSONManuallyAny(array)
+        default:
+            return String(describing: value)
         }
     }
 

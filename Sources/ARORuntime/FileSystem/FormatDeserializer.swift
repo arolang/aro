@@ -40,7 +40,7 @@ public struct FormatDeserializer: Sendable {
             return deserializeCSV(content, delimiter: delimiter, hasHeader: hasHeader, quoteChar: quoteChar)
         case .text:
             return deserializeText(content)
-        case .markdown, .html, .sql, .binary:
+        case .markdown, .html, .sql, .log, .binary:
             // These formats don't support deserialization - return raw string
             return content
         }

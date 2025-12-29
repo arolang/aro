@@ -16,6 +16,7 @@ public enum FileFormat: String, Sendable, CaseIterable {
     case html
     case text
     case sql
+    case log    // Log files - date-prefixed entries
     case binary
 
     /// Detect file format from path extension
@@ -46,6 +47,8 @@ public enum FileFormat: String, Sendable, CaseIterable {
             return .text
         case "sql":
             return .sql
+        case "log":
+            return .log
         case "obj", "bin", "dat":
             return .binary
         default:
@@ -58,7 +61,7 @@ public enum FileFormat: String, Sendable, CaseIterable {
         switch self {
         case .json, .jsonl, .yaml, .xml, .toml, .csv, .tsv, .text:
             return true
-        case .markdown, .html, .sql, .binary:
+        case .markdown, .html, .sql, .log, .binary:
             return false  // These are write-only formats or pass-through
         }
     }
@@ -77,6 +80,7 @@ public enum FileFormat: String, Sendable, CaseIterable {
         case .html: return "HTML"
         case .text: return "Plain Text"
         case .sql: return "SQL"
+        case .log: return "Log"
         case .binary: return "Binary"
         }
     }

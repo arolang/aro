@@ -258,6 +258,11 @@
                 <code>.md .sql</code>
             </div>
             <div class="format-card">
+                <h4>Log Files</h4>
+                <p>Date-prefixed log entries with ISO8601 timestamps.</p>
+                <code>.log</code>
+            </div>
+            <div class="format-card">
                 <h4>Plain Text / Binary</h4>
                 <p>Key=value format or raw binary data.</p>
                 <code>.txt .obj</code>
@@ -328,6 +333,9 @@
 
 <span class="code-comment">(* SQL INSERT statements *)</span>
 <span class="code-keyword">&lt;Write&gt;</span> the <span class="code-result">&lt;users&gt;</span> to <span class="code-string">"./backup/users.sql"</span>.
+
+<span class="code-comment">(* Log file with timestamp *)</span>
+<span class="code-keyword">&lt;Write&gt;</span> the <span class="code-result">&lt;message&gt;</span> to <span class="code-string">"./app.log"</span> with <span class="code-string">"Server started"</span>.
 
 <span class="code-comment">(* Plain text key=value *)</span>
 <span class="code-keyword">&lt;Write&gt;</span> the <span class="code-result">&lt;config&gt;</span> to <span class="code-string">"./output/config.txt"</span>.</code></pre>
@@ -430,6 +438,12 @@
                     <td><code>.sql</code></td>
                     <td>SQL</td>
                     <td>INSERT statements</td>
+                    <td>String</td>
+                </tr>
+                <tr>
+                    <td><code>.log</code></td>
+                    <td>Log</td>
+                    <td>Date-prefixed entries</td>
                     <td>String</td>
                 </tr>
                 <tr>

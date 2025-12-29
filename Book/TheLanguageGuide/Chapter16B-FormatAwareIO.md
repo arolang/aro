@@ -76,6 +76,7 @@ ARO supports thirteen file formats out of the box. Each format has specific char
 | `.html`, `.htm` | HTML | Web output, reports |
 | `.txt` | Plain Text | Simple key-value data |
 | `.sql` | SQL | Database backup, migration |
+| `.log` | Log | Application logs, audit trails |
 | `.obj` or unknown | Binary | Raw data, unknown formats |
 
 ---
@@ -240,6 +241,34 @@ INSERT INTO users (id, name, email) VALUES (2, 'Bob', 'bob@example.com');
 ```
 
 String values are properly escaped to prevent SQL injection in the output.
+
+### Log
+
+Log output produces date-prefixed entries, ideal for application logs and audit trails. Each entry receives an ISO8601 timestamp.
+
+```aro
+<Write> the <message> to "./app.log" with "Server started".
+<Append> the <entry> to "./app.log" with "User logged in".
+```
+
+**Output (app.log):**
+```
+2025-12-29T10:30:45Z: Server started
+2025-12-29T10:30:46Z: User logged in
+```
+
+When writing an array, each element becomes a separate log entry:
+
+```aro
+<Create> the <events> with ["Startup complete", "Listening on port 8080"].
+<Write> the <events> to "./events.log".
+```
+
+**Output:**
+```
+2025-12-29T10:30:45Z: Startup complete
+2025-12-29T10:30:45Z: Listening on port 8080
+```
 
 ### Plain Text
 
