@@ -1,0 +1,538 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <title>Format-Aware File I/O - ARO Programming Language</title>
+{{head}}
+    <style>
+        .doc-page {
+            padding: 120px 24px 80px;
+            max-width: 900px;
+            margin: 0 auto;
+        }
+
+        .doc-header {
+            margin-bottom: 48px;
+        }
+
+        .doc-header h1 {
+            font-size: clamp(2rem, 5vw, 3rem);
+            font-weight: 700;
+            margin-bottom: 16px;
+            letter-spacing: -0.02em;
+        }
+
+        .doc-header .lead {
+            font-size: 1.25rem;
+            color: var(--color-text-muted);
+            line-height: 1.7;
+        }
+
+        .doc-page h2 {
+            font-size: 1.8rem;
+            font-weight: 600;
+            margin: 48px 0 16px;
+            padding-top: 24px;
+            border-top: 1px solid rgba(255, 255, 255, 0.1);
+        }
+
+        .doc-page h3 {
+            font-size: 1.3rem;
+            font-weight: 600;
+            margin: 32px 0 12px;
+            color: var(--color-secondary);
+        }
+
+        .doc-page p {
+            font-size: 1.1rem;
+            color: var(--color-text-muted);
+            line-height: 1.8;
+            margin-bottom: 16px;
+        }
+
+        .doc-page code {
+            font-family: var(--font-mono);
+            background: var(--color-bg-alt);
+            padding: 3px 8px;
+            border-radius: 4px;
+            font-size: 0.9rem;
+            color: var(--color-secondary);
+        }
+
+        .doc-page pre {
+            background: var(--color-bg-alt);
+            border-radius: var(--radius-md);
+            padding: 24px;
+            overflow-x: auto;
+            margin: 24px 0;
+            border: 1px solid rgba(255, 255, 255, 0.1);
+        }
+
+        .doc-page pre code {
+            background: none;
+            padding: 0;
+            font-size: 0.9rem;
+            line-height: 1.7;
+            color: var(--color-text);
+        }
+
+        .doc-page ul {
+            color: var(--color-text-muted);
+            margin: 16px 0 16px 24px;
+            line-height: 1.8;
+        }
+
+        .doc-page li {
+            margin-bottom: 8px;
+        }
+
+        .doc-page strong {
+            color: var(--color-text);
+        }
+
+        .doc-page em {
+            color: var(--color-secondary);
+            font-style: normal;
+        }
+
+        .doc-page table {
+            width: 100%;
+            border-collapse: collapse;
+            margin: 24px 0;
+        }
+
+        .doc-page th, .doc-page td {
+            padding: 12px 16px;
+            text-align: left;
+            border: 1px solid rgba(255, 255, 255, 0.1);
+        }
+
+        .doc-page th {
+            background: var(--color-bg-alt);
+            font-weight: 600;
+            color: var(--color-text);
+        }
+
+        .doc-page td {
+            color: var(--color-text-muted);
+        }
+
+        .doc-page td code {
+            font-size: 0.85rem;
+        }
+
+        .highlight-box {
+            background: rgba(124, 58, 237, 0.1);
+            border: 1px solid rgba(124, 58, 237, 0.3);
+            border-radius: var(--radius-md);
+            padding: 24px;
+            margin: 32px 0;
+        }
+
+        .highlight-box h4 {
+            color: var(--color-primary);
+            font-size: 1.1rem;
+            margin-bottom: 12px;
+        }
+
+        .highlight-box p {
+            margin-bottom: 0;
+        }
+
+        .code-comment { color: #6b7280; }
+        .code-keyword { color: #7c3aed; font-weight: 600; }
+        .code-string { color: #10b981; }
+        .code-feature { color: #f472b6; }
+        .code-result { color: #06b6d4; }
+
+        .back-link {
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            color: var(--color-text-muted);
+            text-decoration: none;
+            font-size: 0.95rem;
+            margin-bottom: 24px;
+            transition: color 0.2s;
+        }
+
+        .back-link:hover {
+            color: var(--color-primary);
+        }
+
+        .format-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+            gap: 16px;
+            margin: 24px 0;
+        }
+
+        .format-card {
+            background: var(--color-bg-alt);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            border-radius: var(--radius-md);
+            padding: 20px;
+        }
+
+        .format-card h4 {
+            color: var(--color-secondary);
+            font-size: 1rem;
+            margin-bottom: 8px;
+        }
+
+        .format-card p {
+            font-size: 0.95rem;
+            margin-bottom: 0;
+        }
+
+        .format-card code {
+            font-size: 0.8rem;
+        }
+    </style>
+</head>
+<body>
+    <nav class="nav">
+        <div class="nav-content">
+            <a href="/aro/" class="logo">
+                <span class="logo-aro">ARO</span>
+            </a>
+            <div class="nav-links">
+                <a href="../fdd.html">The FDD Story</a>
+                <a href="../getting-started.html">Get Started</a>
+                <a href="../docs.html" style="color: var(--color-text);">Docs</a>
+                <a href="../disclaimer.html">Motivation</a>
+                <a href="../download.html">Download</a>
+                <a href="https://github.com/KrisSimon/aro" class="nav-github">
+                    <svg viewBox="0 0 16 16" fill="currentColor"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z"/></svg>
+                    <span class="github-stars">
+                        <svg viewBox="0 0 16 16"><path d="M8 .25a.75.75 0 01.673.418l1.882 3.815 4.21.612a.75.75 0 01.416 1.279l-3.046 2.97.719 4.192a.75.75 0 01-1.088.791L8 12.347l-3.766 1.98a.75.75 0 01-1.088-.79l.72-4.194L.818 6.374a.75.75 0 01.416-1.28l4.21-.611L7.327.668A.75.75 0 018 .25z"/></svg>
+                        <span class="github-stars-count"></span>
+                    </span>
+                </a>
+            </div>
+        </div>
+    </nav>
+
+    <main class="doc-page">
+        <a href="../docs.html" class="back-link">&#x2190; Back to Documentation</a>
+
+        <header class="doc-header">
+            <h1 class="gradient-text">Format-Aware File I/O</h1>
+            <p class="lead">
+                Write objects to files and the format is chosen automatically based on the file extension.
+                Read files and content is parsed back into structured data. Zero boilerplate.
+            </p>
+        </header>
+
+        <div class="highlight-box">
+            <h4>Automatic Format Detection</h4>
+            <p>
+                File extensions determine the output format. Write to <code>data.json</code> and get JSON.
+                Write to <code>data.csv</code> and get CSV. It just works.
+            </p>
+        </div>
+
+        <div class="format-grid">
+            <div class="format-card">
+                <h4>JSON / JSONL</h4>
+                <p>Standard JSON or newline-delimited JSON Lines for streaming.</p>
+                <code>.json .jsonl .ndjson</code>
+            </div>
+            <div class="format-card">
+                <h4>YAML / TOML</h4>
+                <p>Human-readable configuration formats with proper indentation.</p>
+                <code>.yaml .yml .toml</code>
+            </div>
+            <div class="format-card">
+                <h4>CSV / TSV</h4>
+                <p>Spreadsheet-friendly formats with configurable delimiters.</p>
+                <code>.csv .tsv</code>
+            </div>
+            <div class="format-card">
+                <h4>XML / HTML</h4>
+                <p>Markup formats with variable name as root element.</p>
+                <code>.xml .html .htm</code>
+            </div>
+            <div class="format-card">
+                <h4>Markdown / SQL</h4>
+                <p>Tables for docs, INSERT statements for database backup.</p>
+                <code>.md .sql</code>
+            </div>
+            <div class="format-card">
+                <h4>Plain Text / Binary</h4>
+                <p>Key=value format or raw binary data.</p>
+                <code>.txt .obj</code>
+            </div>
+        </div>
+
+        <h2>Writing Structured Data</h2>
+
+        <p>
+            Simply write your data to a file path. The extension determines the format automatically.
+        </p>
+
+        <h3>JSON and JSON Lines</h3>
+        <pre><code><span class="code-comment">(* Pretty-printed JSON *)</span>
+<span class="code-keyword">&lt;Write&gt;</span> the <span class="code-result">&lt;users&gt;</span> to <span class="code-string">"./output/users.json"</span>.
+
+<span class="code-comment">(* JSON Lines - one object per line, compact *)</span>
+<span class="code-keyword">&lt;Write&gt;</span> the <span class="code-result">&lt;events&gt;</span> to <span class="code-string">"./logs/events.jsonl"</span>.</code></pre>
+
+        <p><strong>JSON output:</strong></p>
+        <pre><code>[
+  { "id": 1, "name": "Alice" },
+  { "id": 2, "name": "Bob" }
+]</code></pre>
+
+        <p><strong>JSONL output:</strong></p>
+        <pre><code>{"id":1,"name":"Alice"}
+{"id":2,"name":"Bob"}</code></pre>
+
+        <h3>YAML and TOML</h3>
+        <pre><code><span class="code-comment">(* YAML - human readable *)</span>
+<span class="code-keyword">&lt;Write&gt;</span> the <span class="code-result">&lt;config&gt;</span> to <span class="code-string">"./settings.yaml"</span>.
+
+<span class="code-comment">(* TOML - configuration files *)</span>
+<span class="code-keyword">&lt;Write&gt;</span> the <span class="code-result">&lt;config&gt;</span> to <span class="code-string">"./settings.toml"</span>.</code></pre>
+
+        <h3>CSV and TSV</h3>
+        <pre><code><span class="code-comment">(* CSV with header row *)</span>
+<span class="code-keyword">&lt;Write&gt;</span> the <span class="code-result">&lt;report&gt;</span> to <span class="code-string">"./export/report.csv"</span>.
+
+<span class="code-comment">(* TSV - tab separated *)</span>
+<span class="code-keyword">&lt;Write&gt;</span> the <span class="code-result">&lt;data&gt;</span> to <span class="code-string">"./export/data.tsv"</span>.</code></pre>
+
+        <p><strong>CSV output:</strong></p>
+        <pre><code>id,name,email
+1,Alice,alice@example.com
+2,Bob,bob@example.com</code></pre>
+
+        <h3>XML</h3>
+        <pre><code><span class="code-comment">(* XML - variable name becomes root element *)</span>
+<span class="code-keyword">&lt;Write&gt;</span> the <span class="code-result">&lt;products&gt;</span> to <span class="code-string">"./catalog/products.xml"</span>.</code></pre>
+
+        <p><strong>XML output:</strong> (note: <code>&lt;products&gt;</code> is the root)</p>
+        <pre><code>&lt;?xml version="1.0" encoding="UTF-8"?&gt;
+&lt;products&gt;
+  &lt;item&gt;
+    &lt;id&gt;1&lt;/id&gt;
+    &lt;name&gt;Widget&lt;/name&gt;
+  &lt;/item&gt;
+&lt;/products&gt;</code></pre>
+
+        <h3>Other Formats</h3>
+        <pre><code><span class="code-comment">(* Markdown table *)</span>
+<span class="code-keyword">&lt;Write&gt;</span> the <span class="code-result">&lt;summary&gt;</span> to <span class="code-string">"./docs/summary.md"</span>.
+
+<span class="code-comment">(* HTML table *)</span>
+<span class="code-keyword">&lt;Write&gt;</span> the <span class="code-result">&lt;report&gt;</span> to <span class="code-string">"./output/report.html"</span>.
+
+<span class="code-comment">(* SQL INSERT statements *)</span>
+<span class="code-keyword">&lt;Write&gt;</span> the <span class="code-result">&lt;users&gt;</span> to <span class="code-string">"./backup/users.sql"</span>.
+
+<span class="code-comment">(* Plain text key=value *)</span>
+<span class="code-keyword">&lt;Write&gt;</span> the <span class="code-result">&lt;config&gt;</span> to <span class="code-string">"./output/config.txt"</span>.</code></pre>
+
+        <h2>Reading Structured Data</h2>
+
+        <p>
+            When reading files, the extension determines how content is parsed back into structured data.
+        </p>
+
+        <pre><code><span class="code-comment">(* JSON - parsed to object/array *)</span>
+<span class="code-keyword">&lt;Read&gt;</span> the <span class="code-result">&lt;config&gt;</span> from <span class="code-string">"./settings.json"</span>.
+
+<span class="code-comment">(* JSONL - parsed to array of objects *)</span>
+<span class="code-keyword">&lt;Read&gt;</span> the <span class="code-result">&lt;events&gt;</span> from <span class="code-string">"./logs/events.jsonl"</span>.
+
+<span class="code-comment">(* CSV - parsed to array with headers as keys *)</span>
+<span class="code-keyword">&lt;Read&gt;</span> the <span class="code-result">&lt;records&gt;</span> from <span class="code-string">"./data.csv"</span>.
+
+<span class="code-comment">(* YAML - parsed to object/array *)</span>
+<span class="code-keyword">&lt;Read&gt;</span> the <span class="code-result">&lt;settings&gt;</span> from <span class="code-string">"./config.yaml"</span>.</code></pre>
+
+        <h3>Bypass Parsing with as String</h3>
+        <pre><code><span class="code-comment">(* Read raw content without parsing *)</span>
+<span class="code-keyword">&lt;Read&gt;</span> the <span class="code-result">&lt;raw-json: String&gt;</span> from <span class="code-string">"./data.json"</span>.</code></pre>
+
+        <h2>Format Reference</h2>
+
+        <table>
+            <thead>
+                <tr>
+                    <th>Extension</th>
+                    <th>Format</th>
+                    <th>Write Output</th>
+                    <th>Read Result</th>
+                </tr>
+            </thead>
+            <tbody>
+                <tr>
+                    <td><code>.json</code></td>
+                    <td>JSON</td>
+                    <td>Pretty-printed JSON</td>
+                    <td>Object or Array</td>
+                </tr>
+                <tr>
+                    <td><code>.jsonl</code> <code>.ndjson</code></td>
+                    <td>JSON Lines</td>
+                    <td>One JSON object per line</td>
+                    <td>Array of Objects</td>
+                </tr>
+                <tr>
+                    <td><code>.yaml</code> <code>.yml</code></td>
+                    <td>YAML</td>
+                    <td>Human-readable YAML</td>
+                    <td>Object or Array</td>
+                </tr>
+                <tr>
+                    <td><code>.toml</code></td>
+                    <td>TOML</td>
+                    <td>TOML tables</td>
+                    <td>Object</td>
+                </tr>
+                <tr>
+                    <td><code>.xml</code></td>
+                    <td>XML</td>
+                    <td>XML with variable as root</td>
+                    <td>Object (nested)</td>
+                </tr>
+                <tr>
+                    <td><code>.csv</code></td>
+                    <td>CSV</td>
+                    <td>Comma-separated with header</td>
+                    <td>Array of Objects</td>
+                </tr>
+                <tr>
+                    <td><code>.tsv</code></td>
+                    <td>TSV</td>
+                    <td>Tab-separated with header</td>
+                    <td>Array of Objects</td>
+                </tr>
+                <tr>
+                    <td><code>.md</code></td>
+                    <td>Markdown</td>
+                    <td>Markdown table</td>
+                    <td>String</td>
+                </tr>
+                <tr>
+                    <td><code>.html</code> <code>.htm</code></td>
+                    <td>HTML</td>
+                    <td>HTML table element</td>
+                    <td>String</td>
+                </tr>
+                <tr>
+                    <td><code>.txt</code></td>
+                    <td>Plain Text</td>
+                    <td>key=value pairs</td>
+                    <td>Object</td>
+                </tr>
+                <tr>
+                    <td><code>.sql</code></td>
+                    <td>SQL</td>
+                    <td>INSERT statements</td>
+                    <td>String</td>
+                </tr>
+                <tr>
+                    <td><code>.obj</code> or unknown</td>
+                    <td>Binary</td>
+                    <td>Raw bytes</td>
+                    <td>Binary Data</td>
+                </tr>
+            </tbody>
+        </table>
+
+        <h2>CSV/TSV Options</h2>
+
+        <p>
+            CSV and TSV formats support additional options via the <code>with</code> clause:
+        </p>
+
+        <table>
+            <thead>
+                <tr>
+                    <th>Option</th>
+                    <th>Type</th>
+                    <th>Default</th>
+                    <th>Description</th>
+                </tr>
+            </thead>
+            <tbody>
+                <tr>
+                    <td><code>delimiter</code></td>
+                    <td>String</td>
+                    <td><code>,</code> / <code>\t</code></td>
+                    <td>Field separator character</td>
+                </tr>
+                <tr>
+                    <td><code>header</code></td>
+                    <td>Boolean</td>
+                    <td><code>true</code></td>
+                    <td>Include/expect header row</td>
+                </tr>
+                <tr>
+                    <td><code>quote</code></td>
+                    <td>String</td>
+                    <td><code>"</code></td>
+                    <td>Quote character for escaping</td>
+                </tr>
+            </tbody>
+        </table>
+
+        <pre><code><span class="code-comment">(* Custom delimiter *)</span>
+<span class="code-keyword">&lt;Write&gt;</span> the <span class="code-result">&lt;data&gt;</span> to <span class="code-string">"./export.csv"</span> with { delimiter: <span class="code-string">";"</span> }.
+
+<span class="code-comment">(* Without header row *)</span>
+<span class="code-keyword">&lt;Write&gt;</span> the <span class="code-result">&lt;data&gt;</span> to <span class="code-string">"./export.csv"</span> with { header: false }.
+
+<span class="code-comment">(* Read with custom options *)</span>
+<span class="code-keyword">&lt;Read&gt;</span> the <span class="code-result">&lt;data&gt;</span> from <span class="code-string">"./import.csv"</span> with { delimiter: <span class="code-string">";"</span> }.</code></pre>
+
+        <h2>Complete Example</h2>
+
+        <p>
+            Here's a complete example that reads data from one format and exports to multiple formats:
+        </p>
+
+        <pre><code><span class="code-feature">(Application-Start: Multi-Format Export)</span> {
+    <span class="code-comment">(* Create sample data *)</span>
+    <span class="code-keyword">&lt;Create&gt;</span> the <span class="code-result">&lt;users&gt;</span> with [
+        { "id": 1, "name": "Alice", "email": "alice@example.com" },
+        { "id": 2, "name": "Bob", "email": "bob@example.com" },
+        { "id": 3, "name": "Charlie", "email": "charlie@example.com" }
+    ].
+
+    <span class="code-comment">(* Export to multiple formats - same data, different files *)</span>
+    <span class="code-keyword">&lt;Write&gt;</span> the <span class="code-result">&lt;users&gt;</span> to <span class="code-string">"./output/users.json"</span>.
+    <span class="code-keyword">&lt;Write&gt;</span> the <span class="code-result">&lt;users&gt;</span> to <span class="code-string">"./output/users.jsonl"</span>.
+    <span class="code-keyword">&lt;Write&gt;</span> the <span class="code-result">&lt;users&gt;</span> to <span class="code-string">"./output/users.yaml"</span>.
+    <span class="code-keyword">&lt;Write&gt;</span> the <span class="code-result">&lt;users&gt;</span> to <span class="code-string">"./output/users.csv"</span>.
+    <span class="code-keyword">&lt;Write&gt;</span> the <span class="code-result">&lt;users&gt;</span> to <span class="code-string">"./output/users.xml"</span>.
+    <span class="code-keyword">&lt;Write&gt;</span> the <span class="code-result">&lt;users&gt;</span> to <span class="code-string">"./output/users.md"</span>.
+
+    <span class="code-keyword">&lt;Log&gt;</span> the <span class="code-result">&lt;message&gt;</span> for the &lt;console&gt; with <span class="code-string">"Exported to 6 formats!"</span>.
+
+    <span class="code-comment">(* Read back and verify *)</span>
+    <span class="code-keyword">&lt;Read&gt;</span> the <span class="code-result">&lt;json-data&gt;</span> from <span class="code-string">"./output/users.json"</span>.
+    <span class="code-keyword">&lt;Read&gt;</span> the <span class="code-result">&lt;csv-data&gt;</span> from <span class="code-string">"./output/users.csv"</span>.
+
+    <span class="code-keyword">&lt;Return&gt;</span> an <span class="code-result">&lt;OK: status&gt;</span> for the &lt;export&gt;.
+}</code></pre>
+
+        <div class="highlight-box">
+            <h4>Learn More</h4>
+            <p>
+                See the full format-aware I/O specification in
+                <a href="https://github.com/KrisSimon/aro/blob/main/Proposals/ARO-0040-format-aware-file-io.md">ARO-0040: Format-Aware File I/O</a>.
+            </p>
+        </div>
+    </main>
+
+    <footer class="footer">
+        <div class="container">
+            <div class="footer-bottom">
+                <p>Sometime this page should build with ARO. Obviously.</p>
+            </div>
+        </div>
+    </footer>
+</body>
+</html>
