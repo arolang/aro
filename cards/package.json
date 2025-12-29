@@ -1,0 +1,13 @@
+{
+  "name": "aro-cards",
+  "version": "1.0.0",
+  "description": "Generate promotional cards for ARO language features",
+  "type": "module",
+  "scripts": {
+    "generate": "node generate.js"
+  },
+  "dependencies": {
+    "js-yaml": "^4.1.0",
+    "puppeteer": "^23.0.0"
+  }
+}
