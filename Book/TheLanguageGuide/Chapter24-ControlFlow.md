@@ -1,4 +1,4 @@
-# Chapter 23: Control Flow
+# Chapter 24: Control Flow
 
 ARO provides control flow constructs for conditional execution. This chapter covers how to make decisions in your feature sets using guarded statements and match expressions.
 
@@ -450,3 +450,7 @@ match <order: status> {
 (* Avoid - implicit truthiness *)
 <Grant> the <access> for the <user> when <user: active> and <user: verified>.
 ```
+
+---
+
+*Next: Chapter 25 — Data Pipelines*

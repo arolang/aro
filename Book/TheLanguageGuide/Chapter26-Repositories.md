@@ -1,4 +1,4 @@
-# Chapter 25: Repositories
+# Chapter 26: Repositories
 
 Repositories provide persistent in-memory storage that survives across HTTP requests and event handlers. Unlike regular variables which are scoped to a single feature set execution, repositories maintain state for the lifetime of the application.
 
@@ -434,3 +434,7 @@ Store simple, serializable data:
 (* Avoid - complex nested structures *)
 <Store> the <entire-request-context> into the <debug-repository>.
 ```
+
+---
+
+*Next: Chapter 27 — System Commands*

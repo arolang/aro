@@ -1,4 +1,4 @@
-# Chapter 24: Data Pipelines
+# Chapter 25: Data Pipelines
 
 ARO provides a map/reduce style data pipeline for filtering, transforming, and aggregating collections. All operations are type-safe, with results typed via OpenAPI schemas.
 
@@ -345,3 +345,7 @@ ARO's data pipelines follow these principles:
 4. **Predictable Performance**: Simple operations with clear cost
 
 For complex data needs, use multiple feature sets and compose results in your business logic.
+
+---
+
+*Next: Chapter 26 — Repositories*

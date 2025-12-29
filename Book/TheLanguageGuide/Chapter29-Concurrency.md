@@ -1,4 +1,4 @@
-# Chapter 28: Concurrency
+# Chapter 29: Concurrency
 
 ARO's concurrency model is radically simple: **feature sets are async, statements are sync**. This chapter explains how ARO handles concurrent operations without requiring you to think about threads, locks, or async/await.
 
@@ -244,3 +244,7 @@ These are implementation concerns. The runtime handles them. You write sequentia
 | Concurrency primitives | None needed |
 
 Write synchronous code. Get async performance. No callbacks, no promises, no await.
+
+---
+
+*Next: Chapter 30 — Context-Aware Response Formatting*
