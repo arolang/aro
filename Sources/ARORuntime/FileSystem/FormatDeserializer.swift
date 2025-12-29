@@ -66,7 +66,15 @@ public struct FormatDeserializer: Sendable {
             return str
         case let num as NSNumber:
             // Distinguish between Int, Double, and Bool
-            if CFGetTypeID(num) == CFBooleanGetTypeID() {
+            // Use cross-platform approach to detect boolean type
+            #if canImport(Darwin)
+            let isBool = CFGetTypeID(num) == CFBooleanGetTypeID()
+            #else
+            // On Linux, check objCType - Bool uses "c" (char) with value 0 or 1
+            let objCType = String(cString: num.objCType)
+            let isBool = objCType == "c" && (num.intValue == 0 || num.intValue == 1)
+            #endif
+            if isBool {
                 return num.boolValue
             } else if num.doubleValue == Double(num.intValue) {
                 return num.intValue
