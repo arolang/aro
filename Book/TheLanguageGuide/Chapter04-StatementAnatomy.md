@@ -95,15 +95,23 @@ Array literals are enclosed in square brackets with elements separated by commas
 
 Object literals are enclosed in curly braces with fields written as key-colon-value pairs separated by commas. The keys are identifiers; the values can be any valid expression. Object literals allow you to construct structured data inline, which is particularly useful for return values and event payloads.
 
+```aro
+<Create> the <user> with { name: "Alice", email: "alice@example.com", active: true }.
+```
+
 ## 4.8 Where Clauses
 
 The where clause allows you to filter or constrain operations. It appears after the object clause and begins with the keyword "where," followed by a condition.
 
 Where clauses are most commonly used with Retrieve actions to specify which records to fetch from a repository. When you write a where clause, you are expressing a constraint that the retrieved data must satisfy. The repository implementation uses this constraint to filter results, often translating it into a database query.
 
-Conditions in where clauses can use equality checks with "is" or "==" and inequality checks with "!=." They can use comparison operators for numeric values. They can combine multiple conditions with "and" and "or." The expressive power is similar to the WHERE clause in SQL, which is intentional—many repositories are backed by databases, and the mapping should be straightforward.
+Conditions in where clauses can use equality checks with "is" or "=" and inequality checks with "!=". They can use comparison operators for numeric values. They can combine multiple conditions with "and" and "or." The expressive power is similar to the WHERE clause in SQL, which is intentional—many repositories are backed by databases, and the mapping should be straightforward.
 
 Where clauses can also appear with Filter actions, where they specify which elements of a collection to include in the result. The semantics are the same: only elements satisfying the condition are included.
+
+```aro
+<Retrieve> the <order> from the <order-repository> where id = <order-id>.
+```
 
 ## 4.9 When Conditions
 
@@ -114,6 +122,10 @@ Unlike traditional if-statements, when conditions do not create branches in cont
 When conditions are useful for optional operations—things that should happen only if certain prerequisites are met. For example, you might send a notification only when the user has opted into notifications, or log debug information only when debug mode is enabled.
 
 The condition can be any boolean expression. You can reference bound variables, compare values, check for existence, and combine conditions with logical operators. The same expression syntax used elsewhere in ARO applies within when conditions.
+
+```aro
+<Send> the <notification> to the <user: email> when <user: notifications> is true.
+```
 
 ## 4.10 Comments
 

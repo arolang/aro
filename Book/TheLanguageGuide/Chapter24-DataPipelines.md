@@ -68,7 +68,7 @@ Filters an existing collection with a predicate.
 
 | Operator | Description | Example |
 |----------|-------------|---------|
-| `is`, `==` | Equality | `<status> is "active"` |
+| `is`, `=` | Equality | `<status> is "active"` |
 | `is not`, `!=` | Inequality | `<role> is not "guest"` |
 | `>`, `>=`, `<`, `<=` | Comparison | `<age> >= 18` |
 | `in` | Set membership | `<status> in ["a", "b"]` |

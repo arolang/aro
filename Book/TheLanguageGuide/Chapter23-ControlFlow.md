@@ -36,7 +36,7 @@ The `when` clause conditionally executes a single statement. If the condition is
 <Send> the <notification> to the <user: email> when <user: email> exists.
 
 (* Log admin access only for admins *)
-<Log> the <admin-access> for the <audit> when <user: role> == "admin".
+<Log> the <admin-access> for the <audit> when <user: role> = "admin".
 
 (* Return error when validation fails *)
 <Return> a <BadRequest: status> for the <invalid: input> when <validation> is failed.
@@ -57,7 +57,7 @@ The `when` clause conditionally executes a single statement. If the condition is
 | `<` | Less than |
 | `>=` | Greater than or equal |
 | `<=` | Less than or equal |
-| `==` | Strict equality |
+| `=` | Equality |
 | `!=` | Strict inequality |
 
 ### Boolean Operators

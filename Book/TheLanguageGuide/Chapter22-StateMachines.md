@@ -457,7 +457,7 @@ Sometimes you want handlers to only execute when an entity is in a specific stat
 (* Only process orders that are in "paid" state *)
 (Process Paid Order: OrderUpdated Handler<status:paid>) {
     <Extract> the <order> from the <event: order>.
-    (* This handler only runs when order.status == "paid" *)
+    (* This handler only runs when order.status = "paid" *)
     <Process> the <fulfillment> for the <order>.
     <Return> an <OK: status> for the <processing>.
 }

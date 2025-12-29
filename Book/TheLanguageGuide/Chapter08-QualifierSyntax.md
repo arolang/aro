@@ -223,6 +223,13 @@ If a field name collides with an operation name, use the appropriate action expl
 <Compute> the <obj-size: count> from the <obj>.       (* Count the keys *)
 ```
 
+In summary, qualifiers serve two purposes: navigating data structures and selecting operations.
+
+```aro
+<Extract> the <city> from the <user: address.city>.
+<Compute> the <name-upper: uppercase> from the <name>.
+```
+
 ---
 
 *Next: Chapter 9 — The Happy Path*

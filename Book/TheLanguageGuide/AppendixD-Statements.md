@@ -96,7 +96,7 @@ Conditionally executes a statement based on a condition. If the condition is fal
 <Send> the <notification> to the <user: email> when <user: email> exists.
 
 (* Log admin access only for admins *)
-<Log> the <admin-access> for the <audit> when <user: role> == "admin".
+<Log> the <admin-access> for the <audit> when <user: role> = "admin".
 
 (* Early exit on invalid input *)
 <Return> a <BadRequest: status> for the <invalid: amount> when <amount> <= 0.
