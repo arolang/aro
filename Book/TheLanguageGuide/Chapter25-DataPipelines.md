@@ -10,8 +10,22 @@ ARO supports four core data operations:
 |-----------|---------|---------|
 | **Fetch** | Retrieve and filter data | `<Fetch> the <users: List<User>> from the <repository>...` |
 | **Filter** | Filter existing collection | `<Filter> the <active: List<User>> from the <users>...` |
-| **Map** | Transform to different type | `<Map> the <summaries: List<UserSummary>> from the <users>.` |
-| **Reduce** | Aggregate to single value | `<Reduce> the <total: Float> from the <orders> with sum(<amount>).` |
+| **Map** | Transform to different type | `<Map> the <summaries> as List<UserSummary> from the <users>.` |
+| **Reduce** | Aggregate to single value | `<Reduce> the <total> as Float from the <orders> with sum(<amount>).` |
+
+### Type Annotation Syntax
+
+ARO supports two equivalent syntaxes for type annotations:
+
+```aro
+(* Colon syntax: type inside angle brackets *)
+<Filter> the <active-users: List<User>> from the <users> where <active> is true.
+
+(* As syntax: type follows the result descriptor *)
+<Filter> the <active-users> as List<User> from the <users> where <active> is true.
+```
+
+Both produce identical results. The `as Type` syntax (ARO-0038) can be more readable when the variable name is long, while the colon syntax keeps everything compact. Type annotations are optional since ARO infers types from the source collection.
 
 ---
 

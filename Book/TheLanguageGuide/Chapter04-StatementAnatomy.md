@@ -54,7 +54,7 @@ The distinction between results and objects is fundamental. Results are outputsâ
 
 ## 4.5 Prepositions: The Relationships Between Things
 
-Prepositions are small words that carry large meaning. In ARO, prepositions connect actions to their objects while communicating the nature of that connection. The language supports eight prepositions:
+Prepositions are small words that carry large meaning. In ARO, prepositions connect actions to their objects while communicating the nature of that connection. The language supports ten prepositions:
 
 | Preposition | Meaning | Common Actions |
 |-------------|---------|----------------|
@@ -65,7 +65,9 @@ Prepositions are small words that carry large meaning. In ARO, prepositions conn
 | `into` | Insertion | Store |
 | `against` | Comparison/validation | Validate, Compare |
 | `via` | Intermediate channel | Fetch (with proxy) |
-| `on` | Location/attachment | Start |
+| `on` | Location/attachment | Listen, Start |
+| `at` | Position/placement | CreateDirectory, Make |
+| `as` | Type annotation | Filter, Reduce, Map |
 
 Choosing the right preposition makes your code clearer and more accurate. When you extract a user identifier from the path parameters, "from" is the natural choice. When you create a user with provided data, "with" is the natural choice. When you store a user into a repository, "into" is the natural choice. Let the semantics of your operation guide your choice of preposition.
 

@@ -22,7 +22,13 @@ This design ensures that your API cannot drift from its documentation. If the sp
 
 ## 11.2 The OpenAPI Requirement
 
-ARO's HTTP server depends on the presence of an OpenAPI specification file. The file must be named openapi.yaml and must be located in the application directory alongside your ARO source files. Without this file, no HTTP server starts. No port is opened. No requests are received.
+ARO's HTTP server depends on the presence of an OpenAPI specification file in the application directory. The runtime checks for specification files in this order of precedence:
+
+1. `openapi.yaml` (preferred)
+2. `openapi.yml`
+3. `openapi.json`
+
+The first file found is used as the API contract. Without any of these files, no HTTP server starts. No port is opened. No requests are received.
 
 This requirement is deliberate. It enforces the contract-first philosophy at the framework level. You cannot accidentally create an undocumented API because the documentation is required for the API to exist. You cannot forget to update documentation when changing routes because changing routes means changing the specification.
 
@@ -56,13 +62,21 @@ Requests that do not match any path receive a 404 response. Requests that match 
 
 ---
 
-## 11.5 Starting the Server
+## 11.5 Automatic Server Startup
 
-The HTTP server starts when you execute the Start action with the http-server identifier and the contract preposition. This tells the runtime to read the OpenAPI specification, configure routing based on its contents, and begin accepting requests on the configured port.
+The HTTP server starts automatically when an `openapi.yaml` file is present in your application directory. There is no explicit Start action required for HTTP services. When the runtime discovers the OpenAPI specification during application initialization, it reads the file, configures routing based on its contents, and begins accepting requests on the default port (8080).
 
-The server typically starts during application initialization in the Application-Start feature set. After starting the server, you use the Keepalive action to keep the application running and processing requests. Without Keepalive, the application would start the server and immediately terminate.
+After the server starts, you use the Keepalive action to keep the application running and processing requests. Without Keepalive, the application would start the server and immediately terminate:
 
-You can configure the port on which the server listens. The default is typically 8080, but you can specify a different port using the "on port" syntax or provide a full host and port string. This flexibility allows you to run multiple services on different ports or to conform to container orchestration requirements.
+```aro
+(Application-Start: User API) {
+    <Log> the <startup: message> for the <console> with "API starting...".
+    <Keepalive> the <application> for the <events>.
+    <Return> an <OK: status> for the <startup>.
+}
+```
+
+You can configure the port on which the server listens using environment variables or configuration files. This flexibility allows you to run multiple services on different ports or to conform to container orchestration requirements.
 
 The server starts synchronously during initialization. If the port is already in use or binding fails for any other reason, the startup fails with an appropriate error. This fail-fast behavior ensures you know immediately if the server cannot start, rather than discovering the problem later when requests fail.
 

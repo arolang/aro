@@ -44,9 +44,8 @@ block = "{" , { statement } , "}" ;
 ```ebnf
 (* Statement types *)
 statement = aro_statement
+          | guarded_statement
           | publish_statement
-          | conditional_statement
-          | guard_statement
           | match_statement ;
 
 (* Core ARO statement: Action-Result-Object *)
@@ -55,11 +54,9 @@ aro_statement = action , [ article ] , result , preposition , [ article ] , obje
 (* Publish statement *)
 publish_statement = "<Publish>" , "as" , alias , variable , "." ;
 
-(* Conditional statements *)
-conditional_statement = "if" , condition , "then" , block , [ "else" , block ] ;
-
-(* Guard statements *)
-guard_statement = "when" , condition , block ;
+(* Guarded statement - ARO statement with conditional suffix *)
+guarded_statement = aro_statement_base , "when" , condition , "." ;
+aro_statement_base = action , [ article ] , result , preposition , [ article ] , object , [ modifiers ] ;
 
 (* Match statements *)
 match_statement = "match" , variable , "{" , { match_case } , [ default_case ] , "}" ;
@@ -290,7 +287,7 @@ The following identifiers are reserved:
 
 **Prepositions:** `from`, `to`, `for`, `with`, `into`, `against`, `via`, `on`, `as`
 
-**Control Flow:** `if`, `then`, `else`, `when`, `match`, `case`, `default`, `where`, `and`, `or`, `not`, `is`
+**Control Flow:** `when`, `match`, `case`, `default`, `otherwise`, `where`, `and`, `or`, `not`, `is`
 
 **Literals:** `true`, `false`, `empty`
 

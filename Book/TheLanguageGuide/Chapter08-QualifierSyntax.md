@@ -55,7 +55,7 @@ Now `greeting-length` holds 12 and `farewell-length` holds 8. Both values exist 
 |--------|-----------|
 | **Compute** | `length`, `count`, `hash`, `uppercase`, `lowercase`, `identity` |
 | **Validate** | `required`, `exists`, `nonempty`, `email`, `numeric` |
-| **Transform** | `string`, `int`, `integer`, `float`, `bool`, `boolean`, `json` |
+| **Transform** | `string`, `int`, `integer`, `double`, `float`, `bool`, `boolean`, `json`, `identity` |
 | **Sort** | `ascending`, `descending` |
 
 ### Examples

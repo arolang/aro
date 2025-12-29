@@ -2,8 +2,8 @@
 
 * Proposal: ARO-0012
 * Author: ARO Language Team
-* Status: **Draft**
-* Requires: ARO-0001, ARO-0006
+* Status: **Implemented**
+* Requires: ARO-0001, ARO-0006, ARO-0020
 
 ## Abstract
 
@@ -26,16 +26,16 @@ Applications need to trigger feature sets from other feature sets. Rather than c
 
 #### 1.1 Basic Syntax
 
-Emit an event to a feature set:
+Emit an event with data:
 
 ```aro
-<Emit> to <FeatureSetName> with { key: value, ... }.
+<Emit> a <EventType: event> with <data>.
 ```
 
-Or emit with a typed event (OpenAPI schema):
+Or emit with an inline object:
 
 ```aro
-<Emit> an <EventType> to <FeatureSetName> with { key: value, ... }.
+<Emit> a <UserCreated: event> with { email: <email>, name: <name> }.
 ```
 
 #### 1.2 Examples
@@ -46,11 +46,8 @@ Or emit with a typed event (OpenAPI schema):
     <Create> the <user: User> with <data>.
     <Store> the <user> in the <user-repository>.
 
-    (* Emit to a specific feature set *)
-    <Emit> to <Send Welcome Email> with {
-        email: <user: email>,
-        name: <user: name>
-    }.
+    (* Emit event - handlers subscribe by event type *)
+    <Emit> a <UserCreated: event> with <user>.
 
     <Return> a <Created: status> with <user>.
 }
@@ -64,8 +61,8 @@ Or emit with a typed event (OpenAPI schema):
     <Update> the <user: email> with <newEmail>.
     <Store> the <user> in the <user-repository>.
 
-    (* Emit with typed event from OpenAPI schema *)
-    <Emit> a <UserEmailChangedEvent> to <Notify Email Change> with {
+    (* Emit with inline object *)
+    <Emit> a <UserEmailChanged: event> with {
         userId: <userId>,
         oldEmail: <oldEmail>,
         newEmail: <newEmail>
@@ -82,9 +79,11 @@ Or emit with a typed event (OpenAPI schema):
 Feature sets receive events in the `<event>` variable:
 
 ```aro
-(Send Welcome Email: Notifications) {
-    <Extract> the <email> from the <event: email>.
-    <Extract> the <name> from the <event: name>.
+(* Handler triggered by UserCreated events *)
+(Send Welcome Email: UserCreated Handler) {
+    <Extract> the <user> from the <event: user>.
+    <Extract> the <email> from the <user: email>.
+    <Extract> the <name> from the <user: name>.
 
     <Send> the <welcome-email> to the <email> with {
         subject: "Welcome!",
@@ -94,7 +93,8 @@ Feature sets receive events in the `<event>` variable:
     <Return> an <OK: status> for the <notification>.
 }
 
-(Notify Email Change: Notifications) {
+(* Handler triggered by UserEmailChanged events *)
+(Notify Email Change: UserEmailChanged Handler) {
     <Extract> the <oldEmail> from the <event: oldEmail>.
     <Extract> the <newEmail> from the <event: newEmail>.
 
@@ -175,20 +175,8 @@ In receiving feature sets, the `<event>` variable contains the dispatched data:
 
     <Store> the <order> in the <order-repository>.
 
-    (* Dispatch events to handlers *)
-    <Emit> to <Send Order Confirmation> with {
-        orderId: <order: id>,
-        userEmail: <user: email>,
-        total: <total>
-    }.
-
-    <Emit> to <Update Inventory> with {
-        items: <items>
-    }.
-
-    <Emit> to <Track Revenue> with {
-        amount: <total>
-    }.
+    (* Emit events - handlers subscribe by event type *)
+    <Emit> an <OrderCreated: event> with <order>.
 
     <Return> a <Created: status> with <order>.
 }
@@ -197,10 +185,12 @@ In receiving feature sets, the `<event>` variable contains the dispatched data:
 #### event-handlers.aro
 
 ```aro
-(Send Order Confirmation: Notifications) {
-    <Extract> the <orderId> from the <event: orderId>.
-    <Extract> the <userEmail> from the <event: userEmail>.
-    <Extract> the <total> from the <event: total>.
+(* Multiple handlers can subscribe to the same event type *)
+(Send Order Confirmation: OrderCreated Handler) {
+    <Extract> the <order> from the <event: order>.
+    <Extract> the <orderId> from the <order: id>.
+    <Extract> the <userEmail> from the <order: userEmail>.
+    <Extract> the <total> from the <order: total>.
 
     <Send> the <email> to the <userEmail> with {
         subject: "Order Confirmed",
@@ -210,8 +200,9 @@ In receiving feature sets, the `<event>` variable contains the dispatched data:
     <Return> an <OK: status> for the <confirmation>.
 }
 
-(Update Inventory: Inventory Management) {
-    <Extract> the <items> from the <event: items>.
+(Update Inventory: OrderCreated Handler) {
+    <Extract> the <order> from the <event: order>.
+    <Extract> the <items> from the <order: items>.
 
     for each <item> in <items> {
         <Decrement> the <stock> for the <item: productId> with <item: quantity>.
@@ -220,8 +211,9 @@ In receiving feature sets, the `<event>` variable contains the dispatched data:
     <Return> an <OK: status> for the <inventory>.
 }
 
-(Track Revenue: Analytics) {
-    <Extract> the <amount> from the <event: amount>.
+(Track Revenue: OrderCreated Handler) {
+    <Extract> the <order> from the <event: order>.
+    <Extract> the <amount> from the <order: total>.
 
     <Increment> the <daily-revenue> by <amount>.
 
@@ -298,12 +290,10 @@ Use dot notation for nested fields:
 
 ```ebnf
 (* Event Emission *)
-emit_statement = "<Emit>" , [ article , "<" , event_type , ">" ] ,
-                 "to" , "<" , feature_set_name , ">" ,
-                 "with" , inline_object , "." ;
+emit_statement = "<Emit>" , article , "<" , event_type , ":" , "event" , ">" ,
+                 "with" , ( variable | inline_object ) , "." ;
 
-event_type = identifier ;       (* Optional: References OpenAPI schema *)
-feature_set_name = identifier ; (* Target feature set name *)
+event_type = identifier ;       (* Event type name - handlers subscribe via "{EventType} Handler" *)
 
 (* State-Guarded Handlers *)
 guarded_handler = event_type , "Handler" , [ state_guard_block ] ;
@@ -320,6 +310,7 @@ value_list = identifier , { "," , identifier } ;
 | Version | Date | Changes |
 |---------|------|---------|
 | 1.0 | 2024-01 | Initial specification |
-| 2.0 | 2025-12 | Simplified: removed subscriptions, handlers, event streams. Direct dispatch to feature sets. |
-| 2.1 | 2025-12 | Further simplified: no metadata, no builders. Events emitted directly to feature set names. |
+| 2.0 | 2025-12 | Simplified: removed subscriptions, event streams. Direct dispatch to feature sets. |
+| 2.1 | 2025-12 | Further simplified: no metadata, no builders. |
 | 2.2 | 2025-12 | Added state-guarded handlers for filtering events by entity field values. |
+| 2.3 | 2025-12 | Aligned emit syntax with ARO-0020 implementation: `<Emit> a <EventType: event> with <data>.` |

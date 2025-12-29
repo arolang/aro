@@ -29,16 +29,16 @@ List directory contents with optional pattern matching:
 
 ```aro
 (* List all entries *)
-<List> the <entries> in the <directory: "./uploads">.
+<List> the <entries> from the <directory: "./uploads">.
 
 (* List with glob pattern *)
-<List> the <aro-files> in the <directory: "./src"> matching "*.aro".
+<List> the <aro-files> from the <directory: "./src"> matching "*.aro".
 
 (* List recursively *)
-<List> the <all-files> in the <directory: "./project"> recursively.
+<List> the <all-files> from the <directory: "./project"> recursively.
 
 (* Combine pattern and recursive *)
-<List> the <sources> in the <directory: "./src"> matching "*.swift" recursively.
+<List> the <sources> from the <directory: "./src"> matching "*.swift" recursively.
 ```
 
 ### Result Structure
@@ -255,7 +255,7 @@ ARO normalizes paths for cross-platform compatibility:
     <Log> the <header> for the <console> with "=== Three Oldest Files ===".
 
     (* List all entries *)
-    <List> the <entries> in the <directory: ".">.
+    <List> the <entries> from the <directory: ".">.
 
     (* Filter to files only *)
     <Filter> the <files> from <entries> where <isFile> is true.
@@ -306,7 +306,7 @@ ARO normalizes paths for cross-platform compatibility:
         to the <destination: "./demo-output/hello-copy.txt">.
 
     (* List directory *)
-    <List> the <files> in the <directory: "./demo-output">.
+    <List> the <files> from the <directory: "./demo-output">.
 
     <ForEach> <file> in <files> {
         <Log> the <entry> for the <console> with "  - <file: name>".

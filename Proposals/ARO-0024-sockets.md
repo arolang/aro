@@ -22,12 +22,12 @@ Applications often need real-time bidirectional communication:
 
 ### 1. Socket Server
 
-Start a TCP socket server using the `<Start>` action:
+Start a TCP socket server using the `<Listen>` action:
 
 ```aro
 (Application-Start: Echo Server) {
     <Log> the <message> for the <console> with "Starting socket server".
-    <Start> the <socket-server> on <port> with 9000.
+    <Listen> on port 9000 as <socket-server>.
     <Keepalive> the <application> for the <events>.
     <Return> an <OK: status> for the <startup>.
 }
@@ -66,8 +66,8 @@ public struct DataReceivedEvent: RuntimeEvent {
 }
 
 (Handle Data Received: Socket Event Handler) {
-    <Extract> the <data> from the <packet: buffer>.
-    <Extract> the <client> from the <packet: connection>.
+    <Extract> the <data> from the <event: data>.
+    <Extract> the <client> from the <event: connection>.
 
     (* Process received data *)
     <Transform> the <response> from the <data>.
@@ -75,7 +75,7 @@ public struct DataReceivedEvent: RuntimeEvent {
     (* Send response back *)
     <Send> the <response> to the <client>.
 
-    <Return> an <OK: status> for the <packet>.
+    <Return> an <OK: status> for the <event>.
 }
 
 (Handle Client Disconnected: Socket Event Handler) {
@@ -189,28 +189,28 @@ host_reference = "host:" , string_literal ;
 
 (Application-Start: Echo Socket) {
     <Log> the <message> for the <console> with "Starting echo socket on port 9000".
-    <Start> the <socket-server> on <port> with 9000.
+    <Listen> on port 9000 as <socket-server>.
     <Log> the <message> for the <console> with "Socket server listening on port 9000".
     <Keepalive> the <application> for the <events>.
     <Return> an <OK: status> for the <startup>.
 }
 
 (Handle Client Connected: Socket Event Handler) {
-    <Extract> the <client-id> from the <connection: id>.
-    <Extract> the <remote-address> from the <connection: remoteAddress>.
+    <Extract> the <client-id> from the <event: connectionId>.
+    <Extract> the <remote-address> from the <event: remoteAddress>.
     <Log> the <message> for the <console> with "Client connected".
     <Return> an <OK: status> for the <connection>.
 }
 
 (Handle Data Received: Socket Event Handler) {
-    <Extract> the <data> from the <packet: buffer>.
-    <Extract> the <client> from the <packet: connection>.
+    <Extract> the <data> from the <event: data>.
+    <Extract> the <client> from the <event: connection>.
 
     (* Echo back the received data *)
     <Send> the <data> to the <client>.
 
     <Log> the <message> for the <console> with "Echoed data back to client".
-    <Return> an <OK: status> for the <packet>.
+    <Return> an <OK: status> for the <event>.
 }
 
 (Handle Client Disconnected: Socket Event Handler) {

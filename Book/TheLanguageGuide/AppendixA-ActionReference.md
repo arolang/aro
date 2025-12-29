@@ -22,7 +22,7 @@ Complete reference for all built-in actions in ARO.
 | **Validate** | OWN | Check against rules | `<Validate> the <data> for the <schema>.` |
 | **Compare** | OWN | Compare values | `<Compare> the <hash> against the <stored>.` |
 | **Update** | OWN | Modify existing data | `<Update> the <user> with <changes>.` |
-| **CreateDirectory** | EXPORT | Create directory | `<CreateDirectory> the <dir> to the <path: "./out">.` |
+| **CreateDirectory** | OWN | Create directory | `<CreateDirectory> the <dir> to the <path: "./out">.` |
 | **Copy** | OWN | Copy file/directory | `<Copy> the <file: "./a.txt"> to the <destination: "./b.txt">.` |
 | **Move** | OWN | Move/rename file | `<Move> the <file: "./old.txt"> to the <destination: "./new.txt">.` |
 | **Map** | OWN | Transform collection elements | `<Map> the <names> from the <users: name>.` |
@@ -964,8 +964,9 @@ The `Keepalive` action blocks execution until a shutdown signal is received (SIG
 
 **Examples:**
 ```aro
-(Application-Start: My Server) {
-    <Start> the <http-server> on port 8080.
+(* HTTP server auto-starts when openapi.yaml is present *)
+(Application-Start: My API) {
+    <Log> the <startup: message> for the <console> with "API starting...".
     <Keepalive> the <application> for the <events>.
     <Return> an <OK: status> for the <startup>.
 }

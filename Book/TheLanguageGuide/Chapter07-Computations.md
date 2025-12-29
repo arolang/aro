@@ -60,7 +60,7 @@ ARO provides several built-in computations that cover common transformation need
 
 </div>
 
-The **length** operation counts elements—characters in strings, items in arrays, keys in dictionaries. The **uppercase** and **lowercase** operations transform case. The **hash** operation produces an integer hash value useful for comparisons.
+The **length** and **count** operations count elements—characters in strings, items in arrays, keys in dictionaries. While interchangeable for most purposes, `length` is typically used for strings and `count` for collections. The **uppercase** and **lowercase** operations transform case. The **hash** operation produces an integer hash value useful for comparisons.
 
 The **identity** operation, while seemingly trivial, serves an important purpose: it allows arithmetic expressions to be written naturally:
 
