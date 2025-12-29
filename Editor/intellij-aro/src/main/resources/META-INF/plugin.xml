@@ -77,6 +77,6 @@
                 hover information, go to definition, and code completion.
             ]]></description>
         </server>
-        <languageMapping language="aro" serverId="aro"/>
+        <fileNamePatternMapping patterns="*.aro" serverId="aro"/>
     </extensions>
 </idea-plugin>
