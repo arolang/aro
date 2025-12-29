@@ -114,7 +114,7 @@ facts:
     day: 1
     category: "Compiler"
     headline: "aro build ./MyApp --optimize"
-    explanation: "Compile to native machine code via LLVM. No runtime installation needed. Copy one file, run anywhere. Container images shrink to megabytes."
+    explanation: "Compile to native machine code. No runtime installation needed. Copy one file, run anywhere. Container images shrink to megabytes."
 
   - id: "07-2"
     week: 7
@@ -166,7 +166,7 @@ facts:
     day: 1
     category: "HTTP"
     headline: "<Start> the <http-server> on port 8080."
-    explanation: "SwiftNIO powers the HTTP server. Async, performant, battle-tested. One action starts it. Combine with Keepalive for long-running services."
+    explanation: "One action launches the HTTP server. Async and performant by default. Combine with Keepalive for long-running services. Production-ready."
 
   - id: "10-2"
     week: 10
@@ -655,7 +655,7 @@ facts:
     day: 1
     category: "Sockets"
     headline: "<Listen> on port 9000 as <socket-server>."
-    explanation: "Start a TCP socket server. Accept incoming connections. SwiftNIO powered. Combine with Keepalive for long-running servers."
+    explanation: "Start a TCP socket server. Accept incoming connections. Async and event-driven. Combine with Keepalive for long-running servers."
 
   - id: "37-2"
     week: 37
@@ -805,65 +805,65 @@ facts:
     headline: "<Create> the <updated-user> with <user> + { role: \"admin\" }."
     explanation: "Create new names for new values. Original unchanged. Same name in nested scope shadows outer. Functional data patterns."
 
-  # ===== WEEK 46: Swift Integration =====
+  # ===== WEEK 46: Query Parameters =====
   - id: "46-1"
     week: 46
     day: 1
-    category: "DevOps"
-    headline: "struct MyAction: ActionImplementation"
-    explanation: "Custom actions in Swift. Access the entire Swift ecosystem. Use ARO for business logic, Swift for system integration."
+    category: "API"
+    headline: "<Extract> the <page> from the <queryParameters: page>."
+    explanation: "Query parameters available via queryParameters object. Access by name like path parameters. Types coerced per OpenAPI schema."
 
   - id: "46-2"
     week: 46
     day: 2
-    category: "DevOps"
-    headline: "ActionRegistry.shared.register(MyAction.self)"
-    explanation: "Register with ActionRegistry. Your action available as ARO verb. Full async/await support. Protocol-based extension point."
+    category: "API"
+    headline: "/users?page=2&limit=10&sort=name"
+    explanation: "Define query parameters in OpenAPI. Optional parameters have defaults. Required parameters validated automatically. No parsing code."
 
-  # ===== WEEK 47: LLVM =====
+  # ===== WEEK 47: Environment Variables =====
   - id: "47-1"
     week: 47
     day: 1
-    category: "Compiler"
-    headline: "ARO => AST => LLVM IR => Native Binary"
-    explanation: "LLVM backend means proven optimization. Same technology as Rust, Swift, Clang. Production-grade code generation."
+    category: "DevOps"
+    headline: "<Extract> the <key> from the <environment: API_KEY>."
+    explanation: "Access environment variables with Extract. Secrets stay out of code. Twelve-factor app methodology built in."
 
   - id: "47-2"
     week: 47
     day: 2
-    category: "Compiler"
+    category: "DevOps"
     headline: "./MyApp (single executable)"
     explanation: "Output is standalone executable. No interpreter, no dependencies. Container images shrink to megabytes. Deploy anywhere."
 
-  # ===== WEEK 48: SwiftNIO =====
+  # ===== WEEK 48: Request Headers =====
   - id: "48-1"
     week: 48
     day: 1
     category: "HTTP"
-    headline: "http-server powered by SwiftNIO"
-    explanation: "SwiftNIO powers Apple's server ecosystem. High performance, low latency. Production-proven at scale. ARO inherits this reliability."
+    headline: "<Extract> the <token> from the <headers: Authorization>."
+    explanation: "Access request headers via headers object. Authorization, Content-Type, custom headers. Case-insensitive header names."
 
   - id: "48-2"
     week: 48
     day: 2
     category: "HTTP"
-    headline: "Async request handling, keep-alive"
-    explanation: "Start action launches SwiftNIO server. Async request handling. Keep-alive connections. Production-ready without configuration."
+    headline: "<Return> an <OK> with <data> and { headers: <response-headers> }."
+    explanation: "Set response headers with Return. Add custom headers, caching directives, CORS headers. Full control over HTTP response."
 
-  # ===== WEEK 49: Sendable =====
+  # ===== WEEK 49: Concurrency =====
   - id: "49-1"
     week: 49
     day: 1
-    category: "Compiler"
-    headline: "All core types are Sendable"
-    explanation: "Swift 6 concurrency safety built in. Async/await throughout. No data races. Modern concurrency model."
+    category: "Philosophy"
+    headline: "Event handlers run in parallel"
+    explanation: "Multiple handlers for the same event execute concurrently. No shared mutable state. Thread-safe by design. Scale with cores."
 
   - id: "49-2"
     week: 49
     day: 2
-    category: "Compiler"
-    headline: "Feature sets execute concurrently"
-    explanation: "AST nodes, tokens, symbol tables are Sendable. Event handlers run in parallel. Thread-safe by design. Scale with cores."
+    category: "Syntax"
+    headline: "parallel for each <user> in <users> { }"
+    explanation: "Add parallel keyword to run iterations concurrently. Independent operations finish faster. Order not guaranteed. Use when order doesn't matter."
 
   # ===== WEEK 50: Qualifier Syntax =====
   - id: "50-1"

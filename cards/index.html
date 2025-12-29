@@ -1,0 +1,50 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>ARO Cards Viewer</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="styles.css">
+  <script src="https://cdn.jsdelivr.net/npm/js-yaml@4/dist/js-yaml.min.js"></script>
+</head>
+<body>
+  <div class="viewer">
+    <div class="card">
+      <!-- FRONT (Top Half - Dark) -->
+      <div class="front">
+        <div class="glow-1"></div>
+        <div class="glow-2"></div>
+        <div class="content">
+          <div class="header">
+            <div class="logo">ARO</div>
+            <div class="category" id="category"></div>
+          </div>
+          <div class="headline-wrapper">
+            <div class="headline" id="headline"></div>
+          </div>
+        </div>
+      </div>
+
+      <div class="divider"></div>
+
+      <!-- BACK (Bottom Half - Light) -->
+      <div class="back">
+        <div class="glow-1"></div>
+        <div class="glow-2"></div>
+        <div class="content">
+          <div class="explanation" id="explanation"></div>
+          <div class="footer"><a href="https://github.com/KrisSimon/ARO">github.com/KrisSimon/ARO</a></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="counter" id="counter"></div>
+    <div class="nav-hint">Use &larr; &rarr; arrow keys to navigate</div>
+  </div>
+
+  <script src="viewer.js"></script>
+</body>
+</html>

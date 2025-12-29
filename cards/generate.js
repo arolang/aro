@@ -7,25 +7,8 @@ import { fileURLToPath } from 'url';
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-// Design tokens from the ARO website
-const design = {
-  dark: {
-    background: '#0a0a0f',
-    text: '#e8e8ed',
-    textMuted: '#8888a0',
-    gradientStart: '#7c3aed',
-    gradientEnd: '#06b6d4',
-    glowColor: 'rgba(124, 58, 237, 0.3)',
-  },
-  light: {
-    background: '#f8f9fc',
-    text: '#1a1a2e',
-    textMuted: '#5c5c7a',
-    gradientStart: '#6d28d9',
-    gradientEnd: '#0891b2',
-    glowColor: 'rgba(109, 40, 217, 0.15)',
-  }
-};
+// Load shared CSS
+const cssContent = fs.readFileSync(path.join(__dirname, 'styles.css'), 'utf8');
 
 // Category colors for visual distinction
 const categoryColors = {
@@ -50,9 +33,7 @@ const categoryColors = {
 };
 
 function generateCombinedHTML(fact) {
-  const dark = design.dark;
-  const light = design.light;
-  const categoryColor = categoryColors[fact.category] || dark.gradientStart;
+  const categoryColor = categoryColors[fact.category] || '#7c3aed';
 
   return `<!DOCTYPE html>
 <html>
@@ -62,184 +43,19 @@ function generateCombinedHTML(fact) {
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
   <style>
-    * {
-      margin: 0;
-      padding: 0;
-      box-sizing: border-box;
+    :root {
+      --category-color: ${categoryColor};
     }
-
+    ${cssContent}
+    /* Override for PNG generation - use body instead of .card */
     body {
       width: 1200px;
       height: 1200px;
       font-family: 'Space Grotesk', system-ui, sans-serif;
       display: flex;
       flex-direction: column;
-    }
-
-    /* ===== FRONT SECTION (Top Half - Dark) ===== */
-    .front {
-      width: 1200px;
-      height: 600px;
-      background: ${dark.background};
-      color: ${dark.text};
-      display: flex;
-      flex-direction: column;
-      justify-content: center;
-      align-items: center;
-      position: relative;
-      overflow: hidden;
-      padding: 40px 60px;
-    }
-
-    .front .glow-1 {
-      position: absolute;
-      width: 500px;
-      height: 500px;
-      border-radius: 50%;
-      background: radial-gradient(circle, ${dark.glowColor} 0%, transparent 70%);
-      top: -150px;
-      left: -100px;
-      pointer-events: none;
-    }
-
-    .front .glow-2 {
-      position: absolute;
-      width: 400px;
-      height: 400px;
-      border-radius: 50%;
-      background: radial-gradient(circle, rgba(6, 182, 212, 0.15) 0%, transparent 70%);
-      bottom: -100px;
-      right: -50px;
-      pointer-events: none;
-    }
-
-    .front .content {
-      position: relative;
-      z-index: 1;
-      width: 100%;
-      height: 100%;
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-    }
-
-    .front .header {
-      display: flex;
-      justify-content: space-between;
-      align-items: flex-start;
-      width: 100%;
-      margin-bottom: auto;
-    }
-
-    .front .headline-wrapper {
-      flex: 1;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      width: 100%;
-    }
-
-    .front .logo {
-      font-size: 48px;
-      font-weight: 700;
-      background: linear-gradient(135deg, ${dark.gradientStart}, ${dark.gradientEnd});
-      -webkit-background-clip: text;
-      -webkit-text-fill-color: transparent;
-      background-clip: text;
-    }
-
-    .front .category {
-      font-size: 20px;
-      font-weight: 600;
-      color: ${categoryColor};
-      text-transform: uppercase;
-      letter-spacing: 2px;
-    }
-
-    .front .headline {
-      font-family: 'JetBrains Mono', 'Fira Code', monospace;
-      font-size: 54px;
-      font-weight: 600;
-      line-height: 1.2;
-      text-align: center;
-      background: linear-gradient(135deg, ${dark.gradientStart}, ${dark.gradientEnd});
-      -webkit-background-clip: text;
-      -webkit-text-fill-color: transparent;
-      background-clip: text;
-    }
-
-    /* ===== BACK SECTION (Bottom Half - Light) ===== */
-    .back {
-      width: 1200px;
-      height: 600px;
-      background: ${light.background};
-      color: ${light.text};
-      display: flex;
-      flex-direction: column;
-      justify-content: center;
-      align-items: center;
-      position: relative;
-      overflow: hidden;
-      padding: 40px 60px;
-    }
-
-    .back .glow-1 {
-      position: absolute;
-      width: 500px;
-      height: 500px;
-      border-radius: 50%;
-      background: radial-gradient(circle, ${light.glowColor} 0%, transparent 70%);
-      top: -150px;
-      left: -100px;
-      pointer-events: none;
-    }
-
-    .back .glow-2 {
-      position: absolute;
-      width: 400px;
-      height: 400px;
-      border-radius: 50%;
-      background: radial-gradient(circle, rgba(6, 182, 212, 0.1) 0%, transparent 70%);
-      bottom: -100px;
-      right: -50px;
-      pointer-events: none;
-    }
-
-    .back .content {
-      position: relative;
-      z-index: 1;
-      width: 100%;
-      height: 100%;
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-      justify-content: center;
-    }
-
-    .back .explanation {
-      font-size: 36px;
-      font-weight: 400;
-      line-height: 1.4;
-      text-align: center;
-      color: ${light.text};
-    }
-
-    .back .footer {
-      margin-top: 25px;
-      font-size: 18px;
-      color: ${light.textMuted};
-    }
-
-    /* Divider line between sections */
-    .divider {
-      width: 100%;
-      height: 2px;
-      background: linear-gradient(90deg,
-        transparent 0%,
-        ${dark.gradientStart} 20%,
-        ${dark.gradientEnd} 80%,
-        transparent 100%
-      );
+      margin: 0;
+      padding: 0;
     }
   </style>
 </head>
@@ -271,7 +87,7 @@ function generateCombinedHTML(fact) {
     <div class="content">
       <div class="explanation">${escapeHtml(fact.explanation)}</div>
 
-      <div class="footer">github.com/KrisSimon/ARO</div>
+      <div class="footer"><a href="https://github.com/KrisSimon/ARO">github.com/KrisSimon/ARO</a></div>
     </div>
   </div>
 </body>
