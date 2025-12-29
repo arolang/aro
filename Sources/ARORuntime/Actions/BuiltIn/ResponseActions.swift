@@ -524,18 +524,17 @@ public struct WriteAction: ActionImplementation {
             }
         }
 
-        // Get data to write
+        // Get data to write - prefer resolveAny to get structured data,
+        // only fall back to string if no structured data available
         let content: String
-        if let value: String = context.resolve(result.base) {
-            // String value - serialize based on format or use as-is for binary
-            if format == .binary {
-                content = value
+        if let value = context.resolveAny(result.base) {
+            // Check if it's a simple string (for binary format passthrough)
+            if format == .binary, let strValue = value as? String {
+                content = strValue
             } else {
+                // Serialize structured data to the detected format
                 content = FormatSerializer.serialize(value, format: format, variableName: result.base, options: formatOptions)
             }
-        } else if let value = context.resolveAny(result.base) {
-            // Non-string value - serialize to the detected format
-            content = FormatSerializer.serialize(value, format: format, variableName: result.base, options: formatOptions)
         } else {
             content = ""
         }

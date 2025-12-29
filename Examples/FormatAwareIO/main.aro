@@ -1,7 +1,7 @@
 (* ARO-0040: Format-Aware File I/O Example *)
 (* Demonstrates automatic format detection based on file extension *)
 
-(Application-Start: Format-Aware I/O Demo) {
+(Application-Start: Format Aware IO Demo) {
     (* Create sample data *)
     <Create> the <users> with [
         { "id": 1, "name": "Alice", "email": "alice@example.com" },
@@ -9,11 +9,15 @@
         { "id": 3, "name": "Charlie", "email": "charlie@example.com" }
     ].
 
-    <Log> the <message> for the <console> with "Writing data to multiple formats...".
+    <Log> the <message> for the <console> with "=== Writing data to multiple formats ===".
 
     (* Write to JSON - automatically serialized as JSON *)
     <Write> the <users> to "./output/users.json".
     <Log> the <message> for the <console> with "Wrote users.json".
+
+    (* Write to JSON Lines - one object per line, ideal for streaming/logging *)
+    <Write> the <users> to "./output/users.jsonl".
+    <Log> the <message> for the <console> with "Wrote users.jsonl (JSON Lines)".
 
     (* Write to YAML - automatically serialized as YAML *)
     <Write> the <users> to "./output/users.yaml".
@@ -22,6 +26,10 @@
     (* Write to CSV - automatically serialized as CSV with header row *)
     <Write> the <users> to "./output/users.csv".
     <Log> the <message> for the <console> with "Wrote users.csv".
+
+    (* Write to TSV - automatically serialized as TSV *)
+    <Write> the <users> to "./output/users.tsv".
+    <Log> the <message> for the <console> with "Wrote users.tsv".
 
     (* Write to Markdown - automatically serialized as markdown table *)
     <Write> the <users> to "./output/users.md".
@@ -49,25 +57,30 @@
     <Log> the <message> for the <console> with "Wrote config.txt".
 
     <Log> the <message> for the <console> with "".
-    <Log> the <message> for the <console> with "Reading data back...".
+    <Log> the <message> for the <console> with "=== Reading data back ===".
 
     (* Read JSON - automatically parsed to structured data *)
     <Read> the <json-data> from "./output/users.json".
-    <Log> the <message> for the <console> with "Read JSON: ".
+    <Log> the <message> for the <console> with "Read JSON:".
     <Log> the <message> for the <console> with <json-data>.
+
+    (* Read JSON Lines - parsed to array of objects *)
+    <Read> the <jsonl-data> from "./output/users.jsonl".
+    <Log> the <message> for the <console> with "Read JSONL:".
+    <Log> the <message> for the <console> with <jsonl-data>.
 
     (* Read CSV - automatically parsed to array of objects *)
     <Read> the <csv-data> from "./output/users.csv".
-    <Log> the <message> for the <console> with "Read CSV: ".
+    <Log> the <message> for the <console> with "Read CSV:".
     <Log> the <message> for the <console> with <csv-data>.
 
-    (* Read with "as String" to bypass parsing *)
-    <Read> the <raw-json: as String> from "./output/users.json".
-    <Log> the <message> for the <console> with "Read raw JSON string: ".
-    <Log> the <message> for the <console> with <raw-json>.
+    (* Read YAML - automatically parsed *)
+    <Read> the <yaml-data> from "./output/users.yaml".
+    <Log> the <message> for the <console> with "Read YAML:".
+    <Log> the <message> for the <console> with <yaml-data>.
 
     <Log> the <message> for the <console> with "".
-    <Log> the <message> for the <console> with "Format-Aware I/O demo complete!".
+    <Log> the <message> for the <console> with "=== Format-Aware I/O demo complete! ===".
 
     <Return> an <OK: status> for the <demo>.
 }

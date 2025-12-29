@@ -60,7 +60,27 @@ public struct FormatSerializer: Sendable {
     // MARK: - JSON Serialization
 
     private static func serializeJSON(_ value: any Sendable) -> String {
-        let jsonValue = convertToJSONSerializable(value)
+        var jsonValue = convertToJSONSerializable(value)
+
+        // Ensure we have a valid top-level JSON type (array or object)
+        // Wrap primitives in an object if needed
+        if !JSONSerialization.isValidJSONObject(jsonValue) {
+            // Try wrapping in an object or converting to string representation
+            switch jsonValue {
+            case let str as String:
+                return "\"\(escapeJSON(str))\""
+            case let num as Int:
+                return String(num)
+            case let num as Double:
+                return String(num)
+            case let bool as Bool:
+                return bool ? "true" : "false"
+            default:
+                // Last resort: try to describe the value as JSON-like
+                jsonValue = ["value": jsonValue]
+            }
+        }
+
         do {
             let data = try JSONSerialization.data(
                 withJSONObject: jsonValue,
@@ -72,7 +92,66 @@ public struct FormatSerializer: Sendable {
             if let str = value as? String {
                 return "\"\(escapeJSON(str))\""
             }
-            return String(describing: value)
+            // Try to build JSON manually
+            return buildJSONManually(value)
+        }
+    }
+
+    /// Build JSON string manually for types that JSONSerialization can't handle
+    private static func buildJSONManually(_ value: any Sendable) -> String {
+        switch value {
+        case let str as String:
+            return "\"\(escapeJSON(str))\""
+        case let int as Int:
+            return String(int)
+        case let double as Double:
+            return String(double)
+        case let bool as Bool:
+            return bool ? "true" : "false"
+        case let array as [any Sendable]:
+            let elements = array.map { buildJSONManually($0) }
+            return "[\(elements.joined(separator: ", "))]"
+        case let dict as [String: any Sendable]:
+            let pairs = dict.keys.sorted().map { key in
+                "\"\(escapeJSON(key))\": \(buildJSONManually(dict[key]!))"
+            }
+            return "{\(pairs.joined(separator: ", "))}"
+        case let dict as [String: Any]:
+            let pairs = dict.keys.sorted().map { key in
+                "\"\(escapeJSON(key))\": \(buildJSONManuallyAny(dict[key]!))"
+            }
+            return "{\(pairs.joined(separator: ", "))}"
+        case let array as [Any]:
+            let elements = array.map { buildJSONManuallyAny($0) }
+            return "[\(elements.joined(separator: ", "))]"
+        default:
+            return "\"\(escapeJSON(String(describing: value)))\""
+        }
+    }
+
+    /// Build JSON string manually for Any types
+    private static func buildJSONManuallyAny(_ value: Any) -> String {
+        switch value {
+        case let str as String:
+            return "\"\(escapeJSON(str))\""
+        case let int as Int:
+            return String(int)
+        case let double as Double:
+            return String(double)
+        case let bool as Bool:
+            return bool ? "true" : "false"
+        case let array as [Any]:
+            let elements = array.map { buildJSONManuallyAny($0) }
+            return "[\(elements.joined(separator: ", "))]"
+        case let dict as [String: Any]:
+            let pairs = dict.keys.sorted().map { key in
+                "\"\(escapeJSON(key))\": \(buildJSONManuallyAny(dict[key]!))"
+            }
+            return "{\(pairs.joined(separator: ", "))}"
+        case let sendable as (any Sendable):
+            return buildJSONManually(sendable)
+        default:
+            return "\"\(escapeJSON(String(describing: value)))\""
         }
     }
 
@@ -507,6 +586,42 @@ public struct FormatSerializer: Sendable {
                 result[key] = convertToJSONSerializable(val)
             }
             return result
+        case let dict as [String: Any]:
+            // Handle [String: Any] dictionaries from the runtime
+            var result: [String: Any] = [:]
+            for (key, val) in dict {
+                result[key] = convertAnyToJSONSerializable(val)
+            }
+            return result
+        case let array as [Any]:
+            // Handle [Any] arrays from the runtime
+            return array.map { convertAnyToJSONSerializable($0) }
+        default:
+            return String(describing: value)
+        }
+    }
+
+    /// Convert Any type to JSON-serializable (for runtime values)
+    private static func convertAnyToJSONSerializable(_ value: Any) -> Any {
+        switch value {
+        case let str as String:
+            return str
+        case let int as Int:
+            return int
+        case let double as Double:
+            return double
+        case let bool as Bool:
+            return bool
+        case let array as [Any]:
+            return array.map { convertAnyToJSONSerializable($0) }
+        case let dict as [String: Any]:
+            var result: [String: Any] = [:]
+            for (key, val) in dict {
+                result[key] = convertAnyToJSONSerializable(val)
+            }
+            return result
+        case let sendable as (any Sendable):
+            return convertToJSONSerializable(sendable)
         default:
             return String(describing: value)
         }

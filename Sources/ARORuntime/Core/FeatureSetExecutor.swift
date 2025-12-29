@@ -215,8 +215,11 @@ public final class FeatureSetExecutor: @unchecked Sendable {
                 let updateVerbs: Set<String> = ["update", "modify", "change", "set"]
                 let createVerbs: Set<String> = ["create", "make", "build", "construct"]
                 let mergeVerbs: Set<String> = ["merge", "combine", "join", "concat"]
+                // Response actions like write/read/store should NOT have their result bound to expression value
+                let responseVerbs: Set<String> = ["write", "read", "store", "save", "persist", "log", "print", "send", "emit"]
                 let needsExecution = testVerbs.contains(verb.lowercased()) ||
                     mergeVerbs.contains(verb.lowercased()) ||
+                    responseVerbs.contains(verb.lowercased()) ||
                     (updateVerbs.contains(verb.lowercased()) && !resultDescriptor.specifiers.isEmpty) ||
                     (createVerbs.contains(verb.lowercased()) && !resultDescriptor.specifiers.isEmpty)
                 if !needsExecution {
