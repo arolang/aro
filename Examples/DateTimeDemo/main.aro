@@ -52,7 +52,8 @@
 
     <Log> the <compare1> for the <console> with "  Is yesterday before now?" when <yesterday> < <now>.
     <Log> the <compare2> for the <console> with "  Is next week after now?" when <next-week> > <now>.
-    <Log> the <compare3> for the <console> with "  Is meeting in the past?" when <meeting> < <now>.
+    <Log> the <compare3> for the <console> with "  Is meeting in the past y?" when <meeting> < <now>.
+    <Log> the <compare3> for the <console> with "  Is meeting in the past n?" when <meeting> > <now>.
     <Log> the <compare4> for the <console> with "  Is meeting in 2025?" when <meeting> < "2026-01-01T00:00:00Z".
 
     <Log> the <footer> for the <console> with "=== Demo Complete ===".
