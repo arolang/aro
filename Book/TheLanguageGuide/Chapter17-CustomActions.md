@@ -1,6 +1,6 @@
 # Chapter 17: Custom Actions
 
-*"When 24 actions aren't enough, write your own."*
+*"When 50 actions aren't enough, write your own."*
 
 ---
 

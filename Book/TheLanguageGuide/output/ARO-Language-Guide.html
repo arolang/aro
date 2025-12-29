@@ -1165,7 +1165,7 @@ clarity.</p>
 <h2 id="anatomy-of-a-constrained-language">1.2 Anatomy of a Constrained
 Language</h2>
 <p>ARO makes specific choices about what it will and won’t express:</p>
-<p><strong>What ARO Has:</strong> - 24 built-in actions (verbs like
+<p><strong>What ARO Has:</strong> - 50 built-in actions (verbs like
 Extract, Compute, Return, Emit) - A fixed sentence structure:
 <code>&lt;Action&gt; the &lt;Result&gt; preposition the &lt;Object&gt;</code>
 - Feature sets that respond to events - First-class support for HTTP,
@@ -1178,7 +1178,7 @@ sets aren’t functions) - Complex type system (primitives built-in,
 complex types from OpenAPI schemas) - Exception handling (happy path
 only)</p>
 <p>This sounds limiting because it is. But limitation is the point. When
-the 24 built-in actions aren’t enough, ARO provides escape
+the 50 built-in actions aren’t enough, ARO provides escape
 hatches—custom actions written in Swift and distributable plugins. But
 that’s a topic for later chapters, after you’ve learned the language
 itself.</p>
@@ -1328,7 +1328,7 @@ everywhere. ARO’s constraints actively hurt here.</td>
 <p><strong>The Bug Equation</strong></p>
 <pre><code>Bugs ∝ (API Surface) × (Complexity) × (Mutability)</code></pre>
 <p>ARO attacks all three factors: - <strong>Smaller API
-surface</strong>: 24 actions vs. infinite function possibilities -
+surface</strong>: 50 actions vs. infinite function possibilities -
 <strong>Reduced complexity</strong>: No control flow means fewer
 execution paths - <strong>Limited mutability</strong>: Actions transform
 and return; they don’t mutate shared state (though explicit shared
@@ -1413,9 +1413,8 @@ reading logs and error messages. IDE integration is primitive—syntax
 highlighting exists; language server protocol support is in
 progress.</p>
 <p><strong>Standard Library</strong></p>
-<p>24 actions is a starting point. The vocabulary will grow. File
-operations beyond basic I/O. Database abstractions. Authentication
-patterns. These need to be built.</p>
+<p>50 actions is a starting point. The vocabulary will grow. Database
+abstractions. Authentication patterns. These need to be built.</p>
 <p><strong>Documentation</strong></p>
 <p>You’re reading the first attempt. Expect gaps, errors, and outdated
 information.</p>
@@ -6865,7 +6864,7 @@ making it suitable for large files and streaming scenarios.</p>
 <hr />
 <p><em>Next: Chapter 17 — Custom Actions</em></p>
 <h1 id="chapter-17-custom-actions">Chapter 17: Custom Actions</h1>
-<p><em>“When 24 actions aren’t enough, write your own.”</em></p>
+<p><em>“When 50 actions aren’t enough, write your own.”</em></p>
 <hr />
 <h2 id="when-to-create-custom-actions">17.1 When to Create Custom
 Actions</h2>

@@ -325,7 +325,7 @@ Sources/
 │   └── Linker.swift    # Compilation and linking
 ├── AROCRuntime/        # C-callable Swift runtime bridge
 │   ├── RuntimeBridge.swift   # Core runtime C interface
-│   ├── ActionBridge.swift    # All 24 actions via @_cdecl
+│   ├── ActionBridge.swift    # All 50 actions via @_cdecl
 │   └── ServiceBridge.swift   # HTTP/File/Socket C interface
 └── AROCLI/             # CLI (run, compile, check, build commands)
 

@@ -28,7 +28,7 @@ These languages succeeded not despite their constraints but because of them. Whe
 ARO makes specific choices about what it will and won't express:
 
 **What ARO Has:**
-- 24 built-in actions (verbs like Extract, Compute, Return, Emit)
+- 50 built-in actions (verbs like Extract, Compute, Return, Emit)
 - A fixed sentence structure: `<Action> the <Result> preposition the <Object>`
 - Feature sets that respond to events
 - First-class support for HTTP, files, and sockets
@@ -41,7 +41,7 @@ ARO makes specific choices about what it will and won't express:
 - Complex type system (primitives built-in, complex types from OpenAPI schemas)
 - Exception handling (happy path only)
 
-This sounds limiting because it is. But limitation is the point. When the 24 built-in actions aren't enough, ARO provides escape hatches—custom actions written in Swift and distributable plugins. But that's a topic for later chapters, after you've learned the language itself.
+This sounds limiting because it is. But limitation is the point. When the 50 built-in actions aren't enough, ARO provides escape hatches—custom actions written in Swift and distributable plugins. But that's a topic for later chapters, after you've learned the language itself.
 
 ---
 
@@ -160,7 +160,7 @@ Bugs ∝ (API Surface) × (Complexity) × (Mutability)
 ```
 
 ARO attacks all three factors:
-- **Smaller API surface**: 24 actions vs. infinite function possibilities
+- **Smaller API surface**: 50 actions vs. infinite function possibilities
 - **Reduced complexity**: No control flow means fewer execution paths
 - **Limited mutability**: Actions transform and return; they don't mutate shared state (though explicit shared repositories exist for business domain data and can be safely used across feature sets)
 
@@ -228,7 +228,7 @@ No step debugger exists. Limited introspection. Debugging means reading logs and
 
 **Standard Library**
 
-24 actions is a starting point. The vocabulary will grow. File operations beyond basic I/O. Database abstractions. Authentication patterns. These need to be built.
+50 actions is a starting point. The vocabulary will grow. Database abstractions. Authentication patterns. These need to be built.
 
 **Documentation**
 

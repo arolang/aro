@@ -185,7 +185,7 @@ public final class RuntimeContext: ExecutionContext, @unchecked Sendable {
 
 ### 3. Built-in Actions
 
-ARO implements 24 built-in actions across four semantic roles:
+ARO implements 50 built-in actions across four semantic roles:
 
 #### 3.1 REQUEST Actions (External → Internal)
 
