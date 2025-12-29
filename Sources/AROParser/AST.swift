@@ -109,6 +109,8 @@ public struct AROStatement: Statement {
     public let whereClause: WhereClause?
     /// Optional by clause (ARO-0037) - for Split: `by /delimiter/`
     public let byClause: ByClause?
+    /// Optional to clause (ARO-0041) - for date ranges: `from <start> to <end>`
+    public let toClause: (any Expression)?
     /// Optional when condition (ARO-0004) - for guarded statements
     public let whenCondition: (any Expression)?
     public let span: SourceSpan
@@ -122,6 +124,7 @@ public struct AROStatement: Statement {
         aggregation: AggregationClause? = nil,
         whereClause: WhereClause? = nil,
         byClause: ByClause? = nil,
+        toClause: (any Expression)? = nil,
         whenCondition: (any Expression)? = nil,
         span: SourceSpan
     ) {
@@ -133,6 +136,7 @@ public struct AROStatement: Statement {
         self.aggregation = aggregation
         self.whereClause = whereClause
         self.byClause = byClause
+        self.toClause = toClause
         self.whenCondition = whenCondition
         self.span = span
     }

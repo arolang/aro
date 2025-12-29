@@ -212,11 +212,13 @@ public final class FeatureSetExecutor: @unchecked Sendable {
                 // - "create", "make", "build" when they have specifiers (typed entities need ID generation)
                 // - "merge", "combine", "join", "concat" always need execution (they transform and bind result)
                 // - "compute", "calculate", "derive" when they have specifiers (operations like +7d, hash, format)
+                // - "extract", "parse", "get" when they have specifiers (property extraction like :days, :next)
                 let testVerbs: Set<String> = ["then", "assert"]
                 let updateVerbs: Set<String> = ["update", "modify", "change", "set"]
                 let createVerbs: Set<String> = ["create", "make", "build", "construct"]
                 let mergeVerbs: Set<String> = ["merge", "combine", "join", "concat"]
                 let computeVerbs: Set<String> = ["compute", "calculate", "derive"]
+                let extractVerbs: Set<String> = ["extract", "parse", "get"]
                 // Response actions like write/read/store should NOT have their result bound to expression value
                 let responseVerbs: Set<String> = ["write", "read", "store", "save", "persist", "log", "print", "send", "emit"]
                 let needsExecution = testVerbs.contains(verb.lowercased()) ||
@@ -224,7 +226,8 @@ public final class FeatureSetExecutor: @unchecked Sendable {
                     responseVerbs.contains(verb.lowercased()) ||
                     (updateVerbs.contains(verb.lowercased()) && !resultDescriptor.specifiers.isEmpty) ||
                     (createVerbs.contains(verb.lowercased()) && !resultDescriptor.specifiers.isEmpty) ||
-                    (computeVerbs.contains(verb.lowercased()) && !resultDescriptor.specifiers.isEmpty)
+                    (computeVerbs.contains(verb.lowercased()) && !resultDescriptor.specifiers.isEmpty) ||
+                    (extractVerbs.contains(verb.lowercased()) && !resultDescriptor.specifiers.isEmpty)
                 if !needsExecution {
                     context.bind(resultDescriptor.base, value: expressionValue)
 
@@ -290,6 +293,12 @@ public final class FeatureSetExecutor: @unchecked Sendable {
         if let byClause = statement.byClause {
             context.bind("_by_pattern_", value: byClause.pattern)
             context.bind("_by_flags_", value: byClause.flags)
+        }
+
+        // ARO-0041: Bind to clause if present (for date ranges)
+        if let toClause = statement.toClause {
+            let toValue = try await expressionEvaluator.evaluate(toClause, context: context)
+            context.bind("_to_", value: toValue)
         }
 
         // Get action implementation

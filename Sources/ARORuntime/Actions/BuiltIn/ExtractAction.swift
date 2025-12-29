@@ -64,6 +64,41 @@ public struct ExtractAction: ActionImplementation {
             return extractFromList(array, specifier: specifier)
         }
 
+        // ARO-0041: Check result specifiers for date type property extraction
+        // Syntax: <Extract> the <vacation-days: days> from <vacation>.
+        if let specifier = result.specifiers.first {
+            if let date = resolvedSource as? ARODate {
+                if let value = date.property(specifier) {
+                    if let intVal = value as? Int { return intVal }
+                    if let strVal = value as? String { return strVal }
+                    if let tzVal = value as? TimeZone { return tzVal.identifier }
+                    return String(describing: value)
+                }
+            }
+            if let range = resolvedSource as? ARODateRange {
+                if let value = range.property(specifier) {
+                    if let intVal = value as? Int { return intVal }
+                    if let dateVal = value as? ARODate { return dateVal }
+                    return String(describing: value)
+                }
+            }
+            if let recurrence = resolvedSource as? ARORecurrence {
+                if let value = recurrence.property(specifier) {
+                    if let strVal = value as? String { return strVal }
+                    if let dateVal = value as? ARODate { return dateVal }
+                    if let arrVal = value as? [ARODate] { return arrVal }
+                    return String(describing: value)
+                }
+            }
+            if let distance = resolvedSource as? DateDistance {
+                if let value = distance.property(specifier) {
+                    if let intVal = value as? Int { return intVal }
+                    if let dblVal = value as? Double { return dblVal }
+                    return String(describing: value)
+                }
+            }
+        }
+
         return resolvedSource
     }
 

@@ -242,6 +242,7 @@ public final class Parser {
         let literalValue: LiteralValue? = nil
         var expression: (any Expression)? = nil
         var aggregation: AggregationClause? = nil
+        var toExpression: (any Expression)? = nil
 
         // Check if we should parse an expression after the preposition
         // This happens for: `to <expr>`, `from <expr>`, `with <expr>`, `for <expr>` when followed by expression-starting token
@@ -275,6 +276,14 @@ public final class Parser {
                     expression = try parseExpression()
                 }
             }
+
+        }
+
+        // Parse optional to clause (ARO-0041): `from <start> to <end>` for date ranges
+        // This is placed outside the if/else to handle both expression and standard object syntax
+        if case .preposition(let p) = peek().kind, p == .to {
+            advance() // consume 'to'
+            toExpression = try parseExpression()
         }
 
         // Parse optional where clause (ARO-0018): `where <field> is "value"` or `where <field> > 1000`
@@ -314,6 +323,7 @@ public final class Parser {
             aggregation: aggregation,
             whereClause: whereClause,
             byClause: byClause,
+            toClause: toExpression,
             whenCondition: whenCondition,
             span: startToken.span.merged(with: endToken.span)
         )
