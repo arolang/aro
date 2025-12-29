@@ -39,11 +39,16 @@ if ! command -v pandoc &> /dev/null; then
 fi
 
 # Dynamically build the ordered list of chapters
-# Sort order: Chapter01, Chapter02, ..., Chapter06, Chapter06A, Chapter06B, ..., Appendix*
+# Sort order: Cover, Chapter01, Chapter02, ..., Chapter06, Chapter06A, Chapter06B, ..., Appendix*
 # Sub-chapters (like 06A, 16B) come after their parent chapter (06, 16)
 echo "Discovering chapters..."
 
 CHAPTERS=()
+
+# Start with cover page if it exists
+if [[ -f "$SCRIPT_DIR/Cover.md" ]]; then
+    CHAPTERS+=("Cover.md")
+fi
 
 # Get all Chapter*.md files with proper sorting
 # Transform ChapterXXY to ChapterXX.1Y for sorting so 06 < 06A < 07
