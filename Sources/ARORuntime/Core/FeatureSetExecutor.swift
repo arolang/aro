@@ -211,17 +211,20 @@ public final class FeatureSetExecutor: @unchecked Sendable {
                 // - "update", "modify", "change", "set" when they have specifiers (field-level updates)
                 // - "create", "make", "build" when they have specifiers (typed entities need ID generation)
                 // - "merge", "combine", "join", "concat" always need execution (they transform and bind result)
+                // - "compute", "calculate", "derive" when they have specifiers (operations like +7d, hash, format)
                 let testVerbs: Set<String> = ["then", "assert"]
                 let updateVerbs: Set<String> = ["update", "modify", "change", "set"]
                 let createVerbs: Set<String> = ["create", "make", "build", "construct"]
                 let mergeVerbs: Set<String> = ["merge", "combine", "join", "concat"]
+                let computeVerbs: Set<String> = ["compute", "calculate", "derive"]
                 // Response actions like write/read/store should NOT have their result bound to expression value
                 let responseVerbs: Set<String> = ["write", "read", "store", "save", "persist", "log", "print", "send", "emit"]
                 let needsExecution = testVerbs.contains(verb.lowercased()) ||
                     mergeVerbs.contains(verb.lowercased()) ||
                     responseVerbs.contains(verb.lowercased()) ||
                     (updateVerbs.contains(verb.lowercased()) && !resultDescriptor.specifiers.isEmpty) ||
-                    (createVerbs.contains(verb.lowercased()) && !resultDescriptor.specifiers.isEmpty)
+                    (createVerbs.contains(verb.lowercased()) && !resultDescriptor.specifiers.isEmpty) ||
+                    (computeVerbs.contains(verb.lowercased()) && !resultDescriptor.specifiers.isEmpty)
                 if !needsExecution {
                     context.bind(resultDescriptor.base, value: expressionValue)
 

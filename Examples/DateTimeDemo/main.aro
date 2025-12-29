@@ -32,6 +32,30 @@
     <Extract> the <hour> from the <now: hour>.
     <Log> the <hour1> for the <console> with <hour>.
 
+    (* Date offset calculations *)
+    <Log> the <label7> for the <console> with "Date calculations:".
+
+    <Compute> the <next-week: +7d> from <now>.
+    <Log> the <next-week-label> for the <console> with "  Next week:".
+    <Log> the <next-week-output> for the <console> with <next-week>.
+
+    <Compute> the <yesterday: -1d> from <now>.
+    <Log> the <yesterday-label> for the <console> with "  Yesterday:".
+    <Log> the <yesterday-output> for the <console> with <yesterday>.
+
+    <Compute> the <one-hour-later: +1h> from <now>.
+    <Log> the <hour-label> for the <console> with "  In one hour:".
+    <Log> the <hour-output> for the <console> with <one-hour-later>.
+
+    (* Date comparisons using when clauses *)
+    <Log> the <label8> for the <console> with "Date comparisons:".
+
+    <Log> the <compare1> for the <console> with "  Is yesterday before now?" when <yesterday> < <now>.
+    <Log> the <compare2> for the <console> with "  Is next week after now?" when <next-week> > <now>.
+    <Log> the <compare3> for the <console> with "  Is meeting in the past?" when <meeting> < <now>.
+    <Log> the <compare4> for the <console> with "  Is meeting in 2025?" when <meeting> < "2026-01-01T00:00:00Z".
+
     <Log> the <footer> for the <console> with "=== Demo Complete ===".
+
     <Return> an <OK: status> for the <demo>.
 }
