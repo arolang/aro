@@ -117,28 +117,33 @@ else
     done
 
     # Build HTML with cover at top, then TOC, then content
-    # First, create a combined HTML with cover outside the TOC structure
-    {
-        echo '<!DOCTYPE html><html><head><meta charset="utf-8">'
-        echo '<title>ARO: Business Logic as Language</title>'
-        echo "<style>$(cat "$CSS_FILE")</style>"
-        echo '</head><body>'
+    # Generate TOC and content with pandoc --standalone, then inject cover at top
+    TEMP_HTML="$OUTPUT_DIR/temp-content.html"
 
-        # Add cover page content directly (converted from markdown)
-        if [[ -f "$SCRIPT_DIR/Cover.md" ]]; then
-            pandoc --from markdown+raw_html --to html "$SCRIPT_DIR/Cover.md"
-        fi
+    pandoc \
+        --standalone \
+        --toc \
+        --toc-depth=2 \
+        --css="$CSS_FILE" \
+        --metadata title="" \
+        --from markdown+raw_html \
+        -o "$TEMP_HTML" \
+        $CONTENT_FILES
 
-        # Add TOC and content
-        pandoc \
-            --toc \
-            --toc-depth=2 \
-            --from markdown+raw_html \
-            --to html \
-            $CONTENT_FILES
+    # Generate cover HTML to temp file
+    COVER_TEMP="$OUTPUT_DIR/temp-cover.html"
+    if [[ -f "$SCRIPT_DIR/Cover.md" ]]; then
+        pandoc --from markdown+raw_html --to html "$SCRIPT_DIR/Cover.md" > "$COVER_TEMP"
+    else
+        echo "" > "$COVER_TEMP"
+    fi
 
-        echo '</body></html>'
-    } > "$HTML_OUTPUT"
+    # Inject cover after <body> tag by splitting and concatenating
+    head -n "$(grep -n '<body>' "$TEMP_HTML" | head -1 | cut -d: -f1)" "$TEMP_HTML" > "$HTML_OUTPUT"
+    cat "$COVER_TEMP" >> "$HTML_OUTPUT"
+    tail -n +"$(($(grep -n '<body>' "$TEMP_HTML" | head -1 | cut -d: -f1) + 1))" "$TEMP_HTML" >> "$HTML_OUTPUT"
+    rm -f "$COVER_TEMP"
+    rm -f "$TEMP_HTML"
 
     echo ""
     echo "Created: $HTML_OUTPUT"
@@ -181,27 +186,43 @@ for chapter in "${CHAPTERS[@]}"; do
 done
 
 # Build HTML with cover at top, then TOC, then content
-{
-    echo '<!DOCTYPE html><html><head><meta charset="utf-8">'
-    echo '<title>ARO: Business Logic as Language - The Language Guide</title>'
-    echo "<style>$(cat "$CSS_FILE")</style>"
-    echo '</head><body>'
+TEMP_HTML="$OUTPUT_DIR/temp-content.html"
 
-    # Add cover page content directly (converted from markdown)
-    if [[ -f "$SCRIPT_DIR/Cover.md" ]]; then
-        pandoc --from markdown+raw_html --to html "$SCRIPT_DIR/Cover.md"
-    fi
+pandoc \
+    --standalone \
+    --toc \
+    --toc-depth=2 \
+    --css="unix-style.css" \
+    --metadata title="ARO: Business Logic as Language" \
+    --from markdown+raw_html \
+    --embed-resources \
+    --self-contained \
+    -o "$TEMP_HTML" \
+    $CONTENT_FILES 2>/dev/null || \
+pandoc \
+    --standalone \
+    --toc \
+    --toc-depth=2 \
+    --css="unix-style.css" \
+    --metadata title="ARO: Business Logic as Language" \
+    --from markdown+raw_html \
+    -o "$TEMP_HTML" \
+    $CONTENT_FILES
 
-    # Add TOC and content
-    pandoc \
-        --toc \
-        --toc-depth=2 \
-        --from markdown+raw_html \
-        --to html \
-        $CONTENT_FILES
+# Generate cover HTML to temp file
+COVER_TEMP="$OUTPUT_DIR/temp-cover.html"
+if [[ -f "$SCRIPT_DIR/Cover.md" ]]; then
+    pandoc --from markdown+raw_html --to html "$SCRIPT_DIR/Cover.md" > "$COVER_TEMP"
+else
+    echo "" > "$COVER_TEMP"
+fi
 
-    echo '</body></html>'
-} > "$HTML_OUTPUT"
+# Inject cover after <body> tag by splitting and concatenating
+head -n "$(grep -n '<body>' "$TEMP_HTML" | head -1 | cut -d: -f1)" "$TEMP_HTML" > "$HTML_OUTPUT"
+cat "$COVER_TEMP" >> "$HTML_OUTPUT"
+tail -n +"$(($(grep -n '<body>' "$TEMP_HTML" | head -1 | cut -d: -f1) + 1))" "$TEMP_HTML" >> "$HTML_OUTPUT"
+rm -f "$COVER_TEMP"
+rm -f "$TEMP_HTML"
 
 echo "Created: $HTML_OUTPUT"
 echo ""
