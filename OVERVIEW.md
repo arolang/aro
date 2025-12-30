@@ -390,7 +390,7 @@ Each Feature Set has its own symbol table:
 
 1. **Protocol-Oriented**: Extensible via protocols
 2. **Immutable Data**: SymbolTable and AST nodes are value types
-3. **Swift 6.0 Concurrency**: All core types are `Sendable`
+3. **Swift 6.2 Concurrency**: All core types are `Sendable`
 4. **Visitor Pattern**: Extensible tree traversal
 5. **Error Recovery**: Continue parsing after errors
 6. **Event-Driven**: Loose coupling via event bus

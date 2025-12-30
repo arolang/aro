@@ -6,7 +6,7 @@
 
 ## 3.1 Installation
 
-ARO is implemented in Swift and distributed as a command-line tool. The implementation requires Swift 6.0 or later, which means you will need macOS 14 or a recent Linux distribution with Swift installed. On macOS, Xcode 16 provides everything you need. On Linux, you can install Swift from swift.org.
+ARO is implemented in Swift and distributed as a command-line tool. The implementation requires Swift 6.2 or later, which means you will need macOS 14 or a recent Linux distribution with Swift installed. On macOS, Xcode 16 provides everything you need. On Linux, you can install Swift from swift.org.
 
 The simplest way to get ARO is to build it from source. Clone the repository and run Swift Package Manager's build command. For development work, a debug build is sufficient and compiles faster. For running applications you intend to deploy, a release build with optimizations produces a significantly smaller and faster binary.
 

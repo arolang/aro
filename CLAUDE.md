@@ -362,6 +362,6 @@ The `Proposals/` directory contains 35 evolution proposals:
 
 ## Concurrency
 
-All core types (`SymbolTable`, `Token`, AST nodes, `ActionImplementation`) are `Sendable` for Swift 6.0 concurrency safety.
+All core types (`SymbolTable`, `Token`, AST nodes, `ActionImplementation`) are `Sendable` for Swift 6.2 concurrency safety.
 - Do never ever say: "🤖 Generated with [Claude Code](https://claude.com/claude-code)" and "Co-Authored-By: Claude
   <noreply@anthropic.com>"
