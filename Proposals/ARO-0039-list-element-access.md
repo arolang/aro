@@ -1,6 +1,6 @@
-# ARO-0038: List Element Access
+# ARO-0039: List Element Access
 
-* Proposal: ARO-0038
+* Proposal: ARO-0039
 * Author: ARO Language Team
 * Status: **Implemented**
 * Requires: ARO-0032

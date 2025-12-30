@@ -72,7 +72,8 @@ public struct ComputeAction: ActionImplementation {
         // Computation name from result specifiers or base (for backward compatibility)
         let knownComputations: Set<String> = [
             "hash", "length", "count", "uppercase", "lowercase", "identity",
-            "date", "format", "distance"  // Date operations (ARO-0041)
+            "date", "format", "distance",  // Date operations (ARO-0041)
+            "intersect", "difference", "union"  // Set operations (ARO-0042)
         ]
         let computationName = resolveOperationName(from: result, knownOperations: knownComputations, fallback: "identity")
 
@@ -155,6 +156,28 @@ public struct ComputeAction: ActionImplementation {
             let dateService = context.service(DateService.self) ?? DefaultDateService()
             return dateService.distance(from: fromDate, to: toDate)
 
+        // Set operations (ARO-0042)
+        case "intersect":
+            // Get second operand from 'with' clause (stored in _with_ by FeatureSetExecutor)
+            guard let secondOperand = context.resolveAny("_with_") else {
+                throw ActionError.runtimeError("Intersect requires a 'with' clause: <Compute> the <result: intersect> from <a> with <b>.")
+            }
+            return try computeIntersect(input, with: secondOperand)
+
+        case "difference":
+            // Get second operand from 'with' clause (stored in _with_ by FeatureSetExecutor)
+            guard let secondOperand = context.resolveAny("_with_") else {
+                throw ActionError.runtimeError("Difference requires a 'with' clause: <Compute> the <result: difference> from <a> with <b>.")
+            }
+            return try computeDifference(input, minus: secondOperand)
+
+        case "union":
+            // Get second operand from 'with' clause (stored in _with_ by FeatureSetExecutor)
+            guard let secondOperand = context.resolveAny("_with_") else {
+                throw ActionError.runtimeError("Union requires a 'with' clause: <Compute> the <result: union> from <a> with <b>.")
+            }
+            return try computeUnion(input, with: secondOperand)
+
         default:
             // Return input as-is for unknown computations
             return input
@@ -181,6 +204,298 @@ public struct ComputeAction: ActionImplementation {
         let offset = try DateOffset.parse(offsetPattern)
         let dateService = context.service(DateService.self) ?? DefaultDateService()
         return dateService.offset(date, by: offset)
+    }
+
+    // MARK: - Set Operations (ARO-0042)
+
+    /// Compute intersection of two collections (multiset semantics for arrays)
+    /// - Lists: Elements in both, preserving duplicates up to minimum count
+    /// - Strings: Characters in both, preserving order from first string
+    /// - Objects: Keys with matching values (deep recursive)
+    private func computeIntersect(_ a: any Sendable, with b: any Sendable) throws -> any Sendable {
+        // Arrays - multiset intersection
+        if let arrA = a as? [any Sendable], let arrB = b as? [any Sendable] {
+            return multisetIntersect(arrA, arrB)
+        }
+
+        // Strings - character intersection preserving order
+        if let strA = a as? String, let strB = b as? String {
+            var bCounts = characterCounts(strB)
+            var result = ""
+            for char in strA {
+                if let count = bCounts[char], count > 0 {
+                    result.append(char)
+                    bCounts[char] = count - 1
+                }
+            }
+            return result
+        }
+
+        // Dictionaries - deep recursive intersection
+        if let dictA = a as? [String: any Sendable],
+           let dictB = b as? [String: any Sendable] {
+            return intersectDictionaries(dictA, dictB)
+        }
+
+        throw ActionError.typeMismatch(
+            expected: "Array, String, or Object",
+            actual: String(describing: type(of: a))
+        )
+    }
+
+    /// Compute difference of two collections (A - B, multiset semantics for arrays)
+    /// - Lists: Elements in A but not in B, with multiset subtraction
+    /// - Strings: Characters in A but not in B, preserving order
+    /// - Objects: Keys/values in A that are not matching in B
+    private func computeDifference(_ a: any Sendable, minus b: any Sendable) throws -> any Sendable {
+        // Arrays - multiset difference
+        if let arrA = a as? [any Sendable], let arrB = b as? [any Sendable] {
+            return multisetDifference(arrA, arrB)
+        }
+
+        // Strings - character difference preserving order
+        if let strA = a as? String, let strB = b as? String {
+            var bCounts = characterCounts(strB)
+            var result = ""
+            for char in strA {
+                if let count = bCounts[char], count > 0 {
+                    bCounts[char] = count - 1
+                } else {
+                    result.append(char)
+                }
+            }
+            return result
+        }
+
+        // Dictionaries - deep recursive difference
+        if let dictA = a as? [String: any Sendable],
+           let dictB = b as? [String: any Sendable] {
+            return differenceDictionaries(dictA, dictB)
+        }
+
+        throw ActionError.typeMismatch(
+            expected: "Array, String, or Object",
+            actual: String(describing: type(of: a))
+        )
+    }
+
+    /// Compute union of two collections (deduplicated for arrays)
+    /// - Lists: All unique elements from both (A wins for duplicates)
+    /// - Strings: All unique characters from both, preserving order from A
+    /// - Objects: Merge keys (A wins for conflicts)
+    private func computeUnion(_ a: any Sendable, with b: any Sendable) throws -> any Sendable {
+        // Arrays - deduplicated union
+        if let arrA = a as? [any Sendable], let arrB = b as? [any Sendable] {
+            var result = arrA
+            var seen = Set(arrA.map { hashKey(for: $0) })
+            for item in arrB {
+                let key = hashKey(for: item)
+                if !seen.contains(key) {
+                    seen.insert(key)
+                    result.append(item)
+                }
+            }
+            return result
+        }
+
+        // Strings - character union preserving order
+        if let strA = a as? String, let strB = b as? String {
+            var seen = Set(strA)
+            var result = strA
+            for char in strB {
+                if !seen.contains(char) {
+                    seen.insert(char)
+                    result.append(char)
+                }
+            }
+            return result
+        }
+
+        // Dictionaries - merge (A wins conflicts)
+        if let dictA = a as? [String: any Sendable],
+           let dictB = b as? [String: any Sendable] {
+            var result = dictB  // Start with B
+            for (key, value) in dictA {
+                result[key] = value  // A wins
+            }
+            return result
+        }
+
+        throw ActionError.typeMismatch(
+            expected: "Array, String, or Object",
+            actual: String(describing: type(of: a))
+        )
+    }
+
+    // MARK: - Set Operation Helpers
+
+    /// Multiset intersection: elements in both, preserving duplicates up to min count
+    private func multisetIntersect(_ a: [any Sendable], _ b: [any Sendable]) -> [any Sendable] {
+        var bCounts: [String: Int] = [:]
+        for item in b {
+            let key = hashKey(for: item)
+            bCounts[key, default: 0] += 1
+        }
+
+        var result: [any Sendable] = []
+        for item in a {
+            let key = hashKey(for: item)
+            if let count = bCounts[key], count > 0 {
+                result.append(item)
+                bCounts[key] = count - 1
+            }
+        }
+        return result
+    }
+
+    /// Multiset difference: elements in A minus occurrences in B
+    private func multisetDifference(_ a: [any Sendable], _ b: [any Sendable]) -> [any Sendable] {
+        var bCounts: [String: Int] = [:]
+        for item in b {
+            let key = hashKey(for: item)
+            bCounts[key, default: 0] += 1
+        }
+
+        var result: [any Sendable] = []
+        for item in a {
+            let key = hashKey(for: item)
+            if let count = bCounts[key], count > 0 {
+                bCounts[key] = count - 1
+            } else {
+                result.append(item)
+            }
+        }
+        return result
+    }
+
+    /// Deep recursive dictionary intersection
+    private func intersectDictionaries(
+        _ a: [String: any Sendable],
+        _ b: [String: any Sendable]
+    ) -> [String: any Sendable] {
+        var result: [String: any Sendable] = [:]
+        for (key, valueA) in a {
+            guard let valueB = b[key] else { continue }
+
+            // Recursive for nested objects
+            if let nestedA = valueA as? [String: any Sendable],
+               let nestedB = valueB as? [String: any Sendable] {
+                let nested = intersectDictionaries(nestedA, nestedB)
+                if !nested.isEmpty {
+                    result[key] = nested
+                }
+            }
+            // Arrays within objects
+            else if let arrA = valueA as? [any Sendable],
+                    let arrB = valueB as? [any Sendable] {
+                let intersected = multisetIntersect(arrA, arrB)
+                if !intersected.isEmpty {
+                    result[key] = intersected
+                }
+            }
+            // Primitive equality
+            else if areStrictlyEqual(valueA, valueB) {
+                result[key] = valueA
+            }
+        }
+        return result
+    }
+
+    /// Deep recursive dictionary difference
+    private func differenceDictionaries(
+        _ a: [String: any Sendable],
+        _ b: [String: any Sendable]
+    ) -> [String: any Sendable] {
+        var result: [String: any Sendable] = [:]
+        for (key, valueA) in a {
+            guard let valueB = b[key] else {
+                // Key not in B - include it
+                result[key] = valueA
+                continue
+            }
+
+            // Recursive for nested objects
+            if let nestedA = valueA as? [String: any Sendable],
+               let nestedB = valueB as? [String: any Sendable] {
+                let diff = differenceDictionaries(nestedA, nestedB)
+                if !diff.isEmpty {
+                    result[key] = diff
+                }
+            }
+            // Arrays within objects
+            else if let arrA = valueA as? [any Sendable],
+                    let arrB = valueB as? [any Sendable] {
+                let diffArr = multisetDifference(arrA, arrB)
+                if !diffArr.isEmpty {
+                    result[key] = diffArr
+                }
+            }
+            // Values differ - include A's value
+            else if !areStrictlyEqual(valueA, valueB) {
+                result[key] = valueA
+            }
+        }
+        return result
+    }
+
+    /// Count occurrences of each character in a string
+    private func characterCounts(_ str: String) -> [Character: Int] {
+        var counts: [Character: Int] = [:]
+        for char in str {
+            counts[char, default: 0] += 1
+        }
+        return counts
+    }
+
+    /// Create a hash key for any Sendable value (for multiset counting)
+    private func hashKey(for value: any Sendable) -> String {
+        if let dict = value as? [String: any Sendable] {
+            // Sort keys for consistent hashing
+            let sorted = dict.keys.sorted().map { key -> String in
+                let v = dict[key]!
+                return "\(key):\(hashKey(for: v))"
+            }
+            return "{\(sorted.joined(separator: ","))}"
+        }
+        if let arr = value as? [any Sendable] {
+            return "[\(arr.map { hashKey(for: $0) }.joined(separator: ","))]"
+        }
+        return String(describing: value)
+    }
+
+    /// Strict equality check for two values
+    private func areStrictlyEqual(_ a: any Sendable, _ b: any Sendable) -> Bool {
+        // Same type checks
+        if let aInt = a as? Int, let bInt = b as? Int {
+            return aInt == bInt
+        }
+        if let aDouble = a as? Double, let bDouble = b as? Double {
+            return aDouble == bDouble
+        }
+        if let aStr = a as? String, let bStr = b as? String {
+            return aStr == bStr
+        }
+        if let aBool = a as? Bool, let bBool = b as? Bool {
+            return aBool == bBool
+        }
+        if let aDict = a as? [String: any Sendable],
+           let bDict = b as? [String: any Sendable] {
+            guard aDict.count == bDict.count else { return false }
+            for (key, valueA) in aDict {
+                guard let valueB = bDict[key] else { return false }
+                if !areStrictlyEqual(valueA, valueB) { return false }
+            }
+            return true
+        }
+        if let aArr = a as? [any Sendable], let bArr = b as? [any Sendable] {
+            guard aArr.count == bArr.count else { return false }
+            for (itemA, itemB) in zip(aArr, bArr) {
+                if !areStrictlyEqual(itemA, itemB) { return false }
+            }
+            return true
+        }
+        // Fallback to string comparison
+        return String(describing: a) == String(describing: b)
     }
 }
 

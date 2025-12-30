@@ -174,6 +174,260 @@ struct ComputeActionTests {
     }
 }
 
+// MARK: - Set Operations Tests (ARO-0042)
+
+@Suite("Set Operations Tests")
+struct SetOperationsTests {
+
+    func createDescriptors(
+        resultBase: String = "result",
+        resultSpecifiers: [String] = [],
+        objectBase: String = "_expression_",
+        objectSpecifiers: [String] = [],
+        preposition: Preposition = .from
+    ) -> (ResultDescriptor, ObjectDescriptor) {
+        let span = SourceSpan(at: SourceLocation())
+        let result = ResultDescriptor(base: resultBase, specifiers: resultSpecifiers, span: span)
+        let object = ObjectDescriptor(preposition: preposition, base: objectBase, specifiers: objectSpecifiers, span: span)
+        return (result, object)
+    }
+
+    // MARK: - List Operations
+
+    @Test("Intersect two lists")
+    func testIntersectLists() async throws {
+        let action = ComputeAction()
+        let context = RuntimeContext(featureSetName: "Test")
+        context.bind("_expression_", value: [2, 3, 5] as [any Sendable])
+        context.bind("_with_", value: [1, 2, 3, 4] as [any Sendable])
+
+        let (result, object) = createDescriptors(resultBase: "common", resultSpecifiers: ["intersect"])
+        let value = try await action.execute(result: result, object: object, context: context)
+
+        let arr = value as? [any Sendable]
+        #expect(arr?.count == 2)
+        let intArr = arr?.compactMap { $0 as? Int }
+        #expect(intArr?.contains(2) == true)
+        #expect(intArr?.contains(3) == true)
+    }
+
+    @Test("Difference of two lists (A - B)")
+    func testDifferenceLists() async throws {
+        let action = ComputeAction()
+        let context = RuntimeContext(featureSetName: "Test")
+        context.bind("_expression_", value: [2, 3, 5] as [any Sendable])
+        context.bind("_with_", value: [1, 2, 3, 4] as [any Sendable])
+
+        let (result, object) = createDescriptors(resultBase: "onlyA", resultSpecifiers: ["difference"])
+        let value = try await action.execute(result: result, object: object, context: context)
+
+        let arr = value as? [any Sendable]
+        #expect(arr?.count == 1)
+        #expect(arr?.first as? Int == 5)
+    }
+
+    @Test("Union of two lists")
+    func testUnionLists() async throws {
+        let action = ComputeAction()
+        let context = RuntimeContext(featureSetName: "Test")
+        context.bind("_expression_", value: [2, 3, 5] as [any Sendable])
+        context.bind("_with_", value: [1, 2, 3, 4] as [any Sendable])
+
+        let (result, object) = createDescriptors(resultBase: "all", resultSpecifiers: ["union"])
+        let value = try await action.execute(result: result, object: object, context: context)
+
+        let arr = value as? [any Sendable]
+        // Union is deduplicated: [2, 3, 5, 1, 4]
+        #expect(arr?.count == 5)
+    }
+
+    @Test("Multiset intersection preserves duplicates up to minimum")
+    func testMultisetIntersect() async throws {
+        let action = ComputeAction()
+        let context = RuntimeContext(featureSetName: "Test")
+        // [1, 2, 2, 3] ∩ [2, 2, 2, 4] = [2, 2]
+        context.bind("_expression_", value: [1, 2, 2, 3] as [any Sendable])
+        context.bind("_with_", value: [2, 2, 2, 4] as [any Sendable])
+
+        let (result, object) = createDescriptors(resultBase: "common", resultSpecifiers: ["intersect"])
+        let value = try await action.execute(result: result, object: object, context: context)
+
+        let arr = value as? [any Sendable]
+        #expect(arr?.count == 2)
+        let intArr = arr?.compactMap { $0 as? Int }
+        #expect(intArr == [2, 2])
+    }
+
+    @Test("Multiset difference subtracts counts")
+    func testMultisetDifference() async throws {
+        let action = ComputeAction()
+        let context = RuntimeContext(featureSetName: "Test")
+        // [1, 2, 2, 3] - [2, 2, 2, 4] = [1, 3]
+        context.bind("_expression_", value: [1, 2, 2, 3] as [any Sendable])
+        context.bind("_with_", value: [2, 2, 2, 4] as [any Sendable])
+
+        let (result, object) = createDescriptors(resultBase: "onlyA", resultSpecifiers: ["difference"])
+        let value = try await action.execute(result: result, object: object, context: context)
+
+        let arr = value as? [any Sendable]
+        #expect(arr?.count == 2)
+        let intArr = arr?.compactMap { $0 as? Int }
+        #expect(intArr?.contains(1) == true)
+        #expect(intArr?.contains(3) == true)
+    }
+
+    // MARK: - String Operations
+
+    @Test("Intersect two strings")
+    func testIntersectStrings() async throws {
+        let action = ComputeAction()
+        let context = RuntimeContext(featureSetName: "Test")
+        context.bind("_expression_", value: "hello")
+        context.bind("_with_", value: "bello")
+
+        let (result, object) = createDescriptors(resultBase: "shared", resultSpecifiers: ["intersect"])
+        let value = try await action.execute(result: result, object: object, context: context)
+
+        #expect(value as? String == "ello")
+    }
+
+    @Test("Difference of two strings")
+    func testDifferenceStrings() async throws {
+        let action = ComputeAction()
+        let context = RuntimeContext(featureSetName: "Test")
+        context.bind("_expression_", value: "hello")
+        context.bind("_with_", value: "bello")
+
+        let (result, object) = createDescriptors(resultBase: "unique", resultSpecifiers: ["difference"])
+        let value = try await action.execute(result: result, object: object, context: context)
+
+        #expect(value as? String == "h")
+    }
+
+    @Test("Union of two strings")
+    func testUnionStrings() async throws {
+        let action = ComputeAction()
+        let context = RuntimeContext(featureSetName: "Test")
+        context.bind("_expression_", value: "hello")
+        context.bind("_with_", value: "bello")
+
+        let (result, object) = createDescriptors(resultBase: "all", resultSpecifiers: ["union"])
+        let value = try await action.execute(result: result, object: object, context: context)
+
+        // Union: "hello" + unique chars from "bello" = "hellob"
+        #expect(value as? String == "hellob")
+    }
+
+    // MARK: - Object Operations (Deep)
+
+    @Test("Intersect objects - matching keys and values")
+    func testIntersectObjects() async throws {
+        let action = ComputeAction()
+        let context = RuntimeContext(featureSetName: "Test")
+        context.bind("_expression_", value: [
+            "name": "Alice",
+            "age": 30
+        ] as [String: any Sendable])
+        context.bind("_with_", value: [
+            "name": "Alice",
+            "age": 31
+        ] as [String: any Sendable])
+
+        let (result, object) = createDescriptors(resultBase: "common", resultSpecifiers: ["intersect"])
+        let value = try await action.execute(result: result, object: object, context: context)
+
+        let dict = value as? [String: any Sendable]
+        #expect(dict?["name"] as? String == "Alice")
+        #expect(dict?["age"] == nil) // age differs, not included
+    }
+
+    @Test("Difference objects - keys/values in A not in B")
+    func testDifferenceObjects() async throws {
+        let action = ComputeAction()
+        let context = RuntimeContext(featureSetName: "Test")
+        context.bind("_expression_", value: [
+            "name": "Alice",
+            "age": 30
+        ] as [String: any Sendable])
+        context.bind("_with_", value: [
+            "name": "Alice",
+            "job": "Engineer"
+        ] as [String: any Sendable])
+
+        let (result, object) = createDescriptors(resultBase: "onlyA", resultSpecifiers: ["difference"])
+        let value = try await action.execute(result: result, object: object, context: context)
+
+        let dict = value as? [String: any Sendable]
+        #expect(dict?["age"] as? Int == 30)
+        #expect(dict?["name"] == nil) // name matches, not in difference
+    }
+
+    @Test("Union objects - merge with A winning")
+    func testUnionObjects() async throws {
+        let action = ComputeAction()
+        let context = RuntimeContext(featureSetName: "Test")
+        context.bind("_expression_", value: [
+            "name": "Alice",
+            "age": 30
+        ] as [String: any Sendable])
+        context.bind("_with_", value: [
+            "name": "Bob",
+            "job": "Engineer"
+        ] as [String: any Sendable])
+
+        let (result, object) = createDescriptors(resultBase: "merged", resultSpecifiers: ["union"])
+        let value = try await action.execute(result: result, object: object, context: context)
+
+        let dict = value as? [String: any Sendable]
+        #expect(dict?["name"] as? String == "Alice") // A wins
+        #expect(dict?["age"] as? Int == 30)
+        #expect(dict?["job"] as? String == "Engineer")
+    }
+
+    @Test("Deep object intersection")
+    func testDeepIntersect() async throws {
+        let action = ComputeAction()
+        let context = RuntimeContext(featureSetName: "Test")
+        context.bind("_expression_", value: [
+            "name": "Alice",
+            "address": ["city": "NYC", "zip": "10001"] as [String: any Sendable]
+        ] as [String: any Sendable])
+        context.bind("_with_", value: [
+            "name": "Alice",
+            "address": ["city": "NYC", "state": "NY"] as [String: any Sendable]
+        ] as [String: any Sendable])
+
+        let (result, object) = createDescriptors(resultBase: "common", resultSpecifiers: ["intersect"])
+        let value = try await action.execute(result: result, object: object, context: context)
+
+        let dict = value as? [String: any Sendable]
+        #expect(dict?["name"] as? String == "Alice")
+        let address = dict?["address"] as? [String: any Sendable]
+        #expect(address?["city"] as? String == "NYC")
+        #expect(address?["zip"] == nil) // zip only in A
+        #expect(address?["state"] == nil) // state only in B
+    }
+
+    // MARK: - Error Cases
+
+    @Test("Set operation without with clause throws error")
+    func testSetOperationNoWithClause() async throws {
+        let action = ComputeAction()
+        let context = RuntimeContext(featureSetName: "Test")
+        context.bind("_expression_", value: [1, 2, 3] as [any Sendable])
+        // No _with_ binding
+
+        let (result, object) = createDescriptors(resultBase: "common", resultSpecifiers: ["intersect"])
+
+        do {
+            _ = try await action.execute(result: result, object: object, context: context)
+            #expect(Bool(false), "Should have thrown error")
+        } catch let error as ActionError {
+            #expect(error.localizedDescription.contains("with"))
+        }
+    }
+}
+
 // MARK: - Validate Action Tests
 
 @Suite("Validate Action Tests")
@@ -701,5 +955,133 @@ struct SupportingTypesTests {
         let entity = CreatedEntity(type: "User", data: ["name": "John"])
         #expect(entity.type == "User")
         #expect(entity.data["name"] as? String == "John")
+    }
+}
+
+// MARK: - Filter Action Tests (ARO-0042)
+
+@Suite("Filter Action Tests")
+struct FilterActionTests {
+
+    func createDescriptors(
+        resultBase: String = "filtered",
+        resultSpecifiers: [String] = [],
+        objectBase: String = "items",
+        objectSpecifiers: [String] = [],
+        preposition: Preposition = .from
+    ) -> (ResultDescriptor, ObjectDescriptor) {
+        let span = SourceSpan(at: SourceLocation())
+        let result = ResultDescriptor(base: resultBase, specifiers: resultSpecifiers, span: span)
+        let object = ObjectDescriptor(preposition: preposition, base: objectBase, specifiers: objectSpecifiers, span: span)
+        return (result, object)
+    }
+
+    @Test("Filter action role is own")
+    func testFilterActionRole() {
+        #expect(FilterAction.role == .own)
+    }
+
+    @Test("Filter action verbs")
+    func testFilterActionVerbs() {
+        #expect(FilterAction.verbs.contains("filter"))
+    }
+
+    @Test("Filter with 'in' operator using CSV string")
+    func testFilterInCSV() async throws {
+        let action = FilterAction()
+        let context = RuntimeContext(featureSetName: "Test")
+        let items: [any Sendable] = [
+            ["id": 1, "value": 2] as [String: any Sendable],
+            ["id": 2, "value": 3] as [String: any Sendable],
+            ["id": 3, "value": 5] as [String: any Sendable]
+        ]
+        context.bind("items", value: items)
+
+        // Set up where clause bindings
+        context.bind("_where_field_", value: "value")
+        context.bind("_where_op_", value: "in")
+        context.bind("_where_value_", value: "2,3")
+
+        let (result, object) = createDescriptors()
+        let value = try await action.execute(result: result, object: object, context: context)
+
+        let arr = value as? [any Sendable]
+        #expect(arr?.count == 2)
+    }
+
+    @Test("Filter with 'in' operator using array")
+    func testFilterInArray() async throws {
+        let action = FilterAction()
+        let context = RuntimeContext(featureSetName: "Test")
+        let items: [any Sendable] = [
+            ["id": 1, "value": 2] as [String: any Sendable],
+            ["id": 2, "value": 3] as [String: any Sendable],
+            ["id": 3, "value": 5] as [String: any Sendable]
+        ]
+        context.bind("items", value: items)
+
+        // Set up where clause bindings with array
+        context.bind("_where_field_", value: "value")
+        context.bind("_where_op_", value: "in")
+        context.bind("_where_value_", value: [2, 3] as [any Sendable])
+
+        let (result, object) = createDescriptors()
+        let value = try await action.execute(result: result, object: object, context: context)
+
+        let arr = value as? [any Sendable]
+        #expect(arr?.count == 2)
+    }
+
+    @Test("Filter with 'not in' operator using CSV string")
+    func testFilterNotInCSV() async throws {
+        let action = FilterAction()
+        let context = RuntimeContext(featureSetName: "Test")
+        let items: [any Sendable] = [
+            ["id": 1, "value": 2] as [String: any Sendable],
+            ["id": 2, "value": 3] as [String: any Sendable],
+            ["id": 3, "value": 5] as [String: any Sendable]
+        ]
+        context.bind("items", value: items)
+
+        // Set up where clause bindings
+        context.bind("_where_field_", value: "value")
+        context.bind("_where_op_", value: "not in")
+        context.bind("_where_value_", value: "2,3")
+
+        let (result, object) = createDescriptors()
+        let value = try await action.execute(result: result, object: object, context: context)
+
+        let arr = value as? [any Sendable]
+        #expect(arr?.count == 1)
+        let first = arr?.first as? [String: any Sendable]
+        #expect(first?["value"] as? Int == 5)
+    }
+
+    @Test("Filter with 'not in' operator using array")
+    func testFilterNotInArray() async throws {
+        let action = FilterAction()
+        let context = RuntimeContext(featureSetName: "Test")
+        let items: [any Sendable] = [
+            ["id": 1, "value": 2] as [String: any Sendable],
+            ["id": 2, "value": 3] as [String: any Sendable],
+            ["id": 3, "value": 5] as [String: any Sendable],
+            ["id": 4, "value": 7] as [String: any Sendable]
+        ]
+        context.bind("items", value: items)
+
+        // Set up where clause bindings with array
+        context.bind("_where_field_", value: "value")
+        context.bind("_where_op_", value: "not in")
+        context.bind("_where_value_", value: [3, 5] as [any Sendable])
+
+        let (result, object) = createDescriptors()
+        let value = try await action.execute(result: result, object: object, context: context)
+
+        let arr = value as? [any Sendable]
+        #expect(arr?.count == 2)
+        // Should contain items with value 2 and 7
+        let values = arr?.compactMap { ($0 as? [String: any Sendable])?["value"] as? Int }
+        #expect(values?.contains(2) == true)
+        #expect(values?.contains(7) == true)
     }
 }

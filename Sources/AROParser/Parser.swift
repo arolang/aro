@@ -264,19 +264,28 @@ public final class Parser {
             try expect(.leftAngle, message: "'<'")
             objectNoun = try parseQualifiedNoun()
             try expect(.rightAngle, message: "'>'")
+        }
 
-            // Parse optional value after object: `with "string"` or `with <expr>` or `with sum(<field>)`
-            if case .preposition(.with) = peek().kind {
-                advance() // consume 'with'
-                // Check for aggregation functions: sum(<field>), count(), avg(<field>)
-                if let agg = try parseAggregationIfPresent() {
-                    aggregation = agg
-                } else if isExpressionStart(peek()) {
-                    // Try to parse as expression first
+        // Parse optional with clause: `with "string"` or `with <expr>` or `with sum(<field>)`
+        // This is placed outside the if/else to handle both expression and standard object syntax (ARO-0042)
+        var withExpression: (any Expression)? = nil
+        if case .preposition(.with) = peek().kind {
+            advance() // consume 'with'
+            // Check for aggregation functions: sum(<field>), count(), avg(<field>)
+            if let agg = try parseAggregationIfPresent() {
+                aggregation = agg
+            } else if isExpressionStart(peek()) {
+                // If we're in expression mode (object is an expression like `from <variable>`),
+                // store the with clause separately for set operations (ARO-0042).
+                // Otherwise, use the standard expression binding for existing actions.
+                if objectNoun.base == "_expression_" {
+                    // Expression mode: `from <a> with <b>` - store in withClause for set operations
+                    withExpression = try parseExpression()
+                } else {
+                    // Standard mode: `from the <object> with <expr>` - use regular expression binding
                     expression = try parseExpression()
                 }
             }
-
         }
 
         // Parse optional to clause (ARO-0041): `from <start> to <end>` for date ranges
@@ -324,6 +333,7 @@ public final class Parser {
             whereClause: whereClause,
             byClause: byClause,
             toClause: toExpression,
+            withClause: withExpression,
             whenCondition: whenCondition,
             span: startToken.span.merged(with: endToken.span)
         )
@@ -458,8 +468,20 @@ public final class Parser {
         case .matches:
             advance()
             op = .matches
+        case .in:
+            advance()
+            op = .in
+        case .not:
+            advance()
+            // Must be followed by 'in' for "not in"
+            if check(.in) {
+                advance()
+                op = .notIn
+            } else {
+                throw ParserError.unexpectedToken(expected: "'in' after 'not' in where clause", got: peek())
+            }
         default:
-            throw ParserError.unexpectedToken(expected: "comparison operator (is, <, >, <=, >=, contains, matches)", got: peek())
+            throw ParserError.unexpectedToken(expected: "comparison operator (is, <, >, <=, >=, contains, matches, in, not in)", got: peek())
         }
 
         // Parse value expression

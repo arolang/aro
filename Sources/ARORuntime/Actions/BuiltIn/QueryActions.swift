@@ -306,9 +306,26 @@ public struct FilterAction: ActionImplementation {
             }
 
         case "in":
-            // Expected should be comma-separated values
+            // Support array values (ARO-0042)
+            if let arr = expected as? [any Sendable] {
+                return arr.contains { item in
+                    String(describing: item) == actualStr
+                }
+            }
+            // Fallback to comma-separated values
             let values = expectedStr.split(separator: ",").map { String($0).trimmingCharacters(in: .whitespaces) }
             return values.contains(actualStr)
+
+        case "not in", "not-in", "notin":
+            // Support array values (ARO-0042)
+            if let arr = expected as? [any Sendable] {
+                return !arr.contains { item in
+                    String(describing: item) == actualStr
+                }
+            }
+            // Fallback to comma-separated values
+            let values = expectedStr.split(separator: ",").map { String($0).trimmingCharacters(in: .whitespaces) }
+            return !values.contains(actualStr)
 
         default:
             return actualStr == expectedStr

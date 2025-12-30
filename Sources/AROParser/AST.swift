@@ -111,6 +111,8 @@ public struct AROStatement: Statement {
     public let byClause: ByClause?
     /// Optional to clause (ARO-0041) - for date ranges: `from <start> to <end>`
     public let toClause: (any Expression)?
+    /// Optional with clause (ARO-0042) - for set operations: `from <a> with <b>`
+    public let withClause: (any Expression)?
     /// Optional when condition (ARO-0004) - for guarded statements
     public let whenCondition: (any Expression)?
     public let span: SourceSpan
@@ -125,6 +127,7 @@ public struct AROStatement: Statement {
         whereClause: WhereClause? = nil,
         byClause: ByClause? = nil,
         toClause: (any Expression)? = nil,
+        withClause: (any Expression)? = nil,
         whenCondition: (any Expression)? = nil,
         span: SourceSpan
     ) {
@@ -137,6 +140,7 @@ public struct AROStatement: Statement {
         self.whereClause = whereClause
         self.byClause = byClause
         self.toClause = toClause
+        self.withClause = withClause
         self.whenCondition = whenCondition
         self.span = span
     }
@@ -236,6 +240,8 @@ public enum WhereOperator: String, Sendable, Equatable, CustomStringConvertible 
     case greaterEqual = ">="
     case contains = "contains"
     case matches = "matches"
+    case `in` = "in"          // ARO-0042: membership test
+    case notIn = "not in"     // ARO-0042: negative membership test
 
     public var description: String { rawValue }
 }

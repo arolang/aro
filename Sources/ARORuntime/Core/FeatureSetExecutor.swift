@@ -219,11 +219,14 @@ public final class FeatureSetExecutor: @unchecked Sendable {
                 let mergeVerbs: Set<String> = ["merge", "combine", "join", "concat"]
                 let computeVerbs: Set<String> = ["compute", "calculate", "derive"]
                 let extractVerbs: Set<String> = ["extract", "parse", "get"]
+                // Query actions always need execution for where clause processing
+                let queryVerbs: Set<String> = ["filter", "map", "reduce", "aggregate"]
                 // Response actions like write/read/store should NOT have their result bound to expression value
                 let responseVerbs: Set<String> = ["write", "read", "store", "save", "persist", "log", "print", "send", "emit"]
                 let needsExecution = testVerbs.contains(verb.lowercased()) ||
                     mergeVerbs.contains(verb.lowercased()) ||
                     responseVerbs.contains(verb.lowercased()) ||
+                    queryVerbs.contains(verb.lowercased()) ||
                     (updateVerbs.contains(verb.lowercased()) && !resultDescriptor.specifiers.isEmpty) ||
                     (createVerbs.contains(verb.lowercased()) && !resultDescriptor.specifiers.isEmpty) ||
                     (computeVerbs.contains(verb.lowercased()) && !resultDescriptor.specifiers.isEmpty) ||
@@ -299,6 +302,12 @@ public final class FeatureSetExecutor: @unchecked Sendable {
         if let toClause = statement.toClause {
             let toValue = try await expressionEvaluator.evaluate(toClause, context: context)
             context.bind("_to_", value: toValue)
+        }
+
+        // ARO-0042: Bind with clause if present (for set operations)
+        if let withClause = statement.withClause {
+            let withValue = try await expressionEvaluator.evaluate(withClause, context: context)
+            context.bind("_with_", value: withValue)
         }
 
         // Get action implementation
