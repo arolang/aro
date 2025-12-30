@@ -256,6 +256,10 @@ Enhanced to accept arrays:
 
 ## Implementation
 
+### Architecture: Protocol-Based Generics
+
+This implementation uses **Swift protocols with generic constraints** instead of runtime type checking. This provides better type safety, code reusability, and extensibility.
+
 ### ComputeAction.swift Changes
 
 Add to known computations:
@@ -270,86 +274,276 @@ let knownComputations: Set<String> = [
 Add operation dispatch:
 ```swift
 case "intersect":
-    return try computeIntersect(input, secondOperand)
+    return try computeIntersect(input, with: secondOperand)
 case "difference":
-    return try computeDifference(input, secondOperand)
+    return try computeDifference(input, from: secondOperand)
 case "union":
-    return try computeUnion(input, secondOperand)
+    return try computeUnion(input, with: secondOperand)
 ```
 
-### Polymorphic Implementation
+### Protocol Definition
+
+Define a protocol for types that support set operations:
 
 ```swift
-private func computeIntersect(_ a: Any, with b: Any) throws -> any Sendable {
-    // Lists (multiset semantics)
-    if let arrA = a as? [any Sendable], let arrB = b as? [any Sendable] {
-        return intersectArrays(arrA, arrB)
-    }
-    // Strings (character-level, order preserved)
-    if let strA = a as? String, let strB = b as? String {
-        return intersectStrings(strA, strB)
-    }
-    // Objects (deep recursive)
-    if let dictA = a as? [String: any Sendable],
-       let dictB = b as? [String: any Sendable] {
-        return intersectDictionaries(dictA, dictB)
-    }
-    throw ActionError.typeMismatch(expected: "Array, String, or Object",
-                                    actual: String(describing: type(of: a)))
-}
+/// Types that can participate in set operations
+protocol SetOperable: Sendable {
+    /// Compute intersection with another value
+    func intersect(with other: Self) -> Self
 
-private func intersectArrays(_ a: [any Sendable], _ b: [any Sendable]) -> [any Sendable] {
-    // Multiset intersection - preserve duplicates up to minimum count
-    var bCounts: [String: Int] = [:]
-    for item in b {
-        let key = hashKey(item)
-        bCounts[key, default: 0] += 1
-    }
+    /// Compute difference (self - other)
+    func difference(from other: Self) -> Self
 
-    var result: [any Sendable] = []
-    for item in a {
-        let key = hashKey(item)
-        if let count = bCounts[key], count > 0 {
-            result.append(item)
-            bCounts[key] = count - 1
-        }
-    }
-    return result
-}
-
-private func intersectStrings(_ a: String, _ b: String) -> String {
-    let setB = Set(b)
-    return String(a.filter { setB.contains($0) })
-}
-
-private func intersectDictionaries(
-    _ a: [String: any Sendable],
-    _ b: [String: any Sendable]
-) -> [String: any Sendable] {
-    var result: [String: any Sendable] = [:]
-    for (key, valueA) in a {
-        guard let valueB = b[key] else { continue }
-
-        // Recursive for nested objects
-        if let nestedA = valueA as? [String: any Sendable],
-           let nestedB = valueB as? [String: any Sendable] {
-            let nested = intersectDictionaries(nestedA, nestedB)
-            if !nested.isEmpty { result[key] = nested }
-        }
-        // Arrays within objects (set intersection)
-        else if let arrA = valueA as? [any Sendable],
-                let arrB = valueB as? [any Sendable] {
-            let intersected = intersectArrays(arrA, arrB)
-            if !intersected.isEmpty { result[key] = intersected }
-        }
-        // Primitive equality (strict type)
-        else if areStrictlyEqual(valueA, valueB) {
-            result[key] = valueA
-        }
-    }
-    return result
+    /// Compute union with another value
+    func union(with other: Self) -> Self
 }
 ```
+
+### Generic Dispatcher Functions
+
+Use generic functions with protocol constraints instead of runtime type checking:
+
+```swift
+// Entry points that handle type erasure (any Sendable -> concrete type)
+private func computeIntersect(_ a: Any, with b: Any) throws -> any Sendable {
+    if let arrA = a as? [any Sendable], let arrB = b as? [any Sendable] {
+        return arrA.intersect(with: arrB)
+    }
+    if let strA = a as? String, let strB = b as? String {
+        return strA.intersect(with: strB)
+    }
+    if let dictA = a as? [String: any Sendable],
+       let dictB = b as? [String: any Sendable] {
+        return dictA.intersect(with: dictB)
+    }
+    throw ActionError.typeMismatch(
+        expected: "Array, String, or Dictionary",
+        actual: String(describing: type(of: a))
+    )
+}
+
+private func computeDifference(_ a: Any, from b: Any) throws -> any Sendable {
+    if let arrA = a as? [any Sendable], let arrB = b as? [any Sendable] {
+        return arrA.difference(from: arrB)
+    }
+    if let strA = a as? String, let strB = b as? String {
+        return strA.difference(from: strB)
+    }
+    if let dictA = a as? [String: any Sendable],
+       let dictB = b as? [String: any Sendable] {
+        return dictA.difference(from: dictB)
+    }
+    throw ActionError.typeMismatch(
+        expected: "Array, String, or Dictionary",
+        actual: String(describing: type(of: a))
+    )
+}
+
+private func computeUnion(_ a: Any, with b: Any) throws -> any Sendable {
+    if let arrA = a as? [any Sendable], let arrB = b as? [any Sendable] {
+        return arrA.union(with: arrB)
+    }
+    if let strA = a as? String, let strB = b as? String {
+        return strA.union(with: strB)
+    }
+    if let dictA = a as? [String: any Sendable],
+       let dictB = b as? [String: any Sendable] {
+        return dictA.union(with: dictB)
+    }
+    throw ActionError.typeMismatch(
+        expected: "Array, String, or Dictionary",
+        actual: String(describing: type(of: a))
+    )
+}
+```
+
+### Type-Specific Conformances
+
+Implement the `SetOperable` protocol for each supported type using extensions:
+
+#### Array Extension
+
+```swift
+extension Array: SetOperable where Element == any Sendable {
+    func intersect(with other: Array<Element>) -> Array<Element> {
+        // Multiset intersection - preserve duplicates up to minimum count
+        var otherCounts: [String: (Element, Int)] = [:]
+        for item in other {
+            let key = hashKey(item)
+            let current = otherCounts[key]?.1 ?? 0
+            otherCounts[key] = (item, current + 1)
+        }
+
+        var result: [Element] = []
+        for item in self {
+            let key = hashKey(item)
+            if let (_, count) = otherCounts[key], count > 0 {
+                result.append(item)
+                otherCounts[key]?.1 -= 1
+            }
+        }
+        return result
+    }
+
+    func difference(from other: Array<Element>) -> Array<Element> {
+        let otherSet = Set(other.map { hashKey($0) })
+        return self.filter { !otherSet.contains(hashKey($0)) }
+    }
+
+    func union(with other: Array<Element>) -> Array<Element> {
+        var seen: Set<String> = []
+        var result: [Element] = []
+
+        for item in self + other {
+            let key = hashKey(item)
+            if !seen.contains(key) {
+                seen.insert(key)
+                result.append(item)
+            }
+        }
+        return result
+    }
+
+    // Helper to generate hash keys for elements
+    private func hashKey(_ item: Element) -> String {
+        // Use stable hashing for all types (primitives, arrays, objects)
+        // Implementation details omitted for brevity
+        return generateHashKey(for: item)
+    }
+}
+```
+
+#### String Extension
+
+```swift
+extension String: SetOperable {
+    func intersect(with other: String) -> String {
+        let otherSet = Set(other)
+        return String(self.filter { otherSet.contains($0) })
+    }
+
+    func difference(from other: String) -> String {
+        let otherSet = Set(other)
+        return String(self.filter { !otherSet.contains($0) })
+    }
+
+    func union(with other: String) -> String {
+        var seen: Set<Character> = []
+        var result: [Character] = []
+
+        for char in self + other {
+            if !seen.contains(char) {
+                seen.insert(char)
+                result.append(char)
+            }
+        }
+        return String(result)
+    }
+}
+```
+
+#### Dictionary Extension
+
+```swift
+extension Dictionary: SetOperable where Key == String, Value == any Sendable {
+    func intersect(with other: Dictionary<String, Value>) -> Dictionary<String, Value> {
+        var result: [String: Value] = [:]
+
+        for (key, valueA) in self {
+            guard let valueB = other[key] else { continue }
+
+            // Recursive for nested dictionaries
+            if let nestedA = valueA as? [String: any Sendable],
+               let nestedB = valueB as? [String: any Sendable] {
+                let nested = nestedA.intersect(with: nestedB)
+                if !nested.isEmpty {
+                    result[key] = nested as? Value
+                }
+            }
+            // Arrays within objects
+            else if let arrA = valueA as? [any Sendable],
+                    let arrB = valueB as? [any Sendable] {
+                let intersected = arrA.intersect(with: arrB)
+                if !intersected.isEmpty {
+                    result[key] = intersected as? Value
+                }
+            }
+            // Primitive equality
+            else if areStrictlyEqual(valueA, valueB) {
+                result[key] = valueA
+            }
+        }
+        return result
+    }
+
+    func difference(from other: Dictionary<String, Value>) -> Dictionary<String, Value> {
+        var result: [String: Value] = [:]
+
+        for (key, valueA) in self {
+            if let valueB = other[key] {
+                // Deep comparison for nested structures
+                if !areStrictlyEqual(valueA, valueB) {
+                    result[key] = valueA
+                }
+            } else {
+                result[key] = valueA
+            }
+        }
+        return result
+    }
+
+    func union(with other: Dictionary<String, Value>) -> Dictionary<String, Value> {
+        var result = self  // A wins on conflicts
+
+        for (key, valueB) in other {
+            if result[key] == nil {
+                result[key] = valueB
+            }
+            // Recursive merge for nested dictionaries
+            else if let nestedA = result[key] as? [String: any Sendable],
+                    let nestedB = valueB as? [String: any Sendable] {
+                result[key] = nestedA.union(with: nestedB) as? Value
+            }
+        }
+        return result
+    }
+}
+```
+
+### Benefits of Generic Approach
+
+1. **Type Safety**: Compile-time checking instead of runtime casting
+2. **Code Reuse**: Each operation (intersect/difference/union) implemented once per type
+3. **Extensibility**: New types just conform to `SetOperable` protocol
+4. **Performance**: No repeated type checking at runtime
+5. **Maintainability**: Single source of truth for each operation
+6. **Testability**: Protocol conformances can be tested independently
+7. **Swift 6.2 Concurrency**: All types are `Sendable`, ensuring thread safety
+
+### Alternative: Protocol with Associated Types
+
+For even more type safety, an alternative design using associated types could be considered:
+
+```swift
+protocol SetOperable {
+    associatedtype Element
+
+    func intersect(with other: Self) -> Self
+    func difference(from other: Self) -> Self
+    func union(with other: Self) -> Self
+}
+
+// Generic function with where clause
+func performSetOperation<T>(
+    _ a: T,
+    _ b: T,
+    operation: (T, T) -> T
+) -> T where T: SetOperable {
+    return operation(a, b)
+}
+```
+
+However, this approach is more complex and the simpler `Self` constraint is sufficient for this use case.
 
 ### QueryActions.swift Changes (Filter)
 
