@@ -136,9 +136,14 @@ struct EnvironmentSystemObjectTests {
     func testEnvironmentReadSpecific() async throws {
         let env = EnvironmentObject()
 
-        // Set a test environment variable
+        // Set a test environment variable (cross-platform)
+        #if os(Windows)
+        _putenv("ARO_TEST_VAR=test_value")
+        defer { _putenv("ARO_TEST_VAR=") }
+        #else
         setenv("ARO_TEST_VAR", "test_value", 1)
         defer { unsetenv("ARO_TEST_VAR") }
+        #endif
 
         let value = try await env.read(property: "ARO_TEST_VAR")
         #expect(value as? String == "test_value")
