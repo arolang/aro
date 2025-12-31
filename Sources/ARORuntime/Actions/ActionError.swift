@@ -17,6 +17,9 @@ public struct AROError: Error, Sendable {
     /// The feature set where the error occurred
     public let featureSet: String
 
+    /// The business activity this feature set belongs to
+    public let businessActivity: String
+
     /// The original statement text that failed
     public let statement: String
 
@@ -26,11 +29,13 @@ public struct AROError: Error, Sendable {
     public init(
         message: String,
         featureSet: String,
+        businessActivity: String,
         statement: String,
         resolvedValues: [String: String] = [:]
     ) {
         self.message = message
         self.featureSet = featureSet
+        self.businessActivity = businessActivity
         self.statement = statement
         self.resolvedValues = resolvedValues
     }
@@ -51,6 +56,7 @@ public struct AROError: Error, Sendable {
         object: String,
         condition: String? = nil,
         featureSet: String,
+        businessActivity: String,
         resolvedValues: [String: String] = [:]
     ) -> AROError {
         var msg = "Cannot \(verb.lowercased()) the \(result) \(preposition) the \(object)"
@@ -68,6 +74,7 @@ public struct AROError: Error, Sendable {
         return AROError(
             message: finalMsg,
             featureSet: featureSet,
+            businessActivity: businessActivity,
             statement: "<\(verb)> the <\(result)> \(preposition) the <\(object)>\(condition.map { " \($0)" } ?? "").",
             resolvedValues: resolvedValues
         )
@@ -76,7 +83,12 @@ public struct AROError: Error, Sendable {
 
 extension AROError: CustomStringConvertible {
     public var description: String {
-        "[\(featureSet)] \(message)"
+        """
+        Runtime Error: \(message)
+          Feature: \(featureSet)
+          Business Activity: \(businessActivity)
+          Statement: \(statement)
+        """
     }
 }
 
