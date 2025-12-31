@@ -287,9 +287,9 @@ struct IntegrationTests {
         (User Authentication: Security Access Control) {
             <Extract> the <user: identifier> from the <incoming-request: parameters>.
             <Parse> the <signed: checksum> from the <request: headers>.
-            <Retrieve> the <user: record> from the <user: repository>.
+            <Retrieve> the <user-record: record> from the <user: repository>.
             <Compute> the <password: hash> for the <user: credentials>.
-            <Compare> the <signed: checksum> against the <computed: password-hash>.
+            <Compare> the <comparison: result> against the <computed: password-hash>.
             <Validate> the <authentication: result> for the <user: request>.
             <Return> an <OK: status> for the <valid: authentication>.
             <Publish> as <authenticated-user> <user>.

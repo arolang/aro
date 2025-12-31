@@ -33,14 +33,15 @@
     <Extract> the <user-id> from the <pathParameters: id>.
     <Extract> the <update-data> from the <request: body>.
 
-    <Retrieve> the <existing-user> from the <user-repository> where <id> is <user-id>.
-    <Merge> the <existing-user> with <update-data>.
-    <Store> the <existing-user> into the <user-repository>.
+    (* TODO: Merge existing user with update-data *)
+    (* MergeAction needs redesign for immutability - currently uses mutation pattern *)
+    (* For now, just store the update-data as the new user *)
+    <Store> the <update-data> into the <user-repository>.
 
     (* Emit update event *)
-    <Emit> a <UserUpdated: event> with <existing-user>.
+    <Emit> a <UserUpdated: event> with <update-data>.
 
-    <Return> an <OK: status> with <existing-user>.
+    <Return> an <OK: status> with <update-data>.
 }
 
 (* Delete user - matches operationId: deleteUser *)

@@ -121,7 +121,7 @@ struct CompilerPipelineTests {
         let source = """
         (Test: Testing) {
             <Extract> the <user> from the <request>.
-            <Validate> the <user> against the <schema>.
+            <Validate> the <user-validated> against the <schema>.
             <Return> the <response> for the <success>.
         }
         """
@@ -408,7 +408,7 @@ struct FullPipelineIntegrationTests {
 
         (Create User: User Creation) {
             <Extract> the <user-data> from the <request: body>.
-            <Validate> the <user-data> against the <user-schema>.
+            <Validate> the <user-data-validated> against the <user-schema>.
             <Store> the <user> into the <user-repository>.
             <Return> a <Created: status> with <user>.
         }
@@ -459,7 +459,7 @@ struct FullPipelineIntegrationTests {
         (Test: Testing) {
             <Extract> the <input> from the <request>.
             <Parse> the <json> from the <input>.
-            <Validate> the <json> against the <schema>.
+            <Validate> the <json-validated> against the <schema>.
             <Transform> the <data> into the <output>.
             <Return> the <response> for the <success>.
         }

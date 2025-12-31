@@ -923,7 +923,9 @@ public struct UpdateAction: ActionImplementation {
             // Update the field
             updatedEntity[fieldName] = updateValue
 
-            // Bind the updated entity back
+            // Bind the updated entity
+            // Note: With immutability, this will fail if result.base already exists
+            // The semantic analyzer should catch duplicate bindings
             context.bind(result.base, value: updatedEntity)
             return updatedEntity
         }

@@ -847,10 +847,12 @@ struct UpdateActionTests {
     func testUpdateField() async throws {
         let action = UpdateAction()
         let context = RuntimeContext(featureSetName: "Test")
-        context.bind("entity", value: ["name": "John", "status": "active"] as [String: any Sendable])
+        // UpdateAction reads from result.base and writes back to it (mutation pattern)
+        // With immutability, use framework variable (_entity) which can be rebound
+        context.bind("_entity", value: ["name": "John", "status": "active"] as [String: any Sendable])
         context.bind("newStatus", value: "inactive")
 
-        let (result, object) = createDescriptors(resultBase: "entity", resultSpecifiers: ["status"], objectBase: "newStatus")
+        let (result, object) = createDescriptors(resultBase: "_entity", resultSpecifiers: ["status"], objectBase: "newStatus")
         let value = try await action.execute(result: result, object: object, context: context)
 
         let dict = value as? [String: any Sendable]
@@ -941,10 +943,11 @@ struct MergeActionTests {
     func testMergeDictionaries() async throws {
         let action = MergeAction()
         let context = RuntimeContext(featureSetName: "Test")
-        context.bind("base", value: ["a": 1] as [String: any Sendable])
+        // Use framework variable (_base) which can be rebound
+        context.bind("_base", value: ["a": 1] as [String: any Sendable])
         context.bind("extra", value: ["b": 2] as [String: any Sendable])
 
-        let (result, object) = createDescriptors(resultBase: "base", objectBase: "extra")
+        let (result, object) = createDescriptors(resultBase: "_base", objectBase: "extra")
         let value = try await action.execute(result: result, object: object, context: context)
 
         let dict = value as? [String: any Sendable]
@@ -956,10 +959,11 @@ struct MergeActionTests {
     func testMergeStrings() async throws {
         let action = MergeAction()
         let context = RuntimeContext(featureSetName: "Test")
-        context.bind("first", value: "Hello, ")
+        // Use framework variable (_first) which can be rebound
+        context.bind("_first", value: "Hello, ")
         context.bind("second", value: "World!")
 
-        let (result, object) = createDescriptors(resultBase: "first", objectBase: "second")
+        let (result, object) = createDescriptors(resultBase: "_first", objectBase: "second")
         let value = try await action.execute(result: result, object: object, context: context)
 
         #expect(value as? String == "Hello, World!")
