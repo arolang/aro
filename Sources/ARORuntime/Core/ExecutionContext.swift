@@ -191,6 +191,9 @@ public protocol ExecutionContext: AnyObject, Sendable {
 
     // MARK: - Event Emission
 
+    /// Access to the event bus for direct event operations
+    var eventBus: EventBus? { get }
+
     /// Emit an event to the event bus
     /// - Parameter event: The event to emit
     func emit(_ event: any RuntimeEvent)

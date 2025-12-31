@@ -826,8 +826,14 @@ public struct EmitAction: ActionImplementation {
 
         print("[EmitAction] Emitting domain event: \(eventType) with payload: \(payload)")
 
-        // Emit to event bus
-        context.emit(event)
+        // Emit to event bus and wait for handlers to complete
+        // This ensures event handlers finish before continuing
+        if let eventBus = context.eventBus {
+            await eventBus.publishAndTrack(event)
+        } else {
+            // Fallback to fire-and-forget if no event bus
+            context.emit(event)
+        }
 
         return EmitResult(eventType: eventType, success: true)
     }
