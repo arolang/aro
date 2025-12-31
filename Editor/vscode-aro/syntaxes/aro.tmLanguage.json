@@ -70,48 +70,61 @@
     "actions": {
       "patterns": [
         {
-          "name": "keyword.control.action.request.aro",
-          "match": "<(Extract|Parse|Retrieve|Fetch|Accept)>"
+          "name": "support.function.action.compute.aro",
+          "match": "<(Compute)>",
+          "comment": "Compute action - very prominent/markant"
         },
         {
-          "name": "keyword.control.action.own.aro",
-          "match": "<(Create|Compute|Validate|Compare|Transform|Set|Merge)>"
+          "name": "entity.name.function.action.request.aro",
+          "match": "<(Extract|Parse|Retrieve|Fetch|Accept)>",
+          "comment": "Request actions - bright color"
         },
         {
-          "name": "keyword.control.action.response.aro",
-          "match": "<(Return|Throw|Send|Log|Store|Write|Emit)>"
+          "name": "entity.name.function.action.own.aro",
+          "match": "<(Create|Validate|Compare|Transform|Set|Merge)>",
+          "comment": "Own actions - bright color"
         },
         {
-          "name": "keyword.control.action.test.aro",
-          "match": "<(Given|When|Then|Assert)>"
+          "name": "entity.name.function.action.response.aro",
+          "match": "<(Return|Throw|Send|Log|Store|Write|Emit)>",
+          "comment": "Response actions - bright color"
         },
         {
-          "name": "keyword.control.action.lifecycle.aro",
-          "match": "<(Start|Stop|Keepalive|Watch)>"
+          "name": "entity.name.function.action.test.aro",
+          "match": "<(Given|When|Then|Assert)>",
+          "comment": "Test actions - bright color"
+        },
+        {
+          "name": "entity.name.function.action.lifecycle.aro",
+          "match": "<(Start|Stop|Keepalive|Watch)>",
+          "comment": "Lifecycle actions - bright color"
         }
       ]
     },
     "results": {
       "patterns": [
         {
-          "name": "variable.other.result.aro",
-          "match": "<([a-zA-Z][a-zA-Z0-9-]*)(?::\\s*([a-zA-Z][a-zA-Z0-9-]*))?>"
+          "name": "variable.parameter.result.aro",
+          "match": "<([a-zA-Z][a-zA-Z0-9-]*)(?::\\s*([a-zA-Z][a-zA-Z0-9-]*))?>",
+          "comment": "Results - bright color"
         }
       ]
     },
     "objects": {
       "patterns": [
         {
-          "name": "variable.other.object.aro",
-          "match": "(?<=from|to|with|for|into|on)\\s+(?:the|a|an)?\\s*<([^>]+)>"
+          "name": "entity.other.attribute-name.object.aro",
+          "match": "(?<=from|to|with|for|into|on)\\s+(?:the|a|an)?\\s*<([^>]+)>",
+          "comment": "Objects - bright color"
         }
       ]
     },
     "prepositions": {
       "patterns": [
         {
-          "name": "keyword.other.preposition.aro",
-          "match": "\\b(from|to|with|for|into|on|where)\\b"
+          "name": "storage.modifier.preposition.aro",
+          "match": "\\b(from|to|with|for|into|on|where)\\b",
+          "comment": "Prepositions - darker color"
         }
       ]
     },

@@ -64,6 +64,89 @@
           "description": "Enable debug logging for the language server"
         }
       }
+    },
+    "commands": [
+      {
+        "command": "aro.openSettings",
+        "title": "ARO: Open Settings",
+        "category": "ARO"
+      },
+      {
+        "command": "aro.configureLspPath",
+        "title": "ARO: Configure Language Server Path",
+        "category": "ARO"
+      }
+    ],
+    "configurationDefaults": {
+      "editor.tokenColorCustomizations": {
+        "[*]": {
+          "textMateRules": [
+            {
+              "scope": "support.function.action.compute.aro",
+              "settings": {
+                "foreground": "#DAA520",
+                "fontStyle": "bold"
+              }
+            },
+            {
+              "scope": "entity.name.function.action.request.aro",
+              "settings": {
+                "foreground": "#4169E1",
+                "fontStyle": "bold"
+              }
+            },
+            {
+              "scope": "entity.name.function.action.own.aro",
+              "settings": {
+                "foreground": "#4169E1",
+                "fontStyle": "bold"
+              }
+            },
+            {
+              "scope": "entity.name.function.action.response.aro",
+              "settings": {
+                "foreground": "#4169E1",
+                "fontStyle": "bold"
+              }
+            },
+            {
+              "scope": "entity.name.function.action.test.aro",
+              "settings": {
+                "foreground": "#4169E1",
+                "fontStyle": "bold"
+              }
+            },
+            {
+              "scope": "entity.name.function.action.lifecycle.aro",
+              "settings": {
+                "foreground": "#4169E1",
+                "fontStyle": "bold"
+              }
+            },
+            {
+              "scope": "variable.parameter.result.aro",
+              "settings": {
+                "foreground": "#00FF00",
+                "fontStyle": "bold"
+              }
+            },
+            {
+              "scope": "entity.other.attribute-name.object.aro",
+              "settings": {
+                "foreground": "#FF0000",
+                "fontStyle": "bold"
+              }
+            },
+            {
+              "scope": "storage.modifier.preposition.aro",
+              "settings": {
+                "foreground": "#FF69B4",
+                "fontStyle": "bold"
+              }
+            }
+          ]
+        }
+      }
     }
   },
   "main": "./out/extension.js",
