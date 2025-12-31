@@ -61,7 +61,7 @@ Runtime Error: Cannot retrieve the user from the user-repository where id = 530
 
 **When pathParameters does not contain id:**
 ```
-Runtime Error: Cannot extract the id from the pathParameters
+Runtime Error: Cannot extract the id from the pathParameters: id
   Feature: getUser
   Business Activity: User API
   Statement: <Extract> the <id> from the <pathParameters: id>
