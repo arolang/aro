@@ -54,7 +54,24 @@ struct ComputeActionTests {
         let (result, object) = createDescriptors(resultBase: "hash", resultSpecifiers: ["hash"], objectBase: "password")
         let value = try await action.execute(result: result, object: object, context: context)
 
-        #expect(value as? Int != nil)
+        // SHA256 returns a 64-character hex string
+        let hashString = value as? String
+        #expect(hashString != nil)
+        #expect(hashString?.count == 64)
+        #expect(hashString?.allSatisfy { $0.isHexDigit } == true)
+    }
+
+    @Test("Compute SHA256 produces correct hash")
+    func testComputeSHA256KnownValue() async throws {
+        let action = ComputeAction()
+        let context = RuntimeContext(featureSetName: "Test")
+        context.bind("input", value: "hello")
+
+        let (result, object) = createDescriptors(resultBase: "hash", resultSpecifiers: ["hash"], objectBase: "input")
+        let value = try await action.execute(result: result, object: object, context: context)
+
+        // Known SHA256 hash of "hello"
+        #expect(value as? String == "2cf24dba5fb0a30e26e83b2ac5b9e29e1b161e5c1fa7425e73043362938b9824")
     }
 
     @Test("Compute length of string")

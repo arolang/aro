@@ -365,6 +365,7 @@ public final class FeatureSetExecutor: @unchecked Sendable {
                 object: objectDescriptor.fullName,
                 condition: statement.whenCondition != nil ? "when <condition>" : nil,
                 featureSet: context.featureSetName,
+                businessActivity: context.businessActivity,
                 resolvedValues: gatherResolvedValues(for: statement, context: context)
             )
             throw ActionError.statementFailed(aroError)

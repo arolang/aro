@@ -1,0 +1,23 @@
+(* Hash Test - Verify SHA256 implementation *)
+
+(Application-Start: Hash Test) {
+    (* Test basic string hashing *)
+    <Compute> the <hash1: hash> from "hello".
+    <Create> the <msg1> with "SHA256 of 'hello': ".
+    <Log> the <msg> for the <console> with <msg1>.
+    <Log> the <msg> for the <console> with <hash1>.
+
+    (* Test password hashing *)
+    <Compute> the <password-hash: hash> from "mySecretPassword123".
+    <Create> the <msg2> with "SHA256 of 'mySecretPassword123': ".
+    <Log> the <msg> for the <console> with <msg2>.
+    <Log> the <msg> for the <console> with <password-hash>.
+
+    (* Test that same input produces same hash *)
+    <Compute> the <hash2: hash> from "hello".
+    <Create> the <msg3> with "Second hash of 'hello' (should match): ".
+    <Log> the <msg> for the <console> with <msg3>.
+    <Log> the <msg> for the <console> with <hash2>.
+
+    <Return> an <OK: status> for the <test>.
+}

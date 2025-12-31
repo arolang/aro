@@ -69,6 +69,8 @@ let package = Package(
         .package(url: "https://github.com/apple/swift-argument-parser.git", from: "1.3.0"),
         // Yams for YAML parsing (OpenAPI contracts)
         .package(url: "https://github.com/jpsim/Yams.git", from: "6.2.0"),
+        // Swift Crypto for cryptographic operations (SHA256, etc.)
+        .package(url: "https://github.com/apple/swift-crypto.git", from: "4.0.0"),
     ],
     targets: [
         // Core parser library
@@ -82,6 +84,7 @@ let package = Package(
             dependencies: [
                 "AROParser",
                 .product(name: "Yams", package: "Yams"),
+                .product(name: "Crypto", package: "swift-crypto"),
             ] + runtimePlatformDependencies,
             path: "Sources/ARORuntime"
         ),

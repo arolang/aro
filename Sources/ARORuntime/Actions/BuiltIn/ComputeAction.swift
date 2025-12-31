@@ -5,6 +5,7 @@
 
 import Foundation
 import AROParser
+import Crypto
 
 // MARK: - Helper Functions
 
@@ -90,10 +91,20 @@ public struct ComputeAction: ActionImplementation {
         // Built-in computations
         switch computationName.lowercased() {
         case "hash":
+            // Use SHA256 for cryptographically secure hashing
+            let stringToHash: String
             if let str = input as? String {
-                return str.hashValue
+                stringToHash = str
+            } else {
+                stringToHash = String(describing: input)
             }
-            return String(describing: input).hashValue
+
+            guard let data = stringToHash.data(using: .utf8) else {
+                throw ActionError.runtimeError("Failed to encode string as UTF-8")
+            }
+
+            let hash = SHA256.hash(data: data)
+            return hash.compactMap { String(format: "%02x", $0) }.joined()
 
         case "length", "count":
             if let str = input as? String {

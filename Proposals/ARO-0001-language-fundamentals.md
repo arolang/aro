@@ -832,7 +832,7 @@ Legacy syntax continues to work when the base identifier matches a known operati
 
 | Action | Operations |
 |--------|------------|
-| Compute | `hash`, `length`, `count`, `uppercase`, `lowercase` |
+| Compute | `hash` (SHA256 - for checksums/data integrity only), `length`, `count`, `uppercase`, `lowercase` |
 | Validate | `required`, `exists`, `nonempty`, `email`, `numeric` |
 | Transform | `string`, `int`, `double`, `bool`, `json` |
 | Sort | `ascending`, `descending` |
@@ -846,47 +846,56 @@ Legacy syntax continues to work when the base identifier matches a known operati
 | `<Compute> the <upper-name: uppercase> from <name>.` | upper-name | uppercase |
 | `<Validate> the <email-valid: email> for <input>.` | email-valid | email |
 
+### Security Note: Hash Operation
+
+⚠️ **WARNING**: The `hash` operation uses SHA256, which is suitable for:
+- ✅ Checksums and data integrity verification
+- ✅ Deterministic content hashing
+- ✅ Non-security-critical hashing
+
+**NOT suitable for:**
+- ❌ Password storage (use PBKDF2, bcrypt, or Argon2 instead)
+- ❌ Cryptographic signatures (use HMAC or digital signatures)
+
+SHA256 without salt and key stretching is vulnerable to rainbow table and brute force attacks when used for passwords.
+
 ---
 
 ## Complete Example
 
 ```aro
 (*
- * User Authentication Example
+ * File Integrity Verification Example
  * Demonstrates core ARO syntax and features
  *)
 
-(User Authentication: Security) {
-    // Extract credentials from request
-    <Extract> the <username> from the <request: body username>.
-    <Extract> the <password> from the <request: body password>.
+(File Integrity Verification: Security) {
+    // Extract file content and expected checksum from request
+    <Extract> the <content> from the <request: body content>.
+    <Extract> the <expected-checksum> from the <request: body checksum>.
 
-    // Retrieve user from repository
-    <Retrieve> the <user> from the <user-repository> where username = <username>.
+    // Compute file checksum for integrity verification
+    <Compute> the <actual-checksum: hash> from the <content>.
 
-    // Compute password hash with qualifier-as-name
-    <Compute> the <input-hash: hash> from the <password>.
-    <Compute> the <stored-hash: hash> from the <user: password>.
-
-    // Compare hashes
-    <Compare> the <input-hash> against the <stored-hash>.
+    // Compare checksums
+    <Compare> the <actual-checksum> against the <expected-checksum>.
 
     // Validate and respond
-    <Validate> the <authentication> for the <comparison>.
-    <Return> an <OK: status> for the <authentication>.
+    <Validate> the <integrity> for the <comparison>.
+    <Return> an <OK: status> for the <integrity>.
 
-    // Publish for other feature sets
-    <Publish> as <authenticated-user> <user>.
+    // Publish verification result for other feature sets
+    <Publish> as <verified-content> <content>.
 }
 
-(Profile Retrieval: Security) {
+(Content Processing: Security) {
     // Access published variable from same business activity
-    <Retrieve> the <profile> for the <authenticated-user>.
-    <Return> an <OK: status> with <profile>.
+    <Transform> the <processed-data: uppercase> from the <verified-content>.
+    <Return> an <OK: status> with <processed-data>.
 }
 
 (Audit Logging: Security) {
-    <Log> "User authenticated" to the <console>.
+    <Log> "File integrity verified" to the <console>.
     <Store> the <audit-record> into the <audit-repository>.
 }
 ```
