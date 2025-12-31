@@ -7,6 +7,8 @@ import {
 } from 'vscode-languageclient/node';
 import { execFile } from 'child_process';
 import { promisify } from 'util';
+import { realpath, access, constants } from 'fs/promises';
+import { basename } from 'path';
 
 const execFileAsync = promisify(execFile);
 const VALIDATION_TIMEOUT_MS = 5000;
@@ -148,6 +150,30 @@ async function validateAroPath(path: string): Promise<boolean> {
         // Security: Check for suspicious characters that could indicate command injection
         if (SUSPICIOUS_CHARS.test(path)) {
             console.error(`ARO validation failed: Suspicious characters in path ${path}`);
+            return false;
+        }
+
+        // Security: Prevent path traversal attacks
+        if (path.includes('..')) {
+            console.error(`ARO validation failed: Path traversal not allowed in ${path}`);
+            return false;
+        }
+
+        // Security: Resolve to canonical path to prevent path traversal
+        try {
+            const canonicalPath = await realpath(path);
+            const pathBasename = basename(path);
+
+            // Ensure the canonical path is what we expect (no traversal occurred)
+            if (!canonicalPath.endsWith(pathBasename)) {
+                console.error(`ARO validation failed: Potential path traversal detected in ${path}`);
+                return false;
+            }
+
+            // Verify file exists and is executable
+            await access(canonicalPath, constants.X_OK);
+        } catch (error: any) {
+            console.error(`ARO validation failed: Invalid path ${path}: ${error.message}`);
             return false;
         }
 

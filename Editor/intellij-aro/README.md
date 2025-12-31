@@ -129,10 +129,28 @@ If you installed ARO in a custom location:
 
 **Path validation**
 
-The plugin validates paths by running `aro --version`. Ensure:
-- The file exists and is executable
-- The file is the ARO CLI (not a different binary)
-- You have permission to execute the file
+The plugin validates paths asynchronously by running `aro --version`. Features:
+- **Async validation**: Validation runs in the background without blocking the UI
+- **Validation button**: Click "Validate Path" to test your configured binary
+- **Result caching**: Validation results are cached to avoid repeated checks
+- **Visual feedback**: Green checkmark (✓) for valid paths, red X (✗) for errors
+
+Ensure your binary:
+- Exists and is executable
+- Is the ARO CLI (not a different binary)
+- Outputs "aro version X.Y.Z" format when run with `--version`
+- You have permission to execute it
+
+### Security
+
+The plugin validates paths before executing them to ensure security:
+- **Command injection prevention**: Paths with suspicious characters (`;`, `|`, `` ` ``, `$`, `<`, `>`) are rejected
+- **Path traversal protection**: Paths containing `..` are rejected to prevent directory traversal attacks
+- **Canonical path verification**: Paths are resolved to their canonical form to detect traversal attempts
+- **Version validation**: Only binaries that output "aro version X.Y.Z" are accepted
+- **Executable verification**: Files must exist, be executable, and not be symbolic links to unintended targets
+
+**Important**: Only configure paths to trusted ARO binaries. The plugin executes the binary to validate it.
 
 **Debug logging**
 

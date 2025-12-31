@@ -158,6 +158,16 @@ The extension validates the path by running `aro --version`. Ensure:
 - The file is the ARO CLI (not a different binary)
 - You have permission to execute the file
 
+### Security
+
+The extension validates paths before executing them to ensure security:
+- **Command injection prevention**: Paths with suspicious characters (`;`, `|`, `` ` ``, `$`, `<`, `>`) are rejected
+- **Path traversal protection**: Paths containing `..` are rejected to prevent directory traversal attacks
+- **Version validation**: Only binaries that output "aro version X.Y.Z" are accepted
+- **Executable verification**: Files must have execute permissions
+
+**Important**: Only configure paths to trusted ARO binaries. The extension executes the binary to validate it.
+
 ---
 
 ## Installation
