@@ -20,7 +20,7 @@ import NIO
 // MARK: - Runtime Handle
 
 /// Opaque runtime handle for C interop
-final class AROCRuntimeHandle {
+final class AROCRuntimeHandle: @unchecked Sendable {
     let runtime: Runtime
     var contexts: [UnsafeMutableRawPointer: AROCContextHandle] = [:]
 
@@ -51,7 +51,12 @@ final class AROCContextHandle {
 
     init(runtime: AROCRuntimeHandle, featureSetName: String) {
         self.runtime = runtime
-        self.context = RuntimeContext(featureSetName: featureSetName, isCompiled: true)
+        // CRITICAL: Pass the eventBus from runtime to enable event emission in compiled binaries
+        self.context = RuntimeContext(
+            featureSetName: featureSetName,
+            eventBus: runtime.runtime.eventBus,
+            isCompiled: true
+        )
     }
 }
 
@@ -65,6 +70,9 @@ private let handleLock = NSLock()
 /// Global runtime pointer for use by services (HTTP server, etc.)
 /// Set during aro_runtime_init(), cleared during aro_runtime_shutdown()
 nonisolated(unsafe) public var globalRuntimePtr: UnsafeMutableRawPointer?
+
+/// Global registry for compiled handler function names: eventType -> [handlerFunctionName]
+nonisolated(unsafe) private var compiledHandlerRegistry: [String: [String]] = [:]
 
 // MARK: - Runtime Lifecycle
 
@@ -105,6 +113,104 @@ public func aro_runtime_shutdown(_ runtimePtr: UnsafeMutableRawPointer?) {
     handleLock.unlock()
 
     Unmanaged<AROCRuntimeHandle>.fromOpaque(ptr).release()
+}
+
+/// Wait for all in-flight event handlers to complete
+/// - Parameters:
+///   - runtimePtr: Runtime handle from aro_runtime_init
+///   - timeout: Maximum time to wait in seconds (default: 10.0)
+/// - Returns: 1 if all handlers completed, 0 if timeout occurred
+@_cdecl("aro_runtime_await_pending_events")
+public func aro_runtime_await_pending_events(_ runtimePtr: UnsafeMutableRawPointer?, _ timeout: Double) -> Int32 {
+    guard let ptr = runtimePtr else { return 0 }
+
+    let runtimeHandle = Unmanaged<AROCRuntimeHandle>.fromOpaque(ptr).takeUnretainedValue()
+
+    // Use a thread-safe box to pass the result between async and sync contexts
+    final class ResultBox: @unchecked Sendable {
+        var completed: Bool = false
+        let lock = NSLock()
+
+        func set(_ value: Bool) {
+            lock.lock()
+            completed = value
+            lock.unlock()
+        }
+
+        func get() -> Bool {
+            lock.lock()
+            defer { lock.unlock() }
+            return completed
+        }
+    }
+
+    let resultBox = ResultBox()
+    let semaphore = DispatchSemaphore(value: 0)
+
+    Task { @Sendable in
+        let result = await runtimeHandle.runtime.awaitPendingEvents(timeout: timeout)
+        resultBox.set(result)
+        semaphore.signal()
+    }
+
+    semaphore.wait()
+    return resultBox.get() ? 1 : 0
+}
+
+/// Register a compiled event handler
+/// - Parameters:
+///   - runtimePtr: Runtime handle from aro_runtime_init
+///   - eventType: Event type name (C string)
+///   - handlerFuncName: Name of the compiled handler function (C string)
+@_cdecl("aro_runtime_register_handler")
+public func aro_runtime_register_handler(
+    _ runtimePtr: UnsafeMutableRawPointer?,
+    _ eventType: UnsafePointer<CChar>?,
+    _ handlerFuncName: UnsafeMutableRawPointer?
+) {
+    guard let ptr = runtimePtr else { return }
+    guard let eventTypeStr = eventType.map({ String(cString: $0) }) else { return }
+    guard let handlerPtr = handlerFuncName else { return }
+
+    let runtimeHandle = Unmanaged<AROCRuntimeHandle>.fromOpaque(ptr).takeUnretainedValue()
+
+    // Capture handler pointer as Int (Sendable) for use in closure
+    let handlerAddress = Int(bitPattern: handlerPtr)
+
+    // Register the handler with the runtime
+    // The handler function pointer will be called when events of this type are emitted
+    runtimeHandle.runtime.registerCompiledHandler(
+        eventType: eventTypeStr,
+        handlerName: "compiled_handler"
+    ) { @Sendable event in
+        // Create a context for the handler
+        let contextHandle = AROCContextHandle(runtime: runtimeHandle, featureSetName: "handler")
+
+        // Bind event payload to context
+        contextHandle.context.bind("event", value: event.payload)
+        for (key, value) in event.payload {
+            contextHandle.context.bind("event:\(key)", value: value)
+        }
+
+        // Get the context pointer
+        let contextPtr = Unmanaged.passRetained(contextHandle).toOpaque()
+
+        // Call the compiled handler function
+        // The function signature is: ptr function(ptr context)
+        // Convert Int back to pointer inside closure
+        let handlerPtrReconstructed = UnsafeMutableRawPointer(bitPattern: handlerAddress)!
+        typealias HandlerFunc = @convention(c) (UnsafeMutableRawPointer?) -> UnsafeMutableRawPointer?
+        let handlerFunc = unsafeBitCast(handlerPtrReconstructed, to: HandlerFunc.self)
+        let result = handlerFunc(contextPtr)
+
+        // Clean up result if needed
+        if let resultPtr = result {
+            aro_value_free(resultPtr)
+        }
+
+        // Clean up context
+        Unmanaged<AROCContextHandle>.fromOpaque(contextPtr).release()
+    }
 }
 
 // MARK: - Context Management

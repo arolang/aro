@@ -111,6 +111,14 @@ public final class ExecutionEngine: @unchecked Sendable {
 
         do {
             let response = try await executor.execute(entryFeatureSet, context: context)
+
+            // CRITICAL: Wait for all in-flight event handlers to complete
+            // This ensures events emitted during Application-Start finish executing
+            let completed = await eventBus.awaitPendingEvents(timeout: 10.0)
+            if !completed {
+                print("[WARNING] Some event handlers did not complete within timeout")
+            }
+
             return response
         } catch {
             eventBus.publish(ErrorOccurredEvent(

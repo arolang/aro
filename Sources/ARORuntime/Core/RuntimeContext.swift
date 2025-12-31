@@ -28,7 +28,7 @@ public final class RuntimeContext: ExecutionContext, @unchecked Sendable {
     private var _response: Response?
 
     /// Event bus for event emission
-    private let eventBus: EventBus?
+    public let eventBus: EventBus?
 
     /// Wait state flag
     private var _isWaiting: Bool = false

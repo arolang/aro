@@ -30,6 +30,12 @@ public final class EventBus: @unchecked Sendable {
     /// Async stream continuations for stream-based subscriptions
     private var continuations: [UUID: AsyncStream<any RuntimeEvent>.Continuation] = [:]
 
+    /// In-flight event handler counter
+    private var inFlightHandlers: Int = 0
+
+    /// Continuations waiting for all handlers to complete
+    private var flushContinuations: [CheckedContinuation<Void, Never>] = []
+
     /// Shared instance
     public static let shared = EventBus()
 
@@ -99,6 +105,91 @@ public final class EventBus: @unchecked Sendable {
                     await subscription.handler(event)
                 }
             }
+        }
+    }
+
+    /// Publish an event, wait for handlers to complete, and track in-flight status
+    /// This is used by EmitAction to ensure proper event sequencing
+    public func publishAndTrack(_ event: any RuntimeEvent) async {
+        let eventType = type(of: event).eventType
+        let matchingSubscriptions = getMatchingSubscriptions(for: eventType)
+
+        // Increment in-flight counter
+        withLock {
+            inFlightHandlers += matchingSubscriptions.count
+        }
+
+        // Execute all handlers and wait for completion
+        await withTaskGroup(of: Void.self) { group in
+            for subscription in matchingSubscriptions {
+                group.addTask {
+                    await subscription.handler(event)
+
+                    // Decrement counter when handler completes
+                    let continuationsToResume = self.withLock { () -> [CheckedContinuation<Void, Never>] in
+                        self.inFlightHandlers -= 1
+                        let shouldNotify = self.inFlightHandlers == 0
+                        if shouldNotify {
+                            let continuations = self.flushContinuations
+                            self.flushContinuations.removeAll()
+                            return continuations
+                        }
+                        return []
+                    }
+
+                    // Resume any waiting flush operations
+                    for continuation in continuationsToResume {
+                        continuation.resume()
+                    }
+                }
+            }
+        }
+    }
+
+    /// Wait for all in-flight event handlers to complete
+    /// - Parameter timeout: Maximum time to wait in seconds (default: 10.0)
+    /// - Returns: true if all handlers completed, false if timeout occurred
+    @discardableResult
+    public func awaitPendingEvents(timeout: TimeInterval = 10.0) async -> Bool {
+        // Quick check - no handlers in flight
+        let count = withLock { inFlightHandlers }
+
+        if count == 0 {
+            return true
+        }
+
+        // Wait with timeout
+        return await withTaskGroup(of: Bool.self) { group in
+            // Task 1: Wait for handlers to complete
+            group.addTask {
+                await withCheckedContinuation { (continuation: CheckedContinuation<Void, Never>) in
+                    let shouldWait = self.withLock { () -> Bool in
+                        if self.inFlightHandlers == 0 {
+                            return false
+                        } else {
+                            self.flushContinuations.append(continuation)
+                            return true
+                        }
+                    }
+                    if !shouldWait {
+                        continuation.resume()
+                    }
+                }
+                return true
+            }
+
+            // Task 2: Timeout
+            group.addTask {
+                try? await Task.sleep(nanoseconds: UInt64(timeout * 1_000_000_000))
+                return false
+            }
+
+            // Return first result (completion or timeout)
+            if let result = await group.next() {
+                group.cancelAll()
+                return result
+            }
+            return false
         }
     }
 

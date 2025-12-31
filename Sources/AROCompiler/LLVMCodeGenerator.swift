@@ -99,6 +99,8 @@ public final class LLVMCodeGenerator {
         emit("; Runtime lifecycle")
         emit("declare ptr @aro_runtime_init()")
         emit("declare void @aro_runtime_shutdown(ptr)")
+        emit("declare i32 @aro_runtime_await_pending_events(ptr, double)")
+        emit("declare void @aro_runtime_register_handler(ptr, ptr, ptr)")
         emit("declare ptr @aro_context_create(ptr)")
         emit("declare ptr @aro_context_create_named(ptr, ptr)")
         emit("declare void @aro_context_destroy(ptr)")
@@ -195,6 +197,20 @@ public final class LLVMCodeGenerator {
         for featureSet in program.featureSets {
             registerString(featureSet.featureSet.name)
             registerString(featureSet.featureSet.businessActivity)
+
+            // Collect event types from handler business activities
+            let activity = featureSet.featureSet.businessActivity
+            let hasHandler = activity.contains(" Handler")
+            let isSpecialHandler = activity.contains("Socket Event Handler") ||
+                                   activity.contains("File Event Handler") ||
+                                   activity.contains("Application-End")
+            if hasHandler && !isSpecialHandler {
+                if let handlerRange = activity.range(of: " Handler") {
+                    let eventType = String(activity[..<handlerRange.lowerBound])
+                        .trimmingCharacters(in: .whitespaces)
+                    registerString(eventType)
+                }
+            }
 
             for statement in featureSet.featureSet.statements {
                 collectStringsFromStatement(statement)
@@ -1166,9 +1182,53 @@ public final class LLVMCodeGenerator {
         emit("")
 
         emit("ctx_ok:")
+
+        // Register event handlers before executing Application-Start
+        emit("  ; Register event handlers")
+        for featureSet in program.featureSets {
+            let activity = featureSet.featureSet.businessActivity
+
+            // Find handler feature sets (but not Socket/File handlers or Application-End)
+            let hasHandler = activity.contains(" Handler")
+            let isSpecialHandler = activity.contains("Socket Event Handler") ||
+                                   activity.contains("File Event Handler") ||
+                                   activity.contains("Application-End")
+
+            guard hasHandler && !isSpecialHandler else { continue }
+
+            // Extract event type from business activity
+            // e.g., "UserCreated Handler" -> "UserCreated"
+            // e.g., "NumberTriggered Handler" -> "NumberTriggered"
+            guard let handlerRange = activity.range(of: " Handler") else { continue }
+            let eventType = String(activity[..<handlerRange.lowerBound])
+                .trimmingCharacters(in: .whitespaces)
+
+            guard let eventTypeStr = stringConstants[eventType] else { continue }
+
+            let handlerFuncName = mangleFeatureSetName(featureSet.featureSet.name)
+
+            emit("  ; Register handler '\(featureSet.featureSet.name)' for event '\(eventType)'")
+            emit("  call void @aro_runtime_register_handler(ptr %runtime, ptr \(eventTypeStr), ptr @\(handlerFuncName))")
+        }
+        emit("")
+
         // Execute Application-Start
         emit("  %result = call ptr @\(entryFuncName)(ptr %ctx)")
 
+        // CRITICAL: Wait for all in-flight event handlers to complete
+        // This ensures events emitted during Application-Start finish executing
+        emit("  ; Wait for pending event handlers (timeout: 10 seconds)")
+        emit("  %await_result = call i32 @aro_runtime_await_pending_events(ptr %runtime, double 1.000000e+01)")
+        emit("  %timeout_occurred = icmp eq i32 %await_result, 0")
+        emit("  br i1 %timeout_occurred, label %warn_timeout, label %continue_shutdown")
+        emit("")
+
+        emit("warn_timeout:")
+        emit("  ; Log warning about timeout (would need print function)")
+        emit("  br label %continue_shutdown")
+        emit("")
+
+        emit("continue_shutdown:")
         // Print the response (if any) before cleanup
         emit("  call void @aro_context_print_response(ptr %ctx)")
 

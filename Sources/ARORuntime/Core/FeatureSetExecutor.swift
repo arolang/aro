@@ -747,11 +747,15 @@ public final class Runtime: @unchecked Sendable {
     // MARK: - Properties
 
     private let engine: ExecutionEngine
-    private let eventBus: EventBus
+    /// Event bus for event emission (public for C bridge access in compiled binaries)
+    public let eventBus: EventBus
     private var _isRunning: Bool = false
     private var _currentProgram: AnalyzedProgram?
     private var _shutdownError: Error?
     private let lock = NSLock()
+
+    /// Registry for compiled event handlers: eventType -> [(handlerName, callback)]
+    private var _compiledHandlers: [String: [(String, @Sendable (DomainEvent) async -> Void)]] = [:]
 
     // MARK: - Thread-safe helpers
 
@@ -792,6 +796,21 @@ public final class Runtime: @unchecked Sendable {
     ) {
         self.engine = ExecutionEngine(actionRegistry: actionRegistry, eventBus: eventBus)
         self.eventBus = eventBus
+
+        // Subscribe to DomainEvent once to dispatch to compiled handlers
+        eventBus.subscribe(to: DomainEvent.self) { [weak self] event in
+            guard let self = self else { return }
+
+            // Get handlers for this event type
+            let handlers = self.withLock {
+                self._compiledHandlers[event.domainEventType] ?? []
+            }
+
+            // Execute all matching handlers
+            for (_, callback) in handlers {
+                await callback(event)
+            }
+        }
     }
 
     // MARK: - Service Registration
@@ -799,6 +818,26 @@ public final class Runtime: @unchecked Sendable {
     /// Register a service for dependency injection
     public func register<S: Sendable>(service: S) {
         engine.register(service: service)
+    }
+
+    // MARK: - Compiled Handler Registration
+
+    /// Register a compiled event handler
+    /// - Parameters:
+    ///   - eventType: The event type to listen for
+    ///   - handlerName: Name of the handler feature set
+    ///   - callback: The compiled handler function to call
+    public func registerCompiledHandler(
+        eventType: String,
+        handlerName: String,
+        callback: @escaping @Sendable (DomainEvent) async -> Void
+    ) {
+        withLock {
+            if _compiledHandlers[eventType] == nil {
+                _compiledHandlers[eventType] = []
+            }
+            _compiledHandlers[eventType]?.append((handlerName, callback))
+        }
     }
 
     // MARK: - Execution
@@ -909,6 +948,13 @@ public final class Runtime: @unchecked Sendable {
             // Log but don't propagate errors from exit handler
             print("[Runtime] Application-End handler failed: \(error)")
         }
+    }
+
+    /// Wait for all in-flight event handlers to complete
+    /// - Parameter timeout: Maximum time to wait in seconds (default: 10.0)
+    /// - Returns: true if all handlers completed, false if timeout occurred
+    public func awaitPendingEvents(timeout: TimeInterval = 10.0) async -> Bool {
+        return await eventBus.awaitPendingEvents(timeout: timeout)
     }
 
     /// Stop the runtime
