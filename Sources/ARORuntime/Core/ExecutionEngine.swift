@@ -114,9 +114,10 @@ public final class ExecutionEngine: @unchecked Sendable {
 
             // CRITICAL: Wait for all in-flight event handlers to complete
             // This ensures events emitted during Application-Start finish executing
-            let completed = await eventBus.awaitPendingEvents(timeout: 10.0)
+            let completed = await eventBus.awaitPendingEvents(timeout: AROEventHandlerDefaultTimeout)
             if !completed {
-                print("[WARNING] Some event handlers did not complete within timeout")
+                let pending = eventBus.getPendingHandlerCount()
+                print("[WARNING] \(pending) event handler(s) did not complete within \(AROEventHandlerDefaultTimeout)s timeout")
             }
 
             return response

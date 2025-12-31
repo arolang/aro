@@ -101,6 +101,7 @@ public final class LLVMCodeGenerator {
         emit("declare void @aro_runtime_shutdown(ptr)")
         emit("declare i32 @aro_runtime_await_pending_events(ptr, double)")
         emit("declare void @aro_runtime_register_handler(ptr, ptr, ptr)")
+        emit("declare void @aro_log_warning(ptr)")
         emit("declare ptr @aro_context_create(ptr)")
         emit("declare ptr @aro_context_create_named(ptr, ptr)")
         emit("declare void @aro_context_destroy(ptr)")
@@ -227,6 +228,8 @@ public final class LLVMCodeGenerator {
         registerString("_where_field_")
         registerString("_where_op_")
         registerString("_where_value_")
+        // Timeout warning message
+        registerString("Event handlers did not complete within timeout")
 
         // Register OpenAPI spec JSON if provided (for embedded spec)
         if let specJSON = openAPISpecJSON {
@@ -1224,7 +1227,8 @@ public final class LLVMCodeGenerator {
         emit("")
 
         emit("warn_timeout:")
-        emit("  ; Log warning about timeout (would need print function)")
+        let warnMsgStr = stringConstants["Event handlers did not complete within timeout"]!
+        emit("  call void @aro_log_warning(ptr \(warnMsgStr))")
         emit("  br label %continue_shutdown")
         emit("")
 

@@ -5,6 +5,9 @@
 
 import Foundation
 
+/// Default timeout in seconds for waiting on event handlers to complete
+public let AROEventHandlerDefaultTimeout: TimeInterval = 10.0
+
 /// Central event bus for publishing and subscribing to runtime events
 ///
 /// The EventBus provides a decoupled communication mechanism between
@@ -114,14 +117,14 @@ public final class EventBus: @unchecked Sendable {
         let eventType = type(of: event).eventType
         let matchingSubscriptions = getMatchingSubscriptions(for: eventType)
 
-        // Increment in-flight counter
-        withLock {
-            inFlightHandlers += matchingSubscriptions.count
-        }
-
         // Execute all handlers and wait for completion
         await withTaskGroup(of: Void.self) { group in
             for subscription in matchingSubscriptions {
+                // Increment counter atomically when spawning each task
+                withLock {
+                    inFlightHandlers += 1
+                }
+
                 group.addTask {
                     await subscription.handler(event)
 
@@ -147,32 +150,22 @@ public final class EventBus: @unchecked Sendable {
     }
 
     /// Wait for all in-flight event handlers to complete
-    /// - Parameter timeout: Maximum time to wait in seconds (default: 10.0)
+    /// - Parameter timeout: Maximum time to wait in seconds (default: AROEventHandlerDefaultTimeout)
     /// - Returns: true if all handlers completed, false if timeout occurred
     @discardableResult
-    public func awaitPendingEvents(timeout: TimeInterval = 10.0) async -> Bool {
-        // Quick check - no handlers in flight
-        let count = withLock { inFlightHandlers }
-
-        if count == 0 {
-            return true
-        }
-
+    public func awaitPendingEvents(timeout: TimeInterval = AROEventHandlerDefaultTimeout) async -> Bool {
         // Wait with timeout
         return await withTaskGroup(of: Bool.self) { group in
             // Task 1: Wait for handlers to complete
             group.addTask {
                 await withCheckedContinuation { (continuation: CheckedContinuation<Void, Never>) in
-                    let shouldWait = self.withLock { () -> Bool in
+                    self.withLock {
+                        // CRITICAL: Both check AND resume must be inside lock to prevent TOCTOU race
                         if self.inFlightHandlers == 0 {
-                            return false
+                            continuation.resume()
                         } else {
                             self.flushContinuations.append(continuation)
-                            return true
                         }
-                    }
-                    if !shouldWait {
-                        continuation.resume()
                     }
                 }
                 return true
@@ -191,6 +184,12 @@ public final class EventBus: @unchecked Sendable {
             }
             return false
         }
+    }
+
+    /// Get the count of pending event handlers currently in flight
+    /// - Returns: The number of event handlers currently executing
+    public func getPendingHandlerCount() -> Int {
+        withLock { inFlightHandlers }
     }
 
     // MARK: - Subscribing

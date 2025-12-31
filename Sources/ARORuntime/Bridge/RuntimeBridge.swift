@@ -72,6 +72,7 @@ private let handleLock = NSLock()
 nonisolated(unsafe) public var globalRuntimePtr: UnsafeMutableRawPointer?
 
 /// Global registry for compiled handler function names: eventType -> [handlerFunctionName]
+/// TODO: This variable is currently unused - clarify if it's needed for future features or should be removed
 nonisolated(unsafe) private var compiledHandlerRegistry: [String: [String]] = [:]
 
 // MARK: - Runtime Lifecycle
@@ -157,6 +158,15 @@ public func aro_runtime_await_pending_events(_ runtimePtr: UnsafeMutableRawPoint
     return resultBox.get() ? 1 : 0
 }
 
+/// Log a warning message from compiled code
+/// - Parameter messagePtr: C string pointer to the warning message
+@_cdecl("aro_log_warning")
+public func aro_log_warning(_ messagePtr: UnsafePointer<CChar>?) {
+    guard let messagePtr = messagePtr else { return }
+    let message = String(cString: messagePtr)
+    print("[ARO WARNING] \(message)")
+}
+
 /// Register a compiled event handler
 /// - Parameters:
 ///   - runtimePtr: Runtime handle from aro_runtime_init
@@ -198,7 +208,12 @@ public func aro_runtime_register_handler(
         // Call the compiled handler function
         // The function signature is: ptr function(ptr context)
         // Convert Int back to pointer inside closure
-        let handlerPtrReconstructed = UnsafeMutableRawPointer(bitPattern: handlerAddress)!
+        guard let handlerPtrReconstructed = UnsafeMutableRawPointer(bitPattern: handlerAddress) else {
+            print("[ARO Runtime] Error: Invalid handler pointer address: \(handlerAddress)")
+            // Clean up context before returning
+            Unmanaged<AROCContextHandle>.fromOpaque(contextPtr).release()
+            return
+        }
         typealias HandlerFunc = @convention(c) (UnsafeMutableRawPointer?) -> UnsafeMutableRawPointer?
         let handlerFunc = unsafeBitCast(handlerPtrReconstructed, to: HandlerFunc.self)
         let result = handlerFunc(contextPtr)
