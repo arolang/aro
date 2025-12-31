@@ -26,11 +26,10 @@ jobs:
       actions: read          # Read CI results
 
     steps:
-      - name: Checkout PR branch
+      - name: Checkout repository
         uses: actions/checkout@v4
         with:
-          fetch-depth: 0  # Need full history for branching
-          ref: refs/pull/${{ github.event.issue.number }}/head
+          fetch-depth: 1  # Checkout default branch, not PR code
 
       - name: Configure Git
         run: |
@@ -53,40 +52,44 @@ jobs:
             You have been asked to review this pull request and provide suggested improvements.
 
             Your task:
-            1. **Analyze the PR code** for:
+            1. **Checkout the PR branch** first:
+               - Use: gh pr checkout ${{ github.event.issue.number }}
+               - This ensures you're analyzing the actual PR code
+
+            2. **Analyze the PR code** for:
                - Bugs and logical errors
                - Security vulnerabilities
                - Performance issues
                - Code quality and best practices
                - Test coverage gaps
 
-            2. **Reference CLAUDE.md** for project-specific style guidelines and coding standards
+            3. **Reference CLAUDE.md** for project-specific style guidelines and coding standards
 
-            3. **Create fixes as actual code changes**:
+            4. **Create fixes as actual code changes**:
                - Use Read, Edit, and Write tools to modify files
                - Make concrete improvements (don't just suggest)
                - Focus on high-impact changes
 
-            4. **Create a review branch**:
+            5. **Create a review branch**:
                - Branch name: claude-review-pr-${{ github.event.issue.number }}-$(git rev-parse --short HEAD)
                - Use: git checkout -b <branch-name>
 
-            5. **Commit your changes**:
+            6. **Commit your changes**:
                - Use clear, descriptive commit messages
                - Follow conventional commits format (fix:, refactor:, perf:, etc.)
                - Reference original PR in commit body
 
-            6. **Push the branch**:
+            7. **Push the branch**:
                - Use: git push -u origin <branch-name>
 
-            7. **Create a review PR**:
+            8. **Create a review PR**:
                - Use gh pr create
                - Title: "Code Review: PR #${{ github.event.issue.number }}"
                - Target the original PR's branch (not main)
                - Include summary of changes in PR body
                - Use --reviewer flag to request review from @${{ github.event.issue.user.login }}
 
-            8. **Comment on the original PR**:
+            9. **Comment on the original PR**:
                - Use gh pr comment #${{ github.event.issue.number }}
                - Include link to the review PR
                - Briefly summarize the improvements made
@@ -96,4 +99,4 @@ jobs:
             Important: Be constructive and focus on actionable improvements. Don't over-engineer or make unnecessary changes.
 
           claude_args: |
-            --allowed-tools "Bash(git checkout:*),Bash(git branch:*),Bash(git commit:*),Bash(git push:*),Bash(git rev-parse:*),Bash(git status:*),Bash(git diff:*),Bash(gh pr create:*),Bash(gh pr comment:*),Bash(gh pr view:*),Bash(gh pr diff:*),Bash(gh pr list:*)"
+            --allowed-tools "Bash(git checkout:*),Bash(git branch:*),Bash(git commit:*),Bash(git push:*),Bash(git rev-parse:*),Bash(git status:*),Bash(git diff:*),Bash(gh pr checkout:*),Bash(gh pr create:*),Bash(gh pr comment:*),Bash(gh pr view:*),Bash(gh pr diff:*),Bash(gh pr list:*)"
