@@ -1,0 +1,24 @@
+(* ARO-0043: Sink Syntax Test *)
+(* Tests the new sink verb syntax: <Log> "message" to the <console>. *)
+
+(Application-Start: Sink Syntax Test) {
+    (* New sink syntax - direct string literal to system object *)
+    <Log> "Hello from new sink syntax!" to the <console>.
+
+    (* Variables work with sink syntax too *)
+    <Compute> the <greeting> from "ARO is great!".
+    <Log> <greeting> to the <console>.
+
+    (* Numbers work too *)
+    <Compute> the <count> from 42.
+    <Log> <count> to the <console>.
+
+    (* Objects can be logged directly *)
+    <Compute> the <user> from { name: "Alice", age: 30 }.
+    <Log> <user> to the <console>.
+
+    (* Standard syntax still works for backwards compatibility *)
+    <Log> the <message> for the <console> with "Standard syntax still works".
+
+    <Return> an <OK: status> for the <startup>.
+}

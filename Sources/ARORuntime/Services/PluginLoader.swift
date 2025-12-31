@@ -77,6 +77,18 @@ public final class PluginLoader: @unchecked Sendable {
         UnsafeMutablePointer<UnsafeMutablePointer<CChar>?>  // result JSON
     ) -> Int32
 
+    /// ARO-0043: Plugin system object read function type
+    typealias PluginReadFunction = @convention(c) (
+        UnsafePointer<CChar>?,     // property (optional)
+        UnsafeMutablePointer<UnsafeMutablePointer<CChar>?>  // result JSON
+    ) -> Int32
+
+    /// ARO-0043: Plugin system object write function type
+    typealias PluginWriteFunction = @convention(c) (
+        UnsafePointer<CChar>,      // value JSON
+        UnsafeMutablePointer<UnsafeMutablePointer<CChar>?>  // result (optional error message)
+    ) -> Int32
+
     private init() {
         // Use .aro-cache in current directory
         let currentDir = FileManager.default.currentDirectoryPath
@@ -591,6 +603,86 @@ public final class PluginLoader: @unchecked Sendable {
 
             print("[PluginLoader] Registered plugin service: \(serviceName)")
         }
+
+        // ARO-0043: Register system objects from plugin metadata
+        if let systemObjects = metadata["systemObjects"] as? [[String: Any]] {
+            for objDef in systemObjects {
+                guard let identifier = objDef["identifier"] as? String else {
+                    continue
+                }
+
+                let description = objDef["description"] as? String ?? "Plugin system object"
+
+                // Parse capabilities
+                var capabilities: SystemObjectCapabilities = []
+                if let caps = objDef["capabilities"] as? [String] {
+                    for cap in caps {
+                        switch cap.lowercased() {
+                        case "readable", "source":
+                            capabilities.insert(.readable)
+                        case "writable", "sink":
+                            capabilities.insert(.writable)
+                        default:
+                            break
+                        }
+                    }
+                }
+
+                // Get symbol names
+                let readSymbol = objDef["readSymbol"] as? String
+                let writeSymbol = objDef["writeSymbol"] as? String
+
+                // Load read function
+                var readFunc: PluginReadFunction? = nil
+                if let symbolName = readSymbol {
+                    #if os(Windows)
+                    let symbol = GetProcAddress(handle, symbolName)
+                    #else
+                    let symbol = dlsym(rawHandle, symbolName)
+                    #endif
+                    if let symbol = symbol {
+                        readFunc = unsafeBitCast(symbol, to: PluginReadFunction.self)
+                    }
+                }
+
+                // Load write function
+                var writeFunc: PluginWriteFunction? = nil
+                if let symbolName = writeSymbol {
+                    #if os(Windows)
+                    let symbol = GetProcAddress(handle, symbolName)
+                    #else
+                    let symbol = dlsym(rawHandle, symbolName)
+                    #endif
+                    if let symbol = symbol {
+                        writeFunc = unsafeBitCast(symbol, to: PluginWriteFunction.self)
+                    }
+                }
+
+                // Capture values as constants for the closure (Swift concurrency safety)
+                let capturedIdentifier = identifier
+                let capturedDescription = description
+                let capturedCapabilities = capabilities
+                let capturedReadFunc = readFunc
+                let capturedWriteFunc = writeFunc
+
+                // Register the system object with the registry
+                SystemObjectRegistry.shared.register(
+                    identifier,
+                    description: description,
+                    capabilities: capabilities
+                ) { _ in
+                    PluginSystemObjectWrapper(
+                        pluginIdentifier: capturedIdentifier,
+                        pluginDescription: capturedDescription,
+                        pluginCapabilities: capturedCapabilities,
+                        readFunc: capturedReadFunc,
+                        writeFunc: capturedWriteFunc
+                    )
+                }
+
+                print("[PluginLoader] Registered plugin system object: \(identifier)")
+            }
+        }
     }
 
     #if os(Windows)
@@ -705,6 +797,168 @@ public enum PluginError: Error, CustomStringConvertible {
             return "Plugin service not found: \(name)"
         case .executionFailed(let service, let method, let message):
             return "Plugin '\(service).\(method)' failed: \(message)"
+        }
+    }
+}
+
+// MARK: - Plugin System Object Wrapper (ARO-0043)
+
+/// Wraps a plugin-provided system object for use with SystemObjectRegistry
+///
+/// This allows plugins to provide custom system objects that can be used
+/// in ARO code like built-in objects.
+///
+/// ## Plugin Metadata Example
+/// ```json
+/// {
+///   "systemObjects": [
+///     {
+///       "identifier": "redis",
+///       "description": "Redis key-value store",
+///       "capabilities": ["readable", "writable"],
+///       "readSymbol": "redis_read",
+///       "writeSymbol": "redis_write"
+///     }
+///   ]
+/// }
+/// ```
+///
+/// ## Plugin Implementation
+/// ```swift
+/// @_cdecl("redis_read")
+/// public func redisRead(
+///     _ propertyPtr: UnsafePointer<CChar>?,
+///     _ resultPtr: UnsafeMutablePointer<UnsafeMutablePointer<CChar>?>
+/// ) -> Int32 {
+///     let key = propertyPtr.map { String(cString: $0) } ?? ""
+///     guard let value = redis.get(key) else { return 1 }
+///     resultPtr.pointee = strdup(value)
+///     return 0
+/// }
+/// ```
+public struct PluginSystemObjectWrapper: SystemObject {
+    public static let identifier = "plugin"
+    public static let description = "Plugin-provided system object"
+
+    private let pluginIdentifier: String
+    private let pluginDescription: String
+    private let pluginCapabilities: SystemObjectCapabilities
+    private let readFunc: PluginLoader.PluginReadFunction?
+    private let writeFunc: PluginLoader.PluginWriteFunction?
+
+    init(
+        pluginIdentifier: String,
+        pluginDescription: String,
+        pluginCapabilities: SystemObjectCapabilities,
+        readFunc: PluginLoader.PluginReadFunction?,
+        writeFunc: PluginLoader.PluginWriteFunction?
+    ) {
+        self.pluginIdentifier = pluginIdentifier
+        self.pluginDescription = pluginDescription
+        self.pluginCapabilities = pluginCapabilities
+        self.readFunc = readFunc
+        self.writeFunc = writeFunc
+    }
+
+    public var capabilities: SystemObjectCapabilities {
+        pluginCapabilities
+    }
+
+    public func read(property: String?) async throws -> any Sendable {
+        guard let readFunc = readFunc else {
+            throw SystemObjectError.notReadable(pluginIdentifier)
+        }
+
+        // Prepare result pointer
+        var resultPtr: UnsafeMutablePointer<CChar>? = nil
+
+        // Call the plugin function
+        let status: Int32
+        if let prop = property {
+            status = prop.withCString { propPtr in
+                readFunc(propPtr, &resultPtr)
+            }
+        } else {
+            status = readFunc(nil, &resultPtr)
+        }
+
+        guard status == 0 else {
+            let errorMessage = resultPtr.map { String(cString: $0) } ?? "Unknown error"
+            resultPtr?.deallocate()
+            throw SystemObjectError.readFailed(pluginIdentifier, message: errorMessage)
+        }
+
+        guard let resultPtr = resultPtr else {
+            return ""
+        }
+
+        let result = String(cString: resultPtr)
+        resultPtr.deallocate()
+
+        // Parse JSON result
+        if let data = result.data(using: .utf8),
+           let json = try? JSONSerialization.jsonObject(with: data) {
+            return convertToSendable(json)
+        }
+
+        return result
+    }
+
+    public func write(_ value: any Sendable) async throws {
+        guard let writeFunc = writeFunc else {
+            throw SystemObjectError.notWritable(pluginIdentifier)
+        }
+
+        // Serialize value to JSON
+        let valueJSON: String
+        if let str = value as? String {
+            valueJSON = "\"\(str.replacingOccurrences(of: "\"", with: "\\\""))\""
+        } else if let data = try? JSONSerialization.data(withJSONObject: value),
+                  let json = String(data: data, encoding: .utf8) {
+            valueJSON = json
+        } else {
+            valueJSON = "\"\(value)\""
+        }
+
+        // Prepare result pointer
+        var resultPtr: UnsafeMutablePointer<CChar>? = nil
+
+        // Call the plugin function
+        let status = valueJSON.withCString { valuePtr in
+            writeFunc(valuePtr, &resultPtr)
+        }
+
+        guard status == 0 else {
+            let errorMessage = resultPtr.map { String(cString: $0) } ?? "Unknown error"
+            resultPtr?.deallocate()
+            throw SystemObjectError.writeFailed(pluginIdentifier, message: errorMessage)
+        }
+
+        resultPtr?.deallocate()
+    }
+
+    /// Convert Any to Sendable for JSON parsing
+    private func convertToSendable(_ value: Any) -> any Sendable {
+        switch value {
+        case let str as String:
+            return str
+        case let num as NSNumber:
+            if floor(num.doubleValue) == num.doubleValue {
+                return num.intValue
+            }
+            return num.doubleValue
+        case let dict as [String: Any]:
+            var result: [String: any Sendable] = [:]
+            for (key, val) in dict {
+                result[key] = convertToSendable(val)
+            }
+            return result
+        case let arr as [Any]:
+            return arr.map { convertToSendable($0) }
+        case let bool as Bool:
+            return bool
+        default:
+            return "\(value)"
         }
     }
 }

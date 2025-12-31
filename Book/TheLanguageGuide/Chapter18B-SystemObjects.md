@@ -1,0 +1,321 @@
+# Chapter 18B: System Objects
+
+*"Every program needs to interact with its environment."*
+
+---
+
+## 18B.1 What Are System Objects?
+
+System objects are special objects in ARO that represent external sources and sinks of data. Unlike regular variables that you create and bind within your feature sets, system objects are provided by the runtime and represent I/O streams, HTTP requests, files, environment variables, and other external resources.
+
+ARO defines a consistent interaction pattern for system objects based on data flow direction:
+
+| Pattern | Direction | Description |
+|---------|-----------|-------------|
+| **Source** | External → Internal | Read data FROM the system object |
+| **Sink** | Internal → External | Write data TO the system object |
+| **Bidirectional** | Both | Read from and write to the system object |
+
+This pattern aligns with ARO's action roles: REQUEST actions read from sources, EXPORT actions write to sinks.
+
+### The Source/Sink Flow
+
+The following diagram illustrates how data flows between your ARO feature sets and system objects:
+
+<svg width="800" height="400" xmlns="http://www.w3.org/2000/svg">
+  <!-- Background -->
+  <rect width="800" height="400" fill="#f8f9fa"/>
+
+  <!-- Title -->
+  <text x="400" y="30" font-family="monospace" font-size="18" font-weight="bold" text-anchor="middle" fill="#2c3e50">
+    System Objects: Source/Sink Pattern
+  </text>
+
+  <!-- Feature Set (center) -->
+  <rect x="300" y="150" width="200" height="100" fill="#3498db" stroke="#2980b9" stroke-width="2" rx="5"/>
+  <text x="400" y="185" font-family="monospace" font-size="14" font-weight="bold" text-anchor="middle" fill="white">
+    ARO Feature Set
+  </text>
+  <text x="400" y="210" font-family="monospace" font-size="12" text-anchor="middle" fill="white">
+    Business Logic
+  </text>
+  <text x="400" y="230" font-family="monospace" font-size="12" text-anchor="middle" fill="white">
+    Variables &amp; Computations
+  </text>
+
+  <!-- SOURCE Objects (left side) -->
+  <g id="sources">
+    <!-- stdin -->
+    <rect x="20" y="60" width="120" height="40" fill="#27ae60" stroke="#229954" stroke-width="2" rx="3"/>
+    <text x="80" y="85" font-family="monospace" font-size="12" text-anchor="middle" fill="white">stdin (Source)</text>
+
+    <!-- env -->
+    <rect x="20" y="120" width="120" height="40" fill="#27ae60" stroke="#229954" stroke-width="2" rx="3"/>
+    <text x="80" y="145" font-family="monospace" font-size="12" text-anchor="middle" fill="white">env (Source)</text>
+
+    <!-- request -->
+    <rect x="20" y="180" width="120" height="40" fill="#27ae60" stroke="#229954" stroke-width="2" rx="3"/>
+    <text x="80" y="205" font-family="monospace" font-size="12" text-anchor="middle" fill="white">request (Source)</text>
+
+    <!-- event -->
+    <rect x="20" y="240" width="120" height="40" fill="#27ae60" stroke="#229954" stroke-width="2" rx="3"/>
+    <text x="80" y="265" font-family="monospace" font-size="12" text-anchor="middle" fill="white">event (Source)</text>
+
+    <!-- packet -->
+    <rect x="20" y="300" width="120" height="40" fill="#27ae60" stroke="#229954" stroke-width="2" rx="3"/>
+    <text x="80" y="325" font-family="monospace" font-size="12" text-anchor="middle" fill="white">packet (Source)</text>
+  </g>
+
+  <!-- SINK Objects (right side) -->
+  <g id="sinks">
+    <!-- console -->
+    <rect x="660" y="90" width="120" height="40" fill="#e74c3c" stroke="#c0392b" stroke-width="2" rx="3"/>
+    <text x="720" y="115" font-family="monospace" font-size="12" text-anchor="middle" fill="white">console (Sink)</text>
+
+    <!-- stderr -->
+    <rect x="660" y="150" width="120" height="40" fill="#e74c3c" stroke="#c0392b" stroke-width="2" rx="3"/>
+    <text x="720" y="175" font-family="monospace" font-size="12" text-anchor="middle" fill="white">stderr (Sink)</text>
+  </g>
+
+  <!-- BIDIRECTIONAL Objects (bottom) -->
+  <g id="bidirectional">
+    <!-- file -->
+    <rect x="260" y="330" width="120" height="40" fill="#9b59b6" stroke="#8e44ad" stroke-width="2" rx="3"/>
+    <text x="320" y="355" font-family="monospace" font-size="11" text-anchor="middle" fill="white">file (Bidirectional)</text>
+
+    <!-- connection -->
+    <rect x="420" y="330" width="120" height="40" fill="#9b59b6" stroke="#8e44ad" stroke-width="2" rx="3"/>
+    <text x="480" y="355" font-family="monospace" font-size="11" text-anchor="middle" fill="white">connection (Bidirectional)</text>
+  </g>
+
+  <!-- Arrows: Sources → Feature Set -->
+  <defs>
+    <marker id="arrowhead" markerWidth="10" markerHeight="10" refX="9" refY="3" orient="auto">
+      <polygon points="0 0, 10 3, 0 6" fill="#2c3e50"/>
+    </marker>
+  </defs>
+
+  <!-- REQUEST arrows (Sources to Feature Set) -->
+  <path d="M 140 80 L 300 170" stroke="#27ae60" stroke-width="2" fill="none" marker-end="url(#arrowhead)"/>
+  <text x="220" y="120" font-family="monospace" font-size="10" fill="#27ae60">&lt;Extract&gt;</text>
+
+  <path d="M 140 140 L 300 180" stroke="#27ae60" stroke-width="2" fill="none" marker-end="url(#arrowhead)"/>
+  <text x="220" y="155" font-family="monospace" font-size="10" fill="#27ae60">&lt;Read&gt;</text>
+
+  <path d="M 140 200 L 300 200" stroke="#27ae60" stroke-width="2" fill="none" marker-end="url(#arrowhead)"/>
+  <text x="220" y="195" font-family="monospace" font-size="10" fill="#27ae60">&lt;Fetch&gt;</text>
+
+  <path d="M 140 260 L 300 220" stroke="#27ae60" stroke-width="2" fill="none" marker-end="url(#arrowhead)"/>
+
+  <path d="M 140 320 L 300 230" stroke="#27ae60" stroke-width="2" fill="none" marker-end="url(#arrowhead)"/>
+
+  <!-- EXPORT arrows (Feature Set to Sinks) -->
+  <path d="M 500 180 L 660 110" stroke="#e74c3c" stroke-width="2" fill="none" marker-end="url(#arrowhead)"/>
+  <text x="580" y="140" font-family="monospace" font-size="10" fill="#e74c3c">&lt;Log&gt;</text>
+
+  <path d="M 500 210 L 660 170" stroke="#e74c3c" stroke-width="2" fill="none" marker-end="url(#arrowhead)"/>
+  <text x="580" y="185" font-family="monospace" font-size="10" fill="#e74c3c">&lt;Print&gt;</text>
+
+  <!-- Bidirectional arrows -->
+  <path d="M 320 250 L 320 330" stroke="#9b59b6" stroke-width="2" fill="none" marker-end="url(#arrowhead)"/>
+  <path d="M 340 330 L 340 250" stroke="#9b59b6" stroke-width="2" fill="none" marker-end="url(#arrowhead)"/>
+  <text x="360" y="290" font-family="monospace" font-size="10" fill="#9b59b6">&lt;Read&gt;/&lt;Write&gt;</text>
+
+  <path d="M 460 250 L 480 330" stroke="#9b59b6" stroke-width="2" fill="none" marker-end="url(#arrowhead)"/>
+  <path d="M 500 330 L 480 250" stroke="#9b59b6" stroke-width="2" fill="none" marker-end="url(#arrowhead)"/>
+  <text x="510" y="290" font-family="monospace" font-size="10" fill="#9b59b6">&lt;Send&gt;/&lt;Receive&gt;</text>
+
+  <!-- Legend -->
+  <rect x="20" y="360" width="760" height="30" fill="white" stroke="#bdc3c7" stroke-width="1" rx="3"/>
+  <rect x="30" y="368" width="15" height="12" fill="#27ae60"/>
+  <text x="50" y="378" font-family="monospace" font-size="10" fill="#2c3e50">Source (Read Only)</text>
+
+  <rect x="200" y="368" width="15" height="12" fill="#e74c3c"/>
+  <text x="220" y="378" font-family="monospace" font-size="10" fill="#2c3e50">Sink (Write Only)</text>
+
+  <rect x="370" y="368" width="15" height="12" fill="#9b59b6"/>
+  <text x="390" y="378" font-family="monospace" font-size="10" fill="#2c3e50">Bidirectional (Read &amp; Write)</text>
+
+  <rect x="590" y="368" width="15" height="12" fill="#3498db"/>
+  <text x="610" y="378" font-family="monospace" font-size="10" fill="#2c3e50">Feature Set (Your Code)</text>
+</svg>
+
+---
+
+## 18B.2 Sink Syntax
+
+For sink operations, ARO provides a clean, intuitive syntax where the value comes directly after the verb:
+
+```aro
+(* Sink syntax - direct value to system object *)
+<Log> "Hello, World!" to the <console>.
+<Log> <data> to the <console>.
+<Log> { status: "ok", count: 42 } to the <console>.
+```
+
+Sink verbs that support this syntax include:
+- `log`, `print`, `output`, `debug` — Console output
+- `write` — File writing
+- `send`, `dispatch` — Socket/network sending
+
+---
+
+## 16C.3 Built-in System Objects
+
+### Console Objects
+
+ARO provides three console-related system objects:
+
+| Object | Type | Description |
+|--------|------|-------------|
+| `console` | Sink | Standard output stream |
+| `stderr` | Sink | Standard error stream |
+| `stdin` | Source | Standard input stream |
+
+```aro
+(* Write to console *)
+<Log> "Starting server..." to the <console>.
+
+(* Write to stderr *)
+<Log> "Warning: config missing" to the <stderr>.
+
+(* Read from stdin *)
+<Read> the <input> from the <stdin>.
+```
+
+### Environment Variables
+
+The `env` system object provides access to environment variables:
+
+```aro
+(* Read a specific environment variable *)
+<Extract> the <api-key> from the <env: API_KEY>.
+
+(* Read all environment variables *)
+<Extract> the <all-vars> from the <env>.
+```
+
+### File Object
+
+The `file` system object provides bidirectional file I/O with automatic format detection:
+
+```aro
+(* Read from a file *)
+<Read> the <config> from the <file: "./config.json">.
+
+(* Write to a file *)
+<Write> <data> to the <file: "./output.json">.
+```
+
+The file object automatically detects the format based on file extension and serializes/deserializes accordingly. See Chapter 16B for details on format-aware I/O.
+
+---
+
+## 16C.4 HTTP Context Objects
+
+When handling HTTP requests, ARO provides context-specific system objects:
+
+| Object | Type | Description |
+|--------|------|-------------|
+| `request` | Source | Full HTTP request |
+| `pathParameters` | Source | URL path parameters |
+| `queryParameters` | Source | URL query parameters |
+| `headers` | Source | HTTP headers |
+| `body` | Source | Request body |
+
+```aro
+(getUser: User API) {
+    (* Access path parameters *)
+    <Extract> the <id> from the <pathParameters: id>.
+
+    (* Access query parameters *)
+    <Extract> the <limit> from the <queryParameters: limit>.
+
+    (* Access headers *)
+    <Extract> the <auth> from the <headers: Authorization>.
+
+    (* Access request body *)
+    <Extract> the <data> from the <body>.
+
+    (* Access full request properties *)
+    <Extract> the <method> from the <request: method>.
+
+    <Return> an <OK: status> with <user>.
+}
+```
+
+These objects are only available within HTTP request handler feature sets. Attempting to access them outside this context results in an error.
+
+---
+
+## 16C.5 Event Context Objects
+
+Event handlers have access to event-specific system objects:
+
+| Object | Type | Description |
+|--------|------|-------------|
+| `event` | Source | Event payload |
+| `shutdown` | Source | Shutdown context |
+
+```aro
+(Send Email: UserCreated Handler) {
+    <Extract> the <user> from the <event: user>.
+    <Send> the <welcome-email> to the <user: email>.
+    <Return> an <OK: status> for the <notification>.
+}
+
+(Application-End: Success) {
+    <Extract> the <reason> from the <shutdown: reason>.
+    <Log> <reason> to the <console>.
+    <Return> an <OK: status> for the <shutdown>.
+}
+```
+
+---
+
+## 16C.6 Socket Context Objects
+
+Socket handlers have access to connection-related system objects:
+
+| Object | Type | Description |
+|--------|------|-------------|
+| `connection` | Bidirectional | Socket connection |
+| `packet` | Source | Socket data packet |
+
+```aro
+(Echo Server: Socket Event Handler) {
+    <Extract> the <data> from the <packet>.
+    <Send> <data> to the <connection>.
+    <Return> an <OK: status> for the <echo>.
+}
+```
+
+---
+
+## 16C.7 Plugin System Objects
+
+Plugins can provide custom system objects that integrate seamlessly with ARO's source/sink pattern. This allows third-party services like Redis, databases, or message queues to be accessed with the same familiar syntax.
+
+```aro
+(* Plugin-provided Redis system object *)
+<Get> the <session> from the <redis: "session:123">.
+<Set> <userData> to the <redis: "user:456">.
+```
+
+See Chapter 18 for details on creating plugins that provide system objects.
+
+---
+
+## 16C.8 Summary
+
+System objects provide a unified interface for interacting with external resources. The source/sink pattern creates consistency across all I/O operations:
+
+- **Sources** (readable): `env`, `stdin`, `request`, `event`, `packet`
+- **Sinks** (writable): `console`, `stderr`
+- **Bidirectional**: `file`, `connection`
+
+The sink syntax (`<Log> "message" to the <console>`) provides a clean, intuitive way to write to system objects.
+
+---
+
+*Next: Chapter 17 — Custom Actions*

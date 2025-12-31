@@ -132,4 +132,4 @@ Document complex data flows when the structure is not obvious from the code. A c
 
 ---
 
-*Next: Chapter 7 — Computations*
+*Next: Chapter 8 — Computations*

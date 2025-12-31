@@ -70,48 +70,61 @@
     "actions": {
       "patterns": [
         {
-          "name": "keyword.control.action.request.aro",
-          "match": "<(Extract|Parse|Retrieve|Fetch|Accept)>"
+          "name": "keyword.control.import.aro",
+          "match": "<(Extract|Parse|Retrieve|Fetch|Read|Accept|List|Stat|Exists)>",
+          "comment": "REQUEST actions (External → Internal): Blue/Cyan on both themes"
         },
         {
-          "name": "keyword.control.action.own.aro",
-          "match": "<(Create|Compute|Validate|Compare|Transform|Set|Merge)>"
+          "name": "keyword.operator.aro",
+          "match": "<(Compute|Validate|Compare|Create|Transform|Filter|Match|Split|Set|Merge|Copy|Move|Append)>",
+          "comment": "OWN actions (Internal → Internal): Purple/Violet on both themes"
         },
         {
-          "name": "keyword.control.action.response.aro",
-          "match": "<(Return|Throw|Send|Log|Store|Write|Emit)>"
+          "name": "keyword.control.flow.return.aro",
+          "match": "<(Return|Throw)>",
+          "comment": "RESPONSE actions (Internal → External): Orange/Red on both themes"
         },
         {
-          "name": "keyword.control.action.test.aro",
-          "match": "<(Given|When|Then|Assert)>"
+          "name": "keyword.control.export.aro",
+          "match": "<(Publish|Store|Log|Send|Emit|Write|CreateDirectory)>",
+          "comment": "EXPORT actions (Persistence/Export): Green/Teal on both themes"
         },
         {
-          "name": "keyword.control.action.lifecycle.aro",
-          "match": "<(Start|Stop|Keepalive|Watch)>"
+          "name": "support.function.builtin.aro",
+          "match": "<(Start|Stop|Keepalive|Watch|Configure|Request)>",
+          "comment": "LIFECYCLE actions (System management): Cyan on both themes"
+        },
+        {
+          "name": "entity.name.tag.aro",
+          "match": "<(Given|When|Then|Assert)>",
+          "comment": "TEST actions (BDD testing): Yellow/Gold on both themes"
         }
       ]
     },
     "results": {
       "patterns": [
         {
-          "name": "variable.other.result.aro",
-          "match": "<([a-zA-Z][a-zA-Z0-9-]*)(?::\\s*([a-zA-Z][a-zA-Z0-9-]*))?>"
+          "name": "variable.parameter.result.aro",
+          "match": "<([a-zA-Z][a-zA-Z0-9-]*)(?::\\s*([a-zA-Z][a-zA-Z0-9-]*))?>",
+          "comment": "Results - bright color"
         }
       ]
     },
     "objects": {
       "patterns": [
         {
-          "name": "variable.other.object.aro",
-          "match": "(?<=from|to|with|for|into|on)\\s+(?:the|a|an)?\\s*<([^>]+)>"
+          "name": "entity.other.attribute-name.object.aro",
+          "match": "(?<=from|to|with|for|into|on)\\s+(?:the|a|an)?\\s*<([^>]+)>",
+          "comment": "Objects - bright color"
         }
       ]
     },
     "prepositions": {
       "patterns": [
         {
-          "name": "keyword.other.preposition.aro",
-          "match": "\\b(from|to|with|for|into|on|where)\\b"
+          "name": "storage.modifier.preposition.aro",
+          "match": "\\b(from|to|with|for|into|on|where)\\b",
+          "comment": "Prepositions - darker color"
         }
       ]
     },

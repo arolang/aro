@@ -137,6 +137,10 @@ public protocol ExecutionContext: AnyObject, Sendable {
     ///   - value: The value to bind
     func bind(_ name: String, value: any Sendable)
 
+    /// Remove a variable binding
+    /// - Parameter name: The variable name to unbind
+    func unbind(_ name: String)
+
     /// Check if a variable exists
     /// - Parameter name: The variable name to check
     /// - Returns: true if the variable is defined
@@ -186,6 +190,9 @@ public protocol ExecutionContext: AnyObject, Sendable {
     func getResponse() -> Response?
 
     // MARK: - Event Emission
+
+    /// Access to the event bus for direct event operations
+    var eventBus: EventBus? { get }
 
     /// Emit an event to the event bus
     /// - Parameter event: The event to emit

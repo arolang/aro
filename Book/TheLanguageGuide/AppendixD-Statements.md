@@ -96,7 +96,7 @@ Conditionally executes a statement based on a condition. If the condition is fal
 <Send> the <notification> to the <user: email> when <user: email> exists.
 
 (* Log admin access only for admins *)
-<Log> the <admin-access> for the <audit> when <user: role> = "admin".
+<Log> "admin access" to the <audit> when <user: role> = "admin".
 
 (* Early exit on invalid input *)
 <Return> a <BadRequest: status> for the <invalid: amount> when <amount> <= 0.
@@ -161,18 +161,18 @@ match <variable> {
 ```aro
 match <status> {
     case "pending" {
-        <Log> the <message> for the <console> with "Order is pending".
+        <Log> "Order is pending" to the <console>.
     }
     case "shipped" {
-        <Log> the <message> for the <console> with "Order has shipped".
+        <Log> "Order has shipped" to the <console>.
         <Emit> an <OrderShipped: event> with <order>.
     }
     case "delivered" {
-        <Log> the <message> for the <console> with "Order delivered".
+        <Log> "Order delivered" to the <console>.
         <Emit> an <OrderDelivered: event> with <order>.
     }
     otherwise {
-        <Log> the <warning> for the <console> with "Unknown status".
+        <Log> "Unknown status" to the <console>.
     }
 }
 ```
@@ -311,7 +311,7 @@ Provides additional data or parameters.
 <Create> the <config> with { debug: true, port: 8080 }.
 <Transform> the <updated> from the <user> with <updates>.
 <Send> the <message> to the <connection> with "Hello, World!".
-<Log> the <message> for the <console> with "Application started".
+<Log> "Application started" to the <console>.
 ```
 
 ## On Clause
@@ -346,7 +346,7 @@ Conditionally executes a statement.
 
 ```aro
 <Return> a <NotFound: status> for the <user> when <user> is empty.
-<Log> the <warning> for the <console> with "Low stock" when <stock> < 10.
+<Log> "Low stock" to the <console> when <stock> < 10.
 <Send> the <alert> to the <admin: email> when <errors> > <threshold>.
 ```
 
@@ -372,7 +372,7 @@ Statements execute sequentially from top to bottom:
     <Return> a <Created: status> with <result>.
 
     (* Never executed - after return *)
-    <Log> the <message> for the <console> with "This won't run".
+    <Log> "This won't run" to the <console>.
 }
 ```
 

@@ -115,6 +115,9 @@ public struct AROStatement: Statement {
     public let withClause: (any Expression)?
     /// Optional when condition (ARO-0004) - for guarded statements
     public let whenCondition: (any Expression)?
+    /// Optional result expression (ARO-0043) - for sink syntax: `<Log> "message" to <console>`
+    /// When set, the result position contains an expression instead of a variable to bind
+    public let resultExpression: (any Expression)?
     public let span: SourceSpan
 
     public init(
@@ -129,6 +132,7 @@ public struct AROStatement: Statement {
         toClause: (any Expression)? = nil,
         withClause: (any Expression)? = nil,
         whenCondition: (any Expression)? = nil,
+        resultExpression: (any Expression)? = nil,
         span: SourceSpan
     ) {
         self.action = action
@@ -142,11 +146,18 @@ public struct AROStatement: Statement {
         self.toClause = toClause
         self.withClause = withClause
         self.whenCondition = whenCondition
+        self.resultExpression = resultExpression
         self.span = span
     }
 
     public var description: String {
-        var desc = "<\(action.verb)> the <\(result)> \(object.preposition) the <\(object.noun)>"
+        var desc: String
+        if let resExpr = resultExpression {
+            // Sink syntax: <Log> "message" to the <console>
+            desc = "<\(action.verb)> \(resExpr) \(object.preposition) the <\(object.noun)>"
+        } else {
+            desc = "<\(action.verb)> the <\(result)> \(object.preposition) the <\(object.noun)>"
+        }
         if let literal = literalValue {
             desc += " with \(literal)"
         }

@@ -193,32 +193,54 @@ public final class Parser {
     /// Parses: "<" action ">" [article] "<" result ">" preposition [article] "<" object ">" ["when" condition] "."
     /// ARO-0002: Also supports expressions after prepositions like `from <x> * <y>` or `to 30`
     /// ARO-0004: Also supports guarded statements with `when` clause
+    /// ARO-0043: Also supports sink syntax like `<Log> "message" to the <console>.`
     private func parseAROStatement(startToken: Token) throws -> AROStatement {
         // Parse action verb
         let actionToken = try expectIdentifier(message: "action verb")
         let action = Action(verb: actionToken.lexeme, span: actionToken.span)
         try expect(.rightAngle, message: "'>'")
 
-        // Skip optional article before result
-        if case .article = peek().kind {
-            advance()
-        }
+        // ARO-0043: Check for sink verb syntax
+        // Sink verbs: log, print, output, debug, write, send, dispatch
+        // Syntax: <Log> "message" to the <console>.
+        //         <Write> <data> to the <file: "./output.json">.
+        let isSinkVerb = isSinkActionVerb(action.verb)
+        var resultExpression: (any Expression)? = nil
 
-        // Parse result
-        try expect(.leftAngle, message: "'<'")
-        var result = try parseQualifiedNoun()
-        try expect(.rightAngle, message: "'>'")
+        // Check if we should parse sink syntax:
+        // After a sink verb, if we see an expression-starting token (like string literal)
+        // OR a `<variable>` NOT preceded by an article, treat it as sink syntax
+        let useSinkSyntax = isSinkVerb && isSinkSyntaxStart(peek())
 
-        // ARO-0038: Check for optional 'as Type' annotation after result
-        // Syntax: <result> as Type  (alternative to <result: Type>)
-        if check(.as) {
-            advance()
-            let typeAnnotation = try parseTypeAnnotation()
-            result = QualifiedNoun(
-                base: result.base,
-                typeAnnotation: typeAnnotation,
-                span: result.span
-            )
+        var result: QualifiedNoun
+        if useSinkSyntax {
+            // ARO-0043: Parse expression as the value to output
+            resultExpression = try parseExpression()
+            // Create a placeholder result noun
+            result = QualifiedNoun(base: "_sink_", specifiers: [], span: previous().span)
+        } else {
+            // Standard syntax: [article] <result>
+            // Skip optional article before result
+            if case .article = peek().kind {
+                advance()
+            }
+
+            // Parse result
+            try expect(.leftAngle, message: "'<'")
+            result = try parseQualifiedNoun()
+            try expect(.rightAngle, message: "'>'")
+
+            // ARO-0038: Check for optional 'as Type' annotation after result
+            // Syntax: <result> as Type  (alternative to <result: Type>)
+            if check(.as) {
+                advance()
+                let typeAnnotation = try parseTypeAnnotation()
+                result = QualifiedNoun(
+                    base: result.base,
+                    typeAnnotation: typeAnnotation,
+                    span: result.span
+                )
+            }
         }
 
         // Parse preposition
@@ -335,6 +357,7 @@ public final class Parser {
             toClause: toExpression,
             withClause: withExpression,
             whenCondition: whenCondition,
+            resultExpression: resultExpression,
             span: startToken.span.merged(with: endToken.span)
         )
     }
@@ -347,6 +370,43 @@ public final class Parser {
         case .leftAngle, .leftBracket, .leftBrace, .leftParen:
             return true
         case .hyphen, .minus, .not:
+            return true
+        case .stringSegment, .interpolationStart:
+            return true
+        default:
+            return false
+        }
+    }
+
+    // MARK: - Sink Syntax Helpers (ARO-0043)
+
+    /// Check if a verb is a sink action verb
+    /// Sink verbs write data TO system objects
+    private func isSinkActionVerb(_ verb: String) -> Bool {
+        let sinkVerbs: Set<String> = [
+            "log", "print", "output", "debug",  // LogAction
+            "write",                             // WriteAction
+            "send", "dispatch"                   // SendAction
+        ]
+        return sinkVerbs.contains(verb.lowercased())
+    }
+
+    /// Check if the current token starts sink syntax
+    /// Sink syntax: <Log> "message" or <Log> <data> (without preceding article)
+    private func isSinkSyntaxStart(_ token: Token) -> Bool {
+        // Sink syntax starts with:
+        // 1. String literal: <Log> "message"
+        // 2. Numeric literal: <Log> 42
+        // 3. Object/array literal: <Log> { key: value } or <Log> [1, 2, 3]
+        // 4. Variable reference (without article): <Log> <data>
+        //    Note: Standard syntax has article: <Log> the <result>
+        switch token.kind {
+        case .stringLiteral, .intLiteral, .floatLiteral:
+            return true
+        case .leftBrace, .leftBracket:
+            return true
+        case .leftAngle:
+            // <variable> without preceding article indicates sink syntax
             return true
         case .stringSegment, .interpolationStart:
             return true

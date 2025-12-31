@@ -90,8 +90,8 @@ ARO uses eight prepositions, each with specific semantic meaning:
 (* Merge with updates *)
 <Merge> the <updated> from <existing> with <changes>.
 
-(* Log with message *)
-<Log> the <message> for the <console> with "Application started".
+(* Log to console *)
+<Log> "Application started" to the <console>.
 
 (* Read with path *)
 <Read> the <content> from the <file> with "data.json".
@@ -120,9 +120,9 @@ ARO uses eight prepositions, each with specific semantic meaning:
 <Return> an <OK: status> for the <request>.
 <Return> a <NoContent: status> for the <deletion>.
 
-(* Log for a destination *)
-<Log> the <message> for the <console>.
-<Log> the <error> for the <error-log>.
+(* Log to destination *)
+<Log> <message> to the <console>.
+<Log> <error> to the <error-log>.
 
 (* Compute for an input *)
 <Compute> the <total> for the <items>.

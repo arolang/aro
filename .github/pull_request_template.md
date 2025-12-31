@@ -37,3 +37,7 @@
 - [ ] I have commented my code where necessary
 - [ ] I have updated documentation as needed
 - [ ] My changes generate no new warnings
+
+---
+
+💡 **Tip**: Want an AI code review? Comment `@claude review` to get automated feedback and suggested improvements in a separate PR.

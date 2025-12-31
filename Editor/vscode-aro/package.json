@@ -26,8 +26,13 @@
     "languages": [
       {
         "id": "aro",
-        "aliases": ["ARO", "aro"],
-        "extensions": [".aro"],
+        "aliases": [
+          "ARO",
+          "aro"
+        ],
+        "extensions": [
+          ".aro"
+        ],
         "configuration": "./language-configuration.json"
       }
     ],
@@ -64,6 +69,89 @@
           "description": "Enable debug logging for the language server"
         }
       }
+    },
+    "commands": [
+      {
+        "command": "aro.openSettings",
+        "title": "ARO: Open Settings",
+        "category": "ARO"
+      },
+      {
+        "command": "aro.configureLspPath",
+        "title": "ARO: Configure Language Server Path",
+        "category": "ARO"
+      }
+    ],
+    "configurationDefaults": {
+      "editor.tokenColorCustomizations": {
+        "[*]": {
+          "textMateRules": [
+            {
+              "scope": "support.function.action.compute.aro",
+              "settings": {
+                "foreground": "#DAA520",
+                "fontStyle": "bold"
+              }
+            },
+            {
+              "scope": "entity.name.function.action.request.aro",
+              "settings": {
+                "foreground": "#4169E1",
+                "fontStyle": "bold"
+              }
+            },
+            {
+              "scope": "entity.name.function.action.own.aro",
+              "settings": {
+                "foreground": "#4169E1",
+                "fontStyle": "bold"
+              }
+            },
+            {
+              "scope": "entity.name.function.action.response.aro",
+              "settings": {
+                "foreground": "#4169E1",
+                "fontStyle": "bold"
+              }
+            },
+            {
+              "scope": "entity.name.function.action.test.aro",
+              "settings": {
+                "foreground": "#4169E1",
+                "fontStyle": "bold"
+              }
+            },
+            {
+              "scope": "entity.name.function.action.lifecycle.aro",
+              "settings": {
+                "foreground": "#4169E1",
+                "fontStyle": "bold"
+              }
+            },
+            {
+              "scope": "variable.parameter.result.aro",
+              "settings": {
+                "foreground": "#00FF00",
+                "fontStyle": "bold"
+              }
+            },
+            {
+              "scope": "entity.other.attribute-name.object.aro",
+              "settings": {
+                "foreground": "#FF0000",
+                "fontStyle": "bold"
+              }
+            },
+            {
+              "scope": "storage.modifier.preposition.aro",
+              "settings": {
+                "foreground": "#FF69B4",
+                "fontStyle": "bold"
+              }
+            }
+          ]
+        }
+      }
     }
   },
   "main": "./out/extension.js",
@@ -73,14 +161,22 @@
   "scripts": {
     "vscode:prepublish": "npm run compile",
     "compile": "tsc -p ./",
-    "watch": "tsc -watch -p ./"
+    "watch": "tsc -watch -p ./",
+    "test": "mocha -r ts-node/register src/test/**/*.test.ts"
   },
   "dependencies": {
     "vscode-languageclient": "^9.0.1"
   },
   "devDependencies": {
-    "@types/vscode": "^1.74.0",
+    "@types/mocha": "^10.0.0",
     "@types/node": "^18.0.0",
+    "@types/proxyquire": "^1.3.31",
+    "@types/sinon": "^17.0.0",
+    "@types/vscode": "^1.74.0",
+    "mocha": "^10.0.0",
+    "proxyquire": "^2.1.3",
+    "sinon": "^17.0.0",
+    "ts-node": "^10.0.0",
     "typescript": "^5.0.0"
   }
 }

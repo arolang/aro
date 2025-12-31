@@ -338,9 +338,17 @@ public struct LogAction: ActionImplementation {
         try validatePreposition(object.preposition)
 
         // Get message to log
-        // Priority: 1. with clause literal, 2. result variable, 3. result fullName
+        // Priority:
+        //   1. Result expression (ARO-0043 sink syntax: <Log> "message" to the <console>)
+        //   2. With clause literal
+        //   3. With clause expression
+        //   4. Result variable
+        //   5. Fallback to result fullName
         let message: String
-        if let literal = context.resolveAny("_literal_") {
+        if let resultExpr = context.resolveAny("_result_expression_") {
+            // ARO-0043: Message from sink syntax result expression
+            message = ResponseFormatter.formatValue(resultExpr, for: context.outputContext)
+        } else if let literal = context.resolveAny("_literal_") {
             // Message from "with" clause (string literal)
             message = ResponseFormatter.formatValue(literal, for: context.outputContext)
         } else if let expr = context.resolveAny("_expression_") {
@@ -818,8 +826,14 @@ public struct EmitAction: ActionImplementation {
 
         print("[EmitAction] Emitting domain event: \(eventType) with payload: \(payload)")
 
-        // Emit to event bus
-        context.emit(event)
+        // Emit to event bus and wait for handlers to complete
+        // This ensures event handlers finish before continuing
+        if let eventBus = context.eventBus {
+            await eventBus.publishAndTrack(event)
+        } else {
+            // Fallback to fire-and-forget if no event bus
+            context.emit(event)
+        }
 
         return EmitResult(eventType: eventType, success: true)
     }

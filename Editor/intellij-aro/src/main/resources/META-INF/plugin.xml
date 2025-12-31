@@ -65,6 +65,15 @@
         <!-- Live templates -->
         <defaultLiveTemplates file="/liveTemplates/ARO.xml"/>
         <liveTemplateContext implementation="com.krissimon.aro.AROTemplateContextType"/>
+
+        <!-- Settings -->
+        <applicationService
+            serviceImplementation="com.krissimon.aro.settings.AROSettingsState"/>
+        <applicationConfigurable
+            parentId="tools"
+            instance="com.krissimon.aro.settings.AROSettingsConfigurable"
+            id="com.krissimon.aro.settings.AROSettingsConfigurable"
+            displayName="ARO Language"/>
     </extensions>
 
     <!-- LSP4IJ Language Server Registration -->

@@ -1,0 +1,102 @@
+name: Claude Code Review (On-Demand)
+
+on:
+  issue_comment:
+    types: [created]
+
+jobs:
+  claude-review:
+    # Only run if comment is on a PR and contains "@claude review"
+    if: |
+      github.event.issue.pull_request &&
+      contains(github.event.comment.body, '@claude review')
+
+    runs-on: ubuntu-latest
+
+    # Prevent multiple simultaneous reviews of the same PR
+    concurrency:
+      group: claude-review-${{ github.event.issue.number }}
+      cancel-in-progress: true
+
+    permissions:
+      contents: write        # Create branches and commits
+      pull-requests: write   # Create PRs, comment, request reviews
+      issues: write          # Comment on original PR
+      id-token: write        # Required by claude-code-action
+      actions: read          # Read CI results
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 1  # Checkout default branch, not PR code
+
+      - name: Configure Git
+        run: |
+          git config user.name "Claude Code Bot"
+          git config user.email "claude-code-bot@users.noreply.github.com"
+
+      - name: Run Claude Code Review
+        id: claude-review
+        uses: anthropics/claude-code-action@0a2593483e318c6693adcb04af942367df7157f0 # v1
+        with:
+          claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+
+          additional_permissions: |
+            actions: read
+
+          prompt: |
+            ORIGINAL PR: #${{ github.event.issue.number }}
+            PR AUTHOR: @${{ github.event.issue.user.login }}
+
+            You have been asked to review this pull request and provide suggested improvements.
+
+            Your task:
+            1. **Checkout the PR branch** first:
+               - Use: gh pr checkout ${{ github.event.issue.number }}
+               - This ensures you're analyzing the actual PR code
+
+            2. **Analyze the PR code** for:
+               - Bugs and logical errors
+               - Security vulnerabilities
+               - Performance issues
+               - Code quality and best practices
+               - Test coverage gaps
+
+            3. **Reference CLAUDE.md** for project-specific style guidelines and coding standards
+
+            4. **Create fixes as actual code changes**:
+               - Use Read, Edit, and Write tools to modify files
+               - Make concrete improvements (don't just suggest)
+               - Focus on high-impact changes
+
+            5. **Create a review branch**:
+               - Branch name: claude-review-pr-${{ github.event.issue.number }}-$(git rev-parse --short HEAD)
+               - Use: git checkout -b <branch-name>
+
+            6. **Commit your changes**:
+               - Use clear, descriptive commit messages
+               - Follow conventional commits format (fix:, refactor:, perf:, etc.)
+               - Reference original PR in commit body
+
+            7. **Push the branch**:
+               - Use: git push -u origin <branch-name>
+
+            8. **Create a review PR**:
+               - Use gh pr create
+               - Title: "Code Review: PR #${{ github.event.issue.number }}"
+               - Target the original PR's branch (not main)
+               - Include summary of changes in PR body
+               - Use --reviewer flag to request review from @${{ github.event.issue.user.login }}
+
+            9. **Comment on the original PR**:
+               - Use gh pr comment #${{ github.event.issue.number }}
+               - Include link to the review PR
+               - Briefly summarize the improvements made
+
+            If you find no issues that require code changes, comment on the original PR stating the code looks good.
+
+            Important: Be constructive and focus on actionable improvements. Don't over-engineer or make unnecessary changes.
+
+          claude_args: |
+            --allowed-tools "Bash(git checkout:*),Bash(git branch:*),Bash(git commit:*),Bash(git push:*),Bash(git rev-parse:*),Bash(git status:*),Bash(git diff:*),Bash(gh pr checkout:*),Bash(gh pr create:*),Bash(gh pr comment:*),Bash(gh pr view:*),Bash(gh pr diff:*),Bash(gh pr list:*)"

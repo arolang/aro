@@ -6,13 +6,23 @@ Language support for **ARO** (Action Result Object) - a declarative programming 
 
 ### Syntax Highlighting
 
-Full TextMate-based syntax highlighting for ARO code including:
+Elegant, semantic syntax highlighting that works beautifully on both light and dark themes. Actions are colored by their **semantic role**:
+
+**Actions by Role:**
+- **REQUEST** (External → Internal) - **Blue/Cyan**: `<Extract>`, `<Retrieve>`, `<Fetch>`, `<Read>`, `<Accept>`
+- **OWN** (Internal → Internal) - **Purple/Violet**: `<Compute>`, `<Validate>`, `<Compare>`, `<Create>`, `<Transform>`, `<Filter>`
+- **RESPONSE** (Internal → External) - **Orange/Red**: `<Return>`, `<Throw>`
+- **EXPORT** (Persistence/Export) - **Green/Teal**: `<Publish>`, `<Store>`, `<Log>`, `<Send>`, `<Emit>`, `<Write>`
+- **LIFECYCLE** (System Management) - **Cyan**: `<Start>`, `<Stop>`, `<Keepalive>`, `<Watch>`, `<Configure>`
+- **TEST** (BDD Testing) - **Yellow/Gold**: `<Given>`, `<When>`, `<Then>`, `<Assert>`
+
+**Other Elements:**
 - **Feature set declarations** - Blue feature names, purple business activities
-- **Actions** - Orange action verbs (`<Extract>`, `<Create>`, `<Return>`, etc.)
-- **Results and Objects** - Green results, cyan objects
-- **Prepositions** - Yellow (`from`, `to`, `with`, `for`)
-- **Articles** - Gray (`the`, `a`, `an`)
-- **Literals** - Brown strings, magenta numbers
+- **Results** - Green (`<result>`, `<user>`, `<data>`)
+- **Objects** - Magenta (after prepositions: `<user-repository>`, `<application>`)
+- **Prepositions** - Pink (`from`, `to`, `with`, `for`, `where`)
+- **Articles** - Subtle gray (`the`, `a`, `an`)
+- **Literals** - String and number values
 - **Comments** - Gray/italic `(* ... *)`
 
 ### Live Templates (Code Snippets)
@@ -45,6 +55,120 @@ Quick templates for common ARO patterns. Type the abbreviation and press Tab:
 ### File Association
 
 Automatically associates `.aro` files with ARO language support.
+
+### Language Server Protocol (LSP)
+
+The plugin includes LSP support for advanced IDE features:
+- Real-time diagnostics (errors and warnings)
+- Hover information (types, documentation)
+- Go to definition
+- Find references
+- Code completion
+- Document symbols/structure view
+
+---
+
+## Configuration
+
+### ARO Language Server Path
+
+The plugin requires the **ARO CLI** to be installed for LSP features. By default, it looks for `aro` in your system PATH.
+
+#### Configure Custom Path
+
+**Via Settings UI (Recommended)**
+
+1. Open **Settings/Preferences** (`Ctrl+Alt+S` / `Cmd+,`)
+2. Navigate to **Tools** → **ARO Language**
+3. Click **Browse...** to select the ARO binary
+4. Optionally enable **Debug logging**
+5. Click **Apply**
+6. The language server will restart when you open the next `.aro` file
+
+**Settings Panel Features:**
+- **ARO Binary Path** - Full path to the ARO executable
+- **Enable debug logging** - Enable verbose LSP communication logs
+- Path validation (automatically checks if the binary is valid)
+
+### Installing ARO CLI
+
+If you don't have the ARO CLI installed:
+
+```bash
+# Clone the ARO repository
+git clone https://github.com/KrisSimon/aro.git
+cd aro
+
+# Build the CLI
+swift build -c release
+
+# The binary is at: .build/release/aro
+# Configure the plugin to use this path in Settings
+```
+
+Or add to PATH:
+```bash
+# Copy to a directory in your PATH
+sudo cp .build/release/aro /usr/local/bin/
+
+# Then the plugin will find it automatically
+```
+
+### Troubleshooting Configuration
+
+**Language Server fails to start**
+
+If you see a notification like "ARO Language Server not found":
+
+1. Click **"Open Settings"** in the notification
+2. Or manually open **Settings** → **Tools** → **ARO Language**
+3. Browse to select a valid ARO binary
+4. Click **Apply**
+5. Verify the binary works: `aro --version` in terminal
+
+**Server not found in PATH**
+
+If you installed ARO in a custom location:
+
+1. Get the full path: `which aro` (macOS/Linux) or `where aro` (Windows)
+2. Open **Settings** → **Tools** → **ARO Language**
+3. Enter the full path in **ARO Binary Path**
+4. Click **Apply**
+
+**Path validation**
+
+The plugin validates paths asynchronously by running `aro --version`. Features:
+- **Async validation**: Validation runs in the background without blocking the UI
+- **Validation button**: Click "Validate Path" to test your configured binary
+- **Result caching**: Validation results are cached to avoid repeated checks
+- **Visual feedback**: Green checkmark (✓) for valid paths, red X (✗) for errors
+
+Ensure your binary:
+- Exists and is executable
+- Is the ARO CLI (not a different binary)
+- Outputs "aro version X.Y.Z" format when run with `--version`
+- You have permission to execute it
+
+### Security
+
+The plugin validates paths before executing them to ensure security:
+- **Command injection prevention**: Paths with suspicious characters (`;`, `|`, `` ` ``, `$`, `<`, `>`) are rejected
+- **Path traversal protection**: Paths containing `..` are rejected to prevent directory traversal attacks
+- **Canonical path verification**: Paths are resolved to their canonical form to detect traversal attempts
+- **Version validation**: Only binaries that output "aro version X.Y.Z" are accepted
+- **Executable verification**: Files must exist, be executable, and not be symbolic links to unintended targets
+
+**Important**: Only configure paths to trusted ARO binaries. The plugin executes the binary to validate it.
+
+**Debug logging**
+
+To troubleshoot LSP issues:
+
+1. Open **Settings** → **Tools** → **ARO Language**
+2. Enable **Debug logging**
+3. Click **Apply**
+4. View logs: **Help** → **Show Log in Finder/Explorer** (or `idea.log`)
+5. Search for "ARO" to see LSP communication
 
 ---
 

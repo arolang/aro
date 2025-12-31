@@ -177,6 +177,7 @@ public final class TestContext: ExecutionContext, TestExecutionContext, @uncheck
     public let businessActivity: String
     public let executionId: String
     public let parent: ExecutionContext?
+    public let eventBus: EventBus?
 
     // MARK: - Initialization
 
@@ -191,6 +192,7 @@ public final class TestContext: ExecutionContext, TestExecutionContext, @uncheck
         self.executionId = UUID().uuidString
         self.featureSetLookupTable = featureSetLookup
         self.parent = parent
+        self.eventBus = nil
     }
 
     // MARK: - TestExecutionContext
@@ -265,6 +267,12 @@ public final class TestContext: ExecutionContext, TestExecutionContext, @uncheck
         lock.lock()
         defer { lock.unlock() }
         variables[name] = value
+    }
+
+    public func unbind(_ name: String) {
+        lock.lock()
+        defer { lock.unlock() }
+        variables.removeValue(forKey: name)
     }
 
     public func exists(_ name: String) -> Bool {

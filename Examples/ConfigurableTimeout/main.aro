@@ -1,0 +1,43 @@
+(* Example: Configurable Validation Timeout
+ *
+ * This example demonstrates how to configure custom timeouts for
+ * binary validation in Application-Start using the <Configure> action.
+ *
+ * The IDE plugins use a 5-second default timeout for path validation,
+ * but slow systems may need longer timeouts.
+ *)
+
+(Application-Start: Configurable Timeout Example) {
+    (* Configure validation timeout for IDE plugins
+     * This sets a custom timeout value that can be used by
+     * validation logic during plugin initialization.
+     *
+     * Note: This is a demonstration of how the Configure action
+     * can be used to set timeouts. The actual IDE plugin validation
+     * is separate, but this shows the pattern.
+     *)
+    <Configure> the <validation: timeout> with 10.
+
+    <Log> "Application started with custom timeout configuration" to the <console>.
+    <Log> <validation: timeout> to the <console>.
+
+    <Return> an <OK: status> for the <startup>.
+}
+
+(* Example: Using timeout in custom validation
+ *
+ * This shows how a timeout configuration could be used
+ * in a custom validation feature set.
+ *)
+(Validate Binary Path: Custom Validation) {
+    <Extract> the <path> from the <request: body>.
+    <Extract> the <timeout> from the <validation: timeout>.
+
+    (* Use the configured timeout for validation *)
+    <Log> "Validating with timeout:" to the <console>.
+    <Log> <timeout> to the <console>.
+
+    (* Your validation logic here *)
+
+    <Return> an <OK: status> with <path>.
+}

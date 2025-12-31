@@ -225,6 +225,23 @@ ARO is in active development. Contributions are welcome.
 - [Join the discussion](https://github.com/KrisSimon/ARO-Lang/discussions) for questions and ideas
 - Read the [Evolution Proposals](./Proposals/) to understand the language design
 
+### Code Reviews
+
+You can request an AI-powered code review on any pull request by commenting:
+
+```
+@claude review
+```
+
+Claude will analyze the PR for bugs, security issues, performance problems, and code quality. It will create suggested fixes as actual code changes in a new branch and submit them as a review PR.
+
+The review will:
+- ✅ Check for bugs and logical errors
+- ✅ Identify security vulnerabilities
+- ✅ Suggest performance improvements
+- ✅ Ensure code follows project guidelines (CLAUDE.md)
+- ✅ Verify test coverage
+
 ## License
 
 MIT License

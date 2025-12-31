@@ -33,7 +33,7 @@ Complete reference for all built-in actions in ARO.
 | **Merge** | OWN | Combine data | `<Merge> the <existing-user> with <update-data>.` |
 | **Return** | RESPONSE | Return result | `<Return> an <OK: status> with <data>.` |
 | **Throw** | RESPONSE | Throw error | `<Throw> a <NotFound: error> for the <user>.` |
-| **Log** | EXPORT | Write to logs | `<Log> the <msg> for the <console> with "Done".` |
+| **Log** | EXPORT | Write to logs | `<Log> "Done" to the <console>.` |
 | **Store** | EXPORT | Save to repository | `<Store> the <user> into the <users>.` |
 | **Write** | EXPORT | Write to file | `<Write> the <data> to the <file: "./out.txt">.` |
 | **Append** | EXPORT | Append to file | `<Append> the <line> to the <file: "./log.txt">.` |
@@ -255,7 +255,7 @@ The Exec action returns a structured result with the following fields:
 
 (* With error handling *)
 <Exec> the <result> for the <disk-check> with "df -h".
-<Log> the <error> for the <console> with <result.message> when <result.error> = true.
+<Log> <result.message> to the <console> when <result.error> = true.
 <Return> an <Error: status> for the <result> when <result.error> = true.
 <Return> an <OK: status> for the <result>.
 
@@ -577,43 +577,42 @@ Makes variables globally available.
 
 ### Log
 
-Writes to logs.
+Writes to logs and console output using sink syntax (ARO-0043).
 
 **Syntax:**
 ```aro
-<Log> the <message-type> for the <destination> with <content>.
+<Log> <value> to the <destination>.
 ```
 
 **Examples:**
 ```aro
-<Log> the <message> for the <console> with "User logged in".
-<Log> the <error: message> for the <console> with <error>.
-<Log> the <audit: entry> for the <audit-log> with <details>.
+<Log> "User logged in" to the <console>.
+<Log> <error> to the <console>.
+<Log> { status: "ok", count: 42 } to the <console>.
 ```
 
-**Valid Prepositions:** `for`, `with`
+**Valid Prepositions:** `to`
 
 ---
 
 ### Send
 
-Sends data to external destinations.
+Sends data to external destinations using sink syntax (ARO-0043).
 
 **Syntax:**
 ```aro
-<Send> the <data> to the <destination>.
-<Send> the <data> to the <destination> with <content>.
+<Send> <value> to the <destination>.
 ```
 
 **Examples:**
 ```aro
-<Send> the <email> to the <user: email>.
-<Send> the <notification> to the <push-service>.
-<Send> the <data> to the <connection>.
-<Send> the <message> to the <connection> with "Hello".
+<Send> "Hello" to the <connection>.
+<Send> <data> to the <connection>.
+<Send> <email> to the <user: email>.
+<Send> <notification> to the <push-service>.
 ```
 
-**Valid Prepositions:** `to`, `with`
+**Valid Prepositions:** `to`
 
 ---
 
@@ -989,7 +988,7 @@ The `Keepalive` action blocks execution until a shutdown signal is received (SIG
 ```aro
 (* HTTP server auto-starts when openapi.yaml is present *)
 (Application-Start: My API) {
-    <Log> the <startup: message> for the <console> with "API starting...".
+    <Log> "API starting..." to the <console>.
     <Keepalive> the <application> for the <events>.
     <Return> an <OK: status> for the <startup>.
 }
