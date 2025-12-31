@@ -1,43 +1,18 @@
 /**
  * Unit tests for ARO path validation
  *
- * To run these tests, install mocha and chai:
- * npm install --save-dev mocha @types/mocha chai @types/chai ts-node
+ * To run these tests, install mocha and sinon:
+ * npm install --save-dev mocha @types/mocha sinon @types/sinon ts-node
  *
  * Then run: npm test
  */
 
 import * as assert from 'assert';
-import * as fs from 'fs/promises';
-import * as path from 'path';
-import * as os from 'os';
+import * as sinon from 'sinon';
+import { validateAroPath } from '../extension';
+import * as childProcess from 'child_process';
 
-// Mock implementation of validateAroPath for testing
-// In a real test, this would import from extension.ts
-async function validateAroPath(aroPath: string): Promise<boolean> {
-    const SUSPICIOUS_CHARS = /[;&|`$<>]/;
-    const VERSION_PATTERN = /aro\s+version\s+\d+\.\d+(\.\d+)?/i;
-
-    try {
-        // Security: Check for suspicious characters
-        if (SUSPICIOUS_CHARS.test(aroPath)) {
-            console.error(`ARO validation failed: Suspicious characters in path ${aroPath}`);
-            return false;
-        }
-
-        // Security: Prevent path traversal
-        if (aroPath.includes('..')) {
-            console.error(`ARO validation failed: Path traversal not allowed in ${aroPath}`);
-            return false;
-        }
-
-        // For testing purposes, mock the actual execution
-        return true;
-    } catch (error: any) {
-        console.error(`ARO validation failed for path ${aroPath}:`, error);
-        return false;
-    }
-}
+// Note: We import the real validateAroPath function and mock execFileAsync
 
 describe('ARO Path Validation', () => {
     describe('Security - Command Injection', () => {

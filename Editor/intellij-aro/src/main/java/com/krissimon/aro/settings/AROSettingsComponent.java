@@ -14,6 +14,7 @@ import org.jetbrains.annotations.NotNull;
 
 import javax.swing.*;
 import java.awt.*;
+import java.util.concurrent.atomic.AtomicReference;
 
 public class AROSettingsComponent {
     private final JPanel panel;
@@ -22,9 +23,9 @@ public class AROSettingsComponent {
     private final JButton validateButton = new JButton("Validate Path");
     private final JBLabel statusLabel = new JBLabel("");
 
-    // Cache for validation results
-    private String lastValidatedPath = "";
-    private AROPathValidator.ValidationResult cachedResult = null;
+    // Thread-safe cache for validation results
+    private final AtomicReference<String> lastValidatedPath = new AtomicReference<>("");
+    private final AtomicReference<AROPathValidator.ValidationResult> cachedResult = new AtomicReference<>(null);
 
     public AROSettingsComponent() {
         // Configure file chooser for ARO binary
@@ -60,9 +61,9 @@ public class AROSettingsComponent {
             return;
         }
 
-        // Check cache
-        if (path.equals(lastValidatedPath) && cachedResult != null) {
-            updateStatusLabel(cachedResult);
+        // Check cache (thread-safe)
+        if (path.equals(lastValidatedPath.get()) && cachedResult.get() != null) {
+            updateStatusLabel(cachedResult.get());
             return;
         }
 
@@ -78,9 +79,9 @@ public class AROSettingsComponent {
 
             @Override
             public void onSuccess() {
-                // Cache the result
-                lastValidatedPath = path;
-                cachedResult = result;
+                // Cache the result (thread-safe)
+                lastValidatedPath.set(path);
+                cachedResult.set(result);
 
                 // Update UI on EDT
                 ApplicationManager.getApplication().invokeLater(() -> updateStatusLabel(result));

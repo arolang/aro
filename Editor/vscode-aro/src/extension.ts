@@ -8,7 +8,6 @@ import {
 import { execFile } from 'child_process';
 import { promisify } from 'util';
 import { realpath, access, constants } from 'fs/promises';
-import { basename } from 'path';
 
 const execFileAsync = promisify(execFile);
 const VALIDATION_TIMEOUT_MS = 5000;
@@ -16,13 +15,21 @@ const VERSION_PATTERN = /aro\s+version\s+\d+\.\d+(\.\d+)?/i;
 const SUSPICIOUS_CHARS = /[;&|`$<>]/;
 
 let client: LanguageClient | undefined;
+let statusBarItem: vscode.StatusBarItem;
 
 export function activate(context: vscode.ExtensionContext) {
+    // Create status bar item for LSP connection state
+    statusBarItem = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Right, 100);
+    statusBarItem.command = 'aro.openSettings';
+    context.subscriptions.push(statusBarItem);
     const config = vscode.workspace.getConfiguration('aro.lsp');
     const enabled = config.get<boolean>('enabled', true);
 
     if (!enabled) {
         console.log('ARO Language Server is disabled');
+        statusBarItem.text = '$(circle-slash) ARO LSP: Disabled';
+        statusBarItem.tooltip = 'ARO Language Server is disabled. Click to configure.';
+        statusBarItem.show();
         return;
     }
 
@@ -53,11 +60,26 @@ export function activate(context: vscode.ExtensionContext) {
         clientOptions
     );
 
+    // Update status: connecting
+    statusBarItem.text = '$(sync~spin) ARO LSP: Connecting...';
+    statusBarItem.tooltip = 'Connecting to ARO Language Server';
+    statusBarItem.show();
+
     // Start the client
     client.start().then(() => {
         console.log('ARO Language Server started successfully');
+
+        // Update status: connected
+        statusBarItem.text = '$(check) ARO LSP: Connected';
+        statusBarItem.tooltip = 'ARO Language Server is running';
+        statusBarItem.backgroundColor = undefined;
     }).catch(async (error) => {
         console.error('Failed to start ARO Language Server:', error);
+
+        // Update status: error
+        statusBarItem.text = '$(error) ARO LSP: Failed';
+        statusBarItem.tooltip = `Failed to start: ${error.message}. Click to configure.`;
+        statusBarItem.backgroundColor = new vscode.ThemeColor('statusBarItem.errorBackground');
 
         const action = await vscode.window.showErrorMessage(
             `Failed to start ARO Language Server: ${error.message}`,
@@ -77,7 +99,12 @@ export function activate(context: vscode.ExtensionContext) {
     context.subscriptions.push(
         vscode.commands.registerCommand('aro.restartServer', async () => {
             if (client) {
+                statusBarItem.text = '$(sync~spin) ARO LSP: Restarting...';
+                statusBarItem.tooltip = 'Restarting ARO Language Server';
                 await client.restart();
+                statusBarItem.text = '$(check) ARO LSP: Connected';
+                statusBarItem.tooltip = 'ARO Language Server is running';
+                statusBarItem.backgroundColor = undefined;
                 vscode.window.showInformationMessage('ARO Language Server restarted');
             }
         }),
@@ -145,7 +172,8 @@ async function configureLspPath() {
 }
 
 // Validate ARO binary path
-async function validateAroPath(path: string): Promise<boolean> {
+// Exported for testing
+export async function validateAroPath(path: string): Promise<boolean> {
     try {
         // Security: Check for suspicious characters that could indicate command injection
         if (SUSPICIOUS_CHARS.test(path)) {
@@ -160,15 +188,10 @@ async function validateAroPath(path: string): Promise<boolean> {
         }
 
         // Security: Resolve to canonical path to prevent path traversal
+        // Note: We don't check basename because legitimate symlinks may have different names
+        // The ".." check above provides sufficient path traversal protection
         try {
             const canonicalPath = await realpath(path);
-            const pathBasename = basename(path);
-
-            // Ensure the canonical path is what we expect (no traversal occurred)
-            if (!canonicalPath.endsWith(pathBasename)) {
-                console.error(`ARO validation failed: Potential path traversal detected in ${path}`);
-                return false;
-            }
 
             // Verify file exists and is executable
             await access(canonicalPath, constants.X_OK);

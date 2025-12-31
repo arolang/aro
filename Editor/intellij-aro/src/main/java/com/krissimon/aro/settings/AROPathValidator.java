@@ -32,12 +32,10 @@ public class AROPathValidator {
         File file = new File(path);
 
         // Security: Resolve to canonical path to prevent path traversal
+        // Note: We don't check basename because legitimate symlinks may have different names
+        // The ".." check above provides sufficient path traversal protection
         try {
-            String canonicalPath = file.getCanonicalPath();
-            // Ensure the canonical path is what we expect (no traversal occurred)
-            if (!canonicalPath.endsWith(file.getName())) {
-                return ValidationResult.error("Invalid path: potential path traversal detected");
-            }
+            file.getCanonicalPath();  // Verify path can be resolved (exists)
         } catch (Exception e) {
             return ValidationResult.error("Invalid path: " + e.getMessage());
         }
