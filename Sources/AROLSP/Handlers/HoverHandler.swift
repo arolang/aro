@@ -188,41 +188,6 @@ public struct HoverHandler: Sendable {
         return content
     }
 
-    private func formatPrepositionHover(_ preposition: Preposition, statement: AROStatement) -> String {
-        var content = "### Preposition: `\(preposition.rawValue)`\n\n"
-
-        // Show the full statement for context
-        content += "```aro\n"
-        content += formatStatement(statement)
-        content += "\n```\n\n"
-
-        // Describe the preposition's role
-        switch preposition {
-        case .from:
-            content += "*Indicates the source or origin of data*"
-        case .to:
-            content += "*Indicates the destination or target*"
-        case .with:
-            content += "*Specifies a parameter or accompanying data*"
-        case .for:
-            content += "*Indicates the purpose or beneficiary*"
-        case .into:
-            content += "*Indicates transformation or insertion*"
-        case .on:
-            content += "*Indicates a subject or location*"
-        case .against:
-            content += "*Indicates comparison or opposition*"
-        case .via:
-            content += "*Indicates the path or method*"
-        case .at:
-            content += "*Indicates a specific location or point*"
-        case .by:
-            content += "*Indicates delimiter or grouping*"
-        }
-
-        return content
-    }
-
     private func formatStatement(_ statement: AROStatement) -> String {
         var result = "<\(statement.action.verb)> "
 

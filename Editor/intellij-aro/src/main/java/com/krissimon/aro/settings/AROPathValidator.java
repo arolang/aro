@@ -39,11 +39,10 @@ public class AROPathValidator {
             pb.redirectErrorStream(true);
             process = pb.start();
 
-            // Fix resource leak: Use try-with-resources for BufferedReader
+            // Fix resource leak: Use try-with-resources for both InputStreamReader and BufferedReader
             String output;
-            try (BufferedReader reader = new BufferedReader(
-                new InputStreamReader(process.getInputStream())
-            )) {
+            try (InputStreamReader isr = new InputStreamReader(process.getInputStream());
+                 BufferedReader reader = new BufferedReader(isr)) {
                 output = reader.lines().collect(Collectors.joining("\n"));
             }
 
@@ -74,6 +73,15 @@ public class AROPathValidator {
             // Fix process resource leak: Ensure process is cleaned up
             if (process != null && process.isAlive()) {
                 process.destroy();
+                try {
+                    // Give process 1 second to terminate gracefully, then force kill
+                    if (!process.waitFor(1, TimeUnit.SECONDS)) {
+                        process.destroyForcibly();
+                    }
+                } catch (InterruptedException e) {
+                    Thread.currentThread().interrupt();
+                    process.destroyForcibly();
+                }
             }
         }
     }

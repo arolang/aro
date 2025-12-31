@@ -11,6 +11,7 @@ import { promisify } from 'util';
 const execFileAsync = promisify(execFile);
 const VALIDATION_TIMEOUT_MS = 5000;
 const VERSION_PATTERN = /aro\s+version\s+\d+\.\d+(\.\d+)?/i;
+const SUSPICIOUS_CHARS = /[;&|`$<>]/;
 
 let client: LanguageClient | undefined;
 
@@ -144,6 +145,12 @@ async function configureLspPath() {
 // Validate ARO binary path
 async function validateAroPath(path: string): Promise<boolean> {
     try {
+        // Security: Check for suspicious characters that could indicate command injection
+        if (SUSPICIOUS_CHARS.test(path)) {
+            console.error(`ARO validation failed: Suspicious characters in path ${path}`);
+            return false;
+        }
+
         const { stdout } = await execFileAsync(path, ['--version'], {
             timeout: VALIDATION_TIMEOUT_MS
         });
@@ -157,8 +164,22 @@ async function validateAroPath(path: string): Promise<boolean> {
         }
 
         return isValid;
-    } catch (error) {
-        console.error(`ARO validation failed for path ${path}:`, error);
+    } catch (error: any) {
+        // Distinguish timeout errors from other errors
+        if (error.killed && error.signal === 'SIGTERM') {
+            console.error(`ARO validation timeout for path ${path} (exceeded ${VALIDATION_TIMEOUT_MS}ms)`);
+        } else {
+            const message = error.message || String(error);
+            console.error(`ARO validation failed for path ${path}: ${message}`);
+
+            // Include stdout/stderr if available for debugging
+            if (error.stdout) {
+                console.error(`stdout: ${error.stdout}`);
+            }
+            if (error.stderr) {
+                console.error(`stderr: ${error.stderr}`);
+            }
+        }
         return false;
     }
 }
