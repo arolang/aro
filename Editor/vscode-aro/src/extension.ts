@@ -5,6 +5,12 @@ import {
     ServerOptions,
     TransportKind
 } from 'vscode-languageclient/node';
+import { execFile } from 'child_process';
+import { promisify } from 'util';
+
+const execFileAsync = promisify(execFile);
+const VALIDATION_TIMEOUT_MS = 5000;
+const VERSION_PATTERN = /aro\s+version\s+\d+\.\d+(\.\d+)?/i;
 
 let client: LanguageClient | undefined;
 
@@ -138,17 +144,21 @@ async function configureLspPath() {
 // Validate ARO binary path
 async function validateAroPath(path: string): Promise<boolean> {
     try {
-        const { execFile } = require('child_process');
-        const { promisify } = require('util');
-        const execFileAsync = promisify(execFile);
-
         const { stdout } = await execFileAsync(path, ['--version'], {
-            timeout: 5000
+            timeout: VALIDATION_TIMEOUT_MS
         });
 
-        // Check if output contains "ARO" or "aro"
-        return stdout.toLowerCase().includes('aro');
+        // Improved validation: Check for specific version format instead of just "aro"
+        const isValid = VERSION_PATTERN.test(stdout);
+
+        if (!isValid) {
+            console.error(`ARO validation failed: Invalid version output from ${path}`);
+            console.error(`Output: ${stdout}`);
+        }
+
+        return isValid;
     } catch (error) {
+        console.error(`ARO validation failed for path ${path}:`, error);
         return false;
     }
 }
