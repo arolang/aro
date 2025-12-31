@@ -18,6 +18,10 @@ public final class RuntimeContext: ExecutionContext, @unchecked Sendable {
     /// Variable storage
     private var variables: [String: any Sendable] = [:]
 
+    /// Track which variables are user-defined (immutable) vs framework-internal (mutable)
+    /// Only user variables enforce immutability; framework variables can be rebound
+    private var immutableVariables: Set<String> = []
+
     /// Service registry
     private var services: [ObjectIdentifier: any Sendable] = [:]
 
@@ -109,13 +113,38 @@ public final class RuntimeContext: ExecutionContext, @unchecked Sendable {
     public func bind(_ name: String, value: any Sendable) {
         lock.lock()
         defer { lock.unlock() }
+
+        // Check immutability: framework variables (_prefix) can be rebound
+        let isFrameworkVariable = name.hasPrefix("_")
+
+        if !isFrameworkVariable && immutableVariables.contains(name) {
+            lock.unlock()
+            fatalError("""
+                Runtime Error: Cannot rebind immutable variable '\(name)'
+                Feature: \(featureSetName)
+                Business Activity: \(businessActivity)
+
+                Variables in ARO are immutable. Once bound, they cannot be changed.
+                Create a new variable instead: <Action> the <\(name)-updated> ...
+
+                This error indicates the semantic analyzer missed a duplicate binding.
+                Please report this as a compiler bug.
+                """)
+        }
+
         variables[name] = value
+
+        // Mark user variables as immutable (framework variables stay mutable)
+        if !isFrameworkVariable {
+            immutableVariables.insert(name)
+        }
     }
 
     public func unbind(_ name: String) {
         lock.lock()
         defer { lock.unlock() }
         variables.removeValue(forKey: name)
+        immutableVariables.remove(name)
     }
 
     public func exists(_ name: String) -> Bool {

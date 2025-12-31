@@ -46,7 +46,74 @@ The symbol table is scoped to the feature set. Bindings in one feature set do no
 
 ---
 
-## 6.4 Data Flow Patterns
+## 6.4 Variable Immutability
+
+### The Immutability Rule
+
+**Variables in ARO are immutable.** Once a variable is bound to a value, it cannot be changed.
+
+This enforces functional programming semantics and makes data flow explicit and traceable. When you see a variable reference anywhere in a feature set, you know exactly what value it holds—the value that was assigned when it was first bound. There is no hidden reassignment that could change its value between statements.
+
+The compiler enforces immutability at compile-time. If you attempt to bind a variable name that already exists, the compiler reports an error:
+
+```
+error: Cannot rebind variable 'value' - variables are immutable
+  Hint: Create a new variable with a different name instead
+  Example: <Create> the <value-updated> with "second"
+```
+
+This compile-time check prevents a common class of bugs where variables change unexpectedly and makes it easier to reason about program behavior. The runtime also includes a safety check as a defense against compiler bugs, but in normal operation, all rebinding attempts are caught during compilation.
+
+### Creating New Variables from Existing
+
+To work with transformed values, create new variables with descriptive names that reflect their state in the data flow:
+
+```aro
+(* Immutability Example *)
+(Process Data: Computation) {
+    <Create> the <value> with 10.
+
+    (* ❌ This would fail: Cannot rebind 'value' *)
+    (* <Compute> the <value> from <value> + 5. *)
+
+    (* ✅ Correct: Create new variable *)
+    <Compute> the <value-incremented> from <value> + 5.
+    <Compute> the <value-doubled> from <value-incremented> * 2.
+
+    <Log> <value> to the <console>.              (* 10 *)
+    <Log> <value-incremented> to the <console>.  (* 15 *)
+    <Log> <value-doubled> to the <console>.      (* 30 *)
+
+    <Return> an <OK: status> with <value-doubled>.
+}
+```
+
+This pattern makes the data flow explicit. Each transformation is visible as a distinct variable, and readers can trace the progression: `value` → `value-incremented` → `value-doubled`. The variable names document what transformation occurred at each step.
+
+### Loop Variables
+
+Loop variables are immutable within each iteration. Each iteration gets fresh bindings in a child execution context, so the loop variable can be bound again for the next iteration, but within a single iteration, you cannot rebind it:
+
+```aro
+for each <item> in <items> {
+    (* ❌ Cannot rebind loop variable *)
+    (* <Compute> the <item> from <item> + 1. *)
+
+    (* ✅ Create new variable from loop variable *)
+    <Compute> the <item-incremented> from <item> + 1.
+    <Log> <item-incremented> to the <console>.
+}
+```
+
+This immutability within iterations prevents subtle bugs where loop variables change mid-iteration. The loop variable represents the current element being processed—it should not change while processing that element.
+
+###  Framework Variables
+
+Variables with underscore prefix (`_variable`) are framework-internal and exempt from immutability checks. These are used by the ARO runtime for internal bookkeeping. User code should not use underscore-prefixed names.
+
+---
+
+## 6.5 Data Flow Patterns
 
 Several common patterns emerge in how data flows through feature sets. Recognizing these patterns helps you structure your code effectively and understand existing code more quickly.
 
@@ -82,7 +149,7 @@ These patterns can combine in complex feature sets. A realistic API handler migh
 
 ---
 
-## 6.5 Cross-Feature Set Communication
+## 6.6 Cross-Feature Set Communication
 
 Because each feature set has its own isolated symbol table, data does not automatically flow between feature sets. If one feature set creates a value and another feature set needs that value, you must explicitly communicate it through one of several mechanisms.
 
@@ -102,7 +169,7 @@ The context object provides data that is available to handlers based on how they
 
 ---
 
-## 6.6 Qualified Access
+## 6.7 Qualified Access
 
 When you reference a variable, you can use qualifiers to access nested properties within that variable's value. The qualifier path is written after the variable name, separated by colons. This allows you to navigate into structured data without creating intermediate bindings.
 
@@ -116,7 +183,7 @@ The qualifier syntax reads naturally when the values have descriptive names. If 
 
 ---
 
-## 6.7 Best Practices
+## 6.8 Best Practices
 
 Several practices help maintain clarity in data flow.
 

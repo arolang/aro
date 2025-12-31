@@ -188,9 +188,14 @@ public final class SemanticAnalyzer {
             exports: exports
         )
     }
-    
+
     // MARK: - Statement Analysis
-    
+
+    /// Check if variable name is framework-internal (exempt from immutability)
+    private func isInternalVariable(_ name: String) -> Bool {
+        return name.hasPrefix("_")
+    }
+
     private func analyzeStatement(
         _ statement: Statement,
         builder: SymbolTableBuilder,
@@ -297,6 +302,19 @@ public final class SemanticAnalyzer {
                 dataType = .unknown
             }
 
+            // Check for duplicate binding (immutability enforcement)
+            if definedSymbols.contains(resultName) && !isInternalVariable(resultName) {
+                diagnostics.error(
+                    "Cannot rebind variable '\(resultName)' - variables are immutable",
+                    at: statement.result.span.start,
+                    hints: [
+                        "Variable '\(resultName)' was already defined earlier in this feature set",
+                        "Create a new variable with a different name instead",
+                        "Example: <\(statement.action.verb)> the <\(resultName)-updated> \(statement.object.preposition.rawValue) the <\(objectName)>"
+                    ]
+                )
+            }
+
             builder.define(
                 name: resultName,
                 definedAt: statement.span,
@@ -326,6 +344,19 @@ public final class SemanticAnalyzer {
                 dataType = inferExpressionType(expr)
             } else {
                 dataType = .unknown
+            }
+
+            // Check for duplicate binding (immutability enforcement)
+            if definedSymbols.contains(resultName) && !isInternalVariable(resultName) {
+                diagnostics.error(
+                    "Cannot rebind variable '\(resultName)' - variables are immutable",
+                    at: statement.result.span.start,
+                    hints: [
+                        "Variable '\(resultName)' was already defined earlier in this feature set",
+                        "Create a new variable with a different name instead",
+                        "Example: <\(statement.action.verb)> the <\(resultName)-updated> \(statement.object.preposition.rawValue) the <\(objectName)>"
+                    ]
+                )
             }
 
             builder.define(

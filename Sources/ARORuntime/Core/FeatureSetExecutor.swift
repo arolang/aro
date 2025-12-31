@@ -694,10 +694,17 @@ public final class FeatureSetExecutor: @unchecked Sendable {
             try await withThrowingTaskGroup(of: Void.self) { group in
                 var activeCount = 0
                 for (index, item) in items.enumerated() {
+                    // Create a child context for filter evaluation
+                    // This ensures the filter check doesn't violate immutability
+                    let filterContext = context.createChild(featureSetName: context.featureSetName)
+                    filterContext.bind(loop.itemVariable, value: item)
+                    if let indexVar = loop.indexVariable {
+                        filterContext.bind(indexVar, value: index)
+                    }
+
                     // Check filter condition if present
                     if let filter = loop.filter {
-                        context.bind(loop.itemVariable, value: item)
-                        let filterResult = try await expressionEvaluator.evaluate(filter, context: context)
+                        let filterResult = try await expressionEvaluator.evaluate(filter, context: filterContext)
                         guard let passes = filterResult as? Bool, passes else {
                             continue
                         }
@@ -726,23 +733,28 @@ public final class FeatureSetExecutor: @unchecked Sendable {
         } else {
             // Sequential execution
             for (index, item) in items.enumerated() {
+                // Create fresh child context for this iteration
+                // This gives us fresh immutable bindings per iteration
+                let iterationContext = context.createChild(featureSetName: context.featureSetName)
+
+                // Bind loop variables in iteration context
+                iterationContext.bind(loop.itemVariable, value: item)
+                if let indexVar = loop.indexVariable {
+                    iterationContext.bind(indexVar, value: index)
+                }
+
                 // Check filter condition if present
                 if let filter = loop.filter {
-                    context.bind(loop.itemVariable, value: item)
-                    let filterResult = try await expressionEvaluator.evaluate(filter, context: context)
+                    let filterResult = try await expressionEvaluator.evaluate(filter, context: iterationContext)
                     guard let passes = filterResult as? Bool, passes else {
                         continue
                     }
                 }
 
-                context.bind(loop.itemVariable, value: item)
-                if let indexVar = loop.indexVariable {
-                    context.bind(indexVar, value: index)
-                }
-
+                // Execute loop body in iteration context
                 for bodyStatement in loop.body {
-                    try await executeStatement(bodyStatement, context: context)
-                    if context.getResponse() != nil {
+                    try await executeStatement(bodyStatement, context: iterationContext)
+                    if iterationContext.getResponse() != nil {
                         return
                     }
                 }

@@ -628,7 +628,7 @@ Variables are implicitly defined by ARO statements. The **result** of an action 
 1. The result of an ARO statement creates a new variable
 2. The variable is bound to the value produced by the action
 3. Default visibility is `internal`
-4. Redefining a variable within a feature set **overwrites** it
+4. Variables are **immutable** - once bound, they cannot be rebound
 
 ### Definition Semantics by Action Type
 
@@ -696,6 +696,86 @@ Some variables are provided by the runtime:
 | `<context>` | Execution context |
 | `<pathParameters>` | URL path parameters |
 | `<environment>` | Environment variables |
+
+---
+
+## Variable Immutability
+
+### Overview
+
+Variables in ARO are **immutable**. Once bound, they cannot be rebound to a different value.
+
+**Rationale:**
+- Makes data flow explicit and traceable
+- Prevents accidental mutation bugs
+- Enables functional programming patterns
+- Simplifies reasoning about program behavior
+
+### Enforcement
+
+**Compile-time**: The semantic analyzer detects duplicate bindings and reports an error:
+
+```
+error: Cannot rebind variable 'value' - variables are immutable
+  at line 4, column 13
+
+  Variable 'value' was already defined at line 1, column 13
+
+  Hint: Create a new variable with a different name instead
+  Example: <Create> the <value-updated> with "second"
+```
+
+**Runtime**: A safety check prevents rebinding (should never trigger if compiler works correctly):
+
+```swift
+fatalError("Runtime Error: Cannot rebind immutable variable '\(name)'")
+```
+
+### Creating Transformed Values
+
+To transform existing values, create new variables with descriptive names:
+
+```aro
+(* ❌ Invalid - attempts to rebind *)
+<Create> the <value> with 10.
+<Compute> the <value> from <value> + 5.  (* Error: Cannot rebind 'value' *)
+
+(* ✅ Valid - creates new variables *)
+<Create> the <value> with 10.
+<Compute> the <value-incremented> from <value> + 5.
+<Compute> the <value-doubled> from <value-incremented> * 2.
+```
+
+Variable names should reflect their state in the transformation pipeline:
+- `value` → `value-incremented` → `value-doubled`
+
+### Loop Variables
+
+Loop variables are immutable **per iteration**. Each iteration creates fresh bindings in a child execution context:
+
+```aro
+for each <item> in <items> {
+    (* ❌ Cannot rebind loop variable within iteration *)
+    <Compute> the <item> from <item> + 1.  (* Error *)
+
+    (* ✅ Create new variable from loop variable *)
+    <Compute> the <item-incremented> from <item> + 1.
+}
+```
+
+**Implementation**: Loop execution creates a child `RuntimeContext` for each iteration, providing fresh variable bindings.
+
+### Framework Variables
+
+Variables with `_` prefix are framework-internal and exempt from immutability checks:
+
+```aro
+(* Framework variables can be rebound *)
+<Create> the <_internal> with "first".
+<Create> the <_internal> with "second".  (* Allowed *)
+```
+
+**User code should not use `_` prefixed names.**
 
 ---
 
