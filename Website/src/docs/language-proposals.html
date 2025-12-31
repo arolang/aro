@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-    <title>Language Proposals - ARO Programming Language</title>
+    <title>Language Specifications - ARO Programming Language</title>
 {{head}}
     <style>
         .doc-page { padding: 120px 24px 80px; max-width: 900px; margin: 0 auto; }
@@ -29,7 +29,7 @@
         .proposal-link { color: var(--color-primary); text-decoration: none; }
         .proposal-link:hover { text-decoration: underline; }
         .status-implemented { color: #10b981; }
-        .status-draft { color: #f59e0b; }
+        .status-future { color: #f59e0b; }
     </style>
 </head>
 <body>
@@ -57,280 +57,141 @@
         <a href="../docs.html" class="back-link">&#x2190; Back to Documentation</a>
 
         <header class="doc-header">
-            <h1 class="gradient-text">Language Proposals</h1>
+            <h1 class="gradient-text">Language Specifications</h1>
             <p class="lead">
-                The ARO evolution process is documented through numbered proposals that specify
-                every aspect of the language design. There are currently 35 proposals.
+                The ARO language is documented through 10 comprehensive specifications
+                that cover everything from core syntax to native compilation.
             </p>
         </header>
 
         <div class="highlight-box">
-            <h4>Proposal Format</h4>
+            <h4>Reading Order</h4>
             <p>
-                Each proposal follows a standard format: Abstract, Motivation, Proposed Solution,
-                Implementation Notes, and Revision History. They serve as the official specification
-                for the language.
+                For newcomers to ARO, we recommend reading the specifications in order.
+                Each builds on concepts from the previous ones.
             </p>
         </div>
 
-        <h2>Core Language (ARO-0001 to ARO-0008)</h2>
-        <p>These proposals define the fundamental language constructs.</p>
+        <h2>Language Specifications</h2>
+        <p>These 10 documents define the complete ARO language.</p>
 
         <table>
             <thead>
-                <tr><th>Proposal</th><th>Title</th><th>Status</th></tr>
+                <tr><th>#</th><th>Specification</th><th>Topics</th></tr>
             </thead>
             <tbody>
                 <tr>
-                    <td><a href="https://github.com/KrisSimon/aro/blob/main/Proposals/ARO-0001-core-syntax.md" class="proposal-link">ARO-0001</a></td>
-                    <td>Core Syntax</td>
-                    <td><span class="status-implemented">Implemented</span></td>
+                    <td>1</td>
+                    <td><a href="https://github.com/KrisSimon/aro/blob/main/Proposals/ARO-0001-language-fundamentals.md" class="proposal-link">Language Fundamentals</a></td>
+                    <td>Core syntax, literals, expressions, variable scoping</td>
                 </tr>
                 <tr>
-                    <td><a href="https://github.com/KrisSimon/aro/blob/main/Proposals/ARO-0002-literals-expressions.md" class="proposal-link">ARO-0002</a></td>
-                    <td>Literals and Expressions</td>
-                    <td><span class="status-implemented">Implemented</span></td>
+                    <td>2</td>
+                    <td><a href="https://github.com/KrisSimon/aro/blob/main/Proposals/ARO-0002-control-flow.md" class="proposal-link">Control Flow</a></td>
+                    <td>When guards, match expressions, iteration, collections</td>
                 </tr>
                 <tr>
-                    <td><a href="https://github.com/KrisSimon/aro/blob/main/Proposals/ARO-0003-variable-scoping.md" class="proposal-link">ARO-0003</a></td>
-                    <td>Variable Scoping</td>
-                    <td><span class="status-implemented">Implemented</span></td>
+                    <td>3</td>
+                    <td><a href="https://github.com/KrisSimon/aro/blob/main/Proposals/ARO-0003-type-system.md" class="proposal-link">Type System</a></td>
+                    <td>Types, OpenAPI integration, contract-first APIs</td>
                 </tr>
                 <tr>
-                    <td><a href="https://github.com/KrisSimon/aro/blob/main/Proposals/ARO-0004-conditional-branching.md" class="proposal-link">ARO-0004</a></td>
-                    <td>Conditional Branching</td>
-                    <td><span class="status-implemented">Implemented</span></td>
+                    <td>4</td>
+                    <td><a href="https://github.com/KrisSimon/aro/blob/main/Proposals/ARO-0004-actions.md" class="proposal-link">Actions</a></td>
+                    <td>Action roles, 50 built-in actions, custom extensions</td>
                 </tr>
                 <tr>
-                    <td><a href="https://github.com/KrisSimon/aro/blob/main/Proposals/ARO-0005-iteration-loops.md" class="proposal-link">ARO-0005</a></td>
-                    <td>Iteration and Loops</td>
-                    <td><span class="status-implemented">Implemented</span></td>
+                    <td>5</td>
+                    <td><a href="https://github.com/KrisSimon/aro/blob/main/Proposals/ARO-0005-application-architecture.md" class="proposal-link">Application Architecture</a></td>
+                    <td>App structure, lifecycle, concurrency model</td>
                 </tr>
                 <tr>
-                    <td><a href="https://github.com/KrisSimon/aro/blob/main/Proposals/ARO-0006-type-system.md" class="proposal-link">ARO-0006</a></td>
-                    <td>Type System</td>
-                    <td><span class="status-implemented">Implemented</span></td>
+                    <td>6</td>
+                    <td><a href="https://github.com/KrisSimon/aro/blob/main/Proposals/ARO-0006-error-philosophy.md" class="proposal-link">Error Philosophy</a></td>
+                    <td>"Code is the error message" approach</td>
                 </tr>
                 <tr>
-                    <td><a href="https://github.com/KrisSimon/aro/blob/main/Proposals/ARO-0007-modules-imports.md" class="proposal-link">ARO-0007</a></td>
-                    <td>Modules and Imports</td>
-                    <td><span class="status-implemented">Implemented</span></td>
+                    <td>7</td>
+                    <td><a href="https://github.com/KrisSimon/aro/blob/main/Proposals/ARO-0007-events-reactive.md" class="proposal-link">Events &amp; Reactive</a></td>
+                    <td>Event dispatch, state machines, repositories</td>
                 </tr>
                 <tr>
-                    <td><a href="https://github.com/KrisSimon/aro/blob/main/Proposals/ARO-0008-error-handling.md" class="proposal-link">ARO-0008</a></td>
-                    <td>Error Handling</td>
-                    <td><span class="status-implemented">Implemented</span></td>
+                    <td>8</td>
+                    <td><a href="https://github.com/KrisSimon/aro/blob/main/Proposals/ARO-0008-io-services.md" class="proposal-link">I/O Services</a></td>
+                    <td>HTTP server/client, file system, sockets</td>
+                </tr>
+                <tr>
+                    <td>9</td>
+                    <td><a href="https://github.com/KrisSimon/aro/blob/main/Proposals/ARO-0009-native-compilation.md" class="proposal-link">Native Compilation</a></td>
+                    <td>LLVM code generation, aro build command</td>
+                </tr>
+                <tr>
+                    <td>10</td>
+                    <td><a href="https://github.com/KrisSimon/aro/blob/main/Proposals/ARO-0010-advanced-features.md" class="proposal-link">Advanced Features</a></td>
+                    <td>Regular expressions, date/time, system exec</td>
                 </tr>
             </tbody>
         </table>
 
-        <h2>Actions and Events (ARO-0009 to ARO-0012)</h2>
-        <p>These proposals define action implementations and the event system.</p>
+        <h2>Future Features</h2>
+        <p>These features are planned but not yet implemented.</p>
 
         <table>
             <thead>
-                <tr><th>Proposal</th><th>Title</th><th>Status</th></tr>
+                <tr><th>Feature</th><th>Description</th><th>Status</th></tr>
             </thead>
             <tbody>
                 <tr>
-                    <td><a href="https://github.com/KrisSimon/aro/blob/main/Proposals/ARO-0009-action-implementations.md" class="proposal-link">ARO-0009</a></td>
-                    <td>Action Implementations</td>
-                    <td><span class="status-implemented">Implemented</span></td>
+                    <td><a href="https://github.com/KrisSimon/aro/blob/main/Proposals/future/ARO-0014-domain-modeling.md" class="proposal-link">Domain Modeling</a></td>
+                    <td>DDD patterns: entities, value objects, aggregates</td>
+                    <td><span class="status-future">Planned</span></td>
                 </tr>
                 <tr>
-                    <td><a href="https://github.com/KrisSimon/aro/blob/main/Proposals/ARO-0011-concurrency-async.md" class="proposal-link">ARO-0011</a></td>
-                    <td>Concurrency and Async</td>
-                    <td><span class="status-implemented">Implemented</span></td>
+                    <td><a href="https://github.com/KrisSimon/aro/blob/main/Proposals/future/ARO-0015-testing-framework.md" class="proposal-link">Testing Framework</a></td>
+                    <td>BDD-style testing with Given/When/Then</td>
+                    <td><span class="status-future">Planned</span></td>
                 </tr>
                 <tr>
-                    <td><a href="https://github.com/KrisSimon/aro/blob/main/Proposals/ARO-0012-events-reactive.md" class="proposal-link">ARO-0012</a></td>
-                    <td>Simple Event Dispatch</td>
-                    <td><span class="status-implemented">Implemented</span></td>
+                    <td><a href="https://github.com/KrisSimon/aro/blob/main/Proposals/future/ARO-0016-interoperability.md" class="proposal-link">Interoperability</a></td>
+                    <td>Foreign function interface, database integration</td>
+                    <td><span class="status-future">Planned</span></td>
+                </tr>
+                <tr>
+                    <td><a href="https://github.com/KrisSimon/aro/blob/main/Proposals/future/ARO-0018-query-language.md" class="proposal-link">Query Language</a></td>
+                    <td>SQL-like queries and aggregations</td>
+                    <td><span class="status-future">Planned</span></td>
+                </tr>
+                <tr>
+                    <td><a href="https://github.com/KrisSimon/aro/blob/main/Proposals/future/ARO-0019-standard-library.md" class="proposal-link">Standard Library</a></td>
+                    <td>Core utilities and common functions</td>
+                    <td><span class="status-future">Planned</span></td>
+                </tr>
+                <tr>
+                    <td><a href="https://github.com/KrisSimon/aro/blob/main/Proposals/future/ARO-0030-ide-integration.md" class="proposal-link">IDE Integration</a></td>
+                    <td>Enhanced editor support</td>
+                    <td><span class="status-future">Planned</span></td>
+                </tr>
+                <tr>
+                    <td><a href="https://github.com/KrisSimon/aro/blob/main/Proposals/future/ARO-0034-language-server-protocol.md" class="proposal-link">Language Server Protocol</a></td>
+                    <td>LSP implementation for IDE features</td>
+                    <td><span class="status-future">Planned</span></td>
                 </tr>
             </tbody>
         </table>
 
-        <h2>Advanced Features (ARO-0013 to ARO-0019)</h2>
-        <p>These proposals define state machines, domain modeling, and data pipelines.</p>
-
-        <table>
-            <thead>
-                <tr><th>Proposal</th><th>Title</th><th>Status</th></tr>
-            </thead>
-            <tbody>
-                <tr>
-                    <td><a href="https://github.com/KrisSimon/aro/blob/main/Proposals/ARO-0013-state-machines.md" class="proposal-link">ARO-0013</a></td>
-                    <td>State Machines</td>
-                    <td><span class="status-implemented">Implemented</span></td>
-                </tr>
-                <tr>
-                    <td><a href="https://github.com/KrisSimon/aro/blob/main/Proposals/ARO-0014-domain-modeling.md" class="proposal-link">ARO-0014</a></td>
-                    <td>Domain Modeling</td>
-                    <td><span class="status-implemented">Implemented</span></td>
-                </tr>
-                <tr>
-                    <td><a href="https://github.com/KrisSimon/aro/blob/main/Proposals/ARO-0015-testing-framework.md" class="proposal-link">ARO-0015</a></td>
-                    <td>Testing Framework</td>
-                    <td><span class="status-draft">Draft</span></td>
-                </tr>
-                <tr>
-                    <td><a href="https://github.com/KrisSimon/aro/blob/main/Proposals/ARO-0016-interoperability.md" class="proposal-link">ARO-0016</a></td>
-                    <td>Interoperability</td>
-                    <td><span class="status-implemented">Implemented</span></td>
-                </tr>
-                <tr>
-                    <td><a href="https://github.com/KrisSimon/aro/blob/main/Proposals/ARO-0018-query-language.md" class="proposal-link">ARO-0018</a></td>
-                    <td>Data Pipelines (Query Language)</td>
-                    <td><span class="status-implemented">Implemented</span></td>
-                </tr>
-                <tr>
-                    <td><a href="https://github.com/KrisSimon/aro/blob/main/Proposals/ARO-0019-standard-library.md" class="proposal-link">ARO-0019</a></td>
-                    <td>Standard Library</td>
-                    <td><span class="status-implemented">Implemented</span></td>
-                </tr>
-            </tbody>
-        </table>
-
-        <h2>Runtime Architecture (ARO-0020 to ARO-0025)</h2>
-        <p>These proposals define the runtime, HTTP, file system, and socket services.</p>
-
-        <table>
-            <thead>
-                <tr><th>Proposal</th><th>Title</th><th>Status</th></tr>
-            </thead>
-            <tbody>
-                <tr>
-                    <td><a href="https://github.com/KrisSimon/aro/blob/main/Proposals/ARO-0020-runtime-architecture.md" class="proposal-link">ARO-0020</a></td>
-                    <td>Runtime Architecture</td>
-                    <td><span class="status-implemented">Implemented</span></td>
-                </tr>
-                <tr>
-                    <td><a href="https://github.com/KrisSimon/aro/blob/main/Proposals/ARO-0021-http-server.md" class="proposal-link">ARO-0021</a></td>
-                    <td>HTTP Server</td>
-                    <td><span class="status-implemented">Implemented</span></td>
-                </tr>
-                <tr>
-                    <td><a href="https://github.com/KrisSimon/aro/blob/main/Proposals/ARO-0022-http-client.md" class="proposal-link">ARO-0022</a></td>
-                    <td>HTTP Client</td>
-                    <td><span class="status-implemented">Implemented</span></td>
-                </tr>
-                <tr>
-                    <td><a href="https://github.com/KrisSimon/aro/blob/main/Proposals/ARO-0023-file-system.md" class="proposal-link">ARO-0023</a></td>
-                    <td>File System</td>
-                    <td><span class="status-implemented">Implemented</span></td>
-                </tr>
-                <tr>
-                    <td><a href="https://github.com/KrisSimon/aro/blob/main/Proposals/ARO-0024-sockets.md" class="proposal-link">ARO-0024</a></td>
-                    <td>Sockets</td>
-                    <td><span class="status-implemented">Implemented</span></td>
-                </tr>
-                <tr>
-                    <td><a href="https://github.com/KrisSimon/aro/blob/main/Proposals/ARO-0025-action-extension-interface.md" class="proposal-link">ARO-0025</a></td>
-                    <td>Action Extension Interface</td>
-                    <td><span class="status-implemented">Implemented</span></td>
-                </tr>
-            </tbody>
-        </table>
-
-        <h2>Compilation and APIs (ARO-0026 to ARO-0029)</h2>
-        <p>These proposals define native compilation, OpenAPI integration, and long-running applications.</p>
-
-        <table>
-            <thead>
-                <tr><th>Proposal</th><th>Title</th><th>Status</th></tr>
-            </thead>
-            <tbody>
-                <tr>
-                    <td><a href="https://github.com/KrisSimon/aro/blob/main/Proposals/ARO-0026-native-compilation.md" class="proposal-link">ARO-0026</a></td>
-                    <td>Native Compilation</td>
-                    <td><span class="status-implemented">Implemented</span></td>
-                </tr>
-                <tr>
-                    <td><a href="https://github.com/KrisSimon/aro/blob/main/Proposals/ARO-0027-openapi-contract-first.md" class="proposal-link">ARO-0027</a></td>
-                    <td>OpenAPI Contract-First</td>
-                    <td><span class="status-implemented">Implemented</span></td>
-                </tr>
-                <tr>
-                    <td><a href="https://github.com/KrisSimon/aro/blob/main/Proposals/ARO-0028-long-running-applications.md" class="proposal-link">ARO-0028</a></td>
-                    <td>Long-Running Applications</td>
-                    <td><span class="status-implemented">Implemented</span></td>
-                </tr>
-                <tr>
-                    <td><a href="https://github.com/KrisSimon/aro/blob/main/Proposals/ARO-0029-native-file-monitoring.md" class="proposal-link">ARO-0029</a></td>
-                    <td>Native File Monitoring</td>
-                    <td><span class="status-draft">Draft</span></td>
-                </tr>
-            </tbody>
-        </table>
-
-        <h2>Tooling and Extensions (ARO-0030 to ARO-0034)</h2>
-        <p>These proposals define IDE integration, repositories, and developer tooling.</p>
-
-        <table>
-            <thead>
-                <tr><th>Proposal</th><th>Title</th><th>Status</th></tr>
-            </thead>
-            <tbody>
-                <tr>
-                    <td><a href="https://github.com/KrisSimon/aro/blob/main/Proposals/ARO-0030-ide-integration.md" class="proposal-link">ARO-0030</a></td>
-                    <td>IDE Integration</td>
-                    <td><span class="status-draft">Draft</span></td>
-                </tr>
-                <tr>
-                    <td><a href="https://github.com/KrisSimon/aro/blob/main/Proposals/ARO-0031-context-aware-response-formatting.md" class="proposal-link">ARO-0031</a></td>
-                    <td>Context-Aware Response Formatting</td>
-                    <td><span class="status-implemented">Implemented</span></td>
-                </tr>
-                <tr>
-                    <td><a href="https://github.com/KrisSimon/aro/blob/main/Proposals/ARO-0032-repositories.md" class="proposal-link">ARO-0032</a></td>
-                    <td>Repositories</td>
-                    <td><span class="status-implemented">Implemented</span></td>
-                </tr>
-                <tr>
-                    <td><a href="https://github.com/KrisSimon/aro/blob/main/Proposals/ARO-0033-system-exec-action.md" class="proposal-link">ARO-0033</a></td>
-                    <td>System Exec Action</td>
-                    <td><span class="status-implemented">Implemented</span></td>
-                </tr>
-                <tr>
-                    <td><a href="https://github.com/KrisSimon/aro/blob/main/Proposals/ARO-0034-language-server-protocol.md" class="proposal-link">ARO-0034</a></td>
-                    <td>Language Server Protocol</td>
-                    <td><span class="status-draft">Draft</span></td>
-                </tr>
-            </tbody>
-        </table>
-
-        <h2>Recent Additions (ARO-0035 to ARO-0037)</h2>
-        <p>These proposals add recent language enhancements.</p>
-
-        <table>
-            <thead>
-                <tr><th>Proposal</th><th>Title</th><th>Status</th></tr>
-            </thead>
-            <tbody>
-                <tr>
-                    <td><a href="https://github.com/KrisSimon/aro/blob/main/Proposals/ARO-0035-qualifier-as-name.md" class="proposal-link">ARO-0035</a></td>
-                    <td>Qualifier as Name</td>
-                    <td><span class="status-implemented">Implemented</span></td>
-                </tr>
-                <tr>
-                    <td><a href="https://github.com/KrisSimon/aro/blob/main/Proposals/ARO-0036-file-operations.md" class="proposal-link">ARO-0036</a></td>
-                    <td>Native File Operations</td>
-                    <td><span class="status-implemented">Implemented</span></td>
-                </tr>
-                <tr>
-                    <td><a href="https://github.com/KrisSimon/aro/blob/main/Proposals/ARO-0037-regular-expressions.md" class="proposal-link">ARO-0037</a></td>
-                    <td>Regular Expression Literals</td>
-                    <td><span class="status-implemented">Implemented</span></td>
-                </tr>
-            </tbody>
-        </table>
+        <h2>Legacy Proposals</h2>
+        <p>
+            The original evolution proposals are preserved in the
+            <a href="https://github.com/KrisSimon/aro/tree/main/Proposals/legacy" class="proposal-link">legacy folder</a>
+            for historical reference. These have been superseded by the consolidated specifications above.
+        </p>
 
         <div class="highlight-box">
             <h4>Contributing</h4>
             <p>
                 Want to propose a new feature? Open an issue on
                 <a href="https://github.com/KrisSimon/aro/issues" class="proposal-link">GitHub</a>
-                with your idea and we'll discuss whether it should become a formal proposal.
+                with your idea and we'll discuss whether it should become a formal specification.
             </p>
         </div>
     </main>

@@ -202,14 +202,14 @@ Application lifecycle handlers:
 ```aro
 (* Entry point - exactly one per application *)
 (Application-Start: My App) {
-    <Log> the <startup: message> for the <console> with "Starting...".
+    <Log> "Starting..." to the <console>.
     <Start> the <http-server> with <contract>.
     <Return> an <OK: status> for the <startup>.
 }
 
 (* Exit handler for graceful shutdown - optional, at most one *)
 (Application-End: Success) {
-    <Log> the <shutdown: message> for the <console> with "Shutting down...".
+    <Log> "Shutting down..." to the <console>.
     <Stop> the <http-server> with <application>.
     <Return> an <OK: status> for the <shutdown>.
 }
@@ -217,7 +217,7 @@ Application lifecycle handlers:
 (* Exit handler for errors/crashes - optional, at most one *)
 (Application-End: Error) {
     <Extract> the <error> from the <shutdown: error>.
-    <Log> the <error: message> for the <console> with <error>.
+    <Log> <error> to the <console>.
     <Return> an <OK: status> for the <error-handling>.
 }
 ```
@@ -248,7 +248,7 @@ The Compute action transforms data using built-in operations:
 <Compare> the <first-length> against the <second-length>.
 ```
 
-See `Proposals/ARO-0035-qualifier-as-name.md` for the full specification.
+See `Proposals/ARO-0001-language-fundamentals.md` for the full specification.
 
 ### Long-Running Applications
 
@@ -256,7 +256,7 @@ For applications that need to stay alive and process events (servers, file watch
 
 ```aro
 (Application-Start: File Watcher) {
-    <Log> the <startup: message> for the <console> with "Starting...".
+    <Log> "Starting..." to the <console>.
     <Start> the <file-monitor> with ".".
 
     (* Keep the application running to process events *)
@@ -346,23 +346,40 @@ Examples/
     ├── api.aro         # CRUD operations
     └── observers.aro   # Repository change observers
 
-Proposals/              # 42 evolution proposals (ARO-0001 to ARO-0042)
+Proposals/              # 10 consolidated language specifications
+├── ARO-0001-language-fundamentals.md
+├── ARO-0002-control-flow.md
+├── ARO-0003-type-system.md
+├── ARO-0004-actions.md
+├── ARO-0005-application-architecture.md
+├── ARO-0006-error-philosophy.md
+├── ARO-0007-events-reactive.md
+├── ARO-0008-io-services.md
+├── ARO-0009-native-compilation.md
+├── ARO-0010-advanced-features.md
+├── legacy/             # Original proposals (historical reference)
+└── future/             # Planned features
 ```
 
 ## Language Proposals
 
-The `Proposals/` directory contains 42 evolution proposals:
-- **0001-0019**: Core language specification
-- **0020-0025**: Runtime architecture (execution, HTTP, files, sockets, actions)
-- **0026**: Native compilation (aro build)
-- **0027**: OpenAPI contract-first API development
-- **0028**: Long-running applications (Keepalive action)
-- **0029-0034**: Additional features (file monitoring, IDE, responses, repositories, system exec, LSP)
-- **0035**: Qualifier-as-name syntax for computed results
-- **0036-0039**: File system operations, split action, modules, scheduler
-- **0040**: Format-aware file I/O
-- **0041**: DateTime types and operations
-- **0042**: Polymorphic set operations
+The `Proposals/` directory contains 10 consolidated specifications:
+
+| Proposal | Topics |
+|----------|--------|
+| **0001 Language Fundamentals** | Core syntax, literals, expressions, scoping |
+| **0002 Control Flow** | When guards, match expressions, iteration |
+| **0003 Type System** | Types, OpenAPI integration, schemas |
+| **0004 Actions** | Action roles, built-in actions, extensions |
+| **0005 Application Architecture** | App structure, lifecycle, concurrency |
+| **0006 Error Philosophy** | "Code is the error message" |
+| **0007 Events & Reactive** | Events, state, repositories |
+| **0008 I/O Services** | HTTP, files, sockets, system objects |
+| **0009 Native Compilation** | LLVM, aro build |
+| **0010 Advanced Features** | Regex, dates, exec |
+
+The `legacy/` directory contains the original evolution proposals for historical reference.
+The `future/` directory contains planned features not yet implemented
 
 ## Concurrency
 
