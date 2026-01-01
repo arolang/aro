@@ -142,7 +142,10 @@ public final class LLVMCodeGenerator {
             // Repository actions
             "delete", "merge", "close",
             // String action (ARO-0037)
-            "split"
+            "split",
+            // File operations (ARO-0036)
+            "list", "stat", "exists", "make", "touch", "createdirectory", "mkdir",
+            "copy", "move", "rename", "append"
         ]
         for action in actions {
             emit("declare ptr @aro_action_\(action)(ptr, ptr, ptr)")
