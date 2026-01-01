@@ -49,6 +49,13 @@ final class AROCContextHandle {
     let context: RuntimeContext
     let runtime: AROCRuntimeHandle
 
+    #if !os(Windows)
+    // Store service references to prevent deallocation
+    let fileSystemService: AROFileSystemService?
+    let socketServer: AROSocketServer?
+    let httpServer: AROHTTPServer?
+    #endif
+
     init(runtime: AROCRuntimeHandle, featureSetName: String) {
         self.runtime = runtime
         // CRITICAL: Pass the eventBus from runtime to enable event emission in compiled binaries
@@ -57,6 +64,27 @@ final class AROCContextHandle {
             eventBus: runtime.runtime.eventBus,
             isCompiled: true
         )
+
+        // Register services in context (must match aro_runtime_init registration)
+        self.context.register(InMemoryRepositoryStorage.shared as RepositoryStorageService)
+
+        #if !os(Windows)
+        // Create and register file system service
+        let fs = AROFileSystemService(eventBus: runtime.runtime.eventBus)
+        self.context.register(fs as FileSystemService)
+        self.context.register(fs as FileMonitorService)
+        self.fileSystemService = fs
+
+        // Create and register socket server service
+        let socket = AROSocketServer(eventBus: runtime.runtime.eventBus)
+        self.context.register(socket as SocketServerService)
+        self.socketServer = socket
+
+        // Create and register HTTP server service
+        let http = AROHTTPServer(eventBus: runtime.runtime.eventBus)
+        self.context.register(http as HTTPServerService)
+        self.httpServer = http
+        #endif
     }
 }
 
@@ -83,6 +111,24 @@ nonisolated(unsafe) private var compiledHandlerRegistry: [String: [String]] = [:
 public func aro_runtime_init() -> UnsafeMutableRawPointer? {
     let handle = AROCRuntimeHandle()
     let pointer = Unmanaged.passRetained(handle).toOpaque()
+
+    // Register default services (same as Application.registerDefaultServices)
+    handle.runtime.register(service: InMemoryRepositoryStorage.shared as RepositoryStorageService)
+
+    #if !os(Windows)
+    // Register file system service for file operations and monitoring
+    let fileSystemService = AROFileSystemService(eventBus: handle.runtime.eventBus)
+    handle.runtime.register(service: fileSystemService as FileSystemService)
+    handle.runtime.register(service: fileSystemService as FileMonitorService)
+
+    // Register socket server service for TCP socket operations
+    let socketServer = AROSocketServer(eventBus: handle.runtime.eventBus)
+    handle.runtime.register(service: socketServer as SocketServerService)
+
+    // Register HTTP server service for web APIs
+    let httpServer = AROHTTPServer(eventBus: handle.runtime.eventBus)
+    handle.runtime.register(service: httpServer as HTTPServerService)
+    #endif
 
     handleLock.lock()
     runtimeHandles[pointer] = handle
