@@ -174,9 +174,159 @@ ARO explicitly does **not** provide:
 - Locks / Mutexes / Semaphores
 - Channels
 - Actors
-- Parallel for loops
 
 These are implementation concerns. The runtime handles them. You write sequential code that responds to events.
+
+## Parallel For-Each Loops
+
+While ARO doesn't expose traditional concurrency primitives, it **does** provide a high-level construct for parallel iteration: **`parallel for each`**. This enables true parallel execution across CPU cores for computationally intensive operations.
+
+### Serial vs Parallel Iteration
+
+By default, `for each` loops execute serially—one item after another:
+
+```aro
+for each <number> in <numbers> {
+    <Log> <number> to the <console>.
+}
+```
+
+Output: `1 2 3 4 5` (deterministic order)
+
+The `parallel for each` variant executes iterations concurrently:
+
+```aro
+parallel for each <number> in <numbers> {
+    <Log> <number> to the <console>.
+}
+```
+
+Output: `3 1 5 2 4` (non-deterministic order, varies each run)
+
+### Syntax
+
+```aro
+parallel for each <variable> in <collection> {
+    (* Statements execute in parallel for each item *)
+}
+```
+
+The loop body executes **simultaneously** for all items in the collection, utilizing available CPU cores.
+
+### Execution Model
+
+Under the hood, `parallel for each` uses:
+
+- **DispatchQueue** for thread pool management
+- **DispatchSemaphore** for concurrency limiting
+- **NSLock** for thread-safe error tracking
+- **Isolated contexts** per iteration (no shared mutable state)
+
+Each iteration gets its own execution context, preventing race conditions while maintaining ARO's immutability guarantees.
+
+### Concurrency Control
+
+By default, parallel loops use `System.coreCount` threads (matching your CPU's logical cores):
+
+```aro
+(* Uses all available cores *)
+parallel for each <item> in <items> {
+    <Compute> the <result> from <item>.
+}
+```
+
+You can override concurrency with the `with` clause:
+
+```aro
+(* Limit to 4 concurrent iterations *)
+parallel for each <item> in <items> with <concurrency: 4> {
+    <Compute> the <result> from <item>.
+}
+```
+
+### When to Use Parallel Iteration
+
+Use `parallel for each` when:
+
+- **CPU-bound work**: Heavy computation per iteration
+- **Independence**: Iterations don't depend on each other
+- **Large collections**: Enough items to justify parallelism overhead
+- **Order doesn't matter**: Results can be processed in any order
+
+**Don't use it for:**
+
+- **I/O-bound work**: Network/file operations (event-driven already handles concurrency)
+- **Small collections**: Overhead exceeds benefits (< 100 items typically)
+- **Order-dependent logic**: When sequence matters
+- **Side effects**: Database writes, file modifications (use events instead)
+
+### Thread Safety
+
+ARO's immutability model ensures thread safety:
+
+- Variables are bound once per iteration
+- Each iteration has an isolated context
+- No shared mutable state within feature sets
+- Repositories use internal synchronization
+
+You don't need locks or mutexes. The language prevents data races by design.
+
+### Example
+
+From `Examples/ParallelForEach/main.aro`:
+
+```aro
+(Application-Start: ForEach Demo) {
+    <Create> the <numbers> with [1, 2, 3, 4, 5, 6, 7, 8, 9, 10].
+
+    <Log> "=== Serial Iteration ===" to the <console>.
+    for each <number> in <numbers> {
+        <Log> <number> to the <console>.
+    }
+
+    <Log> "=== Parallel Iteration ===" to the <console>.
+    parallel for each <number> in <numbers> {
+        <Log> <number> to the <console>.
+    }
+
+    <Return> an <OK: status> for the <demo>.
+}
+```
+
+Output (example):
+```
+=== Serial Iteration ===
+1
+2
+3
+4
+5
+6
+7
+8
+9
+10
+=== Parallel Iteration ===
+3
+1
+7
+5
+2
+9
+4
+10
+6
+8
+```
+
+### Performance Characteristics
+
+- **Non-deterministic order**: Items complete in unpredictable sequence
+- **CPU utilization**: Scales with available cores (up to `System.coreCount`)
+- **Overhead**: Thread management cost (~1-10ms startup)
+- **Best for**: Compute-heavy operations (> 10ms per iteration)
+
+**Write-once semantics**: Even in parallel execution, variables remain immutable within each iteration's context. The parallel loop doesn't violate ARO's constraint-based philosophy—it simply executes independent, immutable transformations simultaneously.
 
 ## Examples
 

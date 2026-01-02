@@ -40,7 +40,7 @@
 26. **Modules and Imports** — Modular architecture and cross-module visibility
 
 ## Part VII: Advanced Topics
-27. **Control Flow** — Guards, match expressions, conditional execution
+27. **Control Flow** — Guards, match expressions, regex patterns, conditional execution
 28. **Data Pipelines** — Map, Filter, Reduce for collection processing
 29. **Repositories** — Persistent in-memory storage and observers
 30. **System Commands** — Shell execution with the Exec action

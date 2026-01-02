@@ -196,7 +196,7 @@ match <status-code> {
 
 ### Regular Expression Patterns
 
-Match statements support regex patterns for flexible string matching. Use forward slashes to delimit a regex pattern:
+Match statements support regex patterns for flexible string matching (see **Section 27.4** for comprehensive regex documentation):
 
 ```aro
 match <message.text> {
@@ -217,18 +217,134 @@ match <message.text> {
 }
 ```
 
-#### Regex Flags
+Regex patterns use forward slashes (`/pattern/flags`) and support flags like `i` (case insensitive), `s` (dot matches newlines), and `m` (multiline). See Section 27.4 for more details and additional use cases.
 
-| Flag | Description |
-|------|-------------|
-| `i` | Case insensitive |
-| `s` | Dot matches newlines |
-| `m` | Multiline (^ and $ match line boundaries) |
+## Regular Expression Matching
 
-#### Common Use Cases
+ARO provides first-class support for regular expressions through regex literals. Regular expressions are powerful pattern-matching tools for string validation, extraction, and filtering.
+
+### Regex Literal Syntax
+
+Regular expressions use forward-slash delimiters with optional flags:
+
+```
+/pattern/flags
+```
+
+Examples:
+- `/hello/` - Match "hello" (case-sensitive)
+- `/hello/i` - Match "hello", "HELLO", "Hello" (case-insensitive)
+- `/^[A-Z]{3}-\d{4}$/` - Match ticket IDs like "ABC-1234"
+- `/error/im` - Match "error" with case-insensitive, multiline mode
+
+### Regex Flags
+
+| Flag | Name | Description |
+|------|------|-------------|
+| `i` | Case Insensitive | Match regardless of case (A = a) |
+| `s` | Dotall | Dot (`.`) matches newlines |
+| `m` | Multiline | `^` and `$` match line boundaries, not just string boundaries |
+
+Combine flags by concatenating them: `/pattern/ims`
+
+### Using Regex in Match Statements
+
+Match statements are the primary place to use regex for branching logic:
 
 ```aro
-(* Email validation *)
+(Process Message: Chat Handler) {
+    <Extract> the <text> from the <event: text>.
+
+    match <text> {
+        case /^\/help/i {
+            <Send> "Available commands: /help, /status, /quit" to the <user>.
+        }
+        case /^\/status\s+(\w+)$/i {
+            <Emit> a <StatusQuery: event> with <text>.
+        }
+        case /^\/quit/i {
+            <Emit> a <UserDisconnected: event> with <user>.
+        }
+        case /https?:\/\/[\w.-]+/i {
+            (* Contains a URL *)
+            <Scan> the <link> for the <security-check>.
+        }
+        otherwise {
+            <Store> the <text> into the <message-repository>.
+        }
+    }
+
+    <Return> an <OK: status>.
+}
+```
+
+### Using Regex in Filter Actions
+
+Filter collections based on regex pattern matching with the `matches` operator:
+
+```aro
+(Filter Log Files: File Handler) {
+    <Retrieve> the <files> from the <file-repository>.
+
+    (* Filter for error log files *)
+    <Filter> the <error-logs> from the <files> where name matches /error-\d{4}-\d{2}-\d{2}\.log$/i.
+
+    (* Filter for IP addresses in text *)
+    <Filter> the <ip-entries> from the <log-lines> where text matches /\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}/.
+
+    <Return> an <OK: status> with <error-logs>.
+}
+```
+
+### Using Regex in Where Clauses
+
+Repository queries support regex matching:
+
+```aro
+(Search Users: User API) {
+    (* Find users with email addresses from specific domains *)
+    <Retrieve> the <users> from the <user-repository> where email matches /@(company|example)\.com$/i.
+
+    (* Find tickets by pattern *)
+    <Retrieve> the <tickets> from the <ticket-repository> where code matches /^PROJ-\d{4}$/.
+
+    <Return> an <OK: status> with <users>.
+}
+```
+
+### Using Regex with Split Action
+
+Split strings using regex patterns:
+
+```aro
+(Parse CSV Line: Data Handler) {
+    <Extract> the <line> from the <input>.
+
+    (* Split by comma, optional whitespace *)
+    <Split> the <fields> from the <line> with /\s*,\s*/.
+
+    (* Split by multiple delimiters *)
+    <Split> the <words> from the <text> with /[\s,;]+/.
+
+    <Return> an <OK: status> with <fields>.
+}
+```
+
+The Split action supports regex flags:
+
+```aro
+(* Case-insensitive split *)
+<Split> the <parts> from the <text> with /AND|OR/i.
+
+(* Multiline split *)
+<Split> the <paragraphs> from the <document> with /\n\n+/m.
+```
+
+### Common Regex Patterns
+
+#### Email Validation
+
+```aro
 match <email> {
     case /^[\w.+-]+@[\w.-]+\.[a-zA-Z]{2,}$/i {
         <Return> an <OK: status> with { valid: true }.
@@ -237,22 +353,169 @@ match <email> {
         <Return> a <BadRequest: status> with { error: "Invalid email format" }.
     }
 }
+```
 
-(* Command routing *)
-match <input> {
-    case /^\/help/i {
-        <Emit> a <HelpRequested: event> with <message>.
-    }
-    case /^\/status\s+\w+$/i {
-        <Emit> a <StatusQuery: event> with <message>.
+#### URL Detection
+
+```aro
+match <text> {
+    case /https?:\/\/(www\.)?[-a-zA-Z0-9@:%._\+~#=]{1,256}\.[a-zA-Z0-9()]{1,6}\b([-a-zA-Z0-9()@:%_\+.~#?&\/=]*)/i {
+        <Extract> the <url> from the <text>.
+        <Validate> the <url> for the <security-check>.
     }
     otherwise {
-        <Emit> a <MessageReceived: event> with <message>.
+        <Process> the <text> as the <plain-message>.
     }
 }
 ```
 
-Use `^` and `$` anchors when you need full-string matching rather than substring matching.
+#### Phone Number Validation
+
+```aro
+match <phone> {
+    case /^\+?1?\d{9,15}$/ {
+        <Return> an <OK: status> with { valid: true }.
+    }
+    case /^\(\d{3}\)\s*\d{3}-\d{4}$/ {
+        (* US format: (555) 123-4567 *)
+        <Return> an <OK: status> with { valid: true }.
+    }
+    otherwise {
+        <Return> a <BadRequest: status> with { error: "Invalid phone number" }.
+    }
+}
+```
+
+#### Date Format Matching
+
+```aro
+match <date-string> {
+    case /^\d{4}-\d{2}-\d{2}$/ {
+        (* ISO format: 2024-12-25 *)
+        <Parse> the <date> from the <date-string> with "yyyy-MM-dd".
+    }
+    case /^\d{2}\/\d{2}\/\d{4}$/ {
+        (* US format: 12/25/2024 *)
+        <Parse> the <date> from the <date-string> with "MM/dd/yyyy".
+    }
+    otherwise {
+        <Return> a <BadRequest: status> with { error: "Unsupported date format" }.
+    }
+}
+```
+
+#### Command Parsing
+
+```aro
+match <input> {
+    case /^\/set\s+(\w+)\s+(.+)$/i {
+        (* Matches: /set key value *)
+        <Extract> the <key> from the <input>.
+        <Extract> the <value> from the <input>.
+        <Store> the <value> into the <settings: key>.
+    }
+    case /^\/get\s+(\w+)$/i {
+        (* Matches: /get key *)
+        <Extract> the <key> from the <input>.
+        <Retrieve> the <value> from the <settings: key>.
+        <Return> an <OK: status> with <value>.
+    }
+    otherwise {
+        <Return> a <BadRequest: status> with { error: "Unknown command" }.
+    }
+}
+```
+
+#### Log Level Filtering
+
+```aro
+<Filter> the <error-logs> from the <logs> where message matches /^\[ERROR\]/i.
+<Filter> the <warning-logs> from the <logs> where message matches /^\[WARN(ING)?\]/i.
+<Filter> the <critical-logs> from the <logs> where message matches /^\[(ERROR|FATAL|CRITICAL)\]/i.
+```
+
+### Best Practices
+
+#### Use Anchors for Exact Matching
+
+```aro
+(* Good - requires full match *)
+match <ticket-id> {
+    case /^[A-Z]{3}-\d{4}$/ {
+        (* Matches ONLY "ABC-1234" format *)
+    }
+}
+
+(* Risky - matches substrings *)
+match <ticket-id> {
+    case /[A-Z]{3}-\d{4}/ {
+        (* Matches "ABC-1234" anywhere in the string *)
+    }
+}
+```
+
+#### Escape Special Characters
+
+Regex special characters need escaping: `. ^ $ * + ? { } [ ] \ | ( )`
+
+```aro
+(* Match literal dots in domain names *)
+match <domain> {
+    case /^example\.com$/ {
+        (* Correct - \. matches literal dot *)
+    }
+}
+
+(* Match literal parentheses in phone numbers *)
+match <phone> {
+    case /^\(\d{3}\) \d{3}-\d{4}$/ {
+        (* \( and \) match literal parentheses *)
+    }
+}
+```
+
+#### Keep Patterns Readable
+
+```aro
+(* Good - clear intent *)
+match <email> {
+    case /^[\w.+-]+@[\w.-]+\.[a-zA-Z]{2,}$/i {
+        <Validate> the <email>.
+    }
+}
+
+(* Avoid - overly complex *)
+match <email> {
+    case /^(?:[a-z0-9!#$%&'*+\/=?^_`{|}~-]+(?:\.[a-z0-9!#$%&'*+\/=?^_`{|}~-]+)*|"(?:[\x01-\x08\x0b\x0c\x0e-\x1f\x21\x23-\x5b\x5d-\x7f]|\\[\x01-\x09\x0b\x0c\x0e-\x7f])*")@(?:(?:[a-z0-9](?:[a-z0-9-]*[a-z0-9])?\.)+[a-z0-9](?:[a-z0-9-]*[a-z0-9])?|\[(?:(?:(2(5[0-5]|[0-4][0-9])|1[0-9][0-9]|[1-9]?[0-9]))\.){3}(?:(2(5[0-5]|[0-4][0-9])|1[0-9][0-9]|[1-9]?[0-9])|[a-z0-9-]*[a-z0-9]:(?:[\x01-\x08\x0b\x0c\x0e-\x1f\x21-\x5a\x53-\x7f]|\\[\x01-\x09\x0b\x0c\x0e-\x7f])+)\])$/i {
+        (* Too complex - prefer simpler patterns for business logic *)
+    }
+}
+```
+
+#### Test Your Patterns
+
+Regex can be tricky. Test patterns with sample data:
+
+```aro
+(* Test different email formats *)
+match "user@example.com" { case /^[\w.+-]+@[\w.-]+\.[a-zA-Z]{2,}$/i { ... } }  (* ✓ *)
+match "user.name+tag@example.co.uk" { case /^[\w.+-]+@[\w.-]+\.[a-zA-Z]{2,}$/i { ... } }  (* ✓ *)
+match "invalid@" { case /^[\w.+-]+@[\w.-]+\.[a-zA-Z]{2,}$/i { ... } }  (* ✗ *)
+```
+
+### Regex in ARO vs Other Languages
+
+ARO's regex literals are inspired by JavaScript and Ruby:
+
+| Language | Syntax | Example |
+|----------|--------|---------|
+| ARO | `/pattern/flags` | `/hello/i` |
+| JavaScript | `/pattern/flags` | `/hello/i` |
+| Ruby | `/pattern/flags` | `/hello/i` |
+| Python | `r"pattern"` + flags param | `re.compile(r"hello", re.I)` |
+| Java | `"pattern"` + flags param | `Pattern.compile("hello", Pattern.CASE_INSENSITIVE)` |
+
+ARO's syntax prioritizes readability and inline usage within statements.
 
 ## Common Patterns
 

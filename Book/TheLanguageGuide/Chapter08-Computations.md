@@ -53,14 +53,14 @@ ARO provides several built-in computations that cover common transformation need
 <svg width="120" height="80" viewBox="0 0 120 80" xmlns="http://www.w3.org/2000/svg">
   <rect x="10" y="20" width="100" height="40" rx="5" fill="#f3e8ff" stroke="#a855f7" stroke-width="2"/>
   <text x="60" y="35" text-anchor="middle" font-family="monospace" font-size="10" fill="#7c3aed">"secret"</text>
-  <text x="60" y="50" text-anchor="middle" font-family="sans-serif" font-size="10" fill="#a855f7">→ 839201</text>
-  <text x="60" y="72" text-anchor="middle" font-family="sans-serif" font-size="9" font-weight="bold" fill="#7c3aed">hash</text>
+  <text x="60" y="50" text-anchor="middle" font-family="monospace" font-size="7" fill="#a855f7">→ 2c26b46b...</text>
+  <text x="60" y="72" text-anchor="middle" font-family="sans-serif" font-size="9" font-weight="bold" fill="#7c3aed">hash (SHA256)</text>
 </svg>
 </div>
 
 </div>
 
-The **length** and **count** operations count elements—characters in strings, items in arrays, keys in dictionaries. While interchangeable for most purposes, `length` is typically used for strings and `count` for collections. The **uppercase** and **lowercase** operations transform case. The **hash** operation produces an integer hash value useful for comparisons.
+The **length** and **count** operations count elements—characters in strings, items in arrays, keys in dictionaries. While interchangeable for most purposes, `length` is typically used for strings and `count` for collections. The **uppercase** and **lowercase** operations transform case. The **hash** operation computes a cryptographic SHA256 hash, returning a 64-character hexadecimal string suitable for password hashing, data integrity verification, and secure comparisons.
 
 The **identity** operation, while seemingly trivial, serves an important purpose: it allows arithmetic expressions to be written naturally:
 

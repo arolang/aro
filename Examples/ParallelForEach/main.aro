@@ -1,7 +1,7 @@
 (* Parallel ForEach Example *)
 (* Demonstrates serial vs parallel iteration over a collection *)
-(* Parallel execution: interpreter shows non-deterministic order *)
-(* Compiled code: parallel loops supported but execute serially for now *)
+(* Both interpreter and compiled binaries support true parallel execution *)
+(* Parallel iterations execute concurrently with non-deterministic order *)
 
 (Application-Start: ForEach Demo) {
     (* Create a list of items to process *)
@@ -17,7 +17,7 @@
     <Log> the <message> for the <console> with "=== Parallel Iteration ===".
 
     (* Parallel iteration - items processed concurrently, non-deterministic order *)
-    (* Works in interpreter (aro run), runs serially in compiled binaries for now *)
+    (* True parallel execution in both interpreter and compiled binaries *)
     parallel for each <number> in <numbers> {
         <Log> the <log-entry> for the <console> with <number>.
     }
