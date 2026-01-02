@@ -1,0 +1,27 @@
+(* DirectoryReplicatorEvents - Event-Driven Directory Replication *)
+(* Demonstrates Filter, Store with List, and Repository Observers *)
+(* Refactored from DirectoryReplicator to use repository observers instead of for-each *)
+
+(Application-Start: Directory Replicator Events) {
+    (* 1. Setup template path *)
+    <Create> the <template-path> with "../template".
+    <Log> "Scanning template directory..." to the <console>.
+
+    (* 2. List all entries recursively *)
+    <List> the <all-entries: recursively> from the <directory: template-path>.
+
+    (* 3. Filter to get only directories - replaces 'where isDirectory' clause *)
+    <Filter> the <directories: List> from the <all-entries>
+        where <isDirectory> is true.
+
+    (* 4. Log count *)
+    <Compute> the <count: length> from the <directories>.
+    <Log> "Found ${count} directories" to the <console>.
+
+    (* 5. Store the entire list - runtime emits observer event for EACH item *)
+    <Log> "Storing directories to repository..." to the <console>.
+    <Store> the <directories> into the <directory-repository>.
+
+    (* Runtime automatically waits for all observer events to complete *)
+    <Return> an <OK: status> for the <replication>.
+}

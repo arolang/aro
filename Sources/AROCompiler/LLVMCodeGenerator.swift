@@ -135,6 +135,9 @@ public final class LLVMCodeGenerator {
         emit("declare void @aro_value_free(ptr)")
         emit("declare ptr @aro_value_as_string(ptr)")
         emit("declare i32 @aro_value_as_int(ptr, ptr)")
+        emit("declare ptr @aro_string_concat(ptr, ptr)")
+        emit("declare ptr @aro_interpolate_string(ptr, ptr)")
+        emit("declare i32 @aro_evaluate_when_guard(ptr, ptr)")
         emit("declare void @aro_evaluate_expression(ptr, ptr)")
         emit("")
 
@@ -153,7 +156,10 @@ public final class LLVMCodeGenerator {
             // Repository actions
             "delete", "merge", "close",
             // String action (ARO-0037)
-            "split"
+            "split",
+            // File operations (ARO-0036)
+            "list", "stat", "exists", "make", "touch", "createdirectory", "mkdir",
+            "copy", "move", "rename", "append"
         ]
         for action in actions {
             emit("declare ptr @aro_action_\(action)(ptr, ptr, ptr)")
@@ -205,6 +211,11 @@ public final class LLVMCodeGenerator {
         emit("; OpenAPI spec embedding")
         emit("declare void @aro_set_embedded_openapi(ptr)")
         emit("")
+
+        // Repository observer registration
+        emit("; Repository observer registration")
+        emit("declare void @aro_register_repository_observer(ptr, ptr, ptr)")
+        emit("")
     }
 
     /// Emit global variables
@@ -241,10 +252,16 @@ public final class LLVMCodeGenerator {
             }
         }
 
+        // Register repository observer repository names
+        for (repositoryName, _) in scanRepositoryObservers(program) {
+            registerString(repositoryName)
+        }
+
         // Always register these strings for main
         registerString("Application-Start")
         registerString("_literal_")
         registerString("_expression_")
+        registerString("")  // Empty string for interpolation fallbacks
         // ARO-0018: Aggregation and where clause context variables
         registerString("_aggregation_type_")
         registerString("_aggregation_field_")
@@ -279,6 +296,11 @@ public final class LLVMCodeGenerator {
             // Collect strings from expressions (ARO-0002)
             if let expression = aroStatement.expression {
                 collectStringsFromExpression(expression)
+            }
+
+            // ARO-0043: Collect strings from result expression (sink syntax)
+            if let resultExpression = aroStatement.resultExpression {
+                collectStringsFromExpression(resultExpression)
             }
 
             // ARO-0018: Collect aggregation clause strings
@@ -391,6 +413,32 @@ public final class LLVMCodeGenerator {
             collectStringsFromExpression(binaryExpr.right)
         } else if let groupedExpr = expression as? GroupedExpression {
             collectStringsFromExpression(groupedExpr.expression)
+        } else if let interpolatedExpr = expression as? InterpolatedStringExpression {
+            // Register all literal parts and collect from interpolation expressions
+            for part in interpolatedExpr.parts {
+                switch part {
+                case .literal(let str):
+                    registerString(str)
+                case .interpolation(let expr):
+                    collectStringsFromExpression(expr)
+                }
+            }
+
+            // Also register the reconstructed template string for aro_interpolate_string()
+            var template = ""
+            for part in interpolatedExpr.parts {
+                switch part {
+                case .literal(let str):
+                    template += str
+                case .interpolation(let expr):
+                    if let varRefExpr = expr as? VariableRefExpression {
+                        template += "${\(varRefExpr.noun.base)}"
+                    } else {
+                        template += "${}"
+                    }
+                }
+            }
+            registerString(template)
         }
     }
 
@@ -616,6 +664,11 @@ public final class LLVMCodeGenerator {
             try emitExpressionBinding(expression, prefix: prefix)
         }
 
+        // ARO-0043: Bind result expression for sink syntax (e.g., <Log> "message" to <console>)
+        if let resultExpression = statement.resultExpression {
+            try emitExpressionBinding(resultExpression, prefix: prefix)
+        }
+
         // ARO-0018: Bind aggregation clause if present
         if let aggregation = statement.aggregation {
             try emitAggregationBinding(aggregation, prefix: prefix)
@@ -836,7 +889,46 @@ public final class LLVMCodeGenerator {
         } else if let groupedExpr = expression as? GroupedExpression {
             // Grouped expression: (expr) - evaluate the inner expression
             try emitExpressionBinding(groupedExpr.expression, prefix: prefix)
+        } else if let interpolatedExpr = expression as? InterpolatedStringExpression {
+            // Interpolated string: "Hello ${<name>}!"
+            // Build the string by concatenating literal parts and resolved variable parts
+            try emitInterpolatedStringBinding(interpolatedExpr, prefix: prefix)
         }
+    }
+
+    /// Emit LLVM IR to bind interpolated string expression
+    /// Uses runtime's aro_interpolate_string() for simpler code generation
+    private func emitInterpolatedStringBinding(_ interpolatedExpr: InterpolatedStringExpression, prefix: String) throws {
+        let exprNameStr = stringConstants["_expression_"]!
+
+        emit("  ; Interpolated string - using runtime interpolation")
+
+        // Reconstruct the template string from parts
+        var template = ""
+        for part in interpolatedExpr.parts {
+            switch part {
+            case .literal(let str):
+                template += str
+            case .interpolation(let expr):
+                // Only support simple variable references for now
+                if let varRefExpr = expr as? VariableRefExpression {
+                    template += "${\(varRefExpr.noun.base)}"
+                } else {
+                    // Fallback for complex expressions
+                    template += "${}"
+                }
+            }
+        }
+
+        // Register template string and get constant
+        registerString(template)
+        let templateStr = stringConstants[template]!
+
+        // Call aro_interpolate_string(context, template)
+        emit("  %\(prefix)_interp_result = call ptr @aro_interpolate_string(ptr \(currentContext), ptr \(templateStr))")
+
+        // Bind the result to _expression_
+        emit("  call void @aro_variable_bind_string(ptr \(currentContext), ptr \(exprNameStr), ptr %\(prefix)_interp_result)")
     }
 
     /// Emit LLVM IR to bind aggregation clause context variables (ARO-0018)
@@ -1317,6 +1409,31 @@ public final class LLVMCodeGenerator {
         return expressionToEvalJSON(expr)
     }
 
+    // MARK: - Observer Registration
+
+    /// Scan program for repository observers
+    /// Returns array of tuples: (repository name, feature set)
+    private func scanRepositoryObservers(_ program: AnalyzedProgram) -> [(repositoryName: String, featureSet: AnalyzedFeatureSet)] {
+        var observers: [(String, AnalyzedFeatureSet)] = []
+
+        for analyzedFS in program.featureSets {
+            let activity = analyzedFS.featureSet.businessActivity
+
+            // Match pattern: "{repository-name} Observer"
+            // Examples: "directory-repository Observer", "user-repository Observer"
+            if activity.contains(" Observer") && activity.contains("-repository") {
+                // Extract repository name from "directory-repository Observer"
+                let parts = activity.split(separator: " ")
+                if let repoIndex = parts.firstIndex(where: { $0.hasSuffix("-repository") }) {
+                    let repositoryName = String(parts[repoIndex])
+                    observers.append((repositoryName, analyzedFS))
+                }
+            }
+        }
+
+        return observers
+    }
+
     // MARK: - Main Function Generation
 
     private func generateMain(program: AnalyzedProgram) throws {
@@ -1400,6 +1517,23 @@ public final class LLVMCodeGenerator {
 
             emit("  ; Register handler '\(featureSet.featureSet.name)' for event '\(eventType)'")
             emit("  call void @aro_runtime_register_handler(ptr %runtime, ptr \(eventTypeStr), ptr @\(handlerFuncName))")
+        }
+        emit("")
+
+        // Register repository observers
+        emit("  ; Register repository observers")
+        let observers = scanRepositoryObservers(program)
+        for (repositoryName, observerFS) in observers {
+            // Get observer function name
+            let observerFuncName = mangleFeatureSetName(observerFS.featureSet.name)
+
+            // Get repository name string constant (registered during collection phase)
+            guard let repoNameStr = stringConstants[repositoryName] else {
+                continue
+            }
+
+            emit("  ; Register observer '\(observerFS.featureSet.name)' for repository '\(repositoryName)'")
+            emit("  call void @aro_register_repository_observer(ptr %runtime, ptr \(repoNameStr), ptr @\(observerFuncName))")
         }
         emit("")
 

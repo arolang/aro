@@ -371,6 +371,330 @@ You can have multiple observers for the same repository:
 }
 ```
 
+## Case Study: Directory Replicator
+
+Let's examine two implementations of the same application: a directory replicator that scans a source directory and recreates its structure in a target location. This comparison illustrates the power of repository observers and event-driven architecture in ARO.
+
+### Imperative Approach: DirectoryReplicator
+
+The straightforward implementation uses sequential processing:
+
+```aro
+(Application-Start: Directory Replicator) {
+    <Create> the <template-path> with "../template".
+    <Log> "Scanning template directory..." to the <console>.
+
+    <List> the <all-entries: recursively> from the <directory: template-path>.
+    <Filter> the <directories: List> from the <all-entries> where <isDirectory> is true.
+
+    <Compute> the <count: length> from the <directories>.
+    <Log> "Found ${count} directories" to the <console>.
+
+    <Log> "Creating directory structure..." to the <console>.
+
+    (* Process each directory sequentially *)
+    <Create> the <index> with 0.
+    (For Each: <entry> in <directories>) {
+        <Extract> the <fullpath> from the <entry: path>.
+
+        (* Remove template/ prefix *)
+        <Split> the <pathparts> from the <fullpath> by /template\//.
+        <Extract> the <relpath: last> from the <pathparts>.
+
+        (* Create the directory *)
+        <Make> the <dir> to the <path: relpath>.
+        <Log> "Created: ${relpath}" to the <console>.
+
+        <Compute> the <index> from <index> + 1.
+    }
+
+    <Log> "Replication complete!" to the <console>.
+    <Return> an <OK: status> for the <replication>.
+}
+```
+
+**How it works**:
+1. List all directories recursively
+2. Filter to get only directories
+3. Loop through each directory
+4. Create each directory in sequence
+5. Log progress
+
+**Characteristics**:
+- ✅ Simple and straightforward
+- ✅ Easy to understand control flow
+- ❌ Sequential execution (slow for large directory trees)
+- ❌ All logic in one place (harder to extend)
+- ❌ No separation of concerns
+- ❌ Cannot handle concurrent operations
+
+### Event-Driven Approach: DirectoryReplicatorEvents
+
+The reactive implementation uses repository observers:
+
+**main.aro**:
+```aro
+(Application-Start: Directory Replicator Events) {
+    <Create> the <template-path> with "../template".
+    <Log> "Scanning template directory..." to the <console>.
+
+    <List> the <all-entries: recursively> from the <directory: template-path>.
+    <Filter> the <directories: List> from the <all-entries> where <isDirectory> is true.
+
+    <Compute> the <count: length> from the <directories>.
+    <Log> "Found ${count} directories" to the <console>.
+
+    <Log> "Storing directories to repository..." to the <console>.
+
+    (* Store directories - triggers observers for each item *)
+    <Store> the <directories> into the <directory-repository>.
+
+    <Return> an <OK: status> for the <replication>.
+}
+```
+
+**observers.aro**:
+```aro
+(* Main observer: Creates each directory when stored *)
+(Process Directory Entry: directory-repository Observer) {
+    (* Extract the directory entry from the event *)
+    <Extract> the <entry> from the <event: newValue>.
+    <Extract> the <fullpath> from the <entry: path>.
+
+    (* Split to remove template/ prefix from absolute path *)
+    <Split> the <pathparts> from the <fullpath> by /template\//.
+
+    (* Get the last element (relative path) *)
+    <Extract> the <relpath: last> from the <pathparts>.
+
+    (* Create the directory in current location *)
+    <Make> the <dir> to the <path: relpath>.
+
+    (* Log the created directory *)
+    <Log> "Created: ${relpath}" to the <console>.
+
+    <Return> an <OK: status> for the <processing>.
+}
+
+(* Audit observer: Tracks all repository changes *)
+(Audit Directory Changes: directory-repository Observer) {
+    <Extract> the <changeType> from the <event: changeType>.
+    <Extract> the <repositoryName> from the <event: repositoryName>.
+
+    <Log> "[AUDIT] ${repositoryName}: ${changeType}" to the <console>.
+
+    <Return> an <OK: status> for the <audit>.
+}
+```
+
+**How it works**:
+1. List all directories recursively
+2. Filter to get only directories
+3. **Store array to repository** (triggers per-item events)
+4. **Observers execute concurrently** for each directory
+5. Each observer processes one directory entry
+
+**Characteristics**:
+- ✅ **Concurrent execution** (all directories created simultaneously)
+- ✅ **Separation of concerns** (scanning vs. processing vs. auditing)
+- ✅ **Easily extensible** (add more observers without changing main code)
+- ✅ **Reactive architecture** (responds to data changes)
+- ✅ **Composable** (multiple observers can react to same events)
+- ❌ Slightly more files (but better organized)
+
+### Why the Events Version is Better
+
+#### 1. **Performance: Concurrent Execution**
+
+**Imperative** (sequential):
+```
+Directory 1: [====] 100ms
+Directory 2:          [====] 100ms
+Directory 3:                   [====] 100ms
+Total: 300ms
+```
+
+**Events** (concurrent):
+```
+Directory 1: [====] 100ms
+Directory 2: [====] 100ms
+Directory 3: [====] 100ms
+Total: 100ms (3x faster!)
+```
+
+For 100 directories, the events version can be **100x faster** on multi-core systems.
+
+#### 2. **Separation of Concerns**
+
+**Imperative**: All logic mixed together
+```aro
+(Application-Start) {
+    (* Scanning logic *)
+    (* Processing logic *)
+    (* Logging logic *)
+    (* Error handling *)
+    (* Progress tracking *)
+    (* All in one place! *)
+}
+```
+
+**Events**: Clear separation
+```aro
+(* main.aro: Scanning and storage *)
+(Application-Start) {
+    (* Just scan and store *)
+}
+
+(* observers.aro: Processing *)
+(Process Directory Entry: Observer) {
+    (* Just create directories *)
+}
+
+(* observers.aro: Auditing *)
+(Audit Changes: Observer) {
+    (* Just log changes *)
+}
+```
+
+Each feature set has **one clear responsibility**.
+
+#### 3. **Extensibility Without Modification**
+
+To add new functionality:
+
+**Imperative**: Must modify main code
+```aro
+(Application-Start) {
+    (* Existing code... *)
+
+    (* NEW: Calculate total size? Must add here! *)
+    <Compute> the <total-size>...
+
+    (* NEW: Send notification? Must add here! *)
+    <Send> the <notification>...
+
+    (* NEW: Validate permissions? Must add here! *)
+    <Validate> the <permissions>...
+}
+```
+
+**Events**: Just add new observers
+```aro
+(* NEW: Calculate total size *)
+(Track Size: directory-repository Observer) {
+    <Extract> the <entry> from the <event: newValue>.
+    (* Calculate and track size *)
+}
+
+(* NEW: Send notification *)
+(Notify Completion: directory-repository Observer) {
+    (* Send notification when done *)
+}
+
+(* NEW: Validate permissions *)
+(Check Permissions: directory-repository Observer) {
+    <Extract> the <entry> from the <event: newValue>.
+    (* Validate permissions *)
+}
+```
+
+**No changes to existing code!** This follows the Open/Closed Principle.
+
+#### 4. **Composability and Reusability**
+
+**Events version** allows mix-and-match:
+
+```aro
+(* Reusable observers *)
+(Process Directory Entry: directory-repository Observer) { ... }
+(Audit Changes: directory-repository Observer) { ... }
+(Calculate Statistics: directory-repository Observer) { ... }
+(Send Notifications: directory-repository Observer) { ... }
+
+(* Use all of them *)
+(* Or just some *)
+(* Or add new ones *)
+(* Without changing anything else! *)
+```
+
+Each observer is **independent and reusable**.
+
+#### 5. **Real-World Scalability**
+
+Consider processing 10,000 directories:
+
+**Imperative**:
+- Sequential: ~16 minutes (100ms each)
+- Single-threaded
+- One failure stops everything
+- Hard to parallelize
+
+**Events**:
+- Concurrent: ~10 seconds (with 100 cores)
+- Naturally parallelized
+- One failure doesn't affect others
+- Scales with available CPU cores
+
+#### 6. **Testing and Debugging**
+
+**Imperative**: Must test entire flow
+```bash
+# Test everything at once
+aro run DirectoryReplicator
+```
+
+**Events**: Can test components independently
+```bash
+# Test just the scanning
+aro run main.aro
+
+# Test just the observers
+# (trigger events manually in test)
+
+# Test individual observers in isolation
+```
+
+### Per-Item Event Semantics
+
+A critical feature: when you store an **array** to a repository, ARO emits **per-item events**:
+
+```aro
+<Store> the <directories> into the <directory-repository>.
+(* If directories = [dir1, dir2, dir3] *)
+(* Emits 3 separate events: *)
+(*   - event { newValue: dir1, changeType: "created" } *)
+(*   - event { newValue: dir2, changeType: "created" } *)
+(*   - event { newValue: dir3, changeType: "created" } *)
+```
+
+This enables:
+- **Concurrent processing** of array items
+- **Independent failure handling** per item
+- **Progress tracking** for long operations
+- **Reactive data pipelines**
+
+### When to Use Each Approach
+
+**Use Imperative** when:
+- ❌ Simple, one-off scripts
+- ❌ Learning ARO basics
+- ❌ Very small datasets (< 10 items)
+- ❌ No need for extensibility
+
+**Use Events** when:
+- ✅ Processing large datasets
+- ✅ Need concurrent execution
+- ✅ Want extensibility
+- ✅ Building production systems
+- ✅ Multiple independent operations
+- ✅ Separation of concerns matters
+
+### Best Practice Recommendation
+
+**Prefer the Events version** for any non-trivial application. The benefits of concurrency, extensibility, and separation of concerns far outweigh the slight increase in code organization.
+
+The imperative style is fine for learning and quick scripts, but the event-driven architecture is the **ARO way** for building robust, scalable applications.
+
 ## Lifetime and Persistence
 
 ### Application Lifetime

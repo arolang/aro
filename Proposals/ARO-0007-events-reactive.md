@@ -620,6 +620,70 @@ To delete items and trigger observers:
 +-------------------------------------------------------------+
 ```
 
+### 6.6 List Storage with Per-Item Events
+
+When storing a List to a repository, the Store action automatically emits **one event per list item** instead of a single event for the entire list. This enables observers to process each item individually and concurrently.
+
+**Behavior:**
+- Single value storage: One `RepositoryChangedEvent` (backward compatible)
+- List storage: One `RepositoryChangedEvent` per list item
+
+**Example:**
+
+```aro
+(* Store a list of directories *)
+<Create> the <directories> with ["foo", "foo/bar", "baz"].
+<Store> the <directories> into the <directory-repository>.
+```
+
+This emits **three** events:
+1. Event with `newValue = "foo"`
+2. Event with `newValue = "foo/bar"`
+3. Event with `newValue = "baz"`
+
+**Observer receives individual items:**
+
+```aro
+(Process Directory: directory-repository Observer) {
+    (* Extract ONE item - not the entire list *)
+    <Extract> the <dir-path> from the <event: newValue>.
+
+    (* Process this single directory *)
+    <Make> the <created> to the <path: dir-path>.
+    <Log> "Created: ${dir-path}" to the <console>.
+
+    <Return> an <OK: status> for the <processing>.
+}
+```
+
+**Benefits:**
+1. **No iteration needed**: Application code stores the entire list once
+2. **Concurrent processing**: Observers for each item run in parallel
+3. **Declarative style**: Focus on what to do with each item, not how to iterate
+4. **Event-driven**: Each item triggers the observer pattern independently
+
+**Complete Example:**
+
+```aro
+(Application-Start: Batch Processor) {
+    (* Collect items to process *)
+    <Filter> the <active-items> from the <all-items>
+        where <status> is "active".
+
+    (* Store list - triggers observer for EACH item *)
+    <Store> the <active-items> into the <processing-queue>.
+
+    <Keepalive> the <application> for the <events>.
+    <Return> an <OK: status> for the <batch>.
+}
+
+(Process Item: processing-queue Observer) {
+    <Extract> the <item> from the <event: newValue>.
+    (* Process individual item here *)
+    <Return> an <OK: status> for the <item-processing>.
+}
+```
+
 ---
 
 ## 7. EventBus Architecture

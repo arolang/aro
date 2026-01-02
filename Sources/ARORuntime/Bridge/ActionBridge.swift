@@ -49,7 +49,8 @@ func toResultDescriptor(_ ptr: UnsafeRawPointer) -> ResultDescriptor {
     if let specs = specsPtr {
         for i in 0..<Int(specCount) {
             if let spec = specs[i] {
-                specifiers.append(String(cString: spec))
+                let specStr = String(cString: spec)
+                specifiers.append(specStr)
             }
         }
     }

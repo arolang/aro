@@ -452,18 +452,67 @@ public struct StoreAction: ActionImplementation {
 
             storedData = storeResult.storedValue
 
-            // Update the context variable with stored data (which includes auto-generated id)
-            context.bind(result.base, value: storedData)
+            // Note: We don't rebind the result variable here to maintain immutability
+            // The stored value (with auto-generated ID if applicable) is returned from execute()
 
-            // Emit repository change event for observers
-            let changeType: RepositoryChangeType = storeResult.isUpdate ? .updated : .created
-            context.emit(RepositoryChangedEvent(
-                repositoryName: repoName,
-                changeType: changeType,
-                entityId: storeResult.entityId,
-                newValue: storeResult.storedValue,
-                oldValue: storeResult.oldValue
-            ))
+            // Emit repository change event(s) for observers
+            // If data is an array, emit one event per item
+            // Otherwise, emit a single event (backward compatible)
+            if let arrayData = storeResult.storedValue as? [any Sendable] {
+                // List storage: emit event for EACH item
+                for item in arrayData {
+                    // Try to extract entityId from item if it's a dictionary
+                    var itemId: String? = nil
+                    if let dict = item as? [String: Any] {
+                        if let id = dict["id"] as? String {
+                            itemId = id
+                        } else if let id = dict["id"] as? Int {
+                            itemId = String(id)
+                        }
+                    }
+
+                    // Use publishAndTrack to ensure runtime waits for observers to complete
+                    if let eventBus = context.eventBus {
+                        await eventBus.publishAndTrack(RepositoryChangedEvent(
+                            repositoryName: repoName,
+                            changeType: .created,
+                            entityId: itemId,
+                            newValue: item,
+                            oldValue: nil
+                        ))
+                    } else {
+                        context.emit(RepositoryChangedEvent(
+                            repositoryName: repoName,
+                            changeType: .created,
+                            entityId: itemId,
+                            newValue: item,
+                            oldValue: nil
+                        ))
+                    }
+                }
+            } else {
+                // Single value storage: emit one event (existing behavior)
+                let changeType: RepositoryChangeType = storeResult.isUpdate ? .updated : .created
+
+                // Use publishAndTrack to ensure runtime waits for observers to complete
+                if let eventBus = context.eventBus {
+                    await eventBus.publishAndTrack(RepositoryChangedEvent(
+                        repositoryName: repoName,
+                        changeType: changeType,
+                        entityId: storeResult.entityId,
+                        newValue: storeResult.storedValue,
+                        oldValue: storeResult.oldValue
+                    ))
+                } else {
+                    context.emit(RepositoryChangedEvent(
+                        repositoryName: repoName,
+                        changeType: changeType,
+                        entityId: storeResult.entityId,
+                        newValue: storeResult.storedValue,
+                        oldValue: storeResult.oldValue
+                    ))
+                }
+            }
         }
 
         // Emit store event (legacy)

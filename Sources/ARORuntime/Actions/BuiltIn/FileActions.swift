@@ -67,8 +67,8 @@ public struct ListAction: ActionImplementation {
         // Convert to array of dictionaries for ARO context
         let entriesArray: [[String: any Sendable]] = entries.map { $0.toDictionary() }
 
-        // Bind result
-        context.bind(result.base, value: entriesArray)
+        // Note: We don't rebind the result variable here to maintain immutability
+        // The return value is handled by the runtime
 
         return entriesArray
     }
@@ -259,9 +259,9 @@ public struct MakeAction: ActionImplementation {
             try await fileService.createDirectory(path: path)
         }
 
-        // Bind result
+        // Note: We don't rebind the result variable here to maintain immutability
+        // The return value is handled by the runtime
         let resultValue = MakeResult(path: path, success: true, isFile: isFile)
-        context.bind(result.base, value: path)
 
         return resultValue
     }

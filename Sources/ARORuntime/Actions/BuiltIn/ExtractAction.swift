@@ -61,7 +61,8 @@ public struct ExtractAction: ActionImplementation {
         // ARO-0038: Check result specifiers for list element access
         if let array = resolvedSource as? [any Sendable],
            let specifier = result.specifiers.first {
-            return extractFromList(array, specifier: specifier)
+            let extracted = extractFromList(array, specifier: specifier)
+            return extracted
         }
 
         // ARO-0041: Check result specifiers for date type property extraction
