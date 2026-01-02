@@ -294,8 +294,11 @@ Choosing between Store, Emit, and Publish becomes straightforward when you ask t
 
   <!-- Three branches -->
   <line x1="175" y1="45" x2="80" y2="80" stroke="#6b7280" stroke-width="1.5"/>
+  <polygon points="80,80 88,74 84,82" fill="#6b7280"/>
   <line x1="225" y1="45" x2="225" y2="80" stroke="#6b7280" stroke-width="1.5"/>
+  <polygon points="225,80 220,72 230,72" fill="#6b7280"/>
   <line x1="275" y1="45" x2="370" y2="80" stroke="#6b7280" stroke-width="1.5"/>
+  <polygon points="370,80 362,74 366,82" fill="#6b7280"/>
 
   <!-- Store branch -->
   <rect x="20" y="80" width="120" height="45" rx="5" fill="#dcfce7" stroke="#22c55e" stroke-width="1.5"/>
