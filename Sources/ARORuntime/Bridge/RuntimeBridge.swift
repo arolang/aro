@@ -17,6 +17,18 @@ import CoreFoundation
 import NIO
 #endif
 
+// MARK: - Runtime Errors
+
+/// Runtime errors for compiled code execution
+enum RuntimeError: Error {
+    case contextCreationFailed(String)
+    case invalidFunctionPointer(String)
+
+    init(_ message: String) {
+        self = .contextCreationFailed(message)
+    }
+}
+
 // MARK: - Runtime Handle
 
 /// Opaque runtime handle for C interop
@@ -45,7 +57,7 @@ final class AROCRuntimeHandle: @unchecked Sendable {
 }
 
 /// Opaque context handle for C interop
-final class AROCContextHandle {
+class AROCContextHandle {
     let context: RuntimeContext
     let runtime: AROCRuntimeHandle
 
@@ -85,6 +97,12 @@ final class AROCContextHandle {
         self.context.register(http as HTTPServerService)
         self.httpServer = http
         #endif
+    }
+
+    /// Initializer that takes an existing context (for child contexts)
+    init(runtime: AROCRuntimeHandle, existingContext: RuntimeContext) {
+        self.runtime = runtime
+        self.context = existingContext
     }
 }
 
@@ -394,6 +412,35 @@ public func aro_context_create_named(
     return UnsafeMutableRawPointer(contextPtr)
 }
 
+/// Create a child execution context from a parent context
+/// - Parameters:
+///   - parentContextPtr: Parent context handle
+///   - name: Feature set name (C string, optional)
+/// - Returns: Opaque pointer to child context handle
+@_cdecl("aro_context_create_child")
+public func aro_context_create_child(
+    _ parentContextPtr: UnsafeMutableRawPointer?,
+    _ name: UnsafePointer<CChar>?
+) -> UnsafeMutableRawPointer? {
+    guard let parentPtr = parentContextPtr else { return nil }
+
+    let parentHandle = Unmanaged<AROCContextHandle>.fromOpaque(parentPtr).takeUnretainedValue()
+    let featureSetName = name.map { String(cString: $0) } ?? parentHandle.context.featureSetName
+
+    // Create child context from parent
+    let childContext = parentHandle.context.createChild(featureSetName: featureSetName) as! RuntimeContext
+
+    // Wrap in a handle with the existing context
+    let childHandle = AROCContextHandle(runtime: parentHandle.runtime, existingContext: childContext)
+    let childPtr = Unmanaged.passRetained(childHandle).toOpaque()
+
+    handleLock.lock()
+    parentHandle.runtime.contexts[childPtr] = childHandle
+    handleLock.unlock()
+
+    return UnsafeMutableRawPointer(childPtr)
+}
+
 /// Destroy an execution context
 /// - Parameter contextPtr: Context handle
 @_cdecl("aro_context_destroy")
@@ -594,26 +641,19 @@ private func convertToSendable(_ value: Any) -> any Sendable {
     switch value {
     case let str as String:
         return str
-    case let bool as Bool:
-        return bool
-    // Check for actual CFBoolean type to distinguish from NSNumber integers
-    // CFBoolean is a distinct type for true/false in JSON, NSNumber(1) is an integer
+    // IMPORTANT: Check NSNumber BEFORE Bool
+    // On macOS, CFBoolean (used for JSON true/false) is a subclass of NSNumber
+    // and can match both cases. We need to check NSNumber first and use type info
+    // to distinguish between boolean CFBoolean and numeric NSNumber
     case let nsNumber as NSNumber:
         let objCType = String(cString: nsNumber.objCType)
         #if canImport(Darwin)
-        // On Darwin, check if it's actually a boolean type (CFBoolean)
+        // On Darwin, CFBoolean has objCType "c" (signed char) and is for true/false
+        // NSNumber integers also use various types like "q" (long long), "i" (int), etc.
+        // Check CFBooleanGetTypeID to definitively identify JSON booleans
         if CFGetTypeID(nsNumber) == CFBooleanGetTypeID() {
+            // This is a JSON boolean (true/false), not an integer
             return nsNumber.boolValue
-        }
-        #else
-        // On Linux, NSNumber from JSON booleans have objCType "c" (char)
-        // and values 0 or 1, but we can't reliably distinguish from small integers.
-        // Use objCType check: "c" with 0/1 suggests boolean, but this is heuristic.
-        if objCType == "c" || objCType == "B" {
-            let intVal = nsNumber.intValue
-            if intVal == 0 || intVal == 1 {
-                return nsNumber.boolValue
-            }
         }
         #endif
         // Check if it has a decimal point (is a double)
@@ -622,6 +662,10 @@ private func convertToSendable(_ value: Any) -> any Sendable {
         }
         // Otherwise treat as integer
         return nsNumber.intValue
+    case let bool as Bool:
+        // This case should not be reached on macOS (CFBoolean is NSNumber)
+        // But keep it for other platforms
+        return bool
     case let dict as [String: Any]:
         var result: [String: any Sendable] = [:]
         for (k, v) in dict {
@@ -1282,6 +1326,149 @@ public func aro_dict_get(
     }
 
     return nil
+}
+
+/// Execute a parallel for-each loop with true concurrency
+/// - Parameters:
+///   - runtimePtr: Runtime handle
+///   - contextPtr: Parent context handle
+///   - collectionPtr: Array value handle
+///   - loopBodyFn: Function pointer for loop body: (context, item, index) -> ptr
+///   - concurrency: Maximum concurrent tasks (0 = System.coreCount)
+///   - itemVarName: Variable name for loop item (C string)
+///   - indexVarName: Variable name for loop index (C string), or NULL if none
+/// - Returns: 0 on success, -1 on error
+@_cdecl("aro_parallel_for_each_execute")
+public func aro_parallel_for_each_execute(
+    _ runtimePtr: UnsafeMutableRawPointer?,
+    _ contextPtr: UnsafeMutableRawPointer?,
+    _ collectionPtr: UnsafeMutableRawPointer?,
+    _ loopBodyFn: UnsafeMutableRawPointer?,
+    _ concurrency: Int64,
+    _ itemVarName: UnsafePointer<CChar>?,
+    _ indexVarName: UnsafePointer<CChar>?
+) -> Int32 {
+    guard let rtPtr = runtimePtr,
+          let ctxPtr = contextPtr,
+          let collPtr = collectionPtr,
+          let bodyFn = loopBodyFn else {
+        return -1
+    }
+
+    // Get collection as array
+    let boxed = Unmanaged<AROCValue>.fromOpaque(collPtr).takeUnretainedValue()
+    guard let items = boxed.value as? [any Sendable] else {
+        return -1
+    }
+
+    // Determine concurrency limit
+    let maxConcurrency = concurrency > 0 ? Int(concurrency) : ProcessInfo.processInfo.activeProcessorCount
+
+    // Convert pointers to Int addresses for concurrent capture
+    let ctxAddress = Int(bitPattern: ctxPtr)
+    let bodyFnAddress = Int(bitPattern: bodyFn)
+
+    // Function pointer type definition
+    typealias LoopBodyFunc = @convention(c) (
+        UnsafeMutableRawPointer?,  // context
+        UnsafeMutableRawPointer?,  // item
+        Int64                       // index
+    ) -> UnsafeMutableRawPointer?
+
+    // Thread-safe error tracking
+    final class ErrorBox: @unchecked Sendable {
+        var error: Error?
+        let lock = NSLock()
+
+        func setError(_ err: Error) {
+            lock.lock()
+            defer { lock.unlock() }
+            if error == nil {
+                error = err
+            }
+        }
+
+        func getError() -> Error? {
+            lock.lock()
+            defer { lock.unlock() }
+            return error
+        }
+    }
+
+    let errorBox = ErrorBox()
+
+    // Use DispatchQueue for reliable parallel execution in compiled binaries
+    let queue = DispatchQueue(label: "aro.parallel.foreach", attributes: .concurrent)
+    let group = DispatchGroup()
+    let semaphore = DispatchSemaphore(value: maxConcurrency)
+
+    for (index, item) in items.enumerated() {
+        // Reconstruct context pointer
+        guard let parentCtxPtr = UnsafeMutableRawPointer(bitPattern: ctxAddress) else {
+            print("[ARO] Invalid context pointer")
+            return -1
+        }
+
+        // Create child context for this iteration
+        let childCtxPtr = aro_context_create_child(parentCtxPtr, nil)
+        guard let childPtr = childCtxPtr else {
+            print("[ARO] Failed to create child context")
+            return -1
+        }
+
+        // Box the item value
+        let itemBoxed = AROCValue(value: item)
+        let itemPtr = UnsafeMutableRawPointer(
+            Unmanaged.passRetained(itemBoxed).toOpaque()
+        )
+
+        // Convert to Int addresses for concurrent capture
+        let childAddress = Int(bitPattern: childPtr)
+        let itemAddress = Int(bitPattern: itemPtr)
+
+        // Wait for available concurrency slot
+        semaphore.wait()
+
+        // Dispatch work
+        group.enter()
+        queue.async {
+            defer {
+                group.leave()
+                semaphore.signal()
+            }
+
+            // Reconstruct pointers
+            guard let fnPtr = UnsafeMutableRawPointer(bitPattern: bodyFnAddress),
+                  let childCtx = UnsafeMutableRawPointer(bitPattern: childAddress),
+                  let itemValue = UnsafeMutableRawPointer(bitPattern: itemAddress) else {
+                errorBox.setError(RuntimeError("Invalid pointer reconstruction"))
+                return
+            }
+
+            let fn = unsafeBitCast(fnPtr, to: LoopBodyFunc.self)
+
+            // Call loop body function
+            let result = fn(childCtx, itemValue, Int64(index))
+
+            // Clean up
+            if let resultPtr = result {
+                aro_value_free(resultPtr)
+            }
+            Unmanaged<AROCValue>.fromOpaque(itemValue).release()
+            aro_context_destroy(childCtx)
+        }
+    }
+
+    // Wait for all work to complete
+    group.wait()
+
+    // Check for errors
+    if let error = errorBox.getError() {
+        print("[ARO] Parallel loop error: \(error)")
+        return -1
+    }
+
+    return 0
 }
 
 /// Evaluate a filter expression (where clause) for a value
