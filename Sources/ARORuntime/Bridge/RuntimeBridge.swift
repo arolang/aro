@@ -1133,7 +1133,7 @@ public func aro_parallel_for_each_execute(
     }
 
     // Determine concurrency limit
-    let maxConcurrency = concurrency > 0 ? Int(concurrency) : System.coreCount
+    let maxConcurrency = concurrency > 0 ? Int(concurrency) : ProcessInfo.processInfo.activeProcessorCount
 
     // Convert pointers to Int addresses for concurrent capture
     let ctxAddress = Int(bitPattern: ctxPtr)
