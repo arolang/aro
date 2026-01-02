@@ -182,7 +182,7 @@ jobs:
 
           # Verify signature
           codesign --verify --verbose .build/release/aro
-          spctl --assess --verbose .build/release/aro
+          spctl --assess --type execute --verbose .build/release/aro
 
       - name: Create ZIP for Notarization
         if: github.ref_type == 'tag'
