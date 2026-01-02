@@ -201,7 +201,7 @@ Consider what this means for debugging. When a user reports "I can't place my or
   <line x1="35" y1="40" x2="15" y2="40" stroke="#ef4444" stroke-width="1" stroke-dasharray="3,2"/>
   <line x1="15" y1="40" x2="15" y2="248" stroke="#ef4444" stroke-width="1" stroke-dasharray="3,2"/>
   <line x1="15" y1="248" x2="35" y2="248" stroke="#ef4444" stroke-width="1" stroke-dasharray="3,2"/>
-  <polygon points="35,248 29,244 29,252" fill="#ef4444"/>
+  <polygon points="35,248 30,245 30,251" fill="#ef4444"/>
 
   <!-- Cancelled -->
   <rect x="35" y="236" width="70" height="24" rx="12" fill="#fee2e2" stroke="#ef4444" stroke-width="1.5"/>
