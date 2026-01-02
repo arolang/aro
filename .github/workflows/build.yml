@@ -210,8 +210,26 @@ jobs:
           unzip -o aro.zip
           cd ../..
 
-          # Staple the notarization ticket
-          xcrun stapler staple .build/release/aro
+          # Staple the notarization ticket (with retries for propagation delay)
+          echo "Waiting for notarization ticket to propagate..."
+          sleep 10
+
+          RETRIES=5
+          for i in $(seq 1 $RETRIES); do
+            echo "Stapling attempt $i of $RETRIES..."
+            if xcrun stapler staple .build/release/aro; then
+              echo "Stapling successful!"
+              break
+            else
+              if [ $i -lt $RETRIES ]; then
+                echo "Stapling failed, waiting 15 seconds before retry..."
+                sleep 15
+              else
+                echo "Stapling failed after $RETRIES attempts"
+                exit 1
+              fi
+            fi
+          done
 
           # Verify notarization
           xcrun stapler validate .build/release/aro
