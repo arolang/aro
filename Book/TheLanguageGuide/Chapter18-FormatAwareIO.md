@@ -17,7 +17,7 @@ When you write data to a file, ARO examines the file extension and automatically
 
   <!-- Arrow to detector -->
   <line x1="100" y1="60" x2="150" y2="60" stroke="#6b7280" stroke-width="2"/>
-  <polygon points="150,60 142,55 142,65" fill="#6b7280"/>
+  <polygon points="150,60 144,56 144,64" fill="#6b7280"/>
 
   <!-- Format detector -->
   <rect x="150" y="30" width="100" height="60" rx="5" fill="#fef3c7" stroke="#f59e0b" stroke-width="2"/>
@@ -26,7 +26,7 @@ When you write data to a file, ARO examines the file extension and automatically
 
   <!-- Arrow to serializer -->
   <line x1="250" y1="60" x2="300" y2="60" stroke="#6b7280" stroke-width="2"/>
-  <polygon points="300,60 292,55 292,65" fill="#6b7280"/>
+  <polygon points="300,60 294,56 294,64" fill="#6b7280"/>
 
   <!-- Serializer -->
   <rect x="300" y="30" width="80" height="60" rx="5" fill="#dcfce7" stroke="#22c55e" stroke-width="2"/>
@@ -35,7 +35,7 @@ When you write data to a file, ARO examines the file extension and automatically
 
   <!-- Arrow to file -->
   <line x1="380" y1="60" x2="430" y2="60" stroke="#6b7280" stroke-width="2"/>
-  <polygon points="430,60 422,55 422,65" fill="#6b7280"/>
+  <polygon points="430,60 424,56 424,64" fill="#6b7280"/>
 
   <!-- File icon -->
   <rect x="430" y="35" width="50" height="50" rx="3" fill="#f3e8ff" stroke="#8b5cf6" stroke-width="2"/>
@@ -327,7 +327,7 @@ Reading files reverses the process. ARO examines the file extension and parses t
 
   <!-- Arrow to detector -->
   <line x1="70" y1="60" x2="120" y2="60" stroke="#6b7280" stroke-width="2"/>
-  <polygon points="120,60 112,55 112,65" fill="#6b7280"/>
+  <polygon points="120,60 114,56 114,64" fill="#6b7280"/>
 
   <!-- Format detector -->
   <rect x="120" y="30" width="100" height="60" rx="5" fill="#fef3c7" stroke="#f59e0b" stroke-width="2"/>
@@ -336,7 +336,7 @@ Reading files reverses the process. ARO examines the file extension and parses t
 
   <!-- Arrow to parser -->
   <line x1="220" y1="60" x2="270" y2="60" stroke="#6b7280" stroke-width="2"/>
-  <polygon points="270,60 262,55 262,65" fill="#6b7280"/>
+  <polygon points="270,60 264,56 264,64" fill="#6b7280"/>
 
   <!-- Parser -->
   <rect x="270" y="30" width="80" height="60" rx="5" fill="#dcfce7" stroke="#22c55e" stroke-width="2"/>
@@ -345,7 +345,7 @@ Reading files reverses the process. ARO examines the file extension and parses t
 
   <!-- Arrow to object -->
   <line x1="350" y1="60" x2="400" y2="60" stroke="#6b7280" stroke-width="2"/>
-  <polygon points="400,60 392,55 392,65" fill="#6b7280"/>
+  <polygon points="400,60 394,56 394,64" fill="#6b7280"/>
 
   <!-- Object box -->
   <rect x="400" y="35" width="80" height="50" rx="5" fill="#e0e7ff" stroke="#6366f1" stroke-width="2"/>
