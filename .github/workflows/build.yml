@@ -404,3 +404,65 @@ jobs:
 
             **Windows**
             Download and extract the zip file, then add the directory to your PATH.
+
+      # ========================================================================
+      # Update Homebrew Formula
+      # ========================================================================
+
+      - name: Update Homebrew Formula
+        run: |
+          # Calculate SHA256 of the macOS release
+          SHA256=$(shasum -a 256 artifacts/aro-macos-arm64.tar.gz | awk '{print $1}')
+          VERSION="${{ steps.version.outputs.version }}"
+
+          echo "Version: $VERSION"
+          echo "SHA256: $SHA256"
+
+          # Clone homebrew-aro repository
+          git clone https://github.com/KrisSimon/homebrew-aro.git
+          cd homebrew-aro
+
+          # Update the formula
+          cat > Formula/aro.rb <<EOF
+          class Aro < Formula
+            desc "ARO programming language - Natural language DSL for business logic"
+            homepage "https://github.com/KrisSimon/aro"
+            url "https://github.com/KrisSimon/aro/releases/download/${{ github.ref_name }}/aro-macos-arm64.tar.gz"
+            sha256 "$SHA256"
+            version "$VERSION"
+            license "MIT"
+
+            # Only support macOS for now (ARM64 binary)
+            depends_on :macos
+            depends_on arch: :arm64
+
+            def install
+              bin.install "aro"
+            end
+
+            test do
+              assert_match version.to_s, shell_output("#{bin}/aro --version")
+            end
+          end
+          EOF
+
+          # Configure git
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+          # Commit and push if there are changes
+          git add Formula/aro.rb
+          if git diff --staged --quiet; then
+            echo "No changes to formula"
+          else
+            git commit -m "chore: update formula to version $VERSION
+
+          Auto-update from release workflow
+
+          - Version: $VERSION
+          - SHA256: $SHA256
+          - Release: https://github.com/${{ github.repository }}/releases/tag/${{ github.ref_name }}"
+
+            # Push using PAT (requires HOMEBREW_TAP_TOKEN secret with repo permissions)
+            git push https://x-access-token:${{ secrets.HOMEBREW_TAP_TOKEN }}@github.com/KrisSimon/homebrew-aro.git main
+          fi
