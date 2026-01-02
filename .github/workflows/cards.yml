@@ -102,6 +102,8 @@ jobs:
   post:
     name: Post Card to Mastodon
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
     # Only run on schedule or manual trigger, not on code changes
     if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
     steps:
