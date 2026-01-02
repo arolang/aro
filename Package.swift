@@ -73,6 +73,11 @@ let package = Package(
         .package(url: "https://github.com/apple/swift-crypto.git", from: "4.0.0"),
     ],
     targets: [
+        // Version information library
+        .target(
+            name: "AROVersion",
+            path: "Sources/AROVersion"
+        ),
         // Core parser library
         .target(
             name: "AROParser",
@@ -108,6 +113,7 @@ let package = Package(
         .executableTarget(
             name: "AROCLI",
             dependencies: [
+                "AROVersion",
                 "AROParser",
                 "ARORuntime",
                 "AROCompiler",

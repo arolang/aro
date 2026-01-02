@@ -14,7 +14,7 @@ on:
       - main
       - 'release/**'
     tags:
-      - 'v*'
+      - '*'  # Accept all tag formats (v1.0.0, 0.1.0-alpha.1, etc.)
   pull_request:
     branches:
       - main

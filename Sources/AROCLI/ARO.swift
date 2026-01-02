@@ -8,6 +8,7 @@ import Foundation
 import AROParser
 import ARORuntime
 import AROCompiler
+import AROVersion
 
 @main
 struct ARO: AsyncParsableCommand {
@@ -27,7 +28,7 @@ struct ARO: AsyncParsableCommand {
               aro compile myapp.aro             # Compile and check syntax
               aro check myapp.aro               # Syntax check only
             """,
-        version: "1.0.0",
+        version: AROVersion.shortVersion,
         subcommands: subcommandsList,
         defaultSubcommand: RunCommand.self
     )

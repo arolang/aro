@@ -7,6 +7,7 @@ import ArgumentParser
 import Foundation
 import AROParser
 import ARORuntime
+import AROVersion
 
 struct CompileCommand: ParsableCommand {
     static let configuration = CommandConfiguration(
@@ -46,7 +47,8 @@ struct CompileCommand: ParsableCommand {
         }
 
         if verbose {
-            print("ARO Compiler v1.0.0")
+            print("ARO Compiler v\(AROVersion.shortVersion)")
+            print("Build: \(AROVersion.buildDate)")
             print("========================")
             print("Compiling \(sourceFiles.count) file(s)...")
             print()

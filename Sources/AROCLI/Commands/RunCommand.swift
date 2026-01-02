@@ -7,6 +7,7 @@ import ArgumentParser
 import Foundation
 import AROParser
 import ARORuntime
+import AROVersion
 
 struct RunCommand: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
@@ -33,7 +34,8 @@ struct RunCommand: AsyncParsableCommand {
         let resolvedPath = URL(fileURLWithPath: path)
 
         if verbose {
-            print("ARO Runtime v1.0.0")
+            print("ARO Runtime v\(AROVersion.shortVersion)")
+            print("Build: \(AROVersion.buildDate)")
             print("=======================")
             print("Path: \(resolvedPath.path)")
             print("Entry point: \(entryPoint)")

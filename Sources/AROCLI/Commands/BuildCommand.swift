@@ -8,6 +8,7 @@ import Foundation
 import AROParser
 import ARORuntime
 import AROCompiler
+import AROVersion
 
 struct BuildCommand: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
@@ -47,7 +48,8 @@ struct BuildCommand: AsyncParsableCommand {
         let startTime = Date()
 
         if verbose {
-            print("ARO Compiler v1.0.0")
+            print("ARO Compiler v\(AROVersion.shortVersion)")
+            print("Build: \(AROVersion.buildDate)")
             print("========================")
             print("Source: \(resolvedPath.path)")
             print()
