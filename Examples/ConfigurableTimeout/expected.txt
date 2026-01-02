@@ -1,0 +1,8 @@
+# Generated: Fri Jan  2 19:49:38 2026
+# Type: console
+# Command: aro run ./Examples/ConfigurableTimeout
+---
+[Application-Start] Application started with custom timeout configuration
+[Application-Start] Timeout value:
+[Application-Start] 10
+[OK] startup

@@ -1,0 +1,10 @@
+# Generated: Fri Jan  2 19:13:38 2026
+# Type: console
+# Command: aro run ./Examples/Expressions
+---
+[Application-Start] Expression Demo
+[Application-Start] 100
+[Application-Start] 8.00
+[Application-Start] 108.00
+[Application-Start] John Doe
+[OK] application

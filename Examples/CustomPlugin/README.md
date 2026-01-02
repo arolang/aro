@@ -30,6 +30,37 @@ aro build ./Examples/CustomPlugin
 ./Examples/CustomPlugin/CustomPlugin
 ```
 
+### ⚠️ macOS Code Signing Note
+
+On macOS, plugin loading may fail with this error:
+```
+dlopen(): code signature not valid for use in process:
+mapping process and mapped file have different Team IDs
+```
+
+This is a **macOS security feature**, not an ARO bug. The code is correct.
+
+**Workarounds for Development:**
+
+1. **Disable library validation** (requires sudo):
+   ```bash
+   sudo codesign --force --sign - --deep /opt/homebrew/bin/aro
+   # Clear cached plugin
+   rm -f ~/.aro-cache/GreetingService.dylib
+   # Run
+   aro run ./Examples/CustomPlugin
+   ```
+
+2. **Use local build** (recommended):
+   ```bash
+   swift build -c debug
+   rm -f .aro-cache/GreetingService.dylib
+   .build/debug/aro run ./Examples/CustomPlugin
+   ```
+
+**Production Solution:**
+Code-sign both ARO and plugins with the same Apple Developer Team ID.
+
 ## Project Structure
 
 ```

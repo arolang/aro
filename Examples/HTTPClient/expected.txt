@@ -1,0 +1,4 @@
+# Generated: Fri Jan  2 19:23:57 2026
+# Type: console
+# Command: aro run ./Examples/HTTPClient
+---

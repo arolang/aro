@@ -1,44 +1,55 @@
 # Calculator
 
-A calculator with built-in tests demonstrating ARO's BDD-style testing framework.
+A simple calculator demonstrating arithmetic operations in ARO.
 
 ## What It Does
 
-Provides basic arithmetic operations (add, subtract, multiply) as feature sets that can be invoked programmatically, with companion test feature sets that verify correctness using Given/When/Then syntax.
+Demonstrates basic arithmetic operations using ARO's expression evaluation and computation features.
 
-## Features Tested
+## Features Demonstrated
 
-- **Testing framework** - Tests identified by "Test" suffix in business activity
-- **BDD-style testing** - `<Given>`, `<When>`, `<Then>` actions for test setup and assertions
-- **Expression evaluation** - Arithmetic expressions like `<a> + <b>`
-- **Test stripping** - Production builds exclude test feature sets
+- **Arithmetic operations** - Addition, subtraction, multiplication, division
+- **Expression evaluation** - Expressions like `<a> + <b>`
+- **Compute action** - Computing results from expressions
+- **Complex calculations** - Multi-step calculations (shopping cart with tax)
 
 ## Related Proposals
 
-- [ARO-0015: Testing Framework](../../Proposals/ARO-0015-testing-framework.md)
-- [ARO-0002: Expressions](../../Proposals/ARO-0002-expressions.md)
+- [ARO-0001: Language Fundamentals](../../Proposals/ARO-0001-language-fundamentals.md)
 
 ## Usage
 
 ```bash
-# Run tests
-aro test ./Examples/Calculator
+# Run the calculator
+aro run ./Examples/Calculator
 
-# Build production binary (strips tests)
+# Compile to native binary
 aro build ./Examples/Calculator
+./Examples/Calculator/Calculator
 ```
 
 ## Example Output
 
 ```
-PASS add-positive-numbers
-PASS add-zero
-PASS subtract-basic
-PASS multiply-basic
-
-4 tests passed, 0 failed
+[Application-Start] === ARO Calculator Demo ===
+[Application-Start] 15 + 7 =
+[Application-Start] 22
+[Application-Start] 25 - 10 =
+[Application-Start] 15
+[Application-Start] 6 * 8 =
+[Application-Start] 48
+[Application-Start] 100 / 4 =
+[Application-Start] 25
+[Application-Start] Shopping cart: 3 items @ $50 each
+[Application-Start] Subtotal: $
+[Application-Start] 150
+[Application-Start] Tax (8%): $
+[Application-Start] 12.00
+[Application-Start] Total: $
+[Application-Start] 162.00
+[Application-Start] === Calculator Demo Complete ===
 ```
 
 ---
 
-*Tests live alongside production code, not in separate files. The boundary between specification and implementation dissolves when both speak the same language.*
+*Simple arithmetic operations demonstrating ARO's expression evaluation and computation capabilities.*

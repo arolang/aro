@@ -1,0 +1,42 @@
+# Generated: Fri Jan  2 19:13:34 2026
+# Type: console
+# Command: aro run ./Examples/DateRangeDemo
+---
+[Application-Start] === Date Range & Recurrence Demo ===
+[Application-Start]
+[Application-Start] --- Date Ranges ---
+[Application-Start] Vacation period:
+[Application-Start] __TIMESTAMP__ to __TIMESTAMP__
+[Application-Start]   Days in range:
+[Application-Start] 14
+[Application-Start]   Hours in range:
+[Application-Start] 336
+[Application-Start] Last 7 days range:
+[Application-Start] __TIMESTAMP__ to __TIMESTAMP__
+[Application-Start]   Jan 10 is in vacation range
+[Application-Start]
+[Application-Start] --- Recurrence Patterns ---
+[Application-Start] Daily backup schedule:
+[Application-Start]   Next occurrence:
+[Application-Start] __TIMESTAMP__
+[Application-Start] Weekly report schedule:
+[Application-Start]   Next occurrence:
+[Application-Start] __TIMESTAMP__
+[Application-Start] Monday standup:
+[Application-Start]   Next occurrence:
+[Application-Start] __TIMESTAMP__
+[Application-Start] Biweekly review:
+[Application-Start]   Next occurrence:
+[Application-Start] __TIMESTAMP__
+[Application-Start] Payday (last Friday):
+[Application-Start]   Next occurrence:
+[Application-Start] __TIMESTAMP__
+[Application-Start]
+[Application-Start] --- Combined Usage ---
+[Application-Start] Q1 2025 range:
+[Application-Start] __TIMESTAMP__ to __TIMESTAMP__
+[Application-Start]   Total days in Q1:
+[Application-Start] 89
+[Application-Start]
+[Application-Start] === Demo Complete ===
+[OK] demo

@@ -1,0 +1,39 @@
+# Generated: Fri Jan  2 19:13:44 2026
+# Type: console
+# Command: aro run ./Examples/Iteration
+---
+[Application-Start] === Basic For-Each ===
+[Application-Start] Alice
+[Application-Start] Bob
+[Application-Start] Charlie
+[Application-Start] Diana
+[Application-Start] === Object For-Each ===
+[Application-Start] active: true
+name: Alice
+score: 95
+[Application-Start] active: false
+name: Bob
+score: 72
+[Application-Start] active: true
+name: Charlie
+score: 88
+[Application-Start] active: true
+name: Diana
+score: 91
+[Application-Start] === Filtered For-Each ===
+[Application-Start] Alice
+[Application-Start] Charlie
+[Application-Start] Diana
+[Application-Start] === Indexed For-Each ===
+[Application-Start] 1
+[Application-Start] 2
+[Application-Start] 3
+[Application-Start] 4
+[Application-Start] === Nested For-Each ===
+[Application-Start] Alpha
+[Application-Start] Alice
+[Application-Start] Bob
+[Application-Start] Beta
+[Application-Start] Charlie
+[Application-Start] Diana
+[OK] demo

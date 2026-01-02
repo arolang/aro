@@ -1,0 +1,8 @@
+# Generated: Fri Jan  2 19:13:32 2026
+# Type: console
+# Command: aro run ./Examples/Conditionals
+---
+[Application-Start] Admin access detected!
+[Application-Start] Handling POST request
+[Application-Start] Request successful
+[OK] demo

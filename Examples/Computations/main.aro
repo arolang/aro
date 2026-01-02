@@ -18,7 +18,6 @@
     <Compute> the <length> from the <greeting>.
     <Log> the <result: message> for the <console> with "Greeting length (old syntax): ".
     <Log> the <result: message> for the <console> with <length>.
-    <Log> the <result> count
 
     (* New syntax: variable name and operation are separate *)
     <Compute> the <greeting-length: length> from the <greeting>.

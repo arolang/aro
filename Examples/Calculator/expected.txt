@@ -1,0 +1,22 @@
+# Generated: Fri Jan  2 19:45:45 2026
+# Type: console
+# Command: aro run ./Examples/Calculator
+---
+[Application-Start] === ARO Calculator Demo ===
+[Application-Start] 15 + 7 =
+[Application-Start] 22
+[Application-Start] 25 - 10 =
+[Application-Start] 15
+[Application-Start] 6 * 8 =
+[Application-Start] 48
+[Application-Start] 100 / 4 =
+[Application-Start] 25
+[Application-Start] Shopping cart: 3 items @ $50 each
+[Application-Start] Subtotal: $
+[Application-Start] 150
+[Application-Start] Tax (8%): $
+[Application-Start] 12.00
+[Application-Start] Total: $
+[Application-Start] 162.00
+[Application-Start] === Calculator Demo Complete ===
+[OK] calculator

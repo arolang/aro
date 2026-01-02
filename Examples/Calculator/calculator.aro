@@ -1,72 +1,59 @@
 (* ============================================================
-   Calculator Example with Tests
+   Calculator Example
 
-   Demonstrates ARO testing framework (ARO-0015):
-   - Production code and test code in same file
-   - Tests identified by "Test" suffix in business activity
-   - Given/When/Then/Assert actions for BDD-style tests
-   - Tests run with: aro test ./Examples/Calculator
-   - Build strips tests: aro build ./Examples/Calculator
+   Demonstrates basic arithmetic operations in ARO:
+   - Addition, subtraction, multiplication, division
+   - Expression evaluation
+   - Logging computed results
    ============================================================ *)
 
-(* --- Application Entry Point --- *)
-
 (Application-Start: Calculator) {
-    <Log> the <message> for the <console> with "Calculator ready".
-    <Return> an <OK: status> for the <startup>.
-}
+    <Log> "=== ARO Calculator Demo ===" to the <console>.
 
-(* --- Production Feature Sets ---
-   These read 'a' and 'b' directly from context.
-   Tests set these values using <Given>.
-*)
+    (* Addition *)
+    <Create> the <a> with 15.
+    <Create> the <b> with 7.
+    <Compute> the <sum> from <a> + <b>.
+    <Log> "15 + 7 = " to the <console>.
+    <Log> <sum> to the <console>.
 
-(add-numbers: Calculator) {
-    <Create> the <sum> with <a> + <b>.
-    <Return> an <OK: status> with <sum>.
-}
+    (* Subtraction *)
+    <Create> the <x> with 25.
+    <Create> the <y> with 10.
+    <Compute> the <result-subtract> from <x> - <y>.
+    <Log> "25 - 10 = " to the <console>.
+    <Log> <result-subtract> to the <console>.
 
-(subtract-numbers: Calculator) {
-    <Create> the <difference> with <a> - <b>.
-    <Return> an <OK: status> with <difference>.
-}
+    (* Multiplication *)
+    <Create> the <m> with 6.
+    <Create> the <n> with 8.
+    <Compute> the <product> from <m> * <n>.
+    <Log> "6 * 8 = " to the <console>.
+    <Log> <product> to the <console>.
 
-(multiply-numbers: Calculator) {
-    <Create> the <product> with <a> * <b>.
-    <Return> an <OK: status> with <product>.
-}
+    (* Division *)
+    <Create> the <p> with 100.
+    <Create> the <q> with 4.
+    <Compute> the <quotient> from <p> / <q>.
+    <Log> "100 / 4 = " to the <console>.
+    <Log> <quotient> to the <console>.
 
-(* --- Test Feature Sets ---
-   These are identified by "Test" suffix in business activity.
-   They are:
-   - Executed by: aro test ./Examples/Calculator
-   - Stripped from binary by: aro build ./Examples/Calculator
-*)
+    (* Complex expression *)
+    <Create> the <price> with 50.
+    <Create> the <quantity> with 3.
+    <Create> the <tax-rate> with 0.08.
+    <Compute> the <subtotal> from <price> * <quantity>.
+    <Compute> the <tax> from <subtotal> * <tax-rate>.
+    <Compute> the <total> from <subtotal> + <tax>.
+    <Log> "Shopping cart: 3 items @ $50 each" to the <console>.
+    <Log> "Subtotal: $" to the <console>.
+    <Log> <subtotal> to the <console>.
+    <Log> "Tax (8%): $" to the <console>.
+    <Log> <tax> to the <console>.
+    <Log> "Total: $" to the <console>.
+    <Log> <total> to the <console>.
 
-(add-positive-numbers: Calculator Test) {
-    <Given> the <a> with 5.
-    <Given> the <b> with 3.
-    <When> the <sum> from the <add-numbers>.
-    <Then> the <sum> with 8.
-}
+    <Log> "=== Calculator Demo Complete ===" to the <console>.
 
-(add-zero: Calculator Test) {
-    <Given> the <a> with 10.
-    <Given> the <b> with 0.
-    <When> the <sum> from the <add-numbers>.
-    <Then> the <sum> with 10.
-}
-
-(subtract-basic: Calculator Test) {
-    <Given> the <a> with 10.
-    <Given> the <b> with 4.
-    <When> the <difference> from the <subtract-numbers>.
-    <Then> the <difference> with 6.
-}
-
-(multiply-basic: Calculator Test) {
-    <Given> the <a> with 6.
-    <Given> the <b> with 7.
-    <When> the <product> from the <multiply-numbers>.
-    <Then> the <product> with 42.
+    <Return> an <OK: status> for the <calculator>.
 }

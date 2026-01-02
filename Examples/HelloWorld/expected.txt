@@ -1,0 +1,6 @@
+# Generated: Fri Jan  2 19:13:43 2026
+# Type: console
+# Command: aro run ./Examples/HelloWorld
+---
+[Application-Start] Hello, ARO World!
+[OK] application

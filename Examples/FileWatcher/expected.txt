@@ -1,0 +1,4 @@
+# Generated: Fri Jan  2 19:25:43 2026
+# Type: file
+# Command: aro run ./Examples/FileWatcher
+---

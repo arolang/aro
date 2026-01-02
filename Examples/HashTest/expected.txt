@@ -1,0 +1,11 @@
+# Generated: Fri Jan  2 19:13:42 2026
+# Type: console
+# Command: aro run ./Examples/HashTest
+---
+[Application-Start] SHA256 of 'hello':
+[Application-Start] 2cf24dba5fb0a30e26e83b2ac5b9e29e1b161e5c1fa7425e73043362938b9824
+[Application-Start] SHA256 of 'mySecretPassword123':
+[Application-Start] 1e28d0fd01d085787843952a78c58861a8f82492063bfbf57ee6f3224e75bd3e
+[Application-Start] Second hash of 'hello' (should match):
+[Application-Start] 2cf24dba5fb0a30e26e83b2ac5b9e29e1b161e5c1fa7425e73043362938b9824
+[OK] test

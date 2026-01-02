@@ -16,10 +16,12 @@
      * can be used to set timeouts. The actual IDE plugin validation
      * is separate, but this shows the pattern.
      *)
-    <Configure> the <validation: timeout> with 10.
+    <Create> the <validation-timeout> with 10.
+    <Configure> the <validation: timeout> with <validation-timeout>.
 
     <Log> "Application started with custom timeout configuration" to the <console>.
-    <Log> <validation: timeout> to the <console>.
+    <Log> "Timeout value: " to the <console>.
+    <Log> <validation-timeout> to the <console>.
 
     <Return> an <OK: status> for the <startup>.
 }

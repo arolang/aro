@@ -1,0 +1,13 @@
+# Generated: Fri Jan  2 19:13:36 2026
+# Type: console
+# Command: aro run ./Examples/DirectoryLister
+---
+ARORuntime/RuntimeContext.swift:122: Fatal error: Runtime Error: Cannot rebind immutable variable 'listing'
+Feature: Application-Start
+Business Activity: Directory Lister
+
+Variables in ARO are immutable. Once bound, they cannot be changed.
+Create a new variable instead: <Action> the <listing-updated> ...
+
+This error indicates the semantic analyzer missed a duplicate binding.
+Please report this as a compiler bug.
