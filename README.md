@@ -132,6 +132,46 @@ The complete language guide is available as a PDF in the [Releases](https://gith
 
 For a detailed look at the implementation, see [OVERVIEW.md](./OVERVIEW.md).
 
+## Installation
+
+### macOS (Homebrew)
+
+The easiest way to install ARO on macOS:
+
+```bash
+brew tap krissimon/aro
+brew install aro
+```
+
+Verify installation:
+
+```bash
+aro --version
+```
+
+### Binary Releases
+
+Pre-built binaries are available for all platforms:
+
+**macOS (ARM64)**:
+```bash
+curl -L https://github.com/KrisSimon/aro/releases/latest/download/aro-macos-arm64.tar.gz | tar xz
+sudo mv aro /usr/local/bin/
+```
+
+**Linux (x86_64)**:
+```bash
+curl -L https://github.com/KrisSimon/aro/releases/latest/download/aro-linux-amd64.tar.gz | tar xz
+sudo mv aro /usr/local/bin/
+```
+
+**Windows (x86_64)**:
+Download the latest release from [GitHub Releases](https://github.com/KrisSimon/aro/releases) and add to PATH.
+
+### Build from Source
+
+See the [Building from Source](#building-from-source) section below for detailed instructions.
+
 ## Building from Source
 
 ARO is written in Swift 6.2 and uses Swift Package Manager.
