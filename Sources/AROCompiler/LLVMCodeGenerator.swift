@@ -214,7 +214,7 @@ public final class LLVMCodeGenerator {
 
         // Repository observer registration
         emit("; Repository observer registration")
-        emit("declare void @aro_register_repository_observer(ptr, ptr, ptr, ptr)")
+        emit("declare void @aro_register_repository_observer(ptr, ptr, ptr)")
         emit("")
     }
 
@@ -250,6 +250,11 @@ public final class LLVMCodeGenerator {
             for statement in featureSet.featureSet.statements {
                 collectStringsFromStatement(statement)
             }
+        }
+
+        // Register repository observer repository names
+        for (repositoryName, _) in scanRepositoryObservers(program) {
+            registerString(repositoryName)
         }
 
         // Always register these strings for main
@@ -920,10 +925,10 @@ public final class LLVMCodeGenerator {
         let templateStr = stringConstants[template]!
 
         // Call aro_interpolate_string(context, template)
-        emit("  %\(prefix)_interp_result = call ptr @aro_interpolate_string(ptr %ctx, ptr \(templateStr))")
+        emit("  %\(prefix)_interp_result = call ptr @aro_interpolate_string(ptr \(currentContext), ptr \(templateStr))")
 
         // Bind the result to _expression_
-        emit("  call void @aro_variable_bind_string(ptr %ctx, ptr \(exprNameStr), ptr %\(prefix)_interp_result)")
+        emit("  call void @aro_variable_bind_string(ptr \(currentContext), ptr \(exprNameStr), ptr %\(prefix)_interp_result)")
     }
 
     /// Emit LLVM IR to bind aggregation clause context variables (ARO-0018)
@@ -1522,17 +1527,13 @@ public final class LLVMCodeGenerator {
             // Get observer function name
             let observerFuncName = mangleFeatureSetName(observerFS.featureSet.name)
 
-            // Ensure repository name is registered as string constant
-            if stringConstants[repositoryName] == nil {
-                registerString(repositoryName)
-            }
-
+            // Get repository name string constant (registered during collection phase)
             guard let repoNameStr = stringConstants[repositoryName] else {
                 continue
             }
 
             emit("  ; Register observer '\(observerFS.featureSet.name)' for repository '\(repositoryName)'")
-            emit("  call void @aro_register_repository_observer(ptr %runtime, ptr \(repoNameStr), ptr @\(observerFuncName), ptr null)")
+            emit("  call void @aro_register_repository_observer(ptr %runtime, ptr \(repoNameStr), ptr @\(observerFuncName))")
         }
         emit("")
 

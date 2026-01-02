@@ -304,8 +304,7 @@ public func aro_runtime_register_handler(
 public func aro_register_repository_observer(
     _ runtimePtr: UnsafeMutableRawPointer?,
     _ repositoryNamePtr: UnsafePointer<CChar>?,
-    _ observerFuncPtr: UnsafeMutableRawPointer?,
-    _ guardsJSONPtr: UnsafePointer<CChar>?
+    _ observerFuncPtr: UnsafeMutableRawPointer?
 ) {
     guard let runtimePtr = runtimePtr,
           let repositoryNamePtr = repositoryNamePtr,
