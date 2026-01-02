@@ -180,9 +180,8 @@ jobs:
             --verbose \
             .build/release/aro
 
-          # Verify signature
+          # Verify signature (codesign only - spctl requires notarization)
           codesign --verify --verbose .build/release/aro
-          spctl --assess --type execute --verbose .build/release/aro
 
       - name: Create ZIP for Notarization
         if: github.ref_type == 'tag'
@@ -216,6 +215,9 @@ jobs:
 
           # Verify notarization
           xcrun stapler validate .build/release/aro
+
+          # Verify Gatekeeper will accept the signed and notarized binary
+          spctl --assess --type execute --verbose .build/release/aro
 
       - name: Clean Up Keychain
         if: always() && github.ref_type == 'tag'
