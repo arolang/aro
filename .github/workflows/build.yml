@@ -127,6 +127,108 @@ jobs:
           .build/release/aro check ./Examples/HelloWorldAPI
           .build/release/aro check ./Examples/UserService
 
+      # ========================================================================
+      # Code Signing and Notarization (only for tagged releases)
+      # ========================================================================
+
+      - name: Import Code Signing Certificate
+        if: github.ref_type == 'tag'
+        env:
+          APPLE_CERTIFICATE_BASE64: ${{ secrets.APPLE_CERTIFICATE_BASE64 }}
+          APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
+        run: |
+          # Create temporary keychain
+          KEYCHAIN_PATH=$RUNNER_TEMP/app-signing.keychain-db
+          KEYCHAIN_PASSWORD=$(openssl rand -base64 32)
+
+          # Decode certificate
+          echo "$APPLE_CERTIFICATE_BASE64" | base64 --decode > certificate.p12
+
+          # Create keychain
+          security create-keychain -p "$KEYCHAIN_PASSWORD" $KEYCHAIN_PATH
+          security set-keychain-settings -lut 21600 $KEYCHAIN_PATH
+          security unlock-keychain -p "$KEYCHAIN_PASSWORD" $KEYCHAIN_PATH
+
+          # Import certificate
+          security import certificate.p12 \
+            -P "$APPLE_CERTIFICATE_PASSWORD" \
+            -A \
+            -t cert \
+            -f pkcs12 \
+            -k $KEYCHAIN_PATH
+
+          # Set keychain search list
+          security list-keychain -d user -s $KEYCHAIN_PATH
+
+          # Allow codesign to access keychain
+          security set-key-partition-list \
+            -S apple-tool:,apple: \
+            -s \
+            -k "$KEYCHAIN_PASSWORD" \
+            $KEYCHAIN_PATH
+
+          # Clean up certificate file
+          rm certificate.p12
+
+      - name: Sign Binary
+        if: github.ref_type == 'tag'
+        run: |
+          # Sign the binary
+          codesign --sign "Developer ID Application" \
+            --timestamp \
+            --options runtime \
+            --verbose \
+            .build/release/aro
+
+          # Verify signature
+          codesign --verify --verbose .build/release/aro
+          spctl --assess --verbose .build/release/aro
+
+      - name: Create ZIP for Notarization
+        if: github.ref_type == 'tag'
+        run: |
+          # Notarization requires .zip, .dmg, or .pkg
+          cd .build/release
+          zip -r aro.zip aro
+          cd ../..
+
+      - name: Notarize Binary
+        if: github.ref_type == 'tag'
+        env:
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+          APPLE_APP_PASSWORD: ${{ secrets.APPLE_APP_PASSWORD }}
+        run: |
+          # Submit for notarization
+          xcrun notarytool submit .build/release/aro.zip \
+            --apple-id "$APPLE_ID" \
+            --team-id "$APPLE_TEAM_ID" \
+            --password "$APPLE_APP_PASSWORD" \
+            --wait
+
+          # Unzip to get the notarized binary
+          cd .build/release
+          unzip -o aro.zip
+          cd ../..
+
+          # Staple the notarization ticket
+          xcrun stapler staple .build/release/aro
+
+          # Verify notarization
+          xcrun stapler validate .build/release/aro
+
+      - name: Clean Up Keychain
+        if: always() && github.ref_type == 'tag'
+        run: |
+          KEYCHAIN_PATH=$RUNNER_TEMP/app-signing.keychain-db
+          if [ -f "$KEYCHAIN_PATH" ]; then
+            security delete-keychain $KEYCHAIN_PATH
+          fi
+
+      # ========================================================================
+      # Upload Artifact
+      # ========================================================================
+
       - name: Upload artifact
         uses: actions/upload-artifact@v6
         with:

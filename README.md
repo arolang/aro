@@ -282,6 +282,35 @@ The review will:
 - ✅ Ensure code follows project guidelines (CLAUDE.md)
 - ✅ Verify test coverage
 
+## Troubleshooting
+
+### macOS Gatekeeper Warning
+
+**Official releases** (from GitHub Releases) are code-signed and notarized by Apple, so you should not see any warnings.
+
+If you build from source or use a development build and see a security warning:
+
+> "Apple could not verify 'aro' is free of malware that may harm your Mac or compromise your privacy."
+
+You have several options:
+
+**Option 1: Use Homebrew** (Recommended)
+```bash
+brew tap krissimon/aro
+brew install aro
+```
+Homebrew automatically handles security attributes.
+
+**Option 2: Remove quarantine attribute**
+```bash
+xattr -d com.apple.quarantine /usr/local/bin/aro
+```
+
+**Option 3: Right-click method**
+1. Right-click the `aro` binary in Finder
+2. Select "Open"
+3. Click "Open" in the security dialog
+
 ## License
 
 MIT License
