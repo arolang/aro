@@ -17,7 +17,7 @@ When data leaves your feature set, it takes one of three paths. Each path serves
   <!-- Three diverging arrows -->
   <!-- Store path (left) -->
   <line x1="200" y1="70" x2="100" y2="130" stroke="#22c55e" stroke-width="2"/>
-  <polygon points="100,130 108,122 112,130" fill="#22c55e"/>
+  <polygon points="100,130 94,122 106,122" fill="#22c55e"/>
   <rect x="50" y="140" width="100" height="40" rx="5" fill="#dcfce7" stroke="#22c55e" stroke-width="2"/>
   <text x="100" y="158" text-anchor="middle" font-family="sans-serif" font-size="10" fill="#166534">Repository</text>
   <text x="100" y="172" text-anchor="middle" font-family="sans-serif" font-size="9" fill="#16a34a">&lt;Store&gt;</text>
@@ -31,7 +31,7 @@ When data leaves your feature set, it takes one of three paths. Each path serves
 
   <!-- Publish path (right) -->
   <line x1="300" y1="70" x2="400" y2="130" stroke="#8b5cf6" stroke-width="2"/>
-  <polygon points="400,130 392,122 388,130" fill="#8b5cf6"/>
+  <polygon points="400,130 394,122 406,122" fill="#8b5cf6"/>
   <rect x="350" y="140" width="100" height="40" rx="5" fill="#f3e8ff" stroke="#8b5cf6" stroke-width="2"/>
   <text x="400" y="158" text-anchor="middle" font-family="sans-serif" font-size="10" fill="#6b21a8">Global Registry</text>
   <text x="400" y="172" text-anchor="middle" font-family="sans-serif" font-size="9" fill="#7c3aed">&lt;Publish&gt;</text>
