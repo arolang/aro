@@ -90,8 +90,8 @@ The following diagram illustrates how data flows between your ARO feature sets a
 
   <!-- Arrows: Sources → Feature Set -->
   <defs>
-    <marker id="arrowhead" markerWidth="10" markerHeight="10" refX="9" refY="3" orient="auto">
-      <polygon points="0 0, 10 3, 0 6" fill="#2c3e50"/>
+    <marker id="arrowhead" markerWidth="10" markerHeight="10" refX="10" refY="3" orient="auto" viewBox="0 0 10 6">
+      <polygon points="0,0 10,3 0,6" fill="#2c3e50"/>
     </marker>
   </defs>
 
