@@ -274,6 +274,82 @@ public func aro_runtime_register_handler(
     }
 }
 
+/// Register a repository observer for compiled binaries
+/// This function subscribes to RepositoryChangedEvent for the specified repository
+/// and calls the observer function when events occur
+@_cdecl("aro_register_repository_observer")
+public func aro_register_repository_observer(
+    _ runtimePtr: UnsafeMutableRawPointer?,
+    _ repositoryNamePtr: UnsafePointer<CChar>?,
+    _ observerFuncPtr: UnsafeMutableRawPointer?,
+    _ guardsJSONPtr: UnsafePointer<CChar>?
+) {
+    guard let runtimePtr = runtimePtr,
+          let repositoryNamePtr = repositoryNamePtr,
+          let observerFuncPtr = observerFuncPtr else {
+        print("[RuntimeBridge] ERROR: Invalid parameters to aro_register_repository_observer")
+        return
+    }
+
+    let runtimeHandle = Unmanaged<AROCRuntimeHandle>.fromOpaque(runtimePtr).takeUnretainedValue()
+    let repositoryName = String(cString: repositoryNamePtr)
+
+    // Capture observer pointer as Int (Sendable) for use in closure
+    let observerAddress = Int(bitPattern: observerFuncPtr)
+
+    // Subscribe to RepositoryChangedEvent for this repository
+    runtimeHandle.runtime.eventBus.subscribe(to: RepositoryChangedEvent.self) { event in
+        guard event.repositoryName == repositoryName else { return }
+
+        // Create event context with event data
+        let contextHandle = AROCContextHandle(
+            runtime: runtimeHandle,
+            featureSetName: "\(repositoryName) Observer"
+        )
+
+        // Bind event as a dictionary with all properties
+        // The Extract action will handle nested property access via specifiers
+        var eventDict: [String: any Sendable] = [
+            "repositoryName": event.repositoryName,
+            "changeType": event.changeType.rawValue
+        ]
+        if let entityId = event.entityId {
+            eventDict["entityId"] = entityId
+        }
+        if let newValue = event.newValue {
+            eventDict["newValue"] = newValue
+        }
+        if let oldValue = event.oldValue {
+            eventDict["oldValue"] = oldValue
+        }
+
+        contextHandle.context.bind("event", value: eventDict)
+
+        // Get context pointer
+        let contextPtr = Unmanaged.passRetained(contextHandle).toOpaque()
+
+        // Call observer function (compiled LLVM code)
+        // The function signature is: ptr function(ptr context)
+        guard let observerPtrReconstructed = UnsafeMutableRawPointer(bitPattern: observerAddress) else {
+            print("[RuntimeBridge] ERROR: Invalid observer pointer address: \(observerAddress)")
+            Unmanaged<AROCContextHandle>.fromOpaque(contextPtr).release()
+            return
+        }
+
+        typealias ObserverFunc = @convention(c) (UnsafeMutableRawPointer?) -> UnsafeMutableRawPointer?
+        let observerFunc = unsafeBitCast(observerPtrReconstructed, to: ObserverFunc.self)
+        let result = observerFunc(contextPtr)
+
+        // Clean up result if needed
+        if let resultPtr = result {
+            aro_value_free(resultPtr)
+        }
+
+        // Clean up context
+        Unmanaged<AROCContextHandle>.fromOpaque(contextPtr).release()
+    }
+}
+
 // MARK: - Context Management
 
 /// Create an execution context
@@ -884,6 +960,113 @@ public func aro_value_as_string(_ valuePtr: UnsafeMutableRawPointer?) -> UnsafeM
         return strdup(str)
     }
     return strdup(String(describing: boxed.value))
+}
+
+/// Concatenate two C strings and return the result
+/// - Parameters:
+///   - str1: First string
+///   - str2: Second string
+/// - Returns: New C string (caller must free) containing concatenation
+@_cdecl("aro_string_concat")
+public func aro_string_concat(
+    _ str1: UnsafePointer<CChar>?,
+    _ str2: UnsafePointer<CChar>?
+) -> UnsafeMutablePointer<CChar>? {
+    let s1 = str1.map { String(cString: $0) } ?? ""
+    let s2 = str2.map { String(cString: $0) } ?? ""
+    return strdup(s1 + s2)
+}
+
+/// Interpolate a string template with variables from context
+/// Replaces ${variable} placeholders with resolved values
+/// - Parameters:
+///   - contextPtr: Execution context handle
+///   - templatePtr: String template with ${...} placeholders
+/// - Returns: Interpolated C string (caller must free)
+@_cdecl("aro_interpolate_string")
+public func aro_interpolate_string(
+    _ contextPtr: UnsafeMutableRawPointer?,
+    _ templatePtr: UnsafePointer<CChar>?
+) -> UnsafeMutablePointer<CChar>? {
+    guard let ptr = contextPtr, let templateStr = templatePtr.map({ String(cString: $0) }) else {
+        return strdup("")
+    }
+
+    let contextHandle = Unmanaged<AROCContextHandle>.fromOpaque(ptr).takeUnretainedValue()
+
+    // Parse and interpolate the template
+    var result = ""
+    var current = templateStr
+
+    while !current.isEmpty {
+        // Find next ${
+        if let startRange = current.range(of: "${") {
+            // Add literal part before ${
+            result += current[..<startRange.lowerBound]
+            current = String(current[startRange.upperBound...])
+
+            // Find matching }
+            if let endRange = current.range(of: "}") {
+                let varName = String(current[..<endRange.lowerBound])
+                current = String(current[endRange.upperBound...])
+
+                // Resolve variable from context
+                if let value = contextHandle.context.resolveAny(varName) {
+                    result += "\(value)"
+                }
+            } else {
+                // No closing }, treat as literal
+                result += "${"
+            }
+        } else {
+            // No more interpolations
+            result += current
+            break
+        }
+    }
+
+    return strdup(result)
+}
+
+/// Evaluate a when guard condition
+/// - Parameters:
+///   - contextPtr: Execution context handle
+///   - guardJSON: JSON-encoded guard expression
+/// - Returns: 1 if condition is true, 0 if false
+@_cdecl("aro_evaluate_when_guard")
+public func aro_evaluate_when_guard(
+    _ contextPtr: UnsafeMutableRawPointer?,
+    _ guardJSON: UnsafePointer<CChar>?
+) -> Int32 {
+    guard let ptr = contextPtr,
+          let jsonStr = guardJSON.map({ String(cString: $0) }) else {
+        return 0
+    }
+
+    let contextHandle = Unmanaged<AROCContextHandle>.fromOpaque(ptr).takeUnretainedValue()
+
+    // Parse the guard expression
+    guard let data = jsonStr.data(using: .utf8),
+          let parsed = try? JSONSerialization.jsonObject(with: data, options: []) as? [String: Any] else {
+        return 0
+    }
+
+    // Evaluate the expression
+    let result = evaluateExpressionJSON(parsed, context: contextHandle.context)
+
+    // Check if result is truthy
+    if let boolVal = result as? Bool {
+        return boolVal ? 1 : 0
+    }
+    if let intVal = result as? Int {
+        return intVal != 0 ? 1 : 0
+    }
+    if let strVal = result as? String {
+        return !strVal.isEmpty ? 1 : 0
+    }
+
+    // Non-nil value is truthy
+    return 1
 }
 
 /// Get value as integer
