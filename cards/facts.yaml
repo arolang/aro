@@ -71,6 +71,13 @@ facts:
     headline: "(Send Email: UserCreated Handler)"
     explanation: "Handler suffix makes the feature set an event consumer. 'UserCreated' is the event name to handle. Multiple handlers per event supported."
 
+  - id: "04-3"
+    week: 4
+    day: 3
+    category: "DevOps"
+    headline: "brew install aro"
+    explanation: "Install ARO via Homebrew on macOS. No manual downloads, no PATH configuration. Updates via brew upgrade. Production-ready CLI in seconds."
+
   # ===== WEEK 5: Feature Sets =====
   - id: "05-1"
     week: 5
@@ -85,6 +92,13 @@ facts:
     category: "Syntax"
     headline: "(Feature Name: Business Activity) { }"
     explanation: "Feature sets group related statements. Name describes the business capability. Activity determines trigger: operationId, Handler, or Observer."
+
+  - id: "05-3"
+    week: 5
+    day: 3
+    category: "DevOps"
+    headline: "Signed and notarized macOS binaries"
+    explanation: "ARO binaries are code-signed and notarized. No security warnings on macOS. Install and run immediately. Apple-verified distribution."
 
   # ===== WEEK 6: Extract =====
   - id: "06-1"
@@ -130,6 +144,13 @@ facts:
     headline: "aro check ./MyApp"
     explanation: "Fast syntax validation without execution. Catches errors before runtime. Integrates with CI/CD pipelines. Zero dependencies to check."
 
+  - id: "07-4"
+    week: 7
+    day: 4
+    category: "Compiler"
+    headline: "Interpreter and compiler feature parity"
+    explanation: "Every feature works identically in run and build modes. Parallel execution, observers, events all compile to native code. Develop interpreted, deploy compiled."
+
   # ===== WEEK 8: Error Messages =====
   - id: "08-1"
     week: 8
@@ -144,6 +165,13 @@ facts:
     category: "Data"
     headline: "<Retrieve> the <user> from <user-repo> where id = <id>."
     explanation: "where clause filters data. Natural language operators: is, is not, contains, starts with, ends with. Reads like a sentence."
+
+  - id: "08-3"
+    week: 8
+    day: 3
+    category: "DevOps"
+    headline: "aro --version"
+    explanation: "Version, commit hash, and build date embedded at compile time. Track deployed versions precisely. Git tag becomes binary version. Automated releases."
 
   # ===== WEEK 9: Multi-File =====
   - id: "09-1"
@@ -160,6 +188,13 @@ facts:
     headline: "MyApp/main.aro + users.aro + events.aro"
     explanation: "Organize by domain. Each file contains related feature sets. All auto-discovered at startup. Scale from one file to hundreds naturally."
 
+  - id: "09-3"
+    week: 9
+    day: 3
+    category: "DevOps"
+    headline: "Multi-platform CI/CD with Swift 6.2"
+    explanation: "Build, test, sign, and release on Linux, macOS, Windows automatically. Code signing and Homebrew updates in one workflow. Ship with confidence."
+
   # ===== WEEK 10: HTTP Server =====
   - id: "10-1"
     week: 10
@@ -175,6 +210,13 @@ facts:
     headline: "<Keepalive> the <application>."
     explanation: "Keepalive blocks execution until shutdown signal. Application continues processing events. SIGINT/SIGTERM trigger graceful shutdown."
 
+  - id: "10-3"
+    week: 10
+    day: 3
+    category: "Events"
+    headline: "Events process without Keepalive"
+    explanation: "List storage triggers handlers automatically. Event loop runs without explicit Keepalive. Simpler application lifecycle for event-driven apps."
+
   # ===== WEEK 11: Handlers =====
   - id: "11-1"
     week: 11
@@ -189,6 +231,13 @@ facts:
     category: "Events"
     headline: "<Extract> the <user> from the <event: payload>."
     explanation: "Inside a handler, event:payload contains the emitted data. Access nested fields with colons. Type-safe access to event properties."
+
+  - id: "11-3"
+    week: 11
+    day: 3
+    category: "Events"
+    headline: "<Store> the <users> into <user-repository>."
+    explanation: "Storing a list emits one event per item, not one event for the whole list. Process items individually with handlers. No Keepalive needed for event processing."
 
   # ===== WEEK 12: Repositories =====
   - id: "12-1"
@@ -323,6 +372,13 @@ facts:
     headline: "<Extract> the <user> from the <change: entity>."
     explanation: "Observer receives change object. change:entity is the affected record. change:operation is store/update/delete. React to any data mutation."
 
+  - id: "18-3"
+    week: 18
+    day: 3
+    category: "Compiler"
+    headline: "Repository observers work in aro build"
+    explanation: "Full feature parity between aro run and aro build. Observers trigger in compiled binaries. Audit logs, change tracking in production code."
+
   # ===== WEEK 19: Prepositions =====
   - id: "19-1"
     week: 19
@@ -374,6 +430,13 @@ facts:
     category: "Syntax"
     headline: "case \"pending\" => <Return> an <Accepted>."
     explanation: "Match tests value against patterns. case for each pattern. otherwise for fallback. Value, type, and regex patterns supported."
+
+  - id: "21-3"
+    week: 21
+    day: 3
+    category: "Syntax"
+    headline: "case /^ERROR:/i { }"
+    explanation: "Pattern match with regular expressions. Route messages, validate formats, extract data. Flags for case-insensitive, multiline, dotall matching."
 
   # ===== WEEK 22: File Read/Write =====
   - id: "22-1"
@@ -553,6 +616,13 @@ facts:
     headline: "<Match> the <email> against /^[\\w]+@[\\w]+\\.[\\w]+$/."
     explanation: "Match tests value against pattern. Returns boolean. Use in when guards. Flags after closing slash: i, g, m, s."
 
+  - id: "31-3"
+    week: 31
+    day: 3
+    category: "Syntax"
+    headline: "where <email> matches /^[\\w.+-]+@[\\w.-]+\\.[a-zA-Z]{2,}$/i"
+    explanation: "Filter collections with regex patterns. Retrieve matching repository records. Complex text matching in queries. Natural language meets regular expressions."
+
   # ===== WEEK 32: List Access =====
   - id: "32-1"
     week: 32
@@ -708,6 +778,13 @@ facts:
     headline: "<result: exitCode> | <result: stdout> | <result: stderr>"
     explanation: "Result has exitCode (0=success), stdout (output), stderr (errors). Access with colon qualifier. Check exitCode for success."
 
+  - id: "39-3"
+    week: 39
+    day: 3
+    category: "DevOps"
+    headline: "No runtime, no dependencies, just ./MyApp"
+    explanation: "Compiled binary includes everything. No aro installation on target. Copy executable and run. Docker images shrink to megabytes."
+
   # ===== WEEK 40: File Operations =====
   - id: "40-1"
     week: 40
@@ -834,6 +911,13 @@ facts:
     category: "DevOps"
     headline: "./MyApp (single executable)"
     explanation: "Output is standalone executable. No interpreter, no dependencies. Container images shrink to megabytes. Deploy anywhere."
+
+  - id: "47-3"
+    week: 47
+    day: 3
+    category: "DevOps"
+    headline: "Homebrew formula auto-updates on release"
+    explanation: "Tag a release, formula updates automatically. SHA256 verification included. Users get new versions via brew upgrade. Zero-touch distribution."
 
   # ===== WEEK 48: Request Headers =====
   - id: "48-1"
