@@ -151,9 +151,9 @@ Repository observers are a specialized form of event handlers that react to chan
 
   <!-- Fan-out to observers -->
   <line x1="60" y1="100" x2="40" y2="130" stroke="#a855f7" stroke-width="2"/>
-  <polygon points="40,130 48,125 44,133" fill="#a855f7"/>
+  <polygon points="40,130 46,122 34,122" fill="#a855f7"/>
   <line x1="120" y1="100" x2="140" y2="130" stroke="#a855f7" stroke-width="2"/>
-  <polygon points="140,130 132,125 136,133" fill="#a855f7"/>
+  <polygon points="140,130 134,122 146,122" fill="#a855f7"/>
 
   <!-- Observer 1 -->
   <rect x="5" y="135" width="70" height="35" rx="4" fill="#f3e8ff" stroke="#a855f7" stroke-width="2"/>
