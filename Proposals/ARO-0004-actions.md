@@ -135,11 +135,41 @@ RESPONSE actions send data from the internal context to external destinations.
 | **Return** | return, respond | for, to, with | Return response from feature set |
 | **Throw** | throw, raise, fail | for | Throw an error |
 | **Send** | send, dispatch | to, via, with | Send data externally |
-| **Log** | log, print, output, debug | for, to, with | Log messages |
+| **Log** | log, print, output, debug | for, to, with | Log messages to stdout or stderr |
 | **Write** | write | to, into | Write data to files |
 | **Append** | append | to, into | Append data to files |
 | **Notify** | notify, alert, signal | to, for, with | Send notifications |
 | **Broadcast** | broadcast | to, via | Broadcast to all connections |
+
+##### Log Action Output Streams
+
+The Log action supports directing output to stdout (default) or stderr using qualifiers:
+
+```aro
+(* Default: stdout *)
+<Log> "Application started" to the <console>.
+
+(* Explicit stdout *)
+<Log> "Processing..." to the <console: output>.
+
+(* Error stream *)
+<Log> "Warning: configuration missing" to the <console: error>.
+```
+
+**Stream Selection:**
+- No qualifier or `output` → stdout
+- `error` qualifier → stderr
+- Unknown qualifiers → stdout (graceful fallback)
+
+This enables proper separation of diagnostic/error messages from normal output in production environments. For example, in data pipeline applications where stdout contains actual data and stderr contains progress indicators and error messages:
+
+```aro
+(* Data to stdout *)
+<Log> <json-record> to the <console>.
+
+(* Progress to stderr *)
+<Log> "Processed 1000 records" to the <console: error>.
+```
 
 #### 2.4 EXPORT Actions (Internal to Persistent)
 

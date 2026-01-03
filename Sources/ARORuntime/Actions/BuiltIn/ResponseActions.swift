@@ -368,6 +368,15 @@ public struct LogAction: ActionImplementation {
         // Get log target (e.g., console, file)
         let target = object.base
 
+        // Extract output stream qualifier (for console: stdout vs stderr)
+        // Default to "output" (stdout) if no qualifier specified
+        let outputStream: String
+        if let qualifier = object.specifiers.first {
+            outputStream = qualifier.lowercased()
+        } else {
+            outputStream = "output"  // default to stdout
+        }
+
         // Try logging service
         if let loggingService = context.service(LoggingService.self) {
             await loggingService.log(message: message, target: target, level: .info)
@@ -392,7 +401,18 @@ public struct LogAction: ActionImplementation {
             // Diagnostic format for testing/debugging
             formattedMessage = "LOG[\(target)] \(context.featureSetName): \(message)"
         }
-        print(formattedMessage)
+
+        // Route output to appropriate stream based on target and qualifier
+        // Check if target is "stderr" (backward compatibility) OR qualifier is "error"
+        if target.lowercased() == "stderr" || outputStream == "error" {
+            // Write to stderr using FileHandle for concurrency safety
+            if let data = (formattedMessage + "\n").data(using: .utf8) {
+                try FileHandle.standardError.write(contentsOf: data)
+            }
+        } else {
+            // Write to stdout (default behavior)
+            print(formattedMessage)
+        }
 
         return LogResult(message: message, target: target)
     }

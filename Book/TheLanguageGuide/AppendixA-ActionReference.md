@@ -577,21 +577,47 @@ Makes variables globally available.
 
 ### Log
 
-Writes to logs and console output using sink syntax (ARO-0043).
+**Role:** RESPONSE
+**Verbs:** log, print, output, debug
+**Prepositions:** for, to, with
+
+Outputs messages to console (stdout or stderr).
 
 **Syntax:**
 ```aro
-<Log> <value> to the <destination>.
+<Log> <message> to the <console>.
+<Log> <message> to the <console: output>.
+<Log> <message> to the <console: error>.
+<Log> "literal message" to the <console>.
 ```
+
+**Qualifiers:**
+- `(none)` or `output` → stdout (standard output)
+- `error` → stderr (standard error)
 
 **Examples:**
 ```aro
-<Log> "User logged in" to the <console>.
-<Log> <error> to the <console>.
-<Log> { status: "ok", count: 42 } to the <console>.
+(* Standard output *)
+<Log> "Server started successfully" to the <console>.
+
+(* Error output *)
+<Log> "Warning: Configuration file not found" to the <console: error>.
+<Log> <error-message> to the <console: error>.
+
+(* Data pipeline - stdout for data, stderr for diagnostics *)
+<Log> <json-data> to the <console>.
+<Log> "Processed 1000 records" to the <console: error>.
 ```
 
-**Valid Prepositions:** `to`
+**Output Contexts:**
+- **machine:** JSON format
+- **human:** Clean readable output
+- **developer:** Diagnostic format with feature set name
+
+**Use Cases:**
+- Separate data output from diagnostic messages
+- Error logging in production
+- Pipeline scripts where stdout is piped
 
 ---
 

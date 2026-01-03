@@ -168,20 +168,152 @@ ARO provides three console-related system objects:
 
 | Object | Type | Description |
 |--------|------|-------------|
-| `console` | Sink | Standard output stream |
-| `stderr` | Sink | Standard error stream |
+| `console` | Sink | Standard output stream (supports qualifiers for stdout/stderr routing) |
+| `stderr` | Sink | Standard error stream (direct access) |
 | `stdin` | Source | Standard input stream |
 
 ```aro
-(* Write to console *)
+(* Write to console (stdout) *)
 <Log> "Starting server..." to the <console>.
 
-(* Write to stderr *)
-<Log> "Warning: config missing" to the <stderr>.
+(* Write to console stdout (explicit) *)
+<Log> "Processing data..." to the <console: output>.
+
+(* Write to console stderr *)
+<Log> "Warning: config missing" to the <console: error>.
+
+(* Write to stderr object (alternative syntax) *)
+<Log> "Error message" to the <stderr>.
 
 (* Read from stdin *)
 <Read> the <input> from the <stdin>.
 ```
+
+**Console Output Streams:**
+
+The `console` system object supports qualifier-based stream selection:
+
+| Syntax | Stream | Use Case |
+|--------|--------|----------|
+| `<console>` | stdout | Default output (no qualifier) |
+| `<console: output>` | stdout | Explicit standard output |
+| `<console: error>` | stderr | Errors and diagnostics |
+
+For backward compatibility, the `stderr` object remains available:
+- `<stderr>` - Direct access to standard error stream
+
+**When to use stderr:**
+- Error messages and warnings
+- Diagnostic output that shouldn't mix with data
+- Progress indicators in data processing pipelines
+- Debug logs in production
+
+### Console Stream Routing
+
+The following diagram shows how the Log action routes output based on qualifiers:
+
+<svg width="600" height="350" xmlns="http://www.w3.org/2000/svg">
+  <!-- Title -->
+  <text x="300" y="25" font-family="monospace" font-size="16" font-weight="bold" text-anchor="middle">
+    Log Action: Console Stream Routing
+  </text>
+
+  <!-- ARO Code box -->
+  <rect x="50" y="60" width="200" height="200" fill="#ecf0f1" stroke="#34495e" stroke-width="2" rx="5"/>
+  <text x="150" y="85" font-family="monospace" font-size="12" font-weight="bold" text-anchor="middle">
+    ARO Feature Set
+  </text>
+
+  <!-- Example 1: Default -->
+  <text x="60" y="110" font-family="monospace" font-size="10" fill="#2c3e50">
+    &lt;Log&gt; "msg" to
+  </text>
+  <text x="60" y="125" font-family="monospace" font-size="10" fill="#27ae60">
+    &lt;console&gt;.
+  </text>
+
+  <!-- Example 2: Explicit output -->
+  <text x="60" y="155" font-family="monospace" font-size="10" fill="#2c3e50">
+    &lt;Log&gt; "msg" to
+  </text>
+  <text x="60" y="170" font-family="monospace" font-size="10" fill="#3498db">
+    &lt;console: output&gt;.
+  </text>
+
+  <!-- Example 3: Error -->
+  <text x="60" y="200" font-family="monospace" font-size="10" fill="#2c3e50">
+    &lt;Log&gt; "err" to
+  </text>
+  <text x="60" y="215" font-family="monospace" font-size="10" fill="#e74c3c">
+    &lt;console: error&gt;.
+  </text>
+
+  <!-- Log Action box -->
+  <rect x="300" y="120" width="100" height="80" fill="#3498db" stroke="#2980b9" stroke-width="2" rx="5"/>
+  <text x="350" y="145" font-family="monospace" font-size="12" font-weight="bold" text-anchor="middle" fill="white">
+    Log
+  </text>
+  <text x="350" y="165" font-family="monospace" font-size="11" text-anchor="middle" fill="white">
+    Action
+  </text>
+  <text x="350" y="185" font-family="monospace" font-size="9" text-anchor="middle" fill="#ecf0f1">
+    Qualifier Check
+  </text>
+
+  <!-- stdout box -->
+  <rect x="450" y="80" width="100" height="50" fill="#27ae60" stroke="#229954" stroke-width="2" rx="3"/>
+  <text x="500" y="100" font-family="monospace" font-size="11" font-weight="bold" text-anchor="middle" fill="white">
+    stdout
+  </text>
+  <text x="500" y="118" font-family="monospace" font-size="9" text-anchor="middle" fill="white">
+    (standard out)
+  </text>
+
+  <!-- stderr box -->
+  <rect x="450" y="170" width="100" height="50" fill="#e74c3c" stroke="#c0392b" stroke-width="2" rx="3"/>
+  <text x="500" y="190" font-family="monospace" font-size="11" font-weight="bold" text-anchor="middle" fill="white">
+    stderr
+  </text>
+  <text x="500" y="208" font-family="monospace" font-size="9" text-anchor="middle" fill="white">
+    (standard error)
+  </text>
+
+  <!-- Arrows -->
+  <defs>
+    <marker id="arrow" markerWidth="10" markerHeight="10" refX="10" refY="3" orient="auto">
+      <polygon points="0,0 10,3 0,6" fill="#2c3e50"/>
+    </marker>
+  </defs>
+
+  <!-- Connections -->
+  <path d="M 250 117 L 300 140" stroke="#27ae60" stroke-width="2" fill="none" marker-end="url(#arrow)"/>
+  <path d="M 250 162 L 300 155" stroke="#3498db" stroke-width="2" fill="none" marker-end="url(#arrow)"/>
+  <path d="M 250 207 L 300 180" stroke="#e74c3c" stroke-width="2" fill="none" marker-end="url(#arrow)"/>
+
+  <path d="M 400 140 L 450 105" stroke="#27ae60" stroke-width="2" fill="none" marker-end="url(#arrow)"/>
+  <path d="M 400 150 L 450 105" stroke="#3498db" stroke-width="2" fill="none" marker-end="url(#arrow)"/>
+  <path d="M 400 180 L 450 195" stroke="#e74c3c" stroke-width="2" fill="none" marker-end="url(#arrow)"/>
+
+  <!-- Labels -->
+  <text x="330" y="125" font-family="monospace" font-size="8" fill="#27ae60">
+    (default)
+  </text>
+  <text x="330" y="148" font-family="monospace" font-size="8" fill="#3498db">
+    (output)
+  </text>
+  <text x="330" y="192" font-family="monospace" font-size="8" fill="#e74c3c">
+    (error)
+  </text>
+
+  <!-- Terminal output box -->
+  <rect x="50" y="280" width="500" height="50" fill="#2c3e50" stroke="#1a252f" stroke-width="2" rx="3"/>
+  <text x="60" y="300" font-family="monospace" font-size="10" fill="#27ae60">
+    $ aro run ./App 2&gt; errors.log 1&gt; output.log
+  </text>
+  <text x="60" y="318" font-family="monospace" font-size="9" fill="#ecf0f1">
+    # Separate streams: stdout to output.log, stderr to errors.log
+  </text>
+</svg>
 
 ### Environment Variables
 

@@ -1,0 +1,57 @@
+(*
+    Log to Stderr Example
+    Demonstrates console stream routing with qualifiers
+
+    Usage:
+        aro run ./Examples/LogToStderr
+
+    To separate streams:
+        aro run ./Examples/LogToStderr 2> errors.txt 1> output.txt
+        cat output.txt  # Shows stdout messages
+        cat errors.txt  # Shows stderr messages
+
+    To discard errors:
+        aro run ./Examples/LogToStderr 2> /dev/null
+
+    To combine streams:
+        aro run ./Examples/LogToStderr 2>&1 | tee combined.log
+*)
+
+(Application-Start: Log Stderr Demo) {
+    (* Default syntax - goes to stdout *)
+    <Log> "=== Standard Output (stdout) ===" to the <console>.
+    <Log> "This is a regular log message (no qualifier)" to the <console>.
+
+    (* Explicit stdout using 'output' qualifier *)
+    <Log> "This explicitly goes to stdout" to the <console: output>.
+
+    (* Separator *)
+    <Log> "" to the <console>.
+    <Log> "=== Standard Error (stderr) ===" to the <console: error>.
+
+    (* Error stream using 'error' qualifier *)
+    <Log> "This goes to stderr" to the <console: error>.
+    <Log> "Warning: This is a warning message" to the <console: error>.
+    <Log> "Error: This is an error message" to the <console: error>.
+
+    (* Use case: Data pipeline - stdout for data, stderr for diagnostics *)
+    <Log> "" to the <console>.
+    <Log> "=== Data Pipeline Example ===" to the <console>.
+    <Log> "Processing started..." to the <console: error>.
+
+    (* Simulate data output to stdout *)
+    <Log> "{\"id\": 1, \"name\": \"Alice\"}" to the <console>.
+    <Log> "{\"id\": 2, \"name\": \"Bob\"}" to the <console>.
+    <Log> "{\"id\": 3, \"name\": \"Charlie\"}" to the <console>.
+
+    (* Progress to stderr *)
+    <Log> "Processed 3 records" to the <console: error>.
+    <Log> "Processing complete" to the <console: error>.
+
+    (* Backward compatibility - direct stderr object still works *)
+    <Log> "" to the <console>.
+    <Log> "=== Backward Compatibility ===" to the <console>.
+    <Log> "Direct to stderr object (legacy syntax)" to the <stderr>.
+
+    <Return> an <OK: status> for the <demo>.
+}

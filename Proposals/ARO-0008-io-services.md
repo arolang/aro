@@ -139,11 +139,39 @@ For source operations, the result variable is bound from the source:
 
 #### Console and Stderr
 
-Write-only streams for output:
+Write-only streams for output. The console object supports qualifier-based stream selection:
 
 ```aro
+(* stdout (default) *)
 <Log> "Application starting..." to the <console>.
-<Log> "Warning: deprecated feature used" to the <stderr>.
+
+(* stdout (explicit) *)
+<Log> "Processing data..." to the <console: output>.
+
+(* stderr for errors/warnings *)
+<Log> "Warning: deprecated feature used" to the <console: error>.
+
+(* Backward compatibility - direct stderr object still works *)
+<Log> "Error message" to the <stderr>.
+```
+
+**Use cases for stderr:**
+- Error messages that should be captured separately
+- Warnings and diagnostic output
+- Progress indicators that shouldn't pollute stdout data
+- Logging in data pipeline applications where stdout contains actual data
+
+**Stream redirection examples:**
+
+```bash
+# Separate streams
+aro run ./MyApp 1> output.dat 2> errors.log
+
+# Combine streams
+aro run ./MyApp 2>&1 | tee combined.log
+
+# Discard errors
+aro run ./MyApp 2> /dev/null
 ```
 
 #### Environment Variables
