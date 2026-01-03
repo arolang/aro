@@ -52,28 +52,58 @@ public struct StartAction: ActionImplementation {
 
     private func startHTTPServer(object: ObjectDescriptor, context: ExecutionContext) async throws -> any Sendable {
         // Get port from:
-        // 1. Explicit port in ARO code (object specifiers or literal)
+        // 1. Explicit port in ARO code (_with_ clause, object specifiers, or literal)
         // 2. OpenAPI spec (contract is source of truth)
         // 3. Default to 8080
-        let port: Int
+        var port = 8080
 
-        // Check for explicit port in code
-        if let portSpec = object.specifiers.first, let p = Int(portSpec) {
+        // Priority 1: Check _with_ binding (ARO-0042: with clause)
+        if let withValue = context.resolveAny("_with_") {
+            if let withPort = withValue as? Int {
+                // Direct integer: with 8080
+                port = withPort
+            } else if let contract = withValue as? Contract,
+                      let httpServer = contract.httpServer {
+                // Contract magic object: with <contract>
+                port = httpServer.port
+            } else if let httpServer = withValue as? HTTPServerConfig {
+                // HTTP server config: with <http-server>
+                port = httpServer.port
+            } else if let withConfig = withValue as? [String: any Sendable],
+                      let configPort = withConfig["port"] as? Int {
+                // Config object: with { port: 8080 }
+                port = configPort
+            } else if let specService = context.service(OpenAPISpecService.self),
+                      let openAPIPort = specService.serverPort {
+                // Empty config {}, use OpenAPI port
+                port = openAPIPort
+            } else {
+                // Empty config {}, use default
+                port = 8080
+            }
+        }
+        // Priority 2: Check for explicit port in object specifiers
+        if port == 8080, let portSpec = object.specifiers.first, let p = Int(portSpec) {
             port = p
-        } else if let literalPort = context.resolveAny("_literal_") as? Int {
+        }
+        // Priority 3: Check _literal_ (older syntax)
+        if port == 8080, let literalPort = context.resolveAny("_literal_") as? Int {
             port = literalPort
-        } else if let literalStr = context.resolveAny("_literal_") as? String, let p = Int(literalStr) {
+        }
+        if port == 8080, let literalStr = context.resolveAny("_literal_") as? String, let p = Int(literalStr) {
             port = p
-        } else if let specService = context.service(OpenAPISpecService.self),
-                  let openAPIPort = specService.serverPort {
+        }
+        // Priority 4: OpenAPI spec port
+        if port == 8080, let specService = context.service(OpenAPISpecService.self),
+           let openAPIPort = specService.serverPort {
             // Get port from OpenAPI contract (source of truth)
             port = openAPIPort
-        } else {
+        }
+        // Priority 5: Try to extract port from object base (only if still default)
+        if port == 8080 {
             let portStr = object.base.components(separatedBy: CharacterSet.decimalDigits.inverted).joined()
             if let p = Int(portStr) {
                 port = p
-            } else {
-                port = 8080 // default
             }
         }
 

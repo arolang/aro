@@ -5,7 +5,9 @@
     <Log> "Starting Order Service..." to the <console>.
 
     (* Start HTTP server from OpenAPI contract *)
-    <Start> the <http-server> for the <contract>.
+    (* Contract is a magic system object providing contract metadata *)
+    (* Contract.http-server contains: port, hostname, routes, paths *)
+    <Start> the <http-server> with <Contract>.
 
     <Log> "Order Service ready" to the <console>.
     <Log> "Order lifecycle: draft -> placed -> paid -> shipped -> delivered" to the <console>.

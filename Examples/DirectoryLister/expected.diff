@@ -1,0 +1,17 @@
+--- /var/folders/vn/3pg7yt9157qbqb72y_b_tv_w0000gn/T/9cR3o9Hsrq.expected.txt	2026-01-03 23:55:01.934235678 +0100
++++ /var/folders/vn/3pg7yt9157qbqb72y_b_tv_w0000gn/T/Y63JpqBnw4.actual.txt	2026-01-03 23:55:01.934303977 +0100
+@@ -8,7 +8,7 @@
+   listing.message: Command executed successfully
+   listing.output: total __TOTAL__
+ drwxr-xr-x  43 kris  staff   1376 __DATE__ .
+-drwxr-xr-x  70 kris  staff   2240 __DATE__ ..
++drwxr-xr-x  71 kris  staff   2272 __DATE__ ..
+ -rw-r--r--@  1 kris  staff   6148 __DATE__ .DS_Store
+ drwxr-xr-x   3 kris  staff     96 __DATE__ .aro-cache
+ drwxr-xr-x  15 kris  staff    480 __DATE__ .build
+@@ -49,4 +49,4 @@
+ drwxr-xr-x  14 kris  staff    448 __DATE__ output
+ -rw-r--r--   1 kris  staff  10193 __DATE__ package-lock.json
+ -rw-r--r--   1 kris  staff     71 __DATE__ package.json
+--rwxr-xr-x   1 kris  staff  38619 __DATE__ test-examples.pl
++-rwxr-xr-x   1 kris  staff  42969 __DATE__ test-examples.pl

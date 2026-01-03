@@ -219,7 +219,7 @@ public struct AcceptAction: ActionImplementation {
         // Handle Sendable dictionary
         if var dict = targetObject as? [String: any Sendable] {
             dict[fieldName] = toState
-            context.bind(objectName, value: dict)
+            context.bind(objectName, value: dict, allowRebind: true)
             return dict
         }
 
@@ -227,7 +227,7 @@ public struct AcceptAction: ActionImplementation {
         if var dict = targetObject as? [String: Any] {
             dict[fieldName] = toState
             let sendableDict = convertToSendableDict(dict)
-            context.bind(objectName, value: sendableDict)
+            context.bind(objectName, value: sendableDict, allowRebind: true)
             return sendableDict
         }
 
@@ -243,7 +243,7 @@ public struct AcceptAction: ActionImplementation {
                 }
             }
         }
-        context.bind(objectName, value: resultDict)
+        context.bind(objectName, value: resultDict, allowRebind: true)
         return resultDict
     }
 

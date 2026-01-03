@@ -1,0 +1,26 @@
+---
+triple:          'arm64-apple-darwin'
+binary-path:     '/Users/kris/Projects/ARO-Lang/Examples/ExternalService/plugins/CounterPlugin/.build/arm64-apple-macosx/release/libCounterPlugin.dylib'
+relocations:
+  - { offset: 0x8938E, size: 0x8, addend: 0x0, symName: '_$s13CounterPlugin11globalCount33_43F131FD9942FB7762FED49A04F1E38ALLSivp.0', symObjAddr: 0x5B08, symBinAddr: 0x8060, symSize: 0x0 }
+  - { offset: 0x893A8, size: 0x8, addend: 0x0, symName: '_$s13CounterPlugin12counterQueue33_43F131FD9942FB7762FED49A04F1E38ALLSo17OS_dispatch_queueCvp', symObjAddr: 0x5B18, symBinAddr: 0x8070, symSize: 0x0 }
+  - { offset: 0x893B6, size: 0x8, addend: 0x0, symName: '_$s13CounterPlugin12counterQueue33_43F131FD9942FB7762FED49A04F1E38ALL_WZ', symObjAddr: 0x0, symBinAddr: 0xAB0, symSize: 0x1A0 }
+  - { offset: 0x8945E, size: 0x8, addend: 0x0, symName: _aro_plugin_init, symObjAddr: 0x1A0, symBinAddr: 0xC50, symSize: 0x24 }
+  - { offset: 0x894AF, size: 0x8, addend: 0x0, symName: '_$s13CounterPlugin10pluginInitSPys4Int8VGyF', symObjAddr: 0x1C4, symBinAddr: 0xC74, symSize: 0x24 }
+  - { offset: 0x89538, size: 0x8, addend: 0x0, symName: _counter_call, symObjAddr: 0x1E8, symBinAddr: 0xC98, symSize: 0x8 }
+  - { offset: 0x8956A, size: 0x8, addend: 0x0, symName: '_$s13CounterPlugin11counterCallys5Int32VSPys4Int8VG_AGSpySpyAFGSgGtF', symObjAddr: 0x1F0, symBinAddr: 0xCA0, symSize: 0x8 }
+  - { offset: 0x89589, size: 0x8, addend: 0x0, symName: '_$ss22__RawDictionaryStorageC4findys10_HashTableV6BucketV6bucket_Sb5foundtxSHRzlFSS_Tg5', symObjAddr: 0x2D8, symBinAddr: 0xD88, symSize: 0x64 }
+  - { offset: 0x895D7, size: 0x8, addend: 0x0, symName: '_$ss22__RawDictionaryStorageC4find_9hashValues10_HashTableV6BucketV6bucket_Sb5foundtx_SitSHRzlFSS_Tg5', symObjAddr: 0x33C, symBinAddr: 0xDEC, symSize: 0xB4 }
+  - { offset: 0x89696, size: 0x8, addend: 0x0, symName: '_$s13CounterPlugin11counterCallys5Int32VSPys4Int8VG_AGSpySpyAFGSgGtFTf4ndn_n', symObjAddr: 0x3F0, symBinAddr: 0xEA0, symSize: 0x2A4 }
+  - { offset: 0x8981A, size: 0x8, addend: 0x0, symName: '_$s13CounterPlugin13executeMethod33_43F131FD9942FB7762FED49A04F1E38ALLySDySSypGSSKFADyXEfU_TA', symObjAddr: 0x694, symBinAddr: 0x1144, symSize: 0x3FC }
+  - { offset: 0x89B86, size: 0x8, addend: 0x0, symName: ___swift_instantiateConcreteTypeFromMangledNameV2, symObjAddr: 0xA90, symBinAddr: 0x1540, symSize: 0x44 }
+  - { offset: 0x89B9A, size: 0x8, addend: 0x0, symName: '_$s10Foundation4DataV15_RepresentationOWOe', symObjAddr: 0xAD4, symBinAddr: 0x1584, symSize: 0x40 }
+  - { offset: 0x89C27, size: 0x8, addend: 0x0, symName: '_$sSS_yptWOh', symObjAddr: 0xC20, symBinAddr: 0x16D0, symSize: 0x48 }
+  - { offset: 0x89C3B, size: 0x8, addend: 0x0, symName: '_$sSS_yptWOc', symObjAddr: 0xC68, symBinAddr: 0x1718, symSize: 0x50 }
+  - { offset: 0x89C4F, size: 0x8, addend: 0x0, symName: '_$sypWOb', symObjAddr: 0xCB8, symBinAddr: 0x1768, symSize: 0x10 }
+  - { offset: 0x89C63, size: 0x8, addend: 0x0, symName: '_$sSo17OS_dispatch_queueCMa', symObjAddr: 0xCC8, symBinAddr: 0x1778, symSize: 0x44 }
+  - { offset: 0x89C77, size: 0x8, addend: 0x0, symName: '_$sSo17OS_dispatch_queueC8DispatchE10AttributesVAEs10SetAlgebraACWl', symObjAddr: 0xD0C, symBinAddr: 0x17BC, symSize: 0x44 }
+  - { offset: 0x89C8B, size: 0x8, addend: 0x0, symName: '_$sSaySo17OS_dispatch_queueC8DispatchE10AttributesVGSayxGSTsWl', symObjAddr: 0xD50, symBinAddr: 0x1800, symSize: 0x50 }
+  - { offset: 0x89C9F, size: 0x8, addend: 0x0, symName: ___swift_instantiateConcreteTypeFromMangledNameAbstractV2, symObjAddr: 0xDA0, symBinAddr: 0x1850, symSize: 0x44 }
+  - { offset: 0x89DF5, size: 0x8, addend: 0x0, symName: '_$sSD17dictionaryLiteralSDyxq_Gx_q_td_tcfCSS_ypTt0g5Tf4g_n', symObjAddr: 0xB14, symBinAddr: 0x15C4, symSize: 0x10C }
+...

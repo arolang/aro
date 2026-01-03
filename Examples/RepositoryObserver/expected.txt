@@ -1,9 +1,9 @@
-# Generated: Sat Jan  3 12:49:33 2026
+# Generated: Sat Jan  3 23:23:25 2026
 # Type: http
 # Command: aro run ./Examples/RepositoryObserver
 ---
-GET /users => ERROR: 404 Not Found
 POST /users => ERROR: 404 Not Found
-DELETE /users/{id} => ERROR: 404 Not Found
+GET /users => ERROR: 404 Not Found
 GET /users/{id} => ERROR: 404 Not Found
 PUT /users/{id} => ERROR: 404 Not Found
+DELETE /users/{id} => ERROR: 404 Not Found

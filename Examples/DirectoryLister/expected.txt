@@ -1,4 +1,4 @@
-# Generated: Sat Jan  3 12:40:12 2026
+# Generated: Sat Jan  3 23:23:02 2026
 # Type: console
 # Command: aro run ./Examples/DirectoryLister
 ---
@@ -20,7 +20,7 @@ drwx------   3 kris  staff     96 __DATE__ .claude
 -rw-r--r--   1 kris  staff    598 __DATE__ .dockerignore
 drwxr-xr-x  16 kris  staff    512 __DATE__ .git
 drwxr-xr-x   8 kris  staff    256 __DATE__ .github
--rw-r--r--   1 kris  staff   1841 __DATE__ .gitignore
+-rw-r--r--   1 kris  staff   1930 __DATE__ .gitignore
 drwxr-xr-x@  9 kris  staff    288 __DATE__ .idea
 drwxr-xr-x   4 kris  staff    128 __DATE__ .swiftpm
 drwxr-xr-x   4 kris  staff    128 __DATE__ Book
@@ -30,7 +30,7 @@ drwxr-xr-x   4 kris  staff    128 __DATE__ Book
 -rw-r--r--   1 kris  staff   2124 __DATE__ DISCLAIMER.md
 -rw-r--r--@  1 kris  staff   3225 __DATE__ Dockerfile
 drwxr-xr-x   5 kris  staff    160 __DATE__ Editor
-drwxr-xr-x  43 kris  staff   1376 __DATE__ Examples
+drwxr-xr-x  44 kris  staff   1408 __DATE__ Examples
 -rw-r--r--   1 kris  staff   2043 __DATE__ GOVERNANCE.md
 drwxr-xr-x   8 kris  staff    256 __DATE__ Graphics
 -rw-r--r--   1 kris  staff   1094 __DATE__ LICENSE
@@ -53,4 +53,4 @@ drwxr-xr-x   6 kris  staff    192 __DATE__ node_modules
 drwxr-xr-x  14 kris  staff    448 __DATE__ output
 -rw-r--r--   1 kris  staff  10193 __DATE__ package-lock.json
 -rw-r--r--   1 kris  staff     71 __DATE__ package.json
--rwxr-xr-x   1 kris  staff  33851 __DATE__ test-examples.pl
+-rwxr-xr-x   1 kris  staff  38619 __DATE__ test-examples.pl

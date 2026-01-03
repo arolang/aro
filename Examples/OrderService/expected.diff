@@ -1,0 +1,18 @@
+--- /var/folders/vn/3pg7yt9157qbqb72y_b_tv_w0000gn/T/S20MPKJG7_.expected.txt	2026-01-04 00:06:23.862095880 +0100
++++ /var/folders/vn/3pg7yt9157qbqb72y_b_tv_w0000gn/T/azTchVNdYL.actual.txt	2026-01-04 00:06:23.862172547 +0100
+@@ -1,8 +1,8 @@
+-GET /orders => {"data":[]}
++GET /orders => {"data":[{"customerId":"test-customer","id":"19b861ca457620fcdb0","items":[{"price":10,"productId":"test-product","quantity":1}],"paymentAmount":10,"paymentMethod":"credit_card","status":"delivered","trackingNumber":"TEST-123"}]}
+ GET /orders/{id} => {"data":[]}
+-POST /orders => {"customerId":"test-customer","id":"__ID__","items":[{"price":10,"productId":"test-product","quantity":1}],"status":"draft"}
+-POST /orders/{id}/place => {"customerId":"test-customer","id":"__ID__","items":[{"price":10,"productId":"test-product","quantity":1}],"status":"placed"}
+-POST /orders/{id}/pay => {"customerId":"test-customer","id":"__ID__","items":[{"price":10,"productId":"test-product","quantity":1}],"paymentAmount":10,"paymentMethod":"credit_card","status":"paid"}
+-POST /orders/{id}/ship => {"customerId":"test-customer","id":"__ID__","items":[{"price":10,"productId":"test-product","quantity":1}],"paymentAmount":10,"paymentMethod":"credit_card","status":"shipped","trackingNumber":"TEST-123"}
+-POST /orders/{id}/deliver => {"customerId":"test-customer","id":"__ID__","items":[{"price":10,"productId":"test-product","quantity":1}],"paymentAmount":10,"paymentMethod":"credit_card","status":"delivered","trackingNumber":"TEST-123"}
++POST /orders => {"customerId":"test-customer","id":"19b861ca8ef0214a8a7","items":[{"price":10,"productId":"test-product","quantity":1}],"status":"draft"}
++POST /orders/{id}/place => {"customerId":"test-customer","id":"19b861ca8ef0214a8a7","items":[{"price":10,"productId":"test-product","quantity":1}],"status":"placed"}
++POST /orders/{id}/pay => {"customerId":"test-customer","id":"19b861ca8ef0214a8a7","items":[{"price":10,"productId":"test-product","quantity":1}],"paymentAmount":10,"paymentMethod":"credit_card","status":"paid"}
++POST /orders/{id}/ship => {"customerId":"test-customer","id":"19b861ca8ef0214a8a7","items":[{"price":10,"productId":"test-product","quantity":1}],"paymentAmount":10,"paymentMethod":"credit_card","status":"shipped","trackingNumber":"TEST-123"}
++POST /orders/{id}/deliver => {"customerId":"test-customer","id":"19b861ca8ef0214a8a7","items":[{"price":10,"productId":"test-product","quantity":1}],"paymentAmount":10,"paymentMethod":"credit_card","status":"delivered","trackingNumber":"TEST-123"}
+ POST /orders/{id}/cancel => ERROR: 500 Internal Server Error
+\ No newline at end of file

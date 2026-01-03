@@ -209,6 +209,12 @@ public final class FeatureSetExecutor: @unchecked Sendable {
             let expressionValue = try await expressionEvaluator.evaluate(expression, context: context)
             context.bind("_expression_", value: expressionValue)
 
+            // ARO-0042: If preposition is "with" and object is expression, also bind to _with_
+            // This handles: <Start> the <http-server> with {}.
+            if statement.object.preposition == .with && statement.object.noun.base == "_expression_" {
+                context.bind("_with_", value: expressionValue)
+            }
+
             // Store the original expression name if it's a simple variable reference
             // This allows EmitAction to use the variable name as payload key
             if let varRef = expression as? VariableRefExpression {
@@ -354,7 +360,10 @@ public final class FeatureSetExecutor: @unchecked Sendable {
 
             // Bind result to context (unless it's a response action that already set the response)
             if statement.action.semanticRole != .response {
-                context.bind(resultDescriptor.base, value: result)
+                // Check if this is a rebinding action (accept, update, etc.)
+                let rebindingVerbs: Set<String> = ["accept", "update", "modify", "change", "set"]
+                let allowRebind = rebindingVerbs.contains(verb.lowercased())
+                context.bind(resultDescriptor.base, value: result, allowRebind: allowRebind)
             }
         } catch let assertionError as AssertionError {
             // Re-throw assertion errors directly for test framework

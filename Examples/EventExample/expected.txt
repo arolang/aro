@@ -1,4 +1,4 @@
-# Generated: Sat Jan  3 12:30:32 2026
+# Generated: Sat Jan  3 23:23:04 2026
 # Type: console
 # Command: aro run ./Examples/EventExample
 ---
@@ -7,7 +7,7 @@
 [Handler One] Handler #1 executed
 [Handler Two] Handler #2 executed
 [Handler Three] Handler #3 executed
-[Handler Five] Handler #5 executed
 [Handler Four] Handler #4 executed
+[Handler Five] Handler #5 executed
 [Application-Start] Event emitted. All handlers should have executed.
 [OK] startup

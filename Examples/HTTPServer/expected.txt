@@ -1,7 +1,7 @@
-# Generated: Sat Jan  3 12:49:00 2026
+# Generated: Sat Jan  3 23:23:20 2026
 # Type: http
 # Command: aro run ./Examples/HTTPServer
 ---
-POST /echo => {"message":"test"}
+POST /echo => {"data":"test"}
 GET /health => {"status":"healthy"}
 GET /welcome => {"message":"Welcome to ARO!"}

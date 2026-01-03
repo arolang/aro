@@ -137,6 +137,13 @@ public protocol ExecutionContext: AnyObject, Sendable {
     ///   - value: The value to bind
     func bind(_ name: String, value: any Sendable)
 
+    /// Bind a value to a variable name with optional rebinding
+    /// - Parameters:
+    ///   - name: The variable name
+    ///   - value: The value to bind
+    ///   - allowRebind: If true, allows rebinding an existing variable (for Accept/Update actions)
+    func bind(_ name: String, value: any Sendable, allowRebind: Bool)
+
     /// Remove a variable binding
     /// - Parameter name: The variable name to unbind
     func unbind(_ name: String)

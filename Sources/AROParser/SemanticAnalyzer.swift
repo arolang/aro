@@ -196,6 +196,13 @@ public final class SemanticAnalyzer {
         return name.hasPrefix("_")
     }
 
+    /// Check if action verb is allowed to rebind variables (exempt from immutability)
+    /// Accept and Update actions need to rebind for state transitions
+    private func isRebindingAllowed(_ verb: String) -> Bool {
+        let rebindingVerbs: Set<String> = ["accept", "update", "modify", "change", "set"]
+        return rebindingVerbs.contains(verb.lowercased())
+    }
+
     private func analyzeStatement(
         _ statement: Statement,
         builder: SymbolTableBuilder,
@@ -303,7 +310,8 @@ public final class SemanticAnalyzer {
             }
 
             // Check for duplicate binding (immutability enforcement)
-            if definedSymbols.contains(resultName) && !isInternalVariable(resultName) {
+            // Exempt Accept and Update actions which need to rebind for state transitions
+            if definedSymbols.contains(resultName) && !isInternalVariable(resultName) && !isRebindingAllowed(statement.action.verb) {
                 diagnostics.error(
                     "Cannot rebind variable '\(resultName)' - variables are immutable",
                     at: statement.result.span.start,
@@ -347,7 +355,8 @@ public final class SemanticAnalyzer {
             }
 
             // Check for duplicate binding (immutability enforcement)
-            if definedSymbols.contains(resultName) && !isInternalVariable(resultName) {
+            // Exempt Accept and Update actions which need to rebind for state transitions
+            if definedSymbols.contains(resultName) && !isInternalVariable(resultName) && !isRebindingAllowed(statement.action.verb) {
                 diagnostics.error(
                     "Cannot rebind variable '\(resultName)' - variables are immutable",
                     at: statement.result.span.start,

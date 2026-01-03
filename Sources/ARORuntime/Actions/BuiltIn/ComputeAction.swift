@@ -923,10 +923,9 @@ public struct UpdateAction: ActionImplementation {
             // Update the field
             updatedEntity[fieldName] = updateValue
 
-            // Bind the updated entity
-            // Note: With immutability, this will fail if result.base already exists
-            // The semantic analyzer should catch duplicate bindings
-            context.bind(result.base, value: updatedEntity)
+            // Bind the updated entity with allowRebind: true
+            // Update action is allowed to rebind for state transitions
+            context.bind(result.base, value: updatedEntity, allowRebind: true)
             return updatedEntity
         }
 
@@ -937,7 +936,7 @@ public struct UpdateAction: ActionImplementation {
             for (key, value) in updateDict {
                 merged[key] = value
             }
-            context.bind(result.base, value: merged)
+            context.bind(result.base, value: merged, allowRebind: true)
             return merged
         }
 

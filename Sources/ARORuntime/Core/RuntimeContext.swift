@@ -103,6 +103,17 @@ public final class RuntimeContext: ExecutionContext, @unchecked Sendable {
             return dateService.now(timezone: nil)
         }
 
+        // Magic variable: <Contract> returns OpenAPI contract metadata
+        if name == "Contract" {
+            return buildContractObject()
+        }
+
+        // Magic variable: <http-server> returns Contract.http-server
+        // This allows both <Contract> and <http-server> to work
+        if name == "http-server" || name == "httpServer" {
+            return buildContractObject()?.httpServer
+        }
+
         if let value = variables[name] {
             return value
         }
@@ -110,14 +121,40 @@ public final class RuntimeContext: ExecutionContext, @unchecked Sendable {
         return parent?.resolveAny(name)
     }
 
+    /// Build the Contract magic object from OpenAPI spec service
+    private func buildContractObject() -> Contract? {
+        guard let specService = services[ObjectIdentifier(OpenAPISpecService.self)] as? OpenAPISpecService else {
+            return nil
+        }
+
+        // Extract server configuration from OpenAPI spec
+        let port = specService.serverPort ?? 8080
+        let hostname = specService.serverHost ?? "0.0.0.0"
+        let routes = specService.spec.paths.map { $0.key }
+        let routeCount = routes.count
+
+        let httpServer = HTTPServerConfig(
+            port: port,
+            hostname: hostname,
+            routes: routes,
+            routeCount: routeCount
+        )
+
+        return Contract(httpServer: httpServer)
+    }
+
     public func bind(_ name: String, value: any Sendable) {
+        bind(name, value: value, allowRebind: false)
+    }
+
+    public func bind(_ name: String, value: any Sendable, allowRebind: Bool) {
         lock.lock()
         defer { lock.unlock() }
 
         // Check immutability: framework variables (_prefix) can be rebound
         let isFrameworkVariable = name.hasPrefix("_")
 
-        if !isFrameworkVariable && immutableVariables.contains(name) {
+        if !isFrameworkVariable && !allowRebind && immutableVariables.contains(name) {
             // Don't manually unlock - defer handles cleanup (though fatalError terminates)
             fatalError("""
                 Runtime Error: Cannot rebind immutable variable '\(name)'

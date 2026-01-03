@@ -263,6 +263,22 @@ public struct ExpressionEvaluator: Sendable {
 
     /// Access a property on a value (dictionary, AnySendable, etc.)
     private func accessProperty(_ property: String, on value: any Sendable) throws -> any Sendable {
+        // Handle Contract property access (magic system object)
+        if let contract = value as? Contract {
+            if let propValue = contract.property(property) {
+                return propValue
+            }
+            throw ExpressionError.undefinedMember(property)
+        }
+
+        // Handle HTTPServerConfig property access (contract.http-server)
+        if let serverConfig = value as? HTTPServerConfig {
+            if let propValue = serverConfig.property(property) {
+                return propValue
+            }
+            throw ExpressionError.undefinedMember(property)
+        }
+
         // Handle ARODate property access (ARO-0041)
         if let date = value as? ARODate {
             if let propValue = date.property(property) {

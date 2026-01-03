@@ -264,6 +264,10 @@ public final class TestContext: ExecutionContext, TestExecutionContext, @uncheck
     }
 
     public func bind(_ name: String, value: any Sendable) {
+        bind(name, value: value, allowRebind: false)
+    }
+
+    public func bind(_ name: String, value: any Sendable, allowRebind: Bool) {
         lock.lock()
         defer { lock.unlock() }
         variables[name] = value

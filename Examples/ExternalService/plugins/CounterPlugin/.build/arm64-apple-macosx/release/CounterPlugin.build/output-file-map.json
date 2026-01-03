@@ -1,0 +1,13 @@
+{
+  "": {
+    "dependencies": "/Users/kris/Projects/ARO-Lang/Examples/ExternalService/plugins/CounterPlugin/.build/arm64-apple-macosx/release/CounterPlugin.build/CounterPlugin.d",
+    "object": "/Users/kris/Projects/ARO-Lang/Examples/ExternalService/plugins/CounterPlugin/.build/arm64-apple-macosx/release/CounterPlugin.build/CounterPlugin.o",
+    "swift-dependencies": "/Users/kris/Projects/ARO-Lang/Examples/ExternalService/plugins/CounterPlugin/.build/arm64-apple-macosx/release/CounterPlugin.build/master.swiftdeps"
+  },
+  "/Users/kris/Projects/ARO-Lang/Examples/ExternalService/plugins/CounterPlugin/Sources/CounterPlugin/CounterService.swift": {
+    "object": "/Users/kris/Projects/ARO-Lang/Examples/ExternalService/plugins/CounterPlugin/.build/arm64-apple-macosx/release/CounterPlugin.build/CounterService.swift.o",
+    "swiftmodule": "/Users/kris/Projects/ARO-Lang/Examples/ExternalService/plugins/CounterPlugin/.build/arm64-apple-macosx/release/CounterPlugin.build/CounterService~partial.swiftmodule",
+    "swift-dependencies": "/Users/kris/Projects/ARO-Lang/Examples/ExternalService/plugins/CounterPlugin/.build/arm64-apple-macosx/release/CounterPlugin.build/CounterService.swiftdeps",
+    "diagnostics": "/Users/kris/Projects/ARO-Lang/Examples/ExternalService/plugins/CounterPlugin/.build/arm64-apple-macosx/release/CounterPlugin.build/CounterService.dia"
+  }
+}

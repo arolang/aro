@@ -1,5 +1,0 @@
-# OrderService requires refactoring for immutable variables feature
-# Multiple <Update> statements attempt to rebind the same 'order' variable
-# which is now prohibited by the immutability system
-# TODO: Refactor to use new variable names for each update
-skip: Requires refactoring for immutable variables (ARO-0044)

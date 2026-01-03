@@ -1,0 +1,10 @@
+--- /var/folders/vn/3pg7yt9157qbqb72y_b_tv_w0000gn/T/aHJTdolsLP.expected.txt	2026-01-03 23:55:01.957631559 +0100
++++ /var/folders/vn/3pg7yt9157qbqb72y_b_tv_w0000gn/T/E_0Fo7Tvz6.actual.txt	2026-01-03 23:55:01.957662896 +0100
+@@ -1,5 +1,5 @@
+-POST /users => ERROR: 404 Not Found
+ GET /users => ERROR: 404 Not Found
+ GET /users/{id} => ERROR: 404 Not Found
++POST /users => ERROR: 404 Not Found
+ PUT /users/{id} => ERROR: 404 Not Found
+ DELETE /users/{id} => ERROR: 404 Not Found
+\ No newline at end of file

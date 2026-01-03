@@ -1,0 +1,66 @@
+client:
+  name: basic
+  file-system: device-agnostic
+tools: {}
+targets:
+  "CounterPlugin-arm64-apple-macosx15.0-release.dylib": ["<CounterPlugin-arm64-apple-macosx15.0-release.dylib>"]
+  "CounterPlugin-arm64-apple-macosx15.0-release.module": ["<CounterPlugin-arm64-apple-macosx15.0-release.module>"]
+  "PackageStructure": ["<PackageStructure>"]
+  "main": ["<CounterPlugin-arm64-apple-macosx15.0-release.dylib>","<CounterPlugin-arm64-apple-macosx15.0-release.module>"]
+  "test": ["<CounterPlugin-arm64-apple-macosx15.0-release.dylib>","<CounterPlugin-arm64-apple-macosx15.0-release.module>"]
+default: "main"
+nodes:
+  "/Users/kris/Projects/ARO-Lang/Examples/ExternalService/plugins/CounterPlugin/Sources/CounterPlugin/":
+    is-directory-structure: true
+    content-exclusion-patterns: [".git",".build"]
+commands:
+  "/Users/kris/Projects/ARO-Lang/Examples/ExternalService/plugins/CounterPlugin/.build/arm64-apple-macosx/release/CounterPlugin.build/sources":
+    tool: write-auxiliary-file
+    inputs: ["<sources-file-list>","/Users/kris/Projects/ARO-Lang/Examples/ExternalService/plugins/CounterPlugin/Sources/CounterPlugin/CounterService.swift"]
+    outputs: ["/Users/kris/Projects/ARO-Lang/Examples/ExternalService/plugins/CounterPlugin/.build/arm64-apple-macosx/release/CounterPlugin.build/sources"]
+    description: "Write auxiliary file /Users/kris/Projects/ARO-Lang/Examples/ExternalService/plugins/CounterPlugin/.build/arm64-apple-macosx/release/CounterPlugin.build/sources"
+
+  "/Users/kris/Projects/ARO-Lang/Examples/ExternalService/plugins/CounterPlugin/.build/arm64-apple-macosx/release/CounterPlugin.product/Objects.LinkFileList":
+    tool: write-auxiliary-file
+    inputs: ["<link-file-list>","/Users/kris/Projects/ARO-Lang/Examples/ExternalService/plugins/CounterPlugin/.build/arm64-apple-macosx/release/CounterPlugin.build/CounterService.swift.o"]
+    outputs: ["/Users/kris/Projects/ARO-Lang/Examples/ExternalService/plugins/CounterPlugin/.build/arm64-apple-macosx/release/CounterPlugin.product/Objects.LinkFileList"]
+    description: "Write auxiliary file /Users/kris/Projects/ARO-Lang/Examples/ExternalService/plugins/CounterPlugin/.build/arm64-apple-macosx/release/CounterPlugin.product/Objects.LinkFileList"
+
+  "/Users/kris/Projects/ARO-Lang/Examples/ExternalService/plugins/CounterPlugin/.build/arm64-apple-macosx/release/swift-version--58304C5D6DBC2206.txt":
+    tool: write-auxiliary-file
+    inputs: ["<swift-get-version>","/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/swiftc"]
+    outputs: ["/Users/kris/Projects/ARO-Lang/Examples/ExternalService/plugins/CounterPlugin/.build/arm64-apple-macosx/release/swift-version--58304C5D6DBC2206.txt"]
+    always-out-of-date: "true"
+    description: "Write auxiliary file /Users/kris/Projects/ARO-Lang/Examples/ExternalService/plugins/CounterPlugin/.build/arm64-apple-macosx/release/swift-version--58304C5D6DBC2206.txt"
+
+  "<CounterPlugin-arm64-apple-macosx15.0-release.dylib>":
+    tool: phony
+    inputs: ["/Users/kris/Projects/ARO-Lang/Examples/ExternalService/plugins/CounterPlugin/.build/arm64-apple-macosx/release/libCounterPlugin.dylib"]
+    outputs: ["<CounterPlugin-arm64-apple-macosx15.0-release.dylib>"]
+
+  "<CounterPlugin-arm64-apple-macosx15.0-release.module>":
+    tool: phony
+    inputs: ["/Users/kris/Projects/ARO-Lang/Examples/ExternalService/plugins/CounterPlugin/.build/arm64-apple-macosx/release/CounterPlugin.build/CounterService.swift.o","/Users/kris/Projects/ARO-Lang/Examples/ExternalService/plugins/CounterPlugin/.build/arm64-apple-macosx/release/Modules/CounterPlugin.swiftmodule"]
+    outputs: ["<CounterPlugin-arm64-apple-macosx15.0-release.module>"]
+
+  "C.CounterPlugin-arm64-apple-macosx15.0-release.dylib":
+    tool: shell
+    inputs: ["/Users/kris/Projects/ARO-Lang/Examples/ExternalService/plugins/CounterPlugin/.build/arm64-apple-macosx/release/CounterPlugin.build/CounterService.swift.o","/Users/kris/Projects/ARO-Lang/Examples/ExternalService/plugins/CounterPlugin/.build/arm64-apple-macosx/release/CounterPlugin.product/Objects.LinkFileList"]
+    outputs: ["/Users/kris/Projects/ARO-Lang/Examples/ExternalService/plugins/CounterPlugin/.build/arm64-apple-macosx/release/libCounterPlugin.dylib"]
+    description: "Linking ./.build/arm64-apple-macosx/release/libCounterPlugin.dylib"
+    args: ["/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/swiftc","-L","/Users/kris/Projects/ARO-Lang/Examples/ExternalService/plugins/CounterPlugin/.build/arm64-apple-macosx/release","-o","/Users/kris/Projects/ARO-Lang/Examples/ExternalService/plugins/CounterPlugin/.build/arm64-apple-macosx/release/libCounterPlugin.dylib","-module-name","CounterPlugin","-Xlinker","-no_warn_duplicate_libraries","-emit-library","-Xlinker","-install_name","-Xlinker","@rpath/libCounterPlugin.dylib","-Xlinker","-dead_strip","-Xlinker","-rpath","-Xlinker","@loader_path","@/Users/kris/Projects/ARO-Lang/Examples/ExternalService/plugins/CounterPlugin/.build/arm64-apple-macosx/release/CounterPlugin.product/Objects.LinkFileList","-Xlinker","-rpath","-Xlinker","/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/lib/swift-6.2/macosx","-target","arm64-apple-macosx13.0","-plugin-path","/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/lib/swift/host/plugins/testing","-sdk","/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX26.2.sdk","-F","/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/Library/Frameworks","-F","/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/Library/PrivateFrameworks","-I","/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/usr/lib","-L","/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/usr/lib","-g"]
+
+  "C.CounterPlugin-arm64-apple-macosx15.0-release.module":
+    tool: shell
+    inputs: ["/Users/kris/Projects/ARO-Lang/Examples/ExternalService/plugins/CounterPlugin/Sources/CounterPlugin/CounterService.swift","/Users/kris/Projects/ARO-Lang/Examples/ExternalService/plugins/CounterPlugin/.build/arm64-apple-macosx/release/swift-version--58304C5D6DBC2206.txt","/Users/kris/Projects/ARO-Lang/Examples/ExternalService/plugins/CounterPlugin/.build/arm64-apple-macosx/release/CounterPlugin.build/sources"]
+    outputs: ["/Users/kris/Projects/ARO-Lang/Examples/ExternalService/plugins/CounterPlugin/.build/arm64-apple-macosx/release/CounterPlugin.build/CounterService.swift.o","/Users/kris/Projects/ARO-Lang/Examples/ExternalService/plugins/CounterPlugin/.build/arm64-apple-macosx/release/Modules/CounterPlugin.swiftmodule"]
+    description: "Compiling Swift Module 'CounterPlugin' (1 sources)"
+    args: ["/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/swiftc","-module-name","CounterPlugin","-emit-dependencies","-emit-module","-emit-module-path","/Users/kris/Projects/ARO-Lang/Examples/ExternalService/plugins/CounterPlugin/.build/arm64-apple-macosx/release/Modules/CounterPlugin.swiftmodule","-output-file-map","/Users/kris/Projects/ARO-Lang/Examples/ExternalService/plugins/CounterPlugin/.build/arm64-apple-macosx/release/CounterPlugin.build/output-file-map.json","-parse-as-library","-whole-module-optimization","-num-threads","10","-c","@/Users/kris/Projects/ARO-Lang/Examples/ExternalService/plugins/CounterPlugin/.build/arm64-apple-macosx/release/CounterPlugin.build/sources","-I","/Users/kris/Projects/ARO-Lang/Examples/ExternalService/plugins/CounterPlugin/.build/arm64-apple-macosx/release/Modules","-target","arm64-apple-macosx13.0","-whole-module-optimization","-num-threads","10","-serialize-diagnostics","-O","-j10","-DSWIFT_PACKAGE","-DSWIFT_MODULE_RESOURCE_BUNDLE_UNAVAILABLE","-module-cache-path","/Users/kris/Projects/ARO-Lang/Examples/ExternalService/plugins/CounterPlugin/.build/arm64-apple-macosx/release/ModuleCache","-parseable-output","-parse-as-library","-emit-objc-header","-emit-objc-header-path","/Users/kris/Projects/ARO-Lang/Examples/ExternalService/plugins/CounterPlugin/.build/arm64-apple-macosx/release/CounterPlugin.build/include/CounterPlugin-Swift.h","-swift-version","5","-plugin-path","/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/lib/swift/host/plugins/testing","-sdk","/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX26.2.sdk","-F","/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/Library/Frameworks","-F","/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/Library/PrivateFrameworks","-I","/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/usr/lib","-L","/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/usr/lib","-g","-Xcc","-isysroot","-Xcc","/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX26.2.sdk","-Xcc","-F","-Xcc","/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/Library/Frameworks","-Xcc","-F","-Xcc","/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/Library/PrivateFrameworks","-Xcc","-fPIC","-Xcc","-g","-package-name","counterplugin"]
+
+  "PackageStructure":
+    tool: package-structure-tool
+    inputs: ["/Users/kris/Projects/ARO-Lang/Examples/ExternalService/plugins/CounterPlugin/Sources/CounterPlugin/","/Users/kris/Projects/ARO-Lang/Examples/ExternalService/plugins/CounterPlugin/Package.swift","/Users/kris/Projects/ARO-Lang/Examples/ExternalService/plugins/CounterPlugin/Package.resolved"]
+    outputs: ["<PackageStructure>"]
+    description: "Planning build"
+    allow-missing-inputs: true
+
