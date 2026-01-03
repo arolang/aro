@@ -365,6 +365,9 @@ sub normalize_output {
     # Matches: "Jan  3 12:26" or "Dec 31  2025" in ls output
     $output =~ s/^([\-dlrwxs@+]+\s+\d+\s+\w+\s+\w+\s+\d+\s+)\w+\s+\d+\s+[\d:]+/$1__DATE__/gm;
 
+    # Normalize API response times (generationtime_ms from weather API)
+    $output =~ s/generationtime_ms: \d+\.\d+/generationtime_ms: __TIME__/g;
+
     # Normalize paths (absolute -> relative)
     my $base_dir = $RealBin;
     $output =~ s/\Q$base_dir\E/./g;

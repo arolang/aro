@@ -1,4 +1,4 @@
-# Generated: Sat Jan  3 09:13:57 2026
+# Generated: Sat Jan  3 12:29:15 2026
 # Type: console
 # Command: aro run ./Examples/ExternalService
 ---
@@ -6,11 +6,11 @@
 [Application-Start] Weather data received:
 [Application-Start] current_weather: interval: 900
 is_day: 1
-temperature: 0.50
-time: 2026-01-03T08:00
-weathercode: 3
-winddirection: 253
-windspeed: 16.20
+temperature: 0.40
+time: 2026-01-03T11:15
+weathercode: 73
+winddirection: 241
+windspeed: 15.60
 current_weather_units: interval: seconds
 is_day:
 temperature: °C
@@ -19,7 +19,7 @@ weathercode: wmo code
 winddirection: °
 windspeed: km/h
 elevation: 38
-generationtime_ms: 0.06
+generationtime_ms: __TIME__
 latitude: 52.52
 longitude: 13.42
 timezone: GMT
