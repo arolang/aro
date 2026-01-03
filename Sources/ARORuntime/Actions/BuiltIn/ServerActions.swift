@@ -102,20 +102,42 @@ public struct StartAction: ActionImplementation {
 
     private func startSocketServer(object: ObjectDescriptor, context: ExecutionContext) async throws -> any Sendable {
         // Get port from various sources:
-        // 1. From "with" clause (_literal_ or _expression_)
-        // 2. From object specifiers
-        // 3. Default to 9000
+        // 1. From "with" clause (_with_) - config object or direct value
+        // 2. From "with" clause (_literal_ or _expression_) - legacy support
+        // 3. From object specifiers
+        // 4. Default to 9000
         let port: Int
-        if let literalPort = context.resolveAny("_literal_") as? Int {
+
+        // Priority 1: Check _with_ binding (ARO-0042: with clause)
+        if let withValue = context.resolveAny("_with_") {
+            if let withPort = withValue as? Int {
+                // Direct integer: with 9000
+                port = withPort
+            } else if let withConfig = withValue as? [String: any Sendable],
+                      let configPort = withConfig["port"] as? Int {
+                // Config object: with { port: 9000 }
+                port = configPort
+            } else {
+                port = 9000 // default if with clause doesn't contain port
+            }
+        }
+        // Priority 2: Check _literal_ (older syntax)
+        else if let literalPort = context.resolveAny("_literal_") as? Int {
             port = literalPort
         } else if let literalStr = context.resolveAny("_literal_") as? String, let p = Int(literalStr) {
             port = p
-        } else if let exprPort = context.resolveAny("_expression_") as? Int {
+        }
+        // Priority 3: Check _expression_ (older syntax)
+        else if let exprPort = context.resolveAny("_expression_") as? Int {
             port = exprPort
-        } else if let portSpec = object.specifiers.first, let p = Int(portSpec) {
+        }
+        // Priority 4: Check object specifiers
+        else if let portSpec = object.specifiers.first, let p = Int(portSpec) {
             port = p
-        } else {
-            port = 9000 // default
+        }
+        // Default
+        else {
+            port = 9000
         }
 
         // Try using the SocketServerService (interpreter mode with NIO)

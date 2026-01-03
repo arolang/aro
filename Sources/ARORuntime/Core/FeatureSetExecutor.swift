@@ -241,11 +241,14 @@ public final class FeatureSetExecutor: @unchecked Sendable {
                 let queryVerbs: Set<String> = ["filter", "map", "reduce", "aggregate"]
                 // Response actions like write/read/store should NOT have their result bound to expression value
                 let responseVerbs: Set<String> = ["write", "read", "store", "save", "persist", "log", "print", "send", "emit"]
+                // Server lifecycle actions always need execution for side effects
+                let serverVerbs: Set<String> = ["start", "stop", "restart", "keepalive"]
                 let needsExecution = testVerbs.contains(verb.lowercased()) ||
                     requestVerbs.contains(verb.lowercased()) ||
                     mergeVerbs.contains(verb.lowercased()) ||
                     responseVerbs.contains(verb.lowercased()) ||
                     queryVerbs.contains(verb.lowercased()) ||
+                    serverVerbs.contains(verb.lowercased()) ||
                     (updateVerbs.contains(verb.lowercased()) && !resultDescriptor.specifiers.isEmpty) ||
                     (createVerbs.contains(verb.lowercased()) && !resultDescriptor.specifiers.isEmpty) ||
                     (computeVerbs.contains(verb.lowercased()) && !resultDescriptor.specifiers.isEmpty) ||
