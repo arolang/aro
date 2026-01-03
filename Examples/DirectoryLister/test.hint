@@ -1,0 +1,5 @@
+# DirectoryLister runs 'ls -la' on the project directory
+# Output includes timestamps that change whenever files are modified
+# (.git updates on commits, output/ changes during test runs)
+# This is a demonstration example, not suitable for automated testing
+skip: Output contains volatile filesystem timestamps
