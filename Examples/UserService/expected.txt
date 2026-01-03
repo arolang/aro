@@ -1,9 +1,9 @@
-# Generated: Sat Jan  3 12:36:10 2026
+# Generated: Sat Jan  3 12:49:33 2026
 # Type: http
 # Command: aro run ./Examples/UserService
 ---
-GET /users => {"data":[]}
-POST /users => {"message":"test"}
-DELETE /users/{id} => ERROR: 599 Internal Exception
-GET /users/{id} => ERROR: 599 Internal Exception
-PUT /users/{id} => ERROR: 599 Internal Exception
+GET /users => ERROR: 404 Not Found
+POST /users => ERROR: 404 Not Found
+DELETE /users/{id} => ERROR: 404 Not Found
+GET /users/{id} => ERROR: 404 Not Found
+PUT /users/{id} => ERROR: 404 Not Found

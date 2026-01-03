@@ -4,11 +4,11 @@
     <Log> the <startup: message> for the <console> with "Starting Simple Chat...".
 
     (* Start HTTP server from OpenAPI contract *)
-    <Start> the <http-server> for the <contract>.
+    <Start> the <http-server> with {}.
     <Log> the <http: ready> for the <console> with "HTTP server on port 8080".
 
     (* Start socket server for real-time *)
-    <Start> the <socket-server> on <port> with 9000.
+    <Start> the <socket-server> with { port: 9000 }.
     <Log> the <socket: ready> for the <console> with "Socket server on port 9000".
 
     (* Keep alive *)

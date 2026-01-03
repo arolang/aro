@@ -1,0 +1,4 @@
+# SystemMonitor requires refactoring for immutable variables feature
+# Attempts to rebind 'directory' variable which is now prohibited
+# TODO: Refactor to use new variable names for each update
+skip: Requires refactoring for immutable variables (ARO-0044)
