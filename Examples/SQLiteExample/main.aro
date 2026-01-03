@@ -1,0 +1,95 @@
+(* SQLite Plugin Example - Database CRUD Operations *)
+(* Demonstrates the Call action with database queries and mutations *)
+
+(Application-Start: SQLite Demo) {
+    <Log> "=== SQLite Plugin Demo ===" to the <console>.
+    <Log> "" to the <console>.
+
+    (* Step 1: Create table *)
+    <Log> "Step 1: Creating users table..." to the <console>.
+    <Call> the <create-result> from the <sqlite: execute> with {
+        sql: "CREATE TABLE users (id INTEGER PRIMARY KEY, name TEXT NOT NULL, email TEXT)"
+    }.
+    <Log> "Table created successfully" to the <console>.
+    <Log> "" to the <console>.
+
+    (* Step 2: Insert users *)
+    <Log> "Step 2: Inserting users..." to the <console>.
+    <Call> the <insert1> from the <sqlite: execute> with {
+        sql: "INSERT INTO users (name, email) VALUES ('Alice', 'alice@example.com')"
+    }.
+    <Extract> the <alice-id> from the <insert1: lastInsertRowid>.
+    <Log> "Inserted Alice with ID:" to the <console>.
+    <Log> <alice-id> to the <console>.
+
+    <Call> the <insert2> from the <sqlite: execute> with {
+        sql: "INSERT INTO users (name, email) VALUES ('Bob', 'bob@example.com')"
+    }.
+    <Extract> the <bob-id> from the <insert2: lastInsertRowid>.
+    <Log> "Inserted Bob with ID:" to the <console>.
+    <Log> <bob-id> to the <console>.
+
+    <Call> the <insert3> from the <sqlite: execute> with {
+        sql: "INSERT INTO users (name, email) VALUES ('Charlie', 'charlie@example.com')"
+    }.
+    <Log> "" to the <console>.
+
+    (* Step 3: Query all users *)
+    <Log> "Step 3: Querying all users..." to the <console>.
+    <Call> the <all-users-result> from the <sqlite: query> with {
+        sql: "SELECT * FROM users ORDER BY id"
+    }.
+    <Extract> the <all-users> from the <all-users-result: rows>.
+    <Log> "All users:" to the <console>.
+    <Log> <all-users> to the <console>.
+    <Log> "" to the <console>.
+
+    (* Step 4: Update a user *)
+    <Log> "Step 4: Updating Bob's email..." to the <console>.
+    <Call> the <update-result> from the <sqlite: execute> with {
+        sql: "UPDATE users SET email = 'robert@example.com' WHERE name = 'Bob'"
+    }.
+    <Extract> the <updated-count> from the <update-result: changes>.
+    <Log> "Updated rows:" to the <console>.
+    <Log> <updated-count> to the <console>.
+    <Log> "" to the <console>.
+
+    (* Step 5: Query specific user *)
+    <Log> "Step 5: Querying Bob after update..." to the <console>.
+    <Call> the <bob-result> from the <sqlite: query> with {
+        sql: "SELECT * FROM users WHERE name = 'Bob'"
+    }.
+    <Extract> the <bob-data> from the <bob-result: rows>.
+    <Log> "Bob's data:" to the <console>.
+    <Log> <bob-data> to the <console>.
+    <Log> "" to the <console>.
+
+    (* Step 6: Delete a user *)
+    <Log> "Step 6: Deleting Charlie..." to the <console>.
+    <Call> the <delete-result> from the <sqlite: execute> with {
+        sql: "DELETE FROM users WHERE name = 'Charlie'"
+    }.
+    <Extract> the <deleted-count> from the <delete-result: changes>.
+    <Log> "Deleted rows:" to the <console>.
+    <Log> <deleted-count> to the <console>.
+    <Log> "" to the <console>.
+
+    (* Step 7: Final query *)
+    <Log> "Step 7: Final users list..." to the <console>.
+    <Call> the <final-result> from the <sqlite: query> with {
+        sql: "SELECT * FROM users ORDER BY id"
+    }.
+    <Extract> the <final-users> from the <final-result: rows>.
+    <Log> "Remaining users:" to the <console>.
+    <Log> <final-users> to the <console>.
+    <Log> "" to the <console>.
+
+    <Log> "All CRUD operations completed successfully!" to the <console>.
+
+    <Return> an <OK: status> for the <startup>.
+}
+
+(Application-End: Success) {
+    <Log> "SQLite demo completed." to the <console>.
+    <Return> an <OK: status> for the <shutdown>.
+}

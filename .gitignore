@@ -59,3 +59,5 @@ homebrew-aro/
 /output/users.yaml
 /output/config.env
 /Examples/ZipService/content/archive.zip
+/Examples/SQLiteExample/plugins/SQLitePlugin/.build
+/Examples/FileOperations/demo-output

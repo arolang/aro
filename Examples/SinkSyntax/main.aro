@@ -18,7 +18,7 @@
     <Log> <user> to the <console>.
 
     (* Standard syntax still works for backwards compatibility *)
-    <Log> the <message> for the <console> with "Standard syntax still works".
+    <Log> "Standard syntax still works" to the <console>.
 
     <Return> an <OK: status> for the <startup>.
 }

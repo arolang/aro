@@ -6,7 +6,7 @@
     (* Define template source path *)
     <Create> the <template-path> with "../template".
 
-    <Log> the <start> for the <console> with "Scanning template directory...".
+    <Log> "Scanning template directory..." to the <console>.
 
     (* List all entries recursively from template - use specifier for recursive *)
     <List> the <all-entries: recursively> from the <directory: template-path>.
@@ -25,9 +25,9 @@
         (* Create the directory in current location *)
         <Make> the <created> to the <path: relative-path>.
 
-        <Log> the <status> for the <console> with <relative-path>.
+        <Log> <relative-path> to the <console>.
     }
 
-    <Log> the <done> for the <console> with "Directory structure replicated.".
+    <Log> "Directory structure replicated." to the <console>.
     <Return> an <OK: status> for the <replication>.
 }

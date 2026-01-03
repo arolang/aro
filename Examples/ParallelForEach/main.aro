@@ -7,22 +7,22 @@
     (* Create a list of items to process *)
     <Create> the <numbers> with [1, 2, 3, 4, 5, 6, 7, 8, 9, 10].
 
-    <Log> the <message> for the <console> with "=== Serial Iteration ===".
+    <Log> "=== Serial Iteration ===" to the <console>.
 
     (* Serial iteration - items processed in order *)
     for each <number> in <numbers> {
-        <Log> the <log-entry> for the <console> with <number>.
+        <Log> <number> to the <console>.
     }
 
-    <Log> the <message> for the <console> with "=== Parallel Iteration ===".
+    <Log> "=== Parallel Iteration ===" to the <console>.
 
     (* Parallel iteration - items processed concurrently, non-deterministic order *)
     (* True parallel execution in both interpreter and compiled binaries *)
     parallel for each <number> in <numbers> {
-        <Log> the <log-entry> for the <console> with <number>.
+        <Log> <number> to the <console>.
     }
 
-    <Log> the <message> for the <console> with "=== Done ===".
+    <Log> "=== Done ===" to the <console>.
 
     <Return> an <OK: status> for the <demo>.
 }

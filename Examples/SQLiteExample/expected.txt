@@ -1,0 +1,52 @@
+# Generated: Sat Jan  3 16:59:10 2026
+# Type: console
+# Command: aro run ./Examples/SQLiteExample
+---
+[PluginLoader] Building package plugin: SQLitePlugin
+[PluginLoader] Registered plugin service: sqlite
+[PluginLoader] Loaded package plugin: SQLitePlugin
+[Application-Start] === SQLite Plugin Demo ===
+[Application-Start]
+[Application-Start] Step 1: Creating users table...
+[Application-Start] Table created successfully
+[Application-Start]
+[Application-Start] Step 2: Inserting users...
+[Application-Start] Inserted Alice with ID:
+[Application-Start] 1
+[Application-Start] Inserted Bob with ID:
+[Application-Start] 2
+[Application-Start]
+[Application-Start] Step 3: Querying all users...
+[Application-Start] All users:
+[Application-Start] [email: alice@example.com
+id: 1
+name: Alice, email: bob@example.com
+id: 2
+name: Bob, email: charlie@example.com
+id: 3
+name: Charlie]
+[Application-Start]
+[Application-Start] Step 4: Updating Bob's email...
+[Application-Start] Updated rows:
+[Application-Start] 1
+[Application-Start]
+[Application-Start] Step 5: Querying Bob after update...
+[Application-Start] Bob's data:
+[Application-Start] [email: robert@example.com
+id: 2
+name: Bob]
+[Application-Start]
+[Application-Start] Step 6: Deleting Charlie...
+[Application-Start] Deleted rows:
+[Application-Start] 1
+[Application-Start]
+[Application-Start] Step 7: Final users list...
+[Application-Start] Remaining users:
+[Application-Start] [email: alice@example.com
+id: 1
+name: Alice, email: robert@example.com
+id: 2
+name: Bob]
+[Application-Start]
+[Application-Start] All CRUD operations completed successfully!
+[OK] startup

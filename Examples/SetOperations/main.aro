@@ -10,87 +10,87 @@
    ============================================================ *)
 
 (Application-Start: Set Operations Demo) {
-    <Log> the <header> for the <console> with "=== ARO Set Operations Demo (ARO-0042) ===".
-    <Log> the <separator> for the <console> with "".
+    <Log> "=== ARO Set Operations Demo (ARO-0042) ===" to the <console>.
+    <Log> "" to the <console>.
 
     (* === LIST OPERATIONS === *)
-    <Log> the <section> for the <console> with "--- List Operations ---".
+    <Log> "--- List Operations ---" to the <console>.
 
     <Create> the <list-a> with [2, 3, 5].
     <Create> the <list-b> with [1, 2, 3, 4].
 
-    <Log> the <a> for the <console> with "List A: [2, 3, 5]".
-    <Log> the <b> for the <console> with "List B: [1, 2, 3, 4]".
-    <Log> the <sep1> for the <console> with "".
+    <Log> "List A: [2, 3, 5]" to the <console>.
+    <Log> "List B: [1, 2, 3, 4]" to the <console>.
+    <Log> "" to the <console>.
 
     (* Intersection: elements in both *)
     <Compute> the <common: intersect> from <list-a> with <list-b>.
-    <Log> the <r1> for the <console> with "Intersection (A and B):".
-    <Log> the <r1v> for the <console> with <common>.  (* Output: [2, 3] *)
+    <Log> "Intersection (A and B):" to the <console>.
+    <Log> <common> to the <console>.  (* Output: [2, 3] *)
 
     (* Difference A-B: elements in A but not B *)
     <Compute> the <only-a: difference> from <list-a> with <list-b>.
-    <Log> the <r2> for the <console> with "Difference (A - B):".
-    <Log> the <r2v> for the <console> with <only-a>.  (* Output: [5] *)
+    <Log> "Difference (A - B):" to the <console>.
+    <Log> <only-a> to the <console>.  (* Output: [5] *)
 
     (* Difference B-A: elements in B but not A *)
     <Compute> the <only-b: difference> from <list-b> with <list-a>.
-    <Log> the <r3> for the <console> with "Difference (B - A):".
-    <Log> the <r3v> for the <console> with <only-b>.  (* Output: [1, 4] *)
+    <Log> "Difference (B - A):" to the <console>.
+    <Log> <only-b> to the <console>.  (* Output: [1, 4] *)
 
     (* Union: all unique elements *)
     <Compute> the <all: union> from <list-a> with <list-b>.
-    <Log> the <r4> for the <console> with "Union (A or B):".
-    <Log> the <r4v> for the <console> with <all>.  (* Output: [2, 3, 5, 1, 4] *)
+    <Log> "Union (A or B):" to the <console>.
+    <Log> <all> to the <console>.  (* Output: [2, 3, 5, 1, 4] *)
 
-    <Log> the <sep2> for the <console> with "".
+    <Log> "" to the <console>.
 
     (* === MULTISET SEMANTICS === *)
-    <Log> the <section2> for the <console> with "--- Multiset (Duplicate Handling) ---".
+    <Log> "--- Multiset (Duplicate Handling) ---" to the <console>.
 
     <Create> the <multi-a> with [1, 2, 2, 3].
     <Create> the <multi-b> with [2, 2, 2, 4].
 
-    <Log> the <ma> for the <console> with "Multi A: [1, 2, 2, 3]".
-    <Log> the <mb> for the <console> with "Multi B: [2, 2, 2, 4]".
-    <Log> the <sep3> for the <console> with "".
+    <Log> "Multi A: [1, 2, 2, 3]" to the <console>.
+    <Log> "Multi B: [2, 2, 2, 4]" to the <console>.
+    <Log> "" to the <console>.
 
     <Compute> the <multi-intersect: intersect> from <multi-a> with <multi-b>.
-    <Log> the <mi1> for the <console> with "Intersection: [2, 2] (min count)".
-    <Log> the <mi1v> for the <console> with <multi-intersect>.
+    <Log> "Intersection: [2, 2] (min count)" to the <console>.
+    <Log> <multi-intersect> to the <console>.
 
     <Compute> the <multi-diff: difference> from <multi-a> with <multi-b>.
-    <Log> the <mi2> for the <console> with "Difference A-B: [1, 3]".
-    <Log> the <mi2v> for the <console> with <multi-diff>.
+    <Log> "Difference A-B: [1, 3]" to the <console>.
+    <Log> <multi-diff> to the <console>.
 
-    <Log> the <sep4> for the <console> with "".
+    <Log> "" to the <console>.
 
     (* === STRING OPERATIONS === *)
-    <Log> the <section3> for the <console> with "--- String Operations ---".
+    <Log> "--- String Operations ---" to the <console>.
 
     <Create> the <str-a> with "hello".
     <Create> the <str-b> with "bello".
 
-    <Log> the <sa> for the <console> with "String A: hello".
-    <Log> the <sb> for the <console> with "String B: bello".
-    <Log> the <sep5> for the <console> with "".
+    <Log> "String A: hello" to the <console>.
+    <Log> "String B: bello" to the <console>.
+    <Log> "" to the <console>.
 
     <Compute> the <str-common: intersect> from <str-a> with <str-b>.
-    <Log> the <s1> for the <console> with "Intersection:".
-    <Log> the <s1v> for the <console> with <str-common>.  (* Output: "ello" *)
+    <Log> "Intersection:" to the <console>.
+    <Log> <str-common> to the <console>.  (* Output: "ello" *)
 
     <Compute> the <str-diff: difference> from <str-a> with <str-b>.
-    <Log> the <s2> for the <console> with "Difference (A - B):".
-    <Log> the <s2v> for the <console> with <str-diff>.  (* Output: "h" *)
+    <Log> "Difference (A - B):" to the <console>.
+    <Log> <str-diff> to the <console>.  (* Output: "h" *)
 
     <Compute> the <str-union: union> from <str-a> with <str-b>.
-    <Log> the <s3> for the <console> with "Union:".
-    <Log> the <s3v> for the <console> with <str-union>.  (* Output: "hellob" *)
+    <Log> "Union:" to the <console>.
+    <Log> <str-union> to the <console>.  (* Output: "hellob" *)
 
-    <Log> the <sep6> for the <console> with "".
+    <Log> "" to the <console>.
 
     (* === OBJECT OPERATIONS (Deep Recursive) === *)
-    <Log> the <section4> for the <console> with "--- Object Operations (Deep) ---".
+    <Log> "--- Object Operations (Deep) ---" to the <console>.
 
     <Create> the <obj-a> with {
         name: "Alice",
@@ -110,26 +110,26 @@
         }
     }.
 
-    <Log> the <oa> for the <console> with "Object A: { name: Alice, age: 30, address: { city: NYC, zip: 10001 } }".
-    <Log> the <ob> for the <console> with "Object B: { name: Alice, age: 31, address: { city: NYC, state: NY } }".
-    <Log> the <sep7> for the <console> with "".
+    <Log> "Object A: { name: Alice, age: 30, address: { city: NYC, zip: 10001 } }" to the <console>.
+    <Log> "Object B: { name: Alice, age: 31, address: { city: NYC, state: NY } }" to the <console>.
+    <Log> "" to the <console>.
 
     <Compute> the <obj-common: intersect> from <obj-a> with <obj-b>.
-    <Log> the <o1> for the <console> with "Intersection (matching fields):".
-    <Log> the <o1v> for the <console> with <obj-common>.  (* Output: { name: Alice, address: { city: NYC } } *)
+    <Log> "Intersection (matching fields):" to the <console>.
+    <Log> <obj-common> to the <console>.  (* Output: { name: Alice, address: { city: NYC } } *)
 
     <Compute> the <obj-diff: difference> from <obj-a> with <obj-b>.
-    <Log> the <o2> for the <console> with "Difference (fields in A not matching B):".
-    <Log> the <o2v> for the <console> with <obj-diff>.  (* Output: { age: 30, address: { zip: 10001 } } *)
+    <Log> "Difference (fields in A not matching B):" to the <console>.
+    <Log> <obj-diff> to the <console>.  (* Output: { age: 30, address: { zip: 10001 } } *)
 
     <Compute> the <obj-union: union> from <obj-a> with <obj-b>.
-    <Log> the <o3> for the <console> with "Union (merge, A wins):".
-    <Log> the <o3v> for the <console> with <obj-union>.  (* Output: merged with A values winning *)
+    <Log> "Union (merge, A wins):" to the <console>.
+    <Log> <obj-union> to the <console>.  (* Output: merged with A values winning *)
 
-    <Log> the <sep8> for the <console> with "".
+    <Log> "" to the <console>.
 
     (* === FILTER WITH NOT IN === *)
-    <Log> the <section5> for the <console> with "--- Filter with 'in' and 'not in' ---".
+    <Log> "--- Filter with 'in' and 'not in' ---" to the <console>.
 
     <Create> the <items> with [
         {id: 1, value: 2},
@@ -139,20 +139,20 @@
     ].
     <Create> the <exclude-list> with [3, 5].
 
-    <Log> the <fi> for the <console> with "Items: [{id:1,v:2}, {id:2,v:3}, {id:3,v:5}, {id:4,v:7}]".
-    <Log> the <fe> for the <console> with "Exclude list: [3, 5]".
-    <Log> the <sep9> for the <console> with "".
+    <Log> "Items: [{id:1,v:2}, {id:2,v:3}, {id:3,v:5}, {id:4,v:7}]" to the <console>.
+    <Log> "Exclude list: [3, 5]" to the <console>.
+    <Log> "" to the <console>.
 
     <Filter> the <included> from <items> where <value> in <exclude-list>.
-    <Log> the <f1> for the <console> with "Items where value IN exclude-list:".
-    <Log> the <f1v> for the <console> with <included>.  (* Output: [{id:2,v:3}, {id:3,v:5}] *)
+    <Log> "Items where value IN exclude-list:" to the <console>.
+    <Log> <included> to the <console>.  (* Output: [{id:2,v:3}, {id:3,v:5}] *)
 
     <Filter> the <excluded> from <items> where <value> not in <exclude-list>.
-    <Log> the <f2> for the <console> with "Items where value NOT IN exclude-list:".
-    <Log> the <f2v> for the <console> with <excluded>.  (* Output: [{id:1,v:2}, {id:4,v:7}] *)
+    <Log> "Items where value NOT IN exclude-list:" to the <console>.
+    <Log> <excluded> to the <console>.  (* Output: [{id:1,v:2}, {id:4,v:7}] *)
 
-    <Log> the <sep10> for the <console> with "".
-    <Log> the <done> for the <console> with "=== Demo Complete ===".
+    <Log> "" to the <console>.
+    <Log> "=== Demo Complete ===" to the <console>.
 
     <Return> an <OK: status> for the <demo>.
 }

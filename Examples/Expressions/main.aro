@@ -25,11 +25,11 @@
     }.
 
     (* Logging results *)
-    <Log> the <message> for the <console> with "Expression Demo".
-    <Log> the <subtotal-msg> for the <console> with <subtotal>.
-    <Log> the <tax-msg> for the <console> with <tax>.
-    <Log> the <total-msg> for the <console> with <total>.
-    <Log> the <name-msg> for the <console> with <full-name>.
+    <Log> "Expression Demo" to the <console>.
+    <Log> <subtotal> to the <console>.
+    <Log> <tax> to the <console>.
+    <Log> <total> to the <console>.
+    <Log> <full-name> to the <console>.
 
     (* Comparison expressions using == *)
     <Validate> the <qty-check> for <quantity> == 4.

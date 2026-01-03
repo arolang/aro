@@ -7,14 +7,14 @@
     <Extract> the <name> from the <user: name>.
     <Compute> the <file-path> from "./data/users/" ++ <name> ++ ".json".
     <Write> the <user> to the <file: file-path>.
-    <Log> the <file-write: message> for the <console> with "New user file created".
+    <Log> "New user file created" to the <console>.
     <Return> an <OK: status> for the <file-write>.
 }
 
 (* Handler 2: Log when a user is updated via API *)
 (Log User Update: UserUpdated Handler) {
     <Extract> the <user> from the <event: existing-user>.
-    <Log> the <audit: message> for the <console> with "User was updated".
+    <Log> "User was updated" to the <console>.
     <Return> an <OK: status> for the <audit>.
 }
 
@@ -24,7 +24,7 @@
     <Extract> the <name> from the <user: name>.
     <Compute> the <file-path> from "./data/users/" ++ <name> ++ ".json".
     <Write> the <user> to the <file: file-path>.
-    <Log> the <file-write: message> for the <console> with "User file written".
+    <Log> "User file written" to the <console>.
     <Return> an <OK: status> for the <file-write>.
 }
 
@@ -34,7 +34,7 @@
     <Read> the <content> from the <file: path>.
     <Parse> the <user-data> from the <content>.
     <Store> the <user-data> into the <user-repository>.
-    <Log> the <sync: message> for the <console> with "User synced from file".
+    <Log> "User synced from file" to the <console>.
     <Return> an <OK: status> for the <sync>.
 }
 
@@ -43,6 +43,6 @@
     <Extract> the <path> from the <event: path>.
     <Extract> the <filename> from the <path: filename>.
     <Delete> the <user> from the <user-repository> where <name> is <filename>.
-    <Log> the <delete: message> for the <console> with "User deleted (file removed)".
+    <Log> "User deleted (file removed)" to the <console>.
     <Return> an <OK: status> for the <delete>.
 }

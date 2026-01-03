@@ -1,7 +1,7 @@
 (* ZipService - Demonstrates using a plugin with external dependencies *)
 
 (Application-Start: Zip Service Demo) {
-    <Log> the <message> for the <console> with "Testing zip plugin...".
+    <Log> "Testing zip plugin..." to the <console>.
 
     (* Zip the files in content folder *)
     <Call> the <result> from the <zip: compress> with {
@@ -9,13 +9,13 @@
         output: "Examples/ZipService/content/archive.zip"
     }.
 
-    <Log> the <message> for the <console> with "Zip result:".
-    <Log> the <message> for the <console> with <result>.
+    <Log> "Zip result:" to the <console>.
+    <Log> <result> to the <console>.
 
     <Return> an <OK: status> for the <startup>.
 }
 
 (Application-End: Success) {
-    <Log> the <message> for the <console> with "Zip service demo completed.".
+    <Log> "Zip service demo completed." to the <console>.
     <Return> an <OK: status> for the <shutdown>.
 }

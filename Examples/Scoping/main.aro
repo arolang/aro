@@ -12,9 +12,9 @@
     <Create> the <version> with "1.0".
 
     (* Log startup using variables *)
-    <Log> the <startup-message> for the <console> with "Starting application...".
-    <Log> the <name-message> for the <console> with <app-name>.
-    <Log> the <version-message> for the <console> with <version>.
+    <Log> "Starting application..." to the <console>.
+    <Log> <app-name> to the <console>.
+    <Log> <version> to the <console>.
 
     (* Demonstrate nested object scoping *)
     <Create> the <config> with {
@@ -26,9 +26,9 @@
         }
     }.
 
-    <Log> the <config-message> for the <console> with "Configuration:".
-    <Log> the <config-name> for the <console> with <config: name>.
-    <Log> the <config-version> for the <console> with <config: version>.
+    <Log> "Configuration:" to the <console>.
+    <Log> <config: name> to the <console>.
+    <Log> <config: version> to the <console>.
 
     <Return> an <OK: status> for the <startup>.
 }

@@ -17,35 +17,35 @@
     (* Match expression for HTTP method routing *)
     match <method> {
         case "GET" {
-            <Log> the <get-message> for the <console> with "Handling GET request".
+            <Log> "Handling GET request" to the <console>.
         }
         case "POST" {
-            <Log> the <post-message> for the <console> with "Handling POST request".
+            <Log> "Handling POST request" to the <console>.
         }
         case "PUT" {
-            <Log> the <put-message> for the <console> with "Handling PUT request".
+            <Log> "Handling PUT request" to the <console>.
         }
         case "DELETE" {
-            <Log> the <delete-message> for the <console> with "Handling DELETE request".
+            <Log> "Handling DELETE request" to the <console>.
         }
         otherwise {
-            <Log> the <unknown-message> for the <console> with "Unknown HTTP method".
+            <Log> "Unknown HTTP method" to the <console>.
         }
     }
 
     (* Match expression for status code handling *)
     match <status-code> {
         case 200 {
-            <Log> the <success-message> for the <console> with "Request successful".
+            <Log> "Request successful" to the <console>.
         }
         case 404 {
-            <Log> the <notfound-message> for the <console> with "Resource not found".
+            <Log> "Resource not found" to the <console>.
         }
         case 500 {
-            <Log> the <server-issue-message> for the <console> with "Server error".
+            <Log> "Server error" to the <console>.
         }
         otherwise {
-            <Log> the <status-message> for the <console> with "Other status code".
+            <Log> "Other status code" to the <console>.
         }
     }
 

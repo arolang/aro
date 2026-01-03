@@ -2,7 +2,7 @@
 (* Provides the /module-a endpoint *)
 
 (Application-Start: ModuleA) {
-    <Log> the <startup: message> for the <console> with "Module A starting...".
+    <Log> "Module A starting..." to the <console>.
     <Start> the <http-server> for the <contract>.
     <Keepalive> the <application> for the <events>.
     <Return> an <OK: status> for the <startup>.

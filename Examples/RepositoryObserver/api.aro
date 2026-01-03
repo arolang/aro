@@ -2,8 +2,8 @@
 
 (* POST /users - Create a new user *)
 (createUser: User API) {
-    <Extract> the <data> from the <request: body>.
-    <Create> the <user> with <data>.
+    <Extract> the <user-data> from the <request: body>.
+    <Create> the <user> with <user-data>.
     <Store> the <user> into the <user-repository>.
     <Return> a <Created: status> with <user>.
 }
@@ -24,11 +24,11 @@
 (* PUT /users/{id} - Update a user *)
 (updateUser: User API) {
     <Extract> the <id> from the <pathParameters: id>.
-    <Extract> the <data> from the <request: body>.
+    <Extract> the <update-data> from the <request: body>.
     <Create> the <user> with {
         id: <id>,
-        name: <data: name>,
-        email: <data: email>
+        name: <update-data: name>,
+        email: <update-data: email>
     }.
     <Store> the <user> into the <user-repository>.
     <Return> an <OK: status> with <user>.

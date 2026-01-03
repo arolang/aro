@@ -2,13 +2,13 @@
 (* Demonstrates the Accept action for state transitions *)
 
 (Application-Start: Order Service) {
-    <Log> the <startup: message> for the <console> with "Starting Order Service...".
+    <Log> "Starting Order Service..." to the <console>.
 
     (* Start HTTP server from OpenAPI contract *)
     <Start> the <http-server> for the <contract>.
 
-    <Log> the <ready: message> for the <console> with "Order Service ready".
-    <Log> the <info: message> for the <console> with "Order lifecycle: draft -> placed -> paid -> shipped -> delivered".
+    <Log> "Order Service ready" to the <console>.
+    <Log> "Order lifecycle: draft -> placed -> paid -> shipped -> delivered" to the <console>.
 
     (* Keep the application running until Ctrl+C *)
     <Keepalive> the <application> for the <events>.

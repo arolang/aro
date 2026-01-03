@@ -2,34 +2,34 @@
 
 (Application-Start: Data Pipeline Demo) {
     (* Test 1: Simple array with Reduce operations *)
-    <Log> the <message> for the <console> with "=== Test 1: Simple Array Reduce ===".
+    <Log> "=== Test 1: Simple Array Reduce ===" to the <console>.
 
     <Create> the <numbers> with [1, 2, 3, 4, 5].
-    <Log> the <message> for the <console> with "Numbers:".
-    <Log> the <message> for the <console> with <numbers>.
+    <Log> "Numbers:" to the <console>.
+    <Log> <numbers> to the <console>.
 
     <Reduce> the <count: Integer> from the <numbers> with count().
-    <Log> the <message> for the <console> with "Count:".
-    <Log> the <message> for the <console> with <count>.
+    <Log> "Count:" to the <console>.
+    <Log> <count> to the <console>.
 
     <Reduce> the <sum: Integer> from the <numbers> with sum().
-    <Log> the <message> for the <console> with "Sum:".
-    <Log> the <message> for the <console> with <sum>.
+    <Log> "Sum:" to the <console>.
+    <Log> <sum> to the <console>.
 
     <Reduce> the <avg: Float> from the <numbers> with avg().
-    <Log> the <message> for the <console> with "Average:".
-    <Log> the <message> for the <console> with <avg>.
+    <Log> "Average:" to the <console>.
+    <Log> <avg> to the <console>.
 
     <Reduce> the <minVal: Integer> from the <numbers> with min().
-    <Log> the <message> for the <console> with "Min:".
-    <Log> the <message> for the <console> with <minVal>.
+    <Log> "Min:" to the <console>.
+    <Log> <minVal> to the <console>.
 
     <Reduce> the <maxVal: Integer> from the <numbers> with max().
-    <Log> the <message> for the <console> with "Max:".
-    <Log> the <message> for the <console> with <maxVal>.
+    <Log> "Max:" to the <console>.
+    <Log> <maxVal> to the <console>.
 
     (* Test 2: Object array with Filter and field aggregations *)
-    <Log> the <message> for the <console> with "=== Test 2: Object Array with Filter ===".
+    <Log> "=== Test 2: Object Array with Filter ===" to the <console>.
 
     <Create> the <orders> with [
         {id: 1, amount: 100, status: "active"},
@@ -39,58 +39,58 @@
         {id: 5, amount: 300, status: "active"}
     ].
 
-    <Log> the <message> for the <console> with "All Orders:".
-    <Log> the <message> for the <console> with <orders>.
+    <Log> "All Orders:" to the <console>.
+    <Log> <orders> to the <console>.
 
     (* Filter active orders *)
     <Filter> the <active-orders: List> from the <orders>
         where <status> is "active".
 
-    <Log> the <message> for the <console> with "Active Orders:".
-    <Log> the <message> for the <console> with <active-orders>.
+    <Log> "Active Orders:" to the <console>.
+    <Log> <active-orders> to the <console>.
 
     (* Sum amounts from active orders *)
     <Reduce> the <active-total: Float> from the <active-orders>
         with sum(<amount>).
 
-    <Log> the <message> for the <console> with "Active Orders Total:".
-    <Log> the <message> for the <console> with <active-total>.
+    <Log> "Active Orders Total:" to the <console>.
+    <Log> <active-total> to the <console>.
 
     (* Count active orders *)
     <Reduce> the <active-count: Integer> from the <active-orders>
         with count().
 
-    <Log> the <message> for the <console> with "Active Orders Count:".
-    <Log> the <message> for the <console> with <active-count>.
+    <Log> "Active Orders Count:" to the <console>.
+    <Log> <active-count> to the <console>.
 
     (* Average amount of active orders *)
     <Reduce> the <active-avg: Float> from the <active-orders>
         with avg(<amount>).
 
-    <Log> the <message> for the <console> with "Active Orders Average:".
-    <Log> the <message> for the <console> with <active-avg>.
+    <Log> "Active Orders Average:" to the <console>.
+    <Log> <active-avg> to the <console>.
 
     (* Test 3: Map operation - pass through *)
-    <Log> the <message> for the <console> with "=== Test 3: Map Operation ===".
+    <Log> "=== Test 3: Map Operation ===" to the <console>.
 
     <Map> the <mapped-orders: List> from the <active-orders>.
-    <Log> the <message> for the <console> with "Mapped Active Orders (pass-through):".
-    <Log> the <message> for the <console> with <mapped-orders>.
+    <Log> "Mapped Active Orders (pass-through):" to the <console>.
+    <Log> <mapped-orders> to the <console>.
 
     (* Test 4: Filter with numeric comparison *)
-    <Log> the <message> for the <console> with "=== Test 4: Numeric Filter ===".
+    <Log> "=== Test 4: Numeric Filter ===" to the <console>.
 
     <Filter> the <high-value: List> from the <orders>
         where <amount> > 200.
 
-    <Log> the <message> for the <console> with "High Value Orders (amount > 200):".
-    <Log> the <message> for the <console> with <high-value>.
+    <Log> "High Value Orders (amount > 200):" to the <console>.
+    <Log> <high-value> to the <console>.
 
     <Reduce> the <high-value-total: Float> from the <high-value>
         with sum(<amount>).
 
-    <Log> the <message> for the <console> with "High Value Total:".
-    <Log> the <message> for the <console> with <high-value-total>.
+    <Log> "High Value Total:" to the <console>.
+    <Log> <high-value-total> to the <console>.
 
     <Return> an <OK: status> for the <pipeline-test>.
 }
