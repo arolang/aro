@@ -172,18 +172,10 @@ public struct ExecuteAction: ActionImplementation {
         // Execute the command
         let execResult = await runCommand(config)
 
-        // Bind result as dictionary for proper response formatting
-        let resultDict = execResult.toDictionary()
-        context.bind(result.base, value: resultDict)
-
-        // Also bind individual fields for easy access (e.g., <result.error>)
-        context.bind("\(result.base).error", value: execResult.error)
-        context.bind("\(result.base).message", value: execResult.message)
-        context.bind("\(result.base).output", value: execResult.output)
-        context.bind("\(result.base).exitCode", value: execResult.exitCode)
-        context.bind("\(result.base).command", value: execResult.command)
-
-        return resultDict
+        // Return result as dictionary - FeatureSetExecutor will bind it
+        // Individual fields (error, message, output, exitCode, command) are
+        // accessible via dot notation: <listing.error>, <listing.output>, etc.
+        return execResult.toDictionary()
     }
 
     // MARK: - Private Methods

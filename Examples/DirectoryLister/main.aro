@@ -2,9 +2,9 @@
 (* Shows context-aware response formatting per ARO-0031 *)
 
 (Application-Start: Directory Lister) {
-    <Log> the <startup: message> for the <console> with "Directory Lister - ARO-0033 Example".
-    <Log> the <info: message> for the <console> with "Executing: ls -la".
-    <Log> the <separator: message> for the <console> with "----------------------------------------".
+    <Log> "Directory Lister - ARO-0033 Example" to the <console>.
+    <Log> "Executing: ls -la" to the <console>.
+    <Log> "----------------------------------------" to the <console>.
 
     (* Execute the ls -la command *)
     <Exec> the <listing> for the <command> with "ls -la".

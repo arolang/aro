@@ -148,14 +148,9 @@ public struct RequestAction: ActionImplementation {
             resultValue = response.bodyString ?? ""
         }
 
-        // Bind the result
-        context.bind(result.base, value: resultValue)
-
-        // Also bind response metadata
-        context.bind("\(result.base).statusCode", value: response.statusCode)
-        context.bind("\(result.base).headers", value: response.headers)
-        context.bind("\(result.base).isSuccess", value: response.isSuccess)
-
+        // Return result - FeatureSetExecutor will bind it
+        // Response metadata (statusCode, headers, isSuccess) could be added
+        // to resultValue if needed, but for now we return the parsed body
         return resultValue
         #else
         throw ActionError.runtimeError("HTTP client not available on Windows")
