@@ -3,7 +3,7 @@ use strict;
 use warnings;
 use v5.30;
 use FindBin qw($RealBin);
-use Cwd qw(abs_path);
+use Cwd qw(abs_path cwd);
 
 # Core modules
 use File::Spec;
@@ -150,6 +150,171 @@ sub discover_examples {
     return sort @examples;
 }
 
+# Read test.hint file for an example if it exists
+# Returns hash reference with parsed directives
+sub read_test_hint {
+    my ($example_name) = @_;
+
+    my $hint_file = File::Spec->catfile($examples_dir, $example_name, 'test.hint');
+    my %hints = (
+        workdir => undef,
+        timeout => undef,
+        type => undef,
+        skip => undef,
+        'pre-script' => undef,
+        'test-script' => undef,
+    );
+
+    # Return empty hints if file doesn't exist (backward compatible)
+    return \%hints unless -f $hint_file;
+
+    open my $fh, '<', $hint_file or do {
+        warn "Warning: Cannot read $hint_file: $!\n" if $options{verbose};
+        return \%hints;
+    };
+
+    my $line_no = 0;
+    while (my $line = <$fh>) {
+        $line_no++;
+
+        # Strip whitespace
+        chomp $line;
+        $line =~ s/^\s+|\s+$//g;
+
+        # Skip comments and blank lines
+        next if !$line || $line =~ /^#/;
+
+        # Parse key: value
+        if ($line =~ /^([^:]+):\s*(.*)$/) {
+            my $key = lc $1;
+            my $value = $2;
+
+            # Strip value whitespace
+            $value =~ s/^\s+|\s+$//g;
+
+            # Validate and store
+            if (exists $hints{$key}) {
+                if (defined $hints{$key} && $options{verbose}) {
+                    warn "Warning: $hint_file:$line_no duplicate key '$key' (overriding)\n";
+                }
+                $hints{$key} = $value;
+            } elsif ($options{verbose}) {
+                warn "Warning: $hint_file:$line_no unknown directive '$key'\n";
+            }
+        } elsif ($options{verbose}) {
+            warn "Warning: $hint_file:$line_no malformed line (expected 'key: value'): $line\n";
+        }
+    }
+
+    close $fh;
+
+    # Validate values
+    if (defined $hints{timeout} && $hints{timeout} !~ /^\d+$/) {
+        warn "Warning: Invalid timeout value '$hints{timeout}' (must be integer), ignoring\n";
+        $hints{timeout} = undef;
+    }
+
+    if (defined $hints{type} && $hints{type} !~ /^(console|http|socket|file)$/) {
+        warn "Warning: Invalid type '$hints{type}' (must be console|http|socket|file), ignoring\n";
+        $hints{type} = undef;
+    }
+
+    return \%hints;
+}
+
+# Run test with specified working directory
+# Handles chdir, executes appropriate test runner, restores original directory
+sub run_test_in_workdir {
+    my ($example_name, $workdir, $timeout, $type, $pre_script) = @_;
+
+    my $orig_cwd = cwd();
+    my $output;
+    my $error;
+    my $run_dir = $example_name;  # Default: use example name as-is
+
+    # Change directory if specified
+    if (defined $workdir) {
+        # Convert relative path to absolute (relative to project root)
+        my $abs_workdir = $workdir;
+        unless (File::Spec->file_name_is_absolute($workdir)) {
+            $abs_workdir = File::Spec->catdir($RealBin, $workdir);
+        }
+
+        unless (-d $abs_workdir) {
+            return (undef, "ERROR: workdir does not exist: $abs_workdir");
+        }
+
+        unless (chdir $abs_workdir) {
+            return (undef, "ERROR: Cannot change to workdir $abs_workdir: $!");
+        }
+
+        say "  Changed to workdir: $abs_workdir" if $options{verbose};
+
+        # When running from workdir, use current directory
+        $run_dir = '.';
+    }
+
+    # Execute pre-script if specified
+    if (defined $pre_script) {
+        say "  Running pre-script: $pre_script" if $options{verbose};
+        my ($out, $err, $exit_code) = run_script($pre_script, $timeout, "pre-script");
+
+        if ($exit_code != 0) {
+            unless (chdir $orig_cwd) {
+                warn "WARNING: Cannot restore directory $orig_cwd: $!\n";
+            }
+            return (undef, "Pre-script failed (exit $exit_code): $err");
+        }
+
+        say "  Pre-script output: $out" if $options{verbose} && $out;
+    }
+
+    # Execute with current timeout based on type
+    # Pass $run_dir instead of $example_name to the internal functions
+    if ($type eq 'console') {
+        ($output, $error) = run_console_example_internal($run_dir, $timeout);
+    } elsif ($type eq 'http') {
+        ($output, $error) = run_http_example_internal($run_dir, $timeout);
+    } elsif ($type eq 'socket') {
+        ($output, $error) = run_socket_example_internal($run_dir, $timeout);
+    } elsif ($type eq 'file') {
+        ($output, $error) = run_file_watcher_example_internal($run_dir, $timeout);
+    }
+
+    # Restore original directory
+    unless (chdir $orig_cwd) {
+        warn "WARNING: Cannot restore directory $orig_cwd: $!\n";
+    }
+
+    return ($output, $error);
+}
+
+# Run a shell script with timeout support
+sub run_script {
+    my ($script, $timeout, $context) = @_;
+
+    unless ($has_ipc_run) {
+        return (undef, "IPC::Run module not available", -1);
+    }
+
+    # Use IPC::Run for timeout support
+    my ($in, $out, $err) = ('', '', '');
+    my $handle = eval {
+        IPC::Run::start(['sh', '-c', $script], \$in, \$out, \$err,
+                       IPC::Run::timeout($timeout));
+    };
+
+    if ($@) {
+        return (undef, "Failed to start $context: $@", -1);
+    }
+
+    # Wait for completion
+    eval { $handle->finish; };
+    my $exit_code = $? >> 8;
+
+    return ($out, $err, $exit_code);
+}
+
 # Detect example type
 sub detect_example_type {
     my ($example_name) = @_;
@@ -211,17 +376,31 @@ sub normalize_output {
     return $output;
 }
 
-# Run console example
+# Run console example (public interface)
 sub run_console_example {
     my ($example_name) = @_;
+    return run_console_example_internal($example_name, $options{timeout});
+}
 
-    my $dir = File::Spec->catdir($examples_dir, $example_name);
+# Run console example (internal with timeout parameter)
+sub run_console_example_internal {
+    my ($example_name, $timeout) = @_;
+
+    # Handle '.' or absolute paths directly, otherwise prepend examples_dir
+    my $dir;
+    if ($example_name eq '.' || File::Spec->file_name_is_absolute($example_name)) {
+        $dir = $example_name;
+    } else {
+        $dir = File::Spec->catdir($examples_dir, $example_name);
+    }
 
     if ($has_ipc_run) {
         # Use IPC::Run for better control
+        # Use absolute path to aro binary (works even when cwd changes)
+        my $aro_bin = File::Spec->catfile($RealBin, '.build', 'release', 'aro');
         my ($in, $out, $err) = ('', '', '');
         my $handle = eval {
-            IPC::Run::start(['.build/release/aro', 'run', $dir], \$in, \$out, \$err, IPC::Run::timeout($options{timeout}));
+            IPC::Run::start([$aro_bin, 'run', $dir], \$in, \$out, \$err, IPC::Run::timeout($timeout));
         };
 
         if ($@) {
@@ -235,7 +414,7 @@ sub run_console_example {
         if ($@) {
             if ($@ =~ /timeout/) {
                 IPC::Run::kill_kill($handle);
-                return (undef, "TIMEOUT after $options{timeout}s");
+                return (undef, "TIMEOUT after ${timeout}s");
             }
             return (undef, "ERROR: $@");
         }
@@ -254,15 +433,28 @@ sub run_console_example {
     }
 }
 
-# Run HTTP server example
+# Run HTTP server example (public interface)
 sub run_http_example {
     my ($example_name) = @_;
+    return run_http_example_internal($example_name, $options{timeout});
+}
+
+# Run HTTP server example (internal with timeout parameter)
+sub run_http_example_internal {
+    my ($example_name, $timeout) = @_;
 
     unless ($has_yaml && $has_http_tiny && $has_net_emptyport && $has_ipc_run) {
         return (undef, "SKIP: Missing required modules (YAML::XS, HTTP::Tiny, Net::EmptyPort, IPC::Run)");
     }
 
-    my $dir = File::Spec->catdir($examples_dir, $example_name);
+    # Handle '.' or absolute paths directly, otherwise prepend examples_dir
+    my $dir;
+    if ($example_name eq '.' || File::Spec->file_name_is_absolute($example_name)) {
+        $dir = $example_name;
+    } else {
+        $dir = File::Spec->catdir($examples_dir, $example_name);
+    }
+
     my $openapi_file = File::Spec->catfile($dir, 'openapi.yaml');
 
     unless (-f $openapi_file) {
@@ -282,10 +474,12 @@ sub run_http_example {
         $port = $1 if $url =~ /:(\d+)/;
     }
 
-    # Start server in background
+    # Start server in background (use timeout parameter)
+    # Use absolute path to aro binary (works even when cwd changes)
+    my $aro_bin = File::Spec->catfile($RealBin, '.build', 'release', 'aro');
     my ($in, $out, $err) = ('', '', '');
     my $handle = eval {
-        IPC::Run::start(['.build/release/aro', 'run', $dir], \$in, \$out, \$err, IPC::Run::timeout(30));
+        IPC::Run::start([$aro_bin, 'run', $dir], \$in, \$out, \$err, IPC::Run::timeout($timeout));
     };
 
     if ($@) {
@@ -360,21 +554,36 @@ sub run_http_example {
     return (join("\n", @output), undef);
 }
 
-# Run socket example
+# Run socket example (public interface)
 sub run_socket_example {
     my ($example_name) = @_;
+    return run_socket_example_internal($example_name, $options{timeout});
+}
+
+# Run socket example (internal with timeout parameter)
+sub run_socket_example_internal {
+    my ($example_name, $timeout) = @_;
 
     unless ($has_ipc_run && $has_net_emptyport) {
         return (undef, "SKIP: Missing required modules (IPC::Run, Net::EmptyPort)");
     }
 
-    my $dir = File::Spec->catdir($examples_dir, $example_name);
+    # Handle '.' or absolute paths directly, otherwise prepend examples_dir
+    my $dir;
+    if ($example_name eq '.' || File::Spec->file_name_is_absolute($example_name)) {
+        $dir = $example_name;
+    } else {
+        $dir = File::Spec->catdir($examples_dir, $example_name);
+    }
+
     my $port = 9000;  # Default socket port
 
-    # Start server in background
+    # Start server in background (use timeout parameter)
+    # Use absolute path to aro binary (works even when cwd changes)
+    my $aro_bin = File::Spec->catfile($RealBin, '.build', 'release', 'aro');
     my ($in, $out, $err) = ('', '', '');
     my $handle = eval {
-        IPC::Run::start(['.build/release/aro', 'run', $dir], \$in, \$out, \$err, IPC::Run::timeout(30));
+        IPC::Run::start([$aro_bin, 'run', $dir], \$in, \$out, \$err, IPC::Run::timeout($timeout));
     };
 
     if ($@) {
@@ -436,21 +645,36 @@ sub run_socket_example {
     return (join("\n", @output), undef);
 }
 
-# Run file watcher example
+# Run file watcher example (public interface)
 sub run_file_watcher_example {
     my ($example_name) = @_;
+    return run_file_watcher_example_internal($example_name, $options{timeout});
+}
+
+# Run file watcher example (internal with timeout parameter)
+sub run_file_watcher_example_internal {
+    my ($example_name, $timeout) = @_;
 
     unless ($has_ipc_run) {
         return (undef, "SKIP: Missing required module (IPC::Run)");
     }
 
-    my $dir = File::Spec->catdir($examples_dir, $example_name);
+    # Handle '.' or absolute paths directly, otherwise prepend examples_dir
+    my $dir;
+    if ($example_name eq '.' || File::Spec->file_name_is_absolute($example_name)) {
+        $dir = $example_name;
+    } else {
+        $dir = File::Spec->catdir($examples_dir, $example_name);
+    }
+
     my $test_file = "/tmp/aro_test_$$.txt";
 
-    # Start watcher in background
+    # Start watcher in background (use timeout parameter)
+    # Use absolute path to aro binary (works even when cwd changes)
+    my $aro_bin = File::Spec->catfile($RealBin, '.build', 'release', 'aro');
     my ($in, $out, $err) = ('', '', '');
     my $handle = eval {
-        IPC::Run::start(['.build/release/aro', 'run', $dir], \$in, \$out, \$err, IPC::Run::timeout(30));
+        IPC::Run::start([$aro_bin, 'run', $dir], \$in, \$out, \$err, IPC::Run::timeout($timeout));
     };
 
     if ($@) {
@@ -499,21 +723,38 @@ sub run_file_watcher_example {
 sub run_test {
     my ($example_name) = @_;
 
-    my $type = detect_example_type($example_name);
+    # Read test hints
+    my $hints = read_test_hint($example_name);
+
+    # Handle skip directive
+    if (defined $hints->{skip}) {
+        return {
+            name => $example_name,
+            type => 'UNKNOWN',
+            status => 'SKIP',
+            message => "Skipped: $hints->{skip}",
+            duration => 0,
+        };
+    }
+
+    # Use type from hints or auto-detect
+    my $type = $hints->{type} || detect_example_type($example_name);
+
+    # Use timeout from hints or default
+    my $timeout = $hints->{timeout} // $options{timeout};
+
     my $start_time = time;
 
     say "Testing $example_name ($type)..." if $options{verbose};
 
-    my ($output, $error);
-    if ($type eq 'console') {
-        ($output, $error) = run_console_example($example_name);
-    } elsif ($type eq 'http') {
-        ($output, $error) = run_http_example($example_name);
-    } elsif ($type eq 'socket') {
-        ($output, $error) = run_socket_example($example_name);
-    } elsif ($type eq 'file') {
-        ($output, $error) = run_file_watcher_example($example_name);
-    }
+    # Execute with workdir and pre-script support
+    my ($output, $error) = run_test_in_workdir(
+        $example_name,
+        $hints->{workdir},
+        $timeout,
+        $type,
+        $hints->{'pre-script'}
+    );
 
     my $duration = time - $start_time;
 
@@ -525,6 +766,48 @@ sub run_test {
             message => $error,
             duration => $duration,
         };
+    }
+
+    # If test-script is defined, use it instead of output comparison
+    if (defined $hints->{'test-script'}) {
+        say "  Running test-script: $hints->{'test-script'}" if $options{verbose};
+
+        # Need to be in workdir for test-script
+        my $orig_cwd = cwd();
+        if (defined $hints->{workdir}) {
+            my $abs_workdir = File::Spec->file_name_is_absolute($hints->{workdir})
+                ? $hints->{workdir}
+                : File::Spec->catdir($RealBin, $hints->{workdir});
+            chdir $abs_workdir if -d $abs_workdir;
+        }
+
+        my ($test_out, $test_err, $exit_code) = run_script(
+            $hints->{'test-script'},
+            $timeout,
+            "test-script"
+        );
+
+        chdir $orig_cwd;
+
+        if ($exit_code == 0) {
+            say "  Test script passed" if $options{verbose};
+            return {
+                name => $example_name,
+                type => $type,
+                status => 'PASS',
+                message => '',
+                duration => $duration,
+            };
+        } else {
+            return {
+                name => $example_name,
+                type => $type,
+                status => 'FAIL',
+                message => "Test script failed (exit $exit_code)" . ($test_err ? ": $test_err" : ""),
+                duration => $duration,
+                actual => $test_err,
+            };
+        }
     }
 
     # Normalize output
@@ -579,21 +862,33 @@ sub run_test {
 sub generate_expected {
     my ($example_name) = @_;
 
-    my $type = detect_example_type($example_name);
+    # Read test hints
+    my $hints = read_test_hint($example_name);
+
+    # Skip if requested
+    if (defined $hints->{skip}) {
+        say "Skipping $example_name: $hints->{skip}";
+        return;
+    }
+
+    # Use type from hints or auto-detect
+    my $type = $hints->{type} || detect_example_type($example_name);
+
+    # Use timeout from hints or default
+    my $timeout = $hints->{timeout} // $options{timeout};
+
     my $expected_file = File::Spec->catfile($examples_dir, $example_name, 'expected.txt');
 
     say "Generating expected output for $example_name ($type)...";
 
-    my ($output, $error);
-    if ($type eq 'console') {
-        ($output, $error) = run_console_example($example_name);
-    } elsif ($type eq 'http') {
-        ($output, $error) = run_http_example($example_name);
-    } elsif ($type eq 'socket') {
-        ($output, $error) = run_socket_example($example_name);
-    } elsif ($type eq 'file') {
-        ($output, $error) = run_file_watcher_example($example_name);
-    }
+    # Execute with workdir and pre-script support
+    my ($output, $error) = run_test_in_workdir(
+        $example_name,
+        $hints->{workdir},
+        $timeout,
+        $type,
+        $hints->{'pre-script'}
+    );
 
     if ($error) {
         warn colored("  ✗ Failed: $error\n", 'red');
@@ -603,11 +898,27 @@ sub generate_expected {
     # Normalize output before saving
     $output = normalize_output($output, $type);
 
-    # Write with metadata header
+    # Write with enhanced metadata header
     open my $fh, '>', $expected_file or die "Cannot write $expected_file: $!";
     print $fh "# Generated: " . localtime() . "\n";
     print $fh "# Type: $type\n";
     print $fh "# Command: aro run ./Examples/$example_name\n";
+
+    # Add note if test-script is used (output not used for verification)
+    if (defined $hints->{'test-script'}) {
+        print $fh "# NOTE: This example uses test-script for verification\n";
+        print $fh "# This expected.txt is for reference only, not used in testing\n";
+    }
+
+    # Add optional metadata from hints
+    if (defined $hints->{workdir}) {
+        print $fh "# Workdir: $hints->{workdir}\n";
+    }
+
+    if (defined $hints->{timeout} && $hints->{timeout} != $options{timeout}) {
+        print $fh "# Timeout: $hints->{timeout}s\n";
+    }
+
     print $fh "---\n";
     print $fh $output;
     close $fh;

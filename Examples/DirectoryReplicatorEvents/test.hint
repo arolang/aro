@@ -1,0 +1,10 @@
+# DirectoryReplicatorEvents uses relative path ../template
+# Must run from within example directory
+workdir: Examples/DirectoryReplicatorEvents
+
+# Clean up directories from previous test run
+pre-script: rm -rf foo baz
+
+# Verify directories were created (exit 0 = pass, non-zero = fail)
+# Test by side effects instead of output comparison (observers run concurrently)
+test-script: test -d foo && test -d foo/bar && test -d baz
