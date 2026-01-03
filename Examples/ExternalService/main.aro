@@ -1,23 +1,42 @@
-(* ExternalService - Demonstrates calling external HTTP APIs *)
+(* External Service Demo - Stateful Service Calls *)
+(* Demonstrates Call action with a service that maintains state *)
 
 (Application-Start: External Service Demo) {
-    <Log> the <message> for the <console> with "Fetching weather data from Open-Meteo API...".
+    <Log> "=== External Service Demo ===" to the <console>.
+    <Log> "Demonstrating stateful service calls..." to the <console>.
+    <Log> "" to the <console>.
 
-    (* Call the HTTP service to fetch weather data *)
-    <Call> the <response> from the <http: get> with {
-        url: "https://api.open-meteo.com/v1/forecast?latitude=52.52&longitude=13.41&current_weather=true"
-    }.
+    (* First call - increment counter *)
+    <Call> the <result1> from the <counter: increment> with {}.
+    <Extract> the <count1> from the <result1: count>.
+    <Log> "Step 1: Increment counter" to the <console>.
+    <Log> "Current count:" to the <console>.
+    <Log> <count1> to the <console>.
+    <Log> "" to the <console>.
 
-    (* Extract the body from the response *)
-    <Extract> the <weather> from the <response: body>.
+    (* Second call - increment again (state persists!) *)
+    <Call> the <result2> from the <counter: increment> with {}.
+    <Extract> the <count2> from the <result2: count>.
+    <Log> "Step 2: Increment counter again" to the <console>.
+    <Log> "Current count:" to the <console>.
+    <Log> <count2> to the <console>.
+    <Log> "" to the <console>.
 
-    <Log> the <message> for the <console> with "Weather data received:".
-    <Log> the <message> for the <console> with <weather>.
+    (* Third call - get current count *)
+    <Call> the <result3> from the <counter: get> with {}.
+    <Extract> the <count3> from the <result3: count>.
+    <Log> "Step 3: Get current count" to the <console>.
+    <Log> "Current count:" to the <console>.
+    <Log> <count3> to the <console>.
+    <Log> "" to the <console>.
+
+    <Log> "State persisted across calls: 0 -> 1 -> 2" to the <console>.
+    <Log> "This demonstrates why Call exists!" to the <console>.
 
     <Return> an <OK: status> for the <startup>.
 }
 
 (Application-End: Success) {
-    <Log> the <message> for the <console> with "External service demo completed.".
+    <Log> "External service demo completed." to the <console>.
     <Return> an <OK: status> for the <shutdown>.
 }

@@ -1,11 +1,11 @@
 (* HTTP Server Example - Contract-First API *)
 
 (Application-Start: HTTP Server) {
-    <Log> the <startup: message> for the <console> with "Starting HTTP Server...".
+    <Log> "Starting HTTP Server..." to the <console>.
 
     (* Start HTTP server from OpenAPI contract *)
     <Start> the <http-server> with {}.
-    <Log> the <ready: message> for the <console> with "Server ready on port 8080".
+    <Log> "Server ready on port 8080" to the <console>.
 
     (* Keep the application running until Ctrl+C *)
     <Keepalive> the <application> for the <events>.

@@ -1,16 +1,16 @@
 (* Main application that emits a NumberTriggered event *)
 
 (Application-Start: Event Example) {
-    <Log> the <startup: message> for the <console> with "Starting Event Example...".
+    <Log> "Starting Event Example..." to the <console>.
 
     (* Emit the event that will trigger all 5 handlers *)
     <Emit> a <NumberTriggered: event> with "Event triggered!".
 
-    <Log> the <completion: message> for the <console> with "Event emitted. All handlers should have executed.".
+    <Log> "Event emitted. All handlers should have executed." to the <console>.
     <Return> an <OK: status> for the <startup>.
 }
 
 (Application-End: Success) {
-    <Log> the <shutdown: message> for the <console> with "Very Good!".
+    <Log> "Very Good!" to the <console>.
 }
 

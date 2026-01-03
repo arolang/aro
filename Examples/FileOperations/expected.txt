@@ -1,14 +1,28 @@
-# Generated: Sat Jan  3 12:30:34 2026
+# Generated: Sat Jan  3 16:36:50 2026
 # Type: console
 # Command: aro run ./Examples/FileOperations
+# NOTE: This example uses test-script for verification
+# This expected.txt is for reference only, not used in testing
 ---
-
-Compilation errors:
-  error [34:19]: Cannot rebind variable 'append-line' - variables are immutable
-  hint: Variable 'append-line' was already defined earlier in this feature set
-  hint: Create a new variable with a different name instead
-  hint: Example: <Append> the <append-line-updated> to the <file>
-  error [60:17]: Cannot rebind variable 'file' - variables are immutable
-  hint: Variable 'file' was already defined earlier in this feature set
-  hint: Create a new variable with a different name instead
-  hint: Example: <Move> the <file-updated> to the <destination>
+[Application-Start] === ARO File Operations Demo ===
+[Application-Start]
+[Application-Start] 1. Creating demo directory...
+[Application-Start]    Created ./demo-output
+[Application-Start] 2. Writing hello.txt...
+[Application-Start]    Wrote hello.txt
+[Application-Start] 3. Appending to hello.txt...
+[Application-Start]    Appended to hello.txt
+[Application-Start] 4. Reading hello.txt...
+[Application-Start]    Content:
+[Application-Start]
+[Application-Start] 5. Copying to backup...
+[Application-Start]    Copied to hello-backup.txt
+[Application-Start] 6. Listing demo-output directory...
+[Application-Start]    Files in demo-output:
+[Application-Start] 7. Renaming backup file...
+[Application-Start]    Renamed to hello-copy.txt
+[Application-Start] 8. Final directory listing...
+[Application-Start]    Final files listed
+[Application-Start]
+[Application-Start] === Demo Complete ===
+[OK] demo

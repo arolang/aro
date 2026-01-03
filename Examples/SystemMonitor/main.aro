@@ -5,14 +5,14 @@
 (*   - Debug mode shows diagnostic tables *)
 
 (Application-Start: System Monitor) {
-    <Log> the <startup: message> for the <console> with "System Monitor API starting...".
+    <Log> "System Monitor API starting..." to the <console>.
     <Start> the <http-server> for the <contract>.
-    <Log> the <ready: message> for the <console> with "Server running at http://localhost:8080".
-    <Log> the <info: message> for the <console> with "Endpoints:".
-    <Log> the <endpoint: message> for the <console> with "  GET /exec?cmd=<command>  - Execute any command".
-    <Log> the <endpoint: message> for the <console> with "  GET /list?path=<path>    - List directory".
-    <Log> the <endpoint: message> for the <console> with "  GET /disk                - Check disk usage".
-    <Log> the <endpoint: message> for the <console> with "  GET /processes           - List processes".
+    <Log> "Server running at http://localhost:8080" to the <console>.
+    <Log> "Endpoints:" to the <console>.
+    <Log> "  GET /exec?cmd=<command>  - Execute any command" to the <console>.
+    <Log> "  GET /list?path=<path>    - List directory" to the <console>.
+    <Log> "  GET /disk                - Check disk usage" to the <console>.
+    <Log> "  GET /processes           - List processes" to the <console>.
     <Keepalive> the <application> for the <events>.
     <Return> an <OK: status> for the <startup>.
 }

@@ -1,28 +1,25 @@
-# Generated: Sat Jan  3 12:50:18 2026
+# Generated: Sat Jan  3 13:20:00 2026
 # Type: console
 # Command: aro run ./Examples/ExternalService
 ---
-[Application-Start] Fetching weather data from Open-Meteo API...
-[Application-Start] Weather data received:
-[Application-Start] current_weather: interval: 900
-is_day: 1
-temperature: 0.40
-time: 2026-01-03T11:45
-weathercode: 73
-winddirection: 239
-windspeed: 16.80
-current_weather_units: interval: seconds
-is_day:
-temperature: °C
-time: iso8601
-weathercode: wmo code
-winddirection: °
-windspeed: km/h
-elevation: 38
-generationtime_ms: __TIME__
-latitude: 52.52
-longitude: 13.42
-timezone: GMT
-timezone_abbreviation: GMT
-utc_offset_seconds: 0
+[PluginLoader] Building package plugin: CounterPlugin
+[PluginLoader] Registered plugin service: counter
+[PluginLoader] Loaded package plugin: CounterPlugin
+[Application-Start] === External Service Demo ===
+[Application-Start] Demonstrating stateful service calls...
+[Application-Start]
+[Application-Start] Step 1: Increment counter
+[Application-Start] Current count:
+[Application-Start] 1
+[Application-Start]
+[Application-Start] Step 2: Increment counter again
+[Application-Start] Current count:
+[Application-Start] 2
+[Application-Start]
+[Application-Start] Step 3: Get current count
+[Application-Start] Current count:
+[Application-Start] 2
+[Application-Start]
+[Application-Start] State persisted across calls: 0 -> 1 -> 2
+[Application-Start] This demonstrates why Call exists!
 [OK] startup

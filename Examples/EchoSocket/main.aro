@@ -1,12 +1,12 @@
 (* Echo Socket Server - Bidirectional TCP communication *)
 
 (Application-Start: Echo Socket) {
-    <Log> the <startup: message> for the <console> with "Starting echo socket on port 9000".
+    <Log> "Starting echo socket on port 9000" to the <console>.
 
     (* Start TCP socket server *)
     <Start> the <socket-server> with { port: 9000 }.
 
-    <Log> the <ready: message> for the <console> with "Socket server listening on port 9000".
+    <Log> "Socket server listening on port 9000" to the <console>.
 
     (* Keep the application running until Ctrl+C *)
     <Keepalive> the <application> for the <events>.
@@ -17,7 +17,7 @@
 (Handle Client Connected: Socket Event Handler) {
     <Extract> the <client-id> from the <connection: id>.
     <Extract> the <remote-address> from the <connection: remoteAddress>.
-    <Log> the <connection: info> for the <console> with "Client connected".
+    <Log> "Client connected" to the <console>.
     <Return> an <OK: status> for the <connection>.
 }
 
@@ -28,13 +28,13 @@
     (* Echo back the received data *)
     <Send> the <data> to the <client>.
 
-    <Log> the <echo: complete> for the <console> with "Echoed data back to client".
+    <Log> "Echoed data back to client" to the <console>.
 
     <Return> an <OK: status> for the <packet>.
 }
 
 (Handle Client Disconnected: Socket Event Handler) {
     <Extract> the <client-id> from the <event: connectionId>.
-    <Log> the <disconnection: info> for the <console> with "Client disconnected".
+    <Log> "Client disconnected" to the <console>.
     <Return> an <OK: status> for the <event>.
 }

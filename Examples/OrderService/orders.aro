@@ -22,7 +22,7 @@
     (* New orders start in draft state *)
     <Update> the <order: status> with "draft".
     <Store> the <order> into the <order-repository>.
-    <Log> the <info: message> for the <console> with "Created order in draft state".
+    <Log> "Created order in draft state" to the <console>.
     <Return> a <Created: status> with <order>.
 }
 
@@ -36,7 +36,7 @@
     <Accept> the <transition: draft_to_placed> on <order: status>.
 
     <Store> the <order> into the <order-repository>.
-    <Log> the <info: message> for the <console> with "Order placed successfully".
+    <Log> "Order placed successfully" to the <console>.
     <Return> an <OK: status> with <order>.
 }
 
@@ -55,7 +55,7 @@
     <Update> the <order: paymentAmount> from the <payment: amount>.
 
     <Store> the <order> into the <order-repository>.
-    <Log> the <info: message> for the <console> with "Payment received for order".
+    <Log> "Payment received for order" to the <console>.
     <Return> an <OK: status> with <order>.
 }
 
@@ -72,7 +72,7 @@
     (* Update tracking information *)
     <Update> the <order: trackingNumber> from the <shipping: trackingNumber>.
     <Store> the <order> into the <order-repository>.
-    <Log> the <info: message> for the <console> with "Order shipped".
+    <Log> "Order shipped" to the <console>.
     <Return> an <OK: status> with <order>.
 }
 
@@ -86,7 +86,7 @@
     <Accept> the <transition: shipped_to_delivered> on <order: status>.
 
     <Store> the <order> into the <order-repository>.
-    <Log> the <info: message> for the <console> with "Order delivered".
+    <Log> "Order delivered" to the <console>.
     <Return> an <OK: status> with <order>.
 }
 
@@ -100,6 +100,6 @@
     <Accept> the <transition: draft_to_cancelled> on <order: status>.
 
     <Store> the <order> into the <order-repository>.
-    <Log> the <info: message> for the <console> with "Order cancelled".
+    <Log> "Order cancelled" to the <console>.
     <Return> an <OK: status> with <order>.
 }

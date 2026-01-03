@@ -2,6 +2,6 @@
 
 (Application-Start: Entry Point) {
     <Create> the <greeting: String> with "Hello, ARO World!".
-    <Log> the <greeting> for the <console>.
+    <Log> <greeting> to the <console>.
     <Return> an <OK: status> for the <application>.
 }

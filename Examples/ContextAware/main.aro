@@ -33,11 +33,11 @@
     <Create> the <tags> with ["featured", "premium", "verified"].
 
     (* Log information - format varies by context *)
-    <Log> the <message> for the <console> with "=== Context-Aware Response Demo ===".
-    <Log> the <message> for the <console> with "User data:".
-    <Log> the <message> for the <console> with <user>.
-    <Log> the <message> for the <console> with "Order data:".
-    <Log> the <message> for the <console> with <order>.
+    <Log> "=== Context-Aware Response Demo ===" to the <console>.
+    <Log> "User data:" to the <console>.
+    <Log> <user> to the <console>.
+    <Log> "Order data:" to the <console>.
+    <Log> <order> to the <console>.
 
     (* Return response with structured data *)
     (* Output format depends on execution context:

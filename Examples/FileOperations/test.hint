@@ -1,0 +1,11 @@
+# FileOperations creates files in ./demo-output
+# Clean up from previous test runs
+pre-script: rm -rf demo-output
+
+# Verify file operations succeeded by checking generated files
+# 1. Directory exists
+# 2. hello.txt has correct content (original + appended line)
+# 3. hello-copy.txt exists (moved from hello-backup.txt)
+# 4. hello-backup.txt does NOT exist (was moved to hello-copy.txt)
+# 5. hello-copy.txt has same content as hello.txt
+test-script: test -d demo-output && test -f demo-output/hello.txt && test -f demo-output/hello-copy.txt && ! test -f demo-output/hello-backup.txt && grep -q "Hello from ARO!" demo-output/hello.txt && grep -q "This line was appended." demo-output/hello.txt && diff demo-output/hello.txt demo-output/hello-copy.txt

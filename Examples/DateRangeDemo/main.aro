@@ -1,36 +1,36 @@
 (* Date Range and Recurrence Demo - Demonstrates ARO-0041 features *)
 
 (Application-Start: Date Range Demo) {
-    <Log> the <header> for the <console> with "=== Date Range & Recurrence Demo ===".
+    <Log> "=== Date Range & Recurrence Demo ===" to the <console>.
 
     (* ========================================== *)
     (* Part 1: Date Ranges                        *)
     (* ========================================== *)
-    <Log> the <section1> for the <console> with "".
-    <Log> the <section1-header> for the <console> with "--- Date Ranges ---".
+    <Log> "" to the <console>.
+    <Log> "--- Date Ranges ---" to the <console>.
 
     (* Create a date range from start to end *)
     <Compute> the <start-date: date> from "2025-01-01T00:00:00Z".
     <Compute> the <end-date: date> from "2025-01-15T00:00:00Z".
     <Create> the <vacation: date-range> from <start-date> to <end-date>.
 
-    <Log> the <range-label> for the <console> with "Vacation period:".
-    <Log> the <range-output> for the <console> with <vacation>.
+    <Log> "Vacation period:" to the <console>.
+    <Log> <vacation> to the <console>.
 
     (* Extract span properties *)
     <Extract> the <vacation-days: days> from <vacation>.
-    <Log> the <days-label> for the <console> with "  Days in range:".
-    <Log> the <days-output> for the <console> with <vacation-days>.
+    <Log> "  Days in range:" to the <console>.
+    <Log> <vacation-days> to the <console>.
 
     <Extract> the <vacation-hours: hours> from <vacation>.
-    <Log> the <hours-label> for the <console> with "  Hours in range:".
-    <Log> the <hours-output> for the <console> with <vacation-hours>.
+    <Log> "  Hours in range:" to the <console>.
+    <Log> <vacation-hours> to the <console>.
 
     (* Create a range for "last 7 days" *)
     <Compute> the <week-ago: -7d> from <now>.
     <Create> the <last-week: date-range> from <week-ago> to <now>.
-    <Log> the <last-week-label> for the <console> with "Last 7 days range:".
-    <Log> the <last-week-output> for the <console> with <last-week>.
+    <Log> "Last 7 days range:" to the <console>.
+    <Log> <last-week> to the <console>.
 
     (* Check if a date falls within a range *)
     <Compute> the <check-date: date> from "2025-01-10T12:00:00Z".
@@ -39,63 +39,63 @@
     (* ========================================== *)
     (* Part 2: Recurrence Patterns                *)
     (* ========================================== *)
-    <Log> the <section2> for the <console> with "".
-    <Log> the <section2-header> for the <console> with "--- Recurrence Patterns ---".
+    <Log> "" to the <console>.
+    <Log> "--- Recurrence Patterns ---" to the <console>.
 
     (* Simple interval recurrence *)
     <Create> the <daily-backup: recurrence> with "every day".
-    <Log> the <daily-label> for the <console> with "Daily backup schedule:".
+    <Log> "Daily backup schedule:" to the <console>.
     <Extract> the <next-daily: next> from <daily-backup>.
-    <Log> the <next-daily-label> for the <console> with "  Next occurrence:".
-    <Log> the <next-daily-output> for the <console> with <next-daily>.
+    <Log> "  Next occurrence:" to the <console>.
+    <Log> <next-daily> to the <console>.
 
     (* Weekly recurrence *)
     <Create> the <weekly-report: recurrence> with "every week".
-    <Log> the <weekly-label> for the <console> with "Weekly report schedule:".
+    <Log> "Weekly report schedule:" to the <console>.
     <Extract> the <next-weekly: next> from <weekly-report>.
-    <Log> the <next-weekly-label> for the <console> with "  Next occurrence:".
-    <Log> the <next-weekly-output> for the <console> with <next-weekly>.
+    <Log> "  Next occurrence:" to the <console>.
+    <Log> <next-weekly> to the <console>.
 
     (* Weekday recurrence *)
     <Create> the <standup: recurrence> with "every monday".
-    <Log> the <standup-label> for the <console> with "Monday standup:".
+    <Log> "Monday standup:" to the <console>.
     <Extract> the <next-standup: next> from <standup>.
-    <Log> the <next-standup-label> for the <console> with "  Next occurrence:".
-    <Log> the <next-standup-output> for the <console> with <next-standup>.
+    <Log> "  Next occurrence:" to the <console>.
+    <Log> <next-standup> to the <console>.
 
     (* Biweekly recurrence *)
     <Create> the <biweekly-review: recurrence> with "every 2 weeks".
-    <Log> the <biweekly-label> for the <console> with "Biweekly review:".
+    <Log> "Biweekly review:" to the <console>.
     <Extract> the <next-biweekly: next> from <biweekly-review>.
-    <Log> the <next-biweekly-label> for the <console> with "  Next occurrence:".
-    <Log> the <next-biweekly-output> for the <console> with <next-biweekly>.
+    <Log> "  Next occurrence:" to the <console>.
+    <Log> <next-biweekly> to the <console>.
 
     (* Last Friday of month *)
     <Create> the <payday: recurrence> with "every last friday".
-    <Log> the <payday-label> for the <console> with "Payday (last Friday):".
+    <Log> "Payday (last Friday):" to the <console>.
     <Extract> the <next-payday: next> from <payday>.
-    <Log> the <next-payday-label> for the <console> with "  Next occurrence:".
-    <Log> the <next-payday-output> for the <console> with <next-payday>.
+    <Log> "  Next occurrence:" to the <console>.
+    <Log> <next-payday> to the <console>.
 
     (* ========================================== *)
     (* Part 3: Combining Ranges and Recurrence    *)
     (* ========================================== *)
-    <Log> the <section3> for the <console> with "".
-    <Log> the <section3-header> for the <console> with "--- Combined Usage ---".
+    <Log> "" to the <console>.
+    <Log> "--- Combined Usage ---" to the <console>.
 
     (* Create a Q1 2025 date range *)
     <Compute> the <q1-start: date> from "2025-01-01T00:00:00Z".
     <Compute> the <q1-end: date> from "2025-03-31T23:59:59Z".
     <Create> the <quarter-one: date-range> from <q1-start> to <q1-end>.
-    <Log> the <q1-label> for the <console> with "Q1 2025 range:".
-    <Log> the <q1-output> for the <console> with <quarter-one>.
+    <Log> "Q1 2025 range:" to the <console>.
+    <Log> <quarter-one> to the <console>.
 
     <Extract> the <q1-days: days> from <quarter-one>.
-    <Log> the <q1-days-label> for the <console> with "  Total days in Q1:".
-    <Log> the <q1-days-output> for the <console> with <q1-days>.
+    <Log> "  Total days in Q1:" to the <console>.
+    <Log> <q1-days> to the <console>.
 
-    <Log> the <footer> for the <console> with "".
-    <Log> the <footer2> for the <console> with "=== Demo Complete ===".
+    <Log> "" to the <console>.
+    <Log> "=== Demo Complete ===" to the <console>.
 
     <Return> an <OK: status> for the <demo>.
 }

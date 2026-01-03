@@ -5,7 +5,7 @@ import ../ModuleA
 import ../ModuleB
 
 (Application-Start: Combined) {
-    <Log> the <startup: message> for the <console> with "Combined application starting...".
+    <Log> "Combined application starting..." to the <console>.
     <Start> the <http-server> for the <contract>.
     <Keepalive> the <application> for the <events>.
     <Return> an <OK: status> for the <startup>.

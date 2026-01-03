@@ -13,40 +13,40 @@
     ].
 
     (* 1. Basic for-each loop *)
-    <Log> the <header> for the <console> with "=== Basic For-Each ===".
+    <Log> "=== Basic For-Each ===" to the <console>.
     for each <user> in <users> {
-        <Log> the <name> for the <console> with <user: name>.
+        <Log> <user: name> to the <console>.
     }
 
-    <Log> the <header> for the <console> with "=== Object For-Each ===".
+    <Log> "=== Object For-Each ===" to the <console>.
     for each <user> in <users> {
-        <Log> the <name> for the <console> with <user>.
+        <Log> <user> to the <console>.
     }
 
 
     (* 2. For-each with filter (replaces break/continue) *)
-    <Log> the <header> for the <console> with "=== Filtered For-Each ===".
+    <Log> "=== Filtered For-Each ===" to the <console>.
     for each <user> in <users> where <user: active> is true {
-        <Log> the <active-user> for the <console> with <user: name>.
+        <Log> <user: name> to the <console>.
     }
 
     (* 3. Indexed for-each *)
-    <Log> the <header> for the <console> with "=== Indexed For-Each ===".
+    <Log> "=== Indexed For-Each ===" to the <console>.
     for each <user> at <index> in <users> {
         <Compute> the <position> from <index> + 1.
-        <Log> the <ranking> for the <console> with <position>.
+        <Log> <position> to the <console>.
     }
 
     (* 4. Nested for-each *)
-    <Log> the <header> for the <console> with "=== Nested For-Each ===".
+    <Log> "=== Nested For-Each ===" to the <console>.
     <Create> the <teams> with [
         { name: "Alpha", members: ["Alice", "Bob"] },
         { name: "Beta", members: ["Charlie", "Diana"] }
     ].
     for each <team> in <teams> {
-        <Log> the <team-name> for the <console> with <team: name>.
+        <Log> <team: name> to the <console>.
         for each <member> in <team: members> {
-            <Log> the <member-name> for the <console> with <member>.
+            <Log> <member> to the <console>.
         }
     }
 

@@ -1,8 +1,8 @@
 (* HTTP Client Example - Fetching data from external API *)
 
 (Application-Start: HTTP Client Demo) {
-    <Log> the <startup: message> for the <console> with "HTTP Client Demo".
-    <Log> the <info: message> for the <console> with "Fetching weather data from Open-Meteo API...".
+    <Log> "HTTP Client Demo" to the <console>.
+    <Log> "Fetching weather data from Open-Meteo API..." to the <console>.
 
     (* Create the API URL *)
     <Create> the <api-url> with "https://api.open-meteo.com/v1/forecast?latitude=52.52&longitude=13.41&current_weather=true".
@@ -11,15 +11,15 @@
     <Request> the <weather> from the <api-url>.
 
     (* Log the response *)
-    <Log> the <response: message> for the <console> with "Weather data received:".
-    <Log> the <data: message> for the <console> with <weather>.
+    <Log> "Weather data received:" to the <console>.
+    <Log> <weather> to the <console>.
 
     (* Example with config object: GET with custom timeout *)
-    <Log> the <info: message> for the <console> with "Making request with custom timeout...".
+    <Log> "Making request with custom timeout..." to the <console>.
     <Request> the <weather2> from the <api-url> with {
         timeout: 10
     }.
-    <Log> the <status: message> for the <console> with "Request completed with custom timeout".
+    <Log> "Request completed with custom timeout" to the <console>.
 
     <Return> an <OK: status> for the <startup>.
 }

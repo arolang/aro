@@ -5,7 +5,7 @@
    ============================================================ *)
 
 (Application-Start: Computation Demo) {
-    <Log> the <startup: message> for the <console> with "=== ARO Computations Demo ===".
+    <Log> "=== ARO Computations Demo ===" to the <console>.
 
     (* --------------------------------------------------------
        String Length Operations
@@ -16,16 +16,16 @@
 
     (* Old syntax: variable name IS the operation *)
     <Compute> the <length> from the <greeting>.
-    <Log> the <result: message> for the <console> with "Greeting length (old syntax): ".
-    <Log> the <result: message> for the <console> with <length>.
+    <Log> "Greeting length (old syntax): " to the <console>.
+    <Log> <length> to the <console>.
 
     (* New syntax: variable name and operation are separate *)
     <Compute> the <greeting-length: length> from the <greeting>.
     <Compute> the <farewell-length: length> from the <farewell>.
-    <Log> the <result: message> for the <console> with "Greeting length (new syntax): ".
-    <Log> the <result: message> for the <console> with <greeting-length>.
-    <Log> the <result: message> for the <console> with "Farewell length: ".
-    <Log> the <result: message> for the <console> with <farewell-length>.
+    <Log> "Greeting length (new syntax): " to the <console>.
+    <Log> <greeting-length> to the <console>.
+    <Log> "Farewell length: " to the <console>.
+    <Log> <farewell-length> to the <console>.
 
     (* --------------------------------------------------------
        Case Transformations
@@ -35,20 +35,20 @@
     <Compute> the <upperText: uppercase> from the <mixedText>.
     <Compute> the <lowerText: lowercase> from the <mixedText>.
 
-    <Log> the <result: message> for the <console> with "Original: ".
-    <Log> the <result: message> for the <console> with <mixedText>.
-    <Log> the <result: message> for the <console> with "Uppercase: ".
-    <Log> the <result: message> for the <console> with <upperText>.
-    <Log> the <result: message> for the <console> with "Lowercase: ".
-    <Log> the <result: message> for the <console> with <lowerText>.
+    <Log> "Original: " to the <console>.
+    <Log> <mixedText> to the <console>.
+    <Log> "Uppercase: " to the <console>.
+    <Log> <upperText> to the <console>.
+    <Log> "Lowercase: " to the <console>.
+    <Log> <lowerText> to the <console>.
 
     (* --------------------------------------------------------
        Hashing
        -------------------------------------------------------- *)
     <Create> the <password> with "secret123".
     <Compute> the <password-hash: hash> from the <password>.
-    <Log> the <result: message> for the <console> with "Password hash: ".
-    <Log> the <result: message> for the <console> with <password-hash>.
+    <Log> "Password hash: " to the <console>.
+    <Log> <password-hash> to the <console>.
 
     (* --------------------------------------------------------
        Arithmetic Computations
@@ -60,26 +60,26 @@
     <Compute> the <tax> from <subtotal> * 0.08.
     <Compute> the <total> from <subtotal> + <tax>.
 
-    <Log> the <result: message> for the <console> with "Price: ".
-    <Log> the <result: message> for the <console> with <price>.
-    <Log> the <result: message> for the <console> with "Quantity: ".
-    <Log> the <result: message> for the <console> with <quantity>.
-    <Log> the <result: message> for the <console> with "Subtotal: ".
-    <Log> the <result: message> for the <console> with <subtotal>.
-    <Log> the <result: message> for the <console> with "Tax (8%): ".
-    <Log> the <result: message> for the <console> with <tax>.
-    <Log> the <result: message> for the <console> with "Total: ".
-    <Log> the <result: message> for the <console> with <total>.
+    <Log> "Price: " to the <console>.
+    <Log> <price> to the <console>.
+    <Log> "Quantity: " to the <console>.
+    <Log> <quantity> to the <console>.
+    <Log> "Subtotal: " to the <console>.
+    <Log> <subtotal> to the <console>.
+    <Log> "Tax (8%): " to the <console>.
+    <Log> <tax> to the <console>.
+    <Log> "Total: " to the <console>.
+    <Log> <total> to the <console>.
 
     (* --------------------------------------------------------
        Collection Counting
        -------------------------------------------------------- *)
     <Create> the <items> with ["apple", "banana", "cherry", "date"].
     <Compute> the <item-count: count> from the <items>.
-    <Log> the <result: message> for the <console> with "Number of items: ".
-    <Log> the <result: message> for the <console> with <item-count>.
+    <Log> "Number of items: " to the <console>.
+    <Log> <item-count> to the <console>.
 
-    <Log> the <result: message> for the <console> with "=== Demo Complete ===".
+    <Log> "=== Demo Complete ===" to the <console>.
 
     <Return> an <OK: status> for the <demo>.
 }

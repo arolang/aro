@@ -7,13 +7,13 @@
 
 (Application-Start: Hello World API) {
     (* Log a startup message to the console *)
-    <Log> the <startup: message> for the <console> with "Hello World API starting...".
+    <Log> "Hello World API starting..." to the <console>.
 
     (* Start the HTTP server - port is read from openapi.yaml (contract is source of truth) *)
     <Start> the <http-server> for the <contract>.
 
     (* Log that we're ready to receive requests *)
-    <Log> the <ready: message> for the <console> with "Server ready - waiting for requests...".
+    <Log> "Server ready - waiting for requests..." to the <console>.
 
     (* Keep the application running to handle incoming HTTP requests *)
     <Keepalive> the <application> for the <events>.
@@ -24,7 +24,7 @@
 
 (* Optional: Handle graceful shutdown *)
 (Application-End: Success) {
-    <Log> the <shutdown: message> for the <console> with "Shutting down Hello World API...".
+    <Log> "Shutting down Hello World API..." to the <console>.
     <Stop> the <http-server> for the <application>.
     <Return> an <OK: status> for the <shutdown>.
 }

@@ -2,7 +2,7 @@
 (* This file contains Application-Start and Application-End handlers *)
 
 (Application-Start: User Service) {
-    <Log> the <startup: message> for the <console> with "Starting User Service...".
+    <Log> "Starting User Service..." to the <console>.
 
     (* Start HTTP server from OpenAPI contract *)
     <Start> the <http-server> with {}.
@@ -10,7 +10,7 @@
     (* TODO: File monitor not yet fully implemented *)
     (* <Start> the <file-monitor> with { directory: "./data/users" }. *)
 
-    <Log> the <ready: message> for the <console> with "User Service ready on port 8080".
+    <Log> "User Service ready on port 8080" to the <console>.
 
     (* Keep the application running until Ctrl+C *)
     <Keepalive> the <application> for the <events>.
@@ -20,7 +20,7 @@
 
 (* Called on graceful shutdown (SIGTERM, SIGINT, or programmatic stop) *)
 (Application-End: Success) {
-    <Log> the <shutdown: message> for the <console> with "User Service shutting down...".
+    <Log> "User Service shutting down..." to the <console>.
 
     (* Gracefully stop accepting new requests *)
     <Stop> the <http-server> with <application>.
@@ -28,7 +28,7 @@
     (* Close database connections *)
     <Close> the <database-connections> for the <application>.
 
-    <Log> the <shutdown: complete> for the <console> with "User Service stopped. Goodbye!".
+    <Log> "User Service stopped. Goodbye!" to the <console>.
     <Return> an <OK: status> for the <shutdown>.
 }
 
@@ -36,7 +36,7 @@
 (Application-End: Error) {
     <Extract> the <error> from the <shutdown: error>.
 
-    <Log> the <error: message> for the <console> with "FATAL: User Service crashed!".
+    <Log> "FATAL: User Service crashed!" to the <console>.
 
     (* Attempt to close connections gracefully *)
     <Close> the <database-connections> for the <application>.

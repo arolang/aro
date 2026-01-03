@@ -6,8 +6,7 @@
     <Extract> the <entityId> from the <event: entityId>.
     <Extract> the <repositoryName> from the <event: repositoryName>.
 
-    <Log> the <audit: message> for the <console>
-        with "[AUDIT] " + <repositoryName> + ": " + <changeType> + " (id: " + <entityId> + ")".
+    <Log> ("[AUDIT] " + <repositoryName> + ": " + <changeType> + " (id: " + <entityId> + ")") to the <console>.
 
     <Return> an <OK: status> for the <audit>.
 }
@@ -18,8 +17,7 @@
     <Extract> the <entityId> from the <event: entityId>.
 
     (* Log all updates with entity info *)
-    <Log> the <change: message> for the <console>
-        with "[CHANGE] User " + <entityId> + " changed: " + <changeType>.
+    <Log> ("[CHANGE] User " + <entityId> + " changed: " + <changeType>) to the <console>.
 
     <Return> an <OK: status> for the <tracking>.
 }
@@ -29,8 +27,7 @@
     <Extract> the <changeType> from the <event: changeType>.
     <Extract> the <entityId> from the <event: entityId>.
 
-    <Log> the <monitor: message> for the <console>
-        with "[MONITOR] Entity " + <entityId> + " - operation: " + <changeType>.
+    <Log> ("[MONITOR] Entity " + <entityId> + " - operation: " + <changeType>) to the <console>.
 
     <Return> an <OK: status> for the <monitoring>.
 }

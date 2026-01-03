@@ -1,26 +1,26 @@
 (* Five event handlers that react to the NumberTriggered event *)
 
 (Handler One: NumberTriggered Handler) {
-    <Log> the <handler-message: message> for the <console> with "Handler #1 executed".
+    <Log> "Handler #1 executed" to the <console>.
     <Return> an <OK: status> for the <handler>.
 }
 
 (Handler Two: NumberTriggered Handler) {
-    <Log> the <handler-message: message> for the <console> with "Handler #2 executed".
+    <Log> "Handler #2 executed" to the <console>.
     <Return> an <OK: status> for the <handler>.
 }
 
 (Handler Three: NumberTriggered Handler) {
-    <Log> the <handler-message: message> for the <console> with "Handler #3 executed".
+    <Log> "Handler #3 executed" to the <console>.
     <Return> an <OK: status> for the <handler>.
 }
 
 (Handler Four: NumberTriggered Handler) {
-    <Log> the <handler-message: message> for the <console> with "Handler #4 executed".
+    <Log> "Handler #4 executed" to the <console>.
     <Return> an <OK: status> for the <handler>.
 }
 
 (Handler Five: NumberTriggered Handler) {
-    <Log> the <handler-message: message> for the <console> with "Handler #5 executed".
+    <Log> "Handler #5 executed" to the <console>.
     <Return> an <OK: status> for the <handler>.
 }
