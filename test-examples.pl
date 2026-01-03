@@ -361,6 +361,10 @@ sub normalize_output {
     # Remove ISO timestamps
     $output =~ s/\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d+)?Z?/__TIMESTAMP__/g;
 
+    # Normalize ls -la timestamps (month day time/year before filename)
+    # Matches: "Jan  3 12:26" or "Dec 31  2025" in ls output
+    $output =~ s/^([\-dlrwxs@+]+\s+\d+\s+\w+\s+\w+\s+\d+\s+)\w+\s+\d+\s+[\d:]+/$1__DATE__/gm;
+
     # Normalize paths (absolute -> relative)
     my $base_dir = $RealBin;
     $output =~ s/\Q$base_dir\E/./g;

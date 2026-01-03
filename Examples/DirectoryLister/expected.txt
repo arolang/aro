@@ -1,4 +1,4 @@
-# Generated: Sat Jan  3 10:18:09 2026
+# Generated: Sat Jan  3 12:27:22 2026
 # Type: console
 # Command: aro run ./Examples/DirectoryLister
 ---
@@ -10,47 +10,47 @@
   listing.error: false
   listing.exitCode: 0
   listing.message: Command executed successfully
-  listing.output: total 352
-drwxr-xr-x  43 kris  staff   1376 Jan  3 10:15 .
-drwxr-xr-x  70 kris  staff   2240 Dec 31 08:36 ..
--rw-r--r--@  1 kris  staff   6148 Dec 29 10:05 .DS_Store
-drwxr-xr-x   3 kris  staff     96 Jan  2 19:56 .aro-cache
-drwxr-xr-x  14 kris  staff    448 Jan  3 09:55 .build
-drwx------   3 kris  staff     96 Jan  3 10:03 .claude
--rw-r--r--   1 kris  staff    598 Dec  5 08:31 .dockerignore
-drwxr-xr-x  16 kris  staff    512 Jan  3 10:18 .git
-drwxr-xr-x   8 kris  staff    256 Dec 31 14:10 .github
--rw-r--r--   1 kris  staff   1841 Jan  3 09:31 .gitignore
-drwxr-xr-x@  9 kris  staff    288 Dec 29 18:52 .idea
-drwxr-xr-x   4 kris  staff    128 Dec  5 19:40 .swiftpm
-drwxr-xr-x   4 kris  staff    128 Dec 31 00:12 Book
--rw-r--r--   1 kris  staff  14952 Dec 31 13:08 CLAUDE.md
--rw-r--r--   1 kris  staff   1081 Dec 27 09:36 CODE_OF_CONDUCT.md
--rw-r--r--   1 kris  staff   1220 Dec 27 09:36 CONTRIBUTING.md
--rw-r--r--   1 kris  staff   2124 Dec  5 08:31 DISCLAIMER.md
--rw-r--r--@  1 kris  staff   3225 Dec  5 08:31 Dockerfile
-drwxr-xr-x   5 kris  staff    160 Dec 31 01:12 Editor
-drwxr-xr-x  43 kris  staff   1376 Jan  2 10:03 Examples
--rw-r--r--   1 kris  staff   2043 Dec 27 09:54 GOVERNANCE.md
-drwxr-xr-x   8 kris  staff    256 Jan  2 16:56 Graphics
--rw-r--r--   1 kris  staff   1094 Dec  5 08:31 LICENSE
--rw-r--r--   1 kris  staff  22977 Dec  5 08:31 MISSING.md
--rw-r--r--   1 kris  staff  13947 Dec 30 15:50 OVERVIEW.md
--rw-r--r--   1 kris  staff   7354 Dec 31 17:52 Package.resolved
--rw-r--r--   1 kris  staff   4847 Jan  2 12:17 Package.swift
-drwxr-xr-x   2 kris  staff     64 Jan  2 12:17 Plugins
-drwxr-xr-x  15 kris  staff    480 Jan  2 11:30 Proposals
--rw-r--r--   1 kris  staff   8996 Jan  2 16:56 README.md
--rw-r--r--   1 kris  staff    865 Dec 27 09:54 SECURITY.md
--rw-r--r--   1 kris  staff   1234 Dec 27 09:54 SUPPORT.md
-drwxr-xr-x   8 kris  staff    256 Jan  2 12:12 Sources
-drwxr-xr-x   6 kris  staff    192 Dec 28 20:14 Tests
-drwxr-xr-x  11 kris  staff    352 Dec 31 00:19 Website
-drwxr-xr-x  16 kris  staff    512 Jan  3 09:20 cards
-drwxr-xr-x   4 kris  staff    128 Dec 28 01:17 demo-output
-drwxr-xr-x   5 kris  staff    160 Jan  2 13:08 homebrew-aro
-drwxr-xr-x   6 kris  staff    192 Dec  6 10:21 node_modules
-drwxr-xr-x  14 kris  staff    448 Jan  3 10:16 output
--rw-r--r--   1 kris  staff  10193 Dec 31 14:10 package-lock.json
--rw-r--r--   1 kris  staff     71 Dec  5 08:31 package.json
--rwxr-xr-x   1 kris  staff  27261 Jan  3 10:15 test-examples.pl
+  listing.output: total 360
+drwxr-xr-x  43 kris  staff   1376 __DATE__ .
+drwxr-xr-x  70 kris  staff   2240 __DATE__ ..
+-rw-r--r--@  1 kris  staff   6148 __DATE__ .DS_Store
+drwxr-xr-x   3 kris  staff     96 __DATE__ .aro-cache
+drwxr-xr-x  15 kris  staff    480 __DATE__ .build
+drwx------   3 kris  staff     96 __DATE__ .claude
+-rw-r--r--   1 kris  staff    598 __DATE__ .dockerignore
+drwxr-xr-x  16 kris  staff    512 __DATE__ .git
+drwxr-xr-x   8 kris  staff    256 __DATE__ .github
+-rw-r--r--   1 kris  staff   1841 __DATE__ .gitignore
+drwxr-xr-x@  9 kris  staff    288 __DATE__ .idea
+drwxr-xr-x   4 kris  staff    128 __DATE__ .swiftpm
+drwxr-xr-x   4 kris  staff    128 __DATE__ Book
+-rw-r--r--   1 kris  staff  14952 __DATE__ CLAUDE.md
+-rw-r--r--   1 kris  staff   1081 __DATE__ CODE_OF_CONDUCT.md
+-rw-r--r--   1 kris  staff   1220 __DATE__ CONTRIBUTING.md
+-rw-r--r--   1 kris  staff   2124 __DATE__ DISCLAIMER.md
+-rw-r--r--@  1 kris  staff   3225 __DATE__ Dockerfile
+drwxr-xr-x   5 kris  staff    160 __DATE__ Editor
+drwxr-xr-x  43 kris  staff   1376 __DATE__ Examples
+-rw-r--r--   1 kris  staff   2043 __DATE__ GOVERNANCE.md
+drwxr-xr-x   8 kris  staff    256 __DATE__ Graphics
+-rw-r--r--   1 kris  staff   1094 __DATE__ LICENSE
+-rw-r--r--   1 kris  staff  22977 __DATE__ MISSING.md
+-rw-r--r--   1 kris  staff  13947 __DATE__ OVERVIEW.md
+-rw-r--r--   1 kris  staff   7354 __DATE__ Package.resolved
+-rw-r--r--   1 kris  staff   4847 __DATE__ Package.swift
+drwxr-xr-x   2 kris  staff     64 __DATE__ Plugins
+drwxr-xr-x  15 kris  staff    480 __DATE__ Proposals
+-rw-r--r--   1 kris  staff   8996 __DATE__ README.md
+-rw-r--r--   1 kris  staff    865 __DATE__ SECURITY.md
+-rw-r--r--   1 kris  staff   1234 __DATE__ SUPPORT.md
+drwxr-xr-x   8 kris  staff    256 __DATE__ Sources
+drwxr-xr-x   6 kris  staff    192 __DATE__ Tests
+drwxr-xr-x  11 kris  staff    352 __DATE__ Website
+drwxr-xr-x  16 kris  staff    512 __DATE__ cards
+drwxr-xr-x   4 kris  staff    128 __DATE__ demo-output
+drwxr-xr-x   5 kris  staff    160 __DATE__ homebrew-aro
+drwxr-xr-x   6 kris  staff    192 __DATE__ node_modules
+drwxr-xr-x  14 kris  staff    448 __DATE__ output
+-rw-r--r--   1 kris  staff  10193 __DATE__ package-lock.json
+-rw-r--r--   1 kris  staff     71 __DATE__ package.json
+-rwxr-xr-x   1 kris  staff  32757 __DATE__ test-examples.pl
