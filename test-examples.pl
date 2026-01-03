@@ -387,6 +387,90 @@ sub normalize_output {
     return $output;
 }
 
+# Convert expected output with placeholders to regex pattern
+# Supports: __ID__, __UUID__, __TIMESTAMP__, __DATE__, __NUMBER__, __STRING__
+sub expected_to_pattern {
+    my ($expected) = @_;
+
+    # Escape regex metacharacters in the expected string
+    my $pattern = quotemeta($expected);
+
+    # Replace escaped placeholders with actual regex patterns
+    # __ID__ - matches hex IDs like 19b8607cf80ae931b1f (timestamp + random)
+    $pattern =~ s/__ID__/[a-f0-9]{15,20}/g;
+
+    # __UUID__ - matches UUIDs like 550e8400-e29b-41d4-a716-446655440000
+    $pattern =~ s/__UUID__/[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}/g;
+
+    # __TIMESTAMP__ - matches ISO timestamps like 2025-01-03T23:43:37.478982169+01:00 or 2026-01-03T22:45
+    $pattern =~ s/__TIMESTAMP__/\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}(?::\\d{2})?(?:\\.\\d+)?(?:Z|[+-]\\d{2}:\\d{2})?/g;
+
+    # __DATE__ - matches dates like Jan 3 23:43 or 2025-01-03 (already used in DirectoryLister)
+    $pattern =~ s/__DATE__/(?:\\w{3}\\s+\\d{1,2}\\s+\\d{2}:\\d{2}|\\d{4}-\\d{2}-\\d{2})/g;
+
+    # __NUMBER__ - matches any number (integer or decimal)
+    $pattern =~ s/__NUMBER__/-?\\d+(?:\\.\\d+)?/g;
+
+    # __STRING__ - matches any non-empty string (non-greedy, no quotes)
+    $pattern =~ s/__STRING__/.+?/g;
+
+    # __HASH__ - matches hash values (32-64 hex chars) - already used in HashTest
+    $pattern =~ s/__HASH__/[a-f0-9]{32,64}/g;
+
+    return $pattern;
+}
+
+# Automatically replace dynamic values with placeholders for --generate
+sub auto_placeholderize {
+    my ($output, $type) = @_;
+
+    # For HTTP tests, replace hex IDs with __ID__
+    if ($type && $type eq 'http') {
+        # Replace hex IDs (15-20 chars) in JSON id fields
+        $output =~ s/"id":"[a-f0-9]{15,20}"/"id":"__ID__"/g;
+    }
+
+    # Replace ISO timestamps (with or without seconds, timezone)
+    $output =~ s/\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(?::\d{2})?(?:\.\d+)?(?:Z|[+-]\d{2}:\d{2})?/__TIMESTAMP__/g;
+
+    # For console tests with weather/API data, replace numbers in specific contexts
+    if ($type && $type eq 'console') {
+        # Replace numbers after "temperature:", "windspeed:", etc. (weather data)
+        $output =~ s/(temperature|windspeed|winddirection|elevation|latitude|longitude|generationtime_ms|is_day|weathercode):\s*-?\d+(?:\.\d+)?/$1: __NUMBER__/g;
+    }
+
+    return $output;
+}
+
+# Check if actual output matches expected pattern (with placeholder support)
+sub matches_pattern {
+    my ($actual, $expected) = @_;
+
+    # Split into lines for line-by-line comparison
+    my @actual_lines = split /\n/, $actual;
+    my @expected_lines = split /\n/, $expected;
+
+    # Must have same number of lines
+    return 0 if scalar(@actual_lines) != scalar(@expected_lines);
+
+    # Check each line
+    for (my $i = 0; $i < scalar(@expected_lines); $i++) {
+        my $expected_line = $expected_lines[$i];
+        my $actual_line = $actual_lines[$i];
+
+        # Convert expected line to pattern
+        my $pattern = expected_to_pattern($expected_line);
+
+        # Check if actual line matches pattern
+        unless ($actual_line =~ /^$pattern$/) {
+            return 0;
+        }
+    }
+
+    # All lines matched
+    return 1;
+}
+
 # Check if all expected lines occur in output (order-independent)
 sub check_output_occurrences {
     my ($actual, $expected) = @_;
@@ -468,6 +552,68 @@ sub run_console_example_internal {
 
         return ($output, undef);
     }
+}
+
+# Determine execution order for an operation (lower = earlier)
+sub get_operation_order {
+    my ($operation_id, $path) = @_;
+
+    # Handle empty or undefined operation IDs
+    $operation_id //= '';
+    $path //= '';
+
+    # Order groups (0-9 = setup, 10-19 = read, 20-29 = create, 30-89 = updates, 90-99 = cleanup)
+    return 10 if $operation_id =~ /^list/i;              # List operations first
+    return 15 if $operation_id =~ /^get/i && $path =~ /\{/;  # Get by ID after list
+    return 20 if $operation_id =~ /^create/i;            # Create operations next
+
+    # State transition order for common workflows
+    return 31 if $operation_id =~ /place/i;              # place (draft -> placed)
+    return 32 if $operation_id =~ /pay/i;                # pay (placed -> paid)
+    return 33 if $operation_id =~ /ship/i;               # ship (paid -> shipped)
+    return 34 if $operation_id =~ /deliver/i;            # deliver (shipped -> delivered)
+
+    return 40 if $operation_id =~ /^update/i;            # Generic updates
+    return 50 if $operation_id =~ /^patch/i;             # Patches
+
+    return 91 if $operation_id =~ /cancel/i;             # Cancel near end
+    return 95 if $operation_id =~ /^delete/i;            # Delete operations last
+
+    return 50;  # Default middle priority
+}
+
+# Generate appropriate test payload based on operation ID and OpenAPI schema
+sub generate_test_payload {
+    my ($operation_id, $operation) = @_;
+
+    # Operation-specific payloads for common patterns
+    my %operation_payloads = (
+        # Order management
+        'createOrder' => '{"customerId":"test-customer","items":[{"productId":"test-product","quantity":1,"price":10.0}]}',
+        'payOrder' => '{"paymentMethod":"credit_card","amount":10.0}',
+        'shipOrder' => '{"carrier":"TestCarrier","trackingNumber":"TEST-123"}',
+
+        # User management
+        'createUser' => '{"name":"Test User","email":"test@example.com"}',
+        'updateUser' => '{"name":"Updated User"}',
+
+        # Generic create operations
+        'create' => '{"name":"Test Item"}',
+    );
+
+    # Try exact match first
+    return $operation_payloads{$operation_id} if $operation_payloads{$operation_id};
+
+    # Try partial match (e.g., createOrder matches create pattern)
+    for my $pattern (keys %operation_payloads) {
+        if ($operation_id =~ /$pattern/i) {
+            return $operation_payloads{$pattern};
+        }
+    }
+
+    # TODO: Parse OpenAPI requestBody schema for more accurate payloads
+    # For now, return a generic payload
+    return '{"data":"test"}';
 }
 
 # Run HTTP server example (public interface)
@@ -553,22 +699,56 @@ sub run_http_example_internal {
     # Test endpoints
     my $http = HTTP::Tiny->new(timeout => 5);
     my @output;
+    my %captured_ids;  # Store IDs from responses for use in subsequent requests
+    my $latest_created_id;  # Track the most recently created resource ID
 
     # Extract endpoints from OpenAPI spec
     if ($spec->{paths}) {
-        for my $path (sort keys %{$spec->{paths}}) {
-            for my $method (sort keys %{$spec->{paths}{$path}}) {
+        # Build list of all operations with metadata
+        my @operations;
+        for my $path (keys %{$spec->{paths}}) {
+            for my $method (keys %{$spec->{paths}{$path}}) {
                 next if $method =~ /^(parameters|servers|description)$/;
 
                 my $operation = $spec->{paths}{$path}{$method};
-                my $url = "http://localhost:$port$path";
+                my $operation_id = $operation->{operationId} // '';
 
-                say "  Testing $method $path" if $options{verbose};
+                push @operations, {
+                    path => $path,
+                    method => $method,
+                    operation => $operation,
+                    operation_id => $operation_id,
+                    has_params => ($path =~ /\{/ ? 1 : 0),
+                    order => (get_operation_order($operation_id, $path) // 50),
+                };
+            }
+        }
 
-                # Substitute path parameters with test values
+        # Sort operations by execution order
+        @operations = sort {
+            ($a->{order} // 50) <=> ($b->{order} // 50) ||
+            (!$a->{has_params}) <=> (!$b->{has_params}) ||
+            $a->{path} cmp $b->{path}
+        } @operations;
+
+        for my $op (@operations) {
+            my ($path, $method, $operation, $operation_id) =
+                @{$op}{qw(path method operation operation_id)};
+            my $url = "http://localhost:$port$path";
+
+                say "  Testing $method $path ($operation_id)" if $options{verbose};
+
+                # Substitute path parameters with captured IDs
                 my $test_url = $url;
-                $test_url =~ s/\{id\}/123/g;
+                if ($test_url =~ /\{id\}/) {
+                    # Use the most recently created ID (from POST/PUT operations)
+                    my $use_id = $latest_created_id || $captured_ids{$operation_id} || '123';
+                    $test_url =~ s/\{id\}/$use_id/g;
+                }
                 $test_url =~ s/\{(\w+)\}/test-$1/g;
+
+                # Generate appropriate request payload based on operation
+                my $payload = generate_test_payload($operation_id, $operation);
 
                 my $response;
                 if (uc($method) eq 'GET') {
@@ -576,12 +756,12 @@ sub run_http_example_internal {
                 } elsif (uc($method) eq 'POST') {
                     $response = $http->post($test_url, {
                         headers => { 'Content-Type' => 'application/json' },
-                        content => '{"message":"test"}',
+                        content => $payload,
                     });
                 } elsif (uc($method) eq 'PUT') {
                     $response = $http->put($test_url, {
                         headers => { 'Content-Type' => 'application/json' },
-                        content => '{"message":"test"}',
+                        content => $payload,
                     });
                 } elsif (uc($method) eq 'DELETE') {
                     $response = $http->delete($test_url);
@@ -592,12 +772,25 @@ sub run_http_example_internal {
 
                 if ($response && $response->{success}) {
                     push @output, sprintf("%s %s => %s", uc($method), $path, $response->{content});
+
+                    # Try to capture ID from response for subsequent requests
+                    if ($response->{content} && $response->{content} =~ /"id"\s*:\s*"([^"]+)"/) {
+                        my $captured_id = $1;
+                        $captured_ids{$operation_id} = $captured_id;
+
+                        # Track the latest created ID (from create operations)
+                        if ($operation_id =~ /^create/i || uc($method) eq 'POST') {
+                            $latest_created_id = $captured_id;
+                            say "  Captured ID: $captured_id (latest)" if $options{verbose};
+                        } else {
+                            say "  Captured ID: $captured_id" if $options{verbose};
+                        }
+                    }
                 } elsif ($response) {
                     push @output, sprintf("%s %s => ERROR: %s %s", uc($method), $path, $response->{status}, $response->{reason});
                 } else {
                     push @output, sprintf("%s %s => ERROR: No response", uc($method), $path);
                 }
-            }
         }
     }
 
@@ -777,6 +970,10 @@ sub run_file_watcher_example_internal {
 sub run_test {
     my ($example_name) = @_;
 
+    # Delete old diff file if it exists
+    my $diff_file = "Examples/$example_name/expected.diff";
+    unlink $diff_file if -f $diff_file;
+
     # Read test hints
     my $hints = read_test_hint($example_name);
 
@@ -921,8 +1118,8 @@ sub run_test {
             };
         }
     } else {
-        # Use exact string comparison (current behavior)
-        if ($output eq $expected) {
+        # Use pattern matching for comparison (supports __ID__, __UUID__, etc.)
+        if (matches_pattern($output, $expected)) {
             return {
                 name => $example_name,
                 type => $type,
@@ -941,6 +1138,9 @@ sub run_test {
                 status => 'FAIL',
                 message => "Output mismatch$diff",
                 duration => $duration,
+                expected => $expected,
+                actual => $output,
+                expected_file => $expected_file,
             };
         }
     }
@@ -985,6 +1185,9 @@ sub generate_expected {
 
     # Normalize output before saving
     $output = normalize_output($output, $type);
+
+    # Auto-replace dynamic values with placeholders
+    $output = auto_placeholderize($output, $type);
 
     # Write with enhanced metadata header
     open my $fh, '>', $expected_file or die "Cannot write $expected_file: $!";
@@ -1039,6 +1242,60 @@ sub generate_all_expected {
     say "\nGeneration complete. $current expected files created/updated.";
 }
 
+# Create temporary files for diff comparison
+sub create_temp_files {
+    my ($result) = @_;
+
+    require File::Temp;
+    my $temp_expected = File::Temp->new(SUFFIX => '.expected.txt', UNLINK => 0);
+    my $temp_actual = File::Temp->new(SUFFIX => '.actual.txt', UNLINK => 0);
+
+    print $temp_expected $result->{expected};
+    print $temp_actual $result->{actual};
+
+    close $temp_expected;
+    close $temp_actual;
+
+    return ($temp_expected->filename, $temp_actual->filename);
+}
+
+# Create diff file for a failed test
+sub create_diff_file {
+    my ($result) = @_;
+
+    # Only create diff for failures with expected/actual data
+    return unless $result->{status} eq 'FAIL';
+    return unless $result->{expected} && $result->{actual};
+
+    # Determine diff file path (next to expected.txt)
+    my $expected_file = $result->{expected_file} || '';
+    return unless $expected_file && -f $expected_file;
+
+    my $diff_file = $expected_file;
+    $diff_file =~ s/expected\.txt$/expected.diff/;
+
+    # Create temporary files for diff command
+    my ($temp_expected, $temp_actual) = create_temp_files($result);
+
+    # Generate unified diff
+    my $diff_output = `diff -u "$temp_expected" "$temp_actual" 2>&1`;
+
+    # Write diff to file
+    open my $fh, '>', $diff_file or do {
+        warn "Failed to create diff file: $diff_file: $!\n";
+        unlink $temp_expected, $temp_actual;
+        return;
+    };
+
+    print $fh $diff_output;
+    close $fh;
+
+    # Cleanup temp files
+    unlink $temp_expected, $temp_actual;
+
+    print "  Created diff: $diff_file\n" if $options{verbose};
+}
+
 # Run all tests
 sub run_all_tests {
     my ($examples) = @_;
@@ -1074,6 +1331,13 @@ sub run_all_tests {
 
     # Print summary
     print_summary(\@results, $total_duration);
+
+    # Create diff files for all failed tests
+    for my $result (@results) {
+        if ($result->{status} eq 'FAIL') {
+            create_diff_file($result);
+        }
+    }
 
     # Exit code
     my $failed = grep { $_->{status} eq 'FAIL' || $_->{status} eq 'ERROR' } @results;
