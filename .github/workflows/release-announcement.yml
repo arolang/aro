@@ -39,17 +39,18 @@ jobs:
           echo "version=$VERSION" >> $GITHUB_OUTPUT
           echo "tag=$TAG" >> $GITHUB_OUTPUT
 
-          # Check if this is a pre-release (contains hyphen like -alpha, -beta, -rc)
-          if [[ "$VERSION" =~ - ]]; then
-            echo "is_prerelease=true" >> $GITHUB_OUTPUT
-            echo "This is a pre-release version: $VERSION"
+          # Detect release type for display
+          if [[ "$VERSION" =~ -alpha ]]; then
+            echo "release_type=Alpha" >> $GITHUB_OUTPUT
+          elif [[ "$VERSION" =~ -beta ]]; then
+            echo "release_type=Beta" >> $GITHUB_OUTPUT
+          elif [[ "$VERSION" =~ -rc ]]; then
+            echo "release_type=RC" >> $GITHUB_OUTPUT
           else
-            echo "is_prerelease=false" >> $GITHUB_OUTPUT
-            echo "This is a stable release version: $VERSION"
+            echo "release_type=Stable" >> $GITHUB_OUTPUT
           fi
 
       - name: Post release announcement
-        if: steps.version.outputs.is_prerelease == 'false'
         env:
           MASTODON_INSTANCE: ${{ secrets.MASTODON_INSTANCE }}
           MASTODON_ACCESS_TOKEN: ${{ secrets.MASTODON_ACCESS_TOKEN }}
@@ -59,14 +60,7 @@ jobs:
 
       - name: Summary
         run: |
-          if [[ "${{ steps.version.outputs.is_prerelease }}" == "true" ]]; then
-            echo "### Pre-release - Announcement Skipped" >> $GITHUB_STEP_SUMMARY
-            echo "Version: ${{ steps.version.outputs.version }}" >> $GITHUB_STEP_SUMMARY
-            echo "Tag: ${{ steps.version.outputs.tag }}" >> $GITHUB_STEP_SUMMARY
-            echo "**Note:** Mastodon announcements are only posted for stable releases (non pre-releases)" >> $GITHUB_STEP_SUMMARY
-          else
-            echo "### Release Announcement Posted" >> $GITHUB_STEP_SUMMARY
-            echo "Version: ${{ steps.version.outputs.version }}" >> $GITHUB_STEP_SUMMARY
-            echo "Tag: ${{ steps.version.outputs.tag }}" >> $GITHUB_STEP_SUMMARY
-            echo "Posted to: https://social.uitsmijter.io/@aro" >> $GITHUB_STEP_SUMMARY
-          fi
+          echo "### ${{ steps.version.outputs.release_type }} Release Announcement Posted" >> $GITHUB_STEP_SUMMARY
+          echo "Version: ${{ steps.version.outputs.version }}" >> $GITHUB_STEP_SUMMARY
+          echo "Tag: ${{ steps.version.outputs.tag }}" >> $GITHUB_STEP_SUMMARY
+          echo "Posted to: https://social.uitsmijter.io/@aro" >> $GITHUB_STEP_SUMMARY
