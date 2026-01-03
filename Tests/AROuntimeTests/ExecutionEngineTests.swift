@@ -8,6 +8,11 @@ import Testing
 @testable import ARORuntime
 @testable import AROParser
 
+// Initialize test cleanup as early as possible
+private let _initTestCleanup: Void = {
+    _ = TestCleanup.shared
+}()
+
 // MARK: - Execution Engine Tests
 
 @Suite("Execution Engine Tests")
@@ -201,6 +206,9 @@ struct RuntimeClassTests {
     func testRuntimeInit() {
         let runtime = Runtime()
         #expect(runtime != nil)
+
+        // Cleanup: signal shutdown in case any waiters were registered
+        defer { ShutdownCoordinator.shared.signalShutdown() }
     }
 
     @Test("Runtime with custom dependencies")
@@ -209,6 +217,9 @@ struct RuntimeClassTests {
         let eventBus = EventBus()
         let runtime = Runtime(actionRegistry: registry, eventBus: eventBus)
         #expect(runtime != nil)
+
+        // Cleanup: signal shutdown in case any waiters were registered
+        defer { ShutdownCoordinator.shared.signalShutdown() }
     }
 
     @Test("Runtime service registration")
@@ -218,6 +229,9 @@ struct RuntimeClassTests {
         runtime.register(service: service)
         // Service should be registered for execution
         #expect(Bool(true))
+
+        // Cleanup: signal shutdown in case any waiters were registered
+        defer { ShutdownCoordinator.shared.signalShutdown() }
     }
 
     // Note: We don't test runtime.stop() because it calls

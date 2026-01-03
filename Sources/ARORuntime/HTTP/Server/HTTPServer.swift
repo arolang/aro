@@ -61,11 +61,12 @@ public final class AROHTTPServer: HTTPServerService, @unchecked Sendable {
 
     public init(eventBus: EventBus = .shared) {
         self.eventBus = eventBus
-        self.group = MultiThreadedEventLoopGroup(numberOfThreads: System.coreCount)
+        self.group = EventLoopGroupManager.shared.getEventLoopGroup()
     }
 
     deinit {
-        try? group.syncShutdownGracefully()
+        // Event loop group shutdown is managed by EventLoopGroupManager
+        // Don't shut down here as the group might be shared
     }
 
     // MARK: - Request Handler Configuration

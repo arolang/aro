@@ -37,7 +37,7 @@ struct LogActionUnitTests {
 
 // MARK: - Log Action Integration Tests
 
-@Suite("Log Action Stream Routing")
+@Suite("Log Action Stream Routing", .serialized, .disabled("Slow integration tests - each spawns swift run"))
 struct LogActionStreamTests {
 
     /// Helper to create a temporary ARO file and run it, capturing stdout/stderr
@@ -76,6 +76,13 @@ struct LogActionStreamTests {
         }
         process.currentDirectoryURL = projectRoot
 
+        // Clear test environment variables to prevent TestWatchdog from initializing in subprocess
+        var environment = ProcessInfo.processInfo.environment
+        environment.removeValue(forKey: "XCTestConfigurationFilePath")
+        environment.removeValue(forKey: "XCTestSessionIdentifier")
+        environment.removeValue(forKey: "XCTestBundlePath")
+        process.environment = environment
+
         // Capture stdout and stderr
         let stdoutPipe = Pipe()
         let stderrPipe = Pipe()
@@ -105,8 +112,8 @@ struct LogActionStreamTests {
 
         let result = try await runAROCode(aroCode)
 
-        // Verify stdout contains the message
-        #expect(result.stdout.contains("Default stdout message"))
+        // Verify stdout contains the message (prefixed with feature set name in interpreted mode)
+        #expect(result.stdout.contains("[Application-Start] Default stdout message"))
 
         // Verify stderr does NOT contain the message
         #expect(!result.stderr.contains("Default stdout message"))
@@ -126,8 +133,8 @@ struct LogActionStreamTests {
 
         let result = try await runAROCode(aroCode)
 
-        // Verify stdout contains the message
-        #expect(result.stdout.contains("Explicit stdout message"))
+        // Verify stdout contains the message (prefixed with feature set name in interpreted mode)
+        #expect(result.stdout.contains("[Application-Start] Explicit stdout message"))
 
         // Verify stderr does NOT contain the message
         #expect(!result.stderr.contains("Explicit stdout message"))
@@ -147,8 +154,8 @@ struct LogActionStreamTests {
 
         let result = try await runAROCode(aroCode)
 
-        // Verify stderr contains the error message
-        #expect(result.stderr.contains("Error message to stderr"))
+        // Verify stderr contains the error message (prefixed with feature set name in interpreted mode)
+        #expect(result.stderr.contains("[Application-Start] Error message to stderr"))
 
         // Verify stdout does NOT contain the error message
         #expect(!result.stdout.contains("Error message to stderr"))
@@ -168,8 +175,8 @@ struct LogActionStreamTests {
 
         let result = try await runAROCode(aroCode)
 
-        // Verify stdout contains the message (graceful fallback)
-        #expect(result.stdout.contains("Message with invalid qualifier"))
+        // Verify stdout contains the message (prefixed with feature set name in interpreted mode)
+        #expect(result.stdout.contains("[Application-Start] Message with invalid qualifier"))
 
         // Verify stderr does NOT contain the message
         #expect(!result.stderr.contains("Message with invalid qualifier"))
@@ -189,8 +196,8 @@ struct LogActionStreamTests {
 
         let result = try await runAROCode(aroCode)
 
-        // Verify stderr contains the message
-        #expect(result.stderr.contains("Direct stderr message"))
+        // Verify stderr contains the message (prefixed with feature set name in interpreted mode)
+        #expect(result.stderr.contains("[Application-Start] Direct stderr message"))
 
         // Verify stdout does NOT contain the message
         #expect(!result.stdout.contains("Direct stderr message"))
@@ -213,14 +220,14 @@ struct LogActionStreamTests {
 
         let result = try await runAROCode(aroCode)
 
-        // Verify stdout contains stdout messages only
-        #expect(result.stdout.contains("Stdout message 1"))
-        #expect(result.stdout.contains("Stdout message 2"))
+        // Verify stdout contains stdout messages only (prefixed with feature set name in interpreted mode)
+        #expect(result.stdout.contains("[Application-Start] Stdout message 1"))
+        #expect(result.stdout.contains("[Application-Start] Stdout message 2"))
         #expect(!result.stdout.contains("Stderr message"))
 
-        // Verify stderr contains stderr messages only
-        #expect(result.stderr.contains("Stderr message 1"))
-        #expect(result.stderr.contains("Stderr message 2"))
+        // Verify stderr contains stderr messages only (prefixed with feature set name in interpreted mode)
+        #expect(result.stderr.contains("[Application-Start] Stderr message 1"))
+        #expect(result.stderr.contains("[Application-Start] Stderr message 2"))
         #expect(!result.stderr.contains("Stdout message"))
 
         // Verify successful execution

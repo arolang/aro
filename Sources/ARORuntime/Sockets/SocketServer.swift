@@ -70,11 +70,12 @@ public final class AROSocketServer: SocketServerService, @unchecked Sendable {
 
     public init(eventBus: EventBus = .shared) {
         self.eventBus = eventBus
-        self.group = MultiThreadedEventLoopGroup(numberOfThreads: System.coreCount)
+        self.group = EventLoopGroupManager.shared.getEventLoopGroup()
     }
 
     deinit {
-        try? group.syncShutdownGracefully()
+        // Event loop group shutdown is managed by EventLoopGroupManager
+        // Don't shut down here as the group might be shared
     }
 
     // MARK: - SocketServerService
@@ -290,12 +291,13 @@ public final class AROSocketClient: @unchecked Sendable {
 
     public init(eventBus: EventBus = .shared) {
         self.eventBus = eventBus
-        self.group = MultiThreadedEventLoopGroup(numberOfThreads: 1)
+        self.group = EventLoopGroupManager.shared.getEventLoopGroup()
         self.connectionId = UUID().uuidString
     }
 
     deinit {
-        try? group.syncShutdownGracefully()
+        // Event loop group shutdown is managed by EventLoopGroupManager
+        // Don't shut down here as the group might be shared
     }
 
     // MARK: - Connection

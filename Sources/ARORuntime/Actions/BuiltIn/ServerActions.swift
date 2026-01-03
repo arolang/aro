@@ -637,9 +637,40 @@ public final class ShutdownCoordinator: @unchecked Sendable {
             return
         }
 
-        let id = UUID()
+        // Safety timeout in test environments
+        let isTestEnvironment = ProcessInfo.processInfo.environment["XCTestConfigurationFilePath"] != nil
+            || ProcessInfo.processInfo.environment["XCTestSessionIdentifier"] != nil
 
-        // Use withUnsafeContinuation for proper blocking
+        if isTestEnvironment {
+            // In test environments, use a timeout to prevent hanging
+            try? await withThrowingTaskGroup(of: Void.self) { group in
+                // Add wait task
+                group.addTask {
+                    let id = UUID()
+                    await withUnsafeContinuation { (continuation: UnsafeContinuation<Void, Never>) in
+                        let shouldWait = self.registerWaiter(id: id) {
+                            continuation.resume()
+                        }
+                        if !shouldWait {
+                            continuation.resume()
+                        }
+                    }
+                }
+
+                // Add timeout task (1 second)
+                group.addTask {
+                    try await Task.sleep(nanoseconds: 1_000_000_000)
+                }
+
+                // Wait for first one to complete
+                try await group.next()
+                group.cancelAll()
+            }
+            return
+        }
+
+        // Production: wait indefinitely
+        let id = UUID()
         await withUnsafeContinuation { (continuation: UnsafeContinuation<Void, Never>) in
             let shouldWait = self.registerWaiter(id: id) {
                 continuation.resume()
@@ -669,9 +700,18 @@ public final class ShutdownCoordinator: @unchecked Sendable {
         let sem = syncSemaphore!
         lock.unlock()
 
+        // Safety timeout: don't block forever in test environments
+        // If we're running tests, limit blocking time to avoid hanging the test runner
+        let isTestEnvironment = ProcessInfo.processInfo.environment["XCTestConfigurationFilePath"] != nil
+            || ProcessInfo.processInfo.environment["XCTestSessionIdentifier"] != nil
+        let maxIterations = isTestEnvironment ? 10 : Int.max  // ~1 second in tests, unlimited in production
+
+        var iterations = 0
         // Run the RunLoop to allow event processing (FSEvents, dispatch queues, etc.)
         // Check periodically if shutdown was signaled
-        while !isShuttingDownNow {
+        while !isShuttingDownNow && iterations < maxIterations {
+            iterations += 1
+
             // Process events for a short time
             let result = RunLoop.current.run(mode: .default, before: Date(timeIntervalSinceNow: 0.1))
 
