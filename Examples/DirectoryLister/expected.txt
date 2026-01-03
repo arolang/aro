@@ -1,4 +1,4 @@
-# Generated: Sat Jan  3 09:54:39 2026
+# Generated: Sat Jan  3 10:18:09 2026
 # Type: console
 # Command: aro run ./Examples/DirectoryLister
 ---
@@ -10,15 +10,15 @@
   listing.error: false
   listing.exitCode: 0
   listing.message: Command executed successfully
-  listing.output: total 336
-drwxr-xr-x  43 kris  staff   1376 Jan  3 09:30 .
+  listing.output: total 352
+drwxr-xr-x  43 kris  staff   1376 Jan  3 10:15 .
 drwxr-xr-x  70 kris  staff   2240 Dec 31 08:36 ..
 -rw-r--r--@  1 kris  staff   6148 Dec 29 10:05 .DS_Store
 drwxr-xr-x   3 kris  staff     96 Jan  2 19:56 .aro-cache
-drwxr-xr-x  14 kris  staff    448 Jan  3 09:54 .build
-drwx------   3 kris  staff     96 Jan  2 19:54 .claude
+drwxr-xr-x  14 kris  staff    448 Jan  3 09:55 .build
+drwx------   3 kris  staff     96 Jan  3 10:03 .claude
 -rw-r--r--   1 kris  staff    598 Dec  5 08:31 .dockerignore
-drwxr-xr-x  16 kris  staff    512 Jan  3 09:54 .git
+drwxr-xr-x  16 kris  staff    512 Jan  3 10:18 .git
 drwxr-xr-x   8 kris  staff    256 Dec 31 14:10 .github
 -rw-r--r--   1 kris  staff   1841 Jan  3 09:31 .gitignore
 drwxr-xr-x@  9 kris  staff    288 Dec 29 18:52 .idea
@@ -50,7 +50,7 @@ drwxr-xr-x  16 kris  staff    512 Jan  3 09:20 cards
 drwxr-xr-x   4 kris  staff    128 Dec 28 01:17 demo-output
 drwxr-xr-x   5 kris  staff    160 Jan  2 13:08 homebrew-aro
 drwxr-xr-x   6 kris  staff    192 Dec  6 10:21 node_modules
-drwxr-xr-x  14 kris  staff    448 Jan  3 09:14 output
+drwxr-xr-x  14 kris  staff    448 Jan  3 10:16 output
 -rw-r--r--   1 kris  staff  10193 Dec 31 14:10 package-lock.json
 -rw-r--r--   1 kris  staff     71 Dec  5 08:31 package.json
--rwxr-xr-x   1 kris  staff  20266 Jan  3 09:30 test-examples.pl
+-rwxr-xr-x   1 kris  staff  27261 Jan  3 10:15 test-examples.pl

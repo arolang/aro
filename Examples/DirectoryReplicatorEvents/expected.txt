@@ -1,4 +1,4 @@
-# Generated: Sat Jan  3 11:24:51 2026
+# Generated: Sat Jan  3 11:26:19 2026
 # Type: console
 # Command: aro run ./Examples/DirectoryReplicatorEvents
 # NOTE: This example uses test-script for verification

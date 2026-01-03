@@ -1,9 +1,11 @@
-# Generated: Sat Jan  3 09:13:43 2026
+# Generated: Sat Jan  3 10:19:13 2026
 # Type: console
 # Command: aro run ./Examples/DirectoryReplicator
+# Workdir: Examples/DirectoryReplicator
 ---
 [Application-Start] Scanning template directory...
-Runtime error: Runtime Error: Cannot list the all-entries: recursively from the directory: template-path.
-  Feature: Application-Start
-  Business Activity: Directory Replicator
-  Statement: <List> the <all-entries: recursively> from the <directory: template-path>.
+[Application-Start] foo
+[Application-Start] foo/bar
+[Application-Start] baz
+[Application-Start] Directory structure replicated.
+[OK] replication

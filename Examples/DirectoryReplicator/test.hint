@@ -1,0 +1,3 @@
+# DirectoryReplicator uses relative path ../template
+# Must run from within example directory
+workdir: Examples/DirectoryReplicator
