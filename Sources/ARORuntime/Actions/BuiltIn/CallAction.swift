@@ -120,9 +120,8 @@ public struct CallAction: ActionImplementation {
             args: args
         )
 
-        // Bind result
-        context.bind(result.base, value: callResult)
-
+        // Don't bind result here - let the ActionBridge handle binding
+        // This prevents "Cannot rebind immutable variable" errors
         return callResult
     }
 }

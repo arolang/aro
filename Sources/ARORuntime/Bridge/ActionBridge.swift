@@ -147,13 +147,14 @@ private func executeAction(
     )
 
     // Check semantic role - response/export actions don't bind their results
-    // to avoid overwriting the variable they're outputting
     let semanticRole = ActionSemanticRole.classify(verb: verb)
     let shouldBindResult = semanticRole != .response && semanticRole != .export
 
-    // Bind result if we got one (and action type allows it)
+    // Only bind the result if the action hasn't already bound it
+    // This prevents "Cannot rebind immutable variable" errors while still
+    // supporting actions that don't bind their own results.
     if let value = actionResult {
-        if shouldBindResult {
+        if shouldBindResult && !ctxHandle.context.exists(resultDesc.base) {
             ctxHandle.context.bind(resultDesc.base, value: value)
         }
         return boxResult(value)
@@ -161,7 +162,7 @@ private func executeAction(
 
     // Return empty string on failure
     let fallback = ""
-    if shouldBindResult {
+    if shouldBindResult && !ctxHandle.context.exists(resultDesc.base) {
         ctxHandle.context.bind(resultDesc.base, value: fallback)
     }
     return boxResult(fallback)

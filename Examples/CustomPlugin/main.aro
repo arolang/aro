@@ -9,18 +9,18 @@
     <Log> the <msg> for the <console> with "Testing custom greeting plugin...".
 
     (* Call the custom greeting service (provided by plugin) *)
-    <Call> the <hello-msg> from the <greeting: hello> with {
+    <Call> the <result1> from the <greeting: hello> with {
         name: "ARO Developer"
     }.
 
-    <Log> the <msg> for the <console> with <hello-msg>.
+    <Log> the <msg> for the <console> with <result1>.
 
     (* Call another method on the same service *)
-    <Call> the <goodbye-msg> from the <greeting: goodbye> with {
+    <Call> the <result2> from the <greeting: goodbye> with {
         name: "ARO Developer"
     }.
 
-    <Log> the <msg> for the <console> with <goodbye-msg>.
+    <Log> the <msg> for the <console> with <result2>.
 
     <Return> an <OK: status> for the <startup>.
 }

@@ -224,12 +224,14 @@ public final class FeatureSetExecutor: @unchecked Sendable {
                 // Check if the action needs to be executed
                 // These actions need to run even with expression shortcut:
                 // - "then", "assert" for testing
+                // - "call", "invoke" for external service calls (they bind their own results)
                 // - "update", "modify", "change", "set" when they have specifiers (field-level updates)
                 // - "create", "make", "build" when they have specifiers (typed entities need ID generation)
                 // - "merge", "combine", "join", "concat" always need execution (they transform and bind result)
                 // - "compute", "calculate", "derive" when they have specifiers (operations like +7d, hash, format)
                 // - "extract", "parse", "get" when they have specifiers (property extraction like :days, :next)
                 let testVerbs: Set<String> = ["then", "assert"]
+                let requestVerbs: Set<String> = ["call", "invoke"]
                 let updateVerbs: Set<String> = ["update", "modify", "change", "set"]
                 let createVerbs: Set<String> = ["create", "make", "build", "construct"]
                 let mergeVerbs: Set<String> = ["merge", "combine", "join", "concat"]
@@ -240,6 +242,7 @@ public final class FeatureSetExecutor: @unchecked Sendable {
                 // Response actions like write/read/store should NOT have their result bound to expression value
                 let responseVerbs: Set<String> = ["write", "read", "store", "save", "persist", "log", "print", "send", "emit"]
                 let needsExecution = testVerbs.contains(verb.lowercased()) ||
+                    requestVerbs.contains(verb.lowercased()) ||
                     mergeVerbs.contains(verb.lowercased()) ||
                     responseVerbs.contains(verb.lowercased()) ||
                     queryVerbs.contains(verb.lowercased()) ||
