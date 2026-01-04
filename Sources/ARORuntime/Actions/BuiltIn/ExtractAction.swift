@@ -654,41 +654,6 @@ public struct ReceiveAction: ActionImplementation {
     }
 }
 
-/// Fetches data from an HTTP endpoint
-public struct FetchAction: ActionImplementation {
-    public static let role: ActionRole = .request
-    public static let verbs: Set<String> = ["fetch", "call"]
-    public static let validPrepositions: Set<Preposition> = [.from, .via]
-
-    public init() {}
-
-    public func execute(
-        result: ResultDescriptor,
-        object: ObjectDescriptor,
-        context: ExecutionContext
-    ) async throws -> any Sendable {
-        try validatePreposition(object.preposition)
-
-        // Get HTTP client service
-        guard let httpClient = context.service(HTTPClientService.self) else {
-            // Fallback to variable resolution
-            guard let source = context.resolveAny(object.base) else {
-                throw ActionError.undefinedVariable(object.base)
-            }
-            // source is already `any Sendable` from resolveAny
-            return source
-        }
-
-        // Get URL from object
-        guard let url: String = context.resolve(object.base) else {
-            throw ActionError.undefinedVariable(object.base)
-        }
-
-        // Perform HTTP request
-        return try await httpClient.get(url: url)
-    }
-}
-
 /// Reads data from a file with automatic format detection (ARO-0040)
 /// The file extension determines the parsing format:
 /// - .json: Parse as JSON -> Map or Array

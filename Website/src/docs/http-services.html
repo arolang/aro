@@ -222,15 +222,15 @@
         <p>Make outgoing HTTP requests:</p>
 
         <pre><code><span class="code-comment">(* Simple GET *)</span>
-<span class="code-keyword">&lt;Fetch&gt;</span> the <span class="code-result">&lt;data&gt;</span> from <span class="code-string">"https://api.example.com/resource"</span>.
+<span class="code-keyword">&lt;Request&gt;</span> the <span class="code-result">&lt;data&gt;</span> from <span class="code-string">"https://api.example.com/resource"</span>.
 
 <span class="code-comment">(* GET with response handling *)</span>
-<span class="code-keyword">&lt;Fetch&gt;</span> the <span class="code-result">&lt;response&gt;</span> from <span class="code-string">"https://api.example.com/users"</span>.
+<span class="code-keyword">&lt;Request&gt;</span> the <span class="code-result">&lt;response&gt;</span> from <span class="code-string">"https://api.example.com/users"</span>.
 <span class="code-keyword">&lt;Extract&gt;</span> the <span class="code-result">&lt;users&gt;</span> from the &lt;response: body&gt;.</code></pre>
 
         <h3>Request Methods</h3>
         <pre><code><span class="code-comment">(* GET *)</span>
-<span class="code-keyword">&lt;Fetch&gt;</span> the <span class="code-result">&lt;users&gt;</span> from &lt;UserAPI: GET /users&gt;.
+<span class="code-keyword">&lt;Request&gt;</span> the <span class="code-result">&lt;data&gt;</span> from &lt;UserAPI: GET /users&gt;.
 
 <span class="code-comment">(* POST *)</span>
 <span class="code-keyword">&lt;Call&gt;</span> the <span class="code-result">&lt;result&gt;</span> via &lt;UserAPI: POST /users&gt; with &lt;user-data&gt;.
@@ -243,7 +243,7 @@
 
         <h3>Response Handling</h3>
         <pre><code><span class="code-feature">(Fetch External Data: External Service)</span> {
-    <span class="code-keyword">&lt;Fetch&gt;</span> the <span class="code-result">&lt;response&gt;</span> from <span class="code-string">"https://api.example.com/data"</span>.
+    <span class="code-keyword">&lt;Request&gt;</span> the <span class="code-result">&lt;response&gt;</span> from <span class="code-string">"https://api.example.com/data"</span>.
 
     <span class="code-keyword">&lt;Extract&gt;</span> the <span class="code-result">&lt;status-code&gt;</span> from the &lt;response: statusCode&gt;.
     <span class="code-keyword">&lt;Extract&gt;</span> the <span class="code-result">&lt;body&gt;</span> from the &lt;response: body&gt;.

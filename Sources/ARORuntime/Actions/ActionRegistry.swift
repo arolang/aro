@@ -47,7 +47,6 @@ public final class ActionRegistry: @unchecked Sendable {
         register(ExtractAction.self)
         register(RetrieveAction.self)
         register(ReceiveAction.self)
-        register(FetchAction.self)
         register(RequestAction.self)
         register(ReadAction.self)
 
@@ -81,7 +80,6 @@ public final class ActionRegistry: @unchecked Sendable {
         register(StartAction.self)
         register(StopAction.self)
         register(ListenAction.self)
-        register(RouteAction.self)
 
         // Socket actions (ARO-0024)
         register(ConnectAction.self)

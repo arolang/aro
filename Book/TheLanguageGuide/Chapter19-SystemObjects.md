@@ -103,7 +103,7 @@ The following diagram illustrates how data flows between your ARO feature sets a
   <text x="220" y="155" font-family="monospace" font-size="10" fill="#27ae60">&lt;Read&gt;</text>
 
   <path d="M 140 200 L 300 200" stroke="#27ae60" stroke-width="2" fill="none" marker-end="url(#arrowhead)"/>
-  <text x="220" y="195" font-family="monospace" font-size="10" fill="#27ae60">&lt;Fetch&gt;</text>
+  <text x="220" y="195" font-family="monospace" font-size="10" fill="#27ae60">&lt;Request&gt;</text>
 
   <path d="M 140 260 L 300 220" stroke="#27ae60" stroke-width="2" fill="none" marker-end="url(#arrowhead)"/>
 

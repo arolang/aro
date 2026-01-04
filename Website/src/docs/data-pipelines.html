@@ -224,13 +224,13 @@
         <div class="highlight-box">
             <h4>Pipeline Philosophy</h4>
             <p>
-                Chain operations naturally: <strong>fetch &#x2192; filter &#x2192; map &#x2192; reduce</strong>.
+                Chain operations naturally: <strong>retrieve &#x2192; filter &#x2192; map &#x2192; reduce</strong>.
                 No SQL complexity, no JOINs, no subqueries. Just elegant data transformation.
             </p>
         </div>
 
         <div class="pipeline-visual">
-            <span class="pipeline-step">Fetch</span>
+            <span class="pipeline-step">Retrieve</span>
             <span class="pipeline-arrow">&#x2192;</span>
             <span class="pipeline-step">Filter</span>
             <span class="pipeline-arrow">&#x2192;</span>
@@ -239,14 +239,14 @@
             <span class="pipeline-step">Reduce</span>
         </div>
 
-        <h2>Fetch: Retrieve and Filter</h2>
+        <h2>Retrieve: Query and Filter</h2>
         <p>
             Retrieve data with optional filtering, ordering, and limiting.
             Results are always typed:
         </p>
 
-        <pre><code><span class="code-comment">(* Fetch with filtering and ordering *)</span>
-<span class="code-keyword">&lt;Fetch&gt;</span> the <span class="code-result">&lt;active-users: List&lt;User&gt;&gt;</span> from the &lt;users&gt;
+        <pre><code><span class="code-comment">(* Retrieve with filtering and ordering *)</span>
+<span class="code-keyword">&lt;Retrieve&gt;</span> the <span class="code-result">&lt;active-users: List&lt;User&gt;&gt;</span> from the &lt;users&gt;
     where &lt;status&gt; is <span class="code-string">"active"</span>
     order by &lt;name&gt; asc
     limit 100.</code></pre>
@@ -404,8 +404,8 @@
         </p>
 
         <pre><code><span class="code-feature">(Sales Report: Analytics)</span> {
-    <span class="code-comment">(* Fetch recent orders *)</span>
-    <span class="code-keyword">&lt;Fetch&gt;</span> the <span class="code-result">&lt;recent-orders: List&lt;Order&gt;&gt;</span> from the &lt;orders&gt;
+    <span class="code-comment">(* Retrieve recent orders *)</span>
+    <span class="code-keyword">&lt;Retrieve&gt;</span> the <span class="code-result">&lt;recent-orders: List&lt;Order&gt;&gt;</span> from the &lt;orders&gt;
         where &lt;created-at&gt; > now().minus(30.days)
         order by &lt;created-at&gt; desc.
 

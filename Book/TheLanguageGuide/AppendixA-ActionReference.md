@@ -9,7 +9,6 @@ Complete reference for all built-in actions in ARO.
 | **Extract** | REQUEST | Pull data from structured source | `<Extract> the <id> from the <request: params>.` |
 | **Retrieve** | REQUEST | Fetch from repository | `<Retrieve> the <user> from the <users> where id = <id>.` |
 | **Request** | REQUEST | Make HTTP request | `<Request> the <data> from the <api-url>.` |
-| **Fetch** | REQUEST | Fetch from external API | `<Fetch> the <weather> from <WeatherAPI: GET /forecast>.` |
 | **Read** | REQUEST | Read from file | `<Read> the <config> from the <file: "./config.json">.` |
 | **List** | REQUEST | List directory contents | `<List> the <files> from the <directory: src-path>.` |
 | **Stat** | REQUEST | Get file metadata | `<Stat> the <info> for the <file: "./doc.pdf">.` |
@@ -48,7 +47,6 @@ Complete reference for all built-in actions in ARO.
 | **Connect** | SERVICE | Connect to service | `<Connect> to <host: "db"> on port 5432.` |
 | **Close** | SERVICE | Close connection | `<Close> the <connection>.` |
 | **Broadcast** | SERVICE | Send to all connections | `<Broadcast> the <msg> to the <server>.` |
-| **Route** | SERVICE | Define HTTP route | `<Route> the <handler> for "/api/users".` |
 | **Keepalive** | SERVICE | Keep app running | `<Keepalive> the <app> for the <events>.` |
 | **Call** | SERVICE | Call external API | `<Call> the <result> via <API: POST /users>.` |
 | **Accept** | STATE | Accept state transition | `<Accept> the <order: placed>.` |
@@ -140,26 +138,6 @@ Fetches data from a repository.
 <Retrieve> the <user> from the <user-repository> where id = <user-id>.
 <Retrieve> the <orders> from the <order-repository> where status = "pending".
 <Retrieve> the <products> from the <repository> where category = <cat> and active = true.
-```
-
-**Valid Prepositions:** `from`
-
----
-
-### Fetch
-
-Makes HTTP requests to external APIs.
-
-**Syntax:**
-```aro
-<Fetch> the <result> from <url-or-api-reference>.
-```
-
-**Examples:**
-```aro
-<Fetch> the <data> from "https://api.example.com/resource".
-<Fetch> the <users> from <UserAPI: GET /users>.
-<Fetch> the <weather> from <WeatherAPI: GET /forecast?city=${city}>.
 ```
 
 **Valid Prepositions:** `from`
@@ -1037,7 +1015,6 @@ The `Keepalive` action blocks execution until a shutdown signal is received (SIG
 | Extract | REQUEST | from |
 | Retrieve | REQUEST | from |
 | Request | REQUEST | from, to, via |
-| Fetch | REQUEST | from |
 | Read | REQUEST | from |
 | Receive | REQUEST | from |
 | Execute | REQUEST | for, on, with |
@@ -1075,7 +1052,6 @@ The `Keepalive` action blocks execution until a shutdown signal is received (SIG
 | Listen | SERVICE | on, as |
 | Connect | SERVICE | to, on, as |
 | Close | SERVICE | - |
-| Route | SERVICE | for |
 | Call | SERVICE | via, with |
 | Broadcast | SERVICE | to, with |
 | Keepalive | SERVICE | for |

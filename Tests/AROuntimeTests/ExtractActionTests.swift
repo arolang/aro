@@ -401,38 +401,6 @@ struct ReceiveActionTests {
     }
 }
 
-// MARK: - Fetch Action Tests
-
-@Suite("Fetch Action Tests")
-struct FetchActionTests {
-
-    @Test("Fetch action role is request")
-    func testFetchActionRole() {
-        #expect(FetchAction.role == .request)
-    }
-
-    @Test("Fetch action verbs")
-    func testFetchActionVerbs() {
-        #expect(FetchAction.verbs.contains("fetch"))
-        #expect(FetchAction.verbs.contains("call"))
-    }
-
-    @Test("Fetch falls back to variable resolution")
-    func testFetchFallback() async throws {
-        let action = FetchAction()
-        let context = RuntimeContext(featureSetName: "Test")
-        context.bind("url", value: "http://example.com")
-
-        let span = SourceSpan(at: SourceLocation())
-        let result = ResultDescriptor(base: "result", specifiers: [], span: span)
-        let object = ObjectDescriptor(preposition: .from, base: "url", specifiers: [], span: span)
-
-        let value = try await action.execute(result: result, object: object, context: context)
-
-        #expect(value as? String == "http://example.com")
-    }
-}
-
 // MARK: - Read Action Tests
 
 @Suite("Read Action Tests")

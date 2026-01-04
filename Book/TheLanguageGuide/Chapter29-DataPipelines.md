@@ -8,7 +8,7 @@ ARO supports four core data operations:
 
 | Operation | Purpose | Example |
 |-----------|---------|---------|
-| **Fetch** | Retrieve and filter data | `<Fetch> the <users: List<User>> from the <repository>...` |
+| **Retrieve** | Retrieve and filter data | `<Retrieve> the <users: List<User>> from the <repository>...` |
 | **Filter** | Filter existing collection | `<Filter> the <active: List<User>> from the <users>...` |
 | **Map** | Transform to different type | `<Map> the <summaries> as List<UserSummary> from the <users>.` |
 | **Reduce** | Aggregate to single value | `<Reduce> the <total> as Float from the <orders> with sum(<amount>).` |
@@ -29,30 +29,30 @@ Both produce identical results. The `as Type` syntax (ARO-0038) can be more read
 
 ---
 
-## Fetch
+## Retrieve
 
 Retrieves data with optional filtering, sorting, and pagination.
 
 ```aro
-(* Basic fetch *)
-<Fetch> the <users: List<User>> from the <user-repository>.
+(* Basic retrieve *)
+<Retrieve> the <users: List<User>> from the <user-repository>.
 
 (* With filter *)
-<Fetch> the <active-users: List<User>> from the <users>
+<Retrieve> the <active-users: List<User>> from the <users>
     where <status> is "active".
 
 (* With sorting *)
-<Fetch> the <recent-users: List<User>> from the <users>
+<Retrieve> the <recent-users: List<User>> from the <users>
     order by <created-at> desc.
 
 (* With pagination *)
-<Fetch> the <page: List<User>> from the <users>
+<Retrieve> the <page: List<User>> from the <users>
     order by <name> asc
     limit 20
     offset 40.
 
 (* Combined *)
-<Fetch> the <top-customers: List<User>> from the <users>
+<Retrieve> the <top-customers: List<User>> from the <users>
     where <tier> is "premium"
     order by <total-purchases> desc
     limit 10.
@@ -215,8 +215,8 @@ Chain operations to build complex data transformations:
 
 ```aro
 (Generate Report: Analytics) {
-    (* Step 1: Fetch recent orders *)
-    <Fetch> the <recent-orders: List<Order>> from the <orders>
+    (* Step 1: Retrieve recent orders *)
+    <Retrieve> the <recent-orders: List<Order>> from the <orders>
         where <created-at> > now().minus(30.days)
         order by <created-at> desc.
 
@@ -247,15 +247,15 @@ Sort results by one or more fields:
 
 ```aro
 (* Single field, ascending *)
-<Fetch> the <users: List<User>> from the <repository>
+<Retrieve> the <users: List<User>> from the <repository>
     order by <name> asc.
 
 (* Single field, descending *)
-<Fetch> the <recent: List<Order>> from the <orders>
+<Retrieve> the <recent: List<Order>> from the <orders>
     order by <created-at> desc.
 
 (* Multiple fields *)
-<Fetch> the <products: List<Product>> from the <catalog>
+<Retrieve> the <products: List<Product>> from the <catalog>
     order by <category> asc, <price> desc.
 ```
 
@@ -267,18 +267,18 @@ Limit results with offset for pagination:
 
 ```aro
 (* First page: items 1-20 *)
-<Fetch> the <page1: List<User>> from the <users>
+<Retrieve> the <page1: List<User>> from the <users>
     order by <name> asc
     limit 20.
 
 (* Second page: items 21-40 *)
-<Fetch> the <page2: List<User>> from the <users>
+<Retrieve> the <page2: List<User>> from the <users>
     order by <name> asc
     limit 20
     offset 20.
 
 (* Third page: items 41-60 *)
-<Fetch> the <page3: List<User>> from the <users>
+<Retrieve> the <page3: List<User>> from the <users>
     order by <name> asc
     limit 20
     offset 40.
@@ -330,8 +330,8 @@ components:
 
 (* Analytics report generation *)
 (Generate Report: Order Analytics) {
-    (* Fetch recent orders *)
-    <Fetch> the <recent: List<Order>> from the <orders>
+    (* Retrieve recent orders *)
+    <Retrieve> the <recent: List<Order>> from the <orders>
         where <created-at> > now().minus(30.days)
         order by <created-at> desc.
 

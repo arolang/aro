@@ -384,47 +384,6 @@ public struct ListenAction: ActionImplementation {
     }
 }
 
-/// Routes a request to a handler
-///
-/// The Route action dispatches incoming requests to appropriate handlers
-/// based on path, method, or other criteria.
-///
-/// ## Example
-/// ```
-/// <Route> the <request> through <router>.
-/// ```
-public struct RouteAction: ActionImplementation {
-    public static let role: ActionRole = .own
-    public static let verbs: Set<String> = ["route", "dispatch", "forward"]
-    public static let validPrepositions: Set<Preposition> = [.through, .via, .to]
-
-    public init() {}
-
-    public func execute(
-        result: ResultDescriptor,
-        object: ObjectDescriptor,
-        context: ExecutionContext
-    ) async throws -> any Sendable {
-        // Get request to route
-        guard let request = context.resolveAny(result.base) else {
-            throw ActionError.undefinedVariable(result.base)
-        }
-
-        // Get router
-        let routerName = object.base
-
-        // Try routing service
-        if let routerService = context.service(RouterService.self) {
-            return try await routerService.route(request: request)
-        }
-
-        // Emit routing event
-        context.emit(RouteRequestedEvent(requestType: String(describing: type(of: request)), router: routerName))
-
-        return RouteResult(router: routerName, success: true)
-    }
-}
-
 /// Native file watcher wrapper for compiled binaries
 public final class NativeFileWatcher: @unchecked Sendable {
     public static let shared = NativeFileWatcher()
@@ -497,11 +456,6 @@ public protocol FileMonitorService: Sendable {
     func unwatch(path: String) async throws
 }
 
-/// Router service protocol
-public protocol RouterService: Sendable {
-    func route(request: Any) async throws -> any Sendable
-}
-
 /// Result of a server start operation
 public struct ServerStartResult: Sendable, Equatable {
     public let serverType: String
@@ -521,12 +475,6 @@ public struct ServerStartResult: Sendable, Equatable {
 public struct ListenResult: Sendable, Equatable {
     public let type: String
     public let target: String
-}
-
-/// Result of a route operation
-public struct RouteResult: Sendable, Equatable {
-    public let router: String
-    public let success: Bool
 }
 
 // MARK: - Supporting Events
@@ -590,20 +538,6 @@ public struct ListenStartedEvent: RuntimeEvent {
         self.timestamp = Date()
         self.type = type
         self.target = target
-    }
-}
-
-/// Event requesting route handling
-public struct RouteRequestedEvent: RuntimeEvent {
-    public static var eventType: String { "route.requested" }
-    public let timestamp: Date
-    public let requestType: String
-    public let router: String
-
-    public init(requestType: String, router: String) {
-        self.timestamp = Date()
-        self.requestType = requestType
-        self.router = router
     }
 }
 

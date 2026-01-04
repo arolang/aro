@@ -31,7 +31,7 @@ ARO uses eight prepositions, each with specific semantic meaning:
 
 **Indicates:** The origin of data being pulled into the current context.
 
-**Common with:** `Extract`, `Retrieve`, `Fetch`, `Read`, `Receive`
+**Common with:** `Extract`, `Retrieve`, `Request`, `Read`, `Receive`
 
 ### Examples
 
@@ -45,8 +45,8 @@ ARO uses eight prepositions, each with specific semantic meaning:
 <Retrieve> the <user> from the <user-repository>.
 <Retrieve> the <orders> from the <order-repository> where <status> is "active".
 
-(* Fetch from external URL *)
-<Fetch> the <data> from "https://api.example.com/users".
+(* Request from external URL *)
+<Request> the <data> from "https://api.example.com/users".
 
 (* Read from file *)
 <Read> the <config> from the <file> with "config.json".
@@ -236,13 +236,13 @@ ARO uses eight prepositions, each with specific semantic meaning:
 
 **Indicates:** The pathway or method used.
 
-**Common with:** `Fetch`, `Send`
+**Common with:** `Request`, `Send`
 
 ### Examples
 
 ```aro
-(* Fetch via proxy *)
-<Fetch> the <data> from "https://api.example.com" via the <proxy>.
+(* Request via proxy *)
+<Request> the <data> from "https://api.example.com" via the <proxy>.
 
 (* Send via channel *)
 <Send> the <message> to the <user> via the <email-service>.
@@ -294,7 +294,7 @@ ARO uses eight prepositions, each with specific semantic meaning:
 | Push data out | `to` | `<Send> the <x> to the <y>` |
 | Store/transform | `into` | `<Store> the <x> into the <y>` |
 | Compare/validate | `against` | `<Validate> the <x> against the <y>` |
-| Specify channel | `via` | `<Fetch> the <x> via the <y>` |
+| Specify channel | `via` | `<Request> the <x> via the <y>` |
 | Specify location | `on` | `<Start> the <x> on <y>` |
 
 ---

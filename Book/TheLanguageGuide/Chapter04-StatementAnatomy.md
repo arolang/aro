@@ -58,13 +58,13 @@ Prepositions are small words that carry large meaning. In ARO, prepositions conn
 
 | Preposition | Meaning | Common Actions |
 |-------------|---------|----------------|
-| `from` | Source extraction | Extract, Retrieve, Fetch, Read |
+| `from` | Source extraction | Extract, Retrieve, Request, Read |
 | `with` | Accompaniment/provision | Create, Return, Emit |
 | `for` | Purpose/target | Compute, Return, Log |
 | `to` | Destination | Send, Write |
 | `into` | Insertion | Store |
 | `against` | Comparison/validation | Validate, Compare |
-| `via` | Intermediate channel | Fetch (with proxy) |
+| `via` | Intermediate channel | Request (with proxy) |
 | `on` | Location/attachment | Listen, Start |
 | `at` | Position/placement | CreateDirectory, Make |
 | `as` | Type annotation | Filter, Reduce, Map |
