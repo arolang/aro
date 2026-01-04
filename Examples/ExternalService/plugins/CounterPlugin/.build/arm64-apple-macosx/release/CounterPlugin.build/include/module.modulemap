@@ -1,3 +1,0 @@
-module CounterPlugin {
-    header "/Users/kris/Projects/ARO-Lang/Examples/ExternalService/plugins/CounterPlugin/.build/arm64-apple-macosx/release/CounterPlugin.build/include/CounterPlugin-Swift.h"
-}
