@@ -449,6 +449,150 @@ jobs:
           retention-days: 30
 
   # ===========================================================================
+  # Integration Tests (test-examples.pl on all platforms)
+  # ===========================================================================
+  integration-tests:
+    needs: [linux, macos, windows]
+    name: Integration Tests - ${{ matrix.os }}
+    runs-on: ${{ matrix.runner }}
+    continue-on-error: ${{ matrix.os == 'Windows' }}  # Windows may have issues
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: Linux
+            runner: ubuntu-latest
+            artifact: aro-linux-amd64
+            binary: aro
+            shell: bash
+          - os: macOS
+            runner: macos-15
+            artifact: aro-macos-arm64
+            binary: aro
+            shell: bash
+          - os: Windows
+            runner: windows-latest
+            artifact: aro-windows-amd64
+            binary: aro.exe
+            shell: bash
+    defaults:
+      run:
+        shell: ${{ matrix.shell }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v6
+
+      # ======================================================================
+      # Install Swift
+      # ======================================================================
+      - name: Setup Swift (Linux)
+        if: matrix.os == 'Linux'
+        run: |
+          # Swift is needed for native compilation tests
+          wget https://download.swift.org/swift-6.2.1-release/ubuntu2204/swift-6.2.1-RELEASE/swift-6.2.1-RELEASE-ubuntu22.04.tar.gz
+          tar xzf swift-6.2.1-RELEASE-ubuntu22.04.tar.gz
+          sudo mv swift-6.2.1-RELEASE-ubuntu22.04 /usr/share/swift
+          echo "/usr/share/swift/usr/bin" >> $GITHUB_PATH
+
+      - name: Setup Swift (macOS)
+        if: matrix.os == 'macOS'
+        uses: swift-actions/setup-swift@v3
+        with:
+          swift-version: ${{ env.SWIFT_VERSION }}
+
+      - name: Setup Swift (Windows)
+        if: matrix.os == 'Windows'
+        uses: compnerd/gha-setup-swift@main
+        with:
+          swift-version: swift-6.2.1-release
+          swift-build: 6.2.1-RELEASE
+
+      # ======================================================================
+      # Install LLVM
+      # ======================================================================
+      - name: Install LLVM (Linux)
+        if: matrix.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y llvm-18 llvm-18-dev
+          echo "/usr/lib/llvm-18/bin" >> $GITHUB_PATH
+
+      - name: Install LLVM (macOS)
+        if: matrix.os == 'macOS'
+        run: |
+          brew install llvm@18
+          echo "/opt/homebrew/opt/llvm@18/bin" >> $GITHUB_PATH
+
+      - name: Install LLVM (Windows)
+        if: matrix.os == 'Windows'
+        run: |
+          choco install llvm --version=18.1.8 -y
+          echo "C:\\Program Files\\LLVM\\bin" >> $GITHUB_PATH
+
+      # ======================================================================
+      # Install Perl Modules
+      # ======================================================================
+      - name: Install Perl modules (Linux/macOS)
+        if: matrix.os != 'Windows'
+        run: |
+          cpan -T IPC::Run YAML::XS HTTP::Tiny Net::EmptyPort Term::ANSIColor Time::HiRes
+
+      - name: Install Perl modules (Windows)
+        if: matrix.os == 'Windows'
+        shell: pwsh
+        run: |
+          cpan -T IPC::Run YAML::XS HTTP::Tiny Net::EmptyPort Term::ANSIColor Time::HiRes
+
+      # ======================================================================
+      # Download and Install ARO Binary
+      # ======================================================================
+      - name: Download ARO artifact
+        uses: actions/download-artifact@v7
+        with:
+          name: ${{ matrix.artifact }}
+          path: ./aro-bin
+
+      - name: Install ARO (Linux/macOS)
+        if: matrix.os != 'Windows'
+        run: |
+          chmod +x ./aro-bin/${{ matrix.binary }}
+          sudo mkdir -p /usr/local/bin
+          sudo cp ./aro-bin/${{ matrix.binary }} /usr/local/bin/aro
+          aro --version
+
+      - name: Install ARO (Windows)
+        if: matrix.os == 'Windows'
+        shell: pwsh
+        run: |
+          $aroPath = "$env:GITHUB_WORKSPACE\aro-bin"
+          echo "$aroPath" | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
+          Copy-Item ".\aro-bin\${{ matrix.binary }}" ".\aro-bin\aro.exe" -Force
+
+      - name: Verify ARO installation (Windows)
+        if: matrix.os == 'Windows'
+        run: |
+          export PATH="$GITHUB_WORKSPACE/aro-bin:$PATH"
+          aro.exe --version || true
+
+      # ======================================================================
+      # Run Integration Tests
+      # ======================================================================
+      - name: Run integration tests
+        run: |
+          chmod +x test-examples.pl
+          perl test-examples.pl --verbose
+
+      - name: Upload test results on failure
+        if: failure()
+        uses: actions/upload-artifact@v6
+        with:
+          name: test-failures-${{ matrix.os }}
+          path: |
+            Examples/**/expected.diff
+            Examples/**/expected.txt
+          retention-days: 7
+
+  # ===========================================================================
   # Generate Documentation PDF
   # ===========================================================================
   documentation:
@@ -482,7 +626,7 @@ jobs:
   # ===========================================================================
   release:
     name: Create Release
-    needs: [linux, macos, windows, documentation]
+    needs: [linux, macos, windows, integration-tests, documentation]
     runs-on: ubuntu-latest
     if: github.ref_type == 'tag'
     permissions:
