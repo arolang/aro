@@ -12,6 +12,9 @@ on:
       - 'v*.*.*'      # Match v0.1.0, v1.0.0, etc.
       - '[0-9]*.*.*'  # Match 0.1.0-alpha.2, 1.0.0-rc.1, etc.
 
+permissions:
+  contents: read
+
 jobs:
   announce:
     name: Post to Mastodon

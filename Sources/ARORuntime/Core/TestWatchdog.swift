@@ -47,7 +47,9 @@ public final class TestWatchdog: @unchecked Sendable {
     /// Perform emergency shutdown of all resources
     private func performEmergencyShutdown() {
         // 1. Shutdown NIO event loops
+        #if !os(Windows)
         EventLoopGroupManager.shared.shutdownAll()
+        #endif
 
         // 2. Signal shutdown coordinator
         ShutdownCoordinator.shared.signalShutdown()
