@@ -589,7 +589,10 @@ sub run_console_example_internal {
             return (undef, "ERROR: $@");
         }
 
-        return ($out, undef);
+        # Combine stdout and stderr to match fallback behavior
+        my $combined = $out;
+        $combined .= $err if $err;
+        return ($combined, undef);
     } else {
         # Fallback to system()
         my $aro_bin = find_aro_binary();
@@ -1095,7 +1098,10 @@ sub run_file_watcher_example_internal {
     $cleanup->();
     @cleanup_handlers = grep { $_ != $cleanup } @cleanup_handlers;
 
-    return ($out, undef);
+    # Combine stdout and stderr
+    my $combined = $out;
+    $combined .= $err if $err;
+    return ($combined, undef);
 }
 
 # Run test for a single example

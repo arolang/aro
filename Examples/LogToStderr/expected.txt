@@ -1,4 +1,4 @@
-# Generated: Sun Jan  4 18:25:45 2026
+# Generated: Mon Jan  5 00:03:06 2026
 # Type: console
 # Command: aro run ./Examples/LogToStderr
 ---
@@ -6,19 +6,19 @@
 [Application-Start] This is a regular log message (no qualifier)
 [Application-Start] This explicitly goes to stdout
 [Application-Start]
+[Application-Start]
+[Application-Start] === Data Pipeline Example ===
+[Application-Start] {"id": 1, "name": "Alice"}
+[Application-Start] {"id": 2, "name": "Bob"}
+[Application-Start] {"id": 3, "name": "Charlie"}
+[Application-Start]
+[Application-Start] === Backward Compatibility ===
+[OK] demo
 [Application-Start] === Standard Error (stderr) ===
 [Application-Start] This goes to stderr
 [Application-Start] Warning: This is a warning message
 [Application-Start] Error: This is an error message
-[Application-Start]
-[Application-Start] === Data Pipeline Example ===
 [Application-Start] Processing started...
-[Application-Start] {"id": 1, "name": "Alice"}
-[Application-Start] {"id": 2, "name": "Bob"}
-[Application-Start] {"id": 3, "name": "Charlie"}
 [Application-Start] Processed 3 records
 [Application-Start] Processing complete
-[Application-Start]
-[Application-Start] === Backward Compatibility ===
 [Application-Start] Direct to stderr object (legacy syntax)
-[OK] demo
