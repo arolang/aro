@@ -1,0 +1,30 @@
+--- /var/folders/vn/3pg7yt9157qbqb72y_b_tv_w0000gn/T/4DeO4uVJqi.expected.txt	2026-01-04 23:45:14.320285974 +0100
++++ /var/folders/vn/3pg7yt9157qbqb72y_b_tv_w0000gn/T/BOSD2ToOjY.actual.txt	2026-01-04 23:45:14.320309307 +0100
+@@ -1,19 +1,18 @@
+ === ARO File Operations Demo ===
+ 1. Creating demo directory...
+-Created ./demo-output
++   Created ./demo-output
+ 2. Writing hello.txt...
+-Wrote hello.txt
++   Wrote hello.txt
+ 3. Appending to hello.txt...
+-Appended to hello.txt
++   Appended to hello.txt
+ 4. Reading hello.txt...
+-Content:
+ 5. Copying to backup...
+-Copied to hello-backup.txt
++   Copied to hello-backup.txt
+ 6. Listing demo-output directory...
+-Files in demo-output:
++   Files in demo-output:
+ 7. Renaming backup file...
+-Renamed to hello-copy.txt
++   Renamed to hello-copy.txt
+ 8. Final directory listing...
+-Final files listed
++   Final files listed
+ === Demo Complete ===
+ demo
+\ No newline at end of file

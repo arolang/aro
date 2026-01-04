@@ -1,0 +1,21 @@
+--- /var/folders/vn/3pg7yt9157qbqb72y_b_tv_w0000gn/T/kfHAnnzlPb.expected.txt	2026-01-04 23:45:14.334475895 +0100
++++ /var/folders/vn/3pg7yt9157qbqb72y_b_tv_w0000gn/T/LvH0vwJ1ct.actual.txt	2026-01-04 23:45:14.334501604 +0100
+@@ -1,17 +1,9 @@
+ === Standard Output (stdout) ===
+ This is a regular log message (no qualifier)
+ This explicitly goes to stdout
+-=== Standard Error (stderr) ===
+-This goes to stderr
+-Warning: This is a warning message
+-Error: This is an error message
+ === Data Pipeline Example ===
+-Processing started...
+ {"id": 1, "name": "Alice"}
+ {"id": 2, "name": "Bob"}
+ {"id": 3, "name": "Charlie"}
+-Processed 3 records
+-Processing complete
+ === Backward Compatibility ===
+-Direct to stderr object (legacy syntax)
+ demo
+\ No newline at end of file

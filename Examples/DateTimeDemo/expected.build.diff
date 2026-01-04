@@ -1,0 +1,41 @@
+--- /var/folders/vn/3pg7yt9157qbqb72y_b_tv_w0000gn/T/Svc7QVEthm.expected.txt	2026-01-04 23:45:14.284172003 +0100
++++ /var/folders/vn/3pg7yt9157qbqb72y_b_tv_w0000gn/T/4vYmKinBIh.actual.txt	2026-01-04 23:45:14.284203086 +0100
+@@ -1,8 +1,8 @@
+ === DateTime Demo ===
+ Current UTC time:
+-__TIMESTAMP__
++2026-01-04T22:43:43Z
+ Parsed meeting date:
+-__TIMESTAMP__
++2025-06-15T14:00:00Z
+ Year from now:
+ 2026
+ Month from now:
+@@ -12,16 +12,16 @@
+ Hour from now:
+ 22
+ Date calculations:
+-Next week:
+-__TIMESTAMP__
+-Yesterday:
+-__TIMESTAMP__
+-In one hour:
+-__TIMESTAMP__
++  Next week:
++2026-01-11T22:43:43Z
++2026-01-03T22:43:43Z
++  In one hour:
++2026-01-04T23:43:43Z
+ Date comparisons:
+-Is yesterday before now?
+-Is next week after now?
+-Is meeting in the past y?
+-Is meeting in 2025?
++  Is yesterday before now?
++  Is next week after now?
++  Is meeting in the past y?
++  Is meeting in the past n?
++  Is meeting in 2025?
+ === Demo Complete ===
+ demo
+\ No newline at end of file

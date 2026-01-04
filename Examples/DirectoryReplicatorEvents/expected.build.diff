@@ -1,0 +1,12 @@
+--- /var/folders/vn/3pg7yt9157qbqb72y_b_tv_w0000gn/T/SsXr5nbzO2.expected.txt	2026-01-04 23:58:58.345879867 +0100
++++ /var/folders/vn/3pg7yt9157qbqb72y_b_tv_w0000gn/T/w3625802ll.actual.txt	2026-01-04 23:58:58.345915741 +0100
+@@ -1,4 +1,8 @@
+ Scanning template directory...
++Error executing list: Directory not found: ../template
+ Found 0 directories
+ Storing directories to repository...
++directory-repository: created
++Error executing extract: Property 'path' not found on type 'String'
++Created:
+ replication
+\ No newline at end of file

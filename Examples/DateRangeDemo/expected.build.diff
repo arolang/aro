@@ -1,0 +1,55 @@
+--- /var/folders/vn/3pg7yt9157qbqb72y_b_tv_w0000gn/T/hRDqISGRsm.expected.txt	2026-01-04 23:59:32.935372185 +0100
++++ /var/folders/vn/3pg7yt9157qbqb72y_b_tv_w0000gn/T/Vdi4sCI_yd.actual.txt	2026-01-04 23:59:32.935436351 +0100
+@@ -1,34 +1,31 @@
+ === Date Range & Recurrence Demo ===
+ --- Date Ranges ---
++Error executing create: Runtime error: Date range requires a 'to' clause: <Create> the <range: date-range> from <start> to <end>.
+ Vacation period:
+-__TIMESTAMP__ to __TIMESTAMP__
+-Days in range:
+-14
+-Hours in range:
+-336
++  Days in range:
++  Hours in range:
++Error executing create: Runtime error: Date range requires a 'to' clause: <Create> the <range: date-range> from <start> to <end>.
+ Last 7 days range:
+-__TIMESTAMP__ to __TIMESTAMP__
+-Jan 10 is in vacation range
++  Jan 10 is in vacation range
+ --- Recurrence Patterns ---
+ Daily backup schedule:
+-Next occurrence:
+-__TIMESTAMP__
++  Next occurrence:
++2026-01-05T22:59:32Z
+ Weekly report schedule:
+-Next occurrence:
+-__TIMESTAMP__
++  Next occurrence:
++2026-01-11T22:59:32Z
+ Monday standup:
+-Next occurrence:
+-__TIMESTAMP__
++  Next occurrence:
++2026-01-05T22:59:32Z
+ Biweekly review:
+-Next occurrence:
+-__TIMESTAMP__
++  Next occurrence:
++2026-01-18T22:59:32Z
+ Payday (last Friday):
+-Next occurrence:
+-__TIMESTAMP__
++  Next occurrence:
++2026-02-27T00:00:00Z
+ --- Combined Usage ---
++Error executing create: Runtime error: Date range requires a 'to' clause: <Create> the <range: date-range> from <start> to <end>.
+ Q1 2025 range:
+-__TIMESTAMP__ to __TIMESTAMP__
+-Total days in Q1:
+-89
++  Total days in Q1:
+ === Demo Complete ===
+ demo
+\ No newline at end of file

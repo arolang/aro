@@ -336,6 +336,409 @@ sub run_script {
     return ($out, $err, $exit_code);
 }
 
+# Find compiled binary for an example
+sub find_binary {
+    my ($example_name, $dir) = @_;
+
+    # Try common locations
+    my @paths = (
+        "$dir/$example_name",                    # Examples/HelloWorld/HelloWorld
+        "$dir/.build/debug/$example_name",
+        "$dir/.build/release/$example_name",
+    );
+
+    for my $path (@paths) {
+        return $path if -x $path;
+    }
+    return undef;
+}
+
+# Execute binary based on test type
+sub execute_binary {
+    my ($binary, $type, $timeout) = @_;
+
+    if ($type eq 'console') {
+        return execute_binary_console($binary, $timeout);
+    } elsif ($type eq 'http') {
+        return execute_binary_http($binary, $timeout);
+    } elsif ($type eq 'socket') {
+        return execute_binary_socket($binary, $timeout);
+    } elsif ($type eq 'file') {
+        return execute_binary_file($binary, $timeout);
+    }
+
+    return (undef, "Unknown test type: $type");
+}
+
+# Execute console binary
+sub execute_binary_console {
+    my ($binary, $timeout) = @_;
+
+    if ($has_ipc_run) {
+        my ($in, $out, $err) = ('', '', '');
+        my $handle = eval {
+            IPC::Run::start([$binary], \$in, \$out, \$err, IPC::Run::timeout($timeout));
+        };
+
+        if ($@) {
+            return (undef, "Failed to start binary: $@");
+        }
+
+        eval { IPC::Run::finish($handle); };
+
+        if ($@) {
+            if ($@ =~ /timeout/) {
+                IPC::Run::kill_kill($handle);
+                return (undef, "TIMEOUT after ${timeout}s");
+            }
+            return (undef, "ERROR: $@");
+        }
+
+        return ($out, undef);
+    } else {
+        my $output = `$binary 2>&1`;
+        my $exit_code = $? >> 8;
+        if ($exit_code != 0) {
+            return (undef, "Exit code: $exit_code\n$output");
+        }
+        return ($output, undef);
+    }
+}
+
+# Execute HTTP server binary (similar to run_http_example_internal but with binary)
+sub execute_binary_http {
+    my ($binary, $timeout) = @_;
+
+    unless ($has_yaml && $has_http_tiny && $has_net_emptyport && $has_ipc_run) {
+        return (undef, "SKIP: Missing required modules (YAML::XS, HTTP::Tiny, Net::EmptyPort, IPC::Run)");
+    }
+
+    # Get directory from binary path to find openapi.yaml
+    my $dir = File::Basename::dirname($binary);
+    my $openapi_file = File::Spec->catfile($dir, 'openapi.yaml');
+
+    unless (-f $openapi_file) {
+        return (undef, "ERROR: No openapi.yaml found");
+    }
+
+    # Parse OpenAPI spec
+    my $spec = eval { YAML::XS::LoadFile($openapi_file) };
+    if ($@) {
+        return (undef, "ERROR: Failed to parse openapi.yaml: $@");
+    }
+
+    # Extract port
+    my $port = 8080;
+    if ($spec->{servers} && $spec->{servers}[0]{url}) {
+        my $url = $spec->{servers}[0]{url};
+        $port = $1 if $url =~ /:(\d+)/;
+    }
+
+    # Start server in background
+    my ($in, $out, $err) = ('', '', '');
+    my $handle = eval {
+        IPC::Run::start([$binary], \$in, \$out, \$err, IPC::Run::timeout($timeout));
+    };
+
+    if ($@) {
+        return (undef, "Failed to start binary: $@");
+    }
+
+    # Register cleanup
+    my $cleanup = sub {
+        eval {
+            unless ($handle->pumpable()) {
+                return 1;
+            }
+            eval { $handle->signal('TERM'); };
+            my $max_wait = 3.0;
+            my $waited = 0;
+            while ($waited < $max_wait && $handle->pumpable()) {
+                select(undef, undef, undef, 0.1);
+                $waited += 0.1;
+                eval { $handle->pump_nb(); };
+            }
+            if (!$handle->pumpable()) {
+                return 1;
+            }
+            eval { $handle->kill_kill(); };
+            return 1;
+        };
+    };
+    push @cleanup_handlers, $cleanup;
+
+    # Wait for server to be ready
+    my $ready = 0;
+    for (1..20) {
+        if (Net::EmptyPort::wait_port($port, 0.5)) {
+            $ready = 1;
+            last;
+        }
+    }
+
+    unless ($ready) {
+        $cleanup->();
+        @cleanup_handlers = grep { $_ != $cleanup } @cleanup_handlers;
+        return (undef, "ERROR: Binary server did not start on port $port\nSTDERR: $err");
+    }
+
+    # Test endpoints (reuse same logic as run_http_example_internal)
+    my $http = HTTP::Tiny->new(timeout => 5);
+    my @output;
+    my %captured_ids;
+    my $latest_created_id;
+
+    if ($spec->{paths}) {
+        my @operations;
+        for my $path (keys %{$spec->{paths}}) {
+            for my $method (keys %{$spec->{paths}{$path}}) {
+                next if $method =~ /^(parameters|servers|description)$/;
+                my $operation = $spec->{paths}{$path}{$method};
+                my $operation_id = $operation->{operationId} // '';
+                push @operations, {
+                    path => $path,
+                    method => $method,
+                    operation => $operation,
+                    operation_id => $operation_id,
+                    has_params => ($path =~ /\{/ ? 1 : 0),
+                    order => (get_operation_order($operation_id, $path) // 50),
+                };
+            }
+        }
+
+        @operations = sort {
+            ($a->{order} // 50) <=> ($b->{order} // 50) ||
+            (!$a->{has_params}) <=> (!$b->{has_params}) ||
+            $a->{path} cmp $b->{path}
+        } @operations;
+
+        for my $op (@operations) {
+            my ($path, $method, $operation, $operation_id) =
+                @{$op}{qw(path method operation operation_id)};
+            my $url = "http://localhost:$port$path";
+
+            my $test_url = $url;
+            if ($test_url =~ /\{id\}/) {
+                my $use_id = $latest_created_id || $captured_ids{$operation_id} || '123';
+                $test_url =~ s/\{id\}/$use_id/g;
+            }
+            $test_url =~ s/\{(\w+)\}/test-$1/g;
+
+            my $payload = generate_test_payload($operation_id, $operation);
+
+            my $response;
+            if (uc($method) eq 'GET') {
+                $response = $http->get($test_url);
+            } elsif (uc($method) eq 'POST') {
+                $response = $http->post($test_url, {
+                    headers => { 'Content-Type' => 'application/json' },
+                    content => $payload,
+                });
+            } elsif (uc($method) eq 'PUT') {
+                $response = $http->put($test_url, {
+                    headers => { 'Content-Type' => 'application/json' },
+                    content => $payload,
+                });
+            } elsif (uc($method) eq 'DELETE') {
+                $response = $http->delete($test_url);
+            } else {
+                next;
+            }
+
+            if ($response && $response->{success}) {
+                push @output, sprintf("%s %s => %s", uc($method), $path, $response->{content});
+                if ($response->{content} && $response->{content} =~ /"id"\s*:\s*"([^"]+)"/) {
+                    my $captured_id = $1;
+                    $captured_ids{$operation_id} = $captured_id;
+                    if ($operation_id =~ /^create/i || uc($method) eq 'POST') {
+                        $latest_created_id = $captured_id;
+                    }
+                }
+            } elsif ($response) {
+                push @output, sprintf("%s %s => ERROR: %s %s", uc($method), $path, $response->{status}, $response->{reason});
+            } else {
+                push @output, sprintf("%s %s => ERROR: No response", uc($method), $path);
+            }
+        }
+    }
+
+    # Cleanup
+    $cleanup->();
+    @cleanup_handlers = grep { $_ != $cleanup } @cleanup_handlers;
+
+    return (join("\n", @output), undef);
+}
+
+# Execute socket server binary
+sub execute_binary_socket {
+    my ($binary, $timeout) = @_;
+
+    unless ($has_ipc_run && $has_net_emptyport) {
+        return (undef, "SKIP: Missing required modules (IPC::Run, Net::EmptyPort)");
+    }
+
+    my $port = 9000;
+
+    # Start server in background
+    my ($in, $out, $err) = ('', '', '');
+    my $handle = eval {
+        IPC::Run::start([$binary], \$in, \$out, \$err, IPC::Run::timeout($timeout));
+    };
+
+    if ($@) {
+        return (undef, "Failed to start binary: $@");
+    }
+
+    # Register cleanup
+    my $cleanup = sub {
+        eval {
+            unless ($handle->pumpable()) {
+                return 1;
+            }
+            eval { $handle->signal('TERM'); };
+            my $max_wait = 3.0;
+            my $waited = 0;
+            while ($waited < $max_wait && $handle->pumpable()) {
+                select(undef, undef, undef, 0.1);
+                $waited += 0.1;
+                eval { $handle->pump_nb(); };
+            }
+            if (!$handle->pumpable()) {
+                return 1;
+            }
+            eval { $handle->kill_kill(); };
+            return 1;
+        };
+    };
+    push @cleanup_handlers, $cleanup;
+
+    # Wait for server to be ready
+    my $ready = 0;
+    for (1..20) {
+        if (Net::EmptyPort::wait_port($port, 0.5)) {
+            $ready = 1;
+            last;
+        }
+    }
+
+    unless ($ready) {
+        $cleanup->();
+        @cleanup_handlers = grep { $_ != $cleanup } @cleanup_handlers;
+        return (undef, "ERROR: Binary socket server did not start on port $port");
+    }
+
+    # Connect and test
+    use IO::Socket::INET;
+    my $socket = IO::Socket::INET->new(
+        PeerAddr => 'localhost',
+        PeerPort => $port,
+        Proto => 'tcp',
+        Timeout => 5,
+    );
+
+    my @output;
+    if ($socket) {
+        print $socket "Hello, ARO!\n";
+        my $response = <$socket>;
+        chomp $response if defined $response;
+        push @output, "Sent: Hello, ARO!";
+        push @output, "Received: " . ($response // "NO RESPONSE");
+        close $socket;
+    } else {
+        push @output, "ERROR: Could not connect to socket";
+    }
+
+    # Cleanup
+    $cleanup->();
+    @cleanup_handlers = grep { $_ != $cleanup } @cleanup_handlers;
+
+    return (join("\n", @output), undef);
+}
+
+# Execute file watcher binary
+sub execute_binary_file {
+    my ($binary, $timeout) = @_;
+
+    unless ($has_ipc_run) {
+        return (undef, "SKIP: Missing required module (IPC::Run)");
+    }
+
+    my $test_file = "/tmp/aro_test_$$.txt";
+
+    # Start watcher in background
+    my ($in, $out, $err) = ('', '', '');
+    my $handle = eval {
+        IPC::Run::start([$binary], \$in, \$out, \$err, IPC::Run::timeout($timeout));
+    };
+
+    if ($@) {
+        return (undef, "Failed to start binary: $@");
+    }
+
+    # Register cleanup
+    my $cleanup = sub {
+        eval {
+            kill 'TERM', $handle->pid if $handle->pumpable;
+            sleep 0.5;
+            IPC::Run::kill_kill($handle) if $handle->pumpable;
+            unlink $test_file if -f $test_file;
+        };
+    };
+    push @cleanup_handlers, $cleanup;
+
+    # Wait for startup
+    sleep 2;
+
+    # Create file
+    system("touch $test_file");
+    sleep 1;
+
+    # Modify file
+    system("echo 'test' >> $test_file");
+    sleep 1;
+
+    # Delete file
+    unlink $test_file;
+    sleep 1;
+
+    # Capture output
+    eval { IPC::Run::finish($handle, IPC::Run::timeout(2)) };
+
+    # Cleanup
+    $cleanup->();
+    @cleanup_handlers = grep { $_ != $cleanup } @cleanup_handlers;
+
+    return ($out, undef);
+}
+
+# Run binary phase: build and execute
+sub run_binary_phase {
+    my ($example_name, $dir, $type, $timeout) = @_;
+
+    # Step 1: Build binary
+    my $aro_bin = find_aro_binary();
+    my $build_start = time;
+    my $build_output = `$aro_bin build $dir 2>&1`;
+    my $build_time = time - $build_start;
+
+    if ($? != 0) {
+        return (undef, "BUILD ERROR: $build_output", $build_time);
+    }
+
+    # Step 2: Find binary
+    my $binary = find_binary($example_name, $dir);
+    unless ($binary && -x $binary) {
+        return (undef, "Binary not found after build", $build_time);
+    }
+
+    # Step 3: Run binary
+    my $exec_start = time;
+    my ($output, $error) = execute_binary($binary, $type, $timeout);
+    my $exec_time = time - $exec_start;
+
+    return ($output, $error, $build_time + $exec_time);
+}
+
 # Detect example type
 sub detect_example_type {
     my ($example_name) = @_;
@@ -403,6 +806,29 @@ sub normalize_output {
 
     # Normalize hash values (for HashTest example)
     $output =~ s/\b[a-f0-9]{32,64}\b/__HASH__/g if $type && $type eq 'hash';
+
+    return $output;
+}
+
+# Strip optional feature-set prefix and response formatting from output lines
+# The interpreter outputs [Feature-Name] prefix, but binaries don't
+# Binaries may also output response formatting lines (e.g., "  value: ...")
+# This allows the same expected.txt to match both outputs
+sub normalize_feature_prefix {
+    my ($output) = @_;
+
+    # Remove [feature-set-name] prefix from each line
+    # Matches: [anything-in-brackets] followed by space
+    # Example: "[Application-Start] message" -> "message"
+    $output =~ s/^\[[^\]]+\]\s+//gm;
+
+    # Remove response formatting lines (start with whitespace + key: value)
+    # Example: "  value: Hello" or "  status: 200"
+    # These are from Response.format() output that binaries include
+    $output =~ s/^\s+\w+:.*$//gm;
+
+    # Remove empty lines created by the above filtering
+    $output =~ s/\n\n+/\n/g;
 
     return $output;
 }
@@ -1078,13 +1504,16 @@ sub run_file_watcher_example_internal {
     return ($out, undef);
 }
 
-# Run test for a single example
+# Run test for a single example (two-phase: run + build)
 sub run_test {
     my ($example_name) = @_;
 
-    # Delete old diff file if it exists
-    my $diff_file = "Examples/$example_name/expected.diff";
-    unlink $diff_file if -f $diff_file;
+    # Delete old diff files if they exist
+    my $dir = File::Spec->catdir($examples_dir, $example_name);
+    my $run_diff_file = File::Spec->catfile($dir, 'expected.run.diff');
+    my $build_diff_file = File::Spec->catfile($dir, 'expected.build.diff');
+    unlink $run_diff_file if -f $run_diff_file;
+    unlink $build_diff_file if -f $build_diff_file;
 
     # Read test hints
     my $hints = read_test_hint($example_name);
@@ -1094,9 +1523,13 @@ sub run_test {
         return {
             name => $example_name,
             type => 'UNKNOWN',
-            status => 'SKIP',
-            message => "Skipped: $hints->{skip}",
-            duration => 0,
+            run_status => 'SKIP',
+            build_status => 'SKIP',
+            run_message => "Skipped: $hints->{skip}",
+            build_message => "Skipped",
+            run_duration => 0,
+            build_duration => 0,
+            total_duration => 0,
         };
     }
 
@@ -1106,165 +1539,133 @@ sub run_test {
     # Use timeout from hints or default
     my $timeout = $hints->{timeout} // $options{timeout};
 
-    my $start_time = time;
-
     say "Testing $example_name ($type)..." if $options{verbose};
 
-    # Execute with workdir and pre-script support
-    my ($output, $error) = run_test_in_workdir(
+    # Read expected output once
+    my $expected_file = File::Spec->catfile($dir, 'expected.txt');
+    my $expected = '';
+    if (-f $expected_file) {
+        open my $fh, '<', $expected_file or die "Cannot read $expected_file: $!";
+        $expected = do { local $/; <$fh> };
+        close $fh;
+        $expected =~ s/^#.*?\n---\n//s;  # Strip metadata
+    }
+
+    # Phase 1: Interpreter Run
+    my $run_start = time;
+    my ($run_output, $run_error) = run_test_in_workdir(
         $example_name,
         $hints->{workdir},
         $timeout,
         $type,
         $hints->{'pre-script'}
     );
+    my $run_duration = time - $run_start;
 
-    my $duration = time - $start_time;
+    my $run_status = 'ERROR';
+    my $run_message = '';
+    my $run_actual = '';
+    my $run_expected = '';
 
-    if ($error) {
-        return {
-            name => $example_name,
-            type => $type,
-            status => $error =~ /^SKIP/ ? 'SKIP' : 'ERROR',
-            message => $error,
-            duration => $duration,
-        };
-    }
-
-    # If test-script is defined, use it instead of output comparison
-    if (defined $hints->{'test-script'}) {
-        say "  Running test-script: $hints->{'test-script'}" if $options{verbose};
-
-        # Need to be in workdir for test-script
-        my $orig_cwd = cwd();
-        if (defined $hints->{workdir}) {
-            my $abs_workdir = File::Spec->file_name_is_absolute($hints->{workdir})
-                ? $hints->{workdir}
-                : File::Spec->catdir($RealBin, $hints->{workdir});
-            chdir $abs_workdir if -d $abs_workdir;
-        }
-
-        my ($test_out, $test_err, $exit_code) = run_script(
-            $hints->{'test-script'},
-            $timeout,
-            "test-script"
-        );
-
-        chdir $orig_cwd;
-
-        if ($exit_code == 0) {
-            say "  Test script passed" if $options{verbose};
-            return {
-                name => $example_name,
-                type => $type,
-                status => 'PASS',
-                message => '',
-                duration => $duration,
-            };
-        } else {
-            return {
-                name => $example_name,
-                type => $type,
-                status => 'FAIL',
-                message => "Test script failed (exit $exit_code)" . ($test_err ? ": $test_err" : ""),
-                duration => $duration,
-                actual => $test_err,
-            };
-        }
-    }
-
-    # Compare with expected output
-    my $expected_file = File::Spec->catfile($examples_dir, $example_name, 'expected.txt');
-
-    unless (-f $expected_file) {
-        return {
-            name => $example_name,
-            type => $type,
-            status => 'SKIP',
-            message => 'No expected output file (run with --generate)',
-            duration => $duration,
-        };
-    }
-
-    # Read expected output
-    open my $fh, '<', $expected_file or die "Cannot read $expected_file: $!";
-    my $expected = do { local $/; <$fh> };
-    close $fh;
-
-    # Strip metadata header
-    $expected =~ s/^#.*?\n---\n//s;
-
-    # Trim whitespace from both (without other normalization for pattern matching)
-    my $output_for_comparison = $output;
-    my $expected_for_comparison = $expected;
-    $output_for_comparison =~ s/^\s+|\s+$//g;
-    $output_for_comparison =~ s/ +$//gm;  # Remove trailing spaces from lines
-    $expected_for_comparison =~ s/^\s+|\s+$//g;
-    $expected_for_comparison =~ s/ +$//gm;
-
-    # Choose validation method based on occurrence-check directive
-    if (defined $hints->{'occurrence-check'} && $hints->{'occurrence-check'} eq 'true') {
-        # Use occurrence-based validation (order-independent)
-        # For occurrence check, we need normalized output
-        my $output_normalized = normalize_output($output, $type);
-        my $expected_normalized = normalize_output($expected, $type);
-
-        my ($all_found, $missing_ref) = check_output_occurrences($output_normalized, $expected_normalized);
-
-        if ($all_found) {
-            say "  All expected output lines found (order-independent)" if $options{verbose};
-            return {
-                name => $example_name,
-                type => $type,
-                status => 'PASS',
-                message => '',
-                duration => $duration,
-            };
-        } else {
-            my @missing = @$missing_ref;
-            my $diff = '';
-            if ($options{verbose}) {
-                $diff = "\nExpected:\n$expected_normalized\n\nActual:\n$output_normalized\n";
-            }
-            return {
-                name => $example_name,
-                type => $type,
-                status => 'FAIL',
-                message => "Missing " . scalar(@missing) . " expected line(s)$diff",
-                duration => $duration,
-                expected => $expected_normalized,
-                actual => $output_normalized,
-                diff => "Missing lines:\n" . join("\n", map { "  - $_" } @missing),
-            };
-        }
+    if (defined $run_error && $run_error =~ /^SKIP/) {
+        $run_status = 'SKIP';
+        $run_message = $run_error;
+    } elsif (defined $run_error) {
+        $run_status = 'ERROR';
+        $run_message = $run_error;
+    } elsif (!-f $expected_file) {
+        $run_status = 'SKIP';
+        $run_message = 'No expected output file';
     } else {
-        # Use pattern matching for comparison (supports __ID__, __UUID__, etc.)
-        # Do NOT normalize - pattern matching compares real values against placeholders
-        if (matches_pattern($output_for_comparison, $expected_for_comparison)) {
-            return {
-                name => $example_name,
-                type => $type,
-                status => 'PASS',
-                message => '',
-                duration => $duration,
-            };
+        # Compare with expected.txt
+        my $output_trimmed = $run_output;
+        my $expected_trimmed = $expected;
+
+        # Strip optional feature-set prefix from both
+        $output_trimmed = normalize_feature_prefix($output_trimmed);
+        $expected_trimmed = normalize_feature_prefix($expected_trimmed);
+
+        # Now trim whitespace
+        $output_trimmed =~ s/^\s+|\s+$//g;
+        $output_trimmed =~ s/ +$//gm;
+        $expected_trimmed =~ s/^\s+|\s+$//g;
+        $expected_trimmed =~ s/ +$//gm;
+
+        if (matches_pattern($output_trimmed, $expected_trimmed)) {
+            $run_status = 'PASS';
+            say "  Run phase: PASS" if $options{verbose};
         } else {
-            my $diff = '';
-            if ($options{verbose}) {
-                $diff = "\nExpected:\n$expected_for_comparison\n\nActual:\n$output_for_comparison\n";
-            }
-            return {
-                name => $example_name,
-                type => $type,
-                status => 'FAIL',
-                message => "Output mismatch$diff",
-                duration => $duration,
-                expected => $expected_for_comparison,
-                actual => $output_for_comparison,
-                expected_file => $expected_file,
-            };
+            $run_status = 'FAIL';
+            $run_message = "Output mismatch";
+            $run_actual = $output_trimmed;
+            $run_expected = $expected_trimmed;
+            say "  Run phase: FAIL" if $options{verbose};
         }
     }
+
+    # Phase 2: Binary Build & Run (only if run phase passed)
+    my $build_status = 'SKIP';
+    my $build_message = 'Not tested';
+    my $build_duration = 0;
+    my $build_actual = '';
+    my $build_expected = '';
+
+    if ($run_status eq 'PASS') {
+        say "  Starting build phase..." if $options{verbose};
+        my ($build_output, $build_error, $build_time) =
+            run_binary_phase($example_name, $dir, $type, $timeout);
+
+        $build_duration = $build_time;
+
+        if ($build_error) {
+            $build_status = 'ERROR';
+            $build_message = $build_error;
+            say "  Build phase: ERROR - $build_error" if $options{verbose};
+        } else {
+            my $output_trimmed = $build_output;
+            my $expected_trimmed = $expected;
+
+            # Strip optional feature-set prefix from both
+            $output_trimmed = normalize_feature_prefix($output_trimmed);
+            $expected_trimmed = normalize_feature_prefix($expected_trimmed);
+
+            # Now trim whitespace
+            $output_trimmed =~ s/^\s+|\s+$//g;
+            $output_trimmed =~ s/ +$//gm;
+            $expected_trimmed =~ s/^\s+|\s+$//g;
+            $expected_trimmed =~ s/ +$//gm;
+
+            if (matches_pattern($output_trimmed, $expected_trimmed)) {
+                $build_status = 'PASS';
+                say "  Build phase: PASS" if $options{verbose};
+            } else {
+                $build_status = 'FAIL';
+                $build_message = "Output mismatch";
+                $build_actual = $output_trimmed;
+                $build_expected = $expected_trimmed;
+                say "  Build phase: FAIL" if $options{verbose};
+            }
+        }
+    }
+
+    return {
+        name => $example_name,
+        type => $type,
+        run_status => $run_status,
+        build_status => $build_status,
+        run_message => $run_message,
+        build_message => $build_message,
+        run_duration => $run_duration,
+        build_duration => $build_duration,
+        total_duration => $run_duration + $build_duration,
+        expected_file => $expected_file,
+        # For run phase diff
+        run_expected => $run_expected,
+        run_actual => $run_actual,
+        # For build phase diff
+        build_expected => $build_expected,
+        build_actual => $build_actual,
+    };
 }
 
 # Generate expected output for an example
@@ -1382,18 +1783,26 @@ sub create_temp_files {
 
 # Create diff file for a failed test
 sub create_diff_file {
-    my ($result) = @_;
+    my ($result, $diff_filename) = @_;
 
     # Only create diff for failures with expected/actual data
     return unless $result->{status} eq 'FAIL';
     return unless $result->{expected} && $result->{actual};
 
-    # Determine diff file path (next to expected.txt)
+    # Determine diff file path
     my $expected_file = $result->{expected_file} || '';
     return unless $expected_file && -f $expected_file;
 
-    my $diff_file = $expected_file;
-    $diff_file =~ s/expected\.txt$/expected.diff/;
+    my $diff_file;
+    if ($diff_filename) {
+        # Use custom filename (e.g., expected.run.diff, expected.build.diff)
+        my $dir = File::Basename::dirname($expected_file);
+        $diff_file = File::Spec->catfile($dir, $diff_filename);
+    } else {
+        # Default: expected.diff
+        $diff_file = $expected_file;
+        $diff_file =~ s/expected\.txt$/expected.diff/;
+    }
 
     # Create temporary files for diff command
     my ($temp_expected, $temp_actual) = create_temp_files($result);
@@ -1435,15 +1844,32 @@ sub run_all_tests {
         push @results, $result;
 
         unless ($options{verbose}) {
-            my $status = $result->{status};
-            if ($status eq 'PASS') {
-                say colored('PASS', 'green');
-            } elsif ($status eq 'FAIL') {
-                say colored('FAIL', 'red');
-            } elsif ($status eq 'SKIP') {
-                say colored('SKIP', 'yellow');
-            } else {
-                say colored('ERROR', 'red');
+            # Show both run and build status
+            print "Run: " . colored_status($result->{run_status}) .
+                  " Build: " . colored_status($result->{build_status}) . "\n";
+
+            # Show error messages for failures
+            if ($result->{run_status} eq 'FAIL' || $result->{run_status} eq 'ERROR') {
+                if ($result->{run_message}) {
+                    my $msg = $result->{run_message};
+                    # For long messages, show first line only
+                    if (length($msg) > 100) {
+                        $msg = (split /\n/, $msg)[0];
+                        $msg = substr($msg, 0, 97) . "..." if length($msg) > 100;
+                    }
+                    print "  Run error: " . colored($msg, 'red') . "\n";
+                }
+            }
+            if ($result->{build_status} eq 'FAIL' || $result->{build_status} eq 'ERROR') {
+                if ($result->{build_message}) {
+                    my $msg = $result->{build_message};
+                    # For long messages, show first line only
+                    if (length($msg) > 100) {
+                        $msg = (split /\n/, $msg)[0];
+                        $msg = substr($msg, 0, 97) . "..." if length($msg) > 100;
+                    }
+                    print "  Build error: " . colored($msg, 'red') . "\n";
+                }
             }
         }
     }
@@ -1453,61 +1879,110 @@ sub run_all_tests {
     # Print summary
     print_summary(\@results, $total_duration);
 
-    # Create diff files for all failed tests
+    # Create diff files for both phases
     for my $result (@results) {
-        if ($result->{status} eq 'FAIL') {
-            create_diff_file($result);
+        # Create diff for run phase if failed
+        if ($result->{run_status} eq 'FAIL' && $result->{run_actual}) {
+            create_diff_file({
+                status => 'FAIL',
+                expected => $result->{run_expected},
+                actual => $result->{run_actual},
+                expected_file => $result->{expected_file},
+            }, 'expected.run.diff');
+        }
+
+        # Create diff for build phase if failed
+        if ($result->{build_status} eq 'FAIL' && $result->{build_actual}) {
+            create_diff_file({
+                status => 'FAIL',
+                expected => $result->{build_expected},
+                actual => $result->{build_actual},
+                expected_file => $result->{expected_file},
+            }, 'expected.build.diff');
         }
     }
 
-    # Exit code
-    my $failed = grep { $_->{status} eq 'FAIL' || $_->{status} eq 'ERROR' } @results;
+    # Exit code (fail if either phase fails)
+    my $failed = grep {
+        $_->{run_status} eq 'FAIL' || $_->{run_status} eq 'ERROR' ||
+        $_->{build_status} eq 'FAIL' || $_->{build_status} eq 'ERROR'
+    } @results;
     exit($failed > 0 ? 1 : 0);
 }
 
 # Print test summary
+# Helper function for colored status
+sub colored_status {
+    my ($status) = @_;
+    return colored('PASS', 'green') if $status eq 'PASS';
+    return colored('FAIL', 'red') if $status eq 'FAIL';
+    return colored('ERROR', 'red') if $status eq 'ERROR';
+    return colored('SKIP', 'yellow') if $status eq 'SKIP';
+    return $status;
+}
+
 sub print_summary {
     my ($results, $duration) = @_;
 
-    my $total = scalar @$results;
-    my $passed = grep { $_->{status} eq 'PASS' } @$results;
-    my $failed = grep { $_->{status} eq 'FAIL' } @$results;
-    my $skipped = grep { $_->{status} eq 'SKIP' } @$results;
-    my $errors = grep { $_->{status} eq 'ERROR' } @$results;
+    # Count results for both phases
+    my ($run_pass, $run_fail, $build_pass, $build_fail) = (0, 0, 0, 0);
+    my ($skip, $run_err, $build_err) = (0, 0, 0);
 
-    print "\n";
-    print "=" x 80 . "\n";
-    print "TEST SUMMARY\n";
-    print "=" x 80 . "\n";
-    printf "%-30s | %-8s | %-8s | %-8s\n", "Example", "Type", "Status", "Duration";
-    print "-" x 80 . "\n";
+    for my $r (@$results) {
+        $skip++ if $r->{run_status} eq 'SKIP';
 
-    for my $result (@$results) {
-        my $status = $result->{status};
-        my $colored_status =
-            $status eq 'PASS' ? colored($status, 'green') :
-            $status eq 'FAIL' ? colored($status, 'red') :
-            $status eq 'SKIP' ? colored($status, 'yellow') :
-            colored($status, 'red');
+        # Run phase
+        $run_pass++ if $r->{run_status} eq 'PASS';
+        $run_fail++ if $r->{run_status} eq 'FAIL';
+        $run_err++ if $r->{run_status} eq 'ERROR';
 
-        printf "%-30s | %-8s | %-8s | %.2fs\n",
-            $result->{name},
-            $result->{type},
-            $colored_status,
-            $result->{duration};
+        # Build phase
+        $build_pass++ if $r->{build_status} eq 'PASS';
+        $build_fail++ if $r->{build_status} eq 'FAIL';
+        $build_err++ if $r->{build_status} eq 'ERROR';
     }
 
-    print "=" x 80 . "\n";
-    printf "SUMMARY: %d/%d passed (%.1f%%)\n",
-        $passed,
-        $total,
-        $total ? 100 * $passed / $total : 0;
-    print "  Passed:  " . colored($passed, 'green') . "\n";
-    print "  Failed:  " . colored($failed, $failed > 0 ? 'red' : 'green') . "\n";
-    print "  Skipped: " . colored($skipped, 'yellow') . "\n";
-    print "  Errors:  " . colored($errors, $errors > 0 ? 'red' : 'green') . "\n";
+    # Header
+    print "\n";
+    print "=" x 100 . "\n";
+    print "TEST SUMMARY\n";
+    print "=" x 100 . "\n";
+    printf "%-30s | %-8s | %-11s | %-12s | %s\n",
+        "Example", "Type", "Status Run", "Status Build", "Duration";
+    print "-" x 100 . "\n";
+
+    # Results table
+    for my $r (sort { $a->{name} cmp $b->{name} } @$results) {
+        printf "%-30s | %-8s | %-11s | %-12s | %.2fs\n",
+            $r->{name},
+            $r->{type} // 'UNKNOWN',
+            colored_status($r->{run_status}),
+            colored_status($r->{build_status}),
+            $r->{total_duration};
+    }
+
+    print "=" x 100 . "\n";
+
+    # Statistics
+    my $total = @$results;
+    my $tested = $total - $skip;
+    printf "SUMMARY: Run: %d/%d (%.1f%%), Build: %d/%d (%.1f%%)\n",
+        $run_pass, $tested, ($tested ? 100.0 * $run_pass / $tested : 0),
+        $build_pass, $tested, ($tested ? 100.0 * $build_pass / $tested : 0);
+
+    print "  Run Phase:\n";
+    print "    Passed:  " . colored($run_pass, 'green') . "\n";
+    print "    Failed:  " . colored($run_fail, 'red') . "\n";
+    print "    Errors:  " . colored($run_err, 'red') . "\n";
+
+    print "  Build Phase:\n";
+    print "    Passed:  " . colored($build_pass, 'green') . "\n";
+    print "    Failed:  " . colored($build_fail, 'red') . "\n";
+    print "    Errors:  " . colored($build_err, 'red') . "\n";
+
+    print "  Skipped: " . colored($skip, 'yellow') . "\n";
     printf "  Duration: %.2fs\n", $duration;
-    print "=" x 80 . "\n";
+    print "=" x 100 . "\n";
 }
 
 # Run main
