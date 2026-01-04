@@ -1,0 +1,2 @@
+# Skip this test - output varies by directory contents
+skip: Directory listing output varies by environment
