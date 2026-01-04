@@ -552,27 +552,20 @@ jobs:
           name: ${{ matrix.artifact }}
           path: ./aro-bin
 
-      - name: Install ARO (Linux/macOS)
+      - name: Prepare ARO binary (Linux/macOS)
         if: matrix.os != 'Windows'
         run: |
           chmod +x ./aro-bin/${{ matrix.binary }}
-          sudo mkdir -p /usr/local/bin
-          sudo cp ./aro-bin/${{ matrix.binary }} /usr/local/bin/aro
-          aro --version
+          echo "ARO_BIN=$GITHUB_WORKSPACE/aro-bin/${{ matrix.binary }}" >> $GITHUB_ENV
+          ./aro-bin/${{ matrix.binary }} --version
 
-      - name: Install ARO (Windows)
+      - name: Prepare ARO binary (Windows)
         if: matrix.os == 'Windows'
-        shell: pwsh
+        shell: bash
         run: |
-          $aroPath = "$env:GITHUB_WORKSPACE\aro-bin"
-          echo "$aroPath" | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
-          Copy-Item ".\aro-bin\${{ matrix.binary }}" ".\aro-bin\aro.exe" -Force
-
-      - name: Verify ARO installation (Windows)
-        if: matrix.os == 'Windows'
-        run: |
-          export PATH="$GITHUB_WORKSPACE/aro-bin:$PATH"
-          aro.exe --version || true
+          chmod +x ./aro-bin/${{ matrix.binary }}
+          echo "ARO_BIN=$GITHUB_WORKSPACE/aro-bin/${{ matrix.binary }}" >> $GITHUB_ENV
+          ./aro-bin/${{ matrix.binary }} --version || true
 
       # ======================================================================
       # Run Integration Tests
