@@ -223,6 +223,26 @@ sub read_test_hint {
     return \%hints;
 }
 
+# Find the aro binary - checks PATH first, then local build
+sub find_aro_binary {
+    # Try to find aro in PATH first (for CI/installed version)
+    my $which_aro = `which aro 2>/dev/null`;
+    chomp $which_aro;
+
+    if ($which_aro && -x $which_aro) {
+        return $which_aro;
+    }
+
+    # Fallback to local build directory
+    my $local_aro = File::Spec->catfile($RealBin, '.build', 'release', 'aro');
+    if (-x $local_aro) {
+        return $local_aro;
+    }
+
+    # Last resort: try 'aro' and let shell find it
+    return 'aro';
+}
+
 # Run test with specified working directory
 # Handles chdir, executes appropriate test runner, restores original directory
 sub run_test_in_workdir {
@@ -526,8 +546,8 @@ sub run_console_example_internal {
 
     if ($has_ipc_run) {
         # Use IPC::Run for better control
-        # Use absolute path to aro binary (works even when cwd changes)
-        my $aro_bin = File::Spec->catfile($RealBin, '.build', 'release', 'aro');
+        # Try to find aro in PATH first, fallback to local build
+        my $aro_bin = find_aro_binary();
         my ($in, $out, $err) = ('', '', '');
         my $handle = eval {
             IPC::Run::start([$aro_bin, 'run', $dir], \$in, \$out, \$err, IPC::Run::timeout($timeout));
@@ -552,7 +572,8 @@ sub run_console_example_internal {
         return ($out, undef);
     } else {
         # Fallback to system()
-        my $output = `.build/release/aro run $dir 2>&1`;
+        my $aro_bin = find_aro_binary();
+        my $output = `$aro_bin run $dir 2>&1`;
         my $exit_code = $? >> 8;
 
         if ($exit_code != 0) {
@@ -667,8 +688,8 @@ sub run_http_example_internal {
     }
 
     # Start server in background (use timeout parameter)
-    # Use absolute path to aro binary (works even when cwd changes)
-    my $aro_bin = File::Spec->catfile($RealBin, '.build', 'release', 'aro');
+    # Find aro binary (PATH first, then local build)
+    my $aro_bin = find_aro_binary();
     my ($in, $out, $err) = ('', '', '');
     my $handle = eval {
         IPC::Run::start([$aro_bin, 'run', $dir], \$in, \$out, \$err, IPC::Run::timeout($timeout));
@@ -876,8 +897,8 @@ sub run_socket_example_internal {
     my $port = 9000;  # Default socket port
 
     # Start server in background (use timeout parameter)
-    # Use absolute path to aro binary (works even when cwd changes)
-    my $aro_bin = File::Spec->catfile($RealBin, '.build', 'release', 'aro');
+    # Find aro binary (PATH first, then local build)
+    my $aro_bin = find_aro_binary();
     my ($in, $out, $err) = ('', '', '');
     my $handle = eval {
         IPC::Run::start([$aro_bin, 'run', $dir], \$in, \$out, \$err, IPC::Run::timeout($timeout));
@@ -1008,8 +1029,8 @@ sub run_file_watcher_example_internal {
     my $test_file = "/tmp/aro_test_$$.txt";
 
     # Start watcher in background (use timeout parameter)
-    # Use absolute path to aro binary (works even when cwd changes)
-    my $aro_bin = File::Spec->catfile($RealBin, '.build', 'release', 'aro');
+    # Find aro binary (PATH first, then local build)
+    my $aro_bin = find_aro_binary();
     my ($in, $out, $err) = ('', '', '');
     my $handle = eval {
         IPC::Run::start([$aro_bin, 'run', $dir], \$in, \$out, \$err, IPC::Run::timeout($timeout));
