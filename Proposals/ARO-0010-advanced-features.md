@@ -29,18 +29,18 @@ Business applications frequently need capabilities beyond basic data processing:
 
 ---
 
-## 1. System Exec Action
+## 1. System Execute Action
 
-The `<Exec>` action executes shell commands on the host system, returning structured results.
+The `<Execute>` action executes shell commands on the host system, returning structured results.
 
 ### 1.1 Syntax
 
 ```aro
 (* Basic execution *)
-<Exec> the <result> with "ls -la".
+<Execute> the <result> with "ls -la".
 
 (* Execute with options *)
-<Exec> the <result> with {
+<Execute> the <result> with {
     command: "npm install",
     workingDirectory: "/app",
     timeout: 60000
@@ -51,14 +51,14 @@ The `<Exec>` action executes shell commands on the host system, returning struct
 
 | Property | Value |
 |----------|-------|
-| **Action** | Exec |
+| **Action** | Execute |
 | **Verbs** | `exec`, `execute`, `shell`, `run-command` |
 | **Role** | REQUEST (External to Internal) |
 | **Prepositions** | `with`, `for`, `on` |
 
 ### 1.3 Result Structure
 
-Every `<Exec>` action returns a structured result object:
+Every `<Execute>` action returns a structured result object:
 
 ```
 +------------------+----------------------------------------+
@@ -95,7 +95,7 @@ Every `<Exec>` action returns a structured result object:
 
 ```aro
 (System Check: DevOps) {
-    <Exec> the <result> with "df -h".
+    <Execute> the <result> with "df -h".
 
     match <result: error> {
         case true {
@@ -115,7 +115,7 @@ Every `<Exec>` action returns a structured result object:
 ```aro
 (Build Project: CI Pipeline) {
     (* Run tests *)
-    <Exec> the <test-result> with {
+    <Execute> the <test-result> with {
         command: "npm test",
         workingDirectory: "/app",
         timeout: 120000
@@ -125,7 +125,7 @@ Every `<Exec>` action returns a structured result object:
         when <test-result: error> is true.
 
     (* Build if tests pass *)
-    <Exec> the <build-result> with {
+    <Execute> the <build-result> with {
         command: "npm run build",
         workingDirectory: "/app",
         environment: { NODE_ENV: "production" }
@@ -139,7 +139,7 @@ Every `<Exec>` action returns a structured result object:
 
 ```aro
 (Deploy: Infrastructure) {
-    <Exec> the <result> with {
+    <Execute> the <result> with {
         command: "make release",
         environment: {
             CC: "clang",
@@ -158,7 +158,7 @@ When a command fails, the result captures the error state:
 
 ```aro
 (Health Check: Monitoring) {
-    <Exec> the <result> with "curl -s http://localhost:8080/health".
+    <Execute> the <result> with "curl -s http://localhost:8080/health".
 
     match <result: error> {
         case true {
@@ -189,14 +189,14 @@ Validate and sanitize user input before using in commands:
     <Return> a <BadRequest: status> with "Invalid path characters"
         when <safe-path> is not <valid>.
 
-    <Exec> the <result> with "ls -la ${safe-path}".
+    <Execute> the <result> with "ls -la ${safe-path}".
     <Return> an <OK: status> with <result>.
 }
 ```
 
 #### Audit Logging
 
-All `<Exec>` commands are logged with:
+All `<Execute>` commands are logged with:
 - Timestamp
 - Feature set name
 - Command executed
@@ -720,14 +720,14 @@ When a date is resolved, these properties are accessible via qualifiers:
 (Application-Start: DevOps Dashboard) {
     <Log> "Starting DevOps Dashboard..." to the <console>.
     <Start> the <http-server> with <contract>.
-    <Wait> for <shutdown-signal>.
+    <Keepalive> the <application> for the <events>.
     <Return> an <OK: status> for the <startup>.
 }
 
 (healthCheck: Health API) {
     (* Run system health checks *)
-    <Exec> the <disk-check> with "df -h /".
-    <Exec> the <memory-check> with "free -m".
+    <Execute> the <disk-check> with "df -h /".
+    <Execute> the <memory-check> with "free -m".
 
     (* Check for errors *)
     <Create> the <health-status> with {
@@ -754,7 +754,7 @@ When a date is resolved, these properties are accessible via qualifiers:
     <Compute> the <since-date: date> from <since>.
 
     (* Execute log search *)
-    <Exec> the <search-result> with "grep -r '${pattern}' /var/log/app/".
+    <Execute> the <search-result> with "grep -r '${pattern}' /var/log/app/".
 
     <Return> an <Error: status> with <search-result>
         when <search-result: error> is true.
@@ -860,10 +860,10 @@ existence_check   += expression , [ "not" ] , "in" , expression ;
 
 ## 6. Implementation Notes
 
-### 6.1 Exec Action
+### 6.1 Execute Action
 
 ```swift
-public struct ExecAction: ActionImplementation {
+public struct ExecuteAction: ActionImplementation {
     public static let role: ActionRole = .request
     public static let verbs: Set<String> = ["exec", "execute", "shell", "run-command"]
     public static let validPrepositions: Set<Preposition> = [.with, .for, .on]

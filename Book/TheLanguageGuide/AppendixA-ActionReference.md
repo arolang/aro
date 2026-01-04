@@ -15,14 +15,14 @@ Complete reference for all built-in actions in ARO.
 | **Stat** | REQUEST | Get file metadata | `<Stat> the <info> for the <file: "./doc.pdf">.` |
 | **Exists** | REQUEST | Check file existence | `<Exists> the <found> for the <file: "./config.json">.` |
 | **Receive** | REQUEST | Receive event data | `<Receive> the <message> from the <event>.` |
-| **Exec** | REQUEST | Execute shell command | `<Exec> the <result> for the <command> with "ls -la".` |
+| **Execute** | REQUEST | Execute shell command | `<Execute> the <result> for the <command> with "ls -la".` |
 | **Create** | OWN | Create new data | `<Create> the <user> with { name: "Alice" }.` |
 | **Compute** | OWN | Perform calculations | `<Compute> the <total> for the <items>.` |
 | **Transform** | OWN | Convert/map data | `<Transform> the <dto> from the <entity>.` |
 | **Validate** | OWN | Check against rules | `<Validate> the <data> for the <schema>.` |
 | **Compare** | OWN | Compare values | `<Compare> the <hash> against the <stored>.` |
 | **Update** | OWN | Modify existing data | `<Update> the <user> with <changes>.` |
-| **CreateDirectory** | OWN | Create directory | `<CreateDirectory> the <dir> to the <path: "./out">.` |
+| **Make** | OWN | Create directory | `<Make> the <dir> to the <path: "./out">.` |
 | **Copy** | OWN | Copy file/directory | `<Copy> the <file: "./a.txt"> to the <destination: "./b.txt">.` |
 | **Move** | OWN | Move/rename file | `<Move> the <file: "./old.txt"> to the <destination: "./new.txt">.` |
 | **Map** | OWN | Transform collection elements | `<Map> the <names> from the <users: name>.` |
@@ -224,15 +224,15 @@ Reads from files.
 
 ---
 
-### Exec
+### Execute
 
 Executes shell commands on the host system and returns structured results.
 
 **Syntax:**
 ```aro
-<Exec> the <result> for the <command> with "command-string".
-<Exec> the <result> for the <command> with <variable>.
-<Exec> the <result> on the <system> with {
+<Execute> the <result> for the <command> with "command-string".
+<Execute> the <result> for the <command> with <variable>.
+<Execute> the <result> on the <system> with {
     command: "command-string",
     workingDirectory: "/path",
     timeout: 30000
@@ -240,7 +240,7 @@ Executes shell commands on the host system and returns structured results.
 ```
 
 **Result Object:**
-The Exec action returns a structured result with the following fields:
+The Execute action returns a structured result with the following fields:
 - `result.error` - Boolean: true if command failed (non-zero exit code)
 - `result.message` - Human-readable status message
 - `result.output` - Command stdout (or stderr if error)
@@ -250,21 +250,21 @@ The Exec action returns a structured result with the following fields:
 **Examples:**
 ```aro
 (* Basic command execution *)
-<Exec> the <listing> for the <command> with "ls -la".
+<Execute> the <listing> for the <command> with "ls -la".
 <Return> an <OK: status> for the <listing>.
 
 (* With error handling *)
-<Exec> the <result> for the <disk-check> with "df -h".
+<Execute> the <result> for the <disk-check> with "df -h".
 <Log> <result.message> to the <console> when <result.error> = true.
 <Return> an <Error: status> for the <result> when <result.error> = true.
 <Return> an <OK: status> for the <result>.
 
 (* Using a variable for the command *)
 <Create> the <cmd> with "ps aux | head -20".
-<Exec> the <processes> for the <listing> with <cmd>.
+<Execute> the <processes> for the <listing> with <cmd>.
 
 (* With configuration options *)
-<Exec> the <result> on the <system> with {
+<Execute> the <result> on the <system> with {
     command: "npm install",
     workingDirectory: "/app",
     timeout: 60000
@@ -774,18 +774,18 @@ Checks if a file or directory exists.
 
 ---
 
-### CreateDirectory
+### Make
 
 Creates a directory with all intermediate directories.
 
 **Syntax:**
 ```aro
-<CreateDirectory> the <result> to the <path: path>.
+<Make> the <result> to the <path: path>.
 ```
 
 **Examples:**
 ```aro
-<CreateDirectory> the <output-dir> to the <path: "./output/reports/2024">.
+<Make> the <output-dir> to the <path: "./output/reports/2024">.
 ```
 
 **Valid Prepositions:** `to`, `for`
@@ -1040,7 +1040,7 @@ The `Keepalive` action blocks execution until a shutdown signal is received (SIG
 | Fetch | REQUEST | from |
 | Read | REQUEST | from |
 | Receive | REQUEST | from |
-| Exec | REQUEST | for, on, with |
+| Execute | REQUEST | for, on, with |
 | Create | OWN | with |
 | Compute | OWN | for, from |
 | Transform | OWN | from |
@@ -1066,7 +1066,7 @@ The `Keepalive` action blocks execution until a shutdown signal is received (SIG
 | List | FILE | from |
 | Stat | FILE | for |
 | Exists | FILE | for |
-| CreateDirectory | FILE | to |
+| Make | FILE | to |
 | Copy | FILE | to |
 | Move | FILE | to |
 | Append | FILE | to |
