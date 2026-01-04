@@ -158,7 +158,7 @@ jobs:
           fetch-depth: 0
 
       - name: Setup Swift
-        uses: swift-actions/setup-swift@v3
+        uses: swift-actions/setup-swift@364295d9c23900ce04d4e5cc708387921b4e50f9  # v3
         with:
           swift-version: ${{ env.SWIFT_VERSION }}
 
@@ -370,7 +370,7 @@ jobs:
           fetch-depth: 0
 
       - name: Setup Swift
-        uses: compnerd/gha-setup-swift@main
+        uses: compnerd/gha-setup-swift@c8363f1001fbb4b12d127c432f9eaadec5f56e8c  # main
         with:
           swift-version: swift-6.2.1-release
           swift-build: 6.2.1-RELEASE
@@ -496,13 +496,13 @@ jobs:
 
       - name: Setup Swift (macOS)
         if: matrix.os == 'macOS'
-        uses: swift-actions/setup-swift@v3
+        uses: swift-actions/setup-swift@364295d9c23900ce04d4e5cc708387921b4e50f9  # v3
         with:
           swift-version: ${{ env.SWIFT_VERSION }}
 
       - name: Setup Swift (Windows)
         if: matrix.os == 'Windows'
-        uses: compnerd/gha-setup-swift@main
+        uses: compnerd/gha-setup-swift@c8363f1001fbb4b12d127c432f9eaadec5f56e8c  # main
         with:
           swift-version: swift-6.2.1-release
           swift-build: 6.2.1-RELEASE
