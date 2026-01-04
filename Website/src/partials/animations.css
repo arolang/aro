@@ -385,3 +385,78 @@ html {
         border-color: rgba(0, 0, 0, 0.15);
     }
 }
+
+/* =============================================================================
+   Typewriter Animation
+   ============================================================================= */
+
+/* Two-line typewriter layout */
+.typewriter-line-1,
+.typewriter-line-2 {
+    display: block;
+    min-height: 1.1em;
+}
+
+/* Typewriter line 1 with primary gradient */
+.typewriter-line-1 {
+    background: var(--gradient-primary);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+}
+
+/* Typewriter line 2 with alternate gradient */
+.typewriter-line-2 {
+    background: var(--gradient-alt);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+}
+
+/* Blinking cursor - inline with text, always blinking slowly */
+.typewriter-cursor {
+    color: var(--color-primary);
+    margin-left: 0;
+    font-weight: 400;
+    display: inline !important;
+    animation: blink 1.5s step-end infinite;
+    background: none !important;
+    -webkit-text-fill-color: currentColor !important;
+    -webkit-background-clip: unset !important;
+    background-clip: unset !important;
+}
+
+@keyframes blink {
+    0%, 50% { opacity: 1; }
+    51%, 100% { opacity: 0; }
+}
+
+/* Prevent layout shift during typing - set fixed height for two lines */
+.hero-title {
+    min-height: calc(1.1em * 2);
+    height: calc(1.1em * 2);
+}
+
+/* Respect reduced motion preference - disable cursor blink */
+@media (prefers-reduced-motion: reduce) {
+    .typewriter-cursor {
+        animation: none !important;
+        opacity: 1;
+    }
+}
+
+/* =============================================================================
+   Hero Badge Fade Animation
+   ============================================================================= */
+
+.hero-badge {
+    transition: opacity 0.3s ease-in-out;
+}
+
+.hero-badge.fade-out {
+    opacity: 0;
+}
+
+.hero-badge.fade-in {
+    opacity: 1;
+}

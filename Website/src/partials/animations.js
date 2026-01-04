@@ -188,6 +188,190 @@
     }
 
     // ==========================================================================
+    // Typewriter Animation (Two-Line)
+    // ==========================================================================
+    class TypewriterAnimation {
+        constructor(line1Element, line2Element, cursorElement, badgeElement, slogans, badgeTexts, options = {}) {
+            this.line1 = line1Element;
+            this.line2 = line2Element;
+            this.cursor = cursorElement;
+            this.badge = badgeElement;
+            this.slogans = slogans;
+            this.badgeTexts = badgeTexts;
+            this.currentSloganIndex = 0;
+            this.currentBadgeIndex = 0;
+            this.currentLine1Text = '';
+            this.currentLine2Text = '';
+            this.isDeleting = false;
+            this.isOnLine2 = false;
+            this.isPaused = false;
+
+            // Timing options (milliseconds)
+            this.typeSpeed = options.typeSpeed || 100;
+            this.deleteSpeed = options.deleteSpeed || 50;
+            this.pauseAfterType = options.pauseAfterType || 2000;
+            this.pauseAfterDelete = options.pauseAfterDelete || 500;
+
+            this.start();
+        }
+
+        start() {
+            this.type();
+        }
+
+        updateLine(lineElement, text) {
+            // Clear the line and rebuild with text + cursor if active
+            lineElement.innerHTML = '';
+            if (text) {
+                lineElement.appendChild(document.createTextNode(text));
+            }
+        }
+
+        moveCursorToLine(lineElement) {
+            // Move cursor to the end of the active line
+            lineElement.appendChild(this.cursor);
+        }
+
+        changeBadge() {
+            // Remove any existing classes to reset
+            this.badge.classList.remove('fade-in');
+
+            // Fade out
+            this.badge.classList.add('fade-out');
+
+            setTimeout(() => {
+                // Change text while invisible
+                this.currentBadgeIndex = (this.currentBadgeIndex + 1) % this.badgeTexts.length;
+                this.badge.textContent = this.badgeTexts[this.currentBadgeIndex];
+
+                // Fade in - remove fade-out and let default opacity take over
+                this.badge.classList.remove('fade-out');
+            }, 300); // Match CSS transition duration
+        }
+
+        type() {
+            const currentSlogan = this.slogans[this.currentSloganIndex];
+            const [line1Target, line2Target] = currentSlogan;
+
+            // Track if we're about to start line 2 for the first time
+            const wasOnLine1 = !this.isOnLine2 && !this.isDeleting;
+            const line1Complete = this.currentLine1Text === line1Target;
+            const line2NotStarted = this.currentLine2Text.length === 0;
+
+            if (this.isDeleting) {
+                // Delete from line 2 first, then line 1
+                if (this.currentLine2Text.length > 0) {
+                    this.currentLine2Text = line2Target.substring(0, this.currentLine2Text.length - 1);
+                    this.isOnLine2 = true;
+                } else if (this.currentLine1Text.length > 0) {
+                    this.currentLine1Text = line1Target.substring(0, this.currentLine1Text.length - 1);
+                    this.isOnLine2 = false;
+                }
+            } else {
+                // Type line 1 first, then line 2
+                if (this.currentLine1Text.length < line1Target.length) {
+                    this.currentLine1Text = line1Target.substring(0, this.currentLine1Text.length + 1);
+                    this.isOnLine2 = false;
+                } else if (this.currentLine2Text.length < line2Target.length) {
+                    // About to type on line 2
+                    if (wasOnLine1 && line1Complete && line2NotStarted) {
+                        // Just finished line 1, about to start line 2 - change badge now
+                        this.changeBadge();
+                    }
+                    this.currentLine2Text = line2Target.substring(0, this.currentLine2Text.length + 1);
+                    this.isOnLine2 = true;
+                }
+            }
+
+            // Update DOM - rebuild both lines
+            this.updateLine(this.line1, this.currentLine1Text);
+            this.updateLine(this.line2, this.currentLine2Text);
+
+            // Place cursor at the insertion point
+            const activeLine = this.isOnLine2 ? this.line2 : this.line1;
+            this.moveCursorToLine(activeLine);
+
+            // Calculate next delay
+            let delay = this.isDeleting ? this.deleteSpeed : this.typeSpeed;
+
+            // Add natural variance (±30ms)
+            delay += Math.random() * 60 - 30;
+
+            // Check state transitions
+            const isFullyTyped = this.currentLine1Text === line1Target && this.currentLine2Text === line2Target;
+            const isFullyDeleted = this.currentLine1Text === '' && this.currentLine2Text === '';
+
+            if (!this.isDeleting && isFullyTyped) {
+                // Finished typing - pause then start deleting
+                delay = this.pauseAfterType;
+                this.isDeleting = true;
+            } else if (this.isDeleting && isFullyDeleted) {
+                // Finished deleting - move to next slogan
+                this.isDeleting = false;
+                this.currentSloganIndex = (this.currentSloganIndex + 1) % this.slogans.length;
+                delay = this.pauseAfterDelete;
+            }
+
+            // Schedule next frame
+            setTimeout(() => this.type(), delay);
+        }
+    }
+
+    function initTypewriter() {
+        const line1Element = document.querySelector('.typewriter-line-1');
+        const line2Element = document.querySelector('.typewriter-line-2');
+        const cursorElement = document.querySelector('.typewriter-cursor');
+        const badgeElement = document.querySelector('.hero-badge');
+
+        if (line1Element && line2Element && cursorElement && badgeElement) {
+            // Two-line slogans: [line1, line2]
+            const slogans = [
+                ["Speak Business.", "Write Code."],
+                ["Business Logic.", "Natural Syntax."],
+                ["From Requirements", "to Runtime."],
+                ["Write What", "You Mean."],
+                ["Code That Reads", "Like English."],
+                ["Action. Result.", "Object."],
+                ["Event-Driven.", "Business-Aligned."],
+                ["Contract-First.", "Feature-Focused."],
+                ["Code IS", "the Error Message."],
+                ["Less Code.", "More Meaning."]
+            ];
+
+            // 20 alternative badge texts
+            const badgeTexts = [
+                "A New Kind of Programming Language",
+                "Business Logic Made Simple",
+                "Code That Speaks Your Language",
+                "From Intent to Implementation",
+                "The Human-First Language",
+                "Where Features Become Code",
+                "Business-Driven Development",
+                "Natural Language Programming",
+                "Event-Driven by Design",
+                "Contract-First Architecture",
+                "Built for Humans and AI",
+                "Action-Result-Object Pattern",
+                "The Business Language Revolution",
+                "Executable Requirements",
+                "Feature-First Development",
+                "Domain Logic, Pure Code",
+                "No Stack Traces, Just Facts",
+                "Happy Path by Default",
+                "Simplicity Over Complexity",
+                "The Future of Business Logic"
+            ];
+
+            new TypewriterAnimation(line1Element, line2Element, cursorElement, badgeElement, slogans, badgeTexts, {
+                typeSpeed: 100,
+                deleteSpeed: 50,
+                pauseAfterType: 4000,
+                pauseAfterDelete: 2500
+            });
+        }
+    }
+
+    // ==========================================================================
     // GitHub Stars Fetcher
     // ==========================================================================
     function initGitHubStars() {
@@ -240,6 +424,7 @@
         initCardStagger();
         initNavScrollEffect();
         initMobileMenu();
+        initTypewriter();
         initGitHubStars();
     }
 
