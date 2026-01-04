@@ -1,4 +1,4 @@
-# Generated: Sun Jan  4 17:50:31 2026
+# Generated: Sun Jan  4 18:25:40 2026
 # Type: console
 # Command: aro run ./Examples/FormatAwareIO
 # NOTE: This example uses test-script for verification
