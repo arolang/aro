@@ -2,7 +2,9 @@
 // EventLoopGroupManager.swift
 // ARO Runtime - NIO Event Loop Group Management
 // ============================================================
+// NOTE: NIO is not available on Windows, so this file is excluded
 
+#if !os(Windows)
 import Foundation
 import NIOCore
 import NIOPosix
@@ -99,3 +101,4 @@ public final class EventLoopGroupManager: @unchecked Sendable {
         }
     }
 }
+#endif // !os(Windows)
