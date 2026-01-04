@@ -9,14 +9,15 @@ use warnings;
 use v5.30;
 use FindBin qw($RealBin);
 use lib "$RealBin/lib";
+use Time::HiRes qw(time);
 
 # Import modules
 use AROTest::CLI qw(parse_args print_usage);
 use AROTest::Config;
-use AROTest::Discovery qw(discover_examples read_test_hint);
-use AROTest::TypeDetection qw(detect_type);
-use AROTest::Binary::Locator qw(find_aro_binary);
-use AROTest::Utils qw(colored);
+use AROTest::Discovery qw(discover_examples);
+use AROTest::Runner;
+use AROTest::Reporting qw(print_summary create_diff_file);
+use AROTest::Generation qw(generate_all_expected);
 
 =head1 NAME
 
@@ -48,10 +49,6 @@ sub main {
         die "Examples directory not found: " . $config->examples_dir . "\n";
     }
 
-    # Verify aro binary is available
-    my $aro = find_aro_binary();
-    say colored("Using ARO binary: $aro", 'cyan') if $config->is_verbose;
-
     # Discover examples
     my @examples;
     if (@$example_filters) {
@@ -66,63 +63,125 @@ sub main {
         die "No examples found matching criteria.\n";
     }
 
-    # Show what we're going to test
-    if ($config->is_verbose) {
-        say colored("Found " . scalar(@examples) . " examples:", 'cyan');
-        say "  - $_" for @examples;
-        say "";
-    }
+    # Create runner
+    my $runner = AROTest::Runner->new($config);
 
     # Run in appropriate mode
     if ($config->is_generate) {
-        say colored("=== Generate Mode ===", 'bold yellow');
-        say "This will generate expected.txt files for all examples.";
-        say colored("Not yet implemented - requires Generation module", 'red');
-        # TODO: Call generation module
+        run_generate_mode($runner, $config, \@examples);
     } else {
-        say colored("=== Test Mode ===", 'bold cyan');
-        say "Running tests (run + build phases) for " . scalar(@examples) . " examples...";
-        say "";
-        say colored("Not yet fully implemented - requires Runner and Executor modules", 'yellow');
+        run_test_mode($runner, $config, \@examples);
+    }
+}
 
-        # Demo: show what would be tested
-        for my $example (@examples) {
-            my $dir = File::Spec->catdir($config->examples_dir, $example);
-            my $hints = read_test_hint($dir, $config);
-            my $type = $hints->{type} || detect_type($dir);
+# Generate mode: create expected.txt files
+sub run_generate_mode {
+    my ($runner, $config, $examples) = @_;
 
-            print "[$example] ";
-            print colored("type=$type ", 'cyan');
-            print "timeout=" . ($hints->{timeout} || $config->timeout) . "s ";
-            print colored("SKIP", 'yellow') . " " if $hints->{skip};
-            print "\n";
+    say "=== Generate Mode ===";
+    say "Generating expected.txt files for " . scalar(@$examples) . " examples...";
+    say "";
+
+    generate_all_expected($examples, $runner, $config);
+}
+
+# Test mode: run and verify examples
+sub run_test_mode {
+    my ($runner, $config, $examples) = @_;
+
+    say "=== Test Mode ===";
+    say "Running tests (run + build phases) for " . scalar(@$examples) . " examples...";
+    say "";
+
+    my $start_time = time;
+
+    # Run all tests
+    my @results = $runner->run_all_tests(@$examples);
+
+    my $total_duration = time - $start_time;
+
+    # Print summary
+    print_summary(\@results, $total_duration);
+
+    # Create diff files for failures
+    for my $result (@results) {
+        # Create diff for run phase if failed
+        if ($result->{run_status} eq 'FAIL' && $result->{run_actual}) {
+            create_diff_file({
+                status => 'FAIL',
+                expected => $result->{run_expected},
+                actual => $result->{run_actual},
+                expected_file => $result->{expected_file},
+            }, 'expected.run.diff');
+        }
+
+        # Create diff for build phase if failed
+        if ($result->{build_status} eq 'FAIL' && $result->{build_actual}) {
+            create_diff_file({
+                status => 'FAIL',
+                expected => $result->{build_expected},
+                actual => $result->{build_actual},
+                expected_file => $result->{expected_file},
+            }, 'expected.build.diff');
         }
     }
 
-    say "";
-    say colored("Modular test framework structure created!", 'bold green');
-    say "Modules implemented:";
-    say "  ✓ AROTest::Utils";
-    say "  ✓ AROTest::Config";
-    say "  ✓ AROTest::CLI";
-    say "  ✓ AROTest::Discovery";
-    say "  ✓ AROTest::TypeDetection";
-    say "  ✓ AROTest::Binary::Locator";
-    say "  ✓ AROTest::Comparison::Normalization";
-    say "  ✓ AROTest::Comparison::Matching";
-    say "";
-    say "Next steps:";
-    say "  - Implement Executor modules (Console, HTTP, Socket, FileWatcher)";
-    say "  - Implement Binary::Execution module";
-    say "  - Implement Runner module";
-    say "  - Implement Reporting module";
-    say "  - Implement Generation module";
+    # Exit with appropriate code
+    my $failed = grep {
+        $_->{run_status} eq 'FAIL' || $_->{run_status} eq 'ERROR' ||
+        $_->{build_status} eq 'FAIL' || $_->{build_status} eq 'ERROR'
+    } @results;
+
+    exit($failed > 0 ? 1 : 0);
 }
 
 # Run main
 main() unless caller;
 
 __END__
+
+=head1 SYNOPSIS
+
+    # Run all tests
+    ./run-tests.pl
+
+    # Run specific examples
+    ./run-tests.pl HelloWorld Calculator
+
+    # Filter examples by pattern
+    ./run-tests.pl --filter=HTTP
+
+    # Generate expected output files
+    ./run-tests.pl --generate
+
+    # Verbose output
+    ./run-tests.pl --verbose
+
+=head1 OPTIONS
+
+=over 4
+
+=item B<--generate>
+
+Generate expected.txt files for all examples
+
+=item B<-v, --verbose>
+
+Show detailed output
+
+=item B<--timeout=N>
+
+Set timeout in seconds (default: 10)
+
+=item B<--filter=PATTERN>
+
+Test only examples matching pattern
+
+=item B<-h, --help>
+
+Show help message
+
+=back
 
 =head1 AUTHOR
 
