@@ -230,9 +230,11 @@ public struct ResponseFormatter: Sendable {
         case let bool as Bool:
             return bool ? "true" : "false"
         case let dict as [String: any Sendable]:
-            let items = dict.sorted(by: { $0.key < $1.key })
-                .map { "\($0.key): \(formatValueForHuman($0.value))" }
-            return items.joined(separator: "\n")
+            // Use dot notation for nested objects (context-aware console output)
+            let flattened = flattenValueForHuman(dict, prefix: "")
+            return flattened.sorted(by: { $0.0 < $1.0 })
+                .map { "\($0.0): \($0.1)" }
+                .joined(separator: "\n")
         case let array as [any Sendable]:
             let items = array.map { formatValueForHuman($0) }
             return "[\(items.joined(separator: ", "))]"

@@ -420,6 +420,9 @@ sub expected_to_pattern {
     # __TOTAL__ - matches total blocks count in ls output
     $pattern =~ s/__TOTAL__/\\d+/g;
 
+    # __TIME__ - matches decimal time values like generationtime_ms (0.08, 1.23)
+    $pattern =~ s/__TIME__/\\d+\\.\\d+/g;
+
     return $pattern;
 }
 
@@ -438,8 +441,11 @@ sub auto_placeholderize {
 
     # For console tests with weather/API data, replace numbers in specific contexts
     if ($type && $type eq 'console') {
+        # Replace generationtime_ms with __TIME__ (special case)
+        $output =~ s/generationtime_ms:\s*\d+\.\d+/generationtime_ms: __TIME__/g;
+
         # Replace numbers after "temperature:", "windspeed:", etc. (weather data)
-        $output =~ s/(temperature|windspeed|winddirection|elevation|latitude|longitude|generationtime_ms|is_day|weathercode):\s*-?\d+(?:\.\d+)?/$1: __NUMBER__/g;
+        $output =~ s/(temperature|windspeed|winddirection|elevation|latitude|longitude|is_day|weathercode):\s*-?\d+(?:\.\d+)?/$1: __NUMBER__/g;
     }
 
     return $output;
