@@ -36,7 +36,9 @@ public final class TestCleanup: @unchecked Sendable {
         EventBus.shared.unsubscribeAll()
 
         // 3. Shutdown all SwiftNIO event loop groups (CRITICAL for clean exit)
+        #if !os(Windows)
         EventLoopGroupManager.shared.shutdownAll()
+        #endif
 
         // 4. Reset shutdown coordinator for next run
         ShutdownCoordinator.shared.reset()
