@@ -1,2 +1,1 @@
-timeout: 30
 skip: Plugin loading has path variation in error messages (code signing issues on macOS)

@@ -1,13 +1,13 @@
-# Generated: Sun Jan  4 12:19:53 2026
+# Generated: Sun Jan  4 17:50:17 2026
 # Type: console
 # Command: aro run ./Examples/EventExample
 ---
 [Application-Start] Starting Event Example...
 [EmitAction] Emitting domain event: NumberTriggered with payload: ["data": "Event triggered!"]
-[Handler One] Handler #1 executed
 [Handler Two] Handler #2 executed
+[Handler One] Handler #1 executed
 [Handler Three] Handler #3 executed
-[Handler Five] Handler #5 executed
 [Handler Four] Handler #4 executed
+[Handler Five] Handler #5 executed
 [Application-Start] Event emitted. All handlers should have executed.
 [OK] startup
