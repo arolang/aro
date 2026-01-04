@@ -754,7 +754,7 @@ facts:
     day: 1
     category: "Sockets"
     headline: "<Connect> to <host: 192.168.1.100> on port 8080."
-    explanation: "Connect to external TCP services. Databases, message brokers, legacy systems. Returns connection for Send/Receive."
+    explanation: "Connect to external TCP services. Databases, message brokers, legacy systems. Returns connection for Extract/Send."
 
   - id: "38-2"
     week: 38

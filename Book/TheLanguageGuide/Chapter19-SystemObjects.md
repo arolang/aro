@@ -123,7 +123,7 @@ The following diagram illustrates how data flows between your ARO feature sets a
 
   <path d="M 460 250 L 480 330" stroke="#9b59b6" stroke-width="2" fill="none" marker-end="url(#arrowhead)"/>
   <path d="M 500 330 L 480 250" stroke="#9b59b6" stroke-width="2" fill="none" marker-end="url(#arrowhead)"/>
-  <text x="510" y="290" font-family="monospace" font-size="10" fill="#9b59b6">&lt;Send&gt;/&lt;Receive&gt;</text>
+  <text x="510" y="290" font-family="monospace" font-size="10" fill="#9b59b6">&lt;Extract&gt;/&lt;Send&gt;</text>
 
   <!-- Legend -->
   <rect x="20" y="360" width="760" height="30" fill="white" stroke="#bdc3c7" stroke-width="1" rx="3"/>
