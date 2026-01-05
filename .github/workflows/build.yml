@@ -455,7 +455,6 @@ jobs:
     needs: [linux, macos, windows]
     name: Integration Tests - ${{ matrix.os }}
     runs-on: ${{ matrix.runner }}
-    continue-on-error: ${{ matrix.os == 'Windows' }}  # Windows may have issues
     strategy:
       fail-fast: false
       matrix:
