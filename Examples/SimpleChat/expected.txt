@@ -1,6 +1,6 @@
-# Generated: Sun Jan  4 23:38:07 2026
+# Generated: Sun Jan  4 23:42:37 2026
 # Type: http
 # Command: aro run ./Examples/SimpleChat
 ---
-GET /status => ERROR: 404 Not Found
-POST /status => ERROR: 404 Not Found
+GET /status => {"message":""}
+POST /status => ERROR: 500 Internal Server Error

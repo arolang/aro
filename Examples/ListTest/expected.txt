@@ -1,4 +1,4 @@
-# Generated: Sun Jan  4 23:42:47 2026
+# Generated: Sun Jan  4 23:42:31 2026
 # Type: console
 # Command: aro run ./Examples/ListTest
 ---
@@ -7,3 +7,5 @@ Runtime error: Runtime Error: Cannot list the entries from the directory: path.
   Feature: Application-Start
   Business Activity: List Test
   Statement: <List> the <entries> from the <directory: path>.
+          Trace:
+            path = ../template

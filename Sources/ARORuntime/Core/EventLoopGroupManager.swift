@@ -2,6 +2,7 @@
 // EventLoopGroupManager.swift
 // ARO Runtime - NIO Event Loop Group Management
 // ============================================================
+// NOTE: NIO is not available on Windows, so this file is excluded
 
 #if !os(Windows)
 

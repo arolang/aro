@@ -1,4 +1,4 @@
-# Generated: Sun Jan  4 23:42:07 2026
+# Generated: Sun Jan  4 23:42:13 2026
 # Type: console
 # Command: aro run ./Examples/DirectoryReplicatorEvents
 # NOTE: This example uses test-script for verification
@@ -6,6 +6,12 @@
 # Workdir: Examples/DirectoryReplicatorEvents
 ---
 [Application-Start] Scanning template directory...
-[Application-Start] Found 0 directories
+[Application-Start] Found 3 directories
 [Application-Start] Storing directories to repository...
+[Audit Directory Changes] [AUDIT] directory-repository: created
+[Process Directory Entry] Created: foo
+[Audit Directory Changes] [AUDIT] directory-repository: created
+[Process Directory Entry] Created: foo/bar
+[Audit Directory Changes] [AUDIT] directory-repository: created
+[Process Directory Entry] Created: baz
 [OK] replication

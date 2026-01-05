@@ -149,10 +149,6 @@ private actor RepositoryStorageActor {
             storage[key] = []
         }
 
-        #if DEBUG
-        print("[RepositoryStorage] Storing value of type: \(type(of: value))")
-        #endif
-
         // Handle dictionary values - ensure id exists and handle updates
         var valueToStore = value
         var entityId: String? = nil
@@ -176,9 +172,6 @@ private actor RepositoryStorageActor {
                     entityId = existingId as? String
                     // Update the existing entry
                     storage[key]?[existingIndex] = valueToStore
-                    #if DEBUG
-                    print("[RepositoryStorage] Updated value with name '\(name)' (preserved id '\(existingId)') in '\(key.repository)'")
-                    #endif
                     return RepositoryStoreResult(storedValue: valueToStore, oldValue: oldValue, isUpdate: true, entityId: entityId)
                 }
             }
@@ -189,9 +182,6 @@ private actor RepositoryStorageActor {
                 dict["id"] = generatedId
                 valueToStore = dict
                 entityId = generatedId
-                #if DEBUG
-                print("[RepositoryStorage] Auto-generated id '\(generatedId)' for entry")
-                #endif
             } else {
                 entityId = dict["id"] as? String
             }
@@ -212,9 +202,6 @@ private actor RepositoryStorageActor {
                 let oldValue = storage[key]?[index]
                 // Update existing entry by id
                 storage[key]?[index] = valueToStore
-                #if DEBUG
-                print("[RepositoryStorage] Updated value with id '\(id)' in '\(key.repository)'")
-                #endif
                 return RepositoryStoreResult(storedValue: valueToStore, oldValue: oldValue, isUpdate: true, entityId: entityId)
             }
         }
@@ -222,20 +209,11 @@ private actor RepositoryStorageActor {
         // No matching entry found - append new value
         storage[key]?.append(valueToStore)
 
-        #if DEBUG
-        print("[RepositoryStorage] Stored value in '\(key.repository)'. Count: \(storage[key]?.count ?? 0)")
-        #endif
-
         return RepositoryStoreResult(storedValue: valueToStore, oldValue: nil, isUpdate: false, entityId: entityId)
     }
 
     func retrieve(key: StorageKey) -> [any Sendable] {
         let values = storage[key] ?? []
-
-        #if DEBUG
-        print("[RepositoryStorage] Retrieved \(values.count) values from '\(key.repository)'")
-        #endif
-
         return values
     }
 

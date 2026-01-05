@@ -1,7 +1,7 @@
-# Generated: Sun Jan  4 23:37:48 2026
+# Generated: Sun Jan  4 23:38:33 2026
 # Type: http
 # Command: aro run ./Examples/HTTPServer
 ---
 POST /echo => {"data":"test"}
 GET /health => {"status":"healthy"}
-GET /welcome => {"message":"Welcome to ARO!"}
+GET /welcome => ERROR: 599 Internal Exception

@@ -1,8 +1,11 @@
-# Generated: Sun Jan  4 23:42:06 2026
+# Generated: Sun Jan  4 23:42:12 2026
 # Type: console
 # Command: aro run ./Examples/DirectoryReplicator
 # Workdir: Examples/DirectoryReplicator
 ---
 [Application-Start] Scanning template directory...
+[Application-Start] foo
+[Application-Start] foo/bar
+[Application-Start] baz
 [Application-Start] Directory structure replicated.
 [OK] replication
