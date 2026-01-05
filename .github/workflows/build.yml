@@ -129,7 +129,9 @@ jobs:
           echo "  Build Date: $BUILD_DATE"
 
       - name: Build release
-        run: swift build -c release --static-swift-stdlib
+        run: |
+          swift build -c release --static-swift-stdlib
+          swift build -c release --product ARORuntime
 
       - name: Verify CLI
         run: |
@@ -137,11 +139,17 @@ jobs:
           .build/release/aro check ./Examples/HelloWorldAPI
           .build/release/aro check ./Examples/UserService
 
+      - name: Prepare artifact directory
+        run: |
+          mkdir -p aro-dist
+          cp .build/release/aro aro-dist/
+          cp .build/x86_64-unknown-linux-gnu/release/libARORuntime.a aro-dist/
+
       - name: Upload artifact
         uses: actions/upload-artifact@v6
         with:
           name: aro-linux-amd64
-          path: .build/release/aro
+          path: aro-dist/
           retention-days: 30
 
   # ===========================================================================
@@ -227,7 +235,9 @@ jobs:
           echo "  Build Date: $BUILD_DATE"
 
       - name: Build release
-        run: swift build -c release
+        run: |
+          swift build -c release
+          swift build -c release --product ARORuntime
 
       - name: Verify CLI
         run: |
@@ -346,11 +356,17 @@ jobs:
       # Upload Artifact
       # ========================================================================
 
+      - name: Prepare artifact directory
+        run: |
+          mkdir -p aro-dist
+          cp .build/release/aro aro-dist/
+          cp .build/arm64-apple-macosx/release/libARORuntime.a aro-dist/
+
       - name: Upload artifact
         uses: actions/upload-artifact@v6
         with:
           name: aro-macos-arm64
-          path: .build/release/aro
+          path: aro-dist/
           retention-days: 30
 
   # ===========================================================================
@@ -435,17 +451,26 @@ jobs:
           echo "  Build Date: $BUILD_DATE"
 
       - name: Build release
-        run: swift build -c release
+        run: |
+          swift build -c release
+          swift build -c release --product ARORuntime
 
       - name: Verify CLI
         run: |
           .build\release\aro.exe --help
 
+      - name: Prepare artifact directory
+        shell: bash
+        run: |
+          mkdir -p aro-dist
+          cp .build/release/aro.exe aro-dist/
+          cp .build/x86_64-unknown-windows-msvc/release/ARORuntime.lib aro-dist/
+
       - name: Upload artifact
         uses: actions/upload-artifact@v6
         with:
           name: aro-windows-amd64
-          path: .build/release/aro.exe
+          path: aro-dist/
           retention-days: 30
 
   # ===========================================================================

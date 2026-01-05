@@ -324,30 +324,60 @@ struct BuildCommand: AsyncParsableCommand {
         let executablePath = URL(fileURLWithPath: CommandLine.arguments[0]).resolvingSymlinksInPath()
         let executableDir = executablePath.deletingLastPathComponent()
 
-        // Common search paths relative to the executable
-        // ARORuntime now contains the C-callable bridge (previously in AROCRuntime)
-        let searchPaths: [String] = [
-            // Same directory as executable (typical for swift build)
-            executableDir.appendingPathComponent("libARORuntime.a").path,
-            // Parent .build directory structures
-            executableDir.deletingLastPathComponent().appendingPathComponent("libARORuntime.a").path,
-            // Standard Swift build output locations
-            ".build/debug/libARORuntime.a",
-            ".build/release/libARORuntime.a",
-            ".build/arm64-apple-macosx/debug/libARORuntime.a",
-            ".build/arm64-apple-macosx/release/libARORuntime.a",
-            ".build/x86_64-apple-macosx/debug/libARORuntime.a",
-            ".build/x86_64-apple-macosx/release/libARORuntime.a",
-            // Linux paths
-            ".build/x86_64-unknown-linux-gnu/debug/libARORuntime.a",
-            ".build/x86_64-unknown-linux-gnu/release/libARORuntime.a",
-        ]
+        // Platform-specific library name
+        #if os(Windows)
+        let runtimeLibName = "ARORuntime.lib"
+        #else
+        let runtimeLibName = "libARORuntime.a"
+        #endif
+
+        // Build search paths array programmatically
+        var searchPaths: [String] = []
+
+        // 1. Same directory as executable (for distributed binaries/artifacts)
+        searchPaths.append(executableDir.appendingPathComponent(runtimeLibName).path)
+
+        // 2. Homebrew/system install locations (Unix only)
+        #if os(macOS)
+        searchPaths.append("/opt/homebrew/lib/libARORuntime.a")  // Apple Silicon
+        searchPaths.append("/usr/local/lib/libARORuntime.a")     // Intel Mac
+        #elseif os(Linux)
+        searchPaths.append("/usr/local/lib/libARORuntime.a")
+        searchPaths.append("/usr/lib/libARORuntime.a")
+        #endif
+
+        // 3. Development build locations (platform-specific)
+        #if os(macOS)
+        searchPaths.append(".build/arm64-apple-macosx/release/libARORuntime.a")
+        searchPaths.append(".build/arm64-apple-macosx/debug/libARORuntime.a")
+        searchPaths.append(".build/x86_64-apple-macosx/release/libARORuntime.a")
+        searchPaths.append(".build/x86_64-apple-macosx/debug/libARORuntime.a")
+        searchPaths.append(".build/release/libARORuntime.a")
+        searchPaths.append(".build/debug/libARORuntime.a")
+        #elseif os(Linux)
+        searchPaths.append(".build/x86_64-unknown-linux-gnu/release/libARORuntime.a")
+        searchPaths.append(".build/x86_64-unknown-linux-gnu/debug/libARORuntime.a")
+        searchPaths.append(".build/aarch64-unknown-linux-gnu/release/libARORuntime.a")
+        searchPaths.append(".build/aarch64-unknown-linux-gnu/debug/libARORuntime.a")
+        searchPaths.append(".build/release/libARORuntime.a")
+        searchPaths.append(".build/debug/libARORuntime.a")
+        #elseif os(Windows)
+        searchPaths.append(".build/x86_64-unknown-windows-msvc/release/ARORuntime.lib")
+        searchPaths.append(".build/x86_64-unknown-windows-msvc/debug/ARORuntime.lib")
+        searchPaths.append(".build/release/ARORuntime.lib")
+        searchPaths.append(".build/debug/ARORuntime.lib")
+        #endif
 
         for path in searchPaths {
             let fullPath: String
-            if path.hasPrefix("/") || path.hasPrefix(".") {
+            if path.hasPrefix("/") {
+                // Absolute path
                 fullPath = path
+            } else if path.hasPrefix(".") {
+                // Relative to current directory
+                fullPath = fm.currentDirectoryPath + "/" + path
             } else {
+                // Relative to current directory
                 fullPath = fm.currentDirectoryPath + "/" + path
             }
 
