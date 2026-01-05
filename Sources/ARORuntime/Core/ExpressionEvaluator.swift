@@ -78,10 +78,7 @@ public struct ExpressionEvaluator: Sendable {
             }
             // For other expressions, try to evaluate and check for nil
             do {
-                let value = try await evaluate(existence.expression, context: context)
-                if let optional = value as? (any Sendable)? {
-                    return optional != nil
-                }
+                _ = try await evaluate(existence.expression, context: context)
                 return true
             } catch {
                 return false

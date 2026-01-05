@@ -544,9 +544,7 @@ public final class FeatureSetExecutor: @unchecked Sendable {
             return false
         case .null:
             // Check for nil-like values
-            if let optionalValue = value as? (any Sendable)? {
-                return optionalValue == nil
-            }
+            // Note: value is already any Sendable, so it can't be nil
             return false
         case .array, .object:
             // Complex types - use string comparison for now

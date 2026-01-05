@@ -157,7 +157,7 @@ public struct ARORecurrence: Sendable {
 
         case .last:
             // Find the last occurrence of this weekday in future months
-            var searchDate = calendar.date(byAdding: .month, value: 1, to: date.date)!
+            let searchDate = calendar.date(byAdding: .month, value: 1, to: date.date)!
             let month = calendar.component(.month, from: searchDate)
             let year = calendar.component(.year, from: searchDate)
 

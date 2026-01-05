@@ -451,7 +451,6 @@ public struct StoreAction: ActionImplementation {
         let repoName = object.base
 
         // Check if this is a repository (ends with -repository)
-        var storedData: any Sendable = data
         if InMemoryRepositoryStorage.isRepositoryName(repoName) {
             // Store in repository storage service with change tracking
             let storeResult: RepositoryStoreResult
@@ -469,8 +468,6 @@ public struct StoreAction: ActionImplementation {
                     businessActivity: context.businessActivity
                 )
             }
-
-            storedData = storeResult.storedValue
 
             // Note: We don't rebind the result variable here to maintain immutability
             // The stored value (with auto-generated ID if applicable) is returned from execute()

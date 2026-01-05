@@ -73,7 +73,7 @@ public actor DocumentManager {
         changes: [TextDocumentContentChangeEvent],
         version: Int
     ) -> DocumentState? {
-        guard var state = documents[uri] else { return nil }
+        guard let state = documents[uri] else { return nil }
 
         var content = state.content
 
