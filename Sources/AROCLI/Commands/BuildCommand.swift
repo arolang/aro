@@ -325,11 +325,8 @@ struct BuildCommand: AsyncParsableCommand {
         let executableDir = executablePath.deletingLastPathComponent()
 
         // Platform-specific library name
-        #if os(Windows)
-        let runtimeLibName = "ARORuntime.lib"
-        #else
+        // Note: All platforms use libARORuntime.a (Swift uses .a for static libs on all platforms)
         let runtimeLibName = "libARORuntime.a"
-        #endif
 
         // Build search paths array programmatically
         var searchPaths: [String] = []
@@ -362,10 +359,10 @@ struct BuildCommand: AsyncParsableCommand {
         searchPaths.append(".build/release/libARORuntime.a")
         searchPaths.append(".build/debug/libARORuntime.a")
         #elseif os(Windows)
-        searchPaths.append(".build/x86_64-unknown-windows-msvc/release/ARORuntime.lib")
-        searchPaths.append(".build/x86_64-unknown-windows-msvc/debug/ARORuntime.lib")
-        searchPaths.append(".build/release/ARORuntime.lib")
-        searchPaths.append(".build/debug/ARORuntime.lib")
+        searchPaths.append(".build/x86_64-unknown-windows-msvc/release/libARORuntime.a")
+        searchPaths.append(".build/x86_64-unknown-windows-msvc/debug/libARORuntime.a")
+        searchPaths.append(".build/release/libARORuntime.a")
+        searchPaths.append(".build/debug/libARORuntime.a")
         #endif
 
         for path in searchPaths {

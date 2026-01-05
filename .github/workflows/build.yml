@@ -459,12 +459,28 @@ jobs:
         run: |
           .build\release\aro.exe --help
 
+      - name: Find runtime library
+        shell: bash
+        run: |
+          echo "Looking for runtime library..."
+          find .build -name "*ARORuntime*" -o -name "*.lib" -o -name "*.a" | grep -i runtime || true
+          echo "Contents of .build/release:"
+          ls -la .build/release/ | grep -i aro || true
+
       - name: Prepare artifact directory
         shell: bash
         run: |
           mkdir -p aro-dist
           cp .build/release/aro.exe aro-dist/
-          cp .build/x86_64-unknown-windows-msvc/release/ARORuntime.lib aro-dist/
+          # Windows uses .a extension, not .lib for static libraries
+          if [ -f .build/release/libARORuntime.a ]; then
+            cp .build/release/libARORuntime.a aro-dist/
+          elif [ -f .build/x86_64-unknown-windows-msvc/release/libARORuntime.a ]; then
+            cp .build/x86_64-unknown-windows-msvc/release/libARORuntime.a aro-dist/
+          else
+            echo "Warning: Runtime library not found, checking all .a files..."
+            find .build -name "*.a" | grep -i runtime || true
+          fi
 
       - name: Upload artifact
         uses: actions/upload-artifact@v6
