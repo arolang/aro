@@ -214,9 +214,40 @@ The binary is at `.build\release\aro.exe`.
 
 ## Running Tests
 
+### Unit Tests
+
+Run Swift unit tests for the parser, runtime, and compiler:
+
 ```bash
 swift test
 ```
+
+### Integration Tests
+
+Run integration tests for all examples (two-phase: interpreter + native binary):
+
+```bash
+# Run all examples
+./test-examples.pl
+
+# Run specific examples
+./test-examples.pl HelloWorld Calculator HTTPServer
+
+# Verbose output
+./test-examples.pl --verbose
+
+# Filter by pattern
+./test-examples.pl --filter=HTTP
+```
+
+The integration test framework is modular and located in `Tests/AROIntegrationTests/`:
+- 17 modules organized by responsibility
+- Two-phase testing (run + build)
+- Automatic type detection (console, HTTP, socket, file)
+- Pattern matching with placeholders
+- 109 unit tests validating framework behavior
+
+See `Tests/AROIntegrationTests/README.md` for complete documentation.
 
 ## Examples
 
