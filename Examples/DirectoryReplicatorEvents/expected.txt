@@ -1,4 +1,4 @@
-# Generated: Sun Jan  4 12:19:51 2026
+# Generated: Sun Jan  4 23:42:13 2026
 # Type: console
 # Command: aro run ./Examples/DirectoryReplicatorEvents
 # NOTE: This example uses test-script for verification
@@ -6,7 +6,12 @@
 # Workdir: Examples/DirectoryReplicatorEvents
 ---
 [Application-Start] Scanning template directory...
-Runtime error: Runtime Error: Cannot list the all-entries: recursively from the directory: template-path.
-  Feature: Application-Start
-  Business Activity: Directory Replicator Events
-  Statement: <List> the <all-entries: recursively> from the <directory: template-path>.
+[Application-Start] Found 3 directories
+[Application-Start] Storing directories to repository...
+[Audit Directory Changes] [AUDIT] directory-repository: created
+[Process Directory Entry] Created: foo
+[Audit Directory Changes] [AUDIT] directory-repository: created
+[Process Directory Entry] Created: foo/bar
+[Audit Directory Changes] [AUDIT] directory-repository: created
+[Process Directory Entry] Created: baz
+[OK] replication

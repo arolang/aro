@@ -2,6 +2,7 @@
 // EventLoopGroupManager.swift
 // ARO Runtime - NIO Event Loop Group Management
 // ============================================================
+// NOTE: NIO is not available on Windows, so this file is excluded
 
 #if !os(Windows)
 
@@ -95,9 +96,7 @@ public final class EventLoopGroupManager: @unchecked Sendable {
         // Register atexit handler - this runs when process tries to exit
         // Shutting down the event loops allows the process to complete exit
         atexit {
-            print("[EventLoopGroupManager] atexit handler called - shutting down event loops")
             EventLoopGroupManager.shared.shutdownAll()
-            print("[EventLoopGroupManager] Shutdown complete")
         }
     }
 }
