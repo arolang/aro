@@ -1,0 +1,2 @@
+# Test hints for LogToStderr
+skip: Requires stderr capture fix (see PR #157)

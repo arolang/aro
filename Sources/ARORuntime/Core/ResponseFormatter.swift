@@ -263,8 +263,8 @@ public struct ResponseFormatter: Sendable {
             let items = dict.map { "\($0.key): \(formatValueForDeveloper($0.value))" }
             return "Dict { \(items.joined(separator: ", ")) }"
         case let array as [any Sendable]:
-            let typeName = array.isEmpty ? "Any" : String(describing: type(of: array.first!))
-            return "Array<\(typeName)>[\(array.count)]"
+            let items = array.map { formatValueForDeveloper($0) }
+            return "[\(items.joined(separator: ", "))]"
         case let response as Response:
             return "Response<\(response.status)>"
         default:

@@ -159,4 +159,9 @@ extension TestReporter {
     public static var minimal: TestReporter {
         TestReporter(verbose: false, useColors: true)
     }
+
+    /// Create a reporter with auto-detected color support based on TTY
+    public static var smart: TestReporter {
+        TestReporter(verbose: false, useColors: TTYDetector.stdoutIsTTY)
+    }
 }
