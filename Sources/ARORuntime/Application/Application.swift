@@ -105,7 +105,7 @@ public final class Application: @unchecked Sendable {
         var programs: [AnalyzedProgram] = []
         var allDiagnostics: [Diagnostic] = []
 
-        for (filename, source) in sources {
+        for (_, source) in sources {
             let result = compiler.compile(source)
             allDiagnostics.append(contentsOf: result.diagnostics)
 
@@ -407,7 +407,7 @@ public final class Application: @unchecked Sendable {
             allFeatureSets.append(contentsOf: program.featureSets)
 
             // Merge global registries
-            for (name, info) in program.globalRegistry.allPublished {
+            for (_, info) in program.globalRegistry.allPublished {
                 globalRegistry.register(symbol: info.symbol, fromFeatureSet: info.featureSet)
             }
         }

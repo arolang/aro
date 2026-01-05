@@ -1352,7 +1352,7 @@ public func aro_parallel_for_each_execute(
     _ itemVarName: UnsafePointer<CChar>?,
     _ indexVarName: UnsafePointer<CChar>?
 ) -> Int32 {
-    guard let rtPtr = runtimePtr,
+    guard runtimePtr != nil,
           let ctxPtr = contextPtr,
           let collPtr = collectionPtr,
           let bodyFn = loopBodyFn else {

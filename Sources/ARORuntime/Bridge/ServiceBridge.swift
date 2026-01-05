@@ -61,7 +61,6 @@ public func aro_http_server_start(
     guard let ptr = serverPtr else { return -1 }
 
     let handle = Unmanaged<HTTPServerHandle>.fromOpaque(ptr).takeUnretainedValue()
-    let hostStr = host.map { String(cString: $0) } ?? "127.0.0.1"
 
     // Create server
     handle.server = AROHTTPServer()
@@ -123,7 +122,7 @@ public func aro_http_server_route(
           let methodStr = method.map({ String(cString: $0) }),
           let pathStr = path.map({ String(cString: $0) }) else { return }
 
-    let handle = Unmanaged<HTTPServerHandle>.fromOpaque(ptr).takeUnretainedValue()
+    _ = Unmanaged<HTTPServerHandle>.fromOpaque(ptr).takeUnretainedValue()
 
     // Store route information (actual routing would need more work)
     print("[ARO] Registered route: \(methodStr) \(pathStr)")
@@ -1364,7 +1363,7 @@ public final class NativeSocketServer: @unchecked Sendable {
 
         guard bindResult == 0 else {
             print("[NativeSocketServer] Failed to bind to port \(port)")
-            systemClose(serverFd)
+            _ = systemClose(serverFd)
             serverFd = -1
             return false
         }
@@ -1372,7 +1371,7 @@ public final class NativeSocketServer: @unchecked Sendable {
         // Listen
         guard listen(serverFd, 10) == 0 else {
             print("[NativeSocketServer] Failed to listen")
-            systemClose(serverFd)
+            _ = systemClose(serverFd)
             serverFd = -1
             return false
         }
@@ -1399,12 +1398,12 @@ public final class NativeSocketServer: @unchecked Sendable {
 
         // Close all client connections
         for (_, fd) in conns {
-            systemClose(fd)
+            _ = systemClose(fd)
         }
 
         // Close server socket
         if serverFd >= 0 {
-            systemClose(serverFd)
+            _ = systemClose(serverFd)
             serverFd = -1
         }
 
@@ -1518,7 +1517,7 @@ public final class NativeSocketServer: @unchecked Sendable {
         connections.removeValue(forKey: connectionId)
         lock.unlock()
 
-        systemClose(fd)
+        _ = systemClose(fd)
         disconnectHandler?(connectionId)
     }
 }
@@ -1678,7 +1677,7 @@ public final class NativeHTTPServer: @unchecked Sendable {
 
         guard bindResult == 0 else {
             print("[NativeHTTPServer] Failed to bind to port \(port)")
-            systemClose(serverFd)
+            _ = systemClose(serverFd)
             serverFd = -1
             return false
         }
@@ -1686,7 +1685,7 @@ public final class NativeHTTPServer: @unchecked Sendable {
         // Listen
         guard listen(serverFd, 10) == 0 else {
             print("[NativeHTTPServer] Failed to listen")
-            systemClose(serverFd)
+            _ = systemClose(serverFd)
             serverFd = -1
             return false
         }
@@ -1708,7 +1707,7 @@ public final class NativeHTTPServer: @unchecked Sendable {
 
         // Close server socket
         if serverFd >= 0 {
-            systemClose(serverFd)
+            _ = systemClose(serverFd)
             serverFd = -1
         }
 
@@ -1741,14 +1740,14 @@ public final class NativeHTTPServer: @unchecked Sendable {
         let bytesRead = recv(fd, &buffer, buffer.count, 0)
 
         guard bytesRead > 0 else {
-            systemClose(fd)
+            _ = systemClose(fd)
             return
         }
 
         let requestData = Data(buffer[0..<bytesRead])
         guard let requestString = String(data: requestData, encoding: .utf8) else {
             sendResponse(fd: fd, statusCode: 400, body: "Bad Request")
-            systemClose(fd)
+            _ = systemClose(fd)
             return
         }
 
@@ -1756,14 +1755,14 @@ public final class NativeHTTPServer: @unchecked Sendable {
         let lines = requestString.components(separatedBy: "\r\n")
         guard let requestLine = lines.first else {
             sendResponse(fd: fd, statusCode: 400, body: "Bad Request")
-            systemClose(fd)
+            _ = systemClose(fd)
             return
         }
 
         let parts = requestLine.split(separator: " ", maxSplits: 2)
         guard parts.count >= 2 else {
             sendResponse(fd: fd, statusCode: 400, body: "Bad Request")
-            systemClose(fd)
+            _ = systemClose(fd)
             return
         }
 
@@ -1801,7 +1800,7 @@ public final class NativeHTTPServer: @unchecked Sendable {
             sendResponse(fd: fd, statusCode: 200, body: "{\"status\":\"ok\"}")
         }
 
-        systemClose(fd)
+        _ = systemClose(fd)
     }
 
     private func sendResponse(fd: Int32, statusCode: Int, headers: [String: String] = [:], body: String) {

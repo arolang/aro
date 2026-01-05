@@ -583,7 +583,8 @@ public struct ValidateAction: ActionImplementation {
     }
 
     private func isNilOrEmpty(_ value: Any) -> Bool {
-        if let optional = value as? Any?, optional == nil {
+        // Note: value is Any, so it can't be nil - check for NSNull instead
+        if value is NSNull {
             return true
         }
         if let str = value as? String, str.isEmpty {

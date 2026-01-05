@@ -78,10 +78,7 @@ public struct ExpressionEvaluator: Sendable {
             }
             // For other expressions, try to evaluate and check for nil
             do {
-                let value = try await evaluate(existence.expression, context: context)
-                if let optional = value as? (any Sendable)? {
-                    return optional != nil
-                }
+                _ = try await evaluate(existence.expression, context: context)
                 return true
             } catch {
                 return false
@@ -282,7 +279,7 @@ public struct ExpressionEvaluator: Sendable {
         // Handle ARODate property access (ARO-0041)
         if let date = value as? ARODate {
             if let propValue = date.property(property) {
-                return propValue as! any Sendable
+                return propValue as any Sendable
             }
             throw ExpressionError.undefinedMember(property)
         }
@@ -290,7 +287,7 @@ public struct ExpressionEvaluator: Sendable {
         // Handle ARODateRange property access (ARO-0041)
         if let range = value as? ARODateRange {
             if let propValue = range.property(property) {
-                return propValue as! any Sendable
+                return propValue as any Sendable
             }
             throw ExpressionError.undefinedMember(property)
         }
@@ -298,7 +295,7 @@ public struct ExpressionEvaluator: Sendable {
         // Handle ARORecurrence property access (ARO-0041)
         if let recurrence = value as? ARORecurrence {
             if let propValue = recurrence.property(property) {
-                return propValue as! any Sendable
+                return propValue as any Sendable
             }
             throw ExpressionError.undefinedMember(property)
         }
@@ -306,7 +303,7 @@ public struct ExpressionEvaluator: Sendable {
         // Handle DateDistance property access (ARO-0041)
         if let distance = value as? DateDistance {
             if let propValue = distance.property(property) {
-                return propValue as! any Sendable
+                return propValue as any Sendable
             }
             throw ExpressionError.undefinedMember(property)
         }

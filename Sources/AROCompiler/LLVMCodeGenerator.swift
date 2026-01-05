@@ -595,7 +595,6 @@ public final class LLVMCodeGenerator {
         guard let name = stringConstants[str] else {
             fatalError("String not registered: \(str)")
         }
-        let length = str.utf8.count + 1
         return "ptr \(name)"
     }
 
