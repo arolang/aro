@@ -1,0 +1,60 @@
+--- /var/folders/vn/3pg7yt9157qbqb72y_b_tv_w0000gn/T/LRkrWdgyzF.expected.txt	2026-01-04 23:45:14.271044623 +0100
++++ /var/folders/vn/3pg7yt9157qbqb72y_b_tv_w0000gn/T/oraIv9nAVA.actual.txt	2026-01-04 23:45:14.271069706 +0100
+@@ -1,7 +1,5 @@
+-HTTP request handler configured with 0 routes
+ === Test 1: Simple Array Reduce ===
+ Numbers:
+-[1, 2, 3, 4, 5]
+ Count:
+ 5
+ Sum:
+@@ -14,25 +12,7 @@
+ 5.00
+ === Test 2: Object Array with Filter ===
+ All Orders:
+-[amount: 100
+-id: 1
+-status: active, amount: 250
+-id: 2
+-status: pending, amount: 500
+-id: 3
+-status: active, amount: 75
+-id: 4
+-status: cancelled, amount: 300
+-id: 5
+-status: active]
+ Active Orders:
+-[amount: 100
+-id: 1
+-status: active, amount: 500
+-id: 3
+-status: active, amount: 300
+-id: 5
+-status: active]
+ Active Orders Total:
+ 900.00
+ Active Orders Count:
+@@ -41,22 +21,8 @@
+ 300.00
+ === Test 3: Map Operation ===
+ Mapped Active Orders (pass-through):
+-[amount: 100
+-id: 1
+-status: active, amount: 500
+-id: 3
+-status: active, amount: 300
+-id: 5
+-status: active]
+ === Test 4: Numeric Filter ===
+ High Value Orders (amount > 200):
+-[amount: 250
+-id: 2
+-status: pending, amount: 500
+-id: 3
+-status: active, amount: 300
+-id: 5
+-status: active]
+ High Value Total:
+ 1050.00
+ pipeline-test
+\ No newline at end of file

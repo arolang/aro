@@ -1,0 +1,8 @@
+--- /var/folders/vn/3pg7yt9157qbqb72y_b_tv_w0000gn/T/ulAgeYhpPo.expected.txt	2026-01-04 23:45:14.290766421 +0100
++++ /var/folders/vn/3pg7yt9157qbqb72y_b_tv_w0000gn/T/FOqezqtNO3.actual.txt	2026-01-04 23:45:14.290790588 +0100
+@@ -1,3 +1,4 @@
+ Scanning template directory...
++Error executing list: Directory not found: ../template
+ Directory structure replicated.
+ replication
+\ No newline at end of file

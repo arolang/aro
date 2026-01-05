@@ -628,6 +628,8 @@ jobs:
       # ======================================================================
       # Run Integration Tests
       # ======================================================================
+      # Note: test-examples.pl is a compatibility wrapper that redirects to
+      # the modular framework in Tests/AROIntegrationTests/run-tests.pl
       - name: Run integration tests
         run: |
           chmod +x test-examples.pl

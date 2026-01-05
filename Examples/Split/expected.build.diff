@@ -1,0 +1,11 @@
+--- /var/folders/vn/3pg7yt9157qbqb72y_b_tv_w0000gn/T/PCzOY8k_xK.expected.txt	2026-01-04 23:45:14.370573950 +0100
++++ /var/folders/vn/3pg7yt9157qbqb72y_b_tv_w0000gn/T/qzmpWLzND8.actual.txt	2026-01-04 23:45:14.370598033 +0100
+@@ -1,7 +1,4 @@
+ Fruits:
+-[apple, banana, cherry, date]
+ Words:
+-[Hello, World, ARO]
+ Parts:
+-[one, two, three, four]
+ demo
+\ No newline at end of file
