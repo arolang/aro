@@ -543,17 +543,35 @@ jobs:
         if: matrix.os == 'Windows'
         shell: pwsh
         run: |
-          # Ensure Strawberry Perl's C compiler is available
-          # Windows runners have Strawberry Perl with gcc pre-installed
-          $perlPath = (Get-Command perl).Source | Split-Path
-          $gccPath = Join-Path (Split-Path $perlPath) "c\bin"
-          if (Test-Path $gccPath) {
-            echo $gccPath | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
-            Write-Host "Added Strawberry Perl C compiler to PATH: $gccPath"
+          # Ensure Strawberry Perl's build tools are available
+          Write-Host "Setting up Perl build environment..."
+
+          # Get Perl installation directory
+          $perlExe = (Get-Command perl).Source
+          $perlRoot = Split-Path (Split-Path $perlExe)
+          Write-Host "Perl root: $perlRoot"
+
+          # Add C compiler and build tools to PATH
+          $pathsToAdd = @(
+            "$perlRoot\c\bin",      # gcc, gmake
+            "$perlRoot\perl\bin"    # perl tools
+          )
+
+          foreach ($path in $pathsToAdd) {
+            if (Test-Path $path) {
+              echo $path | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
+              $env:PATH = "$path;$env:PATH"
+              Write-Host "Added to PATH: $path"
+            } else {
+              Write-Host "Path not found: $path"
+            }
           }
 
-          # Verify compiler is available
+          # Verify build tools
+          Write-Host "`nVerifying build tools:"
+          perl -v
           gcc --version
+          gmake --version
 
       - name: Install Perl modules (Linux/macOS)
         if: matrix.os != 'Windows'
@@ -564,8 +582,31 @@ jobs:
         if: matrix.os == 'Windows'
         shell: pwsh
         run: |
-          # Install Perl modules with native compilation support
-          cpan -T IPC::Run YAML::XS HTTP::Tiny Net::EmptyPort Term::ANSIColor Time::HiRes
+          Write-Host "Installing Perl modules..."
+
+          # Configure CPAN for non-interactive mode
+          $env:PERL_MM_USE_DEFAULT = "1"
+
+          # Install modules one by one for better error reporting
+          $modules = @(
+            "HTTP::Tiny",
+            "Time::HiRes",
+            "Term::ANSIColor",
+            "YAML::XS",
+            "Net::EmptyPort",
+            "IPC::Run"
+          )
+
+          foreach ($module in $modules) {
+            Write-Host "`nInstalling $module..."
+            cpan -T $module
+            if ($LASTEXITCODE -eq 0) {
+              Write-Host "✓ $module installed successfully"
+            } else {
+              Write-Host "✗ Failed to install $module (exit code: $LASTEXITCODE)"
+              Write-Host "Continuing with remaining modules..."
+            }
+          }
 
       # ======================================================================
       # Download and Install ARO Binary
