@@ -101,6 +101,33 @@ $SIG{INT} = $SIG{TERM} = sub {
     exit 1;
 };
 
+# Write to testrun.log in example directory
+sub write_testrun_log {
+    my ($example_name, $mode, $error_type, $message, $cmd, $exit_code) = @_;
+
+    my $log_file = File::Spec->catfile($examples_dir, $example_name, 'testrun.log');
+
+    # Open in append mode to preserve multiple test runs
+    if (open my $fh, '>>', $log_file) {
+        my $timestamp = localtime();
+        print $fh "=" x 80 . "\n";
+        print $fh "Timestamp: $timestamp\n";
+        print $fh "Mode: $mode\n";
+        print $fh "Error Type: $error_type\n";
+        if ($cmd) {
+            print $fh "Command: $cmd\n";
+        }
+        if (defined $exit_code) {
+            print $fh "Exit Code: $exit_code\n";
+        }
+        print $fh "Message:\n$message\n";
+        print $fh "=" x 80 . "\n\n";
+        close $fh;
+    } else {
+        warn "Warning: Could not write to $log_file: $!\n" if $options{verbose};
+    }
+}
+
 # Main execution
 sub main {
     unless (-d $examples_dir) {
@@ -291,9 +318,11 @@ sub build_example {
     };
 
     if ($@) {
+        my $error_msg = "Build failed to start: $@";
+        write_testrun_log($example_name, 'compiled', 'BUILD_START_FAILURE', $error_msg, "$aro_bin build $dir", undef);
         return {
             success => 0,
-            error => "Build failed to start: $@",
+            error => $error_msg,
             duration => 0,
         };
     }
@@ -303,9 +332,12 @@ sub build_example {
 
     if ($? != 0) {
         my $combined_err = $err || $out;
+        my $exit_code = $? >> 8;
+        my $error_msg = "Build failed: $combined_err";
+        write_testrun_log($example_name, 'compiled', 'BUILD_FAILURE', $error_msg, "$aro_bin build $dir", $exit_code);
         return {
             success => 0,
-            error => "Build failed: $combined_err",
+            error => $error_msg,
             duration => $build_duration,
         };
     }
@@ -315,9 +347,11 @@ sub build_example {
     my $binary_path = File::Spec->catfile($dir, $basename);
 
     unless (-x $binary_path) {
+        my $error_msg = "Binary not found at: $binary_path";
+        write_testrun_log($example_name, 'compiled', 'BINARY_NOT_FOUND', $error_msg, "$aro_bin build $dir", 0);
         return {
             success => 0,
-            error => "Binary not found at: $binary_path",
+            error => $error_msg,
             duration => $build_duration,
         };
     }
@@ -1280,6 +1314,12 @@ sub run_single_mode_test {
     my $duration = time - $start_time;
 
     if ($error) {
+        # Log execution errors (not skips)
+        unless ($error =~ /^SKIP/) {
+            my $error_type = $error =~ /TIMEOUT/ ? 'TIMEOUT' :
+                            $error =~ /Exit code/ ? 'EXECUTION_FAILURE' : 'ERROR';
+            write_testrun_log($example_name, $mode, $error_type, $error, undef, undef);
+        }
         return {
             name => $example_name,
             type => $type,
@@ -1320,11 +1360,13 @@ sub run_single_mode_test {
                 duration => $duration,
             };
         } else {
+            my $error_msg = "Test script failed (exit $exit_code)" . ($test_err ? ": $test_err" : "");
+            write_testrun_log($example_name, $mode, 'TEST_SCRIPT_FAILURE', $error_msg, $hints->{'test-script'}, $exit_code);
             return {
                 name => $example_name,
                 type => $type,
                 status => 'FAIL',
-                message => "Test script failed (exit $exit_code)" . ($test_err ? ": $test_err" : ""),
+                message => $error_msg,
                 duration => $duration,
                 actual => $test_err,
             };
@@ -1384,11 +1426,14 @@ sub run_single_mode_test {
             if ($options{verbose}) {
                 $diff = "\nExpected:\n$expected_normalized\n\nActual:\n$output_normalized\n";
             }
+            my $error_msg = "Missing " . scalar(@missing) . " expected line(s)$diff";
+            my $full_error = $error_msg . "\nMissing lines:\n" . join("\n", map { "  - $_" } @missing);
+            write_testrun_log($example_name, $mode, 'OUTPUT_MISMATCH', $full_error, undef, undef);
             return {
                 name => $example_name,
                 type => $type,
                 status => 'FAIL',
-                message => "Missing " . scalar(@missing) . " expected line(s)$diff",
+                message => $error_msg,
                 duration => $duration,
                 expected => $expected_normalized,
                 actual => $output_normalized,
@@ -1420,11 +1465,13 @@ sub run_single_mode_test {
             if ($options{verbose}) {
                 $diff = "\nExpected:\n$expected_normalized\n\nActual:\n$output_normalized\n";
             }
+            my $error_msg = "Output mismatch$diff";
+            write_testrun_log($example_name, $mode, 'OUTPUT_MISMATCH', $error_msg, undef, undef);
             return {
                 name => $example_name,
                 type => $type,
                 status => 'FAIL',
-                message => "Output mismatch$diff",
+                message => $error_msg,
                 duration => $duration,
                 expected => $expected_normalized,
                 actual => $output_normalized,
@@ -1438,9 +1485,13 @@ sub run_single_mode_test {
 sub run_test {
     my ($example_name) = @_;
 
-    # Delete old diff file if it exists
+    # Delete old diff files and testrun.log if they exist
     my $diff_file = "Examples/$example_name/expected.diff";
+    my $binary_diff_file = "Examples/$example_name/expected.binary.diff";
+    my $log_file = "Examples/$example_name/testrun.log";
     unlink $diff_file if -f $diff_file;
+    unlink $binary_diff_file if -f $binary_diff_file;
+    unlink $log_file if -f $log_file;
 
     # Read test hints
     my $hints = read_test_hint($example_name);

@@ -642,8 +642,10 @@ jobs:
           name: test-diffs-${{ matrix.os }}
           path: |
             Examples/**/expected.diff
+            Examples/**/expected.binary.diff
             Examples/**/expected.txt
             Examples/**/actual.txt
+            Examples/**/testrun.log
           retention-days: 7
           if-no-files-found: ignore
 
@@ -654,7 +656,9 @@ jobs:
           name: test-failures-${{ matrix.os }}
           path: |
             Examples/**/expected.diff
+            Examples/**/expected.binary.diff
             Examples/**/expected.txt
+            Examples/**/testrun.log
           retention-days: 7
 
   # ===========================================================================
