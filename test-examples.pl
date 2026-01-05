@@ -465,6 +465,10 @@ sub detect_example_type {
 sub normalize_output {
     my ($output, $type) = @_;
 
+    # Remove bracketed prefixes (e.g., [Application-Start], [OK], etc.)
+    # Binary applications don't output these, only the interpreter does
+    $output =~ s/\[[^\]]+\]\s*//g;
+
     # Remove ISO timestamps
     $output =~ s/\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d+)?Z?/__TIMESTAMP__/g;
 
@@ -1393,8 +1397,17 @@ sub run_single_mode_test {
         }
     } else {
         # Use pattern matching for comparison (supports __ID__, __UUID__, etc.)
-        # Do NOT normalize - pattern matching compares real values against placeholders
-        if (matches_pattern($output_for_comparison, $expected_for_comparison)) {
+        # Normalize both to remove brackets and other dynamic content
+        my $output_normalized = normalize_output($output, $type);
+        my $expected_normalized = normalize_output($expected, $type);
+
+        # Trim whitespace after normalization
+        $output_normalized =~ s/^\s+|\s+$//g;
+        $output_normalized =~ s/ +$//gm;
+        $expected_normalized =~ s/^\s+|\s+$//g;
+        $expected_normalized =~ s/ +$//gm;
+
+        if (matches_pattern($output_normalized, $expected_normalized)) {
             return {
                 name => $example_name,
                 type => $type,
@@ -1405,7 +1418,7 @@ sub run_single_mode_test {
         } else {
             my $diff = '';
             if ($options{verbose}) {
-                $diff = "\nExpected:\n$expected_for_comparison\n\nActual:\n$output_for_comparison\n";
+                $diff = "\nExpected:\n$expected_normalized\n\nActual:\n$output_normalized\n";
             }
             return {
                 name => $example_name,
@@ -1413,8 +1426,8 @@ sub run_single_mode_test {
                 status => 'FAIL',
                 message => "Output mismatch$diff",
                 duration => $duration,
-                expected => $expected_for_comparison,
-                actual => $output_for_comparison,
+                expected => $expected_normalized,
+                actual => $output_normalized,
                 expected_file => $expected_file,
             };
         }
@@ -1651,41 +1664,63 @@ sub create_temp_files {
     return ($temp_expected->filename, $temp_actual->filename);
 }
 
-# Create diff file for a failed test
+# Create diff file for a failed test (dual-mode support)
 sub create_diff_file {
     my ($result) = @_;
 
-    # Only create diff for failures with expected/actual data
+    # Only create diff for failures
     return unless $result->{status} eq 'FAIL';
-    return unless $result->{expected} && $result->{actual};
 
-    # Determine diff file path (next to expected.txt)
-    my $expected_file = $result->{expected_file} || '';
-    return unless $expected_file && -f $expected_file;
+    my $example_name = $result->{name};
+    my $expected_file = File::Spec->catfile($examples_dir, $example_name, 'expected.txt');
 
-    my $diff_file = $expected_file;
-    $diff_file =~ s/expected\.txt$/expected.diff/;
+    # Check interpreter failure
+    if ($result->{interpreter_status} && $result->{interpreter_status} eq 'FAIL' &&
+        $result->{interpreter_expected} && $result->{interpreter_actual}) {
 
-    # Create temporary files for diff command
-    my ($temp_expected, $temp_actual) = create_temp_files($result);
+        my $diff_file = File::Spec->catfile($examples_dir, $example_name, 'expected.diff');
 
-    # Generate unified diff
-    my $diff_output = `diff -u "$temp_expected" "$temp_actual" 2>&1`;
+        # Create a temporary result hash in the old format for create_temp_files
+        my $temp_result = {
+            expected => $result->{interpreter_expected},
+            actual => $result->{interpreter_actual},
+        };
 
-    # Write diff to file
-    open my $fh, '>', $diff_file or do {
-        warn "Failed to create diff file: $diff_file: $!\n";
+        my ($temp_expected, $temp_actual) = create_temp_files($temp_result);
+        my $diff_output = `diff -u "$temp_expected" "$temp_actual" 2>&1`;
+
+        if (open my $fh, '>', $diff_file) {
+            print $fh $diff_output;
+            close $fh;
+            print "  Created interpreter diff: $diff_file\n" if $options{verbose};
+        }
+
         unlink $temp_expected, $temp_actual;
-        return;
-    };
+    }
 
-    print $fh $diff_output;
-    close $fh;
+    # Check compiled binary failure
+    if ($result->{compiled_status} && $result->{compiled_status} eq 'FAIL' &&
+        $result->{compiled_expected} && $result->{compiled_actual}) {
 
-    # Cleanup temp files
-    unlink $temp_expected, $temp_actual;
+        my $diff_file = File::Spec->catfile($examples_dir, $example_name, 'expected.binary.diff');
 
-    print "  Created diff: $diff_file\n" if $options{verbose};
+        # Create a temporary result hash in the old format for create_temp_files
+        my $temp_result = {
+            expected => $result->{compiled_expected},
+            actual => $result->{compiled_actual},
+        };
+
+        my ($temp_expected, $temp_actual) = create_temp_files($temp_result);
+        my $diff_output = `diff -u "$temp_expected" "$temp_actual" 2>&1`;
+
+        if (open my $fh, '>', $diff_file) {
+            print $fh $diff_output;
+            close $fh;
+            print "  Created binary diff: $diff_file\n" if $options{verbose};
+        }
+
+        unlink $temp_expected, $temp_actual;
+    }
 }
 
 # Run all tests
