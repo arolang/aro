@@ -1,5 +1,5 @@
 # Skip due to TTY detection changes
-skip: TTY detection affects console output
+skip: under investigation
 
 # ParallelForEach demonstrates concurrent iteration with non-deterministic order
 # Parallel iteration executes in TaskGroup with unpredictable completion sequence

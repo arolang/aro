@@ -1,2 +1,2 @@
 # Test hints for RepositoryObserver
-skip: TTY detection changes affect output formatting
+skip: under investigation
