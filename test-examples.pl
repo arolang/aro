@@ -10,6 +10,7 @@ use File::Spec;
 use File::Basename;
 use Getopt::Long;
 use Time::HiRes qw(time sleep);
+use List::Util qw(sum all);
 
 # Try to load optional modules, fall back to basic functionality if not available
 my $has_ipc_run = eval { require IPC::Run; 1; } || 0;
@@ -160,6 +161,7 @@ sub read_test_hint {
         workdir => undef,
         timeout => undef,
         type => undef,
+        mode => undef,
         skip => undef,
         'pre-script' => undef,
         'test-script' => undef,
@@ -220,6 +222,11 @@ sub read_test_hint {
         $hints{type} = undef;
     }
 
+    if (defined $hints{mode} && $hints{mode} !~ /^(both|interpreter|compiled|test)$/) {
+        warn "Warning: Invalid mode '$hints{mode}' (must be both|interpreter|compiled|test), defaulting to 'both'\n";
+        $hints{mode} = 'both';
+    }
+
     return \%hints;
 }
 
@@ -263,10 +270,70 @@ sub find_aro_binary {
     return 'aro';
 }
 
+# Build an example using 'aro build'
+# Returns hash with success status, binary path, error message, and build duration
+sub build_example {
+    my ($example_name, $timeout) = @_;
+
+    my $dir = File::Spec->catdir($examples_dir, $example_name);
+    my $aro_bin = find_aro_binary();
+
+    my $start_time = time;
+
+    # Execute: aro build <dir>
+    my ($in, $out, $err) = ('', '', '');
+    my $handle = eval {
+        IPC::Run::start(
+            [$aro_bin, 'build', $dir],
+            \$in, \$out, \$err,
+            IPC::Run::timeout($timeout)
+        );
+    };
+
+    if ($@) {
+        return {
+            success => 0,
+            error => "Build failed to start: $@",
+            duration => 0,
+        };
+    }
+
+    eval { IPC::Run::finish($handle) };
+    my $build_duration = time - $start_time;
+
+    if ($? != 0) {
+        my $combined_err = $err || $out;
+        return {
+            success => 0,
+            error => "Build failed: $combined_err",
+            duration => $build_duration,
+        };
+    }
+
+    # Check if binary exists
+    my $basename = basename($dir);
+    my $binary_path = File::Spec->catfile($dir, $basename);
+
+    unless (-x $binary_path) {
+        return {
+            success => 0,
+            error => "Binary not found at: $binary_path",
+            duration => $build_duration,
+        };
+    }
+
+    return {
+        success => 1,
+        binary_path => $binary_path,
+        duration => $build_duration,
+    };
+}
+
 # Run test with specified working directory
 # Handles chdir, executes appropriate test runner, restores original directory
 sub run_test_in_workdir {
-    my ($example_name, $workdir, $timeout, $type, $pre_script) = @_;
+    my ($example_name, $workdir, $timeout, $type, $pre_script, $mode) = @_;
+    $mode //= 'interpreter';  # Default to interpreter mode
 
     my $orig_cwd = cwd();
     my $output;
@@ -313,13 +380,13 @@ sub run_test_in_workdir {
     # Execute with current timeout based on type
     # Pass $run_dir instead of $example_name to the internal functions
     if ($type eq 'console') {
-        ($output, $error) = run_console_example_internal($run_dir, $timeout);
+        ($output, $error) = run_console_example_internal($run_dir, $timeout, $mode);
     } elsif ($type eq 'http') {
-        ($output, $error) = run_http_example_internal($run_dir, $timeout);
+        ($output, $error) = run_http_example_internal($run_dir, $timeout, $mode);
     } elsif ($type eq 'socket') {
-        ($output, $error) = run_socket_example_internal($run_dir, $timeout);
+        ($output, $error) = run_socket_example_internal($run_dir, $timeout, $mode);
     } elsif ($type eq 'file') {
-        ($output, $error) = run_file_watcher_example_internal($run_dir, $timeout);
+        ($output, $error) = run_file_watcher_example_internal($run_dir, $timeout, $mode);
     }
 
     # Restore original directory
@@ -554,7 +621,8 @@ sub run_console_example {
 
 # Run console example (internal with timeout parameter)
 sub run_console_example_internal {
-    my ($example_name, $timeout) = @_;
+    my ($example_name, $timeout, $mode) = @_;
+    $mode //= 'interpreter';  # Default to interpreter mode
 
     # Handle '.' or absolute paths directly, otherwise prepend examples_dir
     my $dir;
@@ -564,13 +632,33 @@ sub run_console_example_internal {
         $dir = File::Spec->catdir($examples_dir, $example_name);
     }
 
+    # Determine command based on mode
+    my @cmd;
+    if ($mode eq 'compiled') {
+        # Execute compiled binary directly
+        my $basename = basename($dir);
+        my $binary_path = File::Spec->catfile($dir, $basename);
+
+        unless (-x $binary_path) {
+            return (undef, "ERROR: Compiled binary not found at $binary_path");
+        }
+
+        @cmd = ($binary_path);
+    } elsif ($mode eq 'test') {
+        # Use 'aro test' command
+        my $aro_bin = find_aro_binary();
+        @cmd = ($aro_bin, 'test', $dir);
+    } else {
+        # Interpreter mode (default)
+        my $aro_bin = find_aro_binary();
+        @cmd = ($aro_bin, 'run', $dir);
+    }
+
     if ($has_ipc_run) {
         # Use IPC::Run for better control
-        # Try to find aro in PATH first, fallback to local build
-        my $aro_bin = find_aro_binary();
         my ($in, $out, $err) = ('', '', '');
         my $handle = eval {
-            IPC::Run::start([$aro_bin, 'run', $dir], \$in, \$out, \$err, IPC::Run::timeout($timeout));
+            IPC::Run::start(\@cmd, \$in, \$out, \$err, IPC::Run::timeout($timeout));
         };
 
         if ($@) {
@@ -594,9 +682,9 @@ sub run_console_example_internal {
         $combined .= $err if $err;
         return ($combined, undef);
     } else {
-        # Fallback to system()
-        my $aro_bin = find_aro_binary();
-        my $output = `$aro_bin run $dir 2>&1`;
+        # Fallback to system() - use same command logic
+        my $cmd_str = join(' ', map { "'$_'" } @cmd);
+        my $output = `$cmd_str 2>&1`;
         my $exit_code = $? >> 8;
 
         if ($exit_code != 0) {
@@ -677,7 +765,8 @@ sub run_http_example {
 
 # Run HTTP server example (internal with timeout parameter)
 sub run_http_example_internal {
-    my ($example_name, $timeout) = @_;
+    my ($example_name, $timeout, $mode) = @_;
+    $mode //= 'interpreter';  # Default to interpreter mode
 
     unless ($has_yaml && $has_http_tiny && $has_net_emptyport && $has_ipc_run) {
         return (undef, "SKIP: Missing required modules (YAML::XS, HTTP::Tiny, Net::EmptyPort, IPC::Run)");
@@ -710,12 +799,32 @@ sub run_http_example_internal {
         $port = $1 if $url =~ /:(\d+)/;
     }
 
-    # Start server in background (use timeout parameter)
-    # Find aro binary (PATH first, then local build)
-    my $aro_bin = find_aro_binary();
+    # Determine command based on mode
+    my @cmd;
+    if ($mode eq 'compiled') {
+        # Execute compiled binary directly
+        my $basename = basename($dir);
+        my $binary_path = File::Spec->catfile($dir, $basename);
+
+        unless (-x $binary_path) {
+            return (undef, "ERROR: Compiled binary not found at $binary_path");
+        }
+
+        @cmd = ($binary_path);
+    } elsif ($mode eq 'test') {
+        # Use 'aro test' command
+        my $aro_bin = find_aro_binary();
+        @cmd = ($aro_bin, 'test', $dir);
+    } else {
+        # Interpreter mode (default)
+        my $aro_bin = find_aro_binary();
+        @cmd = ($aro_bin, 'run', $dir);
+    }
+
+    # Start server in background
     my ($in, $out, $err) = ('', '', '');
     my $handle = eval {
-        IPC::Run::start([$aro_bin, 'run', $dir], \$in, \$out, \$err, IPC::Run::timeout($timeout));
+        IPC::Run::start(\@cmd, \$in, \$out, \$err, IPC::Run::timeout($timeout));
     };
 
     if ($@) {
@@ -903,7 +1012,8 @@ sub run_socket_example {
 
 # Run socket example (internal with timeout parameter)
 sub run_socket_example_internal {
-    my ($example_name, $timeout) = @_;
+    my ($example_name, $timeout, $mode) = @_;
+    $mode //= 'interpreter';  # Default to interpreter mode
 
     unless ($has_ipc_run && $has_net_emptyport) {
         return (undef, "SKIP: Missing required modules (IPC::Run, Net::EmptyPort)");
@@ -919,12 +1029,32 @@ sub run_socket_example_internal {
 
     my $port = 9000;  # Default socket port
 
-    # Start server in background (use timeout parameter)
-    # Find aro binary (PATH first, then local build)
-    my $aro_bin = find_aro_binary();
+    # Determine command based on mode
+    my @cmd;
+    if ($mode eq 'compiled') {
+        # Execute compiled binary directly
+        my $basename = basename($dir);
+        my $binary_path = File::Spec->catfile($dir, $basename);
+
+        unless (-x $binary_path) {
+            return (undef, "ERROR: Compiled binary not found at $binary_path");
+        }
+
+        @cmd = ($binary_path);
+    } elsif ($mode eq 'test') {
+        # Use 'aro test' command
+        my $aro_bin = find_aro_binary();
+        @cmd = ($aro_bin, 'test', $dir);
+    } else {
+        # Interpreter mode (default)
+        my $aro_bin = find_aro_binary();
+        @cmd = ($aro_bin, 'run', $dir);
+    }
+
+    # Start server in background
     my ($in, $out, $err) = ('', '', '');
     my $handle = eval {
-        IPC::Run::start([$aro_bin, 'run', $dir], \$in, \$out, \$err, IPC::Run::timeout($timeout));
+        IPC::Run::start(\@cmd, \$in, \$out, \$err, IPC::Run::timeout($timeout));
     };
 
     if ($@) {
@@ -1035,7 +1165,8 @@ sub run_file_watcher_example {
 
 # Run file watcher example (internal with timeout parameter)
 sub run_file_watcher_example_internal {
-    my ($example_name, $timeout) = @_;
+    my ($example_name, $timeout, $mode) = @_;
+    $mode //= 'interpreter';  # Default to interpreter mode
 
     unless ($has_ipc_run) {
         return (undef, "SKIP: Missing required module (IPC::Run)");
@@ -1049,14 +1180,34 @@ sub run_file_watcher_example_internal {
         $dir = File::Spec->catdir($examples_dir, $example_name);
     }
 
+    # Determine command based on mode
+    my @cmd;
+    if ($mode eq 'compiled') {
+        # Execute compiled binary directly
+        my $basename = basename($dir);
+        my $binary_path = File::Spec->catfile($dir, $basename);
+
+        unless (-x $binary_path) {
+            return (undef, "ERROR: Compiled binary not found at $binary_path");
+        }
+
+        @cmd = ($binary_path);
+    } elsif ($mode eq 'test') {
+        # Use 'aro test' command
+        my $aro_bin = find_aro_binary();
+        @cmd = ($aro_bin, 'test', $dir);
+    } else {
+        # Interpreter mode (default)
+        my $aro_bin = find_aro_binary();
+        @cmd = ($aro_bin, 'run', $dir);
+    }
+
     my $test_file = "/tmp/aro_test_$$.txt";
 
     # Start watcher in background (use timeout parameter)
-    # Find aro binary (PATH first, then local build)
-    my $aro_bin = find_aro_binary();
     my ($in, $out, $err) = ('', '', '');
     my $handle = eval {
-        IPC::Run::start([$aro_bin, 'run', $dir], \$in, \$out, \$err, IPC::Run::timeout($timeout));
+        IPC::Run::start(\@cmd, \$in, \$out, \$err, IPC::Run::timeout($timeout));
     };
 
     if ($@) {
@@ -1104,37 +1255,13 @@ sub run_file_watcher_example_internal {
     return ($combined, undef);
 }
 
-# Run test for a single example
-sub run_test {
-    my ($example_name) = @_;
-
-    # Delete old diff file if it exists
-    my $diff_file = "Examples/$example_name/expected.diff";
-    unlink $diff_file if -f $diff_file;
-
-    # Read test hints
-    my $hints = read_test_hint($example_name);
-
-    # Handle skip directive
-    if (defined $hints->{skip}) {
-        return {
-            name => $example_name,
-            type => 'UNKNOWN',
-            status => 'SKIP',
-            message => "Skipped: $hints->{skip}",
-            duration => 0,
-        };
-    }
-
-    # Use type from hints or auto-detect
-    my $type = $hints->{type} || detect_example_type($example_name);
-
-    # Use timeout from hints or default
-    my $timeout = $hints->{timeout} // $options{timeout};
+# Run test for a single example in a specific mode
+sub run_single_mode_test {
+    my ($example_name, $hints, $type, $timeout, $mode) = @_;
 
     my $start_time = time;
 
-    say "Testing $example_name ($type)..." if $options{verbose};
+    say "  Testing $example_name in $mode mode..." if $options{verbose};
 
     # Execute with workdir and pre-script support
     my ($output, $error) = run_test_in_workdir(
@@ -1142,7 +1269,8 @@ sub run_test {
         $hints->{workdir},
         $timeout,
         $type,
-        $hints->{'pre-script'}
+        $hints->{'pre-script'},
+        $mode
     );
 
     my $duration = time - $start_time;
@@ -1291,6 +1419,123 @@ sub run_test {
             };
         }
     }
+}
+
+# Run test for a single example (dual-mode orchestration)
+sub run_test {
+    my ($example_name) = @_;
+
+    # Delete old diff file if it exists
+    my $diff_file = "Examples/$example_name/expected.diff";
+    unlink $diff_file if -f $diff_file;
+
+    # Read test hints
+    my $hints = read_test_hint($example_name);
+
+    # Handle skip directive (applies to both modes)
+    if (defined $hints->{skip}) {
+        return {
+            name => $example_name,
+            type => 'UNKNOWN',
+            interpreter_status => 'SKIP',
+            compiled_status => 'SKIP',
+            interpreter_message => "Skipped: $hints->{skip}",
+            compiled_message => "Skipped: $hints->{skip}",
+            interpreter_duration => 0,
+            compiled_duration => 0,
+            build_duration => 0,
+            avg_duration => 0,
+            status => 'SKIP',
+            duration => 0,
+        };
+    }
+
+    # Determine test mode
+    my $mode = $hints->{mode} // 'both';
+    my $type = $hints->{type} || detect_example_type($example_name);
+    my $timeout = $hints->{timeout} // $options{timeout};
+
+    say "Testing $example_name ($type) in $mode mode..." if $options{verbose};
+
+    # Initialize result
+    my $result = {
+        name => $example_name,
+        type => $type,
+        interpreter_status => 'N/A',
+        compiled_status => 'N/A',
+        interpreter_message => '',
+        compiled_message => '',
+        interpreter_duration => 0,
+        compiled_duration => 0,
+        build_duration => 0,
+        avg_duration => 0,
+    };
+
+    # Run interpreter test
+    if ($mode eq 'interpreter' || $mode eq 'both' || $mode eq 'test') {
+        my $test_mode = $mode eq 'test' ? 'test' : 'interpreter';
+        my $interp_result = run_single_mode_test(
+            $example_name, $hints, $type, $timeout, $test_mode
+        );
+
+        $result->{interpreter_status} = $interp_result->{status};
+        $result->{interpreter_duration} = $interp_result->{duration};
+        $result->{interpreter_message} = $interp_result->{message} // '';
+        $result->{interpreter_expected} = $interp_result->{expected};
+        $result->{interpreter_actual} = $interp_result->{actual};
+    }
+
+    # Run compiled test
+    if ($mode eq 'compiled' || $mode eq 'both') {
+        # Build the example first
+        my $build_result = build_example($example_name, $timeout);
+        $result->{build_duration} = $build_result->{duration};
+
+        if (!$build_result->{success}) {
+            # Build failed - mark as ERROR
+            $result->{compiled_status} = 'ERROR';
+            $result->{compiled_message} = $build_result->{error};
+            $result->{compiled_duration} = 0;
+        } else {
+            # Build succeeded - run compiled test
+            my $compiled_result = run_single_mode_test(
+                $example_name, $hints, $type, $timeout, 'compiled'
+            );
+
+            $result->{compiled_status} = $compiled_result->{status};
+            $result->{compiled_duration} = $compiled_result->{duration};
+            $result->{compiled_message} = $compiled_result->{message} // '';
+            $result->{compiled_expected} = $compiled_result->{expected};
+            $result->{compiled_actual} = $compiled_result->{actual};
+        }
+    }
+
+    # Calculate averages and overall status
+    my @durations = grep { $_ > 0 } (
+        $result->{interpreter_duration},
+        $result->{compiled_duration}
+    );
+    $result->{avg_duration} = @durations ? (sum(@durations) / @durations) : 0;
+
+    # Overall status: PASS only if both tested modes passed
+    my @statuses = grep { $_ ne 'N/A' } (
+        $result->{interpreter_status},
+        $result->{compiled_status}
+    );
+
+    if (grep { $_ eq 'FAIL' || $_ eq 'ERROR' } @statuses) {
+        $result->{status} = 'FAIL';
+    } elsif (grep { $_ eq 'SKIP' } @statuses) {
+        $result->{status} = 'SKIP';
+    } elsif (@statuses > 0 && all { $_ eq 'PASS' } @statuses) {
+        $result->{status} = 'PASS';
+    } else {
+        $result->{status} = 'ERROR';
+    }
+
+    $result->{duration} = $result->{avg_duration};
+
+    return $result;
 }
 
 # Generate expected output for an example
@@ -1492,38 +1737,53 @@ sub run_all_tests {
 }
 
 # Print test summary
+# Format status with color coding
+sub format_status {
+    my ($status) = @_;
+
+    return 'N/A' if $status eq 'N/A';
+
+    my %colors = (
+        PASS => 'green',
+        FAIL => 'red',
+        SKIP => 'yellow',
+        ERROR => 'red',
+    );
+
+    my $color = $colors{$status} // 'white';
+    return colored($status, $color);
+}
+
 sub print_summary {
     my ($results, $duration) = @_;
 
     my $total = scalar @$results;
     my $passed = grep { $_->{status} eq 'PASS' } @$results;
-    my $failed = grep { $_->{status} eq 'FAIL' } @$results;
+    my $failed = grep { $_->{status} ne 'PASS' && $_->{status} ne 'SKIP' } @$results;
     my $skipped = grep { $_->{status} eq 'SKIP' } @$results;
-    my $errors = grep { $_->{status} eq 'ERROR' } @$results;
 
     print "\n";
-    print "=" x 80 . "\n";
+    print "=" x 120 . "\n";
     print "TEST SUMMARY\n";
-    print "=" x 80 . "\n";
-    printf "%-30s | %-8s | %-8s | %-8s\n", "Example", "Type", "Status", "Duration";
-    print "-" x 80 . "\n";
+    print "=" x 120 . "\n";
+    printf "%-30s | %-8s | %-12s | %-12s | %-12s\n",
+        "Example", "Type", "Interpreter", "Binary", "Avg Duration";
+    print "-" x 120 . "\n";
 
     for my $result (@$results) {
-        my $status = $result->{status};
-        my $colored_status =
-            $status eq 'PASS' ? colored($status, 'green') :
-            $status eq 'FAIL' ? colored($status, 'red') :
-            $status eq 'SKIP' ? colored($status, 'yellow') :
-            colored($status, 'red');
+        # Format statuses with color codes
+        my $interp_status = format_status($result->{interpreter_status});
+        my $compiled_status = format_status($result->{compiled_status});
 
-        printf "%-30s | %-8s | %-8s | %.2fs\n",
+        printf "%-30s | %-8s | %-20s | %-20s | %.2fs\n",
             $result->{name},
             $result->{type},
-            $colored_status,
-            $result->{duration};
+            $interp_status,
+            $compiled_status,
+            $result->{avg_duration};
     }
 
-    print "=" x 80 . "\n";
+    print "=" x 120 . "\n";
     printf "SUMMARY: %d/%d passed (%.1f%%)\n",
         $passed,
         $total,
@@ -1531,9 +1791,8 @@ sub print_summary {
     print "  Passed:  " . colored($passed, 'green') . "\n";
     print "  Failed:  " . colored($failed, $failed > 0 ? 'red' : 'green') . "\n";
     print "  Skipped: " . colored($skipped, 'yellow') . "\n";
-    print "  Errors:  " . colored($errors, $errors > 0 ? 'red' : 'green') . "\n";
     printf "  Duration: %.2fs\n", $duration;
-    print "=" x 80 . "\n";
+    print "=" x 120 . "\n";
 }
 
 # Run main
