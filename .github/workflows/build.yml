@@ -547,8 +547,10 @@ jobs:
 
       - name: Install Perl modules (Windows)
         if: matrix.os == 'Windows'
+        continue-on-error: true  # Some modules may fail to compile on Windows
         shell: pwsh
         run: |
+          # Install Perl modules - test script has fallbacks for missing modules
           cpan -T IPC::Run YAML::XS HTTP::Tiny Net::EmptyPort Term::ANSIColor Time::HiRes
 
       # ======================================================================
