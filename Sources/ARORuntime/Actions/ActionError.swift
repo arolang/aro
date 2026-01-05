@@ -83,12 +83,22 @@ public struct AROError: Error, Sendable {
 
 extension AROError: CustomStringConvertible {
     public var description: String {
-        """
+        var desc = """
         Runtime Error: \(message)
           Feature: \(featureSet)
           Business Activity: \(businessActivity)
           Statement: \(statement)
         """
+
+        // Add trace with resolved values if available
+        if !resolvedValues.isEmpty {
+            desc += "\n          Trace:"
+            for (key, value) in resolvedValues.sorted(by: { $0.key < $1.key }) {
+                desc += "\n            \(key) = \(value)"
+            }
+        }
+
+        return desc
     }
 }
 

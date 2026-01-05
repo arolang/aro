@@ -49,7 +49,11 @@ struct RunCommand: AsyncParsableCommand {
         do {
             appConfig = try await discovery.discover(at: resolvedPath, entryPoint: entryPoint)
         } catch {
-            print("Error: \(error)")
+            if TTYDetector.stderrIsTTY {
+                print("\u{001B}[31mError:\u{001B}[0m \(error)")
+            } else {
+                print("Error: \(error)")
+            }
             throw ExitCode.failure
         }
 
@@ -77,7 +81,11 @@ struct RunCommand: AsyncParsableCommand {
             do {
                 source = try String(contentsOf: sourceFile, encoding: .utf8)
             } catch {
-                print("Error reading \(sourceFile.lastPathComponent): \(error)")
+                if TTYDetector.stderrIsTTY {
+                    print("\u{001B}[31mError reading \(sourceFile.lastPathComponent):\u{001B}[0m \(error)")
+                } else {
+                    print("Error reading \(sourceFile.lastPathComponent): \(error)")
+                }
                 throw ExitCode.failure
             }
 
@@ -160,10 +168,18 @@ struct RunCommand: AsyncParsableCommand {
                 print(response.format(for: outputContext))
             }
         } catch let error as ActionError {
-            print("Runtime error: \(error)")
+            if TTYDetector.stderrIsTTY {
+                print("\u{001B}[31mRuntime error:\u{001B}[0m \(error)")
+            } else {
+                print("Runtime error: \(error)")
+            }
             throw ExitCode.failure
         } catch {
-            print("Error: \(error)")
+            if TTYDetector.stderrIsTTY {
+                print("\u{001B}[31mError:\u{001B}[0m \(error)")
+            } else {
+                print("Error: \(error)")
+            }
             throw ExitCode.failure
         }
     }

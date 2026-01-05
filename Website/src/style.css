@@ -988,6 +988,10 @@ body.menu-open {
         align-items: center;
     }
 
+    .hero-title {
+        margin-bottom: 36px;
+    }
+
     .comparison {
         grid-template-columns: 1fr;
     }

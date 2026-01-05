@@ -223,23 +223,43 @@ sub read_test_hint {
     return \%hints;
 }
 
-# Find the aro binary - checks PATH first, then local build
+# Find the aro binary - checks environment variable, then local build, then installed versions
 sub find_aro_binary {
-    # Try to find aro in PATH first (for CI/installed version)
+    # 1. Check if ARO_BIN environment variable is set
+    if ($ENV{ARO_BIN} && -x $ENV{ARO_BIN}) {
+        return $ENV{ARO_BIN};
+    }
+
+    # 2. Check local release build first (most up-to-date during development)
+    my $local_release = File::Spec->catfile($RealBin, '.build', 'release', 'aro');
+    if (-x $local_release) {
+        return $local_release;
+    }
+
+    # 3. Check /usr/bin/aro (system install)
+    if (-x '/usr/bin/aro') {
+        return '/usr/bin/aro';
+    }
+
+    # 4. Check /opt/homebrew/bin/aro (Homebrew on Apple Silicon)
+    if (-x '/opt/homebrew/bin/aro') {
+        return '/opt/homebrew/bin/aro';
+    }
+
+    # 5. Check ./aro-bin/aro (local binary directory)
+    my $local_bin = File::Spec->catfile($RealBin, 'aro-bin', 'aro');
+    if (-x $local_bin) {
+        return $local_bin;
+    }
+
+    # 6. Last resort: try 'aro' in PATH and let shell find it
     my $which_aro = `which aro 2>/dev/null`;
     chomp $which_aro;
-
     if ($which_aro && -x $which_aro) {
         return $which_aro;
     }
 
-    # Fallback to local build directory
-    my $local_aro = File::Spec->catfile($RealBin, '.build', 'release', 'aro');
-    if (-x $local_aro) {
-        return $local_aro;
-    }
-
-    # Last resort: try 'aro' and let shell find it
+    # Fallback: return 'aro' and hope for the best
     return 'aro';
 }
 
@@ -569,7 +589,10 @@ sub run_console_example_internal {
             return (undef, "ERROR: $@");
         }
 
-        return ($out, undef);
+        # Combine stdout and stderr to match fallback behavior
+        my $combined = $out;
+        $combined .= $err if $err;
+        return ($combined, undef);
     } else {
         # Fallback to system()
         my $aro_bin = find_aro_binary();
@@ -1075,7 +1098,10 @@ sub run_file_watcher_example_internal {
     $cleanup->();
     @cleanup_handlers = grep { $_ != $cleanup } @cleanup_handlers;
 
-    return ($out, undef);
+    # Combine stdout and stderr
+    my $combined = $out;
+    $combined .= $err if $err;
+    return ($combined, undef);
 }
 
 # Run test for a single example
