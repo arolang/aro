@@ -1,9 +1,9 @@
-# Generated: Sun Jan  4 12:20:27 2026
+# Generated: Sun Jan  4 23:42:34 2026
 # Type: http
 # Command: aro run ./Examples/RepositoryObserver
 ---
-GET /users => ERROR: 404 Not Found
-GET /users/{id} => ERROR: 404 Not Found
-POST /users => ERROR: 404 Not Found
-PUT /users/{id} => ERROR: 404 Not Found
-DELETE /users/{id} => ERROR: 404 Not Found
+GET /users => {"users":[]}
+GET /users/{id} => {"data":[]}
+POST /users => {"email":"test@example.com","name":"Test User"}
+PUT /users/{id} => ERROR: 500 Internal Server Error
+DELETE /users/{id} => ERROR: 599 Internal Exception

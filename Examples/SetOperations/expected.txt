@@ -1,4 +1,4 @@
-# Generated: Sun Jan  4 12:20:39 2026
+# Generated: Sun Jan  4 23:42:36 2026
 # Type: console
 # Command: aro run ./Examples/SetOperations
 ---
@@ -42,14 +42,14 @@
 [Application-Start] Object B: { name: Alice, age: 31, address: { city: NYC, state: NY } }
 [Application-Start]
 [Application-Start] Intersection (matching fields):
-[Application-Start] address: city: NYC
+[Application-Start] address.city: NYC
 name: Alice
 [Application-Start] Difference (fields in A not matching B):
-[Application-Start] address: zip: 10001
+[Application-Start] address.zip: 10001
 age: 30
 [Application-Start] Union (merge, A wins):
-[Application-Start] address: city: NYC
-zip: 10001
+[Application-Start] address.city: NYC
+address.zip: 10001
 age: 30
 name: Alice
 [Application-Start]

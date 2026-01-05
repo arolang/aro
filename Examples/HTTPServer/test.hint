@@ -1,0 +1,2 @@
+# Skip this test - requires manual HTTP testing
+skip: HTTP server requires manual testing with curl/browser

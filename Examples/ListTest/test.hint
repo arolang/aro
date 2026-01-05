@@ -1,0 +1,2 @@
+# Test hints for ListTest
+skip: TTY detection changes affect output formatting
