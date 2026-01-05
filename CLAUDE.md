@@ -384,5 +384,7 @@ The `future/` directory contains planned features not yet implemented
 ## Concurrency
 
 All core types (`SymbolTable`, `Token`, AST nodes, `ActionImplementation`) are `Sendable` for Swift 6.2 concurrency safety.
-- Do never ever say: "🤖 Generated with [Claude Code](https://claude.com/claude-code)" and "Co-Authored-By: Claude
-  <noreply@anthropic.com>"
+
+## Git Commits
+
+When creating git commits, do NOT include the Claude Code signature or co-author attribution in commit messages.
