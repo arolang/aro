@@ -47,13 +47,7 @@ public struct ExtractAction: ActionImplementation {
             resolvedSource = try extractValue(from: source, path: object.specifiers)
         } else if let stringSource = source as? String {
             // If source is a string containing JSON, parse it
-            #if DEBUG
-            print("[ExtractAction] Attempting to parse JSON string: \(stringSource.prefix(100))")
-            #endif
             if let parsed = parseJSONString(stringSource) {
-                #if DEBUG
-                print("[ExtractAction] Successfully parsed JSON to: \(type(of: parsed))")
-                #endif
                 resolvedSource = parsed
             }
         }
