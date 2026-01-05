@@ -635,30 +635,14 @@ jobs:
           chmod +x test-examples.pl
           perl test-examples.pl --verbose
 
-      - name: Archive test diffs
-        if: always()
-        uses: actions/upload-artifact@v6
-        with:
-          name: test-diffs-${{ matrix.os }}
-          path: |
-            Examples/**/expected.diff
-            Examples/**/expected.binary.diff
-            Examples/**/expected.txt
-            Examples/**/actual.txt
-            Examples/**/testrun.log
-          retention-days: 7
-          if-no-files-found: ignore
-
       - name: Upload test results on failure
         if: failure()
         uses: actions/upload-artifact@v6
         with:
           name: test-failures-${{ matrix.os }}
           path: |
-            Examples/**/expected.diff
-            Examples/**/expected.binary.diff
-            Examples/**/expected.txt
-            Examples/**/testrun.log
+            Examples/**/expected.*
+            Examples/**/testrun.*
           retention-days: 7
 
   # ===========================================================================
