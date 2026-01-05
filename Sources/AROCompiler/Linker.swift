@@ -278,11 +278,17 @@ public final class CCompiler {
 
         // Platform-specific libraries
         #if os(macOS)
-        // Link Swift runtime
+        // Link Swift runtime and concurrency libraries
         if let swiftLibPath = findSwiftLibPath() {
             args.append("-L\(swiftLibPath)")
             args.append("-rpath")
             args.append(swiftLibPath)
+
+            // Explicitly link Swift runtime libraries needed by libARORuntime.a
+            args.append("-lswiftCore")
+            args.append("-lswift_Concurrency")
+            args.append("-lswift_StringProcessing")
+            args.append("-lswift_RegexParser")
         }
         args.append("-lSystem")
 
@@ -298,6 +304,10 @@ public final class CCompiler {
         if let swiftLibPath = findSwiftLibPath() {
             args.append("-L\(swiftLibPath)")
             args.append("-Wl,-rpath,\(swiftLibPath)")
+
+            // Explicitly link Swift runtime libraries
+            args.append("-lswiftCore")
+            args.append("-lswift_Concurrency")
         }
 
         // Dead code stripping on Linux
