@@ -64,22 +64,6 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Install Perl dependencies
-        run: |
-          export DEBIAN_FRONTEND=noninteractive
-          apt-get update -qq
-          # Install available Perl modules from apt and build tools
-          apt-get install -y -qq \
-            libipc-run-perl \
-            libyaml-libyaml-perl \
-            libhttp-tiny-perl \
-            cpanminus \
-            build-essential \
-            libssl-dev \
-            zlib1g-dev 2>&1 | grep -v "^debconf:" || true
-          # Install remaining modules via cpanm
-          cpanm --notest --quiet Net::EmptyPort Term::ANSIColor 2>&1 || true
-
       - name: Cache Swift packages
         uses: actions/cache@v5
         with:
@@ -185,10 +169,6 @@ jobs:
         uses: swift-actions/setup-swift@364295d9c23900ce04d4e5cc708387921b4e50f9  # v3
         with:
           swift-version: ${{ env.SWIFT_VERSION }}
-
-      - name: Install Perl dependencies
-        run: |
-          cpan -T IPC::Run YAML::XS HTTP::Tiny Net::EmptyPort Term::ANSIColor 2>&1 || true
 
       - name: Cache Swift packages
         uses: actions/cache@v5
@@ -410,16 +390,6 @@ jobs:
         with:
           swift-version: swift-6.2.1-release
           swift-build: 6.2.1-RELEASE
-
-      - name: Install Perl dependencies
-        shell: bash
-        run: |
-          # Try cpanm first (faster), fall back to cpan
-          if command -v cpanm &> /dev/null; then
-            cpanm --notest --quiet IPC::Run YAML::XS HTTP::Tiny Net::EmptyPort Term::ANSIColor 2>&1 || true
-          else
-            echo "yes" | cpan -T IPC::Run YAML::XS HTTP::Tiny Net::EmptyPort Term::ANSIColor 2>&1 || true
-          fi
 
       - name: Build
         run: swift build -c debug
@@ -644,10 +614,24 @@ jobs:
           gcc --version
           gmake --version
 
-      - name: Install Perl modules (Linux/macOS)
-        if: matrix.os != 'Windows'
+      - name: Install Perl modules (Linux)
+        if: matrix.os == 'Linux'
         run: |
-          cpan -T IPC::Run YAML::XS HTTP::Tiny Net::EmptyPort Term::ANSIColor Time::HiRes
+          export DEBIAN_FRONTEND=noninteractive
+          sudo apt-get update -qq
+          # Install available Perl modules from apt (faster and more reliable)
+          sudo apt-get install -y -qq \
+            libipc-run-perl \
+            libyaml-libyaml-perl \
+            libhttp-tiny-perl \
+            cpanminus || true
+          # Install remaining modules via cpan
+          cpan -T Net::EmptyPort Term::ANSIColor 2>&1 || true
+
+      - name: Install Perl modules (macOS)
+        if: matrix.os == 'macOS'
+        run: |
+          cpan -T IPC::Run YAML::XS HTTP::Tiny Net::EmptyPort Term::ANSIColor Time::HiRes 2>&1 || true
 
       - name: Install Perl modules (Windows)
         if: matrix.os == 'Windows'
