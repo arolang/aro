@@ -281,8 +281,7 @@ public final class CCompiler {
         // Link Swift runtime and concurrency libraries
         if let swiftLibPath = findSwiftLibPath() {
             args.append("-L\(swiftLibPath)")
-            args.append("-rpath")
-            args.append(swiftLibPath)
+            args.append("-Wl,-rpath,\(swiftLibPath)")
 
             // Explicitly link Swift runtime libraries needed by libARORuntime.a
             args.append("-lswiftCore")
@@ -370,8 +369,7 @@ public final class CCompiler {
         #if os(macOS)
         if let swiftLibPath = findSwiftLibPath() {
             args.append("-L\(swiftLibPath)")
-            args.append("-rpath")
-            args.append(swiftLibPath)
+            args.append("-Wl,-rpath,\(swiftLibPath)")
         }
         args.append("-lSystem")
         #elseif os(Linux)
