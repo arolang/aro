@@ -282,7 +282,16 @@ public final class CCompiler {
         if let swiftLibPath = findSwiftLibPath() {
             args.append("-L\(swiftLibPath)")
             args.append("-Wl,-rpath,\(swiftLibPath)")
+
+            // Explicitly link Swift libraries with -l flags
+            // These must come after -lARORuntime so the linker can resolve symbols
+            args.append("-lswiftCore")
+            args.append("-lswift_Concurrency")
+            args.append("-lswift_StringProcessing")
+            args.append("-lswift_RegexParser")
+            args.append("-lswiftSwiftOnoneSupport")
         }
+        args.append("-lSystem")
 
         // Dead code stripping (macOS specific)
         if options.deadStrip {
