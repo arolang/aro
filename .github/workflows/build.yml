@@ -64,6 +64,12 @@ jobs:
         with:
           fetch-depth: 0
 
+      - name: Install Perl dependencies
+        run: |
+          apt-get update
+          apt-get install -y cpanminus
+          cpanm --notest IPC::Run YAML::XS HTTP::Tiny Net::EmptyPort Term::ANSIColor
+
       - name: Cache Swift packages
         uses: actions/cache@v5
         with:
@@ -169,6 +175,10 @@ jobs:
         uses: swift-actions/setup-swift@364295d9c23900ce04d4e5cc708387921b4e50f9  # v3
         with:
           swift-version: ${{ env.SWIFT_VERSION }}
+
+      - name: Install Perl dependencies
+        run: |
+          cpan -T IPC::Run YAML::XS HTTP::Tiny Net::EmptyPort Term::ANSIColor
 
       - name: Cache Swift packages
         uses: actions/cache@v5
@@ -390,6 +400,11 @@ jobs:
         with:
           swift-version: swift-6.2.1-release
           swift-build: 6.2.1-RELEASE
+
+      - name: Install Perl dependencies
+        shell: bash
+        run: |
+          cpan -T IPC::Run YAML::XS HTTP::Tiny Net::EmptyPort Term::ANSIColor
 
       - name: Build
         run: swift build -c debug
