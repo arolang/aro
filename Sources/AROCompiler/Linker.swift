@@ -427,7 +427,55 @@ public final class CCompiler {
         return "clang" // Hope it's in PATH
     }
 
+    /// Public accessor for Swift library path (for debugging)
+    public func getSwiftLibPath() -> String? {
+        return findSwiftLibPath()
+    }
+
     private func findSwiftLibPath() -> String? {
+        // First, try to get the Swift library path from the Swift toolchain itself
+        let process = Process()
+        process.executableURL = URL(fileURLWithPath: "/usr/bin/xcrun")
+        process.arguments = ["--find", "swift"]
+
+        let pipe = Pipe()
+        process.standardOutput = pipe
+        process.standardError = FileHandle.nullDevice
+
+        do {
+            try process.run()
+            process.waitUntilExit()
+
+            if process.terminationStatus == 0 {
+                let data = pipe.fileHandleForReading.readDataToEndOfFile()
+                if let swiftPath = String(data: data, encoding: .utf8)?.trimmingCharacters(in: .whitespacesAndNewlines),
+                   !swiftPath.isEmpty {
+                    // Swift is at: /path/to/toolchain/usr/bin/swift
+                    // Libraries are at: /path/to/toolchain/usr/lib/swift/macosx (or linux)
+                    let swiftURL = URL(fileURLWithPath: swiftPath)
+                    let toolchainLib = swiftURL
+                        .deletingLastPathComponent()  // Remove 'bin'
+                        .deletingLastPathComponent()  // Remove 'usr'
+                        .appendingPathComponent("usr")
+                        .appendingPathComponent("lib")
+                        .appendingPathComponent("swift")
+
+                    #if os(macOS)
+                    let platformLib = toolchainLib.appendingPathComponent("macosx").path
+                    #elseif os(Linux)
+                    let platformLib = toolchainLib.appendingPathComponent("linux").path
+                    #else
+                    let platformLib = toolchainLib.path
+                    #endif
+
+                    if FileManager.default.fileExists(atPath: platformLib) {
+                        return platformLib
+                    }
+                }
+            }
+        } catch {}
+
+        // Fallback to standard paths
         #if os(macOS)
         // Check Xcode toolchain
         let xcodeLib = "/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/lib/swift/macosx"
@@ -439,6 +487,12 @@ public final class CCompiler {
         let usrLib = "/usr/lib/swift"
         if FileManager.default.fileExists(atPath: usrLib) {
             return usrLib
+        }
+
+        // Check Homebrew Swift installation
+        let homebrewLib = "/opt/homebrew/opt/swift/lib/swift/macosx"
+        if FileManager.default.fileExists(atPath: homebrewLib) {
+            return homebrewLib
         }
         #elseif os(Linux)
         let swiftLib = "/usr/lib/swift/linux"
