@@ -66,9 +66,10 @@ jobs:
 
       - name: Install Perl dependencies
         run: |
-          apt-get update
-          apt-get install -y cpanminus
-          cpanm --notest IPC::Run YAML::XS HTTP::Tiny Net::EmptyPort Term::ANSIColor
+          export DEBIAN_FRONTEND=noninteractive
+          apt-get update -qq
+          apt-get install -y -qq cpanminus libssl-dev libz-dev 2>&1 | grep -v "^debconf:"
+          cpanm --notest --quiet IPC::Run YAML::XS HTTP::Tiny Net::EmptyPort Term::ANSIColor
 
       - name: Cache Swift packages
         uses: actions/cache@v5
