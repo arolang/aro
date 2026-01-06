@@ -120,6 +120,11 @@ jobs:
           cd cards
           npm install
 
+      - name: Generate cards
+        run: |
+          cd cards
+          node generate.js
+
       - name: Post card to Mastodon
         env:
           MASTODON_INSTANCE: ${{ secrets.MASTODON_INSTANCE }}
