@@ -276,6 +276,8 @@ public final class CCompiler {
             args.append("-Wl,-rpath,\(libDir)")
         }
 
+        // Platform-specific libraries
+        #if os(macOS)
         // Link Swift runtime libraries needed by libARORuntime.a
         if let swiftLibPath = findSwiftLibPath() {
             args.append("-L\(swiftLibPath)")
