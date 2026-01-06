@@ -68,8 +68,17 @@ jobs:
         run: |
           export DEBIAN_FRONTEND=noninteractive
           apt-get update -qq
-          apt-get install -y -qq cpanminus libssl-dev libz-dev 2>&1 | grep -v "^debconf:"
-          cpanm --notest --quiet IPC::Run YAML::XS HTTP::Tiny Net::EmptyPort Term::ANSIColor
+          # Install available Perl modules from apt and build tools
+          apt-get install -y -qq \
+            libipc-run-perl \
+            libyaml-libyaml-perl \
+            libhttp-tiny-perl \
+            cpanminus \
+            build-essential \
+            libssl-dev \
+            zlib1g-dev 2>&1 | grep -v "^debconf:" || true
+          # Install remaining modules via cpanm
+          cpanm --notest --quiet Net::EmptyPort Term::ANSIColor 2>&1 || true
 
       - name: Cache Swift packages
         uses: actions/cache@v5
@@ -179,7 +188,7 @@ jobs:
 
       - name: Install Perl dependencies
         run: |
-          cpan -T IPC::Run YAML::XS HTTP::Tiny Net::EmptyPort Term::ANSIColor
+          cpan -T IPC::Run YAML::XS HTTP::Tiny Net::EmptyPort Term::ANSIColor 2>&1 || true
 
       - name: Cache Swift packages
         uses: actions/cache@v5
@@ -405,7 +414,12 @@ jobs:
       - name: Install Perl dependencies
         shell: bash
         run: |
-          cpan -T IPC::Run YAML::XS HTTP::Tiny Net::EmptyPort Term::ANSIColor
+          # Try cpanm first (faster), fall back to cpan
+          if command -v cpanm &> /dev/null; then
+            cpanm --notest --quiet IPC::Run YAML::XS HTTP::Tiny Net::EmptyPort Term::ANSIColor 2>&1 || true
+          else
+            echo "yes" | cpan -T IPC::Run YAML::XS HTTP::Tiny Net::EmptyPort Term::ANSIColor 2>&1 || true
+          fi
 
       - name: Build
         run: swift build -c debug
