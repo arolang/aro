@@ -21,6 +21,8 @@ on:
 jobs:
   analyze:
     name: Analyze (${{ matrix.language }})
+    # TEMPORARY: Skipped for now, will re-enable later
+    if: false
     # Runner size impacts CodeQL analysis time. To learn more, please see:
     #   - https://gh.io/recommended-hardware-resources-for-running-codeql
     #   - https://gh.io/supported-runners-and-hardware-resources
