@@ -301,15 +301,12 @@ public final class CCompiler {
         args.append("-lpthread")
         args.append("-ldl")
         args.append("-lm")
-        // Swift runtime on Linux
-        if let swiftLibPath = findSwiftLibPath() {
-            args.append("-L\(swiftLibPath)")
-            args.append("-Wl,-rpath,\(swiftLibPath)")
 
-            // Explicitly link Swift runtime libraries
-            args.append("-lswiftCore")
-            args.append("-lswift_Concurrency")
-        }
+        // Note: On Linux, Swift runtime libraries are handled differently
+        // They may be statically linked or provided by the system
+        // Explicitly linking them can cause linker hangs in some environments
+        // If Swift symbols are missing, ensure swift runtime is installed:
+        // sudo apt-get install libswiftcore-dev or similar
 
         // Dead code stripping on Linux
         if options.deadStrip {
