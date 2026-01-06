@@ -12,8 +12,10 @@ use Getopt::Long;
 use Time::HiRes qw(time sleep);
 use List::Util qw(sum all);
 
+# Required modules
+use IPC::Run qw(start finish timeout kill_kill);
+
 # Try to load optional modules, fall back to basic functionality if not available
-my $has_ipc_run = eval { require IPC::Run; 1; } || 0;
 my $has_yaml = eval { require YAML::XS; 1; } || 0;
 my $has_http_tiny = eval { require HTTP::Tiny; 1; } || 0;
 my $has_net_emptyport = eval { require Net::EmptyPort; 1; } || 0;
@@ -132,12 +134,6 @@ sub write_testrun_log {
 sub main {
     unless (-d $examples_dir) {
         die "Examples directory not found: $examples_dir\n";
-    }
-
-    # Check for required modules
-    unless ($has_ipc_run) {
-        warn "Warning: IPC::Run not installed. Using fallback process management.\n";
-        warn "Install with: cpan -i IPC::Run\n\n";
     }
 
     my @examples;
@@ -310,10 +306,10 @@ sub build_example {
     # Execute: aro build <dir>
     my ($in, $out, $err) = ('', '', '');
     my $handle = eval {
-        IPC::Run::start(
+        start(
             [$aro_bin, 'build', $dir],
             \$in, \$out, \$err,
-            IPC::Run::timeout($timeout)
+            timeout($timeout)
         );
     };
 
@@ -327,7 +323,7 @@ sub build_example {
         };
     }
 
-    eval { IPC::Run::finish($handle) };
+    eval { finish($handle) };
     my $build_duration = time - $start_time;
 
     if ($? != 0) {
@@ -435,15 +431,11 @@ sub run_test_in_workdir {
 sub run_script {
     my ($script, $timeout, $context) = @_;
 
-    unless ($has_ipc_run) {
-        return (undef, "IPC::Run module not available", -1);
-    }
-
     # Use IPC::Run for timeout support
     my ($in, $out, $err) = ('', '', '');
     my $handle = eval {
-        IPC::Run::start(['sh', '-c', $script], \$in, \$out, \$err,
-                       IPC::Run::timeout($timeout));
+        start(['sh', '-c', $script], \$in, \$out, \$err,
+              timeout($timeout));
     };
 
     if ($@) {
@@ -692,45 +684,32 @@ sub run_console_example_internal {
         @cmd = ($aro_bin, 'run', $dir);
     }
 
-    if ($has_ipc_run) {
-        # Use IPC::Run for better control
-        my ($in, $out, $err) = ('', '', '');
-        my $handle = eval {
-            IPC::Run::start(\@cmd, \$in, \$out, \$err, IPC::Run::timeout($timeout));
-        };
+    # Use IPC::Run for better control
+    my ($in, $out, $err) = ('', '', '');
+    my $handle = eval {
+        start(\@cmd, \$in, \$out, \$err, timeout($timeout));
+    };
 
-        if ($@) {
-            return (undef, "Failed to start: $@");
-        }
-
-        eval {
-            IPC::Run::finish($handle);
-        };
-
-        if ($@) {
-            if ($@ =~ /timeout/) {
-                IPC::Run::kill_kill($handle);
-                return (undef, "TIMEOUT after ${timeout}s");
-            }
-            return (undef, "ERROR: $@");
-        }
-
-        # Combine stdout and stderr to match fallback behavior
-        my $combined = $out;
-        $combined .= $err if $err;
-        return ($combined, undef);
-    } else {
-        # Fallback to system() - use same command logic
-        my $cmd_str = join(' ', map { "'$_'" } @cmd);
-        my $output = `$cmd_str 2>&1`;
-        my $exit_code = $? >> 8;
-
-        if ($exit_code != 0) {
-            return (undef, "Exit code: $exit_code\n$output");
-        }
-
-        return ($output, undef);
+    if ($@) {
+        return (undef, "Failed to start: $@");
     }
+
+    eval {
+        finish($handle);
+    };
+
+    if ($@) {
+        if ($@ =~ /timeout/) {
+            kill_kill($handle);
+            return (undef, "TIMEOUT after ${timeout}s");
+        }
+        return (undef, "ERROR: $@");
+    }
+
+    # Combine stdout and stderr
+    my $combined = $out;
+    $combined .= $err if $err;
+    return ($combined, undef);
 }
 
 # Determine execution order for an operation (lower = earlier)
@@ -806,8 +785,8 @@ sub run_http_example_internal {
     my ($example_name, $timeout, $mode) = @_;
     $mode //= 'interpreter';  # Default to interpreter mode
 
-    unless ($has_yaml && $has_http_tiny && $has_net_emptyport && $has_ipc_run) {
-        return (undef, "SKIP: Missing required modules (YAML::XS, HTTP::Tiny, Net::EmptyPort, IPC::Run)");
+    unless ($has_yaml && $has_http_tiny && $has_net_emptyport) {
+        return (undef, "SKIP: Missing required modules (YAML::XS, HTTP::Tiny, Net::EmptyPort)");
     }
 
     # Handle '.' or absolute paths directly, otherwise prepend examples_dir
@@ -862,7 +841,7 @@ sub run_http_example_internal {
     # Start server in background
     my ($in, $out, $err) = ('', '', '');
     my $handle = eval {
-        IPC::Run::start(\@cmd, \$in, \$out, \$err, IPC::Run::timeout($timeout));
+        start(\@cmd, \$in, \$out, \$err, timeout($timeout));
     };
 
     if ($@) {
@@ -1053,8 +1032,8 @@ sub run_socket_example_internal {
     my ($example_name, $timeout, $mode) = @_;
     $mode //= 'interpreter';  # Default to interpreter mode
 
-    unless ($has_ipc_run && $has_net_emptyport) {
-        return (undef, "SKIP: Missing required modules (IPC::Run, Net::EmptyPort)");
+    unless ($has_net_emptyport) {
+        return (undef, "SKIP: Missing required module (Net::EmptyPort)");
     }
 
     # Handle '.' or absolute paths directly, otherwise prepend examples_dir
@@ -1092,7 +1071,7 @@ sub run_socket_example_internal {
     # Start server in background
     my ($in, $out, $err) = ('', '', '');
     my $handle = eval {
-        IPC::Run::start(\@cmd, \$in, \$out, \$err, IPC::Run::timeout($timeout));
+        start(\@cmd, \$in, \$out, \$err, timeout($timeout));
     };
 
     if ($@) {
@@ -1206,10 +1185,6 @@ sub run_file_watcher_example_internal {
     my ($example_name, $timeout, $mode) = @_;
     $mode //= 'interpreter';  # Default to interpreter mode
 
-    unless ($has_ipc_run) {
-        return (undef, "SKIP: Missing required module (IPC::Run)");
-    }
-
     # Handle '.' or absolute paths directly, otherwise prepend examples_dir
     my $dir;
     if ($example_name eq '.' || File::Spec->file_name_is_absolute($example_name)) {
@@ -1245,7 +1220,7 @@ sub run_file_watcher_example_internal {
     # Start watcher in background (use timeout parameter)
     my ($in, $out, $err) = ('', '', '');
     my $handle = eval {
-        IPC::Run::start(\@cmd, \$in, \$out, \$err, IPC::Run::timeout($timeout));
+        start(\@cmd, \$in, \$out, \$err, timeout($timeout));
     };
 
     if ($@) {
@@ -1257,7 +1232,7 @@ sub run_file_watcher_example_internal {
         eval {
             kill 'TERM', $handle->pid if $handle->pumpable;
             sleep 0.5;
-            IPC::Run::kill_kill($handle) if $handle->pumpable;
+            kill_kill($handle) if $handle->pumpable;
             unlink $test_file if -f $test_file;
         };
     };
@@ -1281,7 +1256,7 @@ sub run_file_watcher_example_internal {
     sleep 1;
 
     # Capture output
-    eval { IPC::Run::finish($handle, IPC::Run::timeout(2)) };
+    eval { finish($handle, timeout(2)) };
 
     # Cleanup
     $cleanup->();
