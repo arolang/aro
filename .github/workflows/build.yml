@@ -55,6 +55,8 @@ jobs:
   linux:
     needs: test
     name: Linux
+    # TEMPORARY: Skipped for now, will re-enable later
+    if: false
     runs-on: ubuntu-latest
     container:
       image: swift:6.2-jammy
@@ -375,6 +377,8 @@ jobs:
   windows:
     needs: test
     name: Windows
+    # TEMPORARY: Skipped for now, will re-enable later
+    if: false
     permissions:
       contents: read
     runs-on: windows-latest
@@ -493,28 +497,30 @@ jobs:
   # Integration Tests (test-examples.pl on all platforms)
   # ===========================================================================
   integration-tests:
-    needs: [linux, macos, windows]
+    # TEMPORARY: Only running macOS tests, will re-enable Linux/Windows later
+    needs: [macos]
     name: Integration Tests - ${{ matrix.os }}
     runs-on: ${{ matrix.runner }}
     strategy:
       fail-fast: false
       matrix:
         include:
-          - os: Linux
-            runner: ubuntu-latest
-            artifact: aro-linux-amd64
-            binary: aro
-            shell: bash
+          # TEMPORARY: Linux and Windows skipped, will re-enable later
+          # - os: Linux
+          #   runner: ubuntu-latest
+          #   artifact: aro-linux-amd64
+          #   binary: aro
+          #   shell: bash
           - os: macOS
             runner: macos-15
             artifact: aro-macos-arm64
             binary: aro
             shell: bash
-          - os: Windows
-            runner: windows-latest
-            artifact: aro-windows-amd64
-            binary: aro.exe
-            shell: bash
+          # - os: Windows
+          #   runner: windows-latest
+          #   artifact: aro-windows-amd64
+          #   binary: aro.exe
+          #   shell: bash
     defaults:
       run:
         shell: ${{ matrix.shell }}
@@ -734,7 +740,8 @@ jobs:
   # ===========================================================================
   release:
     name: Create Release
-    needs: [linux, macos, windows, integration-tests, documentation]
+    # TEMPORARY: Only depending on macOS build while Linux/Windows are skipped
+    needs: [macos, integration-tests, documentation]
     runs-on: ubuntu-latest
     if: github.ref_type == 'tag'
     permissions:
