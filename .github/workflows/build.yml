@@ -160,7 +160,7 @@ jobs:
   macos:
     needs: test
     name: macOS
-    runs-on: macos-15
+    runs-on: macos-26
     steps:
       - name: Checkout repository
         uses: actions/checkout@v6
@@ -512,7 +512,7 @@ jobs:
           #   binary: aro
           #   shell: bash
           - os: macOS
-            runner: macos-15
+            runner: macos-26
             artifact: aro-macos-arm64
             binary: aro
             shell: bash
