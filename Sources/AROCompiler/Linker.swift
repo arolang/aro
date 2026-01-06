@@ -435,8 +435,16 @@ public final class CCompiler {
     private func findSwiftLibPath() -> String? {
         // First, try to get the Swift library path from the Swift toolchain itself
         let process = Process()
+
+        #if os(macOS)
+        // macOS: use xcrun to find swift
         process.executableURL = URL(fileURLWithPath: "/usr/bin/xcrun")
         process.arguments = ["--find", "swift"]
+        #else
+        // Linux/Windows: use which to find swift
+        process.executableURL = URL(fileURLWithPath: "/usr/bin/which")
+        process.arguments = ["swift"]
+        #endif
 
         let pipe = Pipe()
         process.standardOutput = pipe
