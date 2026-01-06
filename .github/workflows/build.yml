@@ -55,8 +55,6 @@ jobs:
   linux:
     needs: test
     name: Linux
-    # TEMPORARY: Skipped for now, will re-enable later
-    if: false
     runs-on: ubuntu-latest
     container:
       image: swift:6.2-jammy
@@ -505,12 +503,11 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          # TEMPORARY: Linux and Windows skipped, will re-enable later
-          # - os: Linux
-          #   runner: ubuntu-latest
-          #   artifact: aro-linux-amd64
-          #   binary: aro
-          #   shell: bash
+          - os: Linux
+            runner: ubuntu-latest
+            artifact: aro-linux-amd64
+            binary: aro
+            shell: bash
           - os: macOS
             runner: macos-26
             artifact: aro-macos-arm64
@@ -740,8 +737,7 @@ jobs:
   # ===========================================================================
   release:
     name: Create Release
-    # TEMPORARY: Only depending on macOS build while Linux/Windows are skipped
-    needs: [macos, integration-tests, documentation]
+    needs: [linux, macos, integration-tests, documentation]
     runs-on: ubuntu-latest
     if: github.ref_type == 'tag'
     permissions:
