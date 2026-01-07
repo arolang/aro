@@ -273,7 +273,18 @@ public final class CCompiler {
             let libDir = URL(fileURLWithPath: runtimePath).deletingLastPathComponent().path
             args.append("-L\(libDir)")
             args.append("-lARORuntime")
+
+            // Add rpath - format depends on compiler
+            #if os(Linux)
+            // swiftc requires -Xlinker format
+            args.append("-Xlinker")
+            args.append("-rpath")
+            args.append("-Xlinker")
+            args.append(libDir)
+            #else
+            // clang uses -Wl, format
             args.append("-Wl,-rpath,\(libDir)")
+            #endif
         }
 
         // Platform-specific libraries
