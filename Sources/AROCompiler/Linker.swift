@@ -431,15 +431,21 @@ public final class CCompiler {
 
     private func findCompiler() -> String {
         #if os(Linux)
+        FileHandle.standardError.write("[LINKER] findCompiler() called on Linux\n".data(using: .utf8)!)
+
         // On Linux, prefer swiftc for linking Swift static libraries
         // This ensures proper Swift runtime linkage
         let swiftCompilers = ["/usr/bin/swiftc", "swiftc"]
         for compiler in swiftCompilers {
+            FileHandle.standardError.write("[LINKER] Checking if compiler exists: \(compiler)\n".data(using: .utf8)!)
             if FileManager.default.fileExists(atPath: compiler) {
-                print("[LINKER] Found compiler (direct check): \(compiler)")
+                FileHandle.standardError.write("[LINKER] Found compiler (direct check): \(compiler)\n".data(using: .utf8)!)
                 return compiler
             }
+            FileHandle.standardError.write("[LINKER] Compiler not found at: \(compiler)\n".data(using: .utf8)!)
         }
+
+        FileHandle.standardError.write("[LINKER] Trying to find swiftc in PATH using which\n".data(using: .utf8)!)
 
         // Try to find swiftc in PATH
         let process = Process()
@@ -456,12 +462,14 @@ public final class CCompiler {
             let data = pipe.fileHandleForReading.readDataToEndOfFile()
             if let path = String(data: data, encoding: .utf8)?.trimmingCharacters(in: .whitespacesAndNewlines),
                !path.isEmpty {
-                print("[LINKER] Found compiler (which swiftc): \(path)")
+                FileHandle.standardError.write("[LINKER] Found compiler (which swiftc): \(path)\n".data(using: .utf8)!)
                 return path
             }
-        } catch {}
+        } catch {
+            FileHandle.standardError.write("[LINKER] which swiftc failed: \(error)\n".data(using: .utf8)!)
+        }
 
-        print("[LINKER] WARNING: swiftc not found, falling back to clang")
+        FileHandle.standardError.write("[LINKER] WARNING: swiftc not found, falling back to clang\n".data(using: .utf8)!)
         #endif
 
         // macOS/Windows: Prefer clang, fall back to gcc
