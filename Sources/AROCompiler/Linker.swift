@@ -309,19 +309,24 @@ public final class CCompiler {
             args.append("-Wl,-dead_strip")
         }
         #elseif os(Linux)
+        // Add Swift library path for swiftc to find runtime libraries
+        if let swiftLibPath = findSwiftLibPath() {
+            args.append("-L\(swiftLibPath)")
+            // swiftc needs -Xlinker format for rpath
+            args.append("-Xlinker")
+            args.append("-rpath")
+            args.append("-Xlinker")
+            args.append(swiftLibPath)
+        }
+
         args.append("-lpthread")
         args.append("-ldl")
         args.append("-lm")
 
-        // Note: On Linux, Swift runtime libraries are handled differently
-        // They may be statically linked or provided by the system
-        // Explicitly linking them can cause linker hangs in some environments
-        // If Swift symbols are missing, ensure swift runtime is installed:
-        // sudo apt-get install libswiftcore-dev or similar
-
         // Dead code stripping on Linux
         if options.deadStrip {
-            args.append("-Wl,--gc-sections")
+            args.append("-Xlinker")
+            args.append("--gc-sections")
         }
         #endif
 
@@ -558,6 +563,11 @@ public final class CCompiler {
         let command = args.joined(separator: " ")
         #if DEBUG
         print("Running: \(command)")
+        #else
+        // Always print on Linux for debugging integration test issues
+        #if os(Linux)
+        print("[LINKER] Running: \(command)")
+        #endif
         #endif
 
         let process = Process()
