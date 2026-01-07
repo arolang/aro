@@ -68,6 +68,9 @@ struct BuildCommand: AsyncParsableCommand {
 
         do {
             appConfig = try await discovery.discover(at: resolvedPath)
+            #if os(Linux)
+            FileHandle.standardError.write("[BUILD] Discovery completed, found \(appConfig.sourceFiles.count) files\n".data(using: .utf8)!)
+            #endif
         } catch {
             #if os(Linux)
             FileHandle.standardError.write("[BUILD] Discovery failed: \(error)\n".data(using: .utf8)!)
@@ -91,6 +94,10 @@ struct BuildCommand: AsyncParsableCommand {
         var allDiagnostics: [Diagnostic] = []
         var compiledPrograms: [AnalyzedProgram] = []
 
+        #if os(Linux)
+        FileHandle.standardError.write("[BUILD] Starting compilation of \(appConfig.sourceFiles.count) files\n".data(using: .utf8)!)
+        #endif
+
         for sourceFile in appConfig.sourceFiles {
             if verbose {
                 print("Parsing: \(sourceFile.lastPathComponent)")
@@ -112,6 +119,10 @@ struct BuildCommand: AsyncParsableCommand {
             }
         }
 
+        #if os(Linux)
+        FileHandle.standardError.write("[BUILD] Compilation completed, \(compiledPrograms.count) programs\n".data(using: .utf8)!)
+        #endif
+
         // Report compilation errors
         let errors = allDiagnostics.filter { $0.severity == .error }
         let warnings = allDiagnostics.filter { $0.severity == .warning }
@@ -124,6 +135,9 @@ struct BuildCommand: AsyncParsableCommand {
         }
 
         if !errors.isEmpty {
+            #if os(Linux)
+            FileHandle.standardError.write("[BUILD] Compilation errors found: \(errors.count)\n".data(using: .utf8)!)
+            #endif
             print("\nCompilation errors:")
             for error in errors {
                 print("  \(error)")
@@ -133,9 +147,16 @@ struct BuildCommand: AsyncParsableCommand {
 
         // Merge programs
         guard let mergedProgram = mergePrograms(compiledPrograms) else {
+            #if os(Linux)
+            FileHandle.standardError.write("[BUILD] ERROR: No programs to merge\n".data(using: .utf8)!)
+            #endif
             print("Error: No programs to compile")
             throw ExitCode.failure
         }
+
+        #if os(Linux)
+        FileHandle.standardError.write("[BUILD] Merged \(mergedProgram.featureSets.count) feature sets\n".data(using: .utf8)!)
+        #endif
 
         if verbose {
             print("\nParsing successful!")
@@ -153,6 +174,10 @@ struct BuildCommand: AsyncParsableCommand {
         let objectPath = buildDir.appendingPathComponent("\(baseName).o").path
         let binaryPath = appConfig.rootPath.appendingPathComponent(baseName)
 
+        #if os(Linux)
+        FileHandle.standardError.write("[BUILD] Binary path: \(binaryPath.path)\n".data(using: .utf8)!)
+        #endif
+
         // Create build directory
         try? FileManager.default.createDirectory(at: buildDir, withIntermediateDirectories: true)
 
@@ -160,6 +185,10 @@ struct BuildCommand: AsyncParsableCommand {
         if verbose {
             print("Generating LLVM IR...")
         }
+
+        #if os(Linux)
+        FileHandle.standardError.write("[BUILD] Starting LLVM IR generation\n".data(using: .utf8)!)
+        #endif
 
         // Serialize OpenAPI spec to JSON for embedding (if present)
         var openAPISpecJSON: String? = nil
@@ -182,7 +211,13 @@ struct BuildCommand: AsyncParsableCommand {
 
         do {
             llvmResult = try codeGenerator.generate(program: mergedProgram, openAPISpecJSON: openAPISpecJSON)
+            #if os(Linux)
+            FileHandle.standardError.write("[BUILD] LLVM IR generated successfully\n".data(using: .utf8)!)
+            #endif
         } catch {
+            #if os(Linux)
+            FileHandle.standardError.write("[BUILD] ERROR: LLVM generation failed: \(error)\n".data(using: .utf8)!)
+            #endif
             print("Code generation error: \(error)")
             throw ExitCode.failure
         }
@@ -242,10 +277,17 @@ struct BuildCommand: AsyncParsableCommand {
 
         // Find the ARORuntime library (contains C-callable bridge via @_cdecl)
         guard let runtimeLibPath = findARORuntimeLibrary() else {
+            #if os(Linux)
+            FileHandle.standardError.write("[BUILD] ERROR: Runtime library not found\n".data(using: .utf8)!)
+            #endif
             print("Error: ARORuntime library not found.")
             print("Please run 'swift build' first to build the runtime library.")
             throw ExitCode.failure
         }
+
+        #if os(Linux)
+        FileHandle.standardError.write("[BUILD] Runtime library: \(runtimeLibPath)\n".data(using: .utf8)!)
+        #endif
 
         if verbose {
             print("Using runtime: \(runtimeLibPath)")
@@ -263,6 +305,10 @@ struct BuildCommand: AsyncParsableCommand {
             }
         }
 
+        #if os(Linux)
+        FileHandle.standardError.write("[BUILD] Starting linker\n".data(using: .utf8)!)
+        #endif
+
         let linker = CCompiler(runtimeLibraryPath: runtimeLibPath)
         let linkOptions = CCompiler.LinkOptions(
             optimize: effectiveOptimize,
@@ -279,10 +325,17 @@ struct BuildCommand: AsyncParsableCommand {
                 options: linkOptions
             )
 
+            #if os(Linux)
+            FileHandle.standardError.write("[BUILD] Linking completed\n".data(using: .utf8)!)
+            #endif
+
             if verbose {
                 print("  Executable created")
             }
         } catch {
+            #if os(Linux)
+            FileHandle.standardError.write("[BUILD] ERROR: Linking failed: \(error)\n".data(using: .utf8)!)
+            #endif
             print("Linking error: \(error)")
             throw ExitCode.failure
         }
