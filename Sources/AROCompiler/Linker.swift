@@ -590,11 +590,23 @@ public final class CCompiler {
             throw LinkerError.compilationFailed("Failed to run compiler: \(error)")
         }
 
+        // Read output even on success for debugging
+        let errorData = errorPipe.fileHandleForReading.readDataToEndOfFile()
+        let outputData = outputPipe.fileHandleForReading.readDataToEndOfFile()
+        let errorMessage = String(data: errorData, encoding: .utf8) ?? ""
+        let outputMessage = String(data: outputData, encoding: .utf8) ?? ""
+
+        #if os(Linux)
+        // On Linux, always print compiler output for debugging
+        if !errorMessage.isEmpty {
+            print("[LINKER] stderr: \(errorMessage)")
+        }
+        if !outputMessage.isEmpty {
+            print("[LINKER] stdout: \(outputMessage)")
+        }
+        #endif
+
         if process.terminationStatus != 0 {
-            let errorData = errorPipe.fileHandleForReading.readDataToEndOfFile()
-            let outputData = outputPipe.fileHandleForReading.readDataToEndOfFile()
-            let errorMessage = String(data: errorData, encoding: .utf8) ?? ""
-            let outputMessage = String(data: outputData, encoding: .utf8) ?? ""
             let combined = [errorMessage, outputMessage].filter { !$0.isEmpty }.joined(separator: "\n")
             throw LinkerError.compilationFailed(combined.isEmpty ? "Unknown error" : combined)
         }
