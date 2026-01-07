@@ -328,14 +328,11 @@ struct BuildCommand: AsyncParsableCommand {
         #if os(Linux)
         FileHandle.standardError.write("[BUILD] LinkOptions created\n".data(using: .utf8)!)
         FileHandle.standardError.write("[BUILD] About to call linker.link() with objectFiles: [\(objectPath)], outputPath: \(binaryPath.path)\n".data(using: .utf8)!)
-        fflush(stdout)
-        fflush(stderr)
         #endif
 
         do {
             #if os(Linux)
             FileHandle.standardError.write("[BUILD] Inside do block, calling link...\n".data(using: .utf8)!)
-            fflush(stderr)
             #endif
 
             try linker.link(

@@ -244,11 +244,9 @@ public final class CCompiler {
     ) throws {
         #if os(Linux)
         FileHandle.standardError.write("[LINKER] ===== ENTERED link() method =====\n".data(using: .utf8)!)
-        fflush(stderr)
-        print("[LINKER] link() called with objectFiles: \(objectFiles)")
-        print("[LINKER] outputPath: \(outputPath)")
-        print("[LINKER] Finding compiler...")
-        fflush(stdout)
+        FileHandle.standardError.write("[LINKER] link() called with objectFiles: \(objectFiles)\n".data(using: .utf8)!)
+        FileHandle.standardError.write("[LINKER] outputPath: \(outputPath)\n".data(using: .utf8)!)
+        FileHandle.standardError.write("[LINKER] Finding compiler...\n".data(using: .utf8)!)
         #endif
 
         var args = [findCompiler()]
