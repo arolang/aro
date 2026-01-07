@@ -375,12 +375,9 @@ jobs:
   windows:
     needs: test
     name: Windows
-    # TEMPORARY: Skipped for now, will re-enable later
-    if: false
     permissions:
       contents: read
     runs-on: windows-latest
-    continue-on-error: true  # swift-nio-ssl Windows header issues
     steps:
       - name: Checkout repository
         uses: actions/checkout@v6
