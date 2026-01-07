@@ -38,7 +38,15 @@ public final class LLVMEmitter {
         let llcPath = try findLLC()
 
         var args = [llcPath]
-        args.append("-opaque-pointers")  // Required for LLVM 14 compatibility
+
+        // Add -opaque-pointers flag only for LLVM 14-16
+        // LLVM 14: Flag enables opaque pointers (typed pointers are default)
+        // LLVM 15-16: Opaque pointers are default, flag is accepted but deprecated
+        // LLVM 17+: Flag removed (opaque pointers are the only mode)
+        if let version = getLLVMMajorVersion(llcPath), version >= 14 && version < 17 {
+            args.append("-opaque-pointers")
+        }
+
         args.append("-filetype=obj")
         args.append(optimize.rawValue)
         args.append("-o")
@@ -59,7 +67,12 @@ public final class LLVMEmitter {
         let llcPath = try findLLC()
 
         var args = [llcPath]
-        args.append("-opaque-pointers")  // Required for LLVM 14 compatibility
+
+        // Add -opaque-pointers flag only for LLVM 14-16
+        if let version = getLLVMMajorVersion(llcPath), version >= 14 && version < 17 {
+            args.append("-opaque-pointers")
+        }
+
         args.append("-filetype=asm")
         args.append("-o")
         args.append(outputPath)
@@ -105,6 +118,34 @@ public final class LLVMEmitter {
         } catch {}
 
         throw LinkerError.compilationFailed("llc not found. Please install LLVM: brew install llvm")
+    }
+
+    /// Get LLVM major version from llc
+    private func getLLVMMajorVersion(_ llcPath: String) -> Int? {
+        let process = Process()
+        process.executableURL = URL(fileURLWithPath: llcPath)
+        process.arguments = ["--version"]
+
+        let pipe = Pipe()
+        process.standardOutput = pipe
+        process.standardError = FileHandle.nullDevice
+
+        do {
+            try process.run()
+            process.waitUntilExit()
+            let data = pipe.fileHandleForReading.readDataToEndOfFile()
+            if let output = String(data: data, encoding: .utf8) {
+                // Look for version pattern like "LLVM version 14.0.0" or "version 20.1.8"
+                let pattern = #"version (\d+)\."#
+                if let regex = try? NSRegularExpression(pattern: pattern, options: []),
+                   let match = regex.firstMatch(in: output, options: [], range: NSRange(output.startIndex..., in: output)),
+                   let range = Range(match.range(at: 1), in: output) {
+                    return Int(output[range])
+                }
+            }
+        } catch {}
+
+        return nil
     }
 
     private func runProcess(_ args: [String]) throws {
@@ -323,7 +364,6 @@ public final class CCompiler {
 
         // Platform-specific libraries
         #if os(macOS)
-        FileHandle.standardError.write("[LINKER] macOS: Finding Swift lib path...\n".data(using: .utf8)!)
         // Link Swift runtime libraries needed by libARORuntime.a
         if let swiftLibPath = findSwiftLibPath() {
             args.append("-L\(swiftLibPath)")
@@ -331,8 +371,12 @@ public final class CCompiler {
 
             // Explicitly link Swift libraries with -l flags
             // These must come after -lARORuntime so the linker can resolve symbols
+            // Order matters: Core first, then platform libs, then others
             args.append("-lswiftCore")
             args.append("-lswift_Concurrency")
+            args.append("-lswiftDarwin")          // Platform library (POSIX/Darwin)
+            args.append("-lswiftDispatch")        // Grand Central Dispatch
+            args.append("-lswiftFoundation")      // Foundation framework (macOS uses different name)
             args.append("-lswift_StringProcessing")
             args.append("-lswift_RegexParser")
             args.append("-lswiftSwiftOnoneSupport")
