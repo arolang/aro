@@ -243,8 +243,12 @@ public final class CCompiler {
         options: LinkOptions
     ) throws {
         #if os(Linux)
-        print("[LINKER] link() called")
+        FileHandle.standardError.write("[LINKER] ===== ENTERED link() method =====\n".data(using: .utf8)!)
+        fflush(stderr)
+        print("[LINKER] link() called with objectFiles: \(objectFiles)")
+        print("[LINKER] outputPath: \(outputPath)")
         print("[LINKER] Finding compiler...")
+        fflush(stdout)
         #endif
 
         var args = [findCompiler()]
