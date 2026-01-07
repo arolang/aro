@@ -393,7 +393,37 @@ public final class CCompiler {
     // MARK: - Private Methods
 
     private func findCompiler() -> String {
-        // Prefer clang, fall back to gcc
+        #if os(Linux)
+        // On Linux, prefer swiftc for linking Swift static libraries
+        // This ensures proper Swift runtime linkage
+        let swiftCompilers = ["/usr/bin/swiftc", "swiftc"]
+        for compiler in swiftCompilers {
+            if FileManager.default.fileExists(atPath: compiler) {
+                return compiler
+            }
+        }
+
+        // Try to find swiftc in PATH
+        let process = Process()
+        process.executableURL = URL(fileURLWithPath: "/usr/bin/which")
+        process.arguments = ["swiftc"]
+
+        let pipe = Pipe()
+        process.standardOutput = pipe
+        process.standardError = FileHandle.nullDevice
+
+        do {
+            try process.run()
+            process.waitUntilExit()
+            let data = pipe.fileHandleForReading.readDataToEndOfFile()
+            if let path = String(data: data, encoding: .utf8)?.trimmingCharacters(in: .whitespacesAndNewlines),
+               !path.isEmpty {
+                return path
+            }
+        } catch {}
+        #endif
+
+        // macOS/Windows: Prefer clang, fall back to gcc
         let compilers = ["/usr/bin/clang", "/opt/homebrew/bin/clang", "/usr/bin/gcc", "clang", "gcc"]
 
         for compiler in compilers {
@@ -513,6 +543,12 @@ public final class CCompiler {
             throw LinkerError.compilationFailed("No command specified")
         }
 
+        // Debug: Print command being run (helpful for CI debugging)
+        let command = args.joined(separator: " ")
+        #if DEBUG
+        print("Running: \(command)")
+        #endif
+
         let process = Process()
         process.executableURL = URL(fileURLWithPath: args[0])
         process.arguments = Array(args.dropFirst())
@@ -531,8 +567,11 @@ public final class CCompiler {
 
         if process.terminationStatus != 0 {
             let errorData = errorPipe.fileHandleForReading.readDataToEndOfFile()
-            let errorMessage = String(data: errorData, encoding: .utf8) ?? "Unknown error"
-            throw LinkerError.compilationFailed(errorMessage)
+            let outputData = outputPipe.fileHandleForReading.readDataToEndOfFile()
+            let errorMessage = String(data: errorData, encoding: .utf8) ?? ""
+            let outputMessage = String(data: outputData, encoding: .utf8) ?? ""
+            let combined = [errorMessage, outputMessage].filter { !$0.isEmpty }.joined(separator: "\n")
+            throw LinkerError.compilationFailed(combined.isEmpty ? "Unknown error" : combined)
         }
     }
 }
