@@ -47,6 +47,12 @@ struct BuildCommand: AsyncParsableCommand {
         let resolvedPath = URL(fileURLWithPath: path)
         let startTime = Date()
 
+        #if os(Linux)
+        // Debug: Always print on Linux to verify command is running
+        print("[BUILD] Starting aro build on Linux")
+        print("[BUILD] Target: \(resolvedPath.path)")
+        #endif
+
         if verbose {
             print("ARO Compiler v\(AROVersion.shortVersion)")
             print("Build: \(AROVersion.buildDate)")
@@ -317,6 +323,18 @@ struct BuildCommand: AsyncParsableCommand {
         }
 
         let elapsed = Date().timeIntervalSince(startTime)
+
+        #if os(Linux)
+        print("[BUILD] Binary created successfully")
+        print("[BUILD] Path: \(binaryPath.path)")
+        print("[BUILD] Checking if binary exists...")
+        if FileManager.default.fileExists(atPath: binaryPath.path) {
+            print("[BUILD] ✓ Binary exists")
+            print("[BUILD] Size: \(try? FileManager.default.attributesOfItem(atPath: binaryPath.path)[.size] ?? 0) bytes")
+        } else {
+            print("[BUILD] ✗ Binary NOT found!")
+        }
+        #endif
 
         print("Built: \(binaryPath.path)")
         if verbose {
