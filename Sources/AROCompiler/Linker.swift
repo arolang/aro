@@ -415,6 +415,7 @@ public final class CCompiler {
         let swiftCompilers = ["/usr/bin/swiftc", "swiftc"]
         for compiler in swiftCompilers {
             if FileManager.default.fileExists(atPath: compiler) {
+                print("[LINKER] Found compiler (direct check): \(compiler)")
                 return compiler
             }
         }
@@ -434,9 +435,12 @@ public final class CCompiler {
             let data = pipe.fileHandleForReading.readDataToEndOfFile()
             if let path = String(data: data, encoding: .utf8)?.trimmingCharacters(in: .whitespacesAndNewlines),
                !path.isEmpty {
+                print("[LINKER] Found compiler (which swiftc): \(path)")
                 return path
             }
         } catch {}
+
+        print("[LINKER] WARNING: swiftc not found, falling back to clang")
         #endif
 
         // macOS/Windows: Prefer clang, fall back to gcc
