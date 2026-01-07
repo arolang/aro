@@ -541,6 +541,7 @@ jobs:
           chmod +x ./aro-bin/aro
           echo "ARO_BIN=$GITHUB_WORKSPACE/aro-bin/aro" >> $GITHUB_ENV
           # Copy libARORuntime.a to system location for native compilation tests
+          sudo mkdir -p /usr/local/lib
           sudo cp ./aro-bin/libARORuntime.a /usr/local/lib/libARORuntime.a
           ./aro-bin/aro --version
 
@@ -595,6 +596,7 @@ jobs:
           chmod +x ./aro-bin/aro
           echo "ARO_BIN=$GITHUB_WORKSPACE/aro-bin/aro" >> $GITHUB_ENV
           # Copy libARORuntime.a to system location for native compilation tests
+          sudo mkdir -p /usr/local/lib
           sudo cp ./aro-bin/libARORuntime.a /usr/local/lib/libARORuntime.a
           ./aro-bin/aro --version
 

@@ -683,11 +683,21 @@ public final class CCompiler {
             return homebrewLib
         }
         #elseif os(Linux)
+        // Check standard system location
         let swiftLib = "/usr/lib/swift/linux"
         if FileManager.default.fileExists(atPath: swiftLib) {
             return swiftLib
         }
+
+        // Check GitHub Actions / common Swift installation location
+        let shareSwiftLib = "/usr/share/swift/usr/lib/swift/linux"
+        if FileManager.default.fileExists(atPath: shareSwiftLib) {
+            return shareSwiftLib
+        }
+
+        FileHandle.standardError.write("[LINKER] WARNING: Could not find Swift library path\n".data(using: .utf8)!)
         #endif
+
         return nil
     }
 
