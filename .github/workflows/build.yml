@@ -492,44 +492,17 @@ jobs:
           retention-days: 30
 
   # ===========================================================================
-  # Integration Tests (test-examples.pl on all platforms)
+  # Integration Tests - Linux
   # ===========================================================================
-  integration-tests:
-    # TEMPORARY: Only running macOS tests, will re-enable Linux/Windows later
-    needs: [macos]
-    name: Integration Tests - ${{ matrix.os }}
-    runs-on: ${{ matrix.runner }}
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - os: Linux
-            runner: ubuntu-latest
-            artifact: aro-linux-amd64
-            binary: aro
-            shell: bash
-          - os: macOS
-            runner: macos-26
-            artifact: aro-macos-arm64
-            binary: aro
-            shell: bash
-          # - os: Windows
-          #   runner: windows-latest
-          #   artifact: aro-windows-amd64
-          #   binary: aro.exe
-          #   shell: bash
-    defaults:
-      run:
-        shell: ${{ matrix.shell }}
+  integration-tests-linux:
+    needs: [linux]
+    name: Integration Tests - Linux
+    runs-on: ubuntu-latest
     steps:
       - name: Checkout repository
         uses: actions/checkout@v6
 
-      # ======================================================================
-      # Install Swift
-      # ======================================================================
-      - name: Setup Swift (Linux)
-        if: matrix.os == 'Linux'
+      - name: Setup Swift
         run: |
           # Swift is needed for native compilation tests
           wget https://download.swift.org/swift-6.2.1-release/ubuntu2204/swift-6.2.1-RELEASE/swift-6.2.1-RELEASE-ubuntu22.04.tar.gz
@@ -537,88 +510,13 @@ jobs:
           sudo mv swift-6.2.1-RELEASE-ubuntu22.04 /usr/share/swift
           echo "/usr/share/swift/usr/bin" >> $GITHUB_PATH
 
-      - name: Setup Swift (macOS)
-        if: matrix.os == 'macOS'
-        uses: swift-actions/setup-swift@364295d9c23900ce04d4e5cc708387921b4e50f9  # v3
-        with:
-          swift-version: ${{ env.SWIFT_VERSION }}
-
-      - name: Setup Swift (Windows)
-        if: matrix.os == 'Windows'
-        uses: compnerd/gha-setup-swift@c8363f1001fbb4b12d127c432f9eaadec5f56e8c  # main
-        with:
-          swift-version: swift-6.2.1-release
-          swift-build: 6.2.1-RELEASE
-
-      # ======================================================================
-      # Install LLVM
-      # ======================================================================
-      - name: Install LLVM (Linux)
-        if: matrix.os == 'Linux'
+      - name: Install LLVM
         run: |
           sudo apt-get update
           sudo apt-get install -y llvm-18 llvm-18-dev
           echo "/usr/lib/llvm-18/bin" >> $GITHUB_PATH
 
-      - name: Install LLVM (macOS)
-        if: matrix.os == 'macOS'
-        run: |
-          brew install llvm@18
-          echo "/opt/homebrew/opt/llvm@18/bin" >> $GITHUB_PATH
-
-      - name: Install LLVM (Windows)
-        if: matrix.os == 'Windows'
-        shell: pwsh
-        run: |
-          # LLVM is pre-installed on windows-latest runners
-          # Just add to PATH if not already there
-          if (Test-Path "C:\Program Files\LLVM\bin") {
-            echo "C:\Program Files\LLVM\bin" | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
-            Write-Host "LLVM found and added to PATH"
-          } else {
-            choco install llvm -y
-            echo "C:\Program Files\LLVM\bin" | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
-          }
-
-      # ======================================================================
-      # Install Perl Modules
-      # ======================================================================
-      - name: Setup Perl Build Environment (Windows)
-        if: matrix.os == 'Windows'
-        shell: pwsh
-        run: |
-          # Ensure Strawberry Perl's build tools are available
-          Write-Host "Setting up Perl build environment..."
-
-          # Get Perl installation directory
-          $perlExe = (Get-Command perl).Source
-          $perlRoot = Split-Path (Split-Path $perlExe)
-          Write-Host "Perl root: $perlRoot"
-
-          # Add C compiler and build tools to PATH
-          $pathsToAdd = @(
-            "$perlRoot\c\bin",      # gcc, gmake
-            "$perlRoot\perl\bin"    # perl tools
-          )
-
-          foreach ($path in $pathsToAdd) {
-            if (Test-Path $path) {
-              echo $path | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
-              $env:PATH = "$path;$env:PATH"
-              Write-Host "Added to PATH: $path"
-            } else {
-              Write-Host "Path not found: $path"
-            }
-          }
-
-          # Verify build tools
-          Write-Host "`nVerifying build tools:"
-          perl -v
-          gcc --version
-          gmake --version
-
-      - name: Install Perl modules (Linux)
-        if: matrix.os == 'Linux'
+      - name: Install Perl modules
         run: |
           export DEBIAN_FRONTEND=noninteractive
           sudo apt-get update -qq
@@ -631,63 +529,18 @@ jobs:
           # Install remaining modules via cpan
           cpan -T Net::EmptyPort Term::ANSIColor 2>&1 || true
 
-      - name: Install Perl modules (macOS)
-        if: matrix.os == 'macOS'
-        run: |
-          cpan -T IPC::Run YAML::XS HTTP::Tiny Net::EmptyPort Term::ANSIColor Time::HiRes 2>&1 || true
-
-      - name: Install Perl modules (Windows)
-        if: matrix.os == 'Windows'
-        shell: pwsh
-        run: |
-          Write-Host "Installing Perl modules..."
-
-          # Configure CPAN for non-interactive mode
-          $env:PERL_MM_USE_DEFAULT = "1"
-
-          # Install all modules with cpan
-          # Note: cpan may show errors for optional dependencies (like IO::Pty)
-          # but the main modules will install successfully
-          Write-Host "`nInstalling all modules..."
-          cpan -T IPC::Run YAML::XS HTTP::Tiny Net::EmptyPort Term::ANSIColor Time::HiRes
-
-          Write-Host "`nVerifying module installation..."
-          perl -e "use IPC::Run; print 'IPC::Run OK\n'" 2>&1
-          perl -e "use YAML::XS; print 'YAML::XS OK\n'" 2>&1
-          perl -e "use HTTP::Tiny; print 'HTTP::Tiny OK\n'" 2>&1
-
-          Write-Host "`nPerl module installation complete"
-          exit 0  # Always succeed - test script has fallback handling
-
-      # ======================================================================
-      # Download and Install ARO Binary
-      # ======================================================================
       - name: Download ARO artifact
         uses: actions/download-artifact@v7
         with:
-          name: ${{ matrix.artifact }}
+          name: aro-linux-amd64
           path: ./aro-bin
 
-      - name: Prepare ARO binary (Linux/macOS)
-        if: matrix.os != 'Windows'
+      - name: Prepare ARO binary
         run: |
-          chmod +x ./aro-bin/${{ matrix.binary }}
-          echo "ARO_BIN=$GITHUB_WORKSPACE/aro-bin/${{ matrix.binary }}" >> $GITHUB_ENV
-          ./aro-bin/${{ matrix.binary }} --version
+          chmod +x ./aro-bin/aro
+          echo "ARO_BIN=$GITHUB_WORKSPACE/aro-bin/aro" >> $GITHUB_ENV
+          ./aro-bin/aro --version
 
-      - name: Prepare ARO binary (Windows)
-        if: matrix.os == 'Windows'
-        shell: bash
-        run: |
-          chmod +x ./aro-bin/${{ matrix.binary }}
-          echo "ARO_BIN=$GITHUB_WORKSPACE/aro-bin/${{ matrix.binary }}" >> $GITHUB_ENV
-          ./aro-bin/${{ matrix.binary }} --version || true
-
-      # ======================================================================
-      # Run Integration Tests
-      # ======================================================================
-      # Note: test-examples.pl is a compatibility wrapper that redirects to
-      # the modular framework in Tests/AROIntegrationTests/run-tests.pl
       - name: Run integration tests
         run: |
           chmod +x test-examples.pl
@@ -697,11 +550,176 @@ jobs:
         if: failure()
         uses: actions/upload-artifact@v6
         with:
-          name: test-failures-${{ matrix.os }}
+          name: test-failures-Linux
           path: |
             Examples/**/expected.*
             Examples/**/testrun.*
           retention-days: 7
+
+  # ===========================================================================
+  # Integration Tests - macOS
+  # ===========================================================================
+  integration-tests-macos:
+    needs: [macos]
+    name: Integration Tests - macOS
+    runs-on: macos-26
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v6
+
+      - name: Setup Swift
+        uses: swift-actions/setup-swift@364295d9c23900ce04d4e5cc708387921b4e50f9  # v3
+        with:
+          swift-version: ${{ env.SWIFT_VERSION }}
+
+      - name: Install LLVM
+        run: |
+          brew install llvm@18
+          echo "/opt/homebrew/opt/llvm@18/bin" >> $GITHUB_PATH
+
+      - name: Install Perl modules
+        run: |
+          cpan -T IPC::Run YAML::XS HTTP::Tiny Net::EmptyPort Term::ANSIColor Time::HiRes 2>&1 || true
+
+      - name: Download ARO artifact
+        uses: actions/download-artifact@v7
+        with:
+          name: aro-macos-arm64
+          path: ./aro-bin
+
+      - name: Prepare ARO binary
+        run: |
+          chmod +x ./aro-bin/aro
+          echo "ARO_BIN=$GITHUB_WORKSPACE/aro-bin/aro" >> $GITHUB_ENV
+          ./aro-bin/aro --version
+
+      - name: Run integration tests
+        run: |
+          chmod +x test-examples.pl
+          perl test-examples.pl --verbose
+
+      - name: Upload test results on failure
+        if: failure()
+        uses: actions/upload-artifact@v6
+        with:
+          name: test-failures-macOS
+          path: |
+            Examples/**/expected.*
+            Examples/**/testrun.*
+          retention-days: 7
+
+  # ===========================================================================
+  # Integration Tests - Windows (currently disabled)
+  # ===========================================================================
+  # integration-tests-windows:
+  #   needs: [windows]
+  #   name: Integration Tests - Windows
+  #   runs-on: windows-latest
+  #   steps:
+  #     - name: Checkout repository
+  #       uses: actions/checkout@v6
+  #
+  #     - name: Setup Swift
+  #       uses: compnerd/gha-setup-swift@c8363f1001fbb4b12d127c432f9eaadec5f56e8c  # main
+  #       with:
+  #         swift-version: swift-6.2.1-release
+  #         swift-build: 6.2.1-RELEASE
+  #
+  #     - name: Install LLVM
+  #       shell: pwsh
+  #       run: |
+  #         # LLVM is pre-installed on windows-latest runners
+  #         # Just add to PATH if not already there
+  #         if (Test-Path "C:\Program Files\LLVM\bin") {
+  #           echo "C:\Program Files\LLVM\bin" | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
+  #           Write-Host "LLVM found and added to PATH"
+  #         } else {
+  #           choco install llvm -y
+  #           echo "C:\Program Files\LLVM\bin" | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
+  #         }
+  #
+  #     - name: Setup Perl Build Environment
+  #       shell: pwsh
+  #       run: |
+  #         # Ensure Strawberry Perl's build tools are available
+  #         Write-Host "Setting up Perl build environment..."
+  #
+  #         # Get Perl installation directory
+  #         $perlExe = (Get-Command perl).Source
+  #         $perlRoot = Split-Path (Split-Path $perlExe)
+  #         Write-Host "Perl root: $perlRoot"
+  #
+  #         # Add C compiler and build tools to PATH
+  #         $pathsToAdd = @(
+  #           "$perlRoot\c\bin",      # gcc, gmake
+  #           "$perlRoot\perl\bin"    # perl tools
+  #         )
+  #
+  #         foreach ($path in $pathsToAdd) {
+  #           if (Test-Path $path) {
+  #             echo $path | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
+  #             $env:PATH = "$path;$env:PATH"
+  #             Write-Host "Added to PATH: $path"
+  #           } else {
+  #             Write-Host "Path not found: $path"
+  #           }
+  #         }
+  #
+  #         # Verify build tools
+  #         Write-Host "`nVerifying build tools:"
+  #         perl -v
+  #         gcc --version
+  #         gmake --version
+  #
+  #     - name: Install Perl modules
+  #       shell: pwsh
+  #       run: |
+  #         Write-Host "Installing Perl modules..."
+  #
+  #         # Configure CPAN for non-interactive mode
+  #         $env:PERL_MM_USE_DEFAULT = "1"
+  #
+  #         # Install all modules with cpan
+  #         # Note: cpan may show errors for optional dependencies (like IO::Pty)
+  #         # but the main modules will install successfully
+  #         Write-Host "`nInstalling all modules..."
+  #         cpan -T IPC::Run YAML::XS HTTP::Tiny Net::EmptyPort Term::ANSIColor Time::HiRes
+  #
+  #         Write-Host "`nVerifying module installation..."
+  #         perl -e "use IPC::Run; print 'IPC::Run OK\n'" 2>&1
+  #         perl -e "use YAML::XS; print 'YAML::XS OK\n'" 2>&1
+  #         perl -e "use HTTP::Tiny; print 'HTTP::Tiny OK\n'" 2>&1
+  #
+  #         Write-Host "`nPerl module installation complete"
+  #         exit 0  # Always succeed - test script has fallback handling
+  #
+  #     - name: Download ARO artifact
+  #       uses: actions/download-artifact@v7
+  #       with:
+  #         name: aro-windows-amd64
+  #         path: ./aro-bin
+  #
+  #     - name: Prepare ARO binary
+  #       shell: bash
+  #       run: |
+  #         chmod +x ./aro-bin/aro.exe
+  #         echo "ARO_BIN=$GITHUB_WORKSPACE/aro-bin/aro.exe" >> $GITHUB_ENV
+  #         ./aro-bin/aro.exe --version || true
+  #
+  #     - name: Run integration tests
+  #       run: |
+  #         chmod +x test-examples.pl
+  #         perl test-examples.pl --verbose
+  #
+  #     - name: Upload test results on failure
+  #       if: failure()
+  #       uses: actions/upload-artifact@v6
+  #       with:
+  #         name: test-failures-Windows
+  #         path: |
+  #           Examples/**/expected.*
+  #           Examples/**/testrun.*
+  #         retention-days: 7
 
   # ===========================================================================
   # Generate Documentation PDF
@@ -737,7 +755,7 @@ jobs:
   # ===========================================================================
   release:
     name: Create Release
-    needs: [linux, macos, integration-tests, documentation]
+    needs: [linux, macos, integration-tests-linux, integration-tests-macos, documentation]
     runs-on: ubuntu-latest
     if: github.ref_type == 'tag'
     permissions:
