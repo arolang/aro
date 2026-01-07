@@ -343,7 +343,9 @@ sub build_example {
     my $binary_path = File::Spec->catfile($dir, $basename);
 
     unless (-x $binary_path) {
-        my $error_msg = "Binary not found at: $binary_path";
+        # Include build output in error message for debugging
+        my $build_output = $out || $err || "(no output)";
+        my $error_msg = "Binary not found at: $binary_path\n\nBuild output:\n$build_output";
         write_testrun_log($example_name, 'compiled', 'BINARY_NOT_FOUND', $error_msg, "$aro_bin build $dir", 0);
         return {
             success => 0,
