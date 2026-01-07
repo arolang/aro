@@ -433,18 +433,18 @@ public final class CCompiler {
         }
 
         // Try to find in PATH
-        let process = Process()
-        process.executableURL = URL(fileURLWithPath: "/usr/bin/which")
-        process.arguments = ["clang"]
-
-        let pipe = Pipe()
-        process.standardOutput = pipe
-        process.standardError = FileHandle.nullDevice
-
         do {
-            try process.run()
-            process.waitUntilExit()
-            let data = pipe.fileHandleForReading.readDataToEndOfFile()
+            let whichProcess = Process()
+            whichProcess.executableURL = URL(fileURLWithPath: "/usr/bin/which")
+            whichProcess.arguments = ["clang"]
+
+            let whichPipe = Pipe()
+            whichProcess.standardOutput = whichPipe
+            whichProcess.standardError = FileHandle.nullDevice
+
+            try whichProcess.run()
+            whichProcess.waitUntilExit()
+            let data = whichPipe.fileHandleForReading.readDataToEndOfFile()
             if let path = String(data: data, encoding: .utf8)?.trimmingCharacters(in: .whitespacesAndNewlines),
                !path.isEmpty {
                 return path
