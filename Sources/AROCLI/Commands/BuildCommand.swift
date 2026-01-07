@@ -49,8 +49,9 @@ struct BuildCommand: AsyncParsableCommand {
 
         #if os(Linux)
         // Debug: Always print on Linux to verify command is running
-        print("[BUILD] Starting aro build on Linux")
-        print("[BUILD] Target: \(resolvedPath.path)")
+        // Use FileHandle to write directly to stderr to bypass any buffering
+        let debugMsg = "[BUILD] Starting aro build on Linux for \(resolvedPath.path)\n"
+        FileHandle.standardError.write(debugMsg.data(using: .utf8)!)
         #endif
 
         if verbose {
@@ -68,6 +69,9 @@ struct BuildCommand: AsyncParsableCommand {
         do {
             appConfig = try await discovery.discover(at: resolvedPath)
         } catch {
+            #if os(Linux)
+            FileHandle.standardError.write("[BUILD] Discovery failed: \(error)\n".data(using: .utf8)!)
+            #endif
             print("Error: \(error)")
             throw ExitCode.failure
         }
