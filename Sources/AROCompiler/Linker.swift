@@ -547,15 +547,12 @@ public final class CCompiler {
 
         // On Linux, prefer swiftc for linking Swift static libraries
         // swiftc handles Swift runtime initialization and library dependencies automatically
-        let compilers = [
+        let fixed_compilers = [
             "/usr/bin/swiftc",    // Swift compiler handles runtime init properly
-            "swiftc",
             "/usr/bin/clang-14",  // Fallback to clang
-            "/usr/bin/clang",
-            "clang-14",
-            "clang"
+            "/usr/bin/clang"
         ]
-        for compiler in compilers {
+        for compiler in fixed_compilers {
             FileHandle.standardError.write("[LINKER] Checking if compiler exists: \(compiler)\n".data(using: .utf8)!)
             if FileManager.default.fileExists(atPath: compiler) {
                 FileHandle.standardError.write("[LINKER] Found compiler (direct check): \(compiler)\n".data(using: .utf8)!)
@@ -564,8 +561,33 @@ public final class CCompiler {
             FileHandle.standardError.write("[LINKER] Compiler not found at: \(compiler)\n".data(using: .utf8)!)
         }
 
-        FileHandle.standardError.write("[LINKER] No compiler found in fixed locations\n".data(using: .utf8)!)
-        // Return clang as fallback and hope it's in PATH
+        // Try to find swiftc or clang in PATH using which
+        FileHandle.standardError.write("[LINKER] Trying to find compiler in PATH using which\n".data(using: .utf8)!)
+        for compiler_name in ["swiftc", "clang-14", "clang"] {
+            do {
+                let whichProcess = Process()
+                whichProcess.executableURL = URL(fileURLWithPath: "/usr/bin/which")
+                whichProcess.arguments = [compiler_name]
+
+                let whichPipe = Pipe()
+                whichProcess.standardOutput = whichPipe
+                whichProcess.standardError = FileHandle.nullDevice
+
+                try whichProcess.run()
+                whichProcess.waitUntilExit()
+
+                if whichProcess.terminationStatus == 0 {
+                    let data = whichPipe.fileHandleForReading.readDataToEndOfFile()
+                    if let path = String(data: data, encoding: .utf8)?.trimmingCharacters(in: .whitespacesAndNewlines),
+                       !path.isEmpty {
+                        FileHandle.standardError.write("[LINKER] Found \(compiler_name) in PATH: \(path)\n".data(using: .utf8)!)
+                        return path
+                    }
+                }
+            } catch {}
+        }
+
+        FileHandle.standardError.write("[LINKER] WARNING: No compiler found, falling back to clang-14\n".data(using: .utf8)!)
         return "clang-14"
         #else
         // macOS/Windows fallback: Prefer clang, fall back to gcc
