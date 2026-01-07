@@ -16,10 +16,13 @@ FROM swift:6.2-jammy AS builder
 ARG VERSION=dev
 ARG COMMIT_SHA=unknown
 
-# Install build dependencies
+# Install build dependencies including LLVM
 RUN apt-get update && apt-get install -y --no-install-recommends \
     libcurl4-openssl-dev \
     libssl-dev \
+    llvm-14 \
+    clang-14 \
+    && ln -sf /usr/bin/llc-14 /usr/bin/llc \
     && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /build
@@ -46,7 +49,7 @@ RUN swift test --parallel
 # -----------------------------------------------------------------------------
 # Stage 2: Runtime Environment
 # -----------------------------------------------------------------------------
-FROM ubuntu:24.04 AS runtime
+FROM swift:6.2-jammy AS runtime
 
 # Labels for container metadata
 LABEL org.opencontainers.image.title="ARO Programming Language"
@@ -61,16 +64,20 @@ ARG COMMIT_SHA=unknown
 LABEL org.opencontainers.image.version="${VERSION}"
 LABEL org.opencontainers.image.revision="${COMMIT_SHA}"
 
-# Install runtime dependencies
+# Install runtime dependencies (Swift toolchain already present in base image)
 RUN apt-get update && apt-get install -y --no-install-recommends \
     ca-certificates \
     libcurl4 \
     libssl3 \
+    llvm-14 \
+    clang-14 \
+    && ln -sf /usr/bin/llc-14 /usr/bin/llc \
     && rm -rf /var/lib/apt/lists/* \
     && useradd -m -s /bin/bash aro
 
-# Copy the built binary
+# Copy the built binary and runtime library
 COPY --from=builder /build/.build/release/aro /usr/local/bin/aro
+COPY --from=builder /build/.build/release/libARORuntime.a /usr/local/lib/libARORuntime.a
 
 # Copy examples for reference
 COPY Examples/ /opt/aro/examples/
@@ -90,12 +97,15 @@ CMD ["--help"]
 # -----------------------------------------------------------------------------
 FROM swift:6.2-jammy AS dev
 
-# Install development tools
+# Install development tools including LLVM
 RUN apt-get update && apt-get install -y --no-install-recommends \
     vim \
     git \
     curl \
     jq \
+    llvm-14 \
+    clang-14 \
+    && ln -sf /usr/bin/llc-14 /usr/bin/llc \
     && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /workspace

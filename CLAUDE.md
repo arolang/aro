@@ -155,7 +155,7 @@ paths:
 ### Happy Case
 Code contains only the happy case. Errors are handled by the runtime. For example when a user cannot be retrieved from the repository, the server just returns: `Can not retrieve the user from the user-repository where id = 530`.
 
-Do not use it for production code, it is terribly unsecure.
+Do not use it for production code, it is terribly insecure.
 
 ### Key Types
 
@@ -379,7 +379,7 @@ The `Proposals/` directory contains 10 consolidated specifications:
 | **0010 Advanced Features** | Regex, dates, exec |
 
 The `legacy/` directory contains the original evolution proposals for historical reference.
-The `future/` directory contains planned features not yet implemented
+The `future/` directory contains planned features not yet implemented.
 
 ## Concurrency
 

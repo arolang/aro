@@ -38,6 +38,7 @@ public final class LLVMEmitter {
         let llcPath = try findLLC()
 
         var args = [llcPath]
+        args.append("-opaque-pointers")  // Required for LLVM 14 compatibility
         args.append("-filetype=obj")
         args.append(optimize.rawValue)
         args.append("-o")
@@ -58,6 +59,7 @@ public final class LLVMEmitter {
         let llcPath = try findLLC()
 
         var args = [llcPath]
+        args.append("-opaque-pointers")  // Required for LLVM 14 compatibility
         args.append("-filetype=asm")
         args.append("-o")
         args.append(outputPath)
@@ -252,8 +254,12 @@ public final class CCompiler {
         var args = [findCompiler()]
 
         #if os(Linux)
-        print("[LINKER] Compiler found: \(args[0])")
-        print("[LINKER] Building arguments...")
+        FileHandle.standardError.write("[LINKER] Array created with compiler: \(args[0])\n".data(using: .utf8)!)
+        FileHandle.standardError.write("[LINKER] Building arguments...\n".data(using: .utf8)!)
+        #endif
+
+        #if os(Linux)
+        FileHandle.standardError.write("[LINKER] 1. Handling output type...\n".data(using: .utf8)!)
         #endif
 
         // Output type
@@ -273,12 +279,24 @@ public final class CCompiler {
             args.append("-S")
         }
 
+        #if os(Linux)
+        FileHandle.standardError.write("[LINKER] 2. Adding object files...\n".data(using: .utf8)!)
+        #endif
+
         // Object files
         args.append(contentsOf: objectFiles)
+
+        #if os(Linux)
+        FileHandle.standardError.write("[LINKER] 3. Adding output path...\n".data(using: .utf8)!)
+        #endif
 
         // Output
         args.append("-o")
         args.append(outputPath)
+
+        #if os(Linux)
+        FileHandle.standardError.write("[LINKER] 4. Processing runtime library...\n".data(using: .utf8)!)
+        #endif
 
         // Runtime library (ARORuntime contains C-callable bridge via @_cdecl)
         if let runtimePath = runtimeLibraryPath {
@@ -299,8 +317,13 @@ public final class CCompiler {
             #endif
         }
 
+        #if os(Linux)
+        FileHandle.standardError.write("[LINKER] 5. Checking platform-specific libraries...\n".data(using: .utf8)!)
+        #endif
+
         // Platform-specific libraries
         #if os(macOS)
+        FileHandle.standardError.write("[LINKER] macOS: Finding Swift lib path...\n".data(using: .utf8)!)
         // Link Swift runtime libraries needed by libARORuntime.a
         if let swiftLibPath = findSwiftLibPath() {
             args.append("-L\(swiftLibPath)")
@@ -321,19 +344,64 @@ public final class CCompiler {
             args.append("-Wl,-dead_strip")
         }
         #elseif os(Linux)
-        // Add Swift library path for swiftc to find runtime libraries
+        // Add Swift library path for runtime libraries
         if let swiftLibPath = findSwiftLibPath() {
+            // Check which compiler we're using
+            let compiler = args[0]
+            let usingSwiftc = compiler.contains("swiftc")
+
+            FileHandle.standardError.write("[LINKER] Swift lib path: \(swiftLibPath)\n".data(using: .utf8)!)
+            FileHandle.standardError.write("[LINKER] Using compiler: \(usingSwiftc ? "swiftc" : "clang")\n".data(using: .utf8)!)
+
             args.append("-L\(swiftLibPath)")
-            // swiftc needs -Xlinker format for rpath
-            args.append("-Xlinker")
-            args.append("-rpath")
-            args.append("-Xlinker")
-            args.append(swiftLibPath)
+
+            if usingSwiftc {
+                // swiftc needs -Xlinker format for rpath
+                args.append("-Xlinker")
+                args.append("-rpath")
+                args.append("-Xlinker")
+                args.append(swiftLibPath)
+
+                // CRITICAL: Explicitly link Swift runtime libraries when linking object files
+                // swiftc doesn't automatically link these when given .o files instead of .swift files
+                // These must come AFTER -lARORuntime so linker can resolve symbols
+                args.append("-lswiftGlibc")           // Platform library (POSIX/Glibc)
+                args.append("-lswiftDispatch")        // Grand Central Dispatch
+                args.append("-lBlocksRuntime")        // Blocks runtime
+                args.append("-lswift_Concurrency")    // Swift Concurrency (TaskLocal)
+                args.append("-lFoundation")           // Foundation framework
+                args.append("-lFoundationEssentials") // Foundation essentials
+                args.append("-lFoundationNetworking") // HTTP/networking
+                args.append("-lswift_StringProcessing")
+                args.append("-lswift_RegexParser")
+            } else {
+                // clang uses -Wl format for rpath
+                args.append("-Wl,-rpath,\(swiftLibPath)")
+
+                // CRITICAL: Explicitly link Swift runtime libraries when using clang
+                // These must come AFTER -lARORuntime so linker can resolve symbols
+                // Order matters: Core must be first, then platform libs, then others
+                args.append("-lswiftCore")
+                args.append("-lswift_Concurrency")
+                args.append("-lswiftGlibc")           // Platform library (POSIX/Glibc)
+                args.append("-lswiftDispatch")        // Grand Central Dispatch
+                args.append("-lBlocksRuntime")        // Blocks runtime
+                args.append("-lFoundation")           // Foundation framework
+                args.append("-lFoundationEssentials") // Foundation essentials
+                args.append("-lFoundationNetworking") // HTTP/networking
+                args.append("-lswift_StringProcessing")
+                args.append("-lswift_RegexParser")
+                args.append("-lswiftSwiftOnoneSupport")
+            }
+        } else {
+            FileHandle.standardError.write("[LINKER] WARNING: Swift library path not found\n".data(using: .utf8)!)
         }
 
         args.append("-lpthread")
         args.append("-ldl")
         args.append("-lm")
+        args.append("-lstdc++")  // C++ standard library for BoringSSL
+        args.append("-lz")       // zlib for compression
 
         // Dead code stripping on Linux
         if options.deadStrip {
@@ -363,14 +431,14 @@ public final class CCompiler {
         }
 
         #if os(Linux)
-        print("[LINKER] Arguments built, calling runProcess...")
-        print("[LINKER] Total args: \(args.count)")
+        FileHandle.standardError.write("[LINKER] Arguments built, calling runProcess...\n".data(using: .utf8)!)
+        FileHandle.standardError.write("[LINKER] Total args: \(args.count)\n".data(using: .utf8)!)
         #endif
 
         try runProcess(args)
 
         #if os(Linux)
-        print("[LINKER] runProcess completed successfully")
+        FileHandle.standardError.write("[LINKER] runProcess completed successfully\n".data(using: .utf8)!)
         #endif
     }
 
@@ -434,9 +502,16 @@ public final class CCompiler {
         FileHandle.standardError.write("[LINKER] findCompiler() called on Linux\n".data(using: .utf8)!)
 
         // On Linux, prefer swiftc for linking Swift static libraries
-        // This ensures proper Swift runtime linkage
-        let swiftCompilers = ["/usr/bin/swiftc", "swiftc"]
-        for compiler in swiftCompilers {
+        // swiftc handles Swift runtime initialization and library dependencies automatically
+        let compilers = [
+            "/usr/bin/swiftc",    // Swift compiler handles runtime init properly
+            "swiftc",
+            "/usr/bin/clang-14",  // Fallback to clang
+            "/usr/bin/clang",
+            "clang-14",
+            "clang"
+        ]
+        for compiler in compilers {
             FileHandle.standardError.write("[LINKER] Checking if compiler exists: \(compiler)\n".data(using: .utf8)!)
             if FileManager.default.fileExists(atPath: compiler) {
                 FileHandle.standardError.write("[LINKER] Found compiler (direct check): \(compiler)\n".data(using: .utf8)!)
@@ -445,35 +520,19 @@ public final class CCompiler {
             FileHandle.standardError.write("[LINKER] Compiler not found at: \(compiler)\n".data(using: .utf8)!)
         }
 
-        FileHandle.standardError.write("[LINKER] Trying to find swiftc in PATH using which\n".data(using: .utf8)!)
-
-        // Try to find swiftc in PATH
-        let process = Process()
-        process.executableURL = URL(fileURLWithPath: "/usr/bin/which")
-        process.arguments = ["swiftc"]
-
-        let pipe = Pipe()
-        process.standardOutput = pipe
-        process.standardError = FileHandle.nullDevice
-
-        do {
-            try process.run()
-            process.waitUntilExit()
-            let data = pipe.fileHandleForReading.readDataToEndOfFile()
-            if let path = String(data: data, encoding: .utf8)?.trimmingCharacters(in: .whitespacesAndNewlines),
-               !path.isEmpty {
-                FileHandle.standardError.write("[LINKER] Found compiler (which swiftc): \(path)\n".data(using: .utf8)!)
-                return path
-            }
-        } catch {
-            FileHandle.standardError.write("[LINKER] which swiftc failed: \(error)\n".data(using: .utf8)!)
-        }
-
-        FileHandle.standardError.write("[LINKER] WARNING: swiftc not found, falling back to clang\n".data(using: .utf8)!)
-        #endif
-
-        // macOS/Windows: Prefer clang, fall back to gcc
-        let compilers = ["/usr/bin/clang", "/opt/homebrew/bin/clang", "/usr/bin/gcc", "clang", "gcc"]
+        FileHandle.standardError.write("[LINKER] No compiler found in fixed locations\n".data(using: .utf8)!)
+        // Return clang as fallback and hope it's in PATH
+        return "clang-14"
+        #else
+        // macOS/Windows fallback: Prefer clang, fall back to gcc
+        let compilers = [
+            "/usr/bin/clang",
+            "/usr/bin/clang-14",     // Ubuntu 22.04 LLVM package
+            "/opt/homebrew/bin/clang",
+            "/usr/bin/gcc",
+            "clang",
+            "gcc"
+        ]
 
         for compiler in compilers {
             if FileManager.default.fileExists(atPath: compiler) {
@@ -501,6 +560,7 @@ public final class CCompiler {
         } catch {}
 
         return "clang" // Hope it's in PATH
+        #endif
     }
 
     /// Public accessor for Swift library path (for debugging)
@@ -593,7 +653,7 @@ public final class CCompiler {
         }
 
         #if os(Linux)
-        print("[LINKER] runProcess() called with \(args.count) args")
+        FileHandle.standardError.write("[LINKER] runProcess() called with \(args.count) args\n".data(using: .utf8)!)
         #endif
 
         // Debug: Print command being run (helpful for CI debugging)
@@ -603,7 +663,7 @@ public final class CCompiler {
         #else
         // Always print on Linux for debugging integration test issues
         #if os(Linux)
-        print("[LINKER] Running: \(command)")
+        FileHandle.standardError.write("[LINKER] Running: \(command)\n".data(using: .utf8)!)
         #endif
         #endif
 
@@ -617,27 +677,65 @@ public final class CCompiler {
         process.standardError = errorPipe
 
         #if os(Linux)
-        print("[LINKER] Starting process...")
+        FileHandle.standardError.write("[LINKER] Starting process...\n".data(using: .utf8)!)
         #endif
+
+        // Thread-safe data storage
+        final class DataBox: @unchecked Sendable {
+            var data = Data()
+            let lock = NSLock()
+
+            func append(_ newData: Data) {
+                lock.lock()
+                defer { lock.unlock() }
+                data.append(newData)
+            }
+
+            func get() -> Data {
+                lock.lock()
+                defer { lock.unlock() }
+                return data
+            }
+        }
+
+        let outputBox = DataBox()
+        let errorBox = DataBox()
 
         do {
             try process.run()
             #if os(Linux)
-            print("[LINKER] Process started, waiting for exit...")
+            FileHandle.standardError.write("[LINKER] Process started, waiting for exit...\n".data(using: .utf8)!)
             #endif
+
+            // Read pipes in background to prevent deadlock
+            let outputHandle = outputPipe.fileHandleForReading
+            let errorHandle = errorPipe.fileHandleForReading
+
+            DispatchQueue.global().async {
+                let data = outputHandle.readDataToEndOfFile()
+                outputBox.append(data)
+            }
+
+            DispatchQueue.global().async {
+                let data = errorHandle.readDataToEndOfFile()
+                errorBox.append(data)
+            }
+
             process.waitUntilExit()
+
+            // Give a moment for pipe reading to complete
+            Thread.sleep(forTimeInterval: 0.1)
+
             #if os(Linux)
-            print("[LINKER] Process exited with status: \(process.terminationStatus)")
+            FileHandle.standardError.write("[LINKER] Process exited with status: \(process.terminationStatus)\n".data(using: .utf8)!)
             #endif
         } catch {
             throw LinkerError.compilationFailed("Failed to run compiler: \(error)")
         }
 
-        // Read output even on success for debugging
-        let errorData = errorPipe.fileHandleForReading.readDataToEndOfFile()
-        let outputData = outputPipe.fileHandleForReading.readDataToEndOfFile()
-        let errorMessage = String(data: errorData, encoding: .utf8) ?? ""
-        let outputMessage = String(data: outputData, encoding: .utf8) ?? ""
+        // Convert captured data to strings
+        let errorMessage = String(data: errorBox.get(), encoding: .utf8) ?? ""
+        let outputMessage = String(data: outputBox.get(), encoding: .utf8) ?? ""
 
         #if os(Linux)
         // On Linux, always print compiler output for debugging
