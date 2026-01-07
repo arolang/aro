@@ -72,7 +72,7 @@
 
         <pre><code><span class="code-feature">(Application-Start: Socket Server)</span> {
     <span class="code-keyword">&lt;Listen&gt;</span> on port 9000 as &lt;socket-server&gt;.
-    <span class="code-keyword">&lt;Log&gt;</span> the <span class="code-result">&lt;message&gt;</span> for the &lt;console&gt; with <span class="code-string">"Socket server listening on port 9000"</span>.
+    <span class="code-keyword">&lt;Log&gt;</span> <span class="code-string">"Socket server listening on port 9000"</span> to the &lt;console&gt;.
     <span class="code-keyword">&lt;Keepalive&gt;</span> the &lt;application&gt; for the &lt;events&gt;.
     <span class="code-keyword">&lt;Return&gt;</span> an <span class="code-result">&lt;OK: status&gt;</span> for the &lt;startup&gt;.
 }</code></pre>
@@ -96,7 +96,7 @@
     <span class="code-keyword">&lt;Extract&gt;</span> the <span class="code-result">&lt;connection-id&gt;</span> from the &lt;event: connectionId&gt;.
     <span class="code-keyword">&lt;Extract&gt;</span> the <span class="code-result">&lt;remote-address&gt;</span> from the &lt;event: remoteAddress&gt;.
 
-    <span class="code-keyword">&lt;Log&gt;</span> the <span class="code-result">&lt;message&gt;</span> for the &lt;console&gt; with <span class="code-string">"Client connected: ${remote-address}"</span>.
+    <span class="code-keyword">&lt;Log&gt;</span> <span class="code-string">"Client connected: ${remote-address}"</span> to the &lt;console&gt;.
 
     <span class="code-comment">(* Send welcome message *)</span>
     <span class="code-keyword">&lt;Send&gt;</span> the &lt;welcome&gt; to the &lt;event: connection&gt; with <span class="code-string">"Welcome to the server!"</span>.
@@ -110,7 +110,7 @@
     <span class="code-keyword">&lt;Extract&gt;</span> the <span class="code-result">&lt;connection&gt;</span> from the &lt;event: connection&gt;.
     <span class="code-keyword">&lt;Extract&gt;</span> the <span class="code-result">&lt;connection-id&gt;</span> from the &lt;event: connectionId&gt;.
 
-    <span class="code-keyword">&lt;Log&gt;</span> the <span class="code-result">&lt;message&gt;</span> for the &lt;console&gt; with <span class="code-string">"Received from ${connection-id}: ${data}"</span>.
+    <span class="code-keyword">&lt;Log&gt;</span> <span class="code-string">"Received from ${connection-id}: ${data}"</span> to the &lt;console&gt;.
 
     <span class="code-comment">(* Process the data *)</span>
     <span class="code-keyword">&lt;Process&gt;</span> the <span class="code-result">&lt;response&gt;</span> from the &lt;data&gt;.
@@ -126,7 +126,7 @@
     <span class="code-keyword">&lt;Extract&gt;</span> the <span class="code-result">&lt;connection-id&gt;</span> from the &lt;event: connectionId&gt;.
     <span class="code-keyword">&lt;Extract&gt;</span> the <span class="code-result">&lt;reason&gt;</span> from the &lt;event: reason&gt;.
 
-    <span class="code-keyword">&lt;Log&gt;</span> the <span class="code-result">&lt;message&gt;</span> for the &lt;console&gt; with <span class="code-string">"Client ${connection-id} disconnected: ${reason}"</span>.
+    <span class="code-keyword">&lt;Log&gt;</span> <span class="code-string">"Client ${connection-id} disconnected: ${reason}"</span> to the &lt;console&gt;.
 
     <span class="code-comment">(* Clean up client state *)</span>
     <span class="code-keyword">&lt;Delete&gt;</span> the &lt;client-state&gt; from the &lt;client-registry&gt; where id = &lt;connection-id&gt;.
@@ -164,7 +164,7 @@
         <h3>Echo Server</h3>
         <pre><code><span class="code-feature">(Application-Start: Echo Server)</span> {
     <span class="code-keyword">&lt;Listen&gt;</span> on port 9000 as &lt;echo-server&gt;.
-    <span class="code-keyword">&lt;Log&gt;</span> the <span class="code-result">&lt;message&gt;</span> for the &lt;console&gt; with <span class="code-string">"Echo server listening on port 9000"</span>.
+    <span class="code-keyword">&lt;Log&gt;</span> <span class="code-string">"Echo server listening on port 9000"</span> to the &lt;console&gt;.
     <span class="code-keyword">&lt;Keepalive&gt;</span> the &lt;application&gt; for the &lt;events&gt;.
     <span class="code-keyword">&lt;Return&gt;</span> an <span class="code-result">&lt;OK: status&gt;</span> for the &lt;startup&gt;.
 }
@@ -252,7 +252,7 @@
     <span class="code-keyword">&lt;Parse&gt;</span> the <span class="code-result">&lt;message: JSON&gt;</span> from the &lt;raw-data&gt;.
 
     if &lt;message&gt; is empty then {
-        <span class="code-keyword">&lt;Log&gt;</span> the <span class="code-result">&lt;warning&gt;</span> for the &lt;console&gt; with <span class="code-string">"Invalid message format"</span>.
+        <span class="code-keyword">&lt;Log&gt;</span> <span class="code-string">"Invalid message format"</span> to the &lt;console&gt;.
         <span class="code-keyword">&lt;Return&gt;</span> an <span class="code-result">&lt;OK: status&gt;</span> for the &lt;validation&gt;.
     }
 
@@ -265,7 +265,7 @@
 
         <h3>Clean Up on Shutdown</h3>
         <pre><code><span class="code-feature">(Application-End: Success)</span> {
-    <span class="code-keyword">&lt;Log&gt;</span> the <span class="code-result">&lt;message&gt;</span> for the &lt;console&gt; with <span class="code-string">"Closing all connections..."</span>.
+    <span class="code-keyword">&lt;Log&gt;</span> <span class="code-string">"Closing all connections..."</span> to the &lt;console&gt;.
 
     <span class="code-comment">(* Notify all clients *)</span>
     <span class="code-keyword">&lt;Broadcast&gt;</span> the &lt;shutdown-notice&gt; to the &lt;socket-server&gt; with <span class="code-string">"Server shutting down"</span>.

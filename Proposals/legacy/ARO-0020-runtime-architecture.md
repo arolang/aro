@@ -40,7 +40,7 @@ Every application must have **exactly one** feature set named `Application-Start
 
 ```aro
 (Application-Start: My Application) {
-    <Log> the <startup: message> for the <console> with "Starting...".
+    <Log> "Starting..." to the <console>.
     <Start> the <http-server> on port 8080.
     <Return> an <OK: status> for the <startup>.
 }
@@ -57,7 +57,7 @@ Applications can define **exit handlers** that execute when the application term
 ```aro
 (* Called on successful shutdown *)
 (Application-End: Success) {
-    <Log> the <shutdown: message> for the <console> with "Application shutting down gracefully".
+    <Log> "Application shutting down gracefully" to the <console>.
     <Close> the <database-connections>.
     <Return> an <OK: status> for the <shutdown>.
 }
@@ -65,7 +65,7 @@ Applications can define **exit handlers** that execute when the application term
 (* Called on error/crash *)
 (Application-End: Error) {
     <Extract> the <error> from the <shutdown: reason>.
-    <Log> the <error: message> for the <console> with <error>.
+    <Log> <error> to the <console>.
     <Send> the <alert> to the <ops-team>.
     <Return> an <OK: status> for the <error-handling>.
 }
@@ -137,7 +137,7 @@ Example:
 (* Triggered by FileCreatedEvent *)
 (Handle File Created: File Event Handler) {
     <Extract> the <path> from the <event: path>.
-    <Log> the <message> for the <console> with <path>.
+    <Log> <path> to the <console>.
     <Return> an <OK: status> for the <event>.
 }
 
@@ -316,7 +316,7 @@ UserService/
 ```aro
 (* Application entry point - only one allowed *)
 (Application-Start: User Service) {
-    <Log> the <startup: message> for the <console> with "Starting User Service".
+    <Log> "Starting User Service" to the <console>.
 
     (* Start HTTP server *)
     <Start> the <http-server> on port 8080.
@@ -324,16 +324,16 @@ UserService/
     (* Start file watcher *)
     <Watch> the <directory: "./uploads"> as <file-monitor>.
 
-    <Log> the <ready: message> for the <console> with "Service ready".
+    <Log> "Service ready" to the <console>.
     <Return> an <OK: status> for the <startup>.
 }
 
 (* Called on graceful shutdown (SIGTERM, SIGINT) *)
 (Application-End: Success) {
-    <Log> the <shutdown: message> for the <console> with "Shutting down gracefully...".
+    <Log> "Shutting down gracefully..." to the <console>.
     <Stop> the <http-server>.
     <Close> the <database-connections>.
-    <Log> the <shutdown: complete> for the <console> with "Goodbye!".
+    <Log> "Goodbye!" to the <console>.
     <Return> an <OK: status> for the <shutdown>.
 }
 
@@ -341,7 +341,7 @@ UserService/
 (Application-End: Error) {
     <Extract> the <error> from the <shutdown: error>.
     <Extract> the <code> from the <shutdown: code>.
-    <Log> the <error: message> for the <console> with "Fatal error: ${error}".
+    <Log> "Fatal error: ${error}" to the <console>.
     <Send> the <alert> to the <ops-webhook> with {
         message: "User Service crashed",
         error: <error>,
@@ -391,7 +391,7 @@ UserService/
         body: "Thanks for signing up..."
     }.
     <Send> the <welcome-message> to the <email>.
-    <Log> the <sent: message> for the <console> with "Welcome email sent".
+    <Log> "Welcome email sent" to the <console>.
     <Return> an <OK: status> for the <notification>.
 }
 

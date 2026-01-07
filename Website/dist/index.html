@@ -2,41 +2,7 @@
 <html lang="en">
 <head>
     <title>ARO - The Language AI Was Waiting For</title>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <meta name="description" content="ARO - The programming language where features become code. Built for humans, perfected for AI.">
-    <!-- Open Graph / Social Share -->
-    <meta property="og:type" content="website">
-    <meta property="og:url" content="https://krissimon.github.io/aro/">
-    <meta property="og:title" content="ARO - The Language AI Was Waiting For">
-    <meta property="og:description" content="ARO is the programming language where features become code. Built for humans. Perfected for AI.">
-    <meta property="og:image" content="https://krissimon.github.io/aro/social.png">
-    <!-- Twitter Card -->
-    <meta name="twitter:card" content="summary_large_image">
-    <meta name="twitter:title" content="ARO - The Language AI Was Waiting For">
-    <meta name="twitter:description" content="ARO is the programming language where features become code. Built for humans. Perfected for AI.">
-    <meta name="twitter:image" content="https://krissimon.github.io/aro/social.png">
-    <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="style.css">
-    <link rel="stylesheet" href="animations.css">
-    <!-- Matomo -->
-    <script>
-        var _paq = window._paq = window._paq || [];
-        /* tracker methods like "setCustomDimension" should be called before "trackPageView" */
-        _paq.push(['trackPageView']);
-        _paq.push(['enableLinkTracking']);
-        (function() {
-            var u="//matomo.benjamin.ausdertechnik.de/";
-            _paq.push(['setTrackerUrl', u+'matomo.php']);
-            _paq.push(['setSiteId', '4']);
-            var d=document, g=d.createElement('script'), s=d.getElementsByTagName('script')[0];
-            g.async=true; g.src=u+'matomo.js'; s.parentNode.insertBefore(g,s);
-        })();
-    </script>
-    <!-- End Matomo Code -->
-
+{{head}}
 </head>
 <body>
     <nav class="nav">
@@ -225,13 +191,13 @@
                     <pre class="code-content"><span class="comment">(* Fetch weather data from an external API *)</span>
 
 <span class="feature-name">(Application-Start: Weather Client)</span> {
-    <span class="action">&lt;Log&gt;</span> the <span class="result">&lt;message&gt;</span> for the <span class="result">&lt;console&gt;</span> with <span class="string">"Fetching weather..."</span>.
+    <span class="action">&lt;Log&gt;</span> <span class="string">"Fetching weather..."</span> to the <span class="result">&lt;console&gt;</span>.
 
     <span class="action">&lt;Create&gt;</span> the <span class="result">&lt;api-url&gt;</span> with <span class="string">"https://api.open-meteo.com/v1/forecast?latitude=52.52&amp;longitude=13.41&amp;current_weather=true"</span>.
 
     <span class="action">&lt;Request&gt;</span> the <span class="result">&lt;weather&gt;</span> from the <span class="result">&lt;api-url&gt;</span>.
 
-    <span class="action">&lt;Log&gt;</span> the <span class="result">&lt;data&gt;</span> for the <span class="result">&lt;console&gt;</span> with <span class="result">&lt;weather&gt;</span>.
+    <span class="action">&lt;Log&gt;</span> <span class="result">&lt;weather&gt;</span> to the <span class="result">&lt;console&gt;</span>.
 
     <span class="action">&lt;Return&gt;</span> an <span class="result">&lt;OK: status&gt;</span> for the <span class="result">&lt;startup&gt;</span>.
 }</pre>
@@ -267,41 +233,6 @@
         </div>
     </section>
 
-    <!-- Progress Bar -->
-    <div class="progress-bar" id="progressBar"></div>
-
-    <footer class="footer">
-        <div class="container">
-            <div class="footer-content">
-                <div class="footer-brand">
-                    <span class="logo-aro">ARO</span>
-                    <p>The ARO Programming Language</p>
-                    <p class="footer-tagline">Speak Business. Write Code.</p>
-                </div>
-                <div class="footer-links">
-                    <div class="footer-col">
-                        <h4>Learn</h4>
-                        <a href="getting-started.html">Getting Started</a>
-                        <a href="tutorial.html">Tutorial</a>
-                        <a href="docs.html">Documentation</a>
-                        <a href="download.html">Download</a>
-                    </div>
-                    <div class="footer-col">
-                        <h4>Community</h4>
-                        <a href="https://github.com/KrisSimon/aro">GitHub</a>
-                        <a href="https://github.com/KrisSimon/aro/issues">Issues</a>
-                        <a href="disclaimer.html">Motivation & Disclaimer</a>
-                    </div>
-                </div>
-            </div>
-            <div class="footer-bottom">
-                <p>Sometime this page should build with ARO. Obviously.</p>
-            </div>
-        </div>
-    </footer>
-
-    <!-- Animation Scripts -->
-    <script src="animations.js"></script>
-
+{{footer}}
 </body>
 </html>

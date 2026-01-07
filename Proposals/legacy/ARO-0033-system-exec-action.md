@@ -145,7 +145,7 @@ Following ARO-0031, the `<Exec>` result formats differently based on execution c
 (* main.aro - Directory listing with context-aware output *)
 
 (Application-Start: Directory Lister) {
-    <Log> the <startup: message> for the <console> with "Starting Directory Lister...".
+    <Log> "Starting Directory Lister..." to the <console>.
     <Start> the <http-server> on port 8080.
     <Keepalive> the <application> for the <events>.
     <Return> an <OK: status> for the <startup>.
@@ -184,11 +184,11 @@ Following ARO-0031, the `<Exec>` result formats differently based on execution c
     <Execute> the <result> for the <listing> with "ls -la".
 
     if <result: error> = true then {
-        <Log> the <error: message> for the <console> with <result: message>.
+        <Log> <result: message> to the <console>.
         <Return> an <Error: status> with <result>.
     }
 
-    <Log> the <output> for the <console> with <result: output>.
+    <Log> <result: output> to the <console>.
     <Return> an <OK: status> with <result>.
 }
 ```
@@ -242,7 +242,7 @@ When a command fails, the result object captures the error state:
 
     (* result.error will be true, result.output contains stderr *)
     if <result: error> = true then {
-        <Log> the <warning> for the <console> with "Disk check failed: ${result.message}".
+        <Log> "Disk check failed: ${result.message}" to the <console>.
         <Return> a <Warning: status> with <result>.
     }
 

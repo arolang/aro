@@ -204,7 +204,7 @@ struct ParserBasicTests {
     func testHyphenatedFeatureSetName() throws {
         let source = """
         (Application-Start: Entry Point) {
-            <Log> the <message> for the <console>.
+            <Log> <message> to the <console>.
         }
         """
         let program = try Parser.parse(source)
@@ -267,7 +267,7 @@ struct AROStatementParsingTests {
     func testStringLiteral() throws {
         let source = """
         (Test: Test) {
-            <Log> the <message> for the <console> with "Hello World".
+            <Log> "Hello World" to the <console>.
         }
         """
         let program = try Parser.parse(source)

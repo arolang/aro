@@ -78,8 +78,8 @@ Get detailed metadata for a file or directory:
 <Stat> the <dir-info> for the <directory: "./src">.
 
 (* Access metadata *)
-<Log> the <size> for the <console> with <info: size>.
-<Log> the <modified> for the <console> with <info: modified>.
+<Log> <info: size> to the <console>.
+<Log> <info: modified> to the <console>.
 ```
 
 ### Result Structure
@@ -117,7 +117,7 @@ Check if a file or directory exists:
 (* Check file existence *)
 <Exists> the <found> for the <file: "./config.json">.
 
-<Log> the <warning> for the <console> with "Config not found!" when <found> is false.
+<Log> "Config not found!" to the <console> when <found> is false.
 
 (* Check directory existence *)
 <Exists> the <dir-exists> for the <directory: "./output">.
@@ -252,7 +252,7 @@ ARO normalizes paths for cross-platform compatibility:
 
 ```aro
 (Application-Start: Oldest Files Demo) {
-    <Log> the <header> for the <console> with "=== Three Oldest Files ===".
+    <Log> "=== Three Oldest Files ===" to the <console>.
 
     (* List all entries *)
     <List> the <entries> from the <directory: ".">.
@@ -269,8 +269,7 @@ ARO normalizes paths for cross-platform compatibility:
     (* Display each *)
     <ForEach> <file> in <oldest> {
         <Compute> the <size-kb> from <file: size> / 1024.
-        <Log> the <info> for the <console>
-            with "<file: name>: <size-kb> KB".
+        <Log> "<file: name>: <size-kb> KB" to the <console>.
     }
 
     <Return> an <OK: status> for the <demo>.
@@ -281,13 +280,13 @@ ARO normalizes paths for cross-platform compatibility:
 
 ```aro
 (Application-Start: File Operations Demo) {
-    <Log> the <title> for the <console> with "=== File Operations ===".
+    <Log> "=== File Operations ===" to the <console>.
 
     (* Check and create output directory *)
     <Exists> the <dir-exists> for the <directory: "./demo-output">.
 
     <CreateDirectory> the <output> at the <path: "./demo-output"> when <dir-exists> is false.
-    <Log> the <created> for the <console> with "Created directory" when <dir-exists> is false.
+    <Log> "Created directory" to the <console> when <dir-exists> is false.
 
     (* Write a file *)
     <Write> the <content> to the <file: "./demo-output/hello.txt">
@@ -299,7 +298,7 @@ ARO normalizes paths for cross-platform compatibility:
 
     (* Get stats *)
     <Stat> the <info> for the <file: "./demo-output/hello.txt">.
-    <Log> the <size> for the <console> with "Size: <info: size> bytes".
+    <Log> "Size: <info: size> bytes" to the <console>.
 
     (* Copy the file *)
     <Copy> the <file: "./demo-output/hello.txt">
@@ -309,14 +308,14 @@ ARO normalizes paths for cross-platform compatibility:
     <List> the <files> from the <directory: "./demo-output">.
 
     <ForEach> <file> in <files> {
-        <Log> the <entry> for the <console> with "  - <file: name>".
+        <Log> "  - <file: name>" to the <console>.
     }
 
     (* Move/rename *)
     <Move> the <file: "./demo-output/hello-copy.txt">
         to the <destination: "./demo-output/renamed.txt">.
 
-    <Log> the <done> for the <console> with "=== Complete ===".
+    <Log> "=== Complete ===" to the <console>.
     <Return> an <OK: status> for the <demo>.
 }
 ```

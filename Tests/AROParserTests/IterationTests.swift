@@ -17,7 +17,7 @@ struct ForEachLoopParsingTests {
         (Test: Demo) {
             <Create> the <items> with [1, 2, 3].
             for each <item> in <items> {
-                <Log> the <message> for the <console> with <item>.
+                <Log> <item> to the <console>.
             }
             <Return> an <OK: status> for the <test>.
         }
@@ -49,7 +49,7 @@ struct ForEachLoopParsingTests {
         (Test: Demo) {
             <Create> the <items> with [1, 2, 3].
             for each <item> at <index> in <items> {
-                <Log> the <message> for the <console> with <index>.
+                <Log> <index> to the <console>.
             }
             <Return> an <OK: status> for the <test>.
         }
@@ -73,7 +73,7 @@ struct ForEachLoopParsingTests {
         (Test: Demo) {
             <Create> the <users> with [].
             for each <user> in <users> where <user: active> is true {
-                <Log> the <message> for the <console> with <user>.
+                <Log> <user> to the <console>.
             }
             <Return> an <OK: status> for the <test>.
         }
@@ -147,7 +147,7 @@ struct ForEachLoopParsingTests {
             <Create> the <outer> with [[1, 2], [3, 4]].
             for each <row> in <outer> {
                 for each <cell> in <row> {
-                    <Log> the <value> for the <console> with <cell>.
+                    <Log> <cell> to the <console>.
                 }
             }
             <Return> an <OK: status> for the <test>.
@@ -180,7 +180,7 @@ struct ForEachLoopSemanticTests {
         let source = """
         (Test: Demo) {
             for each <item> in <undefined-collection> {
-                <Log> the <message> for the <console> with <item>.
+                <Log> <item> to the <console>.
             }
             <Return> an <OK: status> for the <test>.
         }

@@ -397,7 +397,7 @@ struct FullPipelineIntegrationTests {
     func testCompleteApplication() {
         let source = """
         (Application-Start: Entry Point) {
-            <Log> the <startup: message> for the <console>.
+            <Log> <startup: message> to the <console>.
             <Return> an <OK: status> for the <startup>.
         }
 

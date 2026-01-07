@@ -295,7 +295,7 @@
 <span class="code-keyword">&lt;Exists&gt;</span> the <span class="code-result">&lt;found&gt;</span> for the &lt;file: <span class="code-string">"./config.json"</span>&gt;.
 
 when &lt;found&gt; is false {
-    <span class="code-keyword">&lt;Log&gt;</span> the <span class="code-result">&lt;warning&gt;</span> for the &lt;console&gt; with <span class="code-string">"Config not found!"</span>.
+    <span class="code-keyword">&lt;Log&gt;</span> <span class="code-string">"Config not found!"</span> to the &lt;console&gt;.
 }
 
 <span class="code-comment">(* Check if directory exists *)</span>
@@ -309,8 +309,8 @@ when &lt;found&gt; is false {
         <pre><code><span class="code-comment">(* Get detailed file stats *)</span>
 <span class="code-keyword">&lt;Stat&gt;</span> the <span class="code-result">&lt;info&gt;</span> for the &lt;file: <span class="code-string">"./document.pdf"</span>&gt;.
 
-<span class="code-keyword">&lt;Log&gt;</span> the <span class="code-result">&lt;size&gt;</span> for the &lt;console&gt; with &lt;info: size&gt;.
-<span class="code-keyword">&lt;Log&gt;</span> the <span class="code-result">&lt;modified&gt;</span> for the &lt;console&gt; with &lt;info: modified&gt;.</code></pre>
+<span class="code-keyword">&lt;Log&gt;</span> &lt;info: size&gt; to the &lt;console&gt;.
+<span class="code-keyword">&lt;Log&gt;</span> &lt;info: modified&gt; to the &lt;console&gt;.</code></pre>
 
         <h2>Copy and Move</h2>
 
@@ -334,14 +334,14 @@ when &lt;found&gt; is false {
         </p>
 
         <pre><code><span class="code-feature">(Application-Start: File Operations Demo)</span> {
-    <span class="code-keyword">&lt;Log&gt;</span> the <span class="code-result">&lt;title&gt;</span> for the &lt;console&gt; with <span class="code-string">"=== File Operations ==="</span>.
+    <span class="code-keyword">&lt;Log&gt;</span> <span class="code-string">"=== File Operations ==="</span> to the &lt;console&gt;.
 
     <span class="code-comment">(* Check and create output directory *)</span>
     <span class="code-keyword">&lt;Exists&gt;</span> the <span class="code-result">&lt;dir-exists&gt;</span> for the &lt;directory: <span class="code-string">"./demo-output"</span>&gt;.
 
     when &lt;dir-exists&gt; is false {
         <span class="code-keyword">&lt;CreateDirectory&gt;</span> the <span class="code-result">&lt;output&gt;</span> to the &lt;path: <span class="code-string">"./demo-output"</span>&gt;.
-        <span class="code-keyword">&lt;Log&gt;</span> the <span class="code-result">&lt;created&gt;</span> for the &lt;console&gt; with <span class="code-string">"Created directory"</span>.
+        <span class="code-keyword">&lt;Log&gt;</span> <span class="code-string">"Created directory"</span> to the &lt;console&gt;.
     }
 
     <span class="code-comment">(* Write a file *)</span>
@@ -354,7 +354,7 @@ when &lt;found&gt; is false {
 
     <span class="code-comment">(* Get stats *)</span>
     <span class="code-keyword">&lt;Stat&gt;</span> the <span class="code-result">&lt;info&gt;</span> for the &lt;file: <span class="code-string">"./demo-output/hello.txt"</span>&gt;.
-    <span class="code-keyword">&lt;Log&gt;</span> the <span class="code-result">&lt;size&gt;</span> for the &lt;console&gt; with <span class="code-string">"Size: &lt;info: size&gt; bytes"</span>.
+    <span class="code-keyword">&lt;Log&gt;</span> <span class="code-string">"Size: &lt;info: size&gt; bytes"</span> to the &lt;console&gt;.
 
     <span class="code-comment">(* Copy the file *)</span>
     <span class="code-keyword">&lt;Copy&gt;</span> the &lt;file: <span class="code-string">"./demo-output/hello.txt"</span>&gt;
@@ -363,7 +363,7 @@ when &lt;found&gt; is false {
     <span class="code-comment">(* List directory *)</span>
     <span class="code-keyword">&lt;List&gt;</span> the <span class="code-result">&lt;files&gt;</span> in the &lt;directory: <span class="code-string">"./demo-output"</span>&gt;.
 
-    <span class="code-keyword">&lt;Log&gt;</span> the <span class="code-result">&lt;done&gt;</span> for the &lt;console&gt; with <span class="code-string">"=== Complete ==="</span>.
+    <span class="code-keyword">&lt;Log&gt;</span> <span class="code-string">"=== Complete ==="</span> to the &lt;console&gt;.
     <span class="code-keyword">&lt;Return&gt;</span> an <span class="code-result">&lt;OK: status&gt;</span> for the &lt;demo&gt;.
 }</code></pre>
 

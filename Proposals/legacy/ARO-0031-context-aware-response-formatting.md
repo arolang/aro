@@ -233,7 +233,7 @@ var isTestMode: Bool { get }
 The `<Log>` action respects output context:
 
 ```aro
-<Log> the <message> for the <console> with "Processing request".
+<Log> "Processing request" to the <console>.
 ```
 
 | Context | Output |

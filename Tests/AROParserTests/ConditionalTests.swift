@@ -166,7 +166,7 @@ struct WhenClauseParsingTests {
         let source = """
         (Test: Demo) {
             <Create> the <role> with "admin".
-            <Log> the <message> for the <console> with "Admin!" when <role> == "admin".
+            <Log> "Admin!" to the <console> when <role> == "admin".
             <Return> an <OK: status> for the <request>.
         }
         """
@@ -267,7 +267,7 @@ struct MatchStatementSemanticTests {
         let source = """
         (Test: Demo) {
             <Create> the <role> with "admin".
-            <Log> the <message> for the <console> with "Admin!" when <role> == "admin".
+            <Log> "Admin!" to the <console> when <role> == "admin".
             <Return> an <OK: status> for the <test>.
         }
         """

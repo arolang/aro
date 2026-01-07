@@ -23,7 +23,7 @@
         <h3>ARO Syntax</h3>
         <pre>
 (Application-Start: My Service) {
-    &lt;Log&gt; the &lt;message&gt; for the &lt;console&gt; with "Starting...".
+    &lt;Log&gt; "Starting..." to the &lt;console&gt;.
     &lt;Return&gt; an &lt;OK: status&gt; for the &lt;startup&gt;.
 }
         </pre>

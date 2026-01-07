@@ -249,7 +249,7 @@
     <span class="code-keyword">&lt;Extract&gt;</span> the <span class="code-result">&lt;body&gt;</span> from the &lt;response: body&gt;.
 
     if &lt;status-code&gt; is not 200 then {
-        <span class="code-keyword">&lt;Log&gt;</span> the <span class="code-result">&lt;error: message&gt;</span> for the &lt;console&gt; with <span class="code-string">"API error: ${status-code}"</span>.
+        <span class="code-keyword">&lt;Log&gt;</span> <span class="code-string">"API error: ${status-code}"</span> to the &lt;console&gt;.
         <span class="code-keyword">&lt;Return&gt;</span> a <span class="code-result">&lt;BadRequest: status&gt;</span> for the &lt;api: error&gt;.
     }
 

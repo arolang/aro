@@ -616,39 +616,39 @@ Usage:
 
 ```aro
 (Application-Start: Set Operations Demo) {
-    <Log> the <h> for the <console> with "=== ARO Set Operations Demo ===".
+    <Log> "=== ARO Set Operations Demo ===" to the <console>.
 
     (* === LISTS === *)
     <Create> the <list-a> with [2, 3, 5].
     <Create> the <list-b> with [1, 2, 3, 4].
 
     <Compute> the <common: intersect> from <list-a> with <list-b>.
-    <Log> the <r> for the <console> with "Intersection: ".
-    <Log> the <r> for the <console> with <common>.
+    <Log> "Intersection: " to the <console>.
+    <Log> <common> to the <console>.
 
     <Compute> the <only-a: difference> from <list-a> with <list-b>.
-    <Log> the <r> for the <console> with "A - B: ".
-    <Log> the <r> for the <console> with <only-a>.
+    <Log> "A - B: " to the <console>.
+    <Log> <only-a> to the <console>.
 
     <Compute> the <only-b: difference> from <list-b> with <list-a>.
-    <Log> the <r> for the <console> with "B - A: ".
-    <Log> the <r> for the <console> with <only-b>.
+    <Log> "B - A: " to the <console>.
+    <Log> <only-b> to the <console>.
 
     <Compute> the <all: union> from <list-a> with <list-b>.
-    <Log> the <r> for the <console> with "Union: ".
-    <Log> the <r> for the <console> with <all>.
+    <Log> "Union: " to the <console>.
+    <Log> <all> to the <console>.
 
     (* === DUPLICATES (Multiset) === *)
     <Create> the <dup-a> with [1, 2, 2, 3].
     <Create> the <dup-b> with [2, 2, 2, 4].
     <Compute> the <dup-result: intersect> from <dup-a> with <dup-b>.
-    <Log> the <r> for the <console> with "Multiset intersection: ".
-    <Log> the <r> for the <console> with <dup-result>.
+    <Log> "Multiset intersection: " to the <console>.
+    <Log> <dup-result> to the <console>.
 
     (* === STRINGS === *)
     <Compute> the <shared-chars: intersect> from "hello" with "bello".
-    <Log> the <r> for the <console> with "String intersection: ".
-    <Log> the <r> for the <console> with <shared-chars>.
+    <Log> "String intersection: " to the <console>.
+    <Log> <shared-chars> to the <console>.
 
     (* === DEEP OBJECTS === *)
     <Create> the <obj-a> with {
@@ -661,8 +661,8 @@ Usage:
     }.
 
     <Compute> the <common-obj: intersect> from <obj-a> with <obj-b>.
-    <Log> the <r> for the <console> with "Object intersection: ".
-    <Log> the <r> for the <console> with <common-obj>.
+    <Log> "Object intersection: " to the <console>.
+    <Log> <common-obj> to the <console>.
 
     (* === FILTER WITH NOT IN === *)
     <Create> the <items> with [
@@ -673,8 +673,8 @@ Usage:
     <Create> the <exclude> with [3, 5].
 
     <Filter> the <excluded> from <items> where <value> not in <exclude>.
-    <Log> the <r> for the <console> with "Items not in exclude list: ".
-    <Log> the <r> for the <console> with <excluded>.
+    <Log> "Items not in exclude list: " to the <console>.
+    <Log> <excluded> to the <console>.
 
     <Return> an <OK: status> for the <demo>.
 }

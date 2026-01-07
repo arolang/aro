@@ -230,7 +230,7 @@ Returns an empty string if the repository is empty or index is out of bounds.
 ```aro
 (* main.aro *)
 (Application-Start: Simple Chat) {
-    <Log> the <startup: message> for the <console> with "Starting...".
+    <Log> "Starting..." to the <console>.
     <Start> the <http-server> for the <contract>.
     <Keepalive> the <application> for the <events>.
     <Return> an <OK: status> for the <startup>.
@@ -285,7 +285,7 @@ Observers are feature sets with business activity pattern `{repository-name} Obs
     <Extract> the <newValue> from the <event: newValue>.
     <Extract> the <oldValue> from the <event: oldValue>.
 
-    <Log> the <audit: message> for the <console> with <changeType>.
+    <Log> <changeType> to the <console>.
     <Return> an <OK: status> for the <audit>.
 }
 ```
@@ -321,8 +321,7 @@ Observers are triggered for:
     <Extract> the <oldName> from the <event: oldValue: name>.
     <Extract> the <newName> from the <event: newValue: name>.
 
-    <Log> the <update: message> for the <console>
-        with "User renamed from " + <oldName> + " to " + <newName>.
+    <Log> "User renamed from " + <oldName> + " to " + <newName> to the <console>.
 
     <Return> an <OK: status> for the <update>.
 }

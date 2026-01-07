@@ -116,7 +116,7 @@ struct UnreachableCodeTests {
         let source = """
         (Test Feature: API) {
             <Return> an <OK: status> for the <result>.
-            <Log> the <message> for the <console>.
+            <Log> <message> to the <console>.
         }
         """
         let diagnostics = DiagnosticCollector()
@@ -131,7 +131,7 @@ struct UnreachableCodeTests {
         let source = """
         (Test Feature: API) {
             <Throw> a <Failure: status> for the <operation>.
-            <Log> the <message> for the <console>.
+            <Log> <message> to the <console>.
         }
         """
         let compiler = Compiler()
@@ -145,7 +145,7 @@ struct UnreachableCodeTests {
     func testReturnAtEnd() throws {
         let source = """
         (Test Feature: API) {
-            <Log> the <message> for the <console>.
+            <Log> <message> to the <console>.
             <Return> an <OK: status> for the <result>.
         }
         """
@@ -166,7 +166,7 @@ struct MissingReturnTests {
     func testMissingReturn() throws {
         let source = """
         (Test Feature: API) {
-            <Log> the <message> for the <console>.
+            <Log> <message> to the <console>.
         }
         """
         let diagnostics = DiagnosticCollector()
@@ -235,7 +235,7 @@ struct OrphanedEventTests {
         }
 
         (Log User: UserCreated Handler) {
-            <Log> the <message> for the <console>.
+            <Log> <message> to the <console>.
             <Return> an <OK: status> for the <log>.
         }
         """
@@ -279,7 +279,7 @@ struct StaticAnalysisIntegrationTests {
         }
 
         (Handle User: UserCreated Handler) {
-            <Log> the <message> for the <console>.
+            <Log> <message> to the <console>.
             <Return> an <OK: status> for the <handler>.
         }
         """
@@ -295,7 +295,7 @@ struct StaticAnalysisIntegrationTests {
     func testBadCodeWarnings() throws {
         let source = """
         (Bad Feature: API) {
-            <Log> the <message> for the <console>.
+            <Log> <message> to the <console>.
             <Emit> a <OrphanEvent: event> for the <trigger>.
         }
         """

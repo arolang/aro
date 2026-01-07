@@ -148,7 +148,7 @@ For an ARO program:
 ```aro
 (Application-Start: Entry Point) {
     <Create> the <greeting: String> with "Hello, World!".
-    <Log> the <greeting> for the <console>.
+    <Log> <greeting> to the <console>.
     <Return> an <OK: status> for the <application>.
 }
 ```
@@ -196,7 +196,7 @@ entry:
   %s0_action_result = call ptr @aro_action_create(ptr %ctx, ptr %s0_result_desc, ptr %s0_object_desc)
   store ptr %s0_action_result, ptr %__result
 
-  ; <Log> the <greeting> for the <console>
+  ; <Log> <greeting> to the <console>
   ; ... similar pattern ...
 
   ; <Return> an <OK: status> for the <application>

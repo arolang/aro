@@ -34,7 +34,7 @@
 
     (* Check if a date falls within a range *)
     <Compute> the <check-date: date> from "2025-01-10T12:00:00Z".
-    <Log> the <check-label> for the <console> with "  Jan 10 is in vacation range" when <check-date> > <start-date>.
+    <Log> "  Jan 10 is in vacation range" to the <console> when <check-date> > <start-date>.
 
     (* ========================================== *)
     (* Part 2: Recurrence Patterns                *)

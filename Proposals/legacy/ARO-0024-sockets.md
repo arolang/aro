@@ -26,7 +26,7 @@ Start a TCP socket server using the `<Listen>` action:
 
 ```aro
 (Application-Start: Echo Server) {
-    <Log> the <message> for the <console> with "Starting socket server".
+    <Log> "Starting socket server" to the <console>.
     <Listen> on port 9000 as <socket-server>.
     <Keepalive> the <application> for the <events>.
     <Return> an <OK: status> for the <startup>.
@@ -61,7 +61,7 @@ public struct DataReceivedEvent: RuntimeEvent {
 (Handle Client Connected: Socket Event Handler) {
     <Extract> the <client-id> from the <connection: id>.
     <Extract> the <remote-address> from the <connection: remoteAddress>.
-    <Log> the <connection: info> for the <console> with <remote-address>.
+    <Log> <remote-address> to the <console>.
     <Return> an <OK: status> for the <connection>.
 }
 
@@ -80,7 +80,7 @@ public struct DataReceivedEvent: RuntimeEvent {
 
 (Handle Client Disconnected: Socket Event Handler) {
     <Extract> the <client-id> from the <event: connectionId>.
-    <Log> the <disconnection: info> for the <console> with <client-id>.
+    <Log> <client-id> to the <console>.
     <Return> an <OK: status> for the <event>.
 }
 ```
@@ -188,9 +188,9 @@ host_reference = "host:" , string_literal ;
 (* Echo Socket Server - Bidirectional TCP communication *)
 
 (Application-Start: Echo Socket) {
-    <Log> the <message> for the <console> with "Starting echo socket on port 9000".
+    <Log> "Starting echo socket on port 9000" to the <console>.
     <Listen> on port 9000 as <socket-server>.
-    <Log> the <message> for the <console> with "Socket server listening on port 9000".
+    <Log> "Socket server listening on port 9000" to the <console>.
     <Keepalive> the <application> for the <events>.
     <Return> an <OK: status> for the <startup>.
 }
@@ -198,7 +198,7 @@ host_reference = "host:" , string_literal ;
 (Handle Client Connected: Socket Event Handler) {
     <Extract> the <client-id> from the <event: connectionId>.
     <Extract> the <remote-address> from the <event: remoteAddress>.
-    <Log> the <message> for the <console> with "Client connected".
+    <Log> "Client connected" to the <console>.
     <Return> an <OK: status> for the <connection>.
 }
 
@@ -209,13 +209,13 @@ host_reference = "host:" , string_literal ;
     (* Echo back the received data *)
     <Send> the <data> to the <client>.
 
-    <Log> the <message> for the <console> with "Echoed data back to client".
+    <Log> "Echoed data back to client" to the <console>.
     <Return> an <OK: status> for the <event>.
 }
 
 (Handle Client Disconnected: Socket Event Handler) {
     <Extract> the <client-id> from the <event: connectionId>.
-    <Log> the <message> for the <console> with "Client disconnected".
+    <Log> "Client disconnected" to the <console>.
     <Return> an <OK: status> for the <event>.
 }
 ```

@@ -66,10 +66,10 @@ Regex patterns can be used as case patterns in match statements:
 ```aro
 match <message.text> {
     case /^[a-z]+\-?[0-9]?$/ {
-        <Log> the <message> for the <console> with "Matches format".
+        <Log> "Matches format" to the <console>.
     }
     case /^ERROR:/i {
-        <Log> the <error> for the <console> with <message.text>.
+        <Log> <message.text> to the <console>.
     }
     case "exact string" {
         (* Exact string match *)
@@ -234,7 +234,7 @@ if flags.contains("m") { options.insert(.anchorsMatchLines) }
             <Emit> a <StatusQuery: event> with <message>.
         }
         case /^ERROR:/i {
-            <Log> the <error: alert> for the <console> with <content>.
+            <Log> <content> to the <console>.
         }
         otherwise {
             <Emit> a <MessageReceived: event> with <message>.

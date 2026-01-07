@@ -32,7 +32,7 @@ However, these objects:
 
 ```aro
 (* Current - forces throwaway variable *)
-<Log> the <start> for the <console> with "Scanning template directory...".
+<Log> "Scanning template directory..." to the <console>.
 
 (* The user must invent <start> even though they don't care about it *)
 ```

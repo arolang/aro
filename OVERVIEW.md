@@ -26,7 +26,7 @@ that can be compiled and executed. Features are expressed as Action-Result-Objec
 ```aro
 (* Entry point - exactly one per application *)
 (Application-Start: My Service) {
-    <Log> the <startup: message> for the <console> with "Starting service...".
+    <Log> "Starting service..." to the <console>.
     <Start> the <http-server> on <port> with 8080.
     <Keepalive> the <application> for the <events>.
     <Return> an <OK: status> for the <startup>.
@@ -34,7 +34,7 @@ that can be compiled and executed. Features are expressed as Action-Result-Objec
 
 (* Exit handler - called on graceful shutdown *)
 (Application-End: Success) {
-    <Log> the <shutdown: message> for the <console> with "Goodbye!".
+    <Log> "Goodbye!" to the <console>.
     <Return> an <OK: status> for the <shutdown>.
 }
 
@@ -251,7 +251,7 @@ import ARORuntime
 // Compile source code
 let source = """
 (Application-Start: My App) {
-    <Log> the <startup: message> for the <console> with "Hello, ARO!".
+    <Log> "Hello, ARO!" to the <console>.
     <Return> an <OK: status> for the <startup>.
 }
 """

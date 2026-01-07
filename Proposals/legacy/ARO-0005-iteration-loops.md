@@ -357,7 +357,7 @@ keyword += "for" | "each" | "in" | "at" | "parallel" | "concurrency" ;
 
     (* Calculate summary *)
     <Count> the <processed-count> from the <pending-orders>.
-    <Log> the <summary> for the <console> with <processed-count>.
+    <Log> <processed-count> to the <console>.
 
     <Return> an <OK: status> for the <fulfillment>.
 }

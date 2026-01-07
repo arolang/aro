@@ -1181,7 +1181,7 @@
                 <div class="code-content">
 <pre><span class="comment">(* The required entry point *)</span>
 (<span class="keyword">Application-Start</span>: <span class="keyword">My API Server</span>) {
-    <span class="action">&lt;Log&gt;</span> the <span class="variable">&lt;message&gt;</span> for the <span class="variable">&lt;console&gt;</span> with <span class="string">"Starting server..."</span>.
+    <span class="action">&lt;Log&gt;</span> <span class="string">"Starting server..."</span> to the <span class="variable">&lt;console&gt;</span>.
 
     <span class="comment">(* Keep the app running to handle HTTP requests *)</span>
     <span class="action">&lt;Keepalive&gt;</span> the <span class="variable">&lt;application&gt;</span> for the <span class="variable">&lt;events&gt;</span>.
@@ -1191,7 +1191,7 @@
 
 <span class="comment">(* Optional: cleanup on shutdown *)</span>
 (<span class="keyword">Application-End</span>: <span class="keyword">Success</span>) {
-    <span class="action">&lt;Log&gt;</span> the <span class="variable">&lt;message&gt;</span> for the <span class="variable">&lt;console&gt;</span> with <span class="string">"Goodbye!"</span>.
+    <span class="action">&lt;Log&gt;</span> <span class="string">"Goodbye!"</span> to the <span class="variable">&lt;console&gt;</span>.
     <span class="action">&lt;Return&gt;</span> an <span class="variable">&lt;OK: status&gt;</span> for the <span class="variable">&lt;shutdown&gt;</span>.
 }</pre>
                 </div>
@@ -1374,7 +1374,7 @@ paths:
 (<span class="keyword">Process Upload</span>: <span class="keyword">FileCreated Handler</span>) {
     <span class="action">&lt;Extract&gt;</span> the <span class="variable">&lt;path&gt;</span> from the <span class="variable">&lt;event: path&gt;</span>.
     <span class="action">&lt;Read&gt;</span> the <span class="variable">&lt;content&gt;</span> from the <span class="variable">&lt;file: path&gt;</span>.
-    <span class="action">&lt;Log&gt;</span> the <span class="variable">&lt;message&gt;</span> for the <span class="variable">&lt;console&gt;</span> with <span class="string">"Processing: ${path}"</span>.
+    <span class="action">&lt;Log&gt;</span> <span class="string">"Processing: ${path}"</span> to the <span class="variable">&lt;console&gt;</span>.
     <span class="action">&lt;Return&gt;</span> an <span class="variable">&lt;OK: status&gt;</span> for the <span class="variable">&lt;processing&gt;</span>.
 }
 
@@ -1522,7 +1522,7 @@ paths:
                 <div class="code-content">
 <pre><span class="comment">(* main.aro *)</span>
 (<span class="keyword">Application-Start</span>: <span class="keyword">Greeting API</span>) {
-    <span class="action">&lt;Log&gt;</span> the <span class="variable">&lt;message&gt;</span> for the <span class="variable">&lt;console&gt;</span> with <span class="string">"Greeting API ready!"</span>.
+    <span class="action">&lt;Log&gt;</span> <span class="string">"Greeting API ready!"</span> to the <span class="variable">&lt;console&gt;</span>.
     <span class="action">&lt;Keepalive&gt;</span> the <span class="variable">&lt;application&gt;</span> for the <span class="variable">&lt;events&gt;</span>.
     <span class="action">&lt;Return&gt;</span> an <span class="variable">&lt;OK: status&gt;</span> for the <span class="variable">&lt;startup&gt;</span>.
 }
@@ -1618,7 +1618,7 @@ $ curl http://localhost:8080/hello?name=Developer
                 <div class="code-content">
 <pre>(<span class="keyword">getUser</span>: <span class="keyword">User API</span>) {
     <span class="action">&lt;Retrieve&gt;</span> the <span class="variable">&lt;user&gt;</span> from the <span class="variable">&lt;user-repository&gt;</span> where id <span class="operator">=</span> <span class="variable">&lt;id&gt;</span>.
-    <span class="action">&lt;Log&gt;</span> the <span class="variable">&lt;status&gt;</span> for the <span class="variable">&lt;console&gt;</span> with <span class="string">"User retrieved"</span>.
+    <span class="action">&lt;Log&gt;</span> <span class="string">"User retrieved"</span> to the <span class="variable">&lt;console&gt;</span>.
     <span class="action">&lt;Return&gt;</span> an <span class="variable">&lt;OK: status&gt;</span> with <span class="variable">&lt;user&gt;</span>.
 }</pre>
                 </div>

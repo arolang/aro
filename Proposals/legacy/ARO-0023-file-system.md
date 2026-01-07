@@ -65,19 +65,19 @@ Feature sets with business activity `File Event Handler` receive file events. Th
 ```aro
 (Handle File Created: File Event Handler) {
     <Extract> the <path> from the <event: path>.
-    <Log> the <created: message> for the <console> with <path>.
+    <Log> <path> to the <console>.
     <Return> an <OK: status> for the <event>.
 }
 
 (Handle File Modified: File Event Handler) {
     <Extract> the <path> from the <event: path>.
-    <Log> the <modified: message> for the <console> with <path>.
+    <Log> <path> to the <console>.
     <Return> an <OK: status> for the <event>.
 }
 
 (Handle File Deleted: File Event Handler) {
     <Extract> the <path> from the <event: path>.
-    <Log> the <deleted: message> for the <console> with <path>.
+    <Log> <path> to the <console>.
     <Return> an <OK: status> for the <event>.
 }
 ```
@@ -127,12 +127,12 @@ A file watcher application that monitors a directory and logs all file changes:
 (* File Watcher Application *)
 
 (Application-Start: File Watcher) {
-    <Log> the <startup: message> for the <console> with "Starting file watcher".
+    <Log> "Starting file watcher" to the <console>.
 
     (* Watch the current directory for changes *)
     <Watch> the <file-monitor> for the <directory> with ".".
 
-    <Log> the <ready: message> for the <console> with "Watching for file changes... Press Ctrl+C to stop.".
+    <Log> "Watching for file changes... Press Ctrl+C to stop." to the <console>.
 
     (* Keep the application running until Ctrl+C *)
     <Keepalive> the <application> for the <events>.
@@ -142,24 +142,24 @@ A file watcher application that monitors a directory and logs all file changes:
 
 (Handle File Created: File Event Handler) {
     <Extract> the <path> from the <event: path>.
-    <Log> the <file-created: message> for the <console>.
+    <Log> <path> to the <console>.
     <Return> an <OK: status> for the <event>.
 }
 
 (Handle File Modified: File Event Handler) {
     <Extract> the <path> from the <event: path>.
-    <Log> the <file-modified: message> for the <console>.
+    <Log> <path> to the <console>.
     <Return> an <OK: status> for the <event>.
 }
 
 (Handle File Deleted: File Event Handler) {
     <Extract> the <path> from the <event: path>.
-    <Log> the <file-deleted: message> for the <console>.
+    <Log> <path> to the <console>.
     <Return> an <OK: status> for the <event>.
 }
 
 (Application-End: Success) {
-    <Log> the <shutdown: message> for the <console> with "File watcher stopped.".
+    <Log> "File watcher stopped." to the <console>.
     <Return> an <OK: status> for the <shutdown>.
 }
 ```
@@ -172,7 +172,7 @@ An application that processes files from an inbox directory:
 
 ```aro
 (Application-Start: File Processor) {
-    <Log> the <startup: message> for the <console> with "Starting file processor".
+    <Log> "Starting file processor" to the <console>.
     <Watch> the <file-monitor> for the <directory> with "./inbox".
     <Keepalive> the <application> for the <events>.
     <Return> an <OK: status> for the <startup>.
@@ -191,7 +191,7 @@ An application that processes files from an inbox directory:
     <Create> the <output-path> with "./outbox/processed.txt".
     <Write> the <processed> to the <output-path>.
 
-    <Log> the <processed: message> for the <console> with <path>.
+    <Log> <path> to the <console>.
     <Return> an <OK: status> for the <processing>.
 }
 ```

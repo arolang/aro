@@ -191,7 +191,7 @@ struct UnusedVariableDetectionTests {
         (Test: Demo) {
             <Create> the <used-var> with "hello".
             <Create> the <unused-var> with "world".
-            <Log> the <message> for the <console> with <used-var>.
+            <Log> <used-var> to the <console>.
             <Return> an <OK: status> for the <test>.
         }
         """
