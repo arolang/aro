@@ -326,6 +326,16 @@ sub build_example {
     eval { finish($handle) };
     my $build_duration = time - $start_time;
 
+    # Debug: Print captured output lengths for debugging
+    if ($example_name eq 'HelloWorld') {
+        print STDERR "[TEST-DEBUG] HelloWorld build completed\n";
+        print STDERR "[TEST-DEBUG] Exit code: $?\n";
+        print STDERR "[TEST-DEBUG] stdout length: " . length($out) . "\n";
+        print STDERR "[TEST-DEBUG] stderr length: " . length($err) . "\n";
+        print STDERR "[TEST-DEBUG] stdout content: [$out]\n";
+        print STDERR "[TEST-DEBUG] stderr content: [$err]\n";
+    }
+
     if ($? != 0) {
         my $combined_err = $err || $out;
         my $exit_code = $? >> 8;
