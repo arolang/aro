@@ -308,15 +308,27 @@ struct BuildCommand: AsyncParsableCommand {
 
         #if os(Linux)
         FileHandle.standardError.write("[BUILD] Starting linker\n".data(using: .utf8)!)
+        FileHandle.standardError.write("[BUILD] Object file: \(objectPath)\n".data(using: .utf8)!)
+        FileHandle.standardError.write("[BUILD] Output path: \(binaryPath.path)\n".data(using: .utf8)!)
         #endif
 
         let linker = CCompiler(runtimeLibraryPath: runtimeLibPath)
+
+        #if os(Linux)
+        FileHandle.standardError.write("[BUILD] CCompiler created\n".data(using: .utf8)!)
+        #endif
+
         let linkOptions = CCompiler.LinkOptions(
             optimize: effectiveOptimize,
             optimizeForSize: effectiveSize,
             strip: effectiveStrip,
             deadStrip: effectiveStrip || effectiveSize  // Enable dead stripping when stripping or optimizing for size
         )
+
+        #if os(Linux)
+        FileHandle.standardError.write("[BUILD] LinkOptions created\n".data(using: .utf8)!)
+        FileHandle.standardError.write("[BUILD] Calling linker.link()...\n".data(using: .utf8)!)
+        #endif
 
         do {
             try linker.link(

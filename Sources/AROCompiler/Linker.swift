@@ -242,7 +242,17 @@ public final class CCompiler {
         outputType: OutputType = .executable,
         options: LinkOptions
     ) throws {
+        #if os(Linux)
+        print("[LINKER] link() called")
+        print("[LINKER] Finding compiler...")
+        #endif
+
         var args = [findCompiler()]
+
+        #if os(Linux)
+        print("[LINKER] Compiler found: \(args[0])")
+        print("[LINKER] Building arguments...")
+        #endif
 
         // Output type
         switch outputType {
@@ -350,7 +360,16 @@ public final class CCompiler {
             #endif
         }
 
+        #if os(Linux)
+        print("[LINKER] Arguments built, calling runProcess...")
+        print("[LINKER] Total args: \(args.count)")
+        #endif
+
         try runProcess(args)
+
+        #if os(Linux)
+        print("[LINKER] runProcess completed successfully")
+        #endif
     }
 
     /// Compile C source directly to executable (single step)
@@ -563,6 +582,10 @@ public final class CCompiler {
             throw LinkerError.compilationFailed("No command specified")
         }
 
+        #if os(Linux)
+        print("[LINKER] runProcess() called with \(args.count) args")
+        #endif
+
         // Debug: Print command being run (helpful for CI debugging)
         let command = args.joined(separator: " ")
         #if DEBUG
@@ -583,9 +606,19 @@ public final class CCompiler {
         process.standardOutput = outputPipe
         process.standardError = errorPipe
 
+        #if os(Linux)
+        print("[LINKER] Starting process...")
+        #endif
+
         do {
             try process.run()
+            #if os(Linux)
+            print("[LINKER] Process started, waiting for exit...")
+            #endif
             process.waitUntilExit()
+            #if os(Linux)
+            print("[LINKER] Process exited with status: \(process.terminationStatus)")
+            #endif
         } catch {
             throw LinkerError.compilationFailed("Failed to run compiler: \(error)")
         }
