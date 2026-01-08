@@ -704,14 +704,15 @@ jobs:
           path: ./aro-bin
 
       - name: Prepare ARO binary
-        shell: bash
+        shell: pwsh
         run: |
-          chmod +x ./aro-bin/aro.exe
-          echo "ARO_BIN=$GITHUB_WORKSPACE/aro-bin/aro.exe" >> $GITHUB_ENV
-          ./aro-bin/aro.exe --version || true
+          # Set environment variable for subsequent steps
+          echo "ARO_BIN=$env:GITHUB_WORKSPACE\aro-bin\aro.exe" >> $env:GITHUB_ENV
+          # Verify the binary works
+          & .\aro-bin\aro.exe --version
 
       - name: Run integration tests
-        shell: bash
+        shell: pwsh
         run: |
           perl test-examples.pl --verbose
 
