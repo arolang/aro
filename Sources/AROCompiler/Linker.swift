@@ -85,9 +85,19 @@ public final class LLVMEmitter {
 
     private func findLLC() throws -> String {
         #if os(Windows)
-        // On Windows, LLVM is added to PATH by the workflow
-        // Just return "llc" and let the system find it in PATH
-        // This is more reliable than hardcoded paths or using where.exe from Swift
+        // On Windows, check common LLVM installation paths
+        let windowsPaths = [
+            "C:\\Program Files\\LLVM\\bin\\llc.exe",
+            "C:\\Program Files (x86)\\LLVM\\bin\\llc.exe"
+        ]
+
+        for path in windowsPaths {
+            if FileManager.default.fileExists(atPath: path) {
+                return path
+            }
+        }
+
+        // Fallback to PATH (may not work reliably on Windows)
         return "llc"
         #else
         // Unix-like systems (macOS, Linux)
