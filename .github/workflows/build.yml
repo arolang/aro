@@ -632,19 +632,32 @@ jobs:
       - name: Install LLVM
         shell: pwsh
         run: |
-          # Check if llc.exe exists (not just clang)
-          # Pre-installed LLVM on windows-latest may not include full toolset
-          if (Test-Path "C:\Program Files\LLVM\bin\llc.exe") {
-            Write-Host "LLVM llc.exe found"
-            echo "C:\Program Files\LLVM\bin" | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
-          } else {
-            Write-Host "Installing full LLVM toolset via choco..."
-            choco install llvm --version=18.1.8 -y
+          # Check common LLVM paths for llc.exe
+          $llvmPaths = @(
+            "C:\Program Files\LLVM\bin",
+            "C:\Program Files (x86)\LLVM\bin"
+          )
+
+          $foundLlc = $false
+          foreach ($path in $llvmPaths) {
+            $llcPath = Join-Path $path "llc.exe"
+            if (Test-Path $llcPath) {
+              Write-Host "Found llc.exe at: $llcPath"
+              echo $path | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
+              $foundLlc = $true
+              break
+            }
+          }
+
+          if (-not $foundLlc) {
+            Write-Host "llc.exe not found in standard paths. Installing LLVM..."
+            choco install llvm -y --force
             echo "C:\Program Files\LLVM\bin" | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
           }
-          # Verify llc is available
-          Write-Host "Verifying LLVM installation..."
-          Get-ChildItem "C:\Program Files\LLVM\bin" -Filter "llc*" | Select-Object Name
+
+          # List available LLVM tools
+          Write-Host "Available LLVM tools in C:\Program Files\LLVM\bin:"
+          Get-ChildItem "C:\Program Files\LLVM\bin" -Filter "*.exe" | Where-Object { $_.Name -match "^(llc|clang|ld)" } | Select-Object Name
 
       - name: Setup Perl Build Environment
         shell: pwsh
