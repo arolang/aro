@@ -434,6 +434,18 @@ public final class CCompiler {
                 // clang uses -Wl format for rpath
                 args.append("-Wl,-rpath,\(swiftLibPath)")
 
+                // CRITICAL: When using clang to link Swift code, we need swiftrt.o
+                // This object file initializes the Swift runtime (metadata registration, etc.)
+                // Without it, the binary will hang during Swift runtime bootstrap
+                let swiftRTPath = findSwiftRuntimeObject(swiftLibPath: swiftLibPath)
+                if let rtPath = swiftRTPath {
+                    FileHandle.standardError.write("[LINKER] Found swiftrt.o at: \(rtPath)\n".data(using: .utf8)!)
+                    // swiftrt.o must be linked FIRST to initialize Swift runtime before any Swift code runs
+                    args.insert(rtPath, at: 1)  // Insert right after compiler, before object files
+                } else {
+                    FileHandle.standardError.write("[LINKER] WARNING: swiftrt.o not found - binary may hang\n".data(using: .utf8)!)
+                }
+
                 // CRITICAL: Explicitly link Swift runtime libraries when using clang
                 // These must come AFTER -lARORuntime so linker can resolve symbols
                 // Order matters: Core must be first, then platform libs, then others
@@ -731,6 +743,43 @@ public final class CCompiler {
         }
 
         FileHandle.standardError.write("[LINKER] WARNING: Could not find Swift library path\n".data(using: .utf8)!)
+        #endif
+
+        return nil
+    }
+
+    /// Find the Swift runtime initialization object (swiftrt.o)
+    /// This object is required when linking Swift code with clang instead of swiftc
+    private func findSwiftRuntimeObject(swiftLibPath: String) -> String? {
+        #if os(Linux)
+        // On Linux, swiftrt.o is in the architecture-specific subdirectory
+        // e.g., /usr/share/swift/usr/lib/swift/linux/x86_64/swiftrt.o
+
+        // Determine architecture
+        #if arch(x86_64)
+        let arch = "x86_64"
+        #elseif arch(arm64)
+        let arch = "aarch64"
+        #else
+        let arch = "x86_64"  // Default fallback
+        #endif
+
+        // Build potential paths
+        let potentialPaths = [
+            "\(swiftLibPath)/\(arch)/swiftrt.o",
+            "\(swiftLibPath)/swiftrt.o",
+            // Alternative paths based on common Swift installations
+            "/usr/lib/swift/linux/\(arch)/swiftrt.o",
+            "/usr/share/swift/usr/lib/swift/linux/\(arch)/swiftrt.o"
+        ]
+
+        for path in potentialPaths {
+            if FileManager.default.fileExists(atPath: path) {
+                return path
+            }
+        }
+
+        FileHandle.standardError.write("[LINKER] Searched for swiftrt.o in: \(potentialPaths)\n".data(using: .utf8)!)
         #endif
 
         return nil
