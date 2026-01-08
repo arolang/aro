@@ -84,12 +84,19 @@ public final class LLVMEmitter {
     // MARK: - Private Methods
 
     private func findLLC() throws -> String {
-        // Check common paths
+        #if os(Windows)
+        // On Windows, LLVM is added to PATH by the workflow
+        // Just return "llc" and let the system find it in PATH
+        // This is more reliable than hardcoded paths or using where.exe from Swift
+        return "llc"
+        #else
+        // Unix-like systems (macOS, Linux)
         let paths = [
             "/opt/homebrew/opt/llvm/bin/llc",
             "/usr/local/opt/llvm/bin/llc",
             "/usr/bin/llc",
-            "/usr/local/bin/llc"
+            "/usr/local/bin/llc",
+            "/usr/bin/llc-14"  // Ubuntu 24.04
         ]
 
         for path in paths {
@@ -117,7 +124,12 @@ public final class LLVMEmitter {
             }
         } catch {}
 
+        #if os(macOS)
         throw LinkerError.compilationFailed("llc not found. Please install LLVM: brew install llvm")
+        #else
+        throw LinkerError.compilationFailed("llc not found. Please install LLVM: apt-get install llvm-14")
+        #endif
+        #endif
     }
 
     /// Get LLVM major version from llc
@@ -545,21 +557,28 @@ public final class CCompiler {
         #if os(Linux)
         FileHandle.standardError.write("[LINKER] findCompiler() called on Linux\n".data(using: .utf8)!)
 
-        // On Linux, prefer swiftc for linking Swift static libraries
-        // swiftc handles Swift runtime initialization and library dependencies automatically
+        // On Linux, use clang for linking Swift static libraries
+        // swiftc on GitHub Actions runners is unreliable (hangs intermittently)
+        // clang works consistently when we explicitly specify Swift runtime libraries
 
-        // 1. First check for swiftc at standard location
-        if FileManager.default.fileExists(atPath: "/usr/bin/swiftc") {
-            FileHandle.standardError.write("[LINKER] Found swiftc at /usr/bin/swiftc\n".data(using: .utf8)!)
-            return "/usr/bin/swiftc"
+        // 1. Check for clang-14 (Ubuntu 24.04 default)
+        if FileManager.default.fileExists(atPath: "/usr/bin/clang-14") {
+            FileHandle.standardError.write("[LINKER] Found clang-14 at /usr/bin/clang-14\n".data(using: .utf8)!)
+            return "/usr/bin/clang-14"
         }
 
-        // 2. Try to find swiftc in PATH using which (for non-standard installations)
-        FileHandle.standardError.write("[LINKER] Trying to find swiftc in PATH...\n".data(using: .utf8)!)
+        // 2. Check for generic clang
+        if FileManager.default.fileExists(atPath: "/usr/bin/clang") {
+            FileHandle.standardError.write("[LINKER] Found clang at /usr/bin/clang\n".data(using: .utf8)!)
+            return "/usr/bin/clang"
+        }
+
+        // 3. Try to find clang in PATH
+        FileHandle.standardError.write("[LINKER] Trying to find clang in PATH...\n".data(using: .utf8)!)
         do {
             let whichProcess = Process()
             whichProcess.executableURL = URL(fileURLWithPath: "/usr/bin/which")
-            whichProcess.arguments = ["swiftc"]
+            whichProcess.arguments = ["clang"]
 
             let whichPipe = Pipe()
             whichProcess.standardOutput = whichPipe
@@ -572,29 +591,15 @@ public final class CCompiler {
                 let data = whichPipe.fileHandleForReading.readDataToEndOfFile()
                 if let path = String(data: data, encoding: .utf8)?.trimmingCharacters(in: .whitespacesAndNewlines),
                    !path.isEmpty {
-                    FileHandle.standardError.write("[LINKER] Found swiftc in PATH: \(path)\n".data(using: .utf8)!)
+                    FileHandle.standardError.write("[LINKER] Found clang in PATH: \(path)\n".data(using: .utf8)!)
                     return path
                 }
             }
         } catch {
-            FileHandle.standardError.write("[LINKER] Error searching for swiftc: \(error)\n".data(using: .utf8)!)
+            FileHandle.standardError.write("[LINKER] Error searching for clang: \(error)\n".data(using: .utf8)!)
         }
 
-        // 3. If swiftc not found, fall back to clang
-        FileHandle.standardError.write("[LINKER] swiftc not found, falling back to clang\n".data(using: .utf8)!)
-        let clang_compilers = [
-            "/usr/bin/clang-14",
-            "/usr/bin/clang",
-            "clang-14",
-            "clang"
-        ]
-        for compiler in clang_compilers {
-            if FileManager.default.fileExists(atPath: compiler) {
-                FileHandle.standardError.write("[LINKER] Found clang at: \(compiler)\n".data(using: .utf8)!)
-                return compiler
-            }
-        }
-
+        // 4. Final fallback
         FileHandle.standardError.write("[LINKER] WARNING: No compiler found, returning clang-14\n".data(using: .utf8)!)
         return "clang-14"
         #else
