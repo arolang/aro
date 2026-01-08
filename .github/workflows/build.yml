@@ -635,11 +635,27 @@ jobs:
           # Install LLVM 14 to match Linux version
           Write-Host "Installing LLVM 14 to match Linux..."
           choco install llvm --version=14.0.6 -y --force
+
+          # Find where llc.exe was installed
+          Write-Host "Searching for llc.exe..."
+          $llcPaths = Get-ChildItem -Path "C:\Program Files" -Recurse -Filter "llc.exe" -ErrorAction SilentlyContinue | Select-Object -First 5 -ExpandProperty FullName
+          if ($llcPaths) {
+            Write-Host "Found llc.exe at:"
+            $llcPaths | ForEach-Object { Write-Host "  $_" }
+            $llcDir = Split-Path $llcPaths[0] -Parent
+            echo $llcDir | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
+            Write-Host "Added to PATH: $llcDir"
+          } else {
+            Write-Host "llc.exe not found in Program Files, checking other locations..."
+            Get-ChildItem -Path "C:\" -Recurse -Filter "llc.exe" -ErrorAction SilentlyContinue | Select-Object -First 3 -ExpandProperty FullName
+          }
+
+          # Also add standard LLVM path to PATH
           echo "C:\Program Files\LLVM\bin" | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
 
-          # Verify llc is available
-          Write-Host "Verifying LLVM 14 installation..."
-          & "C:\Program Files\LLVM\bin\llc.exe" --version
+          # Show what's in LLVM bin
+          Write-Host "Contents of C:\Program Files\LLVM\bin:"
+          Get-ChildItem "C:\Program Files\LLVM\bin" -Filter "*.exe" | Select-Object -First 20 Name
 
       - name: Setup Perl Build Environment
         shell: pwsh
