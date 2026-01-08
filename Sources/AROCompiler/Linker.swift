@@ -35,6 +35,18 @@ public final class LLVMEmitter {
         to outputPath: String,
         optimize: OptimizationLevel = .none
     ) throws {
+        #if os(Windows)
+        // On Windows, use clang to compile LLVM IR to object files
+        // The standard LLVM Windows distribution doesn't include llc
+        let clangPath = try findClang()
+        var args = [clangPath]
+        args.append("-c")  // Compile only, don't link
+        args.append(optimize.rawValue)
+        args.append("-o")
+        args.append(outputPath)
+        args.append(irPath)
+        try runProcess(args)
+        #else
         let llcPath = try findLLC()
 
         var args = [llcPath]
@@ -54,6 +66,7 @@ public final class LLVMEmitter {
         args.append(irPath)
 
         try runProcess(args)
+        #endif
     }
 
     /// Emit LLVM IR to assembly
@@ -139,6 +152,28 @@ public final class LLVMEmitter {
         #else
         throw LinkerError.compilationFailed("llc not found. Please install LLVM: apt-get install llvm-14")
         #endif
+        #endif
+    }
+
+    /// Find clang executable (used on Windows for LLVM IR compilation)
+    private func findClang() throws -> String {
+        #if os(Windows)
+        let windowsPaths = [
+            "C:\\Program Files\\LLVM\\bin\\clang.exe",
+            "C:\\Program Files (x86)\\LLVM\\bin\\clang.exe"
+        ]
+
+        for path in windowsPaths {
+            if FileManager.default.fileExists(atPath: path) {
+                return path
+            }
+        }
+
+        // Fallback to PATH
+        return "clang"
+        #else
+        // On Unix, we use llc, not clang for IR compilation
+        throw LinkerError.compilationFailed("clang lookup not implemented for this platform")
         #endif
     }
 

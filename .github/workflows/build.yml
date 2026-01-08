@@ -629,34 +629,19 @@ jobs:
           swift-version: swift-6.2.1-release
           swift-build: 6.2.1-RELEASE
 
-      - name: Install LLVM
+      - name: Setup LLVM
         shell: pwsh
         run: |
-          # Download official LLVM 14 release which includes llc.exe
-          # The chocolatey package only includes clang, not full LLVM tools
-          $llvmVersion = "14.0.6"
-          $llvmUrl = "https://github.com/llvm/llvm-project/releases/download/llvmorg-$llvmVersion/LLVM-$llvmVersion-win64.exe"
-          $installerPath = "$env:TEMP\LLVM-$llvmVersion-win64.exe"
-
-          Write-Host "Downloading LLVM $llvmVersion..."
-          Invoke-WebRequest -Uri $llvmUrl -OutFile $installerPath -UseBasicParsing
-
-          Write-Host "Installing LLVM $llvmVersion..."
-          # Silent install to default location
-          Start-Process -FilePath $installerPath -ArgumentList "/S" -Wait -NoNewWindow
-
-          # Add to PATH
+          # On Windows, we use clang (not llc) to compile LLVM IR to object files
+          # The pre-installed LLVM on Windows runners includes clang
           $llvmBin = "C:\Program Files\LLVM\bin"
-          echo $llvmBin | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
 
-          # Verify llc is available
-          Write-Host "Verifying LLVM installation..."
-          if (Test-Path "$llvmBin\llc.exe") {
-            Write-Host "Found llc.exe at: $llvmBin\llc.exe"
-            & "$llvmBin\llc.exe" --version
+          if (Test-Path "$llvmBin\clang.exe") {
+            Write-Host "Found clang at: $llvmBin\clang.exe"
+            echo $llvmBin | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
+            & "$llvmBin\clang.exe" --version
           } else {
-            Write-Host "ERROR: llc.exe not found after installation"
-            Get-ChildItem $llvmBin -Filter "*.exe" | Select-Object Name
+            Write-Host "ERROR: clang.exe not found"
             exit 1
           }
 
