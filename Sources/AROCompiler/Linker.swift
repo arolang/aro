@@ -530,22 +530,13 @@ public final class CCompiler {
         }
         #elseif os(Windows)
         // Windows platform libraries
-        // When linking with clang on Windows, we need to link against Swift runtime DLLs
-        // The Swift runtime libraries should be in the PATH or we need to find them
-        if let swiftLibPath = findSwiftLibPath() {
-            args.append("-L\(swiftLibPath)")
-            // Note: Windows doesn't support rpath - DLLs must be in PATH or alongside executable
+        // On Windows, Swift uses DLLs for runtime (swiftCore.dll, etc.)
+        // These DLLs are loaded dynamically at runtime from PATH
+        // We don't need to explicitly link import libraries (.lib) - the DLLs handle it
+        // The libARORuntime.a already has Swift dependencies that will resolve to DLLs
 
-            // Link Swift runtime libraries (these are .lib import libraries for .dll)
-            args.append("-lswiftCore")
-            args.append("-lswift_Concurrency")
-            args.append("-lswiftWinSDK")        // Windows platform library
-            args.append("-lswiftCRT")           // C Runtime
-        }
-
-        // Windows system libraries
-        // Note: Windows linking is different - we might need specific MSVC libraries
-        // but clang on Windows should handle most of this automatically
+        // Just add standard Windows system libraries that clang may need
+        // Most of this is handled automatically by clang's Windows toolchain
         #endif
 
         // Optimizations
