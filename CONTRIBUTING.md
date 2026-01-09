@@ -33,4 +33,4 @@ aro run ./Examples/HelloWorld   # Try an example
 
 ## Need Help?
 
-Open an issue at [github.com/KrisSimon/ARO-Lang/issues](https://github.com/KrisSimon/ARO-Lang/issues)
+Open an issue at [github.com/arolang/aro/issues](https://github.com/arolang/aro/issues)

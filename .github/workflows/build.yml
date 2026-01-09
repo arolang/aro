@@ -864,15 +864,15 @@ jobs:
           echo "SHA256: $SHA256"
 
           # Clone homebrew-aro repository
-          git clone https://github.com/KrisSimon/homebrew-aro.git
+          git clone https://github.com/arolang/homebrew-aro.git
           cd homebrew-aro
 
           # Update the formula - write directly with proper Ruby formatting
           {
             echo 'class Aro < Formula'
             echo '  desc "ARO programming language - Natural language DSL for business logic"'
-            echo '  homepage "https://github.com/KrisSimon/aro"'
-            echo "  url \"https://github.com/KrisSimon/aro/releases/download/${{ github.ref_name }}/aro-macos-arm64.tar.gz\""
+            echo '  homepage "https://github.com/arolang/aro"'
+            echo "  url \"https://github.com/arolang/aro/releases/download/${{ github.ref_name }}/aro-macos-arm64.tar.gz\""
             echo "  sha256 \"$SHA256\""
             echo "  version \"$VERSION\""
             echo '  license "MIT"'
@@ -909,5 +909,5 @@ jobs:
           - Release: https://github.com/${{ github.repository }}/releases/tag/${{ github.ref_name }}"
 
             # Push using PAT (requires HOMEBREW_TAP_TOKEN secret with repo permissions)
-            git push https://x-access-token:${{ secrets.HOMEBREW_TAP_TOKEN }}@github.com/KrisSimon/homebrew-aro.git main
+            git push https://x-access-token:${{ secrets.HOMEBREW_TAP_TOKEN }}@github.com/arolang/homebrew-aro.git main
           fi

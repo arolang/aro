@@ -8,10 +8,10 @@
 </p>
 
 <p align="center">
-  <a href="https://krissimon.github.io/aro/">Website</a> ·
-  <a href="https://github.com/KrisSimon/aro/wiki">Documentation</a> ·
-  <a href="https://github.com/KrisSimon/aro/releases/latest/download/ARO-Language-Guide.pdf">Language Guide (PDF)</a> ·
-  <a href="https://github.com/KrisSimon/aro/discussions">Discussions</a> ·
+  <a href="https://arolang.github.io/aro/">Website</a> ·
+  <a href="https://github.com/arolang/aro/wiki">Documentation</a> ·
+  <a href="https://github.com/arolang/aro/releases/latest/download/ARO-Language-Guide.pdf">Language Guide (PDF)</a> ·
+  <a href="https://github.com/arolang/aro/discussions">Discussions</a> ·
   <a href="https://social.uitsmijter.io/@aro">Mastodon</a>
 </p>
 
@@ -119,7 +119,7 @@ aro run ./HelloWorld
 
 ## Documentation
 
-The complete language guide is available as a PDF in the [Releases](https://github.com/KrisSimon/aro/releases) page, or download the [latest version directly](https://github.com/KrisSimon/aro/releases/latest/download/ARO-Language-Guide.pdf). It covers:
+The complete language guide is available as a PDF in the [Releases](https://github.com/arolang/aro/releases) page, or download the [latest version directly](https://github.com/arolang/aro/releases/latest/download/ARO-Language-Guide.pdf). It covers:
 
 - The ARO mental model and philosophy
 - Statement anatomy and feature sets
@@ -139,7 +139,7 @@ For a detailed look at the implementation, see [OVERVIEW.md](./OVERVIEW.md).
 The easiest way to install ARO on macOS:
 
 ```bash
-brew tap krissimon/aro
+brew tap arolang/aro
 brew install aro
 ```
 
@@ -155,18 +155,18 @@ Pre-built binaries are available for all platforms:
 
 **macOS (ARM64)**:
 ```bash
-curl -L https://github.com/KrisSimon/aro/releases/latest/download/aro-macos-arm64.tar.gz | tar xz
+curl -L https://github.com/arolang/aro/releases/latest/download/aro-macos-arm64.tar.gz | tar xz
 sudo mv aro /usr/local/bin/
 ```
 
 **Linux (x86_64)**:
 ```bash
-curl -L https://github.com/KrisSimon/aro/releases/latest/download/aro-linux-amd64.tar.gz | tar xz
+curl -L https://github.com/arolang/aro/releases/latest/download/aro-linux-amd64.tar.gz | tar xz
 sudo mv aro /usr/local/bin/
 ```
 
 **Windows (x86_64)**:
-Download the latest release from [GitHub Releases](https://github.com/KrisSimon/aro/releases) and add to PATH.
+Download the latest release from [GitHub Releases](https://github.com/arolang/aro/releases) and add to PATH.
 
 ### Build from Source
 
@@ -181,7 +181,7 @@ ARO is written in Swift 6.2 and uses Swift Package Manager.
 Xcode 16.3 or later includes Swift 6.2.
 
 ```bash
-git clone https://github.com/KrisSimon/aro.git
+git clone https://github.com/arolang/aro.git
 cd aro
 swift build -c release
 ```
@@ -193,7 +193,7 @@ The binary is at `.build/release/aro`.
 Install Swift 6.2 from [swift.org](https://swift.org/download/).
 
 ```bash
-git clone https://github.com/KrisSimon/aro.git
+git clone https://github.com/arolang/aro.git
 cd aro
 swift build -c release
 ```
@@ -205,7 +205,7 @@ The binary is at `.build/release/aro`.
 Install Swift 6.2 from [swift.org](https://swift.org/download/). Ensure the Swift toolchain is in your PATH.
 
 ```powershell
-git clone https://github.com/KrisSimon/aro.git
+git clone https://github.com/arolang/aro.git
 cd aro
 swift build -c release
 ```
@@ -292,8 +292,8 @@ aro run ./Examples/HTTPServer
 
 ARO is in active development. Contributions are welcome.
 
-- [Open an issue](https://github.com/KrisSimon/aro/issues) for bugs or feature requests
-- [Join the discussion](https://github.com/KrisSimon/aro/discussions) for questions and ideas
+- [Open an issue](https://github.com/arolang/aro/issues) for bugs or feature requests
+- [Join the discussion](https://github.com/arolang/aro/discussions) for questions and ideas
 - [Follow on Mastodon](https://social.uitsmijter.io/@aro) for daily language tips and updates
 - Read the [Evolution Proposals](./Proposals/) to understand the language design
 
@@ -328,7 +328,7 @@ You have several options:
 
 **Option 1: Use Homebrew** (Recommended)
 ```bash
-brew tap krissimon/aro
+brew tap arolang/aro
 brew install aro
 ```
 Homebrew automatically handles security attributes.
@@ -352,3 +352,4 @@ MIT License
 <p align="center">
   <em>ARO: Making business features executable</em>
 </p>
+

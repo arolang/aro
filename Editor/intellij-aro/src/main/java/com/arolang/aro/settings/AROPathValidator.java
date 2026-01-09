@@ -1,4 +1,4 @@
-package com.krissimon.aro.settings;
+package com.arolang.aro.settings;
 
 import java.io.BufferedReader;
 import java.io.File;

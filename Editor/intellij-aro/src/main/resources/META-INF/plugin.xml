@@ -1,8 +1,8 @@
 <idea-plugin>
-    <id>com.krissimon.aro</id>
+    <id>com.arolang.aro</id>
     <name>ARO Language</name>
     <version>1.1.0</version>
-    <vendor email="kris@example.com" url="https://krissimon.github.io/aro/">Kris Simon</vendor>
+    <vendor email="team@arolang.org" url="https://arolang.github.io/aro/">ARO Team</vendor>
 
     <description><![CDATA[
         <p>Language support for <b>ARO</b> (Action Result Object) - a declarative programming language for expressing business features.</p>
@@ -28,7 +28,7 @@
 }
         </pre>
 
-        <p>See <a href="https://krissimon.github.io/aro/">ARO Documentation</a> for more information.</p>
+        <p>See <a href="https://arolang.github.io/aro/">ARO Documentation</a> for more information.</p>
     ]]></description>
 
     <change-notes><![CDATA[
@@ -60,19 +60,19 @@
 
     <extensions defaultExtensionNs="com.intellij">
         <!-- TextMate bundle for syntax highlighting (handles file type association via bundle) -->
-        <textmate.bundleProvider implementation="com.krissimon.aro.AROTextMateBundleProvider"/>
+        <textmate.bundleProvider implementation="com.arolang.aro.AROTextMateBundleProvider"/>
 
         <!-- Live templates -->
         <defaultLiveTemplates file="/liveTemplates/ARO.xml"/>
-        <liveTemplateContext implementation="com.krissimon.aro.AROTemplateContextType"/>
+        <liveTemplateContext implementation="com.arolang.aro.AROTemplateContextType"/>
 
         <!-- Settings -->
         <applicationService
-            serviceImplementation="com.krissimon.aro.settings.AROSettingsState"/>
+            serviceImplementation="com.arolang.aro.settings.AROSettingsState"/>
         <applicationConfigurable
             parentId="tools"
-            instance="com.krissimon.aro.settings.AROSettingsConfigurable"
-            id="com.krissimon.aro.settings.AROSettingsConfigurable"
+            instance="com.arolang.aro.settings.AROSettingsConfigurable"
+            id="com.arolang.aro.settings.AROSettingsConfigurable"
             displayName="ARO Language"/>
     </extensions>
 
@@ -80,7 +80,7 @@
     <extensions defaultExtensionNs="com.redhat.devtools.lsp4ij">
         <server id="aro"
                 name="ARO Language Server"
-                factoryClass="com.krissimon.aro.AROLspServerDescriptor">
+                factoryClass="com.arolang.aro.AROLspServerDescriptor">
             <description><![CDATA[
                 Provides language intelligence for ARO files including diagnostics,
                 hover information, go to definition, and code completion.

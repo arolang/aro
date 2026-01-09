@@ -55,8 +55,8 @@ FROM swift:6.2-jammy AS runtime
 LABEL org.opencontainers.image.title="ARO Programming Language"
 LABEL org.opencontainers.image.description="The ARO Programming Language - Speak Business. Write Code."
 LABEL org.opencontainers.image.vendor="Anthropic"
-LABEL org.opencontainers.image.source="https://github.com/KrisSimon/aro"
-LABEL org.opencontainers.image.documentation="https://github.com/KrisSimon/aro/blob/main/Documentation"
+LABEL org.opencontainers.image.source="https://github.com/arolang/aro"
+LABEL org.opencontainers.image.documentation="https://github.com/arolang/aro/blob/main/Documentation"
 
 ARG VERSION=dev
 ARG COMMIT_SHA=unknown

@@ -1,4 +1,4 @@
-package com.krissimon.aro.settings;
+package com.arolang.aro.settings;
 
 import com.intellij.openapi.application.ApplicationManager;
 import com.intellij.openapi.fileChooser.FileChooserDescriptorFactory;

@@ -126,7 +126,7 @@ If you don't have the ARO CLI installed:
 
 ```bash
 # Clone the ARO repository
-git clone https://github.com/KrisSimon/aro.git
+git clone https://github.com/arolang/aro.git
 cd aro
 
 # Build the CLI
@@ -203,7 +203,7 @@ code --install-extension aro-language-1.0.0.vsix
 
 ```bash
 # Clone the repository
-git clone https://github.com/KrisSimon/aro.git
+git clone https://github.com/arolang/aro.git
 cd aro/Editor/vscode-aro
 
 # Install in VS Code directly from folder
@@ -343,10 +343,10 @@ The extension automatically associates with:
 
 ## Related Links
 
-- [ARO Language Website](https://krissimon.github.io/aro/)
-- [GitHub Repository](https://github.com/KrisSimon/aro)
-- [Language Proposals](https://github.com/KrisSimon/aro/tree/main/Proposals)
-- [ARO-0030: IDE Integration Proposal](https://github.com/KrisSimon/aro/blob/main/Proposals/ARO-0030-ide-integration.md)
+- [ARO Language Website](https://arolang.github.io/aro/)
+- [GitHub Repository](https://github.com/arolang/aro)
+- [Language Proposals](https://github.com/arolang/aro/tree/main/Proposals)
+- [ARO-0030: IDE Integration Proposal](https://github.com/arolang/aro/blob/main/Proposals/ARO-0030-ide-integration.md)
 
 ## License
 

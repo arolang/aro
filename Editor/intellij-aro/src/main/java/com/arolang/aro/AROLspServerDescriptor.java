@@ -1,7 +1,7 @@
-package com.krissimon.aro;
+package com.arolang.aro;
 
 import com.intellij.openapi.project.Project;
-import com.krissimon.aro.settings.AROSettingsState;
+import com.arolang.aro.settings.AROSettingsState;
 import com.redhat.devtools.lsp4ij.LanguageServerFactory;
 import com.redhat.devtools.lsp4ij.client.LanguageClientImpl;
 import com.redhat.devtools.lsp4ij.server.StreamConnectionProvider;

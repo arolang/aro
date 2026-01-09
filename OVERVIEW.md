@@ -1,6 +1,6 @@
 # The ARO Programming Language
 
-| **Website:** https://krissimon.github.io/aro/<br />Reference implementation of a parser, compiler, and runtime for the **ARO** programming language. | ![ARO Logo](./Graphics/logo-small.png) |
+| **Website:** https://arolang.github.io/aro/<br />Reference implementation of a parser, compiler, and runtime for the **ARO** programming language. | ![ARO Logo](./Graphics/logo-small.png) |
 |---------------------------------------------------------------------------------------------------------|----------------------------------------|
 
 ## Overview

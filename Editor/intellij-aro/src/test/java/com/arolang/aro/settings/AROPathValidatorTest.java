@@ -1,4 +1,4 @@
-package com.krissimon.aro.settings;
+package com.arolang.aro.settings;
 
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;

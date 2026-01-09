@@ -20,7 +20,7 @@ if (!MASTODON_INSTANCE || !ACCESS_TOKEN) {
 }
 
 // Build release URL
-const releaseUrl = `https://github.com/KrisSimon/aro/releases/tag/${version}`;
+const releaseUrl = `https://github.com/arolang/aro/releases/tag/${version}`;
 
 // Compose announcement message
 const message = `ARO Programming Language v${version} Released

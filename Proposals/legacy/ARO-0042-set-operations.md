@@ -1,7 +1,7 @@
 # ARO-0042: Polymorphic Set Operations
 
 - **Status**: Draft
-- **Discussion**: https://github.com/KrisSimon/aro/discussions/97
+- **Discussion**: https://github.com/arolang/aro/discussions/97
 - **Author**: Claude (with KrisSimon)
 - **Created**: 2025-12-30
 
@@ -748,6 +748,6 @@ Deep nesting is supported without arbitrary limits. However, extremely deep stru
 
 ## References
 
-- [Discussion #97](https://github.com/KrisSimon/aro/discussions/97) - RFC discussion with design decisions
+- [Discussion #97](https://github.com/arolang/aro/discussions/97) - RFC discussion with design decisions
 - [ARO-0035](./ARO-0035-qualifier-as-name.md) - Qualifier-as-name syntax for Compute operations
 - [ARO-0018](./ARO-0018-query-language.md) - Data pipelines (Filter, Map, Reduce)
