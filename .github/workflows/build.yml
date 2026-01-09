@@ -462,24 +462,55 @@ jobs:
         shell: bash
         run: |
           echo "Looking for runtime library..."
-          find .build -name "*ARORuntime*" -o -name "*.lib" -o -name "*.a" | grep -i runtime || true
-          echo "Contents of .build/release:"
-          ls -la .build/release/ | grep -i aro || true
+          echo "=== Searching for ARORuntime files ==="
+          find .build -name "*ARORuntime*" 2>/dev/null || true
+          echo "=== Searching for .a and .lib files ==="
+          find .build -name "*.a" -o -name "*.lib" 2>/dev/null | head -20 || true
+          echo "=== Contents of .build/release/ ==="
+          ls -la .build/release/ 2>/dev/null || true
 
       - name: Prepare artifact directory
         shell: bash
         run: |
           mkdir -p aro-dist
           cp .build/release/aro.exe aro-dist/
-          # Windows uses .a extension, not .lib for static libraries
-          if [ -f .build/release/libARORuntime.a ]; then
-            cp .build/release/libARORuntime.a aro-dist/
-          elif [ -f .build/x86_64-unknown-windows-msvc/release/libARORuntime.a ]; then
-            cp .build/x86_64-unknown-windows-msvc/release/libARORuntime.a aro-dist/
-          else
-            echo "Warning: Runtime library not found, checking all .a files..."
-            find .build -name "*.a" | grep -i runtime || true
+
+          # Search for runtime library in multiple locations
+          # Swift on Windows may place it in different locations
+          RUNTIME_FOUND=0
+
+          for path in \
+            ".build/release/libARORuntime.a" \
+            ".build/x86_64-unknown-windows-msvc/release/libARORuntime.a" \
+            ".build/release/ARORuntime.lib" \
+            ".build/x86_64-unknown-windows-msvc/release/ARORuntime.lib"; do
+            if [ -f "$path" ]; then
+              echo "Found runtime library at: $path"
+              cp "$path" aro-dist/libARORuntime.a
+              RUNTIME_FOUND=1
+              break
+            fi
+          done
+
+          # If not found in standard locations, search for it
+          if [ "$RUNTIME_FOUND" = "0" ]; then
+            echo "Searching for runtime library..."
+            FOUND_LIB=$(find .build -name "*ARORuntime*" -type f 2>/dev/null | head -1)
+            if [ -n "$FOUND_LIB" ]; then
+              echo "Found runtime library at: $FOUND_LIB"
+              cp "$FOUND_LIB" aro-dist/libARORuntime.a
+              RUNTIME_FOUND=1
+            fi
           fi
+
+          if [ "$RUNTIME_FOUND" = "0" ]; then
+            echo "ERROR: Runtime library not found!"
+            echo "Native compilation tests will fail without libARORuntime.a"
+            exit 1
+          fi
+
+          echo "=== Artifact contents ==="
+          ls -la aro-dist/
 
       - name: Upload artifact
         uses: actions/upload-artifact@v6
@@ -711,12 +742,30 @@ jobs:
         run: |
           # Set environment variable for subsequent steps
           echo "ARO_BIN=$env:GITHUB_WORKSPACE\aro-bin\aro.exe" >> $env:GITHUB_ENV
+
           # Verify the binary works
           & .\aro-bin\aro.exe --version
+
+          # Verify runtime library exists (required for native compilation)
+          Write-Host "`n=== Checking artifact contents ==="
+          Get-ChildItem -Path .\aro-bin\ | Format-Table -AutoSize
+
+          if (Test-Path ".\aro-bin\libARORuntime.a") {
+            Write-Host "Runtime library found: libARORuntime.a"
+            $size = (Get-Item ".\aro-bin\libARORuntime.a").Length
+            Write-Host "Size: $size bytes"
+          } else {
+            Write-Host "WARNING: Runtime library (libARORuntime.a) not found!"
+            Write-Host "Native compilation tests may fail."
+          }
 
       - name: Run integration tests
         shell: pwsh
         run: |
+          # Show current directory and binary location for debugging
+          Write-Host "Current directory: $(Get-Location)"
+          Write-Host "ARO_BIN: $env:ARO_BIN"
+
           perl test-examples.pl --verbose
 
       - name: Upload test results on failure
