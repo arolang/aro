@@ -516,18 +516,28 @@ struct BuildCommand: AsyncParsableCommand {
         #endif
 
         for path in searchPaths {
-            let fullPath: String
+            var fullPath: String
             #if os(Windows)
             // On Windows, use backslashes for path separators
-            if path.hasPrefix("/") || path.contains(":") {
-                // Absolute path (Unix style or Windows drive letter)
-                fullPath = path
-            } else if path.hasPrefix(".") {
+            // First, fix any URL.path artifacts (leading slash before drive letter)
+            var cleanPath = path
+            if cleanPath.hasPrefix("/") && cleanPath.count > 2 {
+                let afterSlash = cleanPath.dropFirst()
+                if afterSlash.first?.isLetter == true && afterSlash.dropFirst().first == ":" {
+                    // Path like "/D:/..." -> "D:/..."
+                    cleanPath = String(afterSlash)
+                }
+            }
+
+            if cleanPath.contains(":") {
+                // Absolute Windows path (e.g., "D:/path" or "D:\path")
+                fullPath = cleanPath.replacingOccurrences(of: "/", with: "\\")
+            } else if cleanPath.hasPrefix(".") {
                 // Relative to current directory
-                fullPath = fm.currentDirectoryPath + "\\" + path.replacingOccurrences(of: "/", with: "\\")
+                fullPath = fm.currentDirectoryPath + "\\" + cleanPath.replacingOccurrences(of: "/", with: "\\")
             } else {
                 // Relative to current directory
-                fullPath = fm.currentDirectoryPath + "\\" + path.replacingOccurrences(of: "/", with: "\\")
+                fullPath = fm.currentDirectoryPath + "\\" + cleanPath.replacingOccurrences(of: "/", with: "\\")
             }
             #else
             if path.hasPrefix("/") {
