@@ -441,31 +441,53 @@ struct BuildCommand: AsyncParsableCommand {
 
         // 0. Check ARO_BIN environment variable directory (used in CI)
         if let aroBinPath = ProcessInfo.processInfo.environment["ARO_BIN"] {
+            #if os(Windows)
+            // On Windows, avoid URL manipulation which has path format issues
+            // Just do simple string manipulation with backslashes
+            var aroBinDir: String
+            if let lastBackslash = aroBinPath.lastIndex(of: "\\") {
+                aroBinDir = String(aroBinPath[..<lastBackslash])
+            } else if let lastSlash = aroBinPath.lastIndex(of: "/") {
+                aroBinDir = String(aroBinPath[..<lastSlash])
+            } else {
+                aroBinDir = "."
+            }
+            for libName in runtimeLibNames {
+                searchPaths.append(aroBinDir + "\\" + libName)
+            }
+            #else
             let aroBinDir = URL(fileURLWithPath: aroBinPath).deletingLastPathComponent()
             for libName in runtimeLibNames {
-                var libPath = aroBinDir.appendingPathComponent(libName).path
-                #if os(Windows)
-                // On Windows, URL.path can return "/D:/path" - remove leading slash
-                if libPath.hasPrefix("/") && libPath.count > 2 && libPath.dropFirst().first?.isLetter == true {
-                    libPath = String(libPath.dropFirst())
-                }
-                #endif
-                searchPaths.append(libPath)
+                searchPaths.append(aroBinDir.appendingPathComponent(libName).path)
             }
+            #endif
         }
 
         // 1. Same directory as executable (for distributed binaries/artifacts)
         // This is the primary location for CI/CD artifacts
-        for libName in runtimeLibNames {
-            var libPath = executableDir.appendingPathComponent(libName).path
-            #if os(Windows)
-            // On Windows, URL.path can return "/D:/path" - remove leading slash
-            if libPath.hasPrefix("/") && libPath.count > 2 && libPath.dropFirst().first?.isLetter == true {
-                libPath = String(libPath.dropFirst())
-            }
-            #endif
-            searchPaths.append(libPath)
+        #if os(Windows)
+        // On Windows, use string manipulation to avoid URL path issues
+        let execPathStr = executablePath.path
+        var execDirStr: String
+        if let lastBackslash = execPathStr.lastIndex(of: "\\") {
+            execDirStr = String(execPathStr[..<lastBackslash])
+        } else if let lastSlash = execPathStr.lastIndex(of: "/") {
+            execDirStr = String(execPathStr[..<lastSlash])
+        } else {
+            execDirStr = "."
         }
+        // Remove leading slash if present (URL.path artifact on Windows)
+        if execDirStr.hasPrefix("/") && execDirStr.count > 2 && execDirStr.dropFirst().first?.isLetter == true {
+            execDirStr = String(execDirStr.dropFirst())
+        }
+        for libName in runtimeLibNames {
+            searchPaths.append(execDirStr + "\\" + libName)
+        }
+        #else
+        for libName in runtimeLibNames {
+            searchPaths.append(executableDir.appendingPathComponent(libName).path)
+        }
+        #endif
 
         // 2. Homebrew/system install locations (Unix only)
         #if os(macOS)
