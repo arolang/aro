@@ -566,7 +566,38 @@ struct BuildCommand: AsyncParsableCommand {
         }
 
         #if os(Windows)
-        FileHandle.standardError.write("[BUILD] Runtime library NOT FOUND in any location\n".data(using: .utf8)!)
+        FileHandle.standardError.write("[BUILD] Runtime library NOT FOUND in standard locations\n".data(using: .utf8)!)
+
+        // Last resort: try to find the library anywhere on disk using where/dir commands
+        FileHandle.standardError.write("[BUILD] Attempting filesystem search...\n".data(using: .utf8)!)
+
+        // Try to find libARORuntime.a near the executable
+        if let aroBinPath = ProcessInfo.processInfo.environment["ARO_BIN"] {
+            // Get the directory containing aro.exe
+            let aroBinURL = URL(fileURLWithPath: aroBinPath)
+            let aroBinDir = aroBinURL.deletingLastPathComponent()
+
+            // Try listing the directory contents
+            do {
+                let contents = try fm.contentsOfDirectory(atPath: aroBinDir.path)
+                FileHandle.standardError.write("[BUILD] Contents of \(aroBinDir.path):\n".data(using: .utf8)!)
+                for item in contents {
+                    FileHandle.standardError.write("[BUILD]   - \(item)\n".data(using: .utf8)!)
+                    if item.contains("ARORuntime") || item.hasSuffix(".a") || item.hasSuffix(".lib") {
+                        let itemPath = aroBinDir.appendingPathComponent(item).path
+                        FileHandle.standardError.write("[BUILD] Found potential library: \(itemPath)\n".data(using: .utf8)!)
+                        if fm.fileExists(atPath: itemPath) {
+                            FileHandle.standardError.write("[BUILD] Returning: \(itemPath)\n".data(using: .utf8)!)
+                            return itemPath
+                        }
+                    }
+                }
+            } catch {
+                FileHandle.standardError.write("[BUILD] Error listing directory: \(error)\n".data(using: .utf8)!)
+            }
+        }
+
+        FileHandle.standardError.write("[BUILD] Runtime library NOT FOUND anywhere\n".data(using: .utf8)!)
         #endif
 
         return nil
