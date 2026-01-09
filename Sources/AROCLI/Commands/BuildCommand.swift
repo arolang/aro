@@ -439,6 +439,14 @@ struct BuildCommand: AsyncParsableCommand {
         let runtimeLibNames = ["libARORuntime.a"]
         #endif
 
+        // 0. Check ARO_BIN environment variable directory (used in CI)
+        if let aroBinPath = ProcessInfo.processInfo.environment["ARO_BIN"] {
+            let aroBinDir = URL(fileURLWithPath: aroBinPath).deletingLastPathComponent()
+            for libName in runtimeLibNames {
+                searchPaths.append(aroBinDir.appendingPathComponent(libName).path)
+            }
+        }
+
         // 1. Same directory as executable (for distributed binaries/artifacts)
         // This is the primary location for CI/CD artifacts
         for libName in runtimeLibNames {
