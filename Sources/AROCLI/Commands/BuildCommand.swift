@@ -443,14 +443,28 @@ struct BuildCommand: AsyncParsableCommand {
         if let aroBinPath = ProcessInfo.processInfo.environment["ARO_BIN"] {
             let aroBinDir = URL(fileURLWithPath: aroBinPath).deletingLastPathComponent()
             for libName in runtimeLibNames {
-                searchPaths.append(aroBinDir.appendingPathComponent(libName).path)
+                var libPath = aroBinDir.appendingPathComponent(libName).path
+                #if os(Windows)
+                // On Windows, URL.path can return "/D:/path" - remove leading slash
+                if libPath.hasPrefix("/") && libPath.count > 2 && libPath.dropFirst().first?.isLetter == true {
+                    libPath = String(libPath.dropFirst())
+                }
+                #endif
+                searchPaths.append(libPath)
             }
         }
 
         // 1. Same directory as executable (for distributed binaries/artifacts)
         // This is the primary location for CI/CD artifacts
         for libName in runtimeLibNames {
-            searchPaths.append(executableDir.appendingPathComponent(libName).path)
+            var libPath = executableDir.appendingPathComponent(libName).path
+            #if os(Windows)
+            // On Windows, URL.path can return "/D:/path" - remove leading slash
+            if libPath.hasPrefix("/") && libPath.count > 2 && libPath.dropFirst().first?.isLetter == true {
+                libPath = String(libPath.dropFirst())
+            }
+            #endif
+            searchPaths.append(libPath)
         }
 
         // 2. Homebrew/system install locations (Unix only)
@@ -490,11 +504,14 @@ struct BuildCommand: AsyncParsableCommand {
         #if os(Windows)
         // Debug output for Windows to help diagnose library location issues
         FileHandle.standardError.write("[BUILD] Searching for runtime library...\n".data(using: .utf8)!)
+        FileHandle.standardError.write("[BUILD] ARO_BIN env: \(ProcessInfo.processInfo.environment["ARO_BIN"] ?? "not set")\n".data(using: .utf8)!)
+        FileHandle.standardError.write("[BUILD] Executable path: \(executablePath.path)\n".data(using: .utf8)!)
         FileHandle.standardError.write("[BUILD] Executable dir: \(executableDir.path)\n".data(using: .utf8)!)
         FileHandle.standardError.write("[BUILD] Current working dir: \(fm.currentDirectoryPath)\n".data(using: .utf8)!)
-        FileHandle.standardError.write("[BUILD] Search paths:\n".data(using: .utf8)!)
+        FileHandle.standardError.write("[BUILD] Search paths (\(searchPaths.count) total):\n".data(using: .utf8)!)
         for (index, path) in searchPaths.enumerated() {
-            FileHandle.standardError.write("[BUILD]   \(index + 1). \(path)\n".data(using: .utf8)!)
+            let exists = fm.fileExists(atPath: path)
+            FileHandle.standardError.write("[BUILD]   \(index + 1). \(path) [\(exists ? "EXISTS" : "not found")]\n".data(using: .utf8)!)
         }
         #endif
 
