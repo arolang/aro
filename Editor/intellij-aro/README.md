@@ -261,9 +261,10 @@ intellij-aro/
 ├── src/
 │   └── main/
 │       ├── java/
-│       │   └── com/krissimon/aro/
+│       │   └── com/arolang/aro/
 │       │       ├── AROTextMateBundleProvider.java   # TextMate bundle provider
-│       │       └── AROTemplateContextType.java      # Live template context
+│       │       ├── AROTemplateContextType.java      # Live template context
+│       │       └── AROLspServerDescriptor.java      # LSP server configuration
 │       └── resources/
 │           ├── META-INF/
 │           │   └── plugin.xml    # Plugin descriptor

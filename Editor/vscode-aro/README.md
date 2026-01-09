@@ -189,7 +189,7 @@ The extension validates paths before executing them to ensure security:
 
 Or install via command line:
 ```bash
-code --install-extension krissimon.aro-language
+code --install-extension arolang.aro-language
 ```
 
 ### Install from VSIX Package
@@ -276,7 +276,7 @@ vscode-aro/
 
 ```bash
 # Login to Visual Studio Marketplace
-npx vsce login krissimon
+npx vsce login arolang
 
 # Publish
 npx vsce publish

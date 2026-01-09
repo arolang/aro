@@ -2,7 +2,7 @@
 
 - **Status**: Draft
 - **Discussion**: https://github.com/arolang/aro/discussions/97
-- **Author**: Claude (with KrisSimon)
+- **Author**: Claude (and the aro developer team)
 - **Created**: 2025-12-30
 
 ## Summary

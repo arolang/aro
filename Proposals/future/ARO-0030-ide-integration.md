@@ -142,7 +142,7 @@ Test:
 
 ```bash
 # From VS Code Marketplace
-code --install-extension krissimon.aro-language
+code --install-extension arolang.aro-language
 
 # Or search "ARO Language" in Extensions panel
 ```
