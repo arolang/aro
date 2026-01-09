@@ -284,15 +284,16 @@ struct BuildCommand: AsyncParsableCommand {
 
         // Find the ARORuntime library (contains C-callable bridge via @_cdecl)
         guard let runtimeLibPath = findARORuntimeLibrary() else {
-            #if os(Linux)
+            #if os(Linux) || os(Windows)
             FileHandle.standardError.write("[BUILD] ERROR: Runtime library not found\n".data(using: .utf8)!)
             #endif
             print("Error: ARORuntime library not found.")
             throw ExitCode.failure
         }
 
-        #if os(Linux)
-        FileHandle.standardError.write("[BUILD] Runtime library: \(runtimeLibPath)\n".data(using: .utf8)!)
+        #if os(Linux) || os(Windows)
+        FileHandle.standardError.write("[BUILD] Runtime library found: \(runtimeLibPath)\n".data(using: .utf8)!)
+        print("[BUILD] Runtime library found: \(runtimeLibPath)")
         #endif
 
         if verbose {
@@ -311,13 +312,24 @@ struct BuildCommand: AsyncParsableCommand {
             }
         }
 
-        #if os(Linux)
+        #if os(Linux) || os(Windows)
         FileHandle.standardError.write("[BUILD] Starting linker\n".data(using: .utf8)!)
         FileHandle.standardError.write("[BUILD] Object file: \(objectPath)\n".data(using: .utf8)!)
         FileHandle.standardError.write("[BUILD] Output path: \(binaryPath.path)\n".data(using: .utf8)!)
+        print("[BUILD] Starting linker")
+        print("[BUILD] Object file: \(objectPath)")
+        print("[BUILD] Output path: \(binaryPath.path)")
+        #endif
+
+        #if os(Windows)
+        print("[BUILD] Creating CCompiler with runtime: \(runtimeLibPath)")
         #endif
 
         let linker = CCompiler(runtimeLibraryPath: runtimeLibPath)
+
+        #if os(Windows)
+        print("[BUILD] CCompiler created successfully")
+        #endif
 
         #if os(Linux)
         FileHandle.standardError.write("[BUILD] CCompiler created\n".data(using: .utf8)!)
@@ -524,17 +536,27 @@ struct BuildCommand: AsyncParsableCommand {
         #endif
 
         #if os(Windows)
-        // Debug output for Windows to help diagnose library location issues
-        FileHandle.standardError.write("[BUILD] Searching for runtime library...\n".data(using: .utf8)!)
-        FileHandle.standardError.write("[BUILD] ARO_BIN env: \(ProcessInfo.processInfo.environment["ARO_BIN"] ?? "not set")\n".data(using: .utf8)!)
-        FileHandle.standardError.write("[BUILD] Executable path: \(executablePath.path)\n".data(using: .utf8)!)
-        FileHandle.standardError.write("[BUILD] Executable dir: \(executableDir.path)\n".data(using: .utf8)!)
-        FileHandle.standardError.write("[BUILD] Current working dir: \(fm.currentDirectoryPath)\n".data(using: .utf8)!)
-        FileHandle.standardError.write("[BUILD] Search paths (\(searchPaths.count) total):\n".data(using: .utf8)!)
+        // Debug output for Windows - write to both stderr AND a debug file
+        var debugLog = "[BUILD] Searching for runtime library...\n"
+        debugLog += "[BUILD] ARO_BIN env: \(ProcessInfo.processInfo.environment["ARO_BIN"] ?? "not set")\n"
+        debugLog += "[BUILD] Executable path: \(executablePath.path)\n"
+        debugLog += "[BUILD] Executable dir: \(executableDir.path)\n"
+        debugLog += "[BUILD] Current working dir: \(fm.currentDirectoryPath)\n"
+        debugLog += "[BUILD] Search paths (\(searchPaths.count) total):\n"
         for (index, path) in searchPaths.enumerated() {
             let exists = fm.fileExists(atPath: path)
-            FileHandle.standardError.write("[BUILD]   \(index + 1). \(path) [\(exists ? "EXISTS" : "not found")]\n".data(using: .utf8)!)
+            debugLog += "[BUILD]   \(index + 1). \(path) [\(exists ? "EXISTS" : "not found")]\n"
         }
+
+        // Write to stderr
+        FileHandle.standardError.write(debugLog.data(using: .utf8)!)
+
+        // Also write to stdout so it's captured in test output
+        print(debugLog)
+
+        // Also write to a debug file
+        let debugFilePath = fm.currentDirectoryPath + "\\aro-build-debug.log"
+        try? debugLog.write(toFile: debugFilePath, atomically: true, encoding: .utf8)
         #endif
 
         for path in searchPaths {
