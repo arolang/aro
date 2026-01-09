@@ -462,12 +462,14 @@ jobs:
         shell: bash
         run: |
           echo "Looking for runtime library..."
-          echo "=== Searching for ARORuntime files ==="
-          find .build -name "*ARORuntime*" 2>/dev/null || true
-          echo "=== Searching for .a and .lib files ==="
-          find .build -name "*.a" -o -name "*.lib" 2>/dev/null | head -20 || true
+          echo "=== Searching for ARORuntime library files ==="
+          find .build -name "*ARORuntime*.a" -o -name "*ARORuntime*.lib" 2>/dev/null || true
+          echo "=== Searching for all .a and .lib files ==="
+          find .build \( -name "*.a" -o -name "*.lib" \) -type f 2>/dev/null | head -30 || true
           echo "=== Contents of .build/release/ ==="
           ls -la .build/release/ 2>/dev/null || true
+          echo "=== Contents of .build/x86_64-unknown-windows-msvc/release/ ==="
+          ls -la .build/x86_64-unknown-windows-msvc/release/ 2>/dev/null || true
 
       - name: Prepare artifact directory
         shell: bash
@@ -477,13 +479,17 @@ jobs:
 
           # Search for runtime library in multiple locations
           # Swift on Windows may place it in different locations
+          # Library names on Windows: libARORuntime.a (Swift default) or ARORuntime.lib (MSVC style)
           RUNTIME_FOUND=0
 
+          # Standard locations with explicit library names
           for path in \
             ".build/release/libARORuntime.a" \
             ".build/x86_64-unknown-windows-msvc/release/libARORuntime.a" \
             ".build/release/ARORuntime.lib" \
-            ".build/x86_64-unknown-windows-msvc/release/ARORuntime.lib"; do
+            ".build/x86_64-unknown-windows-msvc/release/ARORuntime.lib" \
+            ".build/release/ARORuntime.a" \
+            ".build/x86_64-unknown-windows-msvc/release/ARORuntime.a"; do
             if [ -f "$path" ]; then
               echo "Found runtime library at: $path"
               cp "$path" aro-dist/libARORuntime.a
@@ -492,25 +498,45 @@ jobs:
             fi
           done
 
-          # If not found in standard locations, search for it
+          # If not found in standard locations, search for library files only
+          # Be specific: only .a or .lib files with ARORuntime in the name
           if [ "$RUNTIME_FOUND" = "0" ]; then
             echo "Searching for runtime library..."
-            FOUND_LIB=$(find .build -name "*ARORuntime*" -type f 2>/dev/null | head -1)
+            # Search for .a files first (more common for Swift)
+            FOUND_LIB=$(find .build -name "*ARORuntime*.a" -type f 2>/dev/null | head -1)
+            if [ -z "$FOUND_LIB" ]; then
+              # Try .lib files (MSVC style)
+              FOUND_LIB=$(find .build -name "*ARORuntime*.lib" -type f 2>/dev/null | head -1)
+            fi
             if [ -n "$FOUND_LIB" ]; then
               echo "Found runtime library at: $FOUND_LIB"
-              cp "$FOUND_LIB" aro-dist/libARORuntime.a
-              RUNTIME_FOUND=1
+              # Verify it looks like a valid library (has some minimum size)
+              LIB_SIZE=$(stat -c%s "$FOUND_LIB" 2>/dev/null || stat -f%z "$FOUND_LIB" 2>/dev/null || echo "0")
+              echo "Library size: $LIB_SIZE bytes"
+              if [ "$LIB_SIZE" -gt 1000 ]; then
+                cp "$FOUND_LIB" aro-dist/libARORuntime.a
+                RUNTIME_FOUND=1
+              else
+                echo "WARNING: Found file is too small to be a valid library"
+              fi
             fi
           fi
 
           if [ "$RUNTIME_FOUND" = "0" ]; then
             echo "ERROR: Runtime library not found!"
             echo "Native compilation tests will fail without libARORuntime.a"
+            echo ""
+            echo "=== All .a and .lib files in .build ==="
+            find .build \( -name "*.a" -o -name "*.lib" \) -type f 2>/dev/null || true
             exit 1
           fi
 
           echo "=== Artifact contents ==="
           ls -la aro-dist/
+
+          # Verify the library file
+          echo "=== Library file info ==="
+          file aro-dist/libARORuntime.a 2>/dev/null || true
 
       - name: Upload artifact
         uses: actions/upload-artifact@v6
