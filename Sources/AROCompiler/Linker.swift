@@ -398,6 +398,12 @@ public final class CCompiler {
 
         // Runtime library (ARORuntime contains C-callable bridge via @_cdecl)
         if let runtimePath = runtimeLibraryPath {
+            #if os(Windows)
+            // On Windows, use the full path to the library directly
+            // -lARORuntime would look for ARORuntime.lib, but we have libARORuntime.a
+            // Also, Windows linker doesn't support rpath
+            args.append(runtimePath)
+            #else
             let libDir = URL(fileURLWithPath: runtimePath).deletingLastPathComponent().path
             args.append("-L\(libDir)")
             args.append("-lARORuntime")
@@ -412,6 +418,7 @@ public final class CCompiler {
             #else
             // clang uses -Wl, format
             args.append("-Wl,-rpath,\(libDir)")
+            #endif
             #endif
         }
 
@@ -521,6 +528,24 @@ public final class CCompiler {
             args.append("-Xlinker")
             args.append("--gc-sections")
         }
+        #elseif os(Windows)
+        // Windows platform libraries
+        // When linking with clang on Windows, we need to link against Swift runtime DLLs
+        // The Swift runtime libraries should be in the PATH or we need to find them
+        if let swiftLibPath = findSwiftLibPath() {
+            args.append("-L\(swiftLibPath)")
+            // Note: Windows doesn't support rpath - DLLs must be in PATH or alongside executable
+
+            // Link Swift runtime libraries (these are .lib import libraries for .dll)
+            args.append("-lswiftCore")
+            args.append("-lswift_Concurrency")
+            args.append("-lswiftWinSDK")        // Windows platform library
+            args.append("-lswiftCRT")           // C Runtime
+        }
+
+        // Windows system libraries
+        // Note: Windows linking is different - we might need specific MSVC libraries
+        // but clang on Windows should handle most of this automatically
         #endif
 
         // Optimizations
@@ -576,10 +601,15 @@ public final class CCompiler {
 
         // Runtime library (ARORuntime contains C-callable bridge via @_cdecl)
         if let runtimePath = runtimeLibraryPath {
+            #if os(Windows)
+            // On Windows, use the full path to the library directly
+            args.append(runtimePath)
+            #else
             let libDir = URL(fileURLWithPath: runtimePath).deletingLastPathComponent().path
             args.append("-L\(libDir)")
             args.append("-lARORuntime")
             args.append("-Wl,-rpath,\(libDir)")
+            #endif
         }
 
         // Platform-specific
@@ -744,6 +774,54 @@ public final class CCompiler {
     }
 
     private func findSwiftLibPath() -> String? {
+        #if os(Windows)
+        // Windows: Find Swift library path
+        // First, check common installation locations
+        let windowsSwiftLibPaths = [
+            "C:\\Library\\Developer\\Toolchains\\unknown-Asserts-development.xctoolchain\\usr\\lib\\swift\\windows",
+            "C:\\Swift\\Toolchains\\0.0.0+Asserts\\usr\\lib\\swift\\windows"
+        ]
+
+        for path in windowsSwiftLibPaths {
+            if FileManager.default.fileExists(atPath: path) {
+                return path
+            }
+        }
+
+        // Try to find swift.exe and derive library path from it
+        do {
+            let whereProcess = Process()
+            whereProcess.executableURL = URL(fileURLWithPath: "C:\\Windows\\System32\\where.exe")
+            whereProcess.arguments = ["swift"]
+
+            let wherePipe = Pipe()
+            whereProcess.standardOutput = wherePipe
+            whereProcess.standardError = FileHandle.nullDevice
+
+            try whereProcess.run()
+            whereProcess.waitUntilExit()
+
+            if whereProcess.terminationStatus == 0 {
+                let data = wherePipe.fileHandleForReading.readDataToEndOfFile()
+                if let output = String(data: data, encoding: .utf8) {
+                    let paths = output.components(separatedBy: .newlines).filter { !$0.isEmpty }
+                    if let swiftPath = paths.first?.trimmingCharacters(in: .whitespaces) {
+                        // Swift is at: C:\path\to\toolchain\usr\bin\swift.exe
+                        // Libraries are at: C:\path\to\toolchain\usr\lib\swift\windows
+                        if let binRange = swiftPath.range(of: "\\bin\\", options: .backwards) {
+                            let toolchainPath = String(swiftPath[..<binRange.lowerBound])
+                            let libPath = toolchainPath + "\\lib\\swift\\windows"
+                            if FileManager.default.fileExists(atPath: libPath) {
+                                return libPath
+                            }
+                        }
+                    }
+                }
+            }
+        } catch {}
+
+        return nil
+        #else
         // First, try to get the Swift library path from the Swift toolchain itself
         let process = Process()
 
@@ -752,7 +830,7 @@ public final class CCompiler {
         process.executableURL = URL(fileURLWithPath: "/usr/bin/xcrun")
         process.arguments = ["--find", "swift"]
         #else
-        // Linux/Windows: use which to find swift
+        // Linux: use which to find swift
         process.executableURL = URL(fileURLWithPath: "/usr/bin/which")
         process.arguments = ["swift"]
         #endif
@@ -781,10 +859,8 @@ public final class CCompiler {
 
                     #if os(macOS)
                     let platformLib = toolchainLib.appendingPathComponent("macosx").path
-                    #elseif os(Linux)
-                    let platformLib = toolchainLib.appendingPathComponent("linux").path
                     #else
-                    let platformLib = toolchainLib.path
+                    let platformLib = toolchainLib.appendingPathComponent("linux").path
                     #endif
 
                     if FileManager.default.fileExists(atPath: platformLib) {
@@ -793,6 +869,7 @@ public final class CCompiler {
                 }
             }
         } catch {}
+        #endif
 
         // Fallback to standard paths
         #if os(macOS)
