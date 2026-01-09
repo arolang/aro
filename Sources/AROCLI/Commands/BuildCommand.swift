@@ -288,7 +288,6 @@ struct BuildCommand: AsyncParsableCommand {
             FileHandle.standardError.write("[BUILD] ERROR: Runtime library not found\n".data(using: .utf8)!)
             #endif
             print("Error: ARORuntime library not found.")
-            print("Please run 'swift build' first to build the runtime library.")
             throw ExitCode.failure
         }
 
@@ -429,15 +428,22 @@ struct BuildCommand: AsyncParsableCommand {
         let executablePath = URL(fileURLWithPath: CommandLine.arguments[0]).resolvingSymlinksInPath()
         let executableDir = executablePath.deletingLastPathComponent()
 
-        // Platform-specific library name
-        // Note: All platforms use libARORuntime.a (Swift uses .a for static libs on all platforms)
-        let runtimeLibName = "libARORuntime.a"
-
         // Build search paths array programmatically
         var searchPaths: [String] = []
 
+        // Platform-specific library names to search for
+        // Swift uses .a for static libs on all platforms, but we also check .lib for Windows
+        #if os(Windows)
+        let runtimeLibNames = ["libARORuntime.a", "ARORuntime.lib", "libARORuntime.lib"]
+        #else
+        let runtimeLibNames = ["libARORuntime.a"]
+        #endif
+
         // 1. Same directory as executable (for distributed binaries/artifacts)
-        searchPaths.append(executableDir.appendingPathComponent(runtimeLibName).path)
+        // This is the primary location for CI/CD artifacts
+        for libName in runtimeLibNames {
+            searchPaths.append(executableDir.appendingPathComponent(libName).path)
+        }
 
         // 2. Homebrew/system install locations (Unix only)
         #if os(macOS)
@@ -464,14 +470,41 @@ struct BuildCommand: AsyncParsableCommand {
         searchPaths.append(".build/release/libARORuntime.a")
         searchPaths.append(".build/debug/libARORuntime.a")
         #elseif os(Windows)
-        searchPaths.append(".build/x86_64-unknown-windows-msvc/release/libARORuntime.a")
-        searchPaths.append(".build/x86_64-unknown-windows-msvc/debug/libARORuntime.a")
-        searchPaths.append(".build/release/libARORuntime.a")
-        searchPaths.append(".build/debug/libARORuntime.a")
+        // Check multiple library name variants on Windows
+        for libName in runtimeLibNames {
+            searchPaths.append(".build/x86_64-unknown-windows-msvc/release/\(libName)")
+            searchPaths.append(".build/x86_64-unknown-windows-msvc/debug/\(libName)")
+            searchPaths.append(".build/release/\(libName)")
+            searchPaths.append(".build/debug/\(libName)")
+        }
+        #endif
+
+        #if os(Windows)
+        // Debug output for Windows to help diagnose library location issues
+        FileHandle.standardError.write("[BUILD] Searching for runtime library...\n".data(using: .utf8)!)
+        FileHandle.standardError.write("[BUILD] Executable dir: \(executableDir.path)\n".data(using: .utf8)!)
+        FileHandle.standardError.write("[BUILD] Current working dir: \(fm.currentDirectoryPath)\n".data(using: .utf8)!)
+        FileHandle.standardError.write("[BUILD] Search paths:\n".data(using: .utf8)!)
+        for (index, path) in searchPaths.enumerated() {
+            FileHandle.standardError.write("[BUILD]   \(index + 1). \(path)\n".data(using: .utf8)!)
+        }
         #endif
 
         for path in searchPaths {
             let fullPath: String
+            #if os(Windows)
+            // On Windows, use backslashes for path separators
+            if path.hasPrefix("/") || path.contains(":") {
+                // Absolute path (Unix style or Windows drive letter)
+                fullPath = path
+            } else if path.hasPrefix(".") {
+                // Relative to current directory
+                fullPath = fm.currentDirectoryPath + "\\" + path.replacingOccurrences(of: "/", with: "\\")
+            } else {
+                // Relative to current directory
+                fullPath = fm.currentDirectoryPath + "\\" + path.replacingOccurrences(of: "/", with: "\\")
+            }
+            #else
             if path.hasPrefix("/") {
                 // Absolute path
                 fullPath = path
@@ -482,11 +515,24 @@ struct BuildCommand: AsyncParsableCommand {
                 // Relative to current directory
                 fullPath = fm.currentDirectoryPath + "/" + path
             }
+            #endif
 
+            #if os(Windows)
+            let exists = fm.fileExists(atPath: fullPath)
+            FileHandle.standardError.write("[BUILD] Checking: \(fullPath) -> \(exists ? "FOUND" : "not found")\n".data(using: .utf8)!)
+            if exists {
+                return fullPath
+            }
+            #else
             if fm.fileExists(atPath: fullPath) {
                 return fullPath
             }
+            #endif
         }
+
+        #if os(Windows)
+        FileHandle.standardError.write("[BUILD] Runtime library NOT FOUND in any location\n".data(using: .utf8)!)
+        #endif
 
         return nil
     }
