@@ -659,8 +659,47 @@ public final class CCompiler {
         // 4. Final fallback
         FileHandle.standardError.write("[LINKER] WARNING: No compiler found, returning clang-14\n".data(using: .utf8)!)
         return "clang-14"
+        #elseif os(Windows)
+        // Windows: Find clang.exe in standard LLVM installation paths
+        let windowsCompilers = [
+            "C:\\Program Files\\LLVM\\bin\\clang.exe",
+            "C:\\Program Files (x86)\\LLVM\\bin\\clang.exe"
+        ]
+
+        for compiler in windowsCompilers {
+            if FileManager.default.fileExists(atPath: compiler) {
+                return compiler
+            }
+        }
+
+        // Try to find clang in PATH using 'where' command
+        do {
+            let whereProcess = Process()
+            whereProcess.executableURL = URL(fileURLWithPath: "C:\\Windows\\System32\\where.exe")
+            whereProcess.arguments = ["clang"]
+
+            let wherePipe = Pipe()
+            whereProcess.standardOutput = wherePipe
+            whereProcess.standardError = FileHandle.nullDevice
+
+            try whereProcess.run()
+            whereProcess.waitUntilExit()
+
+            if whereProcess.terminationStatus == 0 {
+                let data = wherePipe.fileHandleForReading.readDataToEndOfFile()
+                if let output = String(data: data, encoding: .utf8) {
+                    // 'where' can return multiple lines, take the first one
+                    let paths = output.components(separatedBy: .newlines).filter { !$0.isEmpty }
+                    if let firstPath = paths.first {
+                        return firstPath.trimmingCharacters(in: .whitespaces)
+                    }
+                }
+            }
+        } catch {}
+
+        return "clang.exe" // Hope it's in PATH
         #else
-        // macOS/Windows fallback: Prefer clang, fall back to gcc
+        // macOS fallback: Prefer clang, fall back to gcc
         let compilers = [
             "/usr/bin/clang",
             "/usr/bin/clang-14",     // Ubuntu 22.04 LLVM package
