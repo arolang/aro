@@ -173,7 +173,13 @@ struct BuildCommand: AsyncParsableCommand {
         let llPath = buildDir.appendingPathComponent("\(baseName).ll")
         let objectPath = buildDir.appendingPathComponent("\(baseName).o").path
         // Ensure binary path is absolute and standardized
-        let binaryPath = appConfig.rootPath.appendingPathComponent(baseName).standardizedFileURL
+        // On Windows, executables need .exe extension
+        #if os(Windows)
+        let binaryName = baseName + ".exe"
+        #else
+        let binaryName = baseName
+        #endif
+        let binaryPath = appConfig.rootPath.appendingPathComponent(binaryName).standardizedFileURL
 
         #if os(Linux)
         FileHandle.standardError.write("[BUILD] Binary path: \(binaryPath.path)\n".data(using: .utf8)!)

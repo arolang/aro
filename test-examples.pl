@@ -28,6 +28,29 @@ sub colored {
     return Term::ANSIColor::colored($text, $color);
 }
 
+# Windows detection and binary path helper
+my $is_windows = ($^O eq 'MSWin32' || $^O eq 'cygwin' || $^O eq 'msys');
+
+# Get binary path with proper extension for the platform
+# On Windows, executables have .exe extension
+sub get_binary_path {
+    my ($dir, $basename) = @_;
+    my $binary_name = $is_windows ? "$basename.exe" : $basename;
+    return File::Spec->catfile($dir, $binary_name);
+}
+
+# Check if a file is executable (cross-platform)
+# On Windows, -x doesn't work reliably, so we check for .exe extension
+sub is_executable {
+    my ($path) = @_;
+    if ($is_windows) {
+        # On Windows, check if the file exists and has .exe extension
+        return (-e $path && $path =~ /\.exe$/i);
+    } else {
+        return -x $path;
+    }
+}
+
 # Configuration
 my %options = (
     generate => 0,
@@ -255,37 +278,44 @@ sub read_test_hint {
 
 # Find the aro binary - checks environment variable, then local build, then installed versions
 sub find_aro_binary {
+    my $exe_ext = $is_windows ? '.exe' : '';
+
     # 1. Check if ARO_BIN environment variable is set
-    if ($ENV{ARO_BIN} && -x $ENV{ARO_BIN}) {
+    if ($ENV{ARO_BIN} && is_executable($ENV{ARO_BIN})) {
         return $ENV{ARO_BIN};
     }
 
     # 2. Check local release build first (most up-to-date during development)
-    my $local_release = File::Spec->catfile($RealBin, '.build', 'release', 'aro');
-    if (-x $local_release) {
+    my $local_release = File::Spec->catfile($RealBin, '.build', 'release', "aro$exe_ext");
+    if (is_executable($local_release)) {
         return $local_release;
     }
 
-    # 3. Check /usr/bin/aro (system install)
-    if (-x '/usr/bin/aro') {
-        return '/usr/bin/aro';
+    if (!$is_windows) {
+        # 3. Check /usr/bin/aro (system install) - Unix only
+        if (-x '/usr/bin/aro') {
+            return '/usr/bin/aro';
+        }
+
+        # 4. Check /opt/homebrew/bin/aro (Homebrew on Apple Silicon)
+        if (-x '/opt/homebrew/bin/aro') {
+            return '/opt/homebrew/bin/aro';
+        }
     }
 
-    # 4. Check /opt/homebrew/bin/aro (Homebrew on Apple Silicon)
-    if (-x '/opt/homebrew/bin/aro') {
-        return '/opt/homebrew/bin/aro';
-    }
-
-    # 5. Check ./aro-bin/aro (local binary directory)
-    my $local_bin = File::Spec->catfile($RealBin, 'aro-bin', 'aro');
-    if (-x $local_bin) {
+    # 5. Check ./aro-bin/aro (local binary directory - used in CI)
+    my $local_bin = File::Spec->catfile($RealBin, 'aro-bin', "aro$exe_ext");
+    if (is_executable($local_bin)) {
         return $local_bin;
     }
 
     # 6. Last resort: try 'aro' in PATH and let shell find it
-    my $which_aro = `which aro 2>/dev/null`;
+    my $which_cmd = $is_windows ? "where aro$exe_ext 2>nul" : "which aro 2>/dev/null";
+    my $which_aro = `$which_cmd`;
     chomp $which_aro;
-    if ($which_aro && -x $which_aro) {
+    # On Windows, 'where' can return multiple lines; take the first
+    ($which_aro) = split /\n/, $which_aro if $which_aro;
+    if ($which_aro && is_executable($which_aro)) {
         return $which_aro;
     }
 
@@ -350,14 +380,15 @@ sub build_example {
 
     # Check if binary exists
     my $basename = basename($dir);
-    my $binary_path = File::Spec->catfile($dir, $basename);
+    my $binary_path = get_binary_path($dir, $basename);
 
     # Debug: Check binary status
     if ($example_name eq 'HelloWorld') {
         print STDERR "[TEST-DEBUG] Checking binary at: $binary_path\n";
         print STDERR "[TEST-DEBUG] File exists: " . (-e $binary_path ? "YES" : "NO") . "\n";
         print STDERR "[TEST-DEBUG] File readable: " . (-r $binary_path ? "YES" : "NO") . "\n";
-        print STDERR "[TEST-DEBUG] File executable: " . (-x $binary_path ? "YES" : "NO") . "\n";
+        print STDERR "[TEST-DEBUG] File executable: " . (is_executable($binary_path) ? "YES" : "NO") . "\n";
+        print STDERR "[TEST-DEBUG] Platform: $^O (is_windows=$is_windows)\n";
         if (-e $binary_path) {
             my @stat = stat($binary_path);
             print STDERR "[TEST-DEBUG] File size: $stat[7] bytes\n";
@@ -375,7 +406,7 @@ sub build_example {
         closedir($dh);
     }
 
-    unless (-x $binary_path) {
+    unless (is_executable($binary_path)) {
         # Include build output in error message for debugging
         my $build_output = $out || $err || "(no output)";
         my $error_msg = "Binary not found at: $binary_path\n\nBuild output:\n$build_output";
@@ -702,9 +733,9 @@ sub run_console_example_internal {
     if ($mode eq 'compiled') {
         # Execute compiled binary directly
         my $basename = basename($dir);
-        my $binary_path = File::Spec->catfile($dir, $basename);
+        my $binary_path = get_binary_path($dir, $basename);
 
-        unless (-x $binary_path) {
+        unless (is_executable($binary_path)) {
             return (undef, "ERROR: Compiled binary not found at $binary_path");
         }
 
@@ -856,9 +887,9 @@ sub run_http_example_internal {
     if ($mode eq 'compiled') {
         # Execute compiled binary directly
         my $basename = basename($dir);
-        my $binary_path = File::Spec->catfile($dir, $basename);
+        my $binary_path = get_binary_path($dir, $basename);
 
-        unless (-x $binary_path) {
+        unless (is_executable($binary_path)) {
             return (undef, "ERROR: Compiled binary not found at $binary_path");
         }
 
@@ -1086,9 +1117,9 @@ sub run_socket_example_internal {
     if ($mode eq 'compiled') {
         # Execute compiled binary directly
         my $basename = basename($dir);
-        my $binary_path = File::Spec->catfile($dir, $basename);
+        my $binary_path = get_binary_path($dir, $basename);
 
-        unless (-x $binary_path) {
+        unless (is_executable($binary_path)) {
             return (undef, "ERROR: Compiled binary not found at $binary_path");
         }
 
@@ -1233,9 +1264,9 @@ sub run_file_watcher_example_internal {
     if ($mode eq 'compiled') {
         # Execute compiled binary directly
         my $basename = basename($dir);
-        my $binary_path = File::Spec->catfile($dir, $basename);
+        my $binary_path = get_binary_path($dir, $basename);
 
-        unless (-x $binary_path) {
+        unless (is_executable($binary_path)) {
             return (undef, "ERROR: Compiled binary not found at $binary_path");
         }
 
