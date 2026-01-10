@@ -1,4 +1,4 @@
-package com.krissimon.aro;
+package com.arolang.aro;
 
 import com.intellij.codeInsight.template.TemplateActionContext;
 import com.intellij.codeInsight.template.TemplateContextType;

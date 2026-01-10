@@ -3,7 +3,7 @@ plugins {
     id("org.jetbrains.intellij.platform") version "2.10.5"
 }
 
-group = "com.krissimon"
+group = "com.arolang"
 version = "1.0.0"
 
 repositories {

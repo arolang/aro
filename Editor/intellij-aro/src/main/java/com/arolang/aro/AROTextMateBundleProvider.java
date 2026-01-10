@@ -1,4 +1,4 @@
-package com.krissimon.aro;
+package com.arolang.aro;
 
 import com.intellij.openapi.application.PathManager;
 import org.jetbrains.annotations.NotNull;

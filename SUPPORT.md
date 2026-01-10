@@ -6,8 +6,8 @@ Need help with ARO? We're happy to assist!
 
 | Channel | Use For |
 |---------|---------|
-| [GitHub Issues](https://github.com/KrisSimon/aro/issues) | Bug reports, feature requests |
-| [GitHub Discussions](https://github.com/KrisSimon/aro/discussions) | Questions, ideas, show & tell |
+| [GitHub Issues](https://github.com/arolang/aro/issues) | Bug reports, feature requests |
+| [GitHub Discussions](https://github.com/arolang/aro/discussions) | Questions, ideas, show & tell |
 
 **Note**: Only public GitHub Issues and Discussions will be answered. We don't provide private support via email or direct messages.
 

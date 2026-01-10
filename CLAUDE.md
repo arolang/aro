@@ -8,7 +8,7 @@ The project must always be in sync. When there are conflicts or discrepancies, t
 
 1. **Proposals** (`Proposals/`) - The authoritative specification
 2. **Code** (`Sources/`) - The implementation
-3. **Documentation** ([Wiki](https://github.com/KrisSimon/aro/wiki), `OVERVIEW.md`, `README.md`) - Developer docs
+3. **Documentation** ([Wiki](https://github.com/arolang/aro/wiki), `OVERVIEW.md`, `README.md`) - Developer docs
 4. **Website** (`Website/`) - Public website
 5. **Book** (`Book/`) - The Language Guide
 
@@ -155,7 +155,7 @@ paths:
 ### Happy Case
 Code contains only the happy case. Errors are handled by the runtime. For example when a user cannot be retrieved from the repository, the server just returns: `Can not retrieve the user from the user-repository where id = 530`.
 
-Do not use it for production code, it is terribly unsecure.
+Do not use it for production code, it is terribly insecure.
 
 ### Key Types
 
@@ -304,7 +304,7 @@ public struct MyAction: ActionImplementation {
 ActionRegistry.shared.register(MyAction.self)
 ```
 
-See the [Action Developer Guide](https://github.com/KrisSimon/aro/wiki/Action-Developer-Guide) for full guide.
+See the [Action Developer Guide](https://github.com/arolang/aro/wiki/Action-Developer-Guide) for full guide.
 
 ## Project Structure
 
@@ -379,7 +379,7 @@ The `Proposals/` directory contains 10 consolidated specifications:
 | **0010 Advanced Features** | Regex, dates, exec |
 
 The `legacy/` directory contains the original evolution proposals for historical reference.
-The `future/` directory contains planned features not yet implemented
+The `future/` directory contains planned features not yet implemented.
 
 ## Concurrency
 

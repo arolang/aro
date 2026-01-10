@@ -80,4 +80,4 @@ fi
 
 echo ""
 echo "🎉 Website deployed to gh-pages branch!"
-echo "   Site will be available at: https://krissimon.github.io/aro/"
+echo "   Site will be available at: https://arolang.github.io/aro/"

@@ -1,7 +1,7 @@
 # ARO-0043: System Objects Protocol
 
 - **Status**: Draft
-- **Author**: Claude (with KrisSimon)
+- **Author**: Claude (and the aro developer team)
 - **Created**: 2025-12-31
 
 ## Summary

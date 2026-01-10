@@ -8,11 +8,11 @@ body:
       value: |
         ## ARO Language Proposal
 
-        Thank you for contributing to ARO's evolution! This template follows the structure of our [existing proposals](https://github.com/KrisSimon/aro/tree/main/Proposals).
+        Thank you for contributing to ARO's evolution! This template follows the structure of our [existing proposals](https://github.com/arolang/aro/tree/main/Proposals).
 
         Before submitting, please:
         - Search existing proposals to avoid duplicates
-        - Review [MISSING.md](https://github.com/KrisSimon/aro/blob/main/MISSING.md) for known gaps
+        - Review [MISSING.md](https://github.com/arolang/aro/blob/main/MISSING.md) for known gaps
         - Consider the impact on existing ARO code
 
   - type: input

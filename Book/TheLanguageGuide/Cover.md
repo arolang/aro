@@ -19,7 +19,7 @@ Business Logic as Language
 
 <div style="position: absolute; bottom: 15%; width: 100%; text-align: center;">
 <div style="font-size: 11pt; color: #888; margin-bottom: 1em;">
-<a href="https://github.com/KrisSimon/aro" style="color: #888; text-decoration: none;">github.com/KrisSimon/aro</a><br>
+<a href="https://github.com/arolang/aro" style="color: #888; text-decoration: none;">github.com/arolang/aro</a><br>
 <a href="https://social.uitsmijter.io/@aro" style="color: #888; text-decoration: none;">@aro@social.uitsmijter.io</a>
 </div>
 <div style="font-size: 12pt; color: #888;">

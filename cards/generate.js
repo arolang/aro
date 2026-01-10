@@ -87,7 +87,7 @@ function generateCombinedHTML(fact) {
     <div class="content">
       <div class="explanation">${escapeHtml(fact.explanation)}</div>
 
-      <div class="footer"><a href="https://github.com/KrisSimon/ARO">github.com/KrisSimon/ARO</a></div>
+      <div class="footer"><a href="https://github.com/arolang/aro">github.com/arolang/aro</a></div>
     </div>
   </div>
 </body>

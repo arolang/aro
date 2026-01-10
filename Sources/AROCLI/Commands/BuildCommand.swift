@@ -47,6 +47,13 @@ struct BuildCommand: AsyncParsableCommand {
         let resolvedPath = URL(fileURLWithPath: path)
         let startTime = Date()
 
+        #if os(Linux)
+        // Debug: Always print on Linux to verify command is running
+        // Use FileHandle to write directly to stderr to bypass any buffering
+        let debugMsg = "[BUILD] Starting aro build on Linux for \(resolvedPath.path)\n"
+        FileHandle.standardError.write(debugMsg.data(using: .utf8)!)
+        #endif
+
         if verbose {
             print("ARO Compiler v\(AROVersion.shortVersion)")
             print("Build: \(AROVersion.buildDate)")
@@ -61,7 +68,13 @@ struct BuildCommand: AsyncParsableCommand {
 
         do {
             appConfig = try await discovery.discover(at: resolvedPath)
+            #if os(Linux)
+            FileHandle.standardError.write("[BUILD] Discovery completed, found \(appConfig.sourceFiles.count) files\n".data(using: .utf8)!)
+            #endif
         } catch {
+            #if os(Linux)
+            FileHandle.standardError.write("[BUILD] Discovery failed: \(error)\n".data(using: .utf8)!)
+            #endif
             print("Error: \(error)")
             throw ExitCode.failure
         }
@@ -80,6 +93,10 @@ struct BuildCommand: AsyncParsableCommand {
         let compiler = Compiler()
         var allDiagnostics: [Diagnostic] = []
         var compiledPrograms: [AnalyzedProgram] = []
+
+        #if os(Linux)
+        FileHandle.standardError.write("[BUILD] Starting compilation of \(appConfig.sourceFiles.count) files\n".data(using: .utf8)!)
+        #endif
 
         for sourceFile in appConfig.sourceFiles {
             if verbose {
@@ -102,6 +119,10 @@ struct BuildCommand: AsyncParsableCommand {
             }
         }
 
+        #if os(Linux)
+        FileHandle.standardError.write("[BUILD] Compilation completed, \(compiledPrograms.count) programs\n".data(using: .utf8)!)
+        #endif
+
         // Report compilation errors
         let errors = allDiagnostics.filter { $0.severity == .error }
         let warnings = allDiagnostics.filter { $0.severity == .warning }
@@ -114,6 +135,9 @@ struct BuildCommand: AsyncParsableCommand {
         }
 
         if !errors.isEmpty {
+            #if os(Linux)
+            FileHandle.standardError.write("[BUILD] Compilation errors found: \(errors.count)\n".data(using: .utf8)!)
+            #endif
             print("\nCompilation errors:")
             for error in errors {
                 print("  \(error)")
@@ -123,9 +147,16 @@ struct BuildCommand: AsyncParsableCommand {
 
         // Merge programs
         guard let mergedProgram = mergePrograms(compiledPrograms) else {
+            #if os(Linux)
+            FileHandle.standardError.write("[BUILD] ERROR: No programs to merge\n".data(using: .utf8)!)
+            #endif
             print("Error: No programs to compile")
             throw ExitCode.failure
         }
+
+        #if os(Linux)
+        FileHandle.standardError.write("[BUILD] Merged \(mergedProgram.featureSets.count) feature sets\n".data(using: .utf8)!)
+        #endif
 
         if verbose {
             print("\nParsing successful!")
@@ -141,7 +172,18 @@ struct BuildCommand: AsyncParsableCommand {
         let buildDir = appConfig.rootPath.appendingPathComponent(".build")
         let llPath = buildDir.appendingPathComponent("\(baseName).ll")
         let objectPath = buildDir.appendingPathComponent("\(baseName).o").path
-        let binaryPath = appConfig.rootPath.appendingPathComponent(baseName)
+        // Ensure binary path is absolute and standardized
+        // On Windows, executables need .exe extension
+        #if os(Windows)
+        let binaryName = baseName + ".exe"
+        #else
+        let binaryName = baseName
+        #endif
+        let binaryPath = appConfig.rootPath.appendingPathComponent(binaryName).standardizedFileURL
+
+        #if os(Linux)
+        FileHandle.standardError.write("[BUILD] Binary path: \(binaryPath.path)\n".data(using: .utf8)!)
+        #endif
 
         // Create build directory
         try? FileManager.default.createDirectory(at: buildDir, withIntermediateDirectories: true)
@@ -150,6 +192,10 @@ struct BuildCommand: AsyncParsableCommand {
         if verbose {
             print("Generating LLVM IR...")
         }
+
+        #if os(Linux)
+        FileHandle.standardError.write("[BUILD] Starting LLVM IR generation\n".data(using: .utf8)!)
+        #endif
 
         // Serialize OpenAPI spec to JSON for embedding (if present)
         var openAPISpecJSON: String? = nil
@@ -172,7 +218,13 @@ struct BuildCommand: AsyncParsableCommand {
 
         do {
             llvmResult = try codeGenerator.generate(program: mergedProgram, openAPISpecJSON: openAPISpecJSON)
+            #if os(Linux)
+            FileHandle.standardError.write("[BUILD] LLVM IR generated successfully\n".data(using: .utf8)!)
+            #endif
         } catch {
+            #if os(Linux)
+            FileHandle.standardError.write("[BUILD] ERROR: LLVM generation failed: \(error)\n".data(using: .utf8)!)
+            #endif
             print("Code generation error: \(error)")
             throw ExitCode.failure
         }
@@ -232,10 +284,17 @@ struct BuildCommand: AsyncParsableCommand {
 
         // Find the ARORuntime library (contains C-callable bridge via @_cdecl)
         guard let runtimeLibPath = findARORuntimeLibrary() else {
+            #if os(Linux) || os(Windows)
+            FileHandle.standardError.write("[BUILD] ERROR: Runtime library not found\n".data(using: .utf8)!)
+            #endif
             print("Error: ARORuntime library not found.")
-            print("Please run 'swift build' first to build the runtime library.")
             throw ExitCode.failure
         }
+
+        #if os(Linux) || os(Windows)
+        FileHandle.standardError.write("[BUILD] Runtime library found: \(runtimeLibPath)\n".data(using: .utf8)!)
+        print("[BUILD] Runtime library found: \(runtimeLibPath)")
+        #endif
 
         if verbose {
             print("Using runtime: \(runtimeLibPath)")
@@ -253,7 +312,29 @@ struct BuildCommand: AsyncParsableCommand {
             }
         }
 
+        #if os(Linux) || os(Windows)
+        FileHandle.standardError.write("[BUILD] Starting linker\n".data(using: .utf8)!)
+        FileHandle.standardError.write("[BUILD] Object file: \(objectPath)\n".data(using: .utf8)!)
+        FileHandle.standardError.write("[BUILD] Output path: \(binaryPath.path)\n".data(using: .utf8)!)
+        print("[BUILD] Starting linker")
+        print("[BUILD] Object file: \(objectPath)")
+        print("[BUILD] Output path: \(binaryPath.path)")
+        #endif
+
+        #if os(Windows)
+        print("[BUILD] Creating CCompiler with runtime: \(runtimeLibPath)")
+        #endif
+
         let linker = CCompiler(runtimeLibraryPath: runtimeLibPath)
+
+        #if os(Windows)
+        print("[BUILD] CCompiler created successfully")
+        #endif
+
+        #if os(Linux)
+        FileHandle.standardError.write("[BUILD] CCompiler created\n".data(using: .utf8)!)
+        #endif
+
         let linkOptions = CCompiler.LinkOptions(
             optimize: effectiveOptimize,
             optimizeForSize: effectiveSize,
@@ -261,7 +342,16 @@ struct BuildCommand: AsyncParsableCommand {
             deadStrip: effectiveStrip || effectiveSize  // Enable dead stripping when stripping or optimizing for size
         )
 
+        #if os(Linux)
+        FileHandle.standardError.write("[BUILD] LinkOptions created\n".data(using: .utf8)!)
+        FileHandle.standardError.write("[BUILD] About to call linker.link() with objectFiles: [\(objectPath)], outputPath: \(binaryPath.path)\n".data(using: .utf8)!)
+        #endif
+
         do {
+            #if os(Linux)
+            FileHandle.standardError.write("[BUILD] Inside do block, calling link...\n".data(using: .utf8)!)
+            #endif
+
             try linker.link(
                 objectFiles: [objectPath],
                 outputPath: binaryPath.path,
@@ -269,10 +359,17 @@ struct BuildCommand: AsyncParsableCommand {
                 options: linkOptions
             )
 
+            #if os(Linux)
+            FileHandle.standardError.write("[BUILD] Linking completed\n".data(using: .utf8)!)
+            #endif
+
             if verbose {
                 print("  Executable created")
             }
         } catch {
+            #if os(Linux)
+            FileHandle.standardError.write("[BUILD] ERROR: Linking failed: \(error)\n".data(using: .utf8)!)
+            #endif
             print("Linking error: \(error)")
             throw ExitCode.failure
         }
@@ -318,6 +415,18 @@ struct BuildCommand: AsyncParsableCommand {
 
         let elapsed = Date().timeIntervalSince(startTime)
 
+        #if os(Linux)
+        print("[BUILD] Binary created successfully")
+        print("[BUILD] Path: \(binaryPath.path)")
+        print("[BUILD] Checking if binary exists...")
+        if FileManager.default.fileExists(atPath: binaryPath.path) {
+            print("[BUILD] ✓ Binary exists")
+            print("[BUILD] Size: \(try? FileManager.default.attributesOfItem(atPath: binaryPath.path)[.size] ?? 0) bytes")
+        } else {
+            print("[BUILD] ✗ Binary NOT found!")
+        }
+        #endif
+
         print("Built: \(binaryPath.path)")
         if verbose {
             print("Completed in \(String(format: "%.2f", elapsed))s")
@@ -331,15 +440,66 @@ struct BuildCommand: AsyncParsableCommand {
         let executablePath = URL(fileURLWithPath: CommandLine.arguments[0]).resolvingSymlinksInPath()
         let executableDir = executablePath.deletingLastPathComponent()
 
-        // Platform-specific library name
-        // Note: All platforms use libARORuntime.a (Swift uses .a for static libs on all platforms)
-        let runtimeLibName = "libARORuntime.a"
-
         // Build search paths array programmatically
         var searchPaths: [String] = []
 
+        // Platform-specific library names to search for
+        // Swift uses .a for static libs on all platforms, but we also check .lib for Windows
+        #if os(Windows)
+        let runtimeLibNames = ["libARORuntime.a", "ARORuntime.lib", "libARORuntime.lib"]
+        #else
+        let runtimeLibNames = ["libARORuntime.a"]
+        #endif
+
+        // 0. Check ARO_BIN environment variable directory (used in CI)
+        if let aroBinPath = ProcessInfo.processInfo.environment["ARO_BIN"] {
+            #if os(Windows)
+            // On Windows, avoid URL manipulation which has path format issues
+            // Just do simple string manipulation with backslashes
+            var aroBinDir: String
+            if let lastBackslash = aroBinPath.lastIndex(of: "\\") {
+                aroBinDir = String(aroBinPath[..<lastBackslash])
+            } else if let lastSlash = aroBinPath.lastIndex(of: "/") {
+                aroBinDir = String(aroBinPath[..<lastSlash])
+            } else {
+                aroBinDir = "."
+            }
+            for libName in runtimeLibNames {
+                searchPaths.append(aroBinDir + "\\" + libName)
+            }
+            #else
+            let aroBinDir = URL(fileURLWithPath: aroBinPath).deletingLastPathComponent()
+            for libName in runtimeLibNames {
+                searchPaths.append(aroBinDir.appendingPathComponent(libName).path)
+            }
+            #endif
+        }
+
         // 1. Same directory as executable (for distributed binaries/artifacts)
-        searchPaths.append(executableDir.appendingPathComponent(runtimeLibName).path)
+        // This is the primary location for CI/CD artifacts
+        #if os(Windows)
+        // On Windows, use string manipulation to avoid URL path issues
+        let execPathStr = executablePath.path
+        var execDirStr: String
+        if let lastBackslash = execPathStr.lastIndex(of: "\\") {
+            execDirStr = String(execPathStr[..<lastBackslash])
+        } else if let lastSlash = execPathStr.lastIndex(of: "/") {
+            execDirStr = String(execPathStr[..<lastSlash])
+        } else {
+            execDirStr = "."
+        }
+        // Remove leading slash if present (URL.path artifact on Windows)
+        if execDirStr.hasPrefix("/") && execDirStr.count > 2 && execDirStr.dropFirst().first?.isLetter == true {
+            execDirStr = String(execDirStr.dropFirst())
+        }
+        for libName in runtimeLibNames {
+            searchPaths.append(execDirStr + "\\" + libName)
+        }
+        #else
+        for libName in runtimeLibNames {
+            searchPaths.append(executableDir.appendingPathComponent(libName).path)
+        }
+        #endif
 
         // 2. Homebrew/system install locations (Unix only)
         #if os(macOS)
@@ -366,14 +526,64 @@ struct BuildCommand: AsyncParsableCommand {
         searchPaths.append(".build/release/libARORuntime.a")
         searchPaths.append(".build/debug/libARORuntime.a")
         #elseif os(Windows)
-        searchPaths.append(".build/x86_64-unknown-windows-msvc/release/libARORuntime.a")
-        searchPaths.append(".build/x86_64-unknown-windows-msvc/debug/libARORuntime.a")
-        searchPaths.append(".build/release/libARORuntime.a")
-        searchPaths.append(".build/debug/libARORuntime.a")
+        // Check multiple library name variants on Windows
+        for libName in runtimeLibNames {
+            searchPaths.append(".build/x86_64-unknown-windows-msvc/release/\(libName)")
+            searchPaths.append(".build/x86_64-unknown-windows-msvc/debug/\(libName)")
+            searchPaths.append(".build/release/\(libName)")
+            searchPaths.append(".build/debug/\(libName)")
+        }
+        #endif
+
+        #if os(Windows)
+        // Debug output for Windows - write to both stderr AND a debug file
+        var debugLog = "[BUILD] Searching for runtime library...\n"
+        debugLog += "[BUILD] ARO_BIN env: \(ProcessInfo.processInfo.environment["ARO_BIN"] ?? "not set")\n"
+        debugLog += "[BUILD] Executable path: \(executablePath.path)\n"
+        debugLog += "[BUILD] Executable dir: \(executableDir.path)\n"
+        debugLog += "[BUILD] Current working dir: \(fm.currentDirectoryPath)\n"
+        debugLog += "[BUILD] Search paths (\(searchPaths.count) total):\n"
+        for (index, path) in searchPaths.enumerated() {
+            let exists = fm.fileExists(atPath: path)
+            debugLog += "[BUILD]   \(index + 1). \(path) [\(exists ? "EXISTS" : "not found")]\n"
+        }
+
+        // Write to stderr
+        FileHandle.standardError.write(debugLog.data(using: .utf8)!)
+
+        // Also write to stdout so it's captured in test output
+        print(debugLog)
+
+        // Also write to a debug file
+        let debugFilePath = fm.currentDirectoryPath + "\\aro-build-debug.log"
+        try? debugLog.write(toFile: debugFilePath, atomically: true, encoding: .utf8)
         #endif
 
         for path in searchPaths {
-            let fullPath: String
+            var fullPath: String
+            #if os(Windows)
+            // On Windows, use backslashes for path separators
+            // First, fix any URL.path artifacts (leading slash before drive letter)
+            var cleanPath = path
+            if cleanPath.hasPrefix("/") && cleanPath.count > 2 {
+                let afterSlash = cleanPath.dropFirst()
+                if afterSlash.first?.isLetter == true && afterSlash.dropFirst().first == ":" {
+                    // Path like "/D:/..." -> "D:/..."
+                    cleanPath = String(afterSlash)
+                }
+            }
+
+            if cleanPath.contains(":") {
+                // Absolute Windows path (e.g., "D:/path" or "D:\path")
+                fullPath = cleanPath.replacingOccurrences(of: "/", with: "\\")
+            } else if cleanPath.hasPrefix(".") {
+                // Relative to current directory
+                fullPath = fm.currentDirectoryPath + "\\" + cleanPath.replacingOccurrences(of: "/", with: "\\")
+            } else {
+                // Relative to current directory
+                fullPath = fm.currentDirectoryPath + "\\" + cleanPath.replacingOccurrences(of: "/", with: "\\")
+            }
+            #else
             if path.hasPrefix("/") {
                 // Absolute path
                 fullPath = path
@@ -384,11 +594,55 @@ struct BuildCommand: AsyncParsableCommand {
                 // Relative to current directory
                 fullPath = fm.currentDirectoryPath + "/" + path
             }
+            #endif
 
+            #if os(Windows)
+            let exists = fm.fileExists(atPath: fullPath)
+            FileHandle.standardError.write("[BUILD] Checking: \(fullPath) -> \(exists ? "FOUND" : "not found")\n".data(using: .utf8)!)
+            if exists {
+                return fullPath
+            }
+            #else
             if fm.fileExists(atPath: fullPath) {
                 return fullPath
             }
+            #endif
         }
+
+        #if os(Windows)
+        FileHandle.standardError.write("[BUILD] Runtime library NOT FOUND in standard locations\n".data(using: .utf8)!)
+
+        // Last resort: try to find the library anywhere on disk using where/dir commands
+        FileHandle.standardError.write("[BUILD] Attempting filesystem search...\n".data(using: .utf8)!)
+
+        // Try to find libARORuntime.a near the executable
+        if let aroBinPath = ProcessInfo.processInfo.environment["ARO_BIN"] {
+            // Get the directory containing aro.exe
+            let aroBinURL = URL(fileURLWithPath: aroBinPath)
+            let aroBinDir = aroBinURL.deletingLastPathComponent()
+
+            // Try listing the directory contents
+            do {
+                let contents = try fm.contentsOfDirectory(atPath: aroBinDir.path)
+                FileHandle.standardError.write("[BUILD] Contents of \(aroBinDir.path):\n".data(using: .utf8)!)
+                for item in contents {
+                    FileHandle.standardError.write("[BUILD]   - \(item)\n".data(using: .utf8)!)
+                    if item.contains("ARORuntime") || item.hasSuffix(".a") || item.hasSuffix(".lib") {
+                        let itemPath = aroBinDir.appendingPathComponent(item).path
+                        FileHandle.standardError.write("[BUILD] Found potential library: \(itemPath)\n".data(using: .utf8)!)
+                        if fm.fileExists(atPath: itemPath) {
+                            FileHandle.standardError.write("[BUILD] Returning: \(itemPath)\n".data(using: .utf8)!)
+                            return itemPath
+                        }
+                    }
+                }
+            } catch {
+                FileHandle.standardError.write("[BUILD] Error listing directory: \(error)\n".data(using: .utf8)!)
+            }
+        }
+
+        FileHandle.standardError.write("[BUILD] Runtime library NOT FOUND anywhere\n".data(using: .utf8)!)
+        #endif
 
         return nil
     }

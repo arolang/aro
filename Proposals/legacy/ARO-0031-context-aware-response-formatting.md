@@ -272,7 +272,7 @@ This proposal:
 
 ## References
 
-- ARO Tutorial: https://krissimon.github.io/aro/tutorial.html
+- ARO Tutorial: https://arolang.github.io/aro/tutorial.html
 - Unix Philosophy: "Write programs that handle text streams, because that is a universal interface"
 
 ## Revision History
