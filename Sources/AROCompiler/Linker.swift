@@ -556,6 +556,42 @@ public final class CCompiler {
         } else {
             FileHandle.standardError.write("[LINKER-WIN] WARNING: Swift library path not found!\n".data(using: .utf8)!)
         }
+
+        // Windows CRT and system libraries
+        // These resolve symbols like strdup (_strdup on Windows), _wassert, etc.
+        // Note: On Windows, strdup is deprecated in favor of _strdup
+        // The UCRT provides these via msvcrt.lib or ucrt.lib
+
+        // Add UCRT library path from Windows SDK if available
+        if let ucrtPath = findWindowsUCRTPath() {
+            FileHandle.standardError.write("[LINKER-WIN] Found UCRT path: \(ucrtPath)\n".data(using: .utf8)!)
+            args.append("-L\(ucrtPath)")
+        }
+
+        // Add VC runtime library path if available
+        if let vcrtPath = findWindowsVCRuntimePath() {
+            FileHandle.standardError.write("[LINKER-WIN] Found VC runtime path: \(vcrtPath)\n".data(using: .utf8)!)
+            args.append("-L\(vcrtPath)")
+        }
+
+        // Add Windows UM (user mode) library path for kernel32.lib, user32.lib, etc.
+        if let umPath = findWindowsUMPath() {
+            FileHandle.standardError.write("[LINKER-WIN] Found Windows UM path: \(umPath)\n".data(using: .utf8)!)
+            args.append("-L\(umPath)")
+        }
+
+        // Link against Windows CRT libraries to resolve __imp_strdup, __imp__wassert etc.
+        // Use DLL versions (no 'lib' prefix) to match what Swift uses
+        args.append("-lucrt")               // Universal CRT (basic C runtime)
+        args.append("-lvcruntime")          // VC runtime (exceptions, etc.)
+        args.append("-lmsvcrt")             // MS VC runtime (strdup, etc.)
+        args.append("-llegacy_stdio_definitions")  // Legacy stdio (additional POSIX functions)
+        args.append("-loldnames")           // POSIX name mappings (strdup -> _strdup)
+        args.append("-lkernel32")           // Windows kernel functions
+        args.append("-luser32")             // Windows user functions
+        args.append("-lws2_32")             // Windows sockets (networking)
+        args.append("-ladvapi32")           // Advanced Windows API
+        args.append("-lshell32")            // Shell functions
         #endif
 
         // Optimizations
@@ -968,6 +1004,131 @@ public final class CCompiler {
         FileHandle.standardError.write("[LINKER] WARNING: Could not find Swift library path\n".data(using: .utf8)!)
         #endif
 
+        return nil
+    }
+
+    /// Find Windows Universal CRT library path
+    /// The UCRT is part of the Windows SDK
+    private func findWindowsUCRTPath() -> String? {
+        #if os(Windows)
+        // Common Windows SDK UCRT paths for x64
+        // The UCRT is typically at: C:\Program Files (x86)\Windows Kits\10\Lib\<version>\ucrt\x64
+        let windowsKitsBase = "C:\\Program Files (x86)\\Windows Kits\\10\\Lib"
+
+        FileHandle.standardError.write("[LINKER-WIN] Looking for UCRT in Windows Kits...\n".data(using: .utf8)!)
+
+        // Find the latest SDK version
+        if let versions = try? FileManager.default.contentsOfDirectory(atPath: windowsKitsBase) {
+            // Sort versions in descending order to get the latest
+            let sortedVersions = versions.filter { $0.hasPrefix("10.") }.sorted().reversed()
+            for version in sortedVersions {
+                let ucrtPath = "\(windowsKitsBase)\\\(version)\\ucrt\\x64"
+                if FileManager.default.fileExists(atPath: ucrtPath) {
+                    FileHandle.standardError.write("[LINKER-WIN] Found UCRT at: \(ucrtPath)\n".data(using: .utf8)!)
+                    return ucrtPath
+                }
+            }
+        }
+
+        // Try hardcoded common versions
+        let commonVersions = [
+            "10.0.22621.0",  // Windows 11 SDK
+            "10.0.22000.0",  // Windows 11 SDK
+            "10.0.19041.0",  // Windows 10 SDK 2004
+            "10.0.18362.0",  // Windows 10 SDK 1903
+            "10.0.17763.0"   // Windows 10 SDK 1809
+        ]
+
+        for version in commonVersions {
+            let ucrtPath = "\(windowsKitsBase)\\\(version)\\ucrt\\x64"
+            if FileManager.default.fileExists(atPath: ucrtPath) {
+                return ucrtPath
+            }
+        }
+
+        FileHandle.standardError.write("[LINKER-WIN] UCRT not found in Windows Kits\n".data(using: .utf8)!)
+        #endif
+        return nil
+    }
+
+    /// Find Windows VC runtime library path
+    /// The VC runtime is part of Visual Studio or Build Tools
+    private func findWindowsVCRuntimePath() -> String? {
+        #if os(Windows)
+        // Common VC runtime paths for x64
+        // Located at: C:\Program Files\Microsoft Visual Studio\<year>\<edition>\VC\Tools\MSVC\<version>\lib\x64
+        // Or: C:\Program Files (x86)\Microsoft Visual Studio\<year>\<edition>\VC\Tools\MSVC\<version>\lib\x64
+
+        FileHandle.standardError.write("[LINKER-WIN] Looking for VC runtime...\n".data(using: .utf8)!)
+
+        let vsBasePaths = [
+            "C:\\Program Files\\Microsoft Visual Studio",
+            "C:\\Program Files (x86)\\Microsoft Visual Studio"
+        ]
+
+        let vsYears = ["2022", "2019", "2017"]
+        let vsEditions = ["Enterprise", "Professional", "Community", "BuildTools"]
+
+        for basePath in vsBasePaths {
+            for year in vsYears {
+                for edition in vsEditions {
+                    let vcToolsPath = "\(basePath)\\\(year)\\\(edition)\\VC\\Tools\\MSVC"
+                    if let versions = try? FileManager.default.contentsOfDirectory(atPath: vcToolsPath) {
+                        // Get the latest version
+                        if let latestVersion = versions.sorted().last {
+                            let libPath = "\(vcToolsPath)\\\(latestVersion)\\lib\\x64"
+                            if FileManager.default.fileExists(atPath: libPath) {
+                                FileHandle.standardError.write("[LINKER-WIN] Found VC runtime at: \(libPath)\n".data(using: .utf8)!)
+                                return libPath
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        FileHandle.standardError.write("[LINKER-WIN] VC runtime not found\n".data(using: .utf8)!)
+        #endif
+        return nil
+    }
+
+    /// Find Windows UM (user mode) library path for Windows API libraries
+    /// Contains kernel32.lib, user32.lib, ws2_32.lib, etc.
+    private func findWindowsUMPath() -> String? {
+        #if os(Windows)
+        let windowsKitsBase = "C:\\Program Files (x86)\\Windows Kits\\10\\Lib"
+
+        FileHandle.standardError.write("[LINKER-WIN] Looking for Windows UM libs...\n".data(using: .utf8)!)
+
+        if let versions = try? FileManager.default.contentsOfDirectory(atPath: windowsKitsBase) {
+            let sortedVersions = versions.filter { $0.hasPrefix("10.") }.sorted().reversed()
+            for version in sortedVersions {
+                let umPath = "\(windowsKitsBase)\\\(version)\\um\\x64"
+                if FileManager.default.fileExists(atPath: umPath) {
+                    FileHandle.standardError.write("[LINKER-WIN] Found Windows UM libs at: \(umPath)\n".data(using: .utf8)!)
+                    return umPath
+                }
+            }
+        }
+
+        // Try hardcoded common versions
+        let commonVersions = [
+            "10.0.22621.0",  // Windows 11 SDK
+            "10.0.22000.0",  // Windows 11 SDK
+            "10.0.19041.0",  // Windows 10 SDK 2004
+            "10.0.18362.0",  // Windows 10 SDK 1903
+            "10.0.17763.0"   // Windows 10 SDK 1809
+        ]
+
+        for version in commonVersions {
+            let umPath = "\(windowsKitsBase)\\\(version)\\um\\x64"
+            if FileManager.default.fileExists(atPath: umPath) {
+                return umPath
+            }
+        }
+
+        FileHandle.standardError.write("[LINKER-WIN] Windows UM libs not found\n".data(using: .utf8)!)
+        #endif
         return nil
     }
 
