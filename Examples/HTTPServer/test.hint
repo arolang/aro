@@ -1,2 +1,5 @@
-# Skip this test - requires manual HTTP testing
-skip: HTTP server requires manual testing with curl/browser
+# Test hints for HTTPServer
+# HTTP server binary doesn't start properly
+mode: interpreter
+# HTTP servers hang on Windows CI
+skip-on-windows: HTTP server tests not supported on Windows CI

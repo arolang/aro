@@ -1,2 +1,3 @@
 # Test hints for SetOperations
-skip: under investigation
+# Binary with-clause not yet supported in native compilation
+mode: interpreter

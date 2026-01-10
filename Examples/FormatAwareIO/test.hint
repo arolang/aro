@@ -1,5 +1,8 @@
-# Skip integration test due to TTY detection changes
-skip: under investigation
+# Test hints for FormatAwareIO
+# Binary compilation fails on Linux CI
+mode: interpreter
+# File operations don't work correctly on Windows CI
+skip-on-windows: File operations not supported on Windows CI
 
 # FormatAwareIO creates files in ./output
 # Clean up from previous test runs

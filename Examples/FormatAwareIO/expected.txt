@@ -1,59 +1,33 @@
-# Generated: Sun Jan  4 23:42:27 2026
+# Generated: Sat Jan 10 11:15:17 2026
 # Type: console
 # Command: aro run ./Examples/FormatAwareIO
 # NOTE: This example uses test-script for verification
 # This expected.txt is for reference only, not used in testing
 ---
-[Application-Start] === Writing data to multiple formats ===
-[Application-Start] Wrote users.json
-[Application-Start] Wrote users.jsonl (JSON Lines)
-[Application-Start] Wrote users.yaml
-[Application-Start] Wrote users.csv
-[Application-Start] Wrote users.tsv
-[Application-Start] Wrote users.md
-[Application-Start] Wrote users.xml
-[Application-Start] Wrote users.sql
-[Application-Start] Wrote users.toml
-[Application-Start] Wrote users.html
-[Application-Start] Wrote config.txt
-[Application-Start] Wrote config.env (with nested entries)
-[Application-Start]
-[Application-Start] === Reading data back ===
-[Application-Start] Read JSON:
-[Application-Start] [email: alice@example.com
-id: 1
-name: Alice, email: bob@example.com
-id: 2
-name: Bob, email: charlie@example.com
-id: 3
-name: Charlie]
-[Application-Start] Read JSONL:
-[Application-Start] [email: alice@example.com
-id: 1
-name: Alice, email: bob@example.com
-id: 2
-name: Bob, email: charlie@example.com
-id: 3
-name: Charlie]
-[Application-Start] Read CSV:
-[Application-Start] [email: alice@example.com
-id: 1
-name: Alice, email: bob@example.com
-id: 2
-name: Bob, email: charlie@example.com
-id: 3
-name: Charlie]
-[Application-Start] Read YAML:
-[Application-Start] [email: alice@example.com
-id: 1
-name: Alice]
-[Application-Start] Read ENV:
-[Application-Start] APP_NAME: FormatAwareIO
+=== Writing data to multiple formats ===
+Wrote users.json
+Wrote users.jsonl (JSON Lines)
+Wrote users.yaml
+Wrote users.csv
+Wrote users.tsv
+Wrote users.md
+Wrote users.xml
+Wrote users.sql
+Wrote users.toml
+Wrote users.html
+Wrote config.txt
+Wrote config.env (with nested entries)
+=== Reading data back ===
+Read JSON:
+Read JSONL:
+Read CSV:
+Read YAML:
+Read ENV:
+APP_NAME: FormatAwareIO
 CACHE_ENABLED: true
 CACHE_TTL: 3600
 DATABASE_HOST: localhost
 DATABASE_NAME: myapp
 DATABASE_PORT: 5432
-[Application-Start]
-[Application-Start] === Format-Aware I/O demo complete! ===
-[OK] demo
+=== Format-Aware I/O demo complete! ===
+demo

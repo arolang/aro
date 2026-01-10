@@ -67,3 +67,13 @@ homebrew-aro/
 /Examples/HelloWorld/expected.binary.diff
 expected.binary.diff
 testrun.log
+/Examples/SinkSyntax/SinkSyntax
+/Examples/SetOperations/SetOperations
+/Examples/ParallelForEach/ParallelForEach
+/Examples/ListTest/ListTest
+/Examples/HashTest/HashTest
+/Examples/FormatAwareIO/FormatAwareIO
+/Examples/FileOperations/FileOperations
+/Examples/EventExample/EventExample
+/Examples/DirectoryReplicator/DirectoryReplicator
+/Examples/DateRangeDemo/DateRangeDemo

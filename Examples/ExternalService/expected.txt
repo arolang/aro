@@ -1,13 +1,21 @@
-# Generated: Sun Jan  4 17:50:19 2026
+# Generated: Sat Jan 10 11:39:50 2026
 # Type: console
 # Command: aro run ./Examples/ExternalService
 ---
-[PluginLoader] Building package plugin: CounterPlugin
-[PluginLoader] Warning: Failed to load package plugin CounterPlugin: Failed to load plugin 'CounterPlugin': dlopen(./Examples/ExternalService/plugins/CounterPlugin/.build/release/libCounterPlugin.dylib, 0x0006): tried: './Examples/ExternalService/plugins/CounterPlugin/.build/release/libCounterPlugin.dylib' (code signature in <BF045057-6F60-3C6D-ABA7-C63A5E140905> './Examples/ExternalService/plugins/CounterPlugin/.build/arm64-apple-macosx/release/libCounterPlugin.dylib' not valid for use in process: mapping process and mapped file (non-platform) have different Team IDs), '/System/Volumes/Preboot/Cryptexes/OS./Examples/ExternalService/plugins/CounterPlugin/.build/release/libCounterPlugin.dylib' (no such file), './Examples/ExternalService/plugins/CounterPlugin/.build/release/libCounterPlugin.dylib' (code signature in <BF045057-6F60-3C6D-ABA7-C63A5E140905> './Examples/ExternalService/plugins/CounterPlugin/.build/arm64-apple-macosx/release/libCounterPlugin.dylib' not valid for use in process: mapping process and mapped file (non-platform) have different Team IDs), './Examples/ExternalService/plugins/CounterPlugin/.build/arm64-apple-macosx/release/libCounterPlugin.dylib' (code signature in <BF045057-6F60-3C6D-ABA7-C63A5E140905> './Examples/ExternalService/plugins/CounterPlugin/.build/arm64-apple-macosx/release/libCounterPlugin.dylib' not valid for use in process: mapping process and mapped file (non-platform) have different Team IDs), '/System/Volumes/Preboot/Cryptexes/OS./Examples/ExternalService/plugins/CounterPlugin/.build/arm64-apple-macosx/release/libCounterPlugin.dylib' (no such file), './Examples/ExternalService/plugins/CounterPlugin/.build/arm64-apple-macosx/release/libCounterPlugin.dylib' (code signature in <BF045057-6F60-3C6D-ABA7-C63A5E140905> './Examples/ExternalService/plugins/CounterPlugin/.build/arm64-apple-macosx/release/libCounterPlugin.dylib' not valid for use in process: mapping process and mapped file (non-platform) have different Team IDs)
-[Application-Start] === External Service Demo ===
-[Application-Start] Demonstrating stateful service calls...
-[Application-Start]
-Runtime error: Runtime Error: Cannot call the first-increment-response from the counter: increment.
-  Feature: Application-Start
-  Business Activity: External Service Demo
-  Statement: <Call> the <first-increment-response> from the <counter: increment>.
+Building package plugin: CounterPlugin
+Registered plugin service: counter
+Loaded package plugin: CounterPlugin
+=== External Service Demo ===
+Demonstrating stateful service calls...
+Step 1: Increment counter
+Current count:
+1
+Step 2: Increment counter again
+Current count:
+2
+Step 3: Get current count
+Current count:
+2
+State persisted across calls: 0 -> 1 -> 2
+This demonstrates why Call exists!
+startup

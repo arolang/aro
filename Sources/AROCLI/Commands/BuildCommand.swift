@@ -663,8 +663,14 @@ struct BuildCommand: AsyncParsableCommand {
 
         // Filter out test feature sets (ARO-0015: Tests run only in interpreter mode)
         // Test feature sets have business activity ending in "Test" or "Tests"
+        // Never strip Application-Start or Application-End feature sets
         let productionFeatureSets = allFeatureSets.filter { fs in
+            let name = fs.featureSet.name
             let activity = fs.featureSet.businessActivity
+            // Always keep Application-Start and Application-End
+            if name == "Application-Start" || name.hasPrefix("Application-End") {
+                return true
+            }
             return !activity.hasSuffix("Test") && !activity.hasSuffix("Tests")
         }
 

@@ -1,2 +1,4 @@
-# Skip this test - output varies by directory contents
+# Test hints for DirectoryLister
+# Directory listing output varies significantly by environment (different files, users, permissions)
+# Skip this test as output is inherently environment-dependent
 skip: Directory listing output varies by environment

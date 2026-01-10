@@ -1,2 +1,5 @@
-# Skip integration test
-skip: under investigation
+# Test hints for FileWatcher
+# File watcher binary doesn't work properly
+mode: interpreter
+# File watching has issues on Windows CI
+skip-on-windows: File watcher tests not supported on Windows CI

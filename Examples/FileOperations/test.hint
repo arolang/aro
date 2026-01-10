@@ -1,5 +1,6 @@
-# Skip integration test due to TTY detection changes
-skip: under investigation
+# Test hints for FileOperations
+# File operations don't work correctly on Windows CI
+skip-on-windows: File operations not supported on Windows CI
 
 # FileOperations creates files in ./demo-output
 # Clean up from previous test runs

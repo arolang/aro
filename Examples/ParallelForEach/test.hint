@@ -1,5 +1,6 @@
-# Skip due to TTY detection changes
-skip: under investigation
+# Test hints for ParallelForEach
+# Binary compilation fails on Linux CI
+mode: interpreter
 
 # ParallelForEach demonstrates concurrent iteration with non-deterministic order
 # Parallel iteration executes in TaskGroup with unpredictable completion sequence

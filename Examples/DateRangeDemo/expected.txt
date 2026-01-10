@@ -1,42 +1,38 @@
-# Generated: Sun Jan  4 23:42:10 2026
+# Generated: Sat Jan 10 11:30:02 2026
 # Type: console
 # Command: aro run ./Examples/DateRangeDemo
 ---
-[Application-Start] === Date Range & Recurrence Demo ===
-[Application-Start]
-[Application-Start] --- Date Ranges ---
-[Application-Start] Vacation period:
-[Application-Start] __TIMESTAMP__ to __TIMESTAMP__
-[Application-Start]   Days in range:
-[Application-Start] 14
-[Application-Start]   Hours in range:
-[Application-Start] 336
-[Application-Start] Last 7 days range:
-[Application-Start] __TIMESTAMP__ to __TIMESTAMP__
-[Application-Start]   Jan 10 is in vacation range
-[Application-Start]
-[Application-Start] --- Recurrence Patterns ---
-[Application-Start] Daily backup schedule:
-[Application-Start]   Next occurrence:
-[Application-Start] __TIMESTAMP__
-[Application-Start] Weekly report schedule:
-[Application-Start]   Next occurrence:
-[Application-Start] __TIMESTAMP__
-[Application-Start] Monday standup:
-[Application-Start]   Next occurrence:
-[Application-Start] __TIMESTAMP__
-[Application-Start] Biweekly review:
-[Application-Start]   Next occurrence:
-[Application-Start] __TIMESTAMP__
-[Application-Start] Payday (last Friday):
-[Application-Start]   Next occurrence:
-[Application-Start] __TIMESTAMP__
-[Application-Start]
-[Application-Start] --- Combined Usage ---
-[Application-Start] Q1 2025 range:
-[Application-Start] __TIMESTAMP__ to __TIMESTAMP__
-[Application-Start]   Total days in Q1:
-[Application-Start] 89
-[Application-Start]
-[Application-Start] === Demo Complete ===
-[OK] demo
+=== Date Range & Recurrence Demo ===
+--- Date Ranges ---
+Vacation period:
+__TIMESTAMP__ to __TIMESTAMP__
+Days in range:
+14
+Hours in range:
+336
+Last 7 days range:
+__TIMESTAMP__ to __TIMESTAMP__
+Jan 10 is in vacation range
+--- Recurrence Patterns ---
+Daily backup schedule:
+Next occurrence:
+__TIMESTAMP__
+Weekly report schedule:
+Next occurrence:
+__TIMESTAMP__
+Monday standup:
+Next occurrence:
+__TIMESTAMP__
+Biweekly review:
+Next occurrence:
+__TIMESTAMP__
+Payday (last Friday):
+Next occurrence:
+__TIMESTAMP__
+--- Combined Usage ---
+Q1 2025 range:
+__TIMESTAMP__ to __TIMESTAMP__
+Total days in Q1:
+89
+=== Demo Complete ===
+demo

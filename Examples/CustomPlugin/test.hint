@@ -1,1 +1,4 @@
-skip: Plugin loading has path variation in error messages (code signing issues on macOS)
+# Test hints for CustomPlugin
+# Plugin tests require Swift compiler which is not available on Linux CI
+# Skip this test on Linux; runs on macOS only
+skip: Plugin requires Swift compiler (not available on Linux CI)

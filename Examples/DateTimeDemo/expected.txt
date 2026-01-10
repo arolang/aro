@@ -1,31 +1,31 @@
-# Generated: Sun Jan  4 23:42:11 2026
+# Generated: Sat Jan 10 11:28:27 2026
 # Type: console
 # Command: aro run ./Examples/DateTimeDemo
 ---
-[Application-Start] === DateTime Demo ===
-[Application-Start] Current UTC time:
-[Application-Start] __TIMESTAMP__
-[Application-Start] Parsed meeting date:
-[Application-Start] __TIMESTAMP__
-[Application-Start] Year from now:
-[Application-Start] 2026
-[Application-Start] Month from now:
-[Application-Start] 1
-[Application-Start] Day from now:
-[Application-Start] 4
-[Application-Start] Hour from now:
-[Application-Start] 22
-[Application-Start] Date calculations:
-[Application-Start]   Next week:
-[Application-Start] __TIMESTAMP__
-[Application-Start]   Yesterday:
-[Application-Start] __TIMESTAMP__
-[Application-Start]   In one hour:
-[Application-Start] __TIMESTAMP__
-[Application-Start] Date comparisons:
-[Application-Start]   Is yesterday before now?
-[Application-Start]   Is next week after now?
-[Application-Start]   Is meeting in the past y?
-[Application-Start]   Is meeting in 2025?
-[Application-Start] === Demo Complete ===
-[OK] demo
+=== DateTime Demo ===
+Current UTC time:
+__TIMESTAMP__
+Parsed meeting date:
+__TIMESTAMP__
+Year from now:
+2026
+Month from now:
+1
+Day from now:
+10
+Hour from now:
+10
+Date calculations:
+Next week:
+__TIMESTAMP__
+Yesterday:
+__TIMESTAMP__
+In one hour:
+__TIMESTAMP__
+Date comparisons:
+Is yesterday before now?
+Is next week after now?
+Is meeting in the past y?
+Is meeting in 2025?
+=== Demo Complete ===
+demo

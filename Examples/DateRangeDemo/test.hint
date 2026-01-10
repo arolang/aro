@@ -1,2 +1,4 @@
-# Skip due to TTY detection changes
-skip: under investigation
+# Test hints for DateRangeDemo
+# Uses date/time operations that differ between interpreter and binary
+mode: interpreter
+occurrence-check: true

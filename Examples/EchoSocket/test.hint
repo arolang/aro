@@ -1,2 +1,5 @@
-# Skip integration test
-skip: under investigation
+# Test hints for EchoSocket
+# Socket server binary doesn't start properly
+mode: interpreter
+# Socket servers hang on Windows CI
+skip-on-windows: Socket tests not supported on Windows CI

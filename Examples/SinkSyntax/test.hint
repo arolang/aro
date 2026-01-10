@@ -1,2 +1,3 @@
-# Skip due to TTY detection changes
-skip: under investigation
+# Test hints for SinkSyntax
+# Native compilation bug: integer literal in Compute returns 0
+mode: interpreter

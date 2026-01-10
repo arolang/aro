@@ -1,2 +1,4 @@
 # Test hints for DateTimeDemo
-skip: under investigation
+# Uses date/time operations that differ slightly between interpreter and binary
+mode: interpreter
+occurrence-check: true

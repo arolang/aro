@@ -1,2 +1,7 @@
 # Test hints for SimpleChat
-skip: under investigation
+# Socket server binary doesn't start properly
+mode: interpreter
+# HTTP endpoint test order may vary
+occurrence-check: true
+# Socket servers hang on Windows CI
+skip-on-windows: Socket tests not supported on Windows CI

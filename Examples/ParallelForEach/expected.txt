@@ -1,28 +1,28 @@
-# Generated: Sun Jan  4 23:42:34 2026
+# Generated: Sat Jan 10 11:04:02 2026
 # Type: console
 # Command: aro run ./Examples/ParallelForEach
 ---
-[Application-Start] === Serial Iteration ===
-[Application-Start] 1
-[Application-Start] 2
-[Application-Start] 3
-[Application-Start] 4
-[Application-Start] 5
-[Application-Start] 6
-[Application-Start] 7
-[Application-Start] 8
-[Application-Start] 9
-[Application-Start] 10
-[Application-Start] === Parallel Iteration ===
-[Application-Start] 1
-[Application-Start] 2
-[Application-Start] 4
-[Application-Start] 5
-[Application-Start] 6
-[Application-Start] 7
-[Application-Start] 8
-[Application-Start] 10
-[Application-Start] 3
-[Application-Start] 9
-[Application-Start] === Done ===
-[OK] demo
+=== Serial Iteration ===
+1
+2
+3
+4
+5
+6
+7
+8
+9
+10
+=== Parallel Iteration ===
+1
+3
+4
+2
+7
+8
+6
+10
+5
+9
+=== Done ===
+demo

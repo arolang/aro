@@ -1,2 +1,5 @@
-# Skip integration test
-skip: under investigation
+# Test hints for DataPipeline
+# Binary output differs from interpreter (startup messages)
+mode: interpreter
+# File operations don't work correctly on Windows CI
+skip-on-windows: File operations not supported on Windows CI
