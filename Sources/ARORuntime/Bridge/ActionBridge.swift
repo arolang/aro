@@ -146,6 +146,11 @@ private func executeAction(
         context: ctxHandle.context
     )
 
+    // Clear temporary expression/literal bindings after action execution
+    // These are statement-scoped and should not persist to subsequent statements
+    ctxHandle.context.unbind("_expression_")
+    ctxHandle.context.unbind("_literal_")
+
     // Check semantic role - response/export actions don't bind their results
     let semanticRole = ActionSemanticRole.classify(verb: verb)
     let shouldBindResult = semanticRole != .response && semanticRole != .export
