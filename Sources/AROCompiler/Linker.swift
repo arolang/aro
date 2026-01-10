@@ -830,10 +830,30 @@ public final class CCompiler {
             FileHandle.standardError.write("[LINKER-WIN] Error running where: \(error)\n".data(using: .utf8)!)
         }
 
+        // Check SDKROOT environment variable - Swift import libs are in the SDK, not the toolchain
+        if let sdkRoot = ProcessInfo.processInfo.environment["SDKROOT"] {
+            FileHandle.standardError.write("[LINKER-WIN] SDKROOT: \(sdkRoot)\n".data(using: .utf8)!)
+            // Import libs are at: SDKROOT\usr\lib\swift\windows\x86_64
+            let sdkLibPath = sdkRoot + "\\usr\\lib\\swift\\windows\\x86_64"
+            let sdkLibPathAlt = sdkRoot + "usr\\lib\\swift\\windows\\x86_64"  // In case SDKROOT has trailing backslash
+            FileHandle.standardError.write("[LINKER-WIN] Checking SDK path: \(sdkLibPath)\n".data(using: .utf8)!)
+            if FileManager.default.fileExists(atPath: sdkLibPath) {
+                FileHandle.standardError.write("[LINKER-WIN] Found at SDK path!\n".data(using: .utf8)!)
+                return sdkLibPath
+            }
+            if FileManager.default.fileExists(atPath: sdkLibPathAlt) {
+                FileHandle.standardError.write("[LINKER-WIN] Found at SDK alt path!\n".data(using: .utf8)!)
+                return sdkLibPathAlt
+            }
+        }
+
         // Check common installation locations (GitHub Actions Windows runner)
-        // Pattern: C:\Users\runneradmin\AppData\Local\Programs\Swift\Toolchains\VERSION+Asserts\usr\lib\swift\windows\x86_64
         FileHandle.standardError.write("[LINKER-WIN] Checking common paths...\n".data(using: .utf8)!)
         let commonPaths = [
+            // SDK paths (where import libs actually live)
+            "C:\\Users\\runneradmin\\AppData\\Local\\Programs\\Swift\\Platforms\\6.2.1\\Windows.platform\\Developer\\SDKs\\Windows.sdk\\usr\\lib\\swift\\windows\\x86_64",
+            "C:\\Users\\runneradmin\\AppData\\Local\\Programs\\Swift\\Platforms\\6.2.1\\Windows.platform\\Developer\\SDKs\\Windows.sdk\\usr\\lib\\swift\\windows",
+            // Toolchain paths (fallback)
             "C:\\Users\\runneradmin\\AppData\\Local\\Programs\\Swift\\Toolchains\\6.2.1+Asserts\\usr\\lib\\swift\\windows\\x86_64",
             "C:\\Users\\runneradmin\\AppData\\Local\\Programs\\Swift\\Toolchains\\6.2.1+Asserts\\usr\\lib\\swift\\windows",
             "C:\\Library\\Developer\\Toolchains\\unknown-Asserts-development.xctoolchain\\usr\\lib\\swift\\windows\\x86_64",
