@@ -1,4 +1,4 @@
-# Generated: Sat Jan 10 11:15:12 2026
+# Generated: Sat Jan 10 18:21:41 2026
 # Type: console
 # Command: aro run ./Examples/ContextAware
 ---
@@ -23,7 +23,8 @@ context-demo
   order.status: completed
   order.total: 249.99
   summary: Demo of context-aware formatting
-  tags: user.active: true
+  tags: ["featured","premium","verified"]
+  user.active: true
   user.email: alice@example.com
   user.id: 42
   user.name: Alice Smith
