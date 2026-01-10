@@ -477,13 +477,21 @@ public final class SemanticAnalyzer {
         }
         inputs.insert(subjectName)
 
-        // Analyze each case clause
+        // Track symbols defined in each branch separately
+        // Match branches are mutually exclusive, so defining the same symbol
+        // in different branches is allowed (no rebinding violation)
+        var branchDefinitions: [Set<String>] = []
+
+        // Analyze each case clause with a branch-local copy of definedSymbols
         for caseClause in statement.cases {
+            // Start with the current definedSymbols for this branch
+            var branchSymbols = definedSymbols
+
             // Extract variables from guard condition if present
             if let guard_ = caseClause.guardCondition {
                 let guardVars = extractVariables(from: guard_)
                 for varName in guardVars {
-                    if !definedSymbols.contains(varName) && !isKnownExternal(varName) {
+                    if !branchSymbols.contains(varName) && !isKnownExternal(varName) {
                         dependencies.insert(varName)
                     }
                     inputs.insert(varName)
@@ -494,38 +502,55 @@ public final class SemanticAnalyzer {
             if case .variable(let noun) = caseClause.pattern {
                 // Variable patterns can reference existing variables for comparison
                 let patternName = noun.base
-                if definedSymbols.contains(patternName) {
+                if branchSymbols.contains(patternName) {
                     inputs.insert(patternName)
                 }
             }
 
-            // Analyze body statements
+            // Analyze body statements with branch-local symbols
             for bodyStatement in caseClause.body {
                 let (flow, newDeps) = analyzeStatement(
                     bodyStatement,
                     builder: builder,
-                    definedSymbols: &definedSymbols
+                    definedSymbols: &branchSymbols
                 )
                 inputs.formUnion(flow.inputs)
                 outputs.formUnion(flow.outputs)
                 sideEffects.append(contentsOf: flow.sideEffects)
                 dependencies.formUnion(newDeps)
             }
+
+            // Track what this branch defined (new symbols not in original definedSymbols)
+            branchDefinitions.append(branchSymbols.subtracting(definedSymbols))
         }
 
         // Analyze otherwise clause if present
         if let otherwise = statement.otherwise {
+            var branchSymbols = definedSymbols
+
             for bodyStatement in otherwise {
                 let (flow, newDeps) = analyzeStatement(
                     bodyStatement,
                     builder: builder,
-                    definedSymbols: &definedSymbols
+                    definedSymbols: &branchSymbols
                 )
                 inputs.formUnion(flow.inputs)
                 outputs.formUnion(flow.outputs)
                 sideEffects.append(contentsOf: flow.sideEffects)
                 dependencies.formUnion(newDeps)
             }
+
+            branchDefinitions.append(branchSymbols.subtracting(definedSymbols))
+        }
+
+        // After match: symbols defined in ALL branches are definitely defined
+        // Symbols defined in SOME branches are potentially defined (we add them too
+        // since we need to track them for use after the match)
+        if !branchDefinitions.isEmpty {
+            // Union of all branch definitions - any symbol defined in any branch
+            // is considered defined after the match for subsequent code
+            let allBranchSymbols = branchDefinitions.reduce(Set<String>()) { $0.union($1) }
+            definedSymbols.formUnion(allBranchSymbols)
         }
 
         return (

@@ -37,9 +37,15 @@
 (listDirectory: System Monitor API) {
     <Extract> the <path> from the <queryParameters: path>.
 
-    (* Default to current directory if not specified *)
-    <Create> the <directory> with ".".
-    <Create> the <directory> with <path> when <path> != "".
+    (* Use current directory if path not specified, otherwise use provided path *)
+    match <path> {
+        case "" {
+            <Create> the <directory> with ".".
+        }
+        otherwise {
+            <Create> the <directory> with <path>.
+        }
+    }
 
     (* Build and execute ls command *)
     <Create> the <command> with "ls -la ${directory}".

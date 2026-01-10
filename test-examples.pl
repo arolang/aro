@@ -1025,8 +1025,6 @@ sub run_http_example_internal {
                 @{$op}{qw(path method operation operation_id)};
             my $url = "http://localhost:$port$path";
 
-                say "  Testing $method $path ($operation_id)" if $options{verbose};
-
                 # Substitute path parameters with captured IDs
                 my $test_url = $url;
                 if ($test_url =~ /\{id\}/) {
@@ -1035,6 +1033,46 @@ sub run_http_example_internal {
                     $test_url =~ s/\{id\}/$use_id/g;
                 }
                 $test_url =~ s/\{(\w+)\}/test-$1/g;
+
+                # Add query parameters for GET requests based on OpenAPI spec
+                if (uc($method) eq 'GET' && $operation->{parameters}) {
+                    my @query_params;
+                    for my $param (@{$operation->{parameters}}) {
+                        next unless $param->{in} eq 'query';
+                        my $name = $param->{name};
+                        my $value;
+
+                        # Use example value if provided
+                        if (defined $param->{example}) {
+                            $value = $param->{example};
+                        }
+                        # Use schema default if provided
+                        elsif ($param->{schema} && defined $param->{schema}{default}) {
+                            $value = $param->{schema}{default};
+                        }
+                        # Use schema example if provided
+                        elsif ($param->{schema} && defined $param->{schema}{example}) {
+                            $value = $param->{schema}{example};
+                        }
+                        # Generate test value for required parameters
+                        elsif ($param->{required}) {
+                            $value = "test-$name";
+                        }
+                        # Skip optional parameters without defaults
+                        else {
+                            next;
+                        }
+
+                        # URL-encode the value
+                        $value =~ s/([^a-zA-Z0-9_.-])/sprintf("%%%02X", ord($1))/ge;
+                        push @query_params, "$name=$value";
+                    }
+                    if (@query_params) {
+                        $test_url .= '?' . join('&', @query_params);
+                    }
+                }
+
+                say "  Testing $method $path ($operation_id)" if $options{verbose};
 
                 # Generate appropriate request payload based on operation
                 my $payload = generate_test_payload($operation_id, $operation);
