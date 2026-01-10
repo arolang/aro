@@ -785,6 +785,42 @@ jobs:
             Write-Host "Native compilation tests may fail."
           }
 
+      - name: Test native compilation manually
+        shell: pwsh
+        run: |
+          Write-Host "=== Testing native compilation manually ==="
+
+          # Build HelloWorld
+          Write-Host "`nBuilding HelloWorld..."
+          & $env:ARO_BIN build Examples/HelloWorld 2>&1 | Tee-Object -Variable buildOutput
+          Write-Host "Build exit code: $LASTEXITCODE"
+
+          # Check if binary was created
+          $binaryPath = "Examples/HelloWorld/HelloWorld.exe"
+          if (Test-Path $binaryPath) {
+            Write-Host "`nBinary created: $binaryPath"
+            Write-Host "Size: $((Get-Item $binaryPath).Length) bytes"
+
+            # Try to run it directly
+            Write-Host "`nRunning binary directly..."
+            try {
+              $proc = Start-Process -FilePath $binaryPath -NoNewWindow -PassThru -Wait -RedirectStandardOutput stdout.txt -RedirectStandardError stderr.txt
+              Write-Host "Exit code: $($proc.ExitCode)"
+              Write-Host "stdout:"
+              if (Test-Path stdout.txt) { Get-Content stdout.txt }
+              Write-Host "stderr:"
+              if (Test-Path stderr.txt) { Get-Content stderr.txt }
+            } catch {
+              Write-Host "Exception: $_"
+            }
+
+            # Check dependencies using dumpbin
+            Write-Host "`nChecking binary dependencies..."
+            & dumpbin /dependents $binaryPath 2>&1 | Select-Object -First 30
+          } else {
+            Write-Host "ERROR: Binary not found at $binaryPath"
+          }
+
       - name: Run integration tests
         shell: pwsh
         run: |
