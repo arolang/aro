@@ -209,6 +209,7 @@ sub read_test_hint {
         type => undef,
         mode => undef,
         skip => undef,
+        'skip-on-windows' => undef,
         'pre-script' => undef,
         'test-script' => undef,
         'occurrence-check' => undef,
@@ -1555,6 +1556,24 @@ sub run_test {
         };
     }
 
+    # Handle Windows-specific skip
+    if ($is_windows && defined $hints->{'skip-on-windows'}) {
+        return {
+            name => $example_name,
+            type => 'UNKNOWN',
+            interpreter_status => 'SKIP',
+            compiled_status => 'SKIP',
+            interpreter_message => "Skipped on Windows: $hints->{'skip-on-windows'}",
+            compiled_message => "Skipped on Windows: $hints->{'skip-on-windows'}",
+            interpreter_duration => 0,
+            compiled_duration => 0,
+            build_duration => 0,
+            avg_duration => 0,
+            status => 'SKIP',
+            duration => 0,
+        };
+    }
+
     # Determine test mode
     my $mode = $hints->{mode} // 'both';
     my $type = $hints->{type} || detect_example_type($example_name);
@@ -1653,6 +1672,12 @@ sub generate_expected {
     # Skip if requested
     if (defined $hints->{skip}) {
         say "Skipping $example_name: $hints->{skip}";
+        return;
+    }
+
+    # Skip on Windows if requested
+    if ($is_windows && defined $hints->{'skip-on-windows'}) {
+        say "Skipping $example_name on Windows: $hints->{'skip-on-windows'}";
         return;
     }
 
