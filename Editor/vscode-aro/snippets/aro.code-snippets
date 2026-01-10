@@ -12,7 +12,7 @@
     "prefix": "appstart",
     "body": [
       "(Application-Start: ${1:App Name}) {",
-      "    <Log> the <startup: message> for the <console> with \"${2:Starting...}\".",
+      "    <Log> \"${2:Starting...}\" to the <console>.",
       "    $0",
       "    <Return> an <OK: status> for the <startup>.",
       "}"
@@ -23,7 +23,7 @@
     "prefix": "appendsuccess",
     "body": [
       "(Application-End: Success) {",
-      "    <Log> the <shutdown: message> for the <console> with \"${1:Shutting down...}\".",
+      "    <Log> \"${1:Shutting down...}\" to the <console>.",
       "    $0",
       "    <Return> an <OK: status> for the <shutdown>.",
       "}"
@@ -35,7 +35,7 @@
     "body": [
       "(Application-End: Error) {",
       "    <Extract> the <error> from the <shutdown: error>.",
-      "    <Log> the <error: message> for the <console> with <error>.",
+      "    <Log> <error> to the <console>.",
       "    $0",
       "    <Return> an <OK: status> for the <error-handling>.",
       "}"
@@ -131,7 +131,7 @@
   },
   "Log Action": {
     "prefix": "log",
-    "body": "<Log> the <${1:message}> for the <console> with \"${2:text}\".",
+    "body": "<Log> \"${1:text}\" to the <console>.",
     "description": "Log message to console"
   },
   "Send Action": {

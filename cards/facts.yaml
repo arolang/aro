@@ -984,8 +984,8 @@ facts:
     week: 52
     day: 1
     category: "Actions"
-    headline: "<Log> the <message> for the <console> with \"Starting...\"."
-    explanation: "Log outputs to console or log files. for specifies destination. with provides the message. Structured logging built in."
+    headline: "<Log> \"Starting...\" to the <console>."
+    explanation: "Log outputs to console or log files. to specifies destination. Structured logging built in."
 
   - id: "52-2"
     week: 52

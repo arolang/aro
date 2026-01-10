@@ -27,7 +27,7 @@ Observers use the pattern `{repository-name} Observer` as their business activit
     <Extract> the <oldValue> from the <event: oldValue>.
     <Extract> the <newValue> from the <event: newValue>.
 
-    <Log> the <audit: message> for the <console> with <changeType>.
+    <Log> <changeType> to the <console>.
     <Return> an <OK: status> for the <audit>.
 }
 ```

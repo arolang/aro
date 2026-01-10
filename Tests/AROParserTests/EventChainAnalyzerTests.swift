@@ -73,7 +73,7 @@ struct EventChainAnalyzerTests {
 
         (Log User: UserCreated Handler) {
             <Extract> the <user> from the <event>.
-            <Log> the <message> for the <console> with "User created".
+            <Log> "User created" to the <console>.
             <Return> an <OK: status> for the <log>.
         }
         """
@@ -98,7 +98,7 @@ struct EventChainAnalyzerTests {
         }
 
         (Handle Email Sent: EmailSent Handler) {
-            <Log> the <message> for the <console>.
+            <Log> <message> to the <console>.
             <Return> an <OK: status> for the <handler>.
         }
         """
@@ -182,7 +182,7 @@ struct EventChainAnalyzerTests {
                     <Emit> the <EventBeta: event> for the <trigger>.
                 }
                 otherwise {
-                    <Log> the <message> for the <console>.
+                    <Log> <message> to the <console>.
                 }
             }
             <Return> an <OK: status> for the <handler>.
@@ -233,7 +233,7 @@ struct EventChainAnalyzerTests {
         }
 
         (Handle Alpha: EventAlpha Handler) {
-            <Log> the <message> for the <console>.
+            <Log> <message> to the <console>.
             <Return> an <OK: status> for the <handler>.
         }
         """
@@ -254,7 +254,7 @@ struct EventChainAnalyzerTests {
         }
 
         (Handle Alpha: EventAlpha Handler) {
-            <Log> the <message> for the <console>.
+            <Log> <message> to the <console>.
             <Return> an <OK: status> for the <handler>.
         }
         """
@@ -270,7 +270,7 @@ struct EventChainAnalyzerTests {
     func testMultipleHandlersSameEvent() throws {
         let source = """
         (Handler One: EventAlpha Handler) {
-            <Log> the <message> for the <console>.
+            <Log> <message> to the <console>.
             <Return> an <OK: status> for the <handler>.
         }
 

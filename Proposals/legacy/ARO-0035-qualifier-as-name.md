@@ -118,14 +118,14 @@ function resolveOperationName(result, knownOperations, fallback):
     <Compare> the <greeting-length> against the <farewell-length>.
 
     (* All variables are available *)
-    <Log> the <result: message> for the <console> with {
+    <Log> {
         greeting: <greeting>,
         farewell: <farewell>,
         greetingLength: <greeting-length>,
         farewellLength: <farewell-length>,
         greetingUpper: <greeting-upper>,
         greetingLower: <greeting-lower>
-    }.
+    } to the <console>.
 
     <Return> an <OK: status> with <greeting-length>.
 }

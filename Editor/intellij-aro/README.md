@@ -376,7 +376,7 @@ Create a file with the `.aro` extension and start writing ARO code:
 ```aro
 (* Entry point *)
 (Application-Start: My Service) {
-    <Log> the <startup: message> for the <console> with "Starting...".
+    <Log> "Starting..." to the <console>.
     <Start> the <http-server> on <port> with 8080.
     <Keepalive> the <application> for the <events>.
     <Return> an <OK: status> for the <startup>.

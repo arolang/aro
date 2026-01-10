@@ -42,7 +42,7 @@ Currently, ARO has no native date/time support. File metadata returns ISO 8601 s
 `<now>` is a built-in variable that always resolves to the current timestamp:
 
 ```aro
-<Log> the <timestamp: message> for the <console> with <now>.
+<Log> <now> to the <console>.
 (* Output: 2025-01-15T10:30:00Z *)
 ```
 

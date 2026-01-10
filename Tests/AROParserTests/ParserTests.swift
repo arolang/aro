@@ -204,7 +204,7 @@ struct ParserBasicTests {
     func testHyphenatedFeatureSetName() throws {
         let source = """
         (Application-Start: Entry Point) {
-            <Log> the <message> for the <console>.
+            <Log> <message> to the <console>.
         }
         """
         let program = try Parser.parse(source)
@@ -267,14 +267,14 @@ struct AROStatementParsingTests {
     func testStringLiteral() throws {
         let source = """
         (Test: Test) {
-            <Log> the <message> for the <console> with "Hello World".
+            <Log> "Hello World" to the <console>.
         }
         """
         let program = try Parser.parse(source)
         let statement = program.featureSets[0].statements[0] as! AROStatement
 
-        // Literals are now stored as expressions (ARO-0002)
-        if let expr = statement.expression as? LiteralExpression {
+        // Sink syntax uses resultExpression (ARO-0043)
+        if let expr = statement.resultExpression as? LiteralExpression {
             #expect(expr.value == .string("Hello World"))
         } else {
             Issue.record("Expected LiteralExpression")

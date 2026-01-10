@@ -230,7 +230,7 @@ public struct CompletionHandler: Sendable {
                 "label": "app start",
                 "kind": 15,
                 "detail": "Application start handler",
-                "insertText": "(Application-Start: ${1:App Name}) {\n\t<Log> the <message> for the <console> with \"Starting...\".\n\t$0\n\t<Return> an <OK: status> for the <startup>.\n}",
+                "insertText": "(Application-Start: ${1:App Name}) {\n\t<Log> \"Starting...\" to the <console>.\n\t$0\n\t<Return> an <OK: status> for the <startup>.\n}",
                 "insertTextFormat": 2
             ],
             [

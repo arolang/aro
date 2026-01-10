@@ -258,16 +258,14 @@ The `fieldName` filters to specific fields. The optional `<from_to_target>` filt
     <Extract> the <fromState> from the <transition: fromState>.
     <Extract> the <toState> from the <transition: toState>.
     <Extract> the <orderId> from the <transition: entityId>.
-    <Log> the <audit: message> for the <console>
-        with "Order ${orderId}: ${fromState} -> ${toState}".
+    <Log> "Order ${orderId}: ${fromState} -> ${toState}" to the <console>.
     <Return> an <OK: status> for the <audit>.
 }
 
 (* Observe ONLY draft->placed transition *)
 (Notify Order Placed: status StateObserver<draft_to_placed>) {
     <Extract> the <orderId> from the <transition: entityId>.
-    <Log> the <notification> for the <console>
-        with "Order ${orderId} has been placed!".
+    <Log> "Order ${orderId} has been placed!" to the <console>.
     <Return> an <OK: status> for the <notification>.
 }
 
@@ -277,8 +275,7 @@ The `fieldName` filters to specific fields. The optional `<from_to_target>` filt
     <Extract> the <object> from the <transition: objectName>.
     <Extract> the <from> from the <transition: fromState>.
     <Extract> the <to> from the <transition: toState>.
-    <Log> the <message> for the <console>
-        with "${object}.${field}: ${from} -> ${to}".
+    <Log> "${object}.${field}: ${from} -> ${to}" to the <console>.
     <Return> an <OK: status> for the <logging>.
 }
 ```
@@ -365,7 +362,7 @@ StateObservers react to state transitions performed by the `<Accept>` action. Th
 (* Triggers when Accept transitions order from paid to shipped *)
 (Track Shipment: status StateObserver<paid_to_shipped>) {
     <Extract> the <orderId> from the <transition: entityId>.
-    <Log> the <message> for the <console> with "Order shipped: " + <orderId>.
+    <Log> "Order shipped: " + <orderId> to the <console>.
     <Return> an <OK: status> for the <tracking>.
 }
 ```

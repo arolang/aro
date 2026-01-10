@@ -106,7 +106,7 @@ Write only the success case. Errors are reported automatically in business terms
 
 ```aro
 (Application-Start: Hello World) {
-    <Log> the <message> for the <console> with "Hello from ARO!".
+    <Log> "Hello from ARO!" to the <console>.
     <Return> an <OK: status> for the <startup>.
 }
 ```

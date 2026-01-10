@@ -247,7 +247,7 @@ Multiple values for the same field are separated by commas:
 (* Handle when status is paid OR shipped *)
 (Track Fulfillment: OrderUpdated Handler<status:paid,shipped>) {
     <Extract> the <order> from the <event: order>.
-    <Log> the <message> for the <console> with "Fulfillment update".
+    <Log> "Fulfillment update" to the <console>.
     <Return> an <OK: status> for the <tracking>.
 }
 ```

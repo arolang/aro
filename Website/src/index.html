@@ -191,13 +191,13 @@
                     <pre class="code-content"><span class="comment">(* Fetch weather data from an external API *)</span>
 
 <span class="feature-name">(Application-Start: Weather Client)</span> {
-    <span class="action">&lt;Log&gt;</span> the <span class="result">&lt;message&gt;</span> for the <span class="result">&lt;console&gt;</span> with <span class="string">"Fetching weather..."</span>.
+    <span class="action">&lt;Log&gt;</span> <span class="string">"Fetching weather..."</span> to the <span class="result">&lt;console&gt;</span>.
 
     <span class="action">&lt;Create&gt;</span> the <span class="result">&lt;api-url&gt;</span> with <span class="string">"https://api.open-meteo.com/v1/forecast?latitude=52.52&amp;longitude=13.41&amp;current_weather=true"</span>.
 
     <span class="action">&lt;Request&gt;</span> the <span class="result">&lt;weather&gt;</span> from the <span class="result">&lt;api-url&gt;</span>.
 
-    <span class="action">&lt;Log&gt;</span> the <span class="result">&lt;data&gt;</span> for the <span class="result">&lt;console&gt;</span> with <span class="result">&lt;weather&gt;</span>.
+    <span class="action">&lt;Log&gt;</span> <span class="result">&lt;weather&gt;</span> to the <span class="result">&lt;console&gt;</span>.
 
     <span class="action">&lt;Return&gt;</span> an <span class="result">&lt;OK: status&gt;</span> for the <span class="result">&lt;startup&gt;</span>.
 }</pre>

@@ -12,7 +12,7 @@
     <Create> the <status-code> with 200.
 
     (* Guarded statement with when clause *)
-    <Log> the <admin-message> for the <console> with "Admin access detected!" when <user-role> == "admin".
+    <Log> "Admin access detected!" to the <console> when <user-role> == "admin".
 
     (* Match expression for HTTP method routing *)
     match <method> {

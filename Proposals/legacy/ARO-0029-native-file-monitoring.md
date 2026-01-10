@@ -60,7 +60,7 @@ The `aro_action_watch` function in `ActionBridge.swift`:
 
 ```aro
 (Application-Start: File Watcher) {
-    <Log> the <startup: message> for the <console> with "Starting file watcher".
+    <Log> "Starting file watcher" to the <console>.
 
     (* Watch the current directory *)
     <Watch> the <file-monitor> for the <directory> with ".".
@@ -73,19 +73,19 @@ The `aro_action_watch` function in `ActionBridge.swift`:
 
 (Handle File Created: File Event Handler) {
     <Extract> the <path> from the <event: path>.
-    <Log> the <file-created: message> for the <console>.
+    <Log> <path> to the <console>.
     <Return> an <OK: status> for the <event>.
 }
 
 (Handle File Modified: File Event Handler) {
     <Extract> the <path> from the <event: path>.
-    <Log> the <file-modified: message> for the <console>.
+    <Log> <path> to the <console>.
     <Return> an <OK: status> for the <event>.
 }
 
 (Handle File Deleted: File Event Handler) {
     <Extract> the <path> from the <event: path>.
-    <Log> the <file-deleted: message> for the <console>.
+    <Log> <path> to the <console>.
     <Return> an <OK: status> for the <event>.
 }
 ```

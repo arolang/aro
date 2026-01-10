@@ -34,9 +34,9 @@ Introduce a `<Wait>` action that blocks until a specific event occurs:
 
 ```aro
 (Application-Start: File Watcher) {
-    <Log> the <startup: message> for the <console> with "Starting file watcher".
+    <Log> "Starting file watcher" to the <console>.
     <Watch> the <file-monitor> for the <directory> with ".".
-    <Log> the <ready: message> for the <console> with "Watching for file changes...".
+    <Log> "Watching for file changes..." to the <console>.
 
     (* Block until Ctrl+C or SIGTERM *)
     <Wait> for <shutdown-signal>.
@@ -68,7 +68,7 @@ The `<Wait>` action takes a specific event name:
 ```aro
 (Application-Start: API Server) {
     <Start> the <http-server> on <port> with 8080.
-    <Log> the <ready: message> for the <console> with "Server ready".
+    <Log> "Server ready" to the <console>.
 
     (* Wait for Ctrl+C *)
     <Wait> for <shutdown-signal>.
@@ -77,7 +77,7 @@ The `<Wait>` action takes a specific event name:
 }
 
 (Application-End: Success) {
-    <Log> the <shutdown: message> for the <console> with "Shutting down...".
+    <Log> "Shutting down..." to the <console>.
     <Stop> the <http-server>.
     <Return> an <OK: status> for the <shutdown>.
 }
@@ -95,18 +95,18 @@ The `<Wait>` action takes a specific event name:
 ```aro
 (Application-Start: One-Shot Processor) {
     <Start> the <file-monitor> for the <directory> with "/incoming".
-    <Log> the <ready: message> for the <console> with "Waiting for file...".
+    <Log> "Waiting for file..." to the <console>.
 
     (* Wait for a file to be created, then exit *)
     <Wait> for <FileCreatedEvent>.
 
-    <Log> the <done: message> for the <console> with "File processed, exiting".
+    <Log> "File processed, exiting" to the <console>.
     <Return> an <OK: status> for the <startup>.
 }
 
 (Handle File Created: File Event Handler) {
     <Extract> the <path> from the <event: path>.
-    <Log> the <created: notification> for the <console> with <path>.
+    <Log> <path> to the <console>.
     (* Process the file... *)
     <Return> an <OK: status> for the <event>.
 }
@@ -120,9 +120,9 @@ The `<Wait>` action takes a specific event name:
 
 ```aro
 (Application-Start: API Server) {
-    <Log> the <startup: message> for the <console> with "Starting API server".
+    <Log> "Starting API server" to the <console>.
     <Start> the <http-server> on <port> with 8080.
-    <Log> the <ready: message> for the <console> with "Server ready on port 8080".
+    <Log> "Server ready on port 8080" to the <console>.
 
     (* Keep server running until Ctrl+C *)
     <Wait> for <shutdown-signal>.
@@ -131,7 +131,7 @@ The `<Wait>` action takes a specific event name:
 }
 
 (Application-End: Success) {
-    <Log> the <shutdown: message> for the <console> with "Shutting down...".
+    <Log> "Shutting down..." to the <console>.
     <Stop> the <http-server>.
     <Return> an <OK: status> for the <shutdown>.
 }
@@ -141,9 +141,9 @@ The `<Wait>` action takes a specific event name:
 
 ```aro
 (Application-Start: File Watcher) {
-    <Log> the <startup: message> for the <console> with "Starting file watcher".
+    <Log> "Starting file watcher" to the <console>.
     <Watch> the <file-monitor> for the <directory> with ".".
-    <Log> the <ready: message> for the <console> with "Watching for changes...".
+    <Log> "Watching for changes..." to the <console>.
 
     (* Block until shutdown *)
     <Wait> for <shutdown-signal>.
@@ -153,18 +153,18 @@ The `<Wait>` action takes a specific event name:
 
 (Handle File Created: File Event Handler) {
     <Extract> the <path> from the <event: path>.
-    <Log> the <created: notification> for the <console>.
+    <Log> <path> to the <console>.
     <Return> an <OK: status> for the <event>.
 }
 
 (Handle File Modified: File Event Handler) {
     <Extract> the <path> from the <event: path>.
-    <Log> the <modified: notification> for the <console>.
+    <Log> <path> to the <console>.
     <Return> an <OK: status> for the <event>.
 }
 
 (Application-End: Success) {
-    <Log> the <shutdown: message> for the <console> with "Shutting down...".
+    <Log> "Shutting down..." to the <console>.
     <Stop> the <file-monitor>.
     <Return> an <OK: status> for the <shutdown>.
 }
@@ -174,9 +174,9 @@ The `<Wait>` action takes a specific event name:
 
 ```aro
 (Application-Start: Echo Socket) {
-    <Log> the <message> for the <console> with "Starting echo socket on port 9000".
+    <Log> "Starting echo socket on port 9000" to the <console>.
     <Start> the <socket-server> on <port> with 9000.
-    <Log> the <message> for the <console> with "Socket server listening".
+    <Log> "Socket server listening" to the <console>.
 
     <Wait> for <shutdown-signal>.
 

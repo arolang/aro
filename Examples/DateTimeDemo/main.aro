@@ -50,11 +50,11 @@
     (* Date comparisons using when clauses *)
     <Log> "Date comparisons:" to the <console>.
 
-    <Log> the <compare1> for the <console> with "  Is yesterday before now?" when <yesterday> < <now>.
-    <Log> the <compare2> for the <console> with "  Is next week after now?" when <next-week> > <now>.
-    <Log> the <compare3> for the <console> with "  Is meeting in the past y?" when <meeting> < <now>.
-    <Log> the <compare3> for the <console> with "  Is meeting in the past n?" when <meeting> > <now>.
-    <Log> the <compare4> for the <console> with "  Is meeting in 2025?" when <meeting> < "2026-01-01T00:00:00Z".
+    <Log> "  Is yesterday before now?" to the <console> when <yesterday> < <now>.
+    <Log> "  Is next week after now?" to the <console> when <next-week> > <now>.
+    <Log> "  Is meeting in the past y?" to the <console> when <meeting> < <now>.
+    <Log> "  Is meeting in the past n?" to the <console> when <meeting> > <now>.
+    <Log> "  Is meeting in 2025?" to the <console> when <meeting> < "2026-01-01T00:00:00Z".
 
     <Log> "=== Demo Complete ===" to the <console>.
 

@@ -112,7 +112,7 @@ components:
     <Create> the <user: User> with <data>.
 
     (* Access fields defined in the schema *)
-    <Log> the <message> for the <console> with <user: name>.
+    <Log> <user: name> to the <console>.
 
     <Return> a <Created: status> with <user>.
 }

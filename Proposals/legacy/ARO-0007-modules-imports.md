@@ -106,7 +106,7 @@ import ../user-service
 import ../payment-service
 
 (Application-Start: API Gateway) {
-    <Log> the <startup: message> for the <console> with "Gateway starting...".
+    <Log> "Gateway starting..." to the <console>.
     <Start> the <http-server> on port 8080.
     <Keepalive> the <application> for the <events>.
     <Return> an <OK: status> for the <startup>.
@@ -256,7 +256,7 @@ type Order {
 import ../shared
 
 (Application-Start: Order Service) {
-    <Log> the <startup: message> for the <console> with "Starting...".
+    <Log> "Starting..." to the <console>.
     <Return> an <OK: status> for the <startup>.
 }
 

@@ -106,13 +106,13 @@
 
         <h3>Basic Example</h3>
         <pre><code><span class="code-feature">(Application-Start: My Application)</span> {
-    <span class="code-keyword">&lt;Log&gt;</span> the <span class="code-result">&lt;startup: message&gt;</span> for the &lt;console&gt; with <span class="code-string">"Starting application..."</span>.
+    <span class="code-keyword">&lt;Log&gt;</span> <span class="code-string">"Starting application..."</span> to the &lt;console&gt;.
     <span class="code-keyword">&lt;Return&gt;</span> an <span class="code-result">&lt;OK: status&gt;</span> for the &lt;startup&gt;.
 }</code></pre>
 
         <h3>Full Example</h3>
         <pre><code><span class="code-feature">(Application-Start: E-Commerce Platform)</span> {
-    <span class="code-keyword">&lt;Log&gt;</span> the <span class="code-result">&lt;startup: message&gt;</span> for the &lt;console&gt; with <span class="code-string">"Starting E-Commerce Platform..."</span>.
+    <span class="code-keyword">&lt;Log&gt;</span> <span class="code-string">"Starting E-Commerce Platform..."</span> to the &lt;console&gt;.
 
     <span class="code-comment">(* Load configuration *)</span>
     <span class="code-keyword">&lt;Read&gt;</span> the <span class="code-result">&lt;config: JSON&gt;</span> from the &lt;file: <span class="code-string">"./config.json"</span>&gt;.
@@ -127,7 +127,7 @@
     <span class="code-comment">(* Keep the application running *)</span>
     <span class="code-keyword">&lt;Keepalive&gt;</span> the &lt;application&gt; for the &lt;events&gt;.
 
-    <span class="code-keyword">&lt;Log&gt;</span> the <span class="code-result">&lt;ready: message&gt;</span> for the &lt;console&gt; with <span class="code-string">"Platform ready"</span>.
+    <span class="code-keyword">&lt;Log&gt;</span> <span class="code-string">"Platform ready"</span> to the &lt;console&gt;.
     <span class="code-keyword">&lt;Return&gt;</span> an <span class="code-result">&lt;OK: status&gt;</span> for the &lt;startup&gt;.
 }</code></pre>
 
@@ -138,12 +138,12 @@
         <p>Called on graceful shutdown (SIGTERM, SIGINT, or programmatic stop):</p>
 
         <pre><code><span class="code-feature">(Application-End: Success)</span> {
-    <span class="code-keyword">&lt;Log&gt;</span> the <span class="code-result">&lt;shutdown: message&gt;</span> for the &lt;console&gt; with <span class="code-string">"Shutting down gracefully..."</span>.
+    <span class="code-keyword">&lt;Log&gt;</span> <span class="code-string">"Shutting down gracefully..."</span> to the &lt;console&gt;.
 
     <span class="code-comment">(* Stop accepting new requests *)</span>
     <span class="code-keyword">&lt;Stop&gt;</span> the &lt;http-server&gt;.
 
-    <span class="code-keyword">&lt;Log&gt;</span> the <span class="code-result">&lt;shutdown: complete&gt;</span> for the &lt;console&gt; with <span class="code-string">"Shutdown complete. Goodbye!"</span>.
+    <span class="code-keyword">&lt;Log&gt;</span> <span class="code-string">"Shutdown complete. Goodbye!"</span> to the &lt;console&gt;.
     <span class="code-keyword">&lt;Return&gt;</span> an <span class="code-result">&lt;OK: status&gt;</span> for the &lt;shutdown&gt;.
 }</code></pre>
 
@@ -154,7 +154,7 @@
     <span class="code-keyword">&lt;Extract&gt;</span> the <span class="code-result">&lt;error&gt;</span> from the &lt;shutdown: error&gt;.
     <span class="code-keyword">&lt;Extract&gt;</span> the <span class="code-result">&lt;reason&gt;</span> from the &lt;shutdown: reason&gt;.
 
-    <span class="code-keyword">&lt;Log&gt;</span> the <span class="code-result">&lt;error: message&gt;</span> for the &lt;console&gt; with <span class="code-string">"FATAL ERROR: ${reason}"</span>.
+    <span class="code-keyword">&lt;Log&gt;</span> <span class="code-string">"FATAL ERROR: ${reason}"</span> to the &lt;console&gt;.
 
     <span class="code-keyword">&lt;Return&gt;</span> an <span class="code-result">&lt;OK: status&gt;</span> for the &lt;error-handling&gt;.
 }</code></pre>
@@ -255,7 +255,7 @@
     <span class="code-keyword">&lt;Read&gt;</span> the <span class="code-result">&lt;config&gt;</span> from the &lt;file: <span class="code-string">"./config.json"</span>&gt;.
 
     when &lt;config: database&gt; is empty {
-        <span class="code-keyword">&lt;Log&gt;</span> the <span class="code-result">&lt;error&gt;</span> for the &lt;console&gt; with <span class="code-string">"Missing database configuration"</span>.
+        <span class="code-keyword">&lt;Log&gt;</span> <span class="code-string">"Missing database configuration"</span> to the &lt;console&gt;.
         <span class="code-keyword">&lt;Throw&gt;</span> a &lt;ConfigurationError&gt; for the &lt;missing: database&gt;.
     }
 
@@ -267,20 +267,20 @@
 
         <h3>Log Lifecycle Events</h3>
         <pre><code><span class="code-feature">(Application-Start: Observable App)</span> {
-    <span class="code-keyword">&lt;Log&gt;</span> the <span class="code-result">&lt;lifecycle: event&gt;</span> for the &lt;console&gt; with <span class="code-string">"APPLICATION_STARTING"</span>.
+    <span class="code-keyword">&lt;Log&gt;</span> <span class="code-string">"APPLICATION_STARTING"</span> to the &lt;console&gt;.
 
     <span class="code-keyword">&lt;Start&gt;</span> the &lt;http-server&gt; on port 8080.
 
-    <span class="code-keyword">&lt;Log&gt;</span> the <span class="code-result">&lt;lifecycle: event&gt;</span> for the &lt;console&gt; with <span class="code-string">"APPLICATION_READY"</span>.
+    <span class="code-keyword">&lt;Log&gt;</span> <span class="code-string">"APPLICATION_READY"</span> to the &lt;console&gt;.
     <span class="code-keyword">&lt;Return&gt;</span> an <span class="code-result">&lt;OK: status&gt;</span> for the &lt;startup&gt;.
 }
 
 <span class="code-feature">(Application-End: Success)</span> {
-    <span class="code-keyword">&lt;Log&gt;</span> the <span class="code-result">&lt;lifecycle: event&gt;</span> for the &lt;console&gt; with <span class="code-string">"APPLICATION_STOPPING"</span>.
+    <span class="code-keyword">&lt;Log&gt;</span> <span class="code-string">"APPLICATION_STOPPING"</span> to the &lt;console&gt;.
 
     <span class="code-keyword">&lt;Stop&gt;</span> the &lt;http-server&gt;.
 
-    <span class="code-keyword">&lt;Log&gt;</span> the <span class="code-result">&lt;lifecycle: event&gt;</span> for the &lt;console&gt; with <span class="code-string">"APPLICATION_STOPPED"</span>.
+    <span class="code-keyword">&lt;Log&gt;</span> <span class="code-string">"APPLICATION_STOPPED"</span> to the &lt;console&gt;.
     <span class="code-keyword">&lt;Return&gt;</span> an <span class="code-result">&lt;OK: status&gt;</span> for the &lt;shutdown&gt;.
 }</code></pre>
 
