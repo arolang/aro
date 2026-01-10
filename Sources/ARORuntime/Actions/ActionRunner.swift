@@ -181,7 +181,10 @@ public final class ActionRunner: @unchecked Sendable {
         let holder = ResultHolder()
         let semaphore = DispatchSemaphore(value: 0)
 
-        Task { @Sendable in
+        // Use Task.detached to ensure the task runs on the concurrent executor
+        // rather than inheriting the current task context. This prevents deadlocks
+        // on Linux where the default Task might try to use the blocked thread.
+        Task.detached { @Sendable [self] in
             do {
                 let result = try await self.executeAsync(
                     verb: verb,
@@ -278,7 +281,10 @@ extension ActionRunner {
         let holder = ActionResultHolder()
         let semaphore = DispatchSemaphore(value: 0)
 
-        Task { @Sendable in
+        // Use Task.detached to ensure the task runs on the concurrent executor
+        // rather than inheriting the current task context. This prevents deadlocks
+        // on Linux where the default Task might try to use the blocked thread.
+        Task.detached { @Sendable [self] in
             do {
                 let value = try await self.executeAsync(
                     verb: verb,

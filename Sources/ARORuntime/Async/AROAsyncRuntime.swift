@@ -287,7 +287,10 @@ public func aro_async_spawn_feature_set(
     let holder = ResponseHolder()
     let semaphore = DispatchSemaphore(value: 0)
 
-    Task { @Sendable in
+    // Use Task.detached to ensure the task runs on the concurrent executor
+    // rather than inheriting the current task context. This prevents deadlocks
+    // on Linux where the default Task might try to use the blocked thread.
+    Task.detached { @Sendable in
         do {
             let resp = try await AROAsyncRuntime.shared.spawnFeatureSet(
                 nameStr,

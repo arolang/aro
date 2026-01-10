@@ -1,8 +1,11 @@
-# Generated: Sat Jan 10 09:59:43 2026
+# Generated: Sat Jan 10 18:21:43 2026
 # Type: console
 # Command: aro run ./Examples/Split
 ---
 Fruits:
+[apple, banana, cherry, date]
 Words:
+[Hello, World, ARO]
 Parts:
+[one, two, three, four]
 demo
