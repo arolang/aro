@@ -1,5 +1,4 @@
 # Test hints for CustomPlugin
-# Plugin tests run in interpreter mode only (code signing issues on macOS)
-# CI may compile plugin on-the-fly, use occurrence-check for flexibility
-mode: interpreter
-occurrence-check: true
+# Plugin tests require Swift compiler which is not available on Linux CI
+# Skip this test on Linux; runs on macOS only
+skip: Plugin requires Swift compiler (not available on Linux CI)

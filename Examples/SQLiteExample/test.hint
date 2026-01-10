@@ -1,4 +1,3 @@
 # Test hints for SQLiteExample
-# Plugin tests run in interpreter mode only (code signing issues on macOS)
-mode: interpreter
-timeout: 30
+# Plugin tests require Swift compiler which is not available on Linux CI
+skip: Plugin requires Swift compiler (not available on Linux CI)
