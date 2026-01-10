@@ -65,3 +65,5 @@ homebrew-aro/
 **/.build/
 /data
 /Examples/HelloWorld/expected.binary.diff
+expected.binary.diff
+testrun.log
