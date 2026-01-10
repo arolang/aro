@@ -530,21 +530,32 @@ public final class CCompiler {
         }
         #elseif os(Windows)
         // Windows platform libraries
-        // libARORuntime.a is compiled from Swift and has dependencies on Swift runtime
-        // The linker needs to find Swift import libraries (.lib) to resolve these
-        // Swift import libs are in the toolchain lib directory
+        // libARORuntime.a is a Swift static library. On Windows:
+        // - At link time, we need import libraries (.lib) to resolve external symbols
+        // - At runtime, the corresponding DLLs must be in PATH
+        //
+        // The Swift runtime DLLs should be in PATH from the Swift installation.
+        // We add -L for the SDK's import libraries.
 
-        // Find Swift library path and add it to linker search path
         if let swiftLibPath = findSwiftLibPath() {
             FileHandle.standardError.write("[LINKER-WIN] Found Swift lib path: \(swiftLibPath)\n".data(using: .utf8)!)
             args.append("-L\(swiftLibPath)")
+
+            // Also add the runtime lib path in case import libs are there
+            // C:\Users\runneradmin\AppData\Local\Programs\Swift\Runtimes\VERSION\usr\lib
+            if let runtimeLibPath = ProcessInfo.processInfo.environment["PATH"]?
+                .components(separatedBy: ";")
+                .first(where: { $0.contains("Swift\\Runtimes") && $0.contains("\\bin") }) {
+                // Convert bin path to lib path
+                let libPath = runtimeLibPath.replacingOccurrences(of: "\\bin", with: "\\lib")
+                FileHandle.standardError.write("[LINKER-WIN] Also checking runtime lib: \(libPath)\n".data(using: .utf8)!)
+                if FileManager.default.fileExists(atPath: libPath) {
+                    args.append("-L\(libPath)")
+                }
+            }
         } else {
             FileHandle.standardError.write("[LINKER-WIN] WARNING: Swift library path not found!\n".data(using: .utf8)!)
         }
-
-        // The linker will automatically resolve Swift dependencies from the -L path
-        // We don't need to explicitly list -lswiftCore etc because libARORuntime.a
-        // already has the proper linkage references
         #endif
 
         // Optimizations
@@ -834,8 +845,10 @@ public final class CCompiler {
         if let sdkRoot = ProcessInfo.processInfo.environment["SDKROOT"] {
             FileHandle.standardError.write("[LINKER-WIN] SDKROOT: \(sdkRoot)\n".data(using: .utf8)!)
             // Import libs are at: SDKROOT\usr\lib\swift\windows\x86_64
-            let sdkLibPath = sdkRoot + "\\usr\\lib\\swift\\windows\\x86_64"
-            let sdkLibPathAlt = sdkRoot + "usr\\lib\\swift\\windows\\x86_64"  // In case SDKROOT has trailing backslash
+            // Handle trailing backslash in SDKROOT
+            let cleanSdkRoot = sdkRoot.hasSuffix("\\") ? String(sdkRoot.dropLast()) : sdkRoot
+            let sdkLibPath = cleanSdkRoot + "\\usr\\lib\\swift\\windows\\x86_64"
+            let sdkLibPathAlt = cleanSdkRoot + "\\usr\\lib\\swift\\windows"  // Without arch suffix
             FileHandle.standardError.write("[LINKER-WIN] Checking SDK path: \(sdkLibPath)\n".data(using: .utf8)!)
             if FileManager.default.fileExists(atPath: sdkLibPath) {
                 FileHandle.standardError.write("[LINKER-WIN] Found at SDK path!\n".data(using: .utf8)!)
