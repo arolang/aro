@@ -1,11 +1,14 @@
-# Generated: Sun Jan  4 17:50:55 2026
+# Generated: Sat Jan 10 11:40:04 2026
 # Type: console
 # Command: aro run ./Examples/ZipService
 ---
-[PluginLoader] Building package plugin: ZipPlugin
-[PluginLoader] Warning: Failed to load package plugin ZipPlugin: Failed to load plugin 'ZipPlugin': dlopen(./Examples/ZipService/plugins/ZipPlugin/.build/release/libZipPlugin.dylib, 0x0006): tried: './Examples/ZipService/plugins/ZipPlugin/.build/release/libZipPlugin.dylib' (code signature in <4C29C979-799D-3C91-B83C-12D68E4FB7AA> './Examples/ZipService/plugins/ZipPlugin/.build/arm64-apple-macosx/release/libZipPlugin.dylib' not valid for use in process: mapping process and mapped file (non-platform) have different Team IDs), '/System/Volumes/Preboot/Cryptexes/OS./Examples/ZipService/plugins/ZipPlugin/.build/release/libZipPlugin.dylib' (no such file), './Examples/ZipService/plugins/ZipPlugin/.build/release/libZipPlugin.dylib' (code signature in <4C29C979-799D-3C91-B83C-12D68E4FB7AA> './Examples/ZipService/plugins/ZipPlugin/.build/arm64-apple-macosx/release/libZipPlugin.dylib' not valid for use in process: mapping process and mapped file (non-platform) have different Team IDs), './Examples/ZipService/plugins/ZipPlugin/.build/arm64-apple-macosx/release/libZipPlugin.dylib' (code signature in <4C29C979-799D-3C91-B83C-12D68E4FB7AA> './Examples/ZipService/plugins/ZipPlugin/.build/arm64-apple-macosx/release/libZipPlugin.dylib' not valid for use in process: mapping process and mapped file (non-platform) have different Team IDs), '/System/Volumes/Preboot/Cryptexes/OS./Examples/ZipService/plugins/ZipPlugin/.build/arm64-apple-macosx/release/libZipPlugin.dylib' (no such file), './Examples/ZipService/plugins/ZipPlugin/.build/arm64-apple-macosx/release/libZipPlugin.dylib' (code signature in <4C29C979-799D-3C91-B83C-12D68E4FB7AA> './Examples/ZipService/plugins/ZipPlugin/.build/arm64-apple-macosx/release/libZipPlugin.dylib' not valid for use in process: mapping process and mapped file (non-platform) have different Team IDs)
-[Application-Start] Testing zip plugin...
-Runtime error: Runtime Error: Cannot call the result from the zip: compress.
-  Feature: Application-Start
-  Business Activity: Zip Service Demo
-  Statement: <Call> the <result> from the <zip: compress>.
+Building package plugin: ZipPlugin
+Registered plugin service: zip
+Loaded package plugin: ZipPlugin
+Testing zip plugin...
+Zip result:
+filesCompressed: 2
+output: Examples/ZipService/content/archive.zip
+success: true
+startup
+  value:

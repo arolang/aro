@@ -1,1 +1,3 @@
-skip: Server startup timing issues in test environment
+# Test hints for OrderService
+# HTTP server binary doesn't start properly
+mode: interpreter

@@ -1,2 +1,3 @@
-# Skip integration test
-skip: under investigation
+# Test hints for FileWatcher
+# File watcher binary doesn't work properly
+mode: interpreter

@@ -1,6 +1,6 @@
-# Skip due to TTY detection changes
-skip: under investigation
-
+# Test hints for DirectoryReplicator
 # DirectoryReplicator uses relative path ../template
 # Must run from within example directory
 workdir: Examples/DirectoryReplicator
+# Binary test has workdir path issue
+mode: interpreter

@@ -1,2 +1,4 @@
 # Test hints for ListTest
-skip: under investigation
+# Uses relative path that only works from Examples/ListTest directory
+workdir: Examples/ListTest
+mode: interpreter

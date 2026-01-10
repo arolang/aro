@@ -1,2 +1,4 @@
-# Skip this test - output varies by directory contents
-skip: Directory listing output varies by environment
+# Test hints for DirectoryLister
+# Output varies by environment, use occurrence-check
+mode: interpreter
+occurrence-check: true

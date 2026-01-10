@@ -1,2 +1,3 @@
 # Test hints for SimpleChat
-skip: under investigation
+# Socket server binary doesn't start properly
+mode: interpreter

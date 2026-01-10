@@ -1,5 +1,4 @@
 # Skip integration test due to TTY detection changes
-skip: under investigation
 
 # FormatAwareIO creates files in ./output
 # Clean up from previous test runs

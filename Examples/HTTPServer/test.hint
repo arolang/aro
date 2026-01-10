@@ -1,2 +1,3 @@
-# Skip this test - requires manual HTTP testing
-skip: HTTP server requires manual testing with curl/browser
+# Test hints for HTTPServer
+# HTTP server binary doesn't start properly
+mode: interpreter

@@ -1,5 +1,4 @@
 # Skip integration test due to TTY detection changes
-skip: under investigation
 
 # FileOperations creates files in ./demo-output
 # Clean up from previous test runs

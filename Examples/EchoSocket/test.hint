@@ -1,2 +1,3 @@
-# Skip integration test
-skip: under investigation
+# Test hints for EchoSocket
+# Socket server binary doesn't start properly
+mode: interpreter

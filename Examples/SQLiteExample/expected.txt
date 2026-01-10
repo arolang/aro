@@ -1,14 +1,30 @@
-# Generated: Sun Jan  4 17:50:50 2026
+# Generated: Sat Jan 10 11:39:52 2026
 # Type: console
 # Command: aro run ./Examples/SQLiteExample
 # Timeout: 30s
 ---
-[PluginLoader] Building package plugin: SQLitePlugin
-[PluginLoader] Warning: Failed to load package plugin SQLitePlugin: Failed to load plugin 'SQLitePlugin': dlopen(./Examples/SQLiteExample/plugins/SQLitePlugin/.build/release/libSQLitePlugin.dylib, 0x0006): tried: './Examples/SQLiteExample/plugins/SQLitePlugin/.build/release/libSQLitePlugin.dylib' (code signature in <88430712-6E6D-3FF3-BB7E-A0E1058AAE14> './Examples/SQLiteExample/plugins/SQLitePlugin/.build/arm64-apple-macosx/release/libSQLitePlugin.dylib' not valid for use in process: mapping process and mapped file (non-platform) have different Team IDs), '/System/Volumes/Preboot/Cryptexes/OS./Examples/SQLiteExample/plugins/SQLitePlugin/.build/release/libSQLitePlugin.dylib' (no such file), './Examples/SQLiteExample/plugins/SQLitePlugin/.build/release/libSQLitePlugin.dylib' (code signature in <88430712-6E6D-3FF3-BB7E-A0E1058AAE14> './Examples/SQLiteExample/plugins/SQLitePlugin/.build/arm64-apple-macosx/release/libSQLitePlugin.dylib' not valid for use in process: mapping process and mapped file (non-platform) have different Team IDs), './Examples/SQLiteExample/plugins/SQLitePlugin/.build/arm64-apple-macosx/release/libSQLitePlugin.dylib' (code signature in <88430712-6E6D-3FF3-BB7E-A0E1058AAE14> './Examples/SQLiteExample/plugins/SQLitePlugin/.build/arm64-apple-macosx/release/libSQLitePlugin.dylib' not valid for use in process: mapping process and mapped file (non-platform) have different Team IDs), '/System/Volumes/Preboot/Cryptexes/OS./Examples/SQLiteExample/plugins/SQLitePlugin/.build/arm64-apple-macosx/release/libSQLitePlugin.dylib' (no such file), './Examples/SQLiteExample/plugins/SQLitePlugin/.build/arm64-apple-macosx/release/libSQLitePlugin.dylib' (code signature in <88430712-6E6D-3FF3-BB7E-A0E1058AAE14> './Examples/SQLiteExample/plugins/SQLitePlugin/.build/arm64-apple-macosx/release/libSQLitePlugin.dylib' not valid for use in process: mapping process and mapped file (non-platform) have different Team IDs)
-[Application-Start] === SQLite Plugin Demo ===
-[Application-Start]
-[Application-Start] Step 1: Creating users table...
-Runtime error: Runtime Error: Cannot call the create-result from the sqlite: execute.
-  Feature: Application-Start
-  Business Activity: SQLite Demo
-  Statement: <Call> the <create-result> from the <sqlite: execute>.
+Building package plugin: SQLitePlugin
+Registered plugin service: sqlite
+Loaded package plugin: SQLitePlugin
+=== SQLite Plugin Demo ===
+Step 1: Creating users table...
+Table created successfully
+Step 2: Inserting users...
+Inserted Alice with ID:
+1
+Inserted Bob with ID:
+2
+Step 3: Querying all users...
+All users:
+Step 4: Updating Bob's email...
+Updated rows:
+1
+Step 5: Querying Bob after update...
+Bob's data:
+Step 6: Deleting Charlie...
+Deleted rows:
+1
+Step 7: Final users list...
+Remaining users:
+All CRUD operations completed successfully!
+startup

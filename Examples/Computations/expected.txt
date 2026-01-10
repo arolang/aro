@@ -1,33 +1,34 @@
-# Generated: Sun Jan  4 23:42:07 2026
+# Generated: Sat Jan 10 10:44:39 2026
 # Type: console
 # Command: aro run ./Examples/Computations
 ---
-[Application-Start] === ARO Computations Demo ===
-[Application-Start] Greeting length (old syntax):
-[Application-Start] 13
-[Application-Start] Greeting length (new syntax):
-[Application-Start] 13
-[Application-Start] Farewell length:
-[Application-Start] 8
-[Application-Start] Original:
-[Application-Start] Hello ARO Developer
-[Application-Start] Uppercase:
-[Application-Start] HELLO ARO DEVELOPER
-[Application-Start] Lowercase:
-[Application-Start] hello aro developer
-[Application-Start] Password hash:
-[Application-Start] fcf730b6d95236ecd3c9fc2d92d7b6b2bb061514961aec041d6c7a7192f592e4
-[Application-Start] Price:
-[Application-Start] 100
-[Application-Start] Quantity:
-[Application-Start] 3
-[Application-Start] Subtotal:
-[Application-Start] 300
-[Application-Start] Tax (8%):
-[Application-Start] 24.00
-[Application-Start] Total:
-[Application-Start] 324.00
-[Application-Start] Number of items:
-[Application-Start] 4
-[Application-Start] === Demo Complete ===
-[OK] demo
+=== ARO Computations Demo ===
+Greeting length (old syntax):
+13
+Greeting length (new syntax):
+13
+Farewell length:
+8
+Original:
+Hello ARO Developer
+Uppercase:
+HELLO ARO DEVELOPER
+Lowercase:
+hello aro developer
+Password hash:
+fcf730b6d95236ecd3c9fc2d92d7b6b2bb061514961aec041d6c7a7192f592e4
+Price:
+100
+Quantity:
+3
+Subtotal:
+300
+Tax (8%):
+24.00
+Total:
+324.00
+Number of items:
+4
+=== Demo Complete ===
+demo
+  value: Hello, World!

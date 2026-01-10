@@ -1,11 +1,11 @@
-# Generated: Sun Jan  4 23:42:35 2026
+# Generated: Sat Jan 10 10:44:41 2026
 # Type: console
 # Command: aro run ./Examples/Scoping
 ---
-[Application-Start] Starting application...
-[Application-Start] Scoping Demo
-[Application-Start] 1.0
-[Application-Start] Configuration:
-[Application-Start] Scoping Demo
-[Application-Start] 1.0
-[OK] startup
+Starting application...
+Scoping Demo
+1.0
+Configuration:
+Scoping Demo
+1.0
+startup

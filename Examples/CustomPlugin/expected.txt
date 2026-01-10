@@ -1,10 +1,9 @@
-# Generated: Sun Jan  4 17:50:13 2026
+# Generated: Sat Jan 10 11:39:45 2026
 # Type: console
 # Command: aro run ./Examples/CustomPlugin
 ---
-[PluginLoader] Warning: Failed to load GreetingService.swift: Failed to load plugin 'GreetingService': dlopen(./.aro-cache/GreetingService.dylib, 0x0006): tried: './.aro-cache/GreetingService.dylib' (code signature in <0F686E07-A44B-3A91-93B1-4A75D28B6C4B> './.aro-cache/GreetingService.dylib' not valid for use in process: mapping process and mapped file (non-platform) have different Team IDs), '/System/Volumes/Preboot/Cryptexes/OS./.aro-cache/GreetingService.dylib' (no such file), './.aro-cache/GreetingService.dylib' (code signature in <0F686E07-A44B-3A91-93B1-4A75D28B6C4B> './.aro-cache/GreetingService.dylib' not valid for use in process: mapping process and mapped file (non-platform) have different Team IDs)
-[Application-Start] Testing custom greeting plugin...
-Runtime error: Runtime Error: Cannot call the hello-msg from the greeting: hello.
-  Feature: Application-Start
-  Business Activity: Custom Plugin Demo
-  Statement: <Call> the <hello-msg> from the <greeting: hello>.
+Registered plugin service: greeting
+Testing custom greeting plugin...
+result: Hello, ARO Developer!
+result: Goodbye, ARO Developer! See you next time.
+startup

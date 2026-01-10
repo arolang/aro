@@ -1,2 +1,3 @@
-# Skip integration test
-skip: under investigation
+# Test hints for DataPipeline
+# Binary output differs from interpreter (startup messages)
+mode: interpreter

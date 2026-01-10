@@ -1,6 +1,5 @@
-# Skip due to TTY detection changes
-skip: under investigation
-
+# Test hints for EventExample
 # EventExample has concurrent event handlers with non-deterministic order
-# Use occurrence-based validation instead of exact output matching
+# Binary execution has different ordering than interpreter
+mode: interpreter
 occurrence-check: true

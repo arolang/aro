@@ -1,1 +1,3 @@
-skip: Plugin loading has path variation in error messages (code signing issues on macOS)
+# Test hints for CustomPlugin
+# Plugin tests run in interpreter mode only (code signing issues on macOS)
+mode: interpreter

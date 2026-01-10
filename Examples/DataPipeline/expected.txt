@@ -1,66 +1,33 @@
-# Generated: Mon Jan  5 15:59:08 2026
+# Generated: Sat Jan 10 11:15:13 2026
 # Type: console
 # Command: aro run ./Examples/DataPipeline
 ---
-[Application] HTTP request handler configured with 0 routes
-[Application-Start] === Test 1: Simple Array Reduce ===
-[Application-Start] Numbers:
-[Application-Start] [1, 2, 3, 4, 5]
-[Application-Start] Count:
-[Application-Start] 5
-[Application-Start] Sum:
-[Application-Start] 15.00
-[Application-Start] Average:
-[Application-Start] 3.00
-[Application-Start] Min:
-[Application-Start] 1.00
-[Application-Start] Max:
-[Application-Start] 5.00
-[Application-Start] === Test 2: Object Array with Filter ===
-[Application-Start] All Orders:
-[Application-Start] [amount: 100
-id: 1
-status: active, amount: 250
-id: 2
-status: pending, amount: 500
-id: 3
-status: active, amount: 75
-id: 4
-status: cancelled, amount: 300
-id: 5
-status: active]
-[Application-Start] Active Orders:
-[Application-Start] [amount: 100
-id: 1
-status: active, amount: 500
-id: 3
-status: active, amount: 300
-id: 5
-status: active]
-[Application-Start] Active Orders Total:
-[Application-Start] 900.00
-[Application-Start] Active Orders Count:
-[Application-Start] 3
-[Application-Start] Active Orders Average:
-[Application-Start] 300.00
-[Application-Start] === Test 3: Map Operation ===
-[Application-Start] Mapped Active Orders (pass-through):
-[Application-Start] [amount: 100
-id: 1
-status: active, amount: 500
-id: 3
-status: active, amount: 300
-id: 5
-status: active]
-[Application-Start] === Test 4: Numeric Filter ===
-[Application-Start] High Value Orders (amount > 200):
-[Application-Start] [amount: 250
-id: 2
-status: pending, amount: 500
-id: 3
-status: active, amount: 300
-id: 5
-status: active]
-[Application-Start] High Value Total:
-[Application-Start] 1050.00
-[OK] pipeline-test
+HTTP request handler configured with 0 routes
+=== Test 1: Simple Array Reduce ===
+Numbers:
+Count:
+5
+Sum:
+15.00
+Average:
+3.00
+Min:
+1.00
+Max:
+5.00
+=== Test 2: Object Array with Filter ===
+All Orders:
+Active Orders:
+Active Orders Total:
+900.00
+Active Orders Count:
+3
+Active Orders Average:
+300.00
+=== Test 3: Map Operation ===
+Mapped Active Orders (pass-through):
+=== Test 4: Numeric Filter ===
+High Value Orders (amount > 200):
+High Value Total:
+1050.00
+pipeline-test

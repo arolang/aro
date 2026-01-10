@@ -1,10 +1,10 @@
-# Generated: Sun Jan  4 23:42:15 2026
+# Generated: Sat Jan 10 10:44:40 2026
 # Type: console
 # Command: aro run ./Examples/Expressions
 ---
-[Application-Start] Expression Demo
-[Application-Start] 100
-[Application-Start] 8.00
-[Application-Start] 108.00
-[Application-Start] John Doe
-[OK] application
+Expression Demo
+100
+8.00
+108.00
+John Doe
+application

@@ -1,11 +1,8 @@
-# Generated: Sun Jan  4 23:42:31 2026
+# Generated: Sat Jan 10 10:49:23 2026
 # Type: console
 # Command: aro run ./Examples/ListTest
+# Workdir: Examples/ListTest
 ---
-[Application-Start] Listing directory...
-Runtime error: Runtime Error: Cannot list the entries from the directory: path.
-  Feature: Application-Start
-  Business Activity: List Test
-  Statement: <List> the <entries> from the <directory: path>.
-          Trace:
-            path = ../template
+Listing directory...
+Found 4 entries
+test

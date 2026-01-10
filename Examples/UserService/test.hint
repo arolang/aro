@@ -1,2 +1,3 @@
 # Test hints for UserService
-skip: under investigation
+# HTTP server binary doesn't start properly
+mode: interpreter
