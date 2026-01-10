@@ -558,9 +558,11 @@ sub detect_example_type {
 sub normalize_output {
     my ($output, $type) = @_;
 
-    # Remove bracketed prefixes (e.g., [Application-Start], [OK], etc.)
+    # Remove bracketed prefixes at start of lines (e.g., [Application-Start], [OK], etc.)
     # Binary applications don't output these, only the interpreter does
-    $output =~ s/\[[^\]]+\]\s*//g;
+    # Pattern: [LetterFollowedByAlphanumericSpacesHyphens] at line start
+    # This avoids matching JSON-like brackets in content (e.g., ["data": "value"])
+    $output =~ s/^\[[A-Za-z][A-Za-z0-9 -]*\]\s*//gm;
 
     # Remove ISO timestamps
     $output =~ s/\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d+)?Z?/__TIMESTAMP__/g;

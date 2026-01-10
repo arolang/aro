@@ -217,7 +217,10 @@ public func aro_runtime_await_pending_events(_ runtimePtr: UnsafeMutableRawPoint
     let resultBox = ResultBox()
     let semaphore = DispatchSemaphore(value: 0)
 
-    Task { @Sendable in
+    // Use Task.detached to ensure the task runs on the concurrent executor
+    // rather than inheriting the current task context. This prevents deadlocks
+    // on Linux where the default Task might try to use the blocked thread.
+    Task.detached { @Sendable in
         let result = await runtimeHandle.runtime.awaitPendingEvents(timeout: timeout)
         resultBox.set(result)
         semaphore.signal()

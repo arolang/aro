@@ -1,9 +1,10 @@
-# Generated: Sat Jan 10 15:25:40 2026
+# Generated: Sat Jan 10 15:57:53 2026
 # Type: console
 # Command: aro run ./Examples/EventExample
 ---
 Starting Event Example...
-Emitting domain event: NumberTriggered with payload: Handler #1 executed
+Emitting domain event: NumberTriggered with payload: ["data": "Event triggered!"]
+Handler #1 executed
 Handler #2 executed
 Handler #3 executed
 Handler #5 executed
