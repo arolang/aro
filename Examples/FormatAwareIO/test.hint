@@ -1,4 +1,6 @@
-# Skip integration test due to TTY detection changes
+# Test hints for FormatAwareIO
+# Binary compilation fails on Linux CI
+mode: interpreter
 
 # FormatAwareIO creates files in ./output
 # Clean up from previous test runs
