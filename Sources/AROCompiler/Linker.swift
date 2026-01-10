@@ -777,6 +777,8 @@ public final class CCompiler {
         // Windows: Find Swift library path for import libraries (.lib files)
         // Import libs are in: toolchain\usr\lib\swift\windows\x86_64\
 
+        FileHandle.standardError.write("[LINKER-WIN] Searching for Swift library path...\n".data(using: .utf8)!)
+
         // Try to find swift.exe and derive library path from it
         do {
             let whereProcess = Process()
@@ -790,33 +792,47 @@ public final class CCompiler {
             try whereProcess.run()
             whereProcess.waitUntilExit()
 
+            FileHandle.standardError.write("[LINKER-WIN] where swift exit status: \(whereProcess.terminationStatus)\n".data(using: .utf8)!)
+
             if whereProcess.terminationStatus == 0 {
                 let data = wherePipe.fileHandleForReading.readDataToEndOfFile()
                 if let output = String(data: data, encoding: .utf8) {
+                    FileHandle.standardError.write("[LINKER-WIN] where swift output: \(output.trimmingCharacters(in: .whitespacesAndNewlines))\n".data(using: .utf8)!)
                     let paths = output.components(separatedBy: .newlines).filter { !$0.isEmpty }
                     if let swiftPath = paths.first?.trimmingCharacters(in: .whitespaces) {
+                        FileHandle.standardError.write("[LINKER-WIN] Swift path: \(swiftPath)\n".data(using: .utf8)!)
                         // Swift is at: C:\path\to\toolchain\usr\bin\swift.exe
                         // Import libs are at: C:\path\to\toolchain\usr\lib\swift\windows\x86_64\
                         if let binRange = swiftPath.range(of: "\\bin\\", options: .backwards) {
                             let usrPath = String(swiftPath[..<binRange.lowerBound])
+                            FileHandle.standardError.write("[LINKER-WIN] usr path: \(usrPath)\n".data(using: .utf8)!)
                             // Try architecture-specific path first (contains .lib import libraries)
                             let archLibPath = usrPath + "\\lib\\swift\\windows\\x86_64"
+                            FileHandle.standardError.write("[LINKER-WIN] Checking arch path: \(archLibPath)\n".data(using: .utf8)!)
                             if FileManager.default.fileExists(atPath: archLibPath) {
+                                FileHandle.standardError.write("[LINKER-WIN] Found at arch path!\n".data(using: .utf8)!)
                                 return archLibPath
                             }
                             // Fall back to platform path
                             let libPath = usrPath + "\\lib\\swift\\windows"
+                            FileHandle.standardError.write("[LINKER-WIN] Checking platform path: \(libPath)\n".data(using: .utf8)!)
                             if FileManager.default.fileExists(atPath: libPath) {
+                                FileHandle.standardError.write("[LINKER-WIN] Found at platform path!\n".data(using: .utf8)!)
                                 return libPath
                             }
+                        } else {
+                            FileHandle.standardError.write("[LINKER-WIN] Could not find \\bin\\ in path\n".data(using: .utf8)!)
                         }
                     }
                 }
             }
-        } catch {}
+        } catch {
+            FileHandle.standardError.write("[LINKER-WIN] Error running where: \(error)\n".data(using: .utf8)!)
+        }
 
         // Check common installation locations (GitHub Actions Windows runner)
         // Pattern: C:\Users\runneradmin\AppData\Local\Programs\Swift\Toolchains\VERSION+Asserts\usr\lib\swift\windows\x86_64
+        FileHandle.standardError.write("[LINKER-WIN] Checking common paths...\n".data(using: .utf8)!)
         let commonPaths = [
             "C:\\Users\\runneradmin\\AppData\\Local\\Programs\\Swift\\Toolchains\\6.2.1+Asserts\\usr\\lib\\swift\\windows\\x86_64",
             "C:\\Users\\runneradmin\\AppData\\Local\\Programs\\Swift\\Toolchains\\6.2.1+Asserts\\usr\\lib\\swift\\windows",
@@ -825,11 +841,14 @@ public final class CCompiler {
         ]
 
         for path in commonPaths {
+            FileHandle.standardError.write("[LINKER-WIN] Checking: \(path)\n".data(using: .utf8)!)
             if FileManager.default.fileExists(atPath: path) {
+                FileHandle.standardError.write("[LINKER-WIN] Found!\n".data(using: .utf8)!)
                 return path
             }
         }
 
+        FileHandle.standardError.write("[LINKER-WIN] No Swift lib path found\n".data(using: .utf8)!)
         return nil
         #else
         // First, try to get the Swift library path from the Swift toolchain itself
