@@ -287,6 +287,8 @@ public final class LLVMCodeGenerator {
         registerString("_where_field_")
         registerString("_where_op_")
         registerString("_where_value_")
+        // ARO-0042: With clause for set operations
+        registerString("_with_")
         // Timeout warning message
         registerString("Event handlers did not complete within timeout")
 
@@ -344,6 +346,11 @@ public final class LLVMCodeGenerator {
                 registerString("_by_flags_")
                 registerString(byClause.pattern)
                 registerString(byClause.flags)
+            }
+
+            // ARO-0042: Collect with clause strings (for set operations)
+            if let withClause = aroStatement.withClause {
+                collectStringsFromExpression(withClause)
             }
         } else if let publishStatement = statement as? PublishStatement {
             registerString(publishStatement.externalName)
@@ -702,6 +709,11 @@ public final class LLVMCodeGenerator {
             emitByClauseBinding(byClause, prefix: prefix)
         }
 
+        // ARO-0042: Bind with clause if present (for set operations)
+        if let withClause = statement.withClause {
+            try emitWithClauseBinding(withClause, prefix: prefix)
+        }
+
         // Allocate result descriptor
         emit("  %\(prefix)_result_desc = alloca %AROResultDescriptor")
 
@@ -1022,6 +1034,99 @@ public final class LLVMCodeGenerator {
         emit("  ; ARO-0037: Bind by clause: /\(byClause.pattern)/\(byClause.flags)")
         emit("  call void @aro_variable_bind_string(ptr \(currentContext), ptr \(patternNameStr), ptr \(patternValueStr))")
         emit("  call void @aro_variable_bind_string(ptr \(currentContext), ptr \(flagsNameStr), ptr \(flagsValueStr))")
+    }
+
+    /// Emit LLVM IR to bind with clause expression (ARO-0042)
+    /// Binds the second operand to _with_ for set operations (intersect, difference, union)
+    private func emitWithClauseBinding(_ expression: any AROParser.Expression, prefix: String) throws {
+        let withNameStr = stringConstants["_with_"]!
+
+        emit("  ; ARO-0042: Bind with clause for set operations")
+
+        // Handle different expression types
+        if let literalExpr = expression as? LiteralExpression {
+            switch literalExpr.value {
+            case .string(let s):
+                let strConst = stringConstants[s]!
+                emit("  call void @aro_variable_bind_string(ptr \(currentContext), ptr \(withNameStr), ptr \(strConst))")
+
+            case .integer(let i):
+                emit("  call void @aro_variable_bind_int(ptr \(currentContext), ptr \(withNameStr), i64 \(i))")
+
+            case .float(let f):
+                let bits = f.bitPattern
+                emit("  call void @aro_variable_bind_double(ptr \(currentContext), ptr \(withNameStr), double 0x\(String(bits, radix: 16, uppercase: true)))")
+
+            case .boolean(let b):
+                emit("  call void @aro_variable_bind_bool(ptr \(currentContext), ptr \(withNameStr), i32 \(b ? 1 : 0))")
+
+            case .null:
+                break
+
+            case .array:
+                let jsonString = literalToJSON(literalExpr.value)
+                let jsonConst = stringConstants[jsonString]!
+                emit("  call void @aro_variable_bind_array(ptr \(currentContext), ptr \(withNameStr), ptr \(jsonConst))")
+
+            case .object:
+                let jsonString = literalToJSON(literalExpr.value)
+                let jsonConst = stringConstants[jsonString]!
+                emit("  call void @aro_variable_bind_dict(ptr \(currentContext), ptr \(withNameStr), ptr \(jsonConst))")
+
+            case .regex:
+                let jsonString = literalToJSON(literalExpr.value)
+                let jsonConst = stringConstants[jsonString]!
+                emit("  call void @aro_variable_bind_dict(ptr \(currentContext), ptr \(withNameStr), ptr \(jsonConst))")
+            }
+        } else if let varRefExpr = expression as? VariableRefExpression {
+            // Variable reference: resolve and copy to _with_
+            let varName = varRefExpr.noun.base
+            let varNameStr = stringConstants[varName]!
+
+            emit("  ; Resolve variable <\(varName)> for with clause")
+
+            if varRefExpr.noun.specifiers.isEmpty {
+                // Simple variable reference
+                emit("  %\(prefix)_with_var = call ptr @aro_variable_resolve(ptr \(currentContext), ptr \(varNameStr))")
+                emit("  call void @aro_variable_bind_value(ptr \(currentContext), ptr \(withNameStr), ptr %\(prefix)_with_var)")
+            } else {
+                // Variable with specifiers: <list: items>
+                emit("  %\(prefix)_with_base = call ptr @aro_variable_resolve(ptr \(currentContext), ptr \(varNameStr))")
+                for (specIdx, spec) in varRefExpr.noun.specifiers.enumerated() {
+                    let specStr = stringConstants[spec]!
+                    let prevPtr = specIdx == 0 ? "%\(prefix)_with_base" : "%\(prefix)_with_spec\(specIdx - 1)"
+                    if specIdx == varRefExpr.noun.specifiers.count - 1 {
+                        emit("  %\(prefix)_with_var = call ptr @aro_dict_get(ptr \(prevPtr), ptr \(specStr))")
+                    } else {
+                        emit("  %\(prefix)_with_spec\(specIdx) = call ptr @aro_dict_get(ptr \(prevPtr), ptr \(specStr))")
+                    }
+                }
+                emit("  call void @aro_variable_bind_value(ptr \(currentContext), ptr \(withNameStr), ptr %\(prefix)_with_var)")
+            }
+        } else if let arrayExpr = expression as? ArrayLiteralExpression {
+            // Array literal: [1, 2, 3]
+            let jsonString = arrayExpressionToJSON(arrayExpr)
+            let jsonConst = stringConstants[jsonString]!
+            emit("  call void @aro_variable_bind_array(ptr \(currentContext), ptr \(withNameStr), ptr \(jsonConst))")
+        } else if let mapExpr = expression as? MapLiteralExpression {
+            // Map literal: { key: value }
+            let jsonString = mapExpressionToJSON(mapExpr)
+            let jsonConst = stringConstants[jsonString]!
+            emit("  call void @aro_variable_bind_dict(ptr \(currentContext), ptr \(withNameStr), ptr \(jsonConst))")
+        } else if let binaryExpr = expression as? BinaryExpression {
+            // Binary expression: evaluate at runtime and bind result
+            let jsonString = binaryExpressionToJSON(binaryExpr)
+            let jsonConst = stringConstants[jsonString]!
+            emit("  ; Evaluate binary expression for with clause")
+            emit("  call void @aro_evaluate_expression(ptr \(currentContext), ptr \(jsonConst))")
+            // The result is in _expression_, copy to _with_
+            let exprNameStr = stringConstants["_expression_"]!
+            emit("  %\(prefix)_with_expr = call ptr @aro_variable_resolve(ptr \(currentContext), ptr \(exprNameStr))")
+            emit("  call void @aro_variable_bind_value(ptr \(currentContext), ptr \(withNameStr), ptr %\(prefix)_with_expr)")
+        } else if let groupedExpr = expression as? GroupedExpression {
+            // Grouped expression: (expr) - evaluate the inner expression
+            try emitWithClauseBinding(groupedExpr.expression, prefix: prefix)
+        }
     }
 
     private func generatePublishStatement(_ statement: PublishStatement, index: Int) throws {
