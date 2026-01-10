@@ -4,3 +4,5 @@
 workdir: Examples/DirectoryReplicator
 # Binary test has workdir path issue
 mode: interpreter
+# File operations don't work correctly on Windows CI
+skip-on-windows: File operations not supported on Windows CI
