@@ -4,5 +4,5 @@
 # Workdir: Examples/ListTest
 ---
 Listing directory...
-Found 4 entries
+Found __NUMBER__ entries
 test

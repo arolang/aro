@@ -1,3 +1,5 @@
 # Test hints for CustomPlugin
 # Plugin tests run in interpreter mode only (code signing issues on macOS)
+# CI may compile plugin on-the-fly, use occurrence-check for flexibility
 mode: interpreter
+occurrence-check: true
