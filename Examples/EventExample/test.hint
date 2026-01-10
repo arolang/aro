@@ -2,6 +2,3 @@
 # EventExample has concurrent event handlers with non-deterministic order
 # Use occurrence-check to allow lines to appear in any order
 occurrence-check: true
-# Binary compilation on Linux has a deadlock issue with nested sync-to-async bridging
-# See: https://github.com/arolang/aro/issues/NEW for tracking
-mode: interpreter

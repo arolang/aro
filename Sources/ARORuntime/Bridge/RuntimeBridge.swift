@@ -265,38 +265,50 @@ public func aro_runtime_register_handler(
         eventType: eventTypeStr,
         handlerName: "compiled_handler"
     ) { @Sendable event in
-        // Create a context for the handler
-        let contextHandle = AROCContextHandle(runtime: runtimeHandle, featureSetName: "handler")
+        // CRITICAL: Run compiled handler on a GCD thread, NOT on Swift's cooperative executor.
+        // Compiled handlers call aro_action_* functions which use semaphore.wait() internally.
+        // If these block executor threads, we get deadlock on Linux where the executor has limited threads.
+        // By dispatching to GCD (which has many threads), we ensure blocking doesn't starve the executor.
+        await withCheckedContinuation { (continuation: CheckedContinuation<Void, Never>) in
+            DispatchQueue.global(qos: .userInitiated).async {
+                // Create a context for the handler
+                let contextHandle = AROCContextHandle(runtime: runtimeHandle, featureSetName: "handler")
 
-        // Bind event payload to context
-        contextHandle.context.bind("event", value: event.payload)
-        for (key, value) in event.payload {
-            contextHandle.context.bind("event:\(key)", value: value)
+                // Bind event payload to context
+                contextHandle.context.bind("event", value: event.payload)
+                for (key, value) in event.payload {
+                    contextHandle.context.bind("event:\(key)", value: value)
+                }
+
+                // Get the context pointer
+                let contextPtr = Unmanaged.passRetained(contextHandle).toOpaque()
+
+                // Call the compiled handler function
+                // The function signature is: ptr function(ptr context)
+                // Convert Int back to pointer inside closure
+                guard let handlerPtrReconstructed = UnsafeMutableRawPointer(bitPattern: handlerAddress) else {
+                    print("[ARO Runtime] Error: Invalid handler pointer address: \(handlerAddress)")
+                    // Clean up context before returning
+                    Unmanaged<AROCContextHandle>.fromOpaque(contextPtr).release()
+                    continuation.resume()
+                    return
+                }
+                typealias HandlerFunc = @convention(c) (UnsafeMutableRawPointer?) -> UnsafeMutableRawPointer?
+                let handlerFunc = unsafeBitCast(handlerPtrReconstructed, to: HandlerFunc.self)
+                let result = handlerFunc(contextPtr)
+
+                // Clean up result if needed
+                if let resultPtr = result {
+                    aro_value_free(resultPtr)
+                }
+
+                // Clean up context
+                Unmanaged<AROCContextHandle>.fromOpaque(contextPtr).release()
+
+                // Resume the async continuation
+                continuation.resume()
+            }
         }
-
-        // Get the context pointer
-        let contextPtr = Unmanaged.passRetained(contextHandle).toOpaque()
-
-        // Call the compiled handler function
-        // The function signature is: ptr function(ptr context)
-        // Convert Int back to pointer inside closure
-        guard let handlerPtrReconstructed = UnsafeMutableRawPointer(bitPattern: handlerAddress) else {
-            print("[ARO Runtime] Error: Invalid handler pointer address: \(handlerAddress)")
-            // Clean up context before returning
-            Unmanaged<AROCContextHandle>.fromOpaque(contextPtr).release()
-            return
-        }
-        typealias HandlerFunc = @convention(c) (UnsafeMutableRawPointer?) -> UnsafeMutableRawPointer?
-        let handlerFunc = unsafeBitCast(handlerPtrReconstructed, to: HandlerFunc.self)
-        let result = handlerFunc(contextPtr)
-
-        // Clean up result if needed
-        if let resultPtr = result {
-            aro_value_free(resultPtr)
-        }
-
-        // Clean up context
-        Unmanaged<AROCContextHandle>.fromOpaque(contextPtr).release()
     }
 }
 
@@ -326,52 +338,62 @@ public func aro_register_repository_observer(
     runtimeHandle.runtime.eventBus.subscribe(to: RepositoryChangedEvent.self) { event in
         guard event.repositoryName == repositoryName else { return }
 
-        // Create event context with event data
-        let contextHandle = AROCContextHandle(
-            runtime: runtimeHandle,
-            featureSetName: "\(repositoryName) Observer"
-        )
+        // CRITICAL: Run compiled observer on a GCD thread, NOT on Swift's cooperative executor.
+        // Same reasoning as aro_runtime_register_handler - avoid deadlock from semaphore blocking.
+        await withCheckedContinuation { (continuation: CheckedContinuation<Void, Never>) in
+            DispatchQueue.global(qos: .userInitiated).async {
+                // Create event context with event data
+                let contextHandle = AROCContextHandle(
+                    runtime: runtimeHandle,
+                    featureSetName: "\(repositoryName) Observer"
+                )
 
-        // Bind event as a dictionary with all properties
-        // The Extract action will handle nested property access via specifiers
-        var eventDict: [String: any Sendable] = [
-            "repositoryName": event.repositoryName,
-            "changeType": event.changeType.rawValue
-        ]
-        if let entityId = event.entityId {
-            eventDict["entityId"] = entityId
+                // Bind event as a dictionary with all properties
+                // The Extract action will handle nested property access via specifiers
+                var eventDict: [String: any Sendable] = [
+                    "repositoryName": event.repositoryName,
+                    "changeType": event.changeType.rawValue
+                ]
+                if let entityId = event.entityId {
+                    eventDict["entityId"] = entityId
+                }
+                if let newValue = event.newValue {
+                    eventDict["newValue"] = newValue
+                }
+                if let oldValue = event.oldValue {
+                    eventDict["oldValue"] = oldValue
+                }
+
+                contextHandle.context.bind("event", value: eventDict)
+
+                // Get context pointer
+                let contextPtr = Unmanaged.passRetained(contextHandle).toOpaque()
+
+                // Call observer function (compiled LLVM code)
+                // The function signature is: ptr function(ptr context)
+                guard let observerPtrReconstructed = UnsafeMutableRawPointer(bitPattern: observerAddress) else {
+                    print("[RuntimeBridge] ERROR: Invalid observer pointer address: \(observerAddress)")
+                    Unmanaged<AROCContextHandle>.fromOpaque(contextPtr).release()
+                    continuation.resume()
+                    return
+                }
+
+                typealias ObserverFunc = @convention(c) (UnsafeMutableRawPointer?) -> UnsafeMutableRawPointer?
+                let observerFunc = unsafeBitCast(observerPtrReconstructed, to: ObserverFunc.self)
+                let result = observerFunc(contextPtr)
+
+                // Clean up result if needed
+                if let resultPtr = result {
+                    aro_value_free(resultPtr)
+                }
+
+                // Clean up context
+                Unmanaged<AROCContextHandle>.fromOpaque(contextPtr).release()
+
+                // Resume the async continuation
+                continuation.resume()
+            }
         }
-        if let newValue = event.newValue {
-            eventDict["newValue"] = newValue
-        }
-        if let oldValue = event.oldValue {
-            eventDict["oldValue"] = oldValue
-        }
-
-        contextHandle.context.bind("event", value: eventDict)
-
-        // Get context pointer
-        let contextPtr = Unmanaged.passRetained(contextHandle).toOpaque()
-
-        // Call observer function (compiled LLVM code)
-        // The function signature is: ptr function(ptr context)
-        guard let observerPtrReconstructed = UnsafeMutableRawPointer(bitPattern: observerAddress) else {
-            print("[RuntimeBridge] ERROR: Invalid observer pointer address: \(observerAddress)")
-            Unmanaged<AROCContextHandle>.fromOpaque(contextPtr).release()
-            return
-        }
-
-        typealias ObserverFunc = @convention(c) (UnsafeMutableRawPointer?) -> UnsafeMutableRawPointer?
-        let observerFunc = unsafeBitCast(observerPtrReconstructed, to: ObserverFunc.self)
-        let result = observerFunc(contextPtr)
-
-        // Clean up result if needed
-        if let resultPtr = result {
-            aro_value_free(resultPtr)
-        }
-
-        // Clean up context
-        Unmanaged<AROCContextHandle>.fromOpaque(contextPtr).release()
     }
 }
 
