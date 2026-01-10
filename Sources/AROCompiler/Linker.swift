@@ -530,13 +530,21 @@ public final class CCompiler {
         }
         #elseif os(Windows)
         // Windows platform libraries
-        // On Windows, Swift uses DLLs for runtime (swiftCore.dll, etc.)
-        // These DLLs are loaded dynamically at runtime from PATH
-        // We don't need to explicitly link import libraries (.lib) - the DLLs handle it
-        // The libARORuntime.a already has Swift dependencies that will resolve to DLLs
+        // libARORuntime.a is compiled from Swift and has dependencies on Swift runtime
+        // The linker needs to find Swift import libraries (.lib) to resolve these
+        // Swift import libs are in the toolchain lib directory
 
-        // Just add standard Windows system libraries that clang may need
-        // Most of this is handled automatically by clang's Windows toolchain
+        // Find Swift library path and add it to linker search path
+        if let swiftLibPath = findSwiftLibPath() {
+            FileHandle.standardError.write("[LINKER-WIN] Found Swift lib path: \(swiftLibPath)\n".data(using: .utf8)!)
+            args.append("-L\(swiftLibPath)")
+        } else {
+            FileHandle.standardError.write("[LINKER-WIN] WARNING: Swift library path not found!\n".data(using: .utf8)!)
+        }
+
+        // The linker will automatically resolve Swift dependencies from the -L path
+        // We don't need to explicitly list -lswiftCore etc because libARORuntime.a
+        // already has the proper linkage references
         #endif
 
         // Optimizations
@@ -766,18 +774,8 @@ public final class CCompiler {
 
     private func findSwiftLibPath() -> String? {
         #if os(Windows)
-        // Windows: Find Swift library path
-        // First, check common installation locations
-        let windowsSwiftLibPaths = [
-            "C:\\Library\\Developer\\Toolchains\\unknown-Asserts-development.xctoolchain\\usr\\lib\\swift\\windows",
-            "C:\\Swift\\Toolchains\\0.0.0+Asserts\\usr\\lib\\swift\\windows"
-        ]
-
-        for path in windowsSwiftLibPaths {
-            if FileManager.default.fileExists(atPath: path) {
-                return path
-            }
-        }
+        // Windows: Find Swift library path for import libraries (.lib files)
+        // Import libs are in: toolchain\usr\lib\swift\windows\x86_64\
 
         // Try to find swift.exe and derive library path from it
         do {
@@ -798,10 +796,16 @@ public final class CCompiler {
                     let paths = output.components(separatedBy: .newlines).filter { !$0.isEmpty }
                     if let swiftPath = paths.first?.trimmingCharacters(in: .whitespaces) {
                         // Swift is at: C:\path\to\toolchain\usr\bin\swift.exe
-                        // Libraries are at: C:\path\to\toolchain\usr\lib\swift\windows
+                        // Import libs are at: C:\path\to\toolchain\usr\lib\swift\windows\x86_64\
                         if let binRange = swiftPath.range(of: "\\bin\\", options: .backwards) {
-                            let toolchainPath = String(swiftPath[..<binRange.lowerBound])
-                            let libPath = toolchainPath + "\\lib\\swift\\windows"
+                            let usrPath = String(swiftPath[..<binRange.lowerBound])
+                            // Try architecture-specific path first (contains .lib import libraries)
+                            let archLibPath = usrPath + "\\lib\\swift\\windows\\x86_64"
+                            if FileManager.default.fileExists(atPath: archLibPath) {
+                                return archLibPath
+                            }
+                            // Fall back to platform path
+                            let libPath = usrPath + "\\lib\\swift\\windows"
                             if FileManager.default.fileExists(atPath: libPath) {
                                 return libPath
                             }
@@ -810,6 +814,21 @@ public final class CCompiler {
                 }
             }
         } catch {}
+
+        // Check common installation locations (GitHub Actions Windows runner)
+        // Pattern: C:\Users\runneradmin\AppData\Local\Programs\Swift\Toolchains\VERSION+Asserts\usr\lib\swift\windows\x86_64
+        let commonPaths = [
+            "C:\\Users\\runneradmin\\AppData\\Local\\Programs\\Swift\\Toolchains\\6.2.1+Asserts\\usr\\lib\\swift\\windows\\x86_64",
+            "C:\\Users\\runneradmin\\AppData\\Local\\Programs\\Swift\\Toolchains\\6.2.1+Asserts\\usr\\lib\\swift\\windows",
+            "C:\\Library\\Developer\\Toolchains\\unknown-Asserts-development.xctoolchain\\usr\\lib\\swift\\windows\\x86_64",
+            "C:\\Swift\\Toolchains\\0.0.0+Asserts\\usr\\lib\\swift\\windows\\x86_64"
+        ]
+
+        for path in commonPaths {
+            if FileManager.default.fileExists(atPath: path) {
+                return path
+            }
+        }
 
         return nil
         #else
