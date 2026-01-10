@@ -790,36 +790,78 @@ jobs:
         run: |
           Write-Host "=== Testing native compilation manually ==="
 
+          # Show PATH (for debugging DLL issues)
+          Write-Host "`n=== PATH (for Swift DLLs) ==="
+          $env:PATH -split ';' | Where-Object { $_ -match 'Swift' } | ForEach-Object { Write-Host $_ }
+
           # Build HelloWorld
           Write-Host "`nBuilding HelloWorld..."
           & $env:ARO_BIN build Examples/HelloWorld 2>&1 | Tee-Object -Variable buildOutput
-          Write-Host "Build exit code: $LASTEXITCODE"
+          $buildExitCode = $LASTEXITCODE
+          Write-Host "Build exit code: $buildExitCode"
+
+          if ($buildExitCode -ne 0) {
+            Write-Host "ERROR: Build failed!"
+            exit 1
+          }
 
           # Check if binary was created
           $binaryPath = "Examples/HelloWorld/HelloWorld.exe"
-          if (Test-Path $binaryPath) {
-            Write-Host "`nBinary created: $binaryPath"
-            Write-Host "Size: $((Get-Item $binaryPath).Length) bytes"
-
-            # Try to run it directly
-            Write-Host "`nRunning binary directly..."
-            try {
-              $proc = Start-Process -FilePath $binaryPath -NoNewWindow -PassThru -Wait -RedirectStandardOutput stdout.txt -RedirectStandardError stderr.txt
-              Write-Host "Exit code: $($proc.ExitCode)"
-              Write-Host "stdout:"
-              if (Test-Path stdout.txt) { Get-Content stdout.txt }
-              Write-Host "stderr:"
-              if (Test-Path stderr.txt) { Get-Content stderr.txt }
-            } catch {
-              Write-Host "Exception: $_"
-            }
-
-            # Check dependencies using dumpbin
-            Write-Host "`nChecking binary dependencies..."
-            & dumpbin /dependents $binaryPath 2>&1 | Select-Object -First 30
-          } else {
+          if (-not (Test-Path $binaryPath)) {
             Write-Host "ERROR: Binary not found at $binaryPath"
+            exit 1
           }
+
+          Write-Host "`nBinary created: $binaryPath"
+          Write-Host "Size: $((Get-Item $binaryPath).Length) bytes"
+
+          # Try to run it directly
+          Write-Host "`nRunning binary directly..."
+          try {
+            $proc = Start-Process -FilePath $binaryPath -NoNewWindow -PassThru -Wait -RedirectStandardOutput stdout.txt -RedirectStandardError stderr.txt
+            Write-Host "Exit code: $($proc.ExitCode)"
+            Write-Host "stdout:"
+            if (Test-Path stdout.txt) { Get-Content stdout.txt }
+            Write-Host "stderr:"
+            if (Test-Path stderr.txt) { Get-Content stderr.txt }
+
+            # Check if binary ran successfully
+            if ($proc.ExitCode -ne 0) {
+              Write-Host "WARNING: Binary exited with non-zero code: $($proc.ExitCode)"
+              # Exit code -1073741819 = 0xC0000005 = ACCESS_VIOLATION
+              if ($proc.ExitCode -eq -1073741819) {
+                Write-Host "This is an ACCESS_VIOLATION - likely missing DLLs or runtime initialization issue"
+              }
+            }
+          } catch {
+            Write-Host "Exception running binary: $_"
+          }
+
+          # Check dependencies using dumpbin (if available)
+          Write-Host "`nChecking binary dependencies..."
+          try {
+            # Try to find dumpbin via Visual Studio
+            $vsWhere = "${env:ProgramFiles(x86)}\Microsoft Visual Studio\Installer\vswhere.exe"
+            if (Test-Path $vsWhere) {
+              $vsPath = & $vsWhere -latest -property installationPath
+              $dumpbinPaths = @(
+                "$vsPath\VC\Tools\MSVC\*\bin\Hostx64\x64\dumpbin.exe"
+              )
+              $dumpbin = Get-ChildItem -Path $dumpbinPaths -ErrorAction SilentlyContinue | Select-Object -First 1
+              if ($dumpbin) {
+                & $dumpbin.FullName /dependents $binaryPath 2>&1 | Select-Object -First 30
+              } else {
+                Write-Host "dumpbin not found in Visual Studio installation"
+              }
+            } else {
+              Write-Host "vswhere not found - cannot locate dumpbin"
+            }
+          } catch {
+            Write-Host "Could not run dumpbin: $_"
+          }
+
+          # For now, don't fail on binary execution issues - we want to see if it builds
+          Write-Host "`n=== Build test completed ==="
 
       - name: Run integration tests
         shell: pwsh

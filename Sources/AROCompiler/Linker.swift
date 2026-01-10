@@ -541,6 +541,16 @@ public final class CCompiler {
             FileHandle.standardError.write("[LINKER-WIN] Found Swift lib path: \(swiftLibPath)\n".data(using: .utf8)!)
             args.append("-L\(swiftLibPath)")
 
+            // CRITICAL: Link swiftrt.obj to initialize Swift runtime on Windows
+            // Without this, the binary will crash with ACCESS_VIOLATION at startup
+            if let swiftRTPath = findWindowsSwiftRuntimeObject(swiftLibPath: swiftLibPath) {
+                FileHandle.standardError.write("[LINKER-WIN] Found swiftrt at: \(swiftRTPath)\n".data(using: .utf8)!)
+                // Insert right after compiler, before object files
+                args.insert(swiftRTPath, at: 1)
+            } else {
+                FileHandle.standardError.write("[LINKER-WIN] WARNING: swiftrt not found - binary may crash at runtime\n".data(using: .utf8)!)
+            }
+
             // Also add the runtime lib path in case import libs are there
             // C:\Users\runneradmin\AppData\Local\Programs\Swift\Runtimes\VERSION\usr\lib
             if let runtimeLibPath = ProcessInfo.processInfo.environment["PATH"]?
@@ -1088,6 +1098,73 @@ public final class CCompiler {
         }
 
         FileHandle.standardError.write("[LINKER-WIN] VC runtime not found\n".data(using: .utf8)!)
+        #endif
+        return nil
+    }
+
+    /// Find Windows Swift runtime initialization object
+    /// This is required to properly initialize the Swift runtime on Windows
+    private func findWindowsSwiftRuntimeObject(swiftLibPath: String) -> String? {
+        #if os(Windows)
+        // On Windows, the Swift runtime initialization object is named swiftrt.obj
+        // It's typically in the same directory as the Swift libraries
+
+        let potentialPaths = [
+            "\(swiftLibPath)\\swiftrt.obj",
+            "\(swiftLibPath)\\..\\swiftrt.obj",  // One level up
+        ]
+
+        for path in potentialPaths {
+            if FileManager.default.fileExists(atPath: path) {
+                return path
+            }
+        }
+
+        // Also check the toolchain path if swiftLibPath is the SDK
+        // Toolchain: C:\...\Toolchains\6.2.1+Asserts\usr\lib\swift\windows\x86_64\swiftrt.obj
+        if let sdkRoot = ProcessInfo.processInfo.environment["SDKROOT"],
+           let toolchainRoot = sdkRoot.range(of: "Platforms") {
+            let basePath = String(sdkRoot[..<toolchainRoot.lowerBound])
+            let toolchainPaths = [
+                "\(basePath)Toolchains\\6.2.1+Asserts\\usr\\lib\\swift\\windows\\x86_64\\swiftrt.obj",
+                "\(basePath)Toolchains\\6.2.1-RELEASE\\usr\\lib\\swift\\windows\\x86_64\\swiftrt.obj"
+            ]
+            for path in toolchainPaths {
+                let cleanPath = path.replacingOccurrences(of: "\\\\", with: "\\")
+                if FileManager.default.fileExists(atPath: cleanPath) {
+                    return cleanPath
+                }
+            }
+        }
+
+        // Try to find via swift.exe location
+        do {
+            let whereProcess = Process()
+            whereProcess.executableURL = URL(fileURLWithPath: "C:\\Windows\\System32\\where.exe")
+            whereProcess.arguments = ["swift"]
+
+            let wherePipe = Pipe()
+            whereProcess.standardOutput = wherePipe
+            whereProcess.standardError = FileHandle.nullDevice
+
+            try whereProcess.run()
+            whereProcess.waitUntilExit()
+
+            if whereProcess.terminationStatus == 0 {
+                let data = wherePipe.fileHandleForReading.readDataToEndOfFile()
+                if let output = String(data: data, encoding: .utf8),
+                   let swiftPath = output.components(separatedBy: .newlines).first?.trimmingCharacters(in: .whitespaces),
+                   let binRange = swiftPath.range(of: "\\bin\\", options: .backwards) {
+                    let usrPath = String(swiftPath[..<binRange.lowerBound])
+                    let rtPath = "\(usrPath)\\lib\\swift\\windows\\x86_64\\swiftrt.obj"
+                    if FileManager.default.fileExists(atPath: rtPath) {
+                        return rtPath
+                    }
+                }
+            }
+        } catch {}
+
+        FileHandle.standardError.write("[LINKER-WIN] Could not find swiftrt.obj\n".data(using: .utf8)!)
         #endif
         return nil
     }
