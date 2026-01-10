@@ -1,3 +1,5 @@
 # Test hints for SimpleChat
 # Socket server binary doesn't start properly
 mode: interpreter
+# HTTP endpoint test order may vary
+occurrence-check: true
