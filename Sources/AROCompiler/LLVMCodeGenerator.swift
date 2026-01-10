@@ -82,12 +82,31 @@ public final class LLVMCodeGenerator {
     private func emitModuleHeader() {
         emit("; ModuleID = 'aro_program'")
         emit("source_filename = \"aro_program.ll\"")
-        emit("target datalayout = \"e-m:o-i64:64-i128:128-n32:64-S128\"")
-        #if arch(arm64)
-        emit("target triple = \"arm64-apple-macosx14.0.0\"")
-        #else
-        emit("target triple = \"x86_64-apple-macosx14.0.0\"")
+
+        // Platform and architecture detection for correct target triple
+        #if os(macOS)
+            #if arch(arm64)
+            emit("target datalayout = \"e-m:o-i64:64-i128:128-n32:64-S128\"")
+            emit("target triple = \"arm64-apple-macosx14.0.0\"")
+            #elseif arch(x86_64)
+            emit("target datalayout = \"e-m:o-i64:64-f80:128-n8:16:32:64-S128\"")
+            emit("target triple = \"x86_64-apple-macosx14.0.0\"")
+            #endif
+        #elseif os(Linux)
+            #if arch(arm64) || arch(aarch64)
+            emit("target datalayout = \"e-m:e-i8:8:32-i16:16:32-i64:64-i128:128-n32:64-S128\"")
+            emit("target triple = \"aarch64-unknown-linux-gnu\"")
+            #elseif arch(x86_64)
+            emit("target datalayout = \"e-m:e-i64:64-f80:128-n8:16:32:64-S128\"")
+            emit("target triple = \"x86_64-unknown-linux-gnu\"")
+            #endif
+        #elseif os(Windows)
+            #if arch(x86_64)
+            emit("target datalayout = \"e-m:w-i64:64-f80:128-n8:16:32:64-S128\"")
+            emit("target triple = \"x86_64-pc-windows-msvc\"")
+            #endif
         #endif
+
         emit("")
     }
 

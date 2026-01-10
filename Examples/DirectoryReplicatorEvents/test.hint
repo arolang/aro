@@ -1,5 +1,5 @@
 # Skip integration test due to TTY detection changes
-skip: TTY detection changes affect test behavior
+skip: under investigation
 
 # DirectoryReplicatorEvents uses relative path ../template
 # Must run from within example directory

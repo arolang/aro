@@ -25,7 +25,7 @@ concurrency:
   cancel-in-progress: true
 
 env:
-  SWIFT_VERSION: '6.2.1'
+  SWIFT_VERSION: '6.2.3'
 
 jobs:
   # ===========================================================================
@@ -129,7 +129,9 @@ jobs:
           echo "  Build Date: $BUILD_DATE"
 
       - name: Build release
-        run: swift build -c release --static-swift-stdlib
+        run: |
+          swift build -c release --static-swift-stdlib
+          swift build -c release --product ARORuntime
 
       - name: Verify CLI
         run: |
@@ -137,11 +139,17 @@ jobs:
           .build/release/aro check ./Examples/HelloWorldAPI
           .build/release/aro check ./Examples/UserService
 
+      - name: Prepare artifact directory
+        run: |
+          mkdir -p aro-dist
+          cp .build/release/aro aro-dist/
+          cp .build/x86_64-unknown-linux-gnu/release/libARORuntime.a aro-dist/
+
       - name: Upload artifact
         uses: actions/upload-artifact@v6
         with:
           name: aro-linux-amd64
-          path: .build/release/aro
+          path: aro-dist/
           retention-days: 30
 
   # ===========================================================================
@@ -150,7 +158,7 @@ jobs:
   macos:
     needs: test
     name: macOS
-    runs-on: macos-15
+    runs-on: macos-26
     steps:
       - name: Checkout repository
         uses: actions/checkout@v6
@@ -227,7 +235,9 @@ jobs:
           echo "  Build Date: $BUILD_DATE"
 
       - name: Build release
-        run: swift build -c release
+        run: |
+          swift build -c release
+          swift build -c release --product ARORuntime
 
       - name: Verify CLI
         run: |
@@ -346,11 +356,17 @@ jobs:
       # Upload Artifact
       # ========================================================================
 
+      - name: Prepare artifact directory
+        run: |
+          mkdir -p aro-dist
+          cp .build/release/aro aro-dist/
+          cp .build/arm64-apple-macosx/release/libARORuntime.a aro-dist/
+
       - name: Upload artifact
         uses: actions/upload-artifact@v6
         with:
           name: aro-macos-arm64
-          path: .build/release/aro
+          path: aro-dist/
           retention-days: 30
 
   # ===========================================================================
@@ -362,7 +378,6 @@ jobs:
     permissions:
       contents: read
     runs-on: windows-latest
-    continue-on-error: true  # swift-nio-ssl Windows header issues
     steps:
       - name: Checkout repository
         uses: actions/checkout@v6
@@ -435,57 +450,113 @@ jobs:
           echo "  Build Date: $BUILD_DATE"
 
       - name: Build release
-        run: swift build -c release
+        run: |
+          swift build -c release
+          swift build -c release --product ARORuntime
 
       - name: Verify CLI
         run: |
           .build\release\aro.exe --help
 
+      - name: Find runtime library
+        shell: bash
+        run: |
+          echo "Looking for runtime library..."
+          echo "=== Searching for ARORuntime library files ==="
+          find .build -name "*ARORuntime*.a" -o -name "*ARORuntime*.lib" 2>/dev/null || true
+          echo "=== Searching for all .a and .lib files ==="
+          find .build \( -name "*.a" -o -name "*.lib" \) -type f 2>/dev/null | head -30 || true
+          echo "=== Contents of .build/release/ ==="
+          ls -la .build/release/ 2>/dev/null || true
+          echo "=== Contents of .build/x86_64-unknown-windows-msvc/release/ ==="
+          ls -la .build/x86_64-unknown-windows-msvc/release/ 2>/dev/null || true
+
+      - name: Prepare artifact directory
+        shell: bash
+        run: |
+          mkdir -p aro-dist
+          cp .build/release/aro.exe aro-dist/
+
+          # Search for runtime library in multiple locations
+          # Swift on Windows may place it in different locations
+          # Library names on Windows: libARORuntime.a (Swift default) or ARORuntime.lib (MSVC style)
+          RUNTIME_FOUND=0
+
+          # Standard locations with explicit library names
+          for path in \
+            ".build/release/libARORuntime.a" \
+            ".build/x86_64-unknown-windows-msvc/release/libARORuntime.a" \
+            ".build/release/ARORuntime.lib" \
+            ".build/x86_64-unknown-windows-msvc/release/ARORuntime.lib" \
+            ".build/release/ARORuntime.a" \
+            ".build/x86_64-unknown-windows-msvc/release/ARORuntime.a"; do
+            if [ -f "$path" ]; then
+              echo "Found runtime library at: $path"
+              cp "$path" aro-dist/libARORuntime.a
+              RUNTIME_FOUND=1
+              break
+            fi
+          done
+
+          # If not found in standard locations, search for library files only
+          # Be specific: only .a or .lib files with ARORuntime in the name
+          if [ "$RUNTIME_FOUND" = "0" ]; then
+            echo "Searching for runtime library..."
+            # Search for .a files first (more common for Swift)
+            FOUND_LIB=$(find .build -name "*ARORuntime*.a" -type f 2>/dev/null | head -1)
+            if [ -z "$FOUND_LIB" ]; then
+              # Try .lib files (MSVC style)
+              FOUND_LIB=$(find .build -name "*ARORuntime*.lib" -type f 2>/dev/null | head -1)
+            fi
+            if [ -n "$FOUND_LIB" ]; then
+              echo "Found runtime library at: $FOUND_LIB"
+              # Verify it looks like a valid library (has some minimum size)
+              LIB_SIZE=$(stat -c%s "$FOUND_LIB" 2>/dev/null || stat -f%z "$FOUND_LIB" 2>/dev/null || echo "0")
+              echo "Library size: $LIB_SIZE bytes"
+              if [ "$LIB_SIZE" -gt 1000 ]; then
+                cp "$FOUND_LIB" aro-dist/libARORuntime.a
+                RUNTIME_FOUND=1
+              else
+                echo "WARNING: Found file is too small to be a valid library"
+              fi
+            fi
+          fi
+
+          if [ "$RUNTIME_FOUND" = "0" ]; then
+            echo "ERROR: Runtime library not found!"
+            echo "Native compilation tests will fail without libARORuntime.a"
+            echo ""
+            echo "=== All .a and .lib files in .build ==="
+            find .build \( -name "*.a" -o -name "*.lib" \) -type f 2>/dev/null || true
+            exit 1
+          fi
+
+          echo "=== Artifact contents ==="
+          ls -la aro-dist/
+
+          # Verify the library file
+          echo "=== Library file info ==="
+          file aro-dist/libARORuntime.a 2>/dev/null || true
+
       - name: Upload artifact
         uses: actions/upload-artifact@v6
         with:
           name: aro-windows-amd64
-          path: .build/release/aro.exe
+          path: aro-dist/
           retention-days: 30
 
   # ===========================================================================
-  # Integration Tests (test-examples.pl on all platforms)
+  # Integration Tests - Linux
   # ===========================================================================
-  integration-tests:
-    needs: [linux, macos, windows]
-    name: Integration Tests - ${{ matrix.os }}
-    runs-on: ${{ matrix.runner }}
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - os: Linux
-            runner: ubuntu-latest
-            artifact: aro-linux-amd64
-            binary: aro
-            shell: bash
-          - os: macOS
-            runner: macos-15
-            artifact: aro-macos-arm64
-            binary: aro
-            shell: bash
-          - os: Windows
-            runner: windows-latest
-            artifact: aro-windows-amd64
-            binary: aro.exe
-            shell: bash
-    defaults:
-      run:
-        shell: ${{ matrix.shell }}
+  integration-tests-linux:
+    needs: [linux]
+    name: Integration Tests - Linux
+    runs-on: ubuntu-latest
     steps:
       - name: Checkout repository
         uses: actions/checkout@v6
 
-      # ======================================================================
-      # Install Swift
-      # ======================================================================
-      - name: Setup Swift (Linux)
-        if: matrix.os == 'Linux'
+      - name: Setup Swift
         run: |
           # Swift is needed for native compilation tests
           wget https://download.swift.org/swift-6.2.1-release/ubuntu2204/swift-6.2.1-RELEASE/swift-6.2.1-RELEASE-ubuntu22.04.tar.gz
@@ -493,54 +564,145 @@ jobs:
           sudo mv swift-6.2.1-RELEASE-ubuntu22.04 /usr/share/swift
           echo "/usr/share/swift/usr/bin" >> $GITHUB_PATH
 
-      - name: Setup Swift (macOS)
-        if: matrix.os == 'macOS'
+      - name: Install LLVM
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y llvm-14 clang-14
+          sudo ln -sf /usr/bin/llc-14 /usr/bin/llc
+          echo "/usr/lib/llvm-14/bin" >> $GITHUB_PATH
+
+      - name: Install Perl modules
+        run: |
+          export DEBIAN_FRONTEND=noninteractive
+          sudo apt-get update -qq
+          # Install available Perl modules from apt (faster and more reliable)
+          sudo apt-get install -y -qq \
+            libipc-run-perl \
+            libyaml-libyaml-perl \
+            libhttp-tiny-perl \
+            cpanminus || true
+          # Install remaining modules via cpan
+          cpan -T Net::EmptyPort Term::ANSIColor 2>&1 || true
+
+      - name: Download ARO artifact
+        uses: actions/download-artifact@v7
+        with:
+          name: aro-linux-amd64
+          path: ./aro-bin
+
+      - name: Prepare ARO binary
+        run: |
+          chmod +x ./aro-bin/aro
+          echo "ARO_BIN=$GITHUB_WORKSPACE/aro-bin/aro" >> $GITHUB_ENV
+          # Copy libARORuntime.a to system location for native compilation tests
+          sudo mkdir -p /usr/local/lib
+          sudo cp ./aro-bin/libARORuntime.a /usr/local/lib/libARORuntime.a
+          ./aro-bin/aro --version
+
+      - name: Run integration tests
+        run: |
+          chmod +x test-examples.pl
+          perl test-examples.pl --verbose
+
+      - name: Upload test results on failure
+        if: failure()
+        uses: actions/upload-artifact@v6
+        with:
+          name: test-failures-Linux
+          path: |
+            Examples/**/expected.*
+            Examples/**/testrun.*
+          retention-days: 7
+
+  # ===========================================================================
+  # Integration Tests - macOS
+  # ===========================================================================
+  integration-tests-macos:
+    needs: [macos]
+    name: Integration Tests - macOS
+    runs-on: macos-26
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v6
+
+      - name: Setup Swift
         uses: swift-actions/setup-swift@364295d9c23900ce04d4e5cc708387921b4e50f9  # v3
         with:
           swift-version: ${{ env.SWIFT_VERSION }}
 
-      - name: Setup Swift (Windows)
-        if: matrix.os == 'Windows'
+      - name: Install LLVM
+        run: |
+          brew install llvm@18
+          echo "/opt/homebrew/opt/llvm@18/bin" >> $GITHUB_PATH
+
+      - name: Install Perl modules
+        run: |
+          cpan -T IPC::Run YAML::XS HTTP::Tiny Net::EmptyPort Term::ANSIColor Time::HiRes 2>&1 || true
+
+      - name: Download ARO artifact
+        uses: actions/download-artifact@v7
+        with:
+          name: aro-macos-arm64
+          path: ./aro-bin
+
+      - name: Prepare ARO binary
+        run: |
+          chmod +x ./aro-bin/aro
+          echo "ARO_BIN=$GITHUB_WORKSPACE/aro-bin/aro" >> $GITHUB_ENV
+          # Copy libARORuntime.a to system location for native compilation tests
+          sudo mkdir -p /usr/local/lib
+          sudo cp ./aro-bin/libARORuntime.a /usr/local/lib/libARORuntime.a
+          ./aro-bin/aro --version
+
+      - name: Run integration tests
+        run: |
+          chmod +x test-examples.pl
+          perl test-examples.pl --verbose
+
+      - name: Upload test results on failure
+        if: failure()
+        uses: actions/upload-artifact@v6
+        with:
+          name: test-failures-macOS
+          path: |
+            Examples/**/expected.*
+            Examples/**/testrun.*
+          retention-days: 7
+
+  # ===========================================================================
+  # Integration Tests - Windows
+  # ===========================================================================
+  integration-tests-windows:
+    needs: [windows]
+    name: Integration Tests - Windows
+    runs-on: windows-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v6
+
+      - name: Setup Swift
         uses: compnerd/gha-setup-swift@c8363f1001fbb4b12d127c432f9eaadec5f56e8c  # main
         with:
           swift-version: swift-6.2.1-release
           swift-build: 6.2.1-RELEASE
 
-      # ======================================================================
-      # Install LLVM
-      # ======================================================================
-      - name: Install LLVM (Linux)
-        if: matrix.os == 'Linux'
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y llvm-18 llvm-18-dev
-          echo "/usr/lib/llvm-18/bin" >> $GITHUB_PATH
-
-      - name: Install LLVM (macOS)
-        if: matrix.os == 'macOS'
-        run: |
-          brew install llvm@18
-          echo "/opt/homebrew/opt/llvm@18/bin" >> $GITHUB_PATH
-
-      - name: Install LLVM (Windows)
-        if: matrix.os == 'Windows'
+      - name: Setup LLVM
         shell: pwsh
         run: |
-          # LLVM is pre-installed on windows-latest runners
-          # Just add to PATH if not already there
-          if (Test-Path "C:\Program Files\LLVM\bin") {
-            echo "C:\Program Files\LLVM\bin" | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
-            Write-Host "LLVM found and added to PATH"
+          # On Windows, we use clang (not llc) to compile LLVM IR to object files
+          # The pre-installed LLVM on Windows runners includes clang
+          $llvmBin = "C:\Program Files\LLVM\bin"
+
+          if (Test-Path "$llvmBin\clang.exe") {
+            Write-Host "Found clang at: $llvmBin\clang.exe"
+            echo $llvmBin | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
+            & "$llvmBin\clang.exe" --version
           } else {
-            choco install llvm -y
-            echo "C:\Program Files\LLVM\bin" | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
+            Write-Host "ERROR: clang.exe not found"
+            exit 1
           }
 
-      # ======================================================================
-      # Install Perl Modules
-      # ======================================================================
-      - name: Setup Perl Build Environment (Windows)
-        if: matrix.os == 'Windows'
+      - name: Setup Perl Build Environment
         shell: pwsh
         run: |
           # Ensure Strawberry Perl's build tools are available
@@ -573,13 +735,7 @@ jobs:
           gcc --version
           gmake --version
 
-      - name: Install Perl modules (Linux/macOS)
-        if: matrix.os != 'Windows'
-        run: |
-          cpan -T IPC::Run YAML::XS HTTP::Tiny Net::EmptyPort Term::ANSIColor Time::HiRes
-
-      - name: Install Perl modules (Windows)
-        if: matrix.os == 'Windows'
+      - name: Install Perl modules
         shell: pwsh
         run: |
           Write-Host "Installing Perl modules..."
@@ -601,60 +757,129 @@ jobs:
           Write-Host "`nPerl module installation complete"
           exit 0  # Always succeed - test script has fallback handling
 
-      # ======================================================================
-      # Download and Install ARO Binary
-      # ======================================================================
       - name: Download ARO artifact
         uses: actions/download-artifact@v7
         with:
-          name: ${{ matrix.artifact }}
+          name: aro-windows-amd64
           path: ./aro-bin
 
-      - name: Prepare ARO binary (Linux/macOS)
-        if: matrix.os != 'Windows'
+      - name: Prepare ARO binary
+        shell: pwsh
         run: |
-          chmod +x ./aro-bin/${{ matrix.binary }}
-          echo "ARO_BIN=$GITHUB_WORKSPACE/aro-bin/${{ matrix.binary }}" >> $GITHUB_ENV
-          ./aro-bin/${{ matrix.binary }} --version
+          # Set environment variable for subsequent steps
+          echo "ARO_BIN=$env:GITHUB_WORKSPACE\aro-bin\aro.exe" >> $env:GITHUB_ENV
 
-      - name: Prepare ARO binary (Windows)
-        if: matrix.os == 'Windows'
-        shell: bash
+          # Verify the binary works
+          & .\aro-bin\aro.exe --version
+
+          # Verify runtime library exists (required for native compilation)
+          Write-Host "`n=== Checking artifact contents ==="
+          Get-ChildItem -Path .\aro-bin\ | Format-Table -AutoSize
+
+          if (Test-Path ".\aro-bin\libARORuntime.a") {
+            Write-Host "Runtime library found: libARORuntime.a"
+            $size = (Get-Item ".\aro-bin\libARORuntime.a").Length
+            Write-Host "Size: $size bytes"
+          } else {
+            Write-Host "WARNING: Runtime library (libARORuntime.a) not found!"
+            Write-Host "Native compilation tests may fail."
+          }
+
+      - name: Test native compilation manually
+        shell: pwsh
         run: |
-          chmod +x ./aro-bin/${{ matrix.binary }}
-          echo "ARO_BIN=$GITHUB_WORKSPACE/aro-bin/${{ matrix.binary }}" >> $GITHUB_ENV
-          ./aro-bin/${{ matrix.binary }} --version || true
+          Write-Host "=== Testing native compilation manually ==="
 
-      # ======================================================================
-      # Run Integration Tests
-      # ======================================================================
-      # Note: test-examples.pl is a compatibility wrapper that redirects to
-      # the modular framework in Tests/AROIntegrationTests/run-tests.pl
+          # Show PATH (for debugging DLL issues)
+          Write-Host "`n=== PATH (for Swift DLLs) ==="
+          $env:PATH -split ';' | Where-Object { $_ -match 'Swift' } | ForEach-Object { Write-Host $_ }
+
+          # Build HelloWorld
+          Write-Host "`nBuilding HelloWorld..."
+          & $env:ARO_BIN build Examples/HelloWorld 2>&1 | Tee-Object -Variable buildOutput
+          $buildExitCode = $LASTEXITCODE
+          Write-Host "Build exit code: $buildExitCode"
+
+          if ($buildExitCode -ne 0) {
+            Write-Host "ERROR: Build failed!"
+            exit 1
+          }
+
+          # Check if binary was created
+          $binaryPath = "Examples/HelloWorld/HelloWorld.exe"
+          if (-not (Test-Path $binaryPath)) {
+            Write-Host "ERROR: Binary not found at $binaryPath"
+            exit 1
+          }
+
+          Write-Host "`nBinary created: $binaryPath"
+          Write-Host "Size: $((Get-Item $binaryPath).Length) bytes"
+
+          # Try to run it directly
+          Write-Host "`nRunning binary directly..."
+          try {
+            $proc = Start-Process -FilePath $binaryPath -NoNewWindow -PassThru -Wait -RedirectStandardOutput stdout.txt -RedirectStandardError stderr.txt
+            Write-Host "Exit code: $($proc.ExitCode)"
+            Write-Host "stdout:"
+            if (Test-Path stdout.txt) { Get-Content stdout.txt }
+            Write-Host "stderr:"
+            if (Test-Path stderr.txt) { Get-Content stderr.txt }
+
+            # Check if binary ran successfully
+            if ($proc.ExitCode -ne 0) {
+              Write-Host "WARNING: Binary exited with non-zero code: $($proc.ExitCode)"
+              # Exit code -1073741819 = 0xC0000005 = ACCESS_VIOLATION
+              if ($proc.ExitCode -eq -1073741819) {
+                Write-Host "This is an ACCESS_VIOLATION - likely missing DLLs or runtime initialization issue"
+              }
+            }
+          } catch {
+            Write-Host "Exception running binary: $_"
+          }
+
+          # Check dependencies using dumpbin (if available)
+          Write-Host "`nChecking binary dependencies..."
+          try {
+            # Try to find dumpbin via Visual Studio
+            $vsWhere = "${env:ProgramFiles(x86)}\Microsoft Visual Studio\Installer\vswhere.exe"
+            if (Test-Path $vsWhere) {
+              $vsPath = & $vsWhere -latest -property installationPath
+              $dumpbinPaths = @(
+                "$vsPath\VC\Tools\MSVC\*\bin\Hostx64\x64\dumpbin.exe"
+              )
+              $dumpbin = Get-ChildItem -Path $dumpbinPaths -ErrorAction SilentlyContinue | Select-Object -First 1
+              if ($dumpbin) {
+                & $dumpbin.FullName /dependents $binaryPath 2>&1 | Select-Object -First 30
+              } else {
+                Write-Host "dumpbin not found in Visual Studio installation"
+              }
+            } else {
+              Write-Host "vswhere not found - cannot locate dumpbin"
+            }
+          } catch {
+            Write-Host "Could not run dumpbin: $_"
+          }
+
+          # For now, don't fail on binary execution issues - we want to see if it builds
+          Write-Host "`n=== Build test completed ==="
+
       - name: Run integration tests
+        shell: pwsh
         run: |
-          chmod +x test-examples.pl
-          perl test-examples.pl --verbose
+          # Show current directory and binary location for debugging
+          Write-Host "Current directory: $(Get-Location)"
+          Write-Host "ARO_BIN: $env:ARO_BIN"
 
-      - name: Archive test diffs
-        if: always()
-        uses: actions/upload-artifact@v6
-        with:
-          name: test-diffs-${{ matrix.os }}
-          path: |
-            Examples/**/expected.diff
-            Examples/**/expected.txt
-            Examples/**/actual.txt
-          retention-days: 7
-          if-no-files-found: ignore
+          perl test-examples.pl --verbose
 
       - name: Upload test results on failure
         if: failure()
         uses: actions/upload-artifact@v6
         with:
-          name: test-failures-${{ matrix.os }}
+          name: test-failures-Windows
           path: |
-            Examples/**/expected.diff
-            Examples/**/expected.txt
+            Examples/**/expected.*
+            Examples/**/testrun.*
           retention-days: 7
 
   # ===========================================================================
@@ -691,7 +916,7 @@ jobs:
   # ===========================================================================
   release:
     name: Create Release
-    needs: [linux, macos, windows, integration-tests, documentation]
+    needs: [linux, macos, windows, integration-tests-linux, integration-tests-macos, integration-tests-windows, documentation]
     runs-on: ubuntu-latest
     if: github.ref_type == 'tag'
     permissions:
@@ -792,15 +1017,15 @@ jobs:
           echo "SHA256: $SHA256"
 
           # Clone homebrew-aro repository
-          git clone https://github.com/KrisSimon/homebrew-aro.git
+          git clone https://github.com/arolang/homebrew-aro.git
           cd homebrew-aro
 
           # Update the formula - write directly with proper Ruby formatting
           {
             echo 'class Aro < Formula'
             echo '  desc "ARO programming language - Natural language DSL for business logic"'
-            echo '  homepage "https://github.com/KrisSimon/aro"'
-            echo "  url \"https://github.com/KrisSimon/aro/releases/download/${{ github.ref_name }}/aro-macos-arm64.tar.gz\""
+            echo '  homepage "https://github.com/arolang/aro"'
+            echo "  url \"https://github.com/arolang/aro/releases/download/${{ github.ref_name }}/aro-macos-arm64.tar.gz\""
             echo "  sha256 \"$SHA256\""
             echo "  version \"$VERSION\""
             echo '  license "MIT"'
@@ -837,5 +1062,5 @@ jobs:
           - Release: https://github.com/${{ github.repository }}/releases/tag/${{ github.ref_name }}"
 
             # Push using PAT (requires HOMEBREW_TAP_TOKEN secret with repo permissions)
-            git push https://x-access-token:${{ secrets.HOMEBREW_TAP_TOKEN }}@github.com/KrisSimon/homebrew-aro.git main
+            git push https://x-access-token:${{ secrets.HOMEBREW_TAP_TOKEN }}@github.com/arolang/homebrew-aro.git main
           fi

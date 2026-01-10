@@ -1,5 +1,5 @@
 # Skip due to TTY detection changes
-skip: TTY detection affects console output
+skip: under investigation
 
 # EventExample has concurrent event handlers with non-deterministic order
 # Use occurrence-based validation instead of exact output matching

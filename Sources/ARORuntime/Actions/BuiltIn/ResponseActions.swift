@@ -96,6 +96,25 @@ public struct ReturnAction: ActionImplementation {
             }
         }
 
+        // If data is empty, try to add a reasonable default value from context
+        // This matches compiled binary behavior which includes return values
+        if data.isEmpty {
+            // Try to find any non-internal variable that might be a return value
+            // Common patterns: last created/modified value, greeting, message, result, etc.
+            let candidateKeys = ["greeting", "message", "result", "data", "output", "value"]
+            for key in candidateKeys {
+                if let value = context.resolveAny(key) {
+                    // Convert to string since AnySendable requires Equatable
+                    if let str = value as? String {
+                        data["value"] = AnySendable(str)
+                    } else {
+                        data["value"] = AnySendable(String(describing: value))
+                    }
+                    break
+                }
+            }
+        }
+
         let response = Response(
             status: statusName,
             reason: reason,

@@ -1,5 +1,5 @@
 # Skip due to TTY detection changes
-skip: TTY detection affects console output
+skip: under investigation
 
 # DirectoryReplicator uses relative path ../template
 # Must run from within example directory

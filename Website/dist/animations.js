@@ -392,7 +392,7 @@
         }
 
         // Fetch from GitHub API
-        fetch('https://api.github.com/repos/KrisSimon/aro')
+        fetch('https://api.github.com/repos/arolang/aro')
             .then(response => {
                 if (!response.ok) throw new Error('API error');
                 return response.json();

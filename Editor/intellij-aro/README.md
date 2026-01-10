@@ -96,7 +96,7 @@ If you don't have the ARO CLI installed:
 
 ```bash
 # Clone the ARO repository
-git clone https://github.com/KrisSimon/aro.git
+git clone https://github.com/arolang/aro.git
 cd aro
 
 # Build the CLI
@@ -197,7 +197,7 @@ If you have a pre-built plugin ZIP file:
 
 ```bash
 # Clone the repository
-git clone https://github.com/KrisSimon/aro.git
+git clone https://github.com/arolang/aro.git
 cd aro/Editor/intellij-aro
 
 # Build the plugin
@@ -261,9 +261,10 @@ intellij-aro/
 ├── src/
 │   └── main/
 │       ├── java/
-│       │   └── com/krissimon/aro/
+│       │   └── com/arolang/aro/
 │       │       ├── AROTextMateBundleProvider.java   # TextMate bundle provider
-│       │       └── AROTemplateContextType.java      # Live template context
+│       │       ├── AROTemplateContextType.java      # Live template context
+│       │       └── AROLspServerDescriptor.java      # LSP server configuration
 │       └── resources/
 │           ├── META-INF/
 │           │   └── plugin.xml    # Plugin descriptor
@@ -424,10 +425,10 @@ Create a file with the `.aro` extension and start writing ARO code:
 
 ## Related Links
 
-- [ARO Language Website](https://krissimon.github.io/aro/)
-- [GitHub Repository](https://github.com/KrisSimon/aro)
-- [Language Proposals](https://github.com/KrisSimon/aro/tree/main/Proposals)
-- [ARO-0030: IDE Integration Proposal](https://github.com/KrisSimon/aro/blob/main/Proposals/ARO-0030-ide-integration.md)
+- [ARO Language Website](https://arolang.github.io/aro/)
+- [GitHub Repository](https://github.com/arolang/aro)
+- [Language Proposals](https://github.com/arolang/aro/tree/main/Proposals)
+- [ARO-0030: IDE Integration Proposal](https://github.com/arolang/aro/blob/main/Proposals/ARO-0030-ide-integration.md)
 
 ## License
 

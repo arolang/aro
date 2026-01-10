@@ -160,7 +160,7 @@ async function main() {
     const mediaId = await uploadMedia(imagePath);
 
     // Create post text
-    const postText = `${todayCard.category}\n\nLearn more: https://github.com/KrisSimon/aro/wiki\n#AROLang`;
+    const postText = `${todayCard.category}\n\nLearn more: https://github.com/arolang/aro/wiki\n#AROLang`;
 
     // Post to Mastodon
     console.log('Posting to Mastodon...');

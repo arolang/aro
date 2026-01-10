@@ -1,2 +1,2 @@
 # Skip due to TTY detection changes
-skip: TTY detection affects console output
+skip: under investigation
