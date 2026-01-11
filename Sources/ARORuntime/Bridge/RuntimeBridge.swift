@@ -37,22 +37,22 @@ final class AROCRuntimeHandle: @unchecked Sendable {
     var contexts: [UnsafeMutableRawPointer: AROCContextHandle] = [:]
 
     #if !os(Windows)
-    /// Shared event loop group for async I/O in compiled binaries
-    let eventLoopGroup: MultiThreadedEventLoopGroup
+    /// Lazy event loop group - deferred until first access to avoid
+    /// crash when created before Swift async runtime is ready
+    lazy var eventLoopGroup: MultiThreadedEventLoopGroup = {
+        let group = MultiThreadedEventLoopGroup(numberOfThreads: System.coreCount)
+        EventLoopGroupManager.shared.registerGroup(group)
+        return group
+    }()
     #endif
 
     init() {
         self.runtime = Runtime()
-        #if !os(Windows)
-        // Create event loop group for NIO-based async I/O
-        self.eventLoopGroup = MultiThreadedEventLoopGroup(numberOfThreads: System.coreCount)
-        #endif
+        // Event loop creation deferred to lazy var - no eager init needed
     }
 
     deinit {
-        #if !os(Windows)
-        try? eventLoopGroup.syncShutdownGracefully()
-        #endif
+        // Event loop cleanup handled by EventLoopGroupManager.shutdownAll()
     }
 }
 
@@ -92,10 +92,16 @@ class AROCContextHandle {
         self.context.register(socket as SocketServerService)
         self.socketServer = socket
 
-        // Create and register HTTP server service
-        let http = AROHTTPServer(eventBus: runtime.runtime.eventBus)
-        self.context.register(http as HTTPServerService)
-        self.httpServer = http
+        // NOTE: Do NOT register AROHTTPServer (NIO-based) in compiled binaries.
+        // SwiftNIO crashes in compiled binaries because Swift's type metadata for NIO's
+        // internal socket channel types is not properly available when the Swift runtime
+        // is initialized from LLVM-compiled code. The crash occurs in _swift_allocObject_
+        // with a null metadata pointer when NIO tries to create socket channels.
+        //
+        // Instead, compiled binaries use the native BSD socket HTTP server via
+        // aro_native_http_server_start_with_openapi() which is invoked in StartAction
+        // when no HTTPServerService is registered.
+        self.httpServer = nil
         #endif
     }
 

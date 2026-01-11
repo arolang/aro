@@ -1989,11 +1989,30 @@ public func aro_native_http_server_start(_ port: Int32, _ contextPtr: UnsafeMuta
 
         // Set up request handler
         nativeHTTPServer?.onRequest { method, path, headers, body in
-            // Match route to operationId
+            // Parse path and query string
+            let pathComponents = path.split(separator: "?", maxSplits: 1)
+            let pathWithoutQuery = String(pathComponents[0])
+            var queryParams: [String: String] = [:]
+            if pathComponents.count > 1 {
+                let queryString = String(pathComponents[1])
+                for pair in queryString.split(separator: "&") {
+                    let kv = pair.split(separator: "=", maxSplits: 1)
+                    if kv.count == 2 {
+                        let key = String(kv[0]).removingPercentEncoding ?? String(kv[0])
+                        let value = String(kv[1]).removingPercentEncoding ?? String(kv[1])
+                        queryParams[key] = value
+                    } else if kv.count == 1 {
+                        let key = String(kv[0]).removingPercentEncoding ?? String(kv[0])
+                        queryParams[key] = ""
+                    }
+                }
+            }
+
+            // Match route to operationId (using path without query string)
             var matchedOperationId: String? = nil
 
             for route in httpRoutes {
-                if route.method == method && route.path == path {
+                if route.method == method && route.path == pathWithoutQuery {
                     matchedOperationId = route.operationId
                     break
                 }
@@ -2030,7 +2049,7 @@ public func aro_native_http_server_start(_ port: Int32, _ contextPtr: UnsafeMuta
             }
 
             // Helper to bind request data to context
-            func bindRequestToContext(_ ctxPtr: UnsafeMutableRawPointer?, body: Data?, headers: [String: String], path: String) {
+            func bindRequestToContext(_ ctxPtr: UnsafeMutableRawPointer?, body: Data?, headers: [String: String], path: String, queryParams: [String: String]) {
                 guard let ptr = ctxPtr else { return }
                 let ctxHandle = Unmanaged<AROCContextHandle>.fromOpaque(ptr).takeUnretainedValue()
 
@@ -2059,6 +2078,9 @@ public func aro_native_http_server_start(_ port: Int32, _ contextPtr: UnsafeMuta
                 requestDict["headers"] = headers
 
                 ctxHandle.context.bind("request", value: requestDict)
+
+                // Bind query parameters for <Extract> the <x> from the <queryParameters: y>
+                ctxHandle.context.bind("queryParameters", value: queryParams)
             }
 
             // If route matched, try to invoke the feature set
@@ -2073,7 +2095,7 @@ public func aro_native_http_server_start(_ port: Int32, _ contextPtr: UnsafeMuta
                 }
 
                 // Bind request data to context before invoking handler
-                bindRequestToContext(requestContext, body: body, headers: headers, path: path)
+                bindRequestToContext(requestContext, body: body, headers: headers, path: pathWithoutQuery, queryParams: queryParams)
 
                 // First check for registered handler
                 if let handler = httpRouteHandlers[opId] {

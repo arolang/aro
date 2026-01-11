@@ -35,8 +35,18 @@ public final class AROAsyncRuntime: @unchecked Sendable {
     public static let shared = AROAsyncRuntime()
 
     #if !os(Windows)
-    /// NIO event loop group for async I/O
-    private let eventLoopGroup: MultiThreadedEventLoopGroup
+    /// NIO event loop group for async I/O - lazily initialized
+    private var _eventLoopGroup: MultiThreadedEventLoopGroup?
+    private let eventLoopLock = NSLock()
+
+    private var eventLoopGroup: MultiThreadedEventLoopGroup {
+        eventLoopLock.lock()
+        defer { eventLoopLock.unlock() }
+        if let group = _eventLoopGroup { return group }
+        let group = MultiThreadedEventLoopGroup(numberOfThreads: System.coreCount)
+        _eventLoopGroup = group
+        return group
+    }
     #endif
 
     /// Active task group for feature set executions
@@ -55,9 +65,7 @@ public final class AROAsyncRuntime: @unchecked Sendable {
     private let handlerLock = NSLock()
 
     private init() {
-        #if !os(Windows)
-        self.eventLoopGroup = MultiThreadedEventLoopGroup(numberOfThreads: System.coreCount)
-        #endif
+        // Event loop creation deferred to lazy initialization
     }
 
     // MARK: - Event Loop
@@ -203,8 +211,11 @@ public final class AROAsyncRuntime: @unchecked Sendable {
         cancelAllTasks()
 
         #if !os(Windows)
-        // Shutdown NIO event loop group
-        try? await eventLoopGroup.shutdownGracefully()
+        // Shutdown NIO event loop group if it was created
+        // Safe to read _eventLoopGroup directly - it's only written once during lazy init
+        if let group = _eventLoopGroup {
+            try? await group.shutdownGracefully()
+        }
         #endif
     }
 
