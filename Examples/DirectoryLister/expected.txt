@@ -1,15 +1,14 @@
 # Generated: Sat Jan 11 2026
 # Type: console
 # Command: aro run ./Examples/DirectoryLister
+# Note: Uses occurrence-check - only key lines need to match
 ---
-Directory Lister - ARO-0033 Example
-Listing test-data directory:
+Directory Lister - Cross-Platform Example
+Using native List action (works on Windows, macOS, Linux)
 ----------------------------------------
-listing
-  listing.command: ls Examples/DirectoryLister/test-data
-  listing.error: false
-  listing.exitCode: 0
-  listing.message: Command executed successfully
-  listing.output: alpha.txt
-beta.txt
-gamma.txt
+entries
+"name":"alpha.txt"
+"name":"beta.txt"
+"name":"gamma.txt"
+"isFile":true
+"isDirectory":false

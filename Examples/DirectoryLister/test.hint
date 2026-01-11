@@ -1,3 +1,4 @@
 # Test hints for DirectoryLister
-# Uses a fixed test-data directory with known contents for predictable output
-# The simple 'ls' command (without -la) produces consistent output across platforms
+# Uses native List action for cross-platform compatibility (Windows, macOS, Linux)
+# Uses occurrence-check since output contains dynamic data (paths, timestamps, sizes)
+occurrence-check: true
