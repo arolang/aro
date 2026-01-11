@@ -872,6 +872,10 @@ private func evaluateBinaryOp(op: String, left: any Sendable, right: any Sendabl
         return asString(left) != asString(right)
 
     case "<":
+        // Try date comparison first (ARO-0041)
+        if let leftDate = parseARODate(left), let rightDate = parseARODate(right) {
+            return leftDate.date < rightDate.date
+        }
         if let l = asDouble(left), let r = asDouble(right) {
             return l < r
         }
@@ -879,6 +883,10 @@ private func evaluateBinaryOp(op: String, left: any Sendable, right: any Sendabl
         return asString(left) < asString(right)
 
     case ">":
+        // Try date comparison first (ARO-0041)
+        if let leftDate = parseARODate(left), let rightDate = parseARODate(right) {
+            return leftDate.date > rightDate.date
+        }
         if let l = asDouble(left), let r = asDouble(right) {
             return l > r
         }
@@ -886,6 +894,10 @@ private func evaluateBinaryOp(op: String, left: any Sendable, right: any Sendabl
         return asString(left) > asString(right)
 
     case "<=":
+        // Try date comparison first (ARO-0041)
+        if let leftDate = parseARODate(left), let rightDate = parseARODate(right) {
+            return leftDate.date <= rightDate.date
+        }
         if let l = asDouble(left), let r = asDouble(right) {
             return l <= r
         }
@@ -893,6 +905,10 @@ private func evaluateBinaryOp(op: String, left: any Sendable, right: any Sendabl
         return asString(left) <= asString(right)
 
     case ">=":
+        // Try date comparison first (ARO-0041)
+        if let leftDate = parseARODate(left), let rightDate = parseARODate(right) {
+            return leftDate.date >= rightDate.date
+        }
         if let l = asDouble(left), let r = asDouble(right) {
             return l >= r
         }
@@ -945,6 +961,18 @@ private func asBool(_ value: any Sendable) -> Bool {
     case let s as String: return s.lowercased() == "true"
     default: return false
     }
+}
+
+/// Parse a value as an ARODate (ARO-0041)
+/// Handles ARODate objects and ISO8601 date strings
+private func parseARODate(_ value: any Sendable) -> ARODate? {
+    if let date = value as? ARODate {
+        return date
+    }
+    if let str = value as? String {
+        return try? ARODate.parse(str)
+    }
+    return nil
 }
 
 /// Resolve a variable from the context

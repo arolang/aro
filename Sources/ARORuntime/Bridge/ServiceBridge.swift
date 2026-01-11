@@ -2009,12 +2009,17 @@ public func aro_native_http_server_start(_ port: Int32, _ contextPtr: UnsafeMuta
             }
 
             // Match route to operationId (using path without query string)
+            // Supports OpenAPI path parameters like /users/{id}
             var matchedOperationId: String? = nil
+            var pathParams: [String: String] = [:]
 
             for route in httpRoutes {
-                if route.method == method && route.path == pathWithoutQuery {
-                    matchedOperationId = route.operationId
-                    break
+                if route.method == method {
+                    if let params = matchPath(pattern: route.path, actual: pathWithoutQuery) {
+                        matchedOperationId = route.operationId
+                        pathParams = params
+                        break
+                    }
                 }
             }
 
@@ -2049,7 +2054,7 @@ public func aro_native_http_server_start(_ port: Int32, _ contextPtr: UnsafeMuta
             }
 
             // Helper to bind request data to context
-            func bindRequestToContext(_ ctxPtr: UnsafeMutableRawPointer?, body: Data?, headers: [String: String], path: String, queryParams: [String: String]) {
+            func bindRequestToContext(_ ctxPtr: UnsafeMutableRawPointer?, body: Data?, headers: [String: String], path: String, queryParams: [String: String], pathParams: [String: String]) {
                 guard let ptr = ctxPtr else { return }
                 let ctxHandle = Unmanaged<AROCContextHandle>.fromOpaque(ptr).takeUnretainedValue()
 
@@ -2081,6 +2086,9 @@ public func aro_native_http_server_start(_ port: Int32, _ contextPtr: UnsafeMuta
 
                 // Bind query parameters for <Extract> the <x> from the <queryParameters: y>
                 ctxHandle.context.bind("queryParameters", value: queryParams)
+
+                // Bind path parameters for <Extract> the <id> from the <pathParameters: id>
+                ctxHandle.context.bind("pathParameters", value: pathParams)
             }
 
             // If route matched, try to invoke the feature set
@@ -2095,7 +2103,7 @@ public func aro_native_http_server_start(_ port: Int32, _ contextPtr: UnsafeMuta
                 }
 
                 // Bind request data to context before invoking handler
-                bindRequestToContext(requestContext, body: body, headers: headers, path: pathWithoutQuery, queryParams: queryParams)
+                bindRequestToContext(requestContext, body: body, headers: headers, path: pathWithoutQuery, queryParams: queryParams, pathParams: pathParams)
 
                 // First check for registered handler
                 if let handler = httpRouteHandlers[opId] {
@@ -2241,6 +2249,38 @@ private func extractPortFromURL(_ urlString: String) -> Int? {
         }
     }
     return nil
+}
+
+/// Match an actual path against an OpenAPI pattern with path parameters
+/// Returns extracted path parameters if match succeeds, nil if no match
+/// Example: pattern="/users/{id}", actual="/users/123" returns ["id": "123"]
+private func matchPath(pattern: String, actual: String) -> [String: String]? {
+    let patternParts = pattern.split(separator: "/", omittingEmptySubsequences: false)
+    let actualParts = actual.split(separator: "/", omittingEmptySubsequences: false)
+
+    // Must have same number of path segments
+    guard patternParts.count == actualParts.count else { return nil }
+
+    var params: [String: String] = [:]
+
+    for (patternPart, actualPart) in zip(patternParts, actualParts) {
+        let patternStr = String(patternPart)
+        let actualStr = String(actualPart)
+
+        // Check if this is a path parameter like {id}
+        if patternStr.hasPrefix("{") && patternStr.hasSuffix("}") {
+            // Extract parameter name (remove braces)
+            let paramName = String(patternStr.dropFirst().dropLast())
+            params[paramName] = actualStr
+        } else {
+            // Must match exactly
+            if patternStr != actualStr {
+                return nil
+            }
+        }
+    }
+
+    return params
 }
 
 /// Simple OpenAPI route parser (auto-detects YAML or JSON)
