@@ -47,7 +47,7 @@
         }
     }
 
-    (* Build and execute ls command *)
+    (* Execute ls command with directory *)
     <Create> the <command> with "ls -la ${directory}".
     <Exec> the <result> for the <listing> with <command>.
 

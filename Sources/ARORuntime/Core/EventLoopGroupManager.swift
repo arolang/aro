@@ -21,6 +21,8 @@ public final class EventLoopGroupManager: @unchecked Sendable {
 
     /// Shared event loop group for test environments
     /// Using a single shared group allows clean shutdown
+    /// GCD wrapper provides extra safety in compiled mode where Swift async runtime
+    /// may not be fully initialized when first accessed
     private lazy var sharedGroup: MultiThreadedEventLoopGroup = {
         // Create on GCD thread to ensure proper thread initialization
         // This prevents crashes when called from LLVM-compiled code
