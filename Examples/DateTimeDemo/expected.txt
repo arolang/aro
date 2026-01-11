@@ -8,13 +8,13 @@ __TIMESTAMP__
 Parsed meeting date:
 __TIMESTAMP__
 Year from now:
-2026
+__NUMBER__
 Month from now:
-1
+__NUMBER__
 Day from now:
-10
+__NUMBER__
 Hour from now:
-10
+__NUMBER__
 Date calculations:
 Next week:
 __TIMESTAMP__

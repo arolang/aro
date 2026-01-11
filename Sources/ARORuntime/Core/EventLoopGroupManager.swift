@@ -22,7 +22,12 @@ public final class EventLoopGroupManager: @unchecked Sendable {
     /// Shared event loop group for test environments
     /// Using a single shared group allows clean shutdown
     private lazy var sharedGroup: MultiThreadedEventLoopGroup = {
-        let group = MultiThreadedEventLoopGroup(numberOfThreads: System.coreCount)
+        // Create on GCD thread to ensure proper thread initialization
+        // This prevents crashes when called from LLVM-compiled code
+        var group: MultiThreadedEventLoopGroup!
+        DispatchQueue.global(qos: .userInitiated).sync {
+            group = MultiThreadedEventLoopGroup(numberOfThreads: System.coreCount)
+        }
         registerGroup(group)
         return group
     }()
@@ -48,8 +53,12 @@ public final class EventLoopGroupManager: @unchecked Sendable {
             // Use shared group for all servers in test environment
             return sharedGroup
         } else {
-            // Create new group for production
-            let group = MultiThreadedEventLoopGroup(numberOfThreads: System.coreCount)
+            // Create new group for production on GCD thread
+            // This ensures proper thread initialization when called from LLVM-compiled code
+            var group: MultiThreadedEventLoopGroup!
+            DispatchQueue.global(qos: .userInitiated).sync {
+                group = MultiThreadedEventLoopGroup(numberOfThreads: System.coreCount)
+            }
             registerGroup(group)
             return group
         }

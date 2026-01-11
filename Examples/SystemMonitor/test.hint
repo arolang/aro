@@ -1,4 +1,8 @@
-# SystemMonitor requires refactoring for immutable variables feature
-# Attempts to rebind 'directory' variable which is now prohibited
-# TODO: Refactor to use new variable names for each update
-skip: Requires refactoring for immutable variables (ARO-0044)
+# SystemMonitor is an HTTP API that uses Unix shell commands (ls, df, ps)
+# These commands are not available on Windows
+type: http
+mode: interpreter
+skip-on-windows: Uses Unix shell commands (ls, df, ps)
+# Output contains dynamic system info (processes, disk usage, directory listings)
+# Use occurrence-check to verify response structure without exact matching
+occurrence-check: true
