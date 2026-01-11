@@ -1,2 +1,6 @@
 # Test hints for HTTPClient
-skip: under investigation
+# Uses occurrence-check since API responses contain dynamic data (weather, timestamps)
+# Verifies HTTP client functionality and response structure
+# Windows SSL/TLS and network stack differences cause response format variations
+occurrence-check: true
+skip-on-windows: Windows SSL and network stack differences cause output variations
