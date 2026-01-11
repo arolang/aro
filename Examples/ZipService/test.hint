@@ -1,3 +1,9 @@
-# Test hints for ZipService
+# Test hints for plugin-based example
 # Plugin tests require Swift compiler which is not available on Linux CI
-skip: Plugin requires Swift compiler (not available on Linux CI)
+# Skip this test on Linux and Windows; runs on macOS only
+# Native compilation doesn't support dynamic plugins yet
+# Dictionary key order is not guaranteed, use occurrence-check
+mode: interpreter
+occurrence-check: true
+skip-on-linux: Plugin requires Swift compiler (not available on Linux CI)
+skip-on-windows: Plugin requires Swift compiler (not available on Windows CI)

@@ -1,2 +1,3 @@
 # Test hints for HTTPClient
-skip: under investigation
+# External API responses vary, so we only check that the request succeeded
+occurrence-check: true
