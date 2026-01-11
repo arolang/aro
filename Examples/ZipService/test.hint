@@ -1,3 +1,4 @@
 # Test hints for ZipService
-# Plugin tests require Swift compiler which is not available on Linux CI
-skip: Plugin requires Swift compiler (not available on Linux CI)
+# Plugin compilation takes too long in CI and times out
+# The plugin system requires building Swift packages at runtime which is unreliable in CI
+skip: Plugin compilation unreliable in CI environments
