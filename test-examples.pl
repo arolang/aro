@@ -595,6 +595,7 @@ sub normalize_output {
 
 # Convert expected output with placeholders to regex pattern
 # Supports: __ID__, __UUID__, __TIMESTAMP__, __DATE__, __NUMBER__, __STRING__
+# Each pattern also matches the literal placeholder (for normalized output comparison)
 sub expected_to_pattern {
     my ($expected) = @_;
 
@@ -602,32 +603,35 @@ sub expected_to_pattern {
     my $pattern = quotemeta($expected);
 
     # Replace escaped placeholders with actual regex patterns
+    # Each pattern matches either the dynamic value OR the literal placeholder
+    # (since normalize_output may have replaced values with placeholders)
+
     # __ID__ - matches hex IDs like 19b8607cf80ae931b1f (timestamp + random)
-    $pattern =~ s/__ID__/[a-f0-9]{15,20}/g;
+    $pattern =~ s/__ID__/(?:[a-f0-9]{15,20}|__ID__)/g;
 
     # __UUID__ - matches UUIDs like 550e8400-e29b-41d4-a716-446655440000
-    $pattern =~ s/__UUID__/[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}/g;
+    $pattern =~ s/__UUID__/(?:[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}|__UUID__)/g;
 
     # __TIMESTAMP__ - matches ISO timestamps like 2025-01-03T23:43:37.478982169+01:00 or 2026-01-03T22:45
-    $pattern =~ s/__TIMESTAMP__/\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}(?::\\d{2})?(?:\\.\\d+)?(?:Z|[+-]\\d{2}:\\d{2})?/g;
+    $pattern =~ s/__TIMESTAMP__/(?:\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}(?::\\d{2})?(?:\\.\\d+)?(?:Z|[+-]\\d{2}:\\d{2})?|__TIMESTAMP__)/g;
 
     # __DATE__ - matches dates like Jan 3 23:43 or 2025-01-03 (already used in DirectoryLister)
-    $pattern =~ s/__DATE__/(?:\\w{3}\\s+\\d{1,2}\\s+\\d{2}:\\d{2}|\\d{4}-\\d{2}-\\d{2})/g;
+    $pattern =~ s/__DATE__/(?:\\w{3}\\s+\\d{1,2}\\s+\\d{2}:\\d{2}|\\d{4}-\\d{2}-\\d{2}|__DATE__)/g;
 
     # __NUMBER__ - matches any number (integer or decimal)
-    $pattern =~ s/__NUMBER__/-?\\d+(?:\\.\\d+)?/g;
+    $pattern =~ s/__NUMBER__/(?:-?\\d+(?:\\.\\d+)?|__NUMBER__)/g;
 
     # __STRING__ - matches any non-empty string (non-greedy, no quotes)
-    $pattern =~ s/__STRING__/.+?/g;
+    $pattern =~ s/__STRING__/(?:.+?|__STRING__)/g;
 
     # __HASH__ - matches hash values (32-64 hex chars) - already used in HashTest
-    $pattern =~ s/__HASH__/[a-f0-9]{32,64}/g;
+    $pattern =~ s/__HASH__/(?:[a-f0-9]{32,64}|__HASH__)/g;
 
     # __TOTAL__ - matches total blocks count in ls output
-    $pattern =~ s/__TOTAL__/\\d+/g;
+    $pattern =~ s/__TOTAL__/(?:\\d+|__TOTAL__)/g;
 
     # __TIME__ - matches decimal time values like generationtime_ms (0.08, 1.23)
-    $pattern =~ s/__TIME__/\\d+\\.\\d+/g;
+    $pattern =~ s/__TIME__/(?:\\d+\\.\\d+|__TIME__)/g;
 
     return $pattern;
 }
@@ -699,8 +703,8 @@ sub check_output_occurrences {
         # Skip empty lines
         next if $expected_line =~ /^\s*$/;
 
-        # Escape regex metacharacters in expected line
-        my $pattern = quotemeta($expected_line);
+        # Use expected_to_pattern to convert placeholders like __NUMBER__, __TIMESTAMP__, etc.
+        my $pattern = expected_to_pattern($expected_line);
 
         # Check if line appears anywhere in actual output
         unless ($actual =~ /$pattern/m) {
