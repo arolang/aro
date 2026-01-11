@@ -1,4 +1,6 @@
 # Test hints for DirectoryLister
-# Directory listing output varies significantly by environment (different files, users, permissions)
-# Skip this test as output is inherently environment-dependent
-skip: Directory listing output varies by environment
+# Uses native List action for cross-platform compatibility (Windows, macOS, Linux)
+# Uses occurrence-check since output contains dynamic data (paths, timestamps, sizes)
+# Windows paths use backslashes which don't match expected output format
+occurrence-check: true
+skip-on-windows: Windows path separator differences cause output mismatch
