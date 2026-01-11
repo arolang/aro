@@ -28,8 +28,10 @@ sub colored {
     return Term::ANSIColor::colored($text, $color);
 }
 
-# Windows detection and binary path helper
+# Platform detection
 my $is_windows = ($^O eq 'MSWin32' || $^O eq 'cygwin' || $^O eq 'msys');
+my $is_macos = ($^O eq 'darwin');
+my $is_linux = ($^O eq 'linux');
 
 # Get binary path with proper extension for the platform
 # On Windows, executables have .exe extension
@@ -210,6 +212,8 @@ sub read_test_hint {
         mode => undef,
         skip => undef,
         'skip-on-windows' => undef,
+        'skip-on-linux' => undef,
+        'skip-on-macos' => undef,
         'pre-script' => undef,
         'test-script' => undef,
         'occurrence-check' => undef,
@@ -1618,6 +1622,42 @@ sub run_test {
         };
     }
 
+    # Handle Linux-specific skip
+    if ($is_linux && defined $hints->{'skip-on-linux'}) {
+        return {
+            name => $example_name,
+            type => 'UNKNOWN',
+            interpreter_status => 'SKIP',
+            compiled_status => 'SKIP',
+            interpreter_message => "Skipped on Linux: $hints->{'skip-on-linux'}",
+            compiled_message => "Skipped on Linux: $hints->{'skip-on-linux'}",
+            interpreter_duration => 0,
+            compiled_duration => 0,
+            build_duration => 0,
+            avg_duration => 0,
+            status => 'SKIP',
+            duration => 0,
+        };
+    }
+
+    # Handle macOS-specific skip
+    if ($is_macos && defined $hints->{'skip-on-macos'}) {
+        return {
+            name => $example_name,
+            type => 'UNKNOWN',
+            interpreter_status => 'SKIP',
+            compiled_status => 'SKIP',
+            interpreter_message => "Skipped on macOS: $hints->{'skip-on-macos'}",
+            compiled_message => "Skipped on macOS: $hints->{'skip-on-macos'}",
+            interpreter_duration => 0,
+            compiled_duration => 0,
+            build_duration => 0,
+            avg_duration => 0,
+            status => 'SKIP',
+            duration => 0,
+        };
+    }
+
     # Determine test mode
     my $mode = $hints->{mode} // 'both';
     my $type = $hints->{type} || detect_example_type($example_name);
@@ -1722,6 +1762,18 @@ sub generate_expected {
     # Skip on Windows if requested
     if ($is_windows && defined $hints->{'skip-on-windows'}) {
         say "Skipping $example_name on Windows: $hints->{'skip-on-windows'}";
+        return;
+    }
+
+    # Skip on Linux if requested
+    if ($is_linux && defined $hints->{'skip-on-linux'}) {
+        say "Skipping $example_name on Linux: $hints->{'skip-on-linux'}";
+        return;
+    }
+
+    # Skip on macOS if requested
+    if ($is_macos && defined $hints->{'skip-on-macos'}) {
+        say "Skipping $example_name on macOS: $hints->{'skip-on-macos'}";
         return;
     }
 

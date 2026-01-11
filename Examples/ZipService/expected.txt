@@ -1,4 +1,4 @@
-# Generated: Sat Jan 10 11:40:04 2026
+# Generated: occurrence-check mode
 # Type: console
 # Command: aro run ./Examples/ZipService
 ---
@@ -11,4 +11,3 @@ filesCompressed: 2
 output: Examples/ZipService/content/archive.zip
 success: true
 startup
-  value:

@@ -1,1 +1,3 @@
-skip: Long-running HTTP server example - not suitable for automated testing
+# ModulesExample tests import functionality with HTTP endpoints
+# Module imports not fully implemented yet - see issue #180
+skip: Module imports not fully implemented

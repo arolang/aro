@@ -1,9 +1,13 @@
-# Generated: Sat Jan  3 23:23:23 2026
-# Type: console
-# Command: aro run ./Examples/ModulesExample
+# ModulesExample HTTP test
+# Tests the module import functionality with HTTP endpoints
+# Type: http
+# Workdir: Combined
 ---
-[Application-Start] Module A starting...
-Runtime error: Runtime Error: Cannot start the http-server for the contract.
-  Feature: Application-Start
-  Business Activity: ModuleA
-  Statement: <Start> the <http-server> for the <contract>.
+Combined application starting...
+---
+get /module-a (getModuleA)
+  status: 200
+  contains: message
+get /module-b (getModuleB)
+  status: 200
+  contains: message

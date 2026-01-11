@@ -1,4 +1,5 @@
 # Test hints for DirectoryLister
 # Directory listing output varies significantly by environment (different files, users, permissions)
-# Skip this test as output is inherently environment-dependent
-skip: Directory listing output varies by environment
+# Use occurrence-check to only verify fixed header lines appear
+skip-on-windows: Uses Unix shell commands (ls)
+occurrence-check: true
