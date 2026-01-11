@@ -36,6 +36,7 @@ public final class AROAsyncRuntime: @unchecked Sendable {
 
     #if !os(Windows)
     /// NIO event loop group for async I/O - lazily initialized
+    /// This prevents crashes when event loops are created before Swift async runtime is ready
     private var _eventLoopGroup: MultiThreadedEventLoopGroup?
     private let eventLoopLock = NSLock()
 
@@ -44,6 +45,7 @@ public final class AROAsyncRuntime: @unchecked Sendable {
         defer { eventLoopLock.unlock() }
         if let group = _eventLoopGroup { return group }
         let group = MultiThreadedEventLoopGroup(numberOfThreads: System.coreCount)
+        EventLoopGroupManager.shared.registerGroup(group)
         _eventLoopGroup = group
         return group
     }
