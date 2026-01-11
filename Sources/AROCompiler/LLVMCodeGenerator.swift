@@ -359,6 +359,14 @@ public final class LLVMCodeGenerator {
             if let toClause = aroStatement.toClause {
                 collectStringsFromExpression(toClause)
             }
+
+            // ARO-0004: Collect when clause strings (for guarded statements)
+            if let whenCondition = aroStatement.whenCondition {
+                collectStringsFromExpression(whenCondition)
+                // Also register the JSON for runtime evaluation
+                let whenJSON = expressionToEvalJSON(whenCondition)
+                registerString(whenJSON)
+            }
         } else if let publishStatement = statement as? PublishStatement {
             registerString(publishStatement.externalName)
             registerString(publishStatement.internalVariable)
@@ -686,6 +694,18 @@ public final class LLVMCodeGenerator {
 
         emit("  ; <\(statement.action.verb)> the <\(statement.result.base)> ...")
 
+        // ARO-0004: Handle when clause - skip statement if condition is false
+        if let whenCondition = statement.whenCondition {
+            let whenJSON = expressionToEvalJSON(whenCondition)
+            let whenStr = stringConstants[whenJSON]!
+            emit("  ; Evaluate when guard: \(whenCondition)")
+            emit("  %\(prefix)_when_result = call i32 @aro_evaluate_when_guard(ptr \(currentContext), ptr \(whenStr))")
+            emit("  %\(prefix)_when_pass = icmp ne i32 %\(prefix)_when_result, 0")
+            emit("  br i1 %\(prefix)_when_pass, label %\(prefix)_body, label %\(prefix)_skip")
+            emit("")
+            emit("\(prefix)_body:")
+        }
+
         // If there's a literal value, bind it first
         if let literalValue = statement.literalValue {
             try emitLiteralBinding(literalValue, prefix: prefix)
@@ -792,6 +812,13 @@ public final class LLVMCodeGenerator {
 
         // Store result
         emit("  store ptr %\(prefix)_action_result, ptr %__result")
+
+        // ARO-0004: Add skip label if when clause was present
+        if statement.whenCondition != nil {
+            emit("  br label %\(prefix)_skip")
+            emit("")
+            emit("\(prefix)_skip:")
+        }
         emit("")
     }
 

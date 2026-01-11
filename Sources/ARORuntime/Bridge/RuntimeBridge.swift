@@ -875,25 +875,29 @@ private func evaluateBinaryOp(op: String, left: any Sendable, right: any Sendabl
         if let l = asDouble(left), let r = asDouble(right) {
             return l < r
         }
-        return false
+        // Fallback to string comparison (works for ISO 8601 dates)
+        return asString(left) < asString(right)
 
     case ">":
         if let l = asDouble(left), let r = asDouble(right) {
             return l > r
         }
-        return false
+        // Fallback to string comparison (works for ISO 8601 dates)
+        return asString(left) > asString(right)
 
     case "<=":
         if let l = asDouble(left), let r = asDouble(right) {
             return l <= r
         }
-        return false
+        // Fallback to string comparison (works for ISO 8601 dates)
+        return asString(left) <= asString(right)
 
     case ">=":
         if let l = asDouble(left), let r = asDouble(right) {
             return l >= r
         }
-        return false
+        // Fallback to string comparison (works for ISO 8601 dates)
+        return asString(left) >= asString(right)
 
     // Logical
     case "and":
