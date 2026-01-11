@@ -1,14 +1,12 @@
-# Generated: Sat Jan 10 11:40:04 2026
+# Generated: Sat Jan 11 2026
 # Type: console
 # Command: aro run ./Examples/ZipService
+# Note: Uses occurrence-check - plugin loading messages differ between interpreter and binary
 ---
-Building package plugin: ZipPlugin
 Registered plugin service: zip
-Loaded package plugin: ZipPlugin
 Testing zip plugin...
 Zip result:
 filesCompressed: 2
 output: Examples/ZipService/content/archive.zip
 success: true
 startup
-  value:
