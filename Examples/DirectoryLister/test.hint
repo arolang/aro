@@ -1,4 +1,3 @@
 # Test hints for DirectoryLister
-# Directory listing output varies significantly by environment (different files, users, permissions)
-# Skip this test as output is inherently environment-dependent
-skip: Directory listing output varies by environment
+# Uses a fixed test-data directory with known contents for predictable output
+# The simple 'ls' command (without -la) produces consistent output across platforms
