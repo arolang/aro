@@ -1,0 +1,312 @@
+# =============================================================================
+# ARO Programming Language - GitLab CI/CD Pipeline (Linux Only)
+# =============================================================================
+# Builds, tests, and releases ARO on Linux using Swift 6.2
+# =============================================================================
+
+stages:
+  - test
+  - build
+  - integration
+  - documentation
+  - release
+
+variables:
+  SWIFT_VERSION: '6.2.3'
+
+# Only run pipelines for main, release branches, tags, and merge requests
+workflow:
+  rules:
+    - if: $CI_COMMIT_TAG
+    - if: $CI_COMMIT_BRANCH == "main"
+    - if: $CI_COMMIT_BRANCH =~ /^release\/.*/
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+      changes:
+        - "**/*"
+
+# Default settings for all jobs
+default:
+  interruptible: true
+
+# =============================================================================
+# Test Stage - Gate for all builds
+# =============================================================================
+test:
+  stage: test
+  image: swift:6.2-jammy
+  cache:
+    key:
+      files:
+        - Package.resolved
+      prefix: swift-test
+    paths:
+      - .build/
+    policy: pull-push
+  script:
+    - swift test --parallel
+  tags:
+    - docker
+
+# =============================================================================
+# Build Stage - Linux Release Build
+# =============================================================================
+build:linux:
+  stage: build
+  image: swift:6.2-jammy
+  needs:
+    - test
+  cache:
+    key:
+      files:
+        - Package.resolved
+      prefix: swift-build
+    paths:
+      - .build/
+    policy: pull-push
+  before_script:
+    - apt-get update -qq && apt-get install -y -qq git
+  script:
+    # Debug build
+    - swift build -c debug
+
+    # Run tests again to ensure build is valid
+    - swift test --parallel
+
+    # Generate version file
+    - |
+      VERSION=$(git describe --tags --always --dirty 2>/dev/null || echo "dev")
+      COMMIT=$(git rev-parse --short HEAD 2>/dev/null || echo "unknown")
+      BUILD_DATE=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
+
+      cat > Sources/AROVersion/Version.swift << 'EOF'
+      // ============================================================
+      // Version.swift
+      // ARO Version Information
+      // ============================================================
+      // This file is auto-generated during build
+
+      import Foundation
+
+      public enum AROVersion {
+          /// Version from git tag (embedded at build time)
+          public static let version: String = "VERSION_PLACEHOLDER"
+
+          /// Short commit hash (embedded at build time)
+          public static let commit: String = "COMMIT_PLACEHOLDER"
+
+          /// Build date in ISO 8601 format (embedded at build time)
+          public static let buildDate: String = "BUILD_DATE_PLACEHOLDER"
+
+          /// Whether this is a release build
+          public static let isRelease: Bool = {
+              !version.contains("-dirty") && !version.hasPrefix("unknown") && !version.hasPrefix("dev")
+          }()
+
+          /// Full version string with commit and build date
+          public static var fullVersion: String {
+              "\(version) (\(commit)) built on \(buildDate)"
+          }
+
+          /// Short version string (just the version)
+          public static var shortVersion: String {
+              version
+          }
+      }
+      EOF
+
+      # Replace placeholders with actual values
+      sed -i "s|VERSION_PLACEHOLDER|$VERSION|g" Sources/AROVersion/Version.swift
+      sed -i "s|COMMIT_PLACEHOLDER|$COMMIT|g" Sources/AROVersion/Version.swift
+      sed -i "s|BUILD_DATE_PLACEHOLDER|$BUILD_DATE|g" Sources/AROVersion/Version.swift
+
+      echo "Generated version file with:"
+      echo "  Version: $VERSION"
+      echo "  Commit: $COMMIT"
+      echo "  Build Date: $BUILD_DATE"
+
+    # Release build with static Swift stdlib
+    - swift build -c release --static-swift-stdlib
+    - swift build -c release --product ARORuntime
+
+    # Verify CLI works
+    - .build/release/aro --help
+    - .build/release/aro check ./Examples/HelloWorldAPI
+    - .build/release/aro check ./Examples/UserService
+
+    # Prepare artifact directory
+    - mkdir -p aro-dist
+    - cp .build/release/aro aro-dist/
+    - cp .build/x86_64-unknown-linux-gnu/release/libARORuntime.a aro-dist/
+
+    # Show artifact contents
+    - ls -la aro-dist/
+  artifacts:
+    name: aro-linux-amd64
+    paths:
+      - aro-dist/
+    expire_in: 30 days
+  tags:
+    - docker
+
+# =============================================================================
+# Integration Tests Stage
+# =============================================================================
+integration:linux:
+  stage: integration
+  image: ubuntu:22.04
+  needs:
+    - job: build:linux
+      artifacts: true
+  cache:
+    key: swift-integration
+    paths:
+      - /usr/share/swift/
+    policy: pull
+  before_script:
+    # Install dependencies
+    - apt-get update -qq
+    - export DEBIAN_FRONTEND=noninteractive
+    - apt-get install -y -qq wget curl perl llvm-14 clang-14 cpanminus libipc-run-perl libyaml-libyaml-perl libhttp-tiny-perl
+
+    # Setup LLVM
+    - ln -sf /usr/bin/llc-14 /usr/bin/llc
+    - export PATH="/usr/lib/llvm-14/bin:$PATH"
+
+    # Install Swift for native compilation tests
+    - wget -q https://download.swift.org/swift-6.2.1-release/ubuntu2204/swift-6.2.1-RELEASE/swift-6.2.1-RELEASE-ubuntu22.04.tar.gz
+    - tar xzf swift-6.2.1-RELEASE-ubuntu22.04.tar.gz
+    - mv swift-6.2.1-RELEASE-ubuntu22.04 /usr/share/swift
+    - export PATH="/usr/share/swift/usr/bin:$PATH"
+
+    # Install Perl modules
+    - cpan -T Net::EmptyPort Term::ANSIColor 2>&1 || true
+
+    # Prepare ARO binary
+    - chmod +x ./aro-dist/aro
+    - export ARO_BIN="$CI_PROJECT_DIR/aro-dist/aro"
+
+    # Copy runtime library to system location
+    - mkdir -p /usr/local/lib
+    - cp ./aro-dist/libARORuntime.a /usr/local/lib/libARORuntime.a
+
+    # Verify installation
+    - ./aro-dist/aro --version
+  script:
+    - export PATH="/usr/share/swift/usr/bin:/usr/lib/llvm-14/bin:$PATH"
+    - export ARO_BIN="$CI_PROJECT_DIR/aro-dist/aro"
+    - chmod +x test-examples.pl
+    - perl test-examples.pl --verbose
+  artifacts:
+    when: on_failure
+    name: test-failures-linux
+    paths:
+      - Examples/**/expected.*
+      - Examples/**/testrun.*
+    expire_in: 7 days
+  tags:
+    - docker
+
+# =============================================================================
+# Documentation Stage
+# =============================================================================
+documentation:
+  stage: documentation
+  image: ubuntu:22.04
+  needs:
+    - test
+  before_script:
+    - apt-get update -qq
+    - export DEBIAN_FRONTEND=noninteractive
+    - apt-get install -y -qq pandoc weasyprint fonts-ibm-plex
+  script:
+    - cd Book/TheLanguageGuide
+    - chmod +x build-pdf.sh
+    - ./build-pdf.sh
+  artifacts:
+    name: aro-language-guide
+    paths:
+      - Book/TheLanguageGuide/output/ARO-Language-Guide.pdf
+    expire_in: 30 days
+  tags:
+    - docker
+
+# =============================================================================
+# Release Stage - Create GitLab Release (tags only)
+# =============================================================================
+release:
+  stage: release
+  image: registry.gitlab.com/gitlab-org/release-cli:latest
+  needs:
+    - job: build:linux
+      artifacts: true
+    - job: integration:linux
+    - job: documentation
+      artifacts: true
+  rules:
+    - if: $CI_COMMIT_TAG
+  before_script:
+    - apk add --no-cache tar gzip
+  script:
+    # Extract version from tag
+    - VERSION="${CI_COMMIT_TAG#v}"
+    - echo "Version - $VERSION"
+
+    # Package Linux binary
+    - cd aro-dist
+    - chmod +x aro
+    - tar -czvf ../aro-linux-amd64.tar.gz aro libARORuntime.a
+    - cd ..
+
+    # Show package contents
+    - ls -la aro-linux-amd64.tar.gz
+    - ls -la Book/TheLanguageGuide/output/ARO-Language-Guide.pdf || echo "PDF not found"
+
+    # Determine if prerelease
+    - |
+      if echo "$CI_COMMIT_TAG" | grep -q '-'; then
+        echo "PRERELEASE=true" >> release.env
+      else
+        echo "PRERELEASE=false" >> release.env
+      fi
+  artifacts:
+    paths:
+      - aro-linux-amd64.tar.gz
+      - Book/TheLanguageGuide/output/ARO-Language-Guide.pdf
+    expire_in: 1 year
+  release:
+    tag_name: $CI_COMMIT_TAG
+    name: 'ARO ${CI_COMMIT_TAG#v}'
+    description: |
+      ## ARO Programming Language ${CI_COMMIT_TAG#v}
+
+      ### Downloads
+
+      | Platform | Architecture | Download |
+      |----------|--------------|----------|
+      | Linux | x86_64 | [aro-linux-amd64.tar.gz]($CI_PROJECT_URL/-/releases/$CI_COMMIT_TAG/downloads/aro-linux-amd64.tar.gz) |
+
+      ### Documentation
+
+      | Document | Download |
+      |----------|----------|
+      | ARO Language Guide | [ARO-Language-Guide.pdf]($CI_PROJECT_URL/-/releases/$CI_COMMIT_TAG/downloads/ARO-Language-Guide.pdf) |
+
+      ### Installation
+
+      **Linux**
+      ```bash
+      curl -L $CI_PROJECT_URL/-/releases/$CI_COMMIT_TAG/downloads/aro-linux-amd64.tar.gz | tar xz
+      sudo mv aro /usr/local/bin/
+      ```
+    assets:
+      links:
+        - name: 'aro-linux-amd64.tar.gz'
+          url: '$CI_PROJECT_URL/-/jobs/artifacts/$CI_COMMIT_TAG/raw/aro-linux-amd64.tar.gz?job=release'
+          filepath: '/aro-linux-amd64.tar.gz'
+          link_type: 'package'
+        - name: 'ARO-Language-Guide.pdf'
+          url: '$CI_PROJECT_URL/-/jobs/artifacts/$CI_COMMIT_TAG/raw/Book/TheLanguageGuide/output/ARO-Language-Guide.pdf?job=release'
+          filepath: '/ARO-Language-Guide.pdf'
+          link_type: 'other'
+  tags:
+    - docker
