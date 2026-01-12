@@ -45,7 +45,7 @@ test:
   script:
     - swift test --parallel
   tags:
-    - docker
+    - spencer
 
 # =============================================================================
 # Build Stage - Linux Release Build
@@ -146,7 +146,7 @@ build:linux:
       - aro-dist/
     expire_in: 30 days
   tags:
-    - docker
+    - spencer
 
 # =============================================================================
 # Integration Tests Stage
@@ -204,7 +204,7 @@ integration:linux:
       - Examples/**/testrun.*
     expire_in: 7 days
   tags:
-    - docker
+    - spencer
 
 # =============================================================================
 # Documentation Stage
@@ -228,7 +228,7 @@ documentation:
       - Book/TheLanguageGuide/output/ARO-Language-Guide.pdf
     expire_in: 30 days
   tags:
-    - docker
+    - spencer
 
 # =============================================================================
 # Release Stage - Create GitLab Release (tags only)
@@ -309,4 +309,4 @@ release:
           filepath: '/ARO-Language-Guide.pdf'
           link_type: 'other'
   tags:
-    - docker
+    - spencer
