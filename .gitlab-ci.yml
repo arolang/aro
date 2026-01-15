@@ -166,7 +166,7 @@ integration:linux:
     # Install dependencies
     - apt-get update -qq
     - export DEBIAN_FRONTEND=noninteractive
-    - apt-get install -y -qq wget curl perl llvm-14 clang-14 cpanminus libipc-run-perl libyaml-libyaml-perl libhttp-tiny-perl
+    - apt-get install -y -qq wget curl perl llvm-14 clang-14 cpanminus libipc-run-perl libyaml-libyaml-perl libhttp-tiny-perl zlib1g-dev
 
     # Setup LLVM
     - ln -sf /usr/bin/llc-14 /usr/bin/llc
