@@ -1,4 +1,6 @@
 # Test hints for ZipService
-# Plugin compilation takes too long in CI and times out
-# The plugin system requires building Swift packages at runtime which is unreliable in CI
-skip: Plugin compilation unreliable in CI environments
+# Package plugin compilation requires Swift compiler - available on CI via swift:6.2-jammy
+mode: interpreter
+timeout: 120
+# Use occurrence-check for order-independent matching (dictionary output order varies)
+occurrence-check: true

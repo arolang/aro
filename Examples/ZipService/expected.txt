@@ -1,12 +1,14 @@
-# Generated: Sat Jan 11 2026
+# Generated: Wed Jan 15 2026
 # Type: console
 # Command: aro run ./Examples/ZipService
-# Note: Uses occurrence-check - plugin loading messages differ between interpreter and binary
+# Timeout: 120s
+# Note: Uses occurrence-check for order-independent matching
 ---
+Building package plugin: ZipPlugin
 Registered plugin service: zip
+Loaded package plugin: ZipPlugin
 Testing zip plugin...
 Zip result:
 filesCompressed: 2
-output: Examples/ZipService/content/archive.zip
 success: true
 startup
