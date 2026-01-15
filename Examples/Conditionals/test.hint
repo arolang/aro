@@ -1,3 +1,3 @@
 # Test hints for Conditionals
-# Binary compilation fails on Linux CI
-mode: interpreter
+# Tested on macOS, Docker (Linux ARM64), and CI (Linux x86_64)
+mode: both
