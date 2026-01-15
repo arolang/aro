@@ -425,7 +425,8 @@ public final class AROFileSystemService: FileSystemService, FileMonitorService, 
             }
         }
 
-        return results
+        // Sort by path for deterministic order across platforms
+        return results.sorted { $0.path < $1.path }
     }
 
     /// Get stats from URL
@@ -864,7 +865,8 @@ public final class AROFileSystemService: FileSystemService, @unchecked Sendable 
             }
         }
 
-        return results
+        // Sort by path for deterministic order across platforms
+        return results.sorted { $0.path < $1.path }
     }
 
     /// Get stats from URL

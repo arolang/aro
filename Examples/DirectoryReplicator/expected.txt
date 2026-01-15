@@ -4,8 +4,8 @@
 # Workdir: Examples/DirectoryReplicator
 ---
 Scanning template directory...
+baz
 foo
 foo/bar
-baz
 Directory structure replicated.
 replication
