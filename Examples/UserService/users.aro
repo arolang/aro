@@ -47,7 +47,7 @@
 (* Delete user - matches operationId: deleteUser *)
 (deleteUser: User API) {
     <Extract> the <user-id> from the <pathParameters: id>.
-    <Delete> the <user> from the <user-repository> where <id> is <user-id>.
+    <Delete> the <deleted-user> from the <user-repository> where <id> is <user-id>.
 
     (* Emit deletion event *)
     <Emit> a <UserDeleted: event> with <user-id>.

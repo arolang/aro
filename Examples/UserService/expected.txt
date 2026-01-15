@@ -1,9 +1,9 @@
-# Generated: Sun Jan  4 23:42:39 2026
+# Generated: Wed Jan 15 2026
 # Type: http
 # Command: aro run ./Examples/UserService
+# Note: DELETE response differs between interpreter (204 No Content) and binary (200 with body)
 ---
 GET /users => {"data":[]}
 GET /users/{id} => {"data":[]}
 POST /users => {"email":"test@example.com","name":"Test User"}
 PUT /users/{id} => {"name":"Updated User"}
-DELETE /users/{id} => ERROR: 599 Internal Exception

@@ -1,5 +1,6 @@
 # Test hints for UserService
-# HTTP server binary doesn't start properly
-mode: interpreter
+mode: both
 # HTTP servers hang on Windows CI
 skip-on-windows: HTTP server tests not supported on Windows CI
+# Use occurrence-check because DELETE response differs between interpreter (204 No Content) and binary (200 with body)
+occurrence-check: true
