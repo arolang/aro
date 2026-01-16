@@ -1,6 +1,4 @@
 # Test hints for ListTest
-# Uses relative path that only works from Examples/ListTest directory
+# Run from within the example directory for consistent file count
 workdir: Examples/ListTest
-mode: interpreter
-# File operations don't work correctly on Windows CI
-skip-on-windows: File operations not supported on Windows CI
+mode: both
