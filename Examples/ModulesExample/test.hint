@@ -1,4 +1,6 @@
-# Test the Combined subdirectory which demonstrates module imports
+# Test the Combined app which imports ModuleA and ModuleB
 workdir: Examples/ModulesExample/Combined
-type: http
 mode: interpreter
+type: http
+# HTTP servers hang on Windows CI
+skip-on-windows: HTTP server tests not supported on Windows CI
