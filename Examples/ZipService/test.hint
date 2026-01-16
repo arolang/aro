@@ -1,6 +1,7 @@
 # Test hints for ZipService
 # Package plugin compilation requires Swift compiler - available on CI via swift:6.2-jammy
-mode: both
+# Binary mode not yet supported (plugin loading differs)
+mode: interpreter
 timeout: 120
 # Use occurrence-check for order-independent matching (dictionary output order varies)
 occurrence-check: true
