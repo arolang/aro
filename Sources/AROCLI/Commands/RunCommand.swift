@@ -47,7 +47,7 @@ struct RunCommand: AsyncParsableCommand {
         let appConfig: DiscoveredApplication
 
         do {
-            appConfig = try await discovery.discover(at: resolvedPath, entryPoint: entryPoint)
+            appConfig = try await discovery.discoverWithImports(at: resolvedPath, entryPoint: entryPoint)
         } catch {
             if TTYDetector.stderrIsTTY {
                 print("\u{001B}[31mError:\u{001B}[0m \(error)")

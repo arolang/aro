@@ -629,12 +629,14 @@ extension ApplicationDiscovery {
 
     /// Resolve an import path relative to a base directory
     private func resolveImportPath(_ importPath: String, relativeTo baseDir: URL) -> URL {
+        // Use absoluteURL.standardized to correctly resolve relative paths
+        // when baseDir itself is a relative URL (e.g., ".")
         // Handle relative paths like ../user-service, ./utils
         if importPath.hasPrefix("../") || importPath.hasPrefix("./") {
-            return baseDir.appendingPathComponent(importPath).standardized
+            return baseDir.appendingPathComponent(importPath).absoluteURL.standardized
         }
         // Treat as relative to base directory
-        return baseDir.appendingPathComponent(importPath).standardized
+        return baseDir.appendingPathComponent(importPath).absoluteURL.standardized
     }
 
     /// Discover an application with all its imports (recursive)
