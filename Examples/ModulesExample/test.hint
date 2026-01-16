@@ -1,1 +1,6 @@
-skip: Long-running HTTP server example - not suitable for automated testing
+# Test the Combined app which imports ModuleA and ModuleB
+workdir: Examples/ModulesExample/Combined
+mode: interpreter
+type: http
+# HTTP servers hang on Windows CI
+skip-on-windows: HTTP server tests not supported on Windows CI
