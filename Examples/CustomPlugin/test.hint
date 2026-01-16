@@ -1,4 +1,6 @@
 # Test hints for CustomPlugin
 # Plugin compilation requires Swift compiler - available on CI via swift:6.2-jammy
+# Skip on Linux: precompiled macOS .dylib in repo; runtime compilation unreliable in CI
+skip-on-linux: Plugin compilation not supported in CI environment
 mode: interpreter
 timeout: 60
