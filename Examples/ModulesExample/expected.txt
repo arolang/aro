@@ -1,9 +1,7 @@
-# Generated: Sat Jan  3 23:23:23 2026
-# Type: console
-# Command: aro run ./Examples/ModulesExample
+# Generated: Thu Jan 16 00:00:00 2026
+# Type: http
+# Command: aro run ./Examples/ModulesExample/Combined
+# Workdir: Examples/ModulesExample/Combined
 ---
-[Application-Start] Module A starting...
-Runtime error: Runtime Error: Cannot start the http-server for the contract.
-  Feature: Application-Start
-  Business Activity: ModuleA
-  Statement: <Start> the <http-server> for the <contract>.
+GET /module-a => {"message":"Hello from Module A"}
+GET /module-b => {"message":"Hello from Module B"}

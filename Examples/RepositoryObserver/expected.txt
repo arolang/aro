@@ -6,4 +6,4 @@ GET /users => {"users":[]}
 GET /users/{id} => {"data":[]}
 POST /users => {"email":"test@example.com","name":"Test User"}
 PUT /users/{id} => ERROR: 500 Internal Server Error
-DELETE /users/{id} => ERROR: 599 Internal Exception
+DELETE /users/{id} => {"deleted":"123"}

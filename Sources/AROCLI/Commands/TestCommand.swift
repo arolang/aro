@@ -41,13 +41,13 @@ struct TestCommand: AsyncParsableCommand {
             print()
         }
 
-        // Discover application
+        // Discover application with import resolution
         let discovery = ApplicationDiscovery()
         let appConfig: DiscoveredApplication
 
         do {
             // Use a dummy entry point since we're running tests, not the app
-            appConfig = try await discovery.discover(
+            appConfig = try await discovery.discoverWithImports(
                 at: resolvedPath,
                 entryPoint: "Application-Start"
             )

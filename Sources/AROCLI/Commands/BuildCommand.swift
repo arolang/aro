@@ -62,12 +62,12 @@ struct BuildCommand: AsyncParsableCommand {
             print()
         }
 
-        // Discover application
+        // Discover application with import resolution
         let discovery = ApplicationDiscovery()
         let appConfig: DiscoveredApplication
 
         do {
-            appConfig = try await discovery.discover(at: resolvedPath)
+            appConfig = try await discovery.discoverWithImports(at: resolvedPath)
             #if os(Linux)
             FileHandle.standardError.write("[BUILD] Discovery completed, found \(appConfig.sourceFiles.count) files\n".data(using: .utf8)!)
             #endif

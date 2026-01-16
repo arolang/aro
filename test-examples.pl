@@ -189,10 +189,19 @@ sub main {
 # Discover all example directories
 sub discover_examples {
     opendir my $dh, $examples_dir or die "Cannot open $examples_dir: $!";
+
+    # Directories to exclude from testing
+    my %excluded = (
+        'template' => 1,     # Template directory
+        'data' => 1,         # Test output directory
+        'output' => 1,       # Test output directory
+        'demo-output' => 1,  # Test output directory
+    );
+
     my @examples = grep {
         -d File::Spec->catdir($examples_dir, $_) &&
         !/^\./ &&
-        $_ ne 'template'
+        !$excluded{$_}
     } readdir $dh;
     closedir $dh;
 
