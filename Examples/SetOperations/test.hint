@@ -1,3 +1,4 @@
 # Test hints for SetOperations
-# Binary with-clause not yet supported in native compilation
+# Tested on macOS and Docker (Linux)
+# Binary mode has extra blank lines in output
 mode: interpreter

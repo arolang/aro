@@ -346,7 +346,7 @@ Examples/
     ├── api.aro         # CRUD operations
     └── observers.aro   # Repository change observers
 
-Proposals/              # 10 consolidated language specifications
+Proposals/              # 17 language specifications
 ├── ARO-0001-language-fundamentals.md
 ├── ARO-0002-control-flow.md
 ├── ARO-0003-type-system.md
@@ -357,13 +357,18 @@ Proposals/              # 10 consolidated language specifications
 ├── ARO-0008-io-services.md
 ├── ARO-0009-native-compilation.md
 ├── ARO-0010-advanced-features.md
-├── legacy/             # Original proposals (historical reference)
-└── future/             # Planned features
+├── ARO-0014-domain-modeling.md
+├── ARO-0015-testing-framework.md
+├── ARO-0016-interoperability.md
+├── ARO-0018-query-language.md
+├── ARO-0019-standard-library.md
+├── ARO-0030-ide-integration.md
+└── ARO-0034-language-server-protocol.md
 ```
 
 ## Language Proposals
 
-The `Proposals/` directory contains 10 consolidated specifications:
+The `Proposals/` directory contains 17 specifications:
 
 | Proposal | Topics |
 |----------|--------|
@@ -377,9 +382,13 @@ The `Proposals/` directory contains 10 consolidated specifications:
 | **0008 I/O Services** | HTTP, files, sockets, system objects |
 | **0009 Native Compilation** | LLVM, aro build |
 | **0010 Advanced Features** | Regex, dates, exec |
-
-The `legacy/` directory contains the original evolution proposals for historical reference.
-The `future/` directory contains planned features not yet implemented.
+| **0014 Domain Modeling** | DDD patterns, entities, aggregates |
+| **0015 Testing Framework** | Colocated tests, Given/When/Then |
+| **0016 Interoperability** | External services, Call action |
+| **0018 Data Pipelines** | Filter, transform, aggregate collections |
+| **0019 Standard Library** | Primitive types, utilities |
+| **0030 IDE Integration** | Syntax highlighting, snippets |
+| **0034 Language Server Protocol** | LSP server, diagnostics, navigation |
 
 ## Concurrency
 

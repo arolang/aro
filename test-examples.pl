@@ -448,6 +448,7 @@ sub run_test_in_workdir {
     my $output;
     my $error;
     my $run_dir = $example_name;  # Default: use example name as-is
+    my $binary_name;  # For compiled mode when using workdir
 
     # Change directory if specified
     if (defined $workdir) {
@@ -469,6 +470,8 @@ sub run_test_in_workdir {
 
         # When running from workdir, use current directory
         $run_dir = '.';
+        # Preserve original example name for finding compiled binary
+        $binary_name = basename($example_name);
     }
 
     # Execute pre-script if specified
@@ -488,8 +491,9 @@ sub run_test_in_workdir {
 
     # Execute with current timeout based on type
     # Pass $run_dir instead of $example_name to the internal functions
+    # Pass $binary_name for compiled mode when using workdir
     if ($type eq 'console') {
-        ($output, $error) = run_console_example_internal($run_dir, $timeout, $mode);
+        ($output, $error) = run_console_example_internal($run_dir, $timeout, $mode, $binary_name);
     } elsif ($type eq 'http') {
         ($output, $error) = run_http_example_internal($run_dir, $timeout, $mode);
     } elsif ($type eq 'socket') {
@@ -736,7 +740,7 @@ sub run_console_example {
 
 # Run console example (internal with timeout parameter)
 sub run_console_example_internal {
-    my ($example_name, $timeout, $mode) = @_;
+    my ($example_name, $timeout, $mode, $binary_name) = @_;
     $mode //= 'interpreter';  # Default to interpreter mode
 
     # Handle '.' or absolute paths directly, otherwise prepend examples_dir
@@ -751,7 +755,8 @@ sub run_console_example_internal {
     my @cmd;
     if ($mode eq 'compiled') {
         # Execute compiled binary directly
-        my $basename = basename($dir);
+        # Use provided binary_name (for workdir cases) or derive from dir
+        my $basename = defined $binary_name ? $binary_name : basename($dir);
         my $binary_path = get_binary_path($dir, $basename);
 
         unless (is_executable($binary_path)) {
