@@ -1,3 +1,4 @@
 # Test hints for SinkSyntax
-# Native compilation bug: integer literal in Compute returns 0
+# Tested on macOS and Docker (Linux)
+# Binary mode has extra blank lines in output
 mode: interpreter

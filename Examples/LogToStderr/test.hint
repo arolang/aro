@@ -1,2 +1,4 @@
 # Test hints for LogToStderr
+# Tested on macOS and Docker (Linux)
+# Binary mode has different stdout/stderr buffering order
 mode: interpreter

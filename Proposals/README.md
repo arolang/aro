@@ -18,6 +18,13 @@ For newcomers to ARO, read the proposals in order:
 | 8 | [I/O Services](ARO-0008-io-services.md) | HTTP, files, sockets, system objects |
 | 9 | [Native Compilation](ARO-0009-native-compilation.md) | LLVM, aro build |
 | 10 | [Advanced Features](ARO-0010-advanced-features.md) | Regex, dates, exec |
+| 14 | [Domain Modeling](ARO-0014-domain-modeling.md) | DDD patterns, entities, aggregates |
+| 15 | [Testing Framework](ARO-0015-testing-framework.md) | Colocated tests, Given/When/Then |
+| 16 | [Interoperability](ARO-0016-interoperability.md) | External services, Call action |
+| 18 | [Data Pipelines](ARO-0018-query-language.md) | Filter, transform, aggregate collections |
+| 19 | [Standard Library](ARO-0019-standard-library.md) | Primitive types, utilities |
+| 30 | [IDE Integration](ARO-0030-ide-integration.md) | Syntax highlighting, snippets |
+| 34 | [Language Server Protocol](ARO-0034-language-server-protocol.md) | LSP server, diagnostics, navigation |
 
 ## Quick Reference
 
@@ -69,28 +76,15 @@ Proposals/
 ├── ARO-0008-io-services.md
 ├── ARO-0009-native-compilation.md
 ├── ARO-0010-advanced-features.md
-├── legacy/                          # Original proposals (historical)
-└── future/                          # Planned features
+├── ARO-0014-domain-modeling.md
+├── ARO-0015-testing-framework.md
+├── ARO-0016-interoperability.md
+├── ARO-0018-query-language.md
+├── ARO-0019-standard-library.md
+├── ARO-0030-ide-integration.md
+└── ARO-0034-language-server-protocol.md
 ```
-
-## Future Proposals
-
-The following features are planned but not yet specified:
-
-| Proposal | Feature |
-|----------|---------|
-| [ARO-0014](future/ARO-0014-domain-modeling.md) | Domain Modeling Patterns |
-| [ARO-0015](future/ARO-0015-testing-framework.md) | Testing Framework |
-| [ARO-0016](future/ARO-0016-interoperability.md) | Foreign Function Interface |
-| [ARO-0018](future/ARO-0018-query-language.md) | Query Language |
-| [ARO-0019](future/ARO-0019-standard-library.md) | Standard Library |
-| [ARO-0030](future/ARO-0030-ide-integration.md) | IDE Integration |
-| [ARO-0034](future/ARO-0034-language-server-protocol.md) | Language Server Protocol |
-
-## Legacy Proposals
-
-The `legacy/` directory contains the original evolution proposals. These are preserved for historical reference but have been superseded by the consolidated specifications above.
 
 ---
 
-*Last updated: December 2025*
+*Last updated: January 2026*
