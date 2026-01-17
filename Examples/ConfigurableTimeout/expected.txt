@@ -5,4 +5,4 @@
 Application started with custom timeout configuration
 Timeout value:
 10
-startup
+[OK] startup

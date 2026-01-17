@@ -178,7 +178,9 @@ public final class LLVMCodeGenerator {
             "split",
             // File operations (ARO-0036)
             "list", "stat", "exists", "make", "touch", "createdirectory", "mkdir",
-            "copy", "move", "rename", "append"
+            "copy", "move", "rename", "append",
+            // Configuration action (synonym for update)
+            "configure"
         ]
         for action in actions {
             emit("declare ptr @aro_action_\(action)(ptr, ptr, ptr)")

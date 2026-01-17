@@ -690,6 +690,16 @@ private func convertToSendable(_ value: Any) -> any Sendable {
             // This is a JSON boolean (true/false), not an integer
             return nsNumber.boolValue
         }
+        #else
+        // On Linux, JSONSerialization uses objCType "c" (signed char) for booleans
+        // We need to check if it's in boolean range (0 or 1) to distinguish from
+        // actual signed char integers
+        if objCType == "c" || objCType == "B" {
+            let intVal = nsNumber.intValue
+            if intVal == 0 || intVal == 1 {
+                return nsNumber.boolValue
+            }
+        }
         #endif
         // Check if it has a decimal point (is a double)
         if objCType == "d" || objCType == "f" {

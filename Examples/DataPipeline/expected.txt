@@ -1,8 +1,7 @@
-# Generated: Sat Jan 10 18:21:42 2026
+# Generated: Sat Jan 17 2026
 # Type: console
 # Command: aro run ./Examples/DataPipeline
 ---
-HTTP request handler configured with 0 routes
 === Test 1: Simple Array Reduce ===
 Numbers:
 [1, 2, 3, 4, 5]

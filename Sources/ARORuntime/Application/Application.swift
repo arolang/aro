@@ -220,7 +220,7 @@ public final class Application: @unchecked Sendable {
         }
 
         httpServer.setRequestHandler(handler)
-        print("[Application] HTTP request handler configured with \(routeRegistry.operationIds.count) routes")
+        // Note: Removed verbose logging for consistency between interpreter and binary modes
     }
 
     /// Execute a feature set for an HTTP request
@@ -632,6 +632,7 @@ extension ApplicationDiscovery {
         // Use absoluteURL.standardized to correctly resolve relative paths
         // when baseDir itself is a relative URL (e.g., ".")
         // Handle relative paths like ../user-service, ./utils
+        // Use absoluteURL.standardized to properly resolve relative base directories (e.g., ".")
         if importPath.hasPrefix("../") || importPath.hasPrefix("./") {
             return baseDir.appendingPathComponent(importPath).absoluteURL.standardized
         }

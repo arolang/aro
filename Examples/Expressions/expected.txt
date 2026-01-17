@@ -7,4 +7,4 @@ Expression Demo
 8.00
 108.00
 John Doe
-application
+[OK] application
