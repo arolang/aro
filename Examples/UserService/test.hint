@@ -1,5 +1,5 @@
 # Test hints for UserService
-# HTTP server binary doesn't start properly
+# HTTP server binary has timing issues - needs investigation
 mode: interpreter
 # HTTP servers hang on Windows CI
 skip-on-windows: HTTP server tests not supported on Windows CI

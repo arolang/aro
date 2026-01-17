@@ -1,4 +1,4 @@
-# Generated: Sun Jan  4 23:42:39 2026
+# Generated: Fri Jan 17 2026
 # Type: http
 # Command: aro run ./Examples/UserService
 ---
@@ -6,4 +6,4 @@ GET /users => {"data":[]}
 GET /users/{id} => {"data":[]}
 POST /users => {"email":"test@example.com","name":"Test User"}
 PUT /users/{id} => {"name":"Updated User"}
-DELETE /users/{id} => ERROR: 599 Internal Exception
+DELETE /users/{id} =>
