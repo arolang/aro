@@ -360,16 +360,6 @@ sub build_example {
     eval { finish($handle) };
     my $build_duration = time - $start_time;
 
-    # Debug: Print captured output lengths for debugging
-    if ($example_name eq 'HelloWorld') {
-        print STDERR "[TEST-DEBUG] HelloWorld build completed\n";
-        print STDERR "[TEST-DEBUG] Exit code: $?\n";
-        print STDERR "[TEST-DEBUG] stdout length: " . length($out) . "\n";
-        print STDERR "[TEST-DEBUG] stderr length: " . length($err) . "\n";
-        print STDERR "[TEST-DEBUG] stdout content: [$out]\n";
-        print STDERR "[TEST-DEBUG] stderr content: [$err]\n";
-    }
-
     if ($? != 0) {
         my $combined_err = $err || $out;
         my $exit_code = $? >> 8;
@@ -385,30 +375,6 @@ sub build_example {
     # Check if binary exists
     my $basename = basename($dir);
     my $binary_path = get_binary_path($dir, $basename);
-
-    # Debug: Check binary status
-    if ($example_name eq 'HelloWorld') {
-        print STDERR "[TEST-DEBUG] Checking binary at: $binary_path\n";
-        print STDERR "[TEST-DEBUG] File exists: " . (-e $binary_path ? "YES" : "NO") . "\n";
-        print STDERR "[TEST-DEBUG] File readable: " . (-r $binary_path ? "YES" : "NO") . "\n";
-        print STDERR "[TEST-DEBUG] File executable: " . (is_executable($binary_path) ? "YES" : "NO") . "\n";
-        print STDERR "[TEST-DEBUG] Platform: $^O (is_windows=$is_windows)\n";
-        if (-e $binary_path) {
-            my @stat = stat($binary_path);
-            print STDERR "[TEST-DEBUG] File size: $stat[7] bytes\n";
-            print STDERR "[TEST-DEBUG] File permissions: " . sprintf("%04o", $stat[2] & 07777) . "\n";
-        }
-        # List directory contents
-        print STDERR "[TEST-DEBUG] Directory contents:\n";
-        opendir(my $dh, $dir) or warn "Can't open $dir: $!";
-        while (my $file = readdir($dh)) {
-            next if $file =~ /^\./;
-            my $path = File::Spec->catfile($dir, $file);
-            my @st = stat($path);
-            print STDERR "[TEST-DEBUG]   $file (size: $st[7], mode: " . sprintf("%04o", $st[2] & 07777) . ")\n";
-        }
-        closedir($dh);
-    }
 
     unless (is_executable($binary_path)) {
         # Include build output in error message for debugging
