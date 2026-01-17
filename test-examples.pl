@@ -1110,7 +1110,8 @@ sub run_http_example_internal {
                 }
 
                 if ($response && $response->{success}) {
-                    push @output, sprintf("%s %s => %s", uc($method), $path, $response->{content});
+                    my $content = $response->{content} // '';
+                    push @output, sprintf("%s %s => %s", uc($method), $path, $content);
 
                     # Try to capture ID from response for subsequent requests
                     if ($response->{content} && $response->{content} =~ /"id"\s*:\s*"([^"]+)"/) {
