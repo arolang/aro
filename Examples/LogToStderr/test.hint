@@ -1,4 +1,5 @@
 # Test hints for LogToStderr
 # Tested on macOS and Docker (Linux)
-# Binary mode has different stdout/stderr buffering order
-mode: interpreter
+# Binary mode has different stdout/stderr buffering order - use occurrence-check
+mode: both
+occurrence-check: true
