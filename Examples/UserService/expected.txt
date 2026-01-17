@@ -1,9 +1,9 @@
-# Generated: Wed Jan 15 2026
+# Generated: Fri Jan 17 2026
 # Type: http
 # Command: aro run ./Examples/UserService
-# Note: DELETE response differs between interpreter (204 No Content) and binary (200 with body)
 ---
 GET /users => {"data":[]}
 GET /users/{id} => {"data":[]}
 POST /users => {"email":"test@example.com","name":"Test User"}
 PUT /users/{id} => {"name":"Updated User"}
+DELETE /users/{id} =>
