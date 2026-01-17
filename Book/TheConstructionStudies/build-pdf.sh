@@ -7,6 +7,7 @@
 #   - pandoc (brew install pandoc)
 #   - LaTeX (brew install --cask mactex-no-gui or basictex)
 #   - Or: weasyprint for HTML-to-PDF (pip install weasyprint)
+#   - Python 3 (for SVG extraction)
 #
 
 set -e
@@ -16,9 +17,19 @@ OUTPUT_DIR="$SCRIPT_DIR/output"
 OUTPUT_PDF="$OUTPUT_DIR/ARO-Construction-Studies.pdf"
 METADATA_FILE="$SCRIPT_DIR/metadata.yaml"
 CSS_FILE="$SCRIPT_DIR/unix-style.css"
+PROCESSED_DIR="$SCRIPT_DIR/processed"
+IMAGES_DIR="$SCRIPT_DIR/images"
 
 # Create output directory
 mkdir -p "$OUTPUT_DIR"
+
+# Step 1: Extract SVGs from markdown files into separate files
+echo "Extracting SVGs from markdown files..."
+python3 "$SCRIPT_DIR/extract-svgs.py"
+
+# Copy images to processed directory for pandoc to find them
+mkdir -p "$PROCESSED_DIR/images"
+cp "$IMAGES_DIR"/*.svg "$PROCESSED_DIR/images/" 2>/dev/null || true
 
 # Check for required files
 if [[ ! -f "$METADATA_FILE" ]]; then
@@ -38,18 +49,18 @@ if ! command -v pandoc &> /dev/null; then
     exit 1
 fi
 
-# Dynamically build the ordered list of chapters
+# Dynamically build the ordered list of chapters from processed directory
 echo "Discovering chapters..."
 
 CHAPTERS=()
 
 # Start with cover page if it exists
-if [[ -f "$SCRIPT_DIR/Cover.md" ]]; then
+if [[ -f "$PROCESSED_DIR/Cover.md" ]]; then
     CHAPTERS+=("Cover.md")
 fi
 
 # Get all Chapter*.md files with proper sorting
-cd "$SCRIPT_DIR"
+cd "$PROCESSED_DIR"
 while IFS= read -r file; do
     CHAPTERS+=("$file")
 done < <(for f in Chapter*.md; do
@@ -62,17 +73,19 @@ while IFS= read -r file; do
     CHAPTERS+=("$file")
 done < <(ls -1 Appendix*.md 2>/dev/null | sort -V)
 
+cd "$SCRIPT_DIR"
+
 echo "Found ${#CHAPTERS[@]} chapters/appendices"
 echo ""
 
 echo "Building ARO Construction Studies..."
 echo ""
 
-# Build the file list
+# Build the file list from processed directory
 FILE_LIST=""
 for chapter in "${CHAPTERS[@]}"; do
-    if [[ -f "$SCRIPT_DIR/$chapter" ]]; then
-        FILE_LIST="$FILE_LIST $SCRIPT_DIR/$chapter"
+    if [[ -f "$PROCESSED_DIR/$chapter" ]]; then
+        FILE_LIST="$FILE_LIST $PROCESSED_DIR/$chapter"
         echo "  + $chapter"
     else
         echo "  ! Missing: $chapter"
@@ -85,6 +98,7 @@ echo ""
 if command -v pdflatex &> /dev/null || command -v xelatex &> /dev/null; then
     echo "Building PDF with LaTeX..."
 
+    cd "$PROCESSED_DIR"
     pandoc \
         --metadata-file="$METADATA_FILE" \
         --pdf-engine=xelatex \
@@ -95,6 +109,7 @@ if command -v pdflatex &> /dev/null || command -v xelatex &> /dev/null; then
         -V fontsize=11pt \
         -o "$OUTPUT_PDF" \
         $FILE_LIST
+    cd "$SCRIPT_DIR"
 
     echo ""
     echo "Created: $OUTPUT_PDF"
@@ -105,17 +120,22 @@ else
 
     HTML_OUTPUT="$OUTPUT_DIR/ARO-Construction-Studies.html"
 
+    # Copy images to output for weasyprint
+    mkdir -p "$OUTPUT_DIR/images"
+    cp "$IMAGES_DIR"/*.svg "$OUTPUT_DIR/images/" 2>/dev/null || true
+
     # Build content files (without cover) for TOC generation
     CONTENT_FILES=""
     for chapter in "${CHAPTERS[@]}"; do
-        if [[ "$chapter" != "Cover.md" && -f "$SCRIPT_DIR/$chapter" ]]; then
-            CONTENT_FILES="$CONTENT_FILES $SCRIPT_DIR/$chapter"
+        if [[ "$chapter" != "Cover.md" && -f "$PROCESSED_DIR/$chapter" ]]; then
+            CONTENT_FILES="$CONTENT_FILES $PROCESSED_DIR/$chapter"
         fi
     done
 
     # Build HTML with cover at top, then TOC, then content
     TEMP_HTML="$OUTPUT_DIR/temp-content.html"
 
+    cd "$OUTPUT_DIR"
     pandoc \
         --standalone \
         --toc \
@@ -125,11 +145,12 @@ else
         --from markdown+raw_html \
         -o "$TEMP_HTML" \
         $CONTENT_FILES
+    cd "$SCRIPT_DIR"
 
     # Generate cover HTML to temp file
     COVER_TEMP="$OUTPUT_DIR/temp-cover.html"
-    if [[ -f "$SCRIPT_DIR/Cover.md" ]]; then
-        pandoc --from markdown+raw_html --to html "$SCRIPT_DIR/Cover.md" > "$COVER_TEMP"
+    if [[ -f "$PROCESSED_DIR/Cover.md" ]]; then
+        pandoc --from markdown+raw_html --to html "$PROCESSED_DIR/Cover.md" > "$COVER_TEMP"
     else
         echo "" > "$COVER_TEMP"
     fi
@@ -148,7 +169,9 @@ else
     if command -v weasyprint &> /dev/null; then
         echo ""
         echo "Converting to PDF with WeasyPrint..."
-        weasyprint "$HTML_OUTPUT" "$OUTPUT_PDF" 2>/dev/null || true
+        cd "$OUTPUT_DIR"
+        weasyprint "$HTML_OUTPUT" "$OUTPUT_PDF" 2>/dev/null || weasyprint "$HTML_OUTPUT" "$OUTPUT_PDF"
+        cd "$SCRIPT_DIR"
 
         if [[ -f "$OUTPUT_PDF" ]]; then
             echo "Created: $OUTPUT_PDF"
@@ -170,31 +193,23 @@ echo "Building HTML version for screen reading..."
 
 HTML_OUTPUT="$OUTPUT_DIR/ARO-Construction-Studies.html"
 
-# Copy CSS to output directory for HTML
+# Copy CSS and images to output directory for HTML
 cp "$CSS_FILE" "$OUTPUT_DIR/"
+mkdir -p "$OUTPUT_DIR/images"
+cp "$IMAGES_DIR"/*.svg "$OUTPUT_DIR/images/" 2>/dev/null || true
 
 # Build content files (without cover) for TOC generation
 CONTENT_FILES=""
 for chapter in "${CHAPTERS[@]}"; do
-    if [[ "$chapter" != "Cover.md" && -f "$SCRIPT_DIR/$chapter" ]]; then
-        CONTENT_FILES="$CONTENT_FILES $SCRIPT_DIR/$chapter"
+    if [[ "$chapter" != "Cover.md" && -f "$PROCESSED_DIR/$chapter" ]]; then
+        CONTENT_FILES="$CONTENT_FILES $PROCESSED_DIR/$chapter"
     fi
 done
 
 # Build HTML with cover at top, then TOC, then content
 TEMP_HTML="$OUTPUT_DIR/temp-content.html"
 
-pandoc \
-    --standalone \
-    --toc \
-    --toc-depth=2 \
-    --css="unix-style.css" \
-    --metadata title="ARO: The Construction Studies" \
-    --from markdown+raw_html \
-    --embed-resources \
-    --self-contained \
-    -o "$TEMP_HTML" \
-    $CONTENT_FILES 2>/dev/null || \
+cd "$OUTPUT_DIR"
 pandoc \
     --standalone \
     --toc \
@@ -204,11 +219,12 @@ pandoc \
     --from markdown+raw_html \
     -o "$TEMP_HTML" \
     $CONTENT_FILES
+cd "$SCRIPT_DIR"
 
 # Generate cover HTML to temp file
 COVER_TEMP="$OUTPUT_DIR/temp-cover.html"
-if [[ -f "$SCRIPT_DIR/Cover.md" ]]; then
-    pandoc --from markdown+raw_html --to html "$SCRIPT_DIR/Cover.md" > "$COVER_TEMP"
+if [[ -f "$PROCESSED_DIR/Cover.md" ]]; then
+    pandoc --from markdown+raw_html --to html "$PROCESSED_DIR/Cover.md" > "$COVER_TEMP"
 else
     echo "" > "$COVER_TEMP"
 fi
