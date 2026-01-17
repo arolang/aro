@@ -6,7 +6,7 @@
 
 ## 1.1 The Paradox of Less
 
-Every programmer eventually discovers a counterintuitive truth: sometimes the best code is the code you couldn't write.
+Every programmer eventually discovers a counterintuitive truth: simplicity isn't the absence of features, it's the discipline to refuse them.
 
 General-purpose languages like Python, JavaScript, and Go are magnificent tools. They let you express almost anything. But "almost anything" is precisely the problem. When a language permits infinite variation, every codebase becomes a unique dialect. Reading someone else's Express.js handler requires decoding their personal philosophy of error handling, their opinions on async/await versus callbacks, their stance on mutation.
 
