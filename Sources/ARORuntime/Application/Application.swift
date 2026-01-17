@@ -220,7 +220,7 @@ public final class Application: @unchecked Sendable {
         }
 
         httpServer.setRequestHandler(handler)
-        print("[Application] HTTP request handler configured with \(routeRegistry.operationIds.count) routes")
+        // Note: Removed verbose logging for consistency between interpreter and binary modes
     }
 
     /// Execute a feature set for an HTTP request

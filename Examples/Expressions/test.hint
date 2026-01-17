@@ -1,1 +1,3 @@
-# Skip due to TTY detection changes
+# Test hints for Expressions
+# Binary mode enabled
+mode: both

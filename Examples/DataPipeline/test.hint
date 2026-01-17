@@ -1,5 +1,7 @@
 # Test hints for DataPipeline
-# Binary output differs from interpreter (startup messages)
-mode: interpreter
+# Fixed: Removed HTTP handler startup message from expected output
+# Note: Has openapi.yaml but no HTTP routes - force console type
+type: console
+mode: both
 # File operations don't work correctly on Windows CI
 skip-on-windows: File operations not supported on Windows CI
