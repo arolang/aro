@@ -850,7 +850,7 @@ public struct CreateAction: ActionImplementation {
 /// Updates an existing entity
 public struct UpdateAction: ActionImplementation {
     public static let role: ActionRole = .own
-    public static let verbs: Set<String> = ["update", "modify", "change", "set"]
+    public static let verbs: Set<String> = ["update", "modify", "change", "set", "configure"]
     public static let validPrepositions: Set<Preposition> = [.with, .to, .for, .from]
 
     public init() {}
@@ -862,9 +862,14 @@ public struct UpdateAction: ActionImplementation {
     ) async throws -> any Sendable {
         try validatePreposition(object.preposition)
 
-        // Get entity to update
-        guard let entity = context.resolveAny(result.base) else {
-            throw ActionError.undefinedVariable(result.base)
+        // For "configure" verb, allow creating new configuration if it doesn't exist
+        // This enables: <Configure> the <validation: timeout> with <value>.
+        let entity: any Sendable
+        if let existingEntity = context.resolveAny(result.base) {
+            entity = existingEntity
+        } else {
+            // Create empty dictionary for new configuration
+            entity = [String: any Sendable]()
         }
 
         // Get update value - check _literal_ first (for "draft"), then resolve from object

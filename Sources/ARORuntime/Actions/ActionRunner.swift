@@ -55,6 +55,7 @@ public final class ActionRunner: @unchecked Sendable {
         "modify": "update",
         "change": "update",
         "set": "update",
+        "configure": "update",
 
         // return synonyms
         "respond": "return",

@@ -285,6 +285,15 @@ public func aro_action_update(
     return executeAction(verb: "update", contextPtr: contextPtr, resultPtr: resultPtr, objectPtr: objectPtr)
 }
 
+@_cdecl("aro_action_configure")
+public func aro_action_configure(
+    _ contextPtr: UnsafeMutableRawPointer?,
+    _ resultPtr: UnsafeRawPointer?,
+    _ objectPtr: UnsafeRawPointer?
+) -> UnsafeMutableRawPointer? {
+    return executeAction(verb: "configure", contextPtr: contextPtr, resultPtr: resultPtr, objectPtr: objectPtr)
+}
+
 @_cdecl("aro_action_accept")
 public func aro_action_accept(
     _ contextPtr: UnsafeMutableRawPointer?,
