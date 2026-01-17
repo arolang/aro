@@ -1,6 +1,6 @@
 # Test hints for ParallelForEach
-# Binary compilation fails on Linux CI
-mode: interpreter
+# Fixed: Binary mode now works after CI dependency fixes (LLVM 14)
+mode: both
 
 # ParallelForEach demonstrates concurrent iteration with non-deterministic order
 # Parallel iteration executes in TaskGroup with unpredictable completion sequence

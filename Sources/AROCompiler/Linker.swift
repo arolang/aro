@@ -59,6 +59,12 @@ public final class LLVMEmitter {
             args.append("-opaque-pointers")
         }
 
+        // On Linux, generate position-independent code for PIE executables
+        // Modern Linux distributions (Ubuntu 18.04+) require PIE by default
+        #if os(Linux)
+        args.append("-relocation-model=pic")
+        #endif
+
         args.append("-filetype=obj")
         args.append(optimize.rawValue)
         args.append("-o")

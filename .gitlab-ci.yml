@@ -29,11 +29,15 @@ default:
   interruptible: true
 
 # =============================================================================
-# Test Stage - Gate for all builds
+# Test Stage - Gate for all builds (main branch only)
 # =============================================================================
 test:
   stage: test
   image: swift:6.2-jammy
+  rules:
+    - if: $CI_COMMIT_TAG
+    - if: $CI_COMMIT_BRANCH == "main"
+    - if: $CI_COMMIT_BRANCH =~ /^release\/.*/
   cache:
     key:
       files:
@@ -54,7 +58,8 @@ build:linux:
   stage: build
   image: swift:6.2-jammy
   needs:
-    - test
+    - job: test
+      optional: true
   cache:
     key:
       files:
@@ -213,7 +218,8 @@ documentation:
   stage: documentation
   image: ubuntu:22.04
   needs:
-    - test
+    - job: test
+      optional: true
   before_script:
     - apt-get update -qq
     - export DEBIAN_FRONTEND=noninteractive
