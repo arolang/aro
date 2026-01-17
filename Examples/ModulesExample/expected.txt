@@ -1,6 +1,7 @@
-# Generated: Wed Jan 15 12:00:00 2026
+# Generated: Thu Jan 16 00:00:00 2026
 # Type: http
 # Command: aro run ./Examples/ModulesExample/Combined
+# Workdir: Examples/ModulesExample/Combined
 ---
 GET /module-a => {"message":"Hello from Module A"}
 GET /module-b => {"message":"Hello from Module B"}
