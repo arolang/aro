@@ -41,7 +41,7 @@ struct TestCommand: AsyncParsableCommand {
             print()
         }
 
-        // Discover application
+        // Discover application with import resolution
         let discovery = ApplicationDiscovery()
         let appConfig: DiscoveredApplication
 
