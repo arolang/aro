@@ -117,7 +117,9 @@ public struct StartAction: ActionImplementation {
         #if !os(Windows)
         // Pass nil for context - the native server will create contexts per-request
         // via the aro_context_create() C function when invoking feature sets
-        let result = aro_native_http_server_start_with_openapi(Int32(port), nil)
+        // If port is still default (8080), pass 0 to let native function extract from OpenAPI spec
+        let nativePort = (port == 8080) ? 0 : port
+        let result = aro_native_http_server_start_with_openapi(Int32(nativePort), nil)
         if result == 0 {
             return ServerStartResult(serverType: "http-server", success: true, port: port)
         } else {

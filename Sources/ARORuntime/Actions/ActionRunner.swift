@@ -47,7 +47,7 @@ public final class ActionRunner: @unchecked Sendable {
         "convert": "transform",
 
         // create synonyms
-        "make": "create",
+        // NOTE: "make" is NOT a synonym for "create" - MakeAction handles directory creation
         "build": "create",
         "construct": "create",
 
