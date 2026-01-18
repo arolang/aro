@@ -1,9 +1,8 @@
 # SystemMonitor is an HTTP API that uses Unix shell commands (ls, df, ps)
 # These commands are not available on Windows
 type: http
-# Binary mode works on macOS but HTTP binaries have issues on Linux
-# See: HTTP binary issue tracking (all HTTP binaries fail on Linux)
-mode: interpreter
+# Binary mode now works after PIE-compatible relocation fix for x86_64 Linux
+mode: both
 skip-on-windows: Uses Unix shell commands (ls, df, ps)
 # Output contains dynamic system info (processes, disk usage, directory listings)
 # Use occurrence-check to verify response structure without exact matching
