@@ -759,14 +759,24 @@ public struct CreateAction: ActionImplementation {
             }
         }
 
-        // Get the source value - this is what we're creating from
-        // The source can be a literal, a variable, or structured data
-        if let sourceValue = context.resolveAny(object.base) {
+        // Get the source value - check _expression_ first (binary mode), then _literal_, then object.base
+        // In binary mode, variable references in expressions are resolved and bound to _expression_
+        // In interpreter mode, variables may be directly resolvable via object.base
+        let sourceValue: (any Sendable)?
+        if let expr = context.resolveAny("_expression_") {
+            sourceValue = expr
+        } else if let literal = context.resolveAny("_literal_") {
+            sourceValue = literal
+        } else {
+            sourceValue = context.resolveAny(object.base)
+        }
+
+        if let value = sourceValue {
             // Check if we're creating a typed entity (e.g., <order: Order>)
             // In this case, we should generate an ID if not present
             if !result.specifiers.isEmpty {
                 // Creating a typed entity - ensure it has an ID
-                if var dict = sourceValue as? [String: any Sendable] {
+                if var dict = value as? [String: any Sendable] {
                     if dict["id"] == nil {
                         dict["id"] = generateEntityId()
                     }
@@ -775,7 +785,7 @@ public struct CreateAction: ActionImplementation {
             }
             // Return the actual value directly - this gets bound to result.base
             // by the FeatureSetExecutor
-            return sourceValue
+            return value
         }
 
         // If no source found, return empty string as default
