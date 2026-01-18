@@ -1000,7 +1000,13 @@ public func aro_variable_resolve(
 
     let contextHandle = Unmanaged<AROCContextHandle>.fromOpaque(ptr).takeUnretainedValue()
 
-    guard let value = contextHandle.context.resolveAny(nameStr) else { return nil }
+    guard let value = contextHandle.context.resolveAny(nameStr) else {
+        // Debug: Log when resolving end-date fails (ARO-0041 diagnostics)
+        if nameStr == "end-date" && ProcessInfo.processInfo.environment["ARO_DEBUG"] != nil {
+            FileHandle.standardError.write("[RuntimeBridge] DEBUG: aro_variable_resolve(end-date) returned nil - variable not bound\n".data(using: .utf8)!)
+        }
+        return nil
+    }
 
     // Wrap value in a box
     let boxedValue = AROCValue(value: value)
@@ -1371,8 +1377,15 @@ public func aro_variable_bind_value(
     _ name: UnsafePointer<CChar>?,
     _ valuePtr: UnsafeMutableRawPointer?
 ) {
+    // Debug: Log when binding _to_ to help diagnose ARO-0041 issues
+    let nameStr = name.map { String(cString: $0) }
+    if nameStr == "_to_" && ProcessInfo.processInfo.environment["ARO_DEBUG"] != nil {
+        let hasValue = valuePtr != nil
+        FileHandle.standardError.write("[RuntimeBridge] DEBUG: aro_variable_bind_value(_to_) called, valuePtr=\(hasValue ? "valid" : "NULL")\n".data(using: .utf8)!)
+    }
+
     guard let ctxPtr = contextPtr,
-          let nameStr = name.map({ String(cString: $0) }),
+          let nameStr,
           let valPtr = valuePtr else { return }
 
     let contextHandle = Unmanaged<AROCContextHandle>.fromOpaque(ctxPtr).takeUnretainedValue()

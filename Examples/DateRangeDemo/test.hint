@@ -1,4 +1,4 @@
 # Test hints for DateRangeDemo
-# Uses date/time operations that differ between interpreter and binary
-mode: interpreter
+# Fixed: Binary mode works - date/time operations are consistent across modes
+mode: both
 occurrence-check: true
