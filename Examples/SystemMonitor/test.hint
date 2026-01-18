@@ -1,6 +1,7 @@
 # SystemMonitor is an HTTP API that uses Unix shell commands (ls, df, ps)
 # These commands are not available on Windows
 type: http
+# Binary mode enabled: -rdynamic exports symbols for dlsym lookup
 mode: both
 skip-on-windows: Uses Unix shell commands (ls, df, ps)
 # Output contains dynamic system info (processes, disk usage, directory listings)

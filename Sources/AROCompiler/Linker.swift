@@ -60,7 +60,8 @@ public final class LLVMEmitter {
         }
 
         // On Linux, generate position-independent code for PIE executables
-        // Modern Linux distributions (Ubuntu 18.04+) require PIE by default
+        // Modern Linux distributions require PIE by default; without this flag,
+        // x86_64 gets R_X86_64_32 relocations that are incompatible with PIE
         #if os(Linux)
         args.append("-relocation-model=pic")
         #endif
@@ -535,6 +536,10 @@ public final class CCompiler {
         args.append("-lm")
         args.append("-lstdc++")  // C++ standard library for BoringSSL
         args.append("-lz")       // zlib for compression
+
+        // Export symbols to dynamic symbol table for dlsym lookup
+        // Required for HTTP binaries to find compiled feature set functions at runtime
+        args.append("-rdynamic")
 
         // Dead code stripping on Linux
         if options.deadStrip {
