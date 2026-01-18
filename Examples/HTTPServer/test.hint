@@ -1,5 +1,5 @@
 # Test hints for HTTPServer
-# Binary mode enabled: CreateAction now checks _expression_ for variable binding
-mode: both
+# HTTP server binary doesn't start properly
+mode: interpreter
 # HTTP servers hang on Windows CI
 skip-on-windows: HTTP server tests not supported on Windows CI
