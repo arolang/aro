@@ -1,4 +1,4 @@
 # Test hints for SinkSyntax
 # Tested on macOS and Docker (Linux)
-# Binary mode has extra blank lines in output
-mode: interpreter
+# Fixed: Binary mode now works correctly (integer values display properly)
+mode: both
