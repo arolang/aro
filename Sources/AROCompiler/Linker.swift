@@ -59,6 +59,12 @@ public final class LLVMEmitter {
             args.append("-opaque-pointers")
         }
 
+        // On Linux, generate position-independent code for PIE executables
+        // Without this, x86_64 gets R_X86_64_32 relocations that are incompatible with PIE
+        #if os(Linux)
+        args.append("-relocation-model=pic")
+        #endif
+
         args.append("-filetype=obj")
         args.append(optimize.rawValue)
         args.append("-o")
