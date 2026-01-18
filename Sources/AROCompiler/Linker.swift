@@ -530,6 +530,10 @@ public final class CCompiler {
         args.append("-lstdc++")  // C++ standard library for BoringSSL
         args.append("-lz")       // zlib for compression
 
+        // Export symbols to dynamic symbol table for dlsym lookup
+        // Required for HTTP binaries to find compiled feature set functions at runtime
+        args.append("-rdynamic")
+
         // Dead code stripping on Linux
         if options.deadStrip {
             args.append("-Xlinker")
