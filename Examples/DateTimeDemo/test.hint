@@ -1,4 +1,3 @@
 # Test hints for DateTimeDemo
-# Uses date/time operations that differ slightly between interpreter and binary
-mode: interpreter
+mode: both
 occurrence-check: true
