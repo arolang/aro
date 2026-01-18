@@ -347,10 +347,11 @@ sub build_example {
     my $start_time = time;
 
     # Execute: aro build <dir>
+    # Use --keep-intermediate to preserve LLVM IR for debugging failures
     my ($in, $out, $err) = ('', '', '');
     my $handle = eval {
         start(
-            [$aro_bin, 'build', $dir],
+            [$aro_bin, 'build', $dir, '--keep-intermediate'],
             \$in, \$out, \$err,
             timeout($timeout)
         );

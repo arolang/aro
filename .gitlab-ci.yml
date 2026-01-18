@@ -199,6 +199,7 @@ integration:linux:
   script:
     - export PATH="/usr/share/swift/usr/bin:/usr/lib/llvm-14/bin:$PATH"
     - export ARO_BIN="$CI_PROJECT_DIR/aro-dist/aro"
+    - export ARO_DEBUG=1  # Enable debug output for ARO-0041 diagnostics
     - chmod +x test-examples.pl
     - perl test-examples.pl --verbose
   artifacts:
@@ -207,6 +208,7 @@ integration:linux:
     paths:
       - Examples/**/expected.*
       - Examples/**/testrun.*
+      - Examples/**/.build/*.ll
     expire_in: 7 days
   tags:
     - spencer
