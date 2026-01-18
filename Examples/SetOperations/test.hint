@@ -1,4 +1,4 @@
 # Test hints for SetOperations
 # Tested on macOS and Docker (Linux)
-# Binary mode has extra blank lines in output
-mode: interpreter
+# Binary mode enabled: blank lines now correctly captured in expected.txt
+mode: both

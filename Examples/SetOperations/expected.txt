@@ -1,11 +1,13 @@
-# Generated: Sat Jan 10 18:21:42 2026
+# Generated: Sun Jan 18 18:05:51 2026
 # Type: console
 # Command: aro run ./Examples/SetOperations
 ---
 === ARO Set Operations Demo (ARO-0042) ===
+
 --- List Operations ---
 List A: [2, 3, 5]
 List B: [1, 2, 3, 4]
+
 Intersection (A and B):
 [2, 3]
 Difference (A - B):
@@ -14,25 +16,31 @@ Difference (B - A):
 [1, 4]
 Union (A or B):
 [2, 3, 5, 1, 4]
+
 --- Multiset (Duplicate Handling) ---
 Multi A: [1, 2, 2, 3]
 Multi B: [2, 2, 2, 4]
+
 Intersection: [2, 2] (min count)
 [2, 2]
 Difference A-B: [1, 3]
 [1, 3]
+
 --- String Operations ---
 String A: hello
 String B: bello
+
 Intersection:
 ello
 Difference (A - B):
 h
 Union:
 hellob
+
 --- Object Operations (Deep) ---
 Object A: { name: Alice, age: 30, address: { city: NYC, zip: 10001 } }
 Object B: { name: Alice, age: 31, address: { city: NYC, state: NY } }
+
 Intersection (matching fields):
 address.city: NYC
 name: Alice
@@ -44,9 +52,11 @@ address.city: NYC
 address.zip: 10001
 age: 30
 name: Alice
+
 --- Filter with 'in' and 'not in' ---
 Items: [{id:1,v:2}, {id:2,v:3}, {id:3,v:5}, {id:4,v:7}]
 Exclude list: [3, 5]
+
 Items where value IN exclude-list:
 [id: 2
 value: 3, id: 3
@@ -55,5 +65,6 @@ Items where value NOT IN exclude-list:
 [id: 1
 value: 2, id: 4
 value: 7]
+
 === Demo Complete ===
 demo
