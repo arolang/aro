@@ -29,11 +29,15 @@ default:
   interruptible: true
 
 # =============================================================================
-# Test Stage - Gate for all builds
+# Test Stage - Gate for all builds (main branch only)
 # =============================================================================
 test:
   stage: test
   image: swift:6.2-jammy
+  rules:
+    - if: $CI_COMMIT_TAG
+    - if: $CI_COMMIT_BRANCH == "main"
+    - if: $CI_COMMIT_BRANCH =~ /^release\/.*/
   cache:
     key:
       files:
@@ -54,7 +58,8 @@ build:linux:
   stage: build
   image: swift:6.2-jammy
   needs:
-    - test
+    - job: test
+      optional: true
   cache:
     key:
       files:
@@ -213,19 +218,27 @@ documentation:
   stage: documentation
   image: ubuntu:22.04
   needs:
-    - test
+    - job: test
+      optional: true
   before_script:
     - apt-get update -qq
     - export DEBIAN_FRONTEND=noninteractive
     - apt-get install -y -qq pandoc weasyprint fonts-ibm-plex
   script:
+    # Build Language Guide
     - cd Book/TheLanguageGuide
     - chmod +x build-pdf.sh
     - ./build-pdf.sh
+    - cd ../..
+    # Build Construction Studies
+    - cd Book/TheConstructionStudies
+    - chmod +x build-pdf.sh
+    - ./build-pdf.sh
   artifacts:
-    name: aro-language-guide
+    name: aro-documentation
     paths:
       - Book/TheLanguageGuide/output/ARO-Language-Guide.pdf
+      - Book/TheConstructionStudies/output/ARO-Construction-Studies.pdf
     expire_in: 30 days
   tags:
     - spencer
@@ -259,7 +272,8 @@ release:
 
     # Show package contents
     - ls -la aro-linux-amd64.tar.gz
-    - ls -la Book/TheLanguageGuide/output/ARO-Language-Guide.pdf || echo "PDF not found"
+    - ls -la Book/TheLanguageGuide/output/ARO-Language-Guide.pdf || echo "Language Guide PDF not found"
+    - ls -la Book/TheConstructionStudies/output/ARO-Construction-Studies.pdf || echo "Construction Studies PDF not found"
 
     # Determine if prerelease
     - |
@@ -272,6 +286,7 @@ release:
     paths:
       - aro-linux-amd64.tar.gz
       - Book/TheLanguageGuide/output/ARO-Language-Guide.pdf
+      - Book/TheConstructionStudies/output/ARO-Construction-Studies.pdf
     expire_in: 1 year
   release:
     tag_name: $CI_COMMIT_TAG
@@ -290,6 +305,7 @@ release:
       | Document | Download |
       |----------|----------|
       | ARO Language Guide | [ARO-Language-Guide.pdf]($CI_PROJECT_URL/-/releases/$CI_COMMIT_TAG/downloads/ARO-Language-Guide.pdf) |
+      | ARO Construction Studies | [ARO-Construction-Studies.pdf]($CI_PROJECT_URL/-/releases/$CI_COMMIT_TAG/downloads/ARO-Construction-Studies.pdf) |
 
       ### Installation
 
@@ -307,6 +323,10 @@ release:
         - name: 'ARO-Language-Guide.pdf'
           url: '$CI_PROJECT_URL/-/jobs/artifacts/$CI_COMMIT_TAG/raw/Book/TheLanguageGuide/output/ARO-Language-Guide.pdf?job=release'
           filepath: '/ARO-Language-Guide.pdf'
+          link_type: 'other'
+        - name: 'ARO-Construction-Studies.pdf'
+          url: '$CI_PROJECT_URL/-/jobs/artifacts/$CI_COMMIT_TAG/raw/Book/TheConstructionStudies/output/ARO-Construction-Studies.pdf?job=release'
+          filepath: '/ARO-Construction-Studies.pdf'
           link_type: 'other'
   tags:
     - spencer

@@ -883,7 +883,7 @@ jobs:
           retention-days: 7
 
   # ===========================================================================
-  # Generate Documentation PDF
+  # Generate Documentation PDFs
   # ===========================================================================
   documentation:
     needs: test
@@ -898,17 +898,30 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y pandoc weasyprint fonts-ibm-plex
 
-      - name: Build PDF
+      - name: Build Language Guide PDF
         run: |
           cd Book/TheLanguageGuide
           chmod +x build-pdf.sh
           ./build-pdf.sh
 
-      - name: Upload PDF artifact
+      - name: Build Construction Studies PDF
+        run: |
+          cd Book/TheConstructionStudies
+          chmod +x build-pdf.sh
+          ./build-pdf.sh
+
+      - name: Upload Language Guide PDF
         uses: actions/upload-artifact@v6
         with:
           name: aro-language-guide
           path: Book/TheLanguageGuide/output/ARO-Language-Guide.pdf
+          retention-days: 30
+
+      - name: Upload Construction Studies PDF
+        uses: actions/upload-artifact@v6
+        with:
+          name: aro-construction-studies
+          path: Book/TheConstructionStudies/output/ARO-Construction-Studies.pdf
           retention-days: 30
 
   # ===========================================================================
@@ -968,6 +981,7 @@ jobs:
             artifacts/aro-macos-arm64.tar.gz
             artifacts/aro-windows-amd64.zip
             artifacts/aro-language-guide/ARO-Language-Guide.pdf
+            artifacts/aro-construction-studies/ARO-Construction-Studies.pdf
           body: |
             ## ARO Programming Language ${{ steps.version.outputs.version }}
 
@@ -984,6 +998,7 @@ jobs:
             | Document | Download |
             |----------|----------|
             | ARO Language Guide | [ARO-Language-Guide.pdf](https://github.com/${{ github.repository }}/releases/download/${{ github.ref_name }}/ARO-Language-Guide.pdf) |
+            | ARO Construction Studies | [ARO-Construction-Studies.pdf](https://github.com/${{ github.repository }}/releases/download/${{ github.ref_name }}/ARO-Construction-Studies.pdf) |
 
             ### Installation
 

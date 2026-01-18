@@ -60,7 +60,8 @@ public final class LLVMEmitter {
         }
 
         // On Linux, generate position-independent code for PIE executables
-        // Without this, x86_64 gets R_X86_64_32 relocations that are incompatible with PIE
+        // Modern Linux distributions require PIE by default; without this flag,
+        // x86_64 gets R_X86_64_32 relocations that are incompatible with PIE
         #if os(Linux)
         args.append("-relocation-model=pic")
         #endif
