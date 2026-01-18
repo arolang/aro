@@ -618,6 +618,15 @@ public func aro_action_createdirectory(
     return executeAction(verb: "createdirectory", contextPtr: contextPtr, resultPtr: resultPtr, objectPtr: objectPtr)
 }
 
+@_cdecl("aro_action_make")
+public func aro_action_make(
+    _ contextPtr: UnsafeMutableRawPointer?,
+    _ resultPtr: UnsafeRawPointer?,
+    _ objectPtr: UnsafeRawPointer?
+) -> UnsafeMutableRawPointer? {
+    return executeAction(verb: "make", contextPtr: contextPtr, resultPtr: resultPtr, objectPtr: objectPtr)
+}
+
 @_cdecl("aro_action_copy")
 public func aro_action_copy(
     _ contextPtr: UnsafeMutableRawPointer?,

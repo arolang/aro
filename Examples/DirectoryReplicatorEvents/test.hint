@@ -1,9 +1,9 @@
 # Test hints for DirectoryReplicatorEvents
-# DirectoryReplicatorEvents uses relative path ../template
-# Must run from within example directory
+# DirectoryReplicatorEvents uses local ./template directory (self-contained)
+# Must run from within example directory for consistent path resolution
 workdir: Examples/DirectoryReplicatorEvents
-# Binary test has workdir path issue
-mode: interpreter
+# Fixed: Binary mode works with self-contained template directory
+mode: both
 # File operations don't work correctly on Windows CI
 skip-on-windows: File operations not supported on Windows CI
 

@@ -4,7 +4,7 @@
 
 (Application-Start: Directory Replicator Events) {
     (* 1. Setup template path *)
-    <Create> the <template-path> with "../template".
+    <Create> the <template-path> with "./template".
     <Log> "Scanning template directory..." to the <console>.
 
     (* 2. List all entries recursively *)

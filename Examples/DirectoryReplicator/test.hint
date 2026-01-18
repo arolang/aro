@@ -1,8 +1,8 @@
 # Test hints for DirectoryReplicator
-# DirectoryReplicator uses relative path ../template
-# Must run from within example directory
+# DirectoryReplicator uses local ./template directory (self-contained)
+# Must run from within example directory for consistent path resolution
 workdir: Examples/DirectoryReplicator
-# Binary test has workdir path issue
-mode: interpreter
+# Fixed: Binary mode works with self-contained template directory
+mode: both
 # File operations don't work correctly on Windows CI
 skip-on-windows: File operations not supported on Windows CI
