@@ -1,10 +1,10 @@
 (* DirectoryReplicator - Replicates directory structure from template *)
-(* Reads ../template and creates matching empty directories in current location *)
+(* Reads ./template and creates matching empty directories in current location *)
 (* Uses ARO-0038 list element access to extract relative paths from Split results *)
 
 (Application-Start: Directory Replicator) {
     (* Define template source path *)
-    <Create> the <template-path> with "../template".
+    <Create> the <template-path> with "./template".
 
     <Log> "Scanning template directory..." to the <console>.
 

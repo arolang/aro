@@ -1825,7 +1825,9 @@ public final class LLVMCodeGenerator {
             "verify": "validate", "check": "validate",
             "match": "compare",
             "convert": "transform",
-            "make": "create", "build": "create", "construct": "create",
+            "build": "create", "construct": "create",
+            // NOTE: "make" is NOT a synonym for "create" - it maps to MakeAction
+            // for directory creation (FileActions.swift)
             "modify": "update", "change": "update", "set": "update",
             "respond": "return",
             "raise": "throw", "fail": "throw",
