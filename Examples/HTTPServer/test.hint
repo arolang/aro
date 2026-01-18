@@ -1,5 +1,5 @@
 # Test hints for HTTPServer
-# Binary mode: POST with Create-from-variable has expression binding issue
-mode: interpreter
+# Binary mode enabled: CreateAction now checks _expression_ for variable binding
+mode: both
 # HTTP servers hang on Windows CI
 skip-on-windows: HTTP server tests not supported on Windows CI

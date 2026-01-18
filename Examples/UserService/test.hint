@@ -1,5 +1,5 @@
 # Test hints for UserService
-# Binary mode: POST with Create action has expression binding issue - needs investigation
-mode: interpreter
+# Binary mode enabled: CreateAction now checks _expression_ for variable binding
+mode: both
 # HTTP servers hang on Windows CI
 skip-on-windows: HTTP server tests not supported on Windows CI
