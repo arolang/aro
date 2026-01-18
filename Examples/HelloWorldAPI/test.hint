@@ -1,5 +1,5 @@
 # Test hints for HelloWorldAPI
-# HTTP server binary doesn't start properly
-mode: interpreter
+# Testing binary mode for HTTP investigation
+mode: both
 # HTTP servers hang on Windows CI
 skip-on-windows: HTTP server tests not supported on Windows CI

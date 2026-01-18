@@ -59,6 +59,12 @@ public final class LLVMEmitter {
             args.append("-opaque-pointers")
         }
 
+        // On Linux, generate position-independent code for PIE executables
+        // Modern Linux distributions (Ubuntu 18.04+) require PIE by default
+        #if os(Linux)
+        args.append("-relocation-model=pic")
+        #endif
+
         args.append("-filetype=obj")
         args.append(optimize.rawValue)
         args.append("-o")
@@ -379,6 +385,13 @@ public final class CCompiler {
 
         #if os(Linux)
         FileHandle.standardError.write("[LINKER] 2. Adding object files...\n".data(using: .utf8)!)
+
+        // On Linux, export all symbols to the dynamic symbol table
+        // This is required for dlsym() to find feature set functions (aro_fs_*)
+        // when handling HTTP requests in compiled binaries
+        if outputType == .executable {
+            args.append("-rdynamic")
+        }
         #endif
 
         // Object files

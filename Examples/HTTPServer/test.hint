@@ -1,5 +1,5 @@
 # Test hints for HTTPServer
-# HTTP server binary doesn't start properly
+# Binary mode: POST with Create-from-variable has expression binding issue
 mode: interpreter
 # HTTP servers hang on Windows CI
 skip-on-windows: HTTP server tests not supported on Windows CI
