@@ -138,8 +138,8 @@ private func executeAction(
     let resultDesc = toResultDescriptor(result)
     let objectDesc = toObjectDescriptor(object)
 
-    // Execute through ActionRunner (uses ActionRegistry internally)
-    let actionResult = ActionRunner.shared.executeSync(
+    // Execute through ActionRunner with error handling
+    let actionResult = ActionRunner.shared.executeSyncWithResult(
         verb: verb,
         result: resultDesc,
         object: objectDesc,
@@ -151,6 +151,11 @@ private func executeAction(
     ctxHandle.context.unbind("_expression_")
     ctxHandle.context.unbind("_literal_")
 
+    // If action failed, store error in context for HTTP response handling
+    if !actionResult.succeeded, let errorMsg = actionResult.error {
+        ctxHandle.context.setExecutionError(ActionError.runtimeError(errorMsg))
+    }
+
     // Check semantic role - response/export actions don't bind their results
     let semanticRole = ActionSemanticRole.classify(verb: verb)
     let shouldBindResult = semanticRole != .response && semanticRole != .export
@@ -158,7 +163,7 @@ private func executeAction(
     // Only bind the result if the action hasn't already bound it
     // This prevents "Cannot rebind immutable variable" errors while still
     // supporting actions that don't bind their own results.
-    if let value = actionResult {
+    if let value = actionResult.value {
         if shouldBindResult && !ctxHandle.context.exists(resultDesc.base) {
             ctxHandle.context.bind(resultDesc.base, value: value)
         }

@@ -31,6 +31,9 @@ public final class RuntimeContext: ExecutionContext, @unchecked Sendable {
     /// Current response
     private var _response: Response?
 
+    /// Error tracking for binary mode
+    private var _executionError: Error?
+
     /// Event bus for event emission
     public let eventBus: EventBus?
 
@@ -259,6 +262,31 @@ public final class RuntimeContext: ExecutionContext, @unchecked Sendable {
         lock.lock()
         defer { lock.unlock() }
         return _response
+    }
+
+    // MARK: - Error Management (for binary mode)
+
+    /// Set an execution error (e.g., from action failures)
+    public func setExecutionError(_ error: Error) {
+        lock.lock()
+        defer { lock.unlock() }
+        if _executionError == nil {
+            _executionError = error
+        }
+    }
+
+    /// Get the execution error if one occurred
+    public func getExecutionError() -> Error? {
+        lock.lock()
+        defer { lock.unlock() }
+        return _executionError
+    }
+
+    /// Check if an execution error occurred
+    public func hasExecutionError() -> Bool {
+        lock.lock()
+        defer { lock.unlock() }
+        return _executionError != nil
     }
 
     // MARK: - Event Emission
