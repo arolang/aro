@@ -1650,6 +1650,39 @@ public final class NativeHTTPServer: @unchecked Sendable {
         requestHandler = handler
     }
 
+    /// Wait for data to be available on the socket using select()
+    /// Returns true if data is available, false on timeout or error
+    private func waitForData(fd: Int32, timeoutMs: Int) -> Bool {
+        var readfds = fd_set()
+        withUnsafeMutablePointer(to: &readfds) { ptr in
+            // Zero out the fd_set
+            let rawPtr = UnsafeMutableRawPointer(ptr)
+            memset(rawPtr, 0, MemoryLayout<fd_set>.size)
+        }
+
+        // Set the fd bit manually - FD_SET macro equivalent
+        let fdIndex = Int(fd)
+        let bitsPerInt = MemoryLayout<Int32>.size * 8
+        let arrayIndex = fdIndex / bitsPerInt
+        let bitIndex = fdIndex % bitsPerInt
+
+        withUnsafeMutablePointer(to: &readfds) { ptr in
+            let intPtr = UnsafeMutableRawPointer(ptr).assumingMemoryBound(to: Int32.self)
+            intPtr[arrayIndex] |= Int32(1 << bitIndex)
+        }
+
+        var timeout = timeval()
+        timeout.tv_sec = timeoutMs / 1000
+        #if os(Linux)
+        timeout.tv_usec = Int(timeoutMs % 1000) * 1000
+        #else
+        timeout.tv_usec = Int32(timeoutMs % 1000) * 1000
+        #endif
+
+        let result = select(fd + 1, &readfds, nil, nil, &timeout)
+        return result > 0
+    }
+
     /// Start the server
     public func start() -> Bool {
         // Create socket
@@ -1748,14 +1781,14 @@ public final class NativeHTTPServer: @unchecked Sendable {
 
         totalData.append(contentsOf: buffer[0..<bytesRead])
 
-        guard var requestString = String(data: totalData, encoding: .utf8) else {
+        guard let requestString = String(data: totalData, encoding: .utf8) else {
             sendResponse(fd: fd, statusCode: 400, body: "Bad Request")
             _ = systemClose(fd)
             return
         }
 
         // Parse HTTP request
-        var lines = requestString.components(separatedBy: "\r\n")
+        let lines = requestString.components(separatedBy: "\r\n")
         guard let requestLine = lines.first else {
             sendResponse(fd: fd, statusCode: 400, body: "Bad Request")
             _ = systemClose(fd)
@@ -1784,42 +1817,44 @@ public final class NativeHTTPServer: @unchecked Sendable {
             }
         }
 
-        // Check Content-Length and read remaining body if needed
-        // On Linux, TCP may deliver headers and body in separate packets
-        if let contentLengthStr = headers["Content-Length"] ?? headers["content-length"],
-           let contentLength = Int(contentLengthStr), contentLength > 0 {
-            // Find where body starts (after \r\n\r\n)
-            if let headerEndRange = requestString.range(of: "\r\n\r\n") {
-                let headerEnd = requestString.distance(from: requestString.startIndex, to: headerEndRange.upperBound)
-                let bodyStartIndex = headerEnd
+        // Find body using byte-level extraction based on Content-Length
+        // This is more reliable than string-based parsing
+        var body: Data? = nil
+
+        // Find where body starts (after \r\n\r\n) in byte data
+        let headerSeparator = Data("\r\n\r\n".utf8)
+        if let separatorRange = totalData.range(of: headerSeparator) {
+            let bodyStartIndex = separatorRange.upperBound
+
+            // Check Content-Length and read remaining body if needed
+            if let contentLengthStr = headers["Content-Length"] ?? headers["content-length"],
+               let contentLength = Int(contentLengthStr), contentLength > 0 {
+
                 let currentBodyLength = totalData.count - bodyStartIndex
 
                 // Read more data if we don't have the full body yet
                 var remainingToRead = contentLength - currentBodyLength
                 while remainingToRead > 0 {
-                    let additionalBytesRead = recv(fd, &buffer, min(buffer.count, remainingToRead), 0)
+                    // Wait for data with select() before reading
+                    // This is critical on Linux where TCP fragmentation may cause
+                    // headers and body to arrive in separate packets
+                    if !waitForData(fd: fd, timeoutMs: 5000) {
+                        break // Timeout or error waiting for data
+                    }
+
+                    let bytesToRead = min(buffer.count, remainingToRead)
+                    let additionalBytesRead = recv(fd, &buffer, bytesToRead, 0)
                     if additionalBytesRead <= 0 {
                         break // Connection closed or error
                     }
                     totalData.append(contentsOf: buffer[0..<additionalBytesRead])
                     remainingToRead -= additionalBytesRead
                 }
-
-                // Re-parse with complete data
-                if let completeString = String(data: totalData, encoding: .utf8) {
-                    requestString = completeString
-                    lines = requestString.components(separatedBy: "\r\n")
-                }
             }
-        }
 
-        // Find body (after empty line)
-        var body: Data? = nil
-        if let emptyLineIndex = lines.firstIndex(of: "") {
-            let bodyLines = lines.dropFirst(emptyLineIndex + 1)
-            let bodyString = bodyLines.joined(separator: "\r\n")
-            if !bodyString.isEmpty {
-                body = bodyString.data(using: .utf8)
+            // Extract body as raw bytes (not through string conversion)
+            if totalData.count > bodyStartIndex {
+                body = totalData.subdata(in: bodyStartIndex..<totalData.count)
             }
         }
 
@@ -1832,14 +1867,10 @@ public final class NativeHTTPServer: @unchecked Sendable {
             sendResponse(fd: fd, statusCode: 200, body: "{\"status\":\"ok\"}")
         }
 
-        // Graceful socket close: shutdown write side first to ensure client receives all data
-        // This prevents "Connection reset by peer" errors on some clients
-        shutdown(fd, Int32(SHUT_WR))
-
-        // Give client time to read the response before closing
-        // Without this, some clients may see RST before reading all data
-        Thread.sleep(forTimeInterval: 0.01)
-
+        // Graceful socket close: signal end of transmission before closing
+        // This prevents "Connection reset by peer" errors for some HTTP clients (like HTTP::Tiny)
+        _ = shutdown(fd, Int32(SHUT_WR))
+        Thread.sleep(forTimeInterval: 0.01) // Brief delay for client to read response
         _ = systemClose(fd)
     }
 
