@@ -1736,7 +1736,9 @@ public final class NativeHTTPServer: @unchecked Sendable {
 
     private func handleClient(fd: Int32) {
         var buffer = [UInt8](repeating: 0, count: 8192)
+        var totalData = Data()
 
+        // Read initial request data
         let bytesRead = recv(fd, &buffer, buffer.count, 0)
 
         guard bytesRead > 0 else {
@@ -1744,15 +1746,16 @@ public final class NativeHTTPServer: @unchecked Sendable {
             return
         }
 
-        let requestData = Data(buffer[0..<bytesRead])
-        guard let requestString = String(data: requestData, encoding: .utf8) else {
+        totalData.append(contentsOf: buffer[0..<bytesRead])
+
+        guard var requestString = String(data: totalData, encoding: .utf8) else {
             sendResponse(fd: fd, statusCode: 400, body: "Bad Request")
             _ = systemClose(fd)
             return
         }
 
         // Parse HTTP request
-        let lines = requestString.components(separatedBy: "\r\n")
+        var lines = requestString.components(separatedBy: "\r\n")
         guard let requestLine = lines.first else {
             sendResponse(fd: fd, statusCode: 400, body: "Bad Request")
             _ = systemClose(fd)
@@ -1778,6 +1781,35 @@ public final class NativeHTTPServer: @unchecked Sendable {
                 let name = String(headerParts[0]).trimmingCharacters(in: .whitespaces)
                 let value = String(headerParts[1]).trimmingCharacters(in: .whitespaces)
                 headers[name] = value
+            }
+        }
+
+        // Check Content-Length and read remaining body if needed
+        // On Linux, TCP may deliver headers and body in separate packets
+        if let contentLengthStr = headers["Content-Length"] ?? headers["content-length"],
+           let contentLength = Int(contentLengthStr), contentLength > 0 {
+            // Find where body starts (after \r\n\r\n)
+            if let headerEndRange = requestString.range(of: "\r\n\r\n") {
+                let headerEnd = requestString.distance(from: requestString.startIndex, to: headerEndRange.upperBound)
+                let bodyStartIndex = headerEnd
+                let currentBodyLength = totalData.count - bodyStartIndex
+
+                // Read more data if we don't have the full body yet
+                var remainingToRead = contentLength - currentBodyLength
+                while remainingToRead > 0 {
+                    let additionalBytesRead = recv(fd, &buffer, min(buffer.count, remainingToRead), 0)
+                    if additionalBytesRead <= 0 {
+                        break // Connection closed or error
+                    }
+                    totalData.append(contentsOf: buffer[0..<additionalBytesRead])
+                    remainingToRead -= additionalBytesRead
+                }
+
+                // Re-parse with complete data
+                if let completeString = String(data: totalData, encoding: .utf8) {
+                    requestString = completeString
+                    lines = requestString.components(separatedBy: "\r\n")
+                }
             }
         }
 
