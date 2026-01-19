@@ -541,7 +541,12 @@ public final class LLVMCodeGenerator {
             return literalToJSON(literalExpr.value)
         } else if let varRefExpr = expr as? VariableRefExpression {
             // Variable reference: use $ref: prefix so runtime can resolve it
-            let escaped = varRefExpr.noun.base.replacingOccurrences(of: "\"", with: "\\\"")
+            // Include specifiers as dot-separated path: <update-data: name> -> $ref:update-data.name
+            var fullPath = varRefExpr.noun.base
+            for spec in varRefExpr.noun.specifiers {
+                fullPath += ".\(spec)"
+            }
+            let escaped = fullPath.replacingOccurrences(of: "\"", with: "\\\"")
             return "\"$ref:\(escaped)\""
         } else if let mapExpr = expr as? MapLiteralExpression {
             return mapExpressionToJSON(mapExpr)

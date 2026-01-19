@@ -811,7 +811,7 @@ sub generate_test_payload {
 
         # User management
         'createUser' => '{"name":"Test User","email":"test@example.com"}',
-        'updateUser' => '{"name":"Updated User"}',
+        'updateUser' => '{"name":"Updated User","email":"updated@example.com"}',
 
         # Generic create operations
         'create' => '{"name":"Test Item"}',
