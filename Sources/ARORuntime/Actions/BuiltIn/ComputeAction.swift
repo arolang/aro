@@ -116,7 +116,10 @@ public struct ComputeAction: ActionImplementation {
             if let dict = input as? [String: any Sendable] {
                 return dict.count
             }
-            return 0
+            // For types where count/length doesn't apply (Int, Double, etc.),
+            // return input unchanged (identity behavior). This allows using
+            // "count" as a variable name in sink syntax: <Compute> the <count> from 42.
+            return input
 
         case "uppercase":
             if let str = input as? String {
