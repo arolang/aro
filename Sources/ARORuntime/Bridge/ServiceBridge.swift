@@ -2111,9 +2111,16 @@ public func aro_native_http_server_start(_ port: Int32, _ contextPtr: UnsafeMuta
 
                 if let response = ctxHandle.context.getResponse() {
                     // Convert Response.data to JSON, returning just the data portion
-                    let statusCode = response.status.lowercased() == "ok" ? 200 :
-                                   response.status.lowercased() == "created" ? 201 :
-                                   response.status.lowercased() == "error" ? 400 : 200
+                    let statusLower = response.status.lowercased()
+                    let statusCode = statusLower == "ok" ? 200 :
+                                   statusLower == "created" ? 201 :
+                                   statusLower == "nocontent" ? 204 :
+                                   statusLower == "error" ? 400 : 200
+
+                    // For 204 No Content, return empty body
+                    if statusCode == 204 {
+                        return (204, [:], nil)
+                    }
 
                     // Build JSON from response data
                     var jsonDict: [String: Any] = [:]
