@@ -1,5 +1,5 @@
 # Test hints for OrderService
-# HTTP server binary doesn't start properly
-mode: interpreter
+# Binary mode works with error handling for state validation
+mode: both
 # HTTP servers hang on Windows CI
 skip-on-windows: HTTP server tests not supported on Windows CI
