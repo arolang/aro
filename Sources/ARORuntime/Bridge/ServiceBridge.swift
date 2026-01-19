@@ -2100,6 +2100,15 @@ public func aro_native_http_server_start(_ port: Int32, _ contextPtr: UnsafeMuta
                     return (500, ["Content-Type": "application/json"], "{\"error\":\"No context\"}".data(using: .utf8))
                 }
                 let ctxHandle = Unmanaged<AROCContextHandle>.fromOpaque(ptr).takeUnretainedValue()
+
+                // Check for execution errors first (e.g., from Accept action validation failures)
+                if let error = ctxHandle.context.getExecutionError() {
+                    let errorMsg = error.localizedDescription
+                        .replacingOccurrences(of: "\"", with: "\\\"")
+                    let errorJson = "{\"error\":\"\(errorMsg)\"}".data(using: .utf8)
+                    return (500, ["Content-Type": "application/json"], errorJson)
+                }
+
                 if let response = ctxHandle.context.getResponse() {
                     // Convert Response.data to JSON, returning just the data portion
                     let statusCode = response.status.lowercased() == "ok" ? 200 :
