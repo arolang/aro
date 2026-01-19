@@ -437,8 +437,8 @@ sub run_test_in_workdir {
 
         # When running from workdir, use current directory
         $run_dir = '.';
-        # Preserve original example name for finding compiled binary
-        $binary_name = basename($example_name);
+        # Use workdir's directory name for finding compiled binary (e.g., Combined from Examples/ModulesExample/Combined)
+        $binary_name = basename($abs_workdir);
     }
 
     # Execute pre-script if specified
@@ -462,11 +462,11 @@ sub run_test_in_workdir {
     if ($type eq 'console') {
         ($output, $error) = run_console_example_internal($run_dir, $timeout, $mode, $binary_name);
     } elsif ($type eq 'http') {
-        ($output, $error) = run_http_example_internal($run_dir, $timeout, $mode);
+        ($output, $error) = run_http_example_internal($run_dir, $timeout, $mode, $binary_name);
     } elsif ($type eq 'socket') {
-        ($output, $error) = run_socket_example_internal($run_dir, $timeout, $mode);
+        ($output, $error) = run_socket_example_internal($run_dir, $timeout, $mode, $binary_name);
     } elsif ($type eq 'file') {
-        ($output, $error) = run_file_watcher_example_internal($run_dir, $timeout, $mode);
+        ($output, $error) = run_file_watcher_example_internal($run_dir, $timeout, $mode, $binary_name);
     }
 
     # Restore original directory
@@ -840,7 +840,7 @@ sub run_http_example {
 
 # Run HTTP server example (internal with timeout parameter)
 sub run_http_example_internal {
-    my ($example_name, $timeout, $mode) = @_;
+    my ($example_name, $timeout, $mode, $binary_name) = @_;
     $mode //= 'interpreter';  # Default to interpreter mode
 
     unless ($has_yaml && $has_http_tiny && $has_net_emptyport) {
@@ -878,7 +878,8 @@ sub run_http_example_internal {
     my @cmd;
     if ($mode eq 'compiled') {
         # Execute compiled binary directly
-        my $basename = basename($dir);
+        # Use provided binary_name (for workdir cases) or derive from dir
+        my $basename = defined $binary_name ? $binary_name : basename($dir);
         my $binary_path = get_binary_path($dir, $basename);
 
         unless (is_executable($binary_path)) {
@@ -1126,7 +1127,7 @@ sub run_socket_example {
 
 # Run socket example (internal with timeout parameter)
 sub run_socket_example_internal {
-    my ($example_name, $timeout, $mode) = @_;
+    my ($example_name, $timeout, $mode, $binary_name) = @_;
     $mode //= 'interpreter';  # Default to interpreter mode
 
     unless ($has_net_emptyport) {
@@ -1147,7 +1148,8 @@ sub run_socket_example_internal {
     my @cmd;
     if ($mode eq 'compiled') {
         # Execute compiled binary directly
-        my $basename = basename($dir);
+        # Use provided binary_name (for workdir cases) or derive from dir
+        my $basename = defined $binary_name ? $binary_name : basename($dir);
         my $binary_path = get_binary_path($dir, $basename);
 
         unless (is_executable($binary_path)) {
@@ -1279,7 +1281,7 @@ sub run_file_watcher_example {
 
 # Run file watcher example (internal with timeout parameter)
 sub run_file_watcher_example_internal {
-    my ($example_name, $timeout, $mode) = @_;
+    my ($example_name, $timeout, $mode, $binary_name) = @_;
     $mode //= 'interpreter';  # Default to interpreter mode
 
     # Handle '.' or absolute paths directly, otherwise prepend examples_dir
@@ -1294,7 +1296,8 @@ sub run_file_watcher_example_internal {
     my @cmd;
     if ($mode eq 'compiled') {
         # Execute compiled binary directly
-        my $basename = basename($dir);
+        # Use provided binary_name (for workdir cases) or derive from dir
+        my $basename = defined $binary_name ? $binary_name : basename($dir);
         my $binary_path = get_binary_path($dir, $basename);
 
         unless (is_executable($binary_path)) {
