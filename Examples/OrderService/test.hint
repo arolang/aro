@@ -1,5 +1,7 @@
 # Test hints for OrderService
-# Fixed: Binary mode works for HTTP server
-mode: both
+# Binary mode works for HTTP server, but Accept action state validation
+# doesn't throw errors in binary mode (returns unchanged instead of 500)
+# See: https://git.ausdertechnik.de/arolang/aro/-/issues/26#note_26738
+mode: interpreter
 # HTTP servers hang on Windows CI
 skip-on-windows: HTTP server tests not supported on Windows CI
