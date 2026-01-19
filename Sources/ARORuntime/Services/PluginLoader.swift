@@ -329,6 +329,50 @@ public final class PluginLoader: @unchecked Sendable {
 
     // MARK: - Private
 
+    /// Find the Swift compiler in PATH or common locations
+    private func findSwiftCompiler() -> String? {
+        // First, try to find swiftc using `which` command
+        let whichProcess = Process()
+        whichProcess.executableURL = URL(fileURLWithPath: "/usr/bin/which")
+        whichProcess.arguments = ["swiftc"]
+
+        let pipe = Pipe()
+        whichProcess.standardOutput = pipe
+        whichProcess.standardError = FileHandle.nullDevice
+
+        do {
+            try whichProcess.run()
+            whichProcess.waitUntilExit()
+
+            if whichProcess.terminationStatus == 0 {
+                let data = pipe.fileHandleForReading.readDataToEndOfFile()
+                if let path = String(data: data, encoding: .utf8)?.trimmingCharacters(in: .whitespacesAndNewlines),
+                   !path.isEmpty {
+                    return path
+                }
+            }
+        } catch {
+            // which failed, try common locations
+        }
+
+        // Check common Swift installation paths
+        let commonPaths = [
+            "/usr/bin/swiftc",
+            "/usr/local/bin/swiftc",
+            "/usr/share/swift/usr/bin/swiftc",  // CI installation path
+            "/opt/swift/usr/bin/swiftc",
+            "/Library/Developer/Toolchains/swift-latest.xctoolchain/usr/bin/swiftc"
+        ]
+
+        for path in commonPaths {
+            if FileManager.default.isExecutableFile(atPath: path) {
+                return path
+            }
+        }
+
+        return nil
+    }
+
     /// Check if source file is newer than compiled dylib
     private func shouldRecompile(source: URL, dylib: URL) -> Bool {
         guard FileManager.default.fileExists(atPath: dylib.path) else {
@@ -359,7 +403,9 @@ public final class PluginLoader: @unchecked Sendable {
         // On Windows, swiftc is in PATH
         process.executableURL = URL(fileURLWithPath: "swiftc.exe")
         #else
-        process.executableURL = URL(fileURLWithPath: "/usr/bin/swiftc")
+        // Find swiftc from PATH or common locations
+        let swiftcPath = findSwiftCompiler() ?? "/usr/bin/swiftc"
+        process.executableURL = URL(fileURLWithPath: swiftcPath)
         #endif
 
         // Build arguments for compiling to dylib
