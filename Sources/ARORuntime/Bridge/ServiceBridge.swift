@@ -1800,6 +1800,14 @@ public final class NativeHTTPServer: @unchecked Sendable {
             sendResponse(fd: fd, statusCode: 200, body: "{\"status\":\"ok\"}")
         }
 
+        // Graceful socket close: shutdown write side first to ensure client receives all data
+        // This prevents "Connection reset by peer" errors on some clients
+        shutdown(fd, Int32(SHUT_WR))
+
+        // Give client time to read the response before closing
+        // Without this, some clients may see RST before reading all data
+        Thread.sleep(forTimeInterval: 0.01)
+
         _ = systemClose(fd)
     }
 
