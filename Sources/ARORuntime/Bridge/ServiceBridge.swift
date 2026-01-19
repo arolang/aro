@@ -1796,7 +1796,8 @@ public final class NativeHTTPServer: @unchecked Sendable {
                 // Read more data if we don't have the full body yet
                 var remainingToRead = contentLength - currentBodyLength
                 while remainingToRead > 0 {
-                    let additionalBytesRead = recv(fd, &buffer, min(buffer.count, remainingToRead), 0)
+                    let bytesToRead = min(buffer.count, remainingToRead)
+                    let additionalBytesRead = recv(fd, &buffer, bytesToRead, 0)
                     if additionalBytesRead <= 0 {
                         break // Connection closed or error
                     }
@@ -1833,7 +1834,7 @@ public final class NativeHTTPServer: @unchecked Sendable {
 
         // Graceful socket close: signal end of transmission before closing
         // This prevents "Connection reset by peer" errors for some HTTP clients (like HTTP::Tiny)
-        _ = shutdown(fd, SHUT_WR)
+        _ = shutdown(fd, Int32(SHUT_WR))
         Thread.sleep(forTimeInterval: 0.01) // Brief delay for client to read response
         _ = systemClose(fd)
     }
