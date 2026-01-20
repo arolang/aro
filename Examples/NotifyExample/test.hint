@@ -1,0 +1,4 @@
+# Test hints for NotifyExample
+# Demonstrates the Notify action (notify, alert, signal verbs)
+# Note: Binary mode not yet supported (needs C bridge functions)
+mode: interpreter

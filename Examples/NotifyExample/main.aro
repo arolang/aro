@@ -1,0 +1,22 @@
+(* NotifyExample - Demonstrating user notifications *)
+
+(Application-Start: Notification Demo) {
+    <Log> "=== Notification Demo ===" to the <console>.
+
+    (* Notify action demonstrates user-facing notifications *)
+    (* Supports verbs: Notify, Alert, Signal *)
+    (* Supports prepositions: to, for, with *)
+
+    <Notify> the <user> with "Welcome to ARO!".
+    <Log> "Sent welcome notification to user" to the <console>.
+
+    <Alert> the <admin> with "System started successfully".
+    <Log> "Sent alert to admin" to the <console>.
+
+    <Signal> the <system> with "Ready for operations".
+    <Log> "Sent signal to system" to the <console>.
+
+    <Log> "All notifications sent!" to the <console>.
+
+    <Return> an <OK: status> for the <startup>.
+}
