@@ -1,10 +1,9 @@
-# Generated: Fri Jan 17 2026
+# Generated: Mon Jan 19 13:48:39 2026
 # Type: http
 # Command: aro run ./Examples/RepositoryObserver
-# Note: PUT fails because test payload lacks 'email' property
 ---
 GET /users => {"users":[]}
 GET /users/{id} => {"data":[]}
 POST /users => {"email":"test@example.com","name":"Test User"}
-PUT /users/{id} => ERROR: 500 Internal Server Error
+PUT /users/{id} => {"email":"updated@example.com","id":"123","name":"Updated User"}
 DELETE /users/{id} => {"deleted":"123"}

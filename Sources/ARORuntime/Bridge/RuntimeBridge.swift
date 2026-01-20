@@ -624,13 +624,36 @@ private func resolveReferences(_ dict: [String: Any], context: RuntimeContext) -
 }
 
 /// Resolve a single value, replacing $ref:varname with actual variable values
+/// Supports dot notation for nested properties: $ref:update-data.name
 private func resolveValue(_ value: Any, context: RuntimeContext) -> Any {
     if let str = value as? String, str.hasPrefix("$ref:") {
-        let varName = String(str.dropFirst(5))  // Remove "$ref:" prefix
-        if let resolved = context.resolveAny(varName) {
-            return resolved
+        let varPath = String(str.dropFirst(5))  // Remove "$ref:" prefix
+
+        // Handle dot notation for nested properties: update-data.name -> resolve update-data, then get "name"
+        let parts = varPath.split(separator: ".")
+        guard !parts.isEmpty else { return value }
+
+        // Resolve the base variable
+        var resolved: Any? = context.resolveAny(String(parts[0]))
+
+        // Navigate through nested properties
+        for part in parts.dropFirst() {
+            if let dict = resolved as? [String: Any] {
+                resolved = dict[String(part)]
+            } else if let sendableDict = resolved as? [String: any Sendable] {
+                resolved = sendableDict[String(part)]
+            } else {
+                resolved = nil
+                break
+            }
+        }
+
+        if let result = resolved {
+            return result
         } else {
-            return value  // Return original if not found
+            // Property not found - return NSNull to signal missing value
+            // This allows downstream code to handle missing properties appropriately
+            return NSNull()
         }
     } else if let subDict = value as? [String: Any] {
         return resolveReferences(subDict, context: context)

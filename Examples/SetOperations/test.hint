@@ -2,3 +2,5 @@
 # Tested on macOS and Docker (Linux)
 # Binary mode enabled: blank lines now correctly captured in expected.txt
 mode: both
+# Linker can be slow on CI, increase timeout for binary build
+timeout: 60

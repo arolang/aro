@@ -1,5 +1,5 @@
 # Test hints for RepositoryObserver
-# HTTP server binary doesn't start properly
-mode: interpreter
+# Fixed: Binary mode works for HTTP server
+mode: both
 # HTTP servers hang on Windows CI
 skip-on-windows: HTTP server tests not supported on Windows CI

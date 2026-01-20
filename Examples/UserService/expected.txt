@@ -5,5 +5,5 @@
 GET /users => {"data":[]}
 GET /users/{id} => {"data":[]}
 POST /users => {"email":"test@example.com","name":"Test User"}
-PUT /users/{id} => {"name":"Updated User"}
+PUT /users/{id} => {"email":"updated@example.com","name":"Updated User"}
 DELETE /users/{id} =>
