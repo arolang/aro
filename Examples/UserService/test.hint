@@ -3,3 +3,5 @@
 mode: both
 # HTTP servers hang on Windows CI
 skip-on-windows: HTTP server tests not supported on Windows CI
+# JSON field order may vary between platforms
+occurrence-check: true
