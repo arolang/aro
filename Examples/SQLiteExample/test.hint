@@ -1,6 +1,8 @@
 # Test hints for SQLiteExample
-# Package plugin compilation requires Swift compiler - available on CI via swift:6.2-jammy
+# Package plugin compilation requires Swift compiler at runtime
 # Requires libsqlite3-dev on Linux (not installed in CI)
 skip-on-linux: Missing libsqlite3-dev dependency in CI environment
-mode: interpreter
+mode: both
 timeout: 120
+# Binary mode loads precompiled plugin with different log messages
+occurrence-check: true
