@@ -1,6 +1,8 @@
 # Test hints for FormatAwareIO
-# Binary compilation fails on Linux CI
-mode: interpreter
+# Fixed: Binary mode now works
+mode: both
+# Allow extra time for linker on slow CI runners
+timeout: 60
 # File operations don't work correctly on Windows CI
 skip-on-windows: File operations not supported on Windows CI
 
