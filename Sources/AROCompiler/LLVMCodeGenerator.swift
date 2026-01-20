@@ -67,7 +67,17 @@ public final class LLVMCodeGenerator {
         emitStringConstants()
 
         // Generate feature set functions
+        // Track which feature set names we've already generated to avoid duplicates
+        // (e.g., when importing modules with their own Application-Start)
+        var generatedFeatureSets: Set<String> = []
         for featureSet in program.featureSets {
+            let name = featureSet.featureSet.name
+            // Skip duplicate feature sets from imported modules
+            // This handles cases where imported modules have their own Application-Start
+            if generatedFeatureSets.contains(name) {
+                continue
+            }
+            generatedFeatureSets.insert(name)
             try generateFeatureSet(featureSet)
         }
 
