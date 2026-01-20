@@ -1,0 +1,19 @@
+# Generated: Mon Jan 20 2026
+# Type: console
+# Command: aro run ./Examples/ErrorHandling
+---
+=== Error Handling Demo ===
+--- Validation Example ---
+Age is:
+25
+Age validation passed!
+--- Authorization Example ---
+User role is:
+admin
+Authorization check passed!
+--- Resource Validation ---
+Resource exists:
+true
+Resource validation passed!
+All validations passed!
+demo

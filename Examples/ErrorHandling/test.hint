@@ -1,0 +1,3 @@
+# Test hints for ErrorHandling
+# Demonstrates the Throw action with guarded validations
+mode: both
