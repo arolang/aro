@@ -1,0 +1,5 @@
+# Test hints for SortExample
+# Demonstrates the Sort action for sorting arrays
+mode: both
+# Use occurrence-check since ReversedCollection format may vary
+occurrence-check: true

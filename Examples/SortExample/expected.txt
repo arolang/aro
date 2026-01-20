@@ -1,0 +1,17 @@
+=== Sort Demo ===
+--- Sorting Numbers (Ascending) ---
+Original:
+[5, 2, 8, 1, 9, 3]
+Sorted:
+[1, 2, 3, 5, 8, 9]
+--- Sorting Numbers (Descending) ---
+[10, 40, 20, 50, 30]
+Sorted descending:
+--- Sorting Strings ---
+[banana, apple, cherry, date]
+[apple, banana, cherry, date]
+--- Using Order Verb ---
+[100, 50, 75, 25]
+Ordered:
+[25, 50, 75, 100]
+All sorting complete!

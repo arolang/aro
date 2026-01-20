@@ -536,6 +536,35 @@ public func aro_action_map(
     return executeAction(verb: "map", contextPtr: contextPtr, resultPtr: resultPtr, objectPtr: objectPtr)
 }
 
+// MARK: - Sort Actions
+
+@_cdecl("aro_action_sort")
+public func aro_action_sort(
+    _ contextPtr: UnsafeMutableRawPointer?,
+    _ resultPtr: UnsafeRawPointer?,
+    _ objectPtr: UnsafeRawPointer?
+) -> UnsafeMutableRawPointer? {
+    return executeAction(verb: "sort", contextPtr: contextPtr, resultPtr: resultPtr, objectPtr: objectPtr)
+}
+
+@_cdecl("aro_action_order")
+public func aro_action_order(
+    _ contextPtr: UnsafeMutableRawPointer?,
+    _ resultPtr: UnsafeRawPointer?,
+    _ objectPtr: UnsafeRawPointer?
+) -> UnsafeMutableRawPointer? {
+    return executeAction(verb: "order", contextPtr: contextPtr, resultPtr: resultPtr, objectPtr: objectPtr)
+}
+
+@_cdecl("aro_action_arrange")
+public func aro_action_arrange(
+    _ contextPtr: UnsafeMutableRawPointer?,
+    _ resultPtr: UnsafeRawPointer?,
+    _ objectPtr: UnsafeRawPointer?
+) -> UnsafeMutableRawPointer? {
+    return executeAction(verb: "arrange", contextPtr: contextPtr, resultPtr: resultPtr, objectPtr: objectPtr)
+}
+
 // MARK: - System Exec Action (ARO-0033)
 
 @_cdecl("aro_action_exec")

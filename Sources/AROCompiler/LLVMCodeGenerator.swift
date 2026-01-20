@@ -180,6 +180,8 @@ public final class LLVMCodeGenerator {
             "call",
             // Data pipeline actions (ARO-0018)
             "filter", "reduce", "map",
+            // Sort actions
+            "sort", "order", "arrange",
             // System exec action (ARO-0033)
             "exec", "shell",
             // Repository actions
