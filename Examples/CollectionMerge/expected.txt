@@ -1,0 +1,19 @@
+# Generated: Mon Jan 20 2026
+# Type: console
+# Command: aro run ./Examples/CollectionMerge
+---
+=== Collection Merge Demo ===
+--- Array Merging ---
+[apple, banana, cherry, date]
+--- Object Merging ---
+age: 30
+city: Berlin
+country: Germany
+name: Alice
+--- String Concatenation ---
+Hello, World!
+--- Using Combine verb ---
+[1, 2, 3, 4, 5, 6]
+All merges complete!
+demo
+  value: Hello, World!

@@ -183,7 +183,7 @@ public final class LLVMCodeGenerator {
             // System exec action (ARO-0033)
             "exec", "shell",
             // Repository actions
-            "delete", "merge", "close",
+            "delete", "merge", "combine", "join", "concat", "close",
             // String action (ARO-0037)
             "split",
             // File operations (ARO-0036)
