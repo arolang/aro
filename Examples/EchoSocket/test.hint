@@ -1,5 +1,5 @@
 # Test hints for EchoSocket
-# Socket server binary doesn't start properly
-mode: interpreter
+# Fixed: Binary mode now uses native BSD socket server
+mode: both
 # Socket servers hang on Windows CI
 skip-on-windows: Socket tests not supported on Windows CI
