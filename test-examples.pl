@@ -57,7 +57,7 @@ sub is_executable {
 my %options = (
     generate => 0,
     verbose => 0,
-    timeout => 10,
+    timeout => 60,  # Increased for Linux CI linker (default was 10)
     filter => '',
     help => 0,
 );
@@ -85,7 +85,7 @@ Usage:
 Options:
     --generate          Generate expected.txt files for all examples
     -v, --verbose       Show detailed output
-    --timeout=N         Timeout in seconds for long-running examples (default: 10)
+    --timeout=N         Timeout in seconds for long-running examples (default: 60)
     --filter=PATTERN    Test only examples matching pattern
     -h, --help          Show this help
 
