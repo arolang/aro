@@ -190,7 +190,9 @@ public final class LLVMCodeGenerator {
             "list", "stat", "exists", "make", "touch", "createdirectory", "mkdir",
             "copy", "move", "rename", "append",
             // Configuration action (synonym for update)
-            "configure"
+            "configure",
+            // Notification actions
+            "notify", "alert", "signal"
         ]
         for action in actions {
             emit("declare ptr @aro_action_\(action)(ptr, ptr, ptr)")
