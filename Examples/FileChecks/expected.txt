@@ -1,0 +1,19 @@
+# Generated: Mon Jan 20 2026
+# Type: console
+# Command: aro run ./Examples/FileChecks
+---
+=== File Check Demo ===
+--- Checking File Existence ---
+main.aro exists:
+true
+--- Checking Directory Existence ---
+FileChecks directory exists:
+true
+--- Checking Non-Existent File ---
+nonexistent.txt exists:
+false
+--- Checking Non-Existent Directory ---
+nonexistent-dir exists:
+false
+All checks complete!
+demo
