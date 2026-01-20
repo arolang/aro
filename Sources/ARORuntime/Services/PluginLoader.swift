@@ -329,6 +329,50 @@ public final class PluginLoader: @unchecked Sendable {
 
     // MARK: - Private
 
+    /// Find the Swift executable (swift command) in PATH or common locations
+    private func findSwiftExecutable() -> String? {
+        // First, try to find swift using `which` command
+        let whichProcess = Process()
+        whichProcess.executableURL = URL(fileURLWithPath: "/usr/bin/which")
+        whichProcess.arguments = ["swift"]
+
+        let pipe = Pipe()
+        whichProcess.standardOutput = pipe
+        whichProcess.standardError = FileHandle.nullDevice
+
+        do {
+            try whichProcess.run()
+            whichProcess.waitUntilExit()
+
+            if whichProcess.terminationStatus == 0 {
+                let data = pipe.fileHandleForReading.readDataToEndOfFile()
+                if let path = String(data: data, encoding: .utf8)?.trimmingCharacters(in: .whitespacesAndNewlines),
+                   !path.isEmpty {
+                    return path
+                }
+            }
+        } catch {
+            // which failed, try common locations
+        }
+
+        // Check common Swift installation paths
+        let commonPaths = [
+            "/usr/bin/swift",
+            "/usr/local/bin/swift",
+            "/usr/share/swift/usr/bin/swift",  // CI installation path
+            "/opt/swift/usr/bin/swift",
+            "/Library/Developer/Toolchains/swift-latest.xctoolchain/usr/bin/swift"
+        ]
+
+        for path in commonPaths {
+            if FileManager.default.isExecutableFile(atPath: path) {
+                return path
+            }
+        }
+
+        return nil
+    }
+
     /// Find the Swift compiler in PATH or common locations
     private func findSwiftCompiler() -> String? {
         // First, try to find swiftc using `which` command
@@ -392,6 +436,62 @@ public final class PluginLoader: @unchecked Sendable {
         } catch {
             return true
         }
+    }
+
+    /// Find a built library in the Swift build directory
+    /// Swift 5.9+ uses arch-specific paths like .build/arm64-apple-macosx/release/
+    /// Older Swift uses .build/release/
+    /// - Parameters:
+    ///   - buildDir: The .build directory
+    ///   - name: Plugin name (e.g., "CounterPlugin")
+    ///   - extension: File extension (dylib, so, dll)
+    /// - Returns: Path to the built library, or nil if not found
+    private func findBuiltLibrary(in buildDir: URL, name: String, extension ext: String) -> URL? {
+        // Possible library names: libCounterPlugin.dylib or CounterPlugin.dylib
+        let libNames = ["lib\(name).\(ext)", "\(name).\(ext)"]
+
+        // First, try the legacy path: .build/release/
+        let legacyReleaseDir = buildDir.appendingPathComponent("release")
+        for libName in libNames {
+            let path = legacyReleaseDir.appendingPathComponent(libName)
+            if FileManager.default.fileExists(atPath: path.path) {
+                return path
+            }
+        }
+
+        // Next, search for arch-specific directories like:
+        // .build/arm64-apple-macosx/release/
+        // .build/x86_64-apple-macosx/release/
+        // .build/x86_64-unknown-linux-gnu/release/
+        do {
+            let contents = try FileManager.default.contentsOfDirectory(
+                at: buildDir,
+                includingPropertiesForKeys: [.isDirectoryKey],
+                options: [.skipsHiddenFiles]
+            )
+
+            for item in contents {
+                var isDirectory: ObjCBool = false
+                if FileManager.default.fileExists(atPath: item.path, isDirectory: &isDirectory),
+                   isDirectory.boolValue {
+                    // Check if this looks like an arch directory (contains hyphen and has release subdir)
+                    let dirName = item.lastPathComponent
+                    if dirName.contains("-") && dirName != "checkouts" {
+                        let releaseDir = item.appendingPathComponent("release")
+                        for libName in libNames {
+                            let path = releaseDir.appendingPathComponent(libName)
+                            if FileManager.default.fileExists(atPath: path.path) {
+                                return path
+                            }
+                        }
+                    }
+                }
+            }
+        } catch {
+            // Ignore directory enumeration errors
+        }
+
+        return nil
     }
 
     /// Compile a Swift plugin to a dynamic library
@@ -459,7 +559,8 @@ public final class PluginLoader: @unchecked Sendable {
 
         // Build the package using swift build
         let process = Process()
-        process.executableURL = URL(fileURLWithPath: "/usr/bin/swift")
+        let swiftPath = findSwiftExecutable() ?? "/usr/bin/swift"
+        process.executableURL = URL(fileURLWithPath: swiftPath)
         process.currentDirectoryURL = packageDir
         process.arguments = ["build", "-c", "release"]
 
@@ -476,19 +577,14 @@ public final class PluginLoader: @unchecked Sendable {
             throw PluginError.compilationFailed(pluginName, message: errorMessage)
         }
 
-        // Find the built dynamic library in .build/release/
-        let buildDir = packageDir.appendingPathComponent(".build/release")
-        let dylibPath = buildDir.appendingPathComponent("lib\(pluginName).\(libraryExtension)")
-
-        guard FileManager.default.fileExists(atPath: dylibPath.path) else {
-            // Try without lib prefix
-            let altPath = buildDir.appendingPathComponent("\(pluginName).\(libraryExtension)")
-            if FileManager.default.fileExists(atPath: altPath.path) {
-                try loadDylib(at: altPath, name: pluginName)
-                print("[PluginLoader] Loaded package plugin: \(pluginName)")
-                return
-            }
-            throw PluginError.loadFailed(pluginName, message: "Built library not found at \(dylibPath.path)")
+        // Find the built dynamic library
+        // Swift now uses arch-specific paths like .build/arm64-apple-macosx/release/
+        guard let dylibPath = findBuiltLibrary(
+            in: packageDir.appendingPathComponent(".build"),
+            name: pluginName,
+            extension: libraryExtension
+        ) else {
+            throw PluginError.loadFailed(pluginName, message: "Built library not found in \(packageDir.appendingPathComponent(".build").path)")
         }
 
         try loadDylib(at: dylibPath, name: pluginName)
@@ -505,7 +601,8 @@ public final class PluginLoader: @unchecked Sendable {
 
         // Build the package using swift build
         let process = Process()
-        process.executableURL = URL(fileURLWithPath: "/usr/bin/swift")
+        let swiftPath = findSwiftExecutable() ?? "/usr/bin/swift"
+        process.executableURL = URL(fileURLWithPath: swiftPath)
         process.currentDirectoryURL = source
         process.arguments = ["build", "-c", "release"]
 
@@ -530,17 +627,14 @@ public final class PluginLoader: @unchecked Sendable {
         let libraryExtension = "dylib"
         #endif
 
-        // Find and copy the built dynamic library
-        let buildDir = source.appendingPathComponent(".build/release")
-        var builtLibPath = buildDir.appendingPathComponent("lib\(pluginName).\(libraryExtension)")
-
-        if !FileManager.default.fileExists(atPath: builtLibPath.path) {
-            // Try without lib prefix
-            builtLibPath = buildDir.appendingPathComponent("\(pluginName).\(libraryExtension)")
-        }
-
-        guard FileManager.default.fileExists(atPath: builtLibPath.path) else {
-            throw PluginError.loadFailed(pluginName, message: "Built library not found at \(builtLibPath.path)")
+        // Find the built dynamic library
+        // Swift now uses arch-specific paths like .build/arm64-apple-macosx/release/
+        guard let builtLibPath = findBuiltLibrary(
+            in: source.appendingPathComponent(".build"),
+            name: pluginName,
+            extension: libraryExtension
+        ) else {
+            throw PluginError.loadFailed(pluginName, message: "Built library not found in \(source.appendingPathComponent(".build").path)")
         }
 
         // Copy to output location
