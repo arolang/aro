@@ -1,3 +1,5 @@
 # Test hints for Conditionals
-# Binary compilation fails on Linux CI - LLVM/linker compatibility issues
-mode: interpreter
+# Fixed: Binary compilation now works on Linux CI
+mode: both
+# Allow extra time for linker on slow CI runners
+timeout: 60

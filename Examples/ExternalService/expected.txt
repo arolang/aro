@@ -1,21 +1,26 @@
-# Generated: Sat Jan 10 11:39:50 2026
+# Generated: Tue Jan 20 08:36:32 2026
 # Type: console
 # Command: aro run ./Examples/ExternalService
+# Timeout: 120s
+# NOTE: Uses occurrence-check for binary mode compatibility
+# Binary loads precompiled plugin, interpreter builds at runtime
 ---
-Building package plugin: CounterPlugin
 Registered plugin service: counter
-Loaded package plugin: CounterPlugin
 === External Service Demo ===
 Demonstrating stateful service calls...
+
 Step 1: Increment counter
 Current count:
 1
+
 Step 2: Increment counter again
 Current count:
 2
+
 Step 3: Get current count
 Current count:
 2
+
 State persisted across calls: 0 -> 1 -> 2
 This demonstrates why Call exists!
 startup

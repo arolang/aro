@@ -1,6 +1,7 @@
 # Test hints for ExternalService
-# Package plugin compilation requires Swift compiler - available on CI via swift:6.2-jammy
-# Skip on Linux: Swift compiler path issues in CI; runtime plugin compilation unreliable
-skip-on-linux: Plugin compilation not supported in CI environment
-mode: interpreter
+# Package plugin compilation requires Swift compiler at runtime
+# Swift is now available in CI (swift-6.2.1-RELEASE installed in integration:linux)
+mode: both
 timeout: 120
+# Binary mode loads precompiled plugin with different log messages
+occurrence-check: true
