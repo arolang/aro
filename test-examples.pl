@@ -339,9 +339,20 @@ sub find_aro_binary {
 # Build an example using 'aro build'
 # Returns hash with success status, binary path, error message, and build duration
 sub build_example {
-    my ($example_name, $timeout) = @_;
+    my ($example_name, $timeout, $workdir) = @_;
 
-    my $dir = File::Spec->catdir($examples_dir, $example_name);
+    # Use workdir if specified, otherwise use example_name
+    my $dir;
+    if (defined $workdir) {
+        # Convert relative workdir to absolute path
+        if (File::Spec->file_name_is_absolute($workdir)) {
+            $dir = $workdir;
+        } else {
+            $dir = File::Spec->catdir($RealBin, $workdir);
+        }
+    } else {
+        $dir = File::Spec->catdir($examples_dir, $example_name);
+    }
     my $aro_bin = find_aro_binary();
 
     my $start_time = time;
@@ -1662,8 +1673,8 @@ sub run_test {
 
     # Run compiled test
     if ($mode eq 'compiled' || $mode eq 'both') {
-        # Build the example first
-        my $build_result = build_example($example_name, $timeout);
+        # Build the example first (use workdir if specified)
+        my $build_result = build_example($example_name, $timeout, $hints->{workdir});
         $result->{build_duration} = $build_result->{duration};
 
         if (!$build_result->{success}) {
