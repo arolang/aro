@@ -1,0 +1,16 @@
+# Generated: Mon Jan 20 2026
+# Type: console
+# Command: aro run ./Examples/FileMetadata
+# Note: Uses occurrence-check - verifies key lines only
+---
+=== File Metadata Demo ===
+--- File Metadata ---
+isFile: true
+isDirectory: false
+name: main.aro
+--- Directory Metadata ---
+isDirectory: true
+isFile: false
+name: FileMetadata
+All metadata retrieved!
+demo
