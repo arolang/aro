@@ -87,10 +87,13 @@ class AROCContextHandle {
         self.context.register(fs as FileMonitorService)
         self.fileSystemService = fs
 
-        // Create and register socket server service
-        let socket = AROSocketServer(eventBus: runtime.runtime.eventBus)
-        self.context.register(socket as SocketServerService)
-        self.socketServer = socket
+        // NOTE: Do NOT register AROSocketServer (NIO-based) in compiled binaries.
+        // Similar to HTTPServer, we cannot wire up event handlers in binary mode because
+        // the ExecutionEngine's registerSocketEventHandlers() is not called.
+        // Instead, compiled binaries use the native BSD socket server via
+        // aro_native_socket_server_start() which is invoked in StartAction
+        // when no SocketServerService is registered.
+        self.socketServer = nil
 
         // NOTE: Do NOT register AROHTTPServer (NIO-based) in compiled binaries.
         // SwiftNIO crashes in compiled binaries because Swift's type metadata for NIO's
@@ -150,10 +153,12 @@ public func aro_runtime_init() -> UnsafeMutableRawPointer? {
     handle.runtime.register(service: fileSystemService as FileSystemService)
     handle.runtime.register(service: fileSystemService as FileMonitorService)
 
-    // Register socket server service for TCP socket operations
-    let socketServer = AROSocketServer(eventBus: handle.runtime.eventBus)
-    handle.runtime.register(service: socketServer as SocketServerService)
+    // NOTE: Do NOT register AROSocketServer (NIO-based) in compiled binaries.
+    // We cannot wire up event handlers in binary mode, so use native BSD socket server instead.
 
+    // NOTE: Do NOT register AROHTTPServer (NIO-based) in compiled binaries.
+    // But we keep it registered here for backward compatibility with the interpreter mode
+    // when accessed via aro_runtime_init. The BridgeRuntimeContext init skips HTTPServer.
     // Register HTTP server service for web APIs
     let httpServer = AROHTTPServer(eventBus: handle.runtime.eventBus)
     handle.runtime.register(service: httpServer as HTTPServerService)
