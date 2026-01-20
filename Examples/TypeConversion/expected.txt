@@ -1,0 +1,25 @@
+# Generated: Mon Jan 20 2026
+# Type: console
+# Command: aro run ./Examples/TypeConversion
+# Note: Uses occurrence-check - JSON key order varies
+---
+=== Type Conversion Demo ===
+--- String to Integer ---
+String '42' as integer:
+42
+--- Integer to String ---
+Integer 123 as string:
+123
+--- String to Double ---
+String '19.99' as double:
+19.99
+--- String to Boolean ---
+String 'true' as boolean:
+true
+--- Object to JSON ---
+Object as JSON:
+--- Integer to Double ---
+Integer 100 as double:
+100.00
+All conversions complete!
+demo
