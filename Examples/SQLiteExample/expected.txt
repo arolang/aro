@@ -1,11 +1,12 @@
-# Generated: Tue Jan 20 08:40:09 2026
+# Generated: Tue Jan 21 13:45:00 2026
 # Type: console
 # Command: aro run ./Examples/SQLiteExample
 # Timeout: 120s
-# NOTE: Uses occurrence-check for binary mode compatibility
-# Binary loads precompiled plugin, interpreter builds at runtime
+# NOTE: Interpreter mode only (plugin compiled at runtime)
 ---
+Building package plugin: SQLitePlugin
 Registered plugin service: sqlite
+Loaded package plugin: SQLitePlugin
 === SQLite Plugin Demo ===
 
 Step 1: Creating users table...
