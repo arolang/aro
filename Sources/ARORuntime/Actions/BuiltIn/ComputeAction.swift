@@ -1123,8 +1123,8 @@ public struct MergeAction: ActionImplementation {
             for (key, value) in sourceDict {
                 targetDict[key] = value
             }
-            // Bind merged result back to the target variable
-            context.bind(result.base, value: targetDict)
+            // Bind merged result back to the target variable (allow rebind)
+            context.bind(result.base, value: targetDict, allowRebind: true)
             return targetDict
         }
 
@@ -1132,8 +1132,8 @@ public struct MergeAction: ActionImplementation {
         if var targetArray = target as? [any Sendable],
            let sourceArray = source as? [any Sendable] {
             targetArray.append(contentsOf: sourceArray)
-            // Bind merged result back to the target variable
-            context.bind(result.base, value: targetArray)
+            // Bind merged result back to the target variable (allow rebind)
+            context.bind(result.base, value: targetArray, allowRebind: true)
             return targetArray
         }
 
@@ -1141,8 +1141,8 @@ public struct MergeAction: ActionImplementation {
         if let targetStr = target as? String,
            let sourceStr = source as? String {
             let merged = targetStr + sourceStr
-            // Bind merged result back to the target variable
-            context.bind(result.base, value: merged)
+            // Bind merged result back to the target variable (allow rebind)
+            context.bind(result.base, value: merged, allowRebind: true)
             return merged
         }
 

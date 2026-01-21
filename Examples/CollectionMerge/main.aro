@@ -1,0 +1,40 @@
+(* CollectionMerge - Demonstrating the Merge action *)
+
+(Application-Start: Collection Merge Demo) {
+    <Log> "=== Collection Merge Demo ===" to the <console>.
+
+    (* Merge action supports verbs: Merge, Combine, Join, Concat *)
+    (* Supports prepositions: with, into, from *)
+    (* Merges the second operand INTO the first operand (target) *)
+
+    (* Example 1: Merge arrays *)
+    <Log> "--- Array Merging ---" to the <console>.
+    <Create> the <fruits> with ["apple", "banana"].
+    <Create> the <more-fruits> with ["cherry", "date"].
+    <Merge> the <fruits> with the <more-fruits>.
+    <Log> <fruits> to the <console>.
+
+    (* Example 2: Merge dictionaries/objects *)
+    <Log> "--- Object Merging ---" to the <console>.
+    <Create> the <person> with {"name": "Alice", "age": 30}.
+    <Create> the <details> with {"city": "Berlin", "country": "Germany"}.
+    <Merge> the <person> with the <details>.
+    <Log> <person> to the <console>.
+
+    (* Example 3: Merge strings using Concat verb *)
+    <Log> "--- String Concatenation ---" to the <console>.
+    <Create> the <greeting> with "Hello, ".
+    <Create> the <name> with "World!".
+    <Concat> the <greeting> with the <name>.
+    <Log> <greeting> to the <console>.
+
+    (* Example 4: Using Combine verb *)
+    <Log> "--- Using Combine verb ---" to the <console>.
+    <Create> the <numbers> with [1, 2, 3].
+    <Create> the <more-numbers> with [4, 5, 6].
+    <Combine> the <numbers> with the <more-numbers>.
+    <Log> <numbers> to the <console>.
+
+    <Log> "All merges complete!" to the <console>.
+    <Return> an <OK: status> for the <demo>.
+}

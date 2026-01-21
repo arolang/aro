@@ -1,0 +1,5 @@
+# Test hints for TypeConversion
+# Demonstrates the Transform action for type conversions
+mode: both
+# Use occurrence-check since JSON key order varies
+occurrence-check: true
