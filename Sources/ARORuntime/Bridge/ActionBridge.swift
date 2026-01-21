@@ -725,3 +725,32 @@ public func aro_action_split(
 ) -> UnsafeMutableRawPointer? {
     return executeAction(verb: "split", contextPtr: contextPtr, resultPtr: resultPtr, objectPtr: objectPtr)
 }
+
+// MARK: - Notification Actions
+
+@_cdecl("aro_action_notify")
+public func aro_action_notify(
+    _ contextPtr: UnsafeMutableRawPointer?,
+    _ resultPtr: UnsafeRawPointer?,
+    _ objectPtr: UnsafeRawPointer?
+) -> UnsafeMutableRawPointer? {
+    return executeAction(verb: "notify", contextPtr: contextPtr, resultPtr: resultPtr, objectPtr: objectPtr)
+}
+
+@_cdecl("aro_action_alert")
+public func aro_action_alert(
+    _ contextPtr: UnsafeMutableRawPointer?,
+    _ resultPtr: UnsafeRawPointer?,
+    _ objectPtr: UnsafeRawPointer?
+) -> UnsafeMutableRawPointer? {
+    return executeAction(verb: "alert", contextPtr: contextPtr, resultPtr: resultPtr, objectPtr: objectPtr)
+}
+
+@_cdecl("aro_action_signal")
+public func aro_action_signal(
+    _ contextPtr: UnsafeMutableRawPointer?,
+    _ resultPtr: UnsafeRawPointer?,
+    _ objectPtr: UnsafeRawPointer?
+) -> UnsafeMutableRawPointer? {
+    return executeAction(verb: "signal", contextPtr: contextPtr, resultPtr: resultPtr, objectPtr: objectPtr)
+}
