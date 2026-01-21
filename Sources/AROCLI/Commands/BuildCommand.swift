@@ -43,6 +43,11 @@ struct BuildCommand: AsyncParsableCommand {
     @Flag(name: .long, help: "Emit LLVM IR text instead of binary")
     var emitLLVM: Bool = false
 
+    #if !os(Windows)
+    @Flag(name: .long, help: "Use LLVM C API for code generation (type-safe IR with better errors)")
+    var useLLVMAPI: Bool = false
+    #endif
+
     func run() async throws {
         let resolvedPath = URL(fileURLWithPath: path)
         let startTime = Date()
@@ -213,11 +218,24 @@ struct BuildCommand: AsyncParsableCommand {
             }
         }
 
-        let codeGenerator = LLVMCodeGenerator()
         let llvmResult: LLVMCodeGenerationResult
 
         do {
+            #if !os(Windows)
+            if useLLVMAPI {
+                if verbose {
+                    print("  Using LLVM C API code generator (V2)")
+                }
+                let codeGeneratorV2 = LLVMCodeGeneratorV2()
+                llvmResult = try codeGeneratorV2.generate(program: mergedProgram, openAPISpecJSON: openAPISpecJSON)
+            } else {
+                let codeGenerator = LLVMCodeGenerator()
+                llvmResult = try codeGenerator.generate(program: mergedProgram, openAPISpecJSON: openAPISpecJSON)
+            }
+            #else
+            let codeGenerator = LLVMCodeGenerator()
             llvmResult = try codeGenerator.generate(program: mergedProgram, openAPISpecJSON: openAPISpecJSON)
+            #endif
             #if os(Linux)
             FileHandle.standardError.write("[BUILD] LLVM IR generated successfully\n".data(using: .utf8)!)
             #endif
