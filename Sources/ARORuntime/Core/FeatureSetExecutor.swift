@@ -75,8 +75,8 @@ public final class FeatureSetExecutor: @unchecked Sendable {
         // Bind external dependencies from global symbols (with business activity validation)
         for dependency in analyzedFeatureSet.dependencies {
             // Check if access would be denied due to business activity mismatch
-            if globalSymbols.isAccessDenied(dependency, forBusinessActivity: context.businessActivity) {
-                let sourceActivity = globalSymbols.businessActivity(for: dependency) ?? "unknown"
+            if await globalSymbols.isAccessDenied(dependency, forBusinessActivity: context.businessActivity) {
+                let sourceActivity = await globalSymbols.businessActivity(for: dependency) ?? "unknown"
                 throw ActionError.runtimeError(
                     "Variable '\(dependency)' is not accessible. " +
                     "Published variables are only visible within the same business activity. " +
@@ -84,7 +84,7 @@ public final class FeatureSetExecutor: @unchecked Sendable {
                 )
             }
 
-            if let value = globalSymbols.resolveAny(dependency, forBusinessActivity: context.businessActivity) {
+            if let value = await globalSymbols.resolveAny(dependency, forBusinessActivity: context.businessActivity) {
                 context.bind(dependency, value: value)
             }
         }
@@ -438,7 +438,7 @@ public final class FeatureSetExecutor: @unchecked Sendable {
         }
 
         // Publish to global symbols with business activity
-        globalSymbols.publish(
+        await globalSymbols.publish(
             name: statement.externalName,
             value: value,
             fromFeatureSet: context.featureSetName,
@@ -644,7 +644,7 @@ public final class FeatureSetExecutor: @unchecked Sendable {
             }
         case .featureSet(let name):
             // Cross-feature-set dependency - resolve from global symbols (with business activity validation)
-            if let value = globalSymbols.resolveAny(statement.variableName, forBusinessActivity: context.businessActivity) {
+            if let value = await globalSymbols.resolveAny(statement.variableName, forBusinessActivity: context.businessActivity) {
                 context.bind(statement.variableName, value: value)
             }
             // If not found, the dependency might be provided later

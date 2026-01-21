@@ -789,17 +789,15 @@ public final class ExecutionEngine: @unchecked Sendable {
 
 // MARK: - Global Symbol Storage
 
-/// Thread-safe storage for published symbols with business activity enforcement
-public final class GlobalSymbolStorage: @unchecked Sendable {
-    private let lock = NSLock()
+/// Thread-safe storage for published symbols with business activity enforcement.
+/// Converted to actor for Swift 6.2 concurrency safety (Issue #2).
+public actor GlobalSymbolStorage {
     private var symbols: [String: (value: any Sendable, featureSet: String, businessActivity: String)] = [:]
 
     public init() {}
 
     /// Store a published symbol with its business activity
     public func publish(name: String, value: any Sendable, fromFeatureSet: String, businessActivity: String) {
-        lock.lock()
-        defer { lock.unlock() }
         symbols[name] = (value, fromFeatureSet, businessActivity)
     }
 
@@ -809,9 +807,6 @@ public final class GlobalSymbolStorage: @unchecked Sendable {
     ///   - forBusinessActivity: The business activity of the requesting feature set
     /// - Returns: The value if found and accessible, nil otherwise
     public func resolve<T: Sendable>(_ name: String, forBusinessActivity: String) -> T? {
-        lock.lock()
-        defer { lock.unlock() }
-
         guard let entry = symbols[name] else { return nil }
 
         // Business activity validation: must match or be empty (framework/external)
@@ -825,9 +820,6 @@ public final class GlobalSymbolStorage: @unchecked Sendable {
 
     /// Resolve a published symbol as any Sendable (validates business activity)
     public func resolveAny(_ name: String, forBusinessActivity: String) -> (any Sendable)? {
-        lock.lock()
-        defer { lock.unlock() }
-
         guard let entry = symbols[name] else { return nil }
 
         // Business activity validation: must match or be empty (framework/external)
@@ -841,9 +833,6 @@ public final class GlobalSymbolStorage: @unchecked Sendable {
 
     /// Check if a symbol is published and accessible
     public func isPublished(_ name: String, forBusinessActivity: String) -> Bool {
-        lock.lock()
-        defer { lock.unlock() }
-
         guard let entry = symbols[name] else { return false }
 
         // Business activity validation
@@ -857,23 +846,16 @@ public final class GlobalSymbolStorage: @unchecked Sendable {
 
     /// Get the feature set that published a symbol
     public func sourceFeatureSet(for name: String) -> String? {
-        lock.lock()
-        defer { lock.unlock() }
         return symbols[name]?.featureSet
     }
 
     /// Get the business activity that a symbol belongs to
     public func businessActivity(for name: String) -> String? {
-        lock.lock()
-        defer { lock.unlock() }
         return symbols[name]?.businessActivity
     }
 
     /// Check if accessing a symbol would be denied due to business activity mismatch
     public func isAccessDenied(_ name: String, forBusinessActivity: String) -> Bool {
-        lock.lock()
-        defer { lock.unlock() }
-
         guard let entry = symbols[name] else { return false }
 
         // Access is denied if both have non-empty business activities that don't match

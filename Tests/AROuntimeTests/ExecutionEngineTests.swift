@@ -48,97 +48,107 @@ struct ExecutionEngineTests {
 struct GlobalSymbolStorageTests {
 
     @Test("Publish and resolve symbol")
-    func testPublishAndResolve() {
+    func testPublishAndResolve() async {
         let storage = GlobalSymbolStorage()
 
-        storage.publish(name: "user", value: "John", fromFeatureSet: "FS1", businessActivity: "Activity1")
+        await storage.publish(name: "user", value: "John", fromFeatureSet: "FS1", businessActivity: "Activity1")
 
-        let value: String? = storage.resolve("user", forBusinessActivity: "Activity1")
+        let value: String? = await storage.resolve("user", forBusinessActivity: "Activity1")
         #expect(value == "John")
     }
 
     @Test("Resolve symbol returns nil for different business activity")
-    func testBusinessActivityIsolation() {
+    func testBusinessActivityIsolation() async {
         let storage = GlobalSymbolStorage()
 
-        storage.publish(name: "user", value: "John", fromFeatureSet: "FS1", businessActivity: "Activity1")
+        await storage.publish(name: "user", value: "John", fromFeatureSet: "FS1", businessActivity: "Activity1")
 
-        let value: String? = storage.resolve("user", forBusinessActivity: "Activity2")
+        let value: String? = await storage.resolve("user", forBusinessActivity: "Activity2")
         #expect(value == nil)
     }
 
     @Test("Resolve symbol with empty business activity is accessible")
-    func testEmptyBusinessActivityAccessible() {
+    func testEmptyBusinessActivityAccessible() async {
         let storage = GlobalSymbolStorage()
 
-        storage.publish(name: "config", value: "value", fromFeatureSet: "Framework", businessActivity: "")
+        await storage.publish(name: "config", value: "value", fromFeatureSet: "Framework", businessActivity: "")
 
-        let value: String? = storage.resolve("config", forBusinessActivity: "AnyActivity")
+        let value: String? = await storage.resolve("config", forBusinessActivity: "AnyActivity")
         #expect(value == "value")
     }
 
     @Test("Resolve any returns correct value")
-    func testResolveAny() {
+    func testResolveAny() async {
         let storage = GlobalSymbolStorage()
 
-        storage.publish(name: "count", value: 42, fromFeatureSet: "FS1", businessActivity: "Activity1")
+        await storage.publish(name: "count", value: 42, fromFeatureSet: "FS1", businessActivity: "Activity1")
 
-        let value = storage.resolveAny("count", forBusinessActivity: "Activity1")
+        let value = await storage.resolveAny("count", forBusinessActivity: "Activity1")
         #expect(value != nil)
         #expect(value as? Int == 42)
     }
 
     @Test("Is published returns true for existing symbol")
-    func testIsPublished() {
+    func testIsPublished() async {
         let storage = GlobalSymbolStorage()
 
-        storage.publish(name: "item", value: "data", fromFeatureSet: "FS1", businessActivity: "Activity1")
+        await storage.publish(name: "item", value: "data", fromFeatureSet: "FS1", businessActivity: "Activity1")
 
-        #expect(storage.isPublished("item", forBusinessActivity: "Activity1") == true)
-        #expect(storage.isPublished("other", forBusinessActivity: "Activity1") == false)
+        let isPublished1 = await storage.isPublished("item", forBusinessActivity: "Activity1")
+        let isPublished2 = await storage.isPublished("other", forBusinessActivity: "Activity1")
+        #expect(isPublished1 == true)
+        #expect(isPublished2 == false)
     }
 
     @Test("Source feature set tracking")
-    func testSourceFeatureSet() {
+    func testSourceFeatureSet() async {
         let storage = GlobalSymbolStorage()
 
-        storage.publish(name: "data", value: "test", fromFeatureSet: "SourceFS", businessActivity: "Activity")
+        await storage.publish(name: "data", value: "test", fromFeatureSet: "SourceFS", businessActivity: "Activity")
 
-        #expect(storage.sourceFeatureSet(for: "data") == "SourceFS")
-        #expect(storage.sourceFeatureSet(for: "unknown") == nil)
+        let sourceFS1 = await storage.sourceFeatureSet(for: "data")
+        let sourceFS2 = await storage.sourceFeatureSet(for: "unknown")
+        #expect(sourceFS1 == "SourceFS")
+        #expect(sourceFS2 == nil)
     }
 
     @Test("Business activity tracking")
-    func testBusinessActivityTracking() {
+    func testBusinessActivityTracking() async {
         let storage = GlobalSymbolStorage()
 
-        storage.publish(name: "config", value: "test", fromFeatureSet: "FS", businessActivity: "MyActivity")
+        await storage.publish(name: "config", value: "test", fromFeatureSet: "FS", businessActivity: "MyActivity")
 
-        #expect(storage.businessActivity(for: "config") == "MyActivity")
-        #expect(storage.businessActivity(for: "unknown") == nil)
+        let activity1 = await storage.businessActivity(for: "config")
+        let activity2 = await storage.businessActivity(for: "unknown")
+        #expect(activity1 == "MyActivity")
+        #expect(activity2 == nil)
     }
 
     @Test("Is access denied check")
-    func testIsAccessDenied() {
+    func testIsAccessDenied() async {
         let storage = GlobalSymbolStorage()
 
-        storage.publish(name: "private", value: "secret", fromFeatureSet: "FS1", businessActivity: "Activity1")
+        await storage.publish(name: "private", value: "secret", fromFeatureSet: "FS1", businessActivity: "Activity1")
 
-        #expect(storage.isAccessDenied("private", forBusinessActivity: "Activity2") == true)
-        #expect(storage.isAccessDenied("private", forBusinessActivity: "Activity1") == false)
-        #expect(storage.isAccessDenied("nonexistent", forBusinessActivity: "Activity1") == false)
+        let denied1 = await storage.isAccessDenied("private", forBusinessActivity: "Activity2")
+        let denied2 = await storage.isAccessDenied("private", forBusinessActivity: "Activity1")
+        let denied3 = await storage.isAccessDenied("nonexistent", forBusinessActivity: "Activity1")
+        #expect(denied1 == true)
+        #expect(denied2 == false)
+        #expect(denied3 == false)
     }
 
     @Test("Symbol overwriting")
-    func testSymbolOverwriting() {
+    func testSymbolOverwriting() async {
         let storage = GlobalSymbolStorage()
 
-        storage.publish(name: "counter", value: 1, fromFeatureSet: "FS1", businessActivity: "Activity")
-        storage.publish(name: "counter", value: 2, fromFeatureSet: "FS2", businessActivity: "Activity")
+        await storage.publish(name: "counter", value: 1, fromFeatureSet: "FS1", businessActivity: "Activity")
+        await storage.publish(name: "counter", value: 2, fromFeatureSet: "FS2", businessActivity: "Activity")
 
-        let value: Int? = storage.resolve("counter", forBusinessActivity: "Activity")
+        let value: Int? = await storage.resolve("counter", forBusinessActivity: "Activity")
+        let sourceFS = await storage.sourceFeatureSet(for: "counter")
         #expect(value == 2)
-        #expect(storage.sourceFeatureSet(for: "counter") == "FS2")
+        #expect(sourceFS == "FS2")
     }
 }
 

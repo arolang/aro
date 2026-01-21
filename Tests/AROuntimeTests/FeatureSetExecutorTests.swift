@@ -65,31 +65,31 @@ struct FeatureSetExecutorTests {
 struct GlobalSymbolStorageIntegrationTests {
 
     @Test("Symbols are isolated by business activity")
-    func testSymbolIsolation() {
+    func testSymbolIsolation() async {
         let storage = GlobalSymbolStorage()
 
         // Publish in Activity1
-        storage.publish(name: "config", value: "value1", fromFeatureSet: "FS1", businessActivity: "Activity1")
+        await storage.publish(name: "config", value: "value1", fromFeatureSet: "FS1", businessActivity: "Activity1")
 
         // Should resolve in same activity
-        let value1: String? = storage.resolve("config", forBusinessActivity: "Activity1")
+        let value1: String? = await storage.resolve("config", forBusinessActivity: "Activity1")
         #expect(value1 == "value1")
 
         // Should NOT resolve in different activity
-        let value2: String? = storage.resolve("config", forBusinessActivity: "Activity2")
+        let value2: String? = await storage.resolve("config", forBusinessActivity: "Activity2")
         #expect(value2 == nil)
     }
 
     @Test("Empty business activity is accessible from anywhere")
-    func testEmptyBusinessActivity() {
+    func testEmptyBusinessActivity() async {
         let storage = GlobalSymbolStorage()
 
         // Publish with empty business activity (framework-level)
-        storage.publish(name: "global", value: "accessible", fromFeatureSet: "Framework", businessActivity: "")
+        await storage.publish(name: "global", value: "accessible", fromFeatureSet: "Framework", businessActivity: "")
 
         // Should be accessible from any activity
-        let value1: String? = storage.resolve("global", forBusinessActivity: "Activity1")
-        let value2: String? = storage.resolve("global", forBusinessActivity: "Activity2")
+        let value1: String? = await storage.resolve("global", forBusinessActivity: "Activity1")
+        let value2: String? = await storage.resolve("global", forBusinessActivity: "Activity2")
 
         #expect(value1 == "accessible")
         #expect(value2 == "accessible")
@@ -102,16 +102,18 @@ struct GlobalSymbolStorageIntegrationTests {
 struct PublishStatementExecutorTests {
 
     @Test("Published variables are stored in global symbols")
-    func testPublishToGlobalSymbols() {
+    func testPublishToGlobalSymbols() async {
         let storage = GlobalSymbolStorage()
 
-        storage.publish(name: "exported", value: "test value", fromFeatureSet: "TestFS", businessActivity: "TestActivity")
+        await storage.publish(name: "exported", value: "test value", fromFeatureSet: "TestFS", businessActivity: "TestActivity")
 
-        let value: String? = storage.resolve("exported", forBusinessActivity: "TestActivity")
+        let value: String? = await storage.resolve("exported", forBusinessActivity: "TestActivity")
         #expect(value == "test value")
 
-        #expect(storage.sourceFeatureSet(for: "exported") == "TestFS")
-        #expect(storage.businessActivity(for: "exported") == "TestActivity")
+        let sourceFS = await storage.sourceFeatureSet(for: "exported")
+        let activity = await storage.businessActivity(for: "exported")
+        #expect(sourceFS == "TestFS")
+        #expect(activity == "TestActivity")
     }
 }
 
