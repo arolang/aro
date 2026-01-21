@@ -1,6 +1,5 @@
 # Test hints for FileMetadata
 # Demonstrates the Stat action for file/directory metadata retrieval
-# Note: Interpreter mode has a bug with Stat action binding, using compiled mode only
-mode: compiled
+mode: both
 # Use occurrence-check since dates/sizes change
 occurrence-check: true
