@@ -44,8 +44,8 @@ struct BuildCommand: AsyncParsableCommand {
     var emitLLVM: Bool = false
 
     #if !os(Windows)
-    @Flag(name: .long, help: "Use LLVM C API for code generation (type-safe IR with better errors)")
-    var useLLVMAPI: Bool = false
+    @Flag(name: .long, help: "Use legacy text-based IR generation instead of LLVM C API")
+    var legacyCodegen: Bool = false
     #endif
 
     func run() async throws {
@@ -222,17 +222,18 @@ struct BuildCommand: AsyncParsableCommand {
 
         do {
             #if !os(Windows)
-            if useLLVMAPI {
+            if legacyCodegen {
                 if verbose {
-                    print("  Using LLVM C API code generator (V2)")
+                    print("  Using legacy text-based IR generator")
                 }
-                let codeGeneratorV2 = LLVMCodeGeneratorV2()
-                llvmResult = try codeGeneratorV2.generate(program: mergedProgram, openAPISpecJSON: openAPISpecJSON)
-            } else {
                 let codeGenerator = LLVMCodeGenerator()
                 llvmResult = try codeGenerator.generate(program: mergedProgram, openAPISpecJSON: openAPISpecJSON)
+            } else {
+                let codeGeneratorV2 = LLVMCodeGeneratorV2()
+                llvmResult = try codeGeneratorV2.generate(program: mergedProgram, openAPISpecJSON: openAPISpecJSON)
             }
             #else
+            // Windows: LLVM C API not available, use text-based generator
             let codeGenerator = LLVMCodeGenerator()
             llvmResult = try codeGenerator.generate(program: mergedProgram, openAPISpecJSON: openAPISpecJSON)
             #endif
