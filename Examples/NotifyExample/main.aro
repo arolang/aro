@@ -20,3 +20,16 @@
 
     <Return> an <OK: status> for the <startup>.
 }
+
+(* Note: Notify/Alert/Signal emit NotificationSentEvent events.
+   To handle these events, add a handler feature set like:
+
+   (My Handler: NotificationSent Handler) {
+       <Extract> the <message> from the <event: message>.
+       <Extract> the <target> from the <event: target>.
+       <Log> <message> to the <console>.
+       <Return> an <OK: status> for the <handling>.
+   }
+
+   The handler will be triggered for each notification sent.
+*)
