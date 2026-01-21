@@ -874,8 +874,8 @@ public final class Runtime: @unchecked Sendable {
     // MARK: - Service Registration
 
     /// Register a service for dependency injection
-    public func register<S: Sendable>(service: S) {
-        engine.register(service: service)
+    public func register<S: Sendable>(service: S) async {
+        await engine.register(service: service)
     }
 
     // MARK: - Compiled Handler Registration

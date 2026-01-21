@@ -49,8 +49,8 @@ public final class ExecutionEngine: @unchecked Sendable {
 
     /// Register a service for dependency injection
     /// - Parameter service: The service instance
-    public func register<S: Sendable>(service: S) {
-        services.register(service)
+    public func register<S: Sendable>(service: S) async {
+        await services.register(service)
     }
 
     // MARK: - Program Execution
@@ -83,7 +83,7 @@ public final class ExecutionEngine: @unchecked Sendable {
         )
 
         // Register services in context
-        services.registerAll(in: context)
+        await services.registerAll(in: context)
 
         // Wire up event handlers for Socket Event Handler feature sets
         #if !os(Windows)
@@ -220,7 +220,7 @@ public final class ExecutionEngine: @unchecked Sendable {
         }
 
         // Copy services from base context
-        services.registerAll(in: handlerContext)
+        await services.registerAll(in: handlerContext)
 
         // Execute the handler
         let executor = FeatureSetExecutor(
@@ -320,7 +320,7 @@ public final class ExecutionEngine: @unchecked Sendable {
         }
 
         // Copy services from base context
-        services.registerAll(in: handlerContext)
+        await services.registerAll(in: handlerContext)
 
         // Execute the handler
         let executor = FeatureSetExecutor(
@@ -386,7 +386,7 @@ public final class ExecutionEngine: @unchecked Sendable {
         handlerContext.bind("event:target", value: event.target)
 
         // Copy services from base context
-        services.registerAll(in: handlerContext)
+        await services.registerAll(in: handlerContext)
 
         // Execute the handler
         let executor = FeatureSetExecutor(
@@ -482,7 +482,7 @@ public final class ExecutionEngine: @unchecked Sendable {
         }
 
         // Copy services from base context
-        services.registerAll(in: handlerContext)
+        await services.registerAll(in: handlerContext)
 
         // Execute the handler
         let executor = FeatureSetExecutor(
@@ -676,7 +676,7 @@ public final class ExecutionEngine: @unchecked Sendable {
         }
 
         // Copy services from base context
-        services.registerAll(in: observerContext)
+        await services.registerAll(in: observerContext)
 
         // Execute the observer
         let executor = FeatureSetExecutor(
@@ -740,7 +740,7 @@ public final class ExecutionEngine: @unchecked Sendable {
         }
 
         // Copy services from base context
-        services.registerAll(in: handlerContext)
+        await services.registerAll(in: handlerContext)
 
         // Execute the observer
         let executor = FeatureSetExecutor(
@@ -885,32 +885,25 @@ public final class GlobalSymbolStorage: @unchecked Sendable {
 
 // MARK: - Service Registry
 
-/// Registry for dependency injection
-public final class ServiceRegistry: @unchecked Sendable {
-    private let lock = NSLock()
+/// Registry for dependency injection.
+/// Converted to actor for Swift 6.2 concurrency safety (Issue #2).
+public actor ServiceRegistry {
     private var services: [ObjectIdentifier: any Sendable] = [:]
 
     public init() {}
 
     /// Register a service
     public func register<S: Sendable>(_ service: S) {
-        lock.lock()
-        defer { lock.unlock() }
         services[ObjectIdentifier(S.self)] = service
     }
 
     /// Resolve a service
     public func resolve<S>(_ type: S.Type) -> S? {
-        lock.lock()
-        defer { lock.unlock() }
-        return services[ObjectIdentifier(type)] as? S
+        services[ObjectIdentifier(type)] as? S
     }
 
     /// Register all services in a context
     public func registerAll(in context: ExecutionContext) {
-        lock.lock()
-        defer { lock.unlock() }
-
         for (typeId, service) in services {
             // Preserve type ID to avoid type erasure
             context.registerWithTypeId(typeId, service: service)

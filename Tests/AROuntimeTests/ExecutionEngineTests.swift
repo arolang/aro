@@ -36,7 +36,7 @@ struct ExecutionEngineTests {
     func testServiceRegistration() async {
         let engine = ExecutionEngine()
         let service = MockTestService(value: "test")
-        engine.register(service: service)
+        await engine.register(service: service)
         // Service should be registered (verified through execution)
         #expect(Bool(true))
     }
@@ -148,43 +148,43 @@ struct GlobalSymbolStorageTests {
 struct ServiceRegistryTests {
 
     @Test("Register and resolve service")
-    func testRegisterAndResolve() {
+    func testRegisterAndResolve() async {
         let registry = ServiceRegistry()
         let service = MockTestService(value: "test")
 
-        registry.register(service)
+        await registry.register(service)
 
-        let resolved = registry.resolve(MockTestService.self)
+        let resolved = await registry.resolve(MockTestService.self)
         #expect(resolved != nil)
         #expect(resolved?.value == "test")
     }
 
     @Test("Resolve unregistered service returns nil")
-    func testResolveUnregistered() {
+    func testResolveUnregistered() async {
         let registry = ServiceRegistry()
 
-        let resolved = registry.resolve(MockTestService.self)
+        let resolved = await registry.resolve(MockTestService.self)
         #expect(resolved == nil)
     }
 
     @Test("Service overwriting")
-    func testServiceOverwriting() {
+    func testServiceOverwriting() async {
         let registry = ServiceRegistry()
 
-        registry.register(MockTestService(value: "first"))
-        registry.register(MockTestService(value: "second"))
+        await registry.register(MockTestService(value: "first"))
+        await registry.register(MockTestService(value: "second"))
 
-        let resolved = registry.resolve(MockTestService.self)
+        let resolved = await registry.resolve(MockTestService.self)
         #expect(resolved?.value == "second")
     }
 
     @Test("Register all in context")
-    func testRegisterAllInContext() {
+    func testRegisterAllInContext() async {
         let registry = ServiceRegistry()
-        registry.register(MockTestService(value: "test"))
+        await registry.register(MockTestService(value: "test"))
 
         let context = RuntimeContext(featureSetName: "Test")
-        registry.registerAll(in: context)
+        await registry.registerAll(in: context)
 
         let service = context.service(MockTestService.self)
         #expect(service != nil)
@@ -223,10 +223,10 @@ struct RuntimeClassTests {
     }
 
     @Test("Runtime service registration")
-    func testRuntimeServiceRegistration() {
+    func testRuntimeServiceRegistration() async {
         let runtime = Runtime()
         let service = MockTestService(value: "runtime-test")
-        runtime.register(service: service)
+        await runtime.register(service: service)
         // Service should be registered for execution
         #expect(Bool(true))
 
