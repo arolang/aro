@@ -359,7 +359,8 @@ public final class FeatureSetExecutor: @unchecked Sendable {
             )
 
             // Bind result to context (unless it's a response action that already set the response)
-            if statement.action.semanticRole != .response {
+            // Also skip binding if the action already bound the result (to avoid double-binding)
+            if statement.action.semanticRole != .response && !context.exists(resultDescriptor.base) {
                 // Check if this is a rebinding action (accept, update, delete, merge, etc.)
                 let rebindingVerbs: Set<String> = [
                     "accept", "update", "modify", "change", "set", "configure",
