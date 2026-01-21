@@ -34,16 +34,16 @@ import AROParser
 
 // MARK: - Statement Future
 
-/// Represents a statement that has been started but may not have completed
-public final class StatementFuture: @unchecked Sendable {
-    private let lock = NSLock()
+/// Represents a statement that has been started but may not have completed.
+/// Converted to actor for Swift 6.2 concurrency safety (Issue #2).
+public actor StatementFuture {
     private var _result: (any Sendable)?
     private var _error: Error?
     private var _isComplete: Bool = false
     private var continuations: [CheckedContinuation<any Sendable, Error>] = []
 
-    /// The index of the statement
-    public let statementIndex: Int
+    /// The index of the statement (immutable, safe to access without isolation)
+    public nonisolated let statementIndex: Int
 
     public init(statementIndex: Int) {
         self.statementIndex = statementIndex
@@ -51,19 +51,16 @@ public final class StatementFuture: @unchecked Sendable {
 
     /// Check if the future has completed
     public var isComplete: Bool {
-        lock.lock()
-        defer { lock.unlock() }
-        return _isComplete
+        _isComplete
     }
 
     /// Complete the future with a result
     public func complete(with result: any Sendable) {
-        lock.lock()
+        guard !_isComplete else { return }
         _result = result
         _isComplete = true
         let waiting = continuations
         continuations.removeAll()
-        lock.unlock()
 
         // Resume all waiting continuations
         for continuation in waiting {
@@ -73,12 +70,11 @@ public final class StatementFuture: @unchecked Sendable {
 
     /// Complete the future with an error
     public func fail(with error: Error) {
-        lock.lock()
+        guard !_isComplete else { return }
         _error = error
         _isComplete = true
         let waiting = continuations
         continuations.removeAll()
-        lock.unlock()
 
         // Resume all waiting continuations with error
         for continuation in waiting {
@@ -86,34 +82,36 @@ public final class StatementFuture: @unchecked Sendable {
         }
     }
 
-    // MARK: - Sync Helpers (for async contexts)
-
-    private func checkCompletion() -> (isComplete: Bool, result: (any Sendable)?, error: Error?) {
-        lock.lock()
-        defer { lock.unlock() }
-        return (_isComplete, _result, _error)
-    }
-
-    private func addContinuation(_ continuation: CheckedContinuation<any Sendable, Error>) {
-        lock.lock()
-        continuations.append(continuation)
-        lock.unlock()
+    /// Register continuation or resume immediately if already complete.
+    /// This method provides atomic check-and-register within actor isolation.
+    private func registerOrComplete(_ continuation: CheckedContinuation<any Sendable, Error>) {
+        if _isComplete {
+            if let error = _error {
+                continuation.resume(throwing: error)
+            } else {
+                continuation.resume(returning: _result ?? ())
+            }
+        } else {
+            continuations.append(continuation)
+        }
     }
 
     /// Wait for the future to complete
     public func wait() async throws -> any Sendable {
-        // Check if already complete (sync operation)
-        let status = checkCompletion()
-        if status.isComplete {
-            if let error = status.error {
+        // Fast path: if already complete, return immediately
+        if _isComplete {
+            if let error = _error {
                 throw error
             }
-            return status.result ?? ()
+            return _result ?? ()
         }
 
-        // Not complete - suspend until it is
+        // Slow path: suspend until completion
+        // Use Task to hop back to actor context for safe registration
         return try await withCheckedThrowingContinuation { continuation in
-            addContinuation(continuation)
+            Task {
+                await self.registerOrComplete(continuation)
+            }
         }
     }
 }
@@ -262,9 +260,9 @@ public final class StatementScheduler: @unchecked Sendable {
         Task { @Sendable in
             do {
                 let result = try await executor(statement, context)
-                future.complete(with: result)
+                await future.complete(with: result)
             } catch {
-                future.fail(with: error)
+                await future.fail(with: error)
             }
         }
     }
