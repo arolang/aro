@@ -1,6 +1,14 @@
-# AssertDemo expected output
-# Demonstrates Given/When/Then testing pattern
+# AssertDemo expected test output
+# Verifies that all 6 Given/When/Then tests pass
 ---
-=== String Utils with Tests ===
-Run 'aro test ./Examples/AssertDemo' to execute tests
-startup
+=== ARO Test Results ===
+PASS  length-of-hello
+PASS  length-of-blank
+PASS  uppercase-simple
+PASS  uppercase-mixed
+PASS  lowercase-simple
+PASS  lowercase-mixed
+Total:  6
+Passed: 6
+Failed: 0
+All tests passed!

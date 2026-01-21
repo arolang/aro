@@ -1,4 +1,7 @@
 # Test hints for AssertDemo
 # Demonstrates Given/When/Then testing pattern with string operations
+# Uses mode: test to run 'aro test' and verify test results
 # Note: Test feature sets are stripped from compiled binaries per ARO-0015
-mode: interpreter
+mode: test
+# Use occurrence-check since timing values vary (<1ms vs 1ms)
+occurrence-check: true
