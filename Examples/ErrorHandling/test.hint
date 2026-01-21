@@ -1,3 +1,5 @@
 # Test hints for ErrorHandling
 # Demonstrates the Throw action with guarded validations
 mode: both
+# Use occurrence-check since the example ends with a triggered error
+occurrence-check: true

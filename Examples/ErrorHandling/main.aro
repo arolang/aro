@@ -39,5 +39,17 @@
     <Log> "Resource validation passed!" to the <console>.
 
     <Log> "All validations passed!" to the <console>.
+
+    (* Example 4: Throw that actually triggers *)
+    <Log> "--- Triggered Throw Example ---" to the <console>.
+    <Create> the <invalid-input> with -5.
+    <Log> "Invalid input value: " to the <console>.
+    <Log> <invalid-input> to the <console>.
+
+    (* This throw WILL execute because the condition is true *)
+    <Throw> the <InputError> for the <negative-value> when <invalid-input> < 0.
+
+    (* This line should NOT be reached *)
+    <Log> "This should not appear!" to the <console>.
     <Return> an <OK: status> for the <demo>.
 }

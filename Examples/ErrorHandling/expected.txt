@@ -1,6 +1,7 @@
-# Generated: Mon Jan 20 2026
+# Generated: Tue Jan 21 2026
 # Type: console
 # Command: aro run ./Examples/ErrorHandling
+# Note: Uses occurrence-check - example ends with a triggered error
 ---
 === Error Handling Demo ===
 --- Validation Example ---
@@ -16,4 +17,7 @@ Resource exists:
 true
 Resource validation passed!
 All validations passed!
-demo
+--- Triggered Throw Example ---
+Invalid input value:
+-5
+Runtime error: Runtime Error: Cannot throw the InputError for the negative-value when <condition>.
