@@ -63,13 +63,13 @@ public struct StatementNode: Sendable {
 
 // MARK: - Dependency Graph
 
-/// Builds and maintains a dependency graph for statement execution
-public final class DependencyGraph: @unchecked Sendable {
+/// Builds and maintains a dependency graph for statement execution.
+/// Converted to actor for Swift 6.2 concurrency safety (Issue #2).
+public actor DependencyGraph {
 
     // MARK: - Properties
 
     private var nodes: [StatementNode] = []
-    private let lock = NSLock()
 
     /// Verbs that typically involve I/O operations
     private static let ioVerbs: Set<String> = [
@@ -100,14 +100,10 @@ public final class DependencyGraph: @unchecked Sendable {
     /// - Parameters:
     ///   - statements: The statements to analyze
     ///   - dataFlows: The data flow info for each statement (parallel array)
-    /// - Returns: The constructed dependency graph
     public func build(
         statements: [Statement],
         dataFlows: [DataFlowInfo]
-    ) -> DependencyGraph {
-        lock.lock()
-        defer { lock.unlock() }
-
+    ) {
         nodes = []
 
         // Map from variable name to the index of the statement that produces it
@@ -141,8 +137,6 @@ public final class DependencyGraph: @unchecked Sendable {
                 producers[output] = index
             }
         }
-
-        return self
     }
 
     /// Classify a statement as I/O or CPU-bound
@@ -179,8 +173,6 @@ public final class DependencyGraph: @unchecked Sendable {
 
     /// Get all nodes in the graph
     public var allNodes: [StatementNode] {
-        lock.lock()
-        defer { lock.unlock() }
         return nodes
     }
 
@@ -188,9 +180,6 @@ public final class DependencyGraph: @unchecked Sendable {
     /// - Parameter completedIndices: Indices of statements that have completed
     /// - Returns: Nodes ready for execution
     public func readyNodes(completedIndices: Set<Int>) -> [StatementNode] {
-        lock.lock()
-        defer { lock.unlock() }
-
         return nodes.filter { node in
             // Not already scheduled
             !node.isScheduled &&
@@ -210,18 +199,12 @@ public final class DependencyGraph: @unchecked Sendable {
     /// - Parameter completedIndices: Indices of statements that have completed
     /// - Returns: The next node to await, or nil if all complete
     public func nextToAwait(completedIndices: Set<Int>) -> StatementNode? {
-        lock.lock()
-        defer { lock.unlock() }
-
         // Find first node not in completed set
         return nodes.first { !completedIndices.contains($0.index) }
     }
 
     /// Mark a node as scheduled
     public func markScheduled(_ index: Int) {
-        lock.lock()
-        defer { lock.unlock() }
-
         if index < nodes.count {
             nodes[index].isScheduled = true
         }
@@ -229,9 +212,6 @@ public final class DependencyGraph: @unchecked Sendable {
 
     /// Reset all scheduled flags
     public func reset() {
-        lock.lock()
-        defer { lock.unlock() }
-
         for i in 0..<nodes.count {
             nodes[i].isScheduled = false
         }
@@ -239,17 +219,12 @@ public final class DependencyGraph: @unchecked Sendable {
 
     /// Get node at index
     public func node(at index: Int) -> StatementNode? {
-        lock.lock()
-        defer { lock.unlock() }
-
         guard index >= 0 && index < nodes.count else { return nil }
         return nodes[index]
     }
 
     /// Number of nodes in the graph
     public var count: Int {
-        lock.lock()
-        defer { lock.unlock() }
         return nodes.count
     }
 }
@@ -286,9 +261,6 @@ public struct ExecutionPlan: Sendable {
 extension DependencyGraph {
     /// Generate an execution plan from the dependency graph
     public func generatePlan() -> ExecutionPlan {
-        lock.lock()
-        defer { lock.unlock() }
-
         var eagerStart: [Int] = []
         var ioStatements: Set<Int> = []
         var dependencies: [Int: Set<Int>] = [:]

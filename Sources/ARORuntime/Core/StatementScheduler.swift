@@ -193,24 +193,24 @@ public final class StatementScheduler: @unchecked Sendable {
         let dataFlows = analyzedFeatureSet.dataFlows
 
         // Build dependency graph
-        _ = dependencyGraph.build(statements: statements, dataFlows: dataFlows)
+        await dependencyGraph.build(statements: statements, dataFlows: dataFlows)
 
         // Generate execution plan
-        let plan = dependencyGraph.generatePlan()
+        let plan = await dependencyGraph.generatePlan()
 
         // Reset state
         resetState()
 
         // Phase 1: Start eager I/O operations (no dependencies)
         for index in plan.eagerStart {
-            if let node = dependencyGraph.node(at: index) {
-                startStatement(node, context: context, executor: executor)
+            if let node = await dependencyGraph.node(at: index) {
+                await startStatement(node, context: context, executor: executor)
             }
         }
 
         // Phase 2: Process statements in semantic order
         for index in plan.executionOrder {
-            guard let node = dependencyGraph.node(at: index) else { continue }
+            guard let node = await dependencyGraph.node(at: index) else { continue }
 
             // Wait for dependencies
             for depIndex in node.dependencies {
@@ -218,7 +218,7 @@ public final class StatementScheduler: @unchecked Sendable {
             }
 
             // Check if this statement was already started eagerly
-            let future = getOrStartStatement(node, context: context, executor: executor)
+            let future = await getOrStartStatement(node, context: context, executor: executor)
 
             // Wait for this statement to complete
             _ = try await future.wait()
@@ -234,7 +234,7 @@ public final class StatementScheduler: @unchecked Sendable {
             }
 
             // Start any newly ready I/O operations
-            startReadyIOOperations(context: context, executor: executor)
+            await startReadyIOOperations(context: context, executor: executor)
         }
 
         return true
@@ -247,11 +247,11 @@ public final class StatementScheduler: @unchecked Sendable {
         _ node: StatementNode,
         context: ExecutionContext,
         executor: @escaping @Sendable StatementExecutor
-    ) {
+    ) async {
         let future = StatementFuture(statementIndex: node.index)
 
         setFuture(future, at: node.index)
-        dependencyGraph.markScheduled(node.index)
+        await dependencyGraph.markScheduled(node.index)
 
         // Capture values needed for the task
         let statement = node.statement
@@ -272,13 +272,13 @@ public final class StatementScheduler: @unchecked Sendable {
         _ node: StatementNode,
         context: ExecutionContext,
         executor: @escaping @Sendable StatementExecutor
-    ) -> StatementFuture {
+    ) async -> StatementFuture {
         if let existing = getFuture(at: node.index) {
             return existing
         }
 
         // Start it now
-        startStatement(node, context: context, executor: executor)
+        await startStatement(node, context: context, executor: executor)
 
         return getFuture(at: node.index)!
     }
@@ -296,13 +296,13 @@ public final class StatementScheduler: @unchecked Sendable {
     private func startReadyIOOperations(
         context: ExecutionContext,
         executor: @escaping @Sendable StatementExecutor
-    ) {
+    ) async {
         let completed = getCompletedIndices()
-        let readyIO = dependencyGraph.parallelizableNodes(completedIndices: completed)
+        let readyIO = await dependencyGraph.parallelizableNodes(completedIndices: completed)
 
         for node in readyIO {
             if !hasFuture(at: node.index) {
-                startStatement(node, context: context, executor: executor)
+                await startStatement(node, context: context, executor: executor)
             }
         }
     }
