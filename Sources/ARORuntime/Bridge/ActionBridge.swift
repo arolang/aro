@@ -466,6 +466,15 @@ public func aro_action_broadcast(
     return boxResult(broadcastResult)
 }
 
+@_cdecl("aro_action_connect")
+public func aro_action_connect(
+    _ contextPtr: UnsafeMutableRawPointer?,
+    _ resultPtr: UnsafeRawPointer?,
+    _ objectPtr: UnsafeRawPointer?
+) -> UnsafeMutableRawPointer? {
+    return executeAction(verb: "connect", contextPtr: contextPtr, resultPtr: resultPtr, objectPtr: objectPtr)
+}
+
 @_cdecl("aro_action_keepalive")
 public func aro_action_keepalive(
     _ contextPtr: UnsafeMutableRawPointer?,

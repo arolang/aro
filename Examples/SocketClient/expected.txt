@@ -1,0 +1,7 @@
+=== Socket Client Demo ===
+Demonstrating Connect action for TCP client
+Connect action features:
+- Verb: connect
+- Prepositions: to, with
+- Returns connection ID for Send/Close
+Demo complete

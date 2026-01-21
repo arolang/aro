@@ -1,0 +1,4 @@
+# Test hints for SocketClient
+# Demonstrates the Connect action syntax for TCP client connections
+mode: both
+occurrence-check: true
