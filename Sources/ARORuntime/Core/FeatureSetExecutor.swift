@@ -193,7 +193,7 @@ public final class FeatureSetExecutor: @unchecked Sendable {
 
         // ARO-0004: Evaluate when condition before processing statement
         // If condition is present and evaluates to false, skip this statement entirely
-        if let whenCondition = statement.whenCondition {
+        if let whenCondition = statement.statementGuard.condition {
             let conditionResult = try await expressionEvaluator.evaluate(whenCondition, context: context)
             guard asBool(conditionResult) else {
                 return  // Condition is false - skip this statement
@@ -205,7 +205,7 @@ public final class FeatureSetExecutor: @unchecked Sendable {
         let objectDescriptor = ObjectDescriptor(from: statement.object)
 
         // ARO-0002: Evaluate expression if present
-        if let expression = statement.expression {
+        if case .expression(let expression) = statement.valueSource {
             let expressionValue = try await expressionEvaluator.evaluate(expression, context: context)
             context.bind("_expression_", value: expressionValue)
 
@@ -281,7 +281,7 @@ public final class FeatureSetExecutor: @unchecked Sendable {
         }
 
         // Bind literal value if present (e.g., "Hello, World!" in the statement)
-        if let literalValue = statement.literalValue {
+        if case .literal(let literalValue) = statement.valueSource {
             let literalName = "_literal_"
             switch literalValue {
             case .string(let s):
@@ -304,7 +304,7 @@ public final class FeatureSetExecutor: @unchecked Sendable {
         }
 
         // ARO-0018: Bind aggregation clause if present
-        if let aggregation = statement.aggregation {
+        if let aggregation = statement.queryModifiers.aggregation {
             context.bind("_aggregation_type_", value: aggregation.type.rawValue)
             if let field = aggregation.field {
                 context.bind("_aggregation_field_", value: field)
@@ -312,7 +312,7 @@ public final class FeatureSetExecutor: @unchecked Sendable {
         }
 
         // ARO-0018: Bind where clause if present
-        if let whereClause = statement.whereClause {
+        if let whereClause = statement.queryModifiers.whereClause {
             context.bind("_where_field_", value: whereClause.field)
             context.bind("_where_op_", value: whereClause.op.rawValue)
             // Evaluate the where value expression
@@ -321,26 +321,26 @@ public final class FeatureSetExecutor: @unchecked Sendable {
         }
 
         // ARO-0037: Bind by clause if present (for Split action)
-        if let byClause = statement.byClause {
+        if let byClause = statement.queryModifiers.byClause {
             context.bind("_by_pattern_", value: byClause.pattern)
             context.bind("_by_flags_", value: byClause.flags)
         }
 
         // ARO-0041: Bind to clause if present (for date ranges)
-        if let toClause = statement.toClause {
+        if let toClause = statement.rangeModifiers.toClause {
             let toValue = try await expressionEvaluator.evaluate(toClause, context: context)
             context.bind("_to_", value: toValue)
         }
 
         // ARO-0042: Bind with clause if present (for set operations)
-        if let withClause = statement.withClause {
+        if let withClause = statement.rangeModifiers.withClause {
             let withValue = try await expressionEvaluator.evaluate(withClause, context: context)
             context.bind("_with_", value: withValue)
         }
 
         // ARO-0043: Evaluate result expression if present (for sink syntax)
         // Sink syntax: <Log> "message" to the <console>.
-        if let resultExpression = statement.resultExpression {
+        if case .sinkExpression(let resultExpression) = statement.valueSource {
             let resultValue = try await expressionEvaluator.evaluate(resultExpression, context: context)
             context.bind("_result_expression_", value: resultValue)
         }
@@ -383,7 +383,7 @@ public final class FeatureSetExecutor: @unchecked Sendable {
                 result: resultDescriptor.fullName,
                 preposition: statement.object.preposition.rawValue,
                 object: objectDescriptor.fullName,
-                condition: statement.whenCondition != nil ? "when <condition>" : nil,
+                condition: statement.statementGuard.isPresent ? "when <condition>" : nil,
                 featureSet: context.featureSetName,
                 businessActivity: context.businessActivity,
                 resolvedValues: gatherResolvedValues(for: statement, context: context)

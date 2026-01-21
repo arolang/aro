@@ -95,30 +95,52 @@ public struct FeatureSet: ASTNode {
 public protocol Statement: ASTNode {}
 
 /// An ARO (Action-Result-Object) statement
+///
+/// Refactored to use grouped clause types for better semantic organization:
+/// - `valueSource`: Where the value comes from (literal, expression, sink)
+/// - `queryModifiers`: Query-related clauses (where, aggregation, by)
+/// - `rangeModifiers`: Range/set operation clauses (to, with)
+/// - `statementGuard`: Optional condition for guarded execution
 public struct AROStatement: Statement {
+    // MARK: - Required Fields
     public let action: Action
     public let result: QualifiedNoun
     public let object: ObjectClause
-    /// Optional literal value (e.g., `with "string"`, `with 42`) - legacy support
-    public let literalValue: LiteralValue?
-    /// Optional expression value (ARO-0002) - for computed values like `from <x> * <y>`
-    public let expression: (any Expression)?
-    /// Optional aggregation clause (ARO-0018) - for Reduce: `with sum(<field>)`
-    public let aggregation: AggregationClause?
-    /// Optional where clause (ARO-0018) - for Filter: `where <field> is "value"`
-    public let whereClause: WhereClause?
-    /// Optional by clause (ARO-0037) - for Split: `by /delimiter/`
-    public let byClause: ByClause?
-    /// Optional to clause (ARO-0041) - for date ranges: `from <start> to <end>`
-    public let toClause: (any Expression)?
-    /// Optional with clause (ARO-0042) - for set operations: `from <a> with <b>`
-    public let withClause: (any Expression)?
-    /// Optional when condition (ARO-0004) - for guarded statements
-    public let whenCondition: (any Expression)?
-    /// Optional result expression (ARO-0043) - for sink syntax: `<Log> "message" to <console>`
-    /// When set, the result position contains an expression instead of a variable to bind
-    public let resultExpression: (any Expression)?
     public let span: SourceSpan
+
+    // MARK: - Grouped Clause Fields
+    /// Where the statement's value comes from (replaces literalValue, expression, resultExpression)
+    public let valueSource: ValueSource
+    /// Query-related clauses (replaces whereClause, aggregation, byClause)
+    public let queryModifiers: QueryModifiers
+    /// Range and set operation clauses (replaces toClause, withClause)
+    public let rangeModifiers: RangeModifiers
+    /// Optional guard condition (replaces whenCondition)
+    public let statementGuard: StatementGuard
+
+    // MARK: - Grouped Initializer
+
+    public init(
+        action: Action,
+        result: QualifiedNoun,
+        object: ObjectClause,
+        valueSource: ValueSource = .none,
+        queryModifiers: QueryModifiers = .none,
+        rangeModifiers: RangeModifiers = .none,
+        statementGuard: StatementGuard = .none,
+        span: SourceSpan
+    ) {
+        self.action = action
+        self.result = result
+        self.object = object
+        self.valueSource = valueSource
+        self.queryModifiers = queryModifiers
+        self.rangeModifiers = rangeModifiers
+        self.statementGuard = statementGuard
+        self.span = span
+    }
+
+    // MARK: - Legacy Initializer (Backward Compatibility)
 
     public init(
         action: Action,
@@ -138,21 +160,90 @@ public struct AROStatement: Statement {
         self.action = action
         self.result = result
         self.object = object
-        self.literalValue = literalValue
-        self.expression = expression
-        self.aggregation = aggregation
-        self.whereClause = whereClause
-        self.byClause = byClause
-        self.toClause = toClause
-        self.withClause = withClause
-        self.whenCondition = whenCondition
-        self.resultExpression = resultExpression
         self.span = span
+
+        // Build ValueSource from legacy fields
+        if let resExpr = resultExpression {
+            self.valueSource = .sinkExpression(resExpr)
+        } else if let expr = expression {
+            self.valueSource = .expression(expr)
+        } else if let literal = literalValue {
+            self.valueSource = .literal(literal)
+        } else {
+            self.valueSource = .none
+        }
+
+        // Build QueryModifiers from legacy fields
+        self.queryModifiers = QueryModifiers(
+            whereClause: whereClause,
+            aggregation: aggregation,
+            byClause: byClause
+        )
+
+        // Build RangeModifiers from legacy fields
+        self.rangeModifiers = RangeModifiers(
+            toClause: toClause,
+            withClause: withClause
+        )
+
+        // Build StatementGuard from legacy field
+        self.statementGuard = StatementGuard(condition: whenCondition)
     }
+
+    // MARK: - Backward Compatibility Computed Properties
+
+    /// Optional literal value (e.g., `with "string"`, `with 42`)
+    public var literalValue: LiteralValue? {
+        valueSource.asLiteral
+    }
+
+    /// Optional expression value (ARO-0002) - for computed values like `from <x> * <y>`
+    public var expression: (any Expression)? {
+        if case .expression(let e) = valueSource { return e }
+        return nil
+    }
+
+    /// Optional result expression (ARO-0043) - for sink syntax: `<Log> "message" to <console>`
+    public var resultExpression: (any Expression)? {
+        if case .sinkExpression(let e) = valueSource { return e }
+        return nil
+    }
+
+    /// Optional aggregation clause (ARO-0018) - for Reduce: `with sum(<field>)`
+    public var aggregation: AggregationClause? {
+        queryModifiers.aggregation
+    }
+
+    /// Optional where clause (ARO-0018) - for Filter: `where <field> is "value"`
+    public var whereClause: WhereClause? {
+        queryModifiers.whereClause
+    }
+
+    /// Optional by clause (ARO-0037) - for Split: `by /delimiter/`
+    public var byClause: ByClause? {
+        queryModifiers.byClause
+    }
+
+    /// Optional to clause (ARO-0041) - for date ranges: `from <start> to <end>`
+    public var toClause: (any Expression)? {
+        rangeModifiers.toClause
+    }
+
+    /// Optional with clause (ARO-0042) - for set operations: `from <a> with <b>`
+    public var withClause: (any Expression)? {
+        rangeModifiers.withClause
+    }
+
+    /// Optional when condition (ARO-0004) - for guarded statements
+    public var whenCondition: (any Expression)? {
+        statementGuard.condition
+    }
+
+    // MARK: - Description
 
     public var description: String {
         var desc: String
-        if let resExpr = resultExpression {
+        if case .sinkExpression(let resExpr) = valueSource {
             // Sink syntax: <Log> "message" to the <console>
             desc = "<\(action.verb)> \(resExpr) \(object.preposition) the <\(object.noun)>"
         } else {
@@ -164,16 +255,16 @@ public struct AROStatement: Statement {
         if let expr = expression {
             desc += " = \(expr)"
         }
-        if let agg = aggregation {
+        if let agg = queryModifiers.aggregation {
             desc += " with \(agg)"
         }
-        if let where_ = whereClause {
+        if let where_ = queryModifiers.whereClause {
             desc += " where \(where_)"
         }
-        if let by = byClause {
+        if let by = queryModifiers.byClause {
             desc += " \(by)"
         }
-        if let when = whenCondition {
+        if let when = statementGuard.condition {
             desc += " when \(when)"
         }
         return desc + "."
@@ -295,6 +386,151 @@ public struct ByClause: Sendable, CustomStringConvertible {
             return "by /\(pattern)/"
         }
         return "by /\(pattern)/\(flags)"
+    }
+}
+
+// MARK: - Value Source (ARO-0002, ARO-0043)
+
+/// Represents the source of a value in an ARO statement.
+/// These are mutually exclusive - a statement has exactly one value source.
+public enum ValueSource: Sendable, CustomStringConvertible {
+    /// Standard syntax: no explicit value, derived from object
+    case none
+
+    /// Legacy literal: `with "string"`, `with 42`
+    case literal(LiteralValue)
+
+    /// Expression value (ARO-0002): `from <x> * <y>`
+    case expression(any Expression)
+
+    /// Sink expression (ARO-0043): `<Log> "message" to <console>`
+    /// The result position contains an expression instead of a variable to bind
+    case sinkExpression(any Expression)
+
+    public var description: String {
+        switch self {
+        case .none: return "none"
+        case .literal(let v): return "literal(\(v))"
+        case .expression(let e): return "expression(\(e))"
+        case .sinkExpression(let e): return "sink(\(e))"
+        }
+    }
+
+    /// Extract the expression if this is an expression or sink expression
+    public var asExpression: (any Expression)? {
+        switch self {
+        case .expression(let e), .sinkExpression(let e): return e
+        case .none, .literal: return nil
+        }
+    }
+
+    /// Extract the literal if this is a literal value source
+    public var asLiteral: LiteralValue? {
+        if case .literal(let v) = self { return v }
+        return nil
+    }
+
+    /// Check if this is a sink expression
+    public var isSinkSyntax: Bool {
+        if case .sinkExpression = self { return true }
+        return false
+    }
+}
+
+// MARK: - Query Modifiers (ARO-0018, ARO-0037)
+
+/// Groups query-related clauses for Filter, Reduce, Split operations.
+public struct QueryModifiers: Sendable, CustomStringConvertible {
+    /// Filter condition: `where <field> is "value"`
+    public let whereClause: WhereClause?
+
+    /// Aggregation function: `with sum(<field>)`
+    public let aggregation: AggregationClause?
+
+    /// Split pattern: `by /delimiter/`
+    public let byClause: ByClause?
+
+    public init(
+        whereClause: WhereClause? = nil,
+        aggregation: AggregationClause? = nil,
+        byClause: ByClause? = nil
+    ) {
+        self.whereClause = whereClause
+        self.aggregation = aggregation
+        self.byClause = byClause
+    }
+
+    /// Empty query modifiers
+    public static let none = QueryModifiers()
+
+    /// Check if any query modifier is present
+    public var isEmpty: Bool {
+        whereClause == nil && aggregation == nil && byClause == nil
+    }
+
+    public var description: String {
+        var parts: [String] = []
+        if let w = whereClause { parts.append("where \(w)") }
+        if let a = aggregation { parts.append("with \(a)") }
+        if let b = byClause { parts.append("\(b)") }
+        return parts.isEmpty ? "none" : parts.joined(separator: " ")
+    }
+}
+
+// MARK: - Range Modifiers (ARO-0041, ARO-0042)
+
+/// Groups range and set operation clauses.
+public struct RangeModifiers: Sendable, CustomStringConvertible {
+    /// End of range: `from <start> to <end>`
+    public let toClause: (any Expression)?
+
+    /// Set operation operand: `from <a> with <b>`
+    public let withClause: (any Expression)?
+
+    public init(
+        toClause: (any Expression)? = nil,
+        withClause: (any Expression)? = nil
+    ) {
+        self.toClause = toClause
+        self.withClause = withClause
+    }
+
+    /// Empty range modifiers
+    public static let none = RangeModifiers()
+
+    /// Check if any range modifier is present
+    public var isEmpty: Bool {
+        toClause == nil && withClause == nil
+    }
+
+    public var description: String {
+        var parts: [String] = []
+        if let t = toClause { parts.append("to \(t)") }
+        if let w = withClause { parts.append("with \(w)") }
+        return parts.isEmpty ? "none" : parts.joined(separator: " ")
+    }
+}
+
+// MARK: - Statement Guard (ARO-0004)
+
+/// Optional guard condition for conditional execution.
+public struct StatementGuard: Sendable, CustomStringConvertible {
+    /// The condition expression: `when <condition>`
+    public let condition: (any Expression)?
+
+    public init(condition: (any Expression)? = nil) {
+        self.condition = condition
+    }
+
+    /// No guard condition
+    public static let none = StatementGuard()
+
+    /// Check if a guard condition is present
+    public var isPresent: Bool { condition != nil }
+
+    public var description: String {
+        if let c = condition { return "when \(c)" }
+        return "none"
     }
 }
 

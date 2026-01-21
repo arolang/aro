@@ -200,7 +200,7 @@ public struct HoverHandler: Sendable {
         result += "the <\(statement.object.noun.fullName)>"
 
         // Add literal value if present on the statement
-        if let literal = statement.literalValue {
+        if case .literal(let literal) = statement.valueSource {
             result += " with "
             switch literal {
             case .string(let s):

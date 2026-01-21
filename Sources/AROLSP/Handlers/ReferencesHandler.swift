@@ -45,7 +45,7 @@ public struct ReferencesHandler: Sendable {
                     }
 
                     // Check expression
-                    if let expr = aro.expression {
+                    if let expr = aro.valueSource.asExpression {
                         if let name = findSymbolNameInExpression(expr, position: aroPosition) {
                             targetName = name
                             break
@@ -78,12 +78,12 @@ public struct ReferencesHandler: Sendable {
                     }
 
                     // Check expression
-                    if let expr = aro.expression {
+                    if let expr = aro.valueSource.asExpression {
                         references.append(contentsOf: findReferencesInExpression(expr, name: symbolName, uri: uri))
                     }
 
                     // Check where clause
-                    if let whereClause = aro.whereClause {
+                    if let whereClause = aro.queryModifiers.whereClause {
                         references.append(contentsOf: findReferencesInExpression(whereClause.value, name: symbolName, uri: uri))
                     }
                 }

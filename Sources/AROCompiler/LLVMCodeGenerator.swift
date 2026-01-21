@@ -330,22 +330,20 @@ public final class LLVMCodeGenerator {
                 registerString(spec)
             }
 
-            if let literal = aroStatement.literalValue {
+            // Collect strings from valueSource
+            switch aroStatement.valueSource {
+            case .literal(let literal):
                 collectStringsFromLiteral(literal)
-            }
-
-            // Collect strings from expressions (ARO-0002)
-            if let expression = aroStatement.expression {
+            case .expression(let expression):
                 collectStringsFromExpression(expression)
-            }
-
-            // ARO-0043: Collect strings from result expression (sink syntax)
-            if let resultExpression = aroStatement.resultExpression {
+            case .sinkExpression(let resultExpression):
                 collectStringsFromExpression(resultExpression)
+            case .none:
+                break
             }
 
             // ARO-0018: Collect aggregation clause strings
-            if let aggregation = aroStatement.aggregation {
+            if let aggregation = aroStatement.queryModifiers.aggregation {
                 registerString(aggregation.type.rawValue)
                 if let field = aggregation.field {
                     registerString(field)
@@ -353,7 +351,7 @@ public final class LLVMCodeGenerator {
             }
 
             // ARO-0018: Collect where clause strings
-            if let whereClause = aroStatement.whereClause {
+            if let whereClause = aroStatement.queryModifiers.whereClause {
                 registerString(whereClause.field)
                 registerString(whereClause.op.rawValue)
                 // Where value expression
@@ -361,7 +359,7 @@ public final class LLVMCodeGenerator {
             }
 
             // ARO-0037: Collect by clause strings (for Split action)
-            if let byClause = aroStatement.byClause {
+            if let byClause = aroStatement.queryModifiers.byClause {
                 registerString("_by_pattern_")
                 registerString("_by_flags_")
                 registerString(byClause.pattern)
@@ -369,17 +367,17 @@ public final class LLVMCodeGenerator {
             }
 
             // ARO-0042: Collect with clause strings (for set operations)
-            if let withClause = aroStatement.withClause {
+            if let withClause = aroStatement.rangeModifiers.withClause {
                 collectStringsFromExpression(withClause)
             }
 
             // ARO-0041: Collect to clause strings (for date ranges)
-            if let toClause = aroStatement.toClause {
+            if let toClause = aroStatement.rangeModifiers.toClause {
                 collectStringsFromExpression(toClause)
             }
 
             // ARO-0004: Collect when clause strings (for guarded statements)
-            if let whenCondition = aroStatement.whenCondition {
+            if let whenCondition = aroStatement.statementGuard.condition {
                 collectStringsFromExpression(whenCondition)
                 // Also register the JSON for runtime evaluation
                 let whenJSON = expressionToEvalJSON(whenCondition)
@@ -730,7 +728,7 @@ public final class LLVMCodeGenerator {
         emit("  ; <\(statement.action.verb)> the <\(statement.result.base)> ...")
 
         // ARO-0004: Handle when clause - skip statement if condition is false
-        if let whenCondition = statement.whenCondition {
+        if let whenCondition = statement.statementGuard.condition {
             let whenJSON = expressionToEvalJSON(whenCondition)
             let whenStr = stringConstants[whenJSON]!
             emit("  ; Evaluate when guard: \(whenCondition)")
@@ -741,43 +739,40 @@ public final class LLVMCodeGenerator {
             emit("\(prefix)_body:")
         }
 
-        // If there's a literal value, bind it first
-        if let literalValue = statement.literalValue {
+        // Bind valueSource based on type
+        switch statement.valueSource {
+        case .literal(let literalValue):
             try emitLiteralBinding(literalValue, prefix: prefix)
-        }
-
-        // If there's an expression (ARO-0002), bind it to _expression_
-        if let expression = statement.expression {
+        case .expression(let expression):
             try emitExpressionBinding(expression, prefix: prefix)
-        }
-
-        // ARO-0043: Bind result expression for sink syntax (e.g., <Log> "message" to <console>)
-        if let resultExpression = statement.resultExpression {
+        case .sinkExpression(let resultExpression):
             try emitExpressionBinding(resultExpression, prefix: prefix)
+        case .none:
+            break
         }
 
         // ARO-0018: Bind aggregation clause if present
-        if let aggregation = statement.aggregation {
+        if let aggregation = statement.queryModifiers.aggregation {
             try emitAggregationBinding(aggregation, prefix: prefix)
         }
 
         // ARO-0018: Bind where clause if present
-        if let whereClause = statement.whereClause {
+        if let whereClause = statement.queryModifiers.whereClause {
             try emitWhereClauseBinding(whereClause, prefix: prefix)
         }
 
         // ARO-0037: Bind by clause if present (for Split action)
-        if let byClause = statement.byClause {
+        if let byClause = statement.queryModifiers.byClause {
             emitByClauseBinding(byClause, prefix: prefix)
         }
 
         // ARO-0042: Bind with clause if present (for set operations)
-        if let withClause = statement.withClause {
+        if let withClause = statement.rangeModifiers.withClause {
             try emitWithClauseBinding(withClause, prefix: prefix)
         }
 
         // ARO-0041: Bind to clause if present (for date ranges)
-        if let toClause = statement.toClause {
+        if let toClause = statement.rangeModifiers.toClause {
             try emitToClauseBinding(toClause, prefix: prefix)
         }
 
@@ -859,7 +854,7 @@ public final class LLVMCodeGenerator {
         }
 
         // ARO-0004: Add skip label if when clause was present
-        if statement.whenCondition != nil {
+        if statement.statementGuard.isPresent {
             emit("  br label %\(prefix)_skip")
             emit("")
             emit("\(prefix)_skip:")
