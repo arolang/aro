@@ -20,6 +20,9 @@ public final class AROLanguageServer: Sendable {
     private let referencesHandler: ReferencesHandler
     private let documentSymbolHandler: DocumentSymbolHandler
     private let diagnosticsHandler: DiagnosticsHandler
+    private let renameHandler: RenameHandler
+    private let workspaceSymbolHandler: WorkspaceSymbolHandler
+    private let codeActionHandler: CodeActionHandler
 
     // MARK: - Initialization
 
@@ -31,6 +34,9 @@ public final class AROLanguageServer: Sendable {
         self.referencesHandler = ReferencesHandler()
         self.documentSymbolHandler = DocumentSymbolHandler()
         self.diagnosticsHandler = DiagnosticsHandler()
+        self.renameHandler = RenameHandler()
+        self.workspaceSymbolHandler = WorkspaceSymbolHandler()
+        self.codeActionHandler = CodeActionHandler()
     }
 
     // MARK: - Server Capabilities
@@ -50,7 +56,10 @@ public final class AROLanguageServer: Sendable {
             ],
             "definitionProvider": true,
             "referencesProvider": true,
-            "documentSymbolProvider": true
+            "documentSymbolProvider": true,
+            "renameProvider": true,
+            "workspaceSymbolProvider": true,
+            "codeActionProvider": true
         ]
     }
 
@@ -189,6 +198,15 @@ public final class AROLanguageServer: Sendable {
 
         case "textDocument/documentSymbol":
             result = await handleDocumentSymbol(params: params)
+
+        case "textDocument/rename":
+            result = await handleRename(params: params)
+
+        case "workspace/symbol":
+            result = await handleWorkspaceSymbol(params: params)
+
+        case "textDocument/codeAction":
+            result = await handleCodeAction(params: params)
 
         default:
             // Unknown method
@@ -380,6 +398,74 @@ public final class AROLanguageServer: Sendable {
         }
 
         return documentSymbolHandler.handle(compilationResult: state.compilationResult)
+    }
+
+    private func handleRename(params: Any?) async -> [String: Any]? {
+        guard let dict = params as? [String: Any],
+              let textDocument = dict["textDocument"] as? [String: Any],
+              let uri = textDocument["uri"] as? String,
+              let position = dict["position"] as? [String: Any],
+              let line = position["line"] as? Int,
+              let character = position["character"] as? Int,
+              let newName = dict["newName"] as? String else {
+            return nil
+        }
+
+        guard let state = await documentManager.get(uri: uri) else {
+            return nil
+        }
+
+        let lspPosition = Position(line: line, character: character)
+        return renameHandler.handle(
+            uri: uri,
+            position: lspPosition,
+            newName: newName,
+            content: state.content,
+            compilationResult: state.compilationResult
+        )
+    }
+
+    private func handleWorkspaceSymbol(params: Any?) async -> [[String: Any]]? {
+        guard let dict = params as? [String: Any],
+              let query = dict["query"] as? String else {
+            return nil
+        }
+
+        let allDocuments = await documentManager.all()
+        return workspaceSymbolHandler.handle(query: query, documents: allDocuments)
+    }
+
+    private func handleCodeAction(params: Any?) async -> [[String: Any]]? {
+        guard let dict = params as? [String: Any],
+              let textDocument = dict["textDocument"] as? [String: Any],
+              let uri = textDocument["uri"] as? String,
+              let range = dict["range"] as? [String: Any],
+              let start = range["start"] as? [String: Any],
+              let end = range["end"] as? [String: Any],
+              let startLine = start["line"] as? Int,
+              let startChar = start["character"] as? Int,
+              let endLine = end["line"] as? Int,
+              let endChar = end["character"] as? Int else {
+            return nil
+        }
+
+        guard let state = await documentManager.get(uri: uri) else {
+            return nil
+        }
+
+        let context = dict["context"] as? [String: Any]
+        let diagnostics = context?["diagnostics"] as? [[String: Any]] ?? []
+
+        let startPos = Position(line: startLine, character: startChar)
+        let endPos = Position(line: endLine, character: endChar)
+
+        return codeActionHandler.handle(
+            uri: uri,
+            range: (start: startPos, end: endPos),
+            diagnostics: diagnostics,
+            content: state.content,
+            compilationResult: state.compilationResult
+        )
     }
 
     // MARK: - Diagnostics Publishing

@@ -35,15 +35,29 @@
       "patterns": [
         {
           "name": "meta.featureset.aro",
-          "begin": "\\(([^:]+):\\s*([^)]+)\\)",
+          "begin": "\\(([^:]+):\\s*([^)<]+?)(\\s+Handler)?(<[^>]+>)?\\s*\\)",
           "beginCaptures": {
             "1": { "name": "entity.name.function.featureset.aro" },
-            "2": { "name": "entity.name.type.business-activity.aro" }
+            "2": { "name": "entity.name.type.business-activity.aro" },
+            "3": { "name": "keyword.control.handler.aro" },
+            "4": { "name": "meta.state-guard.aro", "patterns": [{ "include": "#state-guard" }] }
           },
           "end": "(?=\\()|$",
           "patterns": [
             { "include": "#featureset-body" }
           ]
+        }
+      ]
+    },
+    "state-guard": {
+      "patterns": [
+        {
+          "name": "meta.state-guard.aro",
+          "match": "<([a-zA-Z][a-zA-Z0-9-]*)(?::([^,>]+(?:,[^,>]+)*))?>",
+          "captures": {
+            "1": { "name": "variable.parameter.guard-field.aro" },
+            "2": { "name": "constant.other.guard-value.aro" }
+          }
         }
       ]
     },
@@ -70,24 +84,34 @@
     "actions": {
       "patterns": [
         {
-          "name": "keyword.control.action.request.aro",
-          "match": "<(Extract|Parse|Retrieve|Fetch|Accept)>"
+          "name": "keyword.control.import.aro",
+          "match": "<(Extract|Parse|Retrieve|Fetch|Read|Accept|List|Stat|Exists)>",
+          "comment": "REQUEST actions (External → Internal)"
         },
         {
-          "name": "keyword.control.action.own.aro",
-          "match": "<(Create|Compute|Validate|Compare|Transform|Set|Merge)>"
+          "name": "keyword.operator.aro",
+          "match": "<(Compute|Validate|Compare|Create|Transform|Filter|Match|Split|Set|Merge|Copy|Move|Append)>",
+          "comment": "OWN actions (Internal → Internal)"
         },
         {
-          "name": "keyword.control.action.response.aro",
-          "match": "<(Return|Throw|Send|Log|Store|Write|Emit)>"
+          "name": "keyword.control.flow.return.aro",
+          "match": "<(Return|Throw)>",
+          "comment": "RESPONSE actions (Internal → External)"
         },
         {
-          "name": "keyword.control.action.test.aro",
-          "match": "<(Given|When|Then|Assert)>"
+          "name": "keyword.control.export.aro",
+          "match": "<(Publish|Store|Log|Send|Emit|Write|CreateDirectory)>",
+          "comment": "EXPORT actions (Persistence/Export)"
         },
         {
-          "name": "keyword.control.action.lifecycle.aro",
-          "match": "<(Start|Stop|Keepalive|Watch)>"
+          "name": "support.function.builtin.aro",
+          "match": "<(Start|Stop|Keepalive|Watch|Configure|Request)>",
+          "comment": "LIFECYCLE actions (System management)"
+        },
+        {
+          "name": "entity.name.tag.aro",
+          "match": "<(Given|When|Then|Assert)>",
+          "comment": "TEST actions (BDD testing)"
         }
       ]
     },
