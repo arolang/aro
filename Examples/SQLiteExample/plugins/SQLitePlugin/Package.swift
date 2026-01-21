@@ -3,7 +3,6 @@ import PackageDescription
 
 let package = Package(
     name: "SQLitePlugin",
-    platforms: [.macOS(.v13)],
     products: [
         .library(name: "SQLitePlugin", type: .dynamic, targets: ["SQLitePlugin"])
     ],
