@@ -122,8 +122,8 @@ public struct StatAction: ActionImplementation {
         // Convert to dictionary for ARO context
         let infoDict = info.toDictionary()
 
-        // Bind result
-        context.bind(result.base, value: infoDict)
+        // Note: We don't rebind the result variable here to maintain immutability
+        // The return value is handled by the runtime
 
         return infoDict
     }

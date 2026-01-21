@@ -18,6 +18,8 @@ public struct FileInfo: Sendable, Equatable {
     public let modified: Date?
     public let accessed: Date?
     public let permissions: String?
+    public let owner: String?
+    public let group: String?
 
     public init(
         name: String,
@@ -28,7 +30,9 @@ public struct FileInfo: Sendable, Equatable {
         created: Date?,
         modified: Date?,
         accessed: Date?,
-        permissions: String?
+        permissions: String?,
+        owner: String? = nil,
+        group: String? = nil
     ) {
         self.name = name
         self.path = path
@@ -39,6 +43,8 @@ public struct FileInfo: Sendable, Equatable {
         self.modified = modified
         self.accessed = accessed
         self.permissions = permissions
+        self.owner = owner
+        self.group = group
     }
 
     /// Convert to dictionary for ARO context binding
@@ -63,6 +69,12 @@ public struct FileInfo: Sendable, Equatable {
         }
         if let permissions = permissions {
             dict["permissions"] = permissions
+        }
+        if let owner = owner {
+            dict["owner"] = owner
+        }
+        if let group = group {
+            dict["group"] = group
         }
 
         return dict
@@ -366,6 +378,8 @@ public final class AROFileSystemService: FileSystemService, FileMonitorService, 
         let created = attributes[.creationDate] as? Date
         let modified = attributes[.modificationDate] as? Date
         let posixPermissions = attributes[.posixPermissions] as? Int
+        let owner = attributes[.ownerAccountName] as? String
+        let group = attributes[.groupOwnerAccountName] as? String
 
         return FileInfo(
             name: url.lastPathComponent,
@@ -376,7 +390,9 @@ public final class AROFileSystemService: FileSystemService, FileMonitorService, 
             created: created,
             modified: modified,
             accessed: nil,  // Not available via FileManager
-            permissions: posixPermissions.map { formatPermissions($0) }
+            permissions: posixPermissions.map { formatPermissions($0) },
+            owner: owner,
+            group: group
         )
     }
 
@@ -825,7 +841,9 @@ public final class AROFileSystemService: FileSystemService, @unchecked Sendable 
             created: created,
             modified: modified,
             accessed: nil,
-            permissions: nil  // POSIX permissions not applicable on Windows
+            permissions: nil,  // POSIX permissions not applicable on Windows
+            owner: nil,        // Owner info not applicable on Windows
+            group: nil
         )
     }
 

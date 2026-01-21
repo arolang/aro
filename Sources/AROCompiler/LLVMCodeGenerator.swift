@@ -146,6 +146,8 @@ public final class LLVMCodeGenerator {
         emit("declare ptr @aro_context_create_child(ptr, ptr)")
         emit("declare void @aro_context_destroy(ptr)")
         emit("declare void @aro_context_print_response(ptr)")
+        emit("declare i32 @aro_context_has_error(ptr)")
+        emit("declare void @aro_context_print_error(ptr)")
         emit("declare i32 @aro_load_precompiled_plugins()")
         emit("")
 
@@ -183,7 +185,7 @@ public final class LLVMCodeGenerator {
             // System exec action (ARO-0033)
             "exec", "shell",
             // Repository actions
-            "delete", "merge", "close",
+            "delete", "merge", "combine", "join", "concat", "close",
             // String action (ARO-0037)
             "split",
             // File operations (ARO-0036)
@@ -682,9 +684,21 @@ public final class LLVMCodeGenerator {
             try generateStatement(statement, index: index)
         }
 
-        // Return the result
+        // Branch to normal return
+        emit("  br label %normal_return")
+        emit("")
+
+        // Normal return block
+        emit("normal_return:")
         emit("  %final_result = load ptr, ptr %__result")
         emit("  ret ptr %final_result")
+        emit("")
+
+        // Error exit block - for throw action early termination
+        emit("error_exit:")
+        emit("  ; Print error and return null")
+        emit("  call void @aro_context_print_error(ptr \(currentContext))")
+        emit("  ret ptr null")
         emit("}")
         emit("")
 
@@ -829,6 +843,16 @@ public final class LLVMCodeGenerator {
 
         // Store result
         emit("  store ptr %\(prefix)_action_result, ptr %__result")
+
+        // For throw action, check if error occurred and exit early
+        if actionName == "throw" {
+            emit("  ; Check if throw triggered an error")
+            emit("  %\(prefix)_has_error = call i32 @aro_context_has_error(ptr \(currentContext))")
+            emit("  %\(prefix)_error_check = icmp ne i32 %\(prefix)_has_error, 0")
+            emit("  br i1 %\(prefix)_error_check, label %error_exit, label %\(prefix)_continue")
+            emit("")
+            emit("\(prefix)_continue:")
+        }
 
         // ARO-0004: Add skip label if when clause was present
         if statement.whenCondition != nil {
@@ -1813,8 +1837,19 @@ public final class LLVMCodeGenerator {
         emit("")
 
         emit("cleanup:")
+        // Check if there was an execution error
+        emit("  %has_error = call i32 @aro_context_has_error(ptr \(currentContext))")
+        emit("  %error_occurred = icmp ne i32 %has_error, 0")
         emit("  call void @aro_context_destroy(ptr \(currentContext))")
         emit("  call void @aro_runtime_shutdown(ptr %runtime)")
+        emit("  br i1 %error_occurred, label %exit_error, label %exit_success")
+        emit("")
+
+        emit("exit_error:")
+        emit("  ret i32 1")
+        emit("")
+
+        emit("exit_success:")
         emit("  ret i32 0")
         emit("}")
     }

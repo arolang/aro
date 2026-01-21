@@ -1,0 +1,23 @@
+# Generated: Tue Jan 21 2026
+# Type: console
+# Command: aro run ./Examples/ErrorHandling
+# Note: Uses occurrence-check - example ends with a triggered error
+---
+=== Error Handling Demo ===
+--- Validation Example ---
+Age is:
+25
+Age validation passed!
+--- Authorization Example ---
+User role is:
+admin
+Authorization check passed!
+--- Resource Validation ---
+Resource exists:
+true
+Resource validation passed!
+All validations passed!
+--- Triggered Throw Example ---
+Invalid input value:
+-5
+Runtime error: Runtime Error: Cannot throw the InputError for the negative-value when <condition>.

@@ -1,0 +1,26 @@
+# Generated: Mon Jan 20 2026
+# Type: console
+# Command: aro run ./Examples/FileMetadata
+# Note: Uses occurrence-check - verifies key lines only
+---
+=== File Metadata Demo ===
+--- File Metadata ---
+isFile: true
+isDirectory: false
+name: main.aro
+created: __TIMESTAMP__
+modified: __TIMESTAMP__
+owner: __STRING__
+group: __STRING__
+permissions: __STRING__
+--- Directory Metadata ---
+isDirectory: true
+isFile: false
+name: FileMetadata
+created: __TIMESTAMP__
+modified: __TIMESTAMP__
+owner: __STRING__
+group: __STRING__
+permissions: __STRING__
+All metadata retrieved!
+demo

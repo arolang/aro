@@ -1,0 +1,3 @@
+# Test hints for FileChecks
+# Demonstrates the Exists action for file/directory existence checking
+mode: both

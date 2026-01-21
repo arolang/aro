@@ -1,0 +1,40 @@
+(* FileChecks - Demonstrating the Exists action *)
+
+(Application-Start: File Check Demo) {
+    <Log> "=== File Check Demo ===" to the <console>.
+
+    (* Exists action checks if a file or directory exists *)
+    (* Supports verb: Exists *)
+    (* Supports preposition: for *)
+
+    (* Example 1: Check if a file exists *)
+    <Log> "--- Checking File Existence ---" to the <console>.
+    <Create> the <filepath> with "Examples/FileChecks/main.aro".
+    <Exists> the <file-exists> for the <file: filepath>.
+    <Log> "main.aro exists: " to the <console>.
+    <Log> <file-exists> to the <console>.
+
+    (* Example 2: Check if a directory exists *)
+    <Log> "--- Checking Directory Existence ---" to the <console>.
+    <Create> the <dirpath> with "Examples/FileChecks".
+    <Exists> the <dir-exists> for the <directory: dirpath>.
+    <Log> "FileChecks directory exists: " to the <console>.
+    <Log> <dir-exists> to the <console>.
+
+    (* Example 3: Check for a non-existent file *)
+    <Log> "--- Checking Non-Existent File ---" to the <console>.
+    <Create> the <missing-path> with "nonexistent.txt".
+    <Exists> the <missing-exists> for the <file: missing-path>.
+    <Log> "nonexistent.txt exists: " to the <console>.
+    <Log> <missing-exists> to the <console>.
+
+    (* Example 4: Check for a non-existent directory *)
+    <Log> "--- Checking Non-Existent Directory ---" to the <console>.
+    <Create> the <missing-dir-path> with "nonexistent-dir".
+    <Exists> the <missing-dir-exists> for the <directory: missing-dir-path>.
+    <Log> "nonexistent-dir exists: " to the <console>.
+    <Log> <missing-dir-exists> to the <console>.
+
+    <Log> "All checks complete!" to the <console>.
+    <Return> an <OK: status> for the <demo>.
+}
