@@ -1,0 +1,14 @@
+# Generated: Mon Jan 20 2026
+# Type: console
+# Command: aro run ./Examples/EventListener
+# Note: Uses occurrence-check - ListenResult format may vary
+---
+=== Event Listener Demo ===
+--- Port Listener Setup ---
+Port listener configured for port 8080
+--- Event Listener Setup ---
+Event listener configured for user-created events
+--- File Listener Setup ---
+File listener configured
+All listeners configured!
+demo

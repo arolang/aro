@@ -175,13 +175,15 @@ public final class LLVMCodeGenerator {
         // All action functions
         emit("; Action functions")
         let actions = [
-            "extract", "fetch", "retrieve", "parse", "read", "request",
+            "extract", "fetch", "retrieve", "parse", "read", "request", "receive",
             "compute", "validate", "compare", "transform", "create", "update", "accept",
             "return", "throw", "emit", "send", "log", "store", "write", "publish",
-            "start", "listen", "route", "watch", "stop", "keepalive", "broadcast",
+            "start", "listen", "route", "watch", "stop", "keepalive", "broadcast", "connect",
             "call",
             // Data pipeline actions (ARO-0018)
             "filter", "reduce", "map",
+            // Sort actions
+            "sort", "order", "arrange",
             // System exec action (ARO-0033)
             "exec", "shell",
             // Repository actions
@@ -192,7 +194,9 @@ public final class LLVMCodeGenerator {
             "list", "stat", "exists", "make", "touch", "createdirectory", "mkdir",
             "copy", "move", "rename", "append",
             // Configuration action (synonym for update)
-            "configure"
+            "configure",
+            // Notification actions
+            "notify", "alert", "signal"
         ]
         for action in actions {
             emit("declare ptr @aro_action_\(action)(ptr, ptr, ptr)")

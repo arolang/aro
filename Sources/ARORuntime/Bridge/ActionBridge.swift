@@ -234,6 +234,15 @@ public func aro_action_request(
     return executeAction(verb: "request", contextPtr: contextPtr, resultPtr: resultPtr, objectPtr: objectPtr)
 }
 
+@_cdecl("aro_action_receive")
+public func aro_action_receive(
+    _ contextPtr: UnsafeMutableRawPointer?,
+    _ resultPtr: UnsafeRawPointer?,
+    _ objectPtr: UnsafeRawPointer?
+) -> UnsafeMutableRawPointer? {
+    return executeAction(verb: "receive", contextPtr: contextPtr, resultPtr: resultPtr, objectPtr: objectPtr)
+}
+
 // MARK: - OWN Actions
 
 @_cdecl("aro_action_compute")
@@ -466,6 +475,15 @@ public func aro_action_broadcast(
     return boxResult(broadcastResult)
 }
 
+@_cdecl("aro_action_connect")
+public func aro_action_connect(
+    _ contextPtr: UnsafeMutableRawPointer?,
+    _ resultPtr: UnsafeRawPointer?,
+    _ objectPtr: UnsafeRawPointer?
+) -> UnsafeMutableRawPointer? {
+    return executeAction(verb: "connect", contextPtr: contextPtr, resultPtr: resultPtr, objectPtr: objectPtr)
+}
+
 @_cdecl("aro_action_keepalive")
 public func aro_action_keepalive(
     _ contextPtr: UnsafeMutableRawPointer?,
@@ -534,6 +552,35 @@ public func aro_action_map(
     _ objectPtr: UnsafeRawPointer?
 ) -> UnsafeMutableRawPointer? {
     return executeAction(verb: "map", contextPtr: contextPtr, resultPtr: resultPtr, objectPtr: objectPtr)
+}
+
+// MARK: - Sort Actions
+
+@_cdecl("aro_action_sort")
+public func aro_action_sort(
+    _ contextPtr: UnsafeMutableRawPointer?,
+    _ resultPtr: UnsafeRawPointer?,
+    _ objectPtr: UnsafeRawPointer?
+) -> UnsafeMutableRawPointer? {
+    return executeAction(verb: "sort", contextPtr: contextPtr, resultPtr: resultPtr, objectPtr: objectPtr)
+}
+
+@_cdecl("aro_action_order")
+public func aro_action_order(
+    _ contextPtr: UnsafeMutableRawPointer?,
+    _ resultPtr: UnsafeRawPointer?,
+    _ objectPtr: UnsafeRawPointer?
+) -> UnsafeMutableRawPointer? {
+    return executeAction(verb: "order", contextPtr: contextPtr, resultPtr: resultPtr, objectPtr: objectPtr)
+}
+
+@_cdecl("aro_action_arrange")
+public func aro_action_arrange(
+    _ contextPtr: UnsafeMutableRawPointer?,
+    _ resultPtr: UnsafeRawPointer?,
+    _ objectPtr: UnsafeRawPointer?
+) -> UnsafeMutableRawPointer? {
+    return executeAction(verb: "arrange", contextPtr: contextPtr, resultPtr: resultPtr, objectPtr: objectPtr)
 }
 
 // MARK: - System Exec Action (ARO-0033)
@@ -695,4 +742,33 @@ public func aro_action_split(
     _ objectPtr: UnsafeRawPointer?
 ) -> UnsafeMutableRawPointer? {
     return executeAction(verb: "split", contextPtr: contextPtr, resultPtr: resultPtr, objectPtr: objectPtr)
+}
+
+// MARK: - Notification Actions
+
+@_cdecl("aro_action_notify")
+public func aro_action_notify(
+    _ contextPtr: UnsafeMutableRawPointer?,
+    _ resultPtr: UnsafeRawPointer?,
+    _ objectPtr: UnsafeRawPointer?
+) -> UnsafeMutableRawPointer? {
+    return executeAction(verb: "notify", contextPtr: contextPtr, resultPtr: resultPtr, objectPtr: objectPtr)
+}
+
+@_cdecl("aro_action_alert")
+public func aro_action_alert(
+    _ contextPtr: UnsafeMutableRawPointer?,
+    _ resultPtr: UnsafeRawPointer?,
+    _ objectPtr: UnsafeRawPointer?
+) -> UnsafeMutableRawPointer? {
+    return executeAction(verb: "alert", contextPtr: contextPtr, resultPtr: resultPtr, objectPtr: objectPtr)
+}
+
+@_cdecl("aro_action_signal")
+public func aro_action_signal(
+    _ contextPtr: UnsafeMutableRawPointer?,
+    _ resultPtr: UnsafeRawPointer?,
+    _ objectPtr: UnsafeRawPointer?
+) -> UnsafeMutableRawPointer? {
+    return executeAction(verb: "signal", contextPtr: contextPtr, resultPtr: resultPtr, objectPtr: objectPtr)
 }

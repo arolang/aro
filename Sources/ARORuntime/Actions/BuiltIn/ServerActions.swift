@@ -861,18 +861,31 @@ public struct ConnectAction: ActionImplementation {
             host = object.base
         }
 
-        // Get port from literal or context
-        if let portValue = context.resolveAny("_literal_") as? Int {
+        // Get port from various sources (matching StartAction pattern)
+        // Priority 1: Check _with_ binding (ARO-0042: with clause)
+        if let withValue = context.resolveAny("_with_") {
+            if let withPort = withValue as? Int {
+                port = withPort
+            } else if let withConfig = withValue as? [String: any Sendable],
+                      let configPort = withConfig["port"] as? Int {
+                port = configPort
+            } else {
+                port = 8080 // default if with clause doesn't contain port
+            }
+        }
+        // Priority 2: Check _literal_
+        else if let portValue = context.resolveAny("_literal_") as? Int {
             port = portValue
         } else if let portStr = context.resolveAny("_literal_") as? String, let p = Int(portStr) {
             port = p
-        } else {
-            // Try to find port in specifiers
-            if let portSpec = object.specifiers.dropFirst().first, let p = Int(portSpec) {
-                port = p
-            } else {
-                port = 8080 // default
-            }
+        }
+        // Priority 3: Try to find port in specifiers
+        else if let portSpec = object.specifiers.dropFirst().first, let p = Int(portSpec) {
+            port = p
+        }
+        // Default
+        else {
+            port = 8080
         }
 
         #if !os(Windows)

@@ -1,0 +1,10 @@
+# Generated: Tue Jan 20 18:26:38 2026
+# Type: console
+# Command: aro run ./Examples/NotifyExample
+---
+=== Notification Demo ===
+Sent welcome notification to user
+Sent alert to admin
+Sent signal to system
+All notifications sent!
+startup

@@ -93,6 +93,9 @@ public final class ExecutionEngine: @unchecked Sendable {
         // Wire up domain event handlers (e.g., "UserCreated Handler", "OrderPlaced Handler")
         registerDomainEventHandlers(for: program, baseContext: context)
 
+        // Wire up notification event handlers (e.g., "NotificationSent Handler")
+        registerNotificationEventHandlers(for: program, baseContext: context)
+
         // Wire up file event handlers (e.g., "Handle File Modified: File Event Handler")
         registerFileEventHandlers(for: program, baseContext: context)
 
@@ -315,6 +318,72 @@ public final class ExecutionEngine: @unchecked Sendable {
         for (key, value) in event.payload {
             handlerContext.bind("event:\(key)", value: value)
         }
+
+        // Copy services from base context
+        services.registerAll(in: handlerContext)
+
+        // Execute the handler
+        let executor = FeatureSetExecutor(
+            actionRegistry: actionRegistry,
+            eventBus: eventBus,
+            globalSymbols: globalSymbols
+        )
+
+        do {
+            _ = try await executor.execute(analyzedFS, context: handlerContext)
+        } catch {
+            eventBus.publish(ErrorOccurredEvent(
+                error: String(describing: error),
+                context: analyzedFS.featureSet.name,
+                recoverable: true
+            ))
+        }
+    }
+
+    /// Register notification event handlers for feature sets with "NotificationSent Handler" business activity
+    private func registerNotificationEventHandlers(for program: AnalyzedProgram, baseContext: RuntimeContext) {
+        // Find all feature sets with "NotificationSent Handler" business activity
+        let notificationHandlers = program.featureSets.filter { analyzedFS in
+            analyzedFS.featureSet.businessActivity.contains("NotificationSent Handler")
+        }
+
+        for analyzedFS in notificationHandlers {
+            // Subscribe to NotificationSentEvent
+            eventBus.subscribe(to: NotificationSentEvent.self) { [weak self] event in
+                guard let self = self else { return }
+                await self.executeNotificationEventHandler(
+                    analyzedFS,
+                    program: program,
+                    baseContext: baseContext,
+                    event: event
+                )
+            }
+        }
+    }
+
+    /// Execute a notification event handler feature set
+    private func executeNotificationEventHandler(
+        _ analyzedFS: AnalyzedFeatureSet,
+        program: AnalyzedProgram,
+        baseContext: RuntimeContext,
+        event: NotificationSentEvent
+    ) async {
+        // Create child context for this event handler with its business activity
+        let handlerContext = RuntimeContext(
+            featureSetName: analyzedFS.featureSet.name,
+            businessActivity: analyzedFS.featureSet.businessActivity,
+            eventBus: eventBus,
+            parent: baseContext
+        )
+
+        // Bind event properties to context
+        // e.g., <Extract> the <message> from the <event: message>
+        handlerContext.bind("event", value: [
+            "message": event.message,
+            "target": event.target
+        ] as [String: any Sendable])
+        handlerContext.bind("event:message", value: event.message)
+        handlerContext.bind("event:target", value: event.target)
 
         // Copy services from base context
         services.registerAll(in: handlerContext)
