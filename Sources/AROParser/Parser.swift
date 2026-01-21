@@ -345,19 +345,39 @@ public final class Parser {
 
         let endToken = try expect(.dot, message: "'.'")
 
+        // Build grouped types from parsed fields
+        let valueSource: ValueSource
+        if let resExpr = resultExpression {
+            valueSource = .sinkExpression(resExpr)
+        } else if let expr = expression {
+            valueSource = .expression(expr)
+        } else if let literal = literalValue {
+            valueSource = .literal(literal)
+        } else {
+            valueSource = .none
+        }
+
+        let queryMods = QueryModifiers(
+            whereClause: whereClause,
+            aggregation: aggregation,
+            byClause: byClause
+        )
+
+        let rangeMods = RangeModifiers(
+            toClause: toExpression,
+            withClause: withExpression
+        )
+
+        let guard_ = StatementGuard(condition: whenCondition)
+
         return AROStatement(
             action: action,
             result: result,
             object: ObjectClause(preposition: prep, noun: objectNoun),
-            literalValue: literalValue,
-            expression: expression,
-            aggregation: aggregation,
-            whereClause: whereClause,
-            byClause: byClause,
-            toClause: toExpression,
-            withClause: withExpression,
-            whenCondition: whenCondition,
-            resultExpression: resultExpression,
+            valueSource: valueSource,
+            queryModifiers: queryMods,
+            rangeModifiers: rangeMods,
+            statementGuard: guard_,
             span: startToken.span.merged(with: endToken.span)
         )
     }
