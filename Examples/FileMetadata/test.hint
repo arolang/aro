@@ -1,0 +1,5 @@
+# Test hints for FileMetadata
+# Demonstrates the Stat action for file/directory metadata retrieval
+mode: both
+# Use occurrence-check since dates/sizes change
+occurrence-check: true
