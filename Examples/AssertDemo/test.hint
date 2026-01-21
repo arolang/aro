@@ -1,0 +1,4 @@
+# Test hints for AssertDemo
+# Demonstrates Given/When/Then testing pattern with string operations
+# Note: Test feature sets are stripped from compiled binaries per ARO-0015
+mode: interpreter

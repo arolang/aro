@@ -1,0 +1,6 @@
+# AssertDemo expected output
+# Demonstrates Given/When/Then testing pattern
+---
+=== String Utils with Tests ===
+Run 'aro test ./Examples/AssertDemo' to execute tests
+startup
