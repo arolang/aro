@@ -11,7 +11,9 @@ import AROParser
 /// The ExecutionEngine interprets and executes analyzed ARO programs.
 /// It coordinates feature set execution, manages the global symbol registry,
 /// and handles cross-feature-set dependencies.
-public final class ExecutionEngine: @unchecked Sendable {
+///
+/// Converted to actor for Swift 6.2 concurrency safety (Issue #2).
+public actor ExecutionEngine {
     // MARK: - Properties
 
     /// The action registry for looking up action implementations
@@ -25,9 +27,6 @@ public final class ExecutionEngine: @unchecked Sendable {
 
     /// Service registry for dependency injection
     private let services: ServiceRegistry
-
-    /// Lock for thread-safe access
-    private let lock = NSLock()
 
     // MARK: - Initialization
 
@@ -49,8 +48,8 @@ public final class ExecutionEngine: @unchecked Sendable {
 
     /// Register a service for dependency injection
     /// - Parameter service: The service instance
-    public func register<S: Sendable>(service: S) {
-        services.register(service)
+    public func register<S: Sendable>(service: S) async {
+        await services.register(service)
     }
 
     // MARK: - Program Execution
@@ -83,7 +82,7 @@ public final class ExecutionEngine: @unchecked Sendable {
         )
 
         // Register services in context
-        services.registerAll(in: context)
+        await services.registerAll(in: context)
 
         // Wire up event handlers for Socket Event Handler feature sets
         #if !os(Windows)
@@ -220,7 +219,7 @@ public final class ExecutionEngine: @unchecked Sendable {
         }
 
         // Copy services from base context
-        services.registerAll(in: handlerContext)
+        await services.registerAll(in: handlerContext)
 
         // Execute the handler
         let executor = FeatureSetExecutor(
@@ -320,7 +319,7 @@ public final class ExecutionEngine: @unchecked Sendable {
         }
 
         // Copy services from base context
-        services.registerAll(in: handlerContext)
+        await services.registerAll(in: handlerContext)
 
         // Execute the handler
         let executor = FeatureSetExecutor(
@@ -386,7 +385,7 @@ public final class ExecutionEngine: @unchecked Sendable {
         handlerContext.bind("event:target", value: event.target)
 
         // Copy services from base context
-        services.registerAll(in: handlerContext)
+        await services.registerAll(in: handlerContext)
 
         // Execute the handler
         let executor = FeatureSetExecutor(
@@ -482,7 +481,7 @@ public final class ExecutionEngine: @unchecked Sendable {
         }
 
         // Copy services from base context
-        services.registerAll(in: handlerContext)
+        await services.registerAll(in: handlerContext)
 
         // Execute the handler
         let executor = FeatureSetExecutor(
@@ -676,7 +675,7 @@ public final class ExecutionEngine: @unchecked Sendable {
         }
 
         // Copy services from base context
-        services.registerAll(in: observerContext)
+        await services.registerAll(in: observerContext)
 
         // Execute the observer
         let executor = FeatureSetExecutor(
@@ -740,7 +739,7 @@ public final class ExecutionEngine: @unchecked Sendable {
         }
 
         // Copy services from base context
-        services.registerAll(in: handlerContext)
+        await services.registerAll(in: handlerContext)
 
         // Execute the observer
         let executor = FeatureSetExecutor(
@@ -789,17 +788,15 @@ public final class ExecutionEngine: @unchecked Sendable {
 
 // MARK: - Global Symbol Storage
 
-/// Thread-safe storage for published symbols with business activity enforcement
-public final class GlobalSymbolStorage: @unchecked Sendable {
-    private let lock = NSLock()
+/// Thread-safe storage for published symbols with business activity enforcement.
+/// Converted to actor for Swift 6.2 concurrency safety (Issue #2).
+public actor GlobalSymbolStorage {
     private var symbols: [String: (value: any Sendable, featureSet: String, businessActivity: String)] = [:]
 
     public init() {}
 
     /// Store a published symbol with its business activity
     public func publish(name: String, value: any Sendable, fromFeatureSet: String, businessActivity: String) {
-        lock.lock()
-        defer { lock.unlock() }
         symbols[name] = (value, fromFeatureSet, businessActivity)
     }
 
@@ -809,9 +806,6 @@ public final class GlobalSymbolStorage: @unchecked Sendable {
     ///   - forBusinessActivity: The business activity of the requesting feature set
     /// - Returns: The value if found and accessible, nil otherwise
     public func resolve<T: Sendable>(_ name: String, forBusinessActivity: String) -> T? {
-        lock.lock()
-        defer { lock.unlock() }
-
         guard let entry = symbols[name] else { return nil }
 
         // Business activity validation: must match or be empty (framework/external)
@@ -825,9 +819,6 @@ public final class GlobalSymbolStorage: @unchecked Sendable {
 
     /// Resolve a published symbol as any Sendable (validates business activity)
     public func resolveAny(_ name: String, forBusinessActivity: String) -> (any Sendable)? {
-        lock.lock()
-        defer { lock.unlock() }
-
         guard let entry = symbols[name] else { return nil }
 
         // Business activity validation: must match or be empty (framework/external)
@@ -841,9 +832,6 @@ public final class GlobalSymbolStorage: @unchecked Sendable {
 
     /// Check if a symbol is published and accessible
     public func isPublished(_ name: String, forBusinessActivity: String) -> Bool {
-        lock.lock()
-        defer { lock.unlock() }
-
         guard let entry = symbols[name] else { return false }
 
         // Business activity validation
@@ -857,23 +845,16 @@ public final class GlobalSymbolStorage: @unchecked Sendable {
 
     /// Get the feature set that published a symbol
     public func sourceFeatureSet(for name: String) -> String? {
-        lock.lock()
-        defer { lock.unlock() }
         return symbols[name]?.featureSet
     }
 
     /// Get the business activity that a symbol belongs to
     public func businessActivity(for name: String) -> String? {
-        lock.lock()
-        defer { lock.unlock() }
         return symbols[name]?.businessActivity
     }
 
     /// Check if accessing a symbol would be denied due to business activity mismatch
     public func isAccessDenied(_ name: String, forBusinessActivity: String) -> Bool {
-        lock.lock()
-        defer { lock.unlock() }
-
         guard let entry = symbols[name] else { return false }
 
         // Access is denied if both have non-empty business activities that don't match
@@ -885,32 +866,25 @@ public final class GlobalSymbolStorage: @unchecked Sendable {
 
 // MARK: - Service Registry
 
-/// Registry for dependency injection
-public final class ServiceRegistry: @unchecked Sendable {
-    private let lock = NSLock()
+/// Registry for dependency injection.
+/// Converted to actor for Swift 6.2 concurrency safety (Issue #2).
+public actor ServiceRegistry {
     private var services: [ObjectIdentifier: any Sendable] = [:]
 
     public init() {}
 
     /// Register a service
     public func register<S: Sendable>(_ service: S) {
-        lock.lock()
-        defer { lock.unlock() }
         services[ObjectIdentifier(S.self)] = service
     }
 
     /// Resolve a service
     public func resolve<S>(_ type: S.Type) -> S? {
-        lock.lock()
-        defer { lock.unlock() }
-        return services[ObjectIdentifier(type)] as? S
+        services[ObjectIdentifier(type)] as? S
     }
 
     /// Register all services in a context
     public func registerAll(in context: ExecutionContext) {
-        lock.lock()
-        defer { lock.unlock() }
-
         for (typeId, service) in services {
             // Preserve type ID to avoid type erasure
             context.registerWithTypeId(typeId, service: service)

@@ -216,9 +216,9 @@ public final class ActionRunner: @unchecked Sendable {
     /// Check if a verb has a registered action
     /// - Parameter verb: The verb to check (will be canonicalized)
     /// - Returns: true if an action is registered for this verb
-    public func hasAction(for verb: String) -> Bool {
+    public func hasAction(for verb: String) async -> Bool {
         let canonicalVerb = Self.canonicalizeVerb(verb)
-        return registry.isRegistered(canonicalVerb)
+        return await registry.isRegistered(canonicalVerb)
     }
 
     /// Get the canonical verb for a given verb

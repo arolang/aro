@@ -75,8 +75,8 @@ public final class FeatureSetExecutor: @unchecked Sendable {
         // Bind external dependencies from global symbols (with business activity validation)
         for dependency in analyzedFeatureSet.dependencies {
             // Check if access would be denied due to business activity mismatch
-            if globalSymbols.isAccessDenied(dependency, forBusinessActivity: context.businessActivity) {
-                let sourceActivity = globalSymbols.businessActivity(for: dependency) ?? "unknown"
+            if await globalSymbols.isAccessDenied(dependency, forBusinessActivity: context.businessActivity) {
+                let sourceActivity = await globalSymbols.businessActivity(for: dependency) ?? "unknown"
                 throw ActionError.runtimeError(
                     "Variable '\(dependency)' is not accessible. " +
                     "Published variables are only visible within the same business activity. " +
@@ -84,7 +84,7 @@ public final class FeatureSetExecutor: @unchecked Sendable {
                 )
             }
 
-            if let value = globalSymbols.resolveAny(dependency, forBusinessActivity: context.businessActivity) {
+            if let value = await globalSymbols.resolveAny(dependency, forBusinessActivity: context.businessActivity) {
                 context.bind(dependency, value: value)
             }
         }
@@ -263,7 +263,7 @@ public final class FeatureSetExecutor: @unchecked Sendable {
                     context.bind(resultDescriptor.base, value: expressionValue)
 
                     // Still need to get the action for side effects (like Return, Log, etc.)
-                    if let action = actionRegistry.action(for: verb) {
+                    if let action = await actionRegistry.action(for: verb) {
                         // For response actions, execute them with the expression result
                         if statement.action.semanticRole == .response {
                             _ = try await action.execute(
@@ -346,7 +346,7 @@ public final class FeatureSetExecutor: @unchecked Sendable {
         }
 
         // Get action implementation
-        guard let action = actionRegistry.action(for: verb) else {
+        guard let action = await actionRegistry.action(for: verb) else {
             throw ActionError.unknownAction(verb)
         }
 
@@ -438,7 +438,7 @@ public final class FeatureSetExecutor: @unchecked Sendable {
         }
 
         // Publish to global symbols with business activity
-        globalSymbols.publish(
+        await globalSymbols.publish(
             name: statement.externalName,
             value: value,
             fromFeatureSet: context.featureSetName,
@@ -644,7 +644,7 @@ public final class FeatureSetExecutor: @unchecked Sendable {
             }
         case .featureSet(let name):
             // Cross-feature-set dependency - resolve from global symbols (with business activity validation)
-            if let value = globalSymbols.resolveAny(statement.variableName, forBusinessActivity: context.businessActivity) {
+            if let value = await globalSymbols.resolveAny(statement.variableName, forBusinessActivity: context.businessActivity) {
                 context.bind(statement.variableName, value: value)
             }
             // If not found, the dependency might be provided later
@@ -874,8 +874,8 @@ public final class Runtime: @unchecked Sendable {
     // MARK: - Service Registration
 
     /// Register a service for dependency injection
-    public func register<S: Sendable>(service: S) {
-        engine.register(service: service)
+    public func register<S: Sendable>(service: S) async {
+        await engine.register(service: service)
     }
 
     // MARK: - Compiled Handler Registration

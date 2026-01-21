@@ -56,36 +56,34 @@ public final class Application: @unchecked Sendable {
         self.openAPISpec = openAPISpec
         self.routeRegistry = openAPISpec.map { OpenAPIRouteRegistry(spec: $0) }
         self.runtime = Runtime()
-
-        // Register default services
-        registerDefaultServices()
+        // Services are registered when run() is called (async context)
     }
 
     /// Register default services for the runtime
-    private func registerDefaultServices() {
+    private func registerDefaultServices() async {
         // Register repository storage service for persistent in-memory storage
-        runtime.register(service: InMemoryRepositoryStorage.shared as RepositoryStorageService)
+        await runtime.register(service: InMemoryRepositoryStorage.shared as RepositoryStorageService)
 
         #if !os(Windows)
         // Register file system service for file operations and monitoring
         let fileSystemService = AROFileSystemService(eventBus: .shared)
-        runtime.register(service: fileSystemService as FileSystemService)
-        runtime.register(service: fileSystemService as FileMonitorService)
+        await runtime.register(service: fileSystemService as FileSystemService)
+        await runtime.register(service: fileSystemService as FileMonitorService)
 
         // Register socket server service for TCP socket operations
         let socketServer = AROSocketServer(eventBus: .shared)
-        runtime.register(service: socketServer as SocketServerService)
+        await runtime.register(service: socketServer as SocketServerService)
 
         // Register HTTP server service for web APIs
         let server = AROHTTPServer(eventBus: .shared)
         self.httpServer = server
-        runtime.register(service: server as HTTPServerService)
+        await runtime.register(service: server as HTTPServerService)
         #endif
 
         // Register OpenAPI spec service if contract exists
         if let spec = openAPISpec {
             let specService = OpenAPISpecService(spec: spec)
-            runtime.register(service: specService)
+            await runtime.register(service: specService)
         }
     }
 
@@ -125,8 +123,8 @@ public final class Application: @unchecked Sendable {
     // MARK: - Service Registration
 
     /// Register a service for dependency injection
-    public func register<S: Sendable>(service: S) {
-        runtime.register(service: service)
+    public func register<S: Sendable>(service: S) async {
+        await runtime.register(service: service)
     }
 
     // MARK: - Execution
@@ -135,6 +133,9 @@ public final class Application: @unchecked Sendable {
     /// - Returns: The response from the entry point
     @discardableResult
     public func run() async throws -> Response {
+        // Register services (deferred from init to async context)
+        await registerDefaultServices()
+
         // Merge all programs
         guard let mainProgram = mergedProgram() else {
             throw ApplicationError.noPrograms
@@ -150,6 +151,9 @@ public final class Application: @unchecked Sendable {
 
     /// Run and keep the application alive (for servers)
     public func runForever() async throws {
+        // Register services (deferred from init to async context)
+        await registerDefaultServices()
+
         guard let mainProgram = mergedProgram() else {
             throw ApplicationError.noPrograms
         }
