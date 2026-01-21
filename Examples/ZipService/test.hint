@@ -1,9 +1,9 @@
 # Test hints for ZipService
-# Package plugin compilation requires Swift compiler - available on CI via swift:6.2-jammy
-# Binary mode not yet supported (plugin loading differs)
+# Package plugin compilation requires Swift compiler at runtime
 # ZipPlugin has platforms: [.macOS(.v13)] which blocks Linux compilation
 skip-on-linux: ZipPlugin Package.swift has macOS-only platform restriction
-mode: interpreter
+mode: both
 timeout: 120
 # Use occurrence-check for order-independent matching (dictionary output order varies)
+# Also needed for binary mode compatibility (plugin loading messages differ)
 occurrence-check: true
