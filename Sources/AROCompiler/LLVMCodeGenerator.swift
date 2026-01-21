@@ -178,7 +178,7 @@ public final class LLVMCodeGenerator {
             "extract", "fetch", "retrieve", "parse", "read", "request", "receive",
             "compute", "validate", "compare", "transform", "create", "update", "accept",
             "return", "throw", "emit", "send", "log", "store", "write", "publish",
-            "start", "listen", "route", "watch", "stop", "keepalive", "broadcast",
+            "start", "listen", "route", "watch", "stop", "keepalive", "broadcast", "connect",
             "call",
             // Data pipeline actions (ARO-0018)
             "filter", "reduce", "map",
