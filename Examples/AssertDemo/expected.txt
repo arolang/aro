@@ -1,0 +1,14 @@
+# AssertDemo expected test output
+# Verifies that all 6 Given/When/Then tests pass
+---
+=== ARO Test Results ===
+PASS  length-of-hello
+PASS  length-of-blank
+PASS  uppercase-simple
+PASS  uppercase-mixed
+PASS  lowercase-simple
+PASS  lowercase-mixed
+Total:  6
+Passed: 6
+Failed: 0
+All tests passed!

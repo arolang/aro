@@ -1,0 +1,60 @@
+(* AssertDemo - Demonstrating Given/When/Then/Assert testing *)
+
+(Application-Start: String Utils Demo) {
+    <Log> "=== String Utils with Tests ===" to the <console>.
+    <Log> "Run 'aro test ./Examples/AssertDemo' to execute tests" to the <console>.
+    <Return> an <OK: status> for the <startup>.
+}
+
+(* Production feature sets *)
+(get-length: String Utils) {
+    <Compute> the <len: length> from <text>.
+    <Return> an <OK: status> with <len>.
+}
+
+(make-uppercase: String Utils) {
+    <Compute> the <upper: uppercase> from <text>.
+    <Return> an <OK: status> with <upper>.
+}
+
+(make-lowercase: String Utils) {
+    <Compute> the <lower: lowercase> from <text>.
+    <Return> an <OK: status> with <lower>.
+}
+
+(* Test feature sets - identified by "Test" suffix *)
+(length-of-hello: String Utils Test) {
+    <Given> the <text> with "hello".
+    <When> the <len> from the <get-length>.
+    <Then> the <len> with 5.
+}
+
+(length-of-blank: String Utils Test) {
+    <Given> the <text> with "".
+    <When> the <len> from the <get-length>.
+    <Then> the <len> with 0.
+}
+
+(uppercase-simple: String Utils Test) {
+    <Given> the <text> with "hello".
+    <When> the <upper> from the <make-uppercase>.
+    <Then> the <upper> with "HELLO".
+}
+
+(uppercase-mixed: String Utils Test) {
+    <Given> the <text> with "Hello World".
+    <When> the <upper> from the <make-uppercase>.
+    <Then> the <upper> with "HELLO WORLD".
+}
+
+(lowercase-simple: String Utils Test) {
+    <Given> the <text> with "HELLO".
+    <When> the <lower> from the <make-lowercase>.
+    <Then> the <lower> with "hello".
+}
+
+(lowercase-mixed: String Utils Test) {
+    <Given> the <text> with "Hello World".
+    <When> the <lower> from the <make-lowercase>.
+    <Then> the <lower> with "hello world".
+}

@@ -199,10 +199,12 @@ public final class SemanticAnalyzer {
     /// Check if action verb is allowed to rebind variables (exempt from immutability)
     /// Accept and Update actions need to rebind for state transitions
     /// Merge actions also rebind the target variable with the merged result
+    /// Then and Assert actions READ variables in the result position (don't actually bind)
     private func isRebindingAllowed(_ verb: String) -> Bool {
         let rebindingVerbs: Set<String> = [
             "accept", "update", "modify", "change", "set",
-            "merge", "combine", "join", "concat"
+            "merge", "combine", "join", "concat",
+            "then", "assert"  // Test actions: read variable in result position
         ]
         return rebindingVerbs.contains(verb.lowercased())
     }
