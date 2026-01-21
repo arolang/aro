@@ -1,0 +1,4 @@
+# Test hints for ReceiveData
+# Demonstrates the Receive action with domain events
+mode: both
+occurrence-check: true

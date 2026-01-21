@@ -175,7 +175,7 @@ public final class LLVMCodeGenerator {
         // All action functions
         emit("; Action functions")
         let actions = [
-            "extract", "fetch", "retrieve", "parse", "read", "request",
+            "extract", "fetch", "retrieve", "parse", "read", "request", "receive",
             "compute", "validate", "compare", "transform", "create", "update", "accept",
             "return", "throw", "emit", "send", "log", "store", "write", "publish",
             "start", "listen", "route", "watch", "stop", "keepalive", "broadcast",

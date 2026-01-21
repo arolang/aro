@@ -1,0 +1,6 @@
+=== Receive Data Demo ===
+Emitting MessageReceived event...
+Handler triggered!
+Received payload:
+Hello from event system!
+Event processing complete!
