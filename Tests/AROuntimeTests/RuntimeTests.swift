@@ -41,50 +41,51 @@ struct ActionRoleTests {
 struct ActionRegistryTests {
 
     @Test("Shared registry exists")
-    func testSharedRegistryExists() {
+    func testSharedRegistryExists() async {
         let registry = ActionRegistry.shared
-        #expect(registry.registeredVerbs.isEmpty == false)
+        let verbs = await registry.registeredVerbs
+        #expect(verbs.isEmpty == false)
     }
 
     @Test("Built-in verbs are registered")
-    func testBuiltInVerbs() {
+    func testBuiltInVerbs() async {
         let registry = ActionRegistry.shared
 
-        #expect(registry.isRegistered("extract"))
-        #expect(registry.isRegistered("compute"))
-        #expect(registry.isRegistered("return"))
-        #expect(registry.isRegistered("publish"))
+        #expect(await registry.isRegistered("extract"))
+        #expect(await registry.isRegistered("compute"))
+        #expect(await registry.isRegistered("return"))
+        #expect(await registry.isRegistered("publish"))
     }
 
     @Test("Action lookup returns implementation")
-    func testActionLookup() {
+    func testActionLookup() async {
         let registry = ActionRegistry.shared
 
-        let extractAction = registry.action(for: "extract")
+        let extractAction = await registry.action(for: "extract")
         #expect(extractAction != nil)
     }
 
     @Test("Unknown action returns nil")
-    func testUnknownAction() {
+    func testUnknownAction() async {
         let registry = ActionRegistry.shared
 
-        let unknown = registry.action(for: "nonexistent-action")
+        let unknown = await registry.action(for: "nonexistent-action")
         #expect(unknown == nil)
     }
 
     @Test("Case insensitive lookup")
-    func testCaseInsensitiveLookup() {
+    func testCaseInsensitiveLookup() async {
         let registry = ActionRegistry.shared
 
-        #expect(registry.isRegistered("EXTRACT"))
-        #expect(registry.isRegistered("Extract"))
-        #expect(registry.isRegistered("extract"))
+        #expect(await registry.isRegistered("EXTRACT"))
+        #expect(await registry.isRegistered("Extract"))
+        #expect(await registry.isRegistered("extract"))
     }
 
     @Test("Registered verbs list")
-    func testRegisteredVerbsList() {
+    func testRegisteredVerbsList() async {
         let registry = ActionRegistry.shared
-        let verbs = registry.registeredVerbs
+        let verbs = await registry.registeredVerbs
 
         #expect(verbs.contains("extract"))
         #expect(verbs.contains("compute"))
@@ -92,9 +93,9 @@ struct ActionRegistryTests {
     }
 
     @Test("Actions grouped by role")
-    func testActionsByRole() {
+    func testActionsByRole() async {
         let registry = ActionRegistry.shared
-        let byRole = registry.actionsByRole
+        let byRole = await registry.actionsByRole
 
         #expect(byRole[.request]?.isEmpty == false)
         #expect(byRole[.own]?.isEmpty == false)

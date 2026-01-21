@@ -263,7 +263,7 @@ public final class FeatureSetExecutor: @unchecked Sendable {
                     context.bind(resultDescriptor.base, value: expressionValue)
 
                     // Still need to get the action for side effects (like Return, Log, etc.)
-                    if let action = actionRegistry.action(for: verb) {
+                    if let action = await actionRegistry.action(for: verb) {
                         // For response actions, execute them with the expression result
                         if statement.action.semanticRole == .response {
                             _ = try await action.execute(
@@ -346,7 +346,7 @@ public final class FeatureSetExecutor: @unchecked Sendable {
         }
 
         // Get action implementation
-        guard let action = actionRegistry.action(for: verb) else {
+        guard let action = await actionRegistry.action(for: verb) else {
             throw ActionError.unknownAction(verb)
         }
 
