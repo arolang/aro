@@ -388,11 +388,11 @@ public struct AROStatement: Statement { ... } // Sendable via stored properties
 
 ### The Expression Challenge
 
-Expressions use `any Expression` which is existential, not directly `Sendable`. The workaround:
+Expressions use `any Expression` which is existential, not directly `Sendable`. The workaround uses wrapper types:
 
 ```swift
-public struct AROStatement: Statement {
-    public let expression: (any Expression)?
+public enum ValueSource: Sendable {
+    case expression(any Expression)  // existential wrapped in enum
     // ...
 }
 ```
@@ -452,28 +452,64 @@ The underline is computed from `span.start.column` to `span.end.column`.
 
 ## AROStatement Structure
 
-The core statement type has grown complex to accommodate language features:
+The core statement type uses grouped clause types to organize its optional components:
 
 ```swift
-// AST.swift:98-151
+// AST.swift:98-185
 public struct AROStatement: Statement {
+    // Required fields
     public let action: Action
     public let result: QualifiedNoun
     public let object: ObjectClause
-    public let literalValue: LiteralValue?      // with "string"
-    public let expression: (any Expression)?     // computed value
-    public let aggregation: AggregationClause?   // sum(<field>)
-    public let whereClause: WhereClause?         // where <field> == value
-    public let byClause: ByClause?               // by /delimiter/
-    public let toClause: (any Expression)?       // date ranges
-    public let withClause: (any Expression)?     // set operations
-    public let whenCondition: (any Expression)?  // guards
-    public let resultExpression: (any Expression)? // sink syntax
     public let span: SourceSpan
+
+    // Grouped optional clauses
+    public let valueSource: ValueSource           // literal, expression, or sink
+    public let queryModifiers: QueryModifiers     // where, aggregation, by
+    public let rangeModifiers: RangeModifiers     // to, with
+    public let statementGuard: StatementGuard     // when condition
 }
 ```
 
-This is a design smell—the struct has 13 optional fields. A cleaner design might use an enum of clause types. But the current structure is simpler to parse and execute.
+### Value Source
+
+The `ValueSource` enum represents mutually exclusive value origins:
+
+```swift
+public enum ValueSource: Sendable {
+    case none                           // standard syntax
+    case literal(LiteralValue)          // with "string"
+    case expression(any Expression)     // from <x> * <y>
+    case sinkExpression(any Expression) // <Log> "msg" to <console>
+}
+```
+
+### Query Modifiers
+
+Groups clauses used for filtering and aggregating collections:
+
+```swift
+public struct QueryModifiers: Sendable {
+    public let whereClause: WhereClause?       // where <field> is "value"
+    public let aggregation: AggregationClause? // with sum(<field>)
+    public let byClause: ByClause?             // by /pattern/
+}
+```
+
+### Range and Guard
+
+```swift
+public struct RangeModifiers: Sendable {
+    public let toClause: (any Expression)?     // from <start> to <end>
+    public let withClause: (any Expression)?   // from <a> with <b>
+}
+
+public struct StatementGuard: Sendable {
+    public let condition: (any Expression)?    // when <condition>
+}
+```
+
+This grouped design improves type safety and makes the semantic relationships between clauses explicit.
 
 ---
 

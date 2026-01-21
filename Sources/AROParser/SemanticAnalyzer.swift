@@ -260,7 +260,7 @@ public final class SemanticAnalyzer {
         }
 
         // ARO-0002: Extract variables from expression if present
-        if let expr = statement.expression {
+        if let expr = statement.valueSource.asExpression {
             let exprVars = extractVariables(from: expr)
             for varName in exprVars {
                 if !definedSymbols.contains(varName) && !isKnownExternal(varName) {
@@ -271,7 +271,7 @@ public final class SemanticAnalyzer {
         }
 
         // ARO-0004: Extract variables from when condition if present
-        if let whenExpr = statement.whenCondition {
+        if let whenExpr = statement.statementGuard.condition {
             let condVars = extractVariables(from: whenExpr)
             for varName in condVars {
                 if !definedSymbols.contains(varName) && !isKnownExternal(varName) {
@@ -282,7 +282,7 @@ public final class SemanticAnalyzer {
         }
 
         // ARO-0018: Extract variables from where clause if present
-        if let whereClause = statement.whereClause {
+        if let whereClause = statement.queryModifiers.whereClause {
             let whereVars = extractVariables(from: whereClause.value)
             for varName in whereVars {
                 if !definedSymbols.contains(varName) && !isKnownExternal(varName) {
@@ -307,7 +307,7 @@ public final class SemanticAnalyzer {
             let dataType: DataType
             if let annotatedType = statement.result.dataType {
                 dataType = annotatedType
-            } else if let expr = statement.expression {
+            } else if let expr = statement.valueSource.asExpression {
                 dataType = inferExpressionType(expr)
             } else {
                 dataType = .unknown
@@ -352,7 +352,7 @@ public final class SemanticAnalyzer {
             let dataType: DataType
             if let annotatedType = statement.result.dataType {
                 dataType = annotatedType
-            } else if let expr = statement.expression {
+            } else if let expr = statement.valueSource.asExpression {
                 dataType = inferExpressionType(expr)
             } else {
                 dataType = .unknown

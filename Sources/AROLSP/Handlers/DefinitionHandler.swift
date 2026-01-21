@@ -48,7 +48,7 @@ public struct DefinitionHandler: Sendable {
                     }
 
                     // Check expression for variable references
-                    if let expr = aro.expression {
+                    if let expr = aro.valueSource.asExpression {
                         if let location = findDefinitionInExpression(expr, position: aroPosition, symbolTable: analyzed.symbolTable, uri: uri) {
                             return location
                         }
