@@ -360,8 +360,12 @@ public final class FeatureSetExecutor: @unchecked Sendable {
 
             // Bind result to context (unless it's a response action that already set the response)
             if statement.action.semanticRole != .response {
-                // Check if this is a rebinding action (accept, update, delete, etc.)
-                let rebindingVerbs: Set<String> = ["accept", "update", "modify", "change", "set", "configure", "delete", "remove", "destroy", "clear"]
+                // Check if this is a rebinding action (accept, update, delete, merge, etc.)
+                let rebindingVerbs: Set<String> = [
+                    "accept", "update", "modify", "change", "set", "configure",
+                    "delete", "remove", "destroy", "clear",
+                    "merge", "combine", "join", "concat"
+                ]
                 let allowRebind = rebindingVerbs.contains(verb.lowercased())
                 context.bind(resultDescriptor.base, value: result, allowRebind: allowRebind)
             }
