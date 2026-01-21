@@ -118,15 +118,15 @@ public actor StatementFuture {
 
 // MARK: - Statement Scheduler
 
-/// Schedules and executes statements with data-flow driven parallelism
-public final class StatementScheduler: @unchecked Sendable {
+/// Schedules and executes statements with data-flow driven parallelism.
+/// Converted to actor for Swift 6.2 concurrency safety (Issue #2).
+public actor StatementScheduler {
 
     // MARK: - Properties
 
     private let dependencyGraph: DependencyGraph
     private var futures: [Int: StatementFuture] = [:]
     private var completedIndices: Set<Int> = []
-    private let lock = NSLock()
 
     /// Callback type for executing a statement
     public typealias StatementExecutor = @Sendable (Statement, ExecutionContext) async throws -> any Sendable
@@ -137,42 +137,30 @@ public final class StatementScheduler: @unchecked Sendable {
         self.dependencyGraph = DependencyGraph()
     }
 
-    // MARK: - Sync Helpers (for async contexts)
+    // MARK: - State Helpers
 
     private func resetState() {
-        lock.lock()
         futures.removeAll()
         completedIndices.removeAll()
-        lock.unlock()
     }
 
     private func getFuture(at index: Int) -> StatementFuture? {
-        lock.lock()
-        defer { lock.unlock() }
         return futures[index]
     }
 
     private func setFuture(_ future: StatementFuture, at index: Int) {
-        lock.lock()
         futures[index] = future
-        lock.unlock()
     }
 
     private func getCompletedIndices() -> Set<Int> {
-        lock.lock()
-        defer { lock.unlock() }
         return completedIndices
     }
 
     private func addCompletedIndex(_ index: Int) {
-        lock.lock()
         completedIndices.insert(index)
-        lock.unlock()
     }
 
     private func hasFuture(at index: Int) -> Bool {
-        lock.lock()
-        defer { lock.unlock() }
         return futures[index] != nil
     }
 
