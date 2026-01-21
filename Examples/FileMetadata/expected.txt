@@ -8,9 +8,19 @@
 isFile: true
 isDirectory: false
 name: main.aro
+created: __TIMESTAMP__
+modified: __TIMESTAMP__
+owner: __STRING__
+group: __STRING__
+permissions: __STRING__
 --- Directory Metadata ---
 isDirectory: true
 isFile: false
 name: FileMetadata
+created: __TIMESTAMP__
+modified: __TIMESTAMP__
+owner: __STRING__
+group: __STRING__
+permissions: __STRING__
 All metadata retrieved!
 demo
