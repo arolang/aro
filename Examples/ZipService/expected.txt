@@ -3,10 +3,9 @@
 # Command: aro run ./Examples/ZipService
 # Timeout: 120s
 # Note: Uses occurrence-check for order-independent matching
+# Binary loads precompiled plugin, interpreter builds at runtime
 ---
-Building package plugin: ZipPlugin
 Registered plugin service: zip
-Loaded package plugin: ZipPlugin
 Testing zip plugin...
 Zip result:
 filesCompressed: 2
