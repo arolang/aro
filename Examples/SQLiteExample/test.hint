@@ -1,7 +1,7 @@
 # Test hints for SQLiteExample
 # Package plugin compilation requires Swift compiler at runtime
 # Requires libsqlite3-dev on Linux (now installed in CI)
-# NOTE: Binary mode requires precompiled platform-specific library (.dylib/.so)
-# Testing interpreter mode only to ensure cross-platform compatibility
 mode: interpreter
 timeout: 120
+# Use occurrence-check for cross-platform compatibility (dictionary ordering varies)
+occurrence-check: true

@@ -1,54 +1,27 @@
-# Generated: Tue Jan 21 13:45:00 2026
-# Type: console
-# Command: aro run ./Examples/SQLiteExample
-# Timeout: 120s
-# NOTE: Interpreter mode only (plugin compiled at runtime)
+# SQLiteExample expected output (occurrence-check mode)
+# Key lines that should appear on all platforms
 ---
 Building package plugin: SQLitePlugin
 Registered plugin service: sqlite
 Loaded package plugin: SQLitePlugin
 === SQLite Plugin Demo ===
-
 Step 1: Creating users table...
 Table created successfully
-
 Step 2: Inserting users...
 Inserted Alice with ID:
 1
 Inserted Bob with ID:
 2
-
 Step 3: Querying all users...
 All users:
-[email: alice@example.com
-id: 1
-name: Alice, email: bob@example.com
-id: 2
-name: Bob, email: charlie@example.com
-id: 3
-name: Charlie]
-
 Step 4: Updating Bob's email...
 Updated rows:
 1
-
 Step 5: Querying Bob after update...
 Bob's data:
-[email: robert@example.com
-id: 2
-name: Bob]
-
 Step 6: Deleting Charlie...
 Deleted rows:
 1
-
 Step 7: Final users list...
 Remaining users:
-[email: alice@example.com
-id: 1
-name: Alice, email: robert@example.com
-id: 2
-name: Bob]
-
 All CRUD operations completed successfully!
-startup
