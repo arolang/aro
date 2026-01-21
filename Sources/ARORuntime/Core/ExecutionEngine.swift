@@ -11,7 +11,9 @@ import AROParser
 /// The ExecutionEngine interprets and executes analyzed ARO programs.
 /// It coordinates feature set execution, manages the global symbol registry,
 /// and handles cross-feature-set dependencies.
-public final class ExecutionEngine: @unchecked Sendable {
+///
+/// Converted to actor for Swift 6.2 concurrency safety (Issue #2).
+public actor ExecutionEngine {
     // MARK: - Properties
 
     /// The action registry for looking up action implementations
@@ -25,9 +27,6 @@ public final class ExecutionEngine: @unchecked Sendable {
 
     /// Service registry for dependency injection
     private let services: ServiceRegistry
-
-    /// Lock for thread-safe access
-    private let lock = NSLock()
 
     // MARK: - Initialization
 
