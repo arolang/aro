@@ -552,6 +552,15 @@ sub detect_example_type {
 sub normalize_output {
     my ($output, $type) = @_;
 
+    # Remove ANSI escape codes (colors, bold, etc.)
+    $output =~ s/\e\[[0-9;]*m//g;
+
+    # Remove timing values from test output (e.g., "(1ms)", "(<1ms)")
+    $output =~ s/\s*\([<]?\d+m?s\)//g;
+
+    # Remove leading whitespace from lines (test output has indentation)
+    $output =~ s/^[ \t]+//gm;
+
     # Remove bracketed prefixes at start of lines (e.g., [Application-Start], [OK], etc.)
     # Binary applications don't output these, only the interpreter does
     # Pattern: [LetterFollowedByAlphanumericSpacesHyphens] at line start

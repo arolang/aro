@@ -34,16 +34,16 @@ import AROParser
 
 // MARK: - Statement Future
 
-/// Represents a statement that has been started but may not have completed
-public final class StatementFuture: @unchecked Sendable {
-    private let lock = NSLock()
+/// Represents a statement that has been started but may not have completed.
+/// Converted to actor for Swift 6.2 concurrency safety (Issue #2).
+public actor StatementFuture {
     private var _result: (any Sendable)?
     private var _error: Error?
     private var _isComplete: Bool = false
     private var continuations: [CheckedContinuation<any Sendable, Error>] = []
 
-    /// The index of the statement
-    public let statementIndex: Int
+    /// The index of the statement (immutable, safe to access without isolation)
+    public nonisolated let statementIndex: Int
 
     public init(statementIndex: Int) {
         self.statementIndex = statementIndex
@@ -51,19 +51,16 @@ public final class StatementFuture: @unchecked Sendable {
 
     /// Check if the future has completed
     public var isComplete: Bool {
-        lock.lock()
-        defer { lock.unlock() }
-        return _isComplete
+        _isComplete
     }
 
     /// Complete the future with a result
     public func complete(with result: any Sendable) {
-        lock.lock()
+        guard !_isComplete else { return }
         _result = result
         _isComplete = true
         let waiting = continuations
         continuations.removeAll()
-        lock.unlock()
 
         // Resume all waiting continuations
         for continuation in waiting {
@@ -73,12 +70,11 @@ public final class StatementFuture: @unchecked Sendable {
 
     /// Complete the future with an error
     public func fail(with error: Error) {
-        lock.lock()
+        guard !_isComplete else { return }
         _error = error
         _isComplete = true
         let waiting = continuations
         continuations.removeAll()
-        lock.unlock()
 
         // Resume all waiting continuations with error
         for continuation in waiting {
@@ -86,49 +82,51 @@ public final class StatementFuture: @unchecked Sendable {
         }
     }
 
-    // MARK: - Sync Helpers (for async contexts)
-
-    private func checkCompletion() -> (isComplete: Bool, result: (any Sendable)?, error: Error?) {
-        lock.lock()
-        defer { lock.unlock() }
-        return (_isComplete, _result, _error)
-    }
-
-    private func addContinuation(_ continuation: CheckedContinuation<any Sendable, Error>) {
-        lock.lock()
-        continuations.append(continuation)
-        lock.unlock()
+    /// Register continuation or resume immediately if already complete.
+    /// This method provides atomic check-and-register within actor isolation.
+    private func registerOrComplete(_ continuation: CheckedContinuation<any Sendable, Error>) {
+        if _isComplete {
+            if let error = _error {
+                continuation.resume(throwing: error)
+            } else {
+                continuation.resume(returning: _result ?? ())
+            }
+        } else {
+            continuations.append(continuation)
+        }
     }
 
     /// Wait for the future to complete
     public func wait() async throws -> any Sendable {
-        // Check if already complete (sync operation)
-        let status = checkCompletion()
-        if status.isComplete {
-            if let error = status.error {
+        // Fast path: if already complete, return immediately
+        if _isComplete {
+            if let error = _error {
                 throw error
             }
-            return status.result ?? ()
+            return _result ?? ()
         }
 
-        // Not complete - suspend until it is
+        // Slow path: suspend until completion
+        // Use Task to hop back to actor context for safe registration
         return try await withCheckedThrowingContinuation { continuation in
-            addContinuation(continuation)
+            Task {
+                await self.registerOrComplete(continuation)
+            }
         }
     }
 }
 
 // MARK: - Statement Scheduler
 
-/// Schedules and executes statements with data-flow driven parallelism
-public final class StatementScheduler: @unchecked Sendable {
+/// Schedules and executes statements with data-flow driven parallelism.
+/// Converted to actor for Swift 6.2 concurrency safety (Issue #2).
+public actor StatementScheduler {
 
     // MARK: - Properties
 
     private let dependencyGraph: DependencyGraph
     private var futures: [Int: StatementFuture] = [:]
     private var completedIndices: Set<Int> = []
-    private let lock = NSLock()
 
     /// Callback type for executing a statement
     public typealias StatementExecutor = @Sendable (Statement, ExecutionContext) async throws -> any Sendable
@@ -139,42 +137,30 @@ public final class StatementScheduler: @unchecked Sendable {
         self.dependencyGraph = DependencyGraph()
     }
 
-    // MARK: - Sync Helpers (for async contexts)
+    // MARK: - State Helpers
 
     private func resetState() {
-        lock.lock()
         futures.removeAll()
         completedIndices.removeAll()
-        lock.unlock()
     }
 
     private func getFuture(at index: Int) -> StatementFuture? {
-        lock.lock()
-        defer { lock.unlock() }
         return futures[index]
     }
 
     private func setFuture(_ future: StatementFuture, at index: Int) {
-        lock.lock()
         futures[index] = future
-        lock.unlock()
     }
 
     private func getCompletedIndices() -> Set<Int> {
-        lock.lock()
-        defer { lock.unlock() }
         return completedIndices
     }
 
     private func addCompletedIndex(_ index: Int) {
-        lock.lock()
         completedIndices.insert(index)
-        lock.unlock()
     }
 
     private func hasFuture(at index: Int) -> Bool {
-        lock.lock()
-        defer { lock.unlock() }
         return futures[index] != nil
     }
 
@@ -195,24 +181,24 @@ public final class StatementScheduler: @unchecked Sendable {
         let dataFlows = analyzedFeatureSet.dataFlows
 
         // Build dependency graph
-        _ = dependencyGraph.build(statements: statements, dataFlows: dataFlows)
+        await dependencyGraph.build(statements: statements, dataFlows: dataFlows)
 
         // Generate execution plan
-        let plan = dependencyGraph.generatePlan()
+        let plan = await dependencyGraph.generatePlan()
 
         // Reset state
         resetState()
 
         // Phase 1: Start eager I/O operations (no dependencies)
         for index in plan.eagerStart {
-            if let node = dependencyGraph.node(at: index) {
-                startStatement(node, context: context, executor: executor)
+            if let node = await dependencyGraph.node(at: index) {
+                await startStatement(node, context: context, executor: executor)
             }
         }
 
         // Phase 2: Process statements in semantic order
         for index in plan.executionOrder {
-            guard let node = dependencyGraph.node(at: index) else { continue }
+            guard let node = await dependencyGraph.node(at: index) else { continue }
 
             // Wait for dependencies
             for depIndex in node.dependencies {
@@ -220,7 +206,7 @@ public final class StatementScheduler: @unchecked Sendable {
             }
 
             // Check if this statement was already started eagerly
-            let future = getOrStartStatement(node, context: context, executor: executor)
+            let future = await getOrStartStatement(node, context: context, executor: executor)
 
             // Wait for this statement to complete
             _ = try await future.wait()
@@ -236,7 +222,7 @@ public final class StatementScheduler: @unchecked Sendable {
             }
 
             // Start any newly ready I/O operations
-            startReadyIOOperations(context: context, executor: executor)
+            await startReadyIOOperations(context: context, executor: executor)
         }
 
         return true
@@ -249,11 +235,11 @@ public final class StatementScheduler: @unchecked Sendable {
         _ node: StatementNode,
         context: ExecutionContext,
         executor: @escaping @Sendable StatementExecutor
-    ) {
+    ) async {
         let future = StatementFuture(statementIndex: node.index)
 
         setFuture(future, at: node.index)
-        dependencyGraph.markScheduled(node.index)
+        await dependencyGraph.markScheduled(node.index)
 
         // Capture values needed for the task
         let statement = node.statement
@@ -262,9 +248,9 @@ public final class StatementScheduler: @unchecked Sendable {
         Task { @Sendable in
             do {
                 let result = try await executor(statement, context)
-                future.complete(with: result)
+                await future.complete(with: result)
             } catch {
-                future.fail(with: error)
+                await future.fail(with: error)
             }
         }
     }
@@ -274,13 +260,13 @@ public final class StatementScheduler: @unchecked Sendable {
         _ node: StatementNode,
         context: ExecutionContext,
         executor: @escaping @Sendable StatementExecutor
-    ) -> StatementFuture {
+    ) async -> StatementFuture {
         if let existing = getFuture(at: node.index) {
             return existing
         }
 
         // Start it now
-        startStatement(node, context: context, executor: executor)
+        await startStatement(node, context: context, executor: executor)
 
         return getFuture(at: node.index)!
     }
@@ -298,13 +284,13 @@ public final class StatementScheduler: @unchecked Sendable {
     private func startReadyIOOperations(
         context: ExecutionContext,
         executor: @escaping @Sendable StatementExecutor
-    ) {
+    ) async {
         let completed = getCompletedIndices()
-        let readyIO = dependencyGraph.parallelizableNodes(completedIndices: completed)
+        let readyIO = await dependencyGraph.parallelizableNodes(completedIndices: completed)
 
         for node in readyIO {
             if !hasFuture(at: node.index) {
-                startStatement(node, context: context, executor: executor)
+                await startStatement(node, context: context, executor: executor)
             }
         }
     }

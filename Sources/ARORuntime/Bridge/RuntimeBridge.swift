@@ -145,24 +145,33 @@ public func aro_runtime_init() -> UnsafeMutableRawPointer? {
     let pointer = Unmanaged.passRetained(handle).toOpaque()
 
     // Register default services (same as Application.registerDefaultServices)
-    handle.runtime.register(service: InMemoryRepositoryStorage.shared as RepositoryStorageService)
+    // Use semaphore pattern to bridge sync @_cdecl to async actor methods
+    let semaphore = DispatchSemaphore(value: 0)
 
-    #if !os(Windows)
-    // Register file system service for file operations and monitoring
-    let fileSystemService = AROFileSystemService(eventBus: handle.runtime.eventBus)
-    handle.runtime.register(service: fileSystemService as FileSystemService)
-    handle.runtime.register(service: fileSystemService as FileMonitorService)
+    Task.detached {
+        await handle.runtime.register(service: InMemoryRepositoryStorage.shared as RepositoryStorageService)
 
-    // NOTE: Do NOT register AROSocketServer (NIO-based) in compiled binaries.
-    // We cannot wire up event handlers in binary mode, so use native BSD socket server instead.
+        #if !os(Windows)
+        // Register file system service for file operations and monitoring
+        let fileSystemService = AROFileSystemService(eventBus: handle.runtime.eventBus)
+        await handle.runtime.register(service: fileSystemService as FileSystemService)
+        await handle.runtime.register(service: fileSystemService as FileMonitorService)
 
-    // NOTE: Do NOT register AROHTTPServer (NIO-based) in compiled binaries.
-    // But we keep it registered here for backward compatibility with the interpreter mode
-    // when accessed via aro_runtime_init. The BridgeRuntimeContext init skips HTTPServer.
-    // Register HTTP server service for web APIs
-    let httpServer = AROHTTPServer(eventBus: handle.runtime.eventBus)
-    handle.runtime.register(service: httpServer as HTTPServerService)
-    #endif
+        // NOTE: Do NOT register AROSocketServer (NIO-based) in compiled binaries.
+        // We cannot wire up event handlers in binary mode, so use native BSD socket server instead.
+
+        // NOTE: Do NOT register AROHTTPServer (NIO-based) in compiled binaries.
+        // But we keep it registered here for backward compatibility with the interpreter mode
+        // when accessed via aro_runtime_init. The BridgeRuntimeContext init skips HTTPServer.
+        // Register HTTP server service for web APIs
+        let httpServer = AROHTTPServer(eventBus: handle.runtime.eventBus)
+        await handle.runtime.register(service: httpServer as HTTPServerService)
+        #endif
+
+        semaphore.signal()
+    }
+
+    semaphore.wait()
 
     handleLock.lock()
     runtimeHandles[pointer] = handle

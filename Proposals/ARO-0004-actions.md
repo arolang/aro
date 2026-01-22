@@ -94,7 +94,6 @@ REQUEST actions bring data from external sources into the internal execution con
 | **Extract** | extract, parse, get | from, via | Extract values from objects/structures |
 | **Retrieve** | retrieve, fetch, load, find | from | Retrieve data from repositories |
 | **Receive** | receive | from, via | Receive data from external sources |
-| **Fetch** | fetch, call | from, via | Fetch data from HTTP endpoints |
 | **Request** | request, http | from, to, via, with | Make HTTP requests |
 | **Read** | read | from | Read data from files |
 | **List** | list | from | List directory contents |
@@ -190,7 +189,6 @@ SERVER actions manage long-running services and application lifecycle.
 | **Start** | start | with | Start services (HTTP, socket, file-monitor) |
 | **Stop** | stop | with | Stop services |
 | **Listen** | listen, await | on, for, to | Listen on ports or for events |
-| **Route** | route, dispatch, forward | through, via, to | Route requests |
 | **Connect** | connect | to, with | Connect to remote servers |
 | **Close** | close, disconnect, terminate | with, from | Close connections |
 | **Keepalive** | wait, keepalive, block | for | Keep application alive for events |
@@ -475,7 +473,7 @@ public struct QueryAction: ActionImplementation {
 The ActionRegistry maintains a mapping from verb strings to their implementations.
 
 ```swift
-public final class ActionRegistry: @unchecked Sendable {
+public actor ActionRegistry {
     /// Shared singleton instance
     public static let shared = ActionRegistry()
 
@@ -643,53 +641,51 @@ Actions must be `Sendable` and thread-safe. Do not store mutable state in action
 | 1 | Extract | request | extract, parse, get | from, via |
 | 2 | Retrieve | request | retrieve, fetch, load, find | from |
 | 3 | Receive | request | receive | from, via |
-| 4 | Fetch | request | fetch, call | from, via |
-| 5 | Request | request | request, http | from, to, via, with |
-| 6 | Read | request | read | from |
-| 7 | List | request | list | from |
-| 8 | Stat | request | stat | for |
-| 9 | Exists | request | exists | for |
-| 10 | Compute | own | compute, calculate, derive | from, for, with |
-| 11 | Validate | own | validate, verify, check | for, against, with |
-| 12 | Compare | own | compare, match | against, with, to |
-| 13 | Transform | own | transform, convert, map | from, into, to |
-| 14 | Create | own | create, build, construct | with, from, for, to |
-| 15 | Update | own | update, modify, change, set | with, to, for, from |
-| 16 | Filter | own | filter | from |
-| 17 | Sort | own | sort, order, arrange | for, with |
-| 18 | Split | own | split | from |
-| 19 | Merge | own | merge, combine, join, concat | with, into, from |
-| 20 | Delete | own | delete, remove, destroy, clear | from, for |
-| 21 | Map | own | map | from, to |
-| 22 | Reduce | own | reduce, aggregate | from, with |
-| 23 | Accept | own | accept | on |
-| 24 | Given | own | given | with |
-| 25 | When | own | when | from |
-| 26 | Then | own | then | with |
-| 27 | Assert | own | assert | for, with |
-| 28 | Start | own | start | with |
-| 29 | Stop | own | stop | with |
-| 30 | Listen | own | listen, await | on, for, to |
-| 31 | Route | own | route, dispatch, forward | through, via, to |
-| 32 | Connect | own | connect | to, with |
-| 33 | Close | own | close, disconnect, terminate | with, from |
-| 34 | Keepalive | own | wait, keepalive, block | for |
-| 35 | Make | own | make, touch, mkdir, createdirectory | to, for, at |
-| 36 | Copy | own | copy | to |
-| 37 | Move | own | move, rename | to |
-| 38 | Return | response | return, respond | for, to, with |
-| 39 | Throw | response | throw, raise, fail | for |
-| 40 | Send | response | send, dispatch | to, via, with |
-| 41 | Log | response | log, print, output, debug | for, to, with |
-| 42 | Write | response | write | to, into |
-| 43 | Append | response | append | to, into |
-| 44 | Notify | response | notify, alert, signal | to, for, with |
-| 45 | Broadcast | response | broadcast | to, via |
-| 46 | Publish | export | publish, export, expose, share | with |
-| 47 | Store | export | store, save, persist | into, to, in |
-| 48 | Emit | export | emit | with, to |
-| 49 | Execute | own | execute, exec, run, shell | with |
-| 50 | Call | own | call, invoke | with, to |
+| 4 | Request | request | request, http | from, to, via, with |
+| 5 | Read | request | read | from |
+| 6 | List | request | list | from |
+| 7 | Stat | request | stat | for |
+| 8 | Exists | request | exists | for |
+| 9 | Compute | own | compute, calculate, derive | from, for, with |
+| 10 | Validate | own | validate, verify, check | for, against, with |
+| 11 | Compare | own | compare, match | against, with, to |
+| 12 | Transform | own | transform, convert, map | from, into, to |
+| 13 | Create | own | create, build, construct | with, from, for, to |
+| 14 | Update | own | update, modify, change, set | with, to, for, from |
+| 15 | Filter | own | filter | from |
+| 16 | Sort | own | sort, order, arrange | for, with |
+| 17 | Split | own | split | from |
+| 18 | Merge | own | merge, combine, join, concat | with, into, from |
+| 19 | Delete | own | delete, remove, destroy, clear | from, for |
+| 20 | Map | own | map | from, to |
+| 21 | Reduce | own | reduce, aggregate | from, with |
+| 22 | Accept | own | accept | on |
+| 23 | Given | own | given | with |
+| 24 | When | own | when | from |
+| 25 | Then | own | then | with |
+| 26 | Assert | own | assert | for, with |
+| 27 | Start | server | start | with |
+| 28 | Stop | server | stop | with |
+| 29 | Listen | server | listen, await | on, for, to |
+| 30 | Connect | server | connect | to, with |
+| 31 | Close | server | close, disconnect, terminate | with, from |
+| 32 | Keepalive | server | wait, keepalive, block | for |
+| 33 | Make | server | make, touch, mkdir, createdirectory | to, for, at |
+| 34 | Copy | server | copy | to |
+| 35 | Move | server | move, rename | to |
+| 36 | Return | response | return, respond | for, to, with |
+| 37 | Throw | response | throw, raise, fail | for |
+| 38 | Send | response | send, dispatch | to, via, with |
+| 39 | Log | response | log, print, output, debug | for, to, with |
+| 40 | Write | response | write | to, into |
+| 41 | Append | response | append | to, into |
+| 42 | Notify | response | notify, alert, signal | to, for, with |
+| 43 | Broadcast | response | broadcast | to, via |
+| 44 | Publish | export | publish, export, expose, share | with |
+| 45 | Store | export | store, save, persist | into, to, in |
+| 46 | Emit | export | emit | with, to |
+| 47 | Execute | own | execute, exec, run, shell | with |
+| 48 | Call | own | call, invoke | with, to |
 
 ---
 
@@ -774,5 +770,5 @@ The Action system is implemented in:
 - `Sources/ARORuntime/Actions/ActionDescriptors.swift` - `ResultDescriptor` and `ObjectDescriptor`
 - `Sources/ARORuntime/Actions/ActionError.swift` - `ActionError` enum
 - `Sources/ARORuntime/Actions/ActionRegistry.swift` - `ActionRegistry` for registration
-- `Sources/ARORuntime/Actions/BuiltIn/` - All 50 built-in action implementations
+- `Sources/ARORuntime/Actions/BuiltIn/` - All 48 built-in action implementations
 - `Sources/ARORuntime/Core/ExecutionContext.swift` - `ExecutionContext` protocol
