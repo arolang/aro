@@ -96,7 +96,7 @@ HTTP server and client, file system operations with directory watching, and TCP 
 
 ### Extensible Actions
 
-When the 51 built in actions are not enough, write custom actions in Swift or distribute them as plugins through Swift Package Manager.
+When the 48 built in actions are not enough, write custom actions in Swift or distribute them as plugins through Swift Package Manager.
 
 ### Happy Path Philosophy
 

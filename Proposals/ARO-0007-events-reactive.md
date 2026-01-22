@@ -149,6 +149,33 @@ Inside a handler, the `<event>` variable provides access to event data:
 | `<event>` | The full event object |
 | `<event: fieldName>` | Access specific field from event payload |
 
+### 2.4 NotificationSent Event Handler
+
+When the `<Notify>`, `<Alert>`, or `<Signal>` actions are executed, the runtime automatically emits a `NotificationSentEvent`. Feature sets can subscribe to these events using the `NotificationSent Handler` pattern:
+
+```aro
+(Log All Notifications: NotificationSent Handler) {
+    <Extract> the <message> from the <event: message>.
+    <Extract> the <recipient> from the <event: recipient>.
+    <Extract> the <type> from the <event: type>.
+
+    <Log> "Notification [${type}]: ${message} -> ${recipient}" to the <console>.
+
+    <Return> an <OK: status> for the <logging>.
+}
+```
+
+**Event Payload:**
+
+| Field | Description |
+|-------|-------------|
+| `message` | The notification message content |
+| `recipient` | Target of the notification |
+| `type` | One of: "notify", "alert", or "signal" |
+| `timestamp` | When the notification was sent |
+
+This enables centralized notification logging, analytics, or forwarding to external notification services.
+
 ---
 
 ## 3. State-Guarded Handlers
@@ -736,6 +763,7 @@ The EventBus is the central hub for event routing in ARO applications.
 | Repository Change | `{repository-name} Observer` | `(Audit: user-repository Observer)` |
 | State Transition | `{field} StateObserver` | `(Log: status StateObserver)` |
 | Specific Transition | `{field} StateObserver<from_to_target>` | `(Log: status StateObserver<draft_to_placed>)` |
+| Notification Sent | `NotificationSent Handler` | `(Log Alert: NotificationSent Handler)` |
 
 ### 7.3 Execution Semantics
 
@@ -825,6 +853,7 @@ repository_name = identifier , "-repository" ;
 | **Event Emission** | `<Emit> a <EventType: event> with <data>.` |
 | **Event Handler** | `(Name: EventType Handler)` |
 | **Guarded Handler** | `(Name: EventType Handler<field:value>)` |
+| **Notification Handler** | `(Name: NotificationSent Handler)` |
 | **State Definition** | OpenAPI enum |
 | **State Transition** | `<Accept> the <transition: from_to_target>` |
 | **State Observer** | `(Name: fieldName StateObserver<transition>)` |
