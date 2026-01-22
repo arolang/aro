@@ -169,6 +169,12 @@ let package = Package(
             name: "AROCompilerTests",
             dependencies: ["AROCompiler", "AROParser"],
             path: "Tests/AROCompilerTests"
+        ),
+        // LSP tests (not available on Windows)
+        .testTarget(
+            name: "AROLSPTests",
+            dependencies: ["AROLSP", "AROParser"] + lspTargetDependencies,
+            path: "Tests/AROLSPTests"
         )
     ],
     swiftLanguageModes: [.v6]

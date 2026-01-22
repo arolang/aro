@@ -59,7 +59,7 @@
         <header class="doc-header">
             <h1 class="gradient-text">Language Specifications</h1>
             <p class="lead">
-                The ARO language is documented through 10 comprehensive specifications
+                The ARO language is documented through 27 comprehensive specifications
                 that cover everything from core syntax to native compilation.
             </p>
         </header>
@@ -73,7 +73,7 @@
         </div>
 
         <h2>Language Specifications</h2>
-        <p>These 10 documents define the complete ARO language.</p>
+        <p>These 27 documents define the complete ARO language.</p>
 
         <table>
             <thead>
@@ -81,100 +81,139 @@
             </thead>
             <tbody>
                 <tr>
-                    <td>1</td>
+                    <td>0001</td>
                     <td><a href="https://github.com/arolang/aro/blob/main/Proposals/ARO-0001-language-fundamentals.md" class="proposal-link">Language Fundamentals</a></td>
                     <td>Core syntax, literals, expressions, variable scoping</td>
                 </tr>
                 <tr>
-                    <td>2</td>
+                    <td>0002</td>
                     <td><a href="https://github.com/arolang/aro/blob/main/Proposals/ARO-0002-control-flow.md" class="proposal-link">Control Flow</a></td>
                     <td>When guards, match expressions, iteration, collections</td>
                 </tr>
                 <tr>
-                    <td>3</td>
+                    <td>0003</td>
                     <td><a href="https://github.com/arolang/aro/blob/main/Proposals/ARO-0003-type-system.md" class="proposal-link">Type System</a></td>
                     <td>Types, OpenAPI integration, contract-first APIs</td>
                 </tr>
                 <tr>
-                    <td>4</td>
+                    <td>0004</td>
                     <td><a href="https://github.com/arolang/aro/blob/main/Proposals/ARO-0004-actions.md" class="proposal-link">Actions</a></td>
-                    <td>Action roles, 50 built-in actions, custom extensions</td>
+                    <td>Action roles, 48 built-in actions, custom extensions</td>
                 </tr>
                 <tr>
-                    <td>5</td>
+                    <td>0005</td>
                     <td><a href="https://github.com/arolang/aro/blob/main/Proposals/ARO-0005-application-architecture.md" class="proposal-link">Application Architecture</a></td>
                     <td>App structure, lifecycle, concurrency model</td>
                 </tr>
                 <tr>
-                    <td>6</td>
+                    <td>0006</td>
                     <td><a href="https://github.com/arolang/aro/blob/main/Proposals/ARO-0006-error-philosophy.md" class="proposal-link">Error Philosophy</a></td>
                     <td>"Code is the error message" approach</td>
                 </tr>
                 <tr>
-                    <td>7</td>
+                    <td>0007</td>
                     <td><a href="https://github.com/arolang/aro/blob/main/Proposals/ARO-0007-events-reactive.md" class="proposal-link">Events &amp; Reactive</a></td>
                     <td>Event dispatch, state machines, repositories</td>
                 </tr>
                 <tr>
-                    <td>8</td>
+                    <td>0008</td>
                     <td><a href="https://github.com/arolang/aro/blob/main/Proposals/ARO-0008-io-services.md" class="proposal-link">I/O Services</a></td>
                     <td>HTTP server/client, file system, sockets</td>
                 </tr>
                 <tr>
-                    <td>9</td>
+                    <td>0009</td>
                     <td><a href="https://github.com/arolang/aro/blob/main/Proposals/ARO-0009-native-compilation.md" class="proposal-link">Native Compilation</a></td>
                     <td>LLVM code generation, aro build command</td>
                 </tr>
                 <tr>
-                    <td>10</td>
+                    <td>0010</td>
                     <td><a href="https://github.com/arolang/aro/blob/main/Proposals/ARO-0010-advanced-features.md" class="proposal-link">Advanced Features</a></td>
                     <td>Regular expressions, date/time, system exec</td>
                 </tr>
-            </tbody>
-        </table>
-
-        <h2>Future Features</h2>
-        <p>These features are planned but not yet implemented.</p>
-
-        <table>
-            <thead>
-                <tr><th>Feature</th><th>Description</th><th>Status</th></tr>
-            </thead>
-            <tbody>
                 <tr>
-                    <td><a href="https://github.com/arolang/aro/blob/main/Proposals/future/ARO-0014-domain-modeling.md" class="proposal-link">Domain Modeling</a></td>
+                    <td>0014</td>
+                    <td><a href="https://github.com/arolang/aro/blob/main/Proposals/ARO-0014-domain-modeling.md" class="proposal-link">Domain Modeling</a></td>
                     <td>DDD patterns: entities, value objects, aggregates</td>
-                    <td><span class="status-future">Planned</span></td>
                 </tr>
                 <tr>
-                    <td><a href="https://github.com/arolang/aro/blob/main/Proposals/future/ARO-0015-testing-framework.md" class="proposal-link">Testing Framework</a></td>
+                    <td>0015</td>
+                    <td><a href="https://github.com/arolang/aro/blob/main/Proposals/ARO-0015-testing-framework.md" class="proposal-link">Testing Framework</a></td>
                     <td>BDD-style testing with Given/When/Then</td>
-                    <td><span class="status-future">Planned</span></td>
                 </tr>
                 <tr>
-                    <td><a href="https://github.com/arolang/aro/blob/main/Proposals/future/ARO-0016-interoperability.md" class="proposal-link">Interoperability</a></td>
-                    <td>Foreign function interface, database integration</td>
-                    <td><span class="status-future">Planned</span></td>
+                    <td>0016</td>
+                    <td><a href="https://github.com/arolang/aro/blob/main/Proposals/ARO-0016-interoperability.md" class="proposal-link">Interoperability</a></td>
+                    <td>Foreign function interface, plugins, database integration</td>
                 </tr>
                 <tr>
-                    <td><a href="https://github.com/arolang/aro/blob/main/Proposals/future/ARO-0018-query-language.md" class="proposal-link">Query Language</a></td>
-                    <td>SQL-like queries and aggregations</td>
-                    <td><span class="status-future">Planned</span></td>
+                    <td>0018</td>
+                    <td><a href="https://github.com/arolang/aro/blob/main/Proposals/ARO-0018-query-language.md" class="proposal-link">Data Pipelines</a></td>
+                    <td>Filter, Map, Reduce operations on collections</td>
                 </tr>
                 <tr>
-                    <td><a href="https://github.com/arolang/aro/blob/main/Proposals/future/ARO-0019-standard-library.md" class="proposal-link">Standard Library</a></td>
-                    <td>Core utilities and common functions</td>
-                    <td><span class="status-future">Planned</span></td>
+                    <td>0019</td>
+                    <td><a href="https://github.com/arolang/aro/blob/main/Proposals/ARO-0019-standard-library.md" class="proposal-link">Standard Library</a></td>
+                    <td>Primitive types, core utilities</td>
                 </tr>
                 <tr>
-                    <td><a href="https://github.com/arolang/aro/blob/main/Proposals/future/ARO-0030-ide-integration.md" class="proposal-link">IDE Integration</a></td>
-                    <td>Enhanced editor support</td>
-                    <td><span class="status-future">Planned</span></td>
+                    <td>0022</td>
+                    <td><a href="https://github.com/arolang/aro/blob/main/Proposals/ARO-0022-state-guards.md" class="proposal-link">State Guards</a></td>
+                    <td>Event handler filtering with field:value syntax</td>
                 </tr>
                 <tr>
-                    <td><a href="https://github.com/arolang/aro/blob/main/Proposals/future/ARO-0034-language-server-protocol.md" class="proposal-link">Language Server Protocol</a></td>
+                    <td>0030</td>
+                    <td><a href="https://github.com/arolang/aro/blob/main/Proposals/ARO-0030-ide-integration.md" class="proposal-link">IDE Integration</a></td>
+                    <td>Syntax highlighting, editor support</td>
+                </tr>
+                <tr>
+                    <td>0031</td>
+                    <td><a href="https://github.com/arolang/aro/blob/main/Proposals/ARO-0031-context-aware-formatting.md" class="proposal-link">Context-Aware Formatting</a></td>
+                    <td>Adaptive output for machine/human/developer</td>
+                </tr>
+                <tr>
+                    <td>0034</td>
+                    <td><a href="https://github.com/arolang/aro/blob/main/Proposals/ARO-0034-language-server-protocol.md" class="proposal-link">Language Server Protocol</a></td>
                     <td>LSP implementation for IDE features</td>
-                    <td><span class="status-future">Planned</span></td>
+                </tr>
+                <tr>
+                    <td>0035</td>
+                    <td><a href="https://github.com/arolang/aro/blob/main/Proposals/ARO-0035-configurable-runtime.md" class="proposal-link">Configurable Runtime</a></td>
+                    <td>Configure action for timeouts and settings</td>
+                </tr>
+                <tr>
+                    <td>0036</td>
+                    <td><a href="https://github.com/arolang/aro/blob/main/Proposals/ARO-0036-file-operations.md" class="proposal-link">Extended File Operations</a></td>
+                    <td>Exists, Stat, Make, Copy, Move actions</td>
+                </tr>
+                <tr>
+                    <td>0037</td>
+                    <td><a href="https://github.com/arolang/aro/blob/main/Proposals/ARO-0037-regex-split.md" class="proposal-link">Regex Split</a></td>
+                    <td>Split action with regex delimiters</td>
+                </tr>
+                <tr>
+                    <td>0038</td>
+                    <td><a href="https://github.com/arolang/aro/blob/main/Proposals/ARO-0038-list-element-access.md" class="proposal-link">List Element Access</a></td>
+                    <td>first, last, index, range specifiers</td>
+                </tr>
+                <tr>
+                    <td>0040</td>
+                    <td><a href="https://github.com/arolang/aro/blob/main/Proposals/ARO-0040-format-aware-io.md" class="proposal-link">Format-Aware I/O</a></td>
+                    <td>Auto format detection for JSON, YAML, CSV, etc.</td>
+                </tr>
+                <tr>
+                    <td>0041</td>
+                    <td><a href="https://github.com/arolang/aro/blob/main/Proposals/ARO-0041-datetime-ranges.md" class="proposal-link">Date/Time Ranges</a></td>
+                    <td>Date arithmetic, ranges, recurrence patterns</td>
+                </tr>
+                <tr>
+                    <td>0042</td>
+                    <td><a href="https://github.com/arolang/aro/blob/main/Proposals/ARO-0042-set-operations.md" class="proposal-link">Set Operations</a></td>
+                    <td>intersect, difference, union on collections</td>
+                </tr>
+                <tr>
+                    <td>0043</td>
+                    <td><a href="https://github.com/arolang/aro/blob/main/Proposals/ARO-0043-sink-syntax.md" class="proposal-link">Sink Syntax</a></td>
+                    <td>Expressions in result position</td>
                 </tr>
             </tbody>
         </table>

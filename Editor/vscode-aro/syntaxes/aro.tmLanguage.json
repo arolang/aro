@@ -35,15 +35,29 @@
       "patterns": [
         {
           "name": "meta.featureset.aro",
-          "begin": "\\(([^:]+):\\s*([^)]+)\\)",
+          "begin": "\\(([^:]+):\\s*([^)<]+?)(\\s+Handler)?(<[^>]+>)?\\s*\\)",
           "beginCaptures": {
             "1": { "name": "entity.name.function.featureset.aro" },
-            "2": { "name": "entity.name.type.business-activity.aro" }
+            "2": { "name": "entity.name.type.business-activity.aro" },
+            "3": { "name": "keyword.control.handler.aro" },
+            "4": { "name": "meta.state-guard.aro", "patterns": [{ "include": "#state-guard" }] }
           },
           "end": "(?=\\()|$",
           "patterns": [
             { "include": "#featureset-body" }
           ]
+        }
+      ]
+    },
+    "state-guard": {
+      "patterns": [
+        {
+          "name": "meta.state-guard.aro",
+          "match": "<([a-zA-Z][a-zA-Z0-9-]*)(?::([^,>]+(?:,[^,>]+)*))?>",
+          "captures": {
+            "1": { "name": "variable.parameter.guard-field.aro" },
+            "2": { "name": "constant.other.guard-value.aro" }
+          }
         }
       ]
     },

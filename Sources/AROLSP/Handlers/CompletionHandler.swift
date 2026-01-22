@@ -64,6 +64,10 @@ public struct CompletionHandler: Sendable {
             ("Retrieve", "REQUEST", "Retrieve from data store"),
             ("Fetch", "REQUEST", "Fetch from remote source"),
             ("Accept", "REQUEST", "Accept input"),
+            ("Read", "REQUEST", "Read file contents"),
+            ("List", "REQUEST", "List directory contents"),
+            ("Stat", "REQUEST", "Get file metadata"),
+            ("Exists", "REQUEST", "Check if file exists"),
 
             // OWN actions
             ("Create", "OWN", "Create new data"),
@@ -73,6 +77,12 @@ public struct CompletionHandler: Sendable {
             ("Transform", "OWN", "Transform data structure"),
             ("Set", "OWN", "Set a value"),
             ("Merge", "OWN", "Merge data"),
+            ("Filter", "OWN", "Filter collection"),
+            ("Match", "OWN", "Match pattern"),
+            ("Split", "OWN", "Split string"),
+            ("Copy", "OWN", "Copy file"),
+            ("Move", "OWN", "Move file"),
+            ("Append", "OWN", "Append to collection"),
 
             // RESPONSE actions
             ("Return", "RESPONSE", "Return result"),
@@ -85,12 +95,15 @@ public struct CompletionHandler: Sendable {
             ("Write", "EXPORT", "Write to output"),
             ("Emit", "EXPORT", "Emit event"),
             ("Publish", "EXPORT", "Publish symbol globally"),
+            ("CreateDirectory", "EXPORT", "Create directory"),
 
             // LIFECYCLE actions
             ("Start", "LIFECYCLE", "Start a service"),
             ("Stop", "LIFECYCLE", "Stop a service"),
             ("Keepalive", "LIFECYCLE", "Keep application running"),
             ("Watch", "LIFECYCLE", "Watch for changes"),
+            ("Configure", "LIFECYCLE", "Configure service"),
+            ("Request", "LIFECYCLE", "Make HTTP request"),
 
             // TEST actions
             ("Given", "TEST", "Test setup"),
@@ -144,6 +157,12 @@ public struct CompletionHandler: Sendable {
             ("error", "Error information"),
             ("result", "Operation result"),
             ("config", "Configuration"),
+            // List element specifiers (ARO-0038)
+            ("first", "First element of list"),
+            ("last", "Last element of list"),
+            ("0", "Last element (reverse index)"),
+            ("1", "Second-to-last element"),
+            ("2", "Third-to-last element"),
         ]
 
         return qualifiers.map { qualifier in
@@ -160,14 +179,82 @@ public struct CompletionHandler: Sendable {
     // MARK: - Member Completions
 
     private func memberCompletions() -> [[String: Any]] {
-        let members = [
-            ("length", "Array/string length"),
-            ("count", "Element count"),
-            ("first", "First element"),
-            ("last", "Last element"),
-            ("keys", "Map keys"),
-            ("values", "Map values"),
-        ]
+        // Default members for unknown types
+        return typeAwareMemberCompletions(for: nil)
+    }
+
+    /// Type-aware member completions based on the variable's data type
+    private func typeAwareMemberCompletions(for dataType: DataType?) -> [[String: Any]] {
+        var members: [(String, String)] = []
+
+        guard let type = dataType else {
+            // Generic members for unknown types
+            members = [
+                ("length", "Array/string length"),
+                ("count", "Element count"),
+                ("first", "First element"),
+                ("last", "Last element"),
+                ("keys", "Map keys"),
+                ("values", "Map values"),
+                ("isEmpty", "True if empty"),
+            ]
+            return members.map { member in
+                [
+                    "label": member.0,
+                    "kind": 10,  // Property
+                    "detail": member.1,
+                    "insertText": member.0,
+                    "insertTextFormat": 1
+                ]
+            }
+        }
+
+        switch type {
+        case .list:
+            members = [
+                ("length", "Number of elements in list"),
+                ("count", "Number of elements in list"),
+                ("first", "First element of list"),
+                ("last", "Last element of list"),
+                ("isEmpty", "True if list is empty"),
+            ]
+        case .map:
+            members = [
+                ("keys", "All keys in the map"),
+                ("values", "All values in the map"),
+                ("count", "Number of key-value pairs"),
+                ("isEmpty", "True if map is empty"),
+            ]
+        case .string:
+            members = [
+                ("length", "Number of characters"),
+                ("isEmpty", "True if string is empty"),
+                ("uppercase", "Uppercase version"),
+                ("lowercase", "Lowercase version"),
+                ("trimmed", "Whitespace trimmed version"),
+            ]
+        case .integer, .float:
+            members = [
+                ("abs", "Absolute value"),
+                ("string", "String representation"),
+            ]
+        case .boolean:
+            members = [
+                ("not", "Negated value"),
+                ("string", "String representation"),
+            ]
+        case .schema, .unknown:
+            // Generic members for unknown/schema types
+            members = [
+                ("length", "Array/string length"),
+                ("count", "Element count"),
+                ("first", "First element"),
+                ("last", "Last element"),
+                ("keys", "Map keys"),
+                ("values", "Map values"),
+                ("isEmpty", "True if empty"),
+            ]
+        }
 
         return members.map { member in
             [
@@ -178,6 +265,70 @@ public struct CompletionHandler: Sendable {
                 "insertTextFormat": 1
             ]
         }
+    }
+
+    /// Get type-aware completions for a specific position
+    public func handleWithTypeContext(
+        position: Position,
+        content: String,
+        compilationResult: CompilationResult?,
+        triggerCharacter: String?
+    ) -> [String: Any] {
+        var items: [[String: Any]] = []
+
+        // For "." trigger, try to find the type of the variable before the dot
+        if triggerCharacter == "." {
+            if let dataType = findTypeAtPosition(position: position, content: content, compilationResult: compilationResult) {
+                items.append(contentsOf: typeAwareMemberCompletions(for: dataType))
+            } else {
+                items.append(contentsOf: memberCompletions())
+            }
+        } else {
+            // Delegate to regular handle for other cases
+            return handle(position: position, content: content, compilationResult: compilationResult, triggerCharacter: triggerCharacter)
+        }
+
+        return [
+            "isIncomplete": false,
+            "items": items
+        ]
+    }
+
+    /// Find the data type of the variable at the given position
+    private func findTypeAtPosition(
+        position: Position,
+        content: String,
+        compilationResult: CompilationResult?
+    ) -> DataType? {
+        guard let result = compilationResult else { return nil }
+
+        // Get the line content up to the cursor
+        let lines = content.split(separator: "\n", omittingEmptySubsequences: false)
+        guard position.line < lines.count else { return nil }
+
+        let line = String(lines[position.line])
+        let prefixEnd = line.index(line.startIndex, offsetBy: min(position.character, line.count))
+        let prefix = String(line[..<prefixEnd])
+
+        // Look for variable name before the dot
+        // Pattern: <variable-name>.
+        let pattern = "<([a-zA-Z][a-zA-Z0-9-]*)>\\s*\\.$"
+        guard let regex = try? NSRegularExpression(pattern: pattern),
+              let match = regex.firstMatch(in: prefix, range: NSRange(prefix.startIndex..., in: prefix)),
+              let varRange = Range(match.range(at: 1), in: prefix) else {
+            return nil
+        }
+
+        let variableName = String(prefix[varRange])
+
+        // Look up the variable in symbol tables
+        for analyzed in result.analyzedProgram.featureSets {
+            if let symbol = analyzed.symbolTable.lookup(variableName) {
+                return symbol.dataType
+            }
+        }
+
+        return nil
     }
 
     // MARK: - Keyword Completions
