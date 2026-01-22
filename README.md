@@ -176,9 +176,27 @@ See the [Building from Source](#building-from-source) section below for detailed
 
 ARO is written in Swift 6.2 and uses Swift Package Manager.
 
+### Dependencies
+
+Building ARO from source requires:
+
+| Dependency | Version | Required For |
+|------------|---------|--------------|
+| Swift | 6.2+ | Core compiler and runtime |
+| LLVM | 20 | Native compilation (`aro build`) |
+| Clang | 20 | Linking compiled binaries |
+
+**Note:** LLVM and Clang are only required for the `aro build` command (native compilation). The interpreter (`aro run`) works without them.
+
 ### macOS
 
-Xcode 16.3 or later includes Swift 6.2.
+Xcode 16.3 or later includes Swift 6.2. Install LLVM 20 via Homebrew:
+
+```bash
+brew install llvm@20
+```
+
+Then build:
 
 ```bash
 git clone https://github.com/arolang/aro.git
@@ -188,9 +206,26 @@ swift build -c release
 
 The binary is at `.build/release/aro`.
 
+If LLVM is installed in a non-standard location, set the `LLVM_PATH` environment variable:
+
+```bash
+export LLVM_PATH=/opt/homebrew/opt/llvm@20  # Apple Silicon default
+export LLVM_PATH=/usr/local/opt/llvm@20     # Intel Mac default
+```
+
 ### Linux
 
-Install Swift 6.2 from [swift.org](https://swift.org/download/).
+Install Swift 6.2 from [swift.org](https://swift.org/download/). Install LLVM 20:
+
+```bash
+# Ubuntu/Debian
+wget https://apt.llvm.org/llvm.sh
+chmod +x llvm.sh
+sudo ./llvm.sh 20
+sudo apt-get install -y llvm-20-dev clang-20
+```
+
+Then build:
 
 ```bash
 git clone https://github.com/arolang/aro.git
@@ -201,6 +236,8 @@ swift build -c release
 The binary is at `.build/release/aro`.
 
 ### Windows
+
+Native compilation (`aro build`) is not yet supported on Windows. The interpreter (`aro run`) works with Swift 6.2.
 
 Install Swift 6.2 from [swift.org](https://swift.org/download/). Ensure the Swift toolchain is in your PATH.
 
@@ -251,36 +288,21 @@ See `Tests/AROIntegrationTests/README.md` for complete documentation.
 
 ## Examples
 
-The `Examples/` directory contains working applications:
+The `Examples/` directory contains 50+ working applications demonstrating various ARO features:
 
-| Example | Description |
-|---------|-------------|
-| Calculator | Test framework demonstration |
-| Computations | Arithmetic and data transformations |
-| Conditionals | Conditional logic and branching |
-| ContextAware | Context-aware feature sets |
-| CustomPlugin | Custom action plugin example |
-| DataPipeline | Data pipeline processing |
-| DirectoryLister | Directory listing operations |
-| EchoSocket | TCP server echoing messages |
-| Expressions | Expression evaluation |
-| ExternalService | External service integration |
-| FileOperations | File system operations |
-| FileWatcher | Directory monitoring with event handlers |
-| HTTPClient | HTTP client requests |
-| HTTPServer | Web server with OpenAPI routing |
-| HelloWorld | Minimal single file application |
-| HelloWorldAPI | Simple HTTP API example |
-| Iteration | Loop and iteration patterns |
-| ModulesExample | Application composition with imports |
-| OrderService | Order management service |
-| RepositoryObserver | Repository change observers |
-| Scoping | Variable scoping demonstration |
-| SimpleChat | Simple chat application |
-| Split | String splitting operations |
-| SystemMonitor | System monitoring example |
-| UserService | Multi file application with events |
-| ZipService | ZIP file operations |
+| Category | Examples |
+|----------|----------|
+| **Getting Started** | HelloWorld, HelloWorldAPI, Calculator |
+| **Data & Computation** | Computations, Expressions, TypeConversion, HashTest |
+| **Control Flow** | Conditionals, Iteration, Scoping, ErrorHandling |
+| **Collections** | ListTest, SortExample, Split, CollectionMerge, SetOperations, DataPipeline |
+| **HTTP & APIs** | HTTPServer, HTTPClient, ExternalService, UserService, OrderService |
+| **Events & Observers** | EventExample, EventListener, NotifyExample, RepositoryObserver |
+| **File System** | FileOperations, FileWatcher, FileChecks, FileMetadata, DirectoryLister, DirectoryReplicator, DirectoryReplicatorEvents, FormatAwareIO |
+| **Networking** | EchoSocket, SocketClient, SimpleChat |
+| **Date & Time** | DateTimeDemo, DateRangeDemo |
+| **Advanced** | CustomPlugin, ModulesExample, ContextAware, ConfigurableTimeout, SinkSyntax, AssertDemo, ParallelForEach |
+| **Full Applications** | SystemMonitor, ZipService, SQLiteExample, ReceiveData |
 
 Run any example with:
 
