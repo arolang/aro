@@ -8,7 +8,19 @@ import Foundation
 import SwiftyLLVM
 import AROParser
 
-// Note: Uses LLVMCodeGenerationResult from LLVMCodeGenerator.swift for compatibility
+/// Result of LLVM code generation
+public struct LLVMCodeGenerationResult {
+    /// The generated LLVM IR text
+    public let irText: String
+
+    /// Path to the emitted file (if applicable)
+    public var filePath: String?
+
+    public init(irText: String, filePath: String? = nil) {
+        self.irText = irText
+        self.filePath = filePath
+    }
+}
 
 /// LLVM Code Generator using the Swifty-LLVM API for type-safe IR generation
 /// with source-location-aware error messages

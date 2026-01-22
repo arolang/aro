@@ -2204,7 +2204,7 @@ public func aro_native_http_server_start(_ port: Int32, _ contextPtr: UnsafeMuta
                 }
 
                 // Try to find the compiled feature set function via dlsym
-                // Must match LLVMCodeGenerator.mangleFeatureSetName()
+                // Must match LLVMCodeGeneratorV2.mangleFeatureSetName()
                 let functionName = "aro_fs_" + opId
                     .replacingOccurrences(of: "-", with: "_")
                     .replacingOccurrences(of: " ", with: "_")
