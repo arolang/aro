@@ -8,6 +8,7 @@ var runtimePlatformDependencies: [Target.Dependency] = []
 var lspDependencies: [Package.Dependency] = []
 var lspTargetDependencies: [Target.Dependency] = []
 var cliLspDependency: [Target.Dependency] = []
+var compilerLLVMDependency: [Target.Dependency] = []
 
 #if !os(Windows)
 platformDependencies = [
@@ -17,6 +18,9 @@ platformDependencies = [
     .package(url: "https://github.com/swift-server/async-http-client.git", from: "1.21.0"),
     // FileMonitor for file system watching (using fork with Windows support)
     .package(url: "https://github.com/KrisSimon/FileMonitor.git", from: "2.0.0"),
+    // LLVM C API bindings for type-safe IR generation (Issue #53)
+    // Swifty-LLVM requires Swift 6.2 and LLVM 20
+    .package(url: "https://github.com/hylo-lang/Swifty-LLVM.git", branch: "main"),
 ]
 runtimePlatformDependencies = [
     .product(name: "NIO", package: "swift-nio"),
@@ -35,13 +39,38 @@ lspTargetDependencies = [
 cliLspDependency = [
     "AROLSP",
 ]
+// LLVM C API for type-safe IR generation (not available on Windows)
+compilerLLVMDependency = [
+    .product(name: "SwiftyLLVM", package: "Swifty-LLVM"),
+]
+#endif
+
+// LLVM linker settings - pkg-config needs help finding LLVM on macOS
+#if os(macOS)
+import Foundation
+let llvmPath = ProcessInfo.processInfo.environment["LLVM_PATH"] ?? "/opt/homebrew/opt/llvm@20"
+let llvmLibPath = "\(llvmPath)/lib"
+let llvmLinkerSettings: [LinkerSetting] = [
+    .unsafeFlags(["-L\(llvmLibPath)", "-lLLVM-20"]),
+    .unsafeFlags(["-Xlinker", "-rpath", "-Xlinker", llvmLibPath]),
+]
+#elseif os(Linux)
+import Foundation
+let llvmPath = ProcessInfo.processInfo.environment["LLVM_PATH"] ?? "/usr/lib/llvm-20"
+let llvmLibPath = "\(llvmPath)/lib"
+let llvmLinkerSettings: [LinkerSetting] = [
+    .unsafeFlags(["-L\(llvmLibPath)", "-lLLVM-20"]),
+    .unsafeFlags(["-Xlinker", "-rpath", "-Xlinker", llvmLibPath]),
+]
+#else
+let llvmLinkerSettings: [LinkerSetting] = []
 #endif
 
 let package = Package(
     name: "AROParser",
     platforms: [
-        .macOS(.v14),
-        .iOS(.v17)
+        .macOS(.v15),
+        .iOS(.v18)
     ],
     products: [
         .library(
@@ -98,8 +127,9 @@ let package = Package(
             name: "AROCompiler",
             dependencies: [
                 "AROParser",
-            ],
-            path: "Sources/AROCompiler"
+            ] + compilerLLVMDependency,
+            path: "Sources/AROCompiler",
+            linkerSettings: llvmLinkerSettings
         ),
         // Language Server Protocol implementation (not available on Windows)
         .target(
@@ -119,7 +149,8 @@ let package = Package(
                 "AROCompiler",
                 .product(name: "ArgumentParser", package: "swift-argument-parser"),
             ] + cliLspDependency,
-            path: "Sources/AROCLI"
+            path: "Sources/AROCLI",
+            linkerSettings: llvmLinkerSettings
         ),
         // Parser tests
         .testTarget(

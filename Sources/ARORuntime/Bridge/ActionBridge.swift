@@ -160,11 +160,13 @@ private func executeAction(
     let semanticRole = ActionSemanticRole.classify(verb: verb)
     let shouldBindResult = semanticRole != .response && semanticRole != .export
 
-    // Only bind the result if the action hasn't already bound it
-    // This prevents "Cannot rebind immutable variable" errors while still
-    // supporting actions that don't bind their own results.
+    // Bind the result, unbinding first if it already exists (for loop rebinding)
+    // This allows variables to be updated in loop iterations
     if let value = actionResult.value {
-        if shouldBindResult && !ctxHandle.context.exists(resultDesc.base) {
+        if shouldBindResult {
+            if ctxHandle.context.exists(resultDesc.base) {
+                ctxHandle.context.unbind(resultDesc.base)
+            }
             ctxHandle.context.bind(resultDesc.base, value: value)
         }
         return boxResult(value)
@@ -172,7 +174,10 @@ private func executeAction(
 
     // Return empty string on failure
     let fallback = ""
-    if shouldBindResult && !ctxHandle.context.exists(resultDesc.base) {
+    if shouldBindResult {
+        if ctxHandle.context.exists(resultDesc.base) {
+            ctxHandle.context.unbind(resultDesc.base)
+        }
         ctxHandle.context.bind(resultDesc.base, value: fallback)
     }
     return boxResult(fallback)

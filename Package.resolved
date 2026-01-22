@@ -1,5 +1,5 @@
 {
-  "originHash" : "13575540319d3475dce4d1b793532e16e44479ab7c4b0fdd876e46885db99401",
+  "originHash" : "d21a461fed84a3fac931039c6cd048ed46c7f8d91f2b1aeefb20bebde905ea7a",
   "pins" : [
     {
       "identity" : "async-http-client",
@@ -224,6 +224,15 @@
       "state" : {
         "revision" : "395a77f0aa927f0ff73941d7ac35f2b46d47c9db",
         "version" : "1.6.3"
+      }
+    },
+    {
+      "identity" : "swifty-llvm",
+      "kind" : "remoteSourceControl",
+      "location" : "https://github.com/hylo-lang/Swifty-LLVM.git",
+      "state" : {
+        "branch" : "main",
+        "revision" : "1c515a866b15feeac3ab8bb43a43c0073e9886df"
       }
     },
     {

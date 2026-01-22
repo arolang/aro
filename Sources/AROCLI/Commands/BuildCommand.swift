@@ -43,6 +43,7 @@ struct BuildCommand: AsyncParsableCommand {
     @Flag(name: .long, help: "Emit LLVM IR text instead of binary")
     var emitLLVM: Bool = false
 
+
     func run() async throws {
         let resolvedPath = URL(fileURLWithPath: path)
         let startTime = Date()
@@ -213,11 +214,17 @@ struct BuildCommand: AsyncParsableCommand {
             }
         }
 
-        let codeGenerator = LLVMCodeGenerator()
         let llvmResult: LLVMCodeGenerationResult
 
         do {
+            #if os(Windows)
+            print("Error: Native compilation is not yet supported on Windows.")
+            print("See: https://git.ausdertechnik.de/arolang/aro/-/issues/67")
+            throw ExitCode.failure
+            #else
+            let codeGenerator = LLVMCodeGeneratorV2()
             llvmResult = try codeGenerator.generate(program: mergedProgram, openAPISpecJSON: openAPISpecJSON)
+            #endif
             #if os(Linux)
             FileHandle.standardError.write("[BUILD] LLVM IR generated successfully\n".data(using: .utf8)!)
             #endif

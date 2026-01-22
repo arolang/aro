@@ -862,14 +862,104 @@ public func aro_evaluate_expression(
 
     let contextHandle = Unmanaged<AROCContextHandle>.fromOpaque(ptr).takeUnretainedValue()
 
-    // Parse and evaluate the expression
+    // Parse the JSON
     guard let data = jsonStr.data(using: .utf8),
-          let parsed = try? JSONSerialization.jsonObject(with: data, options: []) as? [String: Any] else {
+          let parsed = try? JSONSerialization.jsonObject(with: data, options: []) else {
         return
     }
 
-    let result = evaluateExpressionJSON(parsed, context: contextHandle.context)
+    // Handle arrays (e.g., JSON array literals)
+    if let array = parsed as? [Any] {
+        let result = evaluateJSONArray(array, context: contextHandle.context)
+        contextHandle.context.bind("_expression_", value: result)
+        return
+    }
+
+    // Handle dictionaries (expressions like {"$var": ...}, {"$lit": ...}, {"$binary": ...})
+    guard let dict = parsed as? [String: Any] else {
+        return
+    }
+
+    let result = evaluateExpressionJSON(dict, context: contextHandle.context)
     contextHandle.context.bind("_expression_", value: result)
+}
+
+/// Evaluate a JSON expression and bind to a specific variable name
+/// - Parameters:
+///   - contextPtr: Context handle
+///   - varName: Variable name to bind the result to
+///   - json: JSON-encoded expression
+@_cdecl("aro_evaluate_and_bind")
+public func aro_evaluate_and_bind(
+    _ contextPtr: UnsafeMutableRawPointer?,
+    _ varName: UnsafePointer<CChar>?,
+    _ json: UnsafePointer<CChar>?
+) {
+    guard let ptr = contextPtr,
+          let nameStr = varName.map({ String(cString: $0) }),
+          let jsonStr = json.map({ String(cString: $0) }) else { return }
+
+    let contextHandle = Unmanaged<AROCContextHandle>.fromOpaque(ptr).takeUnretainedValue()
+
+    // Parse the JSON
+    guard let data = jsonStr.data(using: .utf8),
+          let parsed = try? JSONSerialization.jsonObject(with: data, options: []) else {
+        return
+    }
+
+    // Handle arrays
+    if let array = parsed as? [Any] {
+        let result = evaluateJSONArray(array, context: contextHandle.context)
+        contextHandle.context.bind(nameStr, value: result)
+        return
+    }
+
+    // Handle dictionaries
+    guard let dict = parsed as? [String: Any] else {
+        return
+    }
+
+    let result = evaluateExpressionJSON(dict, context: contextHandle.context)
+    contextHandle.context.bind(nameStr, value: result)
+}
+
+/// Evaluate a JSON array by recursively evaluating each element
+private func evaluateJSONArray(_ array: [Any], context: RuntimeContext) -> [any Sendable] {
+    return array.map { element -> any Sendable in
+        if let dict = element as? [String: Any] {
+            // Check if it's an expression object
+            if dict["$lit"] != nil || dict["$var"] != nil || dict["$binary"] != nil {
+                return evaluateExpressionJSON(dict, context: context)
+            }
+            // Otherwise it's a plain object - evaluate its values recursively
+            return evaluateJSONObject(dict, context: context)
+        } else if let nestedArray = element as? [Any] {
+            return evaluateJSONArray(nestedArray, context: context)
+        } else {
+            return convertToSendable(element)
+        }
+    }
+}
+
+/// Evaluate a JSON object by recursively evaluating its values
+private func evaluateJSONObject(_ obj: [String: Any], context: RuntimeContext) -> [String: any Sendable] {
+    var result: [String: any Sendable] = [:]
+    for (key, value) in obj {
+        if let dict = value as? [String: Any] {
+            // Check if it's an expression object
+            if dict["$lit"] != nil || dict["$var"] != nil || dict["$binary"] != nil {
+                result[key] = evaluateExpressionJSON(dict, context: context)
+            } else {
+                // Plain nested object
+                result[key] = evaluateJSONObject(dict, context: context)
+            }
+        } else if let array = value as? [Any] {
+            result[key] = evaluateJSONArray(array, context: context)
+        } else {
+            result[key] = convertToSendable(value)
+        }
+    }
+    return result
 }
 
 /// Recursively evaluate a JSON-encoded expression
@@ -908,7 +998,94 @@ private func evaluateExpressionJSON(_ expr: [String: Any], context: RuntimeConte
         return evaluateBinaryOp(op: op, left: left, right: right)
     }
 
+    // Interpolated string: {"$interpolated":"Hello ${name}!"}
+    if let template = expr["$interpolated"] as? String {
+        return interpolateString(template, context: context)
+    }
+
+    // Object literal: {"key1": expr1, "key2": expr2, ...}
+    // When no special marker is found, treat it as an object literal
+    // and recursively evaluate each value
+    if !expr.isEmpty && !expr.keys.contains(where: { $0.hasPrefix("$") }) {
+        var result: [String: any Sendable] = [:]
+        for (key, value) in expr {
+            if let nestedDict = value as? [String: Any] {
+                result[key] = evaluateExpressionJSON(nestedDict, context: context)
+            } else if let nestedArray = value as? [Any] {
+                result[key] = evaluateJSONArray(nestedArray, context: context)
+            } else {
+                result[key] = convertToSendable(value)
+            }
+        }
+        return result
+    }
+
     return ""
+}
+
+/// Interpolate a string template with ${varname} placeholders
+private func interpolateString(_ template: String, context: RuntimeContext) -> String {
+    var result = ""
+    var i = template.startIndex
+
+    while i < template.endIndex {
+        // Look for ${
+        if template[i] == "$" {
+            let nextIdx = template.index(after: i)
+            if nextIdx < template.endIndex && template[nextIdx] == "{" {
+                // Find the closing }
+                var endIdx = template.index(after: nextIdx)
+                while endIdx < template.endIndex && template[endIdx] != "}" {
+                    endIdx = template.index(after: endIdx)
+                }
+
+                if endIdx < template.endIndex {
+                    // Extract variable name
+                    let varStart = template.index(after: nextIdx)
+                    let varName = String(template[varStart..<endIdx])
+
+                    // Resolve variable and append
+                    if let value = context.resolveAny(varName) {
+                        result += stringValue(value)
+                    }
+
+                    // Move past the closing }
+                    i = template.index(after: endIdx)
+                    continue
+                }
+            }
+        }
+
+        result.append(template[i])
+        i = template.index(after: i)
+    }
+
+    return result
+}
+
+/// Convert any value to its string representation
+private func stringValue(_ value: any Sendable) -> String {
+    switch value {
+    case let s as String:
+        return s
+    case let i as Int:
+        return String(i)
+    case let d as Double:
+        if d.truncatingRemainder(dividingBy: 1) == 0 {
+            return String(Int(d))
+        }
+        return String(d)
+    case let b as Bool:
+        return b ? "true" : "false"
+    case let arr as [any Sendable]:
+        let items = arr.map { stringValue($0) }.joined(separator: ", ")
+        return "[\(items)]"
+    case let dict as [String: any Sendable]:
+        let items = dict.map { "\($0.key): \(stringValue($0.value))" }.joined(separator: ", ")
+        return "{\(items)}"
+    default:
+        return String(describing: value)
+    }
 }
 
 /// Evaluate a binary operation
@@ -1172,6 +1349,15 @@ public func aro_value_free(_ valuePtr: UnsafeMutableRawPointer?) {
     Unmanaged<AROCValue>.fromOpaque(ptr).release()
 }
 
+/// Create a boxed integer value
+/// - Parameter value: Integer value
+/// - Returns: Opaque pointer to value (must be freed with aro_value_free)
+@_cdecl("aro_value_create_int")
+public func aro_value_create_int(_ value: Int64) -> UnsafeMutableRawPointer {
+    let boxed = AROCValue(value: Int(value))
+    return Unmanaged.passRetained(boxed).toOpaque()
+}
+
 /// Get value as string
 /// - Parameter valuePtr: Value handle
 /// - Returns: C string (caller must free) or NULL
@@ -1291,6 +1477,118 @@ public func aro_evaluate_when_guard(
 
     // Non-nil value is truthy
     return 1
+}
+
+/// Evaluate if a match case pattern matches the subject value
+/// - Parameters:
+///   - contextPtr: Execution context handle
+///   - subjectNameJSON: JSON-encoded subject variable name
+///   - patternJSON: JSON-encoded pattern to match
+/// - Returns: 1 if pattern matches, 0 if not
+@_cdecl("aro_match_pattern")
+public func aro_match_pattern(
+    _ contextPtr: UnsafeMutableRawPointer?,
+    _ subjectNameJSON: UnsafePointer<CChar>?,
+    _ patternJSON: UnsafePointer<CChar>?
+) -> Int32 {
+    guard let ptr = contextPtr,
+          let subjectStr = subjectNameJSON.map({ String(cString: $0) }),
+          let patternStr = patternJSON.map({ String(cString: $0) }) else {
+        return 0
+    }
+
+    let contextHandle = Unmanaged<AROCContextHandle>.fromOpaque(ptr).takeUnretainedValue()
+
+    // Parse subject name and pattern JSON
+    guard let subjectData = subjectStr.data(using: .utf8),
+          let patternData = patternStr.data(using: .utf8),
+          let subjectInfo = try? JSONSerialization.jsonObject(with: subjectData, options: []) as? [String: Any],
+          let patternInfo = try? JSONSerialization.jsonObject(with: patternData, options: []) as? [String: Any] else {
+        return 0
+    }
+
+    // Get subject value from context
+    guard let subjectName = subjectInfo["name"] as? String,
+          let subjectValue = contextHandle.context.resolveAny(subjectName) else {
+        return 0
+    }
+
+    // Match based on pattern type
+    guard let patternType = patternInfo["type"] as? String else {
+        return 0
+    }
+
+    switch patternType {
+    case "literal":
+        // Compare with literal value
+        if let literalValue = patternInfo["value"] {
+            return valuesEqual(subjectValue, literalValue) ? 1 : 0
+        }
+        return 0
+
+    case "wildcard":
+        // Wildcard matches everything
+        return 1
+
+    case "variable":
+        // Variable pattern - bind and match
+        if let varName = patternInfo["name"] as? String,
+           let varValue = contextHandle.context.resolveAny(varName) {
+            return valuesEqual(subjectValue, varValue) ? 1 : 0
+        }
+        return 0
+
+    case "regex":
+        // Regex pattern matching
+        guard let pattern = patternInfo["pattern"] as? String,
+              let stringValue = subjectValue as? String else {
+            return 0
+        }
+        let flags = patternInfo["flags"] as? String ?? ""
+        var options: NSRegularExpression.Options = []
+        if flags.contains("i") { options.insert(.caseInsensitive) }
+        if flags.contains("m") { options.insert(.anchorsMatchLines) }
+
+        do {
+            let regex = try NSRegularExpression(pattern: pattern, options: options)
+            let range = NSRange(stringValue.startIndex..., in: stringValue)
+            return regex.firstMatch(in: stringValue, options: [], range: range) != nil ? 1 : 0
+        } catch {
+            return 0
+        }
+
+    default:
+        return 0
+    }
+}
+
+/// Helper function to compare two values for equality
+private func valuesEqual(_ lhs: Any, _ rhs: Any) -> Bool {
+    // String comparison
+    if let l = lhs as? String, let r = rhs as? String {
+        return l == r
+    }
+    // Integer comparison (handle various int types)
+    if let l = lhs as? Int {
+        if let r = rhs as? Int { return l == r }
+        if let r = rhs as? Int64 { return Int64(l) == r }
+        if let r = rhs as? Double { return Double(l) == r }
+    }
+    if let l = lhs as? Int64 {
+        if let r = rhs as? Int64 { return l == r }
+        if let r = rhs as? Int { return l == Int64(r) }
+        if let r = rhs as? Double { return Double(l) == r }
+    }
+    // Double comparison
+    if let l = lhs as? Double, let r = rhs as? Double {
+        return l == r
+    }
+    // Boolean comparison
+    if let l = lhs as? Bool, let r = rhs as? Bool {
+        return l == r
+    }
+    // Fallback to string comparison
+    return String(describing: lhs) == String(describing: rhs)
 }
 
 /// Get value as integer
@@ -1489,6 +1787,22 @@ public func aro_variable_bind_value(
     let boxed = Unmanaged<AROCValue>.fromOpaque(valPtr).takeUnretainedValue()
 
     contextHandle.context.bind(nameStr, value: boxed.value)
+}
+
+/// Unbind a variable from the context (for loop variable rebinding)
+/// - Parameters:
+///   - contextPtr: Context handle
+///   - name: Variable name (C string)
+@_cdecl("aro_variable_unbind")
+public func aro_variable_unbind(
+    _ contextPtr: UnsafeMutableRawPointer?,
+    _ name: UnsafePointer<CChar>?
+) {
+    guard let ctxPtr = contextPtr,
+          let nameStr = name.map({ String(cString: $0) }) else { return }
+
+    let contextHandle = Unmanaged<AROCContextHandle>.fromOpaque(ctxPtr).takeUnretainedValue()
+    contextHandle.context.unbind(nameStr)
 }
 
 /// Get a property from a dictionary value
