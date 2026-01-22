@@ -10,13 +10,15 @@ stages:
   - integration
   - documentation
   - release
+  - mastodon
 
 variables:
   SWIFT_VERSION: '6.2.3'
 
-# Only run pipelines for main, release branches, tags, and merge requests
+# Only run pipelines for main, release branches, tags, merge requests, and schedules
 workflow:
   rules:
+    - if: $CI_PIPELINE_SOURCE == "schedule"
     - if: $CI_COMMIT_TAG
     - if: $CI_COMMIT_BRANCH == "main"
     - if: $CI_COMMIT_BRANCH =~ /^release\/.*/
@@ -330,5 +332,27 @@ release:
           url: '$CI_PROJECT_URL/-/jobs/artifacts/$CI_COMMIT_TAG/raw/Book/TheConstructionStudies/output/ARO-Construction-Studies.pdf?job=release'
           filepath: '/ARO-Construction-Studies.pdf'
           link_type: 'other'
+  tags:
+    - spencer
+
+# =============================================================================
+# Mastodon Stage - Post Daily Cards (scheduled pipelines only)
+# =============================================================================
+post:mastodon:
+  stage: mastodon
+  image: node:20-bookworm
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "schedule"
+  before_script:
+    # Install Puppeteer dependencies for card generation
+    - apt-get update -qq
+    - apt-get install -y -qq chromium
+    - export PUPPETEER_SKIP_CHROMIUM_DOWNLOAD=true
+    - export PUPPETEER_EXECUTABLE_PATH=/usr/bin/chromium
+  script:
+    - cd cards
+    - npm install
+    - node generate.js
+    - node post-to-mastodon.js
   tags:
     - spencer
