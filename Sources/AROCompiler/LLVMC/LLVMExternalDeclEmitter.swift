@@ -39,6 +39,7 @@ public final class LLVMExternalDeclEmitter {
     private var _variableBindDict: Function?
     private var _variableBindArray: Function?
     private var _variableBindValue: Function?
+    private var _variableUnbind: Function?
     private var _variableResolve: Function?
     private var _variableResolveString: Function?
     private var _variableResolveInt: Function?
@@ -50,7 +51,10 @@ public final class LLVMExternalDeclEmitter {
     private var _interpolateString: Function?
     private var _evaluateWhenGuard: Function?
     private var _evaluateExpression: Function?
+    private var _evaluateAndBind: Function?
     private var _evaluateFilter: Function?
+    private var _matchPattern: Function?
+    private var _valueCreateInt: Function?
 
     // Collection operations
     private var _arrayCount: Function?
@@ -230,6 +234,12 @@ public final class LLVMExternalDeclEmitter {
             types.voidFunctionType(parameters: [ptr, ptr, ptr])
         )
 
+        // void @aro_variable_unbind(ptr, ptr)
+        _variableUnbind = ctx.module.declareFunction(
+            "aro_variable_unbind",
+            types.voidFunctionType(parameters: [ptr, ptr])
+        )
+
         // ptr @aro_variable_resolve(ptr, ptr)
         _variableResolve = ctx.module.declareFunction(
             "aro_variable_resolve",
@@ -296,10 +306,28 @@ public final class LLVMExternalDeclEmitter {
             types.voidFunctionType(parameters: [ptr, ptr])
         )
 
+        // void @aro_evaluate_and_bind(ptr, ptr, ptr)
+        _evaluateAndBind = ctx.module.declareFunction(
+            "aro_evaluate_and_bind",
+            types.voidFunctionType(parameters: [ptr, ptr, ptr])
+        )
+
         // i32 @aro_evaluate_filter(ptr, ptr)
         _evaluateFilter = ctx.module.declareFunction(
             "aro_evaluate_filter",
             types.functionType(parameters: [ptr, ptr], returning: i32)
+        )
+
+        // i32 @aro_match_pattern(ptr, ptr, ptr)
+        _matchPattern = ctx.module.declareFunction(
+            "aro_match_pattern",
+            types.functionType(parameters: [ptr, ptr, ptr], returning: i32)
+        )
+
+        // ptr @aro_value_create_int(i64)
+        _valueCreateInt = ctx.module.declareFunction(
+            "aro_value_create_int",
+            types.functionType(parameters: [i64], returning: ptr)
         )
     }
 
@@ -418,6 +446,7 @@ public final class LLVMExternalDeclEmitter {
     public var variableBindDict: Function { _variableBindDict! }
     public var variableBindArray: Function { _variableBindArray! }
     public var variableBindValue: Function { _variableBindValue! }
+    public var variableUnbind: Function { _variableUnbind! }
     public var variableResolve: Function { _variableResolve! }
     public var variableResolveString: Function { _variableResolveString! }
     public var variableResolveInt: Function { _variableResolveInt! }
@@ -429,7 +458,10 @@ public final class LLVMExternalDeclEmitter {
     public var interpolateString: Function { _interpolateString! }
     public var evaluateWhenGuard: Function { _evaluateWhenGuard! }
     public var evaluateExpression: Function { _evaluateExpression! }
+    public var evaluateAndBind: Function { _evaluateAndBind! }
     public var evaluateFilter: Function { _evaluateFilter! }
+    public var matchPattern: Function { _matchPattern! }
+    public var valueCreateInt: Function { _valueCreateInt! }
 
     // Collection operations
     public var arrayCount: Function { _arrayCount! }

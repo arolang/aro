@@ -129,10 +129,8 @@ public final class LLVMCodeGeneratorV2 {
         if entryPoints.isEmpty {
             throw LLVMCodeGenError.noEntryPoint
         }
-
-        if entryPoints.count > 1 {
-            throw LLVMCodeGenError.multipleEntryPoints
-        }
+        // Allow multiple Application-Start for module imports
+        // The last one is the main application's entry point
     }
 
     private func verifyModule() throws {
@@ -147,7 +145,13 @@ public final class LLVMCodeGeneratorV2 {
 
     private func generateFeatureSet(_ analyzed: AnalyzedFeatureSet) {
         let fs = analyzed.featureSet
-        let funcName = featureSetFunctionName(fs.name)
+        // Use unique function name for Application-Start to support module imports
+        let funcName: String
+        if fs.name == "Application-Start" {
+            funcName = applicationStartFunctionName(fs.businessActivity)
+        } else {
+            funcName = featureSetFunctionName(fs.name)
+        }
 
         // Create function
         let funcType = types.featureSetFunctionType
@@ -201,6 +205,15 @@ public final class LLVMCodeGeneratorV2 {
         return "aro_fs_\(sanitized)"
     }
 
+    /// Generate unique function name for Application-Start using business activity
+    private func applicationStartFunctionName(_ businessActivity: String) -> String {
+        let sanitized = businessActivity
+            .lowercased()
+            .replacingOccurrences(of: "-", with: "_")
+            .replacingOccurrences(of: " ", with: "_")
+        return "aro_fs_application_start_\(sanitized)"
+    }
+
     // MARK: - Statement Generation
 
     private func generateStatement(_ statement: Statement, index: Int, errorBlock: BasicBlock) {
@@ -211,6 +224,10 @@ public final class LLVMCodeGeneratorV2 {
             generateMatchStatement(matchStatement, index: index, errorBlock: errorBlock)
         case let forEachLoop as ForEachLoop:
             generateForEachLoop(forEachLoop, index: index, errorBlock: errorBlock)
+        case let publishStatement as PublishStatement:
+            generatePublishStatement(publishStatement, index: index, errorBlock: errorBlock)
+        case let requireStatement as RequireStatement:
+            generateRequireStatement(requireStatement, index: index, errorBlock: errorBlock)
         default:
             // Unsupported statement type
             ctx.recordError(.invalidExpression(
@@ -224,10 +241,16 @@ public final class LLVMCodeGeneratorV2 {
         let prefix = "s\(index)"
         let ip = ctx.insertionPoint
 
+        // Track merge block for when guard
+        var guardMergeBlock: BasicBlock?
+
         // Handle when guard if present
         if let condition = statement.statementGuard.condition {
             let skipBlock = ctx.module.appendBlock(named: "\(prefix)_skip", to: ctx.currentFunction!)
             let bodyBlock = ctx.module.appendBlock(named: "\(prefix)_body", to: ctx.currentFunction!)
+            let mergeBlock = ctx.module.appendBlock(named: "\(prefix)_merge", to: ctx.currentFunction!)
+
+            guardMergeBlock = mergeBlock
 
             // Evaluate guard condition
             let conditionJSON = ctx.stringConstant(serializeExpression(condition))
@@ -244,6 +267,10 @@ public final class LLVMCodeGeneratorV2 {
 
             ctx.module.insertCondBr(if: guardPassed, then: bodyBlock, else: skipBlock, at: ip)
 
+            // Add terminator to skip block - branch directly to merge
+            ctx.setInsertionPoint(atEndOf: skipBlock)
+            ctx.module.insertBr(to: mergeBlock, at: ctx.insertionPoint)
+
             // Continue in body block
             ctx.setInsertionPoint(atEndOf: bodyBlock)
         }
@@ -253,6 +280,12 @@ public final class LLVMCodeGeneratorV2 {
 
         // Build object descriptor
         let objectDesc = buildObjectDescriptor(statement.object, prefix: prefix)
+
+        // Bind query modifiers if present
+        bindQueryModifiers(statement.queryModifiers)
+
+        // Bind range modifiers if present
+        bindRangeModifiers(statement.rangeModifiers)
 
         // Bind value source if present
         bindValueSource(statement.valueSource, prefix: prefix)
@@ -297,6 +330,12 @@ public final class LLVMCodeGeneratorV2 {
             )
 
             ctx.setInsertionPoint(atEndOf: continueBlock)
+        }
+
+        // If we had a when guard, branch to merge block and continue from there
+        if let mergeBlock = guardMergeBlock {
+            ctx.module.insertBr(to: mergeBlock, at: ctx.insertionPoint)
+            ctx.setInsertionPoint(atEndOf: mergeBlock)
         }
     }
 
@@ -429,11 +468,118 @@ public final class LLVMCodeGeneratorV2 {
             )
 
         case .sinkExpression(let expr):
-            // Sink expression: bind the expression to _literal_ for the action to use
+            // Sink expression: evaluate and bind to _result_expression_ for LogAction/response actions
+            let resultExprName = ctx.stringConstant("_result_expression_")
             let exprJSON = ctx.stringConstant(serializeExpression(expr))
             ctx.module.insertCall(
-                externals.evaluateExpression,
-                on: [ctx.currentContextVar!, exprJSON],
+                externals.evaluateAndBind,
+                on: [ctx.currentContextVar!, resultExprName, exprJSON],
+                at: ip
+            )
+        }
+    }
+
+    // MARK: - Query and Range Modifiers Binding
+
+    private func bindQueryModifiers(_ modifiers: QueryModifiers) {
+        guard !modifiers.isEmpty else { return }
+        let ip = ctx.insertionPoint
+
+        // Bind where clause if present
+        if let whereClause = modifiers.whereClause {
+            // Bind _where_field_
+            let fieldName = ctx.stringConstant("_where_field_")
+            let fieldValue = ctx.stringConstant(whereClause.field)
+            ctx.module.insertCall(
+                externals.variableBindString,
+                on: [ctx.currentContextVar!, fieldName, fieldValue],
+                at: ip
+            )
+
+            // Bind _where_op_
+            let opName = ctx.stringConstant("_where_op_")
+            let opValue = ctx.stringConstant(whereClause.op.rawValue)
+            ctx.module.insertCall(
+                externals.variableBindString,
+                on: [ctx.currentContextVar!, opName, opValue],
+                at: ip
+            )
+
+            // Bind _where_value_ by evaluating the expression
+            let valueName = ctx.stringConstant("_where_value_")
+            let valueJSON = ctx.stringConstant(serializeExpression(whereClause.value))
+            ctx.module.insertCall(
+                externals.evaluateAndBind,
+                on: [ctx.currentContextVar!, valueName, valueJSON],
+                at: ip
+            )
+        }
+
+        // Bind aggregation clause if present
+        if let aggregation = modifiers.aggregation {
+            // Bind _aggregation_type_
+            let typeName = ctx.stringConstant("_aggregation_type_")
+            let typeValue = ctx.stringConstant(aggregation.type.rawValue)
+            ctx.module.insertCall(
+                externals.variableBindString,
+                on: [ctx.currentContextVar!, typeName, typeValue],
+                at: ip
+            )
+
+            // Bind _aggregation_field_ (can be nil for count())
+            let fieldName = ctx.stringConstant("_aggregation_field_")
+            let fieldValue = ctx.stringConstant(aggregation.field ?? "")
+            ctx.module.insertCall(
+                externals.variableBindString,
+                on: [ctx.currentContextVar!, fieldName, fieldValue],
+                at: ip
+            )
+        }
+
+        // Bind by clause if present (for Split action with regex)
+        if let byClause = modifiers.byClause {
+            // Bind _by_pattern_
+            let patternName = ctx.stringConstant("_by_pattern_")
+            let patternValue = ctx.stringConstant(byClause.pattern)
+            ctx.module.insertCall(
+                externals.variableBindString,
+                on: [ctx.currentContextVar!, patternName, patternValue],
+                at: ip
+            )
+
+            // Bind _by_flags_
+            let flagsName = ctx.stringConstant("_by_flags_")
+            let flagsValue = ctx.stringConstant(byClause.flags)
+            ctx.module.insertCall(
+                externals.variableBindString,
+                on: [ctx.currentContextVar!, flagsName, flagsValue],
+                at: ip
+            )
+        }
+    }
+
+    private func bindRangeModifiers(_ modifiers: RangeModifiers) {
+        guard !modifiers.isEmpty else { return }
+        let ip = ctx.insertionPoint
+
+        // Bind to clause if present (e.g., date range end) - evaluate expression
+        if let toClause = modifiers.toClause {
+            let toName = ctx.stringConstant("_to_")
+            let toJSON = ctx.stringConstant(serializeExpression(toClause))
+            ctx.module.insertCall(
+                externals.evaluateAndBind,
+                on: [ctx.currentContextVar!, toName, toJSON],
+                at: ip
+            )
+        }
+
+        // Bind with clause if present (e.g., set operations) - evaluate expression
+        if let withClause = modifiers.withClause {
+            let withName = ctx.stringConstant("_with_")
+            let withJSON = ctx.stringConstant(serializeExpression(withClause))
+            ctx.module.insertCall(
+                externals.evaluateAndBind,
+                on: [ctx.currentContextVar!, withName, withJSON],
                 at: ip
             )
         }
@@ -478,8 +624,8 @@ public final class LLVMCodeGeneratorV2 {
             break
 
         case .array(let elements):
-            // Serialize array as JSON
-            let json = serializeLiteralArray(elements)
+            // Serialize array as plain JSON (not expression-wrapped) for variableBindArray
+            let json = serializeLiteralArrayPlain(elements)
             let jsonStr = ctx.stringConstant(json)
             ctx.module.insertCall(
                 externals.variableBindArray,
@@ -488,8 +634,8 @@ public final class LLVMCodeGeneratorV2 {
             )
 
         case .object(let entries):
-            // Serialize object as JSON
-            let json = serializeLiteralObject(entries)
+            // Serialize object as plain JSON (not expression-wrapped) for variableBindDict
+            let json = serializeLiteralObjectPlain(entries)
             let jsonStr = ctx.stringConstant(json)
             ctx.module.insertCall(
                 externals.variableBindDict,
@@ -624,6 +770,40 @@ public final class LLVMCodeGeneratorV2 {
         return "{\(serialized)}"
     }
 
+    // Plain JSON serialization (no $lit wrappers) for variableBindDict/variableBindArray
+    private func serializeLiteralValuePlain(_ lit: LiteralValue) -> String {
+        switch lit {
+        case .string(let s):
+            return "\"\(escapeJSON(s))\""
+        case .integer(let i):
+            return "\(i)"
+        case .float(let f):
+            return "\(f)"
+        case .boolean(let b):
+            return "\(b)"
+        case .null:
+            return "null"
+        case .array(let elements):
+            return serializeLiteralArrayPlain(elements)
+        case .object(let entries):
+            return serializeLiteralObjectPlain(entries)
+        case .regex(let pattern, let flags):
+            return "\"/\(escapeJSON(pattern))/\(flags)\""
+        }
+    }
+
+    private func serializeLiteralArrayPlain(_ elements: [LiteralValue]) -> String {
+        let serialized = elements.map { serializeLiteralValuePlain($0) }.joined(separator: ",")
+        return "[\(serialized)]"
+    }
+
+    private func serializeLiteralObjectPlain(_ entries: [(String, LiteralValue)]) -> String {
+        let serialized = entries.map { key, value in
+            "\"\(escapeJSON(key))\":\(serializeLiteralValuePlain(value))"
+        }.joined(separator: ",")
+        return "{\(serialized)}"
+    }
+
     private func escapeJSON(_ s: String) -> String {
         s.replacingOccurrences(of: "\\", with: "\\\\")
          .replacingOccurrences(of: "\"", with: "\\\"")
@@ -635,11 +815,423 @@ public final class LLVMCodeGeneratorV2 {
     // MARK: - Control Flow (Stubs)
 
     private func generateMatchStatement(_ statement: MatchStatement, index: Int, errorBlock: BasicBlock) {
-        // TODO: Implement match statement generation
+        let prefix = "match\(index)"
+
+        // Create end block for after the match
+        let endBlock = ctx.module.appendBlock(named: "\(prefix)_end", to: ctx.currentFunction!)
+
+        // Create subject JSON for pattern matching
+        let subjectJSON = ctx.stringConstant(serializeMatchSubject(statement.subject))
+
+        // Generate code for each case
+        for (caseIndex, caseClause) in statement.cases.enumerated() {
+            let casePrefix = "\(prefix)_case\(caseIndex)"
+
+            // Create blocks for this case
+            let caseBodyBlock = ctx.module.appendBlock(named: "\(casePrefix)_body", to: ctx.currentFunction!)
+            let caseNextBlock = ctx.module.appendBlock(named: "\(casePrefix)_next", to: ctx.currentFunction!)
+
+            // Evaluate if pattern matches
+            let patternJSON = ctx.stringConstant(serializePattern(caseClause.pattern))
+            let matchResult = ctx.module.insertCall(
+                externals.matchPattern,
+                on: [ctx.currentContextVar!, subjectJSON, patternJSON],
+                at: ctx.insertionPoint
+            )
+
+            // Check if matched
+            let matched = ctx.module.insertIntegerComparison(
+                .ne, matchResult, ctx.i32Type.zero, at: ctx.insertionPoint
+            )
+
+            // Branch based on match result
+            ctx.module.insertCondBr(if: matched, then: caseBodyBlock, else: caseNextBlock, at: ctx.insertionPoint)
+
+            // Generate case body
+            ctx.setInsertionPoint(atEndOf: caseBodyBlock)
+
+            // Generate statements in the case body
+            for (stmtIndex, stmt) in caseClause.body.enumerated() {
+                generateStatement(stmt, index: index * 100 + caseIndex * 10 + stmtIndex, errorBlock: errorBlock)
+            }
+
+            // Branch to end after case body
+            ctx.module.insertBr(to: endBlock, at: ctx.insertionPoint)
+
+            // Continue from next block for subsequent cases
+            ctx.setInsertionPoint(atEndOf: caseNextBlock)
+        }
+
+        // Handle otherwise clause if present
+        if let otherwiseStmts = statement.otherwise {
+            for (stmtIndex, stmt) in otherwiseStmts.enumerated() {
+                generateStatement(stmt, index: index * 100 + statement.cases.count * 10 + stmtIndex, errorBlock: errorBlock)
+            }
+        }
+
+        // Branch to end block
+        ctx.module.insertBr(to: endBlock, at: ctx.insertionPoint)
+
+        // Continue from end block
+        ctx.setInsertionPoint(atEndOf: endBlock)
+    }
+
+    /// Serialize match subject to JSON
+    private func serializeMatchSubject(_ subject: QualifiedNoun) -> String {
+        "{\"name\":\"\(escapeJSON(subject.base))\"}"
+    }
+
+    /// Serialize a pattern to JSON for match statement
+    private func serializePattern(_ pattern: Pattern) -> String {
+        switch pattern {
+        case .literal(let literal):
+            return "{\"type\":\"literal\",\"value\":\(serializePatternLiteral(literal))}"
+        case .variable(let noun):
+            return "{\"type\":\"variable\",\"name\":\"\(escapeJSON(noun.base))\"}"
+        case .wildcard:
+            return "{\"type\":\"wildcard\"}"
+        case .regex(let patternStr, let flags):
+            return "{\"type\":\"regex\",\"pattern\":\"\(escapeJSON(patternStr))\",\"flags\":\"\(escapeJSON(flags))\"}"
+        }
+    }
+
+    /// Serialize a literal value to raw JSON (for pattern matching)
+    private func serializePatternLiteral(_ literal: LiteralValue) -> String {
+        switch literal {
+        case .string(let s):
+            return "\"\(escapeJSON(s))\""
+        case .integer(let i):
+            return "\(i)"
+        case .float(let f):
+            return "\(f)"
+        case .boolean(let b):
+            return b ? "true" : "false"
+        case .null:
+            return "null"
+        case .array(let elements):
+            let items = elements.map { serializePatternLiteral($0) }.joined(separator: ",")
+            return "[\(items)]"
+        case .object(let entries):
+            let items = entries.map { (key, value) in "\"\(escapeJSON(key))\":\(serializePatternLiteral(value))" }.joined(separator: ",")
+            return "{\(items)}"
+        case .regex(let pattern, let flags):
+            return "{\"pattern\":\"\(escapeJSON(pattern))\",\"flags\":\"\(escapeJSON(flags))\"}"
+        }
     }
 
     private func generateForEachLoop(_ loop: ForEachLoop, index: Int, errorBlock: BasicBlock) {
-        // TODO: Implement for-each loop generation
+        let prefix = "foreach\(index)"
+
+        // Create loop blocks
+        let condBlock = ctx.module.appendBlock(named: "\(prefix)_cond", to: ctx.currentFunction!)
+        let bodyBlock = ctx.module.appendBlock(named: "\(prefix)_body", to: ctx.currentFunction!)
+        let incrBlock = ctx.module.appendBlock(named: "\(prefix)_incr", to: ctx.currentFunction!)
+        let endBlock = ctx.module.appendBlock(named: "\(prefix)_end", to: ctx.currentFunction!)
+
+        // Resolve collection (with optional specifier for nested properties like <team: members>)
+        let collectionName = ctx.stringConstant(loop.collection.base)
+        var collection = ctx.module.insertCall(
+            externals.variableResolve,
+            on: [ctx.currentContextVar!, collectionName],
+            at: ctx.insertionPoint
+        )
+
+        // Handle specifiers to access nested properties
+        for spec in loop.collection.specifiers {
+            let specName = ctx.stringConstant(spec)
+            collection = ctx.module.insertCall(
+                externals.dictGet,
+                on: [collection, specName],
+                at: ctx.insertionPoint
+            )
+        }
+
+        // Get collection count
+        let count = ctx.module.insertCall(
+            externals.arrayCount,
+            on: [collection],
+            at: ctx.insertionPoint
+        )
+
+        // Allocate index counter
+        let indexPtr = ctx.module.insertAlloca(ctx.i64Type, at: ctx.insertionPoint)
+        ctx.module.insertStore(ctx.i64Type.zero, to: indexPtr, at: ctx.insertionPoint)
+
+        // Jump to condition check
+        ctx.module.insertBr(to: condBlock, at: ctx.insertionPoint)
+
+        // === Condition Block ===
+        ctx.setInsertionPoint(atEndOf: condBlock)
+
+        let curIndex = ctx.module.insertLoad(ctx.i64Type, from: indexPtr, at: ctx.insertionPoint)
+        let done = ctx.module.insertIntegerComparison(
+            .sge, curIndex, count, at: ctx.insertionPoint
+        )
+        ctx.module.insertCondBr(if: done, then: endBlock, else: bodyBlock, at: ctx.insertionPoint)
+
+        // === Body Block ===
+        ctx.setInsertionPoint(atEndOf: bodyBlock)
+
+        // Get current element
+        let element = ctx.module.insertCall(
+            externals.arrayGet,
+            on: [collection, curIndex],
+            at: ctx.insertionPoint
+        )
+
+        // Unbind and rebind element to item variable (unbind allows rebinding on each iteration)
+        let itemVarName = ctx.stringConstant(loop.itemVariable)
+        ctx.module.insertCall(
+            externals.variableUnbind,
+            on: [ctx.currentContextVar!, itemVarName],
+            at: ctx.insertionPoint
+        )
+        ctx.module.insertCall(
+            externals.variableBindValue,
+            on: [ctx.currentContextVar!, itemVarName, element],
+            at: ctx.insertionPoint
+        )
+
+        // Bind index if specified
+        if let indexVar = loop.indexVariable {
+            // Create index value (0-based like most programming languages)
+            let indexVarName = ctx.stringConstant(indexVar)
+
+            // Unbind first to allow rebinding on each iteration
+            ctx.module.insertCall(
+                externals.variableUnbind,
+                on: [ctx.currentContextVar!, indexVarName],
+                at: ctx.insertionPoint
+            )
+
+            // Create boxed integer value
+            let indexValue = ctx.module.insertCall(
+                externals.valueCreateInt,
+                on: [curIndex],
+                at: ctx.insertionPoint
+            )
+            ctx.module.insertCall(
+                externals.variableBindValue,
+                on: [ctx.currentContextVar!, indexVarName, indexValue],
+                at: ctx.insertionPoint
+            )
+        }
+
+        // Check filter if present
+        var filterSkipBlock: BasicBlock?
+        if let filter = loop.filter {
+            filterSkipBlock = incrBlock  // Skip to increment if filter fails
+
+            let filterJSON = ctx.stringConstant(serializeExpression(filter))
+            let filterResult = ctx.module.insertCall(
+                externals.evaluateWhenGuard,
+                on: [ctx.currentContextVar!, filterJSON],
+                at: ctx.insertionPoint
+            )
+            let passed = ctx.module.insertIntegerComparison(
+                .ne, filterResult, ctx.i32Type.zero, at: ctx.insertionPoint
+            )
+
+            let filterBodyBlock = ctx.module.appendBlock(named: "\(prefix)_filter_body", to: ctx.currentFunction!)
+            ctx.module.insertCondBr(if: passed, then: filterBodyBlock, else: incrBlock, at: ctx.insertionPoint)
+
+            ctx.setInsertionPoint(atEndOf: filterBodyBlock)
+        }
+
+        // Generate body statements
+        for (stmtIndex, stmt) in loop.body.enumerated() {
+            generateStatement(stmt, index: index * 100 + stmtIndex, errorBlock: errorBlock)
+        }
+
+        // Branch to increment
+        ctx.module.insertBr(to: incrBlock, at: ctx.insertionPoint)
+
+        // === Increment Block ===
+        ctx.setInsertionPoint(atEndOf: incrBlock)
+
+        let nextIndex = ctx.module.insertAdd(curIndex, ctx.i64Type.constant(1), at: ctx.insertionPoint)
+        ctx.module.insertStore(nextIndex, to: indexPtr, at: ctx.insertionPoint)
+        ctx.module.insertBr(to: condBlock, at: ctx.insertionPoint)
+
+        // === End Block ===
+        ctx.setInsertionPoint(atEndOf: endBlock)
+    }
+
+    // MARK: - Publish Statement Generation
+
+    private func generatePublishStatement(_ statement: PublishStatement, index: Int, errorBlock: BasicBlock) {
+        let ip = ctx.insertionPoint
+
+        // Bind the publish alias
+        let aliasName = ctx.stringConstant("_publish_alias_")
+        let aliasValue = ctx.stringConstant(statement.externalName)
+        ctx.module.insertCall(
+            externals.variableBindString,
+            on: [ctx.currentContextVar!, aliasName, aliasValue],
+            at: ip
+        )
+
+        // Bind the internal variable name
+        let varName = ctx.stringConstant("_publish_variable_")
+        let varValue = ctx.stringConstant(statement.internalVariable)
+        ctx.module.insertCall(
+            externals.variableBindString,
+            on: [ctx.currentContextVar!, varName, varValue],
+            at: ip
+        )
+
+        // Build result descriptor for the publish action
+        let descType = types.resultDescriptorType
+        let resultDesc = ctx.module.insertAlloca(descType, at: ip)
+
+        let baseStr = ctx.stringConstant(statement.externalName)
+        let basePtr = ctx.module.insertGetStructElementPointer(
+            of: resultDesc, typed: descType, index: 0, at: ip
+        )
+        ctx.module.insertStore(baseStr, to: basePtr, at: ip)
+
+        // Specifiers = null
+        let specsPtr = ctx.module.insertGetStructElementPointer(
+            of: resultDesc, typed: descType, index: 1, at: ip
+        )
+        ctx.module.insertStore(ctx.ptrType.null, to: specsPtr, at: ip)
+
+        // Count = 0
+        let countPtr = ctx.module.insertGetStructElementPointer(
+            of: resultDesc, typed: descType, index: 2, at: ip
+        )
+        ctx.module.insertStore(ctx.i32Type.zero, to: countPtr, at: ip)
+
+        // Build object descriptor for the internal variable
+        let objDescType = types.objectDescriptorType
+        let objectDesc = ctx.module.insertAlloca(objDescType, at: ip)
+
+        let objBaseStr = ctx.stringConstant(statement.internalVariable)
+        let objBasePtr = ctx.module.insertGetStructElementPointer(
+            of: objectDesc, typed: objDescType, index: 0, at: ip
+        )
+        ctx.module.insertStore(objBaseStr, to: objBasePtr, at: ip)
+
+        // Preposition = from (0)
+        let prepPtr = ctx.module.insertGetStructElementPointer(
+            of: objectDesc, typed: objDescType, index: 1, at: ip
+        )
+        ctx.module.insertStore(ctx.i32Type.zero, to: prepPtr, at: ip)
+
+        // Specifiers = null
+        let objSpecsPtr = ctx.module.insertGetStructElementPointer(
+            of: objectDesc, typed: objDescType, index: 2, at: ip
+        )
+        ctx.module.insertStore(ctx.ptrType.null, to: objSpecsPtr, at: ip)
+
+        // Count = 0
+        let objCountPtr = ctx.module.insertGetStructElementPointer(
+            of: objectDesc, typed: objDescType, index: 3, at: ip
+        )
+        ctx.module.insertStore(ctx.i32Type.zero, to: objCountPtr, at: ip)
+
+        // Call publish action
+        if let publishFunc = externals.actionFunction(for: "publish") {
+            let actionResult = ctx.module.insertCall(
+                publishFunc,
+                on: [ctx.currentContextVar!, resultDesc, objectDesc],
+                at: ip
+            )
+            ctx.module.insertStore(actionResult, to: ctx.currentResultPtr!, at: ip)
+        }
+    }
+
+    // MARK: - Require Statement Generation
+
+    private func generateRequireStatement(_ statement: RequireStatement, index: Int, errorBlock: BasicBlock) {
+        let ip = ctx.insertionPoint
+
+        // Bind the required variable name
+        let varNameStr = ctx.stringConstant("_require_variable_")
+        let varValue = ctx.stringConstant(statement.variableName)
+        ctx.module.insertCall(
+            externals.variableBindString,
+            on: [ctx.currentContextVar!, varNameStr, varValue],
+            at: ip
+        )
+
+        // Bind the source type
+        let sourceName = ctx.stringConstant("_require_source_")
+        let sourceValue: String
+        switch statement.source {
+        case .framework:
+            sourceValue = "framework"
+        case .environment:
+            sourceValue = "environment"
+        case .featureSet(let name):
+            sourceValue = name
+        }
+        let sourceStr = ctx.stringConstant(sourceValue)
+        ctx.module.insertCall(
+            externals.variableBindString,
+            on: [ctx.currentContextVar!, sourceName, sourceStr],
+            at: ip
+        )
+
+        // Build result descriptor for the require action
+        let descType = types.resultDescriptorType
+        let resultDesc = ctx.module.insertAlloca(descType, at: ip)
+
+        let baseStr = ctx.stringConstant(statement.variableName)
+        let basePtr = ctx.module.insertGetStructElementPointer(
+            of: resultDesc, typed: descType, index: 0, at: ip
+        )
+        ctx.module.insertStore(baseStr, to: basePtr, at: ip)
+
+        // Specifiers = null
+        let specsPtr = ctx.module.insertGetStructElementPointer(
+            of: resultDesc, typed: descType, index: 1, at: ip
+        )
+        ctx.module.insertStore(ctx.ptrType.null, to: specsPtr, at: ip)
+
+        // Count = 0
+        let countPtr = ctx.module.insertGetStructElementPointer(
+            of: resultDesc, typed: descType, index: 2, at: ip
+        )
+        ctx.module.insertStore(ctx.i32Type.zero, to: countPtr, at: ip)
+
+        // Build object descriptor for the source
+        let objDescType = types.objectDescriptorType
+        let objectDesc = ctx.module.insertAlloca(objDescType, at: ip)
+
+        let objBaseStr = ctx.stringConstant(sourceValue)
+        let objBasePtr = ctx.module.insertGetStructElementPointer(
+            of: objectDesc, typed: objDescType, index: 0, at: ip
+        )
+        ctx.module.insertStore(objBaseStr, to: objBasePtr, at: ip)
+
+        // Preposition = from (0)
+        let prepPtr = ctx.module.insertGetStructElementPointer(
+            of: objectDesc, typed: objDescType, index: 1, at: ip
+        )
+        ctx.module.insertStore(ctx.i32Type.zero, to: prepPtr, at: ip)
+
+        // Specifiers = null
+        let objSpecsPtr = ctx.module.insertGetStructElementPointer(
+            of: objectDesc, typed: objDescType, index: 2, at: ip
+        )
+        ctx.module.insertStore(ctx.ptrType.null, to: objSpecsPtr, at: ip)
+
+        // Count = 0
+        let objCountPtr = ctx.module.insertGetStructElementPointer(
+            of: objectDesc, typed: objDescType, index: 3, at: ip
+        )
+        ctx.module.insertStore(ctx.i32Type.zero, to: objCountPtr, at: ip)
+
+        // Call require action (extract)
+        if let extractFunc = externals.actionFunction(for: "extract") {
+            let actionResult = ctx.module.insertCall(
+                extractFunc,
+                on: [ctx.currentContextVar!, resultDesc, objectDesc],
+                at: ip
+            )
+            ctx.module.insertStore(actionResult, to: ctx.currentResultPtr!, at: ip)
+        }
     }
 
     // MARK: - Main Function Generation
@@ -666,20 +1258,44 @@ public final class LLVMCodeGeneratorV2 {
         // Load precompiled plugins
         ctx.module.insertCall(externals.loadPrecompiledPlugins, on: [], at: ip)
 
-        // Create context for Application-Start
-        let appStartName = ctx.stringConstant("Application-Start")
-        let mainCtx = ctx.module.insertCall(
-            externals.contextCreateNamed,
-            on: [runtime, appStartName],
-            at: ip
-        )
-
         // Register event handlers
         registerEventHandlers(program: program, runtime: runtime)
 
-        // Call Application-Start
-        let appStartFunc = ctx.module.function(named: "aro_fs_application_start")!
-        ctx.module.insertCall(appStartFunc, on: [mainCtx], at: ip)
+        // Find all Application-Start feature sets
+        let appStartFeatureSets = program.featureSets.filter {
+            $0.featureSet.name == "Application-Start"
+        }
+
+        // Variable to hold the main context (last Application-Start)
+        var mainCtx: IRValue!
+
+        // Call all Application-Start functions in order
+        // Imported modules come first, main application comes last
+        for (index, analyzed) in appStartFeatureSets.enumerated() {
+            let isMain = (index == appStartFeatureSets.count - 1)
+            let activity = analyzed.featureSet.businessActivity
+
+            // Create context for this Application-Start
+            let contextName = ctx.stringConstant(isMain ? "Application-Start" : "Application-Start:\(activity)")
+            let appCtx = ctx.module.insertCall(
+                externals.contextCreateNamed,
+                on: [runtime, contextName],
+                at: ip
+            )
+
+            // Call the Application-Start function
+            let funcName = applicationStartFunctionName(activity)
+            if let appStartFunc = ctx.module.function(named: funcName) {
+                ctx.module.insertCall(appStartFunc, on: [appCtx], at: ip)
+            }
+
+            // Keep main context for response printing, destroy imported module contexts
+            if isMain {
+                mainCtx = appCtx
+            } else {
+                _ = ctx.module.insertCall(externals.contextDestroy, on: [appCtx], at: ip)
+            }
+        }
 
         // Wait for pending events (10 second timeout)
         _ = ctx.module.insertCall(
@@ -763,9 +1379,11 @@ private final class StringConstantCollector {
 
     func collect(from program: AnalyzedProgram, openAPISpecJSON: String?) {
         // Register built-in variable names
-        let builtins = ["_literal_", "_expression_", "_aggregation_type_", "_aggregation_field_",
+        let builtins = ["_literal_", "_expression_", "_result_expression_",
+                        "_aggregation_type_", "_aggregation_field_",
                         "_where_field_", "_where_op_", "_where_value_", "_by_pattern_", "_by_flags_",
-                        "_with_", "_to_", "Application-Start"]
+                        "_with_", "_to_", "_publish_alias_", "_publish_variable_",
+                        "_require_variable_", "_require_source_", "Application-Start"]
         for name in builtins {
             _ = ctx.stringConstant(name)
         }
@@ -801,6 +1419,8 @@ private final class StringConstantCollector {
                 _ = ctx.stringConstant(spec)
             }
             collectFromValueSource(aro.valueSource)
+            collectFromQueryModifiers(aro.queryModifiers)
+            collectFromRangeModifiers(aro.rangeModifiers)
         } else if let match = statement as? MatchStatement {
             _ = ctx.stringConstant(match.subject.base)
             for caseClause in match.cases {
@@ -822,6 +1442,19 @@ private final class StringConstantCollector {
             for stmt in loop.body {
                 collectFromStatement(stmt)
             }
+        } else if let publish = statement as? PublishStatement {
+            _ = ctx.stringConstant(publish.externalName)
+            _ = ctx.stringConstant(publish.internalVariable)
+        } else if let require = statement as? RequireStatement {
+            _ = ctx.stringConstant(require.variableName)
+            switch require.source {
+            case .framework:
+                _ = ctx.stringConstant("framework")
+            case .environment:
+                _ = ctx.stringConstant("environment")
+            case .featureSet(let name):
+                _ = ctx.stringConstant(name)
+            }
         }
     }
 
@@ -835,6 +1468,40 @@ private final class StringConstantCollector {
             collectFromExpression(expr)
         case .sinkExpression(let expr):
             collectFromExpression(expr)
+        }
+    }
+
+    private func collectFromQueryModifiers(_ modifiers: QueryModifiers) {
+        guard !modifiers.isEmpty else { return }
+
+        if let whereClause = modifiers.whereClause {
+            _ = ctx.stringConstant(whereClause.field)
+            _ = ctx.stringConstant(whereClause.op.rawValue)
+            collectFromExpression(whereClause.value)
+        }
+
+        if let aggregation = modifiers.aggregation {
+            _ = ctx.stringConstant(aggregation.type.rawValue)
+            if let field = aggregation.field {
+                _ = ctx.stringConstant(field)
+            }
+        }
+
+        if let byClause = modifiers.byClause {
+            _ = ctx.stringConstant(byClause.pattern)
+            _ = ctx.stringConstant(byClause.flags)
+        }
+    }
+
+    private func collectFromRangeModifiers(_ modifiers: RangeModifiers) {
+        guard !modifiers.isEmpty else { return }
+
+        if let toClause = modifiers.toClause {
+            collectFromExpression(toClause)
+        }
+
+        if let withClause = modifiers.withClause {
+            collectFromExpression(withClause)
         }
     }
 
