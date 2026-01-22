@@ -219,11 +219,11 @@ integration:linux:
     - wget -qO- https://apt.llvm.org/llvm-snapshot.gpg.key | gpg --dearmor -o /usr/share/keyrings/llvm-archive-keyring.gpg
     - echo "deb [signed-by=/usr/share/keyrings/llvm-archive-keyring.gpg] http://apt.llvm.org/jammy/ llvm-toolchain-jammy-20 main" > /etc/apt/sources.list.d/llvm.list
     - apt-get update -qq
-    - apt-get install -y -qq libllvm20
+    - apt-get install -y -qq libllvm20 llvm-20
 
-    # Setup LLVM (keep llvm-14 for llc, add llvm-20 lib path for aro binary runtime)
-    - ln -sf /usr/bin/llc-14 /usr/bin/llc
-    - export PATH="/usr/lib/llvm-14/bin:$PATH"
+    # Setup LLVM 20 for both aro binary and llc (V2 code generator produces LLVM 20 IR)
+    - ln -sf /usr/bin/llc-20 /usr/bin/llc
+    - export PATH="/usr/lib/llvm-20/bin:$PATH"
     - export LD_LIBRARY_PATH="/usr/lib/llvm-20/lib:$LD_LIBRARY_PATH"
 
     # Install Swift for native compilation tests
@@ -246,7 +246,7 @@ integration:linux:
     # Verify installation
     - ./aro-dist/aro --version
   script:
-    - export PATH="/usr/share/swift/usr/bin:/usr/lib/llvm-14/bin:$PATH"
+    - export PATH="/usr/share/swift/usr/bin:/usr/lib/llvm-20/bin:$PATH"
     - export LD_LIBRARY_PATH="/usr/lib/llvm-20/lib:$LD_LIBRARY_PATH"
     - export ARO_BIN="$CI_PROJECT_DIR/aro-dist/aro"
     - export ARO_DEBUG=1  # Enable debug output for ARO-0041 diagnostics
