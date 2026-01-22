@@ -219,9 +219,9 @@ integration:linux:
     - wget -qO- https://apt.llvm.org/llvm-snapshot.gpg.key | gpg --dearmor -o /usr/share/keyrings/llvm-archive-keyring.gpg
     - echo "deb [signed-by=/usr/share/keyrings/llvm-archive-keyring.gpg] http://apt.llvm.org/jammy/ llvm-toolchain-jammy-20 main" > /etc/apt/sources.list.d/llvm.list
     - apt-get update -qq
-    - apt-get install -y -qq llvm-20
+    - apt-get install -y -qq libllvm20
 
-    # Setup LLVM (keep llvm-14 for llc, add llvm-20 lib path for runtime)
+    # Setup LLVM (keep llvm-14 for llc, add llvm-20 lib path for aro binary runtime)
     - ln -sf /usr/bin/llc-14 /usr/bin/llc
     - export PATH="/usr/lib/llvm-14/bin:$PATH"
     - export LD_LIBRARY_PATH="/usr/lib/llvm-20/lib:$LD_LIBRARY_PATH"
