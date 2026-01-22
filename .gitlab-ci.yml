@@ -46,6 +46,28 @@ test:
     paths:
       - .build/
     policy: pull-push
+  before_script:
+    - apt-get update -qq
+    - apt-get install -y -qq wget gnupg software-properties-common
+    # Add LLVM APT repository for LLVM 20 (required for Swifty-LLVM)
+    - wget -qO- https://apt.llvm.org/llvm-snapshot.gpg.key | gpg --dearmor -o /usr/share/keyrings/llvm-archive-keyring.gpg
+    - echo "deb [signed-by=/usr/share/keyrings/llvm-archive-keyring.gpg] http://apt.llvm.org/jammy/ llvm-toolchain-jammy-20 main" > /etc/apt/sources.list.d/llvm.list
+    - apt-get update -qq
+    - apt-get install -y -qq llvm-20-dev libzstd-dev
+    # Create pkg-config file for LLVM
+    - |
+      cat > /usr/lib/pkgconfig/llvm.pc << 'PKGCONFIG'
+      prefix=/usr/lib/llvm-20
+      exec_prefix=${prefix}
+      libdir=${prefix}/lib
+      includedir=${prefix}/include
+
+      Name: LLVM
+      Description: Low-level Virtual Machine compiler framework
+      Version: 20.1
+      Libs: -L${libdir} -lLLVM-20
+      Cflags: -I${includedir}
+      PKGCONFIG
   script:
     - swift test --parallel
   tags:
@@ -69,7 +91,27 @@ build:linux:
       - .build/
     policy: pull-push
   before_script:
-    - apt-get update -qq && apt-get install -y -qq git
+    - apt-get update -qq
+    - apt-get install -y -qq git wget gnupg software-properties-common
+    # Add LLVM APT repository for LLVM 20 (required for Swifty-LLVM)
+    - wget -qO- https://apt.llvm.org/llvm-snapshot.gpg.key | gpg --dearmor -o /usr/share/keyrings/llvm-archive-keyring.gpg
+    - echo "deb [signed-by=/usr/share/keyrings/llvm-archive-keyring.gpg] http://apt.llvm.org/jammy/ llvm-toolchain-jammy-20 main" > /etc/apt/sources.list.d/llvm.list
+    - apt-get update -qq
+    - apt-get install -y -qq llvm-20-dev libzstd-dev
+    # Create pkg-config file for LLVM
+    - |
+      cat > /usr/lib/pkgconfig/llvm.pc << 'PKGCONFIG'
+      prefix=/usr/lib/llvm-20
+      exec_prefix=${prefix}
+      libdir=${prefix}/lib
+      includedir=${prefix}/include
+
+      Name: LLVM
+      Description: Low-level Virtual Machine compiler framework
+      Version: 20.1
+      Libs: -L${libdir} -lLLVM-20
+      Cflags: -I${includedir}
+      PKGCONFIG
   script:
     # Debug build
     - swift build -c debug
