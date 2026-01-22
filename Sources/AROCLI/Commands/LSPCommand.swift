@@ -26,6 +26,21 @@ struct LSPCommand: AsyncParsableCommand {
               - Code completion
               - Document outline (symbols)
 
+            Features supported:
+              - Real-time diagnostics (errors and warnings)
+              - Hover information (types, documentation)
+              - Go to definition
+              - Find references
+              - Code completion
+              - Document outline (symbols)
+              - Workspace symbol search
+              - Code formatting
+              - Symbol rename
+              - Folding ranges
+              - Semantic tokens (enhanced highlighting)
+              - Signature help
+              - Code actions (quick fixes)
+
             Example:
               aro lsp               # Start server on stdio
               aro lsp --debug       # Start with debug logging
@@ -36,11 +51,7 @@ struct LSPCommand: AsyncParsableCommand {
     var debug: Bool = false
 
     func run() async throws {
-        if debug {
-            FileHandle.standardError.write("ARO Language Server starting...\n".data(using: .utf8)!)
-        }
-
-        let server = AROLanguageServer()
+        let server = AROLanguageServer(debug: debug)
         try await server.runStdio()
     }
 }
