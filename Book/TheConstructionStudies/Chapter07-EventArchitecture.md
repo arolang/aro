@@ -469,6 +469,42 @@ if !completed {
 
 ---
 
+## Concurrency Design
+
+### Why EventBus Is Not an Actor
+
+Unlike `ExecutionEngine` and `ActionRegistry` (which are actors), EventBus is a `final class` with manual `NSLock`:
+
+```swift
+public final class EventBus: @unchecked Sendable {
+    private let lock = NSLock()
+    // ...
+}
+```
+
+Reasons for this design:
+
+1. **Fire-and-forget publishing**: Event publication should not block the caller. Actors require `await` for every method call, adding unwanted latency.
+
+2. **Lock overhead**: For high-frequency event dispatch, NSLock has lower overhead than actor hop overhead.
+
+3. **Callback compatibility**: The `@unchecked Sendable` conformance allows storing closures that capture external state.
+
+### Handler Threading
+
+Event handlers run on **GCD dispatch queues**, not Swift's cooperative executor:
+
+```swift
+DispatchQueue.global().async {
+    // Handler executes here, isolated from main thread
+    await subscription.handler(event)
+}
+```
+
+This design prevents a critical issue on Linux: if handlers ran on the Swift cooperative executor and blocked (e.g., waiting for I/O), the executor pool could be exhausted, causing deadlocks.
+
+---
+
 ## Race Condition Prevention
 
 The EventBus uses careful lock ordering to prevent race conditions:

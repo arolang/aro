@@ -82,19 +82,25 @@ let analyzed = try analyzer.analyze(program)
 
 | File | Lines | Description |
 |------|-------|-------------|
-| `LLVMCodeGenerator.swift` | ~1900 | AST → LLVM IR transformation |
-| `Linker.swift` | ~1400 | Object emission, platform linking |
 | `Compiler.swift` | ~200 | High-level compilation API |
+| `Linker.swift` | ~1400 | Object emission, platform linking |
 
-### LLVMCodeGenerator Key Methods
+### LLVM C API (`LLVMC/`)
+
+The compiler uses Swifty-LLVM for type-safe LLVM IR generation:
+
+| File | Description |
+|------|-------------|
+| `LLVMCodeGeneratorV2.swift` | Main code generator using LLVM C API |
+| `LLVMCodeGenContext.swift` | Module, builder, and type caches |
+| `LLVMTypeMapper.swift` | Descriptor struct type definitions |
+| `LLVMExternalDeclEmitter.swift` | Runtime function declarations |
+
+### LLVMCodeGeneratorV2 Key Methods
 
 | Method | Purpose |
 |--------|---------|
 | `generate(_:)` | Main entry point |
-| `generateHeader()` | Module metadata, target triple |
-| `generateTypeDefinitions()` | Struct types for descriptors |
-| `generateExternalDeclarations()` | @_cdecl function declarations |
-| `generateStringConstants()` | Collect and emit string pool |
 | `generateFeatureSet(_:)` | Feature set → LLVM function |
 | `generateStatement(_:)` | Statement → descriptor + call |
 | `generateForEachLoop(_:)` | Sequential iteration |
@@ -157,8 +163,8 @@ let analyzed = try analyzer.analyze(program)
 2. **Understand AST**: `AST.swift`, `Parser.swift`
 3. **See execution**: `FeatureSetExecutor.swift`, `ActionImplementation.swift`
 4. **Study events**: `EventBus.swift`, `EventTypes.swift`
-5. **Explore compilation**: `LLVMCodeGenerator.swift`
-6. **Understand bridge**: `RuntimeBridge.swift`, `ActionBridge.swift`
+5. **Explore compilation**: `LLVMC/LLVMCodeGeneratorV2.swift`
+6. **Understand bridge**: `Bridge/RuntimeBridge.swift`, `Bridge/ActionBridge.swift`
 
 ---
 
@@ -168,11 +174,12 @@ let analyzed = try analyzer.analyze(program)
 |------------------------------|------------|
 | How tokens are classified | `Lexer.swift:classifyIdentifier()` |
 | How expressions are parsed | `Parser.swift:parseExpression()` |
-| How actions are registered | `ActionRegistry.swift` |
+| How actions are registered | `ActionRegistry.swift` (actor) |
 | How events are dispatched | `EventBus.swift:publishAndTrack()` |
-| How LLVM IR is structured | `LLVMCodeGenerator.swift:generateHeader()` |
-| How C calls Swift | `ActionBridge.swift:executeAction()` |
-| How pointers are managed | `RuntimeBridge.swift:AROCRuntimeHandle` |
+| How LLVM IR is generated | `LLVMC/LLVMCodeGeneratorV2.swift` |
+| How descriptor types are defined | `LLVMC/LLVMTypeMapper.swift` |
+| How C calls Swift | `Bridge/ActionBridge.swift:executeAction()` |
+| How pointers are managed | `Bridge/RuntimeBridge.swift:AROCRuntimeHandle` |
 
 ---
 

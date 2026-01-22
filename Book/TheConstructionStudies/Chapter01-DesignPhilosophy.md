@@ -78,9 +78,11 @@ In a general-purpose language, the AST node types proliferate. Python's AST has 
 ARO has five statement types:
 1. `AROStatement` (the action-result-object form)
 2. `PublishStatement` (variable export)
-3. `ForEachStatement` (iteration)
-4. `WhenStatement` (conditional guard)
+3. `ForEachLoop` (iteration)
+4. `RequireStatement` (dependency declaration)
 5. `MatchStatement` (pattern matching)
+
+**Lifecycle feature sets** (`Application-Start`, `Application-End: Success`, `Application-End: Error`) are not special statement types—they are regular feature sets distinguished by naming convention. The runtime treats them specially based on their business activity names.
 
 This constraint propagates through the entire implementation:
 - The parser is simpler (fewer production rules)

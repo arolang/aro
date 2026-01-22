@@ -26,7 +26,7 @@ This is not marketing material. We do not argue that ARO is better than other la
 - How a constrained domain-specific language differs architecturally from general-purpose languages
 - Practical trade-offs in lexer and parser design
 - Event-driven runtime architecture with pub-sub semantics
-- LLVM IR generation without the LLVM C++ API
+- LLVM IR generation using the Swifty-LLVM C API wrapper
 - Swift-C interoperability patterns for language runtimes
 - Honest assessment of design decisions that didn't work out
 

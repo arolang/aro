@@ -76,6 +76,87 @@ public actor ExecutionEngine {
 
 ---
 
+## Actor-Based Concurrency
+
+ARO's runtime uses Swift actors for thread-safe shared state. The core components—`ExecutionEngine` and `ActionRegistry`—are actors, not classes.
+
+### Why Actors?
+
+Swift 6.2 requires explicit concurrency safety. All code must either be isolated to a single concurrency domain or be marked `Sendable`. ARO chose actors for shared registries because they provide:
+
+- **Automatic isolation**: The Swift compiler ensures no concurrent access to mutable state
+- **No manual locking**: Unlike `NSLock` or `DispatchQueue`, actors handle synchronization implicitly
+- **Data race prevention**: Compile-time errors if unsafe access is attempted
+
+### Actor Isolation in Practice
+
+```swift
+// ExecutionEngine is an actor - all method calls are implicitly async
+public actor ExecutionEngine {
+    private var featureSetExecutors: [String: FeatureSetExecutor]
+
+    // Async method - caller must await
+    public func execute(_ program: AnalyzedProgram) async throws {
+        // Safe to mutate featureSetExecutors - actor isolation guarantees exclusivity
+        for featureSet in program.featureSets {
+            featureSetExecutors[featureSet.name] = FeatureSetExecutor(featureSet)
+        }
+    }
+}
+
+// ActionRegistry is also an actor
+public actor ActionRegistry {
+    private var actions: [String: any ActionImplementation.Type]
+
+    // Registration happens at startup - no contention
+    public func register<A: ActionImplementation>(_ action: A.Type) {
+        for verb in A.verbs {
+            actions[verb.lowercased()] = action
+        }
+    }
+}
+```
+
+### Async Execution Model
+
+Because `ExecutionEngine` and `ActionRegistry` are actors, all calls to their methods must be awaited:
+
+```swift
+// Calling an actor method
+let engine = ExecutionEngine()
+try await engine.execute(program)  // Must use 'await'
+
+// Looking up an action
+let action = await ActionRegistry.shared.action(for: "extract")
+```
+
+This async requirement propagates through the call stack, making the entire execution path asynchronous. Actions are defined with async signatures for this reason:
+
+```swift
+public protocol ActionImplementation {
+    func execute(
+        result: ResultDescriptor,
+        object: ObjectDescriptor,
+        context: ExecutionContext
+    ) async throws -> any Sendable
+}
+```
+
+### EventBus Exception
+
+Not all components are actors. `EventBus` uses `NSLock` instead:
+
+```swift
+public final class EventBus: @unchecked Sendable {
+    private let handlersLock = NSLock()
+    private var handlers: [ObjectIdentifier: [AnyHandler]] = [:]
+}
+```
+
+This is intentional: event publication is fire-and-forget, and the lock overhead is lower than actor hop overhead for high-frequency operations.
+
+---
+
 ## ExecutionContext Protocol
 
 Actions access runtime services through the context:
@@ -358,12 +439,14 @@ for each <item> in <items> {
 
 The interpreted execution model is straightforward:
 
-1. **ExecutionEngine** loads the program and registers feature sets with EventBus
-2. **EventBus** routes events to matching handlers
-3. **FeatureSetExecutor** processes statements sequentially
-4. **ActionRegistry** maps verbs to action implementations
+1. **ExecutionEngine** (actor) loads the program and registers feature sets with EventBus
+2. **ActionRegistry** (actor) maps verbs to action implementations with thread-safe access
+3. **EventBus** routes events to matching handlers (uses NSLock, not actor)
+4. **FeatureSetExecutor** processes statements sequentially
 5. **Descriptors** carry structured information to actions
 6. **Context hierarchy** enables scoped variable binding for loops
+
+The use of Swift actors ensures thread safety without manual lock management. All action methods are async, enabling cooperative scheduling.
 
 The interpreter is the reference implementation. Native compilation (Chapter 8) generates code that calls the same action implementations through a C bridge.
 

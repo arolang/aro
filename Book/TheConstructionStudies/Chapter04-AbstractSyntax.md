@@ -471,6 +471,23 @@ public struct AROStatement: Statement {
 }
 ```
 
+### Design Rationale: Why Grouped Clauses?
+
+The original implementation used flat optional properties—`literalValue`, `expression`, `whereClause`, `toClause`, etc. This had problems:
+
+1. **Invalid combinations**: Nothing prevented setting both `literalValue` and `expression`
+2. **Semantic confusion**: `toClause` and `withClause` are related (range operations), but appeared as unrelated properties
+3. **Verbose pattern matching**: Checking all combinations required many nested `if let` statements
+
+Grouped clause types solve these issues:
+
+| Group | Purpose | Clauses | Prevents |
+|-------|---------|---------|----------|
+| `ValueSource` | Where the value comes from | literal, expression, sink | Mutually exclusive sources |
+| `QueryModifiers` | Collection filtering | where, aggregation, by | - |
+| `RangeModifiers` | Range operations | to, with | - |
+| `StatementGuard` | Conditional execution | when | - |
+
 ### Value Source
 
 The `ValueSource` enum represents mutually exclusive value origins:
@@ -480,9 +497,13 @@ public enum ValueSource: Sendable {
     case none                           // standard syntax
     case literal(LiteralValue)          // with "string"
     case expression(any Expression)     // from <x> * <y>
-    case sinkExpression(any Expression) // <Log> "msg" to <console>
+    case sinkExpression(any Expression) // <Log> "msg" to <console> (ARO-0043)
 }
 ```
+
+The enum makes invalid states unrepresentable. A statement cannot have both a literal value and an expression—the type system enforces this.
+
+**Sink Syntax (ARO-0043)**: The `sinkExpression` case handles statements like `<Log> "Hello" to the <console>` where the result position contains an expression rather than a variable binding.
 
 ### Query Modifiers
 
@@ -496,20 +517,61 @@ public struct QueryModifiers: Sendable {
 }
 ```
 
-### Range and Guard
+These clauses work together for data pipeline operations (ARO-0018):
+```aro
+<Retrieve> the <total: sum> from the <orders> where status = "shipped".
+```
+
+### Range Modifiers
+
+Groups clauses for range-based operations:
 
 ```swift
 public struct RangeModifiers: Sendable {
     public let toClause: (any Expression)?     // from <start> to <end>
     public let withClause: (any Expression)?   // from <a> with <b>
 }
+```
 
+Used by date range (ARO-0041) and set operations (ARO-0042):
+```aro
+<Generate> the <dates> from <start-date> to <end-date>.
+<Compute> the <result: intersect> from <set-a> with <set-b>.
+```
+
+### Statement Guard
+
+Conditional execution via `when` clause:
+
+```swift
 public struct StatementGuard: Sendable {
     public let condition: (any Expression)?    // when <condition>
 }
 ```
 
-This grouped design improves type safety and makes the semantic relationships between clauses explicit.
+Used for state guards (ARO-0022) and conditional actions (ARO-0004):
+```aro
+<Send> the <notification> to the <user> when <user: subscribed> is true.
+```
+
+### Semantic Analyzer Validation
+
+The grouped types simplify semantic analysis. Instead of checking individual properties, the analyzer can match on enum cases:
+
+```swift
+switch statement.valueSource {
+case .none:
+    // Standard statement: result binds from action output
+case .literal(let value):
+    // Bind result to literal value
+case .expression(let expr):
+    // Evaluate expression, bind result
+case .sinkExpression(let expr):
+    // Special: result position contains expression to evaluate
+}
+```
+
+This grouped design improves type safety, makes semantic relationships explicit, and simplifies code that consumes the AST.
 
 ---
 
@@ -553,15 +615,17 @@ ARO's AST design reflects the language's constraints:
 
 1. **Five statement types**: The uniform structure enables simple tooling.
 
-2. **QualifiedNoun pattern**: Handles variable naming, type annotation, and property access in one structure.
+2. **Grouped clause types**: `ValueSource`, `QueryModifiers`, `RangeModifiers`, and `StatementGuard` organize optional clauses into semantic groups. This prevents invalid combinations and simplifies pattern matching.
 
-3. **Visitor pattern**: Decouples traversal from structure; enables semantic analysis, interpretation, and code generation with the same AST.
+3. **QualifiedNoun pattern**: Handles variable naming, type annotation, and property access in one structure.
 
-4. **Sendable throughout**: Swift 6 concurrency safety is enforced at compile time.
+4. **Visitor pattern**: Decouples traversal from structure; enables semantic analysis, interpretation, and code generation with the same AST.
 
-5. **Span propagation**: Every node knows its source location for error reporting.
+5. **Sendable throughout**: Swift 6 concurrency safety is enforced at compile time.
 
-The AST is 1315 lines—larger than it would be for a minimal language, but manageable. The complexity comes from supporting clauses (`where`, `when`, `by`) that extend the basic action-result-object form.
+6. **Span propagation**: Every node knows its source location for error reporting.
+
+The AST complexity comes from supporting optional clauses (`where`, `when`, `by`, `to`, `with`) that extend the basic action-result-object form. The grouped clause types keep this complexity manageable.
 
 Implementation reference: `Sources/AROParser/AST.swift`
 

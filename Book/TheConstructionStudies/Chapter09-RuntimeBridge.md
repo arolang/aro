@@ -2,7 +2,15 @@
 
 ## The Three-Layer Architecture
 
-Compiled ARO binaries need to call Swift runtime code. LLVM generates native code that can call C functions. Swift can expose functions to C via `@_cdecl`. This creates a three-layer bridge:
+Compiled ARO binaries need to call Swift runtime code. LLVM generates native code that can call C functions. Swift can expose functions to C via `@_cdecl`. This creates a three-layer bridge.
+
+The bridge code lives in `Sources/ARORuntime/Bridge/`:
+
+| File | Purpose |
+|------|---------|
+| `RuntimeBridge.swift` | Lifecycle: init, shutdown, context management |
+| `ActionBridge.swift` | All 48 actions exposed via @_cdecl |
+| `ServiceBridge.swift` | HTTP server, file system, socket services |
 
 ```
 LLVM-Generated Code (native)
@@ -521,8 +529,9 @@ The runtime bridge enables compiled code to call Swift:
 The bridge is the most fragile part of native compilation. Memory layout assumptions, pointer casting, and synchronization all create potential failure modes. The interpreter path avoids these issues entirely—use it when stability matters more than startup time.
 
 Implementation references:
-- `Sources/ARORuntime/Bridge/RuntimeBridge.swift` (1000+ lines)
-- `Sources/ARORuntime/Bridge/ActionBridge.swift` (500+ lines)
+- `Sources/ARORuntime/Bridge/RuntimeBridge.swift` — Core lifecycle and context management
+- `Sources/ARORuntime/Bridge/ActionBridge.swift` — All 48 action @_cdecl exports
+- `Sources/ARORuntime/Bridge/ServiceBridge.swift` — HTTP/File/Socket service bridges
 
 ---
 

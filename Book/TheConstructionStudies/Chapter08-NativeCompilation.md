@@ -7,7 +7,7 @@ The interpreter works well for development and debugging, but production deploym
 - **Single binary**: Self-contained executable, no runtime dependencies
 - **Performance**: Direct machine code execution
 
-ARO generates LLVM IR text, compiles it to object code via `llc`, and links with the Swift runtime.
+ARO generates LLVM IR using the Swifty-LLVM C API, compiles it to object code via `llc`, and links with the Swift runtime.
 
 ---
 
@@ -20,7 +20,8 @@ Source Files (.aro)
        ↓
 AnalyzedProgram (AST)
        ↓
- LLVMCodeGenerator
+LLVMCodeGeneratorV2
+  (Swifty-LLVM API)
        ↓
   LLVM IR (.ll)
        ↓
@@ -60,10 +61,10 @@ Executable
   <text x="100" y="130" class="title" text-anchor="middle">Parser</text>
   <text x="100" y="150" class="label" text-anchor="middle">AnalyzedProgram</text>
 
-  <!-- LLVMCodeGenerator -->
+  <!-- LLVMCodeGeneratorV2 -->
   <rect x="30" y="190" width="140" height="50" rx="5" class="box compiler"/>
-  <text x="100" y="210" class="title" text-anchor="middle">LLVMCodeGenerator</text>
-  <text x="100" y="230" class="label" text-anchor="middle">AST → IR</text>
+  <text x="100" y="210" class="title" text-anchor="middle">LLVMCodeGeneratorV2</text>
+  <text x="100" y="230" class="label" text-anchor="middle">AST → IR (C API)</text>
 
   <!-- LLVM IR -->
   <rect x="30" y="270" width="140" height="50" rx="5" class="box output"/>
@@ -110,22 +111,50 @@ Executable
 
 ---
 
-## Why Textual LLVM IR?
+## LLVM C API via Swifty-LLVM
 
-ARO generates LLVM IR as text rather than using the LLVM C API. This decision has trade-offs:
+ARO generates LLVM IR using [Swifty-LLVM](https://github.com/hylo-lang/Swifty-LLVM), a Swift wrapper around LLVM's C API. This provides type-safe IR construction with compile-time checking.
+
+### Historical Note
+
+The original implementation (V1) generated LLVM IR as text strings. While simple, this approach had significant drawbacks:
+
+- No compile-time type checking—IR syntax errors only found when running `llc`
+- String manipulation performance overhead
+- Easy to generate invalid IR through typos or format mismatches
+
+### Why Swifty-LLVM?
+
+Swifty-LLVM wraps LLVM's C API in Swift types, providing:
 
 **Advantages**:
-- No C++ dependency—easier to build and distribute
-- Debuggable—human-readable IR for inspection
-- Portable—same generator works across LLVM versions
-- Simpler—string concatenation vs. complex API calls
+- **Type safety**: Module, Function, and BasicBlock are distinct types; mismatches caught at compile time
+- **Performance**: Direct memory operations without text parsing
+- **API stability**: C API is more stable than textual IR format across LLVM versions
+- **Debuggability**: Can still dump IR to text for inspection
 
-**Disadvantages**:
-- Slower generation—parsing text is slower than API calls
-- No compile-time type checking—IR errors found at `llc` time
-- Version sensitivity—textual format can change
+**Trade-offs**:
+- Requires LLVM 20 as a build dependency
+- More complex build setup (pkg-config, library paths)
+- Tighter coupling to specific LLVM version
 
-The textual approach works well for a DSL compiler where IR generation is straightforward and debugging visibility matters more than raw speed.
+### Code Generator Architecture
+
+The code generator (`LLVMCodeGeneratorV2`) uses several supporting components:
+
+```
+LLVMCodeGeneratorV2
+       │
+       ├── LLVMCodeGenContext     (module, builder, type cache)
+       │
+       ├── LLVMTypeMapper         (descriptor struct types)
+       │
+       └── LLVMExternalDeclEmitter (runtime function declarations)
+```
+
+- **LLVMCodeGenContext**: Manages the LLVM module, instruction builder, and caches for types and functions
+- **LLVMTypeMapper**: Creates the `AROResultDescriptor` and `AROObjectDescriptor` struct types
+- **LLVMExternalDeclEmitter**: Declares all 50 runtime action functions and lifecycle functions
 
 ---
 
@@ -647,7 +676,7 @@ if options.strip {
 
 Native compilation transforms ARO programs into standalone executables:
 
-1. **LLVMCodeGenerator** traverses the AST, emitting textual LLVM IR
+1. **LLVMCodeGeneratorV2** traverses the AST using the Swifty-LLVM C API for type-safe IR generation
 2. **String constants** are collected first, then referenced by pointer
 3. **Feature sets** become functions; **statements** become descriptor allocations and action calls
 4. **Control flow** (when, match, for-each) uses LLVM branches and phi nodes
@@ -655,11 +684,13 @@ Native compilation transforms ARO programs into standalone executables:
 6. **Main function** initializes runtime, registers handlers, executes entry point
 7. **Linking** combines object code with Swift runtime and ARO library
 
-The textual IR approach trades some performance for simplicity and debuggability—a reasonable choice for a DSL compiler where generation speed is not critical.
+The Swifty-LLVM C API approach provides compile-time type safety and better performance compared to the original text-based generator, at the cost of requiring LLVM 20 as a build dependency.
 
 Implementation references:
-- `Sources/AROCompiler/LLVMCodeGenerator.swift` (1895 lines)
-- `Sources/AROCompiler/Linker.swift` (1374 lines)
+- `Sources/AROCompiler/LLVMC/LLVMCodeGeneratorV2.swift` — Main code generator
+- `Sources/AROCompiler/LLVMC/LLVMTypeMapper.swift` — Descriptor struct type definitions
+- `Sources/AROCompiler/LLVMC/LLVMExternalDeclEmitter.swift` — Runtime function declarations
+- `Sources/AROCompiler/Linker.swift` — Object linking
 
 ---
 
