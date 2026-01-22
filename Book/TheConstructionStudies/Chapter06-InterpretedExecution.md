@@ -6,7 +6,7 @@ The runtime engine orchestrates program execution. It manages the event bus, reg
 
 ```swift
 // ExecutionEngine.swift
-public final class ExecutionEngine {
+public actor ExecutionEngine {
     private let eventBus: EventBus
     private let actionRegistry: ActionRegistry
     private var featureSetExecutors: [String: FeatureSetExecutor]
@@ -62,7 +62,7 @@ public final class ExecutionEngine {
   <rect x="530" y="30" width="140" height="80" rx="5" class="box"/>
   <text x="600" y="55" class="title" text-anchor="middle">ActionRegistry</text>
   <text x="540" y="75" class="label">verb → Action</text>
-  <text x="540" y="90" class="label">50 built-in</text>
+  <text x="540" y="90" class="label">48 built-in</text>
 
   <!-- Arrows -->
   <path d="M 350 110 L 350 140" class="arrow"/>
@@ -186,7 +186,7 @@ public final class FeatureSetExecutor {
 Actions are registered by their verbs and looked up at execution time:
 
 ```swift
-public final class ActionRegistry: @unchecked Sendable {
+public actor ActionRegistry {
     private var actions: [String: any ActionImplementation.Type] = [:]
 
     public func register<A: ActionImplementation>(_ action: A.Type) {
@@ -202,7 +202,7 @@ public final class ActionRegistry: @unchecked Sendable {
 }
 ```
 
-ARO has 50 built-in actions. Each is registered at startup:
+ARO has 48 built-in actions. Each is registered at startup:
 
 ```swift
 // ActionRegistry initialization
@@ -210,7 +210,7 @@ ActionRegistry.shared.register(ExtractAction.self)
 ActionRegistry.shared.register(RetrieveAction.self)
 ActionRegistry.shared.register(ComputeAction.self)
 ActionRegistry.shared.register(ReturnAction.self)
-// ... 46 more
+// ... 44 more
 ```
 
 <svg viewBox="0 0 600 250" xmlns="http://www.w3.org/2000/svg">
@@ -241,7 +241,7 @@ ActionRegistry.shared.register(ReturnAction.self)
   <text x="180" y="135" class="label">"extract" → ExtractAction</text>
   <text x="180" y="150" class="label">"compute" → ComputeAction</text>
   <text x="180" y="165" class="label">"return" → ReturnAction</text>
-  <text x="180" y="180" class="label">... (50 total)</text>
+  <text x="180" y="180" class="label">... (48 total)</text>
 
   <!-- Action instance -->
   <rect x="400" y="90" width="160" height="70" rx="5" class="box"/>

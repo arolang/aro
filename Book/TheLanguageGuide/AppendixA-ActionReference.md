@@ -640,6 +640,53 @@ Emits domain events.
 
 ---
 
+### Notify
+
+Sends notifications to users, administrators, or systems. The action automatically emits a `NotificationSentEvent` that can be handled by feature sets with `NotificationSent Handler` business activity.
+
+**Verbs:** `notify`, `alert`, `signal`
+
+**Syntax:**
+```aro
+<Notify> the <message> to the <recipient>.
+<Alert> the <message> to the <recipient>.
+<Signal> the <message> to the <recipient>.
+```
+
+**Examples:**
+```aro
+(* User notification *)
+<Notify> the <welcome-message> to the <user>.
+
+(* Admin alert *)
+<Alert> the <system-warning> to the <admin>.
+
+(* System signal *)
+<Signal> the <shutdown-notice> to the <processes>.
+```
+
+**NotificationSent Handler:**
+Feature sets can subscribe to notification events:
+
+```aro
+(Log All Notifications: NotificationSent Handler) {
+    <Extract> the <message> from the <event: message>.
+    <Extract> the <type> from the <event: type>.
+    <Log> "Notification [${type}]: ${message}" to the <console>.
+    <Return> an <OK: status> for the <logging>.
+}
+```
+
+**Event Payload:**
+- `message` - The notification content
+- `recipient` - Target of the notification
+- `type` - One of: "notify", "alert", or "signal"
+- `timestamp` - When the notification was sent
+
+**Valid Prepositions:** `to`, `for`, `with`
+
+---
+
 ### Write
 
 Writes to files.
