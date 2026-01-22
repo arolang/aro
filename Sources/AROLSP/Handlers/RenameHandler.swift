@@ -8,10 +8,67 @@ import Foundation
 import AROParser
 import LanguageServerProtocol
 
-/// Handles textDocument/rename requests
+/// Handles textDocument/rename and textDocument/prepareRename requests
 public struct RenameHandler: Sendable {
 
     public init() {}
+
+    /// Handle a prepare rename request
+    /// Returns the range and placeholder text for the symbol at the position
+    public func prepareRename(
+        uri: String,
+        position: Position,
+        content: String,
+        compilationResult: CompilationResult?
+    ) -> [String: Any]? {
+        guard let result = compilationResult else { return nil }
+
+        let aroPosition = PositionConverter.fromLSP(position)
+
+        // Find the symbol at the position
+        for analyzed in result.analyzedProgram.featureSets {
+            let fs = analyzed.featureSet
+
+            for statement in fs.statements {
+                if let aro = statement as? AROStatement {
+                    // Check result
+                    if isPositionInSpan(aroPosition, aro.result.span) {
+                        let name = aro.result.base
+                        let lspRange = PositionConverter.toLSP(aro.result.span)
+                        return [
+                            "range": [
+                                "start": ["line": lspRange.start.line, "character": lspRange.start.character],
+                                "end": ["line": lspRange.end.line, "character": lspRange.end.character]
+                            ],
+                            "placeholder": name
+                        ]
+                    }
+
+                    // Check object
+                    if isPositionInSpan(aroPosition, aro.object.noun.span) {
+                        let name = aro.object.noun.base
+                        let lspRange = PositionConverter.toLSP(aro.object.noun.span)
+                        return [
+                            "range": [
+                                "start": ["line": lspRange.start.line, "character": lspRange.start.character],
+                                "end": ["line": lspRange.end.line, "character": lspRange.end.character]
+                            ],
+                            "placeholder": name
+                        ]
+                    }
+
+                    // Check expression
+                    if let expr = aro.valueSource.asExpression {
+                        if let prepareResult = findPrepareRenameInExpression(expr, position: aroPosition) {
+                            return prepareResult
+                        }
+                    }
+                }
+            }
+        }
+
+        return nil
+    }
 
     /// Handle a rename request
     /// Returns a WorkspaceEdit with all text edits needed to rename the symbol
@@ -64,6 +121,7 @@ public struct RenameHandler: Sendable {
         }
 
         guard let symbolName = targetName else { return nil }
+        _ = targetSpan  // Used for validation, may be used for more precise matching later
 
         // Find all references to this symbol and create text edits
         var textEdits: [[String: Any]] = []
@@ -117,6 +175,48 @@ public struct RenameHandler: Sendable {
     }
 
     // MARK: - Expression Traversal
+
+    private func findPrepareRenameInExpression(
+        _ expression: any AROParser.Expression,
+        position: SourceLocation
+    ) -> [String: Any]? {
+        if let varRef = expression as? VariableRefExpression {
+            if isPositionInSpan(position, varRef.span) {
+                let lspRange = PositionConverter.toLSP(varRef.span)
+                return [
+                    "range": [
+                        "start": ["line": lspRange.start.line, "character": lspRange.start.character],
+                        "end": ["line": lspRange.end.line, "character": lspRange.end.character]
+                    ],
+                    "placeholder": varRef.noun.base
+                ]
+            }
+        } else if let binary = expression as? BinaryExpression {
+            if let result = findPrepareRenameInExpression(binary.left, position: position) {
+                return result
+            }
+            if let result = findPrepareRenameInExpression(binary.right, position: position) {
+                return result
+            }
+        } else if let unary = expression as? UnaryExpression {
+            if let result = findPrepareRenameInExpression(unary.operand, position: position) {
+                return result
+            }
+        } else if let member = expression as? MemberAccessExpression {
+            if let result = findPrepareRenameInExpression(member.base, position: position) {
+                return result
+            }
+        } else if let subscript_ = expression as? SubscriptExpression {
+            if let result = findPrepareRenameInExpression(subscript_.base, position: position) {
+                return result
+            }
+            if let result = findPrepareRenameInExpression(subscript_.index, position: position) {
+                return result
+            }
+        }
+
+        return nil
+    }
 
     private func findSymbolInExpression(_ expression: any AROParser.Expression, position: SourceLocation) -> (String, SourceSpan)? {
         if let varRef = expression as? VariableRefExpression {
@@ -206,7 +306,7 @@ public struct RenameHandler: Sendable {
                 "start": ["line": lspRange.start.line, "character": lspRange.start.character],
                 "end": ["line": lspRange.end.line, "character": lspRange.end.character]
             ],
-            "newText": newText
+            "newText": "<\(newText)>"
         ]
     }
 }

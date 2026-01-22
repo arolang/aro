@@ -42,7 +42,7 @@ public struct CodeActionHandler: Sendable {
         // Process diagnostic-based code actions
         for diagnostic in diagnostics {
             if let message = diagnostic["message"] as? String {
-                actions.append(contentsOf: actionsForDiagnostic(message: message, uri: uri, range: range))
+                actions.append(contentsOf: actionsForDiagnostic(message: message, uri: uri, range: range, diagnostic: diagnostic))
             }
         }
 
@@ -59,7 +59,8 @@ public struct CodeActionHandler: Sendable {
     private func actionsForDiagnostic(
         message: String,
         uri: String,
-        range: (start: Position, end: Position)
+        range: (start: Position, end: Position),
+        diagnostic: [String: Any]
     ) -> [[String: Any]] {
         var actions: [[String: Any]] = []
 
@@ -73,10 +74,44 @@ public struct CodeActionHandler: Sendable {
                         title: "Did you mean '\(suggestion)'?",
                         uri: uri,
                         range: range,
-                        newText: suggestion
+                        newText: "<\(suggestion)>",
+                        diagnostic: diagnostic
                     ))
                 }
             }
+        }
+
+        // Check for missing preposition
+        if message.contains("expected preposition") || message.contains("Expected preposition") {
+            actions.append(createInsertAction(
+                title: "Add preposition 'from'",
+                uri: uri,
+                position: range.end,
+                text: "from ",
+                diagnostic: diagnostic
+            ))
+        }
+
+        // Check for missing article
+        if message.contains("expected article") || message.contains("Expected article") {
+            actions.append(createInsertAction(
+                title: "Add article 'the'",
+                uri: uri,
+                position: range.end,
+                text: "the ",
+                diagnostic: diagnostic
+            ))
+        }
+
+        // Check for missing period
+        if message.contains("expected '.'") || message.contains("Expected '.'") {
+            actions.append(createInsertAction(
+                title: "Add missing period",
+                uri: uri,
+                position: range.end,
+                text: ".",
+                diagnostic: diagnostic
+            ))
         }
 
         return actions
@@ -116,7 +151,8 @@ public struct CodeActionHandler: Sendable {
                         title: "Add Return statement",
                         uri: uri,
                         position: insertPosition,
-                        text: "    <Return> an <OK: status> for the <result>.\n"
+                        text: "    <Return> an <OK: status> for the <result>.\n",
+                        diagnostic: nil
                     ))
                 }
             }
@@ -215,9 +251,10 @@ public struct CodeActionHandler: Sendable {
         title: String,
         uri: String,
         range: (start: Position, end: Position),
-        newText: String
+        newText: String,
+        diagnostic: [String: Any]?
     ) -> [String: Any] {
-        return [
+        var action: [String: Any] = [
             "title": title,
             "kind": "quickfix",
             "edit": [
@@ -234,15 +271,22 @@ public struct CodeActionHandler: Sendable {
                 ]
             ]
         ]
+
+        if let diag = diagnostic {
+            action["diagnostics"] = [diag]
+        }
+
+        return action
     }
 
     private func createInsertAction(
         title: String,
         uri: String,
         position: Position,
-        text: String
+        text: String,
+        diagnostic: [String: Any]?
     ) -> [String: Any] {
-        return [
+        var action: [String: Any] = [
             "title": title,
             "kind": "quickfix",
             "edit": [
@@ -259,6 +303,12 @@ public struct CodeActionHandler: Sendable {
                 ]
             ]
         ]
+
+        if let diag = diagnostic {
+            action["diagnostics"] = [diag]
+        }
+
+        return action
     }
 }
 

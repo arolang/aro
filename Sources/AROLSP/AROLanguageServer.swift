@@ -22,11 +22,18 @@ public final class AROLanguageServer: Sendable {
     private let diagnosticsHandler: DiagnosticsHandler
     private let renameHandler: RenameHandler
     private let workspaceSymbolHandler: WorkspaceSymbolHandler
+    private let formattingHandler: FormattingHandler
+    private let foldingRangeHandler: FoldingRangeHandler
+    private let semanticTokensHandler: SemanticTokensHandler
+    private let signatureHelpHandler: SignatureHelpHandler
     private let codeActionHandler: CodeActionHandler
+
+    private let debugMode: Bool
 
     // MARK: - Initialization
 
-    public init() {
+    public init(debug: Bool = false) {
+        self.debugMode = debug
         self.documentManager = DocumentManager()
         self.hoverHandler = HoverHandler()
         self.definitionHandler = DefinitionHandler()
@@ -36,6 +43,10 @@ public final class AROLanguageServer: Sendable {
         self.diagnosticsHandler = DiagnosticsHandler()
         self.renameHandler = RenameHandler()
         self.workspaceSymbolHandler = WorkspaceSymbolHandler()
+        self.formattingHandler = FormattingHandler()
+        self.foldingRangeHandler = FoldingRangeHandler()
+        self.semanticTokensHandler = SemanticTokensHandler()
+        self.signatureHelpHandler = SignatureHelpHandler()
         self.codeActionHandler = CodeActionHandler()
     }
 
@@ -46,7 +57,7 @@ public final class AROLanguageServer: Sendable {
         [
             "textDocumentSync": [
                 "openClose": true,
-                "change": 1,  // Full sync
+                "change": 2,  // Incremental sync
                 "save": ["includeText": true]
             ],
             "hoverProvider": true,
@@ -57,16 +68,47 @@ public final class AROLanguageServer: Sendable {
             "definitionProvider": true,
             "referencesProvider": true,
             "documentSymbolProvider": true,
-            "renameProvider": true,
             "workspaceSymbolProvider": true,
-            "codeActionProvider": true
+            "documentFormattingProvider": true,
+            "renameProvider": [
+                "prepareProvider": true
+            ],
+            "foldingRangeProvider": true,
+            "semanticTokensProvider": [
+                "legend": semanticTokensHandler.legend,
+                "full": true,
+                "range": false
+            ],
+            "signatureHelpProvider": [
+                "triggerCharacters": ["<", " "],
+                "retriggerCharacters": [","]
+            ],
+            "codeActionProvider": [
+                "codeActionKinds": ["quickfix", "refactor"]
+            ]
         ]
+    }
+
+    // MARK: - Debug Logging
+
+    private func log(_ message: String) {
+        if debugMode {
+            FileHandle.standardError.write("[\(timestamp())] \(message)\n".data(using: .utf8)!)
+        }
+    }
+
+    private func timestamp() -> String {
+        let formatter = ISO8601DateFormatter()
+        formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+        return formatter.string(from: Date())
     }
 
     // MARK: - Stdio Transport
 
     /// Run the language server using stdio transport
     public func runStdio() async throws {
+        log("ARO Language Server starting...")
+
         let input = FileHandle.standardInput
         let output = FileHandle.standardOutput
 
@@ -77,14 +119,17 @@ public final class AROLanguageServer: Sendable {
             let availableData = input.availableData
             if availableData.isEmpty {
                 // EOF
+                log("EOF received, shutting down")
                 break
             }
             buffer.append(availableData)
 
             // Try to parse complete messages
             while let message = try extractMessage(from: &buffer) {
+                log("Received message: \(String(data: message.prefix(200), encoding: .utf8) ?? "...")")
                 let response = await handleMessage(message)
                 if let response = response {
+                    log("Sending response: \(String(data: response.prefix(200), encoding: .utf8) ?? "...")")
                     try sendMessage(response, to: output)
                 }
             }
@@ -151,6 +196,8 @@ public final class AROLanguageServer: Sendable {
         let id = json["id"]
         let params = json["params"]
 
+        log("Handling method: \(method)")
+
         // Handle the message based on method
         let result: Any?
 
@@ -199,17 +246,37 @@ public final class AROLanguageServer: Sendable {
         case "textDocument/documentSymbol":
             result = await handleDocumentSymbol(params: params)
 
+        case "workspace/symbol":
+            result = await handleWorkspaceSymbol(params: params)
+
+        case "textDocument/formatting":
+            result = await handleFormatting(params: params)
+
+        case "textDocument/prepareRename":
+            result = await handlePrepareRename(params: params)
+
         case "textDocument/rename":
             result = await handleRename(params: params)
 
-        case "workspace/symbol":
-            result = await handleWorkspaceSymbol(params: params)
+        case "textDocument/foldingRange":
+            result = await handleFoldingRange(params: params)
+
+        case "textDocument/semanticTokens/full":
+            result = await handleSemanticTokens(params: params)
+
+        case "textDocument/signatureHelp":
+            result = await handleSignatureHelp(params: params)
 
         case "textDocument/codeAction":
             result = await handleCodeAction(params: params)
 
+        case "$/cancelRequest":
+            // Cancellation not fully supported yet, just acknowledge
+            return nil
+
         default:
             // Unknown method
+            log("Unknown method: \(method)")
             if id != nil {
                 return createErrorResponse(id: id, code: -32601, message: "Method not found: \(method)")
             }
@@ -227,8 +294,13 @@ public final class AROLanguageServer: Sendable {
     // MARK: - Initialize
 
     private func handleInitialize(params: Any?) async -> [String: Any] {
+        log("Initialize request received")
         return [
-            "capabilities": capabilitiesDict
+            "capabilities": capabilitiesDict,
+            "serverInfo": [
+                "name": "aro-lsp",
+                "version": "1.1.0"
+            ]
         ]
     }
 
@@ -243,6 +315,7 @@ public final class AROLanguageServer: Sendable {
             return
         }
 
+        log("Document opened: \(uri)")
         let state = await documentManager.open(uri: uri, content: text, version: version)
         await publishDiagnostics(for: uri, state: state)
     }
@@ -256,12 +329,34 @@ public final class AROLanguageServer: Sendable {
             return
         }
 
-        // For full sync, just take the last change
-        if let lastChange = contentChanges.last,
-           let text = lastChange["text"] as? String {
-            if let state = await documentManager.update(uri: uri, content: text, version: version) {
-                await publishDiagnostics(for: uri, state: state)
+        log("Document changed: \(uri)")
+
+        // Convert content changes to TextDocumentContentChangeEvent
+        var changes: [TextDocumentContentChangeEvent] = []
+        for change in contentChanges {
+            let text = change["text"] as? String ?? ""
+
+            if let rangeDict = change["range"] as? [String: Any],
+               let startDict = rangeDict["start"] as? [String: Any],
+               let endDict = rangeDict["end"] as? [String: Any],
+               let startLine = startDict["line"] as? Int,
+               let startChar = startDict["character"] as? Int,
+               let endLine = endDict["line"] as? Int,
+               let endChar = endDict["character"] as? Int {
+                // Incremental change
+                let range = LSPRange(
+                    start: Position(line: startLine, character: startChar),
+                    end: Position(line: endLine, character: endChar)
+                )
+                changes.append(TextDocumentContentChangeEvent(range: range, rangeLength: nil, text: text))
+            } else {
+                // Full content change
+                changes.append(TextDocumentContentChangeEvent(range: nil, rangeLength: nil, text: text))
             }
+        }
+
+        if let state = await documentManager.applyChanges(uri: uri, changes: changes, version: version) {
+            await publishDiagnostics(for: uri, state: state)
         }
     }
 
@@ -272,6 +367,7 @@ public final class AROLanguageServer: Sendable {
             return
         }
 
+        log("Document closed: \(uri)")
         await documentManager.close(uri: uri)
         // Clear diagnostics
         await publishDiagnostics(for: uri, diagnostics: [])
@@ -285,6 +381,7 @@ public final class AROLanguageServer: Sendable {
             return
         }
 
+        log("Document saved: \(uri)")
         if let state = await documentManager.get(uri: uri) {
             await publishDiagnostics(for: uri, state: state)
         }
@@ -400,6 +497,60 @@ public final class AROLanguageServer: Sendable {
         return documentSymbolHandler.handle(compilationResult: state.compilationResult)
     }
 
+    private func handleWorkspaceSymbol(params: Any?) async -> [[String: Any]]? {
+        guard let dict = params as? [String: Any],
+              let query = dict["query"] as? String else {
+            return nil
+        }
+
+        let allDocuments = await documentManager.all()
+        return workspaceSymbolHandler.handle(query: query, documents: allDocuments)
+    }
+
+    private func handleFormatting(params: Any?) async -> [[String: Any]]? {
+        guard let dict = params as? [String: Any],
+              let textDocument = dict["textDocument"] as? [String: Any],
+              let uri = textDocument["uri"] as? String,
+              let options = dict["options"] as? [String: Any] else {
+            return nil
+        }
+
+        guard let state = await documentManager.get(uri: uri) else {
+            return nil
+        }
+
+        let tabSize = options["tabSize"] as? Int ?? 4
+        let insertSpaces = options["insertSpaces"] as? Bool ?? true
+
+        return formattingHandler.handle(
+            content: state.content,
+            options: FormattingOptions(tabSize: tabSize, insertSpaces: insertSpaces)
+        )
+    }
+
+    private func handlePrepareRename(params: Any?) async -> [String: Any]? {
+        guard let dict = params as? [String: Any],
+              let textDocument = dict["textDocument"] as? [String: Any],
+              let uri = textDocument["uri"] as? String,
+              let position = dict["position"] as? [String: Any],
+              let line = position["line"] as? Int,
+              let character = position["character"] as? Int else {
+            return nil
+        }
+
+        guard let state = await documentManager.get(uri: uri) else {
+            return nil
+        }
+
+        let lspPosition = Position(line: line, character: character)
+        return renameHandler.prepareRename(
+            uri: uri,
+            position: lspPosition,
+            content: state.content,
+            compilationResult: state.compilationResult
+        )
+    }
+
     private func handleRename(params: Any?) async -> [String: Any]? {
         guard let dict = params as? [String: Any],
               let textDocument = dict["textDocument"] as? [String: Any],
@@ -425,14 +576,57 @@ public final class AROLanguageServer: Sendable {
         )
     }
 
-    private func handleWorkspaceSymbol(params: Any?) async -> [[String: Any]]? {
+    private func handleFoldingRange(params: Any?) async -> [[String: Any]]? {
         guard let dict = params as? [String: Any],
-              let query = dict["query"] as? String else {
+              let textDocument = dict["textDocument"] as? [String: Any],
+              let uri = textDocument["uri"] as? String else {
             return nil
         }
 
-        let allDocuments = await documentManager.all()
-        return workspaceSymbolHandler.handle(query: query, documents: allDocuments)
+        guard let state = await documentManager.get(uri: uri) else {
+            return nil
+        }
+
+        return foldingRangeHandler.handle(compilationResult: state.compilationResult)
+    }
+
+    private func handleSemanticTokens(params: Any?) async -> [String: Any]? {
+        guard let dict = params as? [String: Any],
+              let textDocument = dict["textDocument"] as? [String: Any],
+              let uri = textDocument["uri"] as? String else {
+            return nil
+        }
+
+        guard let state = await documentManager.get(uri: uri) else {
+            return nil
+        }
+
+        return semanticTokensHandler.handle(
+            content: state.content,
+            compilationResult: state.compilationResult
+        )
+    }
+
+    private func handleSignatureHelp(params: Any?) async -> [String: Any]? {
+        guard let dict = params as? [String: Any],
+              let textDocument = dict["textDocument"] as? [String: Any],
+              let uri = textDocument["uri"] as? String,
+              let position = dict["position"] as? [String: Any],
+              let line = position["line"] as? Int,
+              let character = position["character"] as? Int else {
+            return nil
+        }
+
+        guard let state = await documentManager.get(uri: uri) else {
+            return nil
+        }
+
+        let lspPosition = Position(line: line, character: character)
+        return signatureHelpHandler.handle(
+            position: lspPosition,
+            content: state.content,
+            compilationResult: state.compilationResult
+        )
     }
 
     private func handleCodeAction(params: Any?) async -> [[String: Any]]? {

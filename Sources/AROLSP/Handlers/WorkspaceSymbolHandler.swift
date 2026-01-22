@@ -30,7 +30,8 @@ public struct WorkspaceSymbolHandler: Sendable {
 
                 // Add feature set as a symbol
                 let fsName = fs.name
-                if query.isEmpty || fsName.lowercased().contains(lowercaseQuery) {
+                if query.isEmpty || fsName.lowercased().contains(lowercaseQuery) ||
+                   fs.businessActivity.lowercased().contains(lowercaseQuery) {
                     symbols.append(createSymbolInfo(
                         name: fsName,
                         kind: 12,  // Function
@@ -50,6 +51,31 @@ public struct WorkspaceSymbolHandler: Sendable {
                                 kind: 14,  // Constant (published/exported)
                                 uri: uri,
                                 span: publish.span,
+                                containerName: fsName
+                            ))
+                        }
+                    }
+
+                    // Check ARO statements for action verbs and results
+                    if let aro = statement as? AROStatement {
+                        // Check action verb
+                        if query.isEmpty || aro.action.verb.lowercased().contains(lowercaseQuery) {
+                            symbols.append(createSymbolInfo(
+                                name: aro.action.verb,
+                                kind: 6,  // Method
+                                uri: uri,
+                                span: aro.action.span,
+                                containerName: fsName
+                            ))
+                        }
+
+                        // Check result name
+                        if query.isEmpty || aro.result.base.lowercased().contains(lowercaseQuery) {
+                            symbols.append(createSymbolInfo(
+                                name: aro.result.base,
+                                kind: 13,  // Variable
+                                uri: uri,
+                                span: aro.result.span,
                                 containerName: fsName
                             ))
                         }
