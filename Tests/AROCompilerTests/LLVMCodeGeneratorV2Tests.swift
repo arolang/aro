@@ -187,8 +187,10 @@ final class LLVMCodeGeneratorV2Tests: XCTestCase {
         XCTAssertNil(emitter.actionFunction(for: "nonexistent"))
     }
 
-    func testV2MultipleEntryPointsError() throws {
+    func testV2MultipleEntryPointsAllowed() throws {
         // Create a program with multiple Application-Start feature sets
+        // This is now allowed to support module imports where each module
+        // has its own Application-Start that runs before the main Application-Start
         let dummyLocation = SourceLocation(line: 0, column: 0, offset: 0)
         let dummySpan = SourceSpan(at: dummyLocation)
 
@@ -231,14 +233,17 @@ final class LLVMCodeGeneratorV2Tests: XCTestCase {
 
         let generator = LLVMCodeGeneratorV2()
 
-        XCTAssertThrowsError(try generator.generate(program: analyzedProgram)) { error in
-            XCTAssertTrue(error is LLVMCodeGenError)
-            if case LLVMCodeGenError.multipleEntryPoints = error {
-                // Expected
-            } else {
-                XCTFail("Expected multipleEntryPoints error, got: \(error)")
-            }
-        }
+        // Multiple Application-Start feature sets should now succeed
+        let result = try generator.generate(program: analyzedProgram)
+
+        // Verify IR contains both entry point functions with unique names
+        XCTAssertTrue(result.irText.contains("aro_fs_application_start_entry_point_1") ||
+                      result.irText.contains("entry_point_1"),
+                      "Should contain function for Entry Point 1")
+        XCTAssertTrue(result.irText.contains("aro_fs_application_start_entry_point_2") ||
+                      result.irText.contains("entry_point_2"),
+                      "Should contain function for Entry Point 2")
+        XCTAssertTrue(result.irText.contains("main"), "Should contain main function")
     }
 }
 
