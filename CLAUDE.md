@@ -325,7 +325,7 @@ Sources/
 │   └── Linker.swift    # Compilation and linking
 ├── AROCRuntime/        # C-callable Swift runtime bridge
 │   ├── RuntimeBridge.swift   # Core runtime C interface
-│   ├── ActionBridge.swift    # All 50 actions via @_cdecl
+│   ├── ActionBridge.swift    # All 48 actions via @_cdecl
 │   └── ServiceBridge.swift   # HTTP/File/Socket C interface
 └── AROCLI/             # CLI (run, compile, check, build commands)
 
@@ -346,7 +346,7 @@ Examples/
     ├── api.aro         # CRUD operations
     └── observers.aro   # Repository change observers
 
-Proposals/              # 17 language specifications
+Proposals/              # 27 language specifications
 ├── ARO-0001-language-fundamentals.md
 ├── ARO-0002-control-flow.md
 ├── ARO-0003-type-system.md
@@ -362,13 +362,23 @@ Proposals/              # 17 language specifications
 ├── ARO-0016-interoperability.md
 ├── ARO-0018-query-language.md
 ├── ARO-0019-standard-library.md
+├── ARO-0022-state-guards.md
 ├── ARO-0030-ide-integration.md
-└── ARO-0034-language-server-protocol.md
+├── ARO-0031-context-aware-formatting.md
+├── ARO-0034-language-server-protocol.md
+├── ARO-0035-configurable-runtime.md
+├── ARO-0036-file-operations.md
+├── ARO-0037-regex-split.md
+├── ARO-0038-list-element-access.md
+├── ARO-0040-format-aware-io.md
+├── ARO-0041-datetime-ranges.md
+├── ARO-0042-set-operations.md
+└── ARO-0043-sink-syntax.md
 ```
 
 ## Language Proposals
 
-The `Proposals/` directory contains 17 specifications:
+The `Proposals/` directory contains 27 specifications:
 
 | Proposal | Topics |
 |----------|--------|
@@ -387,8 +397,18 @@ The `Proposals/` directory contains 17 specifications:
 | **0016 Interoperability** | External services, Call action |
 | **0018 Data Pipelines** | Filter, transform, aggregate collections |
 | **0019 Standard Library** | Primitive types, utilities |
+| **0022 State Guards** | Event handler filtering with field:value syntax |
 | **0030 IDE Integration** | Syntax highlighting, snippets |
+| **0031 Context-Aware Formatting** | Adaptive output for machine/human/developer |
 | **0034 Language Server Protocol** | LSP server, diagnostics, navigation |
+| **0035 Configurable Runtime** | Configure action for timeouts and settings |
+| **0036 Extended File Operations** | Exists, Stat, Make, Copy, Move actions |
+| **0037 Regex Split** | Split action with regex delimiters |
+| **0038 List Element Access** | first, last, index, range specifiers |
+| **0040 Format-Aware I/O** | Auto format detection for JSON, YAML, CSV |
+| **0041 Date/Time Ranges** | Date arithmetic, ranges, recurrence patterns |
+| **0042 Set Operations** | intersect, difference, union on collections |
+| **0043 Sink Syntax** | Expressions in result position |
 
 ## Concurrency
 
