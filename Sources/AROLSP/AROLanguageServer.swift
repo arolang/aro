@@ -20,9 +20,9 @@ public final class AROLanguageServer: Sendable {
     private let referencesHandler: ReferencesHandler
     private let documentSymbolHandler: DocumentSymbolHandler
     private let diagnosticsHandler: DiagnosticsHandler
+    private let renameHandler: RenameHandler
     private let workspaceSymbolHandler: WorkspaceSymbolHandler
     private let formattingHandler: FormattingHandler
-    private let renameHandler: RenameHandler
     private let foldingRangeHandler: FoldingRangeHandler
     private let semanticTokensHandler: SemanticTokensHandler
     private let signatureHelpHandler: SignatureHelpHandler
@@ -41,9 +41,9 @@ public final class AROLanguageServer: Sendable {
         self.referencesHandler = ReferencesHandler()
         self.documentSymbolHandler = DocumentSymbolHandler()
         self.diagnosticsHandler = DiagnosticsHandler()
+        self.renameHandler = RenameHandler()
         self.workspaceSymbolHandler = WorkspaceSymbolHandler()
         self.formattingHandler = FormattingHandler()
-        self.renameHandler = RenameHandler()
         self.foldingRangeHandler = FoldingRangeHandler()
         self.semanticTokensHandler = SemanticTokensHandler()
         self.signatureHelpHandler = SignatureHelpHandler()
@@ -503,7 +503,8 @@ public final class AROLanguageServer: Sendable {
             return nil
         }
 
-        return await workspaceSymbolHandler.handle(query: query, documentManager: documentManager)
+        let allDocuments = await documentManager.all()
+        return workspaceSymbolHandler.handle(query: query, documents: allDocuments)
     }
 
     private func handleFormatting(params: Any?) async -> [[String: Any]]? {
@@ -632,13 +633,13 @@ public final class AROLanguageServer: Sendable {
         guard let dict = params as? [String: Any],
               let textDocument = dict["textDocument"] as? [String: Any],
               let uri = textDocument["uri"] as? String,
-              let rangeDict = dict["range"] as? [String: Any],
-              let startDict = rangeDict["start"] as? [String: Any],
-              let endDict = rangeDict["end"] as? [String: Any],
-              let startLine = startDict["line"] as? Int,
-              let startChar = startDict["character"] as? Int,
-              let endLine = endDict["line"] as? Int,
-              let endChar = endDict["character"] as? Int else {
+              let range = dict["range"] as? [String: Any],
+              let start = range["start"] as? [String: Any],
+              let end = range["end"] as? [String: Any],
+              let startLine = start["line"] as? Int,
+              let startChar = start["character"] as? Int,
+              let endLine = end["line"] as? Int,
+              let endChar = end["character"] as? Int else {
             return nil
         }
 
@@ -646,18 +647,18 @@ public final class AROLanguageServer: Sendable {
             return nil
         }
 
-        let range = LSPRange(
-            start: Position(line: startLine, character: startChar),
-            end: Position(line: endLine, character: endChar)
-        )
+        let context = dict["context"] as? [String: Any]
+        let diagnostics = context?["diagnostics"] as? [[String: Any]] ?? []
 
-        // Get diagnostics from compilation result
-        let diagnostics = state.compilationResult?.diagnostics ?? []
+        let startPos = Position(line: startLine, character: startChar)
+        let endPos = Position(line: endLine, character: endChar)
 
         return codeActionHandler.handle(
             uri: uri,
-            range: range,
-            diagnostics: diagnostics
+            range: (start: startPos, end: endPos),
+            diagnostics: diagnostics,
+            content: state.content,
+            compilationResult: state.compilationResult
         )
     }
 

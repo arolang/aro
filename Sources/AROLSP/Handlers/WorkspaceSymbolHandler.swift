@@ -1,6 +1,6 @@
 // ============================================================
 // WorkspaceSymbolHandler.swift
-// AROLSP - Workspace Symbol Search Provider
+// AROLSP - Workspace Symbol Provider
 // ============================================================
 
 #if !os(Windows)
@@ -14,30 +14,26 @@ public struct WorkspaceSymbolHandler: Sendable {
     public init() {}
 
     /// Handle a workspace symbol request
+    /// Returns SymbolInformation array for all matching symbols across the workspace
     public func handle(
         query: String,
-        documentManager: DocumentManager
-    ) async -> [[String: Any]]? {
-        let allDocuments = await documentManager.all()
-
-        if allDocuments.isEmpty {
-            return nil
-        }
-
+        documents: [String: DocumentManager.DocumentState]
+    ) -> [[String: Any]] {
         var symbols: [[String: Any]] = []
         let lowercaseQuery = query.lowercased()
 
-        for (uri, state) in allDocuments {
+        for (uri, state) in documents {
             guard let result = state.compilationResult else { continue }
 
             for analyzed in result.analyzedProgram.featureSets {
                 let fs = analyzed.featureSet
 
-                // Check feature set name
-                if fs.name.lowercased().contains(lowercaseQuery) ||
+                // Add feature set as a symbol
+                let fsName = fs.name
+                if query.isEmpty || fsName.lowercased().contains(lowercaseQuery) ||
                    fs.businessActivity.lowercased().contains(lowercaseQuery) {
                     symbols.append(createSymbolInfo(
-                        name: fs.name,
+                        name: fsName,
                         kind: 12,  // Function
                         uri: uri,
                         span: fs.span,
@@ -45,52 +41,79 @@ public struct WorkspaceSymbolHandler: Sendable {
                     ))
                 }
 
-                // Check variables in symbol table
-                for (name, symbol) in analyzed.symbolTable.symbols {
-                    if name.lowercased().contains(lowercaseQuery) {
-                        symbols.append(createSymbolInfo(
-                            name: name,
-                            kind: 13,  // Variable
-                            uri: uri,
-                            span: symbol.definedAt,
-                            containerName: fs.name
-                        ))
-                    }
-                }
-
-                // Check statements
+                // Add published symbols
                 for statement in fs.statements {
+                    if let publish = statement as? PublishStatement {
+                        let symbolName = publish.externalName
+                        if query.isEmpty || symbolName.lowercased().contains(lowercaseQuery) {
+                            symbols.append(createSymbolInfo(
+                                name: symbolName,
+                                kind: 14,  // Constant (published/exported)
+                                uri: uri,
+                                span: publish.span,
+                                containerName: fsName
+                            ))
+                        }
+                    }
+
+                    // Check ARO statements for action verbs and results
                     if let aro = statement as? AROStatement {
                         // Check action verb
-                        if aro.action.verb.lowercased().contains(lowercaseQuery) {
+                        if query.isEmpty || aro.action.verb.lowercased().contains(lowercaseQuery) {
                             symbols.append(createSymbolInfo(
                                 name: aro.action.verb,
                                 kind: 6,  // Method
                                 uri: uri,
                                 span: aro.action.span,
-                                containerName: fs.name
+                                containerName: fsName
                             ))
                         }
 
                         // Check result name
-                        if aro.result.base.lowercased().contains(lowercaseQuery) {
+                        if query.isEmpty || aro.result.base.lowercased().contains(lowercaseQuery) {
                             symbols.append(createSymbolInfo(
                                 name: aro.result.base,
                                 kind: 13,  // Variable
                                 uri: uri,
                                 span: aro.result.span,
-                                containerName: fs.name
+                                containerName: fsName
                             ))
                         }
+                    }
+                }
+
+                // Add symbols from symbol table
+                for (name, symbol) in analyzed.symbolTable.symbols {
+                    if query.isEmpty || name.lowercased().contains(lowercaseQuery) {
+                        symbols.append(createSymbolInfo(
+                            name: name,
+                            kind: symbolKind(for: symbol),
+                            uri: uri,
+                            span: symbol.definedAt,
+                            containerName: fsName
+                        ))
                     }
                 }
             }
         }
 
-        return symbols.isEmpty ? nil : symbols
+        return symbols
     }
 
     // MARK: - Helpers
+
+    private func symbolKind(for symbol: AROParser.Symbol) -> Int {
+        switch symbol.source {
+        case .extracted:
+            return 13  // Variable
+        case .computed:
+            return 13  // Variable
+        case .parameter:
+            return 13  // Variable
+        case .alias:
+            return 14  // Constant
+        }
+    }
 
     private func createSymbolInfo(
         name: String,
@@ -101,7 +124,7 @@ public struct WorkspaceSymbolHandler: Sendable {
     ) -> [String: Any] {
         let lspRange = PositionConverter.toLSP(span)
 
-        var result: [String: Any] = [
+        var info: [String: Any] = [
             "name": name,
             "kind": kind,
             "location": [
@@ -114,10 +137,10 @@ public struct WorkspaceSymbolHandler: Sendable {
         ]
 
         if let container = containerName {
-            result["containerName"] = container
+            info["containerName"] = container
         }
 
-        return result
+        return info
     }
 }
 

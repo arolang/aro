@@ -1,6 +1,6 @@
 // ============================================================
 // CodeActionHandler.swift
-// AROLSP - Code Action Provider
+// AROLSP - Code Actions Provider
 // ============================================================
 
 #if !os(Windows)
@@ -11,13 +11,19 @@ import LanguageServerProtocol
 /// Handles textDocument/codeAction requests
 public struct CodeActionHandler: Sendable {
 
-    // Known action verbs for typo correction
-    private static let knownActions = [
-        "Extract", "Parse", "Retrieve", "Fetch", "Accept",
-        "Create", "Compute", "Validate", "Compare", "Transform", "Set", "Merge",
+    /// Known action verbs for spell checking
+    private static let knownVerbs: Set<String> = [
+        // REQUEST
+        "Extract", "Parse", "Retrieve", "Fetch", "Read", "Accept", "List", "Stat", "Exists",
+        // OWN
+        "Create", "Compute", "Validate", "Compare", "Transform", "Filter", "Match", "Split", "Set", "Merge", "Copy", "Move", "Append",
+        // RESPONSE
         "Return", "Throw",
-        "Send", "Log", "Store", "Write", "Emit", "Publish",
-        "Start", "Stop", "Keepalive", "Watch",
+        // EXPORT
+        "Send", "Log", "Store", "Write", "Emit", "Publish", "CreateDirectory",
+        // LIFECYCLE
+        "Start", "Stop", "Keepalive", "Watch", "Configure", "Request",
+        // TEST
         "Given", "When", "Then", "Assert"
     ]
 
@@ -26,184 +32,169 @@ public struct CodeActionHandler: Sendable {
     /// Handle a code action request
     public func handle(
         uri: String,
-        range: LSPRange,
-        diagnostics: [AROParser.Diagnostic]
-    ) -> [[String: Any]]? {
+        range: (start: Position, end: Position),
+        diagnostics: [[String: Any]],
+        content: String,
+        compilationResult: CompilationResult?
+    ) -> [[String: Any]] {
         var actions: [[String: Any]] = []
 
+        // Process diagnostic-based code actions
         for diagnostic in diagnostics {
-            // Check for typo suggestions
-            if diagnostic.message.contains("Unknown action") ||
-               diagnostic.message.contains("unknown action") {
-                if let typoActions = suggestTypoCorrections(diagnostic: diagnostic, uri: uri) {
-                    actions.append(contentsOf: typoActions)
-                }
-            }
-
-            // Check for missing preposition
-            if diagnostic.message.contains("expected preposition") ||
-               diagnostic.message.contains("Expected preposition") {
-                if let fixAction = suggestPrepositionFix(diagnostic: diagnostic, uri: uri) {
-                    actions.append(fixAction)
-                }
-            }
-
-            // Check for missing article
-            if diagnostic.message.contains("expected article") ||
-               diagnostic.message.contains("Expected article") {
-                if let fixAction = suggestArticleFix(diagnostic: diagnostic, uri: uri) {
-                    actions.append(fixAction)
-                }
-            }
-
-            // Check for missing period
-            if diagnostic.message.contains("expected '.'") ||
-               diagnostic.message.contains("Expected '.'") {
-                if let fixAction = suggestPeriodFix(diagnostic: diagnostic, uri: uri) {
-                    actions.append(fixAction)
-                }
+            if let message = diagnostic["message"] as? String {
+                actions.append(contentsOf: actionsForDiagnostic(message: message, uri: uri, range: range, diagnostic: diagnostic))
             }
         }
 
-        return actions.isEmpty ? nil : actions
+        // Add context-based code actions
+        if let result = compilationResult {
+            actions.append(contentsOf: contextActions(result: result, uri: uri, range: range, content: content))
+        }
+
+        return actions
     }
 
-    // MARK: - Typo Corrections
+    // MARK: - Diagnostic-Based Actions
 
-    private func suggestTypoCorrections(diagnostic: AROParser.Diagnostic, uri: String) -> [[String: Any]]? {
-        // Extract the misspelled action from the message
-        let message = diagnostic.message
-        guard let actionName = extractMisspelledAction(from: message) else { return nil }
+    private func actionsForDiagnostic(
+        message: String,
+        uri: String,
+        range: (start: Position, end: Position),
+        diagnostic: [String: Any]
+    ) -> [[String: Any]] {
+        var actions: [[String: Any]] = []
 
-        // Find similar actions using Levenshtein distance
-        let suggestions = Self.knownActions.filter { action in
-            levenshteinDistance(actionName.lowercased(), action.lowercased()) <= 2
+        // Check for unknown action verb
+        if message.contains("Unknown action") || message.contains("unknown verb") {
+            // Try to extract the unknown verb and suggest similar ones
+            if let verb = extractVerbFromMessage(message) {
+                let suggestions = findSimilarVerbs(verb)
+                for suggestion in suggestions {
+                    actions.append(createReplaceAction(
+                        title: "Did you mean '\(suggestion)'?",
+                        uri: uri,
+                        range: range,
+                        newText: "<\(suggestion)>",
+                        diagnostic: diagnostic
+                    ))
+                }
+            }
         }
 
-        if suggestions.isEmpty { return nil }
-
-        guard let location = diagnostic.location else { return nil }
-        let lspPosition = PositionConverter.toLSP(location)
-
-        return suggestions.map { suggestion in
-            return [
-                "title": "Replace with '\(suggestion)'",
-                "kind": "quickfix",
-                "diagnostics": [
-                    [
-                        "range": [
-                            "start": ["line": lspPosition.line, "character": lspPosition.character],
-                            "end": ["line": lspPosition.line, "character": lspPosition.character + actionName.count + 2]
-                        ],
-                        "message": diagnostic.message,
-                        "severity": 1
-                    ]
-                ],
-                "edit": [
-                    "changes": [
-                        uri: [
-                            [
-                                "range": [
-                                    "start": ["line": lspPosition.line, "character": lspPosition.character],
-                                    "end": ["line": lspPosition.line, "character": lspPosition.character + actionName.count + 2]
-                                ],
-                                "newText": "<\(suggestion)>"
-                            ]
-                        ]
-                    ]
-                ]
-            ]
+        // Check for missing preposition
+        if message.contains("expected preposition") || message.contains("Expected preposition") {
+            actions.append(createInsertAction(
+                title: "Add preposition 'from'",
+                uri: uri,
+                position: range.end,
+                text: "from ",
+                diagnostic: diagnostic
+            ))
         }
+
+        // Check for missing article
+        if message.contains("expected article") || message.contains("Expected article") {
+            actions.append(createInsertAction(
+                title: "Add article 'the'",
+                uri: uri,
+                position: range.end,
+                text: "the ",
+                diagnostic: diagnostic
+            ))
+        }
+
+        // Check for missing period
+        if message.contains("expected '.'") || message.contains("Expected '.'") {
+            actions.append(createInsertAction(
+                title: "Add missing period",
+                uri: uri,
+                position: range.end,
+                text: ".",
+                diagnostic: diagnostic
+            ))
+        }
+
+        return actions
     }
 
-    private func extractMisspelledAction(from message: String) -> String? {
-        // Try to extract action name from messages like "Unknown action 'Extrct'"
-        if let range = message.range(of: "'([^']+)'", options: .regularExpression) {
-            let match = message[range]
-            return String(match.dropFirst().dropLast())
+    // MARK: - Context-Based Actions
+
+    private func contextActions(
+        result: CompilationResult,
+        uri: String,
+        range: (start: Position, end: Position),
+        content: String
+    ) -> [[String: Any]] {
+        var actions: [[String: Any]] = []
+        let aroPosition = PositionConverter.fromLSP(range.start)
+
+        for analyzed in result.analyzedProgram.featureSets {
+            let fs = analyzed.featureSet
+
+            // Check if cursor is in this feature set
+            if isPositionInSpan(aroPosition, fs.span) {
+                // Check if feature set is missing a Return statement
+                let hasReturn = fs.statements.contains { statement in
+                    if let aro = statement as? AROStatement {
+                        return aro.action.verb.uppercased() == "RETURN"
+                    }
+                    return false
+                }
+
+                if !hasReturn {
+                    // Find the end of the feature set body to insert Return
+                    let insertPosition = Position(
+                        line: fs.span.end.line - 1,
+                        character: 4
+                    )
+                    actions.append(createInsertAction(
+                        title: "Add Return statement",
+                        uri: uri,
+                        position: insertPosition,
+                        text: "    <Return> an <OK: status> for the <result>.\n",
+                        diagnostic: nil
+                    ))
+                }
+            }
         }
+
+        return actions
+    }
+
+    // MARK: - Helpers
+
+    private func extractVerbFromMessage(_ message: String) -> String? {
+        // Try to extract a verb from error messages like "Unknown action 'Extrct'"
+        let patterns = [
+            "'([A-Za-z]+)'",
+            "\"([A-Za-z]+)\""
+        ]
+
+        for pattern in patterns {
+            if let regex = try? NSRegularExpression(pattern: pattern),
+               let match = regex.firstMatch(in: message, range: NSRange(message.startIndex..., in: message)),
+               let range = Range(match.range(at: 1), in: message) {
+                return String(message[range])
+            }
+        }
+
         return nil
     }
 
-    // MARK: - Preposition Fix
+    private func findSimilarVerbs(_ input: String) -> [String] {
+        let lowercaseInput = input.lowercased()
+        var matches: [(String, Int)] = []
 
-    private func suggestPrepositionFix(diagnostic: AROParser.Diagnostic, uri: String) -> [String: Any]? {
-        guard let location = diagnostic.location else { return nil }
-        let lspPosition = PositionConverter.toLSP(location)
+        for verb in Self.knownVerbs {
+            let distance = levenshteinDistance(lowercaseInput, verb.lowercased())
+            if distance <= 3 {
+                matches.append((verb, distance))
+            }
+        }
 
-        // Suggest the most common preposition based on context
-        let suggestedPreposition = "from"  // Default suggestion
-
-        return [
-            "title": "Add preposition '\(suggestedPreposition)'",
-            "kind": "quickfix",
-            "edit": [
-                "changes": [
-                    uri: [
-                        [
-                            "range": [
-                                "start": ["line": lspPosition.line, "character": lspPosition.character],
-                                "end": ["line": lspPosition.line, "character": lspPosition.character]
-                            ],
-                            "newText": "\(suggestedPreposition) "
-                        ]
-                    ]
-                ]
-            ]
-        ]
+        // Sort by distance and return top 3
+        return matches.sorted { $0.1 < $1.1 }.prefix(3).map { $0.0 }
     }
-
-    // MARK: - Article Fix
-
-    private func suggestArticleFix(diagnostic: AROParser.Diagnostic, uri: String) -> [String: Any]? {
-        guard let location = diagnostic.location else { return nil }
-        let lspPosition = PositionConverter.toLSP(location)
-
-        return [
-            "title": "Add article 'the'",
-            "kind": "quickfix",
-            "edit": [
-                "changes": [
-                    uri: [
-                        [
-                            "range": [
-                                "start": ["line": lspPosition.line, "character": lspPosition.character],
-                                "end": ["line": lspPosition.line, "character": lspPosition.character]
-                            ],
-                            "newText": "the "
-                        ]
-                    ]
-                ]
-            ]
-        ]
-    }
-
-    // MARK: - Period Fix
-
-    private func suggestPeriodFix(diagnostic: AROParser.Diagnostic, uri: String) -> [String: Any]? {
-        guard let location = diagnostic.location else { return nil }
-        let lspPosition = PositionConverter.toLSP(location)
-
-        return [
-            "title": "Add missing period",
-            "kind": "quickfix",
-            "edit": [
-                "changes": [
-                    uri: [
-                        [
-                            "range": [
-                                "start": ["line": lspPosition.line, "character": lspPosition.character],
-                                "end": ["line": lspPosition.line, "character": lspPosition.character]
-                            ],
-                            "newText": "."
-                        ]
-                    ]
-                ]
-            ]
-        ]
-    }
-
-    // MARK: - Levenshtein Distance
 
     private func levenshteinDistance(_ s1: String, _ s2: String) -> Int {
         let s1Array = Array(s1)
@@ -216,21 +207,108 @@ public struct CodeActionHandler: Sendable {
 
         var matrix = [[Int]](repeating: [Int](repeating: 0, count: n + 1), count: m + 1)
 
-        for i in 0...m { matrix[i][0] = i }
-        for j in 0...n { matrix[0][j] = j }
+        for i in 0...m {
+            matrix[i][0] = i
+        }
+        for j in 0...n {
+            matrix[0][j] = j
+        }
 
         for i in 1...m {
             for j in 1...n {
-                let cost = s1Array[i - 1] == s2Array[j - 1] ? 0 : 1
-                matrix[i][j] = min(
-                    matrix[i - 1][j] + 1,      // deletion
-                    matrix[i][j - 1] + 1,      // insertion
-                    matrix[i - 1][j - 1] + cost // substitution
-                )
+                if s1Array[i - 1] == s2Array[j - 1] {
+                    matrix[i][j] = matrix[i - 1][j - 1]
+                } else {
+                    matrix[i][j] = min(
+                        matrix[i - 1][j] + 1,      // deletion
+                        matrix[i][j - 1] + 1,      // insertion
+                        matrix[i - 1][j - 1] + 1   // substitution
+                    )
+                }
             }
         }
 
         return matrix[m][n]
+    }
+
+    private func isPositionInSpan(_ position: SourceLocation, _ span: SourceSpan) -> Bool {
+        if position.line < span.start.line || position.line > span.end.line {
+            return false
+        }
+
+        if position.line == span.start.line && position.column < span.start.column {
+            return false
+        }
+
+        if position.line == span.end.line && position.column > span.end.column {
+            return false
+        }
+
+        return true
+    }
+
+    private func createReplaceAction(
+        title: String,
+        uri: String,
+        range: (start: Position, end: Position),
+        newText: String,
+        diagnostic: [String: Any]?
+    ) -> [String: Any] {
+        var action: [String: Any] = [
+            "title": title,
+            "kind": "quickfix",
+            "edit": [
+                "changes": [
+                    uri: [
+                        [
+                            "range": [
+                                "start": ["line": range.start.line, "character": range.start.character],
+                                "end": ["line": range.end.line, "character": range.end.character]
+                            ],
+                            "newText": newText
+                        ]
+                    ]
+                ]
+            ]
+        ]
+
+        if let diag = diagnostic {
+            action["diagnostics"] = [diag]
+        }
+
+        return action
+    }
+
+    private func createInsertAction(
+        title: String,
+        uri: String,
+        position: Position,
+        text: String,
+        diagnostic: [String: Any]?
+    ) -> [String: Any] {
+        var action: [String: Any] = [
+            "title": title,
+            "kind": "quickfix",
+            "edit": [
+                "changes": [
+                    uri: [
+                        [
+                            "range": [
+                                "start": ["line": position.line, "character": position.character],
+                                "end": ["line": position.line, "character": position.character]
+                            ],
+                            "newText": text
+                        ]
+                    ]
+                ]
+            ]
+        ]
+
+        if let diag = diagnostic {
+            action["diagnostics"] = [diag]
+        }
+
+        return action
     }
 }
 

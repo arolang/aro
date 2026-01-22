@@ -1,6 +1,6 @@
 // ============================================================
 // RenameHandler.swift
-// AROLSP - Symbol Rename Provider
+// AROLSP - Rename Symbol Provider
 // ============================================================
 
 #if !os(Windows)
@@ -14,6 +14,7 @@ public struct RenameHandler: Sendable {
     public init() {}
 
     /// Handle a prepare rename request
+    /// Returns the range and placeholder text for the symbol at the position
     public func prepareRename(
         uri: String,
         position: Position,
@@ -70,6 +71,7 @@ public struct RenameHandler: Sendable {
     }
 
     /// Handle a rename request
+    /// Returns a WorkspaceEdit with all text edits needed to rename the symbol
     public func handle(
         uri: String,
         position: Position,
@@ -83,25 +85,32 @@ public struct RenameHandler: Sendable {
 
         // Find the symbol name at the position
         var targetName: String?
+        var targetSpan: SourceSpan?
 
         for analyzed in result.analyzedProgram.featureSets {
             let fs = analyzed.featureSet
 
             for statement in fs.statements {
                 if let aro = statement as? AROStatement {
+                    // Check result
                     if isPositionInSpan(aroPosition, aro.result.span) {
                         targetName = aro.result.base
+                        targetSpan = aro.result.span
                         break
                     }
 
+                    // Check object
                     if isPositionInSpan(aroPosition, aro.object.noun.span) {
                         targetName = aro.object.noun.base
+                        targetSpan = aro.object.noun.span
                         break
                     }
 
+                    // Check expression
                     if let expr = aro.valueSource.asExpression {
-                        if let name = findSymbolNameInExpression(expr, position: aroPosition) {
+                        if let (name, span) = findSymbolInExpression(expr, position: aroPosition) {
                             targetName = name
+                            targetSpan = span
                             break
                         }
                     }
@@ -112,9 +121,10 @@ public struct RenameHandler: Sendable {
         }
 
         guard let symbolName = targetName else { return nil }
+        _ = targetSpan  // Used for validation, may be used for more precise matching later
 
-        // Collect all edits for this symbol
-        var edits: [[String: Any]] = []
+        // Find all references to this symbol and create text edits
+        var textEdits: [[String: Any]] = []
 
         for analyzed in result.analyzedProgram.featureSets {
             let fs = analyzed.featureSet
@@ -123,40 +133,43 @@ public struct RenameHandler: Sendable {
                 if let aro = statement as? AROStatement {
                     // Check result
                     if aro.result.base == symbolName {
-                        edits.append(createTextEdit(span: aro.result.span, newText: newName, content: content))
+                        textEdits.append(createTextEdit(span: aro.result.span, newText: newName))
                     }
 
                     // Check object
                     if aro.object.noun.base == symbolName {
-                        edits.append(createTextEdit(span: aro.object.noun.span, newText: newName, content: content))
+                        textEdits.append(createTextEdit(span: aro.object.noun.span, newText: newName))
                     }
 
                     // Check expression
                     if let expr = aro.valueSource.asExpression {
-                        edits.append(contentsOf: findRenameEditsInExpression(expr, name: symbolName, newName: newName, content: content))
+                        textEdits.append(contentsOf: findEditsInExpression(expr, name: symbolName, newName: newName))
                     }
 
                     // Check where clause
                     if let whereClause = aro.queryModifiers.whereClause {
-                        edits.append(contentsOf: findRenameEditsInExpression(whereClause.value, name: symbolName, newName: newName, content: content))
+                        textEdits.append(contentsOf: findEditsInExpression(whereClause.value, name: symbolName, newName: newName))
                     }
                 }
 
                 if let publish = statement as? PublishStatement {
                     if publish.internalVariable == symbolName {
-                        edits.append(createTextEdit(span: publish.span, newText: newName, content: content))
+                        // For publish statements, we need to handle differently
+                        // since the span covers the whole statement
+                        textEdits.append(createTextEdit(span: publish.span, newText: newName))
                     }
                 }
             }
         }
 
-        if edits.isEmpty {
+        if textEdits.isEmpty {
             return nil
         }
 
+        // Return WorkspaceEdit format
         return [
             "changes": [
-                uri: edits
+                uri: textEdits
             ]
         ]
     }
@@ -205,67 +218,62 @@ public struct RenameHandler: Sendable {
         return nil
     }
 
-    private func findSymbolNameInExpression(_ expression: any AROParser.Expression, position: SourceLocation) -> String? {
+    private func findSymbolInExpression(_ expression: any AROParser.Expression, position: SourceLocation) -> (String, SourceSpan)? {
         if let varRef = expression as? VariableRefExpression {
             if isPositionInSpan(position, varRef.span) {
-                return varRef.noun.base
+                return (varRef.noun.base, varRef.span)
             }
         } else if let binary = expression as? BinaryExpression {
-            if let name = findSymbolNameInExpression(binary.left, position: position) {
-                return name
+            if let result = findSymbolInExpression(binary.left, position: position) {
+                return result
             }
-            if let name = findSymbolNameInExpression(binary.right, position: position) {
-                return name
+            if let result = findSymbolInExpression(binary.right, position: position) {
+                return result
             }
         } else if let unary = expression as? UnaryExpression {
-            if let name = findSymbolNameInExpression(unary.operand, position: position) {
-                return name
+            if let result = findSymbolInExpression(unary.operand, position: position) {
+                return result
             }
         } else if let member = expression as? MemberAccessExpression {
-            if let name = findSymbolNameInExpression(member.base, position: position) {
-                return name
+            if let result = findSymbolInExpression(member.base, position: position) {
+                return result
             }
         } else if let subscript_ = expression as? SubscriptExpression {
-            if let name = findSymbolNameInExpression(subscript_.base, position: position) {
-                return name
+            if let result = findSymbolInExpression(subscript_.base, position: position) {
+                return result
             }
-            if let name = findSymbolNameInExpression(subscript_.index, position: position) {
-                return name
+            if let result = findSymbolInExpression(subscript_.index, position: position) {
+                return result
             }
         }
 
         return nil
     }
 
-    private func findRenameEditsInExpression(
-        _ expression: any AROParser.Expression,
-        name: String,
-        newName: String,
-        content: String
-    ) -> [[String: Any]] {
+    private func findEditsInExpression(_ expression: any AROParser.Expression, name: String, newName: String) -> [[String: Any]] {
         var edits: [[String: Any]] = []
 
         if let varRef = expression as? VariableRefExpression {
             if varRef.noun.base == name {
-                edits.append(createTextEdit(span: varRef.span, newText: newName, content: content))
+                edits.append(createTextEdit(span: varRef.span, newText: newName))
             }
         } else if let binary = expression as? BinaryExpression {
-            edits.append(contentsOf: findRenameEditsInExpression(binary.left, name: name, newName: newName, content: content))
-            edits.append(contentsOf: findRenameEditsInExpression(binary.right, name: name, newName: newName, content: content))
+            edits.append(contentsOf: findEditsInExpression(binary.left, name: name, newName: newName))
+            edits.append(contentsOf: findEditsInExpression(binary.right, name: name, newName: newName))
         } else if let unary = expression as? UnaryExpression {
-            edits.append(contentsOf: findRenameEditsInExpression(unary.operand, name: name, newName: newName, content: content))
+            edits.append(contentsOf: findEditsInExpression(unary.operand, name: name, newName: newName))
         } else if let member = expression as? MemberAccessExpression {
-            edits.append(contentsOf: findRenameEditsInExpression(member.base, name: name, newName: newName, content: content))
+            edits.append(contentsOf: findEditsInExpression(member.base, name: name, newName: newName))
         } else if let subscript_ = expression as? SubscriptExpression {
-            edits.append(contentsOf: findRenameEditsInExpression(subscript_.base, name: name, newName: newName, content: content))
-            edits.append(contentsOf: findRenameEditsInExpression(subscript_.index, name: name, newName: newName, content: content))
+            edits.append(contentsOf: findEditsInExpression(subscript_.base, name: name, newName: newName))
+            edits.append(contentsOf: findEditsInExpression(subscript_.index, name: name, newName: newName))
         } else if let array = expression as? ArrayLiteralExpression {
             for element in array.elements {
-                edits.append(contentsOf: findRenameEditsInExpression(element, name: name, newName: newName, content: content))
+                edits.append(contentsOf: findEditsInExpression(element, name: name, newName: newName))
             }
         } else if let map = expression as? MapLiteralExpression {
             for entry in map.entries {
-                edits.append(contentsOf: findRenameEditsInExpression(entry.value, name: name, newName: newName, content: content))
+                edits.append(contentsOf: findEditsInExpression(entry.value, name: name, newName: newName))
             }
         }
 
@@ -290,7 +298,7 @@ public struct RenameHandler: Sendable {
         return true
     }
 
-    private func createTextEdit(span: SourceSpan, newText: String, content: String) -> [String: Any] {
+    private func createTextEdit(span: SourceSpan, newText: String) -> [String: Any] {
         let lspRange = PositionConverter.toLSP(span)
 
         return [

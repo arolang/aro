@@ -503,10 +503,10 @@ struct WorkspaceSymbolHandlerTests {
         """
         _ = await manager.open(uri: "file:///test.aro", content: content, version: 1)
 
-        let result = await handler.handle(query: "User", documentManager: manager)
+        let documents = await manager.all()
+        let result = handler.handle(query: "User", documents: documents)
 
-        #expect(result != nil)
-        #expect(result!.count >= 1)
+        #expect(result.count >= 1)
     }
 
     @Test("Returns empty for no matches")
@@ -521,9 +521,10 @@ struct WorkspaceSymbolHandlerTests {
         """
         _ = await manager.open(uri: "file:///test.aro", content: content, version: 1)
 
-        let result = await handler.handle(query: "ZZZZZ", documentManager: manager)
+        let documents = await manager.all()
+        let result = handler.handle(query: "ZZZZZ", documents: documents)
 
-        #expect(result == nil || result!.isEmpty)
+        #expect(result.isEmpty)
     }
 }
 
@@ -708,20 +709,32 @@ struct CodeActionHandlerTests {
     @Test("Returns code actions for diagnostics")
     func testCodeActionsForDiagnostics() {
         let handler = CodeActionHandler()
-        let diagnostic = AROParser.Diagnostic(
-            severity: .error,
-            message: "Unknown action 'Extrct'",
-            location: SourceLocation(line: 1, column: 1, offset: 0)
-        )
+        let source = """
+        (Test: Business) {
+            <Extrct> the <data> from the <source>.
+        }
+        """
+        let compilationResult = Compiler.compile(source)
+
+        let diagnostic: [String: Any] = [
+            "severity": 1,
+            "message": "Unknown action 'Extrct'",
+            "range": [
+                "start": ["line": 1, "character": 4],
+                "end": ["line": 1, "character": 12]
+            ]
+        ]
 
         let result = handler.handle(
             uri: "file:///test.aro",
-            range: LSPRange(start: Position(line: 0, character: 0), end: Position(line: 0, character: 10)),
-            diagnostics: [diagnostic]
+            range: (start: Position(line: 1, character: 4), end: Position(line: 1, character: 12)),
+            diagnostics: [diagnostic],
+            content: source,
+            compilationResult: compilationResult
         )
 
         // May return quick fixes
-        #expect(result != nil || result == nil)  // May or may not have fixes
+        #expect(result.count >= 0)  // May or may not have fixes
     }
 }
 

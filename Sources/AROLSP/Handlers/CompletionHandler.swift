@@ -64,6 +64,10 @@ public struct CompletionHandler: Sendable {
             ("Retrieve", "REQUEST", "Retrieve from data store"),
             ("Fetch", "REQUEST", "Fetch from remote source"),
             ("Accept", "REQUEST", "Accept input"),
+            ("Read", "REQUEST", "Read file contents"),
+            ("List", "REQUEST", "List directory contents"),
+            ("Stat", "REQUEST", "Get file metadata"),
+            ("Exists", "REQUEST", "Check if file exists"),
 
             // OWN actions
             ("Create", "OWN", "Create new data"),
@@ -73,6 +77,12 @@ public struct CompletionHandler: Sendable {
             ("Transform", "OWN", "Transform data structure"),
             ("Set", "OWN", "Set a value"),
             ("Merge", "OWN", "Merge data"),
+            ("Filter", "OWN", "Filter collection"),
+            ("Match", "OWN", "Match pattern"),
+            ("Split", "OWN", "Split string"),
+            ("Copy", "OWN", "Copy file"),
+            ("Move", "OWN", "Move file"),
+            ("Append", "OWN", "Append to collection"),
 
             // RESPONSE actions
             ("Return", "RESPONSE", "Return result"),
@@ -85,12 +95,15 @@ public struct CompletionHandler: Sendable {
             ("Write", "EXPORT", "Write to output"),
             ("Emit", "EXPORT", "Emit event"),
             ("Publish", "EXPORT", "Publish symbol globally"),
+            ("CreateDirectory", "EXPORT", "Create directory"),
 
             // LIFECYCLE actions
             ("Start", "LIFECYCLE", "Start a service"),
             ("Stop", "LIFECYCLE", "Stop a service"),
             ("Keepalive", "LIFECYCLE", "Keep application running"),
             ("Watch", "LIFECYCLE", "Watch for changes"),
+            ("Configure", "LIFECYCLE", "Configure service"),
+            ("Request", "LIFECYCLE", "Make HTTP request"),
 
             // TEST actions
             ("Given", "TEST", "Test setup"),
@@ -144,6 +157,12 @@ public struct CompletionHandler: Sendable {
             ("error", "Error information"),
             ("result", "Operation result"),
             ("config", "Configuration"),
+            // List element specifiers (ARO-0038)
+            ("first", "First element of list"),
+            ("last", "Last element of list"),
+            ("0", "Last element (reverse index)"),
+            ("1", "Second-to-last element"),
+            ("2", "Third-to-last element"),
         ]
 
         return qualifiers.map { qualifier in
