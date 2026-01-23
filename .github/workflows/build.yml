@@ -792,6 +792,9 @@ jobs:
 
       - name: Test binary compilation
         run: |
+          echo "=== Environment check ==="
+          echo "SWIFT_LIB_PATH=$SWIFT_LIB_PATH"
+          ls -la "$SWIFT_LIB_PATH" 2>/dev/null | head -5 || echo "SWIFT_LIB_PATH directory not found"
           echo "=== Testing aro build ==="
           ./aro-bin/aro build Examples/HelloWorld --verbose 2>&1 || echo "Build failed with exit code $?"
           echo "=== Checking for binary ==="
