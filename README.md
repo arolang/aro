@@ -40,6 +40,10 @@ This constraint is intentional. When there is only one way to express an operati
 
 A compliance officer can audit this. A new developer can understand it in seconds. The code is the documentation.
 
+## Why This Exists
+
+Right, here's the thing. This project exists because I wanted to see what happens when you let AI loose on a domain you don't feel confident enough to tackle on your own, but you're savvy enough to spot when it's talking rubbish. Turns out, the AI won't stop you doing daft things - it'll happily help you build something bonkers if you ask it to. But the real surprise? I've ended up learning more about language design, parsers, and compiler theory than I ever expected. Never thought I'd care about lexers and ASTs, but here we are. Sometimes the best education comes from poking at something you probably shouldn't, with tools that don't know any better.
+
 ## Features
 
 ### Contract First APIs
@@ -319,22 +323,7 @@ ARO is in active development. Contributions are welcome.
 - [Follow on Mastodon](https://social.uitsmijter.io/@aro) for daily language tips and updates
 - Read the [Evolution Proposals](./Proposals/) to understand the language design
 
-### Code Reviews
-
-You can request an AI-powered code review on any pull request by commenting:
-
-```
-@claude review
-```
-
-Claude will analyze the PR for bugs, security issues, performance problems, and code quality. It will create suggested fixes as actual code changes in a new branch and submit them as a review PR.
-
-The review will:
-- ✅ Check for bugs and logical errors
-- ✅ Identify security vulnerabilities
-- ✅ Suggest performance improvements
-- ✅ Ensure code follows project guidelines (CLAUDE.md)
-- ✅ Verify test coverage
+AI-assisted coding, code reviews, and contributions are highly appreciated.
 
 ## Troubleshooting
 
