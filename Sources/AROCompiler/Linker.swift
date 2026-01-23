@@ -849,9 +849,16 @@ public final class CCompiler {
 
     private func findSwiftLibPath() -> String? {
         // Check environment variable first (allows CI/CD to override)
-        if let envPath = ProcessInfo.processInfo.environment["SWIFT_LIB_PATH"],
-           FileManager.default.fileExists(atPath: envPath) {
-            return envPath
+        if let envPath = ProcessInfo.processInfo.environment["SWIFT_LIB_PATH"] {
+            FileHandle.standardError.write("[LINKER] SWIFT_LIB_PATH env: \(envPath)\n".data(using: .utf8)!)
+            if FileManager.default.fileExists(atPath: envPath) {
+                FileHandle.standardError.write("[LINKER] Using SWIFT_LIB_PATH: \(envPath)\n".data(using: .utf8)!)
+                return envPath
+            } else {
+                FileHandle.standardError.write("[LINKER] SWIFT_LIB_PATH does not exist!\n".data(using: .utf8)!)
+            }
+        } else {
+            FileHandle.standardError.write("[LINKER] SWIFT_LIB_PATH not set\n".data(using: .utf8)!)
         }
 
         #if os(Windows)
@@ -991,6 +998,9 @@ public final class CCompiler {
 
                     #if os(macOS)
                     let platformLib = toolchainLib.appendingPathComponent("macosx").path
+                    FileHandle.standardError.write("[LINKER-MAC] which swift: \(swiftPath)\n".data(using: .utf8)!)
+                    FileHandle.standardError.write("[LINKER-MAC] Derived lib path: \(platformLib)\n".data(using: .utf8)!)
+                    FileHandle.standardError.write("[LINKER-MAC] Path exists: \(FileManager.default.fileExists(atPath: platformLib))\n".data(using: .utf8)!)
                     #else
                     let platformLib = toolchainLib.appendingPathComponent("linux").path
                     #endif
@@ -1005,6 +1015,8 @@ public final class CCompiler {
 
         // Fallback to standard paths
         #if os(macOS)
+        FileHandle.standardError.write("[LINKER-MAC] Primary path discovery failed, trying fallbacks...\n".data(using: .utf8)!)
+
         // Check swift-actions/setup-swift location (GitHub Actions)
         // The action installs Swift at /Users/runner/hostedtoolcache/swift/...
         // Try to find via 'which swift' first (respects PATH)
@@ -1032,6 +1044,10 @@ public final class CCompiler {
                         .appendingPathComponent("swift")
                         .appendingPathComponent("macosx")
 
+                    FileHandle.standardError.write("[LINKER-MAC] Fallback which swift: \(swiftPath)\n".data(using: .utf8)!)
+                    FileHandle.standardError.write("[LINKER-MAC] Fallback derived path: \(toolchainLib.path)\n".data(using: .utf8)!)
+                    FileHandle.standardError.write("[LINKER-MAC] Fallback path exists: \(FileManager.default.fileExists(atPath: toolchainLib.path))\n".data(using: .utf8)!)
+
                     if FileManager.default.fileExists(atPath: toolchainLib.path) {
                         return toolchainLib.path
                     }
@@ -1041,21 +1057,26 @@ public final class CCompiler {
 
         // Check Xcode toolchain
         let xcodeLib = "/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/lib/swift/macosx"
+        FileHandle.standardError.write("[LINKER-MAC] Checking Xcode: \(xcodeLib) exists=\(FileManager.default.fileExists(atPath: xcodeLib))\n".data(using: .utf8)!)
         if FileManager.default.fileExists(atPath: xcodeLib) {
             return xcodeLib
         }
 
         // Check usr/lib/swift
         let usrLib = "/usr/lib/swift"
+        FileHandle.standardError.write("[LINKER-MAC] Checking usrLib: \(usrLib) exists=\(FileManager.default.fileExists(atPath: usrLib))\n".data(using: .utf8)!)
         if FileManager.default.fileExists(atPath: usrLib) {
             return usrLib
         }
 
         // Check Homebrew Swift installation
         let homebrewLib = "/opt/homebrew/opt/swift/lib/swift/macosx"
+        FileHandle.standardError.write("[LINKER-MAC] Checking Homebrew: \(homebrewLib) exists=\(FileManager.default.fileExists(atPath: homebrewLib))\n".data(using: .utf8)!)
         if FileManager.default.fileExists(atPath: homebrewLib) {
             return homebrewLib
         }
+
+        FileHandle.standardError.write("[LINKER-MAC] WARNING: No Swift library path found!\n".data(using: .utf8)!)
         #elseif os(Linux)
         // Check standard system location
         let swiftLib = "/usr/lib/swift/linux"
