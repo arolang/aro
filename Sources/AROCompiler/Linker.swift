@@ -952,9 +952,10 @@ public final class CCompiler {
         let process = Process()
 
         #if os(macOS)
-        // macOS: use xcrun to find swift
-        process.executableURL = URL(fileURLWithPath: "/usr/bin/xcrun")
-        process.arguments = ["--find", "swift"]
+        // macOS: use 'which' first to respect PATH (for swift-actions/setup-swift)
+        // Fall back to 'xcrun' for Xcode installations
+        process.executableURL = URL(fileURLWithPath: "/usr/bin/which")
+        process.arguments = ["swift"]
         #else
         // Linux: use which to find swift
         process.executableURL = URL(fileURLWithPath: "/usr/bin/which")
@@ -999,6 +1000,40 @@ public final class CCompiler {
 
         // Fallback to standard paths
         #if os(macOS)
+        // Check swift-actions/setup-swift location (GitHub Actions)
+        // The action installs Swift at /Users/runner/hostedtoolcache/swift/...
+        // Try to find via 'which swift' first (respects PATH)
+        do {
+            let whichProcess = Process()
+            whichProcess.executableURL = URL(fileURLWithPath: "/usr/bin/which")
+            whichProcess.arguments = ["swift"]
+
+            let whichPipe = Pipe()
+            whichProcess.standardOutput = whichPipe
+            whichProcess.standardError = FileHandle.nullDevice
+
+            try whichProcess.run()
+            whichProcess.waitUntilExit()
+
+            if whichProcess.terminationStatus == 0 {
+                let data = whichPipe.fileHandleForReading.readDataToEndOfFile()
+                if let swiftPath = String(data: data, encoding: .utf8)?.trimmingCharacters(in: .whitespacesAndNewlines),
+                   !swiftPath.isEmpty {
+                    let swiftURL = URL(fileURLWithPath: swiftPath)
+                    let toolchainLib = swiftURL
+                        .deletingLastPathComponent()  // Remove 'swift'
+                        .deletingLastPathComponent()  // Remove 'bin'
+                        .appendingPathComponent("lib")
+                        .appendingPathComponent("swift")
+                        .appendingPathComponent("macosx")
+
+                    if FileManager.default.fileExists(atPath: toolchainLib.path) {
+                        return toolchainLib.path
+                    }
+                }
+            }
+        } catch {}
+
         // Check Xcode toolchain
         let xcodeLib = "/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/lib/swift/macosx"
         if FileManager.default.fileExists(atPath: xcodeLib) {
