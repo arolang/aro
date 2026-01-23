@@ -743,6 +743,19 @@ jobs:
         run: |
           cpan -T IPC::Run YAML::XS HTTP::Tiny Net::EmptyPort Term::ANSIColor Time::HiRes 2>&1 || true
 
+      - name: Verify LLVM setup
+        run: |
+          echo "=== Checking LLVM symlink ==="
+          ls -la /opt/homebrew/opt/llvm || echo "No /opt/homebrew/opt/llvm"
+          ls -la /opt/homebrew/opt/llvm/bin/llc || echo "No llc at symlink path"
+          echo "=== Checking llc in PATH ==="
+          which llc || echo "llc not in PATH"
+          llc --version | head -3 || echo "llc --version failed"
+          echo "=== Checking LLVM_PATH ==="
+          echo "LLVM_PATH=$LLVM_PATH"
+          echo "=== Environment ==="
+          echo "DYLD_LIBRARY_PATH=$DYLD_LIBRARY_PATH"
+
       - name: Download ARO artifact
         uses: actions/download-artifact@v7
         with:
@@ -757,6 +770,14 @@ jobs:
           sudo mkdir -p /usr/local/lib
           sudo cp ./aro-bin/libARORuntime.a /usr/local/lib/libARORuntime.a
           ./aro-bin/aro --version
+
+      - name: Test binary compilation
+        run: |
+          echo "=== Testing aro build ==="
+          ./aro-bin/aro build Examples/HelloWorld --verbose 2>&1 || echo "Build failed with exit code $?"
+          echo "=== Checking for binary ==="
+          ls -la Examples/HelloWorld/HelloWorld 2>/dev/null || echo "Binary not found"
+          ls -la Examples/HelloWorld/.build/ 2>/dev/null || echo "No .build directory"
 
       - name: Run integration tests
         run: |
