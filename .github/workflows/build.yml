@@ -233,6 +233,21 @@ jobs:
           echo "C_INCLUDE_PATH=$LLVM_PREFIX/include" >> $GITHUB_ENV
           echo "CPLUS_INCLUDE_PATH=$LLVM_PREFIX/include" >> $GITHUB_ENV
           echo "LIBRARY_PATH=$LLVM_PREFIX/lib" >> $GITHUB_ENV
+          # Create pkg-config file for Swifty-LLVM
+          mkdir -p $HOME/.pkgconfig
+          cat > $HOME/.pkgconfig/llvm.pc << PKGCONFIG
+          prefix=$LLVM_PREFIX
+          exec_prefix=\${prefix}
+          libdir=\${prefix}/lib
+          includedir=\${prefix}/include
+
+          Name: LLVM
+          Description: Low-level Virtual Machine compiler framework
+          Version: 20.1
+          Libs: -L\${libdir} -lLLVM
+          Cflags: -I\${includedir}
+          PKGCONFIG
+          echo "PKG_CONFIG_PATH=$HOME/.pkgconfig" >> $GITHUB_ENV
 
       - name: Build
         run: swift build -c debug
