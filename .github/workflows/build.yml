@@ -728,14 +728,9 @@ jobs:
             sudo rm -f /usr/local/opt/llvm 2>/dev/null || true
             sudo ln -sf /usr/local/opt/llvm@20 /usr/local/opt/llvm
           fi
-          # Verify llc is accessible
-          echo "LLVM prefix: $LLVM_PREFIX"
-          ls -la $LLVM_PREFIX/bin/llc || echo "llc not found at prefix"
-          $LLVM_PREFIX/bin/llc --version | head -2 || echo "llc version check failed"
-          ls -la /opt/homebrew/opt/llvm/bin/llc || echo "symlink llc not found"
           echo "LLVM_PATH=$LLVM_PREFIX" >> $GITHUB_ENV
           echo "$LLVM_PREFIX/bin" >> $GITHUB_PATH
-          # Set library path for aro binary to find libLLVM at runtime
+          # Set runtime library path for LLVM
           echo "DYLD_LIBRARY_PATH=$LLVM_PREFIX/lib" >> $GITHUB_ENV
           echo "DYLD_FALLBACK_LIBRARY_PATH=$LLVM_PREFIX/lib" >> $GITHUB_ENV
 
