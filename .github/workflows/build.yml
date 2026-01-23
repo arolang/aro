@@ -229,6 +229,10 @@ jobs:
           fi
           echo "LLVM_PATH=$LLVM_PREFIX" >> $GITHUB_ENV
           echo "$LLVM_PREFIX/bin" >> $GITHUB_PATH
+          # Set include paths for Swifty-LLVM C shims
+          echo "C_INCLUDE_PATH=$LLVM_PREFIX/include" >> $GITHUB_ENV
+          echo "CPLUS_INCLUDE_PATH=$LLVM_PREFIX/include" >> $GITHUB_ENV
+          echo "LIBRARY_PATH=$LLVM_PREFIX/lib" >> $GITHUB_ENV
 
       - name: Build
         run: swift build -c debug
