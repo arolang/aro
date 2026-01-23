@@ -731,11 +731,13 @@ jobs:
           swift-version: swift-6.2.1-release
           swift-build: 6.2.1-RELEASE
 
-      - name: Setup LLVM
+      - name: Setup LLVM 20
         shell: pwsh
         run: |
-          # On Windows, we use clang (not llc) to compile LLVM IR to object files
-          # The pre-installed LLVM on Windows runners includes clang
+          # Install LLVM 20 for compatibility with V2 code generator IR
+          Write-Host "Installing LLVM 20..."
+          choco install llvm --version=20.1.5 -y
+
           $llvmBin = "C:\Program Files\LLVM\bin"
 
           if (Test-Path "$llvmBin\clang.exe") {
