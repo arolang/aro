@@ -200,7 +200,7 @@ jobs:
   macos:
     needs: test
     name: macOS
-    runs-on: macos-26
+    runs-on: macos-15
     steps:
       - name: Checkout repository
         uses: actions/checkout@v6
@@ -677,7 +677,7 @@ jobs:
   integration-tests-macos:
     needs: [macos]
     name: Integration Tests - macOS
-    runs-on: macos-26
+    runs-on: macos-15
     steps:
       - name: Checkout repository
         uses: actions/checkout@v6
