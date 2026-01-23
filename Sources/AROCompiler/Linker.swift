@@ -1074,10 +1074,46 @@ public final class CCompiler {
             }
         } catch {}
 
-        // Check Xcode toolchain
+        // Check swiftly toolchain location (~/.swiftly/toolchains/)
+        // swiftly stores full toolchains here, unlike the temporary symlink directory
+        let homeDir = FileManager.default.homeDirectoryForCurrentUser.path
+        let swiftlyToolchains = "\(homeDir)/.swiftly/toolchains"
+        FileHandle.standardError.write("[LINKER-MAC] Checking swiftly toolchains: \(swiftlyToolchains)\n".data(using: .utf8)!)
+        if let contents = try? FileManager.default.contentsOfDirectory(atPath: swiftlyToolchains) {
+            // Find Swift 6.x toolchain (prefer newest)
+            let swift6Toolchains = contents.filter { $0.hasPrefix("swift-6.") }.sorted().reversed()
+            for toolchain in swift6Toolchains {
+                let libPath = "\(swiftlyToolchains)/\(toolchain)/usr/lib/swift/macosx"
+                FileHandle.standardError.write("[LINKER-MAC] Checking swiftly: \(libPath) exists=\(FileManager.default.fileExists(atPath: libPath))\n".data(using: .utf8)!)
+                if FileManager.default.fileExists(atPath: libPath) {
+                    return libPath
+                }
+            }
+        }
+
+        // Check GitHub Actions hostedtoolcache (swift-actions/setup-swift)
+        let toolcache = "/Users/runner/hostedtoolcache/swift"
+        FileHandle.standardError.write("[LINKER-MAC] Checking hostedtoolcache: \(toolcache)\n".data(using: .utf8)!)
+        if let versions = try? FileManager.default.contentsOfDirectory(atPath: toolcache) {
+            for version in versions.filter({ $0.hasPrefix("6.") }).sorted().reversed() {
+                let versionPath = "\(toolcache)/\(version)"
+                if let archs = try? FileManager.default.contentsOfDirectory(atPath: versionPath) {
+                    for arch in archs {
+                        let libPath = "\(versionPath)/\(arch)/usr/lib/swift/macosx"
+                        FileHandle.standardError.write("[LINKER-MAC] Checking toolcache: \(libPath) exists=\(FileManager.default.fileExists(atPath: libPath))\n".data(using: .utf8)!)
+                        if FileManager.default.fileExists(atPath: libPath) {
+                            return libPath
+                        }
+                    }
+                }
+            }
+        }
+
+        // Check Xcode toolchain (WARNING: may be incompatible Swift version)
         let xcodeLib = "/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/lib/swift/macosx"
         FileHandle.standardError.write("[LINKER-MAC] Checking Xcode: \(xcodeLib) exists=\(FileManager.default.fileExists(atPath: xcodeLib))\n".data(using: .utf8)!)
         if FileManager.default.fileExists(atPath: xcodeLib) {
+            FileHandle.standardError.write("[LINKER-MAC] WARNING: Using Xcode toolchain - may have ABI mismatch with Swift 6.2!\n".data(using: .utf8)!)
             return xcodeLib
         }
 
