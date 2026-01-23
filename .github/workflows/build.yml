@@ -719,23 +719,60 @@ jobs:
           # Find Swift installation and set SWIFT_LIB_PATH for the linker
           SWIFT_BIN=$(which swift)
           echo "Swift binary: $SWIFT_BIN"
-          # Swift is at: /path/to/toolchain/usr/bin/swift
-          # Libraries are at: /path/to/toolchain/usr/lib/swift/macosx
-          SWIFT_ROOT=$(dirname $(dirname "$SWIFT_BIN"))
-          SWIFT_LIB="$SWIFT_ROOT/lib/swift/macosx"
-          echo "Swift library path: $SWIFT_LIB"
-          if [ -d "$SWIFT_LIB" ]; then
-            echo "SWIFT_LIB_PATH=$SWIFT_LIB" >> $GITHUB_ENV
-            echo "Found Swift libraries at $SWIFT_LIB"
-            ls -la "$SWIFT_LIB" | head -10
-          else
-            echo "WARNING: Swift library path not found at $SWIFT_LIB"
-            # Try alternative path structure
-            SWIFT_LIB_ALT="$SWIFT_ROOT/lib/swift_static/macosx"
-            if [ -d "$SWIFT_LIB_ALT" ]; then
-              echo "SWIFT_LIB_PATH=$SWIFT_LIB_ALT" >> $GITHUB_ENV
-              echo "Found Swift libraries at $SWIFT_LIB_ALT"
+          echo "Swift version: $(swift --version | head -1)"
+
+          # Try to find swiftly's actual toolchain location
+          # swiftly stores toolchains in ~/.swiftly/toolchains/
+          SWIFTLY_TOOLCHAINS="$HOME/.swiftly/toolchains"
+          echo "Checking swiftly toolchains at: $SWIFTLY_TOOLCHAINS"
+          if [ -d "$SWIFTLY_TOOLCHAINS" ]; then
+            echo "=== Swiftly toolchains ==="
+            ls -la "$SWIFTLY_TOOLCHAINS"
+            # Find the Swift 6.2 toolchain
+            SWIFT_TOOLCHAIN=$(ls -d "$SWIFTLY_TOOLCHAINS"/swift-6.2* 2>/dev/null | head -1)
+            if [ -n "$SWIFT_TOOLCHAIN" ]; then
+              echo "Found Swift toolchain: $SWIFT_TOOLCHAIN"
+              ls -la "$SWIFT_TOOLCHAIN" 2>/dev/null || true
+              ls -la "$SWIFT_TOOLCHAIN/usr/lib/swift" 2>/dev/null || true
             fi
+          fi
+
+          # Also check hostedtoolcache (GitHub Actions cache location)
+          TOOLCACHE="/Users/runner/hostedtoolcache/swift"
+          echo "Checking hostedtoolcache at: $TOOLCACHE"
+          if [ -d "$TOOLCACHE" ]; then
+            echo "=== Hostedtoolcache ==="
+            find "$TOOLCACHE" -maxdepth 3 -type d 2>/dev/null | head -20
+          fi
+
+          # Try all possible paths (in order of preference)
+          FOUND_LIB=""
+          for path in \
+            "$SWIFTLY_TOOLCHAINS"/swift-6.2*/usr/lib/swift/macosx \
+            "$TOOLCACHE"/6.2*/*/usr/lib/swift/macosx \
+            "/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/lib/swift/macosx" \
+            "/Library/Developer/Toolchains/swift-latest.xctoolchain/usr/lib/swift/macosx" \
+            "/usr/lib/swift" \
+            ; do
+            # Expand glob patterns
+            for expanded_path in $path; do
+              echo "Checking: $expanded_path"
+              if [ -d "$expanded_path" ]; then
+                echo "FOUND: $expanded_path"
+                FOUND_LIB="$expanded_path"
+                break 2
+              fi
+            done
+          done
+
+          if [ -n "$FOUND_LIB" ]; then
+            echo "SWIFT_LIB_PATH=$FOUND_LIB" >> $GITHUB_ENV
+            echo "Using Swift library path: $FOUND_LIB"
+            ls -la "$FOUND_LIB" | head -5
+          else
+            echo "ERROR: Could not find Swift library path!"
+            echo "This will cause linking failures for native binaries."
+            exit 1
           fi
 
       - name: Install LLVM 20
