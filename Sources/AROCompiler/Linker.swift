@@ -848,6 +848,12 @@ public final class CCompiler {
     }
 
     private func findSwiftLibPath() -> String? {
+        // Check environment variable first (allows CI/CD to override)
+        if let envPath = ProcessInfo.processInfo.environment["SWIFT_LIB_PATH"],
+           FileManager.default.fileExists(atPath: envPath) {
+            return envPath
+        }
+
         #if os(Windows)
         // Windows: Find Swift library path for import libraries (.lib files)
         // Import libs are in: toolchain\usr\lib\swift\windows\x86_64\

@@ -216,7 +216,7 @@ jobs:
         uses: actions/cache@v5
         with:
           path: .build
-          key: macos-swift-${{ env.SWIFT_VERSION }}-v4-${{ hashFiles('Package.resolved') }}
+          key: macos-swift-${{ env.SWIFT_VERSION }}-v5-${{ hashFiles('Package.resolved') }}
 
       - name: Install LLVM 20
         run: |
@@ -713,6 +713,30 @@ jobs:
         uses: swift-actions/setup-swift@364295d9c23900ce04d4e5cc708387921b4e50f9  # v3
         with:
           swift-version: ${{ env.SWIFT_VERSION }}
+
+      - name: Configure Swift library path
+        run: |
+          # Find Swift installation and set SWIFT_LIB_PATH for the linker
+          SWIFT_BIN=$(which swift)
+          echo "Swift binary: $SWIFT_BIN"
+          # Swift is at: /path/to/toolchain/usr/bin/swift
+          # Libraries are at: /path/to/toolchain/usr/lib/swift/macosx
+          SWIFT_ROOT=$(dirname $(dirname "$SWIFT_BIN"))
+          SWIFT_LIB="$SWIFT_ROOT/lib/swift/macosx"
+          echo "Swift library path: $SWIFT_LIB"
+          if [ -d "$SWIFT_LIB" ]; then
+            echo "SWIFT_LIB_PATH=$SWIFT_LIB" >> $GITHUB_ENV
+            echo "Found Swift libraries at $SWIFT_LIB"
+            ls -la "$SWIFT_LIB" | head -10
+          else
+            echo "WARNING: Swift library path not found at $SWIFT_LIB"
+            # Try alternative path structure
+            SWIFT_LIB_ALT="$SWIFT_ROOT/lib/swift_static/macosx"
+            if [ -d "$SWIFT_LIB_ALT" ]; then
+              echo "SWIFT_LIB_PATH=$SWIFT_LIB_ALT" >> $GITHUB_ENV
+              echo "Found Swift libraries at $SWIFT_LIB_ALT"
+            fi
+          fi
 
       - name: Install LLVM 20
         run: |
