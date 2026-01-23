@@ -716,53 +716,93 @@ jobs:
 
       - name: Configure Swift library path
         run: |
+          set -x  # Enable debug output
+
           # Find Swift installation and set SWIFT_LIB_PATH for the linker
           SWIFT_BIN=$(which swift)
           echo "Swift binary: $SWIFT_BIN"
           echo "Swift version: $(swift --version | head -1)"
 
-          # Try to find swiftly's actual toolchain location
-          # swiftly stores toolchains in ~/.swiftly/toolchains/
-          SWIFTLY_TOOLCHAINS="$HOME/.swiftly/toolchains"
-          echo "Checking swiftly toolchains at: $SWIFTLY_TOOLCHAINS"
-          if [ -d "$SWIFTLY_TOOLCHAINS" ]; then
-            echo "=== Swiftly toolchains ==="
-            ls -la "$SWIFTLY_TOOLCHAINS"
-            # Find the Swift 6.2 toolchain
-            SWIFT_TOOLCHAIN=$(ls -d "$SWIFTLY_TOOLCHAINS"/swift-6.2* 2>/dev/null | head -1)
-            if [ -n "$SWIFT_TOOLCHAIN" ]; then
-              echo "Found Swift toolchain: $SWIFT_TOOLCHAIN"
-              ls -la "$SWIFT_TOOLCHAIN" 2>/dev/null || true
-              ls -la "$SWIFT_TOOLCHAIN/usr/lib/swift" 2>/dev/null || true
-            fi
-          fi
-
-          # Also check hostedtoolcache (GitHub Actions cache location)
-          TOOLCACHE="/Users/runner/hostedtoolcache/swift"
-          echo "Checking hostedtoolcache at: $TOOLCACHE"
-          if [ -d "$TOOLCACHE" ]; then
-            echo "=== Hostedtoolcache ==="
-            find "$TOOLCACHE" -maxdepth 3 -type d 2>/dev/null | head -20
-          fi
-
-          # Try all possible paths (in order of preference)
-          FOUND_LIB=""
-          for path in \
-            "$SWIFTLY_TOOLCHAINS"/swift-6.2*/usr/lib/swift/macosx \
-            "$TOOLCACHE"/6.2*/*/usr/lib/swift/macosx \
-            "/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/lib/swift/macosx" \
-            "/Library/Developer/Toolchains/swift-latest.xctoolchain/usr/lib/swift/macosx" \
-            "/usr/lib/swift" \
-            ; do
-            # Expand glob patterns
-            for expanded_path in $path; do
-              echo "Checking: $expanded_path"
-              if [ -d "$expanded_path" ]; then
-                echo "FOUND: $expanded_path"
-                FOUND_LIB="$expanded_path"
-                break 2
+          # Follow ALL symlinks to find the real Swift binary
+          echo "=== Following symlinks ==="
+          ls -la "$SWIFT_BIN"
+          CURRENT="$SWIFT_BIN"
+          for i in 1 2 3 4 5; do
+            if [ -L "$CURRENT" ]; then
+              TARGET=$(readlink "$CURRENT")
+              # Handle relative symlinks
+              if [[ "$TARGET" != /* ]]; then
+                TARGET="$(dirname "$CURRENT")/$TARGET"
               fi
+              echo "Symlink $i: $CURRENT -> $TARGET"
+              CURRENT="$TARGET"
+            else
+              echo "Real binary: $CURRENT"
+              break
+            fi
+          done
+
+          # Get the toolchain root from the real binary location
+          SWIFT_REAL="$CURRENT"
+          TOOLCHAIN_ROOT=$(dirname $(dirname "$SWIFT_REAL"))
+          echo "Toolchain root: $TOOLCHAIN_ROOT"
+
+          # Explore the toolchain structure
+          echo "=== Toolchain structure ==="
+          ls -la "$TOOLCHAIN_ROOT" 2>/dev/null || true
+          ls -la "$TOOLCHAIN_ROOT/lib" 2>/dev/null || true
+          ls -la "$TOOLCHAIN_ROOT/usr" 2>/dev/null || true
+          ls -la "$TOOLCHAIN_ROOT/usr/lib" 2>/dev/null || true
+          ls -la "$TOOLCHAIN_ROOT/usr/lib/swift" 2>/dev/null || true
+
+          # Check swiftly config
+          echo "=== Swiftly config ==="
+          echo "HOME=$HOME"
+          ls -la "$HOME/.swiftly" 2>/dev/null || echo "No ~/.swiftly"
+          ls -la "$HOME/.swiftly/toolchains" 2>/dev/null || echo "No ~/.swiftly/toolchains"
+          cat "$HOME/.swiftly/config.json" 2>/dev/null || echo "No swiftly config"
+
+          # Check hostedtoolcache
+          echo "=== Hostedtoolcache ==="
+          ls -la /Users/runner/hostedtoolcache 2>/dev/null || echo "No hostedtoolcache"
+          ls -laR /Users/runner/hostedtoolcache/swift 2>/dev/null | head -50 || echo "No swift in hostedtoolcache"
+
+          # Build list of paths to check
+          PATHS_TO_CHECK=(
+            "$TOOLCHAIN_ROOT/lib/swift/macosx"
+            "$TOOLCHAIN_ROOT/usr/lib/swift/macosx"
+            "$(dirname $TOOLCHAIN_ROOT)/lib/swift/macosx"
+            "$(dirname $TOOLCHAIN_ROOT)/usr/lib/swift/macosx"
+          )
+
+          # Add swiftly toolchains if they exist
+          if [ -d "$HOME/.swiftly/toolchains" ]; then
+            for tc in "$HOME/.swiftly/toolchains"/swift-6.*; do
+              PATHS_TO_CHECK+=("$tc/usr/lib/swift/macosx")
             done
+          fi
+
+          # Add hostedtoolcache paths
+          if [ -d "/Users/runner/hostedtoolcache/swift" ]; then
+            for ver in /Users/runner/hostedtoolcache/swift/6.*; do
+              for arch in "$ver"/*; do
+                PATHS_TO_CHECK+=("$arch/usr/lib/swift/macosx")
+              done
+            done
+          fi
+
+          # Xcode as last resort
+          PATHS_TO_CHECK+=("/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/lib/swift/macosx")
+
+          echo "=== Checking paths ==="
+          FOUND_LIB=""
+          for path in "${PATHS_TO_CHECK[@]}"; do
+            echo "Checking: $path"
+            if [ -d "$path" ]; then
+              echo "FOUND: $path"
+              FOUND_LIB="$path"
+              break
+            fi
           done
 
           if [ -n "$FOUND_LIB" ]; then
@@ -771,7 +811,6 @@ jobs:
             ls -la "$FOUND_LIB" | head -5
           else
             echo "ERROR: Could not find Swift library path!"
-            echo "This will cause linking failures for native binaries."
             exit 1
           fi
 
