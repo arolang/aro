@@ -46,6 +46,27 @@ jobs:
           path: .build
           key: linux-swift-${{ env.SWIFT_VERSION }}-test-${{ hashFiles('Package.resolved') }}
 
+      - name: Install LLVM 20
+        run: |
+          apt-get update -qq
+          apt-get install -y -qq wget gnupg software-properties-common
+          wget -qO- https://apt.llvm.org/llvm-snapshot.gpg.key | gpg --dearmor -o /usr/share/keyrings/llvm-archive-keyring.gpg
+          echo "deb [signed-by=/usr/share/keyrings/llvm-archive-keyring.gpg] http://apt.llvm.org/jammy/ llvm-toolchain-jammy-20 main" > /etc/apt/sources.list.d/llvm.list
+          apt-get update -qq
+          apt-get install -y -qq llvm-20-dev libzstd-dev
+          cat > /usr/lib/pkgconfig/llvm.pc << 'PKGCONFIG'
+          prefix=/usr/lib/llvm-20
+          exec_prefix=${prefix}
+          libdir=${prefix}/lib
+          includedir=${prefix}/include
+
+          Name: LLVM
+          Description: Low-level Virtual Machine compiler framework
+          Version: 20.1
+          Libs: -L${libdir} -lLLVM-20
+          Cflags: -I${includedir}
+          PKGCONFIG
+
       - name: Run tests
         run: swift test --parallel
 
@@ -69,6 +90,27 @@ jobs:
         with:
           path: .build
           key: linux-swift-${{ env.SWIFT_VERSION }}-v3-${{ hashFiles('Package.resolved') }}
+
+      - name: Install LLVM 20
+        run: |
+          apt-get update -qq
+          apt-get install -y -qq wget gnupg software-properties-common
+          wget -qO- https://apt.llvm.org/llvm-snapshot.gpg.key | gpg --dearmor -o /usr/share/keyrings/llvm-archive-keyring.gpg
+          echo "deb [signed-by=/usr/share/keyrings/llvm-archive-keyring.gpg] http://apt.llvm.org/jammy/ llvm-toolchain-jammy-20 main" > /etc/apt/sources.list.d/llvm.list
+          apt-get update -qq
+          apt-get install -y -qq llvm-20-dev libzstd-dev
+          cat > /usr/lib/pkgconfig/llvm.pc << 'PKGCONFIG'
+          prefix=/usr/lib/llvm-20
+          exec_prefix=${prefix}
+          libdir=${prefix}/lib
+          includedir=${prefix}/include
+
+          Name: LLVM
+          Description: Low-level Virtual Machine compiler framework
+          Version: 20.1
+          Libs: -L${libdir} -lLLVM-20
+          Cflags: -I${includedir}
+          PKGCONFIG
 
       - name: Build
         run: swift build -c debug
@@ -564,12 +606,15 @@ jobs:
           sudo mv swift-6.2.1-RELEASE-ubuntu22.04 /usr/share/swift
           echo "/usr/share/swift/usr/bin" >> $GITHUB_PATH
 
-      - name: Install LLVM
+      - name: Install LLVM 20
         run: |
           sudo apt-get update
-          sudo apt-get install -y llvm-14 clang-14
-          sudo ln -sf /usr/bin/llc-14 /usr/bin/llc
-          echo "/usr/lib/llvm-14/bin" >> $GITHUB_PATH
+          wget -qO- https://apt.llvm.org/llvm-snapshot.gpg.key | sudo gpg --dearmor -o /usr/share/keyrings/llvm-archive-keyring.gpg
+          echo "deb [signed-by=/usr/share/keyrings/llvm-archive-keyring.gpg] http://apt.llvm.org/jammy/ llvm-toolchain-jammy-20 main" | sudo tee /etc/apt/sources.list.d/llvm.list
+          sudo apt-get update
+          sudo apt-get install -y llvm-20 libllvm20
+          sudo ln -sf /usr/bin/llc-20 /usr/bin/llc
+          echo "/usr/lib/llvm-20/bin" >> $GITHUB_PATH
 
       - name: Install Perl modules
         run: |
@@ -630,10 +675,10 @@ jobs:
         with:
           swift-version: ${{ env.SWIFT_VERSION }}
 
-      - name: Install LLVM
+      - name: Install LLVM 20
         run: |
-          brew install llvm@18
-          echo "/opt/homebrew/opt/llvm@18/bin" >> $GITHUB_PATH
+          brew install llvm@20
+          echo "/opt/homebrew/opt/llvm@20/bin" >> $GITHUB_PATH
 
       - name: Install Perl modules
         run: |
