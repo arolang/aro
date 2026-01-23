@@ -984,9 +984,8 @@ public final class CCompiler {
                     // Libraries are at: /path/to/toolchain/usr/lib/swift/macosx (or linux)
                     let swiftURL = URL(fileURLWithPath: swiftPath)
                     let toolchainLib = swiftURL
-                        .deletingLastPathComponent()  // Remove 'bin'
-                        .deletingLastPathComponent()  // Remove 'usr'
-                        .appendingPathComponent("usr")
+                        .deletingLastPathComponent()  // Remove 'swift' → /path/usr/bin
+                        .deletingLastPathComponent()  // Remove 'bin' → /path/usr
                         .appendingPathComponent("lib")
                         .appendingPathComponent("swift")
 
