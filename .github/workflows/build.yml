@@ -709,7 +709,16 @@ jobs:
       - name: Install LLVM 20
         run: |
           brew install llvm@20
-          echo "/opt/homebrew/opt/llvm@20/bin" >> $GITHUB_PATH
+          # Detect LLVM path (ARM64 vs Intel)
+          if [ -d "/opt/homebrew/opt/llvm@20" ]; then
+            LLVM_PREFIX="/opt/homebrew/opt/llvm@20"
+          else
+            LLVM_PREFIX="/usr/local/opt/llvm@20"
+          fi
+          echo "LLVM_PATH=$LLVM_PREFIX" >> $GITHUB_ENV
+          echo "$LLVM_PREFIX/bin" >> $GITHUB_PATH
+          # Set library path for aro binary to find libLLVM at runtime
+          echo "DYLD_LIBRARY_PATH=$LLVM_PREFIX/lib" >> $GITHUB_ENV
 
       - name: Install Perl modules
         run: |
