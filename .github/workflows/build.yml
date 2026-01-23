@@ -712,8 +712,13 @@ jobs:
           # Detect LLVM path (ARM64 vs Intel)
           if [ -d "/opt/homebrew/opt/llvm@20" ]; then
             LLVM_PREFIX="/opt/homebrew/opt/llvm@20"
+            # Ensure the default 'llvm' symlink points to llvm@20 for Linker.swift
+            sudo rm -f /opt/homebrew/opt/llvm
+            sudo ln -s /opt/homebrew/opt/llvm@20 /opt/homebrew/opt/llvm
           else
             LLVM_PREFIX="/usr/local/opt/llvm@20"
+            sudo rm -f /usr/local/opt/llvm
+            sudo ln -s /usr/local/opt/llvm@20 /usr/local/opt/llvm
           fi
           echo "LLVM_PATH=$LLVM_PREFIX" >> $GITHUB_ENV
           echo "$LLVM_PREFIX/bin" >> $GITHUB_PATH
