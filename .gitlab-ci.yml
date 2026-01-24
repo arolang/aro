@@ -254,6 +254,14 @@ integration:linux:
     - export LD_LIBRARY_PATH="/usr/lib/llvm-20/lib:$LD_LIBRARY_PATH"
     - export ARO_BIN="$CI_PROJECT_DIR/aro-dist/aro"
     - export ARO_DEBUG=1  # Enable debug output for ARO-0041 diagnostics
+
+    # Debug: test aro build directly to see errors
+    - echo "=== Testing aro build directly ==="
+    - which clang && clang --version | head -1
+    - which llc && llc --version | head -1
+    - ls -la /usr/share/swift/usr/lib/swift/linux/ | head -5
+    - ./aro-dist/aro build ./Examples/HelloWorld --verbose 2>&1 || echo "Build failed with exit code $?"
+
     - chmod +x test-examples.pl
     - perl test-examples.pl --verbose
   artifacts:
