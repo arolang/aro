@@ -722,16 +722,16 @@ public final class CCompiler {
         // swiftc on GitHub Actions runners is unreliable (hangs intermittently)
         // clang works consistently when we explicitly specify Swift runtime libraries
 
-        // 1. Check for clang-14 (Ubuntu 24.04 default)
-        if FileManager.default.fileExists(atPath: "/usr/bin/clang-14") {
-            FileHandle.standardError.write("[LINKER] Found clang-14 at /usr/bin/clang-14\n".data(using: .utf8)!)
-            return "/usr/bin/clang-14"
-        }
-
-        // 2. Check for generic clang
+        // 1. Check for generic clang (may be symlinked to clang-20 in CI)
         if FileManager.default.fileExists(atPath: "/usr/bin/clang") {
             FileHandle.standardError.write("[LINKER] Found clang at /usr/bin/clang\n".data(using: .utf8)!)
             return "/usr/bin/clang"
+        }
+
+        // 2. Check for clang-14 (Ubuntu fallback)
+        if FileManager.default.fileExists(atPath: "/usr/bin/clang-14") {
+            FileHandle.standardError.write("[LINKER] Found clang-14 at /usr/bin/clang-14\n".data(using: .utf8)!)
+            return "/usr/bin/clang-14"
         }
 
         // 3. Try to find clang in PATH

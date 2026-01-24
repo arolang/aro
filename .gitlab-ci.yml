@@ -222,10 +222,11 @@ integration:linux:
     - wget -qO- https://apt.llvm.org/llvm-snapshot.gpg.key | gpg --dearmor -o /usr/share/keyrings/llvm-archive-keyring.gpg
     - echo "deb [signed-by=/usr/share/keyrings/llvm-archive-keyring.gpg] http://apt.llvm.org/jammy/ llvm-toolchain-jammy-20 main" > /etc/apt/sources.list.d/llvm.list
     - apt-get update -qq
-    - apt-get install -y -qq libllvm20 llvm-20
+    - apt-get install -y -qq libllvm20 llvm-20 clang-20
 
-    # Setup LLVM 20 for both aro binary and llc (V2 code generator produces LLVM 20 IR)
+    # Setup LLVM 20 for both aro binary and llc/clang (V2 code generator produces LLVM 20 IR)
     - ln -sf /usr/bin/llc-20 /usr/bin/llc
+    - ln -sf /usr/bin/clang-20 /usr/bin/clang
     - export PATH="/usr/lib/llvm-20/bin:$PATH"
     - export LD_LIBRARY_PATH="/usr/lib/llvm-20/lib:$LD_LIBRARY_PATH"
 
