@@ -3,7 +3,6 @@ import PackageDescription
 
 let package = Package(
     name: "ZipPlugin",
-    platforms: [.macOS(.v13)],
     products: [
         .library(name: "ZipPlugin", type: .dynamic, targets: ["ZipPlugin"])
     ],

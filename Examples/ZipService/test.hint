@@ -1,7 +1,5 @@
 # Test hints for ZipService
 # Package plugin compilation requires Swift compiler at runtime
-# ZipPlugin has platforms: [.macOS(.v13)] which blocks Linux compilation
-skip-on-linux: ZipPlugin Package.swift has macOS-only platform restriction
 mode: both
 timeout: 120
 # Use occurrence-check for order-independent matching (dictionary output order varies)

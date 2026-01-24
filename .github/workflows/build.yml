@@ -645,13 +645,13 @@ jobs:
           sudo mv swift-6.2.1-RELEASE-ubuntu22.04 /usr/share/swift
           echo "/usr/share/swift/usr/bin" >> $GITHUB_PATH
 
-      - name: Install LLVM 20
+      - name: Install LLVM 20 and dependencies
         run: |
           sudo apt-get update
           wget -qO- https://apt.llvm.org/llvm-snapshot.gpg.key | sudo gpg --dearmor -o /usr/share/keyrings/llvm-archive-keyring.gpg
           echo "deb [signed-by=/usr/share/keyrings/llvm-archive-keyring.gpg] http://apt.llvm.org/jammy/ llvm-toolchain-jammy-20 main" | sudo tee /etc/apt/sources.list.d/llvm.list
           sudo apt-get update
-          sudo apt-get install -y llvm-20 libllvm20
+          sudo apt-get install -y llvm-20 libllvm20 libxml2-dev
           sudo ln -sf /usr/bin/llc-20 /usr/bin/llc
           echo "/usr/lib/llvm-20/bin" >> $GITHUB_PATH
 
