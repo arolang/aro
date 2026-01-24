@@ -1,6 +1,6 @@
 # ARO Action Reference
 
-Complete reference of all 50 ARO actions organized by category.
+Complete reference of all 51 ARO actions organized by category.
 
 | **Action**    | **Category**      | **Semantic Role** | **Description**                                           |
 | ------------- | ----------------- | ----------------- | --------------------------------------------------------- |
@@ -46,6 +46,7 @@ Complete reference of all 50 ARO actions organized by category.
 | **Compute**   | Processing        | OWN               | Performs calculation or algorithm.<br>`<Compute> the <total> from <price> * <quantity>.` |
 | **Transform** | Processing        | OWN               | Converts data from one form to another.<br>`<Transform> the <dto> from the <entity>.` |
 | **Map**       | Processing        | OWN               | Applies a function across elements.<br>`<Map> the <names> from the <users: name>.` |
+| **ParseHtml** | Processing        | OWN               | Extracts structured data from HTML.<br>`<ParseHtml> the <links: links> from the <html>.` |
 | **Reduce**    | Processing        | OWN               | Aggregates elements into a summary.<br>`<Reduce> the <total> from the <amounts> with sum.` |
 | **Accept**    | Protocol          | OWN               | Acknowledges or agrees to a connection/request.<br>`<Accept> the <order: placed>.` |
 | **Exists**    | Query             | REQUEST           | Tests whether a resource or value is present.<br>`<Exists> the <found> for the <file: "./config.json">.` |
@@ -56,7 +57,7 @@ Complete reference of all 50 ARO actions organized by category.
 ## Summary by Semantic Role
 
 - **REQUEST** (8 actions): Extract, Retrieve, Receive, Request, Read, List, Stat, Exists
-- **OWN** (31 actions): Compute, Validate, Compare, Transform, Create, Update, Filter, Sort, Split, Merge, Copy, Move, Map, Reduce, Accept, Given, When, Then, Assert, Start, Stop, Listen, Connect, Close, Keepalive, Make, Execute, Call
+- **OWN** (32 actions): Compute, Validate, Compare, Transform, Create, Update, Filter, Sort, Split, Merge, Copy, Move, Map, ParseHtml, Reduce, Accept, Given, When, Then, Assert, Start, Stop, Listen, Connect, Close, Keepalive, Make, Execute, Call
 - **RESPONSE** (8 actions): Return, Throw, Send, Log, Write, Append, Notify, Broadcast
 - **EXPORT** (3 actions): Publish, Store, Emit, Delete
 
@@ -76,7 +77,7 @@ Complete reference of all 50 ARO actions organized by category.
 - **Monitoring** (1): Log
 - **Mutation** (5): Create, Update, Delete, Copy, Move
 - **Persistence** (1): Store
-- **Processing** (4): Compute, Transform, Map, Reduce
+- **Processing** (5): Compute, Transform, Map, ParseHtml, Reduce
 - **Protocol** (1): Accept
 - **Query** (1): Exists
 - **Verification** (3): Validate, Compare, Assert
