@@ -9,6 +9,7 @@ stages:
   - build
   - integration
   - documentation
+  - docker
   - release
   - mastodon
 
@@ -382,6 +383,77 @@ release:
           url: '$CI_PROJECT_URL/-/jobs/artifacts/$CI_COMMIT_TAG/raw/Book/TheConstructionStudies/output/ARO-Construction-Studies.pdf?job=release'
           filepath: '/ARO-Construction-Studies.pdf'
           link_type: 'other'
+  tags:
+    - spencer
+
+# =============================================================================
+# Docker Stage - Build and Push Docker Images
+# =============================================================================
+docker:buildsystem:
+  stage: docker
+  image: docker:24
+  services:
+    - docker:24-dind
+  needs:
+    - job: build:linux
+      optional: true
+  rules:
+    - if: $CI_COMMIT_TAG
+    - if: $CI_COMMIT_BRANCH == "main"
+  variables:
+    DOCKER_TLS_CERTDIR: "/certs"
+    IMAGE_NAME: $CI_REGISTRY_IMAGE/aro-buildsystem
+  before_script:
+    - docker login -u $CI_REGISTRY_USER -p $CI_REGISTRY_PASSWORD $CI_REGISTRY
+  script:
+    # Build and push buildsystem image
+    - |
+      if [ -n "$CI_COMMIT_TAG" ]; then
+        TAG="$CI_COMMIT_TAG"
+      else
+        TAG="latest"
+      fi
+    - docker build -t $IMAGE_NAME:$TAG -f docker/buildsystem/Dockerfile --build-arg ARO_VERSION=${CI_COMMIT_REF_NAME} docker/buildsystem/
+    - docker push $IMAGE_NAME:$TAG
+    - |
+      if [ -n "$CI_COMMIT_TAG" ]; then
+        docker tag $IMAGE_NAME:$TAG $IMAGE_NAME:latest
+        docker push $IMAGE_NAME:latest
+      fi
+  tags:
+    - spencer
+
+docker:runtime:
+  stage: docker
+  image: docker:24
+  services:
+    - docker:24-dind
+  needs:
+    - job: build:linux
+      optional: true
+  rules:
+    - if: $CI_COMMIT_TAG
+    - if: $CI_COMMIT_BRANCH == "main"
+  variables:
+    DOCKER_TLS_CERTDIR: "/certs"
+    IMAGE_NAME: $CI_REGISTRY_IMAGE/aro-runtime
+  before_script:
+    - docker login -u $CI_REGISTRY_USER -p $CI_REGISTRY_PASSWORD $CI_REGISTRY
+  script:
+    # Build and push runtime image
+    - |
+      if [ -n "$CI_COMMIT_TAG" ]; then
+        TAG="$CI_COMMIT_TAG"
+      else
+        TAG="latest"
+      fi
+    - docker build -t $IMAGE_NAME:$TAG -f docker/runtime/Dockerfile docker/runtime/
+    - docker push $IMAGE_NAME:$TAG
+    - |
+      if [ -n "$CI_COMMIT_TAG" ]; then
+        docker tag $IMAGE_NAME:$TAG $IMAGE_NAME:latest
+        docker push $IMAGE_NAME:latest
+      fi
   tags:
     - spencer
 
