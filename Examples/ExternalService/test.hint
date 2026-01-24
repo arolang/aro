@@ -1,8 +1,6 @@
 # Test hints for ExternalService
 # Package plugin compilation requires Swift compiler at runtime
 # Swift is now available in CI (swift-6.2.1-RELEASE installed in integration:linux)
-# Plugin dylibs have Swift ABI mismatch when loaded by compiled binaries on macOS CI
-skip-compiled-on-macos: Plugin ABI mismatch between Swift 6.2 binary and system Swift dylib
 mode: both
 timeout: 120
 # Binary mode loads precompiled plugin with different log messages
