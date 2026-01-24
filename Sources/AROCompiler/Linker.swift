@@ -536,6 +536,7 @@ public final class CCompiler {
         args.append("-lm")
         args.append("-lstdc++")  // C++ standard library for BoringSSL
         args.append("-lz")       // zlib for compression
+        args.append("-lxml2")    // libxml2 for Kanna HTML/XML parsing
 
         // Export symbols to dynamic symbol table for dlsym lookup
         // Required for HTTP binaries to find compiled feature set functions at runtime
