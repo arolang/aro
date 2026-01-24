@@ -1,6 +1,8 @@
 # Test hints for CustomPlugin
 # Binary mode: plugins are compiled at build time by 'aro build'
 # Plugin requires Swift compiler at build time (available in CI via swift:6.2-jammy)
+# Plugin dylibs have Swift ABI mismatch when loaded by compiled binaries on macOS CI
+skip-compiled-on-macos: Plugin ABI mismatch between Swift 6.2 binary and system Swift dylib
 mode: compiled
 timeout: 60
 # Use occurrence-check since binary output has extra logging lines
