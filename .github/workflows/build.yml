@@ -718,101 +718,55 @@ jobs:
         run: |
           set -x  # Enable debug output
 
-          # Find Swift installation and set SWIFT_LIB_PATH for the linker
-          SWIFT_BIN=$(which swift)
-          echo "Swift binary: $SWIFT_BIN"
           echo "Swift version: $(swift --version | head -1)"
 
-          # Follow ALL symlinks to find the real Swift binary
-          echo "=== Following symlinks ==="
-          ls -la "$SWIFT_BIN"
-          CURRENT="$SWIFT_BIN"
-          for i in 1 2 3 4 5; do
-            if [ -L "$CURRENT" ]; then
-              TARGET=$(readlink "$CURRENT")
-              # Handle relative symlinks
-              if [[ "$TARGET" != /* ]]; then
-                TARGET="$(dirname "$CURRENT")/$TARGET"
-              fi
-              echo "Symlink $i: $CURRENT -> $TARGET"
-              CURRENT="$TARGET"
-            else
-              echo "Real binary: $CURRENT"
-              break
+          # Use Swift's own mechanism to find its resource directory
+          # This is the official way to find Swift libraries
+          echo "=== Swift target info ==="
+          swift -print-target-info
+
+          # Extract the runtimeResourcePath from swift -print-target-info
+          RESOURCE_PATH=$(swift -print-target-info | grep -o '"runtimeResourcePath": "[^"]*"' | cut -d'"' -f4)
+          echo "Runtime resource path: $RESOURCE_PATH"
+
+          if [ -n "$RESOURCE_PATH" ] && [ -d "$RESOURCE_PATH" ]; then
+            # The resource path is typically .../lib/swift
+            # We need .../lib/swift/macosx for linking
+            SWIFT_LIB="$RESOURCE_PATH/macosx"
+            echo "Checking: $SWIFT_LIB"
+            if [ -d "$SWIFT_LIB" ]; then
+              echo "SWIFT_LIB_PATH=$SWIFT_LIB" >> $GITHUB_ENV
+              echo "Found Swift library path: $SWIFT_LIB"
+              ls -la "$SWIFT_LIB" | head -10
+              exit 0
             fi
-          done
-
-          # Get the toolchain root from the real binary location
-          SWIFT_REAL="$CURRENT"
-          TOOLCHAIN_ROOT=$(dirname $(dirname "$SWIFT_REAL"))
-          echo "Toolchain root: $TOOLCHAIN_ROOT"
-
-          # Explore the toolchain structure
-          echo "=== Toolchain structure ==="
-          ls -la "$TOOLCHAIN_ROOT" 2>/dev/null || true
-          ls -la "$TOOLCHAIN_ROOT/lib" 2>/dev/null || true
-          ls -la "$TOOLCHAIN_ROOT/usr" 2>/dev/null || true
-          ls -la "$TOOLCHAIN_ROOT/usr/lib" 2>/dev/null || true
-          ls -la "$TOOLCHAIN_ROOT/usr/lib/swift" 2>/dev/null || true
-
-          # Check swiftly config
-          echo "=== Swiftly config ==="
-          echo "HOME=$HOME"
-          ls -la "$HOME/.swiftly" 2>/dev/null || echo "No ~/.swiftly"
-          ls -la "$HOME/.swiftly/toolchains" 2>/dev/null || echo "No ~/.swiftly/toolchains"
-          cat "$HOME/.swiftly/config.json" 2>/dev/null || echo "No swiftly config"
-
-          # Check hostedtoolcache
-          echo "=== Hostedtoolcache ==="
-          ls -la /Users/runner/hostedtoolcache 2>/dev/null || echo "No hostedtoolcache"
-          ls -laR /Users/runner/hostedtoolcache/swift 2>/dev/null | head -50 || echo "No swift in hostedtoolcache"
-
-          # Build list of paths to check
-          PATHS_TO_CHECK=(
-            "$TOOLCHAIN_ROOT/lib/swift/macosx"
-            "$TOOLCHAIN_ROOT/usr/lib/swift/macosx"
-            "$(dirname $TOOLCHAIN_ROOT)/lib/swift/macosx"
-            "$(dirname $TOOLCHAIN_ROOT)/usr/lib/swift/macosx"
-          )
-
-          # Add swiftly toolchains if they exist
-          if [ -d "$HOME/.swiftly/toolchains" ]; then
-            for tc in "$HOME/.swiftly/toolchains"/swift-6.*; do
-              PATHS_TO_CHECK+=("$tc/usr/lib/swift/macosx")
-            done
           fi
 
-          # Add hostedtoolcache paths
-          if [ -d "/Users/runner/hostedtoolcache/swift" ]; then
-            for ver in /Users/runner/hostedtoolcache/swift/6.*; do
-              for arch in "$ver"/*; do
-                PATHS_TO_CHECK+=("$arch/usr/lib/swift/macosx")
-              done
-            done
-          fi
+          # Fallback: try to extract from swiftc -print-target-info
+          echo "=== Trying swiftc ==="
+          RESOURCE_PATH=$(swiftc -print-target-info | grep -o '"runtimeResourcePath": "[^"]*"' | cut -d'"' -f4)
+          echo "swiftc resource path: $RESOURCE_PATH"
 
-          # Xcode as last resort
-          PATHS_TO_CHECK+=("/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/lib/swift/macosx")
-
-          echo "=== Checking paths ==="
-          FOUND_LIB=""
-          for path in "${PATHS_TO_CHECK[@]}"; do
-            echo "Checking: $path"
-            if [ -d "$path" ]; then
-              echo "FOUND: $path"
-              FOUND_LIB="$path"
-              break
+          if [ -n "$RESOURCE_PATH" ] && [ -d "$RESOURCE_PATH" ]; then
+            SWIFT_LIB="$RESOURCE_PATH/macosx"
+            if [ -d "$SWIFT_LIB" ]; then
+              echo "SWIFT_LIB_PATH=$SWIFT_LIB" >> $GITHUB_ENV
+              echo "Found Swift library path: $SWIFT_LIB"
+              ls -la "$SWIFT_LIB" | head -10
+              exit 0
             fi
-          done
-
-          if [ -n "$FOUND_LIB" ]; then
-            echo "SWIFT_LIB_PATH=$FOUND_LIB" >> $GITHUB_ENV
-            echo "Using Swift library path: $FOUND_LIB"
-            ls -la "$FOUND_LIB" | head -5
-          else
-            echo "ERROR: Could not find Swift library path!"
-            exit 1
           fi
+
+          # Last resort: Xcode toolchain (WARNING: may have ABI mismatch)
+          XCODE_LIB="/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/lib/swift/macosx"
+          if [ -d "$XCODE_LIB" ]; then
+            echo "WARNING: Using Xcode toolchain - may have Swift ABI mismatch!"
+            echo "SWIFT_LIB_PATH=$XCODE_LIB" >> $GITHUB_ENV
+            exit 0
+          fi
+
+          echo "ERROR: Could not find Swift library path!"
+          exit 1
 
       - name: Install LLVM 20
         run: |
