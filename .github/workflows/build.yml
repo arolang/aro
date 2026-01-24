@@ -834,6 +834,12 @@ jobs:
       - name: Run integration tests
         run: |
           chmod +x test-examples.pl
+          # Set DYLD_LIBRARY_PATH so compiled binaries load Swift 6.2 runtime
+          # instead of system Swift from /usr/lib/swift (which causes ABI conflicts)
+          if [ -n "$SWIFT_LIB_PATH" ]; then
+            export DYLD_LIBRARY_PATH="$SWIFT_LIB_PATH:$DYLD_LIBRARY_PATH"
+            echo "DYLD_LIBRARY_PATH set to: $DYLD_LIBRARY_PATH"
+          fi
           perl test-examples.pl --verbose
 
       - name: Upload test results on failure
