@@ -166,17 +166,16 @@ public final class WindowsSocketServer: SocketServerService, @unchecked Sendable
 
     private func handleClient(_ socket: Socket, connectionId: String) async {
         let bufferSize = 4096
-        var buffer = [UInt8](repeating: 0, count: bufferSize)
 
         while !Task.isCancelled {
             do {
-                let bytesRead = try socket.read(&buffer, length: bufferSize)
-                if bytesRead == 0 {
+                let bytes = try socket.read(atMost: bufferSize)
+                if bytes.isEmpty {
                     // Connection closed
                     break
                 }
 
-                let data = Data(bytes: buffer, count: bytesRead)
+                let data = Data(bytes)
                 eventBus.publish(DataReceivedEvent(connectionId: connectionId, data: data))
             } catch {
                 eventBus.publish(SocketErrorEvent(connectionId: connectionId, error: error.localizedDescription))
