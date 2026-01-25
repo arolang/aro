@@ -396,13 +396,13 @@ release:
     - spencer
 
 # =============================================================================
-# Docker Stage - Build and Push Docker Images
+# Docker Stage - Build and Push Docker Images (using Kaniko + Crane)
 # =============================================================================
 docker:buildsystem:
   stage: docker
-  image: docker:24
-  services:
-    - docker:24-dind
+  image:
+    name: gcr.io/kaniko-project/executor:v1.23.2-debug
+    entrypoint: [""]
   needs:
     - job: build:linux
       optional: true
@@ -410,33 +410,35 @@ docker:buildsystem:
     - if: $CI_COMMIT_TAG
     - if: $CI_COMMIT_BRANCH == "main"
   variables:
-    DOCKER_TLS_CERTDIR: "/certs"
     IMAGE_NAME: $CI_REGISTRY_IMAGE/aro-buildsystem
   before_script:
-    - docker login -u $CI_REGISTRY_USER -p $CI_REGISTRY_PASSWORD $CI_REGISTRY
+    # Create Docker config for registry authentication
+    - mkdir -p /kaniko/.docker
+    - echo "{\"auths\":{\"$CI_REGISTRY\":{\"auth\":\"$(echo -n $CI_REGISTRY_USER:$CI_REGISTRY_PASSWORD | base64)\"}}}" > /kaniko/.docker/config.json
   script:
-    # Build and push buildsystem image
+    # Determine tag
     - |
       if [ -n "$CI_COMMIT_TAG" ]; then
         TAG="$CI_COMMIT_TAG"
+        DESTINATIONS="--destination=$IMAGE_NAME:$TAG --destination=$IMAGE_NAME:latest"
       else
         TAG="latest"
+        DESTINATIONS="--destination=$IMAGE_NAME:$TAG"
       fi
-    - docker build -t $IMAGE_NAME:$TAG -f docker/buildsystem/Dockerfile --build-arg ARO_VERSION=${CI_COMMIT_REF_NAME} docker/buildsystem/
-    - docker push $IMAGE_NAME:$TAG
-    - |
-      if [ -n "$CI_COMMIT_TAG" ]; then
-        docker tag $IMAGE_NAME:$TAG $IMAGE_NAME:latest
-        docker push $IMAGE_NAME:latest
-      fi
+    # Build and push with Kaniko
+    - /kaniko/executor
+      --context=docker/buildsystem/
+      --dockerfile=docker/buildsystem/Dockerfile
+      --build-arg=ARO_VERSION=${CI_COMMIT_REF_NAME}
+      $DESTINATIONS
   tags:
     - spencer
 
 docker:runtime:
   stage: docker
-  image: docker:24
-  services:
-    - docker:24-dind
+  image:
+    name: gcr.io/kaniko-project/executor:v1.23.2-debug
+    entrypoint: [""]
   needs:
     - job: build:linux
       optional: true
@@ -444,25 +446,26 @@ docker:runtime:
     - if: $CI_COMMIT_TAG
     - if: $CI_COMMIT_BRANCH == "main"
   variables:
-    DOCKER_TLS_CERTDIR: "/certs"
     IMAGE_NAME: $CI_REGISTRY_IMAGE/aro-runtime
   before_script:
-    - docker login -u $CI_REGISTRY_USER -p $CI_REGISTRY_PASSWORD $CI_REGISTRY
+    # Create Docker config for registry authentication
+    - mkdir -p /kaniko/.docker
+    - echo "{\"auths\":{\"$CI_REGISTRY\":{\"auth\":\"$(echo -n $CI_REGISTRY_USER:$CI_REGISTRY_PASSWORD | base64)\"}}}" > /kaniko/.docker/config.json
   script:
-    # Build and push runtime image
+    # Determine tag
     - |
       if [ -n "$CI_COMMIT_TAG" ]; then
         TAG="$CI_COMMIT_TAG"
+        DESTINATIONS="--destination=$IMAGE_NAME:$TAG --destination=$IMAGE_NAME:latest"
       else
         TAG="latest"
+        DESTINATIONS="--destination=$IMAGE_NAME:$TAG"
       fi
-    - docker build -t $IMAGE_NAME:$TAG -f docker/runtime/Dockerfile docker/runtime/
-    - docker push $IMAGE_NAME:$TAG
-    - |
-      if [ -n "$CI_COMMIT_TAG" ]; then
-        docker tag $IMAGE_NAME:$TAG $IMAGE_NAME:latest
-        docker push $IMAGE_NAME:latest
-      fi
+    # Build and push with Kaniko
+    - /kaniko/executor
+      --context=docker/runtime/
+      --dockerfile=docker/runtime/Dockerfile
+      $DESTINATIONS
   tags:
     - spencer
 
