@@ -143,7 +143,7 @@ public final class WindowsHTTPServer: HTTPServerService, @unchecked Sendable {
         }
 
         // Create ARO request
-        let bodyData = await foxRequest.bodyData
+        let bodyData = try? await foxRequest.bodyData
         let aroRequest = HTTPRequest(
             id: requestId,
             method: foxRequest.method.rawValue,
