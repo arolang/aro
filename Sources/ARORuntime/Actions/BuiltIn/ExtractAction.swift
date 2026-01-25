@@ -36,6 +36,14 @@ public struct ExtractAction: ActionImplementation {
     ) async throws -> any Sendable {
         try validatePreposition(object.preposition)
 
+        // Handle environment variable extraction: <env: VAR_NAME>
+        if object.base == "env", let varName = object.specifiers.first {
+            guard let value = ProcessInfo.processInfo.environment[varName] else {
+                throw ActionError.undefinedVariable("env:\(varName)")
+            }
+            return value
+        }
+
         // Get source object
         guard let source = context.resolveAny(object.base) else {
             throw ActionError.undefinedVariable(object.base)
