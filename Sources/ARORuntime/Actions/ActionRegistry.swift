@@ -71,7 +71,9 @@ public actor ActionRegistry {
         addAction(SplitAction.self)
         addAction(MergeAction.self)
         addAction(DeleteAction.self)
-        addAction(ParseHtmlAction.self)
+        #if !os(Windows)
+        addAction(ParseHtmlAction.self)  // Requires Kanna/libxml2
+        #endif
 
         // RESPONSE actions (Internal → External)
         addAction(ReturnAction.self)

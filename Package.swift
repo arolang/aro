@@ -21,6 +21,8 @@ platformDependencies = [
     // LLVM C API bindings for type-safe IR generation (Issue #53)
     // Swifty-LLVM requires Swift 6.2 and LLVM 20
     .package(url: "https://github.com/hylo-lang/Swifty-LLVM.git", branch: "main"),
+    // Kanna for HTML/XML parsing with CSS selectors (requires libxml2, not available on Windows)
+    .package(url: "https://github.com/tid-kijyun/Kanna.git", from: "5.3.0"),
 ]
 runtimePlatformDependencies = [
     .product(name: "NIO", package: "swift-nio"),
@@ -28,6 +30,7 @@ runtimePlatformDependencies = [
     .product(name: "NIOFoundationCompat", package: "swift-nio"),
     .product(name: "AsyncHTTPClient", package: "async-http-client"),
     .product(name: "FileMonitor", package: "FileMonitor"),
+    .product(name: "Kanna", package: "Kanna"),  // HTML/XML parsing (requires libxml2)
 ]
 // LSP dependencies (JSONRPC doesn't support Windows)
 lspDependencies = [
@@ -113,8 +116,6 @@ let package = Package(
         .package(url: "https://github.com/jpsim/Yams.git", from: "6.2.0"),
         // Swift Crypto for cryptographic operations (SHA256, etc.)
         .package(url: "https://github.com/apple/swift-crypto.git", from: "4.0.0"),
-        // Kanna for HTML/XML parsing with CSS selectors
-        .package(url: "https://github.com/tid-kijyun/Kanna.git", from: "5.3.0"),
     ],
     targets: {
         // Core targets available on all platforms
@@ -136,7 +137,6 @@ let package = Package(
                     "AROParser",
                     .product(name: "Yams", package: "Yams"),
                     .product(name: "Crypto", package: "swift-crypto"),
-                    .product(name: "Kanna", package: "Kanna"),
                 ] + runtimePlatformDependencies,
                 path: "Sources/ARORuntime"
             ),

@@ -3,6 +3,9 @@
 // ARO Runtime - HTML Parse Action for Structured Data Extraction
 // ============================================================
 
+// Kanna requires libxml2 which is not available on Windows
+#if !os(Windows)
+
 import Foundation
 import Kanna
 import AROParser
@@ -104,3 +107,5 @@ public struct ParseHtmlAction: ActionImplementation {
     }
 
 }
+
+#endif  // !os(Windows)
