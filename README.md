@@ -131,7 +131,7 @@ ARO runs on macOS, Linux, and Windows. Most features work across all platforms.
 | Language Server (LSP) | ✅ | ✅ | ❌³ |
 | Swift Plugins | ✅ | ✅ | ✅ |
 
-¹ Uses Joannis's SwiftNIO fork with WSAPoll support (experimental)
+¹ Uses SwiftNIO branch `jo/winsock-fixes` with WSAPoll support (experimental)
 ² Uses polling-based monitoring instead of native events
 ³ LanguageServerProtocol library doesn't support Windows yet
 
@@ -280,7 +280,7 @@ swift build -c release
 
 The binary is at `.build\release\aro.exe`.
 
-**Note:** Windows support uses Joannis's SwiftNIO fork with experimental WSAPoll support for networking.
+**Note:** Windows support uses SwiftNIO branch `jo/winsock-fixes` with experimental WSAPoll support for networking.
 
 ## Running Tests
 
