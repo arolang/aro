@@ -57,7 +57,7 @@ public final class WindowsSocketServer: SocketServerService, @unchecked Sendable
     public func start(port: Int) async throws {
         // Create listening socket
         let address = try Socket.makeAddressINET(port: UInt16(port))
-        let serverSocket = try Socket(domain: Int32(AF_INET), type: Int32(SOCK_STREAM))
+        let serverSocket = try Socket(domain: Int32(AF_INET), type: .stream)
         try serverSocket.setValue(true, for: .localAddressReuse)
         try serverSocket.bind(to: address)
         try serverSocket.listen()
