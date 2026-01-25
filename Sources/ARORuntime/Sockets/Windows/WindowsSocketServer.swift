@@ -11,6 +11,7 @@
 
 import Foundation
 import FlyingSocks
+import WinSDK.WinSock2
 
 /// Socket Server implementation for Windows using FlyingSocks
 ///
