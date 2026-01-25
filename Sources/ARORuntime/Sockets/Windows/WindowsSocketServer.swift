@@ -136,7 +136,9 @@ public final class WindowsSocketServer: SocketServerService, @unchecked Sendable
     private func acceptConnections(_ serverSocket: Socket) async {
         while !Task.isCancelled {
             do {
-                let clientSocket = try await serverSocket.accept()
+                // accept() returns (file: FileDescriptor, addr: sockaddr_storage)
+                let (clientFile, _) = try await serverSocket.accept()
+                let clientSocket = Socket(file: clientFile)
                 let connectionId = UUID().uuidString
 
                 // Store connection (using withLock for async-safe access)
