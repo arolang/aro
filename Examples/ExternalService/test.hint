@@ -5,5 +5,3 @@ mode: both
 timeout: 120
 # Binary mode loads precompiled plugin with different log messages
 occurrence-check: true
-# Swift package plugins don't work on Windows (different plugin loading mechanism)
-skip-on-windows: Swift package plugins not supported
