@@ -3,7 +3,6 @@
 // ARO Compiler - LLVM Code Generation Context
 // ============================================================
 
-#if !os(Windows)
 import SwiftyLLVM
 import AROParser
 
@@ -207,5 +206,3 @@ public final class LLVMCodeGenContext {
     public var doubleType: FloatingPointType { module.double }
     public var voidType: VoidType { module.void }
 }
-
-#endif

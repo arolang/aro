@@ -3,15 +3,9 @@
 // ARO Runtime - HTML Parse Action for Structured Data Extraction
 // ============================================================
 
-// Kanna requires libxml2 which is not available on Windows
-#if !os(Windows)
-
 import Foundation
-import Kanna
+import SwiftSoup
 import AROParser
-
-// Use Kanna's XMLElement to avoid ambiguity with Foundation's NSXMLElement
-private typealias KannaXMLElement = Kanna.XMLElement
 
 // MARK: - ParseHtml Action
 
@@ -72,27 +66,24 @@ public struct ParseHtmlAction: ActionImplementation {
 
     /// Extract all href values from anchor tags
     private func parseHtmlLinks(_ html: String) throws -> [String] {
-        guard let doc = try? HTML(html: html, encoding: .utf8) else {
-            throw ActionError.runtimeError("Failed to parse HTML")
-        }
-        return doc.css("a[href]").compactMap { $0["href"] }
+        let doc = try SwiftSoup.parse(html)
+        let links = try doc.select("a[href]")
+        return try links.array().compactMap { try $0.attr("href") }
     }
 
     /// Extract text content with title
     private func parseHtmlContent(_ html: String) throws -> [String: any Sendable] {
-        guard let doc = try? HTML(html: html, encoding: .utf8) else {
-            throw ActionError.runtimeError("Failed to parse HTML")
-        }
+        let doc = try SwiftSoup.parse(html)
 
-        let title = doc.css("title").first?.text ?? ""
+        let title = try doc.select("title").first()?.text() ?? ""
 
         var content = ""
-        if let main = doc.css("main").first {
-            content = main.text ?? ""
-        } else if let article = doc.css("article").first {
-            content = article.text ?? ""
-        } else if let body = doc.css("body").first {
-            content = body.text ?? ""
+        if let main = try doc.select("main").first() {
+            content = try main.text()
+        } else if let article = try doc.select("article").first() {
+            content = try article.text()
+        } else if let body = try doc.select("body").first() {
+            content = try body.text()
         }
 
         // Clean up whitespace
@@ -106,35 +97,32 @@ public struct ParseHtmlAction: ActionImplementation {
 
     /// Extract text from elements matching CSS selector
     private func parseHtmlText(_ html: String, selector: String) throws -> [String] {
-        guard let doc = try? HTML(html: html, encoding: .utf8) else {
-            throw ActionError.runtimeError("Failed to parse HTML")
-        }
-        return doc.css(selector).compactMap { $0.text }
+        let doc = try SwiftSoup.parse(html)
+        let elements = try doc.select(selector)
+        return try elements.array().map { try $0.text() }
     }
 
     // MARK: - Markdown Conversion
 
     /// Extract HTML content and convert to Markdown
     private func parseHtmlToMarkdown(_ html: String) throws -> [String: any Sendable] {
-        guard let doc = try? HTML(html: html, encoding: .utf8) else {
-            throw ActionError.runtimeError("Failed to parse HTML")
-        }
+        let doc = try SwiftSoup.parse(html)
 
-        let title = doc.css("title").first?.text?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        let title = (try doc.select("title").first()?.text())?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
 
         // Find main content area
-        var contentElement: KannaXMLElement?
-        if let main = doc.css("main").first {
+        var contentElement: Element?
+        if let main = try doc.select("main").first() {
             contentElement = main
-        } else if let article = doc.css("article").first {
+        } else if let article = try doc.select("article").first() {
             contentElement = article
-        } else if let body = doc.css("body").first {
+        } else if let body = try doc.select("body").first() {
             contentElement = body
         }
 
         var markdown: String
         if let element = contentElement {
-            markdown = convertElementToMarkdown(element)
+            markdown = try convertElementToMarkdown(element)
             markdown = cleanupMarkdown(markdown)
         } else {
             markdown = ""
@@ -167,30 +155,27 @@ public struct ParseHtmlAction: ActionImplementation {
     }
 
     /// Recursively convert an HTML element to Markdown
-    private func convertElementToMarkdown(_ element: KannaXMLElement, listDepth: Int = 0) -> String {
-        guard let tagName = element.tagName?.lowercased() else {
-            // Text node - return text content directly
-            return element.text ?? ""
-        }
+    private func convertElementToMarkdown(_ element: Element, listDepth: Int = 0) throws -> String {
+        let tagName = element.tagName().lowercased()
 
         switch tagName {
         // Headings
         case "h1":
-            return "# \(getInlineMarkdown(element))\n\n"
+            return "# \(try getInlineMarkdown(element))\n\n"
         case "h2":
-            return "## \(getInlineMarkdown(element))\n\n"
+            return "## \(try getInlineMarkdown(element))\n\n"
         case "h3":
-            return "### \(getInlineMarkdown(element))\n\n"
+            return "### \(try getInlineMarkdown(element))\n\n"
         case "h4":
-            return "#### \(getInlineMarkdown(element))\n\n"
+            return "#### \(try getInlineMarkdown(element))\n\n"
         case "h5":
-            return "##### \(getInlineMarkdown(element))\n\n"
+            return "##### \(try getInlineMarkdown(element))\n\n"
         case "h6":
-            return "###### \(getInlineMarkdown(element))\n\n"
+            return "###### \(try getInlineMarkdown(element))\n\n"
 
         // Paragraphs and line breaks
         case "p":
-            let content = getInlineMarkdown(element)
+            let content = try getInlineMarkdown(element)
             return content.isEmpty ? "" : "\(content)\n\n"
         case "br":
             return "\n"
@@ -199,56 +184,56 @@ public struct ParseHtmlAction: ActionImplementation {
 
         // Inline formatting (handled by getInlineMarkdown, but support standalone)
         case "strong", "b":
-            return "**\(getInlineMarkdown(element))**"
+            return "**\(try getInlineMarkdown(element))**"
         case "em", "i":
-            return "*\(getInlineMarkdown(element))*"
+            return "*\(try getInlineMarkdown(element))*"
         case "code":
-            return "`\(element.text ?? "")`"
+            return "`\(try element.text())`"
         case "del", "s", "strike":
-            return "~~\(getInlineMarkdown(element))~~"
+            return "~~\(try getInlineMarkdown(element))~~"
 
         // Links and images
         case "a":
-            let href = element["href"] ?? ""
-            let text = getInlineMarkdown(element)
+            let href = try element.attr("href")
+            let text = try getInlineMarkdown(element)
             return "[\(text)](\(escapeMarkdownUrl(href)))"
         case "img":
-            let src = element["src"] ?? ""
-            let alt = element["alt"] ?? ""
+            let src = try element.attr("src")
+            let alt = try element.attr("alt")
             return "![\(escapeMarkdownText(alt))](\(escapeMarkdownUrl(src)))"
 
         // Code blocks
         case "pre":
-            let codeElement = element.css("code").first ?? element
-            let lang = extractLanguageClass(codeElement)
-            let code = codeElement.text ?? ""
+            let codeElement = try element.select("code").first() ?? element
+            let lang = try extractLanguageClass(codeElement)
+            let code = try codeElement.text()
             return "\n```\(lang)\n\(code)\n```\n\n"
 
         // Blockquotes
         case "blockquote":
-            var content = getChildrenMarkdown(element, listDepth: listDepth)
+            var content = try getChildrenMarkdown(element, listDepth: listDepth)
                 .trimmingCharacters(in: .whitespacesAndNewlines)
             // Fallback to element text if no children extracted
             if content.isEmpty {
-                content = element.text?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+                content = (try? element.text())?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
             }
             let lines = content.components(separatedBy: "\n")
             return lines.map { "> \($0)" }.joined(separator: "\n") + "\n\n"
 
         // Lists
         case "ul":
-            return convertUnorderedList(element, depth: listDepth) + "\n"
+            return try convertUnorderedList(element, depth: listDepth) + "\n"
         case "ol":
-            return convertOrderedList(element, depth: listDepth) + "\n"
+            return try convertOrderedList(element, depth: listDepth) + "\n"
 
         // Tables
         case "table":
-            return convertTable(element) + "\n\n"
+            return try convertTable(element) + "\n\n"
 
         // Container elements - process children
         case "div", "span", "section", "article", "main", "header", "footer", "nav", "aside",
              "figure", "figcaption", "details", "summary", "address":
-            return getChildrenMarkdown(element, listDepth: listDepth)
+            return try getChildrenMarkdown(element, listDepth: listDepth)
 
         // Ignored elements
         case "script", "style", "noscript", "template", "iframe", "svg", "canvas":
@@ -256,98 +241,99 @@ public struct ParseHtmlAction: ActionImplementation {
 
         // Definition lists
         case "dl":
-            return convertDefinitionList(element)
+            return try convertDefinitionList(element)
         case "dt":
-            return "**\(getInlineMarkdown(element))**\n"
+            return "**\(try getInlineMarkdown(element))**\n"
         case "dd":
-            return ": \(getInlineMarkdown(element))\n\n"
+            return ": \(try getInlineMarkdown(element))\n\n"
+
+        // Text nodes (handled separately)
+        case "#text":
+            return try element.text()
 
         default:
             // Unknown tags - extract children or text
-            return getChildrenMarkdown(element, listDepth: listDepth)
+            return try getChildrenMarkdown(element, listDepth: listDepth)
         }
     }
 
     /// Get markdown for all children of an element
-    private func getChildrenMarkdown(_ element: KannaXMLElement, listDepth: Int = 0) -> String {
+    private func getChildrenMarkdown(_ element: Element, listDepth: Int = 0) throws -> String {
         var result = ""
-        for child in element.xpath("child::node()") {
-            if let childElement = child as? KannaXMLElement {
-                if childElement.tagName != nil {
-                    result += convertElementToMarkdown(childElement, listDepth: listDepth)
-                } else {
-                    // Text node - normalize whitespace
-                    let text = normalizeWhitespace(childElement.text ?? "")
-                    if !text.trimmingCharacters(in: CharacterSet.whitespaces).isEmpty {
-                        result += text
-                    }
-                }
+        for child in element.children().array() {
+            result += try convertElementToMarkdown(child, listDepth: listDepth)
+        }
+        // Also handle text nodes
+        for node in element.textNodes() {
+            let text = normalizeWhitespace(node.text())
+            if !text.trimmingCharacters(in: CharacterSet.whitespaces).isEmpty {
+                result += text
             }
         }
         return result
     }
 
     /// Get inline markdown (text with inline formatting)
-    private func getInlineMarkdown(_ element: KannaXMLElement) -> String {
+    private func getInlineMarkdown(_ element: Element) throws -> String {
         var result = ""
-        for child in element.xpath("child::node()") {
-            if let childElement = child as? KannaXMLElement {
-                if let tagName = childElement.tagName?.lowercased() {
-                    switch tagName {
-                    case "strong", "b":
-                        let inner = getInlineMarkdown(childElement)
-                        if !inner.isEmpty {
-                            result += "**\(inner)**"
-                        }
-                    case "em", "i":
-                        let inner = getInlineMarkdown(childElement)
-                        if !inner.isEmpty {
-                            result += "*\(inner)*"
-                        }
-                    case "code":
-                        let code = childElement.text ?? ""
-                        if !code.isEmpty {
-                            result += "`\(code)`"
-                        }
-                    case "del", "s", "strike":
-                        let inner = getInlineMarkdown(childElement)
-                        if !inner.isEmpty {
-                            result += "~~\(inner)~~"
-                        }
-                    case "a":
-                        let href = element["href"] ?? childElement["href"] ?? ""
-                        let text = getInlineMarkdown(childElement)
-                        if !text.isEmpty && !href.isEmpty {
-                            result += "[\(text)](\(escapeMarkdownUrl(href)))"
-                        } else if !text.isEmpty {
-                            result += text
-                        }
-                    case "img":
-                        let src = childElement["src"] ?? ""
-                        let alt = childElement["alt"] ?? ""
-                        if !src.isEmpty {
-                            result += "![\(escapeMarkdownText(alt))](\(escapeMarkdownUrl(src)))"
-                        }
-                    case "br":
-                        result += "\n"
-                    case "span":
-                        result += getInlineMarkdown(childElement)
-                    default:
-                        // Normalize whitespace in text from other elements
-                        let text = normalizeWhitespace(childElement.text ?? "")
-                        result += text
-                    }
-                } else {
-                    // Text node - normalize whitespace
-                    let text = normalizeWhitespace(childElement.text ?? "")
+
+        // Process child nodes
+        for child in element.children().array() {
+            let tagName = child.tagName().lowercased()
+            switch tagName {
+            case "strong", "b":
+                let inner = try getInlineMarkdown(child)
+                if !inner.isEmpty {
+                    result += "**\(inner)**"
+                }
+            case "em", "i":
+                let inner = try getInlineMarkdown(child)
+                if !inner.isEmpty {
+                    result += "*\(inner)*"
+                }
+            case "code":
+                let code = try child.text()
+                if !code.isEmpty {
+                    result += "`\(code)`"
+                }
+            case "del", "s", "strike":
+                let inner = try getInlineMarkdown(child)
+                if !inner.isEmpty {
+                    result += "~~\(inner)~~"
+                }
+            case "a":
+                let href = try child.attr("href")
+                let text = try getInlineMarkdown(child)
+                if !text.isEmpty && !href.isEmpty {
+                    result += "[\(text)](\(escapeMarkdownUrl(href)))"
+                } else if !text.isEmpty {
                     result += text
                 }
+            case "img":
+                let src = try child.attr("src")
+                let alt = try child.attr("alt")
+                if !src.isEmpty {
+                    result += "![\(escapeMarkdownText(alt))](\(escapeMarkdownUrl(src)))"
+                }
+            case "br":
+                result += "\n"
+            case "span":
+                result += try getInlineMarkdown(child)
+            default:
+                // Normalize whitespace in text from other elements
+                let text = normalizeWhitespace(try child.text())
+                result += text
             }
         }
 
-        // If no children were found, use element's text directly
+        // Handle text nodes directly under this element
+        for node in element.textNodes() {
+            result += normalizeWhitespace(node.text())
+        }
+
+        // If no content was found, try element's text directly
         if result.isEmpty {
-            result = normalizeWhitespace(element.text ?? "")
+            result = normalizeWhitespace(try element.text())
         }
 
         return result.trimmingCharacters(in: .whitespaces)
@@ -360,8 +346,8 @@ public struct ParseHtmlAction: ActionImplementation {
     }
 
     /// Extract language class from code element (e.g., "language-swift" -> "swift")
-    private func extractLanguageClass(_ element: KannaXMLElement) -> String {
-        guard let className = element.className else { return "" }
+    private func extractLanguageClass(_ element: Element) throws -> String {
+        guard let className = try? element.className() else { return "" }
         let classes = className.split(separator: " ")
         for cls in classes {
             if cls.hasPrefix("language-") {
@@ -377,23 +363,16 @@ public struct ParseHtmlAction: ActionImplementation {
     // MARK: - List Conversion
 
     /// Convert unordered list to Markdown
-    private func convertUnorderedList(_ element: KannaXMLElement, depth: Int = 0) -> String {
+    private func convertUnorderedList(_ element: Element, depth: Int = 0) throws -> String {
         var result = ""
         let prefix = String(repeating: "  ", count: depth)
 
-        for li in element.css(":scope > li") {
-            let content = getListItemContent(li, depth: depth)
-            result += "\(prefix)- \(content)\n"
-        }
-
-        // Fallback if :scope not supported
-        if result.isEmpty {
-            for li in element.css("li") {
-                // Skip nested list items
-                if li.parent?.tagName?.lowercased() == element.tagName?.lowercased() {
-                    let content = getListItemContent(li, depth: depth)
-                    result += "\(prefix)- \(content)\n"
-                }
+        // SwiftSoup doesn't support :scope, so we check parent directly
+        for li in try element.select("li").array() {
+            // Only process direct children of this list
+            if li.parent() === element {
+                let content = try getListItemContent(li, depth: depth)
+                result += "\(prefix)- \(content)\n"
             }
         }
 
@@ -401,25 +380,18 @@ public struct ParseHtmlAction: ActionImplementation {
     }
 
     /// Convert ordered list to Markdown
-    private func convertOrderedList(_ element: KannaXMLElement, depth: Int = 0) -> String {
+    private func convertOrderedList(_ element: Element, depth: Int = 0) throws -> String {
         var result = ""
         let prefix = String(repeating: "  ", count: depth)
         var index = 1
 
-        for li in element.css(":scope > li") {
-            let content = getListItemContent(li, depth: depth)
-            result += "\(prefix)\(index). \(content)\n"
-            index += 1
-        }
-
-        // Fallback if :scope not supported
-        if result.isEmpty {
-            for li in element.css("li") {
-                if li.parent?.tagName?.lowercased() == element.tagName?.lowercased() {
-                    let content = getListItemContent(li, depth: depth)
-                    result += "\(prefix)\(index). \(content)\n"
-                    index += 1
-                }
+        // SwiftSoup doesn't support :scope, so we check parent directly
+        for li in try element.select("li").array() {
+            // Only process direct children of this list
+            if li.parent() === element {
+                let content = try getListItemContent(li, depth: depth)
+                result += "\(prefix)\(index). \(content)\n"
+                index += 1
             }
         }
 
@@ -427,32 +399,31 @@ public struct ParseHtmlAction: ActionImplementation {
     }
 
     /// Get list item content, handling nested lists
-    private func getListItemContent(_ li: KannaXMLElement, depth: Int) -> String {
+    private func getListItemContent(_ li: Element, depth: Int) throws -> String {
         var content = ""
 
         // Get inline text content (excluding nested lists)
-        for child in li.xpath("child::node()") {
-            if let childElement = child as? KannaXMLElement {
-                if let tagName = childElement.tagName?.lowercased() {
-                    switch tagName {
-                    case "ul":
-                        // Nested unordered list
-                        content += "\n" + convertUnorderedList(childElement, depth: depth + 1)
-                    case "ol":
-                        // Nested ordered list
-                        content += "\n" + convertOrderedList(childElement, depth: depth + 1)
-                    case "p":
-                        // Paragraph in list item
-                        content += getInlineMarkdown(childElement)
-                    default:
-                        // Inline element
-                        content += getInlineMarkdown(childElement)
-                    }
-                } else {
-                    // Text node - normalize whitespace
-                    content += normalizeWhitespace(childElement.text ?? "")
-                }
+        for child in li.children().array() {
+            let tagName = child.tagName().lowercased()
+            switch tagName {
+            case "ul":
+                // Nested unordered list
+                content += "\n" + (try convertUnorderedList(child, depth: depth + 1))
+            case "ol":
+                // Nested ordered list
+                content += "\n" + (try convertOrderedList(child, depth: depth + 1))
+            case "p":
+                // Paragraph in list item
+                content += try getInlineMarkdown(child)
+            default:
+                // Inline element
+                content += try getInlineMarkdown(child)
             }
+        }
+
+        // Handle text nodes
+        for node in li.textNodes() {
+            content += normalizeWhitespace(node.text())
         }
 
         return content.trimmingCharacters(in: .whitespaces)
@@ -461,16 +432,16 @@ public struct ParseHtmlAction: ActionImplementation {
     // MARK: - Table Conversion
 
     /// Convert HTML table to Markdown table
-    private func convertTable(_ element: KannaXMLElement) -> String {
+    private func convertTable(_ element: Element) throws -> String {
         var headerRow: [String] = []
         var bodyRows: [[String]] = []
 
         // Extract header rows from thead
-        if let thead = element.css("thead").first {
-            for tr in thead.css("tr") {
+        if let thead = try element.select("thead").first() {
+            for tr in try thead.select("tr").array() {
                 var row: [String] = []
-                for th in tr.css("th") {
-                    row.append(escapeTableCell(getInlineMarkdown(th)))
+                for th in try tr.select("th").array() {
+                    row.append(try escapeTableCell(getInlineMarkdown(th)))
                 }
                 if !row.isEmpty {
                     headerRow = row
@@ -480,16 +451,16 @@ public struct ParseHtmlAction: ActionImplementation {
         }
 
         // Extract body rows
-        let tbody = element.css("tbody").first ?? element
-        for tr in tbody.css("tr") {
+        let tbody = try element.select("tbody").first() ?? element
+        for tr in try tbody.select("tr").array() {
             var row: [String] = []
             // Handle both th and td cells
-            for cell in tr.css("th, td") {
-                row.append(escapeTableCell(getInlineMarkdown(cell)))
+            for cell in try tr.select("th, td").array() {
+                row.append(try escapeTableCell(getInlineMarkdown(cell)))
             }
             if !row.isEmpty {
                 // If no header yet and this row has th cells, use as header
-                if headerRow.isEmpty && tr.css("th").first != nil {
+                if headerRow.isEmpty && (try? tr.select("th").first()) != nil {
                     headerRow = row
                 } else {
                     bodyRows.append(row)
@@ -540,18 +511,17 @@ public struct ParseHtmlAction: ActionImplementation {
     // MARK: - Definition List Conversion
 
     /// Convert definition list to Markdown
-    private func convertDefinitionList(_ element: KannaXMLElement) -> String {
+    private func convertDefinitionList(_ element: Element) throws -> String {
         var result = ""
-        for child in element.xpath("child::*") {
-            if let tagName = child.tagName?.lowercased() {
-                switch tagName {
-                case "dt":
-                    result += "**\(getInlineMarkdown(child))**\n"
-                case "dd":
-                    result += ": \(getInlineMarkdown(child))\n\n"
-                default:
-                    break
-                }
+        for child in element.children().array() {
+            let tagName = child.tagName().lowercased()
+            switch tagName {
+            case "dt":
+                result += "**\(try getInlineMarkdown(child))**\n"
+            case "dd":
+                result += ": \(try getInlineMarkdown(child))\n\n"
+            default:
+                break
             }
         }
         return result
@@ -575,5 +545,3 @@ public struct ParseHtmlAction: ActionImplementation {
     }
 
 }
-
-#endif  // !os(Windows)

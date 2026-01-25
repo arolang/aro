@@ -3,8 +3,7 @@
 // ARO Runtime - ParseHtml Markdown Specifier Unit Tests
 // ============================================================
 
-// ParseHtmlAction requires Kanna/libxml2 which is not available on Windows
-#if !os(Windows)
+// ParseHtmlAction uses SwiftSoup (pure Swift, works on all platforms)
 
 import Foundation
 import Testing
@@ -474,5 +473,3 @@ struct ParseHtmlMarkdownTests {
         #expect(md.isEmpty || md.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
     }
 }
-
-#endif  // !os(Windows)

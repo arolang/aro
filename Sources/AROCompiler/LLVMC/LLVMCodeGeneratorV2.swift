@@ -3,7 +3,6 @@
 // ARO Compiler - LLVM Code Generator using Swifty-LLVM API
 // ============================================================
 
-#if !os(Windows)
 import Foundation
 import SwiftyLLVM
 import AROParser
@@ -1572,5 +1571,3 @@ private final class StringConstantCollector {
         }
     }
 }
-
-#endif

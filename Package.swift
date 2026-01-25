@@ -2,7 +2,8 @@
 import PackageDescription
 
 // Platform-specific dependencies
-// swift-nio, async-http-client, and LSP libraries have Windows compatibility issues
+// On Windows: use Joannis's SwiftNIO fork with WSAPoll support
+// On macOS/Linux: use official SwiftNIO releases
 var platformDependencies: [Package.Dependency] = []
 var runtimePlatformDependencies: [Target.Dependency] = []
 var lspDependencies: [Package.Dependency] = []
@@ -10,19 +11,45 @@ var lspTargetDependencies: [Target.Dependency] = []
 var cliLspDependency: [Target.Dependency] = []
 var compilerLLVMDependency: [Target.Dependency] = []
 
-#if !os(Windows)
+#if os(Windows)
+// Windows-specific dependencies
+// Use Joannis's SwiftNIO fork with WSAPoll support for Windows networking
+platformDependencies = [
+    // Joannis's SwiftNIO fork with Windows WSAPoll support (PR #3433)
+    .package(url: "https://github.com/Joannis/swift-nio.git", branch: "main"),
+    // AsyncHTTPClient for outgoing HTTP requests
+    .package(url: "https://github.com/swift-server/async-http-client.git", from: "1.21.0"),
+    // LLVM C API bindings for type-safe IR generation
+    .package(url: "https://github.com/hylo-lang/Swifty-LLVM.git", branch: "main"),
+    // SwiftSoup for HTML/XML parsing (pure Swift, works on all platforms)
+    .package(url: "https://github.com/scinfu/SwiftSoup.git", from: "2.7.0"),
+]
+runtimePlatformDependencies = [
+    .product(name: "NIO", package: "swift-nio"),
+    .product(name: "NIOHTTP1", package: "swift-nio"),
+    .product(name: "NIOFoundationCompat", package: "swift-nio"),
+    .product(name: "AsyncHTTPClient", package: "async-http-client"),
+    .product(name: "SwiftSoup", package: "SwiftSoup"),
+]
+// LLVM for native compilation on Windows
+compilerLLVMDependency = [
+    .product(name: "SwiftyLLVM", package: "Swifty-LLVM"),
+]
+// LSP not available on Windows yet - JSONRPC has issues
+#else
+// macOS and Linux dependencies
 platformDependencies = [
     // SwiftNIO for HTTP server and sockets (2.75.0+ for Swift 6 support)
     .package(url: "https://github.com/apple/swift-nio.git", from: "2.75.0"),
     // AsyncHTTPClient for outgoing HTTP requests
     .package(url: "https://github.com/swift-server/async-http-client.git", from: "1.21.0"),
-    // FileMonitor for file system watching (using fork with Windows support)
+    // FileMonitor for file system watching
     .package(url: "https://github.com/KrisSimon/FileMonitor.git", from: "2.0.0"),
     // LLVM C API bindings for type-safe IR generation (Issue #53)
     // Swifty-LLVM requires Swift 6.2 and LLVM 20
     .package(url: "https://github.com/hylo-lang/Swifty-LLVM.git", branch: "main"),
-    // Kanna for HTML/XML parsing with CSS selectors (requires libxml2, not available on Windows)
-    .package(url: "https://github.com/tid-kijyun/Kanna.git", from: "5.3.0"),
+    // SwiftSoup for HTML/XML parsing (pure Swift, works on all platforms)
+    .package(url: "https://github.com/scinfu/SwiftSoup.git", from: "2.7.0"),
 ]
 runtimePlatformDependencies = [
     .product(name: "NIO", package: "swift-nio"),
@@ -30,7 +57,7 @@ runtimePlatformDependencies = [
     .product(name: "NIOFoundationCompat", package: "swift-nio"),
     .product(name: "AsyncHTTPClient", package: "async-http-client"),
     .product(name: "FileMonitor", package: "FileMonitor"),
-    .product(name: "Kanna", package: "Kanna"),  // HTML/XML parsing (requires libxml2)
+    .product(name: "SwiftSoup", package: "SwiftSoup"),
 ]
 // LSP dependencies (JSONRPC doesn't support Windows)
 lspDependencies = [
@@ -42,26 +69,13 @@ lspTargetDependencies = [
 cliLspDependency = [
     "AROLSP",
 ]
-// LLVM C API for type-safe IR generation (not available on Windows)
+// LLVM C API for type-safe IR generation
 compilerLLVMDependency = [
     .product(name: "SwiftyLLVM", package: "Swifty-LLVM"),
 ]
-#else
-// Windows-specific dependencies
-// FlyingFox provides HTTP server and socket support using BSD sockets with Swift Concurrency
-// (experimental Windows support via polling-based socket pool)
-platformDependencies = [
-    .package(url: "https://github.com/swhitty/FlyingFox.git", from: "0.26.0"),
-]
-runtimePlatformDependencies = [
-    .product(name: "FlyingFox", package: "FlyingFox"),
-    .product(name: "FlyingSocks", package: "FlyingFox"),
-]
-// LSP not available on Windows - no compatible library
-// LLVM not available on Windows yet
 #endif
 
-// LLVM linker settings - pkg-config needs help finding LLVM on macOS
+// LLVM linker settings - pkg-config needs help finding LLVM
 #if os(macOS)
 import Foundation
 let llvmPath = ProcessInfo.processInfo.environment["LLVM_PATH"] ?? "/opt/homebrew/opt/llvm@20"
@@ -77,6 +91,14 @@ let llvmLibPath = "\(llvmPath)/lib"
 let llvmLinkerSettings: [LinkerSetting] = [
     .unsafeFlags(["-L\(llvmLibPath)", "-lLLVM-20"]),
     .unsafeFlags(["-Xlinker", "-rpath", "-Xlinker", llvmLibPath]),
+]
+#elseif os(Windows)
+import Foundation
+// Windows LLVM paths - check environment or use common locations
+let llvmPath = ProcessInfo.processInfo.environment["LLVM_PATH"] ?? "C:\\Program Files\\LLVM"
+let llvmLibPath = "\(llvmPath)\\lib"
+let llvmLinkerSettings: [LinkerSetting] = [
+    .unsafeFlags(["-L\(llvmLibPath)", "-lLLVM"]),
 ]
 #else
 let llvmLinkerSettings: [LinkerSetting] = []

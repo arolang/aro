@@ -3,7 +3,6 @@
 // ARO Compiler - LLVM Type Mapping and Validation
 // ============================================================
 
-#if !os(Windows)
 import SwiftyLLVM
 import AROParser
 
@@ -145,5 +144,3 @@ extension LLVMTypeMapper {
         }
     }
 }
-
-#endif

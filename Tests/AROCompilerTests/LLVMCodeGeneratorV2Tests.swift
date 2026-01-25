@@ -7,8 +7,6 @@ import XCTest
 @testable import AROCompiler
 @testable import AROParser
 
-#if !os(Windows)
-
 final class LLVMCodeGeneratorV2Tests: XCTestCase {
 
     func testV2GeneratorCreation() throws {
@@ -246,5 +244,3 @@ final class LLVMCodeGeneratorV2Tests: XCTestCase {
         XCTAssertTrue(result.irText.contains("main"), "Should contain main function")
     }
 }
-
-#endif
