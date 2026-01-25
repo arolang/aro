@@ -1,0 +1,43 @@
+---
+title: "ARO: Business Logic as Language"
+subtitle: "ARO By Example"
+author: "ARO Project"
+date: "January 2026"
+lang: en
+documentclass: book
+classoption:
+  - oneside
+  - 11pt
+geometry:
+  - margin=1in
+  - paperwidth=7in
+  - paperheight=10in
+fontfamily: courier
+monofont: "Courier"
+mainfont: "Palatino"
+linestretch: 1.15
+toc: true
+toc-depth: 2
+numbersections: false
+colorlinks: true
+linkcolor: NavyBlue
+urlcolor: NavyBlue
+header-includes:
+  - |
+    \usepackage{fancyhdr}
+    \usepackage{titlesec}
+    \usepackage{xcolor}
+    \definecolor{chaptercolor}{RGB}{40, 40, 40}
+    \definecolor{codebackground}{RGB}{248, 248, 248}
+    \pagestyle{fancy}
+    \fancyhf{}
+    \fancyhead[L]{\small\leftmark}
+    \fancyhead[R]{\small\thepage}
+    \fancyfoot[C]{\small ARO By Example}
+    \renewcommand{\headrulewidth}{0.4pt}
+    \renewcommand{\footrulewidth}{0.4pt}
+    \titleformat{\chapter}[display]
+      {\normalfont\Large\bfseries\color{chaptercolor}}
+      {\chaptertitlename\ \thechapter}{20pt}{\Huge}
+    \titlespacing*{\chapter}{0pt}{-20pt}{40pt}
+---

@@ -1,6 +1,6 @@
 #!/bin/bash
 #
-# ARO Language Guide - PDF Builder
+# ARO By Example - PDF Builder
 # Creates a Unix handbook-style PDF from markdown sources
 #
 # Requirements:
@@ -14,7 +14,7 @@ set -e
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 BOOK_DIR="$(dirname "$SCRIPT_DIR")"
 OUTPUT_DIR="$SCRIPT_DIR/output"
-OUTPUT_PDF="$OUTPUT_DIR/ARO-Language-Guide.pdf"
+OUTPUT_PDF="$OUTPUT_DIR/ARO-By-Example.pdf"
 METADATA_FILE="$SCRIPT_DIR/metadata.yaml"
 CSS_FILE="$BOOK_DIR/unix-style.css"
 
@@ -69,7 +69,7 @@ done < <(ls -1 Appendix*.md 2>/dev/null | sort -V)
 echo "Found ${#CHAPTERS[@]} chapters/appendices"
 echo ""
 
-echo "Building ARO Language Guide..."
+echo "Building ARO By Example..."
 echo ""
 
 # Build the file list
@@ -107,7 +107,7 @@ if command -v pdflatex &> /dev/null || command -v xelatex &> /dev/null; then
 else
     echo "LaTeX not found. Building HTML version..."
 
-    HTML_OUTPUT="$OUTPUT_DIR/ARO-Language-Guide.html"
+    HTML_OUTPUT="$OUTPUT_DIR/ARO-By-Example.html"
 
     # Build content files (without cover) for TOC generation
     CONTENT_FILES=""
@@ -173,7 +173,7 @@ fi
 echo ""
 echo "Building HTML version for screen reading..."
 
-HTML_OUTPUT="$OUTPUT_DIR/ARO-Language-Guide.html"
+HTML_OUTPUT="$OUTPUT_DIR/ARO-By-Example.html"
 
 # Copy CSS to output directory for HTML
 cp "$CSS_FILE" "$OUTPUT_DIR/"

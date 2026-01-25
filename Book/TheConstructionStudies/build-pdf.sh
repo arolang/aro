@@ -13,10 +13,11 @@
 set -e
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+BOOK_DIR="$(dirname "$SCRIPT_DIR")"
 OUTPUT_DIR="$SCRIPT_DIR/output"
 OUTPUT_PDF="$OUTPUT_DIR/ARO-Construction-Studies.pdf"
 METADATA_FILE="$SCRIPT_DIR/metadata.yaml"
-CSS_FILE="$SCRIPT_DIR/unix-style.css"
+CSS_FILE="$BOOK_DIR/unix-style.css"
 PROCESSED_DIR="$SCRIPT_DIR/processed"
 IMAGES_DIR="$SCRIPT_DIR/images"
 
