@@ -4,6 +4,7 @@
 // ============================================================
 
 import Foundation
+import AROParser
 
 /// Concrete implementation of ExecutionContext
 ///
@@ -15,8 +16,8 @@ public final class RuntimeContext: ExecutionContext, @unchecked Sendable {
     /// Thread-safe lock for all mutable state
     private let lock = NSLock()
 
-    /// Variable storage
-    private var variables: [String: any Sendable] = [:]
+    /// Variable storage (now using TypedValue for type preservation)
+    private var variables: [String: TypedValue] = [:]
 
     /// Track which variables are user-defined (immutable) vs framework-internal (mutable)
     /// Only user variables enforce immutability; framework variables can be rebound
@@ -89,7 +90,7 @@ public final class RuntimeContext: ExecutionContext, @unchecked Sendable {
         lock.lock()
         defer { lock.unlock() }
 
-        if let value = variables[name] as? T {
+        if let typedValue = variables[name], let value = typedValue.value as? T {
             return value
         }
         // Try parent context
@@ -117,11 +118,45 @@ public final class RuntimeContext: ExecutionContext, @unchecked Sendable {
             return buildContractObject()?.httpServer
         }
 
-        if let value = variables[name] {
-            return value
+        if let typedValue = variables[name] {
+            return typedValue.value
         }
         // Try parent context
         return parent?.resolveAny(name)
+    }
+
+    /// Resolve a variable returning the full TypedValue (type + value)
+    public func resolveTyped(_ name: String) -> TypedValue? {
+        lock.lock()
+        defer { lock.unlock() }
+
+        if let typedValue = variables[name] {
+            return typedValue
+        }
+        // Try parent context (if it's a RuntimeContext)
+        if let parentRuntime = parent as? RuntimeContext {
+            return parentRuntime.resolveTyped(name)
+        }
+        // Fall back to resolveAny and wrap with unknown type
+        if let value = parent?.resolveAny(name) {
+            return TypedValue(value, type: .unknown)
+        }
+        return nil
+    }
+
+    /// Get the type of a variable without retrieving its value
+    public func typeOf(_ name: String) -> DataType? {
+        lock.lock()
+        defer { lock.unlock() }
+
+        if let typedValue = variables[name] {
+            return typedValue.type
+        }
+        // Try parent context
+        if let parentRuntime = parent as? RuntimeContext {
+            return parentRuntime.typeOf(name)
+        }
+        return nil
     }
 
     /// Build the Contract magic object from OpenAPI spec service
@@ -151,6 +186,23 @@ public final class RuntimeContext: ExecutionContext, @unchecked Sendable {
     }
 
     public func bind(_ name: String, value: any Sendable, allowRebind: Bool) {
+        // Auto-wrap with inferred type
+        let typedValue: TypedValue
+        if let tv = value as? TypedValue {
+            typedValue = tv
+        } else {
+            typedValue = TypedValue.infer(value)
+        }
+        bindTyped(name, value: typedValue, allowRebind: allowRebind)
+    }
+
+    /// Bind a variable with explicit type information
+    public func bindTyped(_ name: String, value: TypedValue) {
+        bindTyped(name, value: value, allowRebind: false)
+    }
+
+    /// Bind a variable with explicit type information and rebind option
+    public func bindTyped(_ name: String, value: TypedValue, allowRebind: Bool) {
         lock.lock()
         defer { lock.unlock() }
 
@@ -374,11 +426,19 @@ public final class RuntimeContext: ExecutionContext, @unchecked Sendable {
 // MARK: - Convenience Extensions
 
 extension RuntimeContext {
-    /// Bind multiple values at once
+    /// Bind multiple values at once (auto-infers types)
     /// - Parameter bindings: Dictionary of name-value pairs
     public func bindAll(_ bindings: [String: any Sendable]) {
         for (name, value) in bindings {
             bind(name, value: value)
+        }
+    }
+
+    /// Bind multiple typed values at once
+    /// - Parameter bindings: Dictionary of name-TypedValue pairs
+    public func bindAllTyped(_ bindings: [String: TypedValue]) {
+        for (name, value) in bindings {
+            bindTyped(name, value: value)
         }
     }
 

@@ -131,7 +131,7 @@ public enum ActionError: Error, Sendable {
     case undefinedRepository(String)
 
     /// Type mismatch during execution
-    case typeMismatch(expected: String, actual: String)
+    case typeMismatch(expected: String, actual: String, variable: String? = nil)
 
     /// Explicit throw from user code
     case thrown(type: String, reason: String, context: String)
@@ -185,7 +185,10 @@ extension ActionError: CustomStringConvertible {
             return "Service not registered: '\(name)'"
         case .undefinedRepository(let name):
             return "Repository not found: '\(name)'"
-        case .typeMismatch(let expected, let actual):
+        case .typeMismatch(let expected, let actual, let variable):
+            if let varName = variable {
+                return "Type mismatch for '\(varName)': expected '\(expected)', got '\(actual)'"
+            }
             return "Type mismatch: expected '\(expected)', got '\(actual)'"
         case .thrown(let type, let reason, let context):
             return "\(type) in \(context): \(reason)"
