@@ -113,6 +113,8 @@ let package = Package(
         .package(url: "https://github.com/jpsim/Yams.git", from: "6.2.0"),
         // Swift Crypto for cryptographic operations (SHA256, etc.)
         .package(url: "https://github.com/apple/swift-crypto.git", from: "4.0.0"),
+        // Kanna for HTML/XML parsing with CSS selectors
+        .package(url: "https://github.com/tid-kijyun/Kanna.git", from: "5.3.0"),
     ],
     targets: {
         // Core targets available on all platforms
@@ -134,6 +136,7 @@ let package = Package(
                     "AROParser",
                     .product(name: "Yams", package: "Yams"),
                     .product(name: "Crypto", package: "swift-crypto"),
+                    .product(name: "Kanna", package: "Kanna"),
                 ] + runtimePlatformDependencies,
                 path: "Sources/ARORuntime"
             ),

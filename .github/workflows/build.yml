@@ -216,7 +216,7 @@ jobs:
         uses: actions/cache@v5
         with:
           path: .build
-          key: macos-swift-${{ env.SWIFT_VERSION }}-v5-${{ hashFiles('Package.resolved') }}
+          key: macos-swift-${{ env.SWIFT_VERSION }}-v7-${{ hashFiles('Package.resolved') }}
 
       - name: Install LLVM 20
         run: |
@@ -645,13 +645,13 @@ jobs:
           sudo mv swift-6.2.1-RELEASE-ubuntu22.04 /usr/share/swift
           echo "/usr/share/swift/usr/bin" >> $GITHUB_PATH
 
-      - name: Install LLVM 20
+      - name: Install LLVM 20 and dependencies
         run: |
           sudo apt-get update
           wget -qO- https://apt.llvm.org/llvm-snapshot.gpg.key | sudo gpg --dearmor -o /usr/share/keyrings/llvm-archive-keyring.gpg
           echo "deb [signed-by=/usr/share/keyrings/llvm-archive-keyring.gpg] http://apt.llvm.org/jammy/ llvm-toolchain-jammy-20 main" | sudo tee /etc/apt/sources.list.d/llvm.list
           sudo apt-get update
-          sudo apt-get install -y llvm-20 libllvm20
+          sudo apt-get install -y llvm-20 libllvm20 libxml2-dev
           sudo ln -sf /usr/bin/llc-20 /usr/bin/llc
           echo "/usr/lib/llvm-20/bin" >> $GITHUB_PATH
 
@@ -716,27 +716,57 @@ jobs:
 
       - name: Configure Swift library path
         run: |
-          # Find Swift installation and set SWIFT_LIB_PATH for the linker
-          SWIFT_BIN=$(which swift)
-          echo "Swift binary: $SWIFT_BIN"
-          # Swift is at: /path/to/toolchain/usr/bin/swift
-          # Libraries are at: /path/to/toolchain/usr/lib/swift/macosx
-          SWIFT_ROOT=$(dirname $(dirname "$SWIFT_BIN"))
-          SWIFT_LIB="$SWIFT_ROOT/lib/swift/macosx"
-          echo "Swift library path: $SWIFT_LIB"
-          if [ -d "$SWIFT_LIB" ]; then
-            echo "SWIFT_LIB_PATH=$SWIFT_LIB" >> $GITHUB_ENV
-            echo "Found Swift libraries at $SWIFT_LIB"
-            ls -la "$SWIFT_LIB" | head -10
-          else
-            echo "WARNING: Swift library path not found at $SWIFT_LIB"
-            # Try alternative path structure
-            SWIFT_LIB_ALT="$SWIFT_ROOT/lib/swift_static/macosx"
-            if [ -d "$SWIFT_LIB_ALT" ]; then
-              echo "SWIFT_LIB_PATH=$SWIFT_LIB_ALT" >> $GITHUB_ENV
-              echo "Found Swift libraries at $SWIFT_LIB_ALT"
+          set -x  # Enable debug output
+
+          echo "Swift version: $(swift --version | head -1)"
+
+          # Use Swift's own mechanism to find its resource directory
+          # This is the official way to find Swift libraries
+          echo "=== Swift target info ==="
+          swift -print-target-info
+
+          # Extract the runtimeResourcePath from swift -print-target-info
+          RESOURCE_PATH=$(swift -print-target-info | grep -o '"runtimeResourcePath": "[^"]*"' | cut -d'"' -f4)
+          echo "Runtime resource path: $RESOURCE_PATH"
+
+          if [ -n "$RESOURCE_PATH" ] && [ -d "$RESOURCE_PATH" ]; then
+            # The resource path is typically .../lib/swift
+            # We need .../lib/swift/macosx for linking
+            SWIFT_LIB="$RESOURCE_PATH/macosx"
+            echo "Checking: $SWIFT_LIB"
+            if [ -d "$SWIFT_LIB" ]; then
+              echo "SWIFT_LIB_PATH=$SWIFT_LIB" >> $GITHUB_ENV
+              echo "Found Swift library path: $SWIFT_LIB"
+              ls -la "$SWIFT_LIB" | head -10
+              exit 0
             fi
           fi
+
+          # Fallback: try to extract from swiftc -print-target-info
+          echo "=== Trying swiftc ==="
+          RESOURCE_PATH=$(swiftc -print-target-info | grep -o '"runtimeResourcePath": "[^"]*"' | cut -d'"' -f4)
+          echo "swiftc resource path: $RESOURCE_PATH"
+
+          if [ -n "$RESOURCE_PATH" ] && [ -d "$RESOURCE_PATH" ]; then
+            SWIFT_LIB="$RESOURCE_PATH/macosx"
+            if [ -d "$SWIFT_LIB" ]; then
+              echo "SWIFT_LIB_PATH=$SWIFT_LIB" >> $GITHUB_ENV
+              echo "Found Swift library path: $SWIFT_LIB"
+              ls -la "$SWIFT_LIB" | head -10
+              exit 0
+            fi
+          fi
+
+          # Last resort: Xcode toolchain (WARNING: may have ABI mismatch)
+          XCODE_LIB="/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/lib/swift/macosx"
+          if [ -d "$XCODE_LIB" ]; then
+            echo "WARNING: Using Xcode toolchain - may have Swift ABI mismatch!"
+            echo "SWIFT_LIB_PATH=$XCODE_LIB" >> $GITHUB_ENV
+            exit 0
+          fi
+
+          echo "ERROR: Could not find Swift library path!"
+          exit 1
 
       - name: Install LLVM 20
         run: |
@@ -804,6 +834,12 @@ jobs:
       - name: Run integration tests
         run: |
           chmod +x test-examples.pl
+          # Set DYLD_LIBRARY_PATH so compiled binaries load Swift 6.2 runtime
+          # instead of system Swift from /usr/lib/swift (which causes ABI conflicts)
+          if [ -n "$SWIFT_LIB_PATH" ]; then
+            export DYLD_LIBRARY_PATH="$SWIFT_LIB_PATH:$DYLD_LIBRARY_PATH"
+            echo "DYLD_LIBRARY_PATH set to: $DYLD_LIBRARY_PATH"
+          fi
           perl test-examples.pl --verbose
 
       - name: Upload test results on failure

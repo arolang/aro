@@ -536,6 +536,7 @@ public final class CCompiler {
         args.append("-lm")
         args.append("-lstdc++")  // C++ standard library for BoringSSL
         args.append("-lz")       // zlib for compression
+        args.append("-lxml2")    // libxml2 for Kanna HTML/XML parsing
 
         // Export symbols to dynamic symbol table for dlsym lookup
         // Required for HTTP binaries to find compiled feature set functions at runtime
@@ -722,16 +723,16 @@ public final class CCompiler {
         // swiftc on GitHub Actions runners is unreliable (hangs intermittently)
         // clang works consistently when we explicitly specify Swift runtime libraries
 
-        // 1. Check for clang-14 (Ubuntu 24.04 default)
-        if FileManager.default.fileExists(atPath: "/usr/bin/clang-14") {
-            FileHandle.standardError.write("[LINKER] Found clang-14 at /usr/bin/clang-14\n".data(using: .utf8)!)
-            return "/usr/bin/clang-14"
-        }
-
-        // 2. Check for generic clang
+        // 1. Check for generic clang (may be symlinked to clang-20 in CI)
         if FileManager.default.fileExists(atPath: "/usr/bin/clang") {
             FileHandle.standardError.write("[LINKER] Found clang at /usr/bin/clang\n".data(using: .utf8)!)
             return "/usr/bin/clang"
+        }
+
+        // 2. Check for clang-14 (Ubuntu fallback)
+        if FileManager.default.fileExists(atPath: "/usr/bin/clang-14") {
+            FileHandle.standardError.write("[LINKER] Found clang-14 at /usr/bin/clang-14\n".data(using: .utf8)!)
+            return "/usr/bin/clang-14"
         }
 
         // 3. Try to find clang in PATH
@@ -849,9 +850,16 @@ public final class CCompiler {
 
     private func findSwiftLibPath() -> String? {
         // Check environment variable first (allows CI/CD to override)
-        if let envPath = ProcessInfo.processInfo.environment["SWIFT_LIB_PATH"],
-           FileManager.default.fileExists(atPath: envPath) {
-            return envPath
+        if let envPath = ProcessInfo.processInfo.environment["SWIFT_LIB_PATH"] {
+            FileHandle.standardError.write("[LINKER] SWIFT_LIB_PATH env: \(envPath)\n".data(using: .utf8)!)
+            if FileManager.default.fileExists(atPath: envPath) {
+                FileHandle.standardError.write("[LINKER] Using SWIFT_LIB_PATH: \(envPath)\n".data(using: .utf8)!)
+                return envPath
+            } else {
+                FileHandle.standardError.write("[LINKER] SWIFT_LIB_PATH does not exist!\n".data(using: .utf8)!)
+            }
+        } else {
+            FileHandle.standardError.write("[LINKER] SWIFT_LIB_PATH not set\n".data(using: .utf8)!)
         }
 
         #if os(Windows)
@@ -980,24 +988,42 @@ public final class CCompiler {
                 let data = pipe.fileHandleForReading.readDataToEndOfFile()
                 if let swiftPath = String(data: data, encoding: .utf8)?.trimmingCharacters(in: .whitespacesAndNewlines),
                    !swiftPath.isEmpty {
-                    // Swift is at: /path/to/toolchain/usr/bin/swift
-                    // Libraries are at: /path/to/toolchain/usr/lib/swift/macosx (or linux)
+                    // Swift is at: /path/to/toolchain/usr/bin/swift (standard)
+                    //          or: /path/to/toolchain/bin/swift (swiftly)
+                    // Libraries at: /path/to/toolchain/usr/lib/swift/macosx
                     let swiftURL = URL(fileURLWithPath: swiftPath)
-                    let toolchainLib = swiftURL
-                        .deletingLastPathComponent()  // Remove 'bin'
-                        .deletingLastPathComponent()  // Remove 'usr'
-                        .appendingPathComponent("usr")
-                        .appendingPathComponent("lib")
-                        .appendingPathComponent("swift")
+                    let baseDir = swiftURL
+                        .deletingLastPathComponent()  // Remove 'swift' → /path/bin
+                        .deletingLastPathComponent()  // Remove 'bin' → /path
 
                     #if os(macOS)
-                    let platformLib = toolchainLib.appendingPathComponent("macosx").path
+                    let platformSuffix = "macosx"
                     #else
-                    let platformLib = toolchainLib.appendingPathComponent("linux").path
+                    let platformSuffix = "linux"
                     #endif
 
-                    if FileManager.default.fileExists(atPath: platformLib) {
-                        return platformLib
+                    // Try two possible structures:
+                    // 1. Standard toolchain: /path/usr/bin/swift → /path/usr/lib/swift/platform
+                    //    (baseDir is already at /path/usr, just add lib/swift)
+                    // 2. Swiftly: /path/bin/swift → /path/usr/lib/swift/platform
+                    //    (baseDir is at /path, need to add usr/lib/swift)
+                    let pathsToTry = [
+                        baseDir.appendingPathComponent("lib/swift/\(platformSuffix)").path,
+                        baseDir.appendingPathComponent("usr/lib/swift/\(platformSuffix)").path
+                    ]
+
+                    #if os(macOS)
+                    FileHandle.standardError.write("[LINKER-MAC] which swift: \(swiftPath)\n".data(using: .utf8)!)
+                    FileHandle.standardError.write("[LINKER-MAC] baseDir: \(baseDir.path)\n".data(using: .utf8)!)
+                    for path in pathsToTry {
+                        FileHandle.standardError.write("[LINKER-MAC] Trying: \(path) exists=\(FileManager.default.fileExists(atPath: path))\n".data(using: .utf8)!)
+                    }
+                    #endif
+
+                    for path in pathsToTry {
+                        if FileManager.default.fileExists(atPath: path) {
+                            return path
+                        }
                     }
                 }
             }
@@ -1006,6 +1032,8 @@ public final class CCompiler {
 
         // Fallback to standard paths
         #if os(macOS)
+        FileHandle.standardError.write("[LINKER-MAC] Primary path discovery failed, trying fallbacks...\n".data(using: .utf8)!)
+
         // Check swift-actions/setup-swift location (GitHub Actions)
         // The action installs Swift at /Users/runner/hostedtoolcache/swift/...
         // Try to find via 'which swift' first (respects PATH)
@@ -1026,37 +1054,85 @@ public final class CCompiler {
                 if let swiftPath = String(data: data, encoding: .utf8)?.trimmingCharacters(in: .whitespacesAndNewlines),
                    !swiftPath.isEmpty {
                     let swiftURL = URL(fileURLWithPath: swiftPath)
-                    let toolchainLib = swiftURL
+                    let baseDir = swiftURL
                         .deletingLastPathComponent()  // Remove 'swift'
                         .deletingLastPathComponent()  // Remove 'bin'
-                        .appendingPathComponent("lib")
-                        .appendingPathComponent("swift")
-                        .appendingPathComponent("macosx")
 
-                    if FileManager.default.fileExists(atPath: toolchainLib.path) {
-                        return toolchainLib.path
+                    // Try both possible structures (standard toolchain and swiftly)
+                    let pathsToTry = [
+                        baseDir.appendingPathComponent("lib/swift/macosx").path,
+                        baseDir.appendingPathComponent("usr/lib/swift/macosx").path
+                    ]
+
+                    FileHandle.standardError.write("[LINKER-MAC] Fallback which swift: \(swiftPath)\n".data(using: .utf8)!)
+                    for path in pathsToTry {
+                        FileHandle.standardError.write("[LINKER-MAC] Fallback trying: \(path) exists=\(FileManager.default.fileExists(atPath: path))\n".data(using: .utf8)!)
+                        if FileManager.default.fileExists(atPath: path) {
+                            return path
+                        }
                     }
                 }
             }
         } catch {}
 
-        // Check Xcode toolchain
+        // Check swiftly toolchain location (~/.swiftly/toolchains/)
+        // swiftly stores full toolchains here, unlike the temporary symlink directory
+        let homeDir = FileManager.default.homeDirectoryForCurrentUser.path
+        let swiftlyToolchains = "\(homeDir)/.swiftly/toolchains"
+        FileHandle.standardError.write("[LINKER-MAC] Checking swiftly toolchains: \(swiftlyToolchains)\n".data(using: .utf8)!)
+        if let contents = try? FileManager.default.contentsOfDirectory(atPath: swiftlyToolchains) {
+            // Find Swift 6.x toolchain (prefer newest)
+            let swift6Toolchains = contents.filter { $0.hasPrefix("swift-6.") }.sorted().reversed()
+            for toolchain in swift6Toolchains {
+                let libPath = "\(swiftlyToolchains)/\(toolchain)/usr/lib/swift/macosx"
+                FileHandle.standardError.write("[LINKER-MAC] Checking swiftly: \(libPath) exists=\(FileManager.default.fileExists(atPath: libPath))\n".data(using: .utf8)!)
+                if FileManager.default.fileExists(atPath: libPath) {
+                    return libPath
+                }
+            }
+        }
+
+        // Check GitHub Actions hostedtoolcache (swift-actions/setup-swift)
+        let toolcache = "/Users/runner/hostedtoolcache/swift"
+        FileHandle.standardError.write("[LINKER-MAC] Checking hostedtoolcache: \(toolcache)\n".data(using: .utf8)!)
+        if let versions = try? FileManager.default.contentsOfDirectory(atPath: toolcache) {
+            for version in versions.filter({ $0.hasPrefix("6.") }).sorted().reversed() {
+                let versionPath = "\(toolcache)/\(version)"
+                if let archs = try? FileManager.default.contentsOfDirectory(atPath: versionPath) {
+                    for arch in archs {
+                        let libPath = "\(versionPath)/\(arch)/usr/lib/swift/macosx"
+                        FileHandle.standardError.write("[LINKER-MAC] Checking toolcache: \(libPath) exists=\(FileManager.default.fileExists(atPath: libPath))\n".data(using: .utf8)!)
+                        if FileManager.default.fileExists(atPath: libPath) {
+                            return libPath
+                        }
+                    }
+                }
+            }
+        }
+
+        // Check Xcode toolchain (WARNING: may be incompatible Swift version)
         let xcodeLib = "/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/lib/swift/macosx"
+        FileHandle.standardError.write("[LINKER-MAC] Checking Xcode: \(xcodeLib) exists=\(FileManager.default.fileExists(atPath: xcodeLib))\n".data(using: .utf8)!)
         if FileManager.default.fileExists(atPath: xcodeLib) {
+            FileHandle.standardError.write("[LINKER-MAC] WARNING: Using Xcode toolchain - may have ABI mismatch with Swift 6.2!\n".data(using: .utf8)!)
             return xcodeLib
         }
 
         // Check usr/lib/swift
         let usrLib = "/usr/lib/swift"
+        FileHandle.standardError.write("[LINKER-MAC] Checking usrLib: \(usrLib) exists=\(FileManager.default.fileExists(atPath: usrLib))\n".data(using: .utf8)!)
         if FileManager.default.fileExists(atPath: usrLib) {
             return usrLib
         }
 
         // Check Homebrew Swift installation
         let homebrewLib = "/opt/homebrew/opt/swift/lib/swift/macosx"
+        FileHandle.standardError.write("[LINKER-MAC] Checking Homebrew: \(homebrewLib) exists=\(FileManager.default.fileExists(atPath: homebrewLib))\n".data(using: .utf8)!)
         if FileManager.default.fileExists(atPath: homebrewLib) {
             return homebrewLib
         }
+
+        FileHandle.standardError.write("[LINKER-MAC] WARNING: No Swift library path found!\n".data(using: .utf8)!)
         #elseif os(Linux)
         // Check standard system location
         let swiftLib = "/usr/lib/swift/linux"

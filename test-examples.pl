@@ -555,6 +555,11 @@ sub normalize_output {
     # Remove ANSI escape codes (colors, bold, etc.)
     $output =~ s/\e\[[0-9;]*m//g;
 
+    # Remove Objective-C duplicate class warnings (macOS Swift runtime conflicts)
+    # These occur when both system Swift and toolchain Swift runtimes are loaded
+    # Example: objc[12345]: Class _TtCs27_KeyedEncodingContainerBase is implemented in both ...
+    $output =~ s/^objc\[\d+\]: Class .* is implemented in both .* One of the duplicates must be removed or renamed\.\n//gm;
+
     # Remove timing values from test output (e.g., "(1ms)", "(<1ms)")
     $output =~ s/\s*\([<]?\d+m?s\)//g;
 
