@@ -3,3 +3,5 @@
 mode: both
 # Use occurrence-check since dates/sizes change
 occurrence-check: true
+# Windows returns different metadata fields (no owner/group/permissions, has path/size)
+skip-on-windows: File metadata fields differ on Windows
