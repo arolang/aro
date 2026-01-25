@@ -55,7 +55,10 @@ RUN git clone --depth 1 --branch ${ARO_VERSION} https://github.com/arolang/aro.g
     && swift build -c release --static-swift-stdlib \
     && swift build -c release --product ARORuntime \
     && cp .build/release/aro /usr/local/bin/aro \
-    && cp .build/x86_64-unknown-linux-gnu/release/libARORuntime.a /usr/local/lib/libARORuntime.a \
+    && ARCH=$(uname -m) \
+    && if [ "$ARCH" = "x86_64" ]; then TRIPLE="x86_64-unknown-linux-gnu"; \
+       elif [ "$ARCH" = "aarch64" ]; then TRIPLE="aarch64-unknown-linux-gnu"; fi \
+    && cp .build/${TRIPLE}/release/libARORuntime.a /usr/local/lib/libARORuntime.a \
     && rm -rf /aro-build
 
 # Verify installation
