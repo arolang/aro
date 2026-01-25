@@ -32,7 +32,9 @@ public final class Application: @unchecked Sendable {
     public let routeRegistry: OpenAPIRouteRegistry?
 
     /// HTTP server instance for setting request handler
-    #if !os(Windows)
+    #if os(Windows)
+    private var httpServer: WindowsHTTPServer?
+    #else
     private var httpServer: AROHTTPServer?
     #endif
 
@@ -64,7 +66,25 @@ public final class Application: @unchecked Sendable {
         // Register repository storage service for persistent in-memory storage
         await runtime.register(service: InMemoryRepositoryStorage.shared as RepositoryStorageService)
 
-        #if !os(Windows)
+        #if os(Windows)
+        // Windows-specific service implementations
+        // Register file system service for file operations
+        let fileSystemService = AROFileSystemService(eventBus: .shared)
+        await runtime.register(service: fileSystemService as FileSystemService)
+
+        // Register Windows file monitor (polling-based)
+        let fileMonitor = WindowsFileMonitor(eventBus: .shared)
+        await runtime.register(service: fileMonitor as FileMonitorService)
+
+        // Register Windows socket server (FlyingSocks-based)
+        let socketServer = WindowsSocketServer(eventBus: .shared)
+        await runtime.register(service: socketServer as SocketServerService)
+
+        // Register Windows HTTP server (FlyingFox-based)
+        let server = WindowsHTTPServer(eventBus: .shared)
+        self.httpServer = server
+        await runtime.register(service: server as HTTPServerService)
+        #else
         // Register file system service for file operations and monitoring
         let fileSystemService = AROFileSystemService(eventBus: .shared)
         await runtime.register(service: fileSystemService as FileSystemService)
@@ -142,9 +162,7 @@ public final class Application: @unchecked Sendable {
         }
 
         // Set up HTTP request handler if OpenAPI contract exists
-        #if !os(Windows)
         setupHTTPRequestHandler(for: mainProgram)
-        #endif
 
         return try await runtime.run(mainProgram, entryPoint: entryPoint)
     }
@@ -159,9 +177,7 @@ public final class Application: @unchecked Sendable {
         }
 
         // Set up HTTP request handler if OpenAPI contract exists
-        #if !os(Windows)
         setupHTTPRequestHandler(for: mainProgram)
-        #endif
 
         try await runtime.runAndKeepAlive(mainProgram, entryPoint: entryPoint)
     }
@@ -171,7 +187,6 @@ public final class Application: @unchecked Sendable {
         runtime.stop()
     }
 
-    #if !os(Windows)
     /// Set up the HTTP request handler for routing requests to feature sets
     private func setupHTTPRequestHandler(for program: AnalyzedProgram) {
         guard let routeRegistry = routeRegistry,
@@ -373,7 +388,6 @@ public final class Application: @unchecked Sendable {
             return 200
         }
     }
-    #endif
 
     // MARK: - Private
 

@@ -3,9 +3,117 @@
 // ARO Runtime - Socket Server (SwiftNIO)
 // ============================================================
 
+import Foundation
+
+// MARK: - Socket Types (Available on all platforms)
+
+/// Errors that can occur during socket operations
+public enum SocketError: Error, Sendable {
+    case notConnected
+    case connectionNotFound(String)
+    case connectionFailed(String)
+    case encodingError
+    case timeout
+}
+
+extension SocketError: CustomStringConvertible {
+    public var description: String {
+        switch self {
+        case .notConnected:
+            return "Not connected"
+        case .connectionNotFound(let id):
+            return "Connection not found: \(id)"
+        case .connectionFailed(let reason):
+            return "Connection failed: \(reason)"
+        case .encodingError:
+            return "String encoding error"
+        case .timeout:
+            return "Connection timeout"
+        }
+    }
+}
+
+/// Wrapper for socket packet data, used by feature sets to extract data
+public struct SocketPacket: Sendable {
+    public let connectionId: String
+    public let data: Data
+
+    /// Get the buffer (data) from the packet
+    public var buffer: Data { data }
+
+    /// Get the connection ID
+    public var connection: String { connectionId }
+
+    public init(connectionId: String, data: Data) {
+        self.connectionId = connectionId
+        self.data = data
+    }
+}
+
+/// Wrapper for socket connection info, used by feature sets
+public struct SocketConnection: Sendable {
+    public let id: String
+    public let remoteAddress: String
+
+    public init(id: String, remoteAddress: String) {
+        self.id = id
+        self.remoteAddress = remoteAddress
+    }
+}
+
+/// Wrapper for socket disconnect info, used by feature sets
+public struct SocketDisconnectInfo: Sendable {
+    public let connectionId: String
+    public let reason: String
+
+    public init(connectionId: String, reason: String) {
+        self.connectionId = connectionId
+        self.reason = reason
+    }
+}
+
+// MARK: - Socket Events (Available on all platforms)
+
+/// Event emitted when socket server starts
+public struct SocketServerStartedEvent: RuntimeEvent {
+    public static var eventType: String { "socket.server.started" }
+    public let timestamp: Date
+    public let port: Int
+
+    public init(port: Int) {
+        self.timestamp = Date()
+        self.port = port
+    }
+}
+
+/// Event emitted when socket server stops
+public struct SocketServerStoppedEvent: RuntimeEvent {
+    public static var eventType: String { "socket.server.stopped" }
+    public let timestamp: Date
+
+    public init() {
+        self.timestamp = Date()
+    }
+}
+
+/// Event emitted when a socket error occurs
+public struct SocketErrorEvent: RuntimeEvent {
+    public static var eventType: String { "socket.error" }
+    public let timestamp: Date
+    public let connectionId: String
+    public let error: String
+
+    public init(connectionId: String, error: String) {
+        self.timestamp = Date()
+        self.connectionId = connectionId
+        self.error = error
+    }
+}
+
+// MARK: - SwiftNIO Implementation (macOS/Linux only)
+
 #if !os(Windows)
 
-import Foundation
 import NIO
 
 /// Socket Server implementation using SwiftNIO
@@ -392,116 +500,6 @@ private final class ClientHandler: ChannelInboundHandler, @unchecked Sendable {
     func errorCaught(context: ChannelHandlerContext, error: Error) {
         eventBus.publish(SocketErrorEvent(connectionId: connectionId, error: error.localizedDescription))
         context.close(promise: nil)
-    }
-}
-
-// MARK: - Socket Errors
-
-/// Errors that can occur during socket operations
-public enum SocketError: Error, Sendable {
-    case notConnected
-    case connectionNotFound(String)
-    case connectionFailed(String)
-    case encodingError
-    case timeout
-}
-
-extension SocketError: CustomStringConvertible {
-    public var description: String {
-        switch self {
-        case .notConnected:
-            return "Not connected"
-        case .connectionNotFound(let id):
-            return "Connection not found: \(id)"
-        case .connectionFailed(let reason):
-            return "Connection failed: \(reason)"
-        case .encodingError:
-            return "String encoding error"
-        case .timeout:
-            return "Connection timeout"
-        }
-    }
-}
-
-// MARK: - Socket Events
-
-/// Event emitted when socket server starts
-public struct SocketServerStartedEvent: RuntimeEvent {
-    public static var eventType: String { "socket.server.started" }
-    public let timestamp: Date
-    public let port: Int
-
-    public init(port: Int) {
-        self.timestamp = Date()
-        self.port = port
-    }
-}
-
-// Note: ClientConnectedEvent, ClientDisconnectedEvent, and DataReceivedEvent
-// are defined in EventTypes.swift to avoid duplication
-
-// MARK: - Socket Event Data Types
-
-/// Wrapper for socket packet data, used by feature sets to extract data
-public struct SocketPacket: Sendable {
-    public let connectionId: String
-    public let data: Data
-
-    /// Get the buffer (data) from the packet
-    public var buffer: Data { data }
-
-    /// Get the connection ID
-    public var connection: String { connectionId }
-
-    public init(connectionId: String, data: Data) {
-        self.connectionId = connectionId
-        self.data = data
-    }
-}
-
-/// Wrapper for socket connection info, used by feature sets
-public struct SocketConnection: Sendable {
-    public let id: String
-    public let remoteAddress: String
-
-    public init(id: String, remoteAddress: String) {
-        self.id = id
-        self.remoteAddress = remoteAddress
-    }
-}
-
-/// Wrapper for socket disconnect info, used by feature sets
-public struct SocketDisconnectInfo: Sendable {
-    public let connectionId: String
-    public let reason: String
-
-    public init(connectionId: String, reason: String) {
-        self.connectionId = connectionId
-        self.reason = reason
-    }
-}
-
-/// Event emitted when socket server stops
-public struct SocketServerStoppedEvent: RuntimeEvent {
-    public static var eventType: String { "socket.server.stopped" }
-    public let timestamp: Date
-
-    public init() {
-        self.timestamp = Date()
-    }
-}
-
-/// Event emitted when a socket error occurs
-public struct SocketErrorEvent: RuntimeEvent {
-    public static var eventType: String { "socket.error" }
-    public let timestamp: Date
-    public let connectionId: String
-    public let error: String
-
-    public init(connectionId: String, error: String) {
-        self.timestamp = Date()
-        self.connectionId = connectionId
-        self.error = error
     }
 }
 

@@ -3,15 +3,135 @@
 // ARO Runtime - HTTP Server (SwiftNIO)
 // ============================================================
 
-#if !os(Windows)
-
 import Foundation
-import NIO
-import NIOHTTP1
-import NIOFoundationCompat
+
+// MARK: - HTTP Types (Available on all platforms)
 
 /// Request handler type for processing HTTP requests
 public typealias HTTPRequestHandler = @Sendable (HTTPRequest) async -> HTTPResponse
+
+/// HTTP Request abstraction
+public struct HTTPRequest: Sendable {
+    public let id: String
+    public let method: String
+    public let path: String
+    public let headers: [String: String]
+    public let body: Data?
+    public let queryParameters: [String: String]
+
+    public init(
+        id: String = UUID().uuidString,
+        method: String,
+        path: String,
+        headers: [String: String] = [:],
+        body: Data? = nil,
+        queryParameters: [String: String] = [:]
+    ) {
+        self.id = id
+        self.method = method
+        self.path = path
+        self.headers = headers
+        self.body = body
+        self.queryParameters = queryParameters
+    }
+
+    /// Parse body as JSON
+    public func json<T: Decodable>(_ type: T.Type) throws -> T {
+        guard let data = body else {
+            throw HTTPError.noBody
+        }
+        return try JSONDecoder().decode(type, from: data)
+    }
+
+    /// Get body as string
+    public var bodyString: String? {
+        body.flatMap { String(data: $0, encoding: .utf8) }
+    }
+}
+
+/// HTTP Response abstraction
+public struct HTTPResponse: Sendable {
+    public let statusCode: Int
+    public let headers: [String: String]
+    public let body: Data?
+
+    public init(
+        statusCode: Int = 200,
+        headers: [String: String] = [:],
+        body: Data? = nil
+    ) {
+        self.statusCode = statusCode
+        self.headers = headers
+        self.body = body
+    }
+
+    /// Create JSON response
+    public static func json<T: Encodable>(_ value: T, status: Int = 200) throws -> HTTPResponse {
+        let data = try JSONEncoder().encode(value)
+        return HTTPResponse(
+            statusCode: status,
+            headers: ["Content-Type": "application/json"],
+            body: data
+        )
+    }
+
+    /// Create text response
+    public static func text(_ string: String, status: Int = 200) -> HTTPResponse {
+        HTTPResponse(
+            statusCode: status,
+            headers: ["Content-Type": "text/plain"],
+            body: string.data(using: .utf8)
+        )
+    }
+
+    /// Common responses
+    public static let ok = HTTPResponse(statusCode: 200)
+    public static let notFound = HTTPResponse(statusCode: 404)
+    public static let badRequest = HTTPResponse(statusCode: 400)
+    public static let serverError = HTTPResponse(statusCode: 500)
+}
+
+/// HTTP Errors
+public enum HTTPError: Error, Sendable {
+    case noBody
+    case invalidJSON
+    case connectionFailed
+    case timeout
+    case serverError(Int)
+    case custom(String)
+}
+
+// MARK: - HTTP Server Events (Available on all platforms)
+
+/// Event emitted when HTTP server starts
+public struct HTTPServerStartedEvent: RuntimeEvent {
+    public static var eventType: String { "http.server.started" }
+    public let timestamp: Date
+    public let port: Int
+
+    public init(port: Int) {
+        self.timestamp = Date()
+        self.port = port
+    }
+}
+
+/// Event emitted when HTTP server stops
+public struct HTTPServerStoppedEvent: RuntimeEvent {
+    public static var eventType: String { "http.server.stopped" }
+    public let timestamp: Date
+
+    public init() {
+        self.timestamp = Date()
+    }
+}
+
+// MARK: - SwiftNIO Implementation (macOS/Linux only)
+
+#if !os(Windows)
+
+import NIO
+import NIOHTTP1
+import NIOFoundationCompat
 
 /// HTTP Server implementation using SwiftNIO
 ///
@@ -269,124 +389,4 @@ private final class HTTPHandler: ChannelInboundHandler, @unchecked Sendable {
     }
 }
 
-// MARK: - HTTP Types
-
-/// HTTP Request abstraction
-public struct HTTPRequest: Sendable {
-    public let id: String
-    public let method: String
-    public let path: String
-    public let headers: [String: String]
-    public let body: Data?
-    public let queryParameters: [String: String]
-
-    public init(
-        id: String = UUID().uuidString,
-        method: String,
-        path: String,
-        headers: [String: String] = [:],
-        body: Data? = nil,
-        queryParameters: [String: String] = [:]
-    ) {
-        self.id = id
-        self.method = method
-        self.path = path
-        self.headers = headers
-        self.body = body
-        self.queryParameters = queryParameters
-    }
-
-    /// Parse body as JSON
-    public func json<T: Decodable>(_ type: T.Type) throws -> T {
-        guard let data = body else {
-            throw HTTPError.noBody
-        }
-        return try JSONDecoder().decode(type, from: data)
-    }
-
-    /// Get body as string
-    public var bodyString: String? {
-        body.flatMap { String(data: $0, encoding: .utf8) }
-    }
-}
-
-/// HTTP Response abstraction
-public struct HTTPResponse: Sendable {
-    public let statusCode: Int
-    public let headers: [String: String]
-    public let body: Data?
-
-    public init(
-        statusCode: Int = 200,
-        headers: [String: String] = [:],
-        body: Data? = nil
-    ) {
-        self.statusCode = statusCode
-        self.headers = headers
-        self.body = body
-    }
-
-    /// Create JSON response
-    public static func json<T: Encodable>(_ value: T, status: Int = 200) throws -> HTTPResponse {
-        let data = try JSONEncoder().encode(value)
-        return HTTPResponse(
-            statusCode: status,
-            headers: ["Content-Type": "application/json"],
-            body: data
-        )
-    }
-
-    /// Create text response
-    public static func text(_ string: String, status: Int = 200) -> HTTPResponse {
-        HTTPResponse(
-            statusCode: status,
-            headers: ["Content-Type": "text/plain"],
-            body: string.data(using: .utf8)
-        )
-    }
-
-    /// Common responses
-    public static let ok = HTTPResponse(statusCode: 200)
-    public static let notFound = HTTPResponse(statusCode: 404)
-    public static let badRequest = HTTPResponse(statusCode: 400)
-    public static let serverError = HTTPResponse(statusCode: 500)
-}
-
-// MARK: - HTTP Server Events
-
-/// Event emitted when HTTP server starts
-public struct HTTPServerStartedEvent: RuntimeEvent {
-    public static var eventType: String { "http.server.started" }
-    public let timestamp: Date
-    public let port: Int
-
-    public init(port: Int) {
-        self.timestamp = Date()
-        self.port = port
-    }
-}
-
-/// Event emitted when HTTP server stops
-public struct HTTPServerStoppedEvent: RuntimeEvent {
-    public static var eventType: String { "http.server.stopped" }
-    public let timestamp: Date
-
-    public init() {
-        self.timestamp = Date()
-    }
-}
-
 #endif  // !os(Windows)
-
-// MARK: - HTTP Errors
-// Available on all platforms (including Windows)
-
-/// HTTP Errors
-public enum HTTPError: Error, Sendable {
-    case noBody
-    case invalidJSON
-    case connectionFailed
-    case timeout
-    case serverError(Int)
-    case custom(String)
-}

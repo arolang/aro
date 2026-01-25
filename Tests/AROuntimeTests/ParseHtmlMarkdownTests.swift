@@ -3,6 +3,8 @@
 // ARO Runtime - ParseHtml Markdown Specifier Unit Tests
 // ============================================================
 
+// ParseHtmlAction uses SwiftSoup (pure Swift, works on all platforms)
+
 import Foundation
 import Testing
 @testable import ARORuntime
