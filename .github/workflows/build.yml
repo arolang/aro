@@ -1095,6 +1095,12 @@ jobs:
           chmod +x build-pdf.sh
           ./build-pdf.sh
 
+      - name: Build ARO By Example PDF
+        run: |
+          cd Book/AROByExample
+          chmod +x build-pdf.sh
+          ./build-pdf.sh
+
       - name: Upload Language Guide PDF
         uses: actions/upload-artifact@v6
         with:
@@ -1107,6 +1113,13 @@ jobs:
         with:
           name: aro-construction-studies
           path: Book/TheConstructionStudies/output/ARO-Construction-Studies.pdf
+          retention-days: 30
+
+      - name: Upload ARO By Example PDF
+        uses: actions/upload-artifact@v6
+        with:
+          name: aro-by-example
+          path: Book/AROByExample/output/ARO-By-Example.pdf
           retention-days: 30
 
   # ===========================================================================
@@ -1167,6 +1180,7 @@ jobs:
             artifacts/aro-windows-amd64.zip
             artifacts/aro-language-guide/ARO-Language-Guide.pdf
             artifacts/aro-construction-studies/ARO-Construction-Studies.pdf
+            artifacts/aro-by-example/ARO-By-Example.pdf
           body: |
             ## ARO Programming Language ${{ steps.version.outputs.version }}
 
@@ -1184,6 +1198,7 @@ jobs:
             |----------|----------|
             | ARO Language Guide | [ARO-Language-Guide.pdf](https://github.com/${{ github.repository }}/releases/download/${{ github.ref_name }}/ARO-Language-Guide.pdf) |
             | ARO Construction Studies | [ARO-Construction-Studies.pdf](https://github.com/${{ github.repository }}/releases/download/${{ github.ref_name }}/ARO-Construction-Studies.pdf) |
+            | ARO By Example | [ARO-By-Example.pdf](https://github.com/${{ github.repository }}/releases/download/${{ github.ref_name }}/ARO-By-Example.pdf) |
 
             ### Installation
 
