@@ -3,6 +3,7 @@
 // ARO Compiler - External Function Declaration Emitter
 // ============================================================
 
+#if !os(Windows)
 import SwiftyLLVM
 import AROParser
 
@@ -476,3 +477,5 @@ public final class LLVMExternalDeclEmitter {
         actionFunctions[name.lowercased()]
     }
 }
+
+#endif

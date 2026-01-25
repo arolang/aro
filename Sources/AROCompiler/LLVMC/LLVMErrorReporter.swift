@@ -3,6 +3,7 @@
 // ARO Compiler - Source-Aware Error Reporting
 // ============================================================
 
+#if !os(Windows)
 import Foundation
 import AROParser
 
@@ -145,3 +146,5 @@ extension LLVMErrorReporter {
         return output
     }
 }
+
+#endif

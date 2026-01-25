@@ -115,7 +115,7 @@ ARO runs on macOS, Linux, and Windows. Most features work across all platforms.
 | **Core Runtime** |
 | Interpreter (`aro run`) | ✅ | ✅ | ✅ |
 | Syntax checking (`aro check`) | ✅ | ✅ | ✅ |
-| Native compilation (`aro build`) | ✅ | ✅ | ✅ |
+| Native compilation (`aro build`) | ✅ | ✅ | ❌⁴ |
 | **Networking** |
 | HTTP Server | ✅ | ✅ | ✅¹ |
 | HTTP Client | ✅ | ✅ | ✅ |
@@ -134,6 +134,7 @@ ARO runs on macOS, Linux, and Windows. Most features work across all platforms.
 ¹ Uses Joannis's SwiftNIO fork with WSAPoll support (experimental)
 ² Uses polling-based monitoring instead of native events
 ³ LanguageServerProtocol library doesn't support Windows yet
+⁴ LLVM not available in Windows CI environment
 
 ## Quick Start
 
@@ -270,7 +271,7 @@ The binary is at `.build/release/aro`.
 
 ### Windows
 
-Install Swift 6.2 from [swift.org](https://swift.org/download/) and LLVM 20 from [releases.llvm.org](https://releases.llvm.org/). Ensure both are in your PATH.
+Install Swift 6.2 from [swift.org](https://swift.org/download/). Ensure the Swift toolchain is in your PATH.
 
 ```powershell
 git clone https://github.com/arolang/aro.git
@@ -280,7 +281,7 @@ swift build -c release
 
 The binary is at `.build\release\aro.exe`.
 
-**Note:** Windows support uses Joannis's SwiftNIO fork with experimental WSAPoll support for networking.
+**Note:** Native compilation (`aro build`) is not yet supported on Windows. Use `aro run` for interpreter mode. Windows networking uses Joannis's SwiftNIO fork with experimental WSAPoll support.
 
 ## Running Tests
 

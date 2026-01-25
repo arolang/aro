@@ -7,7 +7,9 @@ import ArgumentParser
 import Foundation
 import AROParser
 import ARORuntime
+#if !os(Windows)
 import AROCompiler
+#endif
 import AROVersion
 
 struct BuildCommand: AsyncParsableCommand {
@@ -214,6 +216,12 @@ struct BuildCommand: AsyncParsableCommand {
             }
         }
 
+        #if os(Windows)
+        print("Error: Native compilation is not yet supported on Windows.")
+        print("The 'aro build' command requires LLVM which is not available on Windows.")
+        print("Use 'aro run' to execute ARO programs in interpreter mode instead.")
+        throw ExitCode.failure
+        #else
         let llvmResult: LLVMCodeGenerationResult
 
         do {
@@ -432,6 +440,7 @@ struct BuildCommand: AsyncParsableCommand {
         if verbose {
             print("Completed in \(String(format: "%.2f", elapsed))s")
         }
+        #endif  // !os(Windows)
     }
 
     private func findARORuntimeLibrary() -> String? {

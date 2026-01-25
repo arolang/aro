@@ -19,8 +19,6 @@ platformDependencies = [
     .package(url: "https://github.com/Joannis/swift-nio.git", branch: "jo/winsock-fixes"),
     // AsyncHTTPClient for outgoing HTTP requests
     .package(url: "https://github.com/swift-server/async-http-client.git", from: "1.21.0"),
-    // LLVM C API bindings for type-safe IR generation
-    .package(url: "https://github.com/hylo-lang/Swifty-LLVM.git", branch: "main"),
     // SwiftSoup for HTML/XML parsing (pure Swift, works on all platforms)
     .package(url: "https://github.com/scinfu/SwiftSoup.git", from: "2.7.0"),
 ]
@@ -31,10 +29,7 @@ runtimePlatformDependencies = [
     .product(name: "AsyncHTTPClient", package: "async-http-client"),
     .product(name: "SwiftSoup", package: "SwiftSoup"),
 ]
-// LLVM for native compilation on Windows
-compilerLLVMDependency = [
-    .product(name: "SwiftyLLVM", package: "Swifty-LLVM"),
-]
+// LLVM/native compilation not available on Windows yet (requires LLVM installation)
 // LSP not available on Windows yet - JSONRPC has issues
 #else
 // macOS and Linux dependencies
@@ -92,15 +87,8 @@ let llvmLinkerSettings: [LinkerSetting] = [
     .unsafeFlags(["-L\(llvmLibPath)", "-lLLVM-20"]),
     .unsafeFlags(["-Xlinker", "-rpath", "-Xlinker", llvmLibPath]),
 ]
-#elseif os(Windows)
-import Foundation
-// Windows LLVM paths - check environment or use common locations
-let llvmPath = ProcessInfo.processInfo.environment["LLVM_PATH"] ?? "C:\\Program Files\\LLVM"
-let llvmLibPath = "\(llvmPath)\\lib"
-let llvmLinkerSettings: [LinkerSetting] = [
-    .unsafeFlags(["-L\(llvmLibPath)", "-lLLVM"]),
-]
 #else
+// Windows and other platforms: LLVM not available
 let llvmLinkerSettings: [LinkerSetting] = []
 #endif
 
