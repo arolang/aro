@@ -63,13 +63,14 @@ Without built-in HTML parsing, developers must rely on external services or plug
 The result specifier determines what data is extracted from the HTML:
 
 ```
-+------------------+------------------+----------------------------------------+
-| Specifier        | Returns          | Description                            |
-+------------------+------------------+----------------------------------------+
-| links            | [String]         | All href values from <a> tags          |
-| content          | {title, content} | Page title and cleaned body text       |
-| text             | [String]         | Text content from body (default)       |
-+------------------+------------------+----------------------------------------+
++------------------+-------------------+----------------------------------------+
+| Specifier        | Returns           | Description                            |
++------------------+-------------------+----------------------------------------+
+| links            | [String]          | All href values from <a> tags          |
+| content          | {title, content}  | Page title and cleaned body text       |
+| text             | [String]          | Text content from body (default)       |
+| markdown         | {title, markdown} | Page title and body as Markdown        |
++------------------+-------------------+----------------------------------------+
 ```
 
 ### 1.4 Result Structures
@@ -107,6 +108,46 @@ Returns an array of text strings from the document body:
 ```aro
 <ParseHtml> the <paragraphs: text> from the <html>.
 ```
+
+#### Markdown Specifier
+
+Returns a dictionary with `title` and `markdown` fields. The HTML body is converted to properly formatted Markdown, preserving document structure:
+
+```aro
+<ParseHtml> the <result: markdown> from the <html>.
+<Extract> the <title> from the <result: title>.
+<Extract> the <md-content> from the <result: markdown>.
+```
+
+Supported HTML to Markdown conversions:
+
+```
++-------------------+-------------------------+
+| HTML Element      | Markdown Output         |
++-------------------+-------------------------+
+| <h1> to <h6>      | # to ######             |
+| <p>               | Double newlines         |
+| <a href="...">    | [text](url)             |
+| <img src="...">   | ![alt](src)             |
+| <strong>, <b>     | **bold**                |
+| <em>, <i>         | *italic*                |
+| <code>            | `inline code`           |
+| <pre><code>       | ```lang\ncode\n```      |
+| <blockquote>      | > quoted text           |
+| <ul><li>          | - list item             |
+| <ol><li>          | 1. numbered item        |
+| <table>           | Markdown table          |
+| <hr>              | ---                     |
+| <del>, <s>        | ~~strikethrough~~       |
++-------------------+-------------------------+
+```
+
+Content is extracted in priority order (same as content specifier):
+1. `<main>` element if present
+2. `<article>` element if present
+3. `<body>` element as fallback
+
+Script, style, and other non-content elements are automatically ignored.
 
 ---
 
@@ -176,6 +217,35 @@ Returns an array of text strings from the document body:
 }
 ```
 
+### 2.4 Converting HTML to Markdown
+
+```aro
+(Save Article: SaveArticle Handler) {
+    <Extract> the <url> from the <event-data: url>.
+    <Request> the <html> from the <url>.
+
+    (* Convert HTML to structured Markdown *)
+    <ParseHtml> the <result: markdown> from the <html>.
+    <Extract> the <title> from the <result: title>.
+    <Extract> the <markdown-content> from the <result: markdown>.
+
+    (* Create file with frontmatter *)
+    <Compute> the <url-hash: hash> from the <url>.
+    <Create> the <file-path> with "./output/${<url-hash>}.md".
+    <Create> the <file-content> with "# ${<title>}\n\n**Source:** ${<url>}\n\n${<markdown-content>}".
+
+    <Write> the <file-content> to the <file: file-path>.
+
+    <Return> an <OK: status> for the <save>.
+}
+```
+
+This is useful for:
+- Archiving web content in a readable format
+- Converting documentation for offline use
+- Creating markdown copies of articles and pages
+- Content migration pipelines
+
 ---
 
 ## 3. Implementation Notes
@@ -186,6 +256,7 @@ The `<ParseHtml>` action uses CSS selectors internally:
 - `links`: Selects `a[href]` elements
 - `content`: Selects `title`, `main`, `article`, or `body`
 - `text`: Selects `body` by default
+- `markdown`: Recursively traverses `main`, `article`, or `body` with element-aware conversion
 
 ### 3.2 Error Handling
 
