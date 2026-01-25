@@ -189,11 +189,43 @@ public final class WindowsHTTPServer: HTTPServerService, @unchecked Sendable {
             foxHeaders[HTTPHeader(name)] = value
         }
 
+        // Convert status code to FlyingFox status
+        let statusCode = statusCodeToHTTPStatusCode(aroResponse.statusCode)
+
         return FlyingFox.HTTPResponse(
-            statusCode: HTTPStatusCode(aroResponse.statusCode),
+            statusCode: statusCode,
             headers: foxHeaders,
             body: aroResponse.body ?? Data()
         )
+    }
+
+
+    // MARK: - Helpers
+
+    /// Convert integer status code to FlyingFox HTTPStatusCode
+    private func statusCodeToHTTPStatusCode(_ code: Int) -> HTTPStatusCode {
+        switch code {
+        case 200: return .ok
+        case 201: return .created
+        case 202: return .accepted
+        case 204: return .noContent
+        case 301: return .movedPermanently
+        case 302: return .found
+        case 304: return .notModified
+        case 400: return .badRequest
+        case 401: return .unauthorized
+        case 403: return .forbidden
+        case 404: return .notFound
+        case 405: return .methodNotAllowed
+        case 409: return .conflict
+        case 500: return .internalServerError
+        case 501: return .notImplemented
+        case 502: return .badGateway
+        case 503: return .serviceUnavailable
+        default:
+            // For uncommon status codes, create a custom one
+            return HTTPStatusCode(code, phrase: "Status \(code)")
+        }
     }
 }
 
