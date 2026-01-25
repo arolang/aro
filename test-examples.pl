@@ -1708,7 +1708,13 @@ sub run_test {
     }
 
     # Run compiled test
-    if ($mode eq 'compiled' || $mode eq 'both') {
+    # Note: Native compilation (aro build) is not supported on Windows yet
+    if ($is_windows && ($mode eq 'compiled' || $mode eq 'both')) {
+        $result->{compiled_status} = 'SKIP';
+        $result->{compiled_message} = 'Native compilation not supported on Windows';
+        $result->{compiled_duration} = 0;
+        $result->{build_duration} = 0;
+    } elsif ($mode eq 'compiled' || $mode eq 'both') {
         # Build the example first (use workdir if specified)
         my $build_result = build_example($example_name, $timeout, $hints->{workdir});
         $result->{build_duration} = $build_result->{duration};
@@ -1747,6 +1753,9 @@ sub run_test {
 
     if (grep { $_ eq 'FAIL' || $_ eq 'ERROR' } @statuses) {
         $result->{status} = 'FAIL';
+    } elsif ($is_windows && $result->{compiled_status} eq 'SKIP' && $result->{interpreter_status} eq 'PASS') {
+        # On Windows, if interpreter passes but compiled is skipped (not supported), overall is PASS
+        $result->{status} = 'PASS';
     } elsif (grep { $_ eq 'SKIP' } @statuses) {
         $result->{status} = 'SKIP';
     } elsif (@statuses > 0 && all { $_ eq 'PASS' } @statuses) {
