@@ -571,6 +571,45 @@ The `<ParseHtml>` action pairs naturally with `<Request>` for web scraping workf
 }
 ```
 
+### Extracting Markdown
+
+The `markdown` specifier converts HTML to structured Markdown, preserving document structure including headings, links, tables, lists, and formatting:
+
+```aro
+<Request> the <html> from "https://example.com/article".
+<ParseHtml> the <result: markdown> from the <html>.
+<Extract> the <title> from the <result: title>.
+<Extract> the <markdown-content> from the <result: markdown>.
+
+(* Save as markdown file *)
+<Write> the <markdown-content> to "./output/article.md".
+```
+
+This is useful for:
+- Archiving web content in a readable format
+- Converting documentation for offline use
+- Creating markdown copies of articles and pages
+- Content migration pipelines
+
+The conversion preserves:
+
+| HTML Element | Markdown Output |
+|--------------|-----------------|
+| `<h1>` - `<h6>` | `#` - `######` |
+| `<a href="url">text</a>` | `[text](url)` |
+| `<img src="url" alt="text">` | `![text](url)` |
+| `<strong>`, `<b>` | `**bold**` |
+| `<em>`, `<i>` | `*italic*` |
+| `<code>` | `` `code` `` |
+| `<pre><code>` | ` ```lang\ncode\n``` ` |
+| `<blockquote>` | `> quote` |
+| `<ul><li>` | `- item` |
+| `<ol><li>` | `1. item` |
+| `<table>` | Markdown table |
+| `<hr>` | `---` |
+
+Script, style, and non-content elements are automatically ignored.
+
 ### Specifier Reference
 
 | Specifier | Returns | Description |
@@ -578,6 +617,7 @@ The `<ParseHtml>` action pairs naturally with `<Request>` for web scraping workf
 | `links` | `[String]` | All href values from `<a>` tags |
 | `content` | `{title, content}` | Page title and cleaned body text |
 | `text` | `[String]` | Text content from body element |
+| `markdown` | `{title, markdown}` | Page title and body as Markdown |
 
 ---
 

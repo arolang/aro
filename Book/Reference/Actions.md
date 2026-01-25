@@ -46,7 +46,7 @@ Complete reference of all 51 ARO actions organized by category.
 | **Compute**   | Processing        | OWN               | Performs calculation or algorithm.<br>`<Compute> the <total> from <price> * <quantity>.` |
 | **Transform** | Processing        | OWN               | Converts data from one form to another.<br>`<Transform> the <dto> from the <entity>.` |
 | **Map**       | Processing        | OWN               | Applies a function across elements.<br>`<Map> the <names> from the <users: name>.` |
-| **ParseHtml** | Processing        | OWN               | Extracts structured data from HTML.<br>`<ParseHtml> the <links: links> from the <html>.` |
+| **ParseHtml** | Processing        | OWN               | Extracts structured data from HTML. Specifiers: `links`, `content`, `text`, `markdown`.<br>`<ParseHtml> the <result: markdown> from the <html>.` |
 | **Reduce**    | Processing        | OWN               | Aggregates elements into a summary.<br>`<Reduce> the <total> from the <amounts> with sum.` |
 | **Accept**    | Protocol          | OWN               | Acknowledges or agrees to a connection/request.<br>`<Accept> the <order: placed>.` |
 | **Exists**    | Query             | REQUEST           | Tests whether a resource or value is present.<br>`<Exists> the <found> for the <file: "./config.json">.` |
