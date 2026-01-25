@@ -13,10 +13,10 @@ var compilerLLVMDependency: [Target.Dependency] = []
 
 #if os(Windows)
 // Windows-specific dependencies
-// Use Joannis's WSAPoll branch for Windows networking (PR #3433)
+// Use Joannis's SwiftNIO fork with WSAPoll support for Windows networking
 platformDependencies = [
-    // SwiftNIO with Joannis's Windows WSAPoll support branch
-    .package(url: "https://github.com/apple/swift-nio.git", branch: "jo/winsock-fixes"),
+    // Joannis's SwiftNIO fork with Windows WSAPoll support (PR #3433)
+    .package(url: "https://github.com/Joannis/swift-nio.git", branch: "jo/winsock-fixes"),
     // AsyncHTTPClient for outgoing HTTP requests
     .package(url: "https://github.com/swift-server/async-http-client.git", from: "1.21.0"),
     // LLVM C API bindings for type-safe IR generation
