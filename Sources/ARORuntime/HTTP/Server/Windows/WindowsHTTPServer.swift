@@ -138,17 +138,18 @@ public final class WindowsHTTPServer: HTTPServerService, @unchecked Sendable {
 
         // Convert FlyingFox headers to dictionary
         var headers: [String: String] = [:]
-        for header in foxRequest.headers {
-            headers[header.name] = header.value
+        for (header, value) in foxRequest.headers {
+            headers[header.rawValue] = value
         }
 
         // Create ARO request
+        let bodyData = await foxRequest.bodyData
         let aroRequest = HTTPRequest(
             id: requestId,
             method: foxRequest.method.rawValue,
             path: path,
             headers: headers,
-            body: foxRequest.body,
+            body: bodyData,
             queryParameters: queryParams
         )
 
@@ -183,13 +184,13 @@ public final class WindowsHTTPServer: HTTPServerService, @unchecked Sendable {
         ))
 
         // Convert ARO response to FlyingFox response
-        var foxHeaders: [FlyingFox.HTTPHeader] = []
+        var foxHeaders = HTTPHeaders()
         for (name, value) in aroResponse.headers {
-            foxHeaders.append(FlyingFox.HTTPHeader(name: name, value: value))
+            foxHeaders[HTTPHeader(name)] = value
         }
 
         return FlyingFox.HTTPResponse(
-            statusCode: HTTPStatusCode(UInt16(aroResponse.statusCode)),
+            statusCode: HTTPStatusCode(aroResponse.statusCode),
             headers: foxHeaders,
             body: aroResponse.body ?? Data()
         )
