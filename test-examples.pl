@@ -1522,6 +1522,17 @@ sub run_single_mode_test {
             };
         } else {
             my @missing = @$missing_ref;
+            # Always print missing lines and actual output on Linux for diagnosis
+            if ($is_linux) {
+                say "  [Linux Debug] Missing lines:";
+                for my $line (@missing) {
+                    say "    - $line";
+                }
+                say "  [Linux Debug] Actual output:";
+                for my $line (split /\n/, $output_normalized) {
+                    say "    | $line";
+                }
+            }
             my $diff = '';
             if ($options{verbose}) {
                 $diff = "\nExpected:\n$expected_normalized\n\nActual:\n$output_normalized\n";
@@ -1561,6 +1572,17 @@ sub run_single_mode_test {
                 duration => $duration,
             };
         } else {
+            # Always print output mismatch details on Linux for diagnosis
+            if ($is_linux) {
+                say "  [Linux Debug] Output mismatch - expected:";
+                for my $line (split /\n/, $expected_normalized) {
+                    say "    E| $line";
+                }
+                say "  [Linux Debug] Actual:";
+                for my $line (split /\n/, $output_normalized) {
+                    say "    A| $line";
+                }
+            }
             my $diff = '';
             if ($options{verbose}) {
                 $diff = "\nExpected:\n$expected_normalized\n\nActual:\n$output_normalized\n";
