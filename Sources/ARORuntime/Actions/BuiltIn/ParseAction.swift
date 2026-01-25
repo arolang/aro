@@ -129,15 +129,38 @@ public struct ParseHtmlAction: ActionImplementation {
             contentElement = body
         }
 
-        let markdown: String
+        var markdown: String
         if let element = contentElement {
             markdown = convertElementToMarkdown(element)
-                .trimmingCharacters(in: .whitespacesAndNewlines)
+            markdown = cleanupMarkdown(markdown)
         } else {
             markdown = ""
         }
 
         return ["title": title, "markdown": markdown]
+    }
+
+    /// Clean up markdown output by normalizing whitespace
+    private func cleanupMarkdown(_ markdown: String) -> String {
+        var result = markdown
+
+        // Normalize line endings
+        result = result.replacingOccurrences(of: "\r\n", with: "\n")
+        result = result.replacingOccurrences(of: "\r", with: "\n")
+
+        // Remove trailing whitespace from each line
+        let lines = result.components(separatedBy: "\n")
+        result = lines.map { $0.replacingOccurrences(of: "\\s+$", with: "", options: .regularExpression) }.joined(separator: "\n")
+
+        // Collapse 3+ consecutive blank lines into 2
+        while result.contains("\n\n\n") {
+            result = result.replacingOccurrences(of: "\n\n\n", with: "\n\n")
+        }
+
+        // Remove blank lines at start and end
+        result = result.trimmingCharacters(in: .whitespacesAndNewlines)
+
+        return result
     }
 
     /// Recursively convert an HTML element to Markdown
@@ -250,11 +273,10 @@ public struct ParseHtmlAction: ActionImplementation {
                 if childElement.tagName != nil {
                     result += convertElementToMarkdown(childElement, listDepth: listDepth)
                 } else {
-                    // Text node
-                    let text = childElement.text ?? ""
-                    let trimmed = text.replacingOccurrences(of: "\\s+", with: " ", options: String.CompareOptions.regularExpression)
-                    if !trimmed.trimmingCharacters(in: CharacterSet.whitespaces).isEmpty {
-                        result += trimmed
+                    // Text node - normalize whitespace
+                    let text = normalizeWhitespace(childElement.text ?? "")
+                    if !text.trimmingCharacters(in: CharacterSet.whitespaces).isEmpty {
+                        result += text
                     }
                 }
             }
@@ -270,41 +292,68 @@ public struct ParseHtmlAction: ActionImplementation {
                 if let tagName = childElement.tagName?.lowercased() {
                     switch tagName {
                     case "strong", "b":
-                        result += "**\(getInlineMarkdown(childElement))**"
+                        let inner = getInlineMarkdown(childElement)
+                        if !inner.isEmpty {
+                            result += "**\(inner)**"
+                        }
                     case "em", "i":
-                        result += "*\(getInlineMarkdown(childElement))*"
+                        let inner = getInlineMarkdown(childElement)
+                        if !inner.isEmpty {
+                            result += "*\(inner)*"
+                        }
                     case "code":
-                        result += "`\(childElement.text ?? "")`"
+                        let code = childElement.text ?? ""
+                        if !code.isEmpty {
+                            result += "`\(code)`"
+                        }
                     case "del", "s", "strike":
-                        result += "~~\(getInlineMarkdown(childElement))~~"
+                        let inner = getInlineMarkdown(childElement)
+                        if !inner.isEmpty {
+                            result += "~~\(inner)~~"
+                        }
                     case "a":
-                        let href = childElement["href"] ?? ""
+                        let href = element["href"] ?? childElement["href"] ?? ""
                         let text = getInlineMarkdown(childElement)
-                        result += "[\(text)](\(escapeMarkdownUrl(href)))"
+                        if !text.isEmpty && !href.isEmpty {
+                            result += "[\(text)](\(escapeMarkdownUrl(href)))"
+                        } else if !text.isEmpty {
+                            result += text
+                        }
                     case "img":
                         let src = childElement["src"] ?? ""
                         let alt = childElement["alt"] ?? ""
-                        result += "![\(escapeMarkdownText(alt))](\(escapeMarkdownUrl(src)))"
+                        if !src.isEmpty {
+                            result += "![\(escapeMarkdownText(alt))](\(escapeMarkdownUrl(src)))"
+                        }
                     case "br":
                         result += "\n"
                     case "span":
                         result += getInlineMarkdown(childElement)
                     default:
-                        result += childElement.text ?? ""
+                        // Normalize whitespace in text from other elements
+                        let text = normalizeWhitespace(childElement.text ?? "")
+                        result += text
                     }
                 } else {
-                    // Text node
-                    result += childElement.text ?? ""
+                    // Text node - normalize whitespace
+                    let text = normalizeWhitespace(childElement.text ?? "")
+                    result += text
                 }
             }
         }
 
         // If no children were found, use element's text directly
         if result.isEmpty {
-            result = element.text ?? ""
+            result = normalizeWhitespace(element.text ?? "")
         }
 
         return result.trimmingCharacters(in: .whitespaces)
+    }
+
+    /// Normalize whitespace: collapse multiple spaces/newlines into single space
+    private func normalizeWhitespace(_ text: String) -> String {
+        return text
+            .replacingOccurrences(of: "\\s+", with: " ", options: .regularExpression)
     }
 
     /// Extract language class from code element (e.g., "language-swift" -> "swift")
@@ -397,7 +446,8 @@ public struct ParseHtmlAction: ActionImplementation {
                         content += getInlineMarkdown(childElement)
                     }
                 } else {
-                    content += childElement.text ?? ""
+                    // Text node - normalize whitespace
+                    content += normalizeWhitespace(childElement.text ?? "")
                 }
             }
         }
