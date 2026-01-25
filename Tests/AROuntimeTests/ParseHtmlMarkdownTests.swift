@@ -3,6 +3,9 @@
 // ARO Runtime - ParseHtml Markdown Specifier Unit Tests
 // ============================================================
 
+// ParseHtmlAction requires Kanna/libxml2 which is not available on Windows
+#if !os(Windows)
+
 import Foundation
 import Testing
 @testable import ARORuntime
@@ -471,3 +474,5 @@ struct ParseHtmlMarkdownTests {
         #expect(md.isEmpty || md.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
     }
 }
+
+#endif  // !os(Windows)

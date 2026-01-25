@@ -24,4 +24,4 @@ public func forceGlobalTestSetup() {
 }
 
 // Auto-initialize on module load
-private let _autoInit = forceGlobalTestSetup()
+private let _autoInit: Void = forceGlobalTestSetup()
