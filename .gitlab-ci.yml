@@ -9,6 +9,7 @@ stages:
   - build
   - integration
   - documentation
+  - docker
   - release
   - mastodon
 
@@ -221,10 +222,11 @@ integration:linux:
     - wget -qO- https://apt.llvm.org/llvm-snapshot.gpg.key | gpg --dearmor -o /usr/share/keyrings/llvm-archive-keyring.gpg
     - echo "deb [signed-by=/usr/share/keyrings/llvm-archive-keyring.gpg] http://apt.llvm.org/jammy/ llvm-toolchain-jammy-20 main" > /etc/apt/sources.list.d/llvm.list
     - apt-get update -qq
-    - apt-get install -y -qq libllvm20 llvm-20
+    - apt-get install -y -qq libllvm20 llvm-20 clang-20
 
-    # Setup LLVM 20 for both aro binary and llc (V2 code generator produces LLVM 20 IR)
+    # Setup LLVM 20 for both aro binary and llc/clang (V2 code generator produces LLVM 20 IR)
     - ln -sf /usr/bin/llc-20 /usr/bin/llc
+    - ln -sf /usr/bin/clang-20 /usr/bin/clang
     - export PATH="/usr/lib/llvm-20/bin:$PATH"
     - export LD_LIBRARY_PATH="/usr/lib/llvm-20/lib:$LD_LIBRARY_PATH"
 
@@ -252,6 +254,14 @@ integration:linux:
     - export LD_LIBRARY_PATH="/usr/lib/llvm-20/lib:$LD_LIBRARY_PATH"
     - export ARO_BIN="$CI_PROJECT_DIR/aro-dist/aro"
     - export ARO_DEBUG=1  # Enable debug output for ARO-0041 diagnostics
+
+    # Debug: test aro build directly to see errors
+    - echo "=== Testing aro build directly ==="
+    - which clang && clang --version | head -1
+    - which llc && llc --version | head -1
+    - ls -la /usr/share/swift/usr/lib/swift/linux/ | head -5
+    - ./aro-dist/aro build ./Examples/HelloWorld --verbose 2>&1 || echo "Build failed with exit code $?"
+
     - chmod +x test-examples.pl
     - perl test-examples.pl --verbose
   artifacts:
@@ -382,6 +392,77 @@ release:
           url: '$CI_PROJECT_URL/-/jobs/artifacts/$CI_COMMIT_TAG/raw/Book/TheConstructionStudies/output/ARO-Construction-Studies.pdf?job=release'
           filepath: '/ARO-Construction-Studies.pdf'
           link_type: 'other'
+  tags:
+    - spencer
+
+# =============================================================================
+# Docker Stage - Build and Push Docker Images
+# =============================================================================
+docker:buildsystem:
+  stage: docker
+  image: docker:24
+  services:
+    - docker:24-dind
+  needs:
+    - job: build:linux
+      optional: true
+  rules:
+    - if: $CI_COMMIT_TAG
+    - if: $CI_COMMIT_BRANCH == "main"
+  variables:
+    DOCKER_TLS_CERTDIR: "/certs"
+    IMAGE_NAME: $CI_REGISTRY_IMAGE/aro-buildsystem
+  before_script:
+    - docker login -u $CI_REGISTRY_USER -p $CI_REGISTRY_PASSWORD $CI_REGISTRY
+  script:
+    # Build and push buildsystem image
+    - |
+      if [ -n "$CI_COMMIT_TAG" ]; then
+        TAG="$CI_COMMIT_TAG"
+      else
+        TAG="latest"
+      fi
+    - docker build -t $IMAGE_NAME:$TAG -f docker/buildsystem/Dockerfile --build-arg ARO_VERSION=${CI_COMMIT_REF_NAME} docker/buildsystem/
+    - docker push $IMAGE_NAME:$TAG
+    - |
+      if [ -n "$CI_COMMIT_TAG" ]; then
+        docker tag $IMAGE_NAME:$TAG $IMAGE_NAME:latest
+        docker push $IMAGE_NAME:latest
+      fi
+  tags:
+    - spencer
+
+docker:runtime:
+  stage: docker
+  image: docker:24
+  services:
+    - docker:24-dind
+  needs:
+    - job: build:linux
+      optional: true
+  rules:
+    - if: $CI_COMMIT_TAG
+    - if: $CI_COMMIT_BRANCH == "main"
+  variables:
+    DOCKER_TLS_CERTDIR: "/certs"
+    IMAGE_NAME: $CI_REGISTRY_IMAGE/aro-runtime
+  before_script:
+    - docker login -u $CI_REGISTRY_USER -p $CI_REGISTRY_PASSWORD $CI_REGISTRY
+  script:
+    # Build and push runtime image
+    - |
+      if [ -n "$CI_COMMIT_TAG" ]; then
+        TAG="$CI_COMMIT_TAG"
+      else
+        TAG="latest"
+      fi
+    - docker build -t $IMAGE_NAME:$TAG -f docker/runtime/Dockerfile docker/runtime/
+    - docker push $IMAGE_NAME:$TAG
+    - |
+      if [ -n "$CI_COMMIT_TAG" ]; then
+        docker tag $IMAGE_NAME:$TAG $IMAGE_NAME:latest
+        docker push $IMAGE_NAME:latest
+      fi
   tags:
     - spencer
 

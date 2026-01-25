@@ -486,7 +486,102 @@ When you need to provide data in multiple formats for different consumers:
 
 ---
 
-## 18.7 Best Practices
+## 18.7 HTML Content Extraction
+
+While format-aware I/O handles file serialization, web applications often need to extract structured data from HTML responses. The `<ParseHtml>` action complements format-aware I/O by providing CSS-selector-based extraction from HTML strings.
+
+<div style="text-align: center; margin: 2em 0;">
+<svg width="500" height="120" viewBox="0 0 500 120" xmlns="http://www.w3.org/2000/svg">
+  <!-- HTML box -->
+  <rect x="20" y="35" width="80" height="50" rx="5" fill="#fef3c7" stroke="#f59e0b" stroke-width="2"/>
+  <text x="60" y="55" text-anchor="middle" font-family="sans-serif" font-size="10" fill="#92400e">HTML</text>
+  <text x="60" y="70" text-anchor="middle" font-family="sans-serif" font-size="10" fill="#92400e">String</text>
+
+  <!-- Arrow to ParseHtml -->
+  <line x1="100" y1="60" x2="150" y2="60" stroke="#6b7280" stroke-width="2"/>
+  <polygon points="150,60 144,56 144,64" fill="#6b7280"/>
+
+  <!-- ParseHtml -->
+  <rect x="150" y="30" width="100" height="60" rx="5" fill="#dcfce7" stroke="#22c55e" stroke-width="2"/>
+  <text x="200" y="55" text-anchor="middle" font-family="sans-serif" font-size="10" fill="#166534">ParseHtml</text>
+  <text x="200" y="70" text-anchor="middle" font-family="sans-serif" font-size="10" fill="#166534">Action</text>
+
+  <!-- Arrow to output -->
+  <line x1="250" y1="60" x2="300" y2="60" stroke="#6b7280" stroke-width="2"/>
+  <polygon points="300,60 294,56 294,64" fill="#6b7280"/>
+
+  <!-- Output box -->
+  <rect x="300" y="35" width="80" height="50" rx="5" fill="#e0e7ff" stroke="#6366f1" stroke-width="2"/>
+  <text x="340" y="55" text-anchor="middle" font-family="sans-serif" font-size="10" fill="#4338ca">Structured</text>
+  <text x="340" y="70" text-anchor="middle" font-family="sans-serif" font-size="10" fill="#4338ca">Data</text>
+
+  <!-- Specifier label -->
+  <text x="200" y="110" text-anchor="middle" font-family="sans-serif" font-size="9" fill="#6b7280">Specifier determines extraction type</text>
+</svg>
+</div>
+
+### Extracting Links
+
+The `links` specifier extracts all `href` attributes from anchor tags:
+
+```aro
+<Request> the <html> from "https://example.com".
+<ParseHtml> the <links: links> from the <html>.
+
+(* Result: ["/about", "/contact", "https://external.com", ...] *)
+```
+
+This is essential for web crawlers and link validation tools.
+
+### Extracting Page Content
+
+The `content` specifier returns a structured object with the page title and cleaned body text:
+
+```aro
+<Request> the <html> from "https://example.com/article".
+<ParseHtml> the <page: content> from the <html>.
+<Extract> the <title> from the <page: title>.
+<Extract> the <body-text> from the <page: content>.
+
+<Log> <title> to the <console>.
+<Log> <body-text> to the <console>.
+```
+
+The action intelligently extracts content from `<main>`, `<article>`, or `<body>` elements and normalizes whitespace.
+
+### Combining with HTTP Requests
+
+The `<ParseHtml>` action pairs naturally with `<Request>` for web scraping workflows:
+
+```aro
+(Fetch Article: Scraper) {
+    <Request> the <html> from <article-url>.
+
+    (* Extract both links and content *)
+    <ParseHtml> the <links: links> from the <html>.
+    <ParseHtml> the <article: content> from the <html>.
+
+    (* Save the extracted content *)
+    <Write> the <article> to "./output/article.json".
+
+    <Return> an <OK: status> with {
+        links: <links>,
+        title: <article: title>
+    }.
+}
+```
+
+### Specifier Reference
+
+| Specifier | Returns | Description |
+|-----------|---------|-------------|
+| `links` | `[String]` | All href values from `<a>` tags |
+| `content` | `{title, content}` | Page title and cleaned body text |
+| `text` | `[String]` | Text content from body element |
+
+---
+
+## 18.8 Best Practices
 
 **Choose the right format for your use case.** JSON and YAML are best for configuration and API data. CSV is best for spreadsheet workflows. JSON Lines is best for logging and streaming. SQL is best for database backup.
 
