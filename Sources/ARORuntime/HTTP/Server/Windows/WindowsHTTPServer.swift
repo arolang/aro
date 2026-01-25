@@ -53,9 +53,9 @@ public final class WindowsHTTPServer: HTTPServerService, @unchecked Sendable {
 
     /// Set the request handler for processing incoming HTTP requests
     public func setRequestHandler(_ handler: @escaping HTTPRequestHandler) {
-        lock.lock()
-        defer { lock.unlock() }
-        self.requestHandler = handler
+        withLock {
+            self.requestHandler = handler
+        }
     }
 
     // MARK: - HTTPServerService
@@ -74,11 +74,11 @@ public final class WindowsHTTPServer: HTTPServerService, @unchecked Sendable {
             return await self.handleRequest(foxRequest, with: handler)
         }
 
-        // Store server reference
-        lock.lock()
-        self.server = foxServer
-        self.port = port
-        lock.unlock()
+        // Store server reference (using withLock for async-safe access)
+        withLock {
+            self.server = foxServer
+            self.port = port
+        }
 
         // Start the server in a task
         serverTask = Task {
@@ -94,12 +94,14 @@ public final class WindowsHTTPServer: HTTPServerService, @unchecked Sendable {
     }
 
     public func stop() async throws {
-        lock.lock()
-        let foxServer = server
-        let task = serverTask
-        server = nil
-        serverTask = nil
-        lock.unlock()
+        // Get current state atomically
+        let (foxServer, task) = withLock {
+            let s = server
+            let t = serverTask
+            server = nil
+            serverTask = nil
+            return (s, t)
+        }
 
         if let foxServer = foxServer {
             await foxServer.stop()

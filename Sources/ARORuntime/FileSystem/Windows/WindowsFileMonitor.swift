@@ -33,6 +33,14 @@ public final class WindowsFileMonitor: FileMonitorService, @unchecked Sendable {
         var lastFileList: Set<String>
     }
 
+    // MARK: - Thread-safe helpers
+
+    private func withLock<T>(_ body: () -> T) -> T {
+        lock.lock()
+        defer { lock.unlock() }
+        return body()
+    }
+
     // MARK: - Initialization
 
     public init(eventBus: EventBus = .shared) {
@@ -55,14 +63,15 @@ public final class WindowsFileMonitor: FileMonitorService, @unchecked Sendable {
         // Get initial state
         let initialState = try getDirectoryState(resolvedPath)
 
-        lock.lock()
-        watchedPaths[resolvedPath] = WatchState(
-            path: resolvedPath,
-            lastModified: initialState.modificationDates,
-            lastFileList: initialState.files
-        )
-        let shouldStartPolling = watchedPaths.count == 1
-        lock.unlock()
+        // Add watch state and check if we need to start polling
+        let shouldStartPolling = withLock {
+            watchedPaths[resolvedPath] = WatchState(
+                path: resolvedPath,
+                lastModified: initialState.modificationDates,
+                lastFileList: initialState.files
+            )
+            return watchedPaths.count == 1
+        }
 
         // Start polling if this is the first watch
         if shouldStartPolling {
@@ -76,10 +85,11 @@ public final class WindowsFileMonitor: FileMonitorService, @unchecked Sendable {
     public func unwatch(path: String) async throws {
         let resolvedPath = (path as NSString).expandingTildeInPath
 
-        lock.lock()
-        watchedPaths.removeValue(forKey: resolvedPath)
-        let shouldStopPolling = watchedPaths.isEmpty
-        lock.unlock()
+        // Remove watch state and check if we need to stop polling
+        let shouldStopPolling = withLock {
+            watchedPaths.removeValue(forKey: resolvedPath)
+            return watchedPaths.isEmpty
+        }
 
         // Stop polling if no more watches
         if shouldStopPolling {
@@ -107,9 +117,8 @@ public final class WindowsFileMonitor: FileMonitorService, @unchecked Sendable {
     }
 
     private func checkForChanges() {
-        lock.lock()
-        let paths = watchedPaths
-        lock.unlock()
+        // Get current watched paths atomically
+        let paths = withLock { watchedPaths }
 
         for (path, state) in paths {
             do {
@@ -137,11 +146,11 @@ public final class WindowsFileMonitor: FileMonitorService, @unchecked Sendable {
                     }
                 }
 
-                // Update state
-                lock.lock()
-                watchedPaths[path]?.lastModified = currentState.modificationDates
-                watchedPaths[path]?.lastFileList = currentState.files
-                lock.unlock()
+                // Update state atomically
+                withLock {
+                    watchedPaths[path]?.lastModified = currentState.modificationDates
+                    watchedPaths[path]?.lastFileList = currentState.files
+                }
 
             } catch {
                 // Directory may have been deleted

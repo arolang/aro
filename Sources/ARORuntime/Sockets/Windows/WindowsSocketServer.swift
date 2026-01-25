@@ -62,11 +62,11 @@ public final class WindowsSocketServer: SocketServerService, @unchecked Sendable
         try serverSocket.bind(to: address)
         try serverSocket.listen()
 
-        // Store socket reference
-        lock.lock()
-        self.socket = serverSocket
-        self.port = port
-        lock.unlock()
+        // Store socket reference (using withLock for async-safe access)
+        withLock {
+            self.socket = serverSocket
+            self.port = port
+        }
 
         // Start accepting connections
         serverTask = Task {
@@ -79,14 +79,16 @@ public final class WindowsSocketServer: SocketServerService, @unchecked Sendable
     }
 
     public func stop() async throws {
-        lock.lock()
-        let serverSocket = socket
-        let task = serverTask
-        let conns = Array(connections.values)
-        socket = nil
-        serverTask = nil
-        connections.removeAll()
-        lock.unlock()
+        // Get current state atomically
+        let (serverSocket, task, conns) = withLock {
+            let s = socket
+            let t = serverTask
+            let c = Array(connections.values)
+            socket = nil
+            serverTask = nil
+            connections.removeAll()
+            return (s, t, c)
+        }
 
         // Close all connections
         for conn in conns {
@@ -136,10 +138,10 @@ public final class WindowsSocketServer: SocketServerService, @unchecked Sendable
                 let clientSocket = try await serverSocket.accept()
                 let connectionId = UUID().uuidString
 
-                // Store connection
-                lock.lock()
-                connections[connectionId] = clientSocket
-                lock.unlock()
+                // Store connection (using withLock for async-safe access)
+                withLock {
+                    connections[connectionId] = clientSocket
+                }
 
                 // Get remote address (if available)
                 let remoteAddress = "unknown"
@@ -179,10 +181,10 @@ public final class WindowsSocketServer: SocketServerService, @unchecked Sendable
             }
         }
 
-        // Clean up
-        lock.lock()
-        connections.removeValue(forKey: connectionId)
-        lock.unlock()
+        // Clean up (using withLock for async-safe access)
+        withLock {
+            _ = connections.removeValue(forKey: connectionId)
+        }
 
         try? socket.close()
         eventBus.publish(ClientDisconnectedEvent(connectionId: connectionId, reason: "connection closed"))
