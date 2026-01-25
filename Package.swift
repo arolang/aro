@@ -2,7 +2,7 @@
 import PackageDescription
 
 // Platform-specific dependencies
-// On Windows: use Joannis's SwiftNIO fork with WSAPoll support
+// On Windows: use FlyingFox for HTTP server (polling-based, no NIO dependency)
 // On macOS/Linux: use official SwiftNIO releases
 var platformDependencies: [Package.Dependency] = []
 var runtimePlatformDependencies: [Target.Dependency] = []
@@ -13,20 +13,16 @@ var compilerLLVMDependency: [Target.Dependency] = []
 
 #if os(Windows)
 // Windows-specific dependencies
-// Use Joannis's SwiftNIO fork with WSAPoll support for Windows networking
+// FlyingFox provides HTTP server and sockets without NIO (uses polling on Windows)
 platformDependencies = [
-    // Joannis's SwiftNIO fork with Windows WSAPoll support (PR #3433)
-    .package(url: "https://github.com/Joannis/swift-nio.git", branch: "jo/winsock-fixes"),
-    // AsyncHTTPClient for outgoing HTTP requests
-    .package(url: "https://github.com/swift-server/async-http-client.git", from: "1.21.0"),
+    // FlyingFox for HTTP server (includes FlyingSocks for socket support)
+    .package(url: "https://github.com/swhitty/FlyingFox.git", from: "0.21.0"),
     // SwiftSoup for HTML/XML parsing (pure Swift, works on all platforms)
     .package(url: "https://github.com/scinfu/SwiftSoup.git", from: "2.7.0"),
 ]
 runtimePlatformDependencies = [
-    .product(name: "NIO", package: "swift-nio"),
-    .product(name: "NIOHTTP1", package: "swift-nio"),
-    .product(name: "NIOFoundationCompat", package: "swift-nio"),
-    .product(name: "AsyncHTTPClient", package: "async-http-client"),
+    .product(name: "FlyingFox", package: "FlyingFox"),
+    .product(name: "FlyingSocks", package: "FlyingFox"),
     .product(name: "SwiftSoup", package: "SwiftSoup"),
 ]
 // LLVM/native compilation not available on Windows yet (requires LLVM installation)
