@@ -118,6 +118,11 @@ public final class RuntimeContext: ExecutionContext, @unchecked Sendable {
             return buildContractObject()?.httpServer
         }
 
+        // Magic variable: <metrics> returns current execution metrics
+        if name == "metrics" {
+            return MetricsCollector.shared.snapshot()
+        }
+
         if let typedValue = variables[name] {
             return typedValue.value
         }

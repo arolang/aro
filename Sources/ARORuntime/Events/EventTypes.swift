@@ -198,11 +198,13 @@ public struct FeatureSetStartedEvent: RuntimeEvent {
     public static var eventType: String { "featureset.started" }
     public let timestamp: Date
     public let featureSetName: String
+    public let businessActivity: String
     public let executionId: String
 
-    public init(featureSetName: String, executionId: String) {
+    public init(featureSetName: String, businessActivity: String = "", executionId: String) {
         self.timestamp = Date()
         self.featureSetName = featureSetName
+        self.businessActivity = businessActivity
         self.executionId = executionId
     }
 }
@@ -212,13 +214,15 @@ public struct FeatureSetCompletedEvent: RuntimeEvent {
     public static var eventType: String { "featureset.completed" }
     public let timestamp: Date
     public let featureSetName: String
+    public let businessActivity: String
     public let executionId: String
     public let success: Bool
     public let durationMs: Double
 
-    public init(featureSetName: String, executionId: String, success: Bool, durationMs: Double) {
+    public init(featureSetName: String, businessActivity: String = "", executionId: String, success: Bool, durationMs: Double) {
         self.timestamp = Date()
         self.featureSetName = featureSetName
+        self.businessActivity = businessActivity
         self.executionId = executionId
         self.success = success
         self.durationMs = durationMs
