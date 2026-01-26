@@ -3,7 +3,6 @@
 # Command: aro run ./Examples/EventExample
 ---
 Starting Event Example...
-Emitting domain event: NumberTriggered with payload: ["data": "Event triggered!"]
 Handler #1 executed
 Handler #2 executed
 Handler #3 executed

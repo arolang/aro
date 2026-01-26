@@ -628,7 +628,6 @@ public final class PluginLoader: @unchecked Sendable {
     /// - Parameter packageDir: Path to the package directory containing Package.swift
     private func loadPackagePlugin(from packageDir: URL) throws {
         let pluginName = packageDir.lastPathComponent
-        print("[PluginLoader] Building package plugin: \(pluginName)")
 
         #if os(Windows)
         let libraryExtension = "dll"
