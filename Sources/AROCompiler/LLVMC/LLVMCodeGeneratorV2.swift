@@ -1143,6 +1143,12 @@ public final class LLVMCodeGeneratorV2 {
     // MARK: - Require Statement Generation
 
     private func generateRequireStatement(_ statement: RequireStatement, index: Int, errorBlock: BasicBlock) {
+        // Framework dependencies are auto-bound by the runtime (console, http-server, etc.)
+        // and don't need extraction — matching interpreter behavior where .framework is a no-op.
+        if case .framework = statement.source {
+            return
+        }
+
         let ip = ctx.insertionPoint
 
         // Bind the required variable name
@@ -1159,7 +1165,7 @@ public final class LLVMCodeGeneratorV2 {
         let sourceValue: String
         switch statement.source {
         case .framework:
-            sourceValue = "framework"
+            sourceValue = "framework" // unreachable due to early return above
         case .environment:
             sourceValue = "environment"
         case .featureSet(let name):
