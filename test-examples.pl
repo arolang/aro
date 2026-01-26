@@ -1380,8 +1380,12 @@ sub run_file_watcher_example_internal {
     unlink $test_file;
     sleep 1;
 
-    # Capture output
-    eval { finish($handle, timeout(2)) };
+    # Signal the watcher to stop (it uses Keepalive, so it won't exit on its own)
+    eval { $handle->signal('TERM'); };
+    sleep 1;
+
+    # Capture output — process should exit promptly after TERM
+    eval { finish($handle) };
 
     # Cleanup
     $cleanup->();

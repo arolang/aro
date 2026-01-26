@@ -5,7 +5,7 @@
 skip-on-linux: CI runner (spencer) cannot fetch GitHub dependencies
 # SQLite.swift library doesn't compile on Windows (no SQLite3 module available)
 skip-on-windows: SQLite.swift library requires SQLite3 module not available on Windows
-mode: interpreter
+mode: both
 timeout: 120
 # Use occurrence-check for cross-platform compatibility (dictionary ordering varies)
 occurrence-check: true

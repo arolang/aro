@@ -1,9 +1,10 @@
 # SQLiteExample expected output (occurrence-check mode)
-# Key lines that should appear on all platforms
+# Key lines that should appear on all platforms and modes
+# Note: Plugin loading messages differ between interpreter and compiled:
+#   Interpreter: "Building package plugin" / "Loaded package plugin"
+#   Compiled:    "Loaded precompiled plugin"
 ---
-Building package plugin: SQLitePlugin
 Registered plugin service: sqlite
-Loaded package plugin: SQLitePlugin
 === SQLite Plugin Demo ===
 Step 1: Creating users table...
 Table created successfully
