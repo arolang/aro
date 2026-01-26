@@ -2,7 +2,6 @@
 # Type: console
 # Command: aro run ./Examples/CustomPlugin
 ---
-Registered plugin service: greeting
 Testing custom greeting plugin...
 result: Hello, ARO Developer!
 result: Goodbye, ARO Developer! See you next time.

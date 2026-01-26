@@ -202,7 +202,6 @@ public final class Application: @unchecked Sendable {
 
             // Match the request to an operation
             guard let match = routeRegistry.match(method: request.method, path: request.path) else {
-                print("[Application] No route found for \(request.method) \(request.path)")
                 return HTTPResponse(
                     statusCode: 404,
                     headers: ["Content-Type": "application/json"],
@@ -210,13 +209,10 @@ public final class Application: @unchecked Sendable {
                 )
             }
 
-            print("[Application] Matched route: \(match.operationId) for \(request.method) \(request.path)")
-
             // Find the feature set by operationId
             guard let featureSet = program.featureSets.first(where: {
                 $0.featureSet.name == match.operationId
             }) else {
-                print("[Application] Feature set not found: \(match.operationId)")
                 return HTTPResponse(
                     statusCode: 501,
                     headers: ["Content-Type": "application/json"],
@@ -229,7 +225,6 @@ public final class Application: @unchecked Sendable {
                 let response = try await self.executeFeatureSet(featureSet, request: request, pathParams: match.pathParameters)
                 return self.convertToHTTPResponse(response)
             } catch {
-                print("[Application] Feature set execution error: \(error)")
                 return HTTPResponse(
                     statusCode: 500,
                     headers: ["Content-Type": "application/json"],

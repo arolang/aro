@@ -5,7 +5,6 @@
 # NOTE: Uses occurrence-check for binary mode compatibility
 # Binary loads precompiled plugin, interpreter builds at runtime
 ---
-Registered plugin service: counter
 === External Service Demo ===
 Demonstrating stateful service calls...
 
