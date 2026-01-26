@@ -77,3 +77,10 @@ testrun.log
 /Examples/EventExample/EventExample
 /Examples/DirectoryReplicator/DirectoryReplicator
 /Examples/DateRangeDemo/DateRangeDemo
+/Book/AROByExample/output
+/Examples/ConfigurableTimeout/ConfigurableTimeout
+/Examples/SocketClient/SocketClient
+/Examples/ReceiveData/ReceiveData
+/Examples/NotifyExample/NotifyExample
+/Examples/MetricsDemo/MetricsDemo
+/Examples/LogToStderr/LogToStderr
