@@ -331,7 +331,50 @@ public final class PluginLoader: @unchecked Sendable {
 
     /// Find the Swift executable (swift command) in PATH or common locations
     private func findSwiftExecutable() -> String? {
-        // First, try to find swift using `which` command
+        #if os(Windows)
+        // On Windows, use 'where' command to find swift.exe
+        let whereProcess = Process()
+        whereProcess.executableURL = URL(fileURLWithPath: "C:\\Windows\\System32\\where.exe")
+        whereProcess.arguments = ["swift"]
+
+        let pipe = Pipe()
+        whereProcess.standardOutput = pipe
+        whereProcess.standardError = FileHandle.nullDevice
+
+        do {
+            try whereProcess.run()
+            whereProcess.waitUntilExit()
+
+            if whereProcess.terminationStatus == 0 {
+                let data = pipe.fileHandleForReading.readDataToEndOfFile()
+                if let output = String(data: data, encoding: .utf8) {
+                    // 'where' may return multiple lines, take the first
+                    if let path = output.split(separator: "\r\n").first ?? output.split(separator: "\n").first,
+                       !path.isEmpty {
+                        return String(path).trimmingCharacters(in: .whitespacesAndNewlines)
+                    }
+                }
+            }
+        } catch {
+            // where failed, try common locations
+        }
+
+        // Check common Swift installation paths on Windows
+        let commonPaths = [
+            "C:\\Program Files\\Swift\\Toolchains\\0.0.0+Asserts\\usr\\bin\\swift.exe",
+            "C:\\Library\\Developer\\Toolchains\\unknown-Asserts-development.xctoolchain\\usr\\bin\\swift.exe"
+        ]
+
+        for path in commonPaths {
+            if FileManager.default.fileExists(atPath: path) {
+                return path
+            }
+        }
+
+        // Last resort: assume swift is in PATH
+        return "swift"
+        #else
+        // On Unix, use 'which' command to find swift
         let whichProcess = Process()
         whichProcess.executableURL = URL(fileURLWithPath: "/usr/bin/which")
         whichProcess.arguments = ["swift"]
@@ -371,11 +414,55 @@ public final class PluginLoader: @unchecked Sendable {
         }
 
         return nil
+        #endif
     }
 
     /// Find the Swift compiler in PATH or common locations
     private func findSwiftCompiler() -> String? {
-        // First, try to find swiftc using `which` command
+        #if os(Windows)
+        // On Windows, use 'where' command to find swiftc.exe
+        let whereProcess = Process()
+        whereProcess.executableURL = URL(fileURLWithPath: "C:\\Windows\\System32\\where.exe")
+        whereProcess.arguments = ["swiftc"]
+
+        let pipe = Pipe()
+        whereProcess.standardOutput = pipe
+        whereProcess.standardError = FileHandle.nullDevice
+
+        do {
+            try whereProcess.run()
+            whereProcess.waitUntilExit()
+
+            if whereProcess.terminationStatus == 0 {
+                let data = pipe.fileHandleForReading.readDataToEndOfFile()
+                if let output = String(data: data, encoding: .utf8) {
+                    // 'where' may return multiple lines, take the first
+                    if let path = output.split(separator: "\r\n").first ?? output.split(separator: "\n").first,
+                       !path.isEmpty {
+                        return String(path).trimmingCharacters(in: .whitespacesAndNewlines)
+                    }
+                }
+            }
+        } catch {
+            // where failed, try common locations
+        }
+
+        // Check common Swift installation paths on Windows
+        let commonPaths = [
+            "C:\\Program Files\\Swift\\Toolchains\\0.0.0+Asserts\\usr\\bin\\swiftc.exe",
+            "C:\\Library\\Developer\\Toolchains\\unknown-Asserts-development.xctoolchain\\usr\\bin\\swiftc.exe"
+        ]
+
+        for path in commonPaths {
+            if FileManager.default.fileExists(atPath: path) {
+                return path
+            }
+        }
+
+        // Last resort: assume swiftc is in PATH
+        return "swiftc"
+        #else
+        // On Unix, use 'which' command to find swiftc
         let whichProcess = Process()
         whichProcess.executableURL = URL(fileURLWithPath: "/usr/bin/which")
         whichProcess.arguments = ["swiftc"]
@@ -415,6 +502,7 @@ public final class PluginLoader: @unchecked Sendable {
         }
 
         return nil
+        #endif
     }
 
     /// Check if source file is newer than compiled dylib

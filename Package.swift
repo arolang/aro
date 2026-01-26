@@ -2,7 +2,8 @@
 import PackageDescription
 
 // Platform-specific dependencies
-// swift-nio, async-http-client, and LSP libraries have Windows compatibility issues
+// On Windows: use FlyingFox for HTTP server (polling-based, no NIO dependency)
+// On macOS/Linux: use official SwiftNIO releases
 var platformDependencies: [Package.Dependency] = []
 var runtimePlatformDependencies: [Target.Dependency] = []
 var lspDependencies: [Package.Dependency] = []
@@ -10,17 +11,36 @@ var lspTargetDependencies: [Target.Dependency] = []
 var cliLspDependency: [Target.Dependency] = []
 var compilerLLVMDependency: [Target.Dependency] = []
 
-#if !os(Windows)
+#if os(Windows)
+// Windows-specific dependencies
+// FlyingFox provides HTTP server and sockets without NIO (uses polling on Windows)
+platformDependencies = [
+    // FlyingFox for HTTP server (includes FlyingSocks for socket support)
+    .package(url: "https://github.com/swhitty/FlyingFox.git", from: "0.21.0"),
+    // SwiftSoup for HTML/XML parsing (pure Swift, works on all platforms)
+    .package(url: "https://github.com/scinfu/SwiftSoup.git", from: "2.7.0"),
+]
+runtimePlatformDependencies = [
+    .product(name: "FlyingFox", package: "FlyingFox"),
+    .product(name: "FlyingSocks", package: "FlyingFox"),
+    .product(name: "SwiftSoup", package: "SwiftSoup"),
+]
+// LLVM/native compilation not available on Windows yet (requires LLVM installation)
+// LSP not available on Windows yet - JSONRPC has issues
+#else
+// macOS and Linux dependencies
 platformDependencies = [
     // SwiftNIO for HTTP server and sockets (2.75.0+ for Swift 6 support)
     .package(url: "https://github.com/apple/swift-nio.git", from: "2.75.0"),
     // AsyncHTTPClient for outgoing HTTP requests
     .package(url: "https://github.com/swift-server/async-http-client.git", from: "1.21.0"),
-    // FileMonitor for file system watching (using fork with Windows support)
+    // FileMonitor for file system watching
     .package(url: "https://github.com/KrisSimon/FileMonitor.git", from: "2.0.0"),
     // LLVM C API bindings for type-safe IR generation (Issue #53)
     // Swifty-LLVM requires Swift 6.2 and LLVM 20
     .package(url: "https://github.com/hylo-lang/Swifty-LLVM.git", branch: "main"),
+    // SwiftSoup for HTML/XML parsing (pure Swift, works on all platforms)
+    .package(url: "https://github.com/scinfu/SwiftSoup.git", from: "2.7.0"),
 ]
 runtimePlatformDependencies = [
     .product(name: "NIO", package: "swift-nio"),
@@ -28,6 +48,7 @@ runtimePlatformDependencies = [
     .product(name: "NIOFoundationCompat", package: "swift-nio"),
     .product(name: "AsyncHTTPClient", package: "async-http-client"),
     .product(name: "FileMonitor", package: "FileMonitor"),
+    .product(name: "SwiftSoup", package: "SwiftSoup"),
 ]
 // LSP dependencies (JSONRPC doesn't support Windows)
 lspDependencies = [
@@ -39,13 +60,13 @@ lspTargetDependencies = [
 cliLspDependency = [
     "AROLSP",
 ]
-// LLVM C API for type-safe IR generation (not available on Windows)
+// LLVM C API for type-safe IR generation
 compilerLLVMDependency = [
     .product(name: "SwiftyLLVM", package: "Swifty-LLVM"),
 ]
 #endif
 
-// LLVM linker settings - pkg-config needs help finding LLVM on macOS
+// LLVM linker settings - pkg-config needs help finding LLVM
 #if os(macOS)
 import Foundation
 let llvmPath = ProcessInfo.processInfo.environment["LLVM_PATH"] ?? "/opt/homebrew/opt/llvm@20"
@@ -63,6 +84,7 @@ let llvmLinkerSettings: [LinkerSetting] = [
     .unsafeFlags(["-Xlinker", "-rpath", "-Xlinker", llvmLibPath]),
 ]
 #else
+// Windows and other platforms: LLVM not available
 let llvmLinkerSettings: [LinkerSetting] = []
 #endif
 
@@ -100,85 +122,93 @@ let package = Package(
         .package(url: "https://github.com/jpsim/Yams.git", from: "6.2.0"),
         // Swift Crypto for cryptographic operations (SHA256, etc.)
         .package(url: "https://github.com/apple/swift-crypto.git", from: "4.0.0"),
-        // Kanna for HTML/XML parsing with CSS selectors
-        .package(url: "https://github.com/tid-kijyun/Kanna.git", from: "5.3.0"),
     ],
-    targets: [
-        // Version information library
-        .target(
-            name: "AROVersion",
-            path: "Sources/AROVersion"
-        ),
-        // Core parser library
-        .target(
-            name: "AROParser",
-            path: "Sources/AROParser"
-        ),
-        // Runtime library
-        .target(
-            name: "ARORuntime",
-            dependencies: [
-                "AROParser",
-                .product(name: "Yams", package: "Yams"),
-                .product(name: "Crypto", package: "swift-crypto"),
-                .product(name: "Kanna", package: "Kanna"),
-            ] + runtimePlatformDependencies,
-            path: "Sources/ARORuntime"
-        ),
-        // Native compiler (LLVM IR generation)
-        .target(
-            name: "AROCompiler",
-            dependencies: [
-                "AROParser",
-            ] + compilerLLVMDependency,
-            path: "Sources/AROCompiler",
-            linkerSettings: llvmLinkerSettings
-        ),
-        // Language Server Protocol implementation (not available on Windows)
-        .target(
-            name: "AROLSP",
-            dependencies: [
-                "AROParser",
-            ] + lspTargetDependencies,
-            path: "Sources/AROLSP"
-        ),
-        // CLI tool
-        .executableTarget(
-            name: "AROCLI",
-            dependencies: [
-                "AROVersion",
-                "AROParser",
-                "ARORuntime",
-                "AROCompiler",
-                .product(name: "ArgumentParser", package: "swift-argument-parser"),
-            ] + cliLspDependency,
-            path: "Sources/AROCLI",
-            linkerSettings: llvmLinkerSettings
-        ),
-        // Parser tests
-        .testTarget(
-            name: "AROParserTests",
-            dependencies: ["AROParser"],
-            path: "Tests/AROParserTests"
-        ),
-        // Runtime tests
-        .testTarget(
-            name: "AROuntimeTests",
-            dependencies: ["ARORuntime"],
-            path: "Tests/AROuntimeTests"
-        ),
-        // Compiler tests
-        .testTarget(
-            name: "AROCompilerTests",
-            dependencies: ["AROCompiler", "AROParser"],
-            path: "Tests/AROCompilerTests"
-        ),
-        // LSP tests (not available on Windows)
-        .testTarget(
-            name: "AROLSPTests",
-            dependencies: ["AROLSP", "AROParser"] + lspTargetDependencies,
-            path: "Tests/AROLSPTests"
-        )
-    ],
+    targets: {
+        // Core targets available on all platforms
+        var targets: [Target] = [
+            // Version information library
+            .target(
+                name: "AROVersion",
+                path: "Sources/AROVersion"
+            ),
+            // Core parser library
+            .target(
+                name: "AROParser",
+                path: "Sources/AROParser"
+            ),
+            // Runtime library
+            .target(
+                name: "ARORuntime",
+                dependencies: [
+                    "AROParser",
+                    .product(name: "Yams", package: "Yams"),
+                    .product(name: "Crypto", package: "swift-crypto"),
+                ] + runtimePlatformDependencies,
+                path: "Sources/ARORuntime"
+            ),
+            // Native compiler (LLVM IR generation)
+            .target(
+                name: "AROCompiler",
+                dependencies: [
+                    "AROParser",
+                ] + compilerLLVMDependency,
+                path: "Sources/AROCompiler",
+                linkerSettings: llvmLinkerSettings
+            ),
+            // CLI tool
+            .executableTarget(
+                name: "AROCLI",
+                dependencies: [
+                    "AROVersion",
+                    "AROParser",
+                    "ARORuntime",
+                    "AROCompiler",
+                    .product(name: "ArgumentParser", package: "swift-argument-parser"),
+                ] + cliLspDependency,
+                path: "Sources/AROCLI",
+                linkerSettings: llvmLinkerSettings
+            ),
+            // Parser tests
+            .testTarget(
+                name: "AROParserTests",
+                dependencies: ["AROParser"],
+                path: "Tests/AROParserTests"
+            ),
+            // Runtime tests
+            .testTarget(
+                name: "AROuntimeTests",
+                dependencies: ["ARORuntime"],
+                path: "Tests/AROuntimeTests"
+            ),
+            // Compiler tests
+            .testTarget(
+                name: "AROCompilerTests",
+                dependencies: ["AROCompiler", "AROParser"],
+                path: "Tests/AROCompilerTests"
+            ),
+        ]
+
+        // LSP targets - not available on Windows (no compatible library)
+        #if !os(Windows)
+        targets.append(contentsOf: [
+            // Language Server Protocol implementation
+            .target(
+                name: "AROLSP",
+                dependencies: [
+                    "AROParser",
+                ] + lspTargetDependencies,
+                path: "Sources/AROLSP"
+            ),
+            // LSP tests
+            .testTarget(
+                name: "AROLSPTests",
+                dependencies: ["AROLSP", "AROParser"] + lspTargetDependencies,
+                path: "Tests/AROLSPTests"
+            ),
+        ])
+        #endif
+
+        return targets
+    }(),
     swiftLanguageModes: [.v6]
 )

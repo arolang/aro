@@ -106,6 +106,36 @@ When the 48 built in actions are not enough, write custom actions in Swift or di
 
 Write only the success case. Errors are reported automatically in business terms. When a user cannot be retrieved, the message says exactly that.
 
+## Platform Support
+
+ARO runs on macOS, Linux, and Windows. Most features work across all platforms.
+
+| Feature | macOS | Linux | Windows |
+|---------|:-----:|:-----:|:-------:|
+| **Core Runtime** |
+| Interpreter (`aro run`) | ✅ | ✅ | ✅ |
+| Syntax checking (`aro check`) | ✅ | ✅ | ✅ |
+| Native compilation (`aro build`) | ✅ | ✅ | ❌⁴ |
+| **Networking** |
+| HTTP Server | ✅ | ✅ | ✅¹ |
+| HTTP Client | ✅ | ✅ | ✅ |
+| Socket Server | ✅ | ✅ | ✅¹ |
+| Socket Client | ✅ | ✅ | ✅¹ |
+| **File System** |
+| File Operations | ✅ | ✅ | ✅ |
+| File Monitoring | ✅ | ✅ | ✅² |
+| **Data Processing** |
+| HTML Parsing | ✅ | ✅ | ✅ |
+| JSON/YAML Processing | ✅ | ✅ | ✅ |
+| **Developer Tools** |
+| Language Server (LSP) | ✅ | ✅ | ❌³ |
+| Swift Plugins | ✅ | ✅ | ✅ |
+
+¹ Uses FlyingFox with polling-based networking (no SwiftNIO)
+² Uses polling-based monitoring instead of native events
+³ LanguageServerProtocol library doesn't support Windows yet
+⁴ LLVM not available in Windows CI environment
+
 ## Quick Start
 
 ```aro
@@ -241,8 +271,6 @@ The binary is at `.build/release/aro`.
 
 ### Windows
 
-Native compilation (`aro build`) is not yet supported on Windows. The interpreter (`aro run`) works with Swift 6.2.
-
 Install Swift 6.2 from [swift.org](https://swift.org/download/). Ensure the Swift toolchain is in your PATH.
 
 ```powershell
@@ -252,6 +280,8 @@ swift build -c release
 ```
 
 The binary is at `.build\release\aro.exe`.
+
+**Note:** Native compilation (`aro build`) is not yet supported on Windows. Use `aro run` for interpreter mode. Windows networking uses FlyingFox (polling-based, no SwiftNIO dependency).
 
 ## Running Tests
 

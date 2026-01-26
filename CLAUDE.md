@@ -14,6 +14,10 @@ The project must always be in sync. When there are conflicts or discrepancies, t
 
 When updating any layer, ensure all lower-priority layers are updated to match.
 
+## Platform Feature Table
+
+The **Platform Support** table in `README.md` lists feature availability for macOS, Linux, and Windows. When adding or modifying platform-specific features, always update this table to reflect current support status.
+
 ## Documentation Style
 
 - **Proposals** (`Proposals/`): Use ASCII art for diagrams
