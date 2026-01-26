@@ -145,10 +145,13 @@ public final class LLVMCodeGeneratorV2 {
 
     private func generateFeatureSet(_ analyzed: AnalyzedFeatureSet) {
         let fs = analyzed.featureSet
-        // Use unique function name for Application-Start to support module imports
+        // Use unique function name for Application-Start/End to support module imports
+        // and avoid collisions between Success/Error variants
         let funcName: String
         if fs.name == "Application-Start" {
             funcName = applicationStartFunctionName(fs.businessActivity)
+        } else if fs.name == "Application-End" {
+            funcName = applicationEndFunctionName(fs.businessActivity)
         } else {
             funcName = featureSetFunctionName(fs.name)
         }
@@ -212,6 +215,15 @@ public final class LLVMCodeGeneratorV2 {
             .replacingOccurrences(of: "-", with: "_")
             .replacingOccurrences(of: " ", with: "_")
         return "aro_fs_application_start_\(sanitized)"
+    }
+
+    /// Generate unique function name for Application-End using business activity
+    private func applicationEndFunctionName(_ businessActivity: String) -> String {
+        let sanitized = businessActivity
+            .lowercased()
+            .replacingOccurrences(of: "-", with: "_")
+            .replacingOccurrences(of: " ", with: "_")
+        return "aro_fs_application_end_\(sanitized)"
     }
 
     // MARK: - Statement Generation
@@ -1299,6 +1311,25 @@ public final class LLVMCodeGeneratorV2 {
                 mainCtx = appCtx
             } else {
                 _ = ctx.module.insertCall(externals.contextDestroy, on: [appCtx], at: ip)
+            }
+        }
+
+        // Execute Application-End: Success handler if defined
+        let appEndSuccess = program.featureSets.first(where: {
+            $0.featureSet.name == "Application-End" &&
+            $0.featureSet.businessActivity == "Success"
+        })
+        if let endHandler = appEndSuccess {
+            let endFuncName = applicationEndFunctionName(endHandler.featureSet.businessActivity)
+            if let endFunc = ctx.module.function(named: endFuncName) {
+                let endContextName = ctx.stringConstant("Application-End")
+                let endCtx = ctx.module.insertCall(
+                    externals.contextCreateNamed,
+                    on: [runtime, endContextName],
+                    at: ip
+                )
+                ctx.module.insertCall(endFunc, on: [endCtx], at: ip)
+                _ = ctx.module.insertCall(externals.contextDestroy, on: [endCtx], at: ip)
             }
         }
 

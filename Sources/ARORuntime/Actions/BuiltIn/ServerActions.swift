@@ -838,6 +838,12 @@ public final class KeepaliveSignalHandler: @unchecked Sendable {
         if isSetup { return }
         isSetup = true
 
+        // If RuntimeSignalHandler is already active, don't override its handlers.
+        // Runtime.stop() already calls ShutdownCoordinator.signalShutdown(),
+        // so the keepalive wait will unblock through the normal shutdown flow
+        // which also executes Application-End handlers.
+        guard !RuntimeSignalHandler.shared.isActive else { return }
+
         signal(SIGINT) { _ in
             ShutdownCoordinator.shared.signalShutdown()
             // Exit after a brief delay to allow cleanup

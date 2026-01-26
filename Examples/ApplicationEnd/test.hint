@@ -1,0 +1,5 @@
+# Application-End handler integration test
+# App uses <Keepalive>, SIGINT triggers Application-End: Success
+keep-alive: true
+occurrence-check: true
+timeout: 10

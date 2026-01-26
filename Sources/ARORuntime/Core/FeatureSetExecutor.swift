@@ -964,27 +964,31 @@ public final class Runtime: @unchecked Sendable {
             throw error
         }
 
-        // Re-set isRunning since run() resets it in defer block
-        isRunning = true
+        // If shutdown was already signaled during run() (e.g., Keepalive received SIGINT),
+        // skip the keep-alive loop and proceed directly to Application-End.
+        if !ShutdownCoordinator.shared.isShuttingDownNow {
+            // Re-set isRunning since run() resets it in defer block
+            isRunning = true
 
-        // Keep running until stopped or all event processing is complete
-        // For non-server applications (crawlers, batch processors), exit when idle
-        var consecutiveIdleChecks = 0
-        let idleThreshold = 10 // 10 consecutive checks = 1 second of idle
-        while isRunning {
-            try await Task.sleep(nanoseconds: 100_000_000) // 100ms
+            // Keep running until stopped or all event processing is complete
+            // For non-server applications (crawlers, batch processors), exit when idle
+            var consecutiveIdleChecks = 0
+            let idleThreshold = 10 // 10 consecutive checks = 1 second of idle
+            while isRunning {
+                try await Task.sleep(nanoseconds: 100_000_000) // 100ms
 
-            // Check if event bus is idle (no in-flight handlers)
-            let pendingCount = eventBus.getPendingHandlerCount()
-            if pendingCount == 0 {
-                consecutiveIdleChecks += 1
-                if consecutiveIdleChecks >= idleThreshold {
-                    // No events processed for 1 second - application is idle
-                    // Stop the loop (equivalent to graceful shutdown)
-                    break
+                // Check if event bus is idle (no in-flight handlers)
+                let pendingCount = eventBus.getPendingHandlerCount()
+                if pendingCount == 0 {
+                    consecutiveIdleChecks += 1
+                    if consecutiveIdleChecks >= idleThreshold {
+                        // No events processed for 1 second - application is idle
+                        // Stop the loop (equivalent to graceful shutdown)
+                        break
+                    }
+                } else {
+                    consecutiveIdleChecks = 0
                 }
-            } else {
-                consecutiveIdleChecks = 0
             }
         }
 
@@ -1103,6 +1107,13 @@ public final class RuntimeSignalHandler: @unchecked Sendable {
         lock.unlock()
 
         rt?.stop()
+    }
+
+    /// Whether signal handlers have been set up
+    public var isActive: Bool {
+        lock.lock()
+        defer { lock.unlock() }
+        return isSetup
     }
 
     /// Reset for testing (clears registered runtime)
