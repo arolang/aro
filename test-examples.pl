@@ -790,6 +790,8 @@ sub run_console_example_internal {
         sleep 1;
         say "  Sending SIGINT for graceful shutdown" if $options{verbose};
         eval { $handle->signal('INT'); };
+        # Allow time for Application-End handler to execute and flush output
+        sleep 1;
     }
 
     eval {

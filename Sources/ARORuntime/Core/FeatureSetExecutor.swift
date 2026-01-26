@@ -953,12 +953,16 @@ public final class Runtime: @unchecked Sendable {
             throw error
         }
 
-        // Re-set isRunning since run() resets it in defer block
-        isRunning = true
+        // If shutdown was already signaled during run() (e.g., Keepalive received SIGINT),
+        // skip the keep-alive loop and proceed directly to Application-End.
+        if !ShutdownCoordinator.shared.isShuttingDownNow {
+            // Re-set isRunning since run() resets it in defer block
+            isRunning = true
 
-        // Keep running until stopped
-        while isRunning {
-            try await Task.sleep(nanoseconds: 100_000_000) // 100ms
+            // Keep running until stopped
+            while isRunning {
+                try await Task.sleep(nanoseconds: 100_000_000) // 100ms
+            }
         }
 
         // Execute Application-End handler on graceful shutdown
@@ -1076,6 +1080,13 @@ public final class RuntimeSignalHandler: @unchecked Sendable {
         lock.unlock()
 
         rt?.stop()
+    }
+
+    /// Whether signal handlers have been set up
+    public var isActive: Bool {
+        lock.lock()
+        defer { lock.unlock() }
+        return isSetup
     }
 
     /// Reset for testing (clears registered runtime)
