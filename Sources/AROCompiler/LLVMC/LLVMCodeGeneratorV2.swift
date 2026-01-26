@@ -306,31 +306,30 @@ public final class LLVMCodeGeneratorV2 {
         // Store result
         ctx.module.insertStore(actionResult, to: ctx.currentResultPtr!, at: ctx.insertionPoint)
 
-        // Check for throw action
-        if verb == "throw" {
-            let hasError = ctx.module.insertCall(
-                externals.contextHasError,
-                on: [ctx.currentContextVar!],
-                at: ctx.insertionPoint
-            )
-            let errorOccurred = ctx.module.insertIntegerComparison(
-                .ne, hasError, ctx.i32Type.zero, at: ctx.insertionPoint
-            )
+        // Check for action errors - halt execution if any action fails
+        // This matches interpreter behavior where errors stop execution
+        let hasError = ctx.module.insertCall(
+            externals.contextHasError,
+            on: [ctx.currentContextVar!],
+            at: ctx.insertionPoint
+        )
+        let errorOccurred = ctx.module.insertIntegerComparison(
+            .ne, hasError, ctx.i32Type.zero, at: ctx.insertionPoint
+        )
 
-            let continueBlock = ctx.module.appendBlock(
-                named: "\(prefix)_continue",
-                to: ctx.currentFunction!
-            )
+        let continueBlock = ctx.module.appendBlock(
+            named: "\(prefix)_continue",
+            to: ctx.currentFunction!
+        )
 
-            ctx.module.insertCondBr(
-                if: errorOccurred,
-                then: errorBlock,
-                else: continueBlock,
-                at: ctx.insertionPoint
-            )
+        ctx.module.insertCondBr(
+            if: errorOccurred,
+            then: errorBlock,
+            else: continueBlock,
+            at: ctx.insertionPoint
+        )
 
-            ctx.setInsertionPoint(atEndOf: continueBlock)
-        }
+        ctx.setInsertionPoint(atEndOf: continueBlock)
 
         // If we had a when guard, branch to merge block and continue from there
         if let mergeBlock = guardMergeBlock {

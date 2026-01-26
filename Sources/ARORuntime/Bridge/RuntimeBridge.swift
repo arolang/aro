@@ -1206,6 +1206,32 @@ private func evaluateBinaryOp(op: String, left: any Sendable, right: any Sendabl
     case "or":
         return asBool(left) || asBool(right)
 
+    // Containment
+    case "contains":
+        if let array = left as? [any Sendable] {
+            let rightStr = asString(right)
+            return array.contains { asString($0) == rightStr }
+        }
+        if let str = left as? String, let substr = right as? String {
+            return str.contains(substr)
+        }
+        if let dict = left as? [String: any Sendable], let key = right as? String {
+            return dict[key] != nil
+        }
+        return false
+
+    // Regex matching
+    case "matches":
+        let str = asString(left)
+        let pattern = asString(right)
+        do {
+            let regex = try NSRegularExpression(pattern: pattern)
+            let range = NSRange(str.startIndex..., in: str)
+            return regex.firstMatch(in: str, range: range) != nil
+        } catch {
+            return false
+        }
+
     default:
         return ""
     }

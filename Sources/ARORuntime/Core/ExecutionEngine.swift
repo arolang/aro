@@ -28,6 +28,10 @@ public actor ExecutionEngine {
     /// Service registry for dependency injection
     private let services: ServiceRegistry
 
+    /// URLs currently being processed (for deduplication of CrawlPage events)
+    /// This prevents multiple parallel handlers from processing the same URL
+    private var processingUrls: Set<String> = []
+
     // MARK: - Initialization
 
     /// Initialize the execution engine
@@ -301,6 +305,30 @@ public actor ExecutionEngine {
         baseContext: RuntimeContext,
         event: DomainEvent
     ) async {
+        // For CrawlPage events, deduplicate to prevent parallel processing of the same URL
+        // This is a runtime-level fix for race conditions in parallel event processing
+        var claimedUrl: String? = nil
+        if event.domainEventType == "CrawlPage" {
+            if let data = event.payload["data"] as? [String: any Sendable],
+               let url = data["url"] as? String {
+                // Check if another handler is already processing this URL
+                if processingUrls.contains(url) {
+                    // Skip - another handler is already processing this URL
+                    return
+                }
+                // Claim this URL for processing
+                processingUrls.insert(url)
+                claimedUrl = url
+            }
+        }
+
+        // Ensure we release the claimed URL when done
+        defer {
+            if let url = claimedUrl {
+                processingUrls.remove(url)
+            }
+        }
+
         // Create child context for this event handler with its business activity
         let handlerContext = RuntimeContext(
             featureSetName: analyzedFS.featureSet.name,

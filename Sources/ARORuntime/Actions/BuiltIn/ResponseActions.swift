@@ -471,18 +471,22 @@ public struct StoreAction: ActionImplementation {
 
         // Check if this is a repository (ends with -repository)
         if InMemoryRepositoryStorage.isRepositoryName(repoName) {
-            // Store in repository storage service with change tracking
-            let storeResult: RepositoryStoreResult
-            if let storage = context.service(RepositoryStorageService.self) {
-                storeResult = await storage.storeWithChangeInfo(
-                    value: data,
-                    in: repoName,
-                    businessActivity: context.businessActivity
-                )
+            // If data is an array, store each element individually (flatten)
+            // This allows: <Store> the <url-list> into the <crawled-repository>.
+            // to add each URL as a separate item, not the array as one item
+            let itemsToStore: [any Sendable]
+            if let arrayData = data as? [any Sendable] {
+                itemsToStore = arrayData
             } else {
-                // Fallback to shared instance if service not registered
-                storeResult = await InMemoryRepositoryStorage.shared.storeWithChangeInfo(
-                    value: data,
+                itemsToStore = [data]
+            }
+
+            // Store each item individually
+            let storage = context.service(RepositoryStorageService.self) ?? InMemoryRepositoryStorage.shared
+
+            for item in itemsToStore {
+                _ = await storage.storeWithChangeInfo(
+                    value: item,
                     in: repoName,
                     businessActivity: context.businessActivity
                 )
@@ -491,61 +495,34 @@ public struct StoreAction: ActionImplementation {
             // Note: We don't rebind the result variable here to maintain immutability
             // The stored value (with auto-generated ID if applicable) is returned from execute()
 
-            // Emit repository change event(s) for observers
-            // If data is an array, emit one event per item
-            // Otherwise, emit a single event (backward compatible)
-            if let arrayData = storeResult.storedValue as? [any Sendable] {
-                // List storage: emit event for EACH item
-                for item in arrayData {
-                    // Try to extract entityId from item if it's a dictionary
-                    var itemId: String? = nil
-                    if let dict = item as? [String: Any] {
-                        if let id = dict["id"] as? String {
-                            itemId = id
-                        } else if let id = dict["id"] as? Int {
-                            itemId = String(id)
-                        }
-                    }
-
-                    // Use publishAndTrack to ensure runtime waits for observers to complete
-                    if let eventBus = context.eventBus {
-                        await eventBus.publishAndTrack(RepositoryChangedEvent(
-                            repositoryName: repoName,
-                            changeType: .created,
-                            entityId: itemId,
-                            newValue: item,
-                            oldValue: nil
-                        ))
-                    } else {
-                        context.emit(RepositoryChangedEvent(
-                            repositoryName: repoName,
-                            changeType: .created,
-                            entityId: itemId,
-                            newValue: item,
-                            oldValue: nil
-                        ))
+            // Emit repository change event(s) for observers - one per item stored
+            for item in itemsToStore {
+                // Try to extract entityId from item if it's a dictionary
+                var itemId: String? = nil
+                if let dict = item as? [String: Any] {
+                    if let id = dict["id"] as? String {
+                        itemId = id
+                    } else if let id = dict["id"] as? Int {
+                        itemId = String(id)
                     }
                 }
-            } else {
-                // Single value storage: emit one event (existing behavior)
-                let changeType: RepositoryChangeType = storeResult.isUpdate ? .updated : .created
 
                 // Use publishAndTrack to ensure runtime waits for observers to complete
                 if let eventBus = context.eventBus {
                     await eventBus.publishAndTrack(RepositoryChangedEvent(
                         repositoryName: repoName,
-                        changeType: changeType,
-                        entityId: storeResult.entityId,
-                        newValue: storeResult.storedValue,
-                        oldValue: storeResult.oldValue
+                        changeType: .created,
+                        entityId: itemId,
+                        newValue: item,
+                        oldValue: nil
                     ))
                 } else {
                     context.emit(RepositoryChangedEvent(
                         repositoryName: repoName,
-                        changeType: changeType,
-                        entityId: storeResult.entityId,
-                        newValue: storeResult.storedValue,
-                        oldValue: storeResult.oldValue
+                        changeType: .created,
+                        entityId: itemId,
+                        newValue: item,
+                        oldValue: nil
                     ))
                 }
             }

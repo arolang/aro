@@ -36,6 +36,10 @@ public final class EventBus: @unchecked Sendable {
     /// In-flight event handler counter
     private var inFlightHandlers: Int = 0
 
+    /// Active event sources (HTTP servers, file monitors, socket servers)
+    /// These are long-lived services that can generate events asynchronously
+    private var activeEventSources: Int = 0
+
     /// Continuations waiting for all handlers to complete
     private var flushContinuations: [CheckedContinuation<Void, Never>] = []
 
@@ -190,6 +194,24 @@ public final class EventBus: @unchecked Sendable {
     /// - Returns: The number of event handlers currently executing
     public func getPendingHandlerCount() -> Int {
         withLock { inFlightHandlers }
+    }
+
+    // MARK: - Active Event Sources
+
+    /// Register an active event source (e.g., HTTP server, file monitor, socket server)
+    /// Active event sources are long-lived services that can generate events asynchronously
+    public func registerEventSource() {
+        withLock { activeEventSources += 1 }
+    }
+
+    /// Unregister an active event source
+    public func unregisterEventSource() {
+        withLock { activeEventSources = max(0, activeEventSources - 1) }
+    }
+
+    /// Check if there are active event sources that can generate events
+    public var hasActiveEventSources: Bool {
+        withLock { activeEventSources > 0 }
     }
 
     // MARK: - Subscribing

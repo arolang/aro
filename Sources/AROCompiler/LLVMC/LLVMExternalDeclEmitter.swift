@@ -368,7 +368,7 @@ public final class LLVMExternalDeclEmitter {
     /// All action function names
     private static let actionNames: [String] = [
         // Request actions
-        "extract", "fetch", "retrieve", "parse", "read", "request", "receive",
+        "extract", "fetch", "retrieve", "parse", "parsehtml", "read", "request", "receive",
         // Own actions
         "compute", "validate", "compare", "transform", "create", "update", "accept",
         // Response actions
