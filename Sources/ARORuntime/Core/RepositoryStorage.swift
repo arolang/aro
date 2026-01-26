@@ -206,6 +206,19 @@ private actor RepositoryStorageActor {
             }
         }
 
+        // For simple values (strings, numbers), check for duplicates before appending
+        // This prevents the repository from growing with duplicate entries during parallel processing
+        if let stringValue = valueToStore as? String {
+            if storage[key]?.contains(where: { ($0 as? String) == stringValue }) == true {
+                // Already exists - treat as no-op (idempotent)
+                return RepositoryStoreResult(storedValue: valueToStore, oldValue: valueToStore, isUpdate: false, entityId: nil)
+            }
+        } else if let intValue = valueToStore as? Int {
+            if storage[key]?.contains(where: { ($0 as? Int) == intValue }) == true {
+                return RepositoryStoreResult(storedValue: valueToStore, oldValue: valueToStore, isUpdate: false, entityId: nil)
+            }
+        }
+
         // No matching entry found - append new value
         storage[key]?.append(valueToStore)
 

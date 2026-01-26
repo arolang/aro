@@ -151,7 +151,8 @@ private func executeAction(
     ctxHandle.context.unbind("_expression_")
     ctxHandle.context.unbind("_literal_")
 
-    // If action failed, store error in context for HTTP response handling
+    // If action failed, store error in context
+    // Error will be printed by the error block's aro_context_print_error call
     if !actionResult.succeeded, let errorMsg = actionResult.error {
         ctxHandle.context.setExecutionError(ActionError.runtimeError(errorMsg))
     }
@@ -219,6 +220,15 @@ public func aro_action_parse(
     _ objectPtr: UnsafeRawPointer?
 ) -> UnsafeMutableRawPointer? {
     return executeAction(verb: "parse", contextPtr: contextPtr, resultPtr: resultPtr, objectPtr: objectPtr)
+}
+
+@_cdecl("aro_action_parsehtml")
+public func aro_action_parsehtml(
+    _ contextPtr: UnsafeMutableRawPointer?,
+    _ resultPtr: UnsafeRawPointer?,
+    _ objectPtr: UnsafeRawPointer?
+) -> UnsafeMutableRawPointer? {
+    return executeAction(verb: "parsehtml", contextPtr: contextPtr, resultPtr: resultPtr, objectPtr: objectPtr)
 }
 
 @_cdecl("aro_action_read")
@@ -509,9 +519,34 @@ public func aro_action_keepalive(
     // Emit event
     ctxHandle.context.emit(WaitStateEnteredEvent())
 
-    // Use synchronous wait - this properly blocks the current thread
-    // until SIGINT/SIGTERM is received
-    ShutdownCoordinator.shared.waitForShutdownSync()
+    if EventBus.shared.hasActiveEventSources {
+        // Long-running service mode (HTTP server, file monitor, socket):
+        // wait for explicit shutdown signal only (SIGINT/SIGTERM)
+        ShutdownCoordinator.shared.waitForShutdownSync()
+    } else {
+        // Batch processor mode (crawler, etc.):
+        // monitor event bus for sustained idle state, then auto-exit
+        Thread.sleep(forTimeInterval: 0.5) // initial delay for events to start
+
+        var consecutiveIdleChecks = 0
+        let idleThreshold = 20 // 20 × 100ms = 2 seconds of idle
+
+        while !ShutdownCoordinator.shared.isShuttingDownNow {
+            // Process events via RunLoop
+            _ = RunLoop.current.run(mode: .default, before: Date(timeIntervalSinceNow: 0.1))
+
+            let pendingCount = EventBus.shared.getPendingHandlerCount()
+            if pendingCount == 0 {
+                consecutiveIdleChecks += 1
+                if consecutiveIdleChecks >= idleThreshold {
+                    ShutdownCoordinator.shared.signalShutdown()
+                    break
+                }
+            } else {
+                consecutiveIdleChecks = 0
+            }
+        }
+    }
 
     // Return result
     let waitResult = WaitResult(completed: true, reason: "shutdown")

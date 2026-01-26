@@ -110,6 +110,7 @@ public struct StartAction: ActionImplementation {
         // Try HTTP server service (interpreter mode with NIO)
         if let httpServerService = context.service(HTTPServerService.self) {
             try await httpServerService.start(port: port)
+            EventBus.shared.registerEventSource()
             return ServerStartResult(serverType: "http-server", success: true, port: port)
         }
 
@@ -121,6 +122,7 @@ public struct StartAction: ActionImplementation {
         let nativePort = (port == 8080) ? 0 : port
         let result = aro_native_http_server_start_with_openapi(Int32(nativePort), nil)
         if result == 0 {
+            EventBus.shared.registerEventSource()
             return ServerStartResult(serverType: "http-server", success: true, port: port)
         } else {
             throw ActionError.runtimeError("Failed to start HTTP server on port \(port)")
@@ -175,6 +177,7 @@ public struct StartAction: ActionImplementation {
         // Try using the SocketServerService (interpreter mode with NIO)
         if let socketService = context.service(SocketServerService.self) {
             try await socketService.start(port: port)
+            EventBus.shared.registerEventSource()
             return ServerStartResult(serverType: "socket-server", success: true, port: port)
         }
 
@@ -182,6 +185,7 @@ public struct StartAction: ActionImplementation {
         #if !os(Windows)
         let result = aro_native_socket_server_start(Int32(port))
         if result == 0 {
+            EventBus.shared.registerEventSource()
             return ServerStartResult(serverType: "socket-server", success: true, port: port)
         } else {
             throw ActionError.runtimeError("Failed to start socket server on port \(port)")
@@ -220,6 +224,7 @@ public struct StartAction: ActionImplementation {
 
         if let fileMonitorService = context.service(FileMonitorService.self) {
             try await fileMonitorService.watch(path: path)
+            EventBus.shared.registerEventSource()
             return ServerStartResult(serverType: "file-monitor", success: true, path: path)
         }
 
@@ -227,6 +232,7 @@ public struct StartAction: ActionImplementation {
         #if !os(Windows)
         let started = NativeFileWatcher.shared.startWatching(path: path)
         if started {
+            EventBus.shared.registerEventSource()
             return ServerStartResult(serverType: "file-monitor", success: true, path: path)
         }
         #endif
@@ -282,11 +288,13 @@ public struct StopAction: ActionImplementation {
     private func stopHTTPServer(context: ExecutionContext) async throws -> any Sendable {
         if let httpServerService = context.service(HTTPServerService.self) {
             try await httpServerService.stop()
+            EventBus.shared.unregisterEventSource()
             return ServerStopResult(serverType: "http-server", success: true)
         }
 
         #if !os(Windows)
         aro_native_http_server_stop()
+        EventBus.shared.unregisterEventSource()
         #endif
 
         return ServerStopResult(serverType: "http-server", success: true)
@@ -295,11 +303,13 @@ public struct StopAction: ActionImplementation {
     private func stopSocketServer(context: ExecutionContext) async throws -> any Sendable {
         if let socketService = context.service(SocketServerService.self) {
             try await socketService.stop()
+            EventBus.shared.unregisterEventSource()
             return ServerStopResult(serverType: "socket-server", success: true)
         }
 
         #if !os(Windows)
         aro_native_socket_server_stop()
+        EventBus.shared.unregisterEventSource()
         #endif
 
         return ServerStopResult(serverType: "socket-server", success: true)
@@ -308,6 +318,7 @@ public struct StopAction: ActionImplementation {
     private func stopFileMonitor() -> any Sendable {
         #if !os(Windows)
         NativeFileWatcher.shared.stopWatching()
+        EventBus.shared.unregisterEventSource()
         #endif
 
         return ServerStopResult(serverType: "file-monitor", success: true)
@@ -761,8 +772,50 @@ public struct WaitForEventsAction: ActionImplementation {
         // Emit event to signal we're waiting
         context.emit(WaitStateEnteredEvent())
 
-        // Block until shutdown is signaled via the global coordinator
-        await ShutdownCoordinator.shared.waitForShutdown()
+        // If there are active event sources (HTTP server, file monitor, socket server),
+        // only exit on explicit shutdown signal (SIGINT/SIGTERM).
+        // Otherwise, also monitor for idle state to auto-exit batch processors.
+        if EventBus.shared.hasActiveEventSources {
+            // Long-running service mode: wait for explicit shutdown only
+            await ShutdownCoordinator.shared.waitForShutdown()
+        } else {
+            // Batch processor mode: race between shutdown signal and idle detection
+            await withTaskGroup(of: Void.self) { group in
+                // Task 1: Wait for explicit shutdown (SIGINT/SIGTERM)
+                group.addTask {
+                    await ShutdownCoordinator.shared.waitForShutdown()
+                }
+
+                // Task 2: Monitor event bus for sustained idle state
+                group.addTask {
+                    let eventBus = EventBus.shared
+                    // Initial delay to allow events to start processing
+                    try? await Task.sleep(nanoseconds: 500_000_000) // 500ms
+
+                    var consecutiveIdleChecks = 0
+                    let idleThreshold = 20 // 20 × 100ms = 2 seconds of idle
+
+                    while !Task.isCancelled {
+                        try? await Task.sleep(nanoseconds: 100_000_000) // 100ms
+                        let pendingCount = eventBus.getPendingHandlerCount()
+                        if pendingCount == 0 {
+                            consecutiveIdleChecks += 1
+                            if consecutiveIdleChecks >= idleThreshold {
+                                // No events for 2 seconds - signal shutdown
+                                ShutdownCoordinator.shared.signalShutdown()
+                                return
+                            }
+                        } else {
+                            consecutiveIdleChecks = 0
+                        }
+                    }
+                }
+
+                // First task to complete wins
+                _ = await group.next()
+                group.cancelAll()
+            }
+        }
 
         return WaitResult(completed: true, reason: "shutdown")
     }

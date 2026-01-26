@@ -364,15 +364,26 @@ public final class FeatureSetExecutor: @unchecked Sendable {
 
             // Bind result to context (unless it's a response action that already set the response)
             // Also skip binding if the action already bound the result (to avoid double-binding)
-            if statement.action.semanticRole != .response && !context.exists(resultDescriptor.base) {
+            if statement.action.semanticRole != .response {
                 // Check if this is a rebinding action (accept, update, delete, merge, etc.)
+                // Also include REQUEST actions (retrieve, fetch, etc.) since they always get fresh data
+                // and should override parent context values (fixes event handler variable shadowing)
                 let rebindingVerbs: Set<String> = [
                     "accept", "update", "modify", "change", "set", "configure",
                     "delete", "remove", "destroy", "clear",
                     "merge", "combine", "join", "concat"
                 ]
-                let allowRebind = rebindingVerbs.contains(verb.lowercased())
-                context.bind(resultDescriptor.base, value: result, allowRebind: allowRebind)
+                let requestVerbs: Set<String> = [
+                    "retrieve", "fetch", "load", "find", "extract", "parse", "get",
+                    "request", "receive", "read"
+                ]
+                let allowRebind = rebindingVerbs.contains(verb.lowercased()) ||
+                                  requestVerbs.contains(verb.lowercased())
+
+                // Only bind if variable doesn't exist OR if this is a rebinding/request action
+                if allowRebind || !context.exists(resultDescriptor.base) {
+                    context.bind(resultDescriptor.base, value: result, allowRebind: allowRebind)
+                }
             }
         } catch let assertionError as AssertionError {
             // Re-throw assertion errors directly for test framework
@@ -959,9 +970,25 @@ public final class Runtime: @unchecked Sendable {
             // Re-set isRunning since run() resets it in defer block
             isRunning = true
 
-            // Keep running until stopped
+            // Keep running until stopped or all event processing is complete
+            // For non-server applications (crawlers, batch processors), exit when idle
+            var consecutiveIdleChecks = 0
+            let idleThreshold = 10 // 10 consecutive checks = 1 second of idle
             while isRunning {
                 try await Task.sleep(nanoseconds: 100_000_000) // 100ms
+
+                // Check if event bus is idle (no in-flight handlers)
+                let pendingCount = eventBus.getPendingHandlerCount()
+                if pendingCount == 0 {
+                    consecutiveIdleChecks += 1
+                    if consecutiveIdleChecks >= idleThreshold {
+                        // No events processed for 1 second - application is idle
+                        // Stop the loop (equivalent to graceful shutdown)
+                        break
+                    }
+                } else {
+                    consecutiveIdleChecks = 0
+                }
             }
         }
 
