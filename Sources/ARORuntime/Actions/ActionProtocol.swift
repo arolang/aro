@@ -95,4 +95,136 @@ public extension ActionImplementation {
     static func handles(verb: String) -> Bool {
         verbs.contains(verb.lowercased())
     }
+
+    // MARK: - Type-Safe Value Extraction
+
+    /// Resolve a typed value from context
+    /// - Parameters:
+    ///   - name: Variable name to resolve
+    ///   - context: The execution context
+    /// - Returns: The TypedValue if found, nil otherwise
+    func resolveTyped(_ name: String, from context: ExecutionContext) -> TypedValue? {
+        context.resolveTyped(name)
+    }
+
+    /// Require a string value, throwing on missing or type mismatch
+    /// - Parameters:
+    ///   - name: Variable name to resolve
+    ///   - context: The execution context
+    /// - Returns: The string value
+    /// - Throws: ActionError.undefinedVariable or ActionError.typeMismatch
+    func requireString(_ name: String, from context: ExecutionContext) throws -> String {
+        guard let typed = context.resolveTyped(name) else {
+            throw ActionError.undefinedVariable(name)
+        }
+        guard let str = typed.asString() else {
+            throw ActionError.typeMismatch(
+                expected: "String",
+                actual: typed.type.description,
+                variable: name
+            )
+        }
+        return str
+    }
+
+    /// Require an integer value, throwing on missing or type mismatch
+    /// - Parameters:
+    ///   - name: Variable name to resolve
+    ///   - context: The execution context
+    /// - Returns: The integer value
+    /// - Throws: ActionError.undefinedVariable or ActionError.typeMismatch
+    func requireInt(_ name: String, from context: ExecutionContext) throws -> Int {
+        guard let typed = context.resolveTyped(name) else {
+            throw ActionError.undefinedVariable(name)
+        }
+        guard let i = typed.asInt() else {
+            throw ActionError.typeMismatch(
+                expected: "Integer",
+                actual: typed.type.description,
+                variable: name
+            )
+        }
+        return i
+    }
+
+    /// Require a double/float value, throwing on missing or type mismatch
+    /// Also accepts Int and converts to Double
+    /// - Parameters:
+    ///   - name: Variable name to resolve
+    ///   - context: The execution context
+    /// - Returns: The double value
+    /// - Throws: ActionError.undefinedVariable or ActionError.typeMismatch
+    func requireDouble(_ name: String, from context: ExecutionContext) throws -> Double {
+        guard let typed = context.resolveTyped(name) else {
+            throw ActionError.undefinedVariable(name)
+        }
+        guard let d = typed.asDouble() else {
+            throw ActionError.typeMismatch(
+                expected: "Float",
+                actual: typed.type.description,
+                variable: name
+            )
+        }
+        return d
+    }
+
+    /// Require a boolean value, throwing on missing or type mismatch
+    /// - Parameters:
+    ///   - name: Variable name to resolve
+    ///   - context: The execution context
+    /// - Returns: The boolean value
+    /// - Throws: ActionError.undefinedVariable or ActionError.typeMismatch
+    func requireBool(_ name: String, from context: ExecutionContext) throws -> Bool {
+        guard let typed = context.resolveTyped(name) else {
+            throw ActionError.undefinedVariable(name)
+        }
+        guard let b = typed.asBool() else {
+            throw ActionError.typeMismatch(
+                expected: "Boolean",
+                actual: typed.type.description,
+                variable: name
+            )
+        }
+        return b
+    }
+
+    /// Require a list/array value, throwing on missing or type mismatch
+    /// - Parameters:
+    ///   - name: Variable name to resolve
+    ///   - context: The execution context
+    /// - Returns: The array value
+    /// - Throws: ActionError.undefinedVariable or ActionError.typeMismatch
+    func requireList(_ name: String, from context: ExecutionContext) throws -> [any Sendable] {
+        guard let typed = context.resolveTyped(name) else {
+            throw ActionError.undefinedVariable(name)
+        }
+        guard let arr = typed.asList() else {
+            throw ActionError.typeMismatch(
+                expected: "List",
+                actual: typed.type.description,
+                variable: name
+            )
+        }
+        return arr
+    }
+
+    /// Require a dictionary/map value, throwing on missing or type mismatch
+    /// - Parameters:
+    ///   - name: Variable name to resolve
+    ///   - context: The execution context
+    /// - Returns: The dictionary value
+    /// - Throws: ActionError.undefinedVariable or ActionError.typeMismatch
+    func requireDict(_ name: String, from context: ExecutionContext) throws -> [String: any Sendable] {
+        guard let typed = context.resolveTyped(name) else {
+            throw ActionError.undefinedVariable(name)
+        }
+        guard let dict = typed.asDict() else {
+            throw ActionError.typeMismatch(
+                expected: "Map",
+                actual: typed.type.description,
+                variable: name
+            )
+        }
+        return dict
+    }
 }

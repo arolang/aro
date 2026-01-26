@@ -1,0 +1,14 @@
+(* MetricsDemo - Demonstrates runtime metrics tracking (ARO-0044) *)
+
+(Application-Start: Metrics Demo) {
+    <Log> "=== Metrics Demo ===" to the <console>.
+
+    (* Log metrics in short format *)
+    (* Note: Application-Start is still running so it's not counted yet *)
+    <Log> the <metrics: short> to the <console>.
+
+    (* Log metrics in table format *)
+    <Log> the <metrics: table> to the <console>.
+
+    <Return> an <OK: status> for the <demo>.
+}

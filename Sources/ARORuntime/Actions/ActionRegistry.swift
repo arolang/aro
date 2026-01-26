@@ -71,7 +71,7 @@ public actor ActionRegistry {
         addAction(SplitAction.self)
         addAction(MergeAction.self)
         addAction(DeleteAction.self)
-        addAction(ParseHtmlAction.self)
+        addAction(ParseHtmlAction.self)  // Uses SwiftSoup (pure Swift, all platforms)
 
         // RESPONSE actions (Internal → External)
         addAction(ReturnAction.self)

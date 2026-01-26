@@ -14,6 +14,10 @@ The project must always be in sync. When there are conflicts or discrepancies, t
 
 When updating any layer, ensure all lower-priority layers are updated to match.
 
+## Platform Feature Table
+
+The **Platform Support** table in `README.md` lists feature availability for macOS, Linux, and Windows. When adding or modifying platform-specific features, always update this table to reflect current support status.
+
 ## Documentation Style
 
 - **Proposals** (`Proposals/`): Use ASCII art for diagrams
@@ -378,7 +382,7 @@ Proposals/              # 27 language specifications
 
 ## Language Proposals
 
-The `Proposals/` directory contains 27 specifications:
+The `Proposals/` directory contains 28 specifications:
 
 | Proposal | Topics |
 |----------|--------|
@@ -409,6 +413,7 @@ The `Proposals/` directory contains 27 specifications:
 | **0041 Date/Time Ranges** | Date arithmetic, ranges, recurrence patterns |
 | **0042 Set Operations** | intersect, difference, union on collections |
 | **0043 Sink Syntax** | Expressions in result position |
+| **0044 Runtime Metrics** | Execution counts, timing, Prometheus format |
 
 ## Concurrency
 

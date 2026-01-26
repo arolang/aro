@@ -4,6 +4,7 @@
 // ============================================================
 
 import Foundation
+import AROParser
 
 // MARK: - Response
 
@@ -156,6 +157,24 @@ public protocol ExecutionContext: AnyObject, Sendable {
     /// Get all variable names in scope
     var variableNames: Set<String> { get }
 
+    // MARK: - Type-Aware Variable Management
+
+    /// Resolve a variable returning the full TypedValue (type + value)
+    /// - Parameter name: The variable name to look up
+    /// - Returns: The TypedValue if found, nil otherwise
+    func resolveTyped(_ name: String) -> TypedValue?
+
+    /// Bind a typed value to a variable name
+    /// - Parameters:
+    ///   - name: The variable name
+    ///   - value: The TypedValue to bind
+    func bindTyped(_ name: String, value: TypedValue)
+
+    /// Get the type of a variable without retrieving its value
+    /// - Parameter name: The variable name to look up
+    /// - Returns: The DataType if the variable exists, nil otherwise
+    func typeOf(_ name: String) -> DataType?
+
     // MARK: - Service Access
 
     /// Get a registered service by type
@@ -265,4 +284,25 @@ public extension ExecutionContext {
 
     /// Default: not compiled (interpreter mode)
     var isCompiled: Bool { false }
+
+    // MARK: - Default Type-Aware Implementations
+
+    /// Default implementation: wrap resolved value with unknown type
+    func resolveTyped(_ name: String) -> TypedValue? {
+        guard let value = resolveAny(name) else { return nil }
+        // If it's already a TypedValue, return it
+        if let typed = value as? TypedValue { return typed }
+        // Otherwise wrap with inferred type
+        return TypedValue.infer(value)
+    }
+
+    /// Default implementation: unwrap and bind as regular value
+    func bindTyped(_ name: String, value: TypedValue) {
+        bind(name, value: value.value)
+    }
+
+    /// Default implementation: resolve and infer type
+    func typeOf(_ name: String) -> DataType? {
+        resolveTyped(name)?.type
+    }
 }

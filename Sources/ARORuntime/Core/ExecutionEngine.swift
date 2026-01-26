@@ -89,9 +89,8 @@ public actor ExecutionEngine {
         await services.registerAll(in: context)
 
         // Wire up event handlers for Socket Event Handler feature sets
-        #if !os(Windows)
+        // Socket events work on Windows via WindowsSocketServer (FlyingSocks)
         registerSocketEventHandlers(for: program, baseContext: context)
-        #endif
 
         // Wire up domain event handlers (e.g., "UserCreated Handler", "OrderPlaced Handler")
         registerDomainEventHandlers(for: program, baseContext: context)
@@ -137,8 +136,8 @@ public actor ExecutionEngine {
         }
     }
 
-    #if !os(Windows)
     /// Register socket event handlers for feature sets with "Socket Event Handler" business activity
+    /// Socket events work on all platforms via platform-specific implementations
     private func registerSocketEventHandlers(for program: AnalyzedProgram, baseContext: RuntimeContext) {
         // Find all feature sets with "Socket Event Handler" business activity
         let socketHandlers = program.featureSets.filter { analyzedFS in
@@ -242,7 +241,6 @@ public actor ExecutionEngine {
             ))
         }
     }
-    #endif
 
     /// Register domain event handlers for feature sets with "Handler" business activity pattern
     /// For example: "UserCreated Handler", "OrderPlaced Handler"

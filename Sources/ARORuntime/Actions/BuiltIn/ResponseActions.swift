@@ -358,13 +358,24 @@ public struct LogAction: ActionImplementation {
 
         // Get message to log
         // Priority:
-        //   1. Result expression (ARO-0043 sink syntax: <Log> "message" to the <console>)
-        //   2. With clause literal
-        //   3. With clause expression
-        //   4. Result variable
-        //   5. Fallback to result fullName
+        //   1. Metrics with format qualifier (ARO-0044)
+        //   2. Result expression (ARO-0043 sink syntax: <Log> "message" to the <console>)
+        //   3. With clause literal
+        //   4. With clause expression
+        //   5. Result variable
+        //   6. Fallback to result fullName
         let message: String
-        if let resultExpr = context.resolveAny("_result_expression_") {
+
+        // ARO-0044: Check for metrics magic variable with format qualifier
+        // <Log> the <metrics: plain/short/table/prometheus> to the <console>
+        if result.base == "metrics" {
+            if let metricsSnapshot = context.resolveAny("metrics") as? MetricsSnapshot {
+                let format = result.specifiers.first ?? "plain"
+                message = MetricsFormatter.format(metricsSnapshot, as: format, context: context.outputContext)
+            } else {
+                message = "No metrics available"
+            }
+        } else if let resultExpr = context.resolveAny("_result_expression_") {
             // ARO-0043: Message from sink syntax result expression
             message = ResponseFormatter.formatValue(resultExpr, for: context.outputContext)
         } else if let literal = context.resolveAny("_literal_") {

@@ -49,6 +49,7 @@
 33. **Context-Aware Responses** — Human, machine, and developer output formatting
 34. **Type System** — Primitives, collections, and OpenAPI schemas
 35. **Date and Time** — Temporal operations, comparisons, and formatting
+36. **Runtime Metrics** — Execution counts, timing, and Prometheus integration
 
 ## Appendices
 - A: Action Reference (all 50 built-in actions)
