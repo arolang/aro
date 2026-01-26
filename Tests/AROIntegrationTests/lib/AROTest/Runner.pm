@@ -131,7 +131,7 @@ sub run_test {
     my ($build_status, $build_message, $build_duration, $build_actual, $build_expected) =
         ('SKIP', 'Not tested', 0, '', '');
 
-    if ($run_status eq 'PASS') {
+    if ($run_status eq 'PASS' && !$hints->{'skip-build'}) {
         ($build_status, $build_message, $build_duration, $build_actual, $build_expected) =
             $self->_run_binary_phase($example_name, $dir, $type, $timeout, $expected);
     }
@@ -236,10 +236,10 @@ sub _run_interpreter_phase {
             return ('ERROR', "Cannot change to workdir: $workdir", 0, '', '');
         }
 
-        ($run_output, $run_error) = $executor->execute('.', $timeout);
+        ($run_output, $run_error) = $executor->execute('.', $timeout, $hints);
         chdir $orig_cwd;
     } else {
-        ($run_output, $run_error) = $executor->execute($dir, $timeout);
+        ($run_output, $run_error) = $executor->execute($dir, $timeout, $hints);
     }
 
     my $run_duration = time - $run_start;
@@ -266,7 +266,17 @@ sub _run_interpreter_phase {
         $expected_trimmed =~ s/^\s+|\s+$//g;
         $expected_trimmed =~ s/ +$//gm;
 
-        if (matches_pattern($output_trimmed, $expected_trimmed)) {
+        my $matched;
+        if ($hints && $hints->{'occurrence-check'}) {
+            # Occurrence-based matching: each expected line must appear somewhere
+            require AROTest::Comparison::Matching;
+            my ($success, $missing) = AROTest::Comparison::Matching::check_occurrences($output_trimmed, $expected_trimmed);
+            $matched = $success;
+        } else {
+            $matched = matches_pattern($output_trimmed, $expected_trimmed);
+        }
+
+        if ($matched) {
             $run_status = 'PASS';
             say "  Run phase: PASS" if $self->{config}->is_verbose;
         } else {

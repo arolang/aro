@@ -1,5 +1,7 @@
 # Test hints for FileWatcher
 # Fixed: Binary mode works for file watching
 mode: both
+# Compiled binary includes Application-End output; interpreter doesn't (uses run not runForever)
+occurrence-check: true
 # File watching has issues on Windows CI
 skip-on-windows: File watcher tests not supported on Windows CI
