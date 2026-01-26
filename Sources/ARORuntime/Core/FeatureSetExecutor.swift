@@ -69,6 +69,7 @@ public final class FeatureSetExecutor: @unchecked Sendable {
         // Emit start event
         eventBus.publish(FeatureSetStartedEvent(
             featureSetName: featureSet.name,
+            businessActivity: featureSet.businessActivity,
             executionId: context.executionId
         ))
 
@@ -118,6 +119,7 @@ public final class FeatureSetExecutor: @unchecked Sendable {
 
                 eventBus.publish(FeatureSetCompletedEvent(
                     featureSetName: featureSet.name,
+                    businessActivity: featureSet.businessActivity,
                     executionId: context.executionId,
                     success: true,
                     durationMs: duration
@@ -131,6 +133,7 @@ public final class FeatureSetExecutor: @unchecked Sendable {
 
             eventBus.publish(FeatureSetCompletedEvent(
                 featureSetName: featureSet.name,
+                businessActivity: featureSet.businessActivity,
                 executionId: context.executionId,
                 success: true,
                 durationMs: duration
@@ -143,6 +146,7 @@ public final class FeatureSetExecutor: @unchecked Sendable {
 
             eventBus.publish(FeatureSetCompletedEvent(
                 featureSetName: featureSet.name,
+                businessActivity: featureSet.businessActivity,
                 executionId: context.executionId,
                 success: false,
                 durationMs: duration
@@ -869,6 +873,9 @@ public final class Runtime: @unchecked Sendable {
                 }
             }
         }
+
+        // Start metrics collection
+        MetricsCollector.shared.start(eventBus: eventBus)
     }
 
     // MARK: - Service Registration

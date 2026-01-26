@@ -1,0 +1,8 @@
+# Generated: Mon Jan 26 07:51:36 2026
+# Type: console
+# Command: aro run ./Examples/MetricsDemo
+---
+=== Metrics Demo ===
+metrics: 0 executions, 0 featuresets, avg=0.0ms, uptime=0.0s
+No metrics collected yet.
+demo
