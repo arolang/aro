@@ -203,8 +203,7 @@ public final class ActionRunner: @unchecked Sendable {
         semaphore.wait()
 
         if let error = holder.error {
-            // Log error for debugging
-            print("[ActionRunner] Error executing \(verb): \(error)")
+            _ = error
             return nil
         }
 

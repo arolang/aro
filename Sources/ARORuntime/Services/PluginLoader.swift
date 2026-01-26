@@ -178,7 +178,6 @@ public final class PluginLoader: @unchecked Sendable {
             let pluginName = dylibFile.deletingPathExtension().lastPathComponent
             do {
                 try loadDylib(at: dylibFile, name: pluginName)
-                print("[PluginLoader] Loaded precompiled plugin: \(pluginName)")
             } catch {
                 print("[PluginLoader] Warning: Failed to load \(dylibFile.lastPathComponent): \(error)")
             }
@@ -224,7 +223,6 @@ public final class PluginLoader: @unchecked Sendable {
 
             do {
                 try compilePlugin(source: swiftFile, output: outputPath)
-                print("[PluginLoader] Compiled plugin: \(pluginName) -> plugins/\(outputPath.lastPathComponent)")
             } catch {
                 print("[PluginLoader] Warning: Failed to compile \(swiftFile.lastPathComponent): \(error)")
             }
@@ -242,7 +240,6 @@ public final class PluginLoader: @unchecked Sendable {
 
                     do {
                         try compilePackagePlugin(source: item, output: outputPath)
-                        print("[PluginLoader] Compiled package plugin: \(pluginName) -> plugins/\(outputPath.lastPathComponent)")
                     } catch {
                         print("[PluginLoader] Warning: Failed to compile package plugin \(pluginName): \(error)")
                     }
@@ -584,8 +581,6 @@ public final class PluginLoader: @unchecked Sendable {
 
     /// Compile a Swift plugin to a dynamic library
     private func compilePlugin(source: URL, output: URL) throws {
-        print("[PluginLoader] Compiling plugin: \(source.lastPathComponent)")
-
         let process = Process()
         #if os(Windows)
         // On Windows, swiftc is in PATH
@@ -627,8 +622,6 @@ public final class PluginLoader: @unchecked Sendable {
             let errorMessage = String(data: errorData, encoding: .utf8) ?? "Unknown error"
             throw PluginError.compilationFailed(source.lastPathComponent, message: errorMessage)
         }
-
-        print("[PluginLoader] Compiled: \(output.lastPathComponent)")
     }
 
     /// Load a Swift package plugin
@@ -676,7 +669,6 @@ public final class PluginLoader: @unchecked Sendable {
         }
 
         try loadDylib(at: dylibPath, name: pluginName)
-        print("[PluginLoader] Loaded package plugin: \(pluginName)")
     }
 
     /// Compile a Swift package plugin to a dynamic library
@@ -685,7 +677,6 @@ public final class PluginLoader: @unchecked Sendable {
     ///   - output: Output path for the compiled library
     private func compilePackagePlugin(source: URL, output: URL) throws {
         let pluginName = source.lastPathComponent
-        print("[PluginLoader] Building package plugin for distribution: \(pluginName)")
 
         // Build the package using swift build
         let process = Process()
@@ -785,7 +776,6 @@ public final class PluginLoader: @unchecked Sendable {
                 let wrapper = PluginServiceWrapper(name: name, loader: self)
                 try ExternalServiceRegistry.shared.register(wrapper, withName: name)
 
-                print("[PluginLoader] Loaded plugin service: \(name)")
                 return
             }
             throw PluginError.initFunctionNotFound(name)
@@ -829,7 +819,6 @@ public final class PluginLoader: @unchecked Sendable {
             let wrapper = PluginServiceWrapper(name: serviceName, loader: self)
             try ExternalServiceRegistry.shared.register(wrapper, withName: serviceName)
 
-            print("[PluginLoader] Registered plugin service: \(serviceName)")
         }
 
         // ARO-0043: Register system objects from plugin metadata
@@ -908,7 +897,6 @@ public final class PluginLoader: @unchecked Sendable {
                     )
                 }
 
-                print("[PluginLoader] Registered plugin system object: \(identifier)")
             }
         }
     }
@@ -970,7 +958,6 @@ public final class PluginLoader: @unchecked Sendable {
             #else
             dlclose(handle)
             #endif
-            print("[PluginLoader] Unloaded plugin: \(name)")
         }
         loadedPlugins.removeAll()
         pluginFunctions.removeAll()

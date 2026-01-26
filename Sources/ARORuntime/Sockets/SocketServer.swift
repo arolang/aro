@@ -246,12 +246,9 @@ public final class AROSocketServer: SocketServerService, @unchecked Sendable {
 
     /// Send data to a specific connection
     public func send(data: Data, to connectionId: String) async throws {
-        print("[AROSocketServer] send: looking for \(connectionId), instance: \(ObjectIdentifier(self)), total connections: \(connectionCount)")
         guard let channel = getConnection(connectionId) else {
-            print("[AROSocketServer] send FAILED: connection not found")
             throw SocketError.connectionNotFound(connectionId)
         }
-        print("[AROSocketServer] send: found channel, writing \(data.count) bytes")
 
         var buffer = channel.allocator.buffer(capacity: data.count)
         buffer.writeBytes(data)
@@ -290,9 +287,7 @@ public final class AROSocketServer: SocketServerService, @unchecked Sendable {
     private func addConnection(_ connectionId: String, channel: Channel) {
         lock.lock()
         connections[connectionId] = channel
-        let count = connections.count
         lock.unlock()
-        print("[AROSocketServer] addConnection: \(connectionId), total connections: \(count), instance: \(ObjectIdentifier(self))")
     }
 
     private func removeConnection(_ connectionId: String) {
@@ -344,12 +339,10 @@ private final class SocketHandler: ChannelInboundHandler, @unchecked Sendable {
         var buffer = unwrapInboundIn(data)
         guard let id = connectionId,
               let bytes = buffer.readBytes(length: buffer.readableBytes) else {
-            print("[SocketHandler] channelRead: no connectionId or bytes")
             return
         }
 
         let receivedData = Data(bytes)
-        print("[SocketHandler] channelRead: publishing DataReceivedEvent for \(id), \(receivedData.count) bytes, eventBus=\(ObjectIdentifier(eventBus))")
         eventBus.publish(DataReceivedEvent(connectionId: id, data: receivedData))
     }
 

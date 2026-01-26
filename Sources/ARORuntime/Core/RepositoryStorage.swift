@@ -235,10 +235,6 @@ private actor RepositoryStorageActor {
 
     func export(key: StorageKey, as name: String) {
         applicationScope[name] = key
-
-        #if DEBUG
-        print("[RepositoryStorage] Exported '\(key.repository)' as '\(name)'")
-        #endif
     }
 
     func exists(key: StorageKey) -> Bool {
@@ -247,10 +243,6 @@ private actor RepositoryStorageActor {
 
     func clear(key: StorageKey) {
         storage[key] = nil
-
-        #if DEBUG
-        print("[RepositoryStorage] Cleared '\(key.repository)'")
-        #endif
     }
 
     func resolveKey(repository: String, businessActivity: String) -> StorageKey {
@@ -293,10 +285,6 @@ private actor RepositoryStorageActor {
         }
 
         storage[key] = values
-
-        #if DEBUG
-        print("[RepositoryStorage] Deleted \(deletedItems.count) items from '\(key.repository)' where \(field) = \(matchValue)")
-        #endif
 
         return RepositoryDeleteResult(deletedItems: deletedItems)
     }
