@@ -1,0 +1,6 @@
+# Generated: Sun Jan 26 2026
+# Type: console
+# Command: aro run --keep-alive ./Examples/ApplicationEnd (+ SIGINT)
+---
+Application started successfully
+Graceful shutdown complete

@@ -11,8 +11,26 @@ import Testing
 
 // MARK: - Application-End Integration Tests
 
-@Suite("Application-End Handler Tests", .serialized, .disabled("Slow integration tests - each spawns swift run"))
+@Suite("Application-End Handler Tests", .serialized)
 struct ApplicationEndTests {
+
+    /// Find the pre-built aro binary in the build directory.
+    private func findAroBinary() throws -> URL {
+        var projectRoot = URL(fileURLWithPath: FileManager.default.currentDirectoryPath)
+        while !FileManager.default.fileExists(atPath: projectRoot.appendingPathComponent("Package.swift").path) {
+            let parent = projectRoot.deletingLastPathComponent()
+            if parent == projectRoot {
+                throw NSError(domain: "ApplicationEndTests", code: 1, userInfo: [NSLocalizedDescriptionKey: "Could not find project root"])
+            }
+            projectRoot = parent
+        }
+
+        let binaryPath = projectRoot.appendingPathComponent(".build/debug/aro")
+        guard FileManager.default.fileExists(atPath: binaryPath.path) else {
+            throw NSError(domain: "ApplicationEndTests", code: 2, userInfo: [NSLocalizedDescriptionKey: "aro binary not found at \(binaryPath.path). Run 'swift build' first."])
+        }
+        return binaryPath
+    }
 
     /// Helper to create a temporary ARO file and run it with --keep-alive,
     /// optionally sending SIGINT after a delay to trigger graceful shutdown.
@@ -20,6 +38,8 @@ struct ApplicationEndTests {
         _ aroCode: String,
         sendSIGINTAfter signalDelay: TimeInterval? = nil
     ) async throws -> (stdout: String, stderr: String, exitCode: Int32) {
+        let aroBinary = try findAroBinary()
+
         // Create temporary directory for test ARO file
         let tempDir = FileManager.default.temporaryDirectory
             .appendingPathComponent("ARO-ApplicationEndTests-\(UUID().uuidString)")
@@ -33,21 +53,10 @@ struct ApplicationEndTests {
         let aroFile = tempDir.appendingPathComponent("main.aro")
         try aroCode.write(to: aroFile, atomically: true, encoding: .utf8)
 
-        // Set up process
+        // Set up process using pre-built binary directly
         let process = Process()
-        process.executableURL = URL(fileURLWithPath: "/usr/bin/swift")
-        process.arguments = ["run", "aro", "run", "--keep-alive", tempDir.path]
-
-        // Find project root (look for Package.swift)
-        var projectRoot = URL(fileURLWithPath: FileManager.default.currentDirectoryPath)
-        while !FileManager.default.fileExists(atPath: projectRoot.appendingPathComponent("Package.swift").path) {
-            let parent = projectRoot.deletingLastPathComponent()
-            if parent == projectRoot {
-                throw NSError(domain: "ApplicationEndTests", code: 1, userInfo: [NSLocalizedDescriptionKey: "Could not find project root"])
-            }
-            projectRoot = parent
-        }
-        process.currentDirectoryURL = projectRoot
+        process.executableURL = aroBinary
+        process.arguments = ["run", "--keep-alive", tempDir.path]
 
         // Clear test environment variables to prevent TestWatchdog from initializing in subprocess
         var environment = ProcessInfo.processInfo.environment
@@ -99,8 +108,8 @@ struct ApplicationEndTests {
         }
         """
 
-        // Run with --keep-alive; send SIGINT after 2 seconds to trigger graceful shutdown
-        let result = try await runAROCodeKeepAlive(aroCode, sendSIGINTAfter: 2.0)
+        // Run with --keep-alive; send SIGINT after 1 second to trigger graceful shutdown
+        let result = try await runAROCodeKeepAlive(aroCode, sendSIGINTAfter: 1.0)
 
         let output = result.stdout + result.stderr
 

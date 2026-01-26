@@ -84,6 +84,12 @@ Supported directives:
 
 =item * C<occurrence-check> - Use occurrence-based matching
 
+=item * C<keep-alive> - Run with --keep-alive flag and send SIGINT for graceful shutdown
+
+=item * C<allow-error> - Allow non-zero exit codes (for tests that expect runtime errors)
+
+=item * C<skip-build> - Skip the native build phase
+
 =back
 
 Parameters:
@@ -112,6 +118,9 @@ sub read_test_hint {
         'pre-script' => undef,
         'test-script' => undef,
         'occurrence-check' => undef,
+        'keep-alive' => undef,
+        'allow-error' => undef,
+        'skip-build' => undef,
     );
 
     # Return empty hints if file doesn't exist (backward compatible)

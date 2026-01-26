@@ -1,0 +1,6 @@
+# Application-End handler integration test
+# Uses --keep-alive to trigger Application-End: Success on SIGINT
+keep-alive: true
+occurrence-check: true
+skip-build: true
+timeout: 10

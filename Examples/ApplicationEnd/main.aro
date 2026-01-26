@@ -1,0 +1,17 @@
+(* ApplicationEnd - Tests both Application-End handlers *)
+
+(Application-Start: Application End Demo) {
+    <Log> "Application started successfully" to the <console>.
+    <Return> an <OK: status> for the <startup>.
+}
+
+(Application-End: Success) {
+    <Log> "Graceful shutdown complete" to the <console>.
+    <Return> an <OK: status> for the <shutdown>.
+}
+
+(Application-End: Error) {
+    <Extract> the <error> from the <shutdown: error>.
+    <Log> "Error shutdown triggered" to the <console>.
+    <Return> an <OK: status> for the <error-handling>.
+}
