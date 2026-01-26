@@ -9,7 +9,6 @@ stages:
   - build
   - integration
   - documentation
-  - docker
   - release
   - mastodon
 
@@ -412,13 +411,10 @@ release:
 # Docker Stage - Build and Push Docker Images (using Kaniko + Crane)
 # =============================================================================
 docker:buildsystem:
-  stage: docker
+  stage: build
   image:
     name: gcr.io/kaniko-project/executor:v1.23.2-debug
     entrypoint: [""]
-  needs:
-    - job: build:linux
-      optional: true
   rules:
     - if: $CI_COMMIT_TAG
     - if: $CI_COMMIT_BRANCH == "main"
@@ -448,13 +444,10 @@ docker:buildsystem:
     - spencer
 
 docker:runtime:
-  stage: docker
+  stage: build
   image:
     name: gcr.io/kaniko-project/executor:v1.23.2-debug
     entrypoint: [""]
-  needs:
-    - job: build:linux
-      optional: true
   rules:
     - if: $CI_COMMIT_TAG
     - if: $CI_COMMIT_BRANCH == "main"
