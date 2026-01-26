@@ -225,6 +225,9 @@ sub read_test_hint {
         'pre-script' => undef,
         'test-script' => undef,
         'occurrence-check' => undef,
+        'keep-alive' => undef,
+        'allow-error' => undef,
+        'skip-build' => undef,
     );
 
     # Return empty hints if file doesn't exist (backward compatible)
@@ -419,7 +422,7 @@ sub build_example {
 # Run test with specified working directory
 # Handles chdir, executes appropriate test runner, restores original directory
 sub run_test_in_workdir {
-    my ($example_name, $workdir, $timeout, $type, $pre_script, $mode) = @_;
+    my ($example_name, $workdir, $timeout, $type, $pre_script, $mode, $hints) = @_;
     $mode //= 'interpreter';  # Default to interpreter mode
 
     my $orig_cwd = cwd();
@@ -471,7 +474,7 @@ sub run_test_in_workdir {
     # Pass $run_dir instead of $example_name to the internal functions
     # Pass $binary_name for compiled mode when using workdir
     if ($type eq 'console') {
-        ($output, $error) = run_console_example_internal($run_dir, $timeout, $mode, $binary_name);
+        ($output, $error) = run_console_example_internal($run_dir, $timeout, $mode, $binary_name, $hints);
     } elsif ($type eq 'http') {
         ($output, $error) = run_http_example_internal($run_dir, $timeout, $mode, $binary_name);
     } elsif ($type eq 'socket') {
@@ -733,8 +736,11 @@ sub run_console_example {
 
 # Run console example (internal with timeout parameter)
 sub run_console_example_internal {
-    my ($example_name, $timeout, $mode, $binary_name) = @_;
+    my ($example_name, $timeout, $mode, $binary_name, $hints) = @_;
     $mode //= 'interpreter';  # Default to interpreter mode
+
+    my $keep_alive = $hints && $hints->{'keep-alive'};
+    my $allow_error = $hints && $hints->{'allow-error'};
 
     # Handle '.' or absolute paths directly, otherwise prepend examples_dir
     my $dir;
@@ -765,6 +771,8 @@ sub run_console_example_internal {
         # Interpreter mode (default)
         my $aro_bin = find_aro_binary();
         @cmd = ($aro_bin, 'run', $dir);
+        # Add --keep-alive flag for long-running apps that need SIGINT shutdown
+        push @cmd, '--keep-alive' if $keep_alive;
     }
 
     # Use IPC::Run for better control
@@ -777,6 +785,13 @@ sub run_console_example_internal {
         return (undef, "Failed to start: $@");
     }
 
+    if ($keep_alive) {
+        # Wait for the application to start, then send SIGINT for graceful shutdown
+        sleep 1;
+        say "  Sending SIGINT for graceful shutdown" if $options{verbose};
+        eval { $handle->signal('INT'); };
+    }
+
     eval {
         finish($handle);
     };
@@ -786,7 +801,7 @@ sub run_console_example_internal {
             kill_kill($handle);
             return (undef, "TIMEOUT after ${timeout}s");
         }
-        return (undef, "ERROR: $@");
+        return (undef, "ERROR: $@") unless $allow_error;
     }
 
     # Combine stdout and stderr
@@ -1412,7 +1427,8 @@ sub run_single_mode_test {
         $timeout,
         $type,
         $hints->{'pre-script'},
-        $mode
+        $mode,
+        $hints
     );
 
     my $duration = time - $start_time;
@@ -1712,8 +1728,14 @@ sub run_test {
     }
 
     # Run compiled test
+    # Skip build if hint says so (e.g., keep-alive tests that don't support compiled mode)
+    if ($hints->{'skip-build'} && ($mode eq 'compiled' || $mode eq 'both')) {
+        $result->{compiled_status} = 'SKIP';
+        $result->{compiled_message} = 'Skipped by skip-build hint';
+        $result->{compiled_duration} = 0;
+        $result->{build_duration} = 0;
     # Note: Native compilation (aro build) is not supported on Windows yet
-    if ($is_windows && ($mode eq 'compiled' || $mode eq 'both')) {
+    } elsif ($is_windows && ($mode eq 'compiled' || $mode eq 'both')) {
         $result->{compiled_status} = 'SKIP';
         $result->{compiled_message} = 'Native compilation not supported on Windows';
         $result->{compiled_duration} = 0;
@@ -1757,8 +1779,8 @@ sub run_test {
 
     if (grep { $_ eq 'FAIL' || $_ eq 'ERROR' } @statuses) {
         $result->{status} = 'FAIL';
-    } elsif ($is_windows && $result->{compiled_status} eq 'SKIP' && $result->{interpreter_status} eq 'PASS') {
-        # On Windows, if interpreter passes but compiled is skipped (not supported), overall is PASS
+    } elsif ($result->{compiled_status} eq 'SKIP' && $result->{interpreter_status} eq 'PASS') {
+        # If interpreter passes but compiled is skipped (Windows, skip-build, etc.), overall is PASS
         $result->{status} = 'PASS';
     } elsif (grep { $_ eq 'SKIP' } @statuses) {
         $result->{status} = 'SKIP';
