@@ -382,7 +382,7 @@ Proposals/              # 27 language specifications
 
 ## Language Proposals
 
-The `Proposals/` directory contains 27 specifications:
+The `Proposals/` directory contains 28 specifications:
 
 | Proposal | Topics |
 |----------|--------|
@@ -413,6 +413,7 @@ The `Proposals/` directory contains 27 specifications:
 | **0041 Date/Time Ranges** | Date arithmetic, ranges, recurrence patterns |
 | **0042 Set Operations** | intersect, difference, union on collections |
 | **0043 Sink Syntax** | Expressions in result position |
+| **0044 Runtime Metrics** | Execution counts, timing, Prometheus format |
 
 ## Concurrency
 
