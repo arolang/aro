@@ -846,15 +846,17 @@ public final class KeepaliveSignalHandler: @unchecked Sendable {
 
         signal(SIGINT) { _ in
             ShutdownCoordinator.shared.signalShutdown()
-            // Exit after a brief delay to allow cleanup
-            DispatchQueue.global().asyncAfter(deadline: .now() + 0.5) {
+            // Safety exit: gives Application-End handlers time to run
+            DispatchQueue.global().asyncAfter(deadline: .now() + 5.0) {
+                fflush(stdout)
                 exit(0)
             }
         }
 
         signal(SIGTERM) { _ in
             ShutdownCoordinator.shared.signalShutdown()
-            DispatchQueue.global().asyncAfter(deadline: .now() + 0.5) {
+            DispatchQueue.global().asyncAfter(deadline: .now() + 5.0) {
+                fflush(stdout)
                 exit(0)
             }
         }

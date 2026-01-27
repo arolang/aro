@@ -222,6 +222,7 @@ sub read_test_hint {
         skip => undef,
         'skip-on-windows' => undef,
         'skip-on-linux' => undef,
+        'skip-on-macos' => undef,
         'pre-script' => undef,
         'test-script' => undef,
         'occurrence-check' => undef,
@@ -1694,6 +1695,24 @@ sub run_test {
         };
     }
 
+    # Handle macOS-specific skip
+    if ($is_macos && defined $hints->{'skip-on-macos'}) {
+        return {
+            name => $example_name,
+            type => 'UNKNOWN',
+            interpreter_status => 'SKIP',
+            compiled_status => 'SKIP',
+            interpreter_message => "Skipped on macOS: $hints->{'skip-on-macos'}",
+            compiled_message => "Skipped on macOS: $hints->{'skip-on-macos'}",
+            interpreter_duration => 0,
+            compiled_duration => 0,
+            build_duration => 0,
+            avg_duration => 0,
+            status => 'SKIP',
+            duration => 0,
+        };
+    }
+
     # Determine test mode
     my $mode = $hints->{mode} // 'both';
     my $type = $hints->{type} || detect_example_type($example_name);
@@ -1819,6 +1838,12 @@ sub generate_expected {
     # Skip on Linux if requested
     if ($is_linux && defined $hints->{'skip-on-linux'}) {
         say "Skipping $example_name on Linux: $hints->{'skip-on-linux'}";
+        return;
+    }
+
+    # Skip on macOS if requested
+    if ($is_macos && defined $hints->{'skip-on-macos'}) {
+        say "Skipping $example_name on macOS: $hints->{'skip-on-macos'}";
         return;
     }
 
