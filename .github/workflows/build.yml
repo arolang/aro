@@ -372,10 +372,26 @@ jobs:
       - name: Sign Binary
         if: github.ref_type == 'tag'
         run: |
-          # Sign the binary
+          # Create entitlements that allow loading third-party libraries
+          # (e.g. Homebrew's llvm@20). Without this, the hardened runtime
+          # rejects dylibs signed by a different Team ID.
+          cat > /tmp/aro-entitlements.plist << 'PLIST'
+          <?xml version="1.0" encoding="UTF-8"?>
+          <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN"
+            "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+          <plist version="1.0">
+          <dict>
+            <key>com.apple.security.cs.disable-library-validation</key>
+            <true/>
+          </dict>
+          </plist>
+          PLIST
+
+          # Sign the binary with entitlements
           codesign --sign "Developer ID Application" \
             --timestamp \
             --options runtime \
+            --entitlements /tmp/aro-entitlements.plist \
             --verbose \
             .build/release/aro
 
