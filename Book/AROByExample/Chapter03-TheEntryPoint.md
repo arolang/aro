@@ -9,8 +9,8 @@
 - The `Application-Start` feature set
 - Reading environment variables
 - Creating directories at runtime
-- Initializing application state
-- Keeping the application alive for events
+- Emitting events to start processing
+- The `Application-End` shutdown handler
 - The complete `main.aro` file
 
 ---
@@ -103,7 +103,7 @@ You should see both log messages, with the URL in the second one.
 
 `<Create>` makes a new value—here, a string path. `<Make>` creates a directory at that path. The `<directory: ...>` specifier tells ARO what kind of thing we are making.
 
-**Step 4: Initialize the crawled URLs set**
+**Step 4: Emit the first crawl event**
 
 ```aro
 (Application-Start: Web Crawler) {
@@ -116,67 +116,18 @@ You should see both log messages, with the URL in the second one.
     <Make> the <output-dir> to the <directory: output-path>.
     <Log> "Output directory created" to the <console>.
 
-    (* Initialize empty crawled URLs set *)
-    <Create> the <crawled-urls> with [].
-    <Store> the <crawled-urls> into the <crawled-repository>.
+    (* Queue initial URL for crawling *)
+    <Emit> a <QueueUrl: event> with { url: <start-url>, base: <start-url> }.
 
     <Return> an <OK: status> for the <startup>.
 }
 ```
 
-We create an empty list `[]` and store it in a **repository**. Repositories are named storage locations that persist across feature set executions. We will use `crawled-repository` to track which URLs we have already visited.
+`<Emit>` sends an event to the event bus. The event type is `QueueUrl`, and it carries data: the URL to crawl and the base domain for filtering. Event data uses object syntax: `{ key: <value>, ... }`.
 
-**Step 5: Emit the first crawl event**
+Why `QueueUrl` instead of `CrawlPage`? We want every URL -- including the very first one -- to go through the same deduplication logic. The `QueueUrl` handler checks whether a URL has already been visited before triggering `CrawlPage`. This way, the entry point does not need to know about deduplication at all.
 
-```aro
-(Application-Start: Web Crawler) {
-    <Log> "Starting Web Crawler..." to the <console>.
-
-    <Extract> the <start-url> from the <env: CRAWL_URL>.
-    <Log> "Starting URL: ${<start-url>}" to the <console>.
-
-    <Create> the <output-path> with "./output".
-    <Make> the <output-dir> to the <directory: output-path>.
-    <Log> "Output directory created" to the <console>.
-
-    <Create> the <crawled-urls> with [].
-    <Store> the <crawled-urls> into the <crawled-repository>.
-
-    (* Start crawling *)
-    <Emit> a <CrawlPage: event> with { url: <start-url>, base: <start-url> }.
-
-    <Return> an <OK: status> for the <startup>.
-}
-```
-
-`<Emit>` sends an event to the event bus. The event type is `CrawlPage`, and it carries data: the URL to crawl and the base domain for filtering. Event data uses object syntax: `{ key: <value>, ... }`.
-
-**Step 6: Keep the application alive**
-
-```aro
-(Application-Start: Web Crawler) {
-    <Log> "Starting Web Crawler..." to the <console>.
-
-    <Extract> the <start-url> from the <env: CRAWL_URL>.
-    <Log> "Starting URL: ${<start-url>}" to the <console>.
-
-    <Create> the <output-path> with "./output".
-    <Make> the <output-dir> to the <directory: output-path>.
-    <Log> "Output directory created" to the <console>.
-
-    <Create> the <crawled-urls> with [].
-    <Store> the <crawled-urls> into the <crawled-repository>.
-
-    <Emit> a <CrawlPage: event> with { url: <start-url>, base: <start-url> }.
-
-    (* Keep application alive to process events *)
-    <Keepalive> the <application> for the <events>.
-
-    <Return> an <OK: status> for the <startup>.
-}
-```
-
-Without `<Keepalive>`, the application would emit the event and immediately exit. `<Keepalive>` blocks execution, allowing the event loop to process events. The application continues until you press Ctrl+C or all events are processed.
+Notice that we do not need a `<Keepalive>` action here. The `<Emit>` action blocks until the entire event chain completes. When `QueueUrl` triggers `CrawlPage`, which in turn discovers more URLs and emits more `QueueUrl` events, the original `<Emit>` waits for all of them to finish. This makes `<Keepalive>` unnecessary for batch applications. It is only needed for servers or daemons that wait for external events.
 
 ---
 
@@ -186,12 +137,12 @@ Optionally, we can add a handler that runs when the application shuts down:
 
 ```aro
 (Application-End: Success) {
-    <Log> "Web Crawler completed!" to the <console>.
+    <Log> "🥁 Web Crawler completed!" to the <console>.
     <Return> an <OK: status> for the <shutdown>.
 }
 ```
 
-This runs when the application exits normally (not on crashes).
+`Application-End: Success` runs automatically when `Application-Start` completes normally. For our crawler, this means it fires after the `<Emit>` finishes and all crawled pages have been processed. There is no need to send a signal or press Ctrl+C -- the application shuts down on its own once the work is done.
 
 ---
 
@@ -219,21 +170,14 @@ Here is the complete entry point file:
     <Make> the <output-dir> to the <directory: output-path>.
     <Log> "Output directory created" to the <console>.
 
-    (* Initialize empty crawled URLs set *)
-    <Create> the <crawled-urls> with [].
-    <Store> the <crawled-urls> into the <crawled-repository>.
-
-    (* Start crawling *)
-    <Emit> a <CrawlPage: event> with { url: <start-url>, base: <start-url> }.
-
-    (* Keep application alive to process events *)
-    <Keepalive> the <application> for the <events>.
+    (* Queue initial URL - Emit blocks until the entire crawl chain completes *)
+    <Emit> a <QueueUrl: event> with { url: <start-url>, base: <start-url> }.
 
     <Return> an <OK: status> for the <startup>.
 }
 
 (Application-End: Success) {
-    <Log> "Web Crawler completed!" to the <console>.
+    <Log> "🥁 Web Crawler completed!" to the <console>.
     <Return> an <OK: status> for the <shutdown>.
 }
 ```
@@ -242,9 +186,9 @@ Here is the complete entry point file:
 
 ## 3.6 What ARO Does Well Here
 
-**Clean Lifecycle.** Application-Start and Application-End clearly mark the application boundaries. The lifecycle is explicit and easy to understand.
+**Clean Lifecycle.** Application-Start and Application-End clearly mark the application boundaries. `Application-End` triggers automatically when `Application-Start` completes, so the lifecycle is self-contained with no manual shutdown logic required.
 
-**Simple State Initialization.** Creating a repository takes two lines. No database setup, no connection strings. Repositories are in-memory by default, which is perfect for our use case.
+**Blocking Emit.** The `<Emit>` action blocks until the entire event chain finishes. This means a batch application naturally exits when its work is done, without needing explicit keepalive or shutdown coordination.
 
 **Event Emission.** The `<Emit>` syntax is clean and the event data structure is readable. We can see exactly what data flows to the next handler.
 
@@ -263,10 +207,8 @@ Here is the complete entry point file:
 - `Application-Start` is the entry point; exactly one must exist
 - `<Extract> ... from the <env: VAR>` reads environment variables
 - `<Create>` makes values; `<Make>` creates filesystem objects
-- `<Store>` persists data to named repositories
-- `<Emit>` sends events to trigger other feature sets
-- `<Keepalive>` keeps the application running for event processing
-- `Application-End: Success` handles graceful shutdown
+- `<Emit>` sends events to trigger other feature sets and blocks until the chain completes
+- `Application-End: Success` runs automatically when `Application-Start` completes normally
 
 ---
 

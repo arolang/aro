@@ -488,8 +488,9 @@ public struct StoreAction: ActionImplementation {
                 )
             }
 
-            // Note: We don't rebind the result variable here to maintain immutability
-            // The stored value (with auto-generated ID if applicable) is returned from execute()
+            // Bind new-entry for atomic store-and-check patterns (e.g., parallel for each + repository dedup)
+            // Value is 1 if newly created, 0 if duplicate/update - enables `when <new-entry> > 0` guards
+            context.bind("new-entry", value: storeResult.isUpdate ? 0 : 1, allowRebind: true)
 
             // Emit repository change event(s) for observers
             // If data is an array, emit one event per item

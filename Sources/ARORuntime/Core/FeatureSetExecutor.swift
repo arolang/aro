@@ -924,7 +924,20 @@ public final class Runtime: @unchecked Sendable {
             isRunning = false
         }
 
-        return try await engine.execute(program, entryPoint: entryPoint)
+        // Store the program for Application-End execution
+        currentProgram = program
+
+        do {
+            let response = try await engine.execute(program, entryPoint: entryPoint)
+            // Execute Application-End: Success handler
+            await executeApplicationEnd(isError: false)
+            return response
+        } catch {
+            // Execute Application-End: Error handler
+            shutdownError = error
+            await executeApplicationEnd(isError: true)
+            throw error
+        }
     }
 
     /// Run and keep alive (for servers)

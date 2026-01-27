@@ -90,6 +90,28 @@ Repositories use **list-based storage**. Each store operation appends to the lis
 (* Repository: [user1, user2, user3] *)
 ```
 
+### Atomic Deduplication with `new-entry`
+
+When `<Store>` is called, the runtime automatically deduplicates plain values (strings, numbers, booleans). If the value already exists in the repository, it is not appended again. After each store, the runtime binds a variable called `new-entry` to the execution context:
+
+- `new-entry = 1` — The value was newly stored (did not exist before)
+- `new-entry = 0` — The value already existed (duplicate, not stored again)
+
+This enables atomic check-and-store patterns using `when` guards:
+
+```aro
+(* Atomic dedup: Store checks and binds new-entry in one operation *)
+<Store> the <url> into the <crawled-repository>.
+
+(* Only proceed if the URL was new *)
+<Log> "Processing: ${<url>}" to the <console> when <new-entry> > 0.
+<Emit> a <ProcessUrl: event> with { url: <url> } when <new-entry> > 0.
+```
+
+Because repository operations are serialized by the runtime's Actor model, this pattern is **race-condition-free** even under `parallel for each`. Multiple concurrent callers storing the same value will each get a consistent `new-entry` result—only the first caller sees `1`, all subsequent callers see `0`.
+
+This is particularly useful for deduplication in event-driven pipelines where multiple sources may emit the same value concurrently.
+
 ### Example: Storing Messages
 
 ```aro

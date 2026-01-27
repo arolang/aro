@@ -221,6 +221,15 @@ public func aro_action_parse(
     return executeAction(verb: "parse", contextPtr: contextPtr, resultPtr: resultPtr, objectPtr: objectPtr)
 }
 
+@_cdecl("aro_action_parsehtml")
+public func aro_action_parsehtml(
+    _ contextPtr: UnsafeMutableRawPointer?,
+    _ resultPtr: UnsafeRawPointer?,
+    _ objectPtr: UnsafeRawPointer?
+) -> UnsafeMutableRawPointer? {
+    return executeAction(verb: "parsehtml", contextPtr: contextPtr, resultPtr: resultPtr, objectPtr: objectPtr)
+}
+
 @_cdecl("aro_action_read")
 public func aro_action_read(
     _ contextPtr: UnsafeMutableRawPointer?,

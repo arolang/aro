@@ -16,11 +16,11 @@
 
 ## 12.1 The Complete Picture
 
-We have built four files with seven handlers:
+We have built four files with eight handlers:
 
 | File | Handler | Triggered By | Emits |
 |------|---------|--------------|-------|
-| `main.aro` | Application-Start | Application launch | CrawlPage |
+| `main.aro` | Application-Start | Application launch | QueueUrl |
 | `main.aro` | Application-End: Success | Graceful shutdown | — |
 | `crawler.aro` | Crawl Page | CrawlPage | SavePage, ExtractLinks |
 | `links.aro` | Extract Links | ExtractLinks | NormalizeUrl |
@@ -39,38 +39,35 @@ When you run the crawler with a URL, here is what happens:
 1. Application-Start
    ├── Reads CRAWL_URL from environment
    ├── Creates output directory
-   ├── Initializes empty crawled-urls repository
-   ├── Emits CrawlPage with starting URL
-   └── Enters Keepalive mode
+   ├── Emits QueueUrl with starting URL
+   └── Emit blocks until the entire event chain completes
 
-2. CrawlPage Handler (for starting URL)
-   ├── Checks if URL already crawled (no)
-   ├── Marks URL as crawled
+2. QueueUrl Handler (per URL)
+   ├── Stores URL atomically in crawled-repository
+   └── Emits CrawlPage if new-entry = 1 (first time seen)
+
+3. CrawlPage Handler
    ├── Fetches page via HTTP
    ├── Parses HTML to Markdown
-   ├── Emits SavePage (async)
-   └── Emits ExtractLinks (async)
+   ├── Emits SavePage
+   └── Emits ExtractLinks
 
-3. SavePage Handler
+4. SavePage Handler
    ├── Computes URL hash
    ├── Formats content with metadata
    └── Writes file to output/
 
-4. ExtractLinks Handler
+5. ExtractLinks Handler
    ├── Parses HTML for links
    └── Emits NormalizeUrl for each link (parallel)
 
-5. NormalizeUrl Handler (per link)
+6. NormalizeUrl Handler (per link)
    ├── Classifies URL type
    ├── Converts to absolute URL
    └── Emits FilterUrl (or skips)
 
-6. FilterUrl Handler (per URL)
+7. FilterUrl Handler (per URL)
    └── Emits QueueUrl if URL matches base domain
-
-7. QueueUrl Handler (per URL)
-   ├── Checks if URL already crawled
-   └── Emits CrawlPage if new
 
 8. Loop continues until no new URLs
 ```
@@ -110,24 +107,17 @@ Running against a documentation site might produce:
 Starting Web Crawler...
 Starting URL: https://example.com
 Output directory created
-CrawlPage handler triggered
-Extracted URL: https://example.com
+Queued: https://example.com
 Crawling: https://example.com
-Fetched HTML length: 12847
-ExtractLinks handler triggered
-Found 23 links
 Saving: https://example.com to ./output/5d41402a.md
-Queuing: https://example.com/docs
 Queued: https://example.com/docs
-Queuing: https://example.com/about
 Queued: https://example.com/about
-CrawlPage handler triggered
-Extracted URL: https://example.com/docs
 Crawling: https://example.com/docs
 ...
+[Application-End] Web Crawler completed!
 ```
 
-The crawler continues until all discovered pages are processed. Press Ctrl+C to stop early.
+The crawler continues until all discovered pages are processed and then terminates automatically.
 
 ---
 
@@ -202,9 +192,8 @@ Try a different site or check your network connection.
 
 Here are all four files for reference:
 
-**main.aro** (36 lines)
+**main.aro** (13 lines)
 ```aro
-(* Application entry point *)
 (Application-Start: Web Crawler) {
     <Log> "Starting Web Crawler..." to the <console>.
     <Extract> the <start-url> from the <env: CRAWL_URL>.
@@ -212,10 +201,7 @@ Here are all four files for reference:
     <Create> the <output-path> with "./output".
     <Make> the <output-dir> to the <directory: output-path>.
     <Log> "Output directory created" to the <console>.
-    <Create> the <crawled-urls> with [].
-    <Store> the <crawled-urls> into the <crawled-repository>.
-    <Emit> a <CrawlPage: event> with { url: <start-url>, base: <start-url> }.
-    <Keepalive> the <application> for the <events>.
+    <Emit> a <QueueUrl: event> with { url: <start-url>, base: <start-url> }.
     <Return> an <OK: status> for the <startup>.
 }
 
@@ -225,13 +211,13 @@ Here are all four files for reference:
 }
 ```
 
-**crawler.aro** (54 lines) — See Chapter 5
+**crawler.aro** (14 lines) — See Chapter 5
 
 **links.aro** (93 lines) — See Chapter 8
 
 **storage.aro** (28 lines) — See Chapter 9
 
-Total: **211 lines** of ARO code for a complete, concurrent web crawler.
+Total: **148 lines** of ARO code for a complete, concurrent web crawler.
 
 ---
 
@@ -239,7 +225,7 @@ Total: **211 lines** of ARO code for a complete, concurrent web crawler.
 
 **Compositional Design.** Each handler is small and focused. Together, they form a sophisticated application. The event-driven architecture makes composition natural.
 
-**Minimal Boilerplate.** 211 lines does a lot: HTTP requests, HTML parsing, parallel processing, file I/O, and deduplication. No imports, no configuration files, no build setup.
+**Minimal Boilerplate.** 148 lines does a lot: HTTP requests, HTML parsing, parallel processing, file I/O, and deduplication. No imports, no configuration files, no build setup.
 
 **Readable Flow.** You can trace the flow by reading the code. Events connect the pieces explicitly. There is no hidden control flow.
 
@@ -257,7 +243,7 @@ Total: **211 lines** of ARO code for a complete, concurrent web crawler.
 
 ## Chapter Recap
 
-- Four files, seven handlers, 211 lines of code
+- Four files, eight handlers, 148 lines of code
 - Events create a self-sustaining crawl loop
 - Each handler has a single responsibility
 - Running is simple: set CRAWL_URL and run
