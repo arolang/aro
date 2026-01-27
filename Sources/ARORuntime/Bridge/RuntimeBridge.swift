@@ -285,12 +285,22 @@ public func aro_runtime_register_handler(
         eventType: eventTypeStr,
         handlerName: "compiled_handler"
     ) { @Sendable event in
-        // CRITICAL: Run compiled handler on a GCD thread, NOT on Swift's cooperative executor.
-        // Compiled handlers call aro_action_* functions which use semaphore.wait() internally.
-        // If these block executor threads, we get deadlock on Linux where the executor has limited threads.
-        // By dispatching to GCD (which has many threads), we ensure blocking doesn't starve the executor.
+        // CRITICAL: Run compiled handler on a pthread (Foundation Thread), NOT on GCD.
+        // Compiled handlers call aro_action_* functions which use semaphore.wait() internally,
+        // blocking the thread. GCD has a soft thread limit of 64 — recursive event chains
+        // (emit -> handler -> emit -> ...) exhaust this limit because each level blocks a
+        // GCD thread. Using pthreads avoids the GCD limit entirely; the gate still bounds
+        // concurrent active execution to 4 * CPU count.
         await withCheckedContinuation { (continuation: CheckedContinuation<Void, Never>) in
-            DispatchQueue.global(qos: .userInitiated).async {
+            let pool = CompiledExecutionPool.shared
+            Thread {
+                pool.gate.wait()
+                pool.threadHoldsSlot = true
+                defer {
+                    pool.threadHoldsSlot = false
+                    pool.gate.signal()
+                }
+
                 // Create a context for the handler
                 let contextHandle = AROCContextHandle(runtime: runtimeHandle, featureSetName: "handler")
 
@@ -327,7 +337,7 @@ public func aro_runtime_register_handler(
 
                 // Resume the async continuation
                 continuation.resume()
-            }
+            }.start()
         }
     }
 }
@@ -358,10 +368,19 @@ public func aro_register_repository_observer(
     runtimeHandle.runtime.eventBus.subscribe(to: RepositoryChangedEvent.self) { event in
         guard event.repositoryName == repositoryName else { return }
 
-        // CRITICAL: Run compiled observer on a GCD thread, NOT on Swift's cooperative executor.
-        // Same reasoning as aro_runtime_register_handler - avoid deadlock from semaphore blocking.
+        // CRITICAL: Run compiled observer on a pthread (Foundation Thread), NOT on GCD.
+        // Same reasoning as aro_runtime_register_handler — pthreads avoid GCD's 64-thread
+        // soft limit which is easily exhausted by recursive event chains.
         await withCheckedContinuation { (continuation: CheckedContinuation<Void, Never>) in
-            DispatchQueue.global(qos: .userInitiated).async {
+            let pool = CompiledExecutionPool.shared
+            Thread {
+                pool.gate.wait()
+                pool.threadHoldsSlot = true
+                defer {
+                    pool.threadHoldsSlot = false
+                    pool.gate.signal()
+                }
+
                 // Create event context with event data
                 let contextHandle = AROCContextHandle(
                     runtime: runtimeHandle,
@@ -412,7 +431,7 @@ public func aro_register_repository_observer(
 
                 // Resume the async continuation
                 continuation.resume()
-            }
+            }.start()
         }
     }
 }
@@ -1894,9 +1913,6 @@ public func aro_parallel_for_each_execute(
         return -1
     }
 
-    // Determine concurrency limit
-    let maxConcurrency = concurrency > 0 ? Int(concurrency) : ProcessInfo.processInfo.activeProcessorCount
-
     // Convert pointers to Int addresses for concurrent capture
     let ctxAddress = Int(bitPattern: ctxPtr)
     let bodyFnAddress = Int(bitPattern: bodyFn)
@@ -1930,10 +1946,31 @@ public func aro_parallel_for_each_execute(
 
     let errorBox = ErrorBox()
 
-    // Use DispatchQueue for reliable parallel execution in compiled binaries
-    let queue = DispatchQueue(label: "aro.parallel.foreach", attributes: .concurrent)
+    // Use the global execution pool to prevent GCD thread pool exhaustion.
+    // Each iteration may block its thread via semaphore.wait() when calling
+    // aro_action_* functions. The global gate limits total concurrent compiled
+    // code to 4 * CPU count, and the yield pattern in executeSyncWithResult
+    // releases slots while blocked, allowing other work to proceed.
+    //
+    // The localLimit caps in-flight iterations (dispatched + blocked) to prevent
+    // GCD thread exhaustion. Recursive event chains (emit -> handler -> emit -> ...)
+    // create blocked GCD threads at each level. With branching factor B and depth D,
+    // total threads grow as ~B^D. A small localLimit (2) keeps this manageable:
+    // depth 5 ≈ 375 threads, well within GCD's ~512 limit.
+    // Unlike the gate, localLimit is only released when an iteration COMPLETES,
+    // not when it yields — this bounds total GCD threads per loop.
+    let pool = CompiledExecutionPool.shared
+    let localLimit = DispatchSemaphore(value: 2)
     let group = DispatchGroup()
-    let semaphore = DispatchSemaphore(value: maxConcurrency)
+
+    // Yield our gate slot for the duration of the parallel-for-each.
+    // The calling thread just dispatches work and waits — it doesn't need
+    // a gate slot. Freeing it allows iterations and handlers to use it.
+    let hadSlot = pool.threadHoldsSlot
+    if hadSlot {
+        pool.gate.signal()
+        pool.threadHoldsSlot = false
+    }
 
     for (index, item) in items.enumerated() {
         // Reconstruct context pointer
@@ -1959,15 +1996,22 @@ public func aro_parallel_for_each_execute(
         let childAddress = Int(bitPattern: childPtr)
         let itemAddress = Int(bitPattern: itemPtr)
 
-        // Wait for available concurrency slot
-        semaphore.wait()
+        // Local limit caps total in-flight iterations to prevent thread explosion
+        localLimit.wait()
+        // Global gate bounds concurrent compiled code execution
+        pool.gate.wait()
 
-        // Dispatch work
+        // Dispatch work on a pthread (Foundation Thread) to avoid GCD's 64-thread limit.
+        // Each iteration may block its thread via semaphore.wait() when calling
+        // aro_action_* functions; pthreads don't count against GCD's dispatch limit.
         group.enter()
-        queue.async {
+        Thread {
+            pool.threadHoldsSlot = true
             defer {
+                pool.threadHoldsSlot = false
+                pool.gate.signal()
+                localLimit.signal()
                 group.leave()
-                semaphore.signal()
             }
 
             // Reconstruct pointers
@@ -1989,11 +2033,17 @@ public func aro_parallel_for_each_execute(
             }
             Unmanaged<AROCValue>.fromOpaque(itemValue).release()
             aro_context_destroy(childCtx)
-        }
+        }.start()
     }
 
-    // Wait for all work to complete
+    // Wait for all iterations to complete
     group.wait()
+
+    // Re-acquire gate slot if we had one before the loop
+    if hadSlot {
+        pool.gate.wait()
+        pool.threadHoldsSlot = true
+    }
 
     // Check for errors
     if let error = errorBox.getError() {

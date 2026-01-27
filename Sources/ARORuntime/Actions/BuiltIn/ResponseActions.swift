@@ -484,8 +484,9 @@ public struct StoreAction: ActionImplementation {
             // Store each item individually
             let storage = context.service(RepositoryStorageService.self) ?? InMemoryRepositoryStorage.shared
 
+            var lastStoreResult: RepositoryStoreResult?
             for item in itemsToStore {
-                _ = await storage.storeWithChangeInfo(
+                lastStoreResult = await storage.storeWithChangeInfo(
                     value: item,
                     in: repoName,
                     businessActivity: context.businessActivity
@@ -494,7 +495,9 @@ public struct StoreAction: ActionImplementation {
 
             // Bind new-entry for atomic store-and-check patterns (e.g., parallel for each + repository dedup)
             // Value is 1 if newly created, 0 if duplicate/update - enables `when <new-entry> > 0` guards
-            context.bind("new-entry", value: storeResult.isUpdate ? 0 : 1, allowRebind: true)
+            if let storeResult = lastStoreResult {
+                context.bind("new-entry", value: storeResult.isUpdate ? 0 : 1, allowRebind: true)
+            }
 
             // Emit repository change event(s) for observers - one per item stored
             for item in itemsToStore {

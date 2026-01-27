@@ -216,12 +216,12 @@ private actor RepositoryStorageActor {
         // This prevents the repository from growing with duplicate entries during parallel processing
         if let stringValue = valueToStore as? String {
             if storage[key]?.contains(where: { ($0 as? String) == stringValue }) == true {
-                // Already exists - treat as no-op (idempotent)
-                return RepositoryStoreResult(storedValue: valueToStore, oldValue: valueToStore, isUpdate: false, entityId: nil)
+                // Already exists - treat as duplicate (isUpdate: true means not a new entry)
+                return RepositoryStoreResult(storedValue: valueToStore, oldValue: valueToStore, isUpdate: true, entityId: nil)
             }
         } else if let intValue = valueToStore as? Int {
             if storage[key]?.contains(where: { ($0 as? Int) == intValue }) == true {
-                return RepositoryStoreResult(storedValue: valueToStore, oldValue: valueToStore, isUpdate: false, entityId: nil)
+                return RepositoryStoreResult(storedValue: valueToStore, oldValue: valueToStore, isUpdate: true, entityId: nil)
             }
         }
 

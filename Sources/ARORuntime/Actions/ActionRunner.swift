@@ -200,7 +200,22 @@ public final class ActionRunner: @unchecked Sendable {
             semaphore.signal()
         }
 
+        // Yield pattern: release our execution pool slot while blocked so other
+        // compiled code can run. Re-acquire after the action completes.
+        // This prevents deadlock from cascading event chains.
+        let pool = CompiledExecutionPool.shared
+        let hadSlot = pool.threadHoldsSlot
+        if hadSlot {
+            pool.gate.signal()
+            pool.threadHoldsSlot = false
+        }
+
         semaphore.wait()
+
+        if hadSlot {
+            pool.gate.wait()
+            pool.threadHoldsSlot = true
+        }
 
         if let error = holder.error {
             _ = error
@@ -225,6 +240,39 @@ public final class ActionRunner: @unchecked Sendable {
     /// - Returns: The canonical form of the verb
     public func getCanonicalVerb(_ verb: String) -> String {
         return Self.canonicalizeVerb(verb)
+    }
+}
+
+// MARK: - Compiled Execution Pool
+
+/// Bounds concurrent compiled code execution to prevent GCD thread pool exhaustion.
+///
+/// Compiled handlers block GCD threads via semaphore.wait(). Without limits,
+/// cascading event chains (emit -> handler -> emit -> ...) create unbounded
+/// blocked threads. The pool gates execution to `4 * CPU count` slots, and
+/// the yield pattern in executeSync/executeSyncWithResult releases slots
+/// while blocked on async actions, allowing other work to proceed.
+public final class CompiledExecutionPool: @unchecked Sendable {
+    public static let shared = CompiledExecutionPool()
+
+    /// Gate limiting concurrent compiled code executions
+    public let gate: DispatchSemaphore
+
+    /// Serial queue for handler submission — only 1 thread waits on the gate at a time,
+    /// preventing GCD thread explosion when many events fire simultaneously
+    public let submitQueue = DispatchQueue(label: "aro.compiled.submit")
+
+    /// Thread-local key for slot ownership
+    private static let holdsSlotKey = "aro.compiled.holdsSlot"
+
+    private init() {
+        gate = DispatchSemaphore(value: 4 * ProcessInfo.processInfo.activeProcessorCount)
+    }
+
+    /// Whether the current thread holds a global execution slot
+    public var threadHoldsSlot: Bool {
+        get { Thread.current.threadDictionary[Self.holdsSlotKey] as? Bool ?? false }
+        set { Thread.current.threadDictionary[Self.holdsSlotKey] = newValue }
     }
 }
 
@@ -299,7 +347,23 @@ extension ActionRunner {
             semaphore.signal()
         }
 
+        // Yield pattern: release our execution pool slot while blocked so other
+        // compiled code can run. Re-acquire after the action completes.
+        // This prevents deadlock from cascading event chains.
+        let pool = CompiledExecutionPool.shared
+        let hadSlot = pool.threadHoldsSlot
+        if hadSlot {
+            pool.gate.signal()
+            pool.threadHoldsSlot = false
+        }
+
         semaphore.wait()
+
+        if hadSlot {
+            pool.gate.wait()
+            pool.threadHoldsSlot = true
+        }
+
         return holder.result
     }
 }
