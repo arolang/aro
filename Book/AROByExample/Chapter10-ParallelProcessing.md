@@ -59,18 +59,16 @@ Change the `for each` to `parallel for each` in `links.aro`:
 
 ```aro
 (Extract Links: ExtractLinks Handler) {
-    <Log> "ExtractLinks handler triggered" to the <console>.
-
+    (* Extract from event data structure *)
     <Extract> the <event-data> from the <event: data>.
     <Extract> the <html> from the <event-data: html>.
     <Extract> the <source-url> from the <event-data: url>.
     <Extract> the <base-domain> from the <event-data: base>.
 
+    (* Use ParseHtml action to extract all href attributes from anchor tags *)
     <ParseHtml> the <links: links> from the <html>.
-    <Compute> the <link-count: count> from the <links>.
-    <Log> "Found ${<link-count>} links" to the <console>.
 
-    (* Process each extracted link using parallel for *)
+    (* Process links in parallel - repository Actor ensures atomic dedup *)
     parallel for each <raw-url> in <links> {
         <Emit> a <NormalizeUrl: event> with {
             raw: <raw-url>,
@@ -144,7 +142,7 @@ Parallel processing is powerful but has considerations:
 
 **Non-Deterministic Order.** With parallel execution, you cannot predict which task finishes first. Log output may appear in any order.
 
-**Shared State.** If parallel tasks access shared state, you need to be careful about race conditions. Our crawler's repository operations are safe because ARO handles the synchronization.
+**Shared State.** If parallel tasks access shared state, you need to be careful about race conditions. Our crawler's repository operations are safe because the repository Actor serializes concurrent access, and the `<Store>` action's `new-entry` binding provides atomic check-and-store, ensuring race-safe deduplication even under `parallel for each`.
 
 ---
 

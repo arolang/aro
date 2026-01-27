@@ -185,6 +185,12 @@ private actor RepositoryStorageActor {
             } else {
                 entityId = dict["id"] as? String
             }
+        } else {
+            // Plain value (string, int, bool, etc.) - deduplicate
+            // The Actor serializes all store calls, making this check atomic
+            if let existing = storage[key], existing.contains(where: { isEqual($0, value) }) {
+                return RepositoryStoreResult(storedValue: value, oldValue: value, isUpdate: true, entityId: nil)
+            }
         }
 
         // Check if value has an "id" field - if so, try to update existing entry by id

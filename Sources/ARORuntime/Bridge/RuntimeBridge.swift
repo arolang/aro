@@ -1199,6 +1199,12 @@ private func evaluateBinaryOp(op: String, left: any Sendable, right: any Sendabl
         // Fallback to string comparison (works for ISO 8601 dates)
         return asString(left) >= asString(right)
 
+    // String containment
+    case "contains":
+        let leftStr = asString(left)
+        let rightStr = asString(right)
+        return leftStr.contains(rightStr)
+
     // Logical
     case "and":
         return asBool(left) && asBool(right)

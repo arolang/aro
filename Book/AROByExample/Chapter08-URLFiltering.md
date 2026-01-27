@@ -94,14 +94,13 @@ Now add the conditional emit:
     <Extract> the <base-domain> from the <event-data: base>.
 
     (* Filter URLs that belong to the same domain as base-domain *)
-    <Log> "Queuing: ${<url>}" to the <console> when <url> contains <base-domain>.
     <Emit> a <QueueUrl: event> with { url: <url>, base: <base-domain> } when <url> contains <base-domain>.
 
     <Return> an <OK: status> for the <filter>.
 }
 ```
 
-Both the log and the emit have `when <url> contains <base-domain>` guards. If the URL contains the base domain, both execute. If not, both are skipped.
+The emit has a `when <url> contains <base-domain>` guard. If the URL contains the base domain, the event is emitted. If not, the statement is skipped and the handler simply returns.
 
 For example, if `base-domain` is `https://example.com`:
 
@@ -155,23 +154,26 @@ The final handler in the link pipeline queues URLs for crawling. Add to `links.a
     <Extract> the <url> from the <event-data: url>.
     <Extract> the <base-domain> from the <event-data: base>.
 
-    (* Check if already crawled *)
-    <Retrieve> the <crawled-urls> from the <crawled-repository>.
-    <Create> the <single-url-list> with [<url>].
-    <Compute> the <uncrawled-urls: difference> from <single-url-list> with <crawled-urls>.
-    <Compute> the <uncrawled-count: count> from <uncrawled-urls>.
+    (* Atomic store - the repository Actor serializes concurrent access,
+       so only the first caller for a given URL gets is-new-entry = 1 *)
+    <Store> the <url> into the <crawled-repository>.
 
-    (* Only queue if not already crawled *)
-    <Log> "Queued: ${<url>}" to the <console> when <uncrawled-count> > 0.
-    <Emit> a <CrawlPage: event> with { url: <url>, base: <base-domain> } when <uncrawled-count> > 0.
+    (* Only emit CrawlPage if this URL was newly stored *)
+    <Log> "Queued: ${<url>}" to the <console> when <new-entry> > 0.
+    <Emit> a <CrawlPage: event> with { url: <url>, base: <base-domain> } when <new-entry> > 0.
 
     <Return> an <OK: status> for the <queue>.
 }
 ```
 
-This handler performs a final deduplication check. Even though the crawl handler also checks, URLs can arrive here from multiple sources. The double-check ensures no duplicates.
+This handler uses **atomic deduplication**. The `<Store>` action stores the URL into the repository and binds `new-entry` to the execution context:
 
-The `when <uncrawled-count> > 0` guard only emits if the URL has not been crawled.
+- `new-entry = 1` — The URL was newly stored (first time seen)
+- `new-entry = 0` — The URL already existed (duplicate)
+
+The repository Actor serializes all concurrent `<Store>` calls, so even when multiple `parallel for each` iterations emit `QueueUrl` events for the same URL simultaneously, only the first caller gets `new-entry = 1`. All subsequent callers get `new-entry = 0`, regardless of timing. This eliminates race conditions entirely.
+
+The `when <new-entry> > 0` guard ensures that only genuinely new URLs trigger a crawl.
 
 ---
 
@@ -187,8 +189,6 @@ We now have four handlers in `links.aro`. Here is the complete file:
    ============================================================ *)
 
 (Extract Links: ExtractLinks Handler) {
-    <Log> "ExtractLinks handler triggered" to the <console>.
-
     (* Extract from event data structure *)
     <Extract> the <event-data> from the <event: data>.
     <Extract> the <html> from the <event-data: html>.
@@ -197,11 +197,9 @@ We now have four handlers in `links.aro`. Here is the complete file:
 
     (* Use ParseHtml action to extract all href attributes from anchor tags *)
     <ParseHtml> the <links: links> from the <html>.
-    <Compute> the <link-count: count> from the <links>.
-    <Log> "Found ${<link-count>} links" to the <console>.
 
-    (* Process each extracted link using for each *)
-    for each <raw-url> in <links> {
+    (* Process links in parallel - repository Actor ensures atomic dedup *)
+    parallel for each <raw-url> in <links> {
         <Emit> a <NormalizeUrl: event> with {
             raw: <raw-url>,
             source: <source-url>,
@@ -222,17 +220,25 @@ We now have four handlers in `links.aro`. Here is the complete file:
     (* Determine URL type and normalize *)
     match <raw-url> {
         case /^https?:\/\// {
-            (* Already absolute URL *)
-            <Emit> a <FilterUrl: event> with { url: <raw-url>, base: <base-domain> }.
+            (* Already absolute URL - strip fragment and trailing slash *)
+            <Split> the <frag-parts> from the <raw-url> by /#/.
+            <Extract> the <no-fragment: first> from the <frag-parts>.
+            <Split> the <slash-parts> from the <no-fragment> by /\/+$/.
+            <Extract> the <clean-url: first> from the <slash-parts>.
+            <Emit> a <FilterUrl: event> with { url: <clean-url>, base: <base-domain> }.
         }
         case /^\/$/ {
-            (* Just "/" means root - use base domain as-is *)
+            (* Just "/" means root - use base domain as-is (no trailing slash) *)
             <Emit> a <FilterUrl: event> with { url: <base-domain>, base: <base-domain> }.
         }
         case /^\// {
-            (* Root-relative URL: prepend base domain *)
-            <Create> the <absolute-url> with "${<base-domain>}${<raw-url>}".
-            <Emit> a <FilterUrl: event> with { url: <absolute-url>, base: <base-domain> }.
+            (* Root-relative URL: prepend base domain, strip fragment and trailing slash *)
+            <Create> the <joined-url> with "${<base-domain>}${<raw-url>}".
+            <Split> the <frag-parts> from the <joined-url> by /#/.
+            <Extract> the <no-fragment: first> from the <frag-parts>.
+            <Split> the <slash-parts> from the <no-fragment> by /\/+$/.
+            <Extract> the <clean-url: first> from the <slash-parts>.
+            <Emit> a <FilterUrl: event> with { url: <clean-url>, base: <base-domain> }.
         }
         case /^(#|mailto:|javascript:|tel:|data:)/ {
             (* Skip fragments and special URLs *)
@@ -249,7 +255,6 @@ We now have four handlers in `links.aro`. Here is the complete file:
     <Extract> the <base-domain> from the <event-data: base>.
 
     (* Filter URLs that belong to the same domain as base-domain *)
-    <Log> "Queuing: ${<url>}" to the <console> when <url> contains <base-domain>.
     <Emit> a <QueueUrl: event> with { url: <url>, base: <base-domain> } when <url> contains <base-domain>.
 
     <Return> an <OK: status> for the <filter>.
@@ -261,15 +266,13 @@ We now have four handlers in `links.aro`. Here is the complete file:
     <Extract> the <url> from the <event-data: url>.
     <Extract> the <base-domain> from the <event-data: base>.
 
-    (* Check if already crawled *)
-    <Retrieve> the <crawled-urls> from the <crawled-repository>.
-    <Create> the <single-url-list> with [<url>].
-    <Compute> the <uncrawled-urls: difference> from <single-url-list> with <crawled-urls>.
-    <Compute> the <uncrawled-count: count> from <uncrawled-urls>.
+    (* Atomic store - the repository Actor serializes concurrent access,
+       so only the first caller for a given URL gets is-new-entry = 1 *)
+    <Store> the <url> into the <crawled-repository>.
 
-    (* Only queue if not already crawled *)
-    <Log> "Queued: ${<url>}" to the <console> when <uncrawled-count> > 0.
-    <Emit> a <CrawlPage: event> with { url: <url>, base: <base-domain> } when <uncrawled-count> > 0.
+    (* Only emit CrawlPage if this URL was newly stored *)
+    <Log> "Queued: ${<url>}" to the <console> when <new-entry> > 0.
+    <Emit> a <CrawlPage: event> with { url: <url>, base: <base-domain> } when <new-entry> > 0.
 
     <Return> an <OK: status> for the <queue>.
 }
@@ -284,6 +287,8 @@ We now have four handlers in `links.aro`. Here is the complete file:
 **Flexible Conditions.** Guards work with containment, comparison, and equality. You can express most filtering logic.
 
 **No Boilerplate.** No if/else blocks, no boolean variables, no nested conditionals. The guard is part of the action.
+
+**Atomic Deduplication.** The `<Store>` action with `new-entry` binding provides race-safe deduplication in a single statement. No need for retrieve-check-store sequences.
 
 ---
 
@@ -300,7 +305,7 @@ We now have four handlers in `links.aro`. Here is the complete file:
 - `when` guards make actions conditional
 - `<url> contains <base-domain>` checks for substring match
 - Filtered URLs simply do not emit events—no explicit discard
-- The queue handler performs a final deduplication check
+- The queue handler uses atomic `<Store>` with `new-entry` binding for race-safe deduplication
 - Our link pipeline is complete: Extract → Normalize → Filter → Queue
 
 ---

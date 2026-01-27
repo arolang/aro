@@ -30,8 +30,6 @@ This appendix provides a quick reference for all actions used in the web crawler
 **Examples:**
 ```aro
 <Create> the <output-path> with "./output".
-<Create> the <crawled-urls> with [].
-<Create> the <single-url-list> with [<url>].
 <Create> the <absolute-url> with "${<base>}${<path>}".
 ```
 
@@ -85,6 +83,25 @@ This appendix provides a quick reference for all actions used in the web crawler
 
 ---
 
+### String Splitting
+
+| Action | Syntax | Description |
+|--------|--------|-------------|
+| Split | `<Split> the <result> from the <string> by /regex/.` | Split string by regex pattern |
+
+**Examples:**
+```aro
+(* Split by fragment hash to strip URL fragments *)
+<Split> the <parts> from the <url> by /#/.
+<Extract> the <clean: first> from the <parts>.
+
+(* Split by trailing slashes to normalize URLs *)
+<Split> the <parts> from the <url> by /\/+$/.
+<Extract> the <clean: first> from the <parts>.
+```
+
+---
+
 ### File System
 
 | Action | Syntax | Description |
@@ -111,6 +128,16 @@ This appendix provides a quick reference for all actions used in the web crawler
 ```aro
 <Store> the <crawled-urls> into the <crawled-repository>.
 <Retrieve> the <crawled-urls> from the <crawled-repository>.
+```
+
+When storing plain values (not collections), `<Store>` also binds `new-entry` to the execution context:
+- `new-entry = 1` — Value was newly stored
+- `new-entry = 0` — Value already existed (duplicate)
+
+This enables atomic deduplication:
+```aro
+<Store> the <url> into the <crawled-repository>.
+<Emit> a <CrawlPage: event> with { url: <url> } when <new-entry> > 0.
 ```
 
 ---
@@ -146,8 +173,10 @@ This appendix provides a quick reference for all actions used in the web crawler
 
 | Action | Syntax | Description |
 |--------|--------|-------------|
-| Keepalive | `<Keepalive> the <application> for the <events>.` | Keep app running |
+| Keepalive | `<Keepalive> the <application> for the <events>.` | Keep app running for external events (servers only) |
 | Return | `<Return> an <OK: status> for the <context>.` | Return success |
+
+**Note:** Batch applications do not need `<Keepalive>` because `<Emit>` blocks until all downstream handlers complete. Only use `<Keepalive>` for applications that must stay alive to receive external events (e.g., HTTP servers, file watchers).
 
 ---
 
@@ -272,6 +301,9 @@ Escape sequences:
 
     (* HTML parsing *)
     <ParseHtml> the <result: specifier> from the <html>.
+
+    (* String splitting *)
+    <Split> the <parts> from the <string> by /regex/.
 
     (* File I/O *)
     <Make> the <dir> to the <directory: path>.

@@ -38,19 +38,19 @@ The startup feature set must return a status to indicate whether initialization 
 
 ## 9.3 The Keepalive Action
 
-For applications that need to continue running after startup to process ongoing events, the Keepalive action is essential. Without it, the runtime executes the startup feature set, reaches the return statement, and terminates the application. This is fine for batch applications that do their work during startup, but servers and daemons need to stay running.
+For applications that need to continue running after startup to process ongoing events indefinitely, the Keepalive action keeps the process alive. Without it, the runtime executes the startup feature set, reaches the return statement, and proceeds to the shutdown phase. This is correct for batch applications that do their work during startup (including those that emit events—`<Emit>` blocks until all downstream handlers complete), but servers and daemons need to stay running to accept new external events.
 
 The Keepalive action blocks execution at the point where it appears. It allows the event loop to continue processing events—HTTP requests, file system changes, socket messages, timer events, and custom events—while the startup feature set waits. The application remains active, handling events as they arrive.
 
 When the application receives a shutdown signal, either from the user pressing Ctrl+C (SIGINT) or from the operating system sending SIGTERM, the Keepalive action returns. Execution resumes from where it left off, and any statements after the Keepalive execute. Then the return statement completes the startup feature set, which triggers the shutdown phase.
 
-Applications that do not use Keepalive execute their startup statements and immediately terminate. This is appropriate for command-line tools that perform a specific task and exit, data processing scripts that run to completion, or any application where continued execution is not needed. The absence of Keepalive does not indicate an error—it simply indicates that the application has no ongoing work to do.
+Applications that do not use Keepalive execute their startup statements and then proceed to shutdown. This is appropriate for command-line tools that perform a specific task and exit, event-driven batch applications where `<Emit>` blocks until all work completes, data processing scripts that run to completion, or any application where continued execution is not needed. The absence of Keepalive does not indicate an error—it simply indicates that the application has no ongoing external events to wait for.
 
 ---
 
 ## 9.4 Application-End: Success
 
-The success shutdown handler runs when the application terminates normally. This means the user sent a shutdown signal, the application called for shutdown programmatically, or any other clean termination occurred. It is an opportunity to perform cleanup that should happen on every normal exit.
+The success shutdown handler runs when the application terminates normally. This includes when the Application-Start feature set completes and returns, when the user sends a shutdown signal (Ctrl+C or SIGTERM), or when the application calls for shutdown programmatically. It is an opportunity to perform cleanup or final logging on every normal exit.
 
 The handler is optional. If you do not define one, the application terminates without any cleanup phase. For simple applications that do not hold external resources, this is fine. For applications with database connections, open files, or other resources that should be closed properly, defining a success handler is important.
 
@@ -104,7 +104,7 @@ Designing for startup resilience involves validating assumptions early. If your 
 
 ## 9.8 Best Practices
 
-Always use Keepalive for server applications. If your application starts an HTTP server, file watcher, socket listener, or any other service that should run continuously, the Keepalive action is necessary to prevent immediate termination after startup.
+Use Keepalive for server applications. If your application starts an HTTP server, file watcher, socket listener, or any other service that should run continuously and accept external events, the Keepalive action is necessary to keep the process alive. Batch applications that emit events and wait for their completion do not need Keepalive—`<Emit>` blocks until all downstream handlers finish.
 
 Define both shutdown handlers for production applications. The success handler ensures clean shutdown during normal operation. The error handler ensures that error conditions are logged and resources are released even when things go wrong.
 
