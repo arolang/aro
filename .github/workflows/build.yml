@@ -1094,10 +1094,14 @@ jobs:
           tar -czvf ../aro-macos-arm64.tar.gz aro
           cd ../..
 
-          # Windows
-          cd artifacts/aro-windows-amd64
-          zip ../aro-windows-amd64.zip aro.exe
-          cd ../..
+          # Windows (optional — only if the build was enabled)
+          if [ -d "artifacts/aro-windows-amd64" ]; then
+            cd artifacts/aro-windows-amd64
+            zip ../aro-windows-amd64.zip aro.exe
+            cd ../..
+          else
+            echo "Windows artifact not present — skipping"
+          fi
 
       - name: Extract version from tag
         id: version
@@ -1105,6 +1109,42 @@ jobs:
           VERSION="${{ github.ref_name }}"
           VERSION="${VERSION#v}"
           echo "version=${VERSION}" >> $GITHUB_OUTPUT
+
+      - name: Collect release assets
+        id: assets
+        run: |
+          # Build the file list dynamically — only include assets that exist
+          FILES=""
+          for f in \
+            artifacts/aro-linux-amd64.tar.gz \
+            artifacts/aro-macos-arm64.tar.gz \
+            artifacts/aro-windows-amd64.zip \
+            artifacts/aro-language-guide/ARO-Language-Guide.pdf \
+            artifacts/aro-construction-studies/ARO-Construction-Studies.pdf \
+            artifacts/aro-by-example/ARO-By-Example.pdf; do
+            if [ -f "$f" ]; then
+              FILES="${FILES}${f}\n"
+            else
+              echo "Skipping missing asset: $f"
+            fi
+          done
+          echo -e "$FILES" > /tmp/release-files.txt
+          cat /tmp/release-files.txt
+
+          # Build downloads table — only include platforms that were built
+          DOWNLOADS="| Platform | Architecture | Download |\n|----------|--------------|----------|\n"
+          DOWNLOADS="${DOWNLOADS}| Linux | x86_64 | [aro-linux-amd64.tar.gz](https://github.com/${{ github.repository }}/releases/download/${{ github.ref_name }}/aro-linux-amd64.tar.gz) |\n"
+          DOWNLOADS="${DOWNLOADS}| macOS | Apple Silicon | [aro-macos-arm64.tar.gz](https://github.com/${{ github.repository }}/releases/download/${{ github.ref_name }}/aro-macos-arm64.tar.gz) |\n"
+          if [ -f "artifacts/aro-windows-amd64.zip" ]; then
+            DOWNLOADS="${DOWNLOADS}| Windows | x86_64 | [aro-windows-amd64.zip](https://github.com/${{ github.repository }}/releases/download/${{ github.ref_name }}/aro-windows-amd64.zip) |\n"
+          fi
+
+          # Store for the next step
+          {
+            echo "downloads<<ENDOFDOWNLOADS"
+            echo -e "$DOWNLOADS"
+            echo "ENDOFDOWNLOADS"
+          } >> $GITHUB_OUTPUT
 
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
@@ -1120,16 +1160,13 @@ jobs:
             artifacts/aro-language-guide/ARO-Language-Guide.pdf
             artifacts/aro-construction-studies/ARO-Construction-Studies.pdf
             artifacts/aro-by-example/ARO-By-Example.pdf
+          fail_on_unmatched_files: false
           body: |
             ## ARO Programming Language ${{ steps.version.outputs.version }}
 
             ### Downloads
 
-            | Platform | Architecture | Download |
-            |----------|--------------|----------|
-            | Linux | x86_64 | [aro-linux-amd64.tar.gz](https://github.com/${{ github.repository }}/releases/download/${{ github.ref_name }}/aro-linux-amd64.tar.gz) |
-            | macOS | Apple Silicon | [aro-macos-arm64.tar.gz](https://github.com/${{ github.repository }}/releases/download/${{ github.ref_name }}/aro-macos-arm64.tar.gz) |
-            | Windows | x86_64 | [aro-windows-amd64.zip](https://github.com/${{ github.repository }}/releases/download/${{ github.ref_name }}/aro-windows-amd64.zip) |
+            ${{ steps.assets.outputs.downloads }}
 
             ### Documentation
 
