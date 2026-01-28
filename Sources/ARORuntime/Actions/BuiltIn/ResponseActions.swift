@@ -481,54 +481,65 @@ public struct StoreAction: ActionImplementation {
                 itemsToStore = [data]
             }
 
-            // Store each item individually
+            // Store each item individually and emit events only for actual changes
             let storage = context.service(RepositoryStorageService.self) ?? InMemoryRepositoryStorage.shared
 
             var lastStoreResult: RepositoryStoreResult?
             for item in itemsToStore {
-                lastStoreResult = await storage.storeWithChangeInfo(
+                let storeResult = await storage.storeWithChangeInfo(
                     value: item,
                     in: repoName,
                     businessActivity: context.businessActivity
                 )
+                lastStoreResult = storeResult
+
+                // Only emit events for actual changes (not duplicates)
+                // - !isUpdate means new entry → emit .created
+                // - isUpdate with oldValue means value changed → emit .updated
+                // - isUpdate without oldValue means duplicate (no change) → no event
+                let changeType: RepositoryChangeType?
+                let oldValue: (any Sendable)?
+
+                if !storeResult.isUpdate {
+                    // New entry
+                    changeType = .created
+                    oldValue = nil
+                } else if storeResult.oldValue != nil {
+                    // Update with changed data
+                    changeType = .updated
+                    oldValue = storeResult.oldValue
+                } else {
+                    // Duplicate (same value already exists) - no event
+                    changeType = nil
+                    oldValue = nil
+                }
+
+                // Emit event if there was an actual change
+                if let changeType = changeType {
+                    if let eventBus = context.eventBus {
+                        await eventBus.publishAndTrack(RepositoryChangedEvent(
+                            repositoryName: repoName,
+                            changeType: changeType,
+                            entityId: storeResult.entityId,
+                            newValue: storeResult.storedValue,
+                            oldValue: oldValue
+                        ))
+                    } else {
+                        context.emit(RepositoryChangedEvent(
+                            repositoryName: repoName,
+                            changeType: changeType,
+                            entityId: storeResult.entityId,
+                            newValue: storeResult.storedValue,
+                            oldValue: oldValue
+                        ))
+                    }
+                }
             }
 
             // Bind new-entry for atomic store-and-check patterns (e.g., parallel for each + repository dedup)
             // Value is 1 if newly created, 0 if duplicate/update - enables `when <new-entry> > 0` guards
             if let storeResult = lastStoreResult {
                 context.bind("new-entry", value: storeResult.isUpdate ? 0 : 1, allowRebind: true)
-            }
-
-            // Emit repository change event(s) for observers - one per item stored
-            for item in itemsToStore {
-                // Try to extract entityId from item if it's a dictionary
-                var itemId: String? = nil
-                if let dict = item as? [String: Any] {
-                    if let id = dict["id"] as? String {
-                        itemId = id
-                    } else if let id = dict["id"] as? Int {
-                        itemId = String(id)
-                    }
-                }
-
-                // Use publishAndTrack to ensure runtime waits for observers to complete
-                if let eventBus = context.eventBus {
-                    await eventBus.publishAndTrack(RepositoryChangedEvent(
-                        repositoryName: repoName,
-                        changeType: .created,
-                        entityId: itemId,
-                        newValue: item,
-                        oldValue: nil
-                    ))
-                } else {
-                    context.emit(RepositoryChangedEvent(
-                        repositoryName: repoName,
-                        changeType: .created,
-                        entityId: itemId,
-                        newValue: item,
-                        oldValue: nil
-                    ))
-                }
             }
         }
 

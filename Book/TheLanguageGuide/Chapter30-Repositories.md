@@ -90,27 +90,46 @@ Repositories use **list-based storage**. Each store operation appends to the lis
 (* Repository: [user1, user2, user3] *)
 ```
 
-### Atomic Deduplication with `new-entry`
+### Automatic Deduplication
 
-When `<Store>` is called, the runtime automatically deduplicates plain values (strings, numbers, booleans). If the value already exists in the repository, it is not appended again. After each store, the runtime binds a variable called `new-entry` to the execution context:
+When `<Store>` is called, the runtime automatically deduplicates plain values (strings, numbers, booleans). If the value already exists in the repository, it is not stored again and **no observer event fires**. This means repository observers naturally handle deduplication — they only trigger for genuinely new entries.
 
-- `new-entry = 1` — The value was newly stored (did not exist before)
-- `new-entry = 0` — The value already existed (duplicate, not stored again)
-
-This enables atomic check-and-store patterns using `when` guards:
+**Preferred pattern — use observers:**
 
 ```aro
-(* Atomic dedup: Store checks and binds new-entry in one operation *)
-<Store> the <url> into the <crawled-repository>.
+(Queue URL: QueueUrl Handler) {
+    (* Just store — observer handles the rest *)
+    <Store> the <url> into the <crawled-repository>.
+    <Return> an <OK: status>.
+}
 
-(* Only proceed if the URL was new *)
-<Log> "Processing: ${<url>}" to the <console> when <new-entry> > 0.
-<Emit> a <ProcessUrl: event> with { url: <url> } when <new-entry> > 0.
+(Process New URLs: crawled-repository Observer) {
+    (* Only fires for new entries, not duplicates *)
+    <Extract> the <url> from the <event: newValue>.
+    <Log> "Processing: ${<url>}" to the <console>.
+    <Emit> a <ProcessUrl: event> with { url: <url> }.
+    <Return> an <OK: status>.
+}
 ```
 
-Because repository operations are serialized by the runtime's Actor model, this pattern is **race-condition-free** even under `parallel for each`. Multiple concurrent callers storing the same value will each get a consistent `new-entry` result—only the first caller sees `1`, all subsequent callers see `0`.
+This follows ARO's philosophy: **Store OR Emit, not both**. Handlers that store data shouldn't also emit events for the same logical action — that's what observers are for.
 
-This is particularly useful for deduplication in event-driven pipelines where multiple sources may emit the same value concurrently.
+### The `new-entry` Variable (Legacy)
+
+For backward compatibility, `<Store>` also binds a `new-entry` variable:
+
+- `new-entry = 1` — The value was newly stored
+- `new-entry = 0` — The value already existed (duplicate)
+
+This can be used with `when` guards, but **observers are preferred**:
+
+```aro
+(* Works, but consider using an observer instead *)
+<Store> the <url> into the <crawled-repository>.
+<Log> "New: ${<url>}" to the <console> when <new-entry> > 0.
+```
+
+Because repository operations are serialized by the runtime's Actor model, both patterns are **race-condition-free** even under `parallel for each`.
 
 ### Example: Storing Messages
 

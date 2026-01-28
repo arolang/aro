@@ -171,15 +171,24 @@ Link extraction, normalization, filtering, and queuing.
     <Extract> the <url> from the <event-data: url>.
     <Extract> the <base-domain> from the <event-data: base>.
 
-    (* Atomic store - the repository Actor serializes concurrent access,
-       so only the first caller for a given URL gets is-new-entry = 1 *)
-    <Store> the <url> into the <crawled-repository>.
-
-    (* Only emit CrawlPage if this URL was newly stored *)
-    <Log> "Queued: ${<url>}" to the <console> when <new-entry> > 0.
-    <Emit> a <CrawlPage: event> with { url: <url>, base: <base-domain> } when <new-entry> > 0.
+    (* Store full context - observer handles the crawl trigger.
+       Repository deduplicates by URL, observer only fires for new entries. *)
+    <Create> the <crawl-request> with { url: <url>, base: <base-domain> }.
+    <Store> the <crawl-request> into the <crawled-repository>.
 
     <Return> an <OK: status> for the <queue>.
+}
+
+(Trigger Crawl: crawled-repository Observer) {
+    (* React to new entries in the repository *)
+    <Extract> the <crawl-request> from the <event: newValue>.
+    <Extract> the <url> from the <crawl-request: url>.
+    <Extract> the <base-domain> from the <crawl-request: base>.
+
+    <Log> "Queued: ${<url>}" to the <console>.
+    <Emit> a <CrawlPage: event> with { url: <url>, base: <base-domain> }.
+
+    <Return> an <OK: status> for the <observer>.
 }
 ```
 
@@ -241,9 +250,9 @@ File storage handler.
 |------|-------|----------|---------|
 | main.aro | 30 | 2 | Application lifecycle |
 | crawler.aro | 32 | 1 | Core crawling logic |
-| links.aro | 95 | 4 | Link processing pipeline |
+| links.aro | 105 | 5 | Link processing pipeline |
 | storage.aro | 28 | 1 | File storage |
-| **Total** | **185** | **8** | **Complete web crawler** |
+| **Total** | **195** | **9** | **Complete web crawler** |
 
 ---
 

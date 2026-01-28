@@ -313,7 +313,7 @@ struct BuildCommand: AsyncParsableCommand {
         if verbose {
             print("Linking executable...")
             // Show Swift library path for debugging
-            let linkerTest = CCompiler(runtimeLibraryPath: runtimeLibPath)
+            let linkerTest = CCompiler(runtimeLibraryPath: runtimeLibPath, verbose: verbose)
             if let swiftPath = linkerTest.getSwiftLibPath() {
                 print("  Swift libraries: \(swiftPath)")
             } else {
@@ -334,7 +334,7 @@ struct BuildCommand: AsyncParsableCommand {
         print("[BUILD] Creating CCompiler with runtime: \(runtimeLibPath)")
         #endif
 
-        let linker = CCompiler(runtimeLibraryPath: runtimeLibPath)
+        let linker = CCompiler(runtimeLibraryPath: runtimeLibPath, verbose: verbose)
 
         #if os(Windows)
         print("[BUILD] CCompiler created successfully")

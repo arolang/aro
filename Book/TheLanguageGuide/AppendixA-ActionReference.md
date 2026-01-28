@@ -516,7 +516,7 @@ Throws an error.
 
 ### Store
 
-Saves to a repository.
+Saves to a repository. Triggers repository observers for new entries and updates.
 
 **Syntax:**
 ```aro
@@ -527,10 +527,17 @@ Saves to a repository.
 ```aro
 <Store> the <user> into the <user-repository>.
 <Store> the <order> into the <order-repository>.
-<Store> the <log-entry> into the <file: "./app.log">.
 ```
 
+**Behavior:**
+- Triggers `created` event for new entries (observers fire)
+- Triggers `updated` event when existing item (by ID) is modified
+- Duplicates (same value) are ignored — no event fires
+- Binds `new-entry` variable: `1` for new, `0` for duplicate
+
 **Valid Prepositions:** `into`
+
+See Chapter 30 (Repositories) for observer patterns.
 
 ---
 

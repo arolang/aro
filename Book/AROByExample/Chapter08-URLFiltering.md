@@ -154,32 +154,41 @@ The final handler in the link pipeline queues URLs for crawling. Add to `links.a
     <Extract> the <url> from the <event-data: url>.
     <Extract> the <base-domain> from the <event-data: base>.
 
-    (* Atomic store - the repository Actor serializes concurrent access,
-       so only the first caller for a given URL gets is-new-entry = 1 *)
-    <Store> the <url> into the <crawled-repository>.
-
-    (* Only emit CrawlPage if this URL was newly stored *)
-    <Log> "Queued: ${<url>}" to the <console> when <new-entry> > 0.
-    <Emit> a <CrawlPage: event> with { url: <url>, base: <base-domain> } when <new-entry> > 0.
+    (* Store full context - observer handles the crawl trigger.
+       Repository deduplicates by URL, observer only fires for new entries. *)
+    <Create> the <crawl-request> with { url: <url>, base: <base-domain> }.
+    <Store> the <crawl-request> into the <crawled-repository>.
 
     <Return> an <OK: status> for the <queue>.
 }
+
+(Trigger Crawl: crawled-repository Observer) {
+    (* React to new entries in the repository *)
+    <Extract> the <crawl-request> from the <event: newValue>.
+    <Extract> the <url> from the <crawl-request: url>.
+    <Extract> the <base-domain> from the <crawl-request: base>.
+
+    <Log> "Queued: ${<url>}" to the <console>.
+    <Emit> a <CrawlPage: event> with { url: <url>, base: <base-domain> }.
+
+    <Return> an <OK: status> for the <observer>.
+}
 ```
 
-This handler uses **atomic deduplication**. The `<Store>` action stores the URL into the repository and binds `new-entry` to the execution context:
+This handler uses **repository observers** for clean separation of concerns:
 
-- `new-entry = 1` — The URL was newly stored (first time seen)
-- `new-entry = 0` — The URL already existed (duplicate)
+1. **The Queue Handler** has a single responsibility: store the URL with its context
+2. **The Repository Observer** reacts to new entries and triggers the crawl
 
-The repository Actor serializes all concurrent `<Store>` calls, so even when multiple `parallel for each` iterations emit `QueueUrl` events for the same URL simultaneously, only the first caller gets `new-entry = 1`. All subsequent callers get `new-entry = 0`, regardless of timing. This eliminates race conditions entirely.
+The repository automatically deduplicates: when a URL is stored twice, the second store is a no-op and no observer fires. This eliminates race conditions — even when multiple parallel iterations emit `QueueUrl` events for the same URL simultaneously, the observer fires exactly once.
 
-The `when <new-entry> > 0` guard ensures that only genuinely new URLs trigger a crawl.
+This pattern follows ARO's philosophy: **Store OR Emit, not both**. Handlers that store data shouldn't also emit events for the same logical action — that's what observers are for.
 
 ---
 
 ## 8.9 The Complete links.aro
 
-We now have four handlers in `links.aro`. Here is the complete file:
+We now have four handlers plus one observer in `links.aro`. Here is the complete file:
 
 ```aro
 (* ============================================================
@@ -266,15 +275,24 @@ We now have four handlers in `links.aro`. Here is the complete file:
     <Extract> the <url> from the <event-data: url>.
     <Extract> the <base-domain> from the <event-data: base>.
 
-    (* Atomic store - the repository Actor serializes concurrent access,
-       so only the first caller for a given URL gets is-new-entry = 1 *)
-    <Store> the <url> into the <crawled-repository>.
-
-    (* Only emit CrawlPage if this URL was newly stored *)
-    <Log> "Queued: ${<url>}" to the <console> when <new-entry> > 0.
-    <Emit> a <CrawlPage: event> with { url: <url>, base: <base-domain> } when <new-entry> > 0.
+    (* Store full context - observer handles the crawl trigger.
+       Repository deduplicates by URL, observer only fires for new entries. *)
+    <Create> the <crawl-request> with { url: <url>, base: <base-domain> }.
+    <Store> the <crawl-request> into the <crawled-repository>.
 
     <Return> an <OK: status> for the <queue>.
+}
+
+(Trigger Crawl: crawled-repository Observer) {
+    (* React to new entries in the repository *)
+    <Extract> the <crawl-request> from the <event: newValue>.
+    <Extract> the <url> from the <crawl-request: url>.
+    <Extract> the <base-domain> from the <crawl-request: base>.
+
+    <Log> "Queued: ${<url>}" to the <console>.
+    <Emit> a <CrawlPage: event> with { url: <url>, base: <base-domain> }.
+
+    <Return> an <OK: status> for the <observer>.
 }
 ```
 
@@ -288,7 +306,9 @@ We now have four handlers in `links.aro`. Here is the complete file:
 
 **No Boilerplate.** No if/else blocks, no boolean variables, no nested conditionals. The guard is part of the action.
 
-**Atomic Deduplication.** The `<Store>` action with `new-entry` binding provides race-safe deduplication in a single statement. No need for retrieve-check-store sequences.
+**Repository Observers.** The observer pattern provides clean separation: handlers store data, observers react to changes. No need to manually emit events after storing.
+
+**Automatic Deduplication.** Repositories deduplicate automatically — storing the same value twice is a no-op, and the observer doesn't fire for duplicates. No race conditions, no manual checks.
 
 ---
 
