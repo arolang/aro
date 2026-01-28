@@ -326,6 +326,27 @@
                 Download the pre-built binary for your platform or build from source.
             </p>
 
+            <!-- Homebrew Install (macOS) -->
+            <div class="homebrew-install" style="background: linear-gradient(135deg, rgba(16, 185, 129, 0.1) 0%, rgba(16, 185, 129, 0.05) 100%); border: 1px solid rgba(16, 185, 129, 0.3); border-radius: var(--radius-md); padding: 32px; margin-bottom: 32px;">
+                <div style="display: flex; align-items: center; gap: 16px; margin-bottom: 16px;">
+                    <span style="font-size: 2rem;">&#x1F37A;</span>
+                    <div>
+                        <h3 style="font-size: 1.3rem; font-weight: 600; margin: 0;">Install with Homebrew</h3>
+                        <span style="color: var(--color-emerald); font-size: 0.9rem; font-weight: 500;">Recommended for macOS</span>
+                    </div>
+                </div>
+                <p style="color: var(--color-text-muted); margin-bottom: 16px;">
+                    The easiest way to install ARO on macOS. Homebrew handles updates and dependencies automatically.
+                </p>
+                <div class="code-block" style="margin: 0; position: relative;">
+                    <pre style="margin: 0;">brew tap arolang/aro
+brew install aro</pre>
+                    <button onclick="navigator.clipboard.writeText('brew tap arolang/aro\nbrew install aro')" style="position: absolute; top: 12px; right: 12px; background: rgba(255,255,255,0.1); border: none; padding: 6px 12px; border-radius: 4px; color: var(--color-text-muted); cursor: pointer; font-size: 0.8rem;" title="Copy to clipboard">Copy</button>
+                </div>
+            </div>
+
+            <p style="text-align: center; color: var(--color-text-muted); margin-bottom: 24px;">Or download a pre-built binary:</p>
+
             <div class="download-grid">
                 <div class="download-card">
                     <div class="platform-icon">&#x1F34E;</div>
@@ -430,19 +451,41 @@ swift build -c release
         <section class="download-section">
             <h2><span class="icon">&#x1F4D6;</span> Documentation</h2>
             <p>
-                The complete ARO Language Guide covers the philosophy, syntax, patterns, and best practices.
+                Learn ARO with our comprehensive documentation series covering philosophy, syntax, patterns, and practical examples.
             </p>
 
             <div class="download-grid">
                 <div class="download-card">
-                    <div class="platform-icon">&#x1F4DA;</div>
+                    <div class="platform-icon">&#x1F4D8;</div>
                     <h3>The Language Guide</h3>
                     <p class="platform-desc">Comprehensive guide to ARO: from mental model to native compilation</p>
-                    <a href="https://github.com/arolang/aro/releases" class="download-btn">
+                    <a href="https://github.com/arolang/aro/releases/latest/download/ARO-Language-Guide.pdf" class="download-btn">
                         <svg viewBox="0 0 16 16" fill="currentColor"><path d="M2.75 14A1.75 1.75 0 011 12.25v-2.5a.75.75 0 011.5 0v2.5c0 .138.112.25.25.25h10.5a.25.25 0 00.25-.25v-2.5a.75.75 0 011.5 0v2.5A1.75 1.75 0 0113.25 14H2.75z"/><path d="M7.25 7.689V2a.75.75 0 011.5 0v5.689l1.97-1.969a.749.749 0 111.06 1.06l-3.25 3.25a.749.749 0 01-1.06 0L4.22 6.78a.749.749 0 111.06-1.06l1.97 1.969z"/></svg>
                         Download PDF
                     </a>
                     <span class="version">ARO-Language-Guide.pdf</span>
+                </div>
+
+                <div class="download-card">
+                    <div class="platform-icon">&#x1F4D7;</div>
+                    <h3>ARO By Example</h3>
+                    <p class="platform-desc">Learn by doing: practical examples and hands-on tutorials</p>
+                    <a href="https://github.com/arolang/aro/releases/latest/download/ARO-By-Example.pdf" class="download-btn">
+                        <svg viewBox="0 0 16 16" fill="currentColor"><path d="M2.75 14A1.75 1.75 0 011 12.25v-2.5a.75.75 0 011.5 0v2.5c0 .138.112.25.25.25h10.5a.25.25 0 00.25-.25v-2.5a.75.75 0 011.5 0v2.5A1.75 1.75 0 0113.25 14H2.75z"/><path d="M7.25 7.689V2a.75.75 0 011.5 0v5.689l1.97-1.969a.749.749 0 111.06 1.06l-3.25 3.25a.749.749 0 01-1.06 0L4.22 6.78a.749.749 0 111.06-1.06l1.97 1.969z"/></svg>
+                        Download PDF
+                    </a>
+                    <span class="version">ARO-By-Example.pdf</span>
+                </div>
+
+                <div class="download-card">
+                    <div class="platform-icon">&#x1F4D9;</div>
+                    <h3>Construction Studies</h3>
+                    <p class="platform-desc">Deep dives into ARO internals and advanced implementation patterns</p>
+                    <a href="https://github.com/arolang/aro/releases/latest/download/ARO-Construction-Studies.pdf" class="download-btn">
+                        <svg viewBox="0 0 16 16" fill="currentColor"><path d="M2.75 14A1.75 1.75 0 011 12.25v-2.5a.75.75 0 011.5 0v2.5c0 .138.112.25.25.25h10.5a.25.25 0 00.25-.25v-2.5a.75.75 0 011.5 0v2.5A1.75 1.75 0 0113.25 14H2.75z"/><path d="M7.25 7.689V2a.75.75 0 011.5 0v5.689l1.97-1.969a.749.749 0 111.06 1.06l-3.25 3.25a.749.749 0 01-1.06 0L4.22 6.78a.749.749 0 111.06-1.06l1.97 1.969z"/></svg>
+                        Download PDF
+                    </a>
+                    <span class="version">ARO-Construction-Studies.pdf</span>
                 </div>
             </div>
         </section>
