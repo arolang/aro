@@ -196,6 +196,30 @@ public final class EventBus: @unchecked Sendable {
         withLock { inFlightHandlers }
     }
 
+    /// Register a pending handler (for fire-and-forget tasks)
+    /// Call before spawning a task that will execute event handlers
+    public func registerPendingHandler() {
+        withLock { inFlightHandlers += 1 }
+    }
+
+    /// Unregister a pending handler (for fire-and-forget tasks)
+    /// Call when a fire-and-forget task completes
+    public func unregisterPendingHandler() {
+        let continuationsToResume = withLock { () -> [CheckedContinuation<Void, Never>] in
+            inFlightHandlers = max(0, inFlightHandlers - 1)
+            if inFlightHandlers == 0 {
+                let continuations = flushContinuations
+                flushContinuations.removeAll()
+                return continuations
+            }
+            return []
+        }
+        // Resume any waiting continuations outside the lock
+        for continuation in continuationsToResume {
+            continuation.resume()
+        }
+    }
+
     // MARK: - Active Event Sources
 
     /// Register an active event source (e.g., HTTP server, file monitor, socket server)

@@ -1314,6 +1314,14 @@ public final class LLVMCodeGeneratorV2 {
             }
         }
 
+        // Wait for pending events (10 second timeout)
+        // Must complete BEFORE Application-End so all handlers finish first
+        _ = ctx.module.insertCall(
+            externals.runtimeAwaitPendingEvents,
+            on: [runtime, ctx.doubleType.constant(10.0)],
+            at: ip
+        )
+
         // Execute Application-End: Success handler if defined
         let appEndSuccess = program.featureSets.first(where: {
             $0.featureSet.name == "Application-End" &&
@@ -1332,13 +1340,6 @@ public final class LLVMCodeGeneratorV2 {
                 _ = ctx.module.insertCall(externals.contextDestroy, on: [endCtx], at: ip)
             }
         }
-
-        // Wait for pending events (10 second timeout)
-        _ = ctx.module.insertCall(
-            externals.runtimeAwaitPendingEvents,
-            on: [runtime, ctx.doubleType.constant(10.0)],
-            at: ip
-        )
 
         // Print response
         _ = ctx.module.insertCall(externals.contextPrintResponse, on: [mainCtx], at: ip)

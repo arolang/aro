@@ -366,4 +366,30 @@ extension ActionRunner {
 
         return holder.result
     }
+
+    /// Execute an action without waiting for completion (fire-and-forget)
+    /// Used for Emit in compiled binaries to enable parallel event handling
+    public func executeFireAndForget(
+        verb: String,
+        result: ResultDescriptor,
+        object: ObjectDescriptor,
+        context: ExecutionContext
+    ) {
+        // Register this task with EventBus so awaitPendingEvents knows to wait
+        context.eventBus?.registerPendingHandler()
+
+        // Spawn task that runs the action - don't wait for it to complete
+        Task.detached { @Sendable [self] in
+            defer {
+                // Unregister when task completes
+                context.eventBus?.unregisterPendingHandler()
+            }
+            _ = try? await self.executeAsync(
+                verb: verb,
+                result: result,
+                object: object,
+                context: context
+            )
+        }
+    }
 }

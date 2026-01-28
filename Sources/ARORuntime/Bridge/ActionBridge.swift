@@ -358,7 +358,28 @@ public func aro_action_emit(
     _ resultPtr: UnsafeRawPointer?,
     _ objectPtr: UnsafeRawPointer?
 ) -> UnsafeMutableRawPointer? {
-    return executeAction(verb: "emit", contextPtr: contextPtr, resultPtr: resultPtr, objectPtr: objectPtr)
+    // Fire-and-forget: emit events without blocking
+    // This enables parallel event handling in compiled binaries (matching interpreter behavior)
+    guard let ctxHandle = getContext(contextPtr),
+          let result = resultPtr,
+          let object = objectPtr else { return nil }
+
+    let resultDesc = toResultDescriptor(result)
+    let objectDesc = toObjectDescriptor(object)
+    let context = ctxHandle.context
+
+    // Execute emit through ActionRunner but don't block waiting for handlers
+    // Use the same sync-to-async bridge as other actions, but immediately return
+    // so the caller doesn't wait for event handlers to complete
+    ActionRunner.shared.executeFireAndForget(
+        verb: "emit",
+        result: resultDesc,
+        object: objectDesc,
+        context: context
+    )
+
+    // Return immediately - handlers run in background
+    return nil
 }
 
 @_cdecl("aro_action_send")
