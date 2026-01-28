@@ -424,13 +424,16 @@ public struct LogAction: ActionImplementation {
         // Route output to appropriate stream based on target and qualifier
         // Check if target is "stderr" (backward compatibility) OR qualifier is "error"
         if target.lowercased() == "stderr" || outputStream == "error" {
-            // Write to stderr using FileHandle for concurrency safety
+            // Write to stderr using FileHandle for immediate flush
             if let data = (formattedMessage + "\n").data(using: .utf8) {
                 try FileHandle.standardError.write(contentsOf: data)
             }
         } else {
-            // Write to stdout (default behavior)
-            print(formattedMessage)
+            // Write to stdout using FileHandle for immediate flush
+            // (print() uses full buffering when piped, which loses output on Linux CI)
+            if let data = (formattedMessage + "\n").data(using: .utf8) {
+                try FileHandle.standardOutput.write(contentsOf: data)
+            }
         }
 
         return LogResult(message: message, target: target)
