@@ -191,16 +191,19 @@ Pre-built binaries are available for all platforms:
 ```bash
 curl -L https://github.com/arolang/aro/releases/latest/download/aro-macos-arm64.tar.gz | tar xz
 sudo mv aro /usr/local/bin/
+sudo mv libARORuntime.a /usr/local/lib/
 ```
 
 **Linux (x86_64)**:
 ```bash
 curl -L https://github.com/arolang/aro/releases/latest/download/aro-linux-amd64.tar.gz | tar xz
 sudo mv aro /usr/local/bin/
+sudo mv libARORuntime.a /usr/local/lib/
 ```
 
 **Windows (x86_64)**:
 Download the latest release from [GitHub Releases](https://github.com/arolang/aro/releases) and add to PATH.
+Keep `aro.exe` and `libARORuntime.a` in the same directory.
 
 ### Build from Source
 

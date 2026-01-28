@@ -511,7 +511,16 @@ struct BuildCommand: AsyncParsableCommand {
         }
         #endif
 
-        // 2. Homebrew/system install locations (Unix only)
+        // 2. Sibling lib/ directory relative to executable (standard Unix layout)
+        // e.g., /usr/local/bin/aro → /usr/local/lib/libARORuntime.a
+        #if !os(Windows)
+        let siblingLibDir = executableDir.deletingLastPathComponent().appendingPathComponent("lib")
+        for libName in runtimeLibNames {
+            searchPaths.append(siblingLibDir.appendingPathComponent(libName).path)
+        }
+        #endif
+
+        // 3. Homebrew/system install locations (Unix only)
         #if os(macOS)
         searchPaths.append("/opt/homebrew/lib/libARORuntime.a")  // Apple Silicon
         searchPaths.append("/usr/local/lib/libARORuntime.a")     // Intel Mac
@@ -520,7 +529,7 @@ struct BuildCommand: AsyncParsableCommand {
         searchPaths.append("/usr/lib/libARORuntime.a")
         #endif
 
-        // 3. Development build locations (platform-specific)
+        // 4. Development build locations (platform-specific)
         #if os(macOS)
         searchPaths.append(".build/arm64-apple-macosx/release/libARORuntime.a")
         searchPaths.append(".build/arm64-apple-macosx/debug/libARORuntime.a")

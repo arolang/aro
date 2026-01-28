@@ -1101,19 +1101,19 @@ jobs:
           # Linux
           cd artifacts/aro-linux-amd64
           chmod +x aro
-          tar -czvf ../aro-linux-amd64.tar.gz aro
+          tar -czvf ../aro-linux-amd64.tar.gz aro libARORuntime.a
           cd ../..
 
           # macOS
           cd artifacts/aro-macos-arm64
           chmod +x aro
-          tar -czvf ../aro-macos-arm64.tar.gz aro
+          tar -czvf ../aro-macos-arm64.tar.gz aro libARORuntime.a
           cd ../..
 
           # Windows (optional — only if the build was enabled)
           if [ -d "artifacts/aro-windows-amd64" ]; then
             cd artifacts/aro-windows-amd64
-            zip ../aro-windows-amd64.zip aro.exe
+            zip ../aro-windows-amd64.zip aro.exe libARORuntime.a
             cd ../..
           else
             echo "Windows artifact not present — skipping"
@@ -1198,16 +1198,19 @@ jobs:
             ```bash
             curl -L https://github.com/${{ github.repository }}/releases/download/${{ github.ref_name }}/aro-linux-amd64.tar.gz | tar xz
             sudo mv aro /usr/local/bin/
+            sudo mv libARORuntime.a /usr/local/lib/
             ```
 
             **macOS**
             ```bash
             curl -L https://github.com/${{ github.repository }}/releases/download/${{ github.ref_name }}/aro-macos-arm64.tar.gz | tar xz
             sudo mv aro /usr/local/bin/
+            sudo mv libARORuntime.a /usr/local/lib/
             ```
 
             **Windows**
             Download and extract the zip file, then add the directory to your PATH.
+            Keep `aro.exe` and `libARORuntime.a` in the same directory.
 
       # ========================================================================
       # Update Homebrew Formula
@@ -1243,6 +1246,7 @@ jobs:
             echo ''
             echo '  def install'
             echo '    bin.install "aro"'
+            echo '    lib.install "libARORuntime.a"'
             echo '  end'
             echo ''
             echo '  test do'
