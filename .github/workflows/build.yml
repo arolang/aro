@@ -1237,7 +1237,7 @@ jobs:
             echo '  homepage "https://github.com/arolang/aro"'
             echo "  url \"https://github.com/arolang/aro/releases/download/${{ github.ref_name }}/aro-macos-arm64.tar.gz\""
             echo "  sha256 \"$SHA256\""
-            echo "  version \"0.1.0-beta.2\""
+            echo "  version \"$VERSION\""
             echo '  license "MIT"'
             echo ''
             echo '  # Only support macOS for now (ARM64 binary)'
