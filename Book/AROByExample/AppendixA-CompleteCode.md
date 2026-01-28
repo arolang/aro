@@ -171,9 +171,11 @@ Link extraction, normalization, filtering, and queuing.
     <Extract> the <url> from the <event-data: url>.
     <Extract> the <base-domain> from the <event-data: base>.
 
-    (* Store full context - observer handles the crawl trigger.
-       Repository deduplicates by URL, observer only fires for new entries. *)
-    <Create> the <crawl-request> with { url: <url>, base: <base-domain> }.
+    (* Generate deterministic id from URL hash for deduplication *)
+    <Compute> the <url-id: hash> from the <url>.
+
+    (* Store with id - repository deduplicates by id, observer only fires for new entries *)
+    <Create> the <crawl-request> with { id: <url-id>, url: <url>, base: <base-domain> }.
     <Store> the <crawl-request> into the <crawled-repository>.
 
     <Return> an <OK: status> for the <queue>.

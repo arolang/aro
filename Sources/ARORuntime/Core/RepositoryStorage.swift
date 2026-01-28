@@ -206,9 +206,23 @@ private actor RepositoryStorageActor {
             }) {
                 // Capture old value before update
                 let oldValue = storage[key]?[index]
-                // Update existing entry by id
-                storage[key]?[index] = valueToStore
-                return RepositoryStoreResult(storedValue: valueToStore, oldValue: oldValue, isUpdate: true, entityId: entityId)
+
+                // Check if the value has actually changed (compare all fields except id)
+                let valueChanged: Bool
+                if let oldDict = oldValue as? [String: any Sendable] {
+                    valueChanged = !dictionariesEqual(dict, oldDict)
+                } else {
+                    valueChanged = true
+                }
+
+                if valueChanged {
+                    // Actual update - store new value and report change
+                    storage[key]?[index] = valueToStore
+                    return RepositoryStoreResult(storedValue: valueToStore, oldValue: oldValue, isUpdate: true, entityId: entityId)
+                } else {
+                    // Duplicate - same value already exists, no change
+                    return RepositoryStoreResult(storedValue: valueToStore, oldValue: nil, isUpdate: true, entityId: entityId)
+                }
             }
         }
 
@@ -342,6 +356,16 @@ private actor RepositoryStorageActor {
         }
         // String comparison fallback
         return String(describing: lhs) == String(describing: rhs)
+    }
+
+    /// Compare two dictionaries for equality (all fields must match)
+    private func dictionariesEqual(_ lhs: [String: any Sendable], _ rhs: [String: any Sendable]) -> Bool {
+        guard lhs.count == rhs.count else { return false }
+        for (key, lhsValue) in lhs {
+            guard let rhsValue = rhs[key] else { return false }
+            if !isEqual(lhsValue, rhsValue) { return false }
+        }
+        return true
     }
 }
 

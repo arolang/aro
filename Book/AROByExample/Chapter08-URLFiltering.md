@@ -154,9 +154,11 @@ The final handler in the link pipeline queues URLs for crawling. Add to `links.a
     <Extract> the <url> from the <event-data: url>.
     <Extract> the <base-domain> from the <event-data: base>.
 
-    (* Store full context - observer handles the crawl trigger.
-       Repository deduplicates by URL, observer only fires for new entries. *)
-    <Create> the <crawl-request> with { url: <url>, base: <base-domain> }.
+    (* Generate deterministic id from URL hash for deduplication *)
+    <Compute> the <url-id: hash> from the <url>.
+
+    (* Store with id - repository deduplicates by id, observer only fires for new entries *)
+    <Create> the <crawl-request> with { id: <url-id>, url: <url>, base: <base-domain> }.
     <Store> the <crawl-request> into the <crawled-repository>.
 
     <Return> an <OK: status> for the <queue>.
@@ -180,7 +182,7 @@ This handler uses **repository observers** for clean separation of concerns:
 1. **The Queue Handler** has a single responsibility: store the URL with its context
 2. **The Repository Observer** reacts to new entries and triggers the crawl
 
-The repository automatically deduplicates: when a URL is stored twice, the second store is a no-op and no observer fires. This eliminates race conditions — even when multiple parallel iterations emit `QueueUrl` events for the same URL simultaneously, the observer fires exactly once.
+The repository automatically deduplicates by `id`: when a URL with the same hash is stored twice, the second store is a no-op and no observer fires. Using a deterministic hash of the URL as the id ensures that even parallel requests storing the same URL will deduplicate correctly. The observer fires exactly once per unique URL.
 
 This pattern follows ARO's philosophy: **Store OR Emit, not both**. Handlers that store data shouldn't also emit events for the same logical action — that's what observers are for.
 
@@ -275,9 +277,11 @@ We now have four handlers plus one observer in `links.aro`. Here is the complete
     <Extract> the <url> from the <event-data: url>.
     <Extract> the <base-domain> from the <event-data: base>.
 
-    (* Store full context - observer handles the crawl trigger.
-       Repository deduplicates by URL, observer only fires for new entries. *)
-    <Create> the <crawl-request> with { url: <url>, base: <base-domain> }.
+    (* Generate deterministic id from URL hash for deduplication *)
+    <Compute> the <url-id: hash> from the <url>.
+
+    (* Store with id - repository deduplicates by id, observer only fires for new entries *)
+    <Create> the <crawl-request> with { id: <url-id>, url: <url>, base: <base-domain> }.
     <Store> the <crawl-request> into the <crawled-repository>.
 
     <Return> an <OK: status> for the <queue>.
@@ -308,7 +312,7 @@ We now have four handlers plus one observer in `links.aro`. Here is the complete
 
 **Repository Observers.** The observer pattern provides clean separation: handlers store data, observers react to changes. No need to manually emit events after storing.
 
-**Automatic Deduplication.** Repositories deduplicate automatically — storing the same value twice is a no-op, and the observer doesn't fire for duplicates. No race conditions, no manual checks.
+**Automatic Deduplication.** Repositories deduplicate by `id` field — storing a value with an existing id is a no-op, and the observer doesn't fire for duplicates. Using a deterministic hash as the id provides race-free deduplication.
 
 ---
 
@@ -325,7 +329,8 @@ We now have four handlers plus one observer in `links.aro`. Here is the complete
 - `when` guards make actions conditional
 - `<url> contains <base-domain>` checks for substring match
 - Filtered URLs simply do not emit events—no explicit discard
-- The queue handler uses atomic `<Store>` with `new-entry` binding for race-safe deduplication
+- The queue handler uses a URL hash as the `id` for race-safe deduplication
+- Repository observers fire only for genuinely new entries
 - Our link pipeline is complete: Extract → Normalize → Filter → Queue
 
 ---
