@@ -200,7 +200,7 @@ public struct ExtractAction: ActionImplementation {
         // Try generic dictionary access (handles type-erased dictionaries)
         if let dict = source as? Dictionary<String, Any> {
             if let value = dict[key] {
-                // Convert common types
+                // Convert common types, preserving nested structures
                 if let str = value as? String {
                     return str
                 } else if let num = value as? Int {
@@ -209,6 +209,19 @@ public struct ExtractAction: ActionImplementation {
                     return num
                 } else if let b = value as? Bool {
                     return b
+                } else if let nestedDict = value as? [String: any Sendable] {
+                    // Preserve nested dictionaries for further extraction
+                    return nestedDict
+                } else if let nestedDict = value as? Dictionary<String, Any> {
+                    // Convert Dictionary<String, Any> to [String: any Sendable]
+                    var result: [String: any Sendable] = [:]
+                    for (k, v) in nestedDict {
+                        result[k] = convertToSendable(v)
+                    }
+                    return result
+                } else if let arr = value as? [Any] {
+                    // Convert arrays
+                    return arr.map { convertToSendable($0) }
                 }
                 return String(describing: value)
             }
@@ -367,6 +380,27 @@ public struct ExtractAction: ActionImplementation {
             result[key] = convertJSONValue(value)
         }
         return result
+    }
+
+    /// Convert any value to Sendable (for type-erased dictionaries)
+    private func convertToSendable(_ value: Any) -> any Sendable {
+        if let str = value as? String { return str }
+        if let num = value as? Int { return num }
+        if let num = value as? Double { return num }
+        if let b = value as? Bool { return b }
+        if let dict = value as? [String: any Sendable] { return dict }
+        if let dict = value as? Dictionary<String, Any> {
+            var result: [String: any Sendable] = [:]
+            for (k, v) in dict {
+                result[k] = convertToSendable(v)
+            }
+            return result
+        }
+        if let arr = value as? [any Sendable] { return arr }
+        if let arr = value as? [Any] {
+            return arr.map { convertToSendable($0) }
+        }
+        return String(describing: value)
     }
 
     private func extractFromString(_ source: String, key: String) -> (any Sendable)? {

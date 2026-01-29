@@ -392,4 +392,54 @@ extension ActionRunner {
             )
         }
     }
+
+    /// Execute an emit action with pre-captured literal value (fire-and-forget)
+    /// This avoids race conditions where _literal_ is overwritten before the Task runs
+    public func executeFireAndForgetEmit(
+        eventType: String,
+        capturedLiteral: (any Sendable)?,
+        capturedExpressionName: String?,
+        objectBase: String,
+        context: ExecutionContext
+    ) {
+        // Register this task with EventBus so awaitPendingEvents knows to wait
+        context.eventBus?.registerPendingHandler()
+
+        // Capture the event bus reference before spawning
+        let eventBus = context.eventBus
+
+        // Spawn task that emits the event directly - don't wait for handlers to complete
+        Task.detached {
+            defer {
+                // Unregister when task completes
+                eventBus?.unregisterPendingHandler()
+            }
+
+            // Build payload directly using captured values (no context lookup)
+            var payload: [String: any Sendable] = [:]
+
+            // Determine the payload key name
+            let payloadKey: String
+            if let exprName = capturedExpressionName {
+                payloadKey = exprName
+            } else if objectBase != "_expression_" {
+                payloadKey = objectBase
+            } else {
+                payloadKey = "data"
+            }
+
+            // Use the captured literal value
+            if let literal = capturedLiteral {
+                payload[payloadKey] = literal
+            }
+
+            // Create and emit the domain event
+            let event = DomainEvent(eventType: eventType, payload: payload)
+
+            // Publish and wait for handlers
+            if let bus = eventBus {
+                await bus.publishAndTrack(event)
+            }
+        }
+    }
 }

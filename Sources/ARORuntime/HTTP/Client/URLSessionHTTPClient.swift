@@ -127,6 +127,9 @@ public final class URLSessionHTTPClient: HTTPClientService, @unchecked Sendable 
         request.httpMethod = method
         request.timeoutInterval = timeout ?? self.timeout
 
+        // Set a default User-Agent if not provided (some servers require this)
+        request.setValue("ARO-HTTP-Client/1.0", forHTTPHeaderField: "User-Agent")
+
         for (name, value) in headers {
             request.setValue(value, forHTTPHeaderField: name)
         }
@@ -142,8 +145,10 @@ public final class URLSessionHTTPClient: HTTPClientService, @unchecked Sendable 
         do {
             (data, response) = try await session.data(for: request)
         } catch {
-            eventBus.publish(HTTPClientErrorEvent(url: url, error: error.localizedDescription))
-            throw HTTPError.connectionFailed
+            let errorMsg = error.localizedDescription
+            eventBus.publish(HTTPClientErrorEvent(url: url, error: errorMsg))
+            // Include actual error in thrown error for better diagnostics
+            throw HTTPError.custom("Connection failed: \(errorMsg)")
         }
 
         guard let httpResponse = response as? HTTPURLResponse else {

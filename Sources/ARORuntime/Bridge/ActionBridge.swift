@@ -368,13 +368,37 @@ public func aro_action_emit(
     let objectDesc = toObjectDescriptor(object)
     let context = ctxHandle.context
 
+    // CRITICAL: Capture the value NOW, before it gets overwritten by subsequent statements.
+    // The fire-and-forget Task runs later, and by then the values may have changed.
+    // Check both _literal_ (used by some paths) and _expression_ (used by compiled code).
+    let capturedLiteral = context.resolveAny("_literal_")
+    let capturedExpression = context.resolveAny("_expression_")
+    let capturedExpressionName: String? = context.resolve("_expression_name_")
+
+    // Use _expression_ if _literal_ is not available (compiled code path)
+    let payloadValue = capturedLiteral ?? capturedExpression
+
+
+    // Create a snapshot context with the captured values
+    // This ensures the emit uses the correct literal value even when executed later
+    if let literal = capturedLiteral {
+        context.bind("_emit_literal_\(resultDesc.base)", value: literal)
+    }
+    if let expr = capturedExpression {
+        context.bind("_emit_expression_\(resultDesc.base)", value: expr)
+    }
+    if let exprName = capturedExpressionName {
+        context.bind("_emit_expression_name_\(resultDesc.base)", value: exprName)
+    }
+
     // Execute emit through ActionRunner but don't block waiting for handlers
     // Use the same sync-to-async bridge as other actions, but immediately return
     // so the caller doesn't wait for event handlers to complete
-    ActionRunner.shared.executeFireAndForget(
-        verb: "emit",
-        result: resultDesc,
-        object: objectDesc,
+    ActionRunner.shared.executeFireAndForgetEmit(
+        eventType: resultDesc.base,
+        capturedLiteral: payloadValue,
+        capturedExpressionName: capturedExpressionName,
+        objectBase: objectDesc.base,
         context: context
     )
 

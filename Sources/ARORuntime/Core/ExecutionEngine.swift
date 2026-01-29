@@ -275,9 +275,15 @@ public actor ExecutionEngine {
             let guardSet = StateGuardSet.parse(from: activity)
 
             // Subscribe to DomainEvent and filter by eventType and guards
-            eventBus.subscribe(to: DomainEvent.self) { [weak self] event in
-                guard let self = self else { return }
+            // CRITICAL: Capture all needed values to avoid actor reentrancy deadlock.
+            // The handler must NOT call back into the actor since the actor may be
+            // blocked waiting for handlers to complete (via publishAndTrack).
+            let capturedActionRegistry = actionRegistry
+            let capturedEventBus = eventBus
+            let capturedGlobalSymbols = globalSymbols
+            let capturedServices = services
 
+            eventBus.subscribe(to: DomainEvent.self) { event in
                 // Only handle events that match this handler's event type
                 guard event.domainEventType == eventType else { return }
 
@@ -286,17 +292,137 @@ public actor ExecutionEngine {
                     guard guardSet.allMatch(payload: event.payload) else { return }
                 }
 
-                await self.executeDomainEventHandler(
+                // Execute handler WITHOUT actor isolation to avoid deadlock
+                await ExecutionEngine.executeDomainEventHandlerStatic(
                     analyzedFS,
-                    program: program,
                     baseContext: baseContext,
-                    event: event
+                    event: event,
+                    actionRegistry: capturedActionRegistry,
+                    eventBus: capturedEventBus,
+                    globalSymbols: capturedGlobalSymbols,
+                    services: capturedServices
                 )
             }
         }
     }
 
-    /// Execute a domain event handler feature set
+    /// Execute a domain event handler feature set (static version to avoid actor deadlock)
+    /// This is called from event subscriptions and must NOT require actor isolation
+    /// to prevent deadlock when the actor is blocked waiting for handlers.
+    private static func executeDomainEventHandlerStatic(
+        _ analyzedFS: AnalyzedFeatureSet,
+        baseContext: RuntimeContext,
+        event: DomainEvent,
+        actionRegistry: ActionRegistry,
+        eventBus: EventBus,
+        globalSymbols: GlobalSymbolStorage,
+        services: ServiceRegistry
+    ) async {
+        // Create child context for this event handler with its business activity
+        let handlerContext = RuntimeContext(
+            featureSetName: analyzedFS.featureSet.name,
+            businessActivity: analyzedFS.featureSet.businessActivity,
+            eventBus: eventBus,
+            parent: baseContext
+        )
+
+        // Bind event payload to context as "event" with nested access
+        // e.g., <Extract> the <user> from the <event: user>
+        handlerContext.bind("event", value: event.payload)
+
+        // Also bind payload keys directly for convenience
+        for (key, value) in event.payload {
+            handlerContext.bind("event:\(key)", value: value)
+        }
+
+        // Copy services from base context
+        await services.registerAll(in: handlerContext)
+
+        // Execute the handler
+        let executor = FeatureSetExecutor(
+            actionRegistry: actionRegistry,
+            eventBus: eventBus,
+            globalSymbols: globalSymbols
+        )
+
+        do {
+            _ = try await executor.execute(analyzedFS, context: handlerContext)
+        } catch {
+            eventBus.publish(ErrorOccurredEvent(
+                error: String(describing: error),
+                context: analyzedFS.featureSet.name,
+                recoverable: true
+            ))
+        }
+    }
+
+    /// Execute a repository observer feature set (static version to avoid actor deadlock)
+    private static func executeRepositoryObserverStatic(
+        _ analyzedFS: AnalyzedFeatureSet,
+        baseContext: RuntimeContext,
+        event: RepositoryChangedEvent,
+        actionRegistry: ActionRegistry,
+        eventBus: EventBus,
+        globalSymbols: GlobalSymbolStorage,
+        services: ServiceRegistry
+    ) async {
+        // Create child context for this observer with its own business activity
+        let observerContext = RuntimeContext(
+            featureSetName: analyzedFS.featureSet.name,
+            businessActivity: analyzedFS.featureSet.businessActivity,
+            eventBus: eventBus,
+            parent: baseContext
+        )
+
+        // Build event payload for the observer
+        var eventPayload: [String: any Sendable] = [
+            "repositoryName": event.repositoryName,
+            "changeType": event.changeType.rawValue,
+            "timestamp": event.timestamp
+        ]
+
+        if let entityId = event.entityId {
+            eventPayload["entityId"] = entityId
+        }
+
+        if let newValue = event.newValue {
+            eventPayload["newValue"] = newValue
+        }
+
+        if let oldValue = event.oldValue {
+            eventPayload["oldValue"] = oldValue
+        }
+
+        // Bind event payload to context as "event" with nested access
+        observerContext.bind("event", value: eventPayload)
+
+        // Also bind event keys directly for convenience
+        for (key, value) in eventPayload {
+            observerContext.bind("event:\(key)", value: value)
+        }
+
+        // Copy services from base context
+        await services.registerAll(in: observerContext)
+
+        // Execute the observer
+        let executor = FeatureSetExecutor(
+            actionRegistry: actionRegistry,
+            eventBus: eventBus,
+            globalSymbols: globalSymbols
+        )
+
+        do {
+            _ = try await executor.execute(analyzedFS, context: observerContext)
+        } catch {
+            eventBus.publish(ErrorOccurredEvent(
+                error: String(describing: error),
+                context: analyzedFS.featureSet.name,
+                recoverable: true
+            ))
+        }
+    }
+
+    /// Execute a domain event handler feature set (actor method - kept for reference)
     private func executeDomainEventHandler(
         _ analyzedFS: AnalyzedFeatureSet,
         program: AnalyzedProgram,
@@ -557,9 +683,13 @@ public actor ExecutionEngine {
             let guardSet = StateGuardSet.parse(from: activity)
 
             // Subscribe to RepositoryChangedEvent and filter by repositoryName and guards
-            eventBus.subscribe(to: RepositoryChangedEvent.self) { [weak self] event in
-                guard let self = self else { return }
+            // CRITICAL: Capture values to avoid actor reentrancy deadlock
+            let capturedActionRegistry = actionRegistry
+            let capturedEventBus = eventBus
+            let capturedGlobalSymbols = globalSymbols
+            let capturedServices = services
 
+            eventBus.subscribe(to: RepositoryChangedEvent.self) { event in
                 // Only handle events that match this observer's repository
                 guard event.repositoryName == repositoryName else { return }
 
@@ -578,11 +708,15 @@ public actor ExecutionEngine {
                           guardSet.allMatch(payload: entity) else { return }
                 }
 
-                await self.executeRepositoryObserver(
+                // Execute observer WITHOUT actor isolation to avoid deadlock
+                await ExecutionEngine.executeRepositoryObserverStatic(
                     analyzedFS,
-                    program: program,
                     baseContext: baseContext,
-                    event: event
+                    event: event,
+                    actionRegistry: capturedActionRegistry,
+                    eventBus: capturedEventBus,
+                    globalSymbols: capturedGlobalSymbols,
+                    services: capturedServices
                 )
             }
         }
@@ -626,11 +760,14 @@ public actor ExecutionEngine {
             // Capture as constants for Sendable closure
             let capturedFieldName = fieldName
             let capturedTransitionFilter = transitionFilter
+            // CRITICAL: Capture values to avoid actor reentrancy deadlock
+            let capturedActionRegistry = actionRegistry
+            let capturedEventBus = eventBus
+            let capturedGlobalSymbols = globalSymbols
+            let capturedServices = services
 
             // Subscribe to StateTransitionEvent and filter by field name and optional transition
-            eventBus.subscribe(to: StateTransitionEvent.self) { [weak self] event in
-                guard let self = self else { return }
-
+            eventBus.subscribe(to: StateTransitionEvent.self) { event in
                 // Match field name (empty = match all fields)
                 let fieldMatches = capturedFieldName.isEmpty || event.fieldName.lowercased() == capturedFieldName
 
@@ -646,11 +783,15 @@ public actor ExecutionEngine {
                 let shouldHandle = fieldMatches && transitionMatches
 
                 if shouldHandle {
-                    await self.executeStateObserver(
+                    // Execute observer WITHOUT actor isolation to avoid deadlock
+                    await ExecutionEngine.executeStateObserverStatic(
                         analyzedFS,
-                        program: program,
                         baseContext: baseContext,
-                        event: event
+                        event: event,
+                        actionRegistry: capturedActionRegistry,
+                        eventBus: capturedEventBus,
+                        globalSymbols: capturedGlobalSymbols,
+                        services: capturedServices
                     )
                 }
             }
@@ -721,7 +862,73 @@ public actor ExecutionEngine {
         }
     }
 
-    /// Execute a state observer feature set
+    /// Execute a state observer feature set (static version to avoid actor deadlock)
+    private static func executeStateObserverStatic(
+        _ analyzedFS: AnalyzedFeatureSet,
+        baseContext: RuntimeContext,
+        event: StateTransitionEvent,
+        actionRegistry: ActionRegistry,
+        eventBus: EventBus,
+        globalSymbols: GlobalSymbolStorage,
+        services: ServiceRegistry
+    ) async {
+        // Create child context for this observer with its own business activity
+        let handlerContext = RuntimeContext(
+            featureSetName: analyzedFS.featureSet.name,
+            businessActivity: analyzedFS.featureSet.businessActivity,
+            eventBus: eventBus,
+            parent: baseContext
+        )
+
+        // Bind transition data to context as "transition" with nested access
+        var transitionData: [String: any Sendable] = [
+            "fieldName": event.fieldName,
+            "objectName": event.objectName,
+            "fromState": event.fromState,
+            "toState": event.toState
+        ]
+        if let entityId = event.entityId {
+            transitionData["entityId"] = entityId
+        }
+        if let entity = event.entity {
+            transitionData["entity"] = entity
+        }
+        handlerContext.bind("transition", value: transitionData)
+
+        // Also bind transition keys directly for convenience
+        handlerContext.bind("transition:fieldName", value: event.fieldName)
+        handlerContext.bind("transition:objectName", value: event.objectName)
+        handlerContext.bind("transition:fromState", value: event.fromState)
+        handlerContext.bind("transition:toState", value: event.toState)
+        if let entityId = event.entityId {
+            handlerContext.bind("transition:entityId", value: entityId)
+        }
+        if let entity = event.entity {
+            handlerContext.bind("transition:entity", value: entity)
+        }
+
+        // Copy services from base context
+        await services.registerAll(in: handlerContext)
+
+        // Execute the observer
+        let executor = FeatureSetExecutor(
+            actionRegistry: actionRegistry,
+            eventBus: eventBus,
+            globalSymbols: globalSymbols
+        )
+
+        do {
+            _ = try await executor.execute(analyzedFS, context: handlerContext)
+        } catch {
+            eventBus.publish(ErrorOccurredEvent(
+                error: String(describing: error),
+                context: analyzedFS.featureSet.name,
+                recoverable: true
+            ))
+        }
+    }
+
+    /// Execute a state observer feature set (actor method - kept for reference)
     private func executeStateObserver(
         _ analyzedFS: AnalyzedFeatureSet,
         program: AnalyzedProgram,
