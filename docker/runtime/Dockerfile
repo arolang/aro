@@ -29,6 +29,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     ca-certificates \
     libstdc++6 \
     libatomic1 \
+    libxml2 \
     && rm -rf /var/lib/apt/lists/*
 
 # Copy Swift runtime libraries from the Swift image

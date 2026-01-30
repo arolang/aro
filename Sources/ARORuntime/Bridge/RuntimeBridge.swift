@@ -148,6 +148,10 @@ public func aro_runtime_init() -> UnsafeMutableRawPointer? {
     // Use semaphore pattern to bridge sync @_cdecl to async actor methods
     let semaphore = DispatchSemaphore(value: 0)
 
+    // Start metrics collection for compiled binaries
+    // This enables <Log> the <metrics: table> to the <console>
+    MetricsCollector.shared.start(eventBus: handle.runtime.eventBus)
+
     Task.detached {
         await handle.runtime.register(service: InMemoryRepositoryStorage.shared as RepositoryStorageService)
 
@@ -301,8 +305,12 @@ public func aro_runtime_register_handler(
                     pool.gate.signal()
                 }
 
+                // Track execution time for metrics
+                let startTime = Date()
+                let handlerName = "\(eventTypeStr) Handler"
+
                 // Create a context for the handler
-                let contextHandle = AROCContextHandle(runtime: runtimeHandle, featureSetName: "handler")
+                let contextHandle = AROCContextHandle(runtime: runtimeHandle, featureSetName: handlerName)
 
                 // Bind event payload to context
                 contextHandle.context.bind("event", value: event.payload)
@@ -326,6 +334,16 @@ public func aro_runtime_register_handler(
                 typealias HandlerFunc = @convention(c) (UnsafeMutableRawPointer?) -> UnsafeMutableRawPointer?
                 let handlerFunc = unsafeBitCast(handlerPtrReconstructed, to: HandlerFunc.self)
                 let result = handlerFunc(contextPtr)
+
+                // Emit FeatureSetCompletedEvent for metrics tracking
+                let duration = Date().timeIntervalSince(startTime) * 1000
+                runtimeHandle.runtime.eventBus.publish(FeatureSetCompletedEvent(
+                    featureSetName: handlerName,
+                    businessActivity: eventTypeStr,
+                    executionId: contextHandle.context.executionId,
+                    success: true,
+                    durationMs: duration
+                ))
 
                 // Clean up result if needed
                 if let resultPtr = result {
@@ -381,10 +399,14 @@ public func aro_register_repository_observer(
                     pool.gate.signal()
                 }
 
+                // Track execution time for metrics
+                let startTime = Date()
+                let observerName = "\(repositoryName) Observer"
+
                 // Create event context with event data
                 let contextHandle = AROCContextHandle(
                     runtime: runtimeHandle,
-                    featureSetName: "\(repositoryName) Observer"
+                    featureSetName: observerName
                 )
 
                 // Bind event as a dictionary with all properties
@@ -420,6 +442,16 @@ public func aro_register_repository_observer(
                 typealias ObserverFunc = @convention(c) (UnsafeMutableRawPointer?) -> UnsafeMutableRawPointer?
                 let observerFunc = unsafeBitCast(observerPtrReconstructed, to: ObserverFunc.self)
                 let result = observerFunc(contextPtr)
+
+                // Emit FeatureSetCompletedEvent for metrics tracking
+                let duration = Date().timeIntervalSince(startTime) * 1000
+                runtimeHandle.runtime.eventBus.publish(FeatureSetCompletedEvent(
+                    featureSetName: observerName,
+                    businessActivity: "\(repositoryName) Observer",
+                    executionId: contextHandle.context.executionId,
+                    success: true,
+                    durationMs: duration
+                ))
 
                 // Clean up result if needed
                 if let resultPtr = result {
