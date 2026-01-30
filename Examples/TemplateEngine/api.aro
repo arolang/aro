@@ -1,0 +1,48 @@
+(* Template Engine API Endpoints *)
+
+(listUsers: User Pages) {
+    (* Create sample user data *)
+    <Create> the <users> with [
+        { name: "Alice", email: "alice@example.com", plan: "premium" },
+        { name: "Bob", email: "bob@example.com", plan: "free" },
+        { name: "Charlie", email: "charlie@example.com", plan: "premium" }
+    ].
+
+    (* Render the user list template *)
+    <Transform> the <html> from the <template: user-list.html>.
+
+    <Return> an <OK: status> with <html>.
+}
+
+(welcomeUser: User Pages) {
+    (* Extract user name from path *)
+    <Extract> the <name> from the <pathParameters: name>.
+
+    (* Create user object *)
+    <Create> the <user> with {
+        firstName: <name>,
+        email: <name> ++ "@example.com",
+        plan: "premium"
+    }.
+
+    (* Render welcome email template *)
+    <Transform> the <email-content> from the <template: emails/welcome.tpl>.
+
+    <Return> an <OK: status> with <email-content>.
+}
+
+(showDashboard: User Pages) {
+    (* Create sample data for dashboard *)
+    <Create> the <user> with { name: "Alice", isPremium: true }.
+    <Create> the <stats> with [
+        { label: "Total Users", value: 1250 },
+        { label: "Active Today", value: 89 },
+        { label: "Revenue", value: "$12,500" }
+    ].
+    <Create> the <title> with "Dashboard".
+
+    (* Render dashboard with layout *)
+    <Transform> the <page> from the <template: pages/dashboard.html>.
+
+    <Return> an <OK: status> with <page>.
+}

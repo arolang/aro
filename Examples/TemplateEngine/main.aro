@@ -1,0 +1,18 @@
+(* Template Engine Example - ARO-0045 *)
+(* NOTE: This example demonstrates the proposed template engine syntax. *)
+(* The template engine is not yet implemented - this serves as a reference. *)
+
+(Application-Start: Template Engine Demo) {
+    <Log> "Starting Template Engine Demo..." to the <console>.
+
+    (* Start HTTP server from OpenAPI contract *)
+    <Start> the <http-server> with {}.
+    <Log> "Server ready on port 8080" to the <console>.
+    <Log> "Try: curl http://localhost:8080/users" to the <console>.
+    <Log> "Try: curl http://localhost:8080/welcome/Alice" to the <console>.
+
+    (* Keep the application running until Ctrl+C *)
+    <Keepalive> the <application> for the <events>.
+
+    <Return> an <OK: status> for the <startup>.
+}

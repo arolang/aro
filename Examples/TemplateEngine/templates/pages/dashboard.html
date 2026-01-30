@@ -1,0 +1,48 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>{{ <title> }} | Template Demo</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 0; }
+        main { padding: 40px; }
+        .stats { display: flex; gap: 20px; flex-wrap: wrap; }
+        .stat-card {
+            background: #f5f5f5;
+            border-radius: 8px;
+            padding: 20px;
+            min-width: 200px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        .stat-card h2 { margin: 0 0 10px 0; font-size: 14px; color: #666; }
+        .stat-card p { margin: 0; font-size: 24px; font-weight: bold; }
+        .premium-badge {
+            background: gold;
+            color: black;
+            padding: 4px 8px;
+            border-radius: 4px;
+            font-size: 12px;
+        }
+    </style>
+</head>
+<body>
+    {{ <Include> the <template: partials/header.html>. }}
+
+    <main>
+        <h1>Welcome, {{ <user: name> }}!
+            {{ <Print> " <span class='premium-badge'>Premium</span>" to the <template> when <user: isPremium> = true. }}
+        </h1>
+
+        <h2>Your Statistics</h2>
+        <div class="stats">
+{{ for each <stat> in <stats> { }}
+            <div class="stat-card">
+                <h2>{{ <stat: label> }}</h2>
+                <p>{{ <stat: value> }}</p>
+            </div>
+{{ } }}
+        </div>
+    </main>
+
+    {{ <Include> the <template: partials/footer.html>. }}
+</body>
+</html>
