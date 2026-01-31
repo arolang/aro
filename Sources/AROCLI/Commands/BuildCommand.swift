@@ -216,6 +216,39 @@ struct BuildCommand: AsyncParsableCommand {
             }
         }
 
+        // Discover and serialize templates for embedding (ARO-0045)
+        var templatesJSON: String? = nil
+        let templatesDir = appConfig.rootPath.appendingPathComponent("templates")
+        if FileManager.default.fileExists(atPath: templatesDir.path) {
+            do {
+                var templates: [String: String] = [:]
+                let enumerator = FileManager.default.enumerator(at: templatesDir, includingPropertiesForKeys: nil)
+                while let fileURL = enumerator?.nextObject() as? URL {
+                    var isDirectory: ObjCBool = false
+                    FileManager.default.fileExists(atPath: fileURL.path, isDirectory: &isDirectory)
+                    if !isDirectory.boolValue {
+                        // Get relative path from templates directory
+                        let relativePath = fileURL.path.replacingOccurrences(
+                            of: templatesDir.path + "/",
+                            with: ""
+                        )
+                        let content = try String(contentsOf: fileURL, encoding: .utf8)
+                        templates[relativePath] = content
+                    }
+                }
+                if !templates.isEmpty {
+                    let jsonData = try JSONSerialization.data(withJSONObject: templates)
+                    templatesJSON = String(data: jsonData, encoding: .utf8)
+                    if verbose {
+                        print("  Embedding \(templates.count) template(s) (\(jsonData.count) bytes)")
+                    }
+                }
+            } catch {
+                print("Warning: Could not serialize templates: \(error)")
+                // Continue without embedding - fall back to file-based loading at runtime
+            }
+        }
+
         #if os(Windows)
         print("Error: Native compilation is not yet supported on Windows.")
         print("The 'aro build' command requires LLVM which is not available on Windows.")
@@ -226,7 +259,7 @@ struct BuildCommand: AsyncParsableCommand {
 
         do {
             let codeGenerator = LLVMCodeGeneratorV2()
-            llvmResult = try codeGenerator.generate(program: mergedProgram, openAPISpecJSON: openAPISpecJSON)
+            llvmResult = try codeGenerator.generate(program: mergedProgram, openAPISpecJSON: openAPISpecJSON, templatesJSON: templatesJSON)
             #if os(Linux)
             FileHandle.standardError.write("[BUILD] LLVM IR generated successfully\n".data(using: .utf8)!)
             #endif

@@ -145,7 +145,7 @@ struct RunCommand: AsyncParsableCommand {
         let application = Application(
             programs: compiledPrograms,
             entryPoint: entryPoint,
-            config: ApplicationConfig(verbose: verbose),
+            config: ApplicationConfig(verbose: verbose, workingDirectory: appConfig.rootPath.path),
             openAPISpec: appConfig.openAPISpec
         )
 

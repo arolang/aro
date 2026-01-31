@@ -270,6 +270,20 @@ public protocol ExecutionContext: AnyObject, Sendable {
 
     /// Whether execution is from a compiled binary (vs interpreter)
     var isCompiled: Bool { get }
+
+    // MARK: - Template Buffer (ARO-0045)
+
+    /// Append content to the template output buffer
+    /// Used by Print action when target is "template"
+    /// - Parameter value: The string value to append
+    func appendToTemplateBuffer(_ value: String)
+
+    /// Retrieve and clear the template output buffer
+    /// - Returns: The accumulated template output
+    func flushTemplateBuffer() -> String
+
+    /// Check if we're currently in a template rendering context
+    var isTemplateContext: Bool { get }
 }
 
 // MARK: - Default Implementations
@@ -305,4 +319,19 @@ public extension ExecutionContext {
     func typeOf(_ name: String) -> DataType? {
         resolveTyped(name)?.type
     }
+
+    // MARK: - Default Template Buffer Implementations
+
+    /// Default: no-op (not in template context)
+    func appendToTemplateBuffer(_ value: String) {
+        // No-op in non-template contexts
+    }
+
+    /// Default: empty string (not in template context)
+    func flushTemplateBuffer() -> String {
+        return ""
+    }
+
+    /// Default: not a template context
+    var isTemplateContext: Bool { false }
 }

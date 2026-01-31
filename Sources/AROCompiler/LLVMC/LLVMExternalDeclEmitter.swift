@@ -30,6 +30,7 @@ public final class LLVMExternalDeclEmitter {
     private var _contextPrintError: Function?
     private var _loadPrecompiledPlugins: Function?
     private var _setEmbeddedOpenapi: Function?
+    private var _setEmbeddedTemplates: Function?
 
     // Variable operations
     private var _variableBindString: Function?
@@ -180,6 +181,12 @@ public final class LLVMExternalDeclEmitter {
         // void @aro_set_embedded_openapi(ptr)
         _setEmbeddedOpenapi = ctx.module.declareFunction(
             "aro_set_embedded_openapi",
+            types.voidFunctionType(parameters: [ptr])
+        )
+
+        // void @aro_set_embedded_templates(ptr) - ARO-0045
+        _setEmbeddedTemplates = ctx.module.declareFunction(
+            "aro_set_embedded_templates",
             types.voidFunctionType(parameters: [ptr])
         )
     }
@@ -437,6 +444,7 @@ public final class LLVMExternalDeclEmitter {
     public var contextPrintError: Function { _contextPrintError! }
     public var loadPrecompiledPlugins: Function { _loadPrecompiledPlugins! }
     public var setEmbeddedOpenapi: Function { _setEmbeddedOpenapi! }
+    public var setEmbeddedTemplates: Function { _setEmbeddedTemplates! }
 
     // Variable operations
     public var variableBindString: Function { _variableBindString! }

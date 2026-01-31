@@ -50,6 +50,12 @@ public final class RuntimeContext: ExecutionContext, @unchecked Sendable {
     /// Whether this is a compiled binary execution
     private let _isCompiled: Bool
 
+    /// Template output buffer (ARO-0045)
+    private var _templateBuffer: String = ""
+
+    /// Whether this is a template rendering context
+    private let _isTemplateContext: Bool
+
     // MARK: - Metadata
 
     public let featureSetName: String
@@ -67,13 +73,15 @@ public final class RuntimeContext: ExecutionContext, @unchecked Sendable {
     ///   - eventBus: Optional event bus for event emission
     ///   - parent: Optional parent context for nested execution
     ///   - isCompiled: Whether this is a compiled binary execution (defaults to false)
+    ///   - isTemplateContext: Whether this is a template rendering context (defaults to false)
     public init(
         featureSetName: String,
         businessActivity: String = "",
         outputContext: OutputContext = .human,
         eventBus: EventBus? = nil,
         parent: ExecutionContext? = nil,
-        isCompiled: Bool = false
+        isCompiled: Bool = false,
+        isTemplateContext: Bool = false
     ) {
         self.featureSetName = featureSetName
         self.businessActivity = businessActivity
@@ -82,6 +90,7 @@ public final class RuntimeContext: ExecutionContext, @unchecked Sendable {
         self.eventBus = eventBus
         self.parent = parent
         self._isCompiled = isCompiled
+        self._isTemplateContext = isTemplateContext
     }
 
     // MARK: - Variable Management
@@ -361,7 +370,8 @@ public final class RuntimeContext: ExecutionContext, @unchecked Sendable {
             outputContext: _outputContext,
             eventBus: eventBus,
             parent: self,
-            isCompiled: _isCompiled
+            isCompiled: _isCompiled,
+            isTemplateContext: false
         )
     }
 
@@ -373,8 +383,40 @@ public final class RuntimeContext: ExecutionContext, @unchecked Sendable {
             outputContext: _outputContext,
             eventBus: eventBus,
             parent: self,
-            isCompiled: _isCompiled
+            isCompiled: _isCompiled,
+            isTemplateContext: false
         )
+    }
+
+    /// Create a child context for template rendering (ARO-0045)
+    /// This context has an isolated template buffer and copies all parent variables
+    public func createTemplateContext() -> RuntimeContext {
+        let templateContext = RuntimeContext(
+            featureSetName: "template:\(featureSetName)",
+            businessActivity: businessActivity,
+            outputContext: _outputContext,
+            eventBus: eventBus,
+            parent: self,
+            isCompiled: _isCompiled,
+            isTemplateContext: true
+        )
+
+        // Copy all variables from parent context for isolation
+        // Changes in template context won't affect parent
+        for name in variableNames {
+            if let value = resolveAny(name) {
+                templateContext.bind(name, value: value, allowRebind: true)
+            }
+        }
+
+        // Copy services from parent
+        lock.lock()
+        for (typeId, service) in services {
+            templateContext.registerWithTypeId(typeId, service: service)
+        }
+        lock.unlock()
+
+        return templateContext
     }
 
     // MARK: - Wait State Management
@@ -425,6 +467,26 @@ public final class RuntimeContext: ExecutionContext, @unchecked Sendable {
 
     public var isCompiled: Bool {
         _isCompiled
+    }
+
+    // MARK: - Template Buffer (ARO-0045)
+
+    public func appendToTemplateBuffer(_ value: String) {
+        lock.lock()
+        defer { lock.unlock() }
+        _templateBuffer.append(value)
+    }
+
+    public func flushTemplateBuffer() -> String {
+        lock.lock()
+        defer { lock.unlock() }
+        let result = _templateBuffer
+        _templateBuffer = ""
+        return result
+    }
+
+    public var isTemplateContext: Bool {
+        _isTemplateContext
     }
 }
 

@@ -105,6 +105,16 @@ public final class Application: @unchecked Sendable {
             let specService = OpenAPISpecService(spec: spec)
             await runtime.register(service: specService)
         }
+
+        // Register template service (ARO-0045)
+        let templatesDirectory = (config.workingDirectory as NSString).appendingPathComponent("templates")
+        let templateService = AROTemplateService(templatesDirectory: templatesDirectory)
+        let templateExecutor = TemplateExecutor(
+            actionRegistry: ActionRegistry.shared,
+            eventBus: .shared
+        )
+        templateService.setExecutor(templateExecutor)
+        await runtime.register(service: templateService as TemplateService)
     }
 
     /// Initialize from source files

@@ -50,6 +50,7 @@
 34. **Type System** — Primitives, collections, and OpenAPI schemas
 35. **Date and Time** — Temporal operations, comparisons, and formatting
 36. **Runtime Metrics** — Execution counts, timing, and Prometheus integration
+37. **Template Engine** — Dynamic content generation with `{{ }}` blocks
 
 ## Appendices
 - A: Action Reference (all 50 built-in actions)

@@ -2025,11 +2025,28 @@ nonisolated(unsafe) public var httpRoutes: [(method: String, path: String, opera
 /// Global storage for embedded OpenAPI spec (JSON string, set at compile time)
 nonisolated(unsafe) public var embeddedOpenAPISpec: String? = nil
 
+/// Global storage for embedded templates (JSON dictionary: path -> content, set at compile time)
+nonisolated(unsafe) public var embeddedTemplates: [String: String]? = nil
+
 /// Set the embedded OpenAPI spec (called from generated main)
 @_cdecl("aro_set_embedded_openapi")
 public func aro_set_embedded_openapi(_ specPtr: UnsafePointer<CChar>?) {
     guard let ptr = specPtr else { return }
     embeddedOpenAPISpec = String(cString: ptr)
+}
+
+/// Set the embedded templates (called from generated main) - ARO-0045
+@_cdecl("aro_set_embedded_templates")
+public func aro_set_embedded_templates(_ jsonPtr: UnsafePointer<CChar>?) {
+    guard let ptr = jsonPtr else { return }
+    let jsonString = String(cString: ptr)
+
+    // Parse the JSON dictionary
+    guard let data = jsonString.data(using: .utf8),
+          let dict = try? JSONSerialization.jsonObject(with: data) as? [String: String] else {
+        return
+    }
+    embeddedTemplates = dict
 }
 
 /// Register a feature set handler for HTTP routing
@@ -2647,6 +2664,12 @@ public func aro_http_register_route(
 /// Set the embedded OpenAPI spec (Windows stub)
 @_cdecl("aro_set_embedded_openapi")
 public func aro_set_embedded_openapi(_ specPtr: UnsafePointer<CChar>?) {
+    // No-op on Windows
+}
+
+/// Set the embedded templates (Windows stub) - ARO-0045
+@_cdecl("aro_set_embedded_templates")
+public func aro_set_embedded_templates(_ jsonPtr: UnsafePointer<CChar>?) {
     // No-op on Windows
 }
 

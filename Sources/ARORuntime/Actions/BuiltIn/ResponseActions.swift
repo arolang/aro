@@ -384,8 +384,16 @@ public struct LogAction: ActionImplementation {
             message = result.fullName
         }
 
-        // Get log target (e.g., console, file)
+        // Get log target (e.g., console, file, template)
         let target = object.base
+
+        // ARO-0045: Check for template target
+        // Syntax: <Print> "message" to the <template>.
+        if target.lowercased() == "template" {
+            // Append to template buffer instead of stdout/stderr
+            context.appendToTemplateBuffer(message)
+            return LogResult(message: message, target: target)
+        }
 
         // Extract output stream qualifier (for console: stdout vs stderr)
         // Default to "output" (stdout) if no qualifier specified

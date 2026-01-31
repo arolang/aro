@@ -45,11 +45,13 @@ public final class LLVMCodeGeneratorV2 {
     /// - Parameters:
     ///   - program: The analyzed ARO program
     ///   - openAPISpecJSON: Optional OpenAPI specification as JSON string
+    ///   - templatesJSON: Optional templates dictionary as JSON string (ARO-0045)
     /// - Returns: Code generation result with IR text
     /// - Throws: LLVMCodeGenError if generation fails
     public func generate(
         program: AnalyzedProgram,
-        openAPISpecJSON: String? = nil
+        openAPISpecJSON: String? = nil,
+        templatesJSON: String? = nil
     ) throws -> LLVMCodeGenerationResult {
         // Initialize components
         ctx = LLVMCodeGenContext(moduleName: "aro_program")
@@ -70,7 +72,7 @@ public final class LLVMCodeGeneratorV2 {
 
         // Collect and emit string constants
         let stringCollector = StringConstantCollector(context: ctx)
-        stringCollector.collect(from: program, openAPISpecJSON: openAPISpecJSON)
+        stringCollector.collect(from: program, openAPISpecJSON: openAPISpecJSON, templatesJSON: templatesJSON)
 
         // Generate feature set functions
         for analyzedFS in program.featureSets {
@@ -78,7 +80,7 @@ public final class LLVMCodeGeneratorV2 {
         }
 
         // Generate main function
-        generateMainFunction(program: program, openAPISpecJSON: openAPISpecJSON)
+        generateMainFunction(program: program, openAPISpecJSON: openAPISpecJSON, templatesJSON: templatesJSON)
 
         // Verify module
         try verifyModule()
@@ -1253,7 +1255,7 @@ public final class LLVMCodeGeneratorV2 {
 
     // MARK: - Main Function Generation
 
-    private func generateMainFunction(program: AnalyzedProgram, openAPISpecJSON: String?) {
+    private func generateMainFunction(program: AnalyzedProgram, openAPISpecJSON: String?, templatesJSON: String? = nil) {
         let mainFunc = ctx.module.declareFunction("main", types.mainFunctionType)
 
         let entryBlock = ctx.module.appendBlock(named: "entry", to: mainFunc)
@@ -1270,6 +1272,12 @@ public final class LLVMCodeGeneratorV2 {
         if let spec = openAPISpecJSON {
             let specStr = ctx.stringConstant(spec)
             ctx.module.insertCall(externals.setEmbeddedOpenapi, on: [specStr], at: ip)
+        }
+
+        // Set embedded templates if provided (ARO-0045)
+        if let templates = templatesJSON {
+            let templatesStr = ctx.stringConstant(templates)
+            ctx.module.insertCall(externals.setEmbeddedTemplates, on: [templatesStr], at: ip)
         }
 
         // Load precompiled plugins
@@ -1414,7 +1422,7 @@ private final class StringConstantCollector {
         self.ctx = context
     }
 
-    func collect(from program: AnalyzedProgram, openAPISpecJSON: String?) {
+    func collect(from program: AnalyzedProgram, openAPISpecJSON: String?, templatesJSON: String? = nil) {
         // Register built-in variable names
         let builtins = ["_literal_", "_expression_", "_result_expression_",
                         "_aggregation_type_", "_aggregation_field_",
@@ -1428,6 +1436,11 @@ private final class StringConstantCollector {
         // Register OpenAPI spec if provided
         if let spec = openAPISpecJSON {
             _ = ctx.stringConstant(spec)
+        }
+
+        // Register templates JSON if provided (ARO-0045)
+        if let templates = templatesJSON {
+            _ = ctx.stringConstant(templates)
         }
 
         // Collect from feature sets

@@ -669,7 +669,7 @@ public struct CompareAction: ActionImplementation {
     }
 }
 
-/// Transforms a value
+/// Transforms a value or renders a template (ARO-0045)
 public struct TransformAction: ActionImplementation {
     public static let role: ActionRole = .own
     public static let verbs: Set<String> = ["transform", "convert", "map"]
@@ -683,6 +683,12 @@ public struct TransformAction: ActionImplementation {
         context: ExecutionContext
     ) async throws -> any Sendable {
         try validatePreposition(object.preposition)
+
+        // ARO-0045: Check for template rendering
+        // Syntax: <Transform> the <result> from the <template: path>.
+        if object.base.lowercased() == "template" {
+            return try await renderTemplate(object: object, context: context)
+        }
 
         // Get value to transform
         guard let value = context.resolveAny(object.base) else {
@@ -730,6 +736,39 @@ public struct TransformAction: ActionImplementation {
             // value is already `any Sendable`
             return value
         }
+    }
+
+    /// Render a template (ARO-0045)
+    private func renderTemplate(
+        object: ObjectDescriptor,
+        context: ExecutionContext
+    ) async throws -> String {
+        // Get template path from specifiers
+        // Specifiers are split by ':' and '.', so "foo.tpl" becomes ["foo", "tpl"]
+        // and "emails/welcome.tpl" becomes ["emails/welcome", "tpl"]
+        // We join with '.' to reconstruct the original path with extension
+        guard !object.specifiers.isEmpty else {
+            throw ActionError.runtimeError("Template path required: <template: path>")
+        }
+
+        // Join specifiers with '.' to reconstruct path with extension
+        let rawPath = object.specifiers.joined(separator: ".")
+
+        // Check if this is a variable reference that should be resolved
+        let templatePath: String
+        if object.specifiers.count == 1, let resolved: String = context.resolve(object.specifiers[0]) {
+            templatePath = resolved
+        } else {
+            templatePath = rawPath
+        }
+
+        // Get template service
+        guard let templateService = context.service(TemplateService.self) else {
+            throw ActionError.missingService("TemplateService not registered. Templates require the template service to be configured.")
+        }
+
+        // Render the template
+        return try await templateService.render(path: templatePath, context: context)
     }
 }
 
