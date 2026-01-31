@@ -66,6 +66,7 @@ class AROCContextHandle {
     let fileSystemService: AROFileSystemService?
     let socketServer: AROSocketServer?
     let httpServer: AROHTTPServer?
+    let templateService: AROTemplateService?
     #endif
 
     init(runtime: AROCRuntimeHandle, featureSetName: String) {
@@ -105,6 +106,18 @@ class AROCContextHandle {
         // aro_native_http_server_start_with_openapi() which is invoked in StartAction
         // when no HTTPServerService is registered.
         self.httpServer = nil
+
+        // Register template service (ARO-0045)
+        let cwd = FileManager.default.currentDirectoryPath
+        let templatesDirectory = (cwd as NSString).appendingPathComponent("templates")
+        let ts = AROTemplateService(templatesDirectory: templatesDirectory)
+        let templateExecutor = TemplateExecutor(
+            actionRegistry: ActionRegistry.shared,
+            eventBus: .shared
+        )
+        ts.setExecutor(templateExecutor)
+        self.context.register(ts as TemplateService)
+        self.templateService = ts
         #endif
     }
 
@@ -116,6 +129,7 @@ class AROCContextHandle {
         self.fileSystemService = nil
         self.socketServer = nil
         self.httpServer = nil
+        self.templateService = nil
         #endif
     }
 }
