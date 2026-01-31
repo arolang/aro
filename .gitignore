@@ -97,3 +97,4 @@ testrun.log
 /Examples/ExternalService/plugins/libCounterPlugin.so
 /Examples/CustomPlugin/plugins/GreetingService.so
 /Examples/ApplicationEnd/ApplicationEnd
+/Examples/TemplateEngine/TemplateEngine
