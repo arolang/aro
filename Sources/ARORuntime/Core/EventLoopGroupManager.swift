@@ -104,12 +104,25 @@ public final class EventLoopGroupManager: @unchecked Sendable {
 
     /// Setup automatic shutdown when process exits
     private func setupAutomaticShutdown() {
+        // Mark as initialized BEFORE registering atexit handler
+        // This allows the atexit handler to know if we need to do anything
+        EventLoopGroupManager._instanceInitialized = true
+
         // Register atexit handler - this runs when process tries to exit
-        // Shutting down the event loops allows the process to complete exit
+        // Only shutdown if the manager was actually used (groups were created)
         atexit {
+            // Only access shared if it was already initialized
+            // This prevents recursive initialization during exit which causes hangs
+            guard EventLoopGroupManager._instanceInitialized else { return }
             EventLoopGroupManager.shared.shutdownAll()
         }
     }
+
+    /// Static flag to track if the singleton was ever initialized
+    /// Must be set BEFORE the atexit handler is registered to avoid race conditions
+    /// nonisolated(unsafe) is used because this is only ever written once (during init)
+    /// and read once (during atexit) - no concurrent access is possible
+    nonisolated(unsafe) private static var _instanceInitialized = false
 }
 
 #endif  // !os(Windows)

@@ -6,7 +6,6 @@
 import ArgumentParser
 import Foundation
 import AROParser
-import ARORuntime
 
 struct CheckCommand: ParsableCommand {
     static let configuration = CommandConfiguration(
@@ -68,7 +67,9 @@ struct CheckCommand: ParsableCommand {
         }
 
         if totalErrors > 0 {
-            throw ExitCode.failure
+            // Use Foundation.exit() directly instead of throwing
+            // This avoids potential issues with async command unwinding
+            Foundation.exit(1)
         }
     }
 
