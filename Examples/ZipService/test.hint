@@ -2,8 +2,6 @@
 # Package plugin compilation requires Swift compiler at runtime
 # Zip library requires zlib.h which is not available on Windows CI
 skip-on-windows: Zip library requires zlib which is not installed on Windows CI
-# Zip library 2.1.x has Swift 6 compatibility issue on Linux (optional pointer unwrapping)
-skip-on-linux: Zip library has Swift 6 compatibility bug on Linux
 timeout: 120
 # Use occurrence-check for order-independent matching (dictionary output order varies)
 occurrence-check: true

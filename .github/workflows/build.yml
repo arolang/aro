@@ -703,6 +703,11 @@ jobs:
           sudo cp ./aro-bin/libARORuntime.a /usr/local/lib/libARORuntime.a
           ./aro-bin/aro --version
 
+      - name: Verify Swift version
+        run: |
+          echo "Swift binary: $(which swift)"
+          swift --version
+
       - name: Run integration tests
         run: |
           chmod +x test-examples.pl
