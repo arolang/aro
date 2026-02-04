@@ -672,12 +672,15 @@ jobs:
           sudo ln -sf /usr/bin/llc-20 /usr/bin/llc
           echo "/usr/lib/llvm-20/bin" >> $GITHUB_PATH
 
-      - name: Install Perl modules
+      - name: Install dependencies and Perl modules
         run: |
           export DEBIAN_FRONTEND=noninteractive
           sudo apt-get update -qq
-          # Install available Perl modules from apt (faster and more reliable)
+          # Install runtime libraries for plugin tests (SQLiteExample, ZipService)
+          # and Perl modules from apt (faster and more reliable)
           sudo apt-get install -y -qq \
+            libsqlite3-dev \
+            zlib1g-dev \
             libipc-run-perl \
             libyaml-libyaml-perl \
             libhttp-tiny-perl \

@@ -502,7 +502,7 @@ When using `aro build`, all templates from `./templates/` are bundled into the f
 ### 12.1 Build-Time Behavior
 
 ```
-./templates/          BuildCommand.swift         LLVMCodeGeneratorV2
+./templates/          BuildCommand.swift         LLVMCodeGenerator
       |                      |                          |
       v                      v                          v
 +------------+       +---------------+          +---------------+
@@ -766,7 +766,7 @@ Error: Can not extract the <name> from the <user: name> in template welcome.tpl
 - `Sources/ARORuntime/FileSystem/FileSystemService.swift` - File reading pattern
 - `Sources/AROParser/AST.swift` - ForEachLoop AST structure
 - `Sources/AROCLI/Commands/BuildCommand.swift` - OpenAPI embedding pattern
-- `Sources/AROCompiler/LLVMC/LLVMCodeGeneratorV2.swift` - LLVM IR generation
+- `Sources/AROCompiler/LLVMC/LLVMCodeGenerator.swift` - LLVM IR generation
 - ARO-0001: Language Fundamentals - Core syntax
 - ARO-0002: Control Flow - For-each loops
 - ARO-0004: Actions - Action roles and extensions

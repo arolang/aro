@@ -12,7 +12,9 @@ let package = Package(
     targets: [
         .target(
             name: "ZipPlugin",
-            dependencies: ["Zip"]
+            dependencies: [
+                .product(name: "Zip", package: "Zip")
+            ]
         )
     ]
 )

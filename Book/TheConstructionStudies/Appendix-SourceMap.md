@@ -91,12 +91,12 @@ The compiler uses Swifty-LLVM for type-safe LLVM IR generation:
 
 | File | Description |
 |------|-------------|
-| `LLVMCodeGeneratorV2.swift` | Main code generator using LLVM C API |
+| `LLVMCodeGenerator.swift` | Main code generator using LLVM C API |
 | `LLVMCodeGenContext.swift` | Module, builder, and type caches |
 | `LLVMTypeMapper.swift` | Descriptor struct type definitions |
 | `LLVMExternalDeclEmitter.swift` | Runtime function declarations |
 
-### LLVMCodeGeneratorV2 Key Methods
+### LLVMCodeGenerator Key Methods
 
 | Method | Purpose |
 |--------|---------|
@@ -163,7 +163,7 @@ The compiler uses Swifty-LLVM for type-safe LLVM IR generation:
 2. **Understand AST**: `AST.swift`, `Parser.swift`
 3. **See execution**: `FeatureSetExecutor.swift`, `ActionImplementation.swift`
 4. **Study events**: `EventBus.swift`, `EventTypes.swift`
-5. **Explore compilation**: `LLVMC/LLVMCodeGeneratorV2.swift`
+5. **Explore compilation**: `LLVMC/LLVMCodeGenerator.swift`
 6. **Understand bridge**: `Bridge/RuntimeBridge.swift`, `Bridge/ActionBridge.swift`
 
 ---
@@ -176,7 +176,7 @@ The compiler uses Swifty-LLVM for type-safe LLVM IR generation:
 | How expressions are parsed | `Parser.swift:parseExpression()` |
 | How actions are registered | `ActionRegistry.swift` (actor) |
 | How events are dispatched | `EventBus.swift:publishAndTrack()` |
-| How LLVM IR is generated | `LLVMC/LLVMCodeGeneratorV2.swift` |
+| How LLVM IR is generated | `LLVMC/LLVMCodeGenerator.swift` |
 | How descriptor types are defined | `LLVMC/LLVMTypeMapper.swift` |
 | How C calls Swift | `Bridge/ActionBridge.swift:executeAction()` |
 | How pointers are managed | `Bridge/RuntimeBridge.swift:AROCRuntimeHandle` |

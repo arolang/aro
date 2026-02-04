@@ -98,3 +98,6 @@ testrun.log
 /Examples/CustomPlugin/plugins/GreetingService.so
 /Examples/ApplicationEnd/ApplicationEnd
 /Examples/TemplateEngine/TemplateEngine
+/output
+/Examples/ZipService/plugins/libZipPlugin.so
+/Examples/SQLiteExample/plugins/libSQLitePlugin.so

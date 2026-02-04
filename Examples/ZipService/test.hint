@@ -1,14 +1,7 @@
 # Test hints for ZipService
 # Package plugin compilation requires Swift compiler at runtime
-# Skipped on Linux: CI runner cannot access GitHub to fetch Swift package dependencies
-# Error: "Failed to clone repository https://github.com/marmelroy/Zip.git"
-skip-on-linux: CI runner (spencer) cannot fetch GitHub dependencies
 # Zip library requires zlib.h which is not available on Windows CI
 skip-on-windows: Zip library requires zlib which is not installed on Windows CI
-# macOS CI runners cannot reliably fetch GitHub dependencies for plugin compilation
-skip-on-macos: CI runner cannot fetch GitHub dependencies for plugin compilation
-mode: both
 timeout: 120
 # Use occurrence-check for order-independent matching (dictionary output order varies)
-# Also needed for binary mode compatibility (plugin loading messages differ)
 occurrence-check: true

@@ -76,31 +76,6 @@ public final class LLVMEmitter {
         #endif
     }
 
-    /// Emit LLVM IR to assembly
-    /// - Parameters:
-    ///   - irPath: Path to LLVM IR file (.ll)
-    ///   - outputPath: Path for output assembly file
-    public func emitAssembly(
-        irPath: String,
-        to outputPath: String
-    ) throws {
-        let llcPath = try findLLC()
-
-        var args = [llcPath]
-
-        // Add -opaque-pointers flag only for LLVM 14-16
-        if let version = getLLVMMajorVersion(llcPath), version >= 14 && version < 17 {
-            args.append("-opaque-pointers")
-        }
-
-        args.append("-filetype=asm")
-        args.append("-o")
-        args.append(outputPath)
-        args.append(irPath)
-
-        try runProcess(args)
-    }
-
     // MARK: - Private Methods
 
     private func findLLC() throws -> String {
