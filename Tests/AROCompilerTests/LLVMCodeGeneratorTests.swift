@@ -1,5 +1,5 @@
 // ============================================================
-// LLVMCodeGeneratorV2Tests.swift
+// LLVMCodeGeneratorTests.swift
 // AROCompiler Tests - LLVM C API Code Generator
 // ============================================================
 
@@ -9,10 +9,10 @@ import XCTest
 
 #if !os(Windows)
 
-final class LLVMCodeGeneratorV2Tests: XCTestCase {
+final class LLVMCodeGeneratorTests: XCTestCase {
 
     func testV2GeneratorCreation() throws {
-        let generator = LLVMCodeGeneratorV2()
+        let generator = LLVMCodeGenerator()
         XCTAssertNotNil(generator)
     }
 
@@ -67,7 +67,7 @@ final class LLVMCodeGeneratorV2Tests: XCTestCase {
             globalRegistry: GlobalSymbolRegistry()
         )
 
-        let generator = LLVMCodeGeneratorV2()
+        let generator = LLVMCodeGenerator()
         let result2 = try generator.generate(program: analyzedProgram)
 
         // Verify output contains expected LLVM IR elements
@@ -103,7 +103,7 @@ final class LLVMCodeGeneratorV2Tests: XCTestCase {
             globalRegistry: GlobalSymbolRegistry()
         )
 
-        let generator = LLVMCodeGeneratorV2()
+        let generator = LLVMCodeGenerator()
 
         XCTAssertThrowsError(try generator.generate(program: analyzedProgram)) { error in
             XCTAssertTrue(error is LLVMCodeGenError)
@@ -231,7 +231,7 @@ final class LLVMCodeGeneratorV2Tests: XCTestCase {
             globalRegistry: GlobalSymbolRegistry()
         )
 
-        let generator = LLVMCodeGeneratorV2()
+        let generator = LLVMCodeGenerator()
 
         // Multiple Application-Start feature sets should now succeed
         let result = try generator.generate(program: analyzedProgram)

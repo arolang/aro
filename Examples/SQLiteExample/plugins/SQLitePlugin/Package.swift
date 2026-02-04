@@ -7,7 +7,8 @@ let package = Package(
         .library(name: "SQLitePlugin", type: .dynamic, targets: ["SQLitePlugin"])
     ],
     dependencies: [
-        .package(url: "https://github.com/stephencelis/SQLite.swift.git", from: "0.15.0")
+        // Use 0.14.1 which has simpler Linux support without traits
+        .package(url: "https://github.com/stephencelis/SQLite.swift.git", exact: "0.14.1")
     ],
     targets: [
         .target(

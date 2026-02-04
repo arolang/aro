@@ -258,7 +258,7 @@ struct BuildCommand: AsyncParsableCommand {
         let llvmResult: LLVMCodeGenerationResult
 
         do {
-            let codeGenerator = LLVMCodeGeneratorV2()
+            let codeGenerator = LLVMCodeGenerator()
             llvmResult = try codeGenerator.generate(program: mergedProgram, openAPISpecJSON: openAPISpecJSON, templatesJSON: templatesJSON)
             #if os(Linux)
             FileHandle.standardError.write("[BUILD] LLVM IR generated successfully\n".data(using: .utf8)!)

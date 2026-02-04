@@ -20,7 +20,7 @@ Source Files (.aro)
        ↓
 AnalyzedProgram (AST)
        ↓
-LLVMCodeGeneratorV2
+LLVMCodeGenerator
   (Swifty-LLVM API)
        ↓
   LLVM IR (.ll)
@@ -61,9 +61,9 @@ Executable
   <text x="100" y="130" class="title" text-anchor="middle">Parser</text>
   <text x="100" y="150" class="label" text-anchor="middle">AnalyzedProgram</text>
 
-  <!-- LLVMCodeGeneratorV2 -->
+  <!-- LLVMCodeGenerator -->
   <rect x="30" y="190" width="140" height="50" rx="5" class="box compiler"/>
-  <text x="100" y="210" class="title" text-anchor="middle">LLVMCodeGeneratorV2</text>
+  <text x="100" y="210" class="title" text-anchor="middle">LLVMCodeGenerator</text>
   <text x="100" y="230" class="label" text-anchor="middle">AST → IR (C API)</text>
 
   <!-- LLVM IR -->
@@ -140,10 +140,10 @@ Swifty-LLVM wraps LLVM's C API in Swift types, providing:
 
 ### Code Generator Architecture
 
-The code generator (`LLVMCodeGeneratorV2`) uses several supporting components:
+The code generator (`LLVMCodeGenerator`) uses several supporting components:
 
 ```
-LLVMCodeGeneratorV2
+LLVMCodeGenerator
        │
        ├── LLVMCodeGenContext     (module, builder, type cache)
        │
@@ -676,7 +676,7 @@ if options.strip {
 
 Native compilation transforms ARO programs into standalone executables:
 
-1. **LLVMCodeGeneratorV2** traverses the AST using the Swifty-LLVM C API for type-safe IR generation
+1. **LLVMCodeGenerator** traverses the AST using the Swifty-LLVM C API for type-safe IR generation
 2. **String constants** are collected first, then referenced by pointer
 3. **Feature sets** become functions; **statements** become descriptor allocations and action calls
 4. **Control flow** (when, match, for-each) uses LLVM branches and phi nodes
@@ -687,7 +687,7 @@ Native compilation transforms ARO programs into standalone executables:
 The Swifty-LLVM C API approach provides compile-time type safety and better performance compared to the original text-based generator, at the cost of requiring LLVM 20 as a build dependency.
 
 Implementation references:
-- `Sources/AROCompiler/LLVMC/LLVMCodeGeneratorV2.swift` — Main code generator
+- `Sources/AROCompiler/LLVMC/LLVMCodeGenerator.swift` — Main code generator
 - `Sources/AROCompiler/LLVMC/LLVMTypeMapper.swift` — Descriptor struct type definitions
 - `Sources/AROCompiler/LLVMC/LLVMExternalDeclEmitter.swift` — Runtime function declarations
 - `Sources/AROCompiler/Linker.swift` — Object linking

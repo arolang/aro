@@ -190,12 +190,7 @@ public struct AROStatement: Statement {
         self.statementGuard = StatementGuard(condition: whenCondition)
     }
 
-    // MARK: - Backward Compatibility Computed Properties
-
-    /// Optional literal value (e.g., `with "string"`, `with 42`)
-    public var literalValue: LiteralValue? {
-        valueSource.asLiteral
-    }
+    // MARK: - Convenience Accessors
 
     /// Optional expression value (ARO-0002) - for computed values like `from <x> * <y>`
     public var expression: (any Expression)? {
@@ -249,10 +244,10 @@ public struct AROStatement: Statement {
         } else {
             desc = "<\(action.verb)> the <\(result)> \(object.preposition) the <\(object.noun)>"
         }
-        if let literal = literalValue {
+        if let literal = valueSource.asLiteral {
             desc += " with \(literal)"
         }
-        if let expr = expression {
+        if case .expression(let expr) = valueSource {
             desc += " = \(expr)"
         }
         if let agg = queryModifiers.aggregation {

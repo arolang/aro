@@ -120,12 +120,6 @@ public indirect enum DataType: Sendable, Equatable, CustomStringConvertible {
         }
     }
 
-    /// Check if this is an OpenAPI schema reference
-    public var isSchemaReference: Bool {
-        if case .schema = self { return true }
-        return false
-    }
-
     /// Parse a type from a string (e.g., "String", "List<User>", "Map<String, Integer>")
     public static func parse(_ typeString: String) -> DataType {
         let trimmed = typeString.trimmingCharacters(in: .whitespaces)

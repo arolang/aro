@@ -1,0 +1,12 @@
+services:
+  aro-runtime:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: runtime
+    volumes:
+      - .:/aro-source
+    working_dir: /aro-source
+    stdin_open: true
+    tty: true
+    entrypoint: /bin/bash

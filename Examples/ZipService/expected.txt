@@ -1,13 +1,13 @@
-# Generated: Wed Jan 15 2026
+# Generated: Sat Jan 31 17:49:20 2026
 # Type: console
 # Command: aro run ./Examples/ZipService
 # Timeout: 120s
-# Note: Uses occurrence-check for order-independent matching
-# Binary loads precompiled plugin, interpreter builds at runtime
+# Note: Dictionary ordering in value line is non-deterministic, so we use occurrence-check
 ---
-Registered plugin service: zip
 Testing zip plugin...
 Zip result:
 filesCompressed: 2
+output: Examples/ZipService/content/archive.zip
 success: true
+Zip service demo completed.
 startup

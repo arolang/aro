@@ -1,5 +1,5 @@
 // ============================================================
-// LLVMCodeGeneratorV2.swift
+// LLVMCodeGenerator.swift
 // ARO Compiler - LLVM Code Generator using Swifty-LLVM API
 // ============================================================
 
@@ -24,7 +24,7 @@ public struct LLVMCodeGenerationResult {
 
 /// LLVM Code Generator using the Swifty-LLVM API for type-safe IR generation
 /// with source-location-aware error messages
-public final class LLVMCodeGeneratorV2 {
+public final class LLVMCodeGenerator {
     // MARK: - Components
 
     private var ctx: LLVMCodeGenContext!
