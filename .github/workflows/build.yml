@@ -657,6 +657,8 @@ jobs:
       - name: Setup Swift
         run: |
           # Swift is needed for native compilation tests
+          # Remove any pre-existing Swift installation to avoid mv conflicts
+          sudo rm -rf /usr/share/swift
           wget https://download.swift.org/swift-6.2.1-release/ubuntu2204/swift-6.2.1-RELEASE/swift-6.2.1-RELEASE-ubuntu22.04.tar.gz
           tar xzf swift-6.2.1-RELEASE-ubuntu22.04.tar.gz
           sudo mv swift-6.2.1-RELEASE-ubuntu22.04 /usr/share/swift
