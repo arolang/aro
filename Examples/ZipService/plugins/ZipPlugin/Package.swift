@@ -7,7 +7,7 @@ let package = Package(
         .library(name: "ZipPlugin", type: .dynamic, targets: ["ZipPlugin"])
     ],
     dependencies: [
-        .package(url: "https://github.com/marmelroy/Zip.git", from: "2.1.0")
+        .package(url: "https://github.com/marmelroy/Zip.git", exact: "2.1.1")
     ],
     targets: [
         .target(
