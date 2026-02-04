@@ -710,6 +710,12 @@ jobs:
           echo "Swift binary: $(which swift)"
           swift --version
 
+      - name: Clean plugin build directories
+        run: |
+          # Remove any cached plugin builds from previous runs with different Swift versions
+          find Examples -name ".build" -type d -exec rm -rf {} + 2>/dev/null || true
+          echo "Plugin build directories cleaned"
+
       - name: Run integration tests
         run: |
           chmod +x test-examples.pl
