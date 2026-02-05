@@ -1,0 +1,4 @@
+# Test hints for EventSchema
+# Demonstrates ARO-0046 typed event extraction with OpenAPI schemas
+# Binary mode not supported - schema registry requires interpreter runtime
+mode: interpreter

@@ -1,0 +1,5 @@
+# Generated: Thu Feb  5 19:18:52 2026
+# Type: console
+# Command: aro run ./Examples/EventSchema
+---
+./.build/release/aro: ./.build/release/aro: cannot execute binary file
