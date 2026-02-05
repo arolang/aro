@@ -192,6 +192,14 @@ public protocol ExecutionContext: AnyObject, Sendable {
     ///   - service: The service instance to register
     func registerWithTypeId(_ typeId: ObjectIdentifier, service: any Sendable)
 
+    // MARK: - Schema Registry (ARO-0046)
+
+    /// Access the schema registry for typed event extraction
+    ///
+    /// Returns nil if no OpenAPI spec is loaded or schemas aren't available.
+    /// Used by ExtractAction when a PascalCase qualifier indicates a schema name.
+    var schemaRegistry: SchemaRegistry? { get }
+
     // MARK: - Repository Access
 
     /// Get a repository by name
@@ -298,6 +306,9 @@ public extension ExecutionContext {
 
     /// Default: not compiled (interpreter mode)
     var isCompiled: Bool { false }
+
+    /// Default: no schema registry (no OpenAPI spec loaded)
+    var schemaRegistry: SchemaRegistry? { nil }
 
     // MARK: - Default Type-Aware Implementations
 

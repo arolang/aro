@@ -60,6 +60,28 @@ public struct ExtractAction: ActionImplementation {
             }
         }
 
+        // ARO-0046: Check for schema qualifier for typed event extraction
+        // PascalCase qualifiers (e.g., ExtractLinksEvent) trigger schema validation
+        if let schemaName = detectSchemaQualifier(result.specifiers),
+           let registry = context.schemaRegistry {
+            if let schema = registry.schema(named: schemaName) {
+                // Validate and coerce the resolved source against the schema
+                let validated = try SchemaBinding.validateAgainstSchema(
+                    value: resolvedSource,
+                    schemaName: schemaName,
+                    schema: schema,
+                    components: registry.components
+                )
+                return validated
+            } else {
+                // Schema not found - provide helpful error
+                throw SchemaValidationError.schemaNotFound(
+                    schemaName: schemaName,
+                    availableSchemas: registry.schemaNames
+                )
+            }
+        }
+
         // ARO-0038: Check result specifiers for list element access
         if let array = resolvedSource as? [any Sendable],
            let specifier = result.specifiers.first {
@@ -103,6 +125,51 @@ public struct ExtractAction: ActionImplementation {
         }
 
         return resolvedSource
+    }
+
+    // MARK: - ARO-0046: Schema Qualifier Detection
+
+    /// Detects if a specifier is a schema name vs property/element specifier
+    ///
+    /// Schema names are PascalCase (e.g., ExtractLinksEvent, UserData).
+    /// Property specifiers are lowercase or kebab-case (e.g., html, user-id).
+    /// Element specifiers are reserved words (first, last) or numeric.
+    ///
+    /// - Parameter specifiers: The result specifiers to check
+    /// - Returns: The schema name if detected, nil otherwise
+    private func detectSchemaQualifier(_ specifiers: [String]) -> String? {
+        guard let first = specifiers.first else { return nil }
+
+        // Reserved element specifiers - never schema names
+        let reserved = ["first", "last", "length", "count", "days", "year", "month",
+                        "day", "hour", "minute", "second", "weekday", "timezone",
+                        "start", "end", "pattern", "next", "all", "years", "months",
+                        "hours", "minutes", "seconds", "as string"]
+        if reserved.contains(first.lowercased()) { return nil }
+
+        // Numeric index - never a schema name
+        if Int(first) != nil { return nil }
+
+        // Range pattern (3-5) - never a schema name
+        if first.contains("-") && first.split(separator: "-").allSatisfy({ Int($0) != nil }) {
+            return nil
+        }
+
+        // Pick pattern (3,5,7) - never a schema name
+        if first.contains(",") { return nil }
+
+        // PascalCase check: starts with uppercase letter
+        guard let firstChar = first.first, firstChar.isUppercase else {
+            return nil
+        }
+
+        // Additional check: must contain only letters and numbers (no hyphens/underscores)
+        // This distinguishes PascalCase schema names from OTHER-FORMAT names
+        if first.allSatisfy({ $0.isLetter || $0.isNumber }) {
+            return first
+        }
+
+        return nil
     }
 
     // MARK: - ARO-0038: List Element Access

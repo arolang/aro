@@ -56,6 +56,9 @@ public final class RuntimeContext: ExecutionContext, @unchecked Sendable {
     /// Whether this is a template rendering context
     private let _isTemplateContext: Bool
 
+    /// Schema registry for typed event extraction (ARO-0046)
+    private var _schemaRegistry: SchemaRegistry?
+
     // MARK: - Metadata
 
     public let featureSetName: String
@@ -487,6 +490,29 @@ public final class RuntimeContext: ExecutionContext, @unchecked Sendable {
 
     public var isTemplateContext: Bool {
         _isTemplateContext
+    }
+
+    // MARK: - Schema Registry (ARO-0046)
+
+    /// Get the schema registry for typed event extraction
+    /// Falls back to parent context if not set locally
+    public var schemaRegistry: SchemaRegistry? {
+        lock.lock()
+        defer { lock.unlock() }
+
+        if let registry = _schemaRegistry {
+            return registry
+        }
+        // Try parent context
+        return parent?.schemaRegistry
+    }
+
+    /// Set the schema registry (called during application startup)
+    /// - Parameter registry: The schema registry to use
+    public func setSchemaRegistry(_ registry: SchemaRegistry) {
+        lock.lock()
+        defer { lock.unlock() }
+        _schemaRegistry = registry
     }
 }
 

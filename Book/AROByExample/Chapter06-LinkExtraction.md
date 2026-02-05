@@ -8,6 +8,7 @@
 
 - Using `<ParseHtml>` to extract links
 - The different `ParseHtml` specifiers
+- Typed event extraction with OpenAPI schemas (ARO-0046)
 - Iterating over collections with `for each`
 - Building the link extraction handler
 
@@ -94,7 +95,75 @@ The event carries three pieces of data:
 
 ---
 
-## 6.5 Extracting Links
+## 6.5 Typed Event Extraction (ARO-0046)
+
+The field-by-field extraction in section 6.4 works well, but ARO provides a more concise alternative: **typed event extraction**. By defining the event structure in your OpenAPI specification, you can extract and validate the entire event in one statement.
+
+### Defining the Event Schema
+
+Add the event schema to your `openapi.yaml`:
+
+```yaml
+components:
+  schemas:
+    ExtractLinksEvent:
+      type: object
+      required:
+        - url
+        - html
+      properties:
+        url:
+          type: string
+          description: The page URL that was fetched
+        html:
+          type: string
+          description: The raw HTML content
+        base:
+          type: string
+          description: The base domain for filtering
+```
+
+### Using Typed Extraction
+
+With the schema defined, the handler becomes:
+
+```aro
+(Extract Links: ExtractLinks Handler) {
+    <Log> "ExtractLinks handler triggered" to the <console>.
+
+    (* Typed extraction - validates against ExtractLinksEvent schema *)
+    <Extract> the <event-data: ExtractLinksEvent> from the <event: data>.
+
+    <Return> an <OK: status> for the <extraction>.
+}
+```
+
+The PascalCase qualifier `ExtractLinksEvent` tells ARO to:
+1. Look up the schema in `components.schemas`
+2. Validate the event data against that schema
+3. Fail fast if required properties are missing or types don't match
+
+### Accessing Properties
+
+After typed extraction, access properties using the qualifier syntax:
+
+```aro
+<ParseHtml> the <links: links> from the <event-data: html>.
+<Log> "Processing links from ${<event-data: url>}" to the <console>.
+```
+
+### Typed vs Field-by-Field
+
+| Approach | Pros | Cons |
+|----------|------|------|
+| **Field-by-field** | Explicit, educational | Verbose, no validation |
+| **Typed extraction** | Concise, validated | Requires schema definition |
+
+For production code, typed extraction catches errors earlier and provides documentation through the schema. For learning, field-by-field extraction makes the data flow explicit.
+
+---
+
+## 6.6 Extracting Links
 
 Add the link extraction:
 
@@ -120,7 +189,7 @@ We compute the count for logging. On a typical page, you might see "Found 47 lin
 
 ---
 
-## 6.6 Iterating with For Each
+## 6.7 Iterating with For Each
 
 To process each link, we use `for each`:
 
@@ -149,7 +218,7 @@ Note the event data we pass:
 
 ---
 
-## 6.7 Parallel Processing Preview
+## 6.8 Parallel Processing Preview
 
 In Chapter 10, we will replace `for each` with `parallel for each`:
 
@@ -163,7 +232,7 @@ This processes links concurrently. For now, sequential processing works fine. We
 
 ---
 
-## 6.8 The Complete Handler
+## 6.9 The Complete Handler
 
 Here is the complete `ExtractLinks` handler:
 
@@ -203,7 +272,7 @@ Here is the complete `ExtractLinks` handler:
 
 ---
 
-## 6.9 What ARO Does Well Here
+## 6.10 What ARO Does Well Here
 
 **Built-in HTML Parsing.** `<ParseHtml>` handles real HTML with all its quirks. We do not need an external library or worry about malformed markup.
 
@@ -213,7 +282,7 @@ Here is the complete `ExtractLinks` handler:
 
 ---
 
-## 6.10 What Could Be Better
+## 6.11 What Could Be Better
 
 **No Custom Selectors.** We can only extract links. What if we wanted all images? Or specific CSS classes? A more flexible selector system would help.
 
@@ -225,6 +294,7 @@ Here is the complete `ExtractLinks` handler:
 
 - `<ParseHtml> ... links` extracts all href values from anchor tags
 - The result is a list of raw strings (relative and absolute URLs, fragments, etc.)
+- Typed event extraction (`<Extract> the <data: SchemaName> from <event>`) validates data against OpenAPI schemas
 - `for each <item> in <list>` iterates over collections
 - We emit a `NormalizeUrl` event for each link, passing through the source and base
 - This handler is focused: extract and emit, nothing more

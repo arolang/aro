@@ -414,6 +414,7 @@ The `Proposals/` directory contains 28 specifications:
 | **0042 Set Operations** | intersect, difference, union on collections |
 | **0043 Sink Syntax** | Expressions in result position |
 | **0044 Runtime Metrics** | Execution counts, timing, Prometheus format |
+| **0046 Typed Event Extraction** | Schema-validated event data extraction |
 
 ## Concurrency
 

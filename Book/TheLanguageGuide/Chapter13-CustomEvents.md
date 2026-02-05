@@ -186,7 +186,82 @@ Avoid circular event chains. If event A triggers a handler that emits event B, a
 
 ---
 
-## 10.8 Compiler Validation
+## 10.8 Typed Event Extraction (ARO-0046)
+
+When your application has an OpenAPI specification, you can define event schemas in `components.schemas` and use them to validate event data during extraction.
+
+### Schema Definition
+
+Define event schemas in your `openapi.yaml`:
+
+```yaml
+components:
+  schemas:
+    UserCreatedEvent:
+      type: object
+      required:
+        - userId
+        - email
+      properties:
+        userId:
+          type: string
+        email:
+          type: string
+        name:
+          type: string
+```
+
+### Typed Extraction Syntax
+
+Use a PascalCase qualifier to reference the schema:
+
+```aro
+(Send Welcome Email: UserCreated Handler) {
+    (* Typed extraction - validates against UserCreatedEvent schema *)
+    <Extract> the <event-data: UserCreatedEvent> from the <event: data>.
+
+    (* Properties are now guaranteed to exist *)
+    <Send> the <welcome-email> to <event-data: email>.
+    <Return> an <OK: status> for the <notification>.
+}
+```
+
+The PascalCase qualifier (`UserCreatedEvent`) triggers schema lookup and validation. If the event data does not match the schema, the handler fails immediately with a descriptive error message.
+
+### Benefits
+
+**Validation at the boundary**: Instead of discovering missing fields deep in handler logic, schema validation catches problems immediately when the event is extracted.
+
+**Self-documenting contracts**: Event schemas in `openapi.yaml` document the expected structure. Emitters and handlers share this specification as their contract.
+
+**Reduced boilerplate**: Instead of extracting each field separately, extract the entire typed object and access its properties:
+
+```aro
+(* Before: field-by-field extraction *)
+<Extract> the <data> from the <event: data>.
+<Extract> the <userId> from the <data: userId>.
+<Extract> the <email> from the <data: email>.
+<Extract> the <name> from the <data: name>.
+
+(* After: typed extraction *)
+<Extract> the <data: UserCreatedEvent> from the <event: data>.
+(* Access properties with <data: email>, <data: name>, etc. *)
+```
+
+### Error Messages
+
+Validation errors follow ARO-0006 "Code Is The Error Message":
+
+```
+Cannot <Extract> the <event-data: UserCreatedEvent> from the <event: data>.
+  Schema 'UserCreatedEvent' validation failed:
+    Missing required property 'email'
+  Required properties: userId, email
+```
+
+---
+
+## 10.9 Compiler Validation
 
 The ARO compiler performs static analysis on your event handlers to detect potential issues before runtime.
 
