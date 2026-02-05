@@ -1,4 +1,4 @@
-// swift-tools-version:6.0
+// swift-tools-version:5.9
 import PackageDescription
 
 let package = Package(
@@ -16,8 +16,5 @@ let package = Package(
                 .product(name: "Zip", package: "Zip")
             ]
         )
-    ],
-    // Force Swift 5 language mode for the entire package graph
-    // to work around Zip library not being Swift 6 compatible
-    swiftLanguageModes: [.v5]
+    ]
 )

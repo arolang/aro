@@ -656,12 +656,14 @@ jobs:
 
       - name: Setup Swift
         run: |
-          # Swift is needed for native compilation tests
+          # Swift is needed for native compilation and plugin tests
+          # Use Swift 5.10 for plugin compilation (Swift 6 has C pointer optionality issues
+          # with the marmelroy/Zip library that hasn't been updated for Swift 6)
           # Remove any pre-existing Swift installation to avoid mv conflicts
           sudo rm -rf /usr/share/swift
-          wget https://download.swift.org/swift-6.2.1-release/ubuntu2204/swift-6.2.1-RELEASE/swift-6.2.1-RELEASE-ubuntu22.04.tar.gz
-          tar xzf swift-6.2.1-RELEASE-ubuntu22.04.tar.gz
-          sudo mv swift-6.2.1-RELEASE-ubuntu22.04 /usr/share/swift
+          wget https://download.swift.org/swift-5.10.1-release/ubuntu2204/swift-5.10.1-RELEASE/swift-5.10.1-RELEASE-ubuntu22.04.tar.gz
+          tar xzf swift-5.10.1-RELEASE-ubuntu22.04.tar.gz
+          sudo mv swift-5.10.1-RELEASE-ubuntu22.04 /usr/share/swift
           echo "/usr/share/swift/usr/bin" >> $GITHUB_PATH
 
       - name: Install LLVM 20 and dependencies
