@@ -650,45 +650,52 @@ jobs:
     needs: [linux]
     name: Integration Tests - Linux
     runs-on: ubuntu-latest
+    container:
+      image: swift:6.2-jammy
     steps:
       - name: Checkout repository
         uses: actions/checkout@v6
 
-      - name: Setup Swift
-        run: |
-          # Swift is needed for native compilation and plugin tests
-          # Use Swift 6.2 (same version as main build) for ABI compatibility
-          sudo rm -rf /usr/share/swift
-          wget -q https://download.swift.org/swift-6.0.3-release/ubuntu2204/swift-6.0.3-RELEASE/swift-6.0.3-RELEASE-ubuntu22.04.tar.gz
-          tar xzf swift-6.0.3-RELEASE-ubuntu22.04.tar.gz
-          sudo mv swift-6.0.3-RELEASE-ubuntu22.04 /usr/share/swift
-          echo "/usr/share/swift/usr/bin" >> $GITHUB_PATH
-
       - name: Install LLVM 20 and dependencies
         run: |
-          sudo apt-get update
-          wget -qO- https://apt.llvm.org/llvm-snapshot.gpg.key | sudo gpg --dearmor -o /usr/share/keyrings/llvm-archive-keyring.gpg
-          echo "deb [signed-by=/usr/share/keyrings/llvm-archive-keyring.gpg] http://apt.llvm.org/jammy/ llvm-toolchain-jammy-20 main" | sudo tee /etc/apt/sources.list.d/llvm.list
-          sudo apt-get update
-          sudo apt-get install -y llvm-20 libllvm20 libxml2-dev
-          sudo ln -sf /usr/bin/llc-20 /usr/bin/llc
-          echo "/usr/lib/llvm-20/bin" >> $GITHUB_PATH
+          # Running inside container as root (no sudo needed)
+          apt-get update -qq
+          apt-get install -y -qq wget gnupg software-properties-common
+          wget -qO- https://apt.llvm.org/llvm-snapshot.gpg.key | gpg --dearmor -o /usr/share/keyrings/llvm-archive-keyring.gpg
+          echo "deb [signed-by=/usr/share/keyrings/llvm-archive-keyring.gpg] http://apt.llvm.org/jammy/ llvm-toolchain-jammy-20 main" > /etc/apt/sources.list.d/llvm.list
+          apt-get update -qq
+          apt-get install -y -qq llvm-20-dev libzstd-dev libxml2-dev
+          ln -sf /usr/bin/llc-20 /usr/bin/llc
+          # Create pkg-config file for LLVM
+          mkdir -p /usr/lib/pkgconfig
+          cat > /usr/lib/pkgconfig/llvm.pc << 'PKGCONFIG'
+          prefix=/usr/lib/llvm-20
+          exec_prefix=${prefix}
+          libdir=${prefix}/lib
+          includedir=${prefix}/include
+
+          Name: LLVM
+          Description: Low-level Virtual Machine compiler framework
+          Version: 20.1
+          Libs: -L${libdir} -lLLVM-20
+          Cflags: -I${includedir}
+          PKGCONFIG
 
       - name: Install dependencies and Perl modules
         run: |
           export DEBIAN_FRONTEND=noninteractive
-          sudo apt-get update -qq
           # Install runtime libraries for plugin tests (SQLiteExample, ZipService)
           # and Perl modules from apt (faster and more reliable)
-          sudo apt-get install -y -qq \
+          apt-get install -y -qq \
             libsqlite3-dev \
             zlib1g-dev \
+            git \
             libipc-run-perl \
             libyaml-libyaml-perl \
             libhttp-tiny-perl \
             cpanminus || true
           # Install remaining modules via cpan
-          cpan -T Net::EmptyPort Term::ANSIColor 2>&1 || true
+          cpanm -q --notest Net::EmptyPort Term::ANSIColor 2>/dev/null || true
 
       - name: Download ARO artifact
         uses: actions/download-artifact@v7
@@ -701,12 +708,10 @@ jobs:
           chmod +x ./aro-bin/aro
           echo "ARO_BIN=$GITHUB_WORKSPACE/aro-bin/aro" >> $GITHUB_ENV
           # Copy libARORuntime.a to system location for native compilation tests
-          sudo mkdir -p /usr/local/lib
-          sudo cp ./aro-bin/libARORuntime.a /usr/local/lib/libARORuntime.a
+          mkdir -p /usr/local/lib
+          cp ./aro-bin/libARORuntime.a /usr/local/lib/libARORuntime.a
           ./aro-bin/aro --version
-
-      - name: Verify Swift version
-        run: |
+          # Verify Swift version
           echo "Swift binary: $(which swift)"
           swift --version
 
