@@ -54,11 +54,11 @@
     <Extract> the <user: UserRegisteredEvent> from the <event: data>.
 
     (* Access validated properties directly using specifier syntax *)
-    <Log> "  [UserRegistered] Received valid event:" to the <console>.
-    <Log> "    User ID: ${<user: userId>}" to the <console>.
-    <Log> "    Email: ${<user: email>}" to the <console>.
-    <Log> "    Name: ${<user: name>}" to the <console>.
-    <Log> "    Premium: ${<user: premium>}" to the <console>.
+    <Log> "UserRegistered: Received valid event" to the <console>.
+    <Log> "- User ID: ${<user: userId>}" to the <console>.
+    <Log> "- Email: ${<user: email>}" to the <console>.
+    <Log> "- Name: ${<user: name>}" to the <console>.
+    <Log> "- Premium: ${<user: premium>}" to the <console>.
 
     <Return> an <OK: status> for the <handler>.
 }
@@ -68,15 +68,15 @@
     (* Typed extraction: validates against OrderPlacedEvent schema *)
     <Extract> the <order: OrderPlacedEvent> from the <event: data>.
 
-    <Log> "  [OrderPlaced] Received valid event:" to the <console>.
-    <Log> "    Order ID: ${<order: orderId>}" to the <console>.
-    <Log> "    Customer: ${<order: customerId>}" to the <console>.
-    <Log> "    Total: $${<order: total>}" to the <console>.
+    <Log> "OrderPlaced: Received valid event" to the <console>.
+    <Log> "- Order ID: ${<order: orderId>}" to the <console>.
+    <Log> "- Customer: ${<order: customerId>}" to the <console>.
+    <Log> "- Total: $${<order: total>}" to the <console>.
 
     (* Extract nested items array *)
     <Extract> the <items> from the <order: items>.
     <Compute> the <item-count: length> from the <items>.
-    <Log> "    Items: ${<item-count>} item(s)" to the <console>.
+    <Log> "- Items: ${<item-count>} item(s)" to the <console>.
 
     <Return> an <OK: status> for the <handler>.
 }
@@ -86,9 +86,9 @@
     (* Typed extraction: validates against NotificationEvent schema *)
     <Extract> the <notif: NotificationEvent> from the <event: data>.
 
-    <Log> "  [Notification] Received valid event:" to the <console>.
-    <Log> "    Message: ${<notif: message>}" to the <console>.
-    <Log> "    Priority: ${<notif: priority>}" to the <console>.
+    <Log> "Notification: Received valid event" to the <console>.
+    <Log> "- Message: ${<notif: message>}" to the <console>.
+    <Log> "- Priority: ${<notif: priority>}" to the <console>.
 
     <Return> an <OK: status> for the <handler>.
 }

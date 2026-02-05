@@ -1,5 +1,28 @@
-# Generated: Thu Feb  5 19:18:52 2026
+# Generated: Thu Feb  5 19:28:30 2026
 # Type: console
 # Command: aro run ./Examples/EventSchema
 ---
-./.build/release/aro: ./.build/release/aro: cannot execute binary file
+=== Event Schema Example ===
+Testing ARO-0046: Typed Event Extraction
+
+Test 1: Emitting UserRegistered event...
+UserRegistered: Received valid event
+- User ID: user-123
+- Email: alice@example.com
+- Name: Alice Smith
+- Premium: true
+
+Test 2: Emitting OrderPlaced event...
+OrderPlaced: Received valid event
+- Order ID: order-456
+- Customer: user-123
+- Total: $99.99
+- Items: 2 item(s)
+
+Test 3: Emitting Notification event...
+Notification: Received valid event
+- Message: Welcome to the platform!
+- Priority: high
+
+=== All events emitted ===
+demo
