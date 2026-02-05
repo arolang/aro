@@ -62,8 +62,17 @@ public struct ExtractAction: ActionImplementation {
 
         // ARO-0046: Check for schema qualifier for typed event extraction
         // PascalCase qualifiers (e.g., ExtractLinksEvent) trigger schema validation
-        if let schemaName = detectSchemaQualifier(result.specifiers),
-           let registry = context.schemaRegistry {
+        if let schemaName = detectSchemaQualifier(result.specifiers) {
+            // Debug: Check if schema registry is available
+            guard let registry = context.schemaRegistry else {
+                // Schema qualifier detected but no registry available
+                // This is a configuration error - the openapi.yaml should define schemas
+                throw SchemaValidationError.schemaNotFound(
+                    schemaName: schemaName,
+                    availableSchemas: ["(schema registry not available - ensure openapi.yaml is present)"]
+                )
+            }
+
             if let schema = registry.schema(named: schemaName) {
                 // Validate and coerce the resolved source against the schema
                 let validated = try SchemaBinding.validateAgainstSchema(

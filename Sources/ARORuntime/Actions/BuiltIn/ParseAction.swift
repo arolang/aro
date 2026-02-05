@@ -35,9 +35,8 @@ public struct ParseHtmlAction: ActionImplementation {
     ) async throws -> any Sendable {
         try validatePreposition(object.preposition)
 
-        guard let input: String = context.resolve(object.base) else {
-            throw ActionError.undefinedVariable(object.base)
-        }
+        // Resolve input - support property access via specifiers (e.g., <event-data: html>)
+        let input: String = try context.resolveWithSpecifiers(object.base, specifiers: object.specifiers)
 
         // Get parse type from specifier
         let parseType = result.specifiers.first ?? "text"
