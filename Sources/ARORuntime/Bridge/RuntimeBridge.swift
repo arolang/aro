@@ -138,37 +138,42 @@ class AROCContextHandle {
     }
 
     /// Set up schema registry for typed event extraction (ARO-0046)
-    /// Loads openapi.yaml from the binary's directory if present
+    /// Uses embedded spec (compiled into binary) or falls back to file loading
     private static func setupSchemaRegistry(for context: RuntimeContext) {
-        // Get the binary's directory
-        // First try to resolve the executable path to an absolute path
-        let executablePath = CommandLine.arguments[0]
-        let absolutePath: String
-        if executablePath.hasPrefix("/") {
-            absolutePath = executablePath
-        } else {
-            // Relative path - resolve against current working directory
-            let cwd = FileManager.default.currentDirectoryPath
-            absolutePath = (cwd as NSString).appendingPathComponent(executablePath)
+        var spec: OpenAPISpec? = nil
+
+        // Priority 1: Use embedded spec (compiled into binary)
+        // This is set by aro_set_embedded_openapi() called from generated main()
+        if let embeddedJSON = embeddedOpenAPISpec {
+            if let data = embeddedJSON.data(using: .utf8) {
+                spec = try? JSONDecoder().decode(OpenAPISpec.self, from: data)
+            }
         }
 
-        // Resolve symlinks to get the real path
-        let resolvedPath = (absolutePath as NSString).resolvingSymlinksInPath
-        let binaryDir = (resolvedPath as NSString).deletingLastPathComponent
+        // Priority 2: Fall back to file loading (interpreter mode / development)
+        if spec == nil {
+            let executablePath = CommandLine.arguments[0]
+            let absolutePath: String
+            if executablePath.hasPrefix("/") {
+                absolutePath = executablePath
+            } else {
+                let cwd = FileManager.default.currentDirectoryPath
+                absolutePath = (cwd as NSString).appendingPathComponent(executablePath)
+            }
 
-        // Try to load openapi.yaml from the binary's directory
-        let openapiPath = (binaryDir as NSString).appendingPathComponent("openapi.yaml")
-        guard FileManager.default.fileExists(atPath: openapiPath) else {
-            return  // No OpenAPI spec, schema registry not needed
+            let resolvedPath = (absolutePath as NSString).resolvingSymlinksInPath
+            let binaryDir = (resolvedPath as NSString).deletingLastPathComponent
+            let openapiPath = (binaryDir as NSString).appendingPathComponent("openapi.yaml")
+
+            if FileManager.default.fileExists(atPath: openapiPath) {
+                spec = try? OpenAPILoader.load(from: URL(fileURLWithPath: openapiPath))
+            }
         }
 
-        do {
-            let spec = try OpenAPILoader.load(from: URL(fileURLWithPath: openapiPath))
-            let registry = OpenAPISchemaRegistry(spec: spec)
+        // Register schema registry if spec was loaded
+        if let loadedSpec = spec {
+            let registry = OpenAPISchemaRegistry(spec: loadedSpec)
             context.setSchemaRegistry(registry)
-        } catch {
-            // Silently ignore errors - schema registry is optional
-            // If the spec is malformed, HTTP server will report the error separately
         }
     }
 }
