@@ -4,7 +4,7 @@
 
 ---
 
-## 7.1 The Philosophy
+## 10.1 The Philosophy
 
 ARO code expresses only the happy path—what should happen when everything works correctly. There is no try/catch mechanism, no error handling blocks, no defensive programming patterns. You write the successful case, and the runtime handles everything else.
 
@@ -16,7 +16,7 @@ This means that error handling is not absent—it is automated. The runtime catc
 
 ---
 
-## 7.2 How Errors Work
+## 10.2 How Errors Work
 
 When an action cannot complete successfully, ARO generates an error message derived from the failed statement. The message describes the operation in business terms rather than technical ones. If a statement attempts to retrieve a user from a repository and no matching user exists, the error message says exactly that: "Cannot retrieve the user from the user-repository where id = 42."
 
@@ -28,7 +28,7 @@ The runtime also logs every error with full context: which feature set was execu
 
 ---
 
-## 7.3 Error Message Generation
+## 10.3 Error Message Generation
 
 ARO constructs error messages systematically from the components of the failed statement. The message typically follows the pattern "Cannot [action] the [result] [preposition] the [object]" with any where clause or other qualifiers appended.
 
@@ -100,7 +100,7 @@ The pattern is consistent: the statement's natural language structure becomes th
 
 ---
 
-## 7.4 Why This Works
+## 10.4 Why This Works
 
 The happy path philosophy reduces code dramatically. Traditional error handling often quadruples the size of a function. Every operation that might fail needs a corresponding error check. Every error check needs logging, response construction, and potentially cleanup. A simple three-step operation can become twenty or thirty lines when fully protected with error handling.
 
@@ -114,7 +114,7 @@ Automatic logging eliminates another common failure mode. In traditional code, d
 
 ---
 
-## 7.5 When Happy Path Hurts
+## 10.5 When Happy Path Hurts
 
 The happy path philosophy is not universally applicable. Several categories of problems fit poorly with this approach.
 
@@ -130,7 +130,7 @@ Graceful degradation, where an application continues with reduced functionality 
 
 ---
 
-## 7.6 Strategies for Complex Error Handling
+## 10.6 Strategies for Complex Error Handling
 
 When you need error handling that goes beyond the automatic behavior, several strategies can help.
 
@@ -144,7 +144,7 @@ Separating concerns into multiple feature sets can isolate failures. If you have
 
 ---
 
-## 7.7 The Happy Path Contract
+## 10.7 The Happy Path Contract
 
 When you write ARO code, you implicitly accept a contract about how error handling works. You express what should happen when inputs are valid and systems are working. The runtime handles what happens when things fail. Custom actions provide escape hatches for scenarios that require more sophisticated error handling.
 
@@ -156,7 +156,7 @@ Knowing when to use ARO and when to use custom actions or other approaches is pa
 
 ---
 
-## 7.8 Best Practices
+## 10.8 Best Practices
 
 Trust the runtime's error handling. Do not add defensive checks for conditions that the runtime already handles. If the runtime will produce an appropriate error when a required value is missing, there is no need to add a validation statement that checks for its presence. The redundant check adds code without adding value.
 

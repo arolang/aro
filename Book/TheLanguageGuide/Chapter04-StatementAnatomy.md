@@ -22,7 +22,7 @@ Let us examine each component in detail, understanding not just what it is but w
 
 An action is a verb enclosed in angle brackets. It tells the reader what operation the statement performs. Actions are the most prominent part of any ARO statement because they appear at the beginning and because they carry semantic meaning that affects how the runtime behaves.
 
-When you write an action, you are choosing from a vocabulary of approximately two dozen built-in verbs, each representing a fundamental operation. The choice of verb is significant because each verb carries a semantic role that determines the direction of data flow. When you choose Extract, you are telling the runtime that you want to pull data from an external source into the current context. When you choose Return, you are telling the runtime that you want to send data out to the caller and terminate execution.
+When you write an action, you are choosing from a vocabulary of approximately fifty built-in verbs, each representing a fundamental operation. The choice of verb is significant because each verb carries a semantic role that determines the direction of data flow. When you choose Extract, you are telling the runtime that you want to pull data from an external source into the current context. When you choose Return, you are telling the runtime that you want to send data out to the caller and terminate execution.
 
 The verbs are case-sensitive. Extract is a valid action. extract is not. This case sensitivity is deliberate: it makes actions visually distinctive from other identifiers in your code, and it aligns with the convention that actions are proper verbs deserving of capitalization.
 

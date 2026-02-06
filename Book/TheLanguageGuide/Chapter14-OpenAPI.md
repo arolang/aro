@@ -4,7 +4,7 @@
 
 ---
 
-## 11.1 Contract-First Development
+## 14.1 Contract-First Development
 
 <div style="float: right; margin: 0 0 1em 1.5em;">
 <svg width="180" height="200" viewBox="0 0 180 200" xmlns="http://www.w3.org/2000/svg">  <!-- OpenAPI file -->  <rect x="50" y="10" width="80" height="45" rx="4" fill="#fef3c7" stroke="#f59e0b" stroke-width="2"/>  <text x="90" y="28" text-anchor="middle" font-family="monospace" font-size="9" font-weight="bold" fill="#92400e">openapi.yaml</text>  <text x="90" y="42" text-anchor="middle" font-family="sans-serif" font-size="8" fill="#b45309">operationId:</text>  <text x="90" y="52" text-anchor="middle" font-family="monospace" font-size="7" fill="#d97706">listUsers</text>  <!-- Arrow down -->  <line x1="90" y1="55" x2="90" y2="75" stroke="#6b7280" stroke-width="2"/>  <polygon points="90,75 85,67 95,67" fill="#6b7280"/>  <!-- Router box -->  <rect x="40" y="80" width="100" height="30" rx="4" fill="#e0e7ff" stroke="#6366f1" stroke-width="2"/>  <text x="90" y="100" text-anchor="middle" font-family="sans-serif" font-size="9" font-weight="bold" fill="#4338ca">Route Matcher</text>  <!-- Arrow down -->  <line x1="90" y1="110" x2="90" y2="130" stroke="#6b7280" stroke-width="2"/>  <polygon points="90,130 85,122 95,122" fill="#6b7280"/>  <!-- Feature Set -->  <rect x="30" y="135" width="120" height="50" rx="4" fill="#dcfce7" stroke="#22c55e" stroke-width="2"/>  <text x="90" y="152" text-anchor="middle" font-family="monospace" font-size="8" fill="#166534">(listUsers: User API)</text>  <text x="90" y="165" text-anchor="middle" font-family="sans-serif" font-size="8" fill="#22c55e">&lt;Retrieve&gt;...</text>  <text x="90" y="178" text-anchor="middle" font-family="sans-serif" font-size="8" fill="#22c55e">&lt;Return&gt;...</text>  <!-- Label -->  <text x="90" y="198" text-anchor="middle" font-family="sans-serif" font-size="7" fill="#9ca3af">name = operationId</text></svg>
@@ -20,7 +20,7 @@ This design ensures that your API cannot drift from its documentation. If the sp
 
 ---
 
-## 11.2 The OpenAPI Requirement
+## 14.2 The OpenAPI Requirement
 
 ARO's HTTP server depends on the presence of an OpenAPI specification file in the application directory. The runtime checks for specification files in this order of precedence:
 
@@ -38,7 +38,7 @@ If you are building an application that does not expose an HTTP API—a file pro
 
 ---
 
-## 11.3 Operation Identifiers
+## 14.3 Operation Identifiers
 
 The operationId is the key that connects HTTP routes to feature sets. When you define an operation in your OpenAPI specification, you assign it an operationId. When you implement the handler in ARO, you create a feature set with that identifier as its name.
 
@@ -50,7 +50,7 @@ When a request arrives that matches a path and method in your specification, ARO
 
 ---
 
-## 11.4 Route Matching
+## 14.4 Route Matching
 
 ARO matches incoming HTTP requests to operations through a two-step process. First, it matches the request path against the path templates in the specification. Second, it matches the HTTP method against the methods defined for that path. The combination of path and method identifies a unique operation.
 
@@ -62,7 +62,7 @@ Requests that do not match any path receive a 404 response. Requests that match 
 
 ---
 
-## 11.5 Automatic Server Startup
+## 14.5 Automatic Server Startup
 
 The HTTP server starts automatically when an `openapi.yaml` file is present in your application directory. There is no explicit Start action required for HTTP services. When the runtime discovers the OpenAPI specification during application initialization, it reads the file, configures routing based on its contents, and begins accepting requests on the default port (8080).
 
@@ -82,7 +82,7 @@ The server starts synchronously during initialization. If the port is already in
 
 ---
 
-## 11.6 Request Context
+## 14.6 Request Context
 
 When a feature set handles an HTTP request, it has access to information about that request through special context identifiers. You use the Extract action to pull specific pieces of information into local bindings.
 
@@ -96,7 +96,7 @@ Headers are the HTTP headers sent with the request. Authentication tokens, conte
 
 ---
 
-## 11.7 Response Mapping
+## 14.7 Response Mapping
 
 ARO maps return statements to HTTP responses based on the status qualifier you provide. The qualifier determines the HTTP status code, and the payload becomes the response body.
 
@@ -108,7 +108,7 @@ If your feature set fails rather than returning normally, the runtime generates 
 
 ---
 
-## 11.8 Validation
+## 14.8 Validation
 
 OpenAPI specifications can include schemas that define the structure and constraints of request bodies and responses. ARO can validate incoming requests against these schemas, rejecting invalid requests before they reach your feature set.
 
@@ -120,7 +120,7 @@ Schema validation provides a first line of defense against malformed requests. I
 
 ---
 
-## 11.9 Best Practices
+## 14.9 Best Practices
 
 Design your API specification before writing implementation code. Think about what resources your API exposes, what operations clients need to perform, and what data structures are involved. Write this design down in OpenAPI format. Then implement feature sets to fulfill the specification.
 

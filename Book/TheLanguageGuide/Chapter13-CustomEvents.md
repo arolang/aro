@@ -4,7 +4,7 @@
 
 ---
 
-## 10.1 Domain Events
+## 13.1 Domain Events
 
 Custom events represent significant occurrences in your business domain. Unlike the built-in events that the runtime generates for file changes, socket messages, and HTTP requests, custom events are defined by you to capture business-meaningful happenings within your application.
 
@@ -16,7 +16,7 @@ Designing good domain events requires thinking about your business domain. What 
 
 ---
 
-## 10.2 Emitting Events
+## 13.2 Emitting Events
 
 The Emit action publishes an event to the event bus. The event has a type and a payload. The type is specified in the result position with an "event" qualifier. The payload follows the "with" preposition.
 
@@ -30,7 +30,7 @@ The payload should be self-contained. Handlers should not need to make additiona
 
 ---
 
-## 10.3 Handling Events
+## 13.3 Handling Events
 
 A feature set becomes an event handler when its business activity matches the handler pattern. The pattern consists of the event name followed by "Handler." A feature set with business activity "UserCreated Handler" handles UserCreated events. A feature set with business activity "OrderPlaced Handler" handles OrderPlaced events.
 
@@ -44,7 +44,7 @@ Handlers should be focused on single responsibilities. A handler that sends emai
 
 ---
 
-## 10.4 Event Patterns
+## 13.4 Event Patterns
 
 Several patterns emerge in how events are used to structure applications.
 
@@ -142,7 +142,7 @@ Fan-out occurs when multiple handlers react to the same event. An OrderPlaced ev
 
 ---
 
-## 10.5 Event Design Guidelines
+## 13.5 Event Design Guidelines
 
 Good event design requires thinking about both producers and consumers.
 
@@ -158,7 +158,7 @@ Design for evolution. Events are contracts between producers and consumers. Chan
 
 ---
 
-## 10.6 Error Handling in Events
+## 13.6 Error Handling in Events
 
 Event handlers run in isolation. If one handler fails, other handlers for the same event still run. The emitting feature set is not affected by handler failures—it continues with its own execution regardless of what handlers do.
 
@@ -172,7 +172,7 @@ Designing handlers for idempotency provides resilience. If a handler can safely 
 
 ---
 
-## 10.7 Best Practices
+## 13.7 Best Practices
 
 Name events from the perspective of the domain, not the infrastructure. "CustomerJoinedLoyaltyProgram" is a domain event. "DatabaseRowInserted" is an infrastructure event. Domain events communicate business meaning; infrastructure events communicate implementation details. Prefer domain events because they remain stable as implementations change.
 
@@ -186,7 +186,7 @@ Avoid circular event chains. If event A triggers a handler that emits event B, a
 
 ---
 
-## 10.8 Typed Event Extraction (ARO-0046)
+## 13.8 Typed Event Extraction (ARO-0046)
 
 When your application has an OpenAPI specification, you can define event schemas in `components.schemas` and use them to validate event data during extraction.
 
@@ -261,7 +261,7 @@ Cannot <Extract> the <event-data: UserCreatedEvent> from the <event: data>.
 
 ---
 
-## 10.9 Compiler Validation
+## 13.9 Compiler Validation
 
 The ARO compiler performs static analysis on your event handlers to detect potential issues before runtime.
 

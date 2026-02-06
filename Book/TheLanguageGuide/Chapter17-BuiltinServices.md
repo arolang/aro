@@ -158,7 +158,7 @@ The Delete action removes a file from the file system.
 File watching monitors a directory for changes and emits events when files are created, modified, or deleted. You start watching during Application-Start by specifying the directory to monitor. When changes occur, the runtime emits File Event events that your handlers can process. This is useful for applications that need to react to external file changes—configuration reloading, data import, file synchronization.
 
 ```aro
-<Watch> the <file-monitor> for the <directory> with "./data".
+<Start> the <file-monitor> with "./data".
 ```
 
 Event handlers are named according to the event type: `Handle File Created`, `Handle File Modified`, or `Handle File Deleted`.
@@ -225,7 +225,7 @@ Here is a complete example demonstrating multiple built-in services working toge
     <Create> the <webhook-url> with "https://monitoring.example.com/webhook".
 
     (* Start watching the config directory *)
-    <Watch> the <file-monitor> for the <directory> with "./config".
+    <Start> the <file-monitor> with "./config".
 
     <Log> "Watching ./config for changes..." to the <console>.
 
@@ -289,4 +289,4 @@ Configure services appropriately for your environment. Development might use per
 
 ---
 
-*Next: Chapter 18 — Custom Actions*
+*Next: Chapter 18 — Format-Aware I/O*
