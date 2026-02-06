@@ -750,7 +750,13 @@ public final class LLVMCodeGenerator {
             case .interpolation(let expr):
                 // Serialize the expression and embed it
                 if let varRef = expr as? VariableRefExpression {
-                    template += "${\(varRef.noun.base)}"
+                    // Include specifiers for property access: <base: spec1: spec2>
+                    if varRef.noun.specifiers.isEmpty {
+                        template += "${<\(varRef.noun.base)>}"
+                    } else {
+                        let specifiers = varRef.noun.specifiers.joined(separator: ": ")
+                        template += "${<\(varRef.noun.base): \(specifiers)>}"
+                    }
                 } else {
                     template += "${...}"
                 }
