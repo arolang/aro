@@ -327,6 +327,70 @@ The `env` system object provides access to environment variables:
 <Extract> the <all-vars> from the <env>.
 ```
 
+### Command-Line Parameters
+
+The `parameter` system object provides access to command-line arguments passed to your ARO application:
+
+```aro
+(* Read a specific parameter *)
+<Extract> the <url> from the <parameter: url>.
+<Extract> the <count> from the <parameter: count>.
+
+(* Read all parameters as a dictionary *)
+<Extract> the <all-params> from the <parameter>.
+```
+
+**Passing Parameters:**
+
+Parameters are passed after the application path:
+
+```bash
+# Interpreter mode
+aro run ./MyApp --url http://example.com --count 5 --verbose
+
+# Compiled binary
+./MyApp --url http://example.com --count 5 --verbose
+```
+
+**Supported Syntax:**
+
+| CLI Syntax | ARO Access | Value |
+|------------|------------|-------|
+| `--url http://example.com` | `<parameter: url>` | `"http://example.com"` |
+| `--count 5` | `<parameter: count>` | `5` (auto-converted to Int) |
+| `--enabled true` | `<parameter: enabled>` | `true` (auto-converted to Bool) |
+| `--verbose` | `<parameter: verbose>` | `true` (boolean flag) |
+| `-v` | `<parameter: v>` | `true` (short flag) |
+| `-abc` | `<parameter: a>`, `<parameter: b>`, `<parameter: c>` | Each `true` |
+
+**Type Coercion:**
+
+Parameter values are automatically converted to appropriate types:
+- Integer patterns (`123`) → `Int`
+- Decimal patterns (`3.14`) → `Double`
+- `"true"` / `"false"` → `Bool`
+- Everything else → `String`
+
+**Example:**
+
+```aro
+(Application-Start: Greeter) {
+    <Extract> the <name> from the <parameter: name>.
+    <Extract> the <count> from the <parameter: count>.
+
+    <Log> "Hello, ${<name>}!" to the <console>.
+    <Log> "Count: ${<count>}" to the <console>.
+
+    <Return> an <OK: status> with <name>.
+}
+```
+
+```bash
+$ aro run ./Greeter --name "World" --count 3
+Hello, World!
+Count: 3
+```
+
 ### File Object
 
 The `file` system object provides bidirectional file I/O with automatic format detection:
@@ -482,7 +546,7 @@ See Chapter 18 for details on creating plugins that provide system objects.
 
 System objects provide a unified interface for interacting with external resources. The source/sink pattern creates consistency across all I/O operations:
 
-- **Sources** (readable): `env`, `stdin`, `request`, `event`, `packet`, `Contract`
+- **Sources** (readable): `env`, `parameter`, `stdin`, `request`, `event`, `packet`, `Contract`
 - **Sinks** (writable): `console`, `stderr`
 - **Bidirectional**: `file`, `connection`
 - **Magic Objects**: `Contract`, `now`
