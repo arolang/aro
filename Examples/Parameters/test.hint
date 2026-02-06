@@ -1,0 +1,4 @@
+# Test hints for Parameters (ARO-0047)
+# Uses custom test-script to pass arguments
+mode: both
+test-script: $ARO_BIN run ./Examples/Parameters --name "Test" --count 5 | grep -q "Hello, Test!" && $ARO_BIN run ./Examples/Parameters --name "Test" --count 5 | grep -q "Count: 5"

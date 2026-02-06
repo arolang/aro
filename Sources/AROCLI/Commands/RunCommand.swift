@@ -18,6 +18,9 @@ struct RunCommand: AsyncParsableCommand {
     @Argument(help: "Path to the application directory or .aro file")
     var path: String
 
+    @Argument(parsing: .captureForPassthrough, help: "Arguments to pass to the application")
+    var applicationArguments: [String] = []
+
     @Option(name: .shortAndLong, help: "Override the entry point feature set")
     var entryPoint: String = "Application-Start"
 
@@ -33,12 +36,20 @@ struct RunCommand: AsyncParsableCommand {
     func run() async throws {
         let resolvedPath = URL(fileURLWithPath: path)
 
+        // ARO-0047: Parse application arguments into ParameterStorage
+        if !applicationArguments.isEmpty {
+            ParameterStorage.shared.parseArguments(applicationArguments)
+        }
+
         if verbose {
             print("ARO Runtime v\(AROVersion.shortVersion)")
             print("Build: \(AROVersion.buildDate)")
             print("=======================")
             print("Path: \(resolvedPath.path)")
             print("Entry point: \(entryPoint)")
+            if !applicationArguments.isEmpty {
+                print("Application arguments: \(applicationArguments.joined(separator: " "))")
+            }
             print()
         }
 

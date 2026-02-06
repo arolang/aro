@@ -44,6 +44,20 @@ public struct ExtractAction: ActionImplementation {
             return value
         }
 
+        // ARO-0047: Handle command-line parameter extraction: <parameter: NAME>
+        if object.base == "parameter" {
+            if let paramName = object.specifiers.first {
+                // Extract specific parameter
+                guard let value = ParameterStorage.shared.get(paramName) else {
+                    throw ActionError.undefinedVariable("parameter:\(paramName)")
+                }
+                return value
+            } else {
+                // Return all parameters as a dictionary
+                return ParameterStorage.shared.getAll()
+            }
+        }
+
         // Get source object
         guard let source = context.resolveAny(object.base) else {
             throw ActionError.undefinedVariable(object.base)
