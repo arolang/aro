@@ -1,0 +1,10 @@
+# Generated: Thu Feb  6 11:00:00 2026
+# Type: console
+# Command: aro run ./Examples/Parameters --name "Test" --count 5
+# NOTE: This example uses test-script for verification
+# This expected.txt is for reference only, not used in testing
+---
+Hello, Test!
+Count: 5
+_expression_
+  value: Test

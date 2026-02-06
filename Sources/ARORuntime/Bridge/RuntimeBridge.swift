@@ -267,6 +267,22 @@ public func aro_runtime_shutdown(_ runtimePtr: UnsafeMutableRawPointer?) {
     Unmanaged<AROCRuntimeHandle>.fromOpaque(ptr).release()
 }
 
+/// Parse command-line arguments into ParameterStorage (ARO-0047)
+/// - Parameters:
+///   - argc: Argument count from main()
+///   - argv: Argument vector from main()
+@_cdecl("aro_parse_arguments")
+public func aro_parse_arguments(_ argc: Int32, _ argv: UnsafeMutablePointer<UnsafeMutablePointer<CChar>?>?) {
+    var args: [String] = []
+    // Skip argv[0] (executable name)
+    for i in 1..<Int(argc) {
+        if let arg = argv?[i] {
+            args.append(String(cString: arg))
+        }
+    }
+    ParameterStorage.shared.parseArguments(args)
+}
+
 /// Wait for all in-flight event handlers to complete
 /// - Parameters:
 ///   - runtimePtr: Runtime handle from aro_runtime_init

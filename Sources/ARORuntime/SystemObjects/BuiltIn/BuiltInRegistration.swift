@@ -13,6 +13,7 @@ public extension SystemObjectRegistry {
     /// This registers:
     /// - Console objects (console, stderr, stdin)
     /// - Environment objects (env)
+    /// - Parameter objects (parameter) - ARO-0047
     /// - File objects (file)
     /// - HTTP context objects (request, pathParameters, queryParameters, headers, body)
     /// - Event objects (event, shutdown)
@@ -23,6 +24,9 @@ public extension SystemObjectRegistry {
 
         // Environment
         registerEnvironmentObjects()
+
+        // Command-line parameters
+        registerParameterObjects()
 
         // File system
         registerFileObjects()
@@ -52,6 +56,7 @@ public extension SystemObjectRegistry {
 /// | `stderr` | Sink | Standard error stream |
 /// | `stdin` | Source | Standard input stream |
 /// | `env` | Source | Environment variables |
+/// | `parameter` | Source | Command-line parameters |
 ///
 /// ## Dynamic Objects (Path/Key Required)
 ///

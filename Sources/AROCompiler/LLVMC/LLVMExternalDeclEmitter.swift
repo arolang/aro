@@ -19,6 +19,7 @@ public final class LLVMExternalDeclEmitter {
     private var _runtimeShutdown: Function?
     private var _runtimeAwaitPendingEvents: Function?
     private var _runtimeRegisterHandler: Function?
+    private var _parseArguments: Function?
     private var _registerRepositoryObserver: Function?
     private var _logWarning: Function?
     private var _contextCreate: Function?
@@ -116,6 +117,12 @@ public final class LLVMExternalDeclEmitter {
         _runtimeRegisterHandler = ctx.module.declareFunction(
             "aro_runtime_register_handler",
             types.voidFunctionType(parameters: [ptr, ptr, ptr])
+        )
+
+        // void @aro_parse_arguments(i32, ptr) - ARO-0047
+        _parseArguments = ctx.module.declareFunction(
+            "aro_parse_arguments",
+            types.voidFunctionType(parameters: [i32, ptr])
         )
 
         // void @aro_register_repository_observer(ptr, ptr, ptr)
@@ -433,6 +440,7 @@ public final class LLVMExternalDeclEmitter {
     public var runtimeShutdown: Function { _runtimeShutdown! }
     public var runtimeAwaitPendingEvents: Function { _runtimeAwaitPendingEvents! }
     public var runtimeRegisterHandler: Function { _runtimeRegisterHandler! }
+    public var parseArguments: Function { _parseArguments! }
     public var registerRepositoryObserver: Function { _registerRepositoryObserver! }
     public var logWarning: Function { _logWarning! }
     public var contextCreate: Function { _contextCreate! }

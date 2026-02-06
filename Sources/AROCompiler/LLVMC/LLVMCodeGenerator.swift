@@ -1274,6 +1274,11 @@ public final class LLVMCodeGenerator {
         // Store runtime in global
         ctx.module.insertStore(runtime, to: globalRuntime!, at: ip)
 
+        // Parse command-line arguments (ARO-0047)
+        let argc = mainFunc.parameters[0]
+        let argv = mainFunc.parameters[1]
+        ctx.module.insertCall(externals.parseArguments, on: [argc, argv], at: ip)
+
         // Set embedded OpenAPI spec if provided
         if let spec = openAPISpecJSON {
             let specStr = ctx.stringConstant(spec)
