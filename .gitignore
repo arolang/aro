@@ -101,3 +101,5 @@ testrun.log
 /output
 /Examples/ZipService/plugins/libZipPlugin.so
 /Examples/SQLiteExample/plugins/libSQLitePlugin.so
+/Examples/EventSchema/EventSchema
+/Examples/Parameters/Parameters
