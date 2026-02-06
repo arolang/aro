@@ -55,5 +55,4 @@
 ## Appendices
 - A: Action Reference (all 50 built-in actions)
 - B: Preposition Semantics
-- C: Grammar Specification
-- D: Statements Reference
+- C: Statements Reference

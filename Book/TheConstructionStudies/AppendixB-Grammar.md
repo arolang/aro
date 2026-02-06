@@ -1,4 +1,4 @@
-# Appendix C: Grammar Specification
+# Appendix B: Grammar Specification
 
 This appendix provides the complete formal grammar specification for ARO using Extended Backus-Naur Form (EBNF).
 

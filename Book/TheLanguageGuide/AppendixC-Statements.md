@@ -1,4 +1,4 @@
-# Appendix D: Statements Reference
+# Appendix C: Statements Reference
 
 This appendix provides a complete reference for all statement types in ARO.
 

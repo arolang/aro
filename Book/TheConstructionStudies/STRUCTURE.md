@@ -46,6 +46,9 @@ What works well. What doesn't work. Design decisions we'd reconsider. Lessons fo
 ### [Appendix A: Source Map](Appendix-SourceMap.md)
 Key file locations and their responsibilities.
 
+### [Appendix B: Grammar Specification](AppendixB-Grammar.md)
+Complete formal grammar specification for ARO in EBNF notation.
+
 ---
 
 **Total**: ~75 pages
