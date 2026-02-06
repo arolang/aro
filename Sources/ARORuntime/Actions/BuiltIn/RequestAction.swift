@@ -74,10 +74,10 @@ public struct RequestAction: ActionImplementation {
         let configBody = config["body"]
         let configTimeout = extractTimeout(from: config)
 
-        // Determine URL
+        // Determine URL - support property access via specifiers (e.g., <event-data: url>)
         let url: String
-        if let resolvedUrl: String = context.resolve(object.base) {
-            url = resolvedUrl
+        if context.exists(object.base) {
+            url = try context.resolveWithSpecifiers(object.base, specifiers: object.specifiers)
         } else if config.isEmpty, let literalUrl = context.resolveAny("_literal_") as? String,
                   literalUrl.hasPrefix("http") {
             // Only use _literal_ as URL if no config (backwards compatibility)

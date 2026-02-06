@@ -78,10 +78,10 @@ A subtle problem arises when you need multiple results of the same operation. Co
 
 ```aro
 <Compute> the <length> from the <greeting>.
-<Compute> the <length> from the <farewell>.  (* Overwrites! *)
+<Compute> the <length> from the <farewell>.  (* Compile error! *)
 ```
 
-Since ARO variables are immutable within their scope, the second statement overwrites the first. Both computations produce lengths, but only the last one survives.
+Since ARO variables are immutable, the compiler rejects the second statement—you cannot rebind a name that already exists. This is a compile-time error, not a silent overwrite.
 
 The solution is the **qualifier-as-name** syntax. In this pattern, the qualifier specifies the operation while the base becomes the variable name:
 

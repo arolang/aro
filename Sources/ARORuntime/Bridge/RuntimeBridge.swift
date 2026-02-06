@@ -118,6 +118,10 @@ class AROCContextHandle {
         ts.setExecutor(templateExecutor)
         self.context.register(ts as TemplateService)
         self.templateService = ts
+
+        // Set up schema registry for typed event extraction (ARO-0046)
+        // Load openapi.yaml from the binary's directory if present
+        Self.setupSchemaRegistry(for: self.context)
         #endif
     }
 
@@ -131,6 +135,46 @@ class AROCContextHandle {
         self.httpServer = nil
         self.templateService = nil
         #endif
+    }
+
+    /// Set up schema registry for typed event extraction (ARO-0046)
+    /// Uses embedded spec (compiled into binary) or falls back to file loading
+    private static func setupSchemaRegistry(for context: RuntimeContext) {
+        var spec: OpenAPISpec? = nil
+
+        // Priority 1: Use embedded spec (compiled into binary)
+        // This is set by aro_set_embedded_openapi() called from generated main()
+        if let embeddedJSON = embeddedOpenAPISpec {
+            if let data = embeddedJSON.data(using: .utf8) {
+                spec = try? JSONDecoder().decode(OpenAPISpec.self, from: data)
+            }
+        }
+
+        // Priority 2: Fall back to file loading (interpreter mode / development)
+        if spec == nil {
+            let executablePath = CommandLine.arguments[0]
+            let absolutePath: String
+            if executablePath.hasPrefix("/") {
+                absolutePath = executablePath
+            } else {
+                let cwd = FileManager.default.currentDirectoryPath
+                absolutePath = (cwd as NSString).appendingPathComponent(executablePath)
+            }
+
+            let resolvedPath = (absolutePath as NSString).resolvingSymlinksInPath
+            let binaryDir = (resolvedPath as NSString).deletingLastPathComponent
+            let openapiPath = (binaryDir as NSString).appendingPathComponent("openapi.yaml")
+
+            if FileManager.default.fileExists(atPath: openapiPath) {
+                spec = try? OpenAPILoader.load(from: URL(fileURLWithPath: openapiPath))
+            }
+        }
+
+        // Register schema registry if spec was loaded
+        if let loadedSpec = spec {
+            let registry = OpenAPISchemaRegistry(spec: loadedSpec)
+            context.setSchemaRegistry(registry)
+        }
     }
 }
 
@@ -1088,7 +1132,7 @@ private func evaluateExpressionJSON(_ expr: [String: Any], context: RuntimeConte
     return ""
 }
 
-/// Interpolate a string template with ${varname} placeholders
+/// Interpolate a string template with ${varname} or ${<base: specifier>} placeholders
 private func interpolateString(_ template: String, context: RuntimeContext) -> String {
     var result = ""
     var i = template.startIndex
@@ -1105,14 +1149,13 @@ private func interpolateString(_ template: String, context: RuntimeContext) -> S
                 }
 
                 if endIdx < template.endIndex {
-                    // Extract variable name
+                    // Extract variable expression
                     let varStart = template.index(after: nextIdx)
-                    let varName = String(template[varStart..<endIdx])
+                    let varExpr = String(template[varStart..<endIdx])
 
-                    // Resolve variable and append
-                    if let value = context.resolveAny(varName) {
-                        result += stringValue(value)
-                    }
+                    // Resolve with property access support
+                    let resolved = resolveVariableExpression(varExpr, context: context)
+                    result += resolved
 
                     // Move past the closing }
                     i = template.index(after: endIdx)
@@ -1126,6 +1169,48 @@ private func interpolateString(_ template: String, context: RuntimeContext) -> S
     }
 
     return result
+}
+
+/// Resolve a variable expression, handling property access syntax
+/// Supports: varname, <varname>, <base: property>, <base: prop1: prop2>
+private func resolveVariableExpression(_ expr: String, context: RuntimeContext) -> String {
+    var varExpr = expr.trimmingCharacters(in: .whitespaces)
+
+    // Handle <base: specifier> syntax
+    if varExpr.hasPrefix("<") && varExpr.hasSuffix(">") {
+        // Remove angle brackets
+        varExpr = String(varExpr.dropFirst().dropLast())
+
+        // Parse base and specifiers (split by ": ")
+        let parts = varExpr.split(separator: ":", maxSplits: 1).map { $0.trimmingCharacters(in: .whitespaces) }
+        let base = parts[0]
+        let specifiers = parts.count > 1 ? parts[1].split(separator: ":").map { $0.trimmingCharacters(in: .whitespaces) } : []
+
+        // Resolve base variable
+        guard var value = context.resolveAny(base) else {
+            return ""  // Variable not found
+        }
+
+        // Navigate through property path
+        for specifier in specifiers {
+            if let dict = value as? [String: any Sendable], let nested = dict[specifier] {
+                value = nested
+            } else if let dict = value as? [String: Any], let nested = dict[specifier] {
+                value = nested as! any Sendable
+            } else {
+                return ""  // Property not found
+            }
+        }
+
+        return stringValue(value)
+    }
+
+    // Simple variable reference
+    if let value = context.resolveAny(varExpr) {
+        return stringValue(value)
+    }
+
+    return ""
 }
 
 /// Convert any value to its string representation
@@ -1486,6 +1571,7 @@ public func aro_string_concat(
 
 /// Interpolate a string template with variables from context
 /// Replaces ${variable} placeholders with resolved values
+/// Supports property access syntax: ${<base: property>} or ${base}
 /// - Parameters:
 ///   - contextPtr: Execution context handle
 ///   - templatePtr: String template with ${...} placeholders
@@ -1498,6 +1584,7 @@ public func aro_interpolate_string(
     guard let ptr = contextPtr, let templateStr = templatePtr.map({ String(cString: $0) }) else {
         return strdup("")
     }
+
 
     let contextHandle = Unmanaged<AROCContextHandle>.fromOpaque(ptr).takeUnretainedValue()
 
@@ -1514,13 +1601,12 @@ public func aro_interpolate_string(
 
             // Find matching }
             if let endRange = current.range(of: "}") {
-                let varName = String(current[..<endRange.lowerBound])
+                let varExpr = String(current[..<endRange.lowerBound])
                 current = String(current[endRange.upperBound...])
 
-                // Resolve variable from context
-                if let value = contextHandle.context.resolveAny(varName) {
-                    result += "\(value)"
-                }
+                // Resolve variable with property access support
+                let resolved = resolveInterpolationExpression(varExpr, context: contextHandle.context)
+                result += resolved
             } else {
                 // No closing }, treat as literal
                 result += "${"
@@ -1533,6 +1619,70 @@ public func aro_interpolate_string(
     }
 
     return strdup(result)
+}
+
+/// Resolve an interpolation expression, handling property access syntax
+/// Supports: ${varname}, ${<varname>}, ${<base: property>}, ${<base: prop1: prop2>}
+private func resolveInterpolationExpression(_ expr: String, context: RuntimeContext) -> String {
+    var varExpr = expr.trimmingCharacters(in: .whitespaces)
+
+    // Handle <base: specifier> syntax
+    if varExpr.hasPrefix("<") && varExpr.hasSuffix(">") {
+        // Remove angle brackets
+        varExpr = String(varExpr.dropFirst().dropLast())
+
+        // Parse base and specifiers (split by ": ")
+        let parts = varExpr.split(separator: ":", maxSplits: 1).map { $0.trimmingCharacters(in: .whitespaces) }
+        let base = parts[0]
+        let specifiers = parts.count > 1 ? parts[1].split(separator: ":").map { $0.trimmingCharacters(in: .whitespaces) } : []
+
+        // Resolve base variable
+        guard var value = context.resolveAny(base) else {
+            return ""  // Variable not found
+        }
+
+        // Navigate through property path
+        for specifier in specifiers {
+            // Try [String: any Sendable] first
+            if let dict = value as? [String: any Sendable], let nested = dict[specifier] {
+                value = nested
+            }
+            // Also try [String: Any] for dictionaries from JSON parsing
+            else if let dict = value as? [String: Any], let nested = dict[specifier] {
+                value = nested as! any Sendable
+            } else {
+                return ""  // Property not found
+            }
+        }
+
+        return formatInterpolatedValue(value)
+    }
+
+    // Simple variable reference
+    if let value = context.resolveAny(varExpr) {
+        return formatInterpolatedValue(value)
+    }
+
+    return ""
+}
+
+/// Format a value for string interpolation
+private func formatInterpolatedValue(_ value: any Sendable) -> String {
+    switch value {
+    case let s as String:
+        return s
+    case let i as Int:
+        return String(i)
+    case let d as Double:
+        if d.truncatingRemainder(dividingBy: 1) == 0 {
+            return String(Int(d))
+        }
+        return String(d)
+    case let b as Bool:
+        return b ? "true" : "false"
+    default:
+        return String(describing: value)
+    }
 }
 
 /// Evaluate a when guard condition

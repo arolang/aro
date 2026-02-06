@@ -10,7 +10,7 @@ Every programmer eventually discovers a counterintuitive truth: simplicity isn't
 
 General-purpose languages like Python, JavaScript, and Go are magnificent tools. They let you express almost anything. But "almost anything" is precisely the problem. When a language permits infinite variation, every codebase becomes a unique dialect. Reading someone else's Express.js handler requires decoding their personal philosophy of error handling, their opinions on async/await versus callbacks, their stance on mutation.
 
-ARO takes a different path. It deliberately limits what you can express. No loops. No conditionals. No arbitrary function definitions. Just 24 verbs, a fixed grammar, and a commitment to the happy path.
+ARO takes a different path. It deliberately limits what you can express. No loops. No conditionals. No arbitrary function definitions. Just 50 verbs, a fixed grammar, and a commitment to the happy path.
 
 This isn't a limitation born of laziness or naivety. It's a design philosophy with historical precedent:
 

@@ -58,9 +58,9 @@ Feature sets execute in response to events. The runtime maintains an event bus t
 | File Event | `File Event Handler` | React to file changes |
 | Socket Event | `Socket Event Handler` | React to socket messages |
 
-> **See Chapter 10** for application lifecycle details (startup, shutdown, Keepalive).
+> **See Chapter 12** for application lifecycle details (startup, shutdown, Keepalive).
 
-> **See Chapter 9** for event bus mechanics and handler patterns.
+> **See Chapter 11** for event bus mechanics and handler patterns.
 
 ---
 

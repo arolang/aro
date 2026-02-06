@@ -4,7 +4,7 @@
 
 ---
 
-## 13.1 The Request-Response Cycle
+## 16.1 The Request-Response Cycle
 
 <div style="text-align: center; margin: 2em 0;">
 <svg width="400" height="100" viewBox="0 0 400 100" xmlns="http://www.w3.org/2000/svg">  <!-- Extract -->  <rect x="20" y="30" width="90" height="40" rx="5" fill="#dbeafe" stroke="#3b82f6" stroke-width="2"/>  <text x="65" y="48" text-anchor="middle" font-family="sans-serif" font-size="10" font-weight="bold" fill="#1e40af">EXTRACT</text>  <text x="65" y="62" text-anchor="middle" font-family="sans-serif" font-size="8" fill="#3b82f6">path, query, body</text>  <!-- Arrow -->  <line x1="110" y1="50" x2="140" y2="50" stroke="#6b7280" stroke-width="2"/>  <polygon points="140,50 133,45 133,55" fill="#6b7280"/>  <!-- Process -->  <rect x="145" y="30" width="90" height="40" rx="5" fill="#dcfce7" stroke="#22c55e" stroke-width="2"/>  <text x="190" y="48" text-anchor="middle" font-family="sans-serif" font-size="10" font-weight="bold" fill="#166534">PROCESS</text>  <text x="190" y="62" text-anchor="middle" font-family="sans-serif" font-size="8" fill="#22c55e">validate, transform</text>  <!-- Arrow -->  <line x1="235" y1="50" x2="265" y2="50" stroke="#6b7280" stroke-width="2"/>  <polygon points="265,50 258,45 258,55" fill="#6b7280"/>  <!-- Return -->  <rect x="270" y="30" width="90" height="40" rx="5" fill="#fce7f3" stroke="#ec4899" stroke-width="2"/>  <text x="315" y="48" text-anchor="middle" font-family="sans-serif" font-size="10" font-weight="bold" fill="#9d174d">RETURN</text>  <text x="315" y="62" text-anchor="middle" font-family="sans-serif" font-size="8" fill="#ec4899">status + data</text>  <!-- Labels below -->  <text x="65" y="88" text-anchor="middle" font-family="sans-serif" font-size="8" fill="#9ca3af">input</text>  <text x="190" y="88" text-anchor="middle" font-family="sans-serif" font-size="8" fill="#9ca3af">business logic</text>  <text x="315" y="88" text-anchor="middle" font-family="sans-serif" font-size="8" fill="#9ca3af">output</text></svg>
@@ -22,7 +22,7 @@ This cycle is the same regardless of what your API does. A simple health check e
 
 ---
 
-## 13.2 Extraction Patterns
+## 16.2 Extraction Patterns
 
 Extraction is the first step in handling any request. You need to get data out of the request and into local bindings where you can work with it.
 
@@ -38,7 +38,7 @@ The pattern is to perform all extractions early in the feature set, before any p
 
 ---
 
-## 13.3 Validation Patterns
+## 16.3 Validation Patterns
 
 Validation ensures that extracted data meets expectations before you use it in business logic. Invalid data caught early produces clear error messages; invalid data caught late produces confusing failures.
 
@@ -52,7 +52,7 @@ Custom validation actions encapsulate complex validation logic. When validation 
 
 ---
 
-## 13.4 Transformation Patterns
+## 16.4 Transformation Patterns
 
 Transformation is the heart of request processing. You take input data and produce output data through various operations.
 
@@ -68,7 +68,7 @@ Each transformation takes bound values as input and produces new bindings as out
 
 ---
 
-## 13.5 Response Patterns
+## 16.5 Response Patterns
 
 Response patterns determine how you communicate outcomes to clients. The combination of status code and response body tells clients what happened and provides any resulting data.
 
@@ -84,7 +84,7 @@ Structured responses maintain consistency across endpoints. Rather than returnin
 
 ---
 
-## 13.6 Common Patterns
+## 16.6 Common Patterns
 
 Several patterns recur across APIs and have established solutions in ARO.
 
@@ -98,7 +98,7 @@ Search with filters handles complex queries. Rather than defining separate endpo
 
 ---
 
-## 13.7 Response Headers
+## 16.7 Response Headers
 
 Beyond the status code and body, responses can include headers that provide additional metadata or instructions to clients.
 
@@ -112,7 +112,7 @@ The Return action can include header specifications that the runtime applies to 
 
 ---
 
-## 13.8 Best Practices
+## 16.8 Best Practices
 
 Extract and validate early. Get all the data you need from the request at the beginning of your handler. Validate it immediately after extraction. This pattern ensures that invalid requests fail fast with clear errors.
 

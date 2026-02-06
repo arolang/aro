@@ -22,7 +22,7 @@ Complete reference of all 51 ARO actions organized by category.
 | **Given**     | Control/Spec      | OWN               | Denotes initial precondition in scenarios.<br>`<Given> the <user> with { name: "Test" }.` |
 | **When**      | Control/Spec      | OWN               | Denotes conditional trigger.<br>`<When> the <action> from the <feature-set>.` |
 | **Then**      | Control/Spec      | OWN               | Denotes expected result after condition.<br>`<Then> the <result> with <expected>.` |
-| **Extract**   | Data Access       | REQUEST           | Pulls a subset or component from a larger data structure.<br>`<Extract> the <user-id> from the <request: parameters>.` |
+| **Extract**   | Data Access       | REQUEST           | Pulls a subset or component from a larger data structure. PascalCase qualifiers enable typed extraction with OpenAPI schema validation (ARO-0046).<br>`<Extract> the <user-id> from the <request: parameters>.`<br>`<Extract> the <data: UserEvent> from the <event: data>.` |
 | **Retrieve**  | Data Access       | REQUEST           | Gets existing data by key or identifier.<br>`<Retrieve> the <user> from the <user-repository> where id = <id>.` |
 | **List**      | Enumeration       | REQUEST           | Enumerates items in a collection or directory.<br>`<List> the <files> from the <directory: "./src">.` |
 | **Filter**    | Enumeration       | OWN               | Selects items matching criteria.<br>`<Filter> the <active> from the <users> where status = "active".` |

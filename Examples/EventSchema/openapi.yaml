@@ -1,0 +1,64 @@
+openapi: 3.0.3
+info:
+  title: Event Schema Example
+  description: Demonstrates ARO-0046 typed event extraction
+  version: 1.0.0
+
+paths: {}
+
+components:
+  schemas:
+    # User registration event with required fields
+    UserRegisteredEvent:
+      type: object
+      required:
+        - userId
+        - email
+        - name
+      properties:
+        userId:
+          type: string
+        email:
+          type: string
+        name:
+          type: string
+        premium:
+          type: boolean
+          default: false
+
+    # Order placed event with nested object
+    OrderPlacedEvent:
+      type: object
+      required:
+        - orderId
+        - customerId
+        - items
+        - total
+      properties:
+        orderId:
+          type: string
+        customerId:
+          type: string
+        items:
+          type: array
+          items:
+            type: object
+            properties:
+              productId:
+                type: string
+              quantity:
+                type: integer
+        total:
+          type: number
+
+    # Simple notification event
+    NotificationEvent:
+      type: object
+      required:
+        - message
+      properties:
+        message:
+          type: string
+        priority:
+          type: string
+          enum: [low, medium, high]

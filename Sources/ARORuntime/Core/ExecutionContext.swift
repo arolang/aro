@@ -192,6 +192,14 @@ public protocol ExecutionContext: AnyObject, Sendable {
     ///   - service: The service instance to register
     func registerWithTypeId(_ typeId: ObjectIdentifier, service: any Sendable)
 
+    // MARK: - Schema Registry (ARO-0046)
+
+    /// Access the schema registry for typed event extraction
+    ///
+    /// Returns nil if no OpenAPI spec is loaded or schemas aren't available.
+    /// Used by ExtractAction when a PascalCase qualifier indicates a schema name.
+    var schemaRegistry: SchemaRegistry? { get }
+
     // MARK: - Repository Access
 
     /// Get a repository by name
@@ -299,6 +307,9 @@ public extension ExecutionContext {
     /// Default: not compiled (interpreter mode)
     var isCompiled: Bool { false }
 
+    /// Default: no schema registry (no OpenAPI spec loaded)
+    var schemaRegistry: SchemaRegistry? { nil }
+
     // MARK: - Default Type-Aware Implementations
 
     /// Default implementation: wrap resolved value with unknown type
@@ -334,4 +345,53 @@ public extension ExecutionContext {
 
     /// Default: not a template context
     var isTemplateContext: Bool { false }
+
+    // MARK: - Object Resolution with Specifiers
+
+    /// Resolve an object with optional property access via specifiers
+    ///
+    /// This supports syntax like `<event-data: url>` where:
+    /// - `base` = "event-data" (the variable name)
+    /// - `specifiers` = ["url"] (the property path)
+    ///
+    /// - Parameters:
+    ///   - base: The variable name to resolve
+    ///   - specifiers: Property path to extract from the resolved value
+    /// - Returns: The resolved value, or the nested property if specifiers are provided
+    /// - Throws: ActionError.undefinedVariable if base not found,
+    ///           ActionError.propertyNotFound if property access fails
+    func resolveWithSpecifiers(_ base: String, specifiers: [String]) throws -> any Sendable {
+        guard let resolvedBase = resolveAny(base) else {
+            throw ActionError.undefinedVariable(base)
+        }
+
+        if specifiers.isEmpty {
+            return resolvedBase
+        }
+
+        var value: any Sendable = resolvedBase
+        for specifier in specifiers {
+            if let dict = value as? [String: any Sendable], let nested = dict[specifier] {
+                value = nested
+            } else {
+                throw ActionError.propertyNotFound(property: specifier, on: base)
+            }
+        }
+        return value
+    }
+
+    /// Resolve an object with specifiers, expecting a specific type
+    ///
+    /// - Parameters:
+    ///   - base: The variable name to resolve
+    ///   - specifiers: Property path to extract from the resolved value
+    /// - Returns: The resolved value cast to the expected type
+    /// - Throws: ActionError.undefinedVariable, propertyNotFound, or type mismatch
+    func resolveWithSpecifiers<T>(_ base: String, specifiers: [String]) throws -> T {
+        let value = try resolveWithSpecifiers(base, specifiers: specifiers)
+        guard let typed = value as? T else {
+            throw ActionError.runtimeError("Expected \(T.self) but got \(type(of: value))")
+        }
+        return typed
+    }
 }

@@ -88,6 +88,13 @@ public actor ExecutionEngine {
         // Register services in context
         await services.registerAll(in: context)
 
+        // Set up schema registry for typed event extraction (ARO-0046)
+        // If an OpenAPI spec is loaded, create a schema registry for schema-based validation
+        if let specService = context.service(OpenAPISpecService.self) {
+            let schemaRegistry = OpenAPISchemaRegistry(spec: specService.spec)
+            context.setSchemaRegistry(schemaRegistry)
+        }
+
         // Wire up event handlers for Socket Event Handler feature sets
         // Socket events work on Windows via WindowsSocketServer (FlyingSocks)
         registerSocketEventHandlers(for: program, baseContext: context)

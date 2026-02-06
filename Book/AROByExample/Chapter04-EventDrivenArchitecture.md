@@ -252,7 +252,7 @@ Notice the flow: Start → Greet event → Hello handler → Farewell event → 
 
 **No Event Tracing.** When something goes wrong, there is no built-in way to trace which events led to the error. You add `<Log>` statements manually.
 
-**No Event Schema.** Event data is untyped. If a handler expects `name` but the emitter sends `userName`, you get a runtime error. A type system for events would catch this earlier.
+**Event Schema Validation.** Event data is untyped by default. If a handler expects `name` but the emitter sends `userName`, you get a runtime error. However, ARO-0046 introduces **typed event extraction** which validates event data against OpenAPI schemas defined in `components.schemas`. See Chapter 6 for details on using `<Extract> the <data: SchemaName> from the <event: data>.`
 
 **No Guaranteed Order.** If multiple handlers listen to the same event, their execution order is not guaranteed. Usually this is fine, but sometimes order matters.
 
