@@ -168,6 +168,12 @@ public struct PathPattern: Sendable {
     /// - Returns: Extracted parameters if matched, nil otherwise
     public func match(_ path: String) -> [String: String]? {
         let normalizedPath = path.hasPrefix("/") ? String(path.dropFirst()) : path
+
+        // Handle root path "/" -> empty normalizedPath matches empty segments
+        if normalizedPath.isEmpty {
+            return segments.isEmpty ? [:] : nil
+        }
+
         let pathParts = normalizedPath.split(separator: "/", omittingEmptySubsequences: false).map(String.init)
 
         guard pathParts.count == segments.count else {
