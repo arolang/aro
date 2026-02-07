@@ -526,3 +526,7 @@ Consider what happens when optional data is missing:
 | Include with vars | `{{ <Include> the <template: path> with { k: v }. }}` | Pass variables to include |
 
 The template engine bridges ARO's action-oriented paradigm with the need for dynamic content generation. By maintaining context isolation and embracing the familiar `{{ }}` delimiter syntax, templates integrate naturally into ARO applications while preserving safety and predictability.
+
+---
+
+*Next: Chapter 39 — WebSockets*
