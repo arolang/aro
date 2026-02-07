@@ -283,7 +283,7 @@ public final class AROHTTPServer: HTTPServerService, @unchecked Sendable {
 
 // MARK: - HTTP Handler
 
-private final class HTTPHandler: ChannelInboundHandler, @unchecked Sendable {
+private final class HTTPHandler: ChannelInboundHandler, RemovableChannelHandler, @unchecked Sendable {
     typealias InboundIn = HTTPServerRequestPart
     typealias OutboundOut = HTTPServerResponsePart
 
