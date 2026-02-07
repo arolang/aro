@@ -369,7 +369,16 @@ public func createWebSocketUpgrader(
             // Only upgrade if path matches
             let requestPath = head.uri.split(separator: "?").first.map(String.init) ?? head.uri
             if requestPath == path {
-                return channel.eventLoop.makeSucceededFuture([:])
+                // IMPORTANT: Remove HTTP handler BEFORE upgrade proceeds.
+                // This must happen before NIO adds WebSocket handlers,
+                // otherwise our HTTP handler ends up at the front of the pipeline
+                // and receives raw WebSocket bytes it can't decode.
+                return channel.pipeline.removeHandler(name: "AROHTTPHandler")
+                    .map { _ in [:] as HTTPHeaders }
+                    .flatMapError { _ in
+                        // Handler might not exist, that's OK
+                        channel.eventLoop.makeSucceededFuture([:] as HTTPHeaders)
+                    }
             }
             return channel.eventLoop.makeSucceededFuture(nil)
         },
@@ -384,14 +393,9 @@ public func createWebSocketUpgrader(
                 remoteAddress: remoteAddress
             )
 
-            // Remove the HTTP handler before adding WebSocket handler
-            // This prevents the HTTP handler from receiving WebSocket frames
-            return channel.pipeline.removeHandler(name: "AROHTTPHandler").flatMap {
-                channel.pipeline.addHandler(handler)
-            }.flatMapError { _ in
-                // If removal fails (handler not found), just add the WebSocket handler
-                channel.pipeline.addHandler(handler)
-            }
+            // HTTP handler was already removed in shouldUpgrade.
+            // Just add the WebSocket handler.
+            return channel.pipeline.addHandler(handler)
         }
     )
 }
