@@ -63,8 +63,8 @@ public final class TemplateExecutor: @unchecked Sendable {
                 index += 1
 
             case .expressionShorthand(let expression):
-                let value = try await evaluateExpression(expression, context: templateContext)
-                output += formatValue(value)
+                let (value, filters) = try await evaluateExpressionWithFilters(expression, context: templateContext)
+                output += applyFilters(formatValue(value), filters: filters)
                 index += 1
 
             case .statements(let statementsSource):
@@ -100,6 +100,119 @@ public final class TemplateExecutor: @unchecked Sendable {
     }
 
     // MARK: - Expression Evaluation
+
+    /// Evaluate an expression with optional filters: <expr | filter: "arg">
+    private func evaluateExpressionWithFilters(
+        _ expression: String,
+        context: ExecutionContext
+    ) async throws -> (Any, [(name: String, arg: String?)]) {
+        let trimmed = expression.trimmingCharacters(in: .whitespaces)
+
+        // Check for filter syntax: <expr> | filter: "arg"
+        // Need to find pipe outside of angle brackets
+        if let pipeIndex = findPipeOutsideBrackets(trimmed) {
+            let exprPart = String(trimmed[..<pipeIndex]).trimmingCharacters(in: .whitespaces)
+            let filterPart = String(trimmed[trimmed.index(after: pipeIndex)...]).trimmingCharacters(in: .whitespaces)
+
+            let value = try await evaluateExpression(exprPart, context: context)
+            let filters = parseFilters(filterPart)
+            return (value, filters)
+        }
+
+        // No filters
+        let value = try await evaluateExpression(trimmed, context: context)
+        return (value, [])
+    }
+
+    /// Find pipe character outside of angle brackets
+    private func findPipeOutsideBrackets(_ str: String) -> String.Index? {
+        var depth = 0
+        for (index, char) in zip(str.indices, str) {
+            if char == "<" { depth += 1 }
+            else if char == ">" { depth -= 1 }
+            else if char == "|" && depth == 0 { return index }
+        }
+        return nil
+    }
+
+    /// Parse filter chain: filter1: "arg1" | filter2
+    private func parseFilters(_ filterStr: String) -> [(name: String, arg: String?)] {
+        var filters: [(name: String, arg: String?)] = []
+
+        // Split by pipe for chained filters
+        let parts = filterStr.components(separatedBy: "|").map { $0.trimmingCharacters(in: .whitespaces) }
+
+        for part in parts where !part.isEmpty {
+            // Parse: filterName: "arg" or filterName
+            if let colonIndex = part.firstIndex(of: ":") {
+                let name = String(part[..<colonIndex]).trimmingCharacters(in: .whitespaces)
+                var arg = String(part[part.index(after: colonIndex)...]).trimmingCharacters(in: .whitespaces)
+
+                // Remove quotes from argument
+                if arg.hasPrefix("\"") && arg.hasSuffix("\"") {
+                    arg = String(arg.dropFirst().dropLast())
+                }
+
+                filters.append((name: name, arg: arg))
+            } else {
+                filters.append((name: part, arg: nil))
+            }
+        }
+
+        return filters
+    }
+
+    /// Apply filters to a formatted value
+    private func applyFilters(_ value: String, filters: [(name: String, arg: String?)]) -> String {
+        var result = value
+
+        for filter in filters {
+            switch filter.name {
+            case "date":
+                result = formatDate(result, format: filter.arg ?? "dd.MM.yyyy HH:mm")
+            case "uppercase":
+                result = result.uppercased()
+            case "lowercase":
+                result = result.lowercased()
+            default:
+                break
+            }
+        }
+
+        return result
+    }
+
+    /// Format an ISO date string to a custom format
+    private func formatDate(_ isoString: String, format: String) -> String {
+        // Parse ISO 8601 date
+        let isoFormatter = ISO8601DateFormatter()
+        isoFormatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+
+        var date = isoFormatter.date(from: isoString)
+        if date == nil {
+            // Try without fractional seconds
+            isoFormatter.formatOptions = [.withInternetDateTime]
+            date = isoFormatter.date(from: isoString)
+        }
+
+        guard let parsedDate = date else {
+            return isoString // Return original if parsing fails
+        }
+
+        // Format to desired output
+        let outputFormatter = DateFormatter()
+        outputFormatter.dateFormat = convertToDateFormat(format)
+        outputFormatter.timeZone = TimeZone(identifier: "UTC")
+
+        return outputFormatter.string(from: parsedDate)
+    }
+
+    /// Convert user-friendly format to DateFormatter format
+    private func convertToDateFormat(_ format: String) -> String {
+        // The format string uses standard DateFormatter patterns
+        // dd = day, MM = month, yyyy = year, HH = hour, mm = minute, ss = second
+        return format
+    }
 
     /// Evaluate an expression shorthand and return its value
     private func evaluateExpression(_ expression: String, context: ExecutionContext) async throws -> Any {
