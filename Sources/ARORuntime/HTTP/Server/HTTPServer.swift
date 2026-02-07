@@ -217,6 +217,11 @@ public final class AROHTTPServer: HTTPServerService, @unchecked Sendable {
 
     // MARK: - HTTPServerService
 
+    public func configureWebSocket(path: String) async throws {
+        let wsServer = AROWebSocketServer(path: path, eventBus: eventBus)
+        setWebSocketServer(wsServer)
+    }
+
     public func start(port: Int) async throws {
         let handler = withLock { requestHandler }
         let wsServer = withLock { webSocketServer }

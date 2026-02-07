@@ -56,6 +56,7 @@ public struct StartAction: ActionImplementation {
         // 2. OpenAPI spec (contract is source of truth)
         // 3. Default to 8080
         var port = 8080
+        var websocketPath: String? = nil
 
         // Priority 1: Check _with_ binding (ARO-0042: with clause)
         if let withValue = context.resolveAny("_with_") {
@@ -69,10 +70,21 @@ public struct StartAction: ActionImplementation {
             } else if let httpServer = withValue as? HTTPServerConfig {
                 // HTTP server config: with <http-server>
                 port = httpServer.port
-            } else if let withConfig = withValue as? [String: any Sendable],
-                      let configPort = withConfig["port"] as? Int {
-                // Config object: with { port: 8080 }
-                port = configPort
+            } else if let withConfig = withValue as? [String: any Sendable] {
+                // Config object: with { port: 8080, websocket: "/ws" }
+                if let configPort = withConfig["port"] as? Int {
+                    port = configPort
+                }
+                // Extract websocket path if specified
+                if let wsPath = withConfig["websocket"] as? String {
+                    websocketPath = wsPath
+                }
+                // Fallback to OpenAPI port if no port specified
+                if withConfig["port"] == nil,
+                   let specService = context.service(OpenAPISpecService.self),
+                   let openAPIPort = specService.serverPort {
+                    port = openAPIPort
+                }
             } else if let specService = context.service(OpenAPISpecService.self),
                       let openAPIPort = specService.serverPort {
                 // Empty config {}, use OpenAPI port
@@ -109,6 +121,10 @@ public struct StartAction: ActionImplementation {
 
         // Try HTTP server service (interpreter mode with NIO)
         if let httpServerService = context.service(HTTPServerService.self) {
+            // Configure WebSocket if path is specified
+            if let wsPath = websocketPath {
+                try await httpServerService.configureWebSocket(path: wsPath)
+            }
             try await httpServerService.start(port: port)
             EventBus.shared.registerEventSource()
             return ServerStartResult(serverType: "http-server", success: true, port: port)
@@ -452,6 +468,12 @@ public final class NativeFileWatcher: @unchecked Sendable {
 public protocol HTTPServerService: Sendable {
     func start(port: Int) async throws
     func stop() async throws
+    func configureWebSocket(path: String) async throws
+}
+
+extension HTTPServerService {
+    /// Default implementation does nothing (for servers without WebSocket support)
+    public func configureWebSocket(path: String) async throws {}
 }
 
 /// Socket server service protocol

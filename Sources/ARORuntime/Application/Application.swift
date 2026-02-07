@@ -38,11 +38,6 @@ public final class Application: @unchecked Sendable {
     private var httpServer: AROHTTPServer?
     #endif
 
-    /// WebSocket server instance for broadcast support
-    #if !os(Windows)
-    private var webSocketServer: AROWebSocketServer?
-    #endif
-
     /// Template service for HTML template rendering (ARO-0045)
     private var templateService: AROTemplateService?
 
@@ -103,15 +98,10 @@ public final class Application: @unchecked Sendable {
         await runtime.register(service: socketServer as SocketServerService)
 
         // Register HTTP server service for web APIs
+        // WebSocket is configured on-demand via: <Start> the <http-server> with { websocket: "/ws" }.
         let server = AROHTTPServer(eventBus: .shared)
         self.httpServer = server
         await runtime.register(service: server as HTTPServerService)
-
-        // Register WebSocket server service
-        let wsServer = AROWebSocketServer(path: "/ws", eventBus: .shared)
-        self.webSocketServer = wsServer
-        server.setWebSocketServer(wsServer)
-        await runtime.register(service: wsServer as WebSocketServerService)
         #endif
 
         // Register OpenAPI spec service if contract exists
@@ -278,9 +268,9 @@ public final class Application: @unchecked Sendable {
         // Register repository storage service for persistent in-memory storage
         context.register(InMemoryRepositoryStorage.shared as RepositoryStorageService)
 
-        // Register WebSocket server service for broadcast support
+        // Register WebSocket server service for broadcast support (if configured)
         #if !os(Windows)
-        if let wsServer = self.webSocketServer {
+        if let wsServer = self.httpServer?.getWebSocketServer() {
             context.register(wsServer as WebSocketServerService)
         }
         #endif
