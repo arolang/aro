@@ -71,17 +71,20 @@ public struct FeatureSet: ASTNode {
     public let name: String
     public let businessActivity: String
     public let statements: [Statement]
+    public let whenCondition: (any Expression)?
     public let span: SourceSpan
-    
-    public init(name: String, businessActivity: String, statements: [Statement], span: SourceSpan) {
+
+    public init(name: String, businessActivity: String, statements: [Statement], whenCondition: (any Expression)? = nil, span: SourceSpan) {
         self.name = name
         self.businessActivity = businessActivity
         self.statements = statements
+        self.whenCondition = whenCondition
         self.span = span
     }
-    
+
     public var description: String {
-        "FeatureSet(\(name): \(businessActivity), \(statements.count) statements)"
+        let whenDesc = whenCondition != nil ? " when ..." : ""
+        return "FeatureSet(\(name): \(businessActivity)\(whenDesc), \(statements.count) statements)"
     }
     
     public func accept<V: ASTVisitor>(_ visitor: V) throws -> V.Result {

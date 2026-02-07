@@ -765,9 +765,43 @@ public actor ExecutionEngine {
             let capturedGlobalSymbols = globalSymbols
             let capturedServices = services
 
+            // Capture the feature-set-level when condition for evaluation
+            let whenCondition = analyzedFS.featureSet.whenCondition
+
             eventBus.subscribe(to: RepositoryChangedEvent.self) { event in
                 // Only handle events that match this observer's repository
                 guard event.repositoryName == repositoryName else { return }
+
+                // Evaluate feature-set-level when condition (e.g., when <message-repository: count> > 40)
+                if let condition = whenCondition {
+                    // Create temporary context for condition evaluation
+                    let evalContext = RuntimeContext(
+                        featureSetName: analyzedFS.featureSet.name,
+                        businessActivity: analyzedFS.featureSet.businessActivity,
+                        eventBus: capturedEventBus,
+                        parent: baseContext
+                    )
+
+                    let evaluator = ExpressionEvaluator()
+                    do {
+                        let conditionResult = try await evaluator.evaluate(condition, context: evalContext)
+                        // Convert condition result to boolean
+                        let isTrue: Bool
+                        if let b = conditionResult as? Bool {
+                            isTrue = b
+                        } else if let i = conditionResult as? Int {
+                            isTrue = i != 0
+                        } else {
+                            isTrue = false
+                        }
+                        guard isTrue else {
+                            return  // Condition is false - skip this observer
+                        }
+                    } catch {
+                        // Log error but skip observer silently on evaluation failure
+                        return
+                    }
+                }
 
                 // Apply state guards if present (check newValue for creates/updates, oldValue for deletes)
                 if !guardSet.isEmpty {

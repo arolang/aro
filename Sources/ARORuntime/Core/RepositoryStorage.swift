@@ -129,6 +129,13 @@ public protocol RepositoryStorageService: Sendable {
     ///   - id: The ID to search for
     /// - Returns: The item if found, nil otherwise
     func findById(in repository: String, businessActivity: String, id: String) async -> (any Sendable)?
+
+    /// Get the count of items in a repository
+    /// - Parameters:
+    ///   - repository: Repository name
+    ///   - businessActivity: The business activity scope
+    /// - Returns: Number of items in the repository
+    func count(repository: String, businessActivity: String) async -> Int
 }
 
 /// Storage key for repository name only (repositories are application-scoped)
@@ -272,6 +279,10 @@ private actor RepositoryStorageActor {
 
     func exists(key: StorageKey) -> Bool {
         return storage[key] != nil && !(storage[key]?.isEmpty ?? true)
+    }
+
+    func count(key: StorageKey) -> Int {
+        return storage[key]?.count ?? 0
     }
 
     func clear(key: StorageKey) {
@@ -439,6 +450,11 @@ public final class InMemoryRepositoryStorage: RepositoryStorageService, Sendable
     public func findById(in repository: String, businessActivity: String, id: String) async -> (any Sendable)? {
         let key = await actor.resolveKey(repository: repository, businessActivity: businessActivity)
         return await actor.findById(key: key, id: id)
+    }
+
+    public func count(repository: String, businessActivity: String) async -> Int {
+        let key = await actor.resolveKey(repository: repository, businessActivity: businessActivity)
+        return await actor.count(key: key)
     }
 
     // MARK: - Debug/Testing

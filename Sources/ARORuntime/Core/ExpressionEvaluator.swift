@@ -24,6 +24,15 @@ public struct ExpressionEvaluator: Sendable {
 
         // Variable reference
         case let varRef as VariableRefExpression:
+            // Special handling for repository count access: <repository-name: count>
+            if InMemoryRepositoryStorage.isRepositoryName(varRef.noun.base) &&
+               varRef.noun.specifiers == ["count"] {
+                return await InMemoryRepositoryStorage.shared.count(
+                    repository: varRef.noun.base,
+                    businessActivity: context.businessActivity
+                )
+            }
+
             guard var value = context.resolveAny(varRef.noun.base) else {
                 throw ExpressionError.undefinedVariable(varRef.noun.base)
             }

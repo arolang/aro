@@ -1263,6 +1263,25 @@ public struct DeleteAction: ActionImplementation {
         let whereField: String? = context.resolve("_where_field_")
         let whereValue = context.resolveAny("_where_value_")
 
+        // If no where clause, clear the entire repository
+        // This supports: <Clear> the <all> from the <message-repository>.
+        if whereField == nil || whereValue == nil {
+            if let storage = context.service(RepositoryStorageService.self) {
+                await storage.clear(repository: repositoryName, businessActivity: context.businessActivity)
+            } else {
+                await InMemoryRepositoryStorage.shared.clear(repository: repositoryName, businessActivity: context.businessActivity)
+            }
+            // Emit repository cleared event
+            context.emit(RepositoryChangedEvent(
+                repositoryName: repositoryName,
+                changeType: .deleted,
+                entityId: nil,
+                newValue: nil,
+                oldValue: nil
+            ))
+            return DeleteResult(target: result.base, success: true)
+        }
+
         guard let field = whereField, let matchValue = whereValue else {
             throw ActionError.runtimeError(
                 "Delete from repository requires a where clause: <Delete> the <item> from the <\(repositoryName)> where field = <value>."
