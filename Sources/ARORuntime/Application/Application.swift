@@ -43,6 +43,9 @@ public final class Application: @unchecked Sendable {
     private var webSocketServer: AROWebSocketServer?
     #endif
 
+    /// Template service for HTML template rendering (ARO-0045)
+    private var templateService: AROTemplateService?
+
     /// Whether HTTP server is enabled (requires OpenAPI contract)
     public var isHTTPEnabled: Bool {
         return openAPISpec != nil
@@ -119,13 +122,14 @@ public final class Application: @unchecked Sendable {
 
         // Register template service (ARO-0045)
         let templatesDirectory = (config.workingDirectory as NSString).appendingPathComponent("templates")
-        let templateService = AROTemplateService(templatesDirectory: templatesDirectory)
+        let ts = AROTemplateService(templatesDirectory: templatesDirectory)
         let templateExecutor = TemplateExecutor(
             actionRegistry: ActionRegistry.shared,
             eventBus: .shared
         )
-        templateService.setExecutor(templateExecutor)
-        await runtime.register(service: templateService as TemplateService)
+        ts.setExecutor(templateExecutor)
+        self.templateService = ts
+        await runtime.register(service: ts as TemplateService)
     }
 
     /// Initialize from source files
@@ -280,6 +284,11 @@ public final class Application: @unchecked Sendable {
             context.register(wsServer as WebSocketServerService)
         }
         #endif
+
+        // Register template service for HTML template rendering (ARO-0045)
+        if let ts = self.templateService {
+            context.register(ts as TemplateService)
+        }
 
         // Parse JSON body if present
         var bodyValue: any Sendable = request.bodyString ?? ""

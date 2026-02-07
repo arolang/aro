@@ -273,10 +273,10 @@ public actor ExecutionEngine {
                         program: program,
                         baseContext: baseContext,
                         eventData: [
-                            "event": WebSocketMessageInfo(
-                                connectionId: event.connectionId,
-                                message: event.message
-                            )
+                            "event": [
+                                "connectionId": event.connectionId,
+                                "message": event.message
+                            ] as [String: any Sendable]
                         ]
                     )
                 }
@@ -289,11 +289,11 @@ public actor ExecutionEngine {
                         program: program,
                         baseContext: baseContext,
                         eventData: [
-                            "event": WebSocketConnectionInfo(
-                                id: event.connectionId,
-                                path: event.path,
-                                remoteAddress: event.remoteAddress
-                            )
+                            "event": [
+                                "id": event.connectionId,
+                                "path": event.path,
+                                "remoteAddress": event.remoteAddress
+                            ] as [String: any Sendable]
                         ]
                     )
                 }
@@ -306,10 +306,10 @@ public actor ExecutionEngine {
                         program: program,
                         baseContext: baseContext,
                         eventData: [
-                            "event": WebSocketDisconnectInfo(
-                                connectionId: event.connectionId,
-                                reason: event.reason
-                            )
+                            "event": [
+                                "connectionId": event.connectionId,
+                                "reason": event.reason
+                            ] as [String: any Sendable]
                         ]
                     )
                 }
