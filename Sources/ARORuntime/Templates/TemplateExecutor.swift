@@ -229,8 +229,14 @@ public final class TemplateExecutor: @unchecked Sendable {
 
     /// Resolve a property path on an object
     private func resolvePropertyPath(_ value: Any, path: String) throws -> Any {
+        // Unwrap AnySendableWrapper if present
+        var unwrapped = value
+        if let wrapper = value as? AnySendableWrapper {
+            unwrapped = wrapper.value
+        }
+
         // Handle dictionary-like objects
-        if let dict = value as? [String: Any] {
+        if let dict = unwrapped as? [String: Any] {
             // Split path by ":" for nested access
             let parts = path.split(separator: ":").map { String($0).trimmingCharacters(in: .whitespaces) }
             var current: Any = dict
