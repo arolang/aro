@@ -1465,6 +1465,10 @@ sub run_single_mode_test {
             chdir $abs_workdir if -d $abs_workdir;
         }
 
+        # Set ARO_BIN environment variable for test-script to use
+        my $aro_bin = find_aro_binary();
+        local $ENV{ARO_BIN} = $aro_bin;
+
         my ($test_out, $test_err, $exit_code) = run_script(
             $hints->{'test-script'},
             $timeout,

@@ -99,6 +99,9 @@ public actor ExecutionEngine {
         // Socket events work on Windows via WindowsSocketServer (FlyingSocks)
         registerSocketEventHandlers(for: program, baseContext: context)
 
+        // Wire up event handlers for WebSocket Event Handler feature sets
+        registerWebSocketEventHandlers(for: program, baseContext: context)
+
         // Wire up domain event handlers (e.g., "UserCreated Handler", "OrderPlaced Handler")
         registerDomainEventHandlers(for: program, baseContext: context)
 
@@ -249,16 +252,82 @@ public actor ExecutionEngine {
         }
     }
 
+    /// Register WebSocket event handlers for feature sets with "WebSocket Event Handler" business activity
+    private func registerWebSocketEventHandlers(for program: AnalyzedProgram, baseContext: RuntimeContext) {
+        // Find all feature sets with "WebSocket Event Handler" business activity
+        let wsHandlers = program.featureSets.filter { analyzedFS in
+            analyzedFS.featureSet.businessActivity.contains("WebSocket Event Handler")
+        }
+
+        for analyzedFS in wsHandlers {
+            let featureSetName = analyzedFS.featureSet.name
+            let lowercaseName = featureSetName.lowercased()
+
+            // Determine which event type this handler should respond to
+            if lowercaseName.contains("message") {
+                // Subscribe to WebSocketMessageEvent
+                eventBus.subscribe(to: WebSocketMessageEvent.self) { [weak self] event in
+                    guard let self = self else { return }
+                    await self.executeSocketHandler(
+                        analyzedFS,
+                        program: program,
+                        baseContext: baseContext,
+                        eventData: [
+                            "event": WebSocketMessageInfo(
+                                connectionId: event.connectionId,
+                                message: event.message
+                            )
+                        ]
+                    )
+                }
+            } else if lowercaseName.contains("connect") && !lowercaseName.contains("disconnect") {
+                // Subscribe to WebSocketConnectedEvent
+                eventBus.subscribe(to: WebSocketConnectedEvent.self) { [weak self] event in
+                    guard let self = self else { return }
+                    await self.executeSocketHandler(
+                        analyzedFS,
+                        program: program,
+                        baseContext: baseContext,
+                        eventData: [
+                            "event": WebSocketConnectionInfo(
+                                id: event.connectionId,
+                                path: event.path,
+                                remoteAddress: event.remoteAddress
+                            )
+                        ]
+                    )
+                }
+            } else if lowercaseName.contains("disconnect") {
+                // Subscribe to WebSocketDisconnectedEvent
+                eventBus.subscribe(to: WebSocketDisconnectedEvent.self) { [weak self] event in
+                    guard let self = self else { return }
+                    await self.executeSocketHandler(
+                        analyzedFS,
+                        program: program,
+                        baseContext: baseContext,
+                        eventData: [
+                            "event": WebSocketDisconnectInfo(
+                                connectionId: event.connectionId,
+                                reason: event.reason
+                            )
+                        ]
+                    )
+                }
+            }
+        }
+    }
+
     /// Register domain event handlers for feature sets with "Handler" business activity pattern
     /// For example: "UserCreated Handler", "OrderPlaced Handler"
     /// Supports state guards: "UserCreated Handler<status:active>"
     private func registerDomainEventHandlers(for program: AnalyzedProgram, baseContext: RuntimeContext) {
-        // Find all feature sets with "*Handler" business activity (but not Socket/File event handlers)
+        // Find all feature sets with "*Handler" business activity (but not Socket/File/WebSocket event handlers)
         // Also match handlers with state guards like "Handler<status:paid>"
         let domainHandlers = program.featureSets.filter { analyzedFS in
             let activity = analyzedFS.featureSet.businessActivity
             let hasHandler = activity.contains(" Handler")
             let isSpecialHandler = activity.contains("Socket Event Handler") ||
+                                   activity.contains("WebSocket Event Handler") ||
                                    activity.contains("File Event Handler") ||
                                    activity.contains("Application-End")
             return hasHandler && !isSpecialHandler

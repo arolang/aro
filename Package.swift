@@ -45,6 +45,7 @@ platformDependencies = [
 runtimePlatformDependencies = [
     .product(name: "NIO", package: "swift-nio"),
     .product(name: "NIOHTTP1", package: "swift-nio"),
+    .product(name: "NIOWebSocket", package: "swift-nio"),
     .product(name: "NIOFoundationCompat", package: "swift-nio"),
     .product(name: "AsyncHTTPClient", package: "async-http-client"),
     .product(name: "FileMonitor", package: "FileMonitor"),

@@ -112,6 +112,16 @@ public struct ExtractAction: ActionImplementation {
             return extracted
         }
 
+        // Use result specifier to extract from string (form data, JSON, etc.)
+        // Example: <Extract> the <message-text: message> from the <body>.
+        // Uses "message" as the key to extract from body string
+        if let specifier = result.specifiers.first,
+           let stringSource = resolvedSource as? String {
+            if let value = extractFromString(stringSource, key: specifier) {
+                return value
+            }
+        }
+
         // ARO-0041: Check result specifiers for date type property extraction
         // Syntax: <Extract> the <vacation-days: days> from <vacation>.
         if let specifier = result.specifiers.first {

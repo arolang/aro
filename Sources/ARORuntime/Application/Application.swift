@@ -38,6 +38,11 @@ public final class Application: @unchecked Sendable {
     private var httpServer: AROHTTPServer?
     #endif
 
+    /// WebSocket server instance for broadcast support
+    #if !os(Windows)
+    private var webSocketServer: AROWebSocketServer?
+    #endif
+
     /// Whether HTTP server is enabled (requires OpenAPI contract)
     public var isHTTPEnabled: Bool {
         return openAPISpec != nil
@@ -98,6 +103,12 @@ public final class Application: @unchecked Sendable {
         let server = AROHTTPServer(eventBus: .shared)
         self.httpServer = server
         await runtime.register(service: server as HTTPServerService)
+
+        // Register WebSocket server service
+        let wsServer = AROWebSocketServer(path: "/ws", eventBus: .shared)
+        self.webSocketServer = wsServer
+        server.setWebSocketServer(wsServer)
+        await runtime.register(service: wsServer as WebSocketServerService)
         #endif
 
         // Register OpenAPI spec service if contract exists
@@ -263,6 +274,13 @@ public final class Application: @unchecked Sendable {
         // Register repository storage service for persistent in-memory storage
         context.register(InMemoryRepositoryStorage.shared as RepositoryStorageService)
 
+        // Register WebSocket server service for broadcast support
+        #if !os(Windows)
+        if let wsServer = self.webSocketServer {
+            context.register(wsServer as WebSocketServerService)
+        }
+        #endif
+
         // Parse JSON body if present
         var bodyValue: any Sendable = request.bodyString ?? ""
         if let body = request.body,
@@ -310,6 +328,20 @@ public final class Application: @unchecked Sendable {
 
     /// Convert ARO Response to HTTP Response
     private func convertToHTTPResponse(_ response: Response) -> HTTPResponse {
+        // Map status string to HTTP status code
+        let statusCode = mapStatusToHTTPCode(response.status)
+
+        // Check if response data contains HTML content
+        // If so, return it directly with text/html content type
+        if let htmlValue = detectHTMLContent(in: response.data) {
+            return HTTPResponse(
+                statusCode: statusCode,
+                headers: ["Content-Type": "text/html; charset=utf-8"],
+                body: htmlValue.data(using: .utf8)
+            )
+        }
+
+        // Default: JSON response
         let headers = ["Content-Type": "application/json"]
 
         // Build JSON response body from Response.data
@@ -349,9 +381,6 @@ public final class Application: @unchecked Sendable {
             }
         }
 
-        // Map status string to HTTP status code
-        let statusCode = mapStatusToHTTPCode(response.status)
-
         let bodyData: Data?
         if let jsonData = try? JSONSerialization.data(withJSONObject: jsonBody, options: [.sortedKeys]) {
             bodyData = jsonData
@@ -364,6 +393,25 @@ public final class Application: @unchecked Sendable {
             headers: headers,
             body: bodyData
         )
+    }
+
+    /// Detect if response data contains HTML content (single string value starting with HTML markers)
+    private func detectHTMLContent(in data: [String: AnySendable]) -> String? {
+        // If there's exactly one value and it's an HTML string, return it
+        guard data.count == 1 else { return nil }
+
+        for (_, anySendable) in data {
+            if let str: String = anySendable.get() {
+                let trimmed = str.trimmingCharacters(in: .whitespacesAndNewlines)
+                if trimmed.hasPrefix("<!DOCTYPE") ||
+                   trimmed.hasPrefix("<!doctype") ||
+                   trimmed.hasPrefix("<html") ||
+                   trimmed.hasPrefix("<HTML") {
+                    return str
+                }
+            }
+        }
+        return nil
     }
 
     /// Map ARO status string to HTTP status code

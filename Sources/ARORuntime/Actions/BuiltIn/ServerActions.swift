@@ -1003,18 +1003,48 @@ public struct BroadcastAction: ActionImplementation {
             throw ActionError.undefinedVariable(result.base)
         }
 
-        // Convert data to bytes
-        let dataToSend: Data
-        if let d = data as? Data {
-            dataToSend = d
-        } else if let s = data as? String {
-            dataToSend = s.data(using: .utf8) ?? Data()
+        // Convert data to string for WebSocket, bytes for TCP socket
+        let dataString: String
+        if let s = data as? String {
+            dataString = s
+        } else if let dict = data as? [String: Any] {
+            // Convert dictionary to JSON
+            if let jsonData = try? JSONSerialization.data(withJSONObject: dict),
+               let jsonString = String(data: jsonData, encoding: .utf8) {
+                dataString = jsonString
+            } else {
+                dataString = String(describing: data)
+            }
+        } else if let sendableDict = data as? [String: any Sendable] {
+            // Convert Sendable dictionary to JSON-compatible format
+            let jsonCompatible = convertToJSONCompatible(sendableDict)
+            if let jsonData = try? JSONSerialization.data(withJSONObject: jsonCompatible),
+               let jsonString = String(data: jsonData, encoding: .utf8) {
+                dataString = jsonString
+            } else {
+                dataString = String(describing: data)
+            }
         } else {
-            dataToSend = String(describing: data).data(using: .utf8) ?? Data()
+            dataString = String(describing: data)
         }
 
+        let dataToSend = dataString.data(using: .utf8) ?? Data()
+
         #if !os(Windows)
-        // Try socket server service (interpreter mode)
+        // Check if target is WebSocket
+        let objectBase = object.base.lowercased()
+        if objectBase.contains("websocket") || objectBase == "ws" {
+            // Try WebSocket server service
+            if let wsServer = context.service(WebSocketServerService.self) {
+                try await wsServer.broadcast(message: dataString)
+                return BroadcastResult(success: true, clientCount: wsServer.connectionCount)
+            }
+            // WebSocket not available - emit event as fallback
+            context.emit(WebSocketBroadcastRequestedEvent(message: dataString))
+            return BroadcastResult(success: true, clientCount: 0)
+        }
+
+        // Try TCP socket server service (interpreter mode)
         if let socketServer = context.service(SocketServerService.self) {
             try await socketServer.broadcast(data: dataToSend)
             return BroadcastResult(success: true, clientCount: -1) // Count not available
@@ -1031,6 +1061,47 @@ public struct BroadcastAction: ActionImplementation {
         context.emit(BroadcastRequestedEvent(data: String(describing: data)))
 
         return BroadcastResult(success: true, clientCount: 0)
+    }
+}
+
+/// Convert Sendable dictionary to JSON-compatible format
+private func convertToJSONCompatible(_ dict: [String: any Sendable]) -> [String: Any] {
+    var result: [String: Any] = [:]
+    for (key, value) in dict {
+        result[key] = convertValueToJSONCompatible(value)
+    }
+    return result
+}
+
+/// Convert a Sendable value to JSON-compatible format
+private func convertValueToJSONCompatible(_ value: any Sendable) -> Any {
+    switch value {
+    case let s as String:
+        return s
+    case let i as Int:
+        return i
+    case let d as Double:
+        return d
+    case let b as Bool:
+        return b
+    case let arr as [any Sendable]:
+        return arr.map { convertValueToJSONCompatible($0) }
+    case let dict as [String: any Sendable]:
+        return convertToJSONCompatible(dict)
+    default:
+        return String(describing: value)
+    }
+}
+
+/// Event emitted when WebSocket broadcast is requested
+public struct WebSocketBroadcastRequestedEvent: RuntimeEvent {
+    public static var eventType: String { "websocket.broadcast.requested" }
+    public let timestamp: Date
+    public let message: String
+
+    public init(message: String) {
+        self.timestamp = Date()
+        self.message = message
     }
 }
 
