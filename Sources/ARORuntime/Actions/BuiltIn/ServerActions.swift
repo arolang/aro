@@ -1007,14 +1007,6 @@ public struct BroadcastAction: ActionImplementation {
         let dataString: String
         if let s = data as? String {
             dataString = s
-        } else if let dict = data as? [String: Any] {
-            // Convert dictionary to JSON
-            if let jsonData = try? JSONSerialization.data(withJSONObject: dict),
-               let jsonString = String(data: jsonData, encoding: .utf8) {
-                dataString = jsonString
-            } else {
-                dataString = String(describing: data)
-            }
         } else if let sendableDict = data as? [String: any Sendable] {
             // Convert Sendable dictionary to JSON-compatible format
             let jsonCompatible = convertToJSONCompatible(sendableDict)
@@ -1084,6 +1076,10 @@ private func convertValueToJSONCompatible(_ value: any Sendable) -> Any {
         return d
     case let b as Bool:
         return b
+    case let date as Date:
+        return ISO8601DateFormatter().string(from: date)
+    case let aroDate as ARODate:
+        return aroDate.iso
     case let arr as [any Sendable]:
         return arr.map { convertValueToJSONCompatible($0) }
     case let dict as [String: any Sendable]:
