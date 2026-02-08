@@ -434,24 +434,27 @@ public func aro_runtime_register_handler(
     }
 }
 
-/// Register a repository observer for compiled binaries
+/// Register a repository observer for compiled binaries with optional when condition
 /// This function subscribes to RepositoryChangedEvent for the specified repository
-/// and calls the observer function when events occur
-@_cdecl("aro_register_repository_observer")
-public func aro_register_repository_observer(
+/// and calls the observer function when events occur (if when condition passes)
+@_cdecl("aro_register_repository_observer_with_guard")
+public func aro_register_repository_observer_with_guard(
     _ runtimePtr: UnsafeMutableRawPointer?,
     _ repositoryNamePtr: UnsafePointer<CChar>?,
-    _ observerFuncPtr: UnsafeMutableRawPointer?
+    _ observerFuncPtr: UnsafeMutableRawPointer?,
+    _ whenConditionPtr: UnsafePointer<CChar>?
 ) {
     guard let runtimePtr = runtimePtr,
           let repositoryNamePtr = repositoryNamePtr,
           let observerFuncPtr = observerFuncPtr else {
-        print("[RuntimeBridge] ERROR: Invalid parameters to aro_register_repository_observer")
+        print("[RuntimeBridge] ERROR: Invalid parameters to aro_register_repository_observer_with_guard")
         return
     }
 
     let runtimeHandle = Unmanaged<AROCRuntimeHandle>.fromOpaque(runtimePtr).takeUnretainedValue()
     let repositoryName = String(cString: repositoryNamePtr)
+    let whenCondition: String? = whenConditionPtr.map { String(cString: $0) }
+
 
     // Capture observer pointer as Int (Sendable) for use in closure
     let observerAddress = Int(bitPattern: observerFuncPtr)
@@ -459,6 +462,39 @@ public func aro_register_repository_observer(
     // Subscribe to RepositoryChangedEvent for this repository
     runtimeHandle.runtime.eventBus.subscribe(to: RepositoryChangedEvent.self) { event in
         guard event.repositoryName == repositoryName else { return }
+
+        // If there's a when condition, evaluate it first
+        if let condition = whenCondition, !condition.isEmpty {
+            // Parse the when condition JSON
+            guard let conditionData = condition.data(using: .utf8),
+                  let parsed = try? JSONSerialization.jsonObject(with: conditionData, options: []) as? [String: Any] else {
+                return // Skip if can't parse condition
+            }
+
+            // Create a temporary context to evaluate the condition
+            let tempContext = RuntimeContext(
+                featureSetName: "\(repositoryName) Observer",
+                businessActivity: "\(repositoryName) Observer",
+                eventBus: runtimeHandle.runtime.eventBus
+            )
+
+            // Evaluate the condition
+            let result = evaluateExpressionJSON(parsed, context: tempContext)
+
+            // Check if result is truthy
+            let conditionPassed: Bool
+            if let boolVal = result as? Bool {
+                conditionPassed = boolVal
+            } else if let intVal = result as? Int {
+                conditionPassed = intVal != 0
+            } else {
+                conditionPassed = false
+            }
+
+            if !conditionPassed {
+                return // Skip observer if condition is false
+            }
+        }
 
         // CRITICAL: Run compiled observer on a pthread (Foundation Thread), NOT on GCD.
         // Same reasoning as aro_runtime_register_handler — pthreads avoid GCD's 64-thread
@@ -540,6 +576,19 @@ public func aro_register_repository_observer(
             }.start()
         }
     }
+}
+
+/// Register a repository observer for compiled binaries (legacy, no when condition)
+/// This function subscribes to RepositoryChangedEvent for the specified repository
+/// and calls the observer function when events occur
+@_cdecl("aro_register_repository_observer")
+public func aro_register_repository_observer(
+    _ runtimePtr: UnsafeMutableRawPointer?,
+    _ repositoryNamePtr: UnsafePointer<CChar>?,
+    _ observerFuncPtr: UnsafeMutableRawPointer?
+) {
+    // Delegate to the guarded version with no condition
+    aro_register_repository_observer_with_guard(runtimePtr, repositoryNamePtr, observerFuncPtr, nil)
 }
 
 // MARK: - Context Management
@@ -1096,16 +1145,26 @@ private func evaluateExpressionJSON(_ expr: [String: Any], context: RuntimeConte
 
     // Variable reference (with optional specifiers)
     if let varName = expr["$var"] as? String {
+        let specs = expr["$specs"] as? [String] ?? []
+
+        // Special handling for repository count access: <repository-name: count>
+        if specs == ["count"] && InMemoryRepositoryStorage.isRepositoryName(varName) {
+            // Get count synchronously using the actor's sync count method
+            let businessActivity = context.businessActivity
+            return InMemoryRepositoryStorage.shared.countSync(
+                repository: varName,
+                businessActivity: businessActivity
+            )
+        }
+
         var value = context.resolveAny(varName) ?? ""
 
         // Handle specifiers for expressions like <user: active>
-        if let specs = expr["$specs"] as? [String] {
-            for spec in specs {
-                if let dict = value as? [String: any Sendable], let propVal = dict[spec] {
-                    value = propVal
-                } else {
-                    return "" // Property not found
-                }
+        for spec in specs {
+            if let dict = value as? [String: any Sendable], let propVal = dict[spec] {
+                value = propVal
+            } else {
+                return "" // Property not found
             }
         }
         return value

@@ -14,6 +14,9 @@ import AROParser
 
 #if os(macOS)
 import CoreServices
+import CommonCrypto
+#elseif os(Linux)
+import Crypto
 #endif
 
 #if !os(Windows)
@@ -1628,17 +1631,44 @@ public func aro_native_socket_broadcast_excluding(
 public typealias NativeHTTPRequestHandler = (String, String, [String: String], Data?) -> (Int, [String: String], Data?)
 
 /// Native HTTP Server using BSD sockets
-/// This provides a working HTTP server for compiled binaries
+/// This provides a working HTTP server for compiled binaries with WebSocket support
 public final class NativeHTTPServer: @unchecked Sendable {
     private var serverFd: Int32 = -1
     private var isRunning = false
     private let lock = NSLock()
     private var requestHandler: NativeHTTPRequestHandler?
 
+    /// WebSocket connection storage
+    private var wsConnections: [String: Int32] = [:]
+    private let wsLock = NSLock()
+
+    /// WebSocket path to listen on
+    private var wsPath: String = "/ws"
+
+    /// Event bus for WebSocket events
+    public var eventBus: EventBus?
+
     public let port: Int
+
+    /// Number of active WebSocket connections
+    public var wsConnectionCount: Int {
+        wsLock.lock()
+        defer { wsLock.unlock() }
+        return wsConnections.count
+    }
 
     public init(port: Int) {
         self.port = port
+    }
+
+    /// Configure WebSocket path
+    public func setWebSocketPath(_ path: String) {
+        wsPath = path
+    }
+
+    /// Set event bus for WebSocket events
+    public func setEventBus(_ eventBus: EventBus) {
+        self.eventBus = eventBus
     }
 
     deinit {
@@ -1817,6 +1847,18 @@ public final class NativeHTTPServer: @unchecked Sendable {
             }
         }
 
+        // Check for WebSocket upgrade request
+        if isWebSocketUpgrade(path: path, headers: headers) {
+            if performWebSocketHandshake(fd: fd, headers: headers) {
+                let connectionId = UUID().uuidString
+                handleWebSocket(fd: fd, connectionId: connectionId)
+            } else {
+                sendResponse(fd: fd, statusCode: 400, body: "WebSocket handshake failed")
+                _ = systemClose(fd)
+            }
+            return
+        }
+
         // Find body using byte-level extraction based on Content-Length
         // This is more reliable than string-based parsing
         var body: Data? = nil
@@ -1917,6 +1959,239 @@ public final class NativeHTTPServer: @unchecked Sendable {
                 _ = systemSend(fd, buffer.baseAddress!, body.count, 0)
             }
         }
+    }
+
+    // MARK: - WebSocket Support
+
+    /// Check if request is a WebSocket upgrade request
+    private func isWebSocketUpgrade(path: String, headers: [String: String]) -> Bool {
+        guard path == wsPath || path.hasPrefix(wsPath + "?") else { return false }
+        let upgrade = headers["Upgrade"]?.lowercased() ?? headers["upgrade"]?.lowercased()
+        let connection = headers["Connection"]?.lowercased() ?? headers["connection"]?.lowercased()
+        return upgrade == "websocket" && (connection?.contains("upgrade") ?? false)
+    }
+
+    /// Perform WebSocket handshake
+    private func performWebSocketHandshake(fd: Int32, headers: [String: String]) -> Bool {
+        guard let key = headers["Sec-WebSocket-Key"] ?? headers["sec-websocket-key"] else {
+            return false
+        }
+
+        // WebSocket magic string
+        let magic = "258EAFA5-E914-47DA-95CA-C5AB0DC85B11"
+        let combined = key + magic
+
+        // SHA-1 hash and base64 encode
+        guard let data = combined.data(using: .utf8),
+              let hash = sha1(data) else {
+            return false
+        }
+
+        let acceptKey = hash.base64EncodedString()
+
+        // Build handshake response
+        var response = "HTTP/1.1 101 Switching Protocols\r\n"
+        response += "Upgrade: websocket\r\n"
+        response += "Connection: Upgrade\r\n"
+        response += "Sec-WebSocket-Accept: \(acceptKey)\r\n"
+        response += "\r\n"
+
+        // Send response
+        guard let responseData = response.data(using: .utf8) else { return false }
+        var sent = 0
+        while sent < responseData.count {
+            let result = responseData.withUnsafeBytes { buffer in
+                systemSend(fd, buffer.baseAddress!.advanced(by: sent), responseData.count - sent, 0)
+            }
+            if result <= 0 { return false }
+            sent += result
+        }
+
+        return true
+    }
+
+    /// SHA-1 hash implementation
+    private func sha1(_ data: Data) -> Data? {
+        #if os(macOS)
+        var hash = [UInt8](repeating: 0, count: 20)
+        data.withUnsafeBytes { buffer in
+            _ = CC_SHA1(buffer.baseAddress, CC_LONG(data.count), &hash)
+        }
+        return Data(hash)
+        #elseif os(Linux)
+        // Use Swift Crypto on Linux
+        let digest = Insecure.SHA1.hash(data: data)
+        return Data(digest)
+        #else
+        return nil
+        #endif
+    }
+
+    /// Handle WebSocket connection
+    private func handleWebSocket(fd: Int32, connectionId: String) {
+        // Register connection
+        wsLock.lock()
+        wsConnections[connectionId] = fd
+        wsLock.unlock()
+
+        // Emit connect event
+        eventBus?.publish(WebSocketConnectedEvent(
+            connectionId: connectionId,
+            path: wsPath,
+            remoteAddress: "unknown"
+        ))
+
+        defer {
+            // Cleanup on disconnect
+            wsLock.lock()
+            wsConnections.removeValue(forKey: connectionId)
+            wsLock.unlock()
+
+            // Emit disconnect event
+            eventBus?.publish(WebSocketDisconnectedEvent(
+                connectionId: connectionId,
+                reason: "connection closed"
+            ))
+
+            _ = systemClose(fd)
+        }
+
+        // WebSocket frame reading loop
+        var buffer = [UInt8](repeating: 0, count: 8192)
+        while isRunning {
+            // Wait for data with timeout
+            if !waitForData(fd: fd, timeoutMs: 1000) {
+                continue // Timeout, check if still running
+            }
+
+            let bytesRead = recv(fd, &buffer, buffer.count, 0)
+            guard bytesRead > 0 else {
+                break // Connection closed or error
+            }
+
+            // Parse WebSocket frame
+            guard let frame = parseWebSocketFrame(Data(buffer[0..<bytesRead])) else {
+                continue
+            }
+
+            switch frame.opcode {
+            case 0x1: // Text frame
+                if let text = String(data: frame.payload, encoding: .utf8) {
+                    // Emit message event
+                    eventBus?.publish(WebSocketMessageEvent(
+                        connectionId: connectionId,
+                        message: text
+                    ))
+                }
+
+            case 0x8: // Close frame
+                // Send close frame back
+                sendWebSocketFrame(fd: fd, opcode: 0x8, payload: Data())
+                return
+
+            case 0x9: // Ping frame
+                // Send pong
+                sendWebSocketFrame(fd: fd, opcode: 0xA, payload: frame.payload)
+
+            default:
+                break
+            }
+        }
+    }
+
+    /// Parse a WebSocket frame
+    private func parseWebSocketFrame(_ data: Data) -> (opcode: UInt8, payload: Data)? {
+        guard data.count >= 2 else { return nil }
+
+        let byte0 = data[0]
+        let byte1 = data[1]
+
+        let opcode = byte0 & 0x0F
+        let masked = (byte1 & 0x80) != 0
+        var payloadLen = UInt64(byte1 & 0x7F)
+        var offset = 2
+
+        // Extended payload length
+        if payloadLen == 126 {
+            guard data.count >= 4 else { return nil }
+            payloadLen = UInt64(data[2]) << 8 | UInt64(data[3])
+            offset = 4
+        } else if payloadLen == 127 {
+            guard data.count >= 10 else { return nil }
+            payloadLen = 0
+            for i in 0..<8 {
+                payloadLen |= UInt64(data[2 + i]) << (56 - 8 * i)
+            }
+            offset = 10
+        }
+
+        // Read mask key if present
+        var maskKey: [UInt8]? = nil
+        if masked {
+            guard data.count >= offset + 4 else { return nil }
+            maskKey = Array(data[offset..<offset + 4])
+            offset += 4
+        }
+
+        // Extract payload
+        guard data.count >= offset + Int(payloadLen) else { return nil }
+        var payload = Data(data[offset..<offset + Int(payloadLen)])
+
+        // Unmask payload
+        if let mask = maskKey {
+            for i in 0..<payload.count {
+                payload[i] ^= mask[i % 4]
+            }
+        }
+
+        return (opcode, payload)
+    }
+
+    /// Send a WebSocket frame
+    private func sendWebSocketFrame(fd: Int32, opcode: UInt8, payload: Data) {
+        var frame = Data()
+
+        // First byte: FIN + opcode
+        frame.append(0x80 | opcode)
+
+        // Payload length (no masking for server-to-client)
+        if payload.count < 126 {
+            frame.append(UInt8(payload.count))
+        } else if payload.count < 65536 {
+            frame.append(126)
+            frame.append(UInt8((payload.count >> 8) & 0xFF))
+            frame.append(UInt8(payload.count & 0xFF))
+        } else {
+            frame.append(127)
+            for i in (0..<8).reversed() {
+                frame.append(UInt8((payload.count >> (8 * i)) & 0xFF))
+            }
+        }
+
+        // Payload
+        frame.append(payload)
+
+        // Send
+        frame.withUnsafeBytes { buffer in
+            _ = systemSend(fd, buffer.baseAddress!, frame.count, 0)
+        }
+    }
+
+    /// Broadcast a message to all WebSocket connections
+    public func broadcastWebSocket(message: String) -> Int {
+        guard let payload = message.data(using: .utf8) else { return 0 }
+
+        wsLock.lock()
+        let connections = wsConnections
+        wsLock.unlock()
+
+        var sentCount = 0
+        for (_, fd) in connections {
+            sendWebSocketFrame(fd: fd, opcode: 0x1, payload: payload)
+            sentCount += 1
+        }
+
+        return sentCount
     }
 }
 
@@ -2077,6 +2352,19 @@ public func aro_native_http_server_start(_ port: Int32, _ contextPtr: UnsafeMuta
     // Create server if needed
     if nativeHTTPServer == nil {
         nativeHTTPServer = NativeHTTPServer(port: Int(port))
+
+        // Set eventBus if context is available
+        if let ptr = contextPtr {
+            let ctxHandle = Unmanaged<AROCContextHandle>.fromOpaque(ptr).takeUnretainedValue()
+            if let eventBus = ctxHandle.context.eventBus {
+                nativeHTTPServer?.setEventBus(eventBus)
+
+                // Subscribe to WebSocket broadcast events
+                eventBus.subscribe(to: WebSocketBroadcastRequestedEvent.self) { event in
+                    _ = nativeHTTPServer?.broadcastWebSocket(message: event.message)
+                }
+            }
+        }
 
         // Set up request handler
         nativeHTTPServer?.onRequest { method, path, headers, body in

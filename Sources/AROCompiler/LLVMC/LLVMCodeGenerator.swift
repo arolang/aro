@@ -1411,11 +1411,25 @@ public final class LLVMCodeGenerator {
                     let funcName = featureSetFunctionName(analyzed.featureSet.name)
                     if let observerFunc = ctx.module.function(named: funcName) {
                         let repoNameStr = ctx.stringConstant(repoName)
-                        ctx.module.insertCall(
-                            externals.registerRepositoryObserver,
-                            on: [runtime, repoNameStr, observerFunc],
-                            at: ip
-                        )
+
+                        // Check for when condition on the feature set
+                        if let whenCondition = analyzed.featureSet.whenCondition {
+                            // Serialize the when condition to JSON
+                            let conditionJSON = serializeExpression(whenCondition)
+                            let conditionStr = ctx.stringConstant(conditionJSON)
+                            ctx.module.insertCall(
+                                externals.registerRepositoryObserverWithGuard,
+                                on: [runtime, repoNameStr, observerFunc, conditionStr],
+                                at: ip
+                            )
+                        } else {
+                            // No when condition, use the legacy function
+                            ctx.module.insertCall(
+                                externals.registerRepositoryObserver,
+                                on: [runtime, repoNameStr, observerFunc],
+                                at: ip
+                            )
+                        }
                     }
                 }
             }

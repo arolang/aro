@@ -457,6 +457,26 @@ public final class InMemoryRepositoryStorage: RepositoryStorageService, Sendable
         return await actor.count(key: key)
     }
 
+    /// Get count synchronously (for compiled binary when guards)
+    /// Uses a semaphore to block until the async operation completes
+    public func countSync(repository: String, businessActivity: String) -> Int {
+        let semaphore = DispatchSemaphore(value: 0)
+        nonisolated(unsafe) var result = 0
+
+        Thread {
+            let runLoop = CFRunLoopGetCurrent()
+            Task {
+                result = await self.count(repository: repository, businessActivity: businessActivity)
+                semaphore.signal()
+                CFRunLoopStop(runLoop)
+            }
+            CFRunLoopRun()
+        }.start()
+
+        semaphore.wait()
+        return result
+    }
+
     // MARK: - Debug/Testing
 
     /// Get all repository names (for debugging)
