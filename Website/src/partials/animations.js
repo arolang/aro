@@ -414,11 +414,132 @@
     }
 
     // ==========================================================================
+    // Cursor Glow Effect
+    // ==========================================================================
+    function initCursorGlow() {
+        const cursorGlow = document.querySelector('.cursor-glow');
+        if (!cursorGlow) return;
+
+        // Skip on mobile or if reduced motion preferred
+        if (window.matchMedia('(max-width: 768px)').matches ||
+            window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
+            cursorGlow.remove();
+            return;
+        }
+
+        let mouseX = 0, mouseY = 0;
+        let currentX = 0, currentY = 0;
+        let rafId = null;
+
+        document.addEventListener('mousemove', (e) => {
+            mouseX = e.clientX;
+            mouseY = e.clientY;
+            cursorGlow.classList.add('active');
+        });
+
+        document.addEventListener('mouseleave', () => {
+            cursorGlow.classList.remove('active');
+        });
+
+        function animate() {
+            // Smooth follow with easing
+            currentX += (mouseX - currentX) * 0.08;
+            currentY += (mouseY - currentY) * 0.08;
+
+            cursorGlow.style.left = currentX + 'px';
+            cursorGlow.style.top = currentY + 'px';
+
+            rafId = requestAnimationFrame(animate);
+        }
+
+        animate();
+    }
+
+    // ==========================================================================
+    // Reveal Animations (enhanced scroll-triggered)
+    // ==========================================================================
+    function initRevealAnimations() {
+        const observerOptions = {
+            threshold: 0.15,
+            rootMargin: '0px 0px -80px 0px'
+        };
+
+        const observer = new IntersectionObserver((entries) => {
+            entries.forEach(entry => {
+                if (entry.isIntersecting) {
+                    entry.target.classList.add('visible');
+                    // Optionally unobserve after reveal for performance
+                    // observer.unobserve(entry.target);
+                }
+            });
+        }, observerOptions);
+
+        const revealElements = document.querySelectorAll(
+            '.reveal-up, .reveal-left, .reveal-right, .reveal-scale'
+        );
+        revealElements.forEach(el => observer.observe(el));
+    }
+
+    // ==========================================================================
+    // Scroll Progress Indicator (back to top)
+    // ==========================================================================
+    function initScrollIndicator() {
+        const indicator = document.querySelector('.scroll-indicator');
+        if (!indicator) return;
+
+        const circle = indicator.querySelector('circle');
+        const circumference = 2 * Math.PI * 23; // r=23
+
+        if (circle) {
+            circle.style.strokeDasharray = circumference;
+        }
+
+        function updateIndicator() {
+            const scrollTop = window.scrollY;
+            const docHeight = document.documentElement.scrollHeight - window.innerHeight;
+            const progress = docHeight > 0 ? scrollTop / docHeight : 0;
+
+            // Show/hide based on scroll position
+            if (scrollTop > 300) {
+                indicator.classList.add('visible');
+            } else {
+                indicator.classList.remove('visible');
+            }
+
+            // Update circle progress
+            if (circle) {
+                const offset = circumference * (1 - progress);
+                circle.style.strokeDashoffset = offset;
+            }
+        }
+
+        window.addEventListener('scroll', updateIndicator, { passive: true });
+
+        // Click to scroll to top
+        indicator.addEventListener('click', () => {
+            window.scrollTo({ top: 0, behavior: 'smooth' });
+        });
+
+        updateIndicator();
+    }
+
+    // ==========================================================================
+    // Micro-bounce on cards
+    // ==========================================================================
+    function initMicroBounce() {
+        const cards = document.querySelectorAll('.doc-card, .feature-card');
+        cards.forEach(card => {
+            card.classList.add('micro-bounce');
+        });
+    }
+
+    // ==========================================================================
     // Initialize All Animations
     // ==========================================================================
     function init() {
         initProgressBar();
         initScrollAnimations();
+        initRevealAnimations();
         initTimelineAnimations();
         initFloatingNav();
         initCardStagger();
@@ -426,6 +547,9 @@
         initMobileMenu();
         initTypewriter();
         initGitHubStars();
+        initCursorGlow();
+        initScrollIndicator();
+        initMicroBounce();
     }
 
     // Run on DOM ready
