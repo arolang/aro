@@ -463,15 +463,13 @@ public final class InMemoryRepositoryStorage: RepositoryStorageService, Sendable
         let semaphore = DispatchSemaphore(value: 0)
         nonisolated(unsafe) var result = 0
 
-        Thread {
-            let runLoop = CFRunLoopGetCurrent()
+        // Use DispatchQueue with a background thread to avoid blocking the main actor
+        DispatchQueue.global(qos: .userInitiated).async {
             Task {
                 result = await self.count(repository: repository, businessActivity: businessActivity)
                 semaphore.signal()
-                CFRunLoopStop(runLoop)
             }
-            CFRunLoopRun()
-        }.start()
+        }
 
         semaphore.wait()
         return result
