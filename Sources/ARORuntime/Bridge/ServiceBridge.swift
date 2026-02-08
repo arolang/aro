@@ -2353,17 +2353,19 @@ public func aro_native_http_server_start(_ port: Int32, _ contextPtr: UnsafeMuta
     if nativeHTTPServer == nil {
         nativeHTTPServer = NativeHTTPServer(port: Int(port))
 
-        // Set eventBus if context is available
+        // Set eventBus - use context's eventBus if available, otherwise use shared
+        let eventBus: EventBus
         if let ptr = contextPtr {
             let ctxHandle = Unmanaged<AROCContextHandle>.fromOpaque(ptr).takeUnretainedValue()
-            if let eventBus = ctxHandle.context.eventBus {
-                nativeHTTPServer?.setEventBus(eventBus)
+            eventBus = ctxHandle.context.eventBus ?? EventBus.shared
+        } else {
+            eventBus = EventBus.shared
+        }
+        nativeHTTPServer?.setEventBus(eventBus)
 
-                // Subscribe to WebSocket broadcast events
-                eventBus.subscribe(to: WebSocketBroadcastRequestedEvent.self) { event in
-                    _ = nativeHTTPServer?.broadcastWebSocket(message: event.message)
-                }
-            }
+        // Subscribe to WebSocket broadcast events
+        eventBus.subscribe(to: WebSocketBroadcastRequestedEvent.self) { event in
+            _ = nativeHTTPServer?.broadcastWebSocket(message: event.message)
         }
 
         // Set up request handler
