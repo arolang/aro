@@ -239,6 +239,22 @@ public final class Application: @unchecked Sendable {
             do {
                 let response = try await self.executeFeatureSet(featureSet, request: request, pathParams: match.pathParameters)
                 return self.convertToHTTPResponse(response)
+            } catch let templateError as TemplateError {
+                // Handle template errors with appropriate HTTP status codes
+                switch templateError {
+                case .notFound:
+                    return HTTPResponse(
+                        statusCode: 404,
+                        headers: ["Content-Type": "application/json"],
+                        body: "{\"error\":\"Not Found\",\"message\":\"\(templateError.errorDescription ?? "Template not found")\"}".data(using: .utf8)
+                    )
+                default:
+                    return HTTPResponse(
+                        statusCode: 500,
+                        headers: ["Content-Type": "application/json"],
+                        body: "{\"error\":\"\(String(describing: templateError).replacingOccurrences(of: "\"", with: "\\\""))\"}".data(using: .utf8)
+                    )
+                }
             } catch {
                 return HTTPResponse(
                     statusCode: 500,
@@ -340,6 +356,15 @@ public final class Application: @unchecked Sendable {
             )
         }
 
+        // Check if response data contains raw CSS/JS content
+        if let (rawContent, contentType) = detectRawContent(in: response.data) {
+            return HTTPResponse(
+                statusCode: statusCode,
+                headers: ["Content-Type": contentType],
+                body: rawContent.data(using: .utf8)
+            )
+        }
+
         // Default: JSON response
         let headers = ["Content-Type": "application/json"]
 
@@ -407,6 +432,42 @@ public final class Application: @unchecked Sendable {
                    trimmed.hasPrefix("<html") ||
                    trimmed.hasPrefix("<HTML") {
                     return str
+                }
+            }
+        }
+        return nil
+    }
+
+    /// Detect if response data contains raw text content that should be returned as-is
+    /// Returns (content, contentType) tuple or nil if not detected
+    private func detectRawContent(in data: [String: AnySendable]) -> (String, String)? {
+        guard data.count == 1 else { return nil }
+
+        for (_, anySendable) in data {
+            if let str: String = anySendable.get() {
+                let trimmed = str.trimmingCharacters(in: .whitespacesAndNewlines)
+
+                // Detect JavaScript first (more specific patterns)
+                if trimmed.hasPrefix("var ") || trimmed.hasPrefix("let ") ||
+                   trimmed.hasPrefix("const ") || trimmed.hasPrefix("function ") ||
+                   trimmed.hasPrefix("//") || trimmed.hasPrefix("/*") ||
+                   trimmed.hasPrefix("'use strict'") || trimmed.hasPrefix("\"use strict\"") ||
+                   trimmed.hasPrefix("(function") || trimmed.hasPrefix("import ") ||
+                   trimmed.hasPrefix("export ") {
+                    return (str, "text/javascript; charset=utf-8")
+                }
+
+                // Detect CSS: starts with selector patterns (not JS keywords)
+                // CSS selectors start with: element, .class, #id, @media, @keyframes, etc.
+                if !trimmed.hasPrefix("{") && !trimmed.hasPrefix("<") {
+                    let cssPattern = try? NSRegularExpression(
+                        pattern: "^(@|\\*|[a-zA-Z][a-zA-Z0-9-]*|\\.[a-zA-Z]|#[a-zA-Z])[^{]*\\{",
+                        options: []
+                    )
+                    if let match = cssPattern?.firstMatch(in: trimmed, range: NSRange(trimmed.startIndex..., in: trimmed)),
+                       match.range.location != NSNotFound {
+                        return (str, "text/css; charset=utf-8")
+                    }
                 }
             }
         }
