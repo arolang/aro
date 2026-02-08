@@ -5,7 +5,7 @@
 {{head}}
 </head>
 <body>
-    <!-- Gentle floating background particles -->
+    <!-- Minimal floating particles -->
     <div class="bg-particles" aria-hidden="true">
         <div class="particle particle-1"></div>
         <div class="particle particle-2"></div>
@@ -21,11 +21,10 @@
                 <span class="logo-aro">ARO</span>
             </a>
             <div class="nav-links">
-                <a href="fdd.html">The FDD Story</a>
+                <a href="fdd.html">FDD Story</a>
                 <a href="getting-started.html">Get Started</a>
                 <a href="tutorial.html">Tutorial</a>
                 <a href="docs.html">Docs</a>
-                <a href="disclaimer.html">Motivation</a>
                 <a href="download.html">Download</a>
                 <a href="https://github.com/arolang/aro" class="nav-github">
                     <svg viewBox="0 0 16 16" fill="currentColor"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z"/></svg>
@@ -44,36 +43,32 @@
     </nav>
 
     <div class="mobile-menu">
-        <a href="fdd.html">The FDD Story</a>
+        <a href="fdd.html">FDD Story</a>
         <a href="getting-started.html">Get Started</a>
         <a href="tutorial.html">Tutorial</a>
         <a href="docs.html">Docs</a>
-        <a href="disclaimer.html">Motivation</a>
         <a href="download.html">Download</a>
-        <a href="https://github.com/arolang/aro" class="nav-github">GitHub</a>
+        <a href="https://github.com/arolang/aro">GitHub</a>
     </div>
 
     <header class="hero">
-        <div class="hero-bg"></div>
+        <div class="hero-bg" data-parallax="0.3"></div>
         <div class="hero-content">
-            <div class="hero-badge">A New Kind of Programming Language</div>
+            <div class="hero-badge">// A New Programming Language</div>
             <h1 class="hero-title">
-                <span class="typewriter-line-1"><span class="typewriter-cursor">|</span></span><span class="typewriter-line-2"></span>
+                <span class="typewriter-line-1"><span class="typewriter-cursor">|</span></span>
+                <span class="typewriter-line-2"></span>
             </h1>
             <p class="hero-subtitle">
-                ARO is the programming language where <em>features</em> become code.<br>
+                ARO is where <em>features</em> become code.<br>
                 Built for humans. <strong>Perfected for AI.</strong>
             </p>
-            <div class="hero-tagline">
-                <span class="tagline-icon">&#x2728;</span>
-                <span>Where Project Managers and AI Finally Understand Each Other</span>
-            </div>
             <div class="hero-cta">
-                <a href="getting-started.html" class="btn btn-primary">Start Building</a>
-                <a href="fdd.html" class="btn btn-secondary">Learn the Story</a>
+                <a href="getting-started.html" class="btn btn-primary">Get Started</a>
+                <a href="fdd.html" class="btn btn-secondary">Learn More</a>
             </div>
         </div>
-        <div class="hero-code">
+        <div class="hero-code" data-parallax="-0.1">
             <div class="code-window">
                 <div class="code-header">
                     <span class="dot red"></span>
@@ -94,32 +89,29 @@
     <section class="features-section">
         <div class="container">
             <h2 class="section-title animate-on-scroll">
-                <span class="gradient-text">Action.</span>
-                <span class="gradient-text-alt">Result.</span>
-                <span class="gradient-text-third">Object.</span>
+                <span class="accent">Action.</span> <span class="accent">Result.</span> <span class="accent">Object.</span>
             </h2>
             <p class="section-subtitle animate-on-scroll">
-                Every statement in ARO follows the natural pattern of how we describe work.<br>
-                It's not magic. It's just really, really good design.
+                Every statement follows the natural pattern of how we describe work.
             </p>
 
             <div class="feature-cards">
-                <div class="feature-card animate-on-scroll stagger-1 hover-lift glass-card">
-                    <div class="card-icon">&#x1F3AF;</div>
+                <div class="feature-card animate-on-scroll stagger-1">
+                    <div class="card-icon">01</div>
                     <h3>Features First</h3>
                     <p>Write code the way you write user stories. Each feature set maps directly to a business capability.</p>
                     <code>&lt;Extract&gt; the &lt;user&gt; from the &lt;request&gt;.</code>
                 </div>
-                <div class="feature-card animate-on-scroll stagger-2 hover-lift glass-card">
-                    <div class="card-icon">&#x1F916;</div>
+                <div class="feature-card animate-on-scroll stagger-2">
+                    <div class="card-icon">02</div>
                     <h3>AI Native</h3>
-                    <p>The first language designed from the ground up for AI collaboration. Natural language syntax that LLMs understand intuitively.</p>
+                    <p>The first language designed for AI collaboration. Natural language syntax that LLMs understand.</p>
                     <code>&lt;Validate&gt; the &lt;data&gt; against &lt;schema&gt;.</code>
                 </div>
-                <div class="feature-card animate-on-scroll stagger-3 hover-lift glass-card">
-                    <div class="card-icon">&#x1F4DD;</div>
+                <div class="feature-card animate-on-scroll stagger-3">
+                    <div class="card-icon">03</div>
                     <h3>Contract First</h3>
-                    <p>Your OpenAPI contract is your routing table. Define your API, and ARO handles the rest.</p>
+                    <p>Your OpenAPI contract is your routing table. Define your API, ARO handles the rest.</p>
                     <code>&lt;Return&gt; an &lt;OK: status&gt; with &lt;result&gt;.</code>
                 </div>
             </div>
@@ -130,9 +122,9 @@
         <div class="container">
             <div class="ai-content">
                 <div class="ai-text">
-                    <h2 class="gradient-text-alt animate-on-scroll">Why AI Needs<br>a New Language</h2>
+                    <h2 class="animate-on-scroll">Why AI Needs<br><span class="accent">a New Language</span></h2>
                     <p class="lead animate-on-scroll">
-                        Think about it. When you ask an AI to write code, you describe what you want in natural language.
+                        When you ask AI to write code, you describe what you want in natural language.
                         Then the AI translates that into Python, JavaScript, or Rust.
                     </p>
                     <p class="animate-on-scroll">
@@ -141,18 +133,17 @@
                     <p class="animate-on-scroll">
                         ARO eliminates the gap. The language <em>is</em> the specification. When you write
                         <code>&lt;Store&gt; the &lt;user&gt; into the &lt;database&gt;</code>, there's no ambiguity.
-                        The AI doesn't have to guess what you meant.
                     </p>
                     <div class="ai-quote animate-on-scroll">
                         <blockquote>
-                            "The best code is code that reads like a conversation between the business and the computer."
+                            "The best code reads like a conversation between business and computer."
                         </blockquote>
                     </div>
                 </div>
                 <div class="ai-visual animate-on-scroll">
-                    <div class="comparison glass-card">
+                    <div class="comparison">
                         <div class="comparison-old">
-                            <h4>Traditional Flow</h4>
+                            <h4>// Traditional</h4>
                             <div class="flow-items">
                                 <span class="flow-item">Requirements</span>
                                 <span class="flow-arrow">&#x2193;</span>
@@ -166,7 +157,7 @@
                             </div>
                         </div>
                         <div class="comparison-new">
-                            <h4>ARO Flow</h4>
+                            <h4>// ARO</h4>
                             <div class="flow-items">
                                 <span class="flow-item highlight">Feature Set</span>
                                 <span class="flow-arrow">&#x2193;</span>
@@ -183,8 +174,7 @@
     <section class="examples-section">
         <div class="container">
             <h2 class="section-title animate-on-scroll">
-                <span class="gradient-text">See ARO</span>
-                <span class="gradient-text-alt">in Action</span>
+                See ARO <span class="accent">in Action</span>
             </h2>
             <p class="section-subtitle animate-on-scroll">
                 Real examples that show how ARO makes complex tasks simple.
@@ -212,17 +202,17 @@
     <span class="action">&lt;Return&gt;</span> an <span class="result">&lt;OK: status&gt;</span> for the <span class="result">&lt;startup&gt;</span>.
 }</pre>
                 </div>
-                <div class="example-description glass-card">
-                    <h3>HTTP Client Example</h3>
+                <div class="example-description">
+                    <h3>HTTP Client</h3>
                     <p>
-                        The <code>&lt;Request&gt;</code> action makes HTTP requests to external APIs.
-                        Use <code>from</code> for GET requests, <code>to</code> for POST.
-                        JSON responses are automatically parsed.
+                        The <code>&lt;Request&gt;</code> action fetches from external APIs.
+                        Use <code>from</code> for GET, <code>to</code> for POST.
+                        JSON responses are parsed automatically.
                     </p>
                     <div class="example-features">
-                        <span class="feature-tag">GET/POST/PUT/DELETE</span>
-                        <span class="feature-tag">Auto JSON parsing</span>
-                        <span class="feature-tag">Response metadata</span>
+                        <span class="feature-tag">GET/POST/PUT</span>
+                        <span class="feature-tag">Auto JSON</span>
+                        <span class="feature-tag">Headers</span>
                     </div>
                     <a href="docs/http-services.html" class="example-link">Learn more &rarr;</a>
                 </div>
@@ -232,13 +222,13 @@
 
     <section class="cta-section">
         <div class="container">
-            <h2 class="cta-title gradient-text animate-on-scroll">Ready to Build?</h2>
+            <h2 class="cta-title animate-on-scroll">Ready to <span class="accent">Build</span>?</h2>
             <p class="cta-subtitle animate-on-scroll">
-                Join the developers who are writing the future—one feature at a time.
+                Join the developers writing the future&mdash;one feature at a time.
             </p>
             <div class="cta-buttons animate-on-scroll">
-                <a href="getting-started.html" class="btn btn-primary btn-large hover-glow">Get Started Free</a>
-                <a href="fdd.html" class="btn btn-outline btn-large hover-lift">Read the FDD Story</a>
+                <a href="getting-started.html" class="btn btn-primary btn-large">Get Started</a>
+                <a href="fdd.html" class="btn btn-outline btn-large">Read the Story</a>
             </div>
         </div>
     </section>

@@ -1,46 +1,95 @@
-/* =============================================================================
-   ARO Website - Modern Animation Styles
-   Typographic, micro-animations, parallax, gentle backgrounds
-   ============================================================================= */
+/* ============================================================
+   ARO Website - Parallax & Console Animations
+   Deep parallax scrolling, terminal effects, reveal animations
+   ============================================================ */
 
-/* Custom properties for animations */
 :root {
-    --animation-fast: 0.2s;
-    --animation-medium: 0.4s;
-    --animation-slow: 0.8s;
-    --animation-gentle: 1.2s;
-    --easing-smooth: cubic-bezier(0.16, 1, 0.3, 1);
-    --easing-bounce: cubic-bezier(0.34, 1.56, 0.64, 1);
-    --easing-gentle: cubic-bezier(0.25, 0.1, 0.25, 1);
+    --animation-fast: 0.15s;
+    --animation-medium: 0.3s;
+    --animation-slow: 0.6s;
+    --animation-gentle: 1s;
+    --ease-out-expo: cubic-bezier(0.16, 1, 0.3, 1);
+    --ease-in-out-expo: cubic-bezier(0.87, 0, 0.13, 1);
 }
 
-/* Smooth scrolling */
-html {
-    scroll-behavior: smooth;
-}
+/* ============================================================
+   Scroll Progress Bar
+   ============================================================ */
 
-/* =============================================================================
-   Progress Bar
-   ============================================================================= */
 .progress-bar {
     position: fixed;
     top: 0;
     left: 0;
-    height: 3px;
-    background: linear-gradient(90deg, var(--color-primary), var(--color-secondary));
+    height: 2px;
+    background: var(--color-accent);
     z-index: 1000;
-    transition: width 0.1s ease-out;
+    transform-origin: left;
+    transition: none;
 }
 
-/* =============================================================================
-   Scroll-Triggered Animations
-   ============================================================================= */
+/* ============================================================
+   Parallax Layers
+   ============================================================ */
 
-/* Base state for animated elements */
+.parallax-container {
+    position: relative;
+    overflow: hidden;
+}
+
+[data-parallax] {
+    will-change: transform;
+    transition: transform 0.1s linear;
+}
+
+/* Parallax background elements */
+.parallax-bg {
+    position: absolute;
+    inset: -20%;
+    pointer-events: none;
+}
+
+.parallax-grid {
+    position: absolute;
+    inset: 0;
+    background-image:
+        linear-gradient(var(--color-border) 1px, transparent 1px),
+        linear-gradient(90deg, var(--color-border) 1px, transparent 1px);
+    background-size: 100px 100px;
+    opacity: 0.3;
+    transform: perspective(500px) rotateX(60deg);
+    transform-origin: center top;
+}
+
+.parallax-lines {
+    position: absolute;
+    inset: 0;
+    overflow: hidden;
+}
+
+.parallax-line {
+    position: absolute;
+    left: 0;
+    right: 0;
+    height: 1px;
+    background: linear-gradient(90deg,
+        transparent,
+        var(--color-accent-dim),
+        transparent
+    );
+    opacity: 0.5;
+}
+
+/* ============================================================
+   Scroll-Triggered Reveal Animations
+   ============================================================ */
+
+/* Base state for scroll-triggered elements */
 .animate-on-scroll {
     opacity: 0;
-    transform: translateY(30px);
-    transition: all 0.6s var(--easing-smooth);
+    transform: translateY(40px);
+    transition:
+        opacity var(--animation-slow) var(--ease-out-expo),
+        transform var(--animation-slow) var(--ease-out-expo);
 }
 
 .animate-on-scroll.visible {
@@ -48,11 +97,20 @@ html {
     transform: translateY(0);
 }
 
-/* Fade in from left */
+/* Staggered delays */
+.stagger-1 { transition-delay: 0.1s; }
+.stagger-2 { transition-delay: 0.2s; }
+.stagger-3 { transition-delay: 0.3s; }
+.stagger-4 { transition-delay: 0.4s; }
+.stagger-5 { transition-delay: 0.5s; }
+
+/* Fade in from sides */
 .animate-slide-left {
     opacity: 0;
-    transform: translateX(-30px);
-    transition: all 0.6s var(--easing-smooth);
+    transform: translateX(-40px);
+    transition:
+        opacity var(--animation-slow) var(--ease-out-expo),
+        transform var(--animation-slow) var(--ease-out-expo);
 }
 
 .animate-slide-left.visible {
@@ -60,11 +118,12 @@ html {
     transform: translateX(0);
 }
 
-/* Fade in from right */
 .animate-slide-right {
     opacity: 0;
-    transform: translateX(30px);
-    transition: all 0.6s var(--easing-smooth);
+    transform: translateX(40px);
+    transition:
+        opacity var(--animation-slow) var(--ease-out-expo),
+        transform var(--animation-slow) var(--ease-out-expo);
 }
 
 .animate-slide-right.visible {
@@ -72,11 +131,13 @@ html {
     transform: translateX(0);
 }
 
-/* Scale in */
+/* Scale reveal */
 .animate-scale {
     opacity: 0;
     transform: scale(0.95);
-    transition: all 0.6s var(--easing-smooth);
+    transition:
+        opacity var(--animation-slow) var(--ease-out-expo),
+        transform var(--animation-slow) var(--ease-out-expo);
 }
 
 .animate-scale.visible {
@@ -84,14 +145,85 @@ html {
     transform: scale(1);
 }
 
-/* =============================================================================
-   Keyframe Animations
-   ============================================================================= */
+/* ============================================================
+   Console / Terminal Effects
+   ============================================================ */
 
-@keyframes fadeInUp {
+/* Scanline overlay */
+.scanlines::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background: repeating-linear-gradient(
+        0deg,
+        rgba(0, 0, 0, 0.1) 0px,
+        rgba(0, 0, 0, 0.1) 1px,
+        transparent 1px,
+        transparent 2px
+    );
+    pointer-events: none;
+    opacity: 0.3;
+}
+
+/* Terminal cursor blink */
+@keyframes cursor-blink {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0; }
+}
+
+.cursor {
+    display: inline-block;
+    width: 0.6em;
+    height: 1.2em;
+    background: var(--color-accent);
+    animation: cursor-blink 1s step-end infinite;
+    vertical-align: text-bottom;
+    margin-left: 2px;
+}
+
+/* Typing effect */
+@keyframes typing {
+    from { width: 0; }
+    to { width: 100%; }
+}
+
+.typing-text {
+    overflow: hidden;
+    white-space: nowrap;
+    animation: typing 2s steps(40) forwards;
+}
+
+/* Glitch effect */
+@keyframes glitch {
+    0%, 100% {
+        transform: translate(0);
+        filter: none;
+    }
+    20% {
+        transform: translate(-2px, 2px);
+        filter: hue-rotate(90deg);
+    }
+    40% {
+        transform: translate(2px, -2px);
+        filter: hue-rotate(-90deg);
+    }
+    60% {
+        transform: translate(-1px, 1px);
+    }
+    80% {
+        transform: translate(1px, -1px);
+    }
+}
+
+.glitch:hover {
+    animation: glitch 0.3s ease-in-out;
+}
+
+/* Text reveal character by character */
+@keyframes text-reveal {
     from {
         opacity: 0;
-        transform: translateY(30px);
+        transform: translateY(10px);
     }
     to {
         opacity: 1;
@@ -99,261 +231,260 @@ html {
     }
 }
 
-@keyframes fadeInDown {
-    from {
+.text-reveal span {
+    display: inline-block;
+    opacity: 0;
+    animation: text-reveal 0.3s var(--ease-out-expo) forwards;
+}
+
+/* ============================================================
+   Background Particles (Minimal)
+   ============================================================ */
+
+.bg-particles {
+    position: fixed;
+    inset: 0;
+    pointer-events: none;
+    z-index: -1;
+    overflow: hidden;
+}
+
+.particle {
+    position: absolute;
+    width: 2px;
+    height: 2px;
+    background: var(--color-accent);
+    border-radius: 50%;
+    opacity: 0.3;
+}
+
+@keyframes float-up {
+    0% {
+        transform: translateY(100vh) translateX(0);
         opacity: 0;
-        transform: translateY(-30px);
+    }
+    10% {
+        opacity: 0.3;
+    }
+    90% {
+        opacity: 0.3;
+    }
+    100% {
+        transform: translateY(-100px) translateX(20px);
+        opacity: 0;
+    }
+}
+
+.particle-1 {
+    left: 10%;
+    animation: float-up 15s linear infinite;
+}
+
+.particle-2 {
+    left: 50%;
+    animation: float-up 20s linear infinite;
+    animation-delay: -5s;
+}
+
+.particle-3 {
+    left: 85%;
+    animation: float-up 18s linear infinite;
+    animation-delay: -10s;
+}
+
+/* ============================================================
+   Cursor Glow Effect
+   ============================================================ */
+
+.cursor-glow {
+    position: fixed;
+    width: 300px;
+    height: 300px;
+    background: radial-gradient(
+        circle,
+        rgba(0, 255, 136, 0.03) 0%,
+        transparent 70%
+    );
+    border-radius: 50%;
+    pointer-events: none;
+    z-index: -1;
+    transform: translate(-50%, -50%);
+    transition: opacity 0.3s;
+    opacity: 0;
+}
+
+.cursor-glow.active {
+    opacity: 1;
+}
+
+/* ============================================================
+   Section Transitions
+   ============================================================ */
+
+/* Horizontal line reveal */
+@keyframes line-reveal {
+    from {
+        transform: scaleX(0);
     }
     to {
-        opacity: 1;
-        transform: translateY(0);
+        transform: scaleX(1);
     }
 }
 
-@keyframes fadeIn {
-    from { opacity: 0; }
-    to { opacity: 1; }
+.line-reveal {
+    display: block;
+    height: 1px;
+    background: var(--color-border);
+    transform-origin: left;
+    animation: line-reveal 1s var(--ease-out-expo) forwards;
 }
 
-@keyframes gradientShift {
-    0%, 100% { background-position: 0% 50%; }
-    50% { background-position: 100% 50%; }
+/* Counter animation */
+@keyframes count-up {
+    from { opacity: 0; transform: translateY(20px); }
+    to { opacity: 1; transform: translateY(0); }
 }
 
-@keyframes float {
-    0%, 100% { transform: translateY(0); }
-    50% { transform: translateY(-10px); }
+.counter {
+    animation: count-up 0.6s var(--ease-out-expo) forwards;
 }
 
-@keyframes floatRotate {
-    0%, 100% { transform: translateY(0) rotate(0deg); }
-    50% { transform: translateY(-15px) rotate(5deg); }
-}
+/* ============================================================
+   Hover Effects
+   ============================================================ */
 
-@keyframes pulse {
-    0%, 100% { opacity: 1; transform: scale(1); }
-    50% { opacity: 0.7; transform: scale(0.98); }
-}
-
-@keyframes bounce {
-    0%, 20%, 50%, 80%, 100% { transform: translateY(0); }
-    40% { transform: translateY(-8px); }
-    60% { transform: translateY(-4px); }
-}
-
-@keyframes rotate {
-    from { transform: rotate(0deg); }
-    to { transform: rotate(360deg); }
-}
-
-@keyframes shimmer {
-    0% { background-position: -200% 0; }
-    100% { background-position: 200% 0; }
-}
-
-@keyframes slideInLeft {
-    from {
-        opacity: 0;
-        transform: translateX(-50px);
-    }
-    to {
-        opacity: 1;
-        transform: translateX(0);
-    }
-}
-
-@keyframes slideInRight {
-    from {
-        opacity: 0;
-        transform: translateX(50px);
-    }
-    to {
-        opacity: 1;
-        transform: translateX(0);
-    }
-}
-
-/* =============================================================================
-   Animated Gradient Text
-   ============================================================================= */
-.gradient-animate {
-    background-size: 200% 200%;
-    animation: gradientShift 5s ease infinite;
-}
-
-/* =============================================================================
-   Hover Animations
-   ============================================================================= */
-
-/* Card hover lift */
 .hover-lift {
-    transition: transform 0.3s var(--easing-smooth), box-shadow 0.3s ease;
+    transition: transform var(--animation-medium) var(--ease-out-expo);
 }
 
 .hover-lift:hover {
-    transform: translateY(-8px);
-    box-shadow: 0 20px 40px rgba(0, 0, 0, 0.2);
+    transform: translateY(-4px);
 }
 
-/* Icon hover scale */
-.hover-scale {
-    transition: transform 0.3s var(--easing-bounce);
-}
-
-.hover-scale:hover {
-    transform: scale(1.1);
-}
-
-/* Button hover glow */
 .hover-glow {
-    transition: all 0.3s ease;
+    transition: box-shadow var(--animation-medium) var(--ease-out-expo);
 }
 
 .hover-glow:hover {
-    box-shadow: 0 0 30px rgba(124, 58, 237, 0.4);
+    box-shadow: 0 0 40px var(--color-accent-dim);
 }
 
-/* =============================================================================
-   Stagger Animation Delays
-   ============================================================================= */
-.stagger-1 { transition-delay: 0.1s; }
-.stagger-2 { transition-delay: 0.2s; }
-.stagger-3 { transition-delay: 0.3s; }
-.stagger-4 { transition-delay: 0.4s; }
-.stagger-5 { transition-delay: 0.5s; }
-.stagger-6 { transition-delay: 0.6s; }
+.hover-border {
+    transition: border-color var(--animation-fast);
+}
 
-/* =============================================================================
-   Background Gradients
-   ============================================================================= */
-.bg-gradient-animated {
+.hover-border:hover {
+    border-color: var(--color-accent);
+}
+
+/* ============================================================
+   Code Window Animations
+   ============================================================ */
+
+.code-window {
+    opacity: 0;
+    transform: translateY(20px);
+    transition:
+        opacity var(--animation-slow) var(--ease-out-expo),
+        transform var(--animation-slow) var(--ease-out-expo);
+}
+
+.code-window.visible {
+    opacity: 1;
+    transform: translateY(0);
+}
+
+/* Line-by-line reveal for code */
+.code-line {
+    opacity: 0;
+    transform: translateX(-10px);
+    animation: code-line-reveal 0.3s var(--ease-out-expo) forwards;
+}
+
+@keyframes code-line-reveal {
+    to {
+        opacity: 1;
+        transform: translateX(0);
+    }
+}
+
+.code-line:nth-child(1) { animation-delay: 0.1s; }
+.code-line:nth-child(2) { animation-delay: 0.2s; }
+.code-line:nth-child(3) { animation-delay: 0.3s; }
+.code-line:nth-child(4) { animation-delay: 0.4s; }
+.code-line:nth-child(5) { animation-delay: 0.5s; }
+.code-line:nth-child(6) { animation-delay: 0.6s; }
+
+/* ============================================================
+   Button Interactions
+   ============================================================ */
+
+.btn {
     position: relative;
     overflow: hidden;
 }
 
-.bg-gradient-animated::before {
+.btn::before {
     content: '';
     position: absolute;
-    top: 0;
-    left: 0;
-    right: 0;
-    bottom: 0;
-    background:
-        radial-gradient(ellipse at 20% 20%, rgba(124, 58, 237, 0.15) 0%, transparent 50%),
-        radial-gradient(ellipse at 80% 80%, rgba(6, 182, 212, 0.1) 0%, transparent 50%);
-    z-index: -1;
-    opacity: 0.5;
+    inset: 0;
+    background: linear-gradient(
+        90deg,
+        transparent,
+        rgba(255, 255, 255, 0.1),
+        transparent
+    );
+    transform: translateX(-100%);
+    transition: transform 0.5s;
 }
 
-/* =============================================================================
-   Glass Morphism
-   ============================================================================= */
-.glass {
-    background: rgba(255, 255, 255, 0.03);
-    backdrop-filter: blur(10px);
-    border: 1px solid rgba(255, 255, 255, 0.08);
+.btn:hover::before {
+    transform: translateX(100%);
 }
 
-.glass-card {
-    background: rgba(255, 255, 255, 0.03);
-    backdrop-filter: blur(10px);
-    border: 1px solid rgba(255, 255, 255, 0.08);
-    border-radius: 20px;
-    transition: all 0.3s var(--easing-smooth);
-}
-
-.glass-card:hover {
-    border-color: var(--color-primary);
-    box-shadow: 0 20px 40px rgba(0, 0, 0, 0.3), 0 0 60px rgba(124, 58, 237, 0.1);
-}
-
-/* =============================================================================
-   Animated Underline
-   ============================================================================= */
-.animated-underline {
-    position: relative;
-    display: inline-block;
-}
-
-.animated-underline::after {
-    content: '';
-    position: absolute;
-    bottom: -4px;
-    left: 0;
-    width: 0;
-    height: 3px;
-    background: linear-gradient(90deg, var(--color-primary), var(--color-secondary));
-    border-radius: 2px;
-    transition: width 0.6s var(--easing-smooth);
-}
-
-.animated-underline.visible::after,
-.animated-underline:hover::after {
-    width: 100%;
-}
-
-/* =============================================================================
+/* ============================================================
    Loading States
-   ============================================================================= */
-.skeleton {
-    background: linear-gradient(90deg, rgba(255,255,255,0.05) 25%, rgba(255,255,255,0.1) 50%, rgba(255,255,255,0.05) 75%);
-    background-size: 200% 100%;
-    animation: shimmer 1.5s infinite;
+   ============================================================ */
+
+@keyframes pulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.5; }
 }
 
-/* =============================================================================
-   GitHub Link with Stars
-   ============================================================================= */
-.nav-github {
-    display: inline-flex;
-    align-items: center;
-    gap: 6px;
-    padding: 6px 12px;
-    background: rgba(255, 255, 255, 0.05);
-    border: 1px solid rgba(255, 255, 255, 0.1);
-    border-radius: 20px;
-    transition: all 0.3s var(--easing-smooth);
+.loading {
+    animation: pulse 1.5s ease-in-out infinite;
 }
 
-.nav-github:hover {
-    background: rgba(255, 255, 255, 0.1);
-    border-color: rgba(255, 255, 255, 0.2);
-    transform: translateY(-2px);
+@keyframes spin {
+    from { transform: rotate(0deg); }
+    to { transform: rotate(360deg); }
 }
 
-.nav-github svg {
-    width: 18px;
-    height: 18px;
-    fill: currentColor;
+.spinner {
+    animation: spin 1s linear infinite;
 }
 
-.github-stars {
-    display: inline-flex;
-    align-items: center;
-    gap: 4px;
-    font-size: 0.85rem;
-    font-weight: 500;
-    color: var(--color-warning);
+/* ============================================================
+   Page Load Animation
+   ============================================================ */
+
+@keyframes fade-in-page {
+    from {
+        opacity: 0;
+    }
+    to {
+        opacity: 1;
+    }
 }
 
-.github-stars svg {
-    width: 14px;
-    height: 14px;
-    fill: var(--color-warning);
+body {
+    animation: fade-in-page 0.5s ease-out;
 }
 
-.github-stars-count {
-    opacity: 0;
-    transition: opacity 0.3s ease;
-}
+/* ============================================================
+   Reduce Motion
+   ============================================================ */
 
-.github-stars-count.loaded {
-    opacity: 1;
-}
-
-/* =============================================================================
-   Responsive Adjustments
-   ============================================================================= */
 @media (prefers-reduced-motion: reduce) {
     *,
     *::before,
@@ -362,573 +493,16 @@ html {
         animation-iteration-count: 1 !important;
         transition-duration: 0.01ms !important;
     }
-}
 
-/* =============================================================================
-   Light Mode Overrides
-   ============================================================================= */
-@media (prefers-color-scheme: light) {
-    .glass {
-        background: rgba(0, 0, 0, 0.02);
-        border: 1px solid rgba(0, 0, 0, 0.08);
-    }
-
-    .glass-card {
-        background: rgba(0, 0, 0, 0.02);
-        border: 1px solid rgba(0, 0, 0, 0.08);
-    }
-
-    .nav-github {
-        background: rgba(0, 0, 0, 0.05);
-        border: 1px solid rgba(0, 0, 0, 0.1);
-    }
-
-    .nav-github:hover {
-        background: rgba(0, 0, 0, 0.08);
-        border-color: rgba(0, 0, 0, 0.15);
-    }
-}
-
-/* =============================================================================
-   Typewriter Animation
-   ============================================================================= */
-
-/* Two-line typewriter layout */
-.typewriter-line-1,
-.typewriter-line-2 {
-    display: block;
-    min-height: 1.1em;
-}
-
-/* Typewriter line 1 with primary gradient */
-.typewriter-line-1 {
-    background: var(--gradient-primary);
-    -webkit-background-clip: text;
-    -webkit-text-fill-color: transparent;
-    background-clip: text;
-}
-
-/* Typewriter line 2 with alternate gradient */
-.typewriter-line-2 {
-    background: var(--gradient-alt);
-    -webkit-background-clip: text;
-    -webkit-text-fill-color: transparent;
-    background-clip: text;
-}
-
-/* Blinking cursor - inline with text, always blinking slowly */
-.typewriter-cursor {
-    color: var(--color-primary);
-    margin-left: 0;
-    font-weight: 400;
-    display: inline !important;
-    animation: blink 1.5s step-end infinite;
-    background: none !important;
-    -webkit-text-fill-color: currentColor !important;
-    -webkit-background-clip: unset !important;
-    background-clip: unset !important;
-}
-
-@keyframes blink {
-    0%, 50% { opacity: 1; }
-    51%, 100% { opacity: 0; }
-}
-
-/* Prevent layout shift during typing - set fixed height for two lines */
-.hero-title {
-    min-height: calc(1.1em * 2);
-    height: calc(1.1em * 2);
-}
-
-/* Respect reduced motion preference - disable cursor blink */
-@media (prefers-reduced-motion: reduce) {
-    .typewriter-cursor {
-        animation: none !important;
+    .animate-on-scroll,
+    .animate-slide-left,
+    .animate-slide-right,
+    .animate-scale {
         opacity: 1;
-    }
-}
-
-/* =============================================================================
-   Hero Badge Fade Animation
-   ============================================================================= */
-
-.hero-badge {
-    transition: opacity 0.3s ease-in-out;
-}
-
-.hero-badge.fade-out {
-    opacity: 0;
-}
-
-.hero-badge.fade-in {
-    opacity: 1;
-}
-
-/* =============================================================================
-   Parallax Effects
-   ============================================================================= */
-
-.parallax-container {
-    perspective: 1000px;
-    perspective-origin: center;
-}
-
-.parallax-layer {
-    will-change: transform;
-    transition: transform 0.1s linear;
-}
-
-.parallax-slow {
-    --parallax-speed: 0.02;
-}
-
-.parallax-medium {
-    --parallax-speed: 0.05;
-}
-
-.parallax-fast {
-    --parallax-speed: 0.1;
-}
-
-/* =============================================================================
-   Gentle Floating Background Particles
-   ============================================================================= */
-
-.bg-particles {
-    position: fixed;
-    top: 0;
-    left: 0;
-    width: 100%;
-    height: 100%;
-    pointer-events: none;
-    z-index: 0;
-    overflow: hidden;
-}
-
-.particle {
-    position: absolute;
-    border-radius: 50%;
-    opacity: 0.15;
-    will-change: transform;
-}
-
-.particle-1 {
-    width: 300px;
-    height: 300px;
-    background: radial-gradient(circle, var(--color-primary) 0%, transparent 70%);
-    top: 10%;
-    left: 10%;
-    animation: gentleFloat1 25s ease-in-out infinite;
-}
-
-.particle-2 {
-    width: 400px;
-    height: 400px;
-    background: radial-gradient(circle, var(--color-secondary) 0%, transparent 70%);
-    top: 60%;
-    right: 5%;
-    animation: gentleFloat2 30s ease-in-out infinite;
-}
-
-.particle-3 {
-    width: 250px;
-    height: 250px;
-    background: radial-gradient(circle, var(--color-accent) 0%, transparent 70%);
-    bottom: 20%;
-    left: 30%;
-    animation: gentleFloat3 20s ease-in-out infinite;
-}
-
-@keyframes gentleFloat1 {
-    0%, 100% { transform: translate(0, 0) scale(1); }
-    25% { transform: translate(30px, -20px) scale(1.05); }
-    50% { transform: translate(-20px, 30px) scale(0.95); }
-    75% { transform: translate(-30px, -10px) scale(1.02); }
-}
-
-@keyframes gentleFloat2 {
-    0%, 100% { transform: translate(0, 0) scale(1); }
-    33% { transform: translate(-40px, 20px) scale(1.03); }
-    66% { transform: translate(20px, -30px) scale(0.97); }
-}
-
-@keyframes gentleFloat3 {
-    0%, 100% { transform: translate(0, 0) scale(1); }
-    50% { transform: translate(40px, 40px) scale(1.08); }
-}
-
-/* =============================================================================
-   Micro Interactions
-   ============================================================================= */
-
-/* Subtle hover pulse */
-.micro-pulse {
-    transition: transform 0.3s var(--easing-smooth);
-}
-
-.micro-pulse:hover {
-    animation: microPulse 0.6s ease-in-out;
-}
-
-@keyframes microPulse {
-    0%, 100% { transform: scale(1); }
-    50% { transform: scale(1.02); }
-}
-
-/* Icon bounce on hover */
-.micro-bounce:hover .card-icon,
-.micro-bounce:hover .doc-card-icon {
-    animation: iconBounce 0.5s var(--easing-bounce);
-}
-
-@keyframes iconBounce {
-    0%, 100% { transform: translateY(0); }
-    40% { transform: translateY(-8px); }
-    60% { transform: translateY(-4px); }
-}
-
-/* Link underline grow */
-.link-underline {
-    position: relative;
-    text-decoration: none;
-}
-
-.link-underline::after {
-    content: '';
-    position: absolute;
-    bottom: -2px;
-    left: 0;
-    width: 0;
-    height: 2px;
-    background: var(--gradient-primary);
-    transition: width 0.3s var(--easing-smooth);
-}
-
-.link-underline:hover::after {
-    width: 100%;
-}
-
-/* Button ripple effect */
-.btn-ripple {
-    position: relative;
-    overflow: hidden;
-}
-
-.btn-ripple::after {
-    content: '';
-    position: absolute;
-    top: 50%;
-    left: 50%;
-    width: 0;
-    height: 0;
-    background: rgba(255, 255, 255, 0.2);
-    border-radius: 50%;
-    transform: translate(-50%, -50%);
-    transition: width 0.6s, height 0.6s, opacity 0.6s;
-    opacity: 0;
-}
-
-.btn-ripple:active::after {
-    width: 300px;
-    height: 300px;
-    opacity: 0;
-}
-
-/* =============================================================================
-   Typography Animations
-   ============================================================================= */
-
-/* Letter spacing animation on hover */
-.type-breathe {
-    transition: letter-spacing 0.4s var(--easing-smooth);
-}
-
-.type-breathe:hover {
-    letter-spacing: 0.05em;
-}
-
-/* Gradient text shimmer */
-.gradient-shimmer {
-    background: linear-gradient(
-        90deg,
-        var(--color-primary) 0%,
-        var(--color-secondary) 25%,
-        var(--color-accent) 50%,
-        var(--color-secondary) 75%,
-        var(--color-primary) 100%
-    );
-    background-size: 200% 100%;
-    -webkit-background-clip: text;
-    -webkit-text-fill-color: transparent;
-    background-clip: text;
-    animation: gradientFlow 8s linear infinite;
-}
-
-@keyframes gradientFlow {
-    0% { background-position: 0% 50%; }
-    100% { background-position: 200% 50%; }
-}
-
-/* Subtle text glow on hover */
-.text-glow:hover {
-    text-shadow: 0 0 20px rgba(124, 58, 237, 0.3);
-}
-
-/* =============================================================================
-   Card Micro-Animations
-   ============================================================================= */
-
-/* Card border glow */
-.card-glow {
-    position: relative;
-}
-
-.card-glow::before {
-    content: '';
-    position: absolute;
-    inset: -1px;
-    background: linear-gradient(45deg, var(--color-primary), var(--color-secondary), var(--color-accent));
-    border-radius: inherit;
-    opacity: 0;
-    z-index: -1;
-    transition: opacity 0.4s var(--easing-smooth);
-}
-
-.card-glow:hover::before {
-    opacity: 0.5;
-}
-
-/* Content slide up on card hover */
-.card-content-slide {
-    transition: transform 0.3s var(--easing-smooth);
-}
-
-.hover-lift:hover .card-content-slide {
-    transform: translateY(-4px);
-}
-
-/* =============================================================================
-   Scroll Progress Indicator
-   ============================================================================= */
-
-.scroll-indicator {
-    position: fixed;
-    right: 24px;
-    bottom: 24px;
-    width: 48px;
-    height: 48px;
-    border-radius: 50%;
-    background: var(--color-bg-alt);
-    border: 2px solid transparent;
-    background-clip: padding-box;
-    z-index: 100;
-    opacity: 0;
-    transform: scale(0.8);
-    transition: opacity 0.3s, transform 0.3s;
-    cursor: pointer;
-}
-
-.scroll-indicator.visible {
-    opacity: 1;
-    transform: scale(1);
-}
-
-.scroll-indicator::before {
-    content: '↑';
-    position: absolute;
-    inset: 0;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    font-size: 1.2rem;
-    color: var(--color-text);
-}
-
-.scroll-indicator svg {
-    position: absolute;
-    inset: -2px;
-    width: calc(100% + 4px);
-    height: calc(100% + 4px);
-    transform: rotate(-90deg);
-}
-
-.scroll-indicator circle {
-    fill: none;
-    stroke: var(--color-primary);
-    stroke-width: 2;
-    stroke-dasharray: 144;
-    stroke-dashoffset: 144;
-    transition: stroke-dashoffset 0.1s;
-}
-
-/* =============================================================================
-   Gentle Background Animations
-   ============================================================================= */
-
-/* Subtle gradient movement */
-.bg-gradient-gentle {
-    background:
-        radial-gradient(ellipse at 20% 20%, rgba(124, 58, 237, 0.08) 0%, transparent 50%),
-        radial-gradient(ellipse at 80% 80%, rgba(6, 182, 212, 0.06) 0%, transparent 50%),
-        radial-gradient(ellipse at 50% 100%, rgba(244, 114, 182, 0.05) 0%, transparent 40%);
-    animation: bgBreath 15s ease-in-out infinite;
-}
-
-@keyframes bgBreath {
-    0%, 100% {
-        background-position: 0% 0%, 100% 100%, 50% 100%;
-        opacity: 1;
-    }
-    50% {
-        background-position: 5% 5%, 95% 95%, 55% 95%;
-        opacity: 0.8;
-    }
-}
-
-/* Noise overlay for texture */
-.bg-noise::after {
-    content: '';
-    position: absolute;
-    inset: 0;
-    background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noise'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.8' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noise)'/%3E%3C/svg%3E");
-    opacity: 0.02;
-    pointer-events: none;
-    z-index: 1;
-}
-
-/* =============================================================================
-   Focus States with Animation
-   ============================================================================= */
-
-.focus-ring:focus-visible {
-    outline: none;
-    box-shadow: 0 0 0 3px rgba(124, 58, 237, 0.4);
-    animation: focusPulse 1.5s ease-in-out infinite;
-}
-
-@keyframes focusPulse {
-    0%, 100% { box-shadow: 0 0 0 3px rgba(124, 58, 237, 0.4); }
-    50% { box-shadow: 0 0 0 5px rgba(124, 58, 237, 0.2); }
-}
-
-/* =============================================================================
-   Code Block Animations
-   ============================================================================= */
-
-.code-window {
-    transition: transform 0.4s var(--easing-smooth), box-shadow 0.4s var(--easing-smooth);
-}
-
-.code-window:hover {
-    transform: translateY(-4px) scale(1.01);
-    box-shadow: 0 25px 50px rgba(0, 0, 0, 0.3), var(--shadow-glow);
-}
-
-/* Line highlight animation */
-.code-line-highlight {
-    background: linear-gradient(90deg, rgba(124, 58, 237, 0.1) 0%, transparent 100%);
-    animation: lineHighlight 2s ease-out;
-}
-
-@keyframes lineHighlight {
-    0% { background-position: -100% 0; }
-    100% { background-position: 100% 0; }
-}
-
-/* =============================================================================
-   Section Reveal Animations
-   ============================================================================= */
-
-.reveal-up {
-    opacity: 0;
-    transform: translateY(60px);
-    transition: all 0.8s var(--easing-smooth);
-}
-
-.reveal-up.visible {
-    opacity: 1;
-    transform: translateY(0);
-}
-
-.reveal-left {
-    opacity: 0;
-    transform: translateX(-60px);
-    transition: all 0.8s var(--easing-smooth);
-}
-
-.reveal-left.visible {
-    opacity: 1;
-    transform: translateX(0);
-}
-
-.reveal-right {
-    opacity: 0;
-    transform: translateX(60px);
-    transition: all 0.8s var(--easing-smooth);
-}
-
-.reveal-right.visible {
-    opacity: 1;
-    transform: translateX(0);
-}
-
-.reveal-scale {
-    opacity: 0;
-    transform: scale(0.9);
-    transition: all 0.8s var(--easing-smooth);
-}
-
-.reveal-scale.visible {
-    opacity: 1;
-    transform: scale(1);
-}
-
-/* =============================================================================
-   Interactive Cursor Effect
-   ============================================================================= */
-
-.cursor-glow {
-    position: fixed;
-    width: 300px;
-    height: 300px;
-    border-radius: 50%;
-    background: radial-gradient(circle, rgba(124, 58, 237, 0.15) 0%, transparent 70%);
-    pointer-events: none;
-    z-index: 9999;
-    transform: translate(-50%, -50%);
-    opacity: 0;
-    transition: opacity 0.3s;
-    mix-blend-mode: screen;
-}
-
-.cursor-glow.active {
-    opacity: 1;
-}
-
-/* Hide on mobile and for reduced motion */
-@media (max-width: 768px), (prefers-reduced-motion: reduce) {
-    .cursor-glow {
-        display: none;
-    }
-}
-
-/* =============================================================================
-   Light Mode Particle Adjustments
-   ============================================================================= */
-
-@media (prefers-color-scheme: light) {
-    .particle {
-        opacity: 0.08;
+        transform: none;
     }
 
-    .bg-gradient-gentle {
-        background:
-            radial-gradient(ellipse at 20% 20%, rgba(109, 40, 217, 0.05) 0%, transparent 50%),
-            radial-gradient(ellipse at 80% 80%, rgba(8, 145, 178, 0.04) 0%, transparent 50%),
-            radial-gradient(ellipse at 50% 100%, rgba(219, 39, 119, 0.03) 0%, transparent 40%);
-    }
-
-    .cursor-glow {
-        background: radial-gradient(circle, rgba(109, 40, 217, 0.1) 0%, transparent 70%);
+    [data-parallax] {
+        transform: none !important;
     }
 }
