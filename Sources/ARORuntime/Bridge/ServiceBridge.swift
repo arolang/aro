@@ -2022,6 +2022,9 @@ nonisolated(unsafe) public var httpRouteHandlers: [String: (UnsafeMutableRawPoin
 /// Route registry for matching paths to operationIds
 nonisolated(unsafe) public var httpRoutes: [(method: String, path: String, operationId: String)] = []
 
+/// Response content type registry for operationIds (extracted from OpenAPI spec)
+nonisolated(unsafe) public var httpResponseContentTypes: [String: String] = [:]
+
 /// Global storage for embedded OpenAPI spec (JSON string, set at compile time)
 nonisolated(unsafe) public var embeddedOpenAPISpec: String? = nil
 
@@ -2111,8 +2114,8 @@ public func aro_native_http_server_start(_ port: Int32, _ contextPtr: UnsafeMuta
                 }
             }
 
-            // Helper function to extract response from context and serialize as JSON
-            func getContextResponse(_ ctxPtr: UnsafeMutableRawPointer?) -> (Int, [String: String], Data?) {
+            // Helper function to extract response from context and serialize appropriately
+            func getContextResponse(_ ctxPtr: UnsafeMutableRawPointer?, operationId: String?) -> (Int, [String: String], Data?) {
                 guard let ptr = ctxPtr else {
                     return (500, ["Content-Type": "application/json"], "{\"error\":\"No context\"}".data(using: .utf8))
                 }
@@ -2121,8 +2124,25 @@ public func aro_native_http_server_start(_ port: Int32, _ contextPtr: UnsafeMuta
                 // Check for execution errors first (e.g., from Accept action validation failures)
                 if let error = ctxHandle.context.getExecutionError() {
                     let errorMsg = error.localizedDescription
-                        .replacingOccurrences(of: "\"", with: "\\\"")
-                    let errorJson = "{\"error\":\"\(errorMsg)\"}".data(using: .utf8)
+
+                    // Check for template not found errors - return 404
+                    // In binary mode, errors are wrapped as ActionError.runtimeError with the message
+                    if let templateError = error as? TemplateError {
+                        if case .notFound = templateError {
+                            let msg = templateError.errorDescription ?? "Template not found"
+                            let errorJson = "{\"error\":\"Not Found\",\"message\":\"\(msg.replacingOccurrences(of: "\"", with: "\\\""))\"}".data(using: .utf8)
+                            return (404, ["Content-Type": "application/json"], errorJson)
+                        }
+                    }
+                    // Check for template not found pattern in error message (binary mode)
+                    else if errorMsg.contains("Template not found:") || errorMsg.contains("notFound(path:") {
+                        let escapedMsg = errorMsg.replacingOccurrences(of: "\"", with: "\\\"")
+                        let errorJson = "{\"error\":\"Not Found\",\"message\":\"\(escapedMsg)\"}".data(using: .utf8)
+                        return (404, ["Content-Type": "application/json"], errorJson)
+                    }
+
+                    let escapedMsg = errorMsg.replacingOccurrences(of: "\"", with: "\\\"")
+                    let errorJson = "{\"error\":\"\(escapedMsg)\"}".data(using: .utf8)
                     return (500, ["Content-Type": "application/json"], errorJson)
                 }
 
@@ -2137,6 +2157,49 @@ public func aro_native_http_server_start(_ port: Int32, _ contextPtr: UnsafeMuta
                     // For 204 No Content, return empty body
                     if statusCode == 204 {
                         return (204, [:], nil)
+                    }
+
+                    // Get expected content type from OpenAPI spec
+                    let expectedContentType = operationId.flatMap { httpResponseContentTypes[$0] }
+
+                    // Check for single-value response that should be returned as-is
+                    if response.data.count == 1, let (_, anySendable) = response.data.first {
+                        if let str: String = anySendable.get() {
+                            let trimmed = str.trimmingCharacters(in: .whitespacesAndNewlines)
+
+                            // If OpenAPI says text/html, return as HTML
+                            if expectedContentType == "text/html" {
+                                return (statusCode, ["Content-Type": "text/html; charset=utf-8"], str.data(using: .utf8))
+                            }
+
+                            // Detect HTML content
+                            if trimmed.hasPrefix("<!DOCTYPE") || trimmed.hasPrefix("<!doctype") ||
+                               trimmed.hasPrefix("<html") || trimmed.hasPrefix("<HTML") {
+                                return (statusCode, ["Content-Type": "text/html; charset=utf-8"], str.data(using: .utf8))
+                            }
+
+                            // Detect JavaScript content
+                            if trimmed.hasPrefix("var ") || trimmed.hasPrefix("let ") ||
+                               trimmed.hasPrefix("const ") || trimmed.hasPrefix("function ") ||
+                               trimmed.hasPrefix("//") || trimmed.hasPrefix("/*") ||
+                               trimmed.hasPrefix("'use strict'") || trimmed.hasPrefix("\"use strict\"") ||
+                               trimmed.hasPrefix("(function") || trimmed.hasPrefix("import ") ||
+                               trimmed.hasPrefix("export ") {
+                                return (statusCode, ["Content-Type": "text/javascript; charset=utf-8"], str.data(using: .utf8))
+                            }
+
+                            // Detect CSS content
+                            if !trimmed.hasPrefix("{") && !trimmed.hasPrefix("<") {
+                                let cssPattern = try? NSRegularExpression(
+                                    pattern: "^(@|\\*|[a-zA-Z][a-zA-Z0-9-]*|\\.[a-zA-Z]|#[a-zA-Z])[^{]*\\{",
+                                    options: []
+                                )
+                                if let match = cssPattern?.firstMatch(in: trimmed, range: NSRange(trimmed.startIndex..., in: trimmed)),
+                                   match.range.location != NSNotFound {
+                                    return (statusCode, ["Content-Type": "text/css; charset=utf-8"], str.data(using: .utf8))
+                                }
+                            }
+                        }
                     }
 
                     // Build JSON from response data
@@ -2212,7 +2275,7 @@ public func aro_native_http_server_start(_ port: Int32, _ contextPtr: UnsafeMuta
                 // First check for registered handler
                 if let handler = httpRouteHandlers[opId] {
                     _ = handler(requestContext)
-                    let response = getContextResponse(requestContext)
+                    let response = getContextResponse(requestContext, operationId: opId)
                     // Clean up if we created the context
                     if contextPtr == nil, let ctx = requestContext {
                         aro_context_destroy(ctx)
@@ -2231,7 +2294,7 @@ public func aro_native_http_server_start(_ port: Int32, _ contextPtr: UnsafeMuta
                     typealias FSFunction = @convention(c) (UnsafeMutableRawPointer?) -> UnsafeMutableRawPointer?
                     let function = unsafeBitCast(sym, to: FSFunction.self)
                     _ = function(requestContext)
-                    let response = getContextResponse(requestContext)
+                    let response = getContextResponse(requestContext, operationId: opId)
                     // Clean up if we created the context
                     if contextPtr == nil, let ctx = requestContext {
                         aro_context_destroy(ctx)
@@ -2408,6 +2471,13 @@ private func parseOpenAPIRoutesJSON(_ json: String) {
         for (method, operation) in pathItem.allOperations {
             if let opId = operation.operationId {
                 httpRoutes.append((method: method.uppercased(), path: path, operationId: opId))
+
+                // Extract response content type from 200/201 response
+                if let response = operation.responses["200"] ?? operation.responses["201"],
+                   let content = response.content,
+                   let firstContentType = content.keys.first {
+                    httpResponseContentTypes[opId] = firstContentType
+                }
             }
         }
     }
@@ -2418,30 +2488,66 @@ private func parseOpenAPIRoutesYAML(_ yaml: String) {
     let lines = yaml.components(separatedBy: "\n")
     var currentPath: String? = nil
     var currentMethod: String? = nil
+    var currentOperationId: String? = nil
+    var inResponses = false
+    var in200Response = false
 
     for line in lines {
         let trimmed = line.trimmingCharacters(in: .whitespaces)
 
-        // Check for path
+        // Check for path (reset state when entering new path)
         if line.hasPrefix("  /") && line.contains(":") {
             let pathPart = line.trimmingCharacters(in: .whitespaces)
             if let colonIndex = pathPart.firstIndex(of: ":") {
                 currentPath = String(pathPart[..<colonIndex])
+                currentMethod = nil
+                currentOperationId = nil
+                inResponses = false
+                in200Response = false
             }
         }
         // Check for method
         else if trimmed.hasPrefix("get:") || trimmed.hasPrefix("post:") ||
-                trimmed.hasPrefix("put:") || trimmed.hasPrefix("delete:") {
+                trimmed.hasPrefix("put:") || trimmed.hasPrefix("delete:") ||
+                trimmed.hasPrefix("patch:") {
             currentMethod = String(trimmed.dropLast()) // Remove ":"
+            currentOperationId = nil
+            inResponses = false
+            in200Response = false
         }
         // Check for operationId
         else if trimmed.hasPrefix("operationId:") {
             let opId = trimmed.replacingOccurrences(of: "operationId:", with: "")
                 .trimmingCharacters(in: .whitespaces)
+            currentOperationId = opId
 
             if let path = currentPath, let method = currentMethod {
                 httpRoutes.append((method: method.uppercased(), path: path, operationId: opId))
             }
+        }
+        // Track responses section
+        else if trimmed.hasPrefix("responses:") {
+            inResponses = true
+            in200Response = false
+        }
+        // Track 200/201 response
+        else if inResponses && (trimmed.hasPrefix("'200':") || trimmed.hasPrefix("\"200\":") ||
+                                trimmed.hasPrefix("'201':") || trimmed.hasPrefix("\"201\":")) {
+            in200Response = true
+        }
+        // Look for content type in response content section
+        else if in200Response && trimmed.hasPrefix("content:") {
+            // Next non-empty line with proper indentation should be the content type
+            continue
+        }
+        // Capture content type (e.g., "text/html:", "application/json:")
+        else if in200Response && !trimmed.isEmpty && trimmed.hasSuffix(":") &&
+                (trimmed.contains("/")) {
+            let contentType = String(trimmed.dropLast()) // Remove ":"
+            if let opId = currentOperationId {
+                httpResponseContentTypes[opId] = contentType
+            }
+            in200Response = false // Done with this response
         }
     }
 }
