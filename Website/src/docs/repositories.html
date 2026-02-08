@@ -69,6 +69,28 @@
     <span class="action">&lt;Return&gt;</span> an <span class="result">&lt;OK: status&gt;</span> for the <span class="result">&lt;observation&gt;</span>.
 }</code></pre>
 
+<h3>Conditional Observers with <code>when</code> Guard</h3>
+
+<p>
+    Add a <code>when</code> clause to trigger observers only when a condition is met.
+    Use <code>&lt;repository-name: count&gt;</code> to access the repository size.
+</p>
+
+<pre><code><span class="comment">(* Only triggers when message count exceeds 100 *)</span>
+<span class="feature-name">(Cleanup Messages: message-repository Observer)</span> when <span class="result">&lt;message-repository: count&gt;</span> &gt; 100 {
+    <span class="action">&lt;Retrieve&gt;</span> the <span class="result">&lt;all-messages&gt;</span> from the <span class="result">&lt;message-repository&gt;</span>.
+    <span class="action">&lt;Extract&gt;</span> the <span class="result">&lt;keep-messages: 0-49&gt;</span> from the <span class="result">&lt;all-messages&gt;</span>.
+    <span class="action">&lt;Clear&gt;</span> the <span class="result">&lt;all&gt;</span> from the <span class="result">&lt;message-repository&gt;</span>.
+    <span class="action">&lt;Store&gt;</span> the <span class="result">&lt;keep-messages&gt;</span> into the <span class="result">&lt;message-repository&gt;</span>.
+    <span class="action">&lt;Return&gt;</span> an <span class="result">&lt;OK: status&gt;</span> for the <span class="result">&lt;cleanup&gt;</span>.
+}</code></pre>
+
+<p>
+    The <code>when</code> guard is evaluated before the observer runs. If the condition
+    is false, the observer is silently skipped. This prevents infinite loops when the
+    observer modifies the same repository it observes.
+</p>
+
 <p>The observer receives an event with:</p>
 
 <table>
