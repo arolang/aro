@@ -1,10 +1,10 @@
 plugins {
     id("java")
-    id("org.jetbrains.intellij.platform") version "2.10.5"
+    id("org.jetbrains.intellij.platform") version "2.11.0"
 }
 
 group = "com.arolang"
-version = "1.0.0"
+version = "1.1.0"
 
 repositories {
     mavenCentral()
@@ -15,15 +15,15 @@ repositories {
 
 java {
     toolchain {
-        languageVersion = JavaLanguageVersion.of(17)
+        languageVersion = JavaLanguageVersion.of(21)
     }
 }
 
 dependencies {
     intellijPlatform {
-        intellijIdeaCommunity("2024.2")
+        intellijIdeaCommunity("2025.1")
         bundledPlugin("org.jetbrains.plugins.textmate")
-        plugin("com.redhat.devtools.lsp4ij:0.9.0")
+        plugin("com.redhat.devtools.lsp4ij:0.19.1")
         pluginVerifier()
         instrumentationTools()
     }
@@ -33,8 +33,8 @@ intellijPlatform {
     pluginConfiguration {
         name = "ARO Language Support"
         ideaVersion {
-            sinceBuild = "242"
-            untilBuild = "251.*"
+            sinceBuild = "251"
+            untilBuild = "253.*"
         }
     }
 
