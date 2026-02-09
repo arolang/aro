@@ -238,7 +238,7 @@ public final class Application: @unchecked Sendable {
             // Execute the feature set
             do {
                 let response = try await self.executeFeatureSet(featureSet, request: request, pathParams: match.pathParameters)
-                return self.convertToHTTPResponse(response)
+                return self.convertToHTTPResponse(response, requestPath: request.path)
             } catch let templateError as TemplateError {
                 // Handle template errors with appropriate HTTP status codes
                 switch templateError {
@@ -342,9 +342,22 @@ public final class Application: @unchecked Sendable {
     }
 
     /// Convert ARO Response to HTTP Response
-    private func convertToHTTPResponse(_ response: Response) -> HTTPResponse {
+    private func convertToHTTPResponse(_ response: Response, requestPath: String = "") -> HTTPResponse {
         // Map status string to HTTP status code
         let statusCode = mapStatusToHTTPCode(response.status)
+
+        // Check for MIME type from file extension in request path
+        if let mimeType = mimeTypeFromPath(requestPath), response.data.count == 1 {
+            // Try to get the content as a String
+            if let anySendable = response.data.values.first,
+               let content: String = anySendable.get() {
+                return HTTPResponse(
+                    statusCode: statusCode,
+                    headers: ["Content-Type": mimeType],
+                    body: content.data(using: .utf8)
+                )
+            }
+        }
 
         // Check if response data contains HTML content
         // If so, return it directly with text/html content type
@@ -447,30 +460,92 @@ public final class Application: @unchecked Sendable {
             if let str: String = anySendable.get() {
                 let trimmed = str.trimmingCharacters(in: .whitespacesAndNewlines)
 
-                // Detect JavaScript first (more specific patterns)
+                // Strip CSS/JS block comments for content detection
+                var contentForDetection = trimmed
+                if trimmed.hasPrefix("/*") {
+                    // Find end of block comment and check what follows
+                    if let endRange = trimmed.range(of: "*/") {
+                        let afterComment = String(trimmed[endRange.upperBound...])
+                            .trimmingCharacters(in: .whitespacesAndNewlines)
+                        contentForDetection = afterComment
+                    }
+                }
+
+                // Detect CSS first: starts with selector patterns
+                // CSS selectors: :root, element, .class, #id, @media, @keyframes, *, etc.
+                if !contentForDetection.hasPrefix("{") && !contentForDetection.hasPrefix("<") {
+                    let cssPattern = try? NSRegularExpression(
+                        pattern: "^(:|@|\\*|[a-zA-Z][a-zA-Z0-9-]*|\\.[a-zA-Z]|#[a-zA-Z])[^{]*\\{",
+                        options: []
+                    )
+                    if let match = cssPattern?.firstMatch(in: contentForDetection, range: NSRange(contentForDetection.startIndex..., in: contentForDetection)),
+                       match.range.location != NSNotFound {
+                        return (str, "text/css; charset=utf-8")
+                    }
+                }
+
+                // Detect JavaScript patterns
                 if trimmed.hasPrefix("var ") || trimmed.hasPrefix("let ") ||
                    trimmed.hasPrefix("const ") || trimmed.hasPrefix("function ") ||
-                   trimmed.hasPrefix("//") || trimmed.hasPrefix("/*") ||
+                   trimmed.hasPrefix("//") ||
                    trimmed.hasPrefix("'use strict'") || trimmed.hasPrefix("\"use strict\"") ||
                    trimmed.hasPrefix("(function") || trimmed.hasPrefix("import ") ||
                    trimmed.hasPrefix("export ") {
                     return (str, "text/javascript; charset=utf-8")
                 }
 
-                // Detect CSS: starts with selector patterns (not JS keywords)
-                // CSS selectors start with: element, .class, #id, @media, @keyframes, etc.
-                if !trimmed.hasPrefix("{") && !trimmed.hasPrefix("<") {
-                    let cssPattern = try? NSRegularExpression(
-                        pattern: "^(@|\\*|[a-zA-Z][a-zA-Z0-9-]*|\\.[a-zA-Z]|#[a-zA-Z])[^{]*\\{",
-                        options: []
-                    )
-                    if let match = cssPattern?.firstMatch(in: trimmed, range: NSRange(trimmed.startIndex..., in: trimmed)),
-                       match.range.location != NSNotFound {
-                        return (str, "text/css; charset=utf-8")
+                // Check content after block comment for JS patterns
+                if trimmed.hasPrefix("/*") && !contentForDetection.isEmpty {
+                    if contentForDetection.hasPrefix("var ") || contentForDetection.hasPrefix("let ") ||
+                       contentForDetection.hasPrefix("const ") || contentForDetection.hasPrefix("function ") ||
+                       contentForDetection.hasPrefix("(function") {
+                        return (str, "text/javascript; charset=utf-8")
                     }
                 }
             }
         }
+        return nil
+    }
+
+    /// Detect MIME type from file extension in request path
+    private func mimeTypeFromPath(_ path: String) -> String? {
+        let lowercasePath = path.lowercased()
+
+        // Common web file extensions
+        if lowercasePath.hasSuffix(".css") {
+            return "text/css; charset=utf-8"
+        } else if lowercasePath.hasSuffix(".js") {
+            return "text/javascript; charset=utf-8"
+        } else if lowercasePath.hasSuffix(".json") {
+            return "application/json; charset=utf-8"
+        } else if lowercasePath.hasSuffix(".html") || lowercasePath.hasSuffix(".htm") {
+            return "text/html; charset=utf-8"
+        } else if lowercasePath.hasSuffix(".xml") {
+            return "application/xml; charset=utf-8"
+        } else if lowercasePath.hasSuffix(".txt") {
+            return "text/plain; charset=utf-8"
+        } else if lowercasePath.hasSuffix(".svg") {
+            return "image/svg+xml"
+        } else if lowercasePath.hasSuffix(".png") {
+            return "image/png"
+        } else if lowercasePath.hasSuffix(".jpg") || lowercasePath.hasSuffix(".jpeg") {
+            return "image/jpeg"
+        } else if lowercasePath.hasSuffix(".gif") {
+            return "image/gif"
+        } else if lowercasePath.hasSuffix(".webp") {
+            return "image/webp"
+        } else if lowercasePath.hasSuffix(".ico") {
+            return "image/x-icon"
+        } else if lowercasePath.hasSuffix(".woff") {
+            return "font/woff"
+        } else if lowercasePath.hasSuffix(".woff2") {
+            return "font/woff2"
+        } else if lowercasePath.hasSuffix(".ttf") {
+            return "font/ttf"
+        } else if lowercasePath.hasSuffix(".eot") {
+            return "application/vnd.ms-fontobject"
+        }
+
         return nil
     }
 

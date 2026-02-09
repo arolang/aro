@@ -2405,7 +2405,7 @@ public func aro_native_http_server_start(_ port: Int32, _ contextPtr: UnsafeMuta
             }
 
             // Helper function to extract response from context and serialize appropriately
-            func getContextResponse(_ ctxPtr: UnsafeMutableRawPointer?, operationId: String?) -> (Int, [String: String], Data?) {
+            func getContextResponse(_ ctxPtr: UnsafeMutableRawPointer?, operationId: String?, requestPath: String = "") -> (Int, [String: String], Data?) {
                 guard let ptr = ctxPtr else {
                     return (500, ["Content-Type": "application/json"], "{\"error\":\"No context\"}".data(using: .utf8))
                 }
@@ -2457,11 +2457,30 @@ public func aro_native_http_server_start(_ port: Int32, _ contextPtr: UnsafeMuta
                         if let str: String = anySendable.get() {
                             let trimmed = str.trimmingCharacters(in: .whitespacesAndNewlines)
 
-                            // If OpenAPI says text/html, return as HTML
+                            // Priority 1: Detect MIME type from request path file extension
+                            let lowercasePath = requestPath.lowercased()
+                            if lowercasePath.hasSuffix(".css") {
+                                return (statusCode, ["Content-Type": "text/css; charset=utf-8"], str.data(using: .utf8))
+                            } else if lowercasePath.hasSuffix(".js") {
+                                return (statusCode, ["Content-Type": "text/javascript; charset=utf-8"], str.data(using: .utf8))
+                            } else if lowercasePath.hasSuffix(".json") {
+                                return (statusCode, ["Content-Type": "application/json; charset=utf-8"], str.data(using: .utf8))
+                            } else if lowercasePath.hasSuffix(".html") || lowercasePath.hasSuffix(".htm") {
+                                return (statusCode, ["Content-Type": "text/html; charset=utf-8"], str.data(using: .utf8))
+                            } else if lowercasePath.hasSuffix(".xml") {
+                                return (statusCode, ["Content-Type": "application/xml; charset=utf-8"], str.data(using: .utf8))
+                            } else if lowercasePath.hasSuffix(".txt") {
+                                return (statusCode, ["Content-Type": "text/plain; charset=utf-8"], str.data(using: .utf8))
+                            } else if lowercasePath.hasSuffix(".svg") {
+                                return (statusCode, ["Content-Type": "image/svg+xml"], str.data(using: .utf8))
+                            }
+
+                            // Priority 2: If OpenAPI says text/html, return as HTML
                             if expectedContentType == "text/html" {
                                 return (statusCode, ["Content-Type": "text/html; charset=utf-8"], str.data(using: .utf8))
                             }
 
+                            // Priority 3: Content-based detection (fallback)
                             // Detect HTML content
                             if trimmed.hasPrefix("<!DOCTYPE") || trimmed.hasPrefix("<!doctype") ||
                                trimmed.hasPrefix("<html") || trimmed.hasPrefix("<HTML") {
@@ -2565,7 +2584,7 @@ public func aro_native_http_server_start(_ port: Int32, _ contextPtr: UnsafeMuta
                 // First check for registered handler
                 if let handler = httpRouteHandlers[opId] {
                     _ = handler(requestContext)
-                    let response = getContextResponse(requestContext, operationId: opId)
+                    let response = getContextResponse(requestContext, operationId: opId, requestPath: pathWithoutQuery)
                     // Clean up if we created the context
                     if contextPtr == nil, let ctx = requestContext {
                         aro_context_destroy(ctx)
@@ -2584,7 +2603,7 @@ public func aro_native_http_server_start(_ port: Int32, _ contextPtr: UnsafeMuta
                     typealias FSFunction = @convention(c) (UnsafeMutableRawPointer?) -> UnsafeMutableRawPointer?
                     let function = unsafeBitCast(sym, to: FSFunction.self)
                     _ = function(requestContext)
-                    let response = getContextResponse(requestContext, operationId: opId)
+                    let response = getContextResponse(requestContext, operationId: opId, requestPath: pathWithoutQuery)
                     // Clean up if we created the context
                     if contextPtr == nil, let ctx = requestContext {
                         aro_context_destroy(ctx)
