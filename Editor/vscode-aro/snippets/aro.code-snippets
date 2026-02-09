@@ -216,5 +216,53 @@
       "}"
     ],
     "description": "Iterate over collection"
+  },
+  "WebSocket Connect Handler": {
+    "prefix": "wsconnect",
+    "body": [
+      "(Handle WebSocket Connect: WebSocket Event Handler) {",
+      "    <Extract> the <connection-id> from the <event: id>.",
+      "    <Log> \"WebSocket client connected\" to the <console>.",
+      "    $0",
+      "    <Return> an <OK: status> for the <connection>.",
+      "}"
+    ],
+    "description": "WebSocket connection handler"
+  },
+  "WebSocket Message Handler": {
+    "prefix": "wsmessage",
+    "body": [
+      "(Handle WebSocket Message: WebSocket Event Handler) {",
+      "    <Extract> the <message> from the <event: message>.",
+      "    <Extract> the <connection-id> from the <event: connectionId>.",
+      "    <Log> \"Received: \" to the <console>.",
+      "    <Log> <message> to the <console>.",
+      "    $0",
+      "    <Return> an <OK: status> for the <message>.",
+      "}"
+    ],
+    "description": "WebSocket message handler"
+  },
+  "WebSocket Disconnect Handler": {
+    "prefix": "wsdisconnect",
+    "body": [
+      "(Handle WebSocket Disconnect: WebSocket Event Handler) {",
+      "    <Extract> the <connection-id> from the <event: connectionId>.",
+      "    <Log> \"WebSocket client disconnected\" to the <console>.",
+      "    $0",
+      "    <Return> an <OK: status> for the <disconnection>.",
+      "}"
+    ],
+    "description": "WebSocket disconnection handler"
+  },
+  "Broadcast WebSocket": {
+    "prefix": "broadcast",
+    "body": "<Broadcast> the <${1:message}> to the <websocket>.",
+    "description": "Broadcast message to all WebSocket clients"
+  },
+  "Start Server with WebSocket": {
+    "prefix": "startws",
+    "body": "<Start> the <http-server> with { websocket: \"${1:/ws}\" }.",
+    "description": "Start HTTP server with WebSocket support"
   }
 }
