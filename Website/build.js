@@ -27,6 +27,30 @@ function processHtmlFile(srcPath, destPath, basePath = '') {
 
     let content = fs.readFileSync(srcPath, 'utf8');
 
+    // Check if file uses {{TEMPLATE:...}} syntax
+    const templateMatch = content.match(/^\{\{TEMPLATE:([^}]+)\}\}/);
+    if (templateMatch) {
+        const templateName = templateMatch[1];
+        const templatePath = path.join('src', templateName);
+
+        if (fs.existsSync(templatePath)) {
+            const template = fs.readFileSync(templatePath, 'utf8');
+
+            // Extract title
+            const titleMatch = content.match(/\{\{title:([^}]+)\}\}/);
+            const title = titleMatch ? titleMatch[1] : 'Documentation';
+
+            // Extract content (everything after {{content: until the closing }})
+            const contentMatch = content.match(/\{\{content:([\s\S]*)\}\}\s*$/);
+            const pageContent = contentMatch ? contentMatch[1].trim() : '';
+
+            // Replace placeholders in template
+            content = template
+                .replace('{{title}}', title)
+                .replace('{{content}}', pageContent);
+        }
+    }
+
     // Calculate stylesheet paths based on basePath
     const stylesheetPath = basePath + 'style.css';
     const animationsStylesheetPath = basePath + 'animations.css';
