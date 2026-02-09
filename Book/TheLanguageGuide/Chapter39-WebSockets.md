@@ -142,7 +142,7 @@ WebChat/
 ```aro
 (Application-Start: Web Chat) {
     <Log> "Starting Web Chat..." to the <console>.
-    <Start> the <http-server> with {}.
+    <Start> the <http-server> with { websocket: "/ws" }.
     <Log> "Server ready on http://localhost:8080" to the <console>.
     <Log> "WebSocket available on ws://localhost:8080/ws" to the <console>.
     <Keepalive> the <application> for the <events>.
@@ -267,12 +267,32 @@ async function postMessage(text) {
 }
 ```
 
-## WebSocket Path
+## WebSocket Path Configuration
 
-By default, WebSocket connections are accepted on `/ws`:
+WebSocket is enabled by specifying the path in the `Start` action:
+
+```aro
+<Start> the <http-server> with { websocket: "/ws" }.
+```
+
+This enables WebSocket upgrades on the specified path. Clients can then connect:
 
 ```javascript
 const ws = new WebSocket('ws://localhost:8080/ws');
+```
+
+You can choose any path for your WebSocket endpoint:
+
+```aro
+(* Custom WebSocket path *)
+<Start> the <http-server> with { websocket: "/realtime" }.
+```
+
+If you omit the websocket configuration, WebSocket connections will not be available:
+
+```aro
+(* HTTP only, no WebSocket *)
+<Start> the <http-server> with {}.
 ```
 
 ## Comparison with TCP Sockets
