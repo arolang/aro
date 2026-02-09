@@ -412,6 +412,35 @@ You can have multiple observers for the same repository:
 }
 ```
 
+### Conditional Observers with `when` Guard
+
+Add a `when` clause to trigger observers only when a condition is met. This is useful for implementing cleanup logic, rate limiting, or threshold-based actions.
+
+```aro
+(* Only triggers when message count exceeds 100 *)
+(Cleanup Messages: message-repository Observer) when <message-repository: count> > 100 {
+    <Retrieve> the <all-messages> from the <message-repository>.
+    <Extract> the <keep-messages: 0-49> from the <all-messages>.
+    <Clear> the <all> from the <message-repository>.
+    <Store> the <keep-messages> into the <message-repository>.
+    <Log> "Cleaned up messages, kept last 50" to the <console>.
+    <Return> an <OK: status> for the <cleanup>.
+}
+```
+
+The `when` guard is evaluated before the observer executes. If the condition is false, the observer is silently skipped. This prevents infinite loops when the observer modifies the same repository it observes.
+
+**Repository Count Expression**: Use `<repository-name: count>` to get the current number of items in a repository:
+
+```aro
+(* Trigger alert when queue grows too large *)
+(Queue Alert: task-repository Observer) when <task-repository: count> > 1000 {
+    <Log> "Warning: Task queue exceeds 1000 items" to the <console>.
+    <Emit> a <QueueOverflow: event>.
+    <Return> an <OK: status>.
+}
+```
+
 ## Case Study: Directory Replicator
 
 Let's examine two implementations of the same application: a directory replicator that scans a source directory and recreates its structure in a target location. This comparison illustrates the power of repository observers and event-driven architecture in ARO.

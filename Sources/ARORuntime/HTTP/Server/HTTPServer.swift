@@ -132,6 +132,7 @@ public struct HTTPServerStoppedEvent: RuntimeEvent {
 import NIO
 import NIOHTTP1
 import NIOFoundationCompat
+import NIOWebSocket
 
 /// HTTP Server implementation using SwiftNIO
 ///
@@ -147,6 +148,9 @@ public final class AROHTTPServer: HTTPServerService, @unchecked Sendable {
 
     /// Request handler for processing requests through feature sets
     private var requestHandler: HTTPRequestHandler?
+
+    /// WebSocket server for handling WebSocket connections
+    private var webSocketServer: AROWebSocketServer?
 
     /// Current port the server is listening on
     public private(set) var port: Int = 0
@@ -198,17 +202,58 @@ public final class AROHTTPServer: HTTPServerService, @unchecked Sendable {
         self.requestHandler = handler
     }
 
+    /// Set the WebSocket server for handling WebSocket upgrades
+    public func setWebSocketServer(_ server: AROWebSocketServer) {
+        lock.lock()
+        defer { lock.unlock() }
+        self.webSocketServer = server
+        server.enable()
+    }
+
+    /// Get the WebSocket server
+    public func getWebSocketServer() -> AROWebSocketServer? {
+        withLock { webSocketServer }
+    }
+
     // MARK: - HTTPServerService
+
+    public func configureWebSocket(path: String) async throws {
+        let wsServer = AROWebSocketServer(path: path, eventBus: eventBus)
+        setWebSocketServer(wsServer)
+    }
 
     public func start(port: Int) async throws {
         let handler = withLock { requestHandler }
+        let wsServer = withLock { webSocketServer }
 
         let bootstrap = ServerBootstrap(group: group)
             .serverChannelOption(ChannelOptions.backlog, value: 256)
             .serverChannelOption(ChannelOptions.socketOption(.so_reuseaddr), value: 1)
             .childChannelInitializer { channel in
-                channel.pipeline.configureHTTPServerPipeline().flatMap {
-                    channel.pipeline.addHandler(HTTPHandler(eventBus: self.eventBus, requestHandler: handler))
+                // Configure HTTP pipeline with optional WebSocket upgrade support
+                if let wsServer = wsServer {
+                    // Configure with WebSocket upgrader
+                    let upgrader = createWebSocketUpgrader(server: wsServer, path: wsServer.path)
+                    let upgradeConfig: NIOHTTPServerUpgradeConfiguration = (
+                        upgraders: [upgrader],
+                        completionHandler: { _ in }
+                    )
+                    return channel.pipeline.configureHTTPServerPipeline(
+                        withServerUpgrade: upgradeConfig
+                    ).flatMap {
+                        // Add HTTP handler with a name so we can remove it on WebSocket upgrade
+                        channel.pipeline.addHandler(
+                            HTTPHandler(eventBus: self.eventBus, requestHandler: handler),
+                            name: "AROHTTPHandler"
+                        )
+                    }
+                } else {
+                    // Standard HTTP pipeline without WebSocket
+                    return channel.pipeline.configureHTTPServerPipeline().flatMap {
+                        channel.pipeline.addHandler(
+                            HTTPHandler(eventBus: self.eventBus, requestHandler: handler)
+                        )
+                    }
                 }
             }
             .childChannelOption(ChannelOptions.socketOption(.so_reuseaddr), value: 1)
@@ -220,7 +265,11 @@ public final class AROHTTPServer: HTTPServerService, @unchecked Sendable {
 
         eventBus.publish(HTTPServerStartedEvent(port: port))
 
-        print("HTTP Server started on port \(port)")
+        if wsServer != nil {
+            print("HTTP Server started on port \(port) (WebSocket enabled on \(wsServer!.path))")
+        } else {
+            print("HTTP Server started on port \(port)")
+        }
     }
 
     public func stop() async throws {
@@ -239,7 +288,7 @@ public final class AROHTTPServer: HTTPServerService, @unchecked Sendable {
 
 // MARK: - HTTP Handler
 
-private final class HTTPHandler: ChannelInboundHandler, @unchecked Sendable {
+private final class HTTPHandler: ChannelInboundHandler, RemovableChannelHandler, @unchecked Sendable {
     typealias InboundIn = HTTPServerRequestPart
     typealias OutboundOut = HTTPServerResponsePart
 

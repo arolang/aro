@@ -21,6 +21,7 @@ public final class LLVMExternalDeclEmitter {
     private var _runtimeRegisterHandler: Function?
     private var _parseArguments: Function?
     private var _registerRepositoryObserver: Function?
+    private var _registerRepositoryObserverWithGuard: Function?
     private var _logWarning: Function?
     private var _contextCreate: Function?
     private var _contextCreateNamed: Function?
@@ -129,6 +130,12 @@ public final class LLVMExternalDeclEmitter {
         _registerRepositoryObserver = ctx.module.declareFunction(
             "aro_register_repository_observer",
             types.voidFunctionType(parameters: [ptr, ptr, ptr])
+        )
+
+        // void @aro_register_repository_observer_with_guard(ptr, ptr, ptr, ptr)
+        _registerRepositoryObserverWithGuard = ctx.module.declareFunction(
+            "aro_register_repository_observer_with_guard",
+            types.voidFunctionType(parameters: [ptr, ptr, ptr, ptr])
         )
 
         // void @aro_log_warning(ptr)
@@ -442,6 +449,7 @@ public final class LLVMExternalDeclEmitter {
     public var runtimeRegisterHandler: Function { _runtimeRegisterHandler! }
     public var parseArguments: Function { _parseArguments! }
     public var registerRepositoryObserver: Function { _registerRepositoryObserver! }
+    public var registerRepositoryObserverWithGuard: Function { _registerRepositoryObserverWithGuard! }
     public var logWarning: Function { _logWarning! }
     public var contextCreate: Function { _contextCreate! }
     public var contextCreateNamed: Function { _contextCreateNamed! }

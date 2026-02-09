@@ -134,8 +134,16 @@ public final class Parser {
         }
         
         try expect(.rightParen, message: "')'")
+
+        // Parse optional when clause for feature set guards (e.g., Observer when condition)
+        var whenCondition: (any Expression)? = nil
+        if check(.when) {
+            advance() // consume 'when'
+            whenCondition = try parseExpression()
+        }
+
         try expect(.leftBrace, message: "'{'")
-        
+
         // Parse statements
         var statements: [Statement] = []
         while !check(.rightBrace) && !isAtEnd {
@@ -147,13 +155,14 @@ public final class Parser {
                 synchronizeToNextStatement()
             }
         }
-        
+
         let endToken = try expect(.rightBrace, message: "'}'")
-        
+
         return FeatureSet(
             name: name,
             businessActivity: activity,
             statements: statements,
+            whenCondition: whenCondition,
             span: startToken.span.merged(with: endToken.span)
         )
     }
@@ -1001,6 +1010,12 @@ public final class Parser {
             return try parseDateOffsetPattern()
         }
 
+        // Check for numeric range specifier (ARO-0038): 0, 0-19, 0,3,7
+        // This handles list element access patterns
+        if case .intLiteral(let startValue) = peek().kind, startValue >= 0 {
+            return try parseNumericSpecifier()
+        }
+
         // Parse compound identifier (may contain hyphens like "password-hash")
         var typeStr = try parseCompoundIdentifier()
 
@@ -1087,6 +1102,57 @@ public final class Parser {
         // Expect unit identifier (s, m, h, d, w, M, y, or full name)
         let unitToken = try expectIdentifier(message: "time unit (s, m, h, d, w, M, y)")
         result += unitToken.lexeme
+
+        return result
+    }
+
+    /// Parses a numeric specifier for list element access (ARO-0038)
+    /// Formats:
+    /// - Single index: "0", "5", "19"
+    /// - Range: "0-19", "3-5"
+    /// - Pick: "0,3,7"
+    /// Note: The lexer tokenizes "0-19" as intLiteral(0) followed by intLiteral(-19),
+    /// so we need to handle negative integers as range end values.
+    private func parseNumericSpecifier() throws -> String {
+        var result = ""
+
+        // Parse first number
+        guard case .intLiteral(let firstValue) = peek().kind else {
+            throw ParserError.unexpectedToken(expected: "integer", got: peek())
+        }
+        advance()
+        result = String(firstValue)
+
+        // Check for range - the lexer produces intLiteral(-19) for "0-19" after the first "0"
+        // So we look for a negative integer literal which indicates a range
+        if case .intLiteral(let nextValue) = peek().kind, nextValue < 0 {
+            advance()
+            // Convert negative to range: -19 means range end is 19
+            result += "-"
+            result += String(abs(nextValue))
+        }
+        // Check for explicit hyphen (in case lexer produces it separately)
+        else if check(.hyphen) {
+            advance()
+            result += "-"
+            guard case .intLiteral(let endValue) = peek().kind else {
+                throw ParserError.unexpectedToken(expected: "integer", got: peek())
+            }
+            advance()
+            result += String(endValue)
+        }
+        // Check for pick (e.g., 0,3,7)
+        else if check(.comma) {
+            while check(.comma) {
+                advance()
+                result += ","
+                guard case .intLiteral(let nextValue) = peek().kind else {
+                    throw ParserError.unexpectedToken(expected: "integer", got: peek())
+                }
+                advance()
+                result += String(nextValue)
+            }
+        }
 
         return result
     }

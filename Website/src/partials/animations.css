@@ -1,5 +1,6 @@
 /* =============================================================================
-   ARO Website - Animation Styles
+   ARO Website - Modern Animation Styles
+   Typographic, micro-animations, parallax, gentle backgrounds
    ============================================================================= */
 
 /* Custom properties for animations */
@@ -7,8 +8,10 @@
     --animation-fast: 0.2s;
     --animation-medium: 0.4s;
     --animation-slow: 0.8s;
+    --animation-gentle: 1.2s;
     --easing-smooth: cubic-bezier(0.16, 1, 0.3, 1);
     --easing-bounce: cubic-bezier(0.34, 1.56, 0.64, 1);
+    --easing-gentle: cubic-bezier(0.25, 0.1, 0.25, 1);
 }
 
 /* Smooth scrolling */
@@ -459,4 +462,473 @@ html {
 
 .hero-badge.fade-in {
     opacity: 1;
+}
+
+/* =============================================================================
+   Parallax Effects
+   ============================================================================= */
+
+.parallax-container {
+    perspective: 1000px;
+    perspective-origin: center;
+}
+
+.parallax-layer {
+    will-change: transform;
+    transition: transform 0.1s linear;
+}
+
+.parallax-slow {
+    --parallax-speed: 0.02;
+}
+
+.parallax-medium {
+    --parallax-speed: 0.05;
+}
+
+.parallax-fast {
+    --parallax-speed: 0.1;
+}
+
+/* =============================================================================
+   Gentle Floating Background Particles
+   ============================================================================= */
+
+.bg-particles {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    pointer-events: none;
+    z-index: 0;
+    overflow: hidden;
+}
+
+.particle {
+    position: absolute;
+    border-radius: 50%;
+    opacity: 0.15;
+    will-change: transform;
+}
+
+.particle-1 {
+    width: 300px;
+    height: 300px;
+    background: radial-gradient(circle, var(--color-primary) 0%, transparent 70%);
+    top: 10%;
+    left: 10%;
+    animation: gentleFloat1 25s ease-in-out infinite;
+}
+
+.particle-2 {
+    width: 400px;
+    height: 400px;
+    background: radial-gradient(circle, var(--color-secondary) 0%, transparent 70%);
+    top: 60%;
+    right: 5%;
+    animation: gentleFloat2 30s ease-in-out infinite;
+}
+
+.particle-3 {
+    width: 250px;
+    height: 250px;
+    background: radial-gradient(circle, var(--color-accent) 0%, transparent 70%);
+    bottom: 20%;
+    left: 30%;
+    animation: gentleFloat3 20s ease-in-out infinite;
+}
+
+@keyframes gentleFloat1 {
+    0%, 100% { transform: translate(0, 0) scale(1); }
+    25% { transform: translate(30px, -20px) scale(1.05); }
+    50% { transform: translate(-20px, 30px) scale(0.95); }
+    75% { transform: translate(-30px, -10px) scale(1.02); }
+}
+
+@keyframes gentleFloat2 {
+    0%, 100% { transform: translate(0, 0) scale(1); }
+    33% { transform: translate(-40px, 20px) scale(1.03); }
+    66% { transform: translate(20px, -30px) scale(0.97); }
+}
+
+@keyframes gentleFloat3 {
+    0%, 100% { transform: translate(0, 0) scale(1); }
+    50% { transform: translate(40px, 40px) scale(1.08); }
+}
+
+/* =============================================================================
+   Micro Interactions
+   ============================================================================= */
+
+/* Subtle hover pulse */
+.micro-pulse {
+    transition: transform 0.3s var(--easing-smooth);
+}
+
+.micro-pulse:hover {
+    animation: microPulse 0.6s ease-in-out;
+}
+
+@keyframes microPulse {
+    0%, 100% { transform: scale(1); }
+    50% { transform: scale(1.02); }
+}
+
+/* Icon bounce on hover */
+.micro-bounce:hover .card-icon,
+.micro-bounce:hover .doc-card-icon {
+    animation: iconBounce 0.5s var(--easing-bounce);
+}
+
+@keyframes iconBounce {
+    0%, 100% { transform: translateY(0); }
+    40% { transform: translateY(-8px); }
+    60% { transform: translateY(-4px); }
+}
+
+/* Link underline grow */
+.link-underline {
+    position: relative;
+    text-decoration: none;
+}
+
+.link-underline::after {
+    content: '';
+    position: absolute;
+    bottom: -2px;
+    left: 0;
+    width: 0;
+    height: 2px;
+    background: var(--gradient-primary);
+    transition: width 0.3s var(--easing-smooth);
+}
+
+.link-underline:hover::after {
+    width: 100%;
+}
+
+/* Button ripple effect */
+.btn-ripple {
+    position: relative;
+    overflow: hidden;
+}
+
+.btn-ripple::after {
+    content: '';
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    width: 0;
+    height: 0;
+    background: rgba(255, 255, 255, 0.2);
+    border-radius: 50%;
+    transform: translate(-50%, -50%);
+    transition: width 0.6s, height 0.6s, opacity 0.6s;
+    opacity: 0;
+}
+
+.btn-ripple:active::after {
+    width: 300px;
+    height: 300px;
+    opacity: 0;
+}
+
+/* =============================================================================
+   Typography Animations
+   ============================================================================= */
+
+/* Letter spacing animation on hover */
+.type-breathe {
+    transition: letter-spacing 0.4s var(--easing-smooth);
+}
+
+.type-breathe:hover {
+    letter-spacing: 0.05em;
+}
+
+/* Gradient text shimmer */
+.gradient-shimmer {
+    background: linear-gradient(
+        90deg,
+        var(--color-primary) 0%,
+        var(--color-secondary) 25%,
+        var(--color-accent) 50%,
+        var(--color-secondary) 75%,
+        var(--color-primary) 100%
+    );
+    background-size: 200% 100%;
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+    animation: gradientFlow 8s linear infinite;
+}
+
+@keyframes gradientFlow {
+    0% { background-position: 0% 50%; }
+    100% { background-position: 200% 50%; }
+}
+
+/* Subtle text glow on hover */
+.text-glow:hover {
+    text-shadow: 0 0 20px rgba(124, 58, 237, 0.3);
+}
+
+/* =============================================================================
+   Card Micro-Animations
+   ============================================================================= */
+
+/* Card border glow */
+.card-glow {
+    position: relative;
+}
+
+.card-glow::before {
+    content: '';
+    position: absolute;
+    inset: -1px;
+    background: linear-gradient(45deg, var(--color-primary), var(--color-secondary), var(--color-accent));
+    border-radius: inherit;
+    opacity: 0;
+    z-index: -1;
+    transition: opacity 0.4s var(--easing-smooth);
+}
+
+.card-glow:hover::before {
+    opacity: 0.5;
+}
+
+/* Content slide up on card hover */
+.card-content-slide {
+    transition: transform 0.3s var(--easing-smooth);
+}
+
+.hover-lift:hover .card-content-slide {
+    transform: translateY(-4px);
+}
+
+/* =============================================================================
+   Scroll Progress Indicator
+   ============================================================================= */
+
+.scroll-indicator {
+    position: fixed;
+    right: 24px;
+    bottom: 24px;
+    width: 48px;
+    height: 48px;
+    border-radius: 50%;
+    background: var(--color-bg-alt);
+    border: 2px solid transparent;
+    background-clip: padding-box;
+    z-index: 100;
+    opacity: 0;
+    transform: scale(0.8);
+    transition: opacity 0.3s, transform 0.3s;
+    cursor: pointer;
+}
+
+.scroll-indicator.visible {
+    opacity: 1;
+    transform: scale(1);
+}
+
+.scroll-indicator::before {
+    content: '↑';
+    position: absolute;
+    inset: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 1.2rem;
+    color: var(--color-text);
+}
+
+.scroll-indicator svg {
+    position: absolute;
+    inset: -2px;
+    width: calc(100% + 4px);
+    height: calc(100% + 4px);
+    transform: rotate(-90deg);
+}
+
+.scroll-indicator circle {
+    fill: none;
+    stroke: var(--color-primary);
+    stroke-width: 2;
+    stroke-dasharray: 144;
+    stroke-dashoffset: 144;
+    transition: stroke-dashoffset 0.1s;
+}
+
+/* =============================================================================
+   Gentle Background Animations
+   ============================================================================= */
+
+/* Subtle gradient movement */
+.bg-gradient-gentle {
+    background:
+        radial-gradient(ellipse at 20% 20%, rgba(124, 58, 237, 0.08) 0%, transparent 50%),
+        radial-gradient(ellipse at 80% 80%, rgba(6, 182, 212, 0.06) 0%, transparent 50%),
+        radial-gradient(ellipse at 50% 100%, rgba(244, 114, 182, 0.05) 0%, transparent 40%);
+    animation: bgBreath 15s ease-in-out infinite;
+}
+
+@keyframes bgBreath {
+    0%, 100% {
+        background-position: 0% 0%, 100% 100%, 50% 100%;
+        opacity: 1;
+    }
+    50% {
+        background-position: 5% 5%, 95% 95%, 55% 95%;
+        opacity: 0.8;
+    }
+}
+
+/* Noise overlay for texture */
+.bg-noise::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noise'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.8' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noise)'/%3E%3C/svg%3E");
+    opacity: 0.02;
+    pointer-events: none;
+    z-index: 1;
+}
+
+/* =============================================================================
+   Focus States with Animation
+   ============================================================================= */
+
+.focus-ring:focus-visible {
+    outline: none;
+    box-shadow: 0 0 0 3px rgba(124, 58, 237, 0.4);
+    animation: focusPulse 1.5s ease-in-out infinite;
+}
+
+@keyframes focusPulse {
+    0%, 100% { box-shadow: 0 0 0 3px rgba(124, 58, 237, 0.4); }
+    50% { box-shadow: 0 0 0 5px rgba(124, 58, 237, 0.2); }
+}
+
+/* =============================================================================
+   Code Block Animations
+   ============================================================================= */
+
+.code-window {
+    transition: transform 0.4s var(--easing-smooth), box-shadow 0.4s var(--easing-smooth);
+}
+
+.code-window:hover {
+    transform: translateY(-4px) scale(1.01);
+    box-shadow: 0 25px 50px rgba(0, 0, 0, 0.3), var(--shadow-glow);
+}
+
+/* Line highlight animation */
+.code-line-highlight {
+    background: linear-gradient(90deg, rgba(124, 58, 237, 0.1) 0%, transparent 100%);
+    animation: lineHighlight 2s ease-out;
+}
+
+@keyframes lineHighlight {
+    0% { background-position: -100% 0; }
+    100% { background-position: 100% 0; }
+}
+
+/* =============================================================================
+   Section Reveal Animations
+   ============================================================================= */
+
+.reveal-up {
+    opacity: 0;
+    transform: translateY(60px);
+    transition: all 0.8s var(--easing-smooth);
+}
+
+.reveal-up.visible {
+    opacity: 1;
+    transform: translateY(0);
+}
+
+.reveal-left {
+    opacity: 0;
+    transform: translateX(-60px);
+    transition: all 0.8s var(--easing-smooth);
+}
+
+.reveal-left.visible {
+    opacity: 1;
+    transform: translateX(0);
+}
+
+.reveal-right {
+    opacity: 0;
+    transform: translateX(60px);
+    transition: all 0.8s var(--easing-smooth);
+}
+
+.reveal-right.visible {
+    opacity: 1;
+    transform: translateX(0);
+}
+
+.reveal-scale {
+    opacity: 0;
+    transform: scale(0.9);
+    transition: all 0.8s var(--easing-smooth);
+}
+
+.reveal-scale.visible {
+    opacity: 1;
+    transform: scale(1);
+}
+
+/* =============================================================================
+   Interactive Cursor Effect
+   ============================================================================= */
+
+.cursor-glow {
+    position: fixed;
+    width: 300px;
+    height: 300px;
+    border-radius: 50%;
+    background: radial-gradient(circle, rgba(124, 58, 237, 0.15) 0%, transparent 70%);
+    pointer-events: none;
+    z-index: 9999;
+    transform: translate(-50%, -50%);
+    opacity: 0;
+    transition: opacity 0.3s;
+    mix-blend-mode: screen;
+}
+
+.cursor-glow.active {
+    opacity: 1;
+}
+
+/* Hide on mobile and for reduced motion */
+@media (max-width: 768px), (prefers-reduced-motion: reduce) {
+    .cursor-glow {
+        display: none;
+    }
+}
+
+/* =============================================================================
+   Light Mode Particle Adjustments
+   ============================================================================= */
+
+@media (prefers-color-scheme: light) {
+    .particle {
+        opacity: 0.08;
+    }
+
+    .bg-gradient-gentle {
+        background:
+            radial-gradient(ellipse at 20% 20%, rgba(109, 40, 217, 0.05) 0%, transparent 50%),
+            radial-gradient(ellipse at 80% 80%, rgba(8, 145, 178, 0.04) 0%, transparent 50%),
+            radial-gradient(ellipse at 50% 100%, rgba(219, 39, 119, 0.03) 0%, transparent 40%);
+    }
+
+    .cursor-glow {
+        background: radial-gradient(circle, rgba(109, 40, 217, 0.1) 0%, transparent 70%);
+    }
 }

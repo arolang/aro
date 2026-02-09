@@ -1,0 +1,197 @@
+{{TEMPLATE:doc-template.html}}
+{{title:Template Engine}}
+{{content:
+<h1 class="gradient-text">Template Engine</h1>
+
+<p>
+    ARO includes a built-in template engine for generating dynamic HTML content.
+    Templates use the familiar <code>{{ }}</code> delimiter syntax and support
+    variable interpolation, control flow, and template includes.
+</p>
+
+<h2>Basic Usage</h2>
+
+<p>Load and render a template using the <code>Transform</code> action:</p>
+
+<pre><code><span class="feature-name">(homePage: My App API)</span> {
+    <span class="action">&lt;Transform&gt;</span> the <span class="result">&lt;html&gt;</span> from the <span class="result">&lt;template: index.html&gt;</span>.
+    <span class="action">&lt;Return&gt;</span> an <span class="result">&lt;OK: status&gt;</span> with <span class="result">&lt;html&gt;</span>.
+}</code></pre>
+
+<p>Templates are loaded from the <code>templates/</code> directory in your application.</p>
+
+<h2>Variable Interpolation</h2>
+
+<p>Output variables using double braces:</p>
+
+<pre><code>&lt;h1&gt;Welcome, {{ user.name }}&lt;/h1&gt;
+&lt;p&gt;Your balance: {{ account.balance }}&lt;/p&gt;</code></pre>
+
+<p>Variables from the ARO context are automatically available in templates.</p>
+
+<h2>Conditional Rendering</h2>
+
+<p>Use <code>when</code> blocks for conditional content:</p>
+
+<pre><code>{{ when user.isAdmin {
+    &lt;div class="admin-panel"&gt;
+        &lt;h2&gt;Admin Controls&lt;/h2&gt;
+        &lt;button&gt;Manage Users&lt;/button&gt;
+    &lt;/div&gt;
+} }}
+
+{{ when order.status = "shipped" {
+    &lt;p&gt;Your order is on its way!&lt;/p&gt;
+} }}</code></pre>
+
+<h2>Iteration</h2>
+
+<p>Loop over collections with <code>for each</code>:</p>
+
+<pre><code>&lt;ul class="messages"&gt;
+{{ for each message in messages {
+    &lt;li&gt;
+        &lt;span class="author"&gt;{{ message.author }}&lt;/span&gt;
+        &lt;p&gt;{{ message.text }}&lt;/p&gt;
+        &lt;time&gt;{{ message.createdAt }}&lt;/time&gt;
+    &lt;/li&gt;
+} }}
+&lt;/ul&gt;</code></pre>
+
+<h2>Template Includes</h2>
+
+<p>Include other templates to compose layouts:</p>
+
+<pre><code>&lt;!-- layout.html --&gt;
+&lt;!DOCTYPE html&gt;
+&lt;html&gt;
+&lt;head&gt;
+    &lt;title&gt;{{ title }}&lt;/title&gt;
+&lt;/head&gt;
+&lt;body&gt;
+    {{ &lt;Include&gt; the &lt;template: header.html&gt;. }}
+
+    &lt;main&gt;
+        {{ content }}
+    &lt;/main&gt;
+
+    {{ &lt;Include&gt; the &lt;template: footer.html&gt;. }}
+&lt;/body&gt;
+&lt;/html&gt;</code></pre>
+
+<p>Pass variables to included templates:</p>
+
+<pre><code>{{ &lt;Include&gt; the &lt;template: user-card.html&gt; with { user: currentUser, showEmail: true }. }}</code></pre>
+
+<h2>ARO Statements in Templates</h2>
+
+<p>Execute ARO statements directly within templates:</p>
+
+<pre><code>&lt;div class="stats"&gt;
+{{ &lt;Compute&gt; the &lt;count: length&gt; from the &lt;messages&gt;. }}
+&lt;p&gt;Total messages: {{ count }}&lt;/p&gt;
+
+{{ &lt;Retrieve&gt; the &lt;latest&gt; from the &lt;messages: last&gt;. }}
+&lt;p&gt;Latest: {{ latest.text }}&lt;/p&gt;
+&lt;/div&gt;</code></pre>
+
+<h2>Project Structure</h2>
+
+<pre><code>MyApp/
+├── openapi.yaml
+├── main.aro
+├── api.aro
+└── templates/
+    ├── index.html
+    ├── layout.html
+    ├── partials/
+    │   ├── header.html
+    │   └── footer.html
+    └── components/
+        └── user-card.html</code></pre>
+
+<h2>Complete Example</h2>
+
+<h3>api.aro</h3>
+
+<pre><code><span class="feature-name">(homePage: Dashboard API)</span> {
+    <span class="action">&lt;Retrieve&gt;</span> the <span class="result">&lt;messages&gt;</span> from the <span class="result">&lt;message-repository&gt;</span>.
+    <span class="action">&lt;Transform&gt;</span> the <span class="result">&lt;html&gt;</span> from the <span class="result">&lt;template: dashboard.html&gt;</span>.
+    <span class="action">&lt;Return&gt;</span> an <span class="result">&lt;OK: status&gt;</span> with <span class="result">&lt;html&gt;</span>.
+}</code></pre>
+
+<h3>templates/dashboard.html</h3>
+
+<pre><code>&lt;!DOCTYPE html&gt;
+&lt;html&gt;
+&lt;head&gt;
+    &lt;title&gt;Dashboard&lt;/title&gt;
+    &lt;style&gt;
+        .message { padding: 1rem; border-bottom: 1px solid #eee; }
+        .empty { color: #888; font-style: italic; }
+    &lt;/style&gt;
+&lt;/head&gt;
+&lt;body&gt;
+    &lt;h1&gt;Recent Messages&lt;/h1&gt;
+
+    {{ when messages {
+        &lt;div class="messages"&gt;
+        {{ for each msg in messages {
+            &lt;div class="message"&gt;
+                &lt;strong&gt;{{ msg.message }}&lt;/strong&gt;
+                &lt;time&gt;{{ msg.createdAt }}&lt;/time&gt;
+            &lt;/div&gt;
+        } }}
+        &lt;/div&gt;
+    } }}
+
+    {{ when not messages {
+        &lt;p class="empty"&gt;No messages yet.&lt;/p&gt;
+    } }}
+&lt;/body&gt;
+&lt;/html&gt;</code></pre>
+
+<h2>Template Syntax Reference</h2>
+
+<table>
+    <tr>
+        <th>Syntax</th>
+        <th>Description</th>
+    </tr>
+    <tr>
+        <td><code>{{ variable }}</code></td>
+        <td>Output a variable value</td>
+    </tr>
+    <tr>
+        <td><code>{{ obj.property }}</code></td>
+        <td>Access nested property</td>
+    </tr>
+    <tr>
+        <td><code>{{ when condition { } }}</code></td>
+        <td>Conditional block</td>
+    </tr>
+    <tr>
+        <td><code>{{ when not condition { } }}</code></td>
+        <td>Negated conditional</td>
+    </tr>
+    <tr>
+        <td><code>{{ for each x in list { } }}</code></td>
+        <td>Iterate over collection</td>
+    </tr>
+    <tr>
+        <td><code>{{ &lt;Action&gt; ... }}</code></td>
+        <td>Execute ARO statement</td>
+    </tr>
+    <tr>
+        <td><code>{{ &lt;Include&gt; the &lt;template: path&gt;. }}</code></td>
+        <td>Include another template</td>
+    </tr>
+</table>
+
+<hr>
+
+<p>
+    <a href="websockets.html">&larr; WebSockets</a> |
+    <a href="repositories.html">Repositories &rarr;</a>
+</p>
+}}

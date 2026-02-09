@@ -31,6 +31,40 @@ import AROParser
 
 // Note: AROCValue and AROCContextHandle are defined in RuntimeBridge.swift
 
+/// Convert Sendable dictionary to JSON-compatible format for serialization
+func convertDictToJSONCompatible(_ dict: [String: any Sendable]) -> [String: Any] {
+    var result: [String: Any] = [:]
+    for (key, value) in dict {
+        result[key] = convertValueToJSON(value)
+    }
+    return result
+}
+
+private func convertValueToJSON(_ value: any Sendable) -> Any {
+    switch value {
+    case let s as String:
+        return s
+    case let n as Int:
+        return n
+    case let n as Double:
+        return n
+    case let n as Float:
+        return n
+    case let b as Bool:
+        return b
+    case let date as Date:
+        let formatter = ISO8601DateFormatter()
+        formatter.formatOptions = [.withInternetDateTime]
+        return formatter.string(from: date)
+    case let dict as [String: any Sendable]:
+        return convertDictToJSONCompatible(dict)
+    case let arr as [any Sendable]:
+        return arr.map { convertValueToJSON($0) }
+    default:
+        return String(describing: value)
+    }
+}
+
 /// Convert C result descriptor to Swift ResultDescriptor
 func toResultDescriptor(_ ptr: UnsafeRawPointer) -> ResultDescriptor {
     // Read raw C struct with proper alignment:
@@ -514,24 +548,41 @@ public func aro_action_broadcast(
         return nil
     }
 
-    // Convert data to bytes
-    let dataToSend: Data
-    if let d = data as? Data {
-        dataToSend = d
-    } else if let s = data as? String {
-        dataToSend = s.data(using: .utf8) ?? Data()
+    // Convert data to string for WebSocket / JSON-friendly format
+    let dataString: String
+    if let s = data as? String {
+        dataString = s
+    } else if let sendableDict = data as? [String: any Sendable] {
+        // Convert to JSON
+        let jsonCompatible = convertDictToJSONCompatible(sendableDict)
+        if let jsonData = try? JSONSerialization.data(withJSONObject: jsonCompatible),
+           let jsonString = String(data: jsonData, encoding: .utf8) {
+            dataString = jsonString
+        } else {
+            dataString = String(describing: data)
+        }
     } else {
-        dataToSend = String(describing: data).data(using: .utf8) ?? Data()
+        dataString = String(describing: data)
     }
 
-    // Use native socket broadcast
+    // Check if target is WebSocket
+    let objectDesc = objectPtr != nil ? toObjectDescriptor(objectPtr!) : nil
+    let objectBase = (objectDesc?.base ?? "").lowercased()
+
+    if objectBase.contains("websocket") || objectBase == "ws" {
+        // Broadcast via WebSocket - emit event to EventBus
+        EventBus.shared.publish(WebSocketBroadcastRequestedEvent(message: dataString))
+        return boxResult(BroadcastResult(success: true, clientCount: 0))
+    }
+
+    // Fallback to native socket broadcast
+    let dataToSend = dataString.data(using: .utf8) ?? Data()
     let count = dataToSend.withUnsafeBytes { buffer -> Int32 in
         guard let ptr = buffer.baseAddress else { return -1 }
         return aro_native_socket_broadcast(ptr.assumingMemoryBound(to: UInt8.self), dataToSend.count)
     }
 
     let broadcastResult = BroadcastResult(success: count >= 0, clientCount: Int(count))
-    // Don't bind result - broadcast is a response action, shouldn't overwrite the source variable
     return boxResult(broadcastResult)
 }
 

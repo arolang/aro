@@ -1,0 +1,178 @@
+{{TEMPLATE:doc-template.html}}
+{{title:Repositories}}
+{{content:
+<h1 class="gradient-text">Repositories</h1>
+
+<p>
+    ARO provides built-in in-memory repositories for storing and retrieving data.
+    Repositories are automatically created when you store data using the naming convention
+    <code>&lt;entity-repository&gt;</code> and support querying, updating, and observation.
+</p>
+
+<h2>Storing Data</h2>
+
+<p>Store entities into a repository using the <code>Store</code> action:</p>
+
+<pre><code><span class="action">&lt;Create&gt;</span> the <span class="result">&lt;user: User&gt;</span> with {
+    name: <span class="string">"Alice"</span>,
+    email: <span class="string">"alice@example.com"</span>
+}.
+<span class="action">&lt;Store&gt;</span> the <span class="result">&lt;user&gt;</span> into the <span class="result">&lt;user-repository&gt;</span>.</code></pre>
+
+<p>
+    The repository is automatically created on first use. Each stored entity
+    receives a unique <code>id</code> if not already present.
+</p>
+
+<h2>Retrieving Data</h2>
+
+<h3>Get All Entities</h3>
+
+<pre><code><span class="action">&lt;Retrieve&gt;</span> the <span class="result">&lt;all-users&gt;</span> from the <span class="result">&lt;user-repository&gt;</span>.</code></pre>
+
+<h3>Query by Field</h3>
+
+<pre><code><span class="action">&lt;Retrieve&gt;</span> the <span class="result">&lt;user&gt;</span> from the <span class="result">&lt;user-repository&gt;</span> where id = <span class="result">&lt;userId&gt;</span>.
+
+<span class="action">&lt;Retrieve&gt;</span> the <span class="result">&lt;admins&gt;</span> from the <span class="result">&lt;user-repository&gt;</span> where role = <span class="string">"admin"</span>.</code></pre>
+
+<h3>Get First or Last</h3>
+
+<pre><code><span class="action">&lt;Retrieve&gt;</span> the <span class="result">&lt;latest: last&gt;</span> from the <span class="result">&lt;message-repository&gt;</span>.
+<span class="action">&lt;Retrieve&gt;</span> the <span class="result">&lt;oldest: first&gt;</span> from the <span class="result">&lt;message-repository&gt;</span>.</code></pre>
+
+<h2>Updating Data</h2>
+
+<pre><code><span class="action">&lt;Update&gt;</span> the <span class="result">&lt;user-repository&gt;</span> where id = <span class="result">&lt;userId&gt;</span> with {
+    status: <span class="string">"active"</span>,
+    lastLogin: <span class="result">&lt;now&gt;</span>
+}.</code></pre>
+
+<h2>Deleting Data</h2>
+
+<pre><code><span class="action">&lt;Delete&gt;</span> from the <span class="result">&lt;user-repository&gt;</span> where id = <span class="result">&lt;userId&gt;</span>.</code></pre>
+
+<h2>Repository Observers</h2>
+
+<p>
+    React to repository changes with observer feature sets. Observers are triggered
+    whenever data is stored, updated, or deleted.
+</p>
+
+<h3>Observer Pattern</h3>
+
+<pre><code><span class="feature-name">(Log User Changes: user-repository Observer)</span> {
+    <span class="action">&lt;Extract&gt;</span> the <span class="result">&lt;action&gt;</span> from the <span class="result">&lt;event: action&gt;</span>.
+    <span class="action">&lt;Extract&gt;</span> the <span class="result">&lt;entity&gt;</span> from the <span class="result">&lt;event: entity&gt;</span>.
+    <span class="action">&lt;Log&gt;</span> <span class="string">"User repository: "</span> to the <span class="result">&lt;console&gt;</span>.
+    <span class="action">&lt;Log&gt;</span> <span class="result">&lt;action&gt;</span> to the <span class="result">&lt;console&gt;</span>.
+    <span class="action">&lt;Return&gt;</span> an <span class="result">&lt;OK: status&gt;</span> for the <span class="result">&lt;observation&gt;</span>.
+}</code></pre>
+
+<h3>Conditional Observers with <code>when</code> Guard</h3>
+
+<p>
+    Add a <code>when</code> clause to trigger observers only when a condition is met.
+    Use <code>&lt;repository-name: count&gt;</code> to access the repository size.
+</p>
+
+<pre><code><span class="comment">(* Only triggers when message count exceeds 100 *)</span>
+<span class="feature-name">(Cleanup Messages: message-repository Observer)</span> when <span class="result">&lt;message-repository: count&gt;</span> &gt; 100 {
+    <span class="action">&lt;Retrieve&gt;</span> the <span class="result">&lt;all-messages&gt;</span> from the <span class="result">&lt;message-repository&gt;</span>.
+    <span class="action">&lt;Extract&gt;</span> the <span class="result">&lt;keep-messages: 0-49&gt;</span> from the <span class="result">&lt;all-messages&gt;</span>.
+    <span class="action">&lt;Clear&gt;</span> the <span class="result">&lt;all&gt;</span> from the <span class="result">&lt;message-repository&gt;</span>.
+    <span class="action">&lt;Store&gt;</span> the <span class="result">&lt;keep-messages&gt;</span> into the <span class="result">&lt;message-repository&gt;</span>.
+    <span class="action">&lt;Return&gt;</span> an <span class="result">&lt;OK: status&gt;</span> for the <span class="result">&lt;cleanup&gt;</span>.
+}</code></pre>
+
+<p>
+    The <code>when</code> guard is evaluated before the observer runs. If the condition
+    is false, the observer is silently skipped. This prevents infinite loops when the
+    observer modifies the same repository it observes.
+</p>
+
+<p>The observer receives an event with:</p>
+
+<table>
+    <tr>
+        <th>Property</th>
+        <th>Description</th>
+    </tr>
+    <tr>
+        <td><code>action</code></td>
+        <td>"stored", "updated", or "deleted"</td>
+    </tr>
+    <tr>
+        <td><code>entity</code></td>
+        <td>The affected entity</td>
+    </tr>
+    <tr>
+        <td><code>repository</code></td>
+        <td>Repository name</td>
+    </tr>
+</table>
+
+<h2>Complete Example: User Management</h2>
+
+<h3>api.aro</h3>
+
+<pre><code><span class="feature-name">(createUser: User API)</span> {
+    <span class="action">&lt;Extract&gt;</span> the <span class="result">&lt;body&gt;</span> from the <span class="result">&lt;request: body&gt;</span>.
+    <span class="action">&lt;Create&gt;</span> the <span class="result">&lt;user: User&gt;</span> with {
+        name: <span class="result">&lt;body: name&gt;</span>,
+        email: <span class="result">&lt;body: email&gt;</span>,
+        createdAt: <span class="result">&lt;now&gt;</span>
+    }.
+    <span class="action">&lt;Store&gt;</span> the <span class="result">&lt;user&gt;</span> into the <span class="result">&lt;user-repository&gt;</span>.
+    <span class="action">&lt;Return&gt;</span> a <span class="result">&lt;Created: status&gt;</span> with <span class="result">&lt;user&gt;</span>.
+}
+
+<span class="feature-name">(listUsers: User API)</span> {
+    <span class="action">&lt;Retrieve&gt;</span> the <span class="result">&lt;users&gt;</span> from the <span class="result">&lt;user-repository&gt;</span>.
+    <span class="action">&lt;Return&gt;</span> an <span class="result">&lt;OK: status&gt;</span> with <span class="result">&lt;users&gt;</span>.
+}
+
+<span class="feature-name">(getUser: User API)</span> {
+    <span class="action">&lt;Extract&gt;</span> the <span class="result">&lt;id&gt;</span> from the <span class="result">&lt;pathParameters: id&gt;</span>.
+    <span class="action">&lt;Retrieve&gt;</span> the <span class="result">&lt;user&gt;</span> from the <span class="result">&lt;user-repository&gt;</span> where id = <span class="result">&lt;id&gt;</span>.
+    <span class="action">&lt;Return&gt;</span> an <span class="result">&lt;OK: status&gt;</span> with <span class="result">&lt;user&gt;</span>.
+}
+
+<span class="feature-name">(deleteUser: User API)</span> {
+    <span class="action">&lt;Extract&gt;</span> the <span class="result">&lt;id&gt;</span> from the <span class="result">&lt;pathParameters: id&gt;</span>.
+    <span class="action">&lt;Delete&gt;</span> from the <span class="result">&lt;user-repository&gt;</span> where id = <span class="result">&lt;id&gt;</span>.
+    <span class="action">&lt;Return&gt;</span> an <span class="result">&lt;OK: status&gt;</span> for the <span class="result">&lt;deletion&gt;</span>.
+}</code></pre>
+
+<h3>observers.aro</h3>
+
+<pre><code><span class="feature-name">(Audit User Changes: user-repository Observer)</span> {
+    <span class="action">&lt;Extract&gt;</span> the <span class="result">&lt;action&gt;</span> from the <span class="result">&lt;event: action&gt;</span>.
+    <span class="action">&lt;Extract&gt;</span> the <span class="result">&lt;user&gt;</span> from the <span class="result">&lt;event: entity&gt;</span>.
+
+    <span class="action">&lt;Create&gt;</span> the <span class="result">&lt;audit-entry&gt;</span> with {
+        action: <span class="result">&lt;action&gt;</span>,
+        userId: <span class="result">&lt;user: id&gt;</span>,
+        timestamp: <span class="result">&lt;now&gt;</span>
+    }.
+    <span class="action">&lt;Store&gt;</span> the <span class="result">&lt;audit-entry&gt;</span> into the <span class="result">&lt;audit-repository&gt;</span>.
+
+    <span class="action">&lt;Return&gt;</span> an <span class="result">&lt;OK: status&gt;</span> for the <span class="result">&lt;audit&gt;</span>.
+}</code></pre>
+
+<h2>Important Notes</h2>
+
+<ul>
+    <li><strong>In-memory storage</strong> - Data is lost on application restart</li>
+    <li><strong>Automatic IDs</strong> - UUIDs are generated for entities without an <code>id</code></li>
+    <li><strong>Type safety</strong> - Define schemas in OpenAPI for validation</li>
+    <li><strong>Deduplication</strong> - Storing the same entity twice updates the existing one</li>
+</ul>
+
+<hr>
+
+<p>
+    <a href="templates.html">&larr; Templates</a> |
+    <a href="data-pipelines.html">Data Pipelines &rarr;</a>
+</p>
+}}

@@ -173,6 +173,52 @@ public struct ClientDisconnectedEvent: RuntimeEvent {
     }
 }
 
+// MARK: - WebSocket Events
+
+/// WebSocket client connected event
+public struct WebSocketConnectedEvent: RuntimeEvent {
+    public static var eventType: String { "websocket.connected" }
+    public let timestamp: Date
+    public let connectionId: String
+    public let path: String
+    public let remoteAddress: String
+
+    public init(connectionId: String, path: String, remoteAddress: String) {
+        self.timestamp = Date()
+        self.connectionId = connectionId
+        self.path = path
+        self.remoteAddress = remoteAddress
+    }
+}
+
+/// WebSocket message received event
+public struct WebSocketMessageEvent: RuntimeEvent {
+    public static var eventType: String { "websocket.message" }
+    public let timestamp: Date
+    public let connectionId: String
+    public let message: String
+
+    public init(connectionId: String, message: String) {
+        self.timestamp = Date()
+        self.connectionId = connectionId
+        self.message = message
+    }
+}
+
+/// WebSocket client disconnected event
+public struct WebSocketDisconnectedEvent: RuntimeEvent {
+    public static var eventType: String { "websocket.disconnected" }
+    public let timestamp: Date
+    public let connectionId: String
+    public let reason: String
+
+    public init(connectionId: String, reason: String = "closed") {
+        self.timestamp = Date()
+        self.connectionId = connectionId
+        self.reason = reason
+    }
+}
+
 // MARK: - Error Events
 
 /// Error occurred event

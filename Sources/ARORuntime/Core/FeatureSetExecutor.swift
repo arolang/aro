@@ -388,6 +388,9 @@ public final class FeatureSetExecutor: @unchecked Sendable {
         } catch let assertionError as AssertionError {
             // Re-throw assertion errors directly for test framework
             throw assertionError
+        } catch let templateError as TemplateError {
+            // Re-throw template errors directly for proper HTTP status codes (404 for not found)
+            throw templateError
         } catch let aroError as AROError {
             // Already an AROError, re-throw
             throw ActionError.statementFailed(aroError)

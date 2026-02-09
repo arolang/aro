@@ -38,6 +38,9 @@ public final class Application: @unchecked Sendable {
     private var httpServer: AROHTTPServer?
     #endif
 
+    /// Template service for HTML template rendering (ARO-0045)
+    private var templateService: AROTemplateService?
+
     /// Whether HTTP server is enabled (requires OpenAPI contract)
     public var isHTTPEnabled: Bool {
         return openAPISpec != nil
@@ -95,6 +98,7 @@ public final class Application: @unchecked Sendable {
         await runtime.register(service: socketServer as SocketServerService)
 
         // Register HTTP server service for web APIs
+        // WebSocket is configured on-demand via: <Start> the <http-server> with { websocket: "/ws" }.
         let server = AROHTTPServer(eventBus: .shared)
         self.httpServer = server
         await runtime.register(service: server as HTTPServerService)
@@ -108,13 +112,14 @@ public final class Application: @unchecked Sendable {
 
         // Register template service (ARO-0045)
         let templatesDirectory = (config.workingDirectory as NSString).appendingPathComponent("templates")
-        let templateService = AROTemplateService(templatesDirectory: templatesDirectory)
+        let ts = AROTemplateService(templatesDirectory: templatesDirectory)
         let templateExecutor = TemplateExecutor(
             actionRegistry: ActionRegistry.shared,
             eventBus: .shared
         )
-        templateService.setExecutor(templateExecutor)
-        await runtime.register(service: templateService as TemplateService)
+        ts.setExecutor(templateExecutor)
+        self.templateService = ts
+        await runtime.register(service: ts as TemplateService)
     }
 
     /// Initialize from source files
@@ -234,6 +239,22 @@ public final class Application: @unchecked Sendable {
             do {
                 let response = try await self.executeFeatureSet(featureSet, request: request, pathParams: match.pathParameters)
                 return self.convertToHTTPResponse(response)
+            } catch let templateError as TemplateError {
+                // Handle template errors with appropriate HTTP status codes
+                switch templateError {
+                case .notFound:
+                    return HTTPResponse(
+                        statusCode: 404,
+                        headers: ["Content-Type": "application/json"],
+                        body: "{\"error\":\"Not Found\",\"message\":\"\(templateError.errorDescription ?? "Template not found")\"}".data(using: .utf8)
+                    )
+                default:
+                    return HTTPResponse(
+                        statusCode: 500,
+                        headers: ["Content-Type": "application/json"],
+                        body: "{\"error\":\"\(String(describing: templateError).replacingOccurrences(of: "\"", with: "\\\""))\"}".data(using: .utf8)
+                    )
+                }
             } catch {
                 return HTTPResponse(
                     statusCode: 500,
@@ -262,6 +283,18 @@ public final class Application: @unchecked Sendable {
 
         // Register repository storage service for persistent in-memory storage
         context.register(InMemoryRepositoryStorage.shared as RepositoryStorageService)
+
+        // Register WebSocket server service for broadcast support (if configured)
+        #if !os(Windows)
+        if let wsServer = self.httpServer?.getWebSocketServer() {
+            context.register(wsServer as WebSocketServerService)
+        }
+        #endif
+
+        // Register template service for HTML template rendering (ARO-0045)
+        if let ts = self.templateService {
+            context.register(ts as TemplateService)
+        }
 
         // Parse JSON body if present
         var bodyValue: any Sendable = request.bodyString ?? ""
@@ -310,6 +343,29 @@ public final class Application: @unchecked Sendable {
 
     /// Convert ARO Response to HTTP Response
     private func convertToHTTPResponse(_ response: Response) -> HTTPResponse {
+        // Map status string to HTTP status code
+        let statusCode = mapStatusToHTTPCode(response.status)
+
+        // Check if response data contains HTML content
+        // If so, return it directly with text/html content type
+        if let htmlValue = detectHTMLContent(in: response.data) {
+            return HTTPResponse(
+                statusCode: statusCode,
+                headers: ["Content-Type": "text/html; charset=utf-8"],
+                body: htmlValue.data(using: .utf8)
+            )
+        }
+
+        // Check if response data contains raw CSS/JS content
+        if let (rawContent, contentType) = detectRawContent(in: response.data) {
+            return HTTPResponse(
+                statusCode: statusCode,
+                headers: ["Content-Type": contentType],
+                body: rawContent.data(using: .utf8)
+            )
+        }
+
+        // Default: JSON response
         let headers = ["Content-Type": "application/json"]
 
         // Build JSON response body from Response.data
@@ -349,9 +405,6 @@ public final class Application: @unchecked Sendable {
             }
         }
 
-        // Map status string to HTTP status code
-        let statusCode = mapStatusToHTTPCode(response.status)
-
         let bodyData: Data?
         if let jsonData = try? JSONSerialization.data(withJSONObject: jsonBody, options: [.sortedKeys]) {
             bodyData = jsonData
@@ -364,6 +417,61 @@ public final class Application: @unchecked Sendable {
             headers: headers,
             body: bodyData
         )
+    }
+
+    /// Detect if response data contains HTML content (single string value starting with HTML markers)
+    private func detectHTMLContent(in data: [String: AnySendable]) -> String? {
+        // If there's exactly one value and it's an HTML string, return it
+        guard data.count == 1 else { return nil }
+
+        for (_, anySendable) in data {
+            if let str: String = anySendable.get() {
+                let trimmed = str.trimmingCharacters(in: .whitespacesAndNewlines)
+                if trimmed.hasPrefix("<!DOCTYPE") ||
+                   trimmed.hasPrefix("<!doctype") ||
+                   trimmed.hasPrefix("<html") ||
+                   trimmed.hasPrefix("<HTML") {
+                    return str
+                }
+            }
+        }
+        return nil
+    }
+
+    /// Detect if response data contains raw text content that should be returned as-is
+    /// Returns (content, contentType) tuple or nil if not detected
+    private func detectRawContent(in data: [String: AnySendable]) -> (String, String)? {
+        guard data.count == 1 else { return nil }
+
+        for (_, anySendable) in data {
+            if let str: String = anySendable.get() {
+                let trimmed = str.trimmingCharacters(in: .whitespacesAndNewlines)
+
+                // Detect JavaScript first (more specific patterns)
+                if trimmed.hasPrefix("var ") || trimmed.hasPrefix("let ") ||
+                   trimmed.hasPrefix("const ") || trimmed.hasPrefix("function ") ||
+                   trimmed.hasPrefix("//") || trimmed.hasPrefix("/*") ||
+                   trimmed.hasPrefix("'use strict'") || trimmed.hasPrefix("\"use strict\"") ||
+                   trimmed.hasPrefix("(function") || trimmed.hasPrefix("import ") ||
+                   trimmed.hasPrefix("export ") {
+                    return (str, "text/javascript; charset=utf-8")
+                }
+
+                // Detect CSS: starts with selector patterns (not JS keywords)
+                // CSS selectors start with: element, .class, #id, @media, @keyframes, etc.
+                if !trimmed.hasPrefix("{") && !trimmed.hasPrefix("<") {
+                    let cssPattern = try? NSRegularExpression(
+                        pattern: "^(@|\\*|[a-zA-Z][a-zA-Z0-9-]*|\\.[a-zA-Z]|#[a-zA-Z])[^{]*\\{",
+                        options: []
+                    )
+                    if let match = cssPattern?.firstMatch(in: trimmed, range: NSRange(trimmed.startIndex..., in: trimmed)),
+                       match.range.location != NSNotFound {
+                        return (str, "text/css; charset=utf-8")
+                    }
+                }
+            }
+        }
+        return nil
     }
 
     /// Map ARO status string to HTTP status code

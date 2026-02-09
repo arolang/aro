@@ -56,6 +56,7 @@ public struct StartAction: ActionImplementation {
         // 2. OpenAPI spec (contract is source of truth)
         // 3. Default to 8080
         var port = 8080
+        var websocketPath: String? = nil
 
         // Priority 1: Check _with_ binding (ARO-0042: with clause)
         if let withValue = context.resolveAny("_with_") {
@@ -69,10 +70,21 @@ public struct StartAction: ActionImplementation {
             } else if let httpServer = withValue as? HTTPServerConfig {
                 // HTTP server config: with <http-server>
                 port = httpServer.port
-            } else if let withConfig = withValue as? [String: any Sendable],
-                      let configPort = withConfig["port"] as? Int {
-                // Config object: with { port: 8080 }
-                port = configPort
+            } else if let withConfig = withValue as? [String: any Sendable] {
+                // Config object: with { port: 8080, websocket: "/ws" }
+                if let configPort = withConfig["port"] as? Int {
+                    port = configPort
+                }
+                // Extract websocket path if specified
+                if let wsPath = withConfig["websocket"] as? String {
+                    websocketPath = wsPath
+                }
+                // Fallback to OpenAPI port if no port specified
+                if withConfig["port"] == nil,
+                   let specService = context.service(OpenAPISpecService.self),
+                   let openAPIPort = specService.serverPort {
+                    port = openAPIPort
+                }
             } else if let specService = context.service(OpenAPISpecService.self),
                       let openAPIPort = specService.serverPort {
                 // Empty config {}, use OpenAPI port
@@ -109,6 +121,10 @@ public struct StartAction: ActionImplementation {
 
         // Try HTTP server service (interpreter mode with NIO)
         if let httpServerService = context.service(HTTPServerService.self) {
+            // Configure WebSocket if path is specified
+            if let wsPath = websocketPath {
+                try await httpServerService.configureWebSocket(path: wsPath)
+            }
             try await httpServerService.start(port: port)
             EventBus.shared.registerEventSource()
             return ServerStartResult(serverType: "http-server", success: true, port: port)
@@ -452,6 +468,12 @@ public final class NativeFileWatcher: @unchecked Sendable {
 public protocol HTTPServerService: Sendable {
     func start(port: Int) async throws
     func stop() async throws
+    func configureWebSocket(path: String) async throws
+}
+
+extension HTTPServerService {
+    /// Default implementation does nothing (for servers without WebSocket support)
+    public func configureWebSocket(path: String) async throws {}
 }
 
 /// Socket server service protocol
@@ -1003,18 +1025,40 @@ public struct BroadcastAction: ActionImplementation {
             throw ActionError.undefinedVariable(result.base)
         }
 
-        // Convert data to bytes
-        let dataToSend: Data
-        if let d = data as? Data {
-            dataToSend = d
-        } else if let s = data as? String {
-            dataToSend = s.data(using: .utf8) ?? Data()
+        // Convert data to string for WebSocket, bytes for TCP socket
+        let dataString: String
+        if let s = data as? String {
+            dataString = s
+        } else if let sendableDict = data as? [String: any Sendable] {
+            // Convert Sendable dictionary to JSON-compatible format
+            let jsonCompatible = convertToJSONCompatible(sendableDict)
+            if let jsonData = try? JSONSerialization.data(withJSONObject: jsonCompatible),
+               let jsonString = String(data: jsonData, encoding: .utf8) {
+                dataString = jsonString
+            } else {
+                dataString = String(describing: data)
+            }
         } else {
-            dataToSend = String(describing: data).data(using: .utf8) ?? Data()
+            dataString = String(describing: data)
         }
 
+        let dataToSend = dataString.data(using: .utf8) ?? Data()
+
         #if !os(Windows)
-        // Try socket server service (interpreter mode)
+        // Check if target is WebSocket
+        let objectBase = object.base.lowercased()
+        if objectBase.contains("websocket") || objectBase == "ws" {
+            // Try WebSocket server service
+            if let wsServer = context.service(WebSocketServerService.self) {
+                try await wsServer.broadcast(message: dataString)
+                return BroadcastResult(success: true, clientCount: wsServer.connectionCount)
+            }
+            // WebSocket not available - emit event as fallback
+            context.emit(WebSocketBroadcastRequestedEvent(message: dataString))
+            return BroadcastResult(success: true, clientCount: 0)
+        }
+
+        // Try TCP socket server service (interpreter mode)
         if let socketServer = context.service(SocketServerService.self) {
             try await socketServer.broadcast(data: dataToSend)
             return BroadcastResult(success: true, clientCount: -1) // Count not available
@@ -1031,6 +1075,51 @@ public struct BroadcastAction: ActionImplementation {
         context.emit(BroadcastRequestedEvent(data: String(describing: data)))
 
         return BroadcastResult(success: true, clientCount: 0)
+    }
+}
+
+/// Convert Sendable dictionary to JSON-compatible format
+private func convertToJSONCompatible(_ dict: [String: any Sendable]) -> [String: Any] {
+    var result: [String: Any] = [:]
+    for (key, value) in dict {
+        result[key] = convertValueToJSONCompatible(value)
+    }
+    return result
+}
+
+/// Convert a Sendable value to JSON-compatible format
+private func convertValueToJSONCompatible(_ value: any Sendable) -> Any {
+    switch value {
+    case let s as String:
+        return s
+    case let i as Int:
+        return i
+    case let d as Double:
+        return d
+    case let b as Bool:
+        return b
+    case let date as Date:
+        return ISO8601DateFormatter().string(from: date)
+    case let aroDate as ARODate:
+        return aroDate.iso
+    case let arr as [any Sendable]:
+        return arr.map { convertValueToJSONCompatible($0) }
+    case let dict as [String: any Sendable]:
+        return convertToJSONCompatible(dict)
+    default:
+        return String(describing: value)
+    }
+}
+
+/// Event emitted when WebSocket broadcast is requested
+public struct WebSocketBroadcastRequestedEvent: RuntimeEvent {
+    public static var eventType: String { "websocket.broadcast.requested" }
+    public let timestamp: Date
+    public let message: String
+
+    public init(message: String) {
+        self.timestamp = Date()
+        self.message = message
     }
 }
 
