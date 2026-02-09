@@ -1,704 +1,10 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-    <title>Learn ARO - A Complete Tutorial</title>
+    <title>Build StatusPost - A Real-Time Chat Tutorial</title>
 {{head}}
     <style>
-        /* Reset and base */
-        * { box-sizing: border-box; }
-
-        /* Custom properties for animations */
-        :root {
-            --animation-fast: 0.2s;
-            --animation-medium: 0.4s;
-            --animation-slow: 0.8s;
-        }
-
-        /* Smooth scrolling for the whole page */
-        html {
-            scroll-behavior: smooth;
-        }
-
-        /* Progress bar at top */
-        .progress-bar {
-            position: fixed;
-            top: 0;
-            left: 0;
-            height: 3px;
-            background: linear-gradient(90deg, var(--color-primary), var(--color-secondary));
-            z-index: 1000;
-            transition: width 0.1s ease-out;
-        }
-
-        /* Section styling */
-        .tutorial-section {
-            min-height: 100vh;
-            padding: 140px 24px 80px;
-            position: relative;
-            overflow: hidden;
-        }
-
-        .section-bg {
-            position: absolute;
-            top: 0;
-            left: 0;
-            right: 0;
-            bottom: 0;
-            z-index: -1;
-            opacity: 0.5;
-        }
-
-        .bg-gradient-1 {
-            background:
-                radial-gradient(ellipse at 20% 20%, rgba(124, 58, 237, 0.15) 0%, transparent 50%),
-                radial-gradient(ellipse at 80% 80%, rgba(6, 182, 212, 0.1) 0%, transparent 50%);
-        }
-
-        .bg-gradient-2 {
-            background:
-                radial-gradient(ellipse at 80% 20%, rgba(6, 182, 212, 0.15) 0%, transparent 50%),
-                radial-gradient(ellipse at 20% 80%, rgba(124, 58, 237, 0.1) 0%, transparent 50%);
-        }
-
-        .bg-gradient-3 {
-            background:
-                radial-gradient(ellipse at 50% 0%, rgba(124, 58, 237, 0.2) 0%, transparent 40%),
-                radial-gradient(ellipse at 50% 100%, rgba(6, 182, 212, 0.15) 0%, transparent 40%);
-        }
-
-        /* Content wrapper */
-        .tutorial-content {
-            max-width: 900px;
-            margin: 0 auto;
-            position: relative;
-        }
-
-        /* Hero section */
-        .hero-section {
-            display: flex;
-            flex-direction: column;
-            justify-content: center;
-            align-items: center;
-            text-align: center;
-            min-height: 100vh;
-        }
-
-        .hero-title {
-            font-size: clamp(3rem, 10vw, 7rem);
-            font-weight: 700;
-            letter-spacing: -0.04em;
-            margin-bottom: 24px;
-            background: linear-gradient(135deg, var(--color-primary) 0%, var(--color-secondary) 50%, var(--color-primary) 100%);
-            background-size: 200% 200%;
-            -webkit-background-clip: text;
-            -webkit-text-fill-color: transparent;
-            background-clip: text;
-            animation: gradientShift 5s ease infinite;
-        }
-
-        @keyframes gradientShift {
-            0%, 100% { background-position: 0% 50%; }
-            50% { background-position: 100% 50%; }
-        }
-
-        .hero-subtitle {
-            font-size: clamp(1.1rem, 3vw, 1.6rem);
-            color: var(--color-text-muted);
-            max-width: 600px;
-            line-height: 1.7;
-            margin-bottom: 48px;
-            opacity: 0;
-            animation: fadeInUp 0.8s ease 0.3s forwards;
-        }
-
-        .hero-meta {
-            color: var(--color-text-muted);
-            font-size: 0.95rem;
-            opacity: 0;
-            animation: fadeInUp 0.8s ease 0.5s forwards;
-        }
-
-        /* Decorative SVG elements */
-        .hero-decoration {
-            position: absolute;
-            opacity: 0;
-            animation: floatIn 1s ease forwards;
-        }
-
-        .hero-decoration-1 {
-            top: 15%;
-            left: 10%;
-            animation-delay: 0.3s;
-            animation-name: floatIn, rotate;
-            animation-duration: 1s, 20s;
-            animation-timing-function: ease, linear;
-            animation-iteration-count: 1, infinite;
-            animation-fill-mode: forwards, none;
-        }
-
-        .hero-decoration-2 {
-            top: 20%;
-            right: 15%;
-            animation-delay: 0.5s;
-            animation-name: floatIn, float;
-            animation-duration: 1s, 6s;
-            animation-timing-function: ease, ease-in-out;
-            animation-iteration-count: 1, infinite;
-            animation-fill-mode: forwards, none;
-        }
-
-        .hero-decoration-3 {
-            bottom: 25%;
-            left: 20%;
-            animation-delay: 0.7s;
-            animation-name: floatIn, pulse;
-            animation-duration: 1s, 4s;
-            animation-timing-function: ease, ease-in-out;
-            animation-iteration-count: 1, infinite;
-            animation-fill-mode: forwards, none;
-        }
-
-        @keyframes floatIn {
-            from {
-                opacity: 0;
-                transform: scale(0.5) translateY(20px);
-            }
-            to {
-                opacity: 1;
-                transform: scale(1) translateY(0);
-            }
-        }
-
-        @keyframes rotate {
-            from { transform: rotate(0deg); }
-            to { transform: rotate(360deg); }
-        }
-
-        @keyframes float {
-            0%, 100% { transform: translateY(0) rotate(15deg); }
-            50% { transform: translateY(-15px) rotate(15deg); }
-        }
-
-        @media (max-width: 900px) {
-            .hero-decoration { display: none; }
-        }
-
-        .scroll-indicator {
-            position: absolute;
-            bottom: 50px;
-            left: 50%;
-            transform: translateX(-50%);
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-            gap: 12px;
-            color: var(--color-text-muted);
-            opacity: 0;
-            animation: fadeInUp 0.8s ease 0.7s forwards;
-        }
-
-        .scroll-indicator span {
-            font-size: 0.85rem;
-            text-transform: uppercase;
-            letter-spacing: 0.15em;
-        }
-
-        .scroll-icon {
-            stroke: var(--color-primary);
-            animation: bounce 2s ease-in-out infinite;
-        }
-
-        @keyframes bounce {
-            0%, 20%, 50%, 80%, 100% { transform: translateY(0); }
-            40% { transform: translateY(-8px); }
-            60% { transform: translateY(-4px); }
-        }
-
-        /* SVG icons in concept cards */
-        .concept-icon svg {
-            stroke: white;
-        }
-
-        /* Section numbers - animated */
-        .section-number {
-            font-size: clamp(5rem, 15vw, 10rem);
-            font-weight: 800;
-            background: linear-gradient(135deg, rgba(124, 58, 237, 0.15) 0%, rgba(6, 182, 212, 0.1) 100%);
-            -webkit-background-clip: text;
-            -webkit-text-fill-color: transparent;
-            background-clip: text;
-            position: absolute;
-            top: 100px;
-            left: -30px;
-            line-height: 1;
-            pointer-events: none;
-            opacity: 0;
-            transform: translateX(-50px);
-            transition: all 1s cubic-bezier(0.16, 1, 0.3, 1);
-        }
-
-        .section-number.visible {
-            opacity: 1;
-            transform: translateX(0);
-        }
-
-        /* Section titles with animated underline */
-        .section-title {
-            font-size: clamp(2rem, 5vw, 3.5rem);
-            font-weight: 700;
-            margin-bottom: 16px;
-            letter-spacing: -0.02em;
-            position: relative;
-            display: inline-block;
-        }
-
-        .section-title::after {
-            content: '';
-            position: absolute;
-            bottom: -8px;
-            left: 0;
-            width: 0;
-            height: 4px;
-            background: linear-gradient(90deg, var(--color-primary), var(--color-secondary));
-            border-radius: 2px;
-            transition: width 0.8s cubic-bezier(0.16, 1, 0.3, 1);
-        }
-
-        .section-title.visible::after {
-            width: 100%;
-        }
-
-        .section-subtitle {
-            font-size: 1.25rem;
-            color: var(--color-secondary);
-            margin-bottom: 40px;
-            font-weight: 500;
-            opacity: 0;
-            transform: translateY(20px);
-            transition: all 0.6s ease 0.2s;
-        }
-
-        .section-subtitle.visible {
-            opacity: 1;
-            transform: translateY(0);
-        }
-
-        .section-text {
-            font-size: 1.15rem;
-            color: var(--color-text-muted);
-            line-height: 1.9;
-            margin-bottom: 28px;
-            opacity: 0;
-            transform: translateY(20px);
-            transition: all 0.6s ease;
-        }
-
-        .section-text.visible {
-            opacity: 1;
-            transform: translateY(0);
-        }
-
-        .section-text strong {
-            color: var(--color-text);
-        }
-
-        .section-text code {
-            background: rgba(124, 58, 237, 0.15);
-            padding: 2px 8px;
-            border-radius: 4px;
-            font-family: var(--font-mono);
-            font-size: 0.9em;
-        }
-
-        /* Story callouts - glass morphism */
-        .story-callout {
-            background: rgba(124, 58, 237, 0.08);
-            backdrop-filter: blur(10px);
-            border: 1px solid rgba(124, 58, 237, 0.2);
-            border-left: 4px solid var(--color-primary);
-            padding: 28px 32px;
-            margin: 36px 0;
-            border-radius: 0 16px 16px 0;
-            font-size: 1.1rem;
-            line-height: 1.8;
-            color: var(--color-text);
-            position: relative;
-            opacity: 0;
-            transform: translateX(-30px);
-            transition: all 0.8s cubic-bezier(0.16, 1, 0.3, 1);
-        }
-
-        .story-callout.visible {
-            opacity: 1;
-            transform: translateX(0);
-        }
-
-        .story-callout::before {
-            content: '\201C';
-            font-size: 4rem;
-            color: var(--color-primary);
-            opacity: 0.3;
-            position: absolute;
-            top: 10px;
-            left: 20px;
-            line-height: 1;
-            font-family: Georgia, serif;
-        }
-
-        /* Code blocks - modern styling */
-        .code-block {
-            background: rgba(0, 0, 0, 0.4);
-            backdrop-filter: blur(10px);
-            border-radius: 16px;
-            padding: 0;
-            margin: 32px 0;
-            overflow: hidden;
-            border: 1px solid rgba(255, 255, 255, 0.1);
-            opacity: 0;
-            transform: translateY(30px) scale(0.98);
-            transition: all 0.8s cubic-bezier(0.16, 1, 0.3, 1);
-        }
-
-        .code-block.visible {
-            opacity: 1;
-            transform: translateY(0) scale(1);
-        }
-
-        .code-header {
-            display: flex;
-            align-items: center;
-            justify-content: space-between;
-            padding: 12px 20px;
-            background: rgba(255, 255, 255, 0.05);
-            border-bottom: 1px solid rgba(255, 255, 255, 0.1);
-        }
-
-        .code-dots {
-            display: flex;
-            gap: 8px;
-        }
-
-        .code-dot {
-            width: 12px;
-            height: 12px;
-            border-radius: 50%;
-            transition: transform 0.2s ease;
-        }
-
-        .code-dot:hover {
-            transform: scale(1.2);
-        }
-
-        .code-dot.red { background: #ff5f56; }
-        .code-dot.yellow { background: #ffbd2e; }
-        .code-dot.green { background: #27ca40; }
-
-        .code-lang {
-            font-size: 0.75rem;
-            color: var(--color-text-muted);
-            text-transform: uppercase;
-            letter-spacing: 0.1em;
-            font-weight: 500;
-        }
-
-        .code-content {
-            padding: 24px;
-            overflow-x: auto;
-        }
-
-        .code-content pre {
-            margin: 0;
-            font-family: var(--font-mono);
-            font-size: 0.9rem;
-            line-height: 1.8;
-            color: #e2e8f0;
-        }
-
-        /* Syntax highlighting */
-        .code-content .comment { color: #6b7280; font-style: italic; }
-        .code-content .keyword { color: #c084fc; font-weight: 500; }
-        .code-content .action { color: #22d3ee; font-weight: 600; }
-        .code-content .string { color: #4ade80; }
-        .code-content .variable { color: #fbbf24; }
-        .code-content .operator { color: #f472b6; }
-
-        /* Concept cards - glass morphism with stagger */
-        .concept-grid {
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
-            gap: 24px;
-            margin: 40px 0;
-        }
-
-        .concept-card {
-            background: rgba(255, 255, 255, 0.03);
-            backdrop-filter: blur(10px);
-            border: 1px solid rgba(255, 255, 255, 0.08);
-            border-radius: 20px;
-            padding: 32px;
-            opacity: 0;
-            transform: translateY(40px) scale(0.95);
-            transition: all 0.6s cubic-bezier(0.16, 1, 0.3, 1);
-        }
-
-        .concept-card.visible {
-            opacity: 1;
-            transform: translateY(0) scale(1);
-        }
-
-        .concept-card:hover {
-            border-color: var(--color-primary);
-            transform: translateY(-8px) scale(1.02);
-            box-shadow:
-                0 20px 40px rgba(0, 0, 0, 0.3),
-                0 0 60px rgba(124, 58, 237, 0.1);
-        }
-
-        .concept-icon {
-            width: 56px;
-            height: 56px;
-            background: linear-gradient(135deg, var(--color-primary), var(--color-secondary));
-            border-radius: 16px;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            margin-bottom: 20px;
-            font-size: 1.6rem;
-            transition: transform 0.4s cubic-bezier(0.34, 1.56, 0.64, 1);
-        }
-
-        .concept-card:hover .concept-icon {
-            transform: scale(1.1) rotate(5deg);
-        }
-
-        .concept-card h4 {
-            font-size: 1.2rem;
-            font-weight: 600;
-            margin-bottom: 12px;
-            color: var(--color-text);
-        }
-
-        .concept-card p {
-            color: var(--color-text-muted);
-            line-height: 1.7;
-            font-size: 0.95rem;
-        }
-
-        .concept-card code {
-            background: rgba(124, 58, 237, 0.2);
-            padding: 2px 6px;
-            border-radius: 4px;
-            font-size: 0.85em;
-        }
-
-        /* Timeline - animated */
-        .timeline {
-            position: relative;
-            padding-left: 50px;
-            margin: 48px 0;
-        }
-
-        .timeline::before {
-            content: '';
-            position: absolute;
-            left: 18px;
-            top: 0;
-            bottom: 0;
-            width: 3px;
-            background: linear-gradient(to bottom, var(--color-primary), var(--color-secondary));
-            border-radius: 2px;
-            transform: scaleY(0);
-            transform-origin: top;
-            transition: transform 1s cubic-bezier(0.16, 1, 0.3, 1);
-        }
-
-        .timeline.visible::before {
-            transform: scaleY(1);
-        }
-
-        .timeline-item {
-            position: relative;
-            margin-bottom: 48px;
-            opacity: 0;
-            transform: translateX(-30px);
-            transition: all 0.6s cubic-bezier(0.16, 1, 0.3, 1);
-        }
-
-        .timeline-item.visible {
-            opacity: 1;
-            transform: translateX(0);
-        }
-
-        .timeline-item::before {
-            content: '';
-            position: absolute;
-            left: -40px;
-            top: 6px;
-            width: 18px;
-            height: 18px;
-            background: var(--color-primary);
-            border-radius: 50%;
-            border: 4px solid var(--color-bg);
-            box-shadow: 0 0 20px rgba(124, 58, 237, 0.5);
-            transition: transform 0.3s ease;
-        }
-
-        .timeline-item:hover::before {
-            transform: scale(1.3);
-        }
-
-        .timeline-item h4 {
-            font-size: 1.15rem;
-            font-weight: 600;
-            margin-bottom: 10px;
-            color: var(--color-text);
-        }
-
-        .timeline-item p {
-            color: var(--color-text-muted);
-            line-height: 1.8;
-        }
-
-        .timeline-item code {
-            background: rgba(124, 58, 237, 0.15);
-            padding: 2px 8px;
-            border-radius: 4px;
-            font-size: 0.9em;
-        }
-
-        /* Diagram - improved */
-        .diagram {
-            background: rgba(0, 0, 0, 0.4);
-            backdrop-filter: blur(10px);
-            border-radius: 16px;
-            padding: 32px;
-            margin: 36px 0;
-            overflow-x: auto;
-            border: 1px solid rgba(255, 255, 255, 0.1);
-            opacity: 0;
-            transform: scale(0.95);
-            transition: all 0.8s cubic-bezier(0.16, 1, 0.3, 1);
-        }
-
-        .diagram.visible {
-            opacity: 1;
-            transform: scale(1);
-        }
-
-        .diagram pre {
-            margin: 0;
-            font-family: var(--font-mono);
-            font-size: 0.85rem;
-            line-height: 1.7;
-            color: var(--color-text-muted);
-        }
-
-        .diagram .highlight {
-            color: var(--color-secondary);
-        }
-
-        /* Philosophy grid */
-        .philosophy-grid {
-            display: grid;
-            grid-template-columns: repeat(3, 1fr);
-            gap: 40px;
-            margin: 48px 0;
-        }
-
-        @media (max-width: 900px) {
-            .philosophy-grid {
-                grid-template-columns: 1fr;
-                gap: 32px;
-            }
-        }
-
-        .philosophy-item {
-            text-align: center;
-            padding: 40px 24px;
-            opacity: 0;
-            transform: translateY(40px);
-            transition: all 0.6s cubic-bezier(0.16, 1, 0.3, 1);
-        }
-
-        .philosophy-item.visible {
-            opacity: 1;
-            transform: translateY(0);
-        }
-
-        .philosophy-number {
-            font-size: 3.5rem;
-            font-weight: 800;
-            background: linear-gradient(135deg, var(--color-primary), var(--color-secondary));
-            -webkit-background-clip: text;
-            -webkit-text-fill-color: transparent;
-            background-clip: text;
-            margin-bottom: 20px;
-            opacity: 0.6;
-        }
-
-        .philosophy-item h4 {
-            font-size: 1.3rem;
-            font-weight: 600;
-            margin-bottom: 16px;
-            color: var(--color-text);
-        }
-
-        .philosophy-item p {
-            color: var(--color-text-muted);
-            line-height: 1.8;
-        }
-
-        /* CTA buttons */
-        .cta-section {
-            text-align: center;
-        }
-
-        .cta-buttons {
-            display: flex;
-            gap: 16px;
-            justify-content: center;
-            flex-wrap: wrap;
-            margin-top: 40px;
-        }
-
-        .cta-button {
-            display: inline-flex;
-            align-items: center;
-            gap: 10px;
-            padding: 16px 32px;
-            border-radius: 12px;
-            font-weight: 600;
-            font-size: 1.05rem;
-            text-decoration: none;
-            transition: all 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
-            position: relative;
-            overflow: hidden;
-        }
-
-        .cta-button-primary {
-            background: linear-gradient(135deg, var(--color-primary), var(--color-secondary));
-            color: white;
-        }
-
-        .cta-button-primary:hover {
-            transform: translateY(-4px) scale(1.02);
-            box-shadow: 0 20px 40px rgba(124, 58, 237, 0.4);
-        }
-
-        .cta-button-secondary {
-            background: transparent;
-            border: 2px solid rgba(124, 58, 237, 0.5);
-            color: var(--color-text);
-        }
-
-        .cta-button-secondary:hover {
-            border-color: var(--color-primary);
-            background: rgba(124, 58, 237, 0.1);
-            transform: translateY(-4px);
-        }
-
-        /* Floating nav */
-        .floating-nav {
+        .tutorial-nav {
             position: fixed;
             right: 24px;
             top: 50%;
@@ -706,177 +12,250 @@
             z-index: 100;
             display: flex;
             flex-direction: column;
-            gap: 14px;
+            gap: 12px;
         }
 
-        .floating-nav a {
-            width: 12px;
-            height: 12px;
+        .tutorial-nav a {
+            width: 10px;
+            height: 10px;
             border-radius: 50%;
-            background: rgba(255, 255, 255, 0.2);
-            transition: all 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
-            position: relative;
+            background: var(--color-border);
+            transition: all 0.2s;
         }
 
-        .floating-nav a::before {
-            content: attr(data-title);
-            position: absolute;
-            right: 24px;
-            top: 50%;
-            transform: translateY(-50%);
-            background: var(--color-bg-alt);
-            padding: 6px 12px;
-            border-radius: 6px;
-            font-size: 0.75rem;
-            white-space: nowrap;
-            opacity: 0;
-            pointer-events: none;
-            transition: all 0.3s ease;
-        }
-
-        .floating-nav a:hover::before {
-            opacity: 1;
-            right: 28px;
-        }
-
-        .floating-nav a:hover,
-        .floating-nav a.active {
-            background: var(--color-primary);
-            transform: scale(1.4);
-            box-shadow: 0 0 20px rgba(124, 58, 237, 0.6);
+        .tutorial-nav a:hover,
+        .tutorial-nav a.active {
+            background: var(--color-accent);
+            transform: scale(1.3);
         }
 
         @media (max-width: 900px) {
-            .floating-nav { display: none; }
-            .section-number { display: none; }
+            .tutorial-nav { display: none; }
         }
 
-        /* Keyframe animations */
-        @keyframes fadeInUp {
-            from {
-                opacity: 0;
-                transform: translateY(30px);
-            }
-            to {
-                opacity: 1;
-                transform: translateY(0);
-            }
+        .tutorial-hero {
+            min-height: 80vh;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            padding: 120px 0 80px;
         }
 
-        @keyframes pulse {
-            0%, 100% { opacity: 1; }
-            50% { opacity: 0.5; }
+        .tutorial-hero h1 {
+            font-size: clamp(2.5rem, 8vw, 4.5rem);
+            margin-bottom: var(--space-md);
         }
 
-        /* Footer note */
-        .footer-note {
-            margin-top: 60px;
-            padding-top: 40px;
-            border-top: 1px solid rgba(255, 255, 255, 0.1);
-            text-align: center;
-        }
-
-        .footer-note p {
+        .tutorial-hero .subtitle {
+            font-size: 1.25rem;
             color: var(--color-text-muted);
-            font-size: 0.95rem;
-            max-width: 500px;
-            margin: 0 auto;
-            line-height: 1.7;
+            max-width: 600px;
+            margin-bottom: var(--space-lg);
         }
 
-        /* Light mode overrides */
-        @media (prefers-color-scheme: light) {
-            .bg-gradient-1 {
-                background:
-                    radial-gradient(ellipse at 20% 20%, rgba(109, 40, 217, 0.08) 0%, transparent 50%),
-                    radial-gradient(ellipse at 80% 80%, rgba(8, 145, 178, 0.06) 0%, transparent 50%);
+        .tutorial-meta {
+            display: flex;
+            gap: var(--space-lg);
+            color: var(--color-text-muted);
+            font-size: 0.875rem;
+        }
+
+        .step {
+            padding: var(--space-2xl) 0;
+            border-top: 1px solid var(--color-border);
+        }
+
+        .step-header {
+            margin-bottom: var(--space-xl);
+        }
+
+        .step-number {
+            font-size: 0.75rem;
+            text-transform: uppercase;
+            letter-spacing: 0.15em;
+            color: var(--color-accent);
+            margin-bottom: var(--space-sm);
+        }
+
+        .step h2 {
+            font-size: clamp(1.75rem, 4vw, 2.5rem);
+            margin-bottom: var(--space-sm);
+        }
+
+        .step-intro {
+            font-size: 1.1rem;
+            color: var(--color-text-muted);
+            max-width: 700px;
+        }
+
+        .narrative {
+            font-size: 1.05rem;
+            line-height: 1.9;
+            color: var(--color-text-muted);
+            margin-bottom: var(--space-lg);
+            max-width: 700px;
+        }
+
+        .narrative strong {
+            color: var(--color-text);
+        }
+
+        .narrative code {
+            background: var(--color-bg-elevated);
+            padding: 2px 6px;
+            border: 1px solid var(--color-border);
+            font-size: 0.9em;
+        }
+
+        .code-file {
+            margin: var(--space-lg) 0;
+            background: var(--color-bg-elevated);
+            border: 1px solid var(--color-border);
+            overflow: hidden;
+        }
+
+        .code-file-header {
+            display: flex;
+            align-items: center;
+            padding: 12px 16px;
+            background: var(--color-bg);
+            border-bottom: 1px solid var(--color-border);
+            gap: 8px;
+        }
+
+        .code-file-header .dots {
+            display: flex;
+            gap: 6px;
+        }
+
+        .code-file-header .dot {
+            width: 10px;
+            height: 10px;
+            border-radius: 50%;
+        }
+
+        .dot.red { background: #ff5f56; }
+        .dot.yellow { background: #ffbd2e; }
+        .dot.green { background: #27ca40; }
+
+        .code-file-header .filename {
+            margin-left: auto;
+            font-size: 0.75rem;
+            color: var(--color-text-muted);
+        }
+
+        .code-file pre {
+            padding: var(--space-lg);
+            margin: 0;
+            overflow-x: auto;
+            font-size: 0.875rem;
+            line-height: 1.8;
+        }
+
+        .code-file .comment { color: #555; }
+        .code-file .keyword { color: var(--color-accent); }
+        .code-file .action { color: #fff; font-weight: 600; }
+        .code-file .string { color: var(--color-accent); opacity: 0.8; }
+        .code-file .variable { color: #888; }
+
+        .callout {
+            border-left: 2px solid var(--color-accent);
+            padding-left: var(--space-lg);
+            margin: var(--space-lg) 0;
+            color: var(--color-text);
+        }
+
+        .callout p {
+            color: var(--color-text);
+            font-size: 1rem;
+            line-height: 1.8;
+        }
+
+        .file-structure {
+            background: var(--color-bg-elevated);
+            border: 1px solid var(--color-border);
+            padding: var(--space-lg);
+            font-family: var(--font-mono);
+            font-size: 0.875rem;
+            margin: var(--space-lg) 0;
+        }
+
+        .file-structure .dir { color: var(--color-accent); }
+        .file-structure .file { color: var(--color-text-muted); }
+        .file-structure .note { color: #555; }
+
+        .concept-list {
+            margin: var(--space-lg) 0;
+        }
+
+        .concept-item {
+            padding: var(--space-md) 0;
+            border-bottom: 1px solid var(--color-border);
+        }
+
+        .concept-item:last-child {
+            border-bottom: none;
+        }
+
+        .concept-item h4 {
+            font-size: 1rem;
+            margin-bottom: var(--space-xs);
+        }
+
+        .concept-item p {
+            font-size: 0.9rem;
+            color: var(--color-text-muted);
+        }
+
+        .final-cta {
+            text-align: center;
+            padding: var(--space-2xl) 0;
+            border-top: 1px solid var(--color-border);
+        }
+
+        .final-cta h2 {
+            margin-bottom: var(--space-md);
+        }
+
+        .final-cta p {
+            color: var(--color-text-muted);
+            margin-bottom: var(--space-lg);
+        }
+
+        .cta-buttons {
+            display: flex;
+            gap: var(--space-md);
+            justify-content: center;
+            flex-wrap: wrap;
+        }
+
+        @media (max-width: 768px) {
+            .tutorial-meta {
+                flex-direction: column;
+                gap: var(--space-sm);
             }
 
-            .bg-gradient-2 {
-                background:
-                    radial-gradient(ellipse at 80% 20%, rgba(8, 145, 178, 0.08) 0%, transparent 50%),
-                    radial-gradient(ellipse at 20% 80%, rgba(109, 40, 217, 0.06) 0%, transparent 50%);
+            .cta-buttons {
+                flex-direction: column;
+                align-items: center;
             }
 
-            .bg-gradient-3 {
-                background:
-                    radial-gradient(ellipse at 50% 0%, rgba(109, 40, 217, 0.1) 0%, transparent 40%),
-                    radial-gradient(ellipse at 50% 100%, rgba(8, 145, 178, 0.08) 0%, transparent 40%);
-            }
-
-            .code-block {
-                background: rgba(30, 41, 59, 0.95);
-                border: 1px solid rgba(0, 0, 0, 0.1);
-            }
-
-            .code-header {
-                background: rgba(0, 0, 0, 0.2);
-                border-bottom: 1px solid rgba(255, 255, 255, 0.1);
-            }
-
-            .concept-card {
-                background: rgba(0, 0, 0, 0.02);
-                border: 1px solid rgba(0, 0, 0, 0.08);
-            }
-
-            .story-callout {
-                background: rgba(109, 40, 217, 0.05);
-                border: 1px solid rgba(109, 40, 217, 0.15);
-            }
-
-            .section-text code {
-                background: rgba(109, 40, 217, 0.1);
-            }
-
-            .concept-card code {
-                background: rgba(109, 40, 217, 0.15);
-            }
-
-            .diagram {
-                background: rgba(240, 242, 248, 0.95);
-                border: 1px solid rgba(0, 0, 0, 0.08);
-            }
-
-            .diagram pre {
-                color: #4a5568;
-            }
-
-            .diagram .highlight {
-                color: #0891b2;
-            }
-
-            .footer-note {
-                border-top: 1px solid rgba(0, 0, 0, 0.1);
-            }
-
-            .timeline::before {
-                background: rgba(0, 0, 0, 0.1);
-            }
-
-            .floating-nav {
-                background: rgba(248, 249, 252, 0.95);
-                border: 1px solid rgba(0, 0, 0, 0.1);
-            }
-
-            .nav-dot::after {
-                background: rgba(0, 0, 0, 0.2);
+            .cta-buttons .btn {
+                width: 100%;
+                max-width: 280px;
             }
         }
     </style>
 </head>
 <body>
-    <!-- Progress bar -->
-    <div class="progress-bar" id="progressBar"></div>
-
     <nav class="nav">
         <div class="nav-content">
             <a href="/aro/" class="logo"><span class="logo-aro">ARO</span></a>
             <div class="nav-links">
-                <a href="fdd.html">The FDD Story</a>
+                <a href="fdd.html">FDD Story</a>
                 <a href="getting-started.html">Get Started</a>
                 <a href="tutorial.html" style="color: var(--color-text);">Tutorial</a>
                 <a href="docs.html">Docs</a>
-                <a href="disclaimer.html">Motivation</a>
                 <a href="download.html">Download</a>
                 <a href="https://github.com/arolang/aro" class="nav-github">
                     <svg viewBox="0 0 16 16" fill="currentColor"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z"/></svg>
@@ -886,833 +265,689 @@
                     </span>
                 </a>
             </div>
+            <button class="nav-toggle" aria-label="Toggle menu">
+                <span></span>
+                <span></span>
+                <span></span>
+            </button>
         </div>
     </nav>
 
-    <!-- Floating navigation -->
-    <div class="floating-nav">
-        <a href="#hero" data-title="Start"></a>
-        <a href="#story" data-title="The Story"></a>
-        <a href="#statements" data-title="Statements"></a>
-        <a href="#featuresets" data-title="Feature Sets"></a>
-        <a href="#lifecycle" data-title="Lifecycle"></a>
-        <a href="#http" data-title="HTTP APIs"></a>
-        <a href="#events" data-title="Events"></a>
-        <a href="#philosophy" data-title="Philosophy"></a>
-        <a href="#complete" data-title="Example"></a>
-        <a href="#output" data-title="Console Output"></a>
-        <a href="#next" data-title="Next Steps"></a>
+    <div class="mobile-menu">
+        <a href="fdd.html">FDD Story</a>
+        <a href="getting-started.html">Get Started</a>
+        <a href="tutorial.html">Tutorial</a>
+        <a href="docs.html">Docs</a>
+        <a href="download.html">Download</a>
+        <a href="https://github.com/arolang/aro">GitHub</a>
     </div>
 
-    <!-- Hero Section -->
-    <section id="hero" class="tutorial-section hero-section">
-        <div class="section-bg bg-gradient-1"></div>
+    <div class="tutorial-nav">
+        <a href="#intro" title="Introduction"></a>
+        <a href="#structure" title="Project Structure"></a>
+        <a href="#contract" title="The Contract"></a>
+        <a href="#startup" title="Application Startup"></a>
+        <a href="#pages" title="Serving Pages"></a>
+        <a href="#messages" title="Posting Messages"></a>
+        <a href="#websocket" title="Real-Time Updates"></a>
+        <a href="#observer" title="Cleanup Observer"></a>
+        <a href="#templates" title="Templates"></a>
+        <a href="#run" title="Running It"></a>
+    </div>
 
-        <!-- Decorative SVG elements -->
-        <svg class="hero-decoration hero-decoration-1" width="120" height="120" viewBox="0 0 120 120" fill="none">
-            <circle cx="60" cy="60" r="50" stroke="rgba(124, 58, 237, 0.2)" stroke-width="2" stroke-dasharray="10 5"/>
-            <circle cx="60" cy="60" r="35" stroke="rgba(6, 182, 212, 0.15)" stroke-width="2"/>
-        </svg>
-        <svg class="hero-decoration hero-decoration-2" width="80" height="80" viewBox="0 0 80 80" fill="none">
-            <rect x="10" y="10" width="60" height="60" rx="12" stroke="rgba(124, 58, 237, 0.15)" stroke-width="2" transform="rotate(15 40 40)"/>
-        </svg>
-        <svg class="hero-decoration hero-decoration-3" width="60" height="60" viewBox="0 0 60 60" fill="none">
-            <polygon points="30,5 55,50 5,50" stroke="rgba(6, 182, 212, 0.2)" stroke-width="2" fill="none"/>
-        </svg>
-
-        <div class="tutorial-content">
-            <h1 class="hero-title">Learn ARO</h1>
-            <p class="hero-subtitle">
-                A journey from zero to building event-driven applications
-                with natural language-like code.
+    <main class="container">
+        <!-- Hero -->
+        <section id="intro" class="tutorial-hero">
+            <h1>Build <span class="accent">StatusPost</span></h1>
+            <p class="subtitle">
+                A step-by-step guide to building a real-time message board with ARO.
+                WebSockets, repositories, templates, and more.
             </p>
-            <p class="hero-meta">Estimated read time: 15 minutes</p>
-        </div>
-        <div class="scroll-indicator">
-            <span>Begin the journey</span>
-            <svg class="scroll-icon" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                <path d="M12 5v14M5 12l7 7 7-7"/>
-            </svg>
-        </div>
-    </section>
+            <div class="tutorial-meta">
+                <span>10 steps</span>
+                <span>~20 minutes</span>
+                <span>Intermediate</span>
+            </div>
+        </section>
 
-    <!-- The Story Section -->
-    <section id="story" class="tutorial-section">
-        <div class="section-bg bg-gradient-2"></div>
-        <div class="tutorial-content">
-            <span class="section-number animate-on-scroll">01</span>
-            <h2 class="section-title animate-on-scroll">Once Upon a Time...</h2>
-            <p class="section-subtitle animate-on-scroll">Why ARO exists</p>
-
-            <p class="section-text animate-on-scroll">
-                Imagine you're explaining your software to a business colleague. You wouldn't say
-                <em>"We instantiate a UserService singleton and invoke the createUser method with a DTO"</em>.
-                You'd say <strong>"We create a user with their registration data"</strong>.
-            </p>
-
-            <div class="story-callout animate-on-scroll">
-                What if code could read like that conversation? What if the gap between
-                business requirements and implementation simply... disappeared?
+        <!-- Step 1: The Story -->
+        <section id="story" class="step">
+            <div class="step-header">
+                <div class="step-number">Step 1</div>
+                <h2>The Story</h2>
+                <p class="step-intro">What we're building and why</p>
             </div>
 
-            <p class="section-text animate-on-scroll">
-                ARO (Action-Result-Object) was born from a simple idea: <strong>code should express intent,
-                not implementation details</strong>. It's a language designed for business applications
-                where clarity matters more than cleverness.
+            <p class="narrative">
+                Imagine you want to build a simple real-time message board. Users can post short
+                status updates, and everyone connected sees new messages instantly. No page refresh.
+                No polling. Just real-time updates via WebSocket.
             </p>
 
-            <p class="section-text animate-on-scroll">
-                In ARO, every statement follows a natural pattern that anyone can understand:
+            <p class="narrative">
+                <strong>StatusPost</strong> is exactly that. It's a single-page app where you type a message,
+                hit Post, and it appears for everyone. The server stores messages in a repository,
+                broadcasts them via WebSocket, and even cleans up old messages automatically.
             </p>
 
-            <div class="code-block animate-on-scroll">
-                <div class="code-header">
-                    <div class="code-dots">
-                        <span class="code-dot red"></span>
-                        <span class="code-dot yellow"></span>
-                        <span class="code-dot green"></span>
-                    </div>
-                    <span class="code-lang">aro</span>
-                </div>
-                <div class="code-content">
-<pre><span class="action">&lt;Create&gt;</span> the <span class="variable">&lt;user&gt;</span> with <span class="variable">&lt;registration-data&gt;</span>.</pre>
-                </div>
-            </div>
-
-            <p class="section-text animate-on-scroll">
-                That's it. No boilerplate. No ceremony. Just clear, declarative intent.
-            </p>
-        </div>
-    </section>
-
-    <!-- Statements Section -->
-    <section id="statements" class="tutorial-section">
-        <div class="section-bg bg-gradient-3"></div>
-        <div class="tutorial-content">
-            <span class="section-number animate-on-scroll">02</span>
-            <h2 class="section-title animate-on-scroll">The Building Block</h2>
-            <p class="section-subtitle animate-on-scroll">Understanding ARO statements</p>
-
-            <p class="section-text animate-on-scroll">
-                Every line of ARO code follows the same elegant pattern:
+            <p class="narrative">
+                By the end of this tutorial, you'll understand:
             </p>
 
-            <div class="diagram animate-on-scroll">
-<pre>
- <span class="highlight">The ARO Statement Pattern</span>
- -------------------------
-
- &lt;Action&gt;  the  &lt;result&gt;  preposition  the  &lt;object&gt;.
-    |            |             |              |
-    |            |             |              |
- What to do   Output      Relationship     Input
-
-
- <span class="highlight">Examples:</span>
-
- &lt;Extract&gt; the &lt;email&gt;    <span class="highlight">from</span>    the &lt;request: body&gt;.
- &lt;Create&gt;  the &lt;user&gt;     <span class="highlight">with</span>    the &lt;user-data&gt;.
- &lt;Store&gt;   the &lt;user&gt;     <span class="highlight">into</span>    the &lt;repository&gt;.
- &lt;Return&gt;  an  &lt;OK&gt;       <span class="highlight">for</span>     the &lt;request&gt;.
-</pre>
-            </div>
-
-            <p class="section-text animate-on-scroll">
-                Actions are verbs that describe <em>what</em> you want to do. They're categorized
-                by their role in data flow:
-            </p>
-
-            <div class="concept-grid">
-                <div class="concept-card animate-on-scroll" style="transition-delay: 0.1s;">
-                    <div class="concept-icon">
-                        <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                            <path d="M12 3v12m0 0l-4-4m4 4l4-4"/>
-                            <path d="M4 17v2a2 2 0 002 2h12a2 2 0 002-2v-2"/>
-                        </svg>
-                    </div>
-                    <h4>REQUEST Actions</h4>
-                    <p>Bring data in: <code>&lt;Extract&gt;</code>, <code>&lt;Retrieve&gt;</code>, <code>&lt;Request&gt;</code></p>
+            <div class="concept-list">
+                <div class="concept-item">
+                    <h4>Contract-First APIs</h4>
+                    <p>Define your HTTP routes in OpenAPI before writing code</p>
                 </div>
-                <div class="concept-card animate-on-scroll" style="transition-delay: 0.2s;">
-                    <div class="concept-icon">
-                        <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                            <circle cx="12" cy="12" r="3"/>
-                            <path d="M12 1v2m0 18v2M4.22 4.22l1.42 1.42m12.72 12.72l1.42 1.42M1 12h2m18 0h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42"/>
-                        </svg>
-                    </div>
-                    <h4>OWN Actions</h4>
-                    <p>Transform data: <code>&lt;Create&gt;</code>, <code>&lt;Compute&gt;</code>, <code>&lt;Validate&gt;</code></p>
+                <div class="concept-item">
+                    <h4>WebSocket Support</h4>
+                    <p>Enable real-time bidirectional communication</p>
                 </div>
-                <div class="concept-card animate-on-scroll" style="transition-delay: 0.3s;">
-                    <div class="concept-icon">
-                        <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                            <path d="M12 21V9m0 0l4 4m-4-4l-4 4"/>
-                            <path d="M4 7V5a2 2 0 012-2h12a2 2 0 012 2v2"/>
-                        </svg>
-                    </div>
-                    <h4>EXPORT Actions</h4>
-                    <p>Send data out: <code>&lt;Store&gt;</code>, <code>&lt;Log&gt;</code>, <code>&lt;Send&gt;</code></p>
+                <div class="concept-item">
+                    <h4>Repositories</h4>
+                    <p>Store and retrieve data with simple actions</p>
                 </div>
-                <div class="concept-card animate-on-scroll" style="transition-delay: 0.4s;">
-                    <div class="concept-icon">
-                        <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                            <polyline points="9 10 4 15 9 20"/>
-                            <path d="M20 4v7a4 4 0 01-4 4H4"/>
-                        </svg>
-                    </div>
-                    <h4>RESPONSE Actions</h4>
-                    <p>Complete the flow: <code>&lt;Return&gt;</code>, <code>&lt;Throw&gt;</code></p>
+                <div class="concept-item">
+                    <h4>Repository Observers</h4>
+                    <p>React automatically when data changes</p>
+                </div>
+                <div class="concept-item">
+                    <h4>Templates</h4>
+                    <p>Render dynamic HTML with ARO expressions</p>
                 </div>
             </div>
 
-            <p class="section-text animate-on-scroll">
-                Prepositions give meaning to relationships: <code>from</code> for sources,
-                <code>with</code> for data, <code>into</code> for destinations,
-                <code>for</code> for purpose.
+            <p class="narrative">
+                Let's build it, step by step.
             </p>
-        </div>
-    </section>
+        </section>
 
-    <!-- Feature Sets Section -->
-    <section id="featuresets" class="tutorial-section">
-        <div class="section-bg bg-gradient-1"></div>
-        <div class="tutorial-content">
-            <span class="section-number animate-on-scroll">03</span>
-            <h2 class="section-title animate-on-scroll">Feature Sets</h2>
-            <p class="section-subtitle animate-on-scroll">Organizing business logic</p>
-
-            <p class="section-text animate-on-scroll">
-                Statements don't live alone &mdash; they're grouped into <strong>feature sets</strong>.
-                A feature set is a named block of code that accomplishes a specific business goal.
-            </p>
-
-            <div class="code-block animate-on-scroll">
-                <div class="code-header">
-                    <div class="code-dots">
-                        <span class="code-dot red"></span>
-                        <span class="code-dot yellow"></span>
-                        <span class="code-dot green"></span>
-                    </div>
-                    <span class="code-lang">aro</span>
-                </div>
-                <div class="code-content">
-<pre><span class="comment">(* A feature set has a name and a business activity *)</span>
-
-(<span class="keyword">Create User Account</span>: <span class="keyword">User Management</span>) {
-    <span class="comment">(* Extract registration data from the request *)</span>
-    <span class="action">&lt;Extract&gt;</span> the <span class="variable">&lt;email&gt;</span> from the <span class="variable">&lt;request: body email&gt;</span>.
-    <span class="action">&lt;Extract&gt;</span> the <span class="variable">&lt;password&gt;</span> from the <span class="variable">&lt;request: body password&gt;</span>.
-
-    <span class="comment">(* Validate the data *)</span>
-    <span class="action">&lt;Validate&gt;</span> the <span class="variable">&lt;email&gt;</span> for the <span class="variable">&lt;email-format&gt;</span>.
-
-    <span class="comment">(* Create and store the user *)</span>
-    <span class="action">&lt;Create&gt;</span> the <span class="variable">&lt;user&gt;</span> with { email: <span class="variable">&lt;email&gt;</span>, password: <span class="variable">&lt;password&gt;</span> }.
-    <span class="action">&lt;Store&gt;</span> the <span class="variable">&lt;user&gt;</span> into the <span class="variable">&lt;user-repository&gt;</span>.
-
-    <span class="comment">(* Return success *)</span>
-    <span class="action">&lt;Return&gt;</span> a <span class="variable">&lt;Created: status&gt;</span> with <span class="variable">&lt;user&gt;</span>.
-}</pre>
-                </div>
+        <!-- Step 2: Project Structure -->
+        <section id="structure" class="step">
+            <div class="step-header">
+                <div class="step-number">Step 2</div>
+                <h2>Project Structure</h2>
+                <p class="step-intro">Setting up the files</p>
             </div>
 
-            <div class="story-callout animate-on-scroll">
-                Notice how this reads almost like a checklist? Extract the data, validate it,
-                create the user, store them, return success. Anyone can understand what this does.
-            </div>
-
-            <p class="section-text animate-on-scroll">
-                The feature set name (<code>Create User Account</code>) describes the action.
-                The business activity (<code>User Management</code>) provides context and grouping.
+            <p class="narrative">
+                An ARO application is a directory containing <code>.aro</code> files and an optional
+                <code>openapi.yaml</code> for HTTP routing. Here's what StatusPost looks like:
             </p>
 
-            <p class="section-text animate-on-scroll">
-                Feature sets are <strong>never called directly</strong>. Instead, they respond to
-                <em>events</em> &mdash; HTTP requests, file changes, socket connections, or custom
-                domain events. This is a fundamental principle of ARO.
-            </p>
-        </div>
-    </section>
-
-    <!-- Application Lifecycle Section -->
-    <section id="lifecycle" class="tutorial-section">
-        <div class="section-bg bg-gradient-2"></div>
-        <div class="tutorial-content">
-            <span class="section-number animate-on-scroll">04</span>
-            <h2 class="section-title animate-on-scroll">The Application Lifecycle</h2>
-            <p class="section-subtitle animate-on-scroll">How ARO applications live and breathe</p>
-
-            <p class="section-text animate-on-scroll">
-                Every ARO application needs exactly one entry point: <code>Application-Start</code>.
-                This is where your application begins its life.
-            </p>
-
-            <div class="timeline animate-on-scroll">
-                <div class="timeline-item animate-on-scroll" style="transition-delay: 0.1s;">
-                    <h4>1. Startup</h4>
-                    <p><code>Application-Start</code> executes. Initialize services, load configuration,
-                    prepare for events.</p>
-                </div>
-                <div class="timeline-item animate-on-scroll" style="transition-delay: 0.2s;">
-                    <h4>2. Keepalive</h4>
-                    <p>For long-running apps (servers, watchers), <code>&lt;Keepalive&gt;</code> keeps
-                    the app alive to process events.</p>
-                </div>
-                <div class="timeline-item animate-on-scroll" style="transition-delay: 0.3s;">
-                    <h4>3. Event Loop</h4>
-                    <p>The application listens for events: HTTP requests, file changes, socket data.
-                    Each event triggers matching feature sets.</p>
-                </div>
-                <div class="timeline-item animate-on-scroll" style="transition-delay: 0.4s;">
-                    <h4>4. Shutdown</h4>
-                    <p>On SIGTERM/SIGINT, <code>Application-End: Success</code> runs for graceful cleanup.</p>
-                </div>
+            <div class="file-structure">
+<pre><span class="dir">StatusPost/</span>
+  <span class="file">openapi.yaml</span>      <span class="note"># HTTP routes (contract-first)</span>
+  <span class="file">main.aro</span>          <span class="note"># Application lifecycle</span>
+  <span class="file">api.aro</span>           <span class="note"># HTTP handlers</span>
+  <span class="file">websocket.aro</span>     <span class="note"># WebSocket handlers</span>
+  <span class="dir">templates/</span>
+    <span class="file">index.html</span>      <span class="note"># Main page template</span>
+    <span class="dir">static/</span>
+      <span class="file">style.css</span>     <span class="note"># Styles</span>
+      <span class="file">app.js</span>        <span class="note"># Client-side JavaScript</span></pre>
             </div>
 
-            <div class="code-block animate-on-scroll">
-                <div class="code-header">
-                    <div class="code-dots">
-                        <span class="code-dot red"></span>
-                        <span class="code-dot yellow"></span>
-                        <span class="code-dot green"></span>
-                    </div>
-                    <span class="code-lang">aro</span>
-                </div>
-                <div class="code-content">
-<pre><span class="comment">(* The required entry point *)</span>
-(<span class="keyword">Application-Start</span>: <span class="keyword">My API Server</span>) {
-    <span class="action">&lt;Log&gt;</span> <span class="string">"Starting server..."</span> to the <span class="variable">&lt;console&gt;</span>.
+            <p class="narrative">
+                Create this directory structure. We'll fill in each file as we go.
+            </p>
 
-    <span class="comment">(* Keep the app running to handle HTTP requests *)</span>
-    <span class="action">&lt;Keepalive&gt;</span> the <span class="variable">&lt;application&gt;</span> for the <span class="variable">&lt;events&gt;</span>.
-
-    <span class="action">&lt;Return&gt;</span> an <span class="variable">&lt;OK: status&gt;</span> for the <span class="variable">&lt;startup&gt;</span>.
-}
-
-<span class="comment">(* Optional: cleanup on shutdown *)</span>
-(<span class="keyword">Application-End</span>: <span class="keyword">Success</span>) {
-    <span class="action">&lt;Log&gt;</span> <span class="string">"Goodbye!"</span> to the <span class="variable">&lt;console&gt;</span>.
-    <span class="action">&lt;Return&gt;</span> an <span class="variable">&lt;OK: status&gt;</span> for the <span class="variable">&lt;shutdown&gt;</span>.
-}</pre>
-                </div>
+            <div class="callout">
+                <p>
+                    ARO automatically discovers all <code>.aro</code> files in your application directory.
+                    No imports needed. Feature sets are globally visible.
+                </p>
             </div>
-        </div>
-    </section>
+        </section>
 
-    <!-- HTTP Section -->
-    <section id="http" class="tutorial-section">
-        <div class="section-bg bg-gradient-3"></div>
-        <div class="tutorial-content">
-            <span class="section-number animate-on-scroll">05</span>
-            <h2 class="section-title animate-on-scroll">Contract-First HTTP</h2>
-            <p class="section-subtitle animate-on-scroll">Your API starts with a contract</p>
+        <!-- Step 3: The Contract -->
+        <section id="contract" class="step">
+            <div class="step-header">
+                <div class="step-number">Step 3</div>
+                <h2>The Contract</h2>
+                <p class="step-intro">Define the API first</p>
+            </div>
 
-            <p class="section-text animate-on-scroll">
-                ARO uses <strong>contract-first</strong> development. You define your API in an
-                <code>openapi.yaml</code> file, and ARO routes requests to feature sets based on
+            <p class="narrative">
+                ARO uses <strong>contract-first</strong> development. You define your HTTP routes
+                in an OpenAPI specification, and ARO routes requests to feature sets based on
                 the <code>operationId</code>.
             </p>
 
-            <div class="diagram animate-on-scroll">
-<pre>
-    <span class="highlight">openapi.yaml</span>                      <span class="highlight">handlers.aro</span>
-    ------------                      ------------
-
-    paths:                            (listUsers: User API) {
-      /users:                             &lt;Retrieve&gt; the &lt;users&gt;...
-        get:              -------->       &lt;Return&gt; an &lt;OK&gt;...
-          operationId: listUsers      }
-        post:
-          operationId: createUser  -> (createUser: User API) {
-      /users/{id}:                        &lt;Extract&gt; the &lt;data&gt;...
-        get:                              &lt;Create&gt; the &lt;user&gt;...
-          operationId: getUser     ->     &lt;Return&gt; a &lt;Created&gt;...
-                                      }
-
-                                      (getUser: User API) {
-                                          &lt;Extract&gt; the &lt;id&gt;...
-                                          &lt;Retrieve&gt; the &lt;user&gt;...
-                                          &lt;Return&gt; an &lt;OK&gt;...
-                                      }
-</pre>
-            </div>
-
-            <p class="section-text animate-on-scroll">
-                The feature set name must match the <code>operationId</code>. No magic annotations,
-                no decorators &mdash; just naming conventions.
+            <p class="narrative">
+                StatusPost needs four endpoints: serve the homepage, serve static files, get messages,
+                and post a new message.
             </p>
 
-            <div class="code-block animate-on-scroll">
-                <div class="code-header">
-                    <div class="code-dots">
-                        <span class="code-dot red"></span>
-                        <span class="code-dot yellow"></span>
-                        <span class="code-dot green"></span>
+            <div class="code-file">
+                <div class="code-file-header">
+                    <div class="dots">
+                        <span class="dot red"></span>
+                        <span class="dot yellow"></span>
+                        <span class="dot green"></span>
                     </div>
-                    <span class="code-lang">yaml</span>
+                    <span class="filename">openapi.yaml</span>
                 </div>
-                <div class="code-content">
-<pre><span class="comment"># openapi.yaml - Your API contract</span>
-openapi: 3.0.3
+<pre>openapi: 3.0.3
 info:
-  title: User API
+  title: StatusPost API
   version: 1.0.0
 
 paths:
-  /users:
+  /:
     get:
-      <span class="keyword">operationId: listUsers</span>  <span class="comment"># Maps to feature set name</span>
-    post:
-      <span class="keyword">operationId: createUser</span>
-  /users/{id}:
+      <span class="keyword">operationId: homePage</span>
+      summary: Serve the main HTML page
+
+  /static/{file}:
     get:
-      <span class="keyword">operationId: getUser</span>
+      <span class="keyword">operationId: serveStatic</span>
+      summary: Serve static files (CSS, JS)
       parameters:
-        - name: id
+        - name: file
           in: path
-          required: true</pre>
-                </div>
-            </div>
-
-            <div class="code-block animate-on-scroll">
-                <div class="code-header">
-                    <div class="code-dots">
-                        <span class="code-dot red"></span>
-                        <span class="code-dot yellow"></span>
-                        <span class="code-dot green"></span>
-                    </div>
-                    <span class="code-lang">aro</span>
-                </div>
-                <div class="code-content">
-<pre><span class="comment">(* Feature set names match operationIds *)</span>
-
-(<span class="keyword">listUsers</span>: <span class="keyword">User API</span>) {
-    <span class="action">&lt;Retrieve&gt;</span> the <span class="variable">&lt;users&gt;</span> from the <span class="variable">&lt;user-repository&gt;</span>.
-    <span class="action">&lt;Return&gt;</span> an <span class="variable">&lt;OK: status&gt;</span> with <span class="variable">&lt;users&gt;</span>.
-}
-
-(<span class="keyword">getUser</span>: <span class="keyword">User API</span>) {
-    <span class="action">&lt;Extract&gt;</span> the <span class="variable">&lt;id&gt;</span> from the <span class="variable">&lt;pathParameters: id&gt;</span>.
-    <span class="action">&lt;Retrieve&gt;</span> the <span class="variable">&lt;user&gt;</span> from the <span class="variable">&lt;user-repository&gt;</span> where id <span class="operator">=</span> <span class="variable">&lt;id&gt;</span>.
-    <span class="action">&lt;Return&gt;</span> an <span class="variable">&lt;OK: status&gt;</span> with <span class="variable">&lt;user&gt;</span>.
-}
-
-(<span class="keyword">createUser</span>: <span class="keyword">User API</span>) {
-    <span class="action">&lt;Extract&gt;</span> the <span class="variable">&lt;data&gt;</span> from the <span class="variable">&lt;request: body&gt;</span>.
-    <span class="action">&lt;Create&gt;</span> the <span class="variable">&lt;user&gt;</span> with <span class="variable">&lt;data&gt;</span>.
-    <span class="action">&lt;Store&gt;</span> the <span class="variable">&lt;user&gt;</span> into the <span class="variable">&lt;user-repository&gt;</span>.
-    <span class="action">&lt;Return&gt;</span> a <span class="variable">&lt;Created: status&gt;</span> with <span class="variable">&lt;user&gt;</span>.
-}</pre>
-                </div>
-            </div>
-        </div>
-    </section>
-
-    <!-- Events Section -->
-    <section id="events" class="tutorial-section">
-        <div class="section-bg bg-gradient-1"></div>
-        <div class="tutorial-content">
-            <span class="section-number animate-on-scroll">06</span>
-            <h2 class="section-title animate-on-scroll">Event-Driven Architecture</h2>
-            <p class="section-subtitle animate-on-scroll">React to the world around you</p>
-
-            <p class="section-text animate-on-scroll">
-                ARO is fundamentally <strong>event-driven</strong>. Feature sets don't call each other
-                directly &mdash; they respond to events. This creates loose coupling and natural
-                extensibility.
-            </p>
-
-            <div class="concept-grid">
-                <div class="concept-card animate-on-scroll" style="transition-delay: 0.1s;">
-                    <div class="concept-icon">
-                        <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                            <circle cx="12" cy="12" r="10"/>
-                            <path d="M2 12h20M12 2a15.3 15.3 0 014 10 15.3 15.3 0 01-4 10 15.3 15.3 0 01-4-10 15.3 15.3 0 014-10z"/>
-                        </svg>
-                    </div>
-                    <h4>HTTP Events</h4>
-                    <p>Requests route via <code>operationId</code> from your OpenAPI contract.</p>
-                </div>
-                <div class="concept-card animate-on-scroll" style="transition-delay: 0.2s;">
-                    <div class="concept-icon">
-                        <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                            <path d="M22 19a2 2 0 01-2 2H4a2 2 0 01-2-2V5a2 2 0 012-2h5l2 3h9a2 2 0 012 2z"/>
-                        </svg>
-                    </div>
-                    <h4>File Events</h4>
-                    <p><code>FileCreated</code>, <code>FileModified</code>, <code>FileDeleted</code> from watched directories.</p>
-                </div>
-                <div class="concept-card animate-on-scroll" style="transition-delay: 0.3s;">
-                    <div class="concept-icon">
-                        <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                            <path d="M5 12h14"/>
-                            <path d="M12 5l7 7-7 7"/>
-                            <circle cx="5" cy="12" r="2"/>
-                            <circle cx="19" cy="12" r="2"/>
-                        </svg>
-                    </div>
-                    <h4>Socket Events</h4>
-                    <p><code>ClientConnected</code>, <code>DataReceived</code>, <code>ClientDisconnected</code> for TCP.</p>
-                </div>
-            </div>
-
-            <p class="section-text animate-on-scroll">
-                Event handlers use "Handler" in their business activity name:
-            </p>
-
-            <div class="code-block animate-on-scroll">
-                <div class="code-header">
-                    <div class="code-dots">
-                        <span class="code-dot red"></span>
-                        <span class="code-dot yellow"></span>
-                        <span class="code-dot green"></span>
-                    </div>
-                    <span class="code-lang">aro</span>
-                </div>
-                <div class="code-content">
-<pre><span class="comment">(* File system event handler *)</span>
-(<span class="keyword">Process Upload</span>: <span class="keyword">FileCreated Handler</span>) {
-    <span class="action">&lt;Extract&gt;</span> the <span class="variable">&lt;path&gt;</span> from the <span class="variable">&lt;event: path&gt;</span>.
-    <span class="action">&lt;Read&gt;</span> the <span class="variable">&lt;content&gt;</span> from the <span class="variable">&lt;file: path&gt;</span>.
-    <span class="action">&lt;Log&gt;</span> <span class="string">"Processing: ${path}"</span> to the <span class="variable">&lt;console&gt;</span>.
-    <span class="action">&lt;Return&gt;</span> an <span class="variable">&lt;OK: status&gt;</span> for the <span class="variable">&lt;processing&gt;</span>.
-}
-
-<span class="comment">(* Socket event handler - echo server *)</span>
-(<span class="keyword">Echo Data</span>: <span class="keyword">DataReceived Handler</span>) {
-    <span class="action">&lt;Extract&gt;</span> the <span class="variable">&lt;data&gt;</span> from the <span class="variable">&lt;event: data&gt;</span>.
-    <span class="action">&lt;Extract&gt;</span> the <span class="variable">&lt;client&gt;</span> from the <span class="variable">&lt;event: connection&gt;</span>.
-    <span class="action">&lt;Send&gt;</span> the <span class="variable">&lt;data&gt;</span> to the <span class="variable">&lt;client&gt;</span>.
-    <span class="action">&lt;Return&gt;</span> an <span class="variable">&lt;OK: status&gt;</span> for the <span class="variable">&lt;echo&gt;</span>.
-}</pre>
-                </div>
-            </div>
-
-            <div class="story-callout animate-on-scroll">
-                Think of feature sets as workers waiting for work. When an event arrives,
-                all matching handlers spring into action &mdash; independently and concurrently.
-            </div>
-        </div>
-    </section>
-
-    <!-- Philosophy Section -->
-    <section id="philosophy" class="tutorial-section">
-        <div class="section-bg bg-gradient-2"></div>
-        <div class="tutorial-content">
-            <span class="section-number animate-on-scroll">07</span>
-            <h2 class="section-title animate-on-scroll">The ARO Philosophy</h2>
-            <p class="section-subtitle animate-on-scroll">Design principles that guide the language</p>
-
-            <div class="philosophy-grid">
-                <div class="philosophy-item animate-on-scroll" style="transition-delay: 0.1s;">
-                    <div class="philosophy-number">I</div>
-                    <h4>Clarity Over Cleverness</h4>
-                    <p>Code should be readable by anyone, not just the author.
-                    Natural language patterns make intent obvious.</p>
-                </div>
-                <div class="philosophy-item animate-on-scroll" style="transition-delay: 0.2s;">
-                    <div class="philosophy-number">II</div>
-                    <h4>Contract-First</h4>
-                    <p>APIs are defined before implementation. The contract is the
-                    source of truth, not an afterthought.</p>
-                </div>
-                <div class="philosophy-item animate-on-scroll" style="transition-delay: 0.3s;">
-                    <div class="philosophy-number">III</div>
-                    <h4>Events, Not Calls</h4>
-                    <p>Feature sets respond to events, never calling each other directly.
-                    This creates natural decoupling.</p>
-                </div>
-            </div>
-
-            <div class="story-callout animate-on-scroll">
-                ARO isn't trying to be the fastest or most powerful language. It's trying
-                to be the most <em>understandable</em>. Because code that everyone can read
-                is code that everyone can improve.
-            </div>
-
-            <p class="section-text animate-on-scroll">
-                ARO focuses on the <strong>"happy path"</strong>. You write the code for when
-                things work; the runtime handles errors gracefully. This isn't production-ready
-                error handling &mdash; it's intentional simplicity for exploration and prototyping.
-            </p>
-
-            <div class="code-block animate-on-scroll">
-                <div class="code-header">
-                    <div class="code-dots">
-                        <span class="code-dot red"></span>
-                        <span class="code-dot yellow"></span>
-                        <span class="code-dot green"></span>
-                    </div>
-                    <span class="code-lang">aro</span>
-                </div>
-                <div class="code-content">
-<pre><span class="comment">(* ARO handles the unhappy path automatically *)</span>
-(<span class="keyword">getUser</span>: <span class="keyword">User API</span>) {
-    <span class="action">&lt;Extract&gt;</span> the <span class="variable">&lt;id&gt;</span> from the <span class="variable">&lt;pathParameters: id&gt;</span>.
-    <span class="action">&lt;Retrieve&gt;</span> the <span class="variable">&lt;user&gt;</span> from the <span class="variable">&lt;user-repository&gt;</span> where id <span class="operator">=</span> <span class="variable">&lt;id&gt;</span>.
-    <span class="action">&lt;Return&gt;</span> an <span class="variable">&lt;OK: status&gt;</span> with <span class="variable">&lt;user&gt;</span>.
-}
-
-<span class="comment">(* If user not found, runtime returns:
-   "Cannot retrieve the user from the user-repository where id = 123"
-
-   No try/catch, no null checks, no boilerplate. *)</span></pre>
-                </div>
-            </div>
-        </div>
-    </section>
-
-    <!-- Complete Example Section -->
-    <section id="complete" class="tutorial-section">
-        <div class="section-bg bg-gradient-3"></div>
-        <div class="tutorial-content">
-            <span class="section-number animate-on-scroll">08</span>
-            <h2 class="section-title animate-on-scroll">Putting It All Together</h2>
-            <p class="section-subtitle animate-on-scroll">A complete ARO application</p>
-
-            <p class="section-text animate-on-scroll">
-                Here's a complete application structure. Notice how everything connects:
-            </p>
-
-            <div class="diagram animate-on-scroll">
-<pre>
-MyAPI/
-├── openapi.yaml      <span class="highlight">&lt;-- Defines HTTP routes</span>
-├── main.aro          <span class="highlight">&lt;-- Application lifecycle</span>
-└── handlers.aro      <span class="highlight">&lt;-- Feature sets for each operationId</span>
-</pre>
-            </div>
-
-            <div class="code-block animate-on-scroll">
-                <div class="code-header">
-                    <div class="code-dots">
-                        <span class="code-dot red"></span>
-                        <span class="code-dot yellow"></span>
-                        <span class="code-dot green"></span>
-                    </div>
-                    <span class="code-lang">yaml</span>
-                </div>
-                <div class="code-content">
-<pre><span class="comment"># openapi.yaml</span>
-openapi: 3.0.3
-info:
-  title: Greeting API
-  version: 1.0.0
-paths:
-  /hello:
-    get:
-      operationId: sayHello
-      parameters:
-        - name: name
-          in: query
+          required: true
           schema:
-            type: string</pre>
-                </div>
+            type: string
+
+  /messages:
+    get:
+      <span class="keyword">operationId: getMessages</span>
+      summary: Get last 20 messages
+
+    post:
+      <span class="keyword">operationId: postMessage</span>
+      summary: Post a new message
+      requestBody:
+        content:
+          application/x-www-form-urlencoded:
+            schema:
+              type: object
+              properties:
+                message:
+                  type: string
+
+components:
+  schemas:
+    Message:
+      type: object
+      properties:
+        id:
+          type: string
+        message:
+          type: string
+        createdAt:
+          type: string
+          format: date-time</pre>
             </div>
 
-            <div class="code-block animate-on-scroll">
-                <div class="code-header">
-                    <div class="code-dots">
-                        <span class="code-dot red"></span>
-                        <span class="code-dot yellow"></span>
-                        <span class="code-dot green"></span>
+            <p class="narrative">
+                Each <code>operationId</code> maps directly to a feature set name. When a request
+                hits <code>GET /</code>, ARO looks for a feature set named <code>homePage</code>.
+            </p>
+        </section>
+
+        <!-- Step 4: Application Startup -->
+        <section id="startup" class="step">
+            <div class="step-header">
+                <div class="step-number">Step 4</div>
+                <h2>Application Startup</h2>
+                <p class="step-intro">Where everything begins</p>
+            </div>
+
+            <p class="narrative">
+                Every ARO application needs exactly one <code>Application-Start</code> feature set.
+                This is where you initialize services and prepare for events.
+            </p>
+
+            <p class="narrative">
+                StatusPost needs an HTTP server with WebSocket support. We enable WebSocket by
+                passing a configuration object to the <code>&lt;Start&gt;</code> action.
+            </p>
+
+            <div class="code-file">
+                <div class="code-file-header">
+                    <div class="dots">
+                        <span class="dot red"></span>
+                        <span class="dot yellow"></span>
+                        <span class="dot green"></span>
                     </div>
-                    <span class="code-lang">aro</span>
+                    <span class="filename">main.aro</span>
                 </div>
-                <div class="code-content">
-<pre><span class="comment">(* main.aro *)</span>
-(<span class="keyword">Application-Start</span>: <span class="keyword">Greeting API</span>) {
-    <span class="action">&lt;Log&gt;</span> <span class="string">"Greeting API ready!"</span> to the <span class="variable">&lt;console&gt;</span>.
+<pre><span class="comment">(* StatusPost - Real-time message board with WebSocket updates *)</span>
+
+(<span class="keyword">Application-Start</span>: <span class="keyword">StatusPost</span>) {
+    <span class="action">&lt;Log&gt;</span> <span class="string">"Starting StatusPost..."</span> to the <span class="variable">&lt;console&gt;</span>.
+
+    <span class="comment">(* Start HTTP server with WebSocket on /ws path *)</span>
+    <span class="action">&lt;Start&gt;</span> the <span class="variable">&lt;http-server&gt;</span> with { websocket: <span class="string">"/ws"</span> }.
+
+    <span class="action">&lt;Log&gt;</span> <span class="string">"StatusPost ready on http://localhost:8080"</span> to the <span class="variable">&lt;console&gt;</span>.
+    <span class="action">&lt;Log&gt;</span> <span class="string">"WebSocket available on ws://localhost:8080/ws"</span> to the <span class="variable">&lt;console&gt;</span>.
+
+    <span class="comment">(* Keep the application running to handle events *)</span>
     <span class="action">&lt;Keepalive&gt;</span> the <span class="variable">&lt;application&gt;</span> for the <span class="variable">&lt;events&gt;</span>.
+
     <span class="action">&lt;Return&gt;</span> an <span class="variable">&lt;OK: status&gt;</span> for the <span class="variable">&lt;startup&gt;</span>.
 }
 
-<span class="comment">(* handlers.aro *)</span>
-(<span class="keyword">sayHello</span>: <span class="keyword">Greeting API</span>) {
-    <span class="action">&lt;Extract&gt;</span> the <span class="variable">&lt;name&gt;</span> from the <span class="variable">&lt;queryParameters: name&gt;</span>.
-
-    if <span class="variable">&lt;name&gt;</span> is empty then {
-        <span class="action">&lt;Create&gt;</span> the <span class="variable">&lt;name&gt;</span> with <span class="string">"World"</span>.
-    }
-
-    <span class="action">&lt;Create&gt;</span> the <span class="variable">&lt;greeting&gt;</span> with { message: <span class="string">"Hello, ${name}!"</span> }.
-    <span class="action">&lt;Return&gt;</span> an <span class="variable">&lt;OK: status&gt;</span> with <span class="variable">&lt;greeting&gt;</span>.
+(<span class="keyword">Application-End</span>: <span class="keyword">Success</span>) {
+    <span class="action">&lt;Log&gt;</span> <span class="string">"StatusPost shutting down..."</span> to the <span class="variable">&lt;console&gt;</span>.
+    <span class="action">&lt;Stop&gt;</span> the <span class="variable">&lt;http-server&gt;</span> with {}.
+    <span class="action">&lt;Return&gt;</span> an <span class="variable">&lt;OK: status&gt;</span> for the <span class="variable">&lt;shutdown&gt;</span>.
 }</pre>
-                </div>
             </div>
 
-            <div class="code-block animate-on-scroll">
-                <div class="code-header">
-                    <div class="code-dots">
-                        <span class="code-dot red"></span>
-                        <span class="code-dot yellow"></span>
-                        <span class="code-dot green"></span>
-                    </div>
-                    <span class="code-lang">bash</span>
-                </div>
-                <div class="code-content">
-<pre><span class="comment"># Run the application</span>
-$ aro run ./MyAPI
-
-Greeting API ready!
-Server running on http://localhost:8080
-
-<span class="comment"># Test it</span>
-$ curl http://localhost:8080/hello?name=Developer
-{"message": "Hello, Developer!"}</pre>
-                </div>
-            </div>
-        </div>
-    </section>
-
-    <!-- Console Output Section -->
-    <section id="output" class="tutorial-section">
-        <div class="section-bg bg-gradient-1"></div>
-        <div class="tutorial-content">
-            <span class="section-number animate-on-scroll">09</span>
-            <h2 class="section-title animate-on-scroll">Context-Aware Output</h2>
-            <p class="section-subtitle animate-on-scroll">Same code, different formats</p>
-
-            <p class="section-text animate-on-scroll">
-                ARO automatically formats output based on <strong>how</strong> your code runs.
-                The same <code>&lt;Log&gt;</code> and <code>&lt;Return&gt;</code> statements produce
-                different output depending on the execution context.
-            </p>
-
-            <div class="concept-grid">
-                <div class="concept-card animate-on-scroll" style="transition-delay: 0.1s;">
-                    <div class="concept-icon">
-                        <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                            <polyline points="4 17 10 11 4 5"/>
-                            <line x1="12" y1="19" x2="20" y2="19"/>
-                        </svg>
-                    </div>
-                    <h4>Human Context</h4>
-                    <p><code>aro run</code> &mdash; Clean, readable text for humans at the terminal.</p>
-                </div>
-                <div class="concept-card animate-on-scroll" style="transition-delay: 0.2s;">
-                    <div class="concept-icon">
-                        <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                            <polyline points="16 18 22 12 16 6"/>
-                            <polyline points="8 6 2 12 8 18"/>
-                        </svg>
-                    </div>
-                    <h4>Machine Context</h4>
-                    <p>HTTP APIs &mdash; JSON output for programmatic consumption.</p>
-                </div>
-            </div>
-
-            <p class="section-text animate-on-scroll">
-                Consider this simple feature set:
-            </p>
-
-            <div class="code-block animate-on-scroll">
-                <div class="code-header">
-                    <div class="code-dots">
-                        <span class="code-dot red"></span>
-                        <span class="code-dot yellow"></span>
-                        <span class="code-dot green"></span>
-                    </div>
-                    <span class="code-lang">aro</span>
-                </div>
-                <div class="code-content">
-<pre>(<span class="keyword">getUser</span>: <span class="keyword">User API</span>) {
-    <span class="action">&lt;Retrieve&gt;</span> the <span class="variable">&lt;user&gt;</span> from the <span class="variable">&lt;user-repository&gt;</span> where id <span class="operator">=</span> <span class="variable">&lt;id&gt;</span>.
-    <span class="action">&lt;Log&gt;</span> <span class="string">"User retrieved"</span> to the <span class="variable">&lt;console&gt;</span>.
-    <span class="action">&lt;Return&gt;</span> an <span class="variable">&lt;OK: status&gt;</span> with <span class="variable">&lt;user&gt;</span>.
-}</pre>
-                </div>
-            </div>
-
-            <p class="section-text animate-on-scroll">
-                When run from the CLI with <code>aro run</code>, humans see this:
-            </p>
-
-            <div class="code-block animate-on-scroll">
-                <div class="code-header">
-                    <div class="code-dots">
-                        <span class="code-dot red"></span>
-                        <span class="code-dot yellow"></span>
-                        <span class="code-dot green"></span>
-                    </div>
-                    <span class="code-lang">Human Context</span>
-                </div>
-                <div class="code-content">
-<pre><span class="comment">[getUser]</span> User retrieved
-<span class="comment">[OK]</span> success
-  user.id: 123
-  user.name: Alice</pre>
-                </div>
-            </div>
-
-            <p class="section-text animate-on-scroll">
-                When accessed via HTTP API, machines receive JSON:
-            </p>
-
-            <div class="code-block animate-on-scroll">
-                <div class="code-header">
-                    <div class="code-dots">
-                        <span class="code-dot red"></span>
-                        <span class="code-dot yellow"></span>
-                        <span class="code-dot green"></span>
-                    </div>
-                    <span class="code-lang">Machine Context (JSON)</span>
-                </div>
-                <div class="code-content">
-<pre>{
-  <span class="string">"status"</span>: <span class="string">"OK"</span>,
-  <span class="string">"reason"</span>: <span class="string">"success"</span>,
-  <span class="string">"data"</span>: {
-    <span class="string">"user"</span>: {<span class="string">"id"</span>: 123, <span class="string">"name"</span>: <span class="string">"Alice"</span>}
-  }
-}</pre>
-                </div>
-            </div>
-
-            <div class="story-callout animate-on-scroll">
-                Write once, run anywhere. Your ARO code adapts its output to serve humans
-                at the terminal, developers during testing, and machines via APIs &mdash;
-                all without a single format string.
-            </div>
-        </div>
-    </section>
-
-    <!-- Next Steps Section -->
-    <section id="next" class="tutorial-section cta-section">
-        <div class="section-bg bg-gradient-1"></div>
-        <div class="tutorial-content">
-            <h2 class="section-title animate-on-scroll">Your Journey Begins</h2>
-            <p class="section-subtitle animate-on-scroll">Ready to write some ARO?</p>
-
-            <p class="section-text animate-on-scroll" style="text-align: center; max-width: 600px; margin: 0 auto 20px;">
-                You've learned the fundamentals. Now it's time to explore deeper.
-                Build something. Break something. Learn by doing.
-            </p>
-
-            <div class="cta-buttons animate-on-scroll">
-                <a href="getting-started.html" class="cta-button cta-button-primary">
-                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                        <path d="M5 12h14M12 5l7 7-7 7"/>
-                    </svg>
-                    Get Started
-                </a>
-                <a href="docs.html" class="cta-button cta-button-secondary">
-                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                        <path d="M4 19.5A2.5 2.5 0 016.5 17H20"/>
-                        <path d="M6.5 2H20v20H6.5A2.5 2.5 0 014 19.5v-15A2.5 2.5 0 016.5 2z"/>
-                    </svg>
-                    Read the Docs
-                </a>
-            </div>
-
-            <div class="footer-note animate-on-scroll">
+            <div class="callout">
                 <p>
-                    ARO is experimental. It's a playground for ideas about what programming
-                    languages could be. Use it to explore, prototype, and imagine.
+                    The <code>&lt;Keepalive&gt;</code> action is essential for long-running applications.
+                    Without it, the application would exit after startup completes.
                 </p>
             </div>
-        </div>
-    </section>
+        </section>
+
+        <!-- Step 5: Serving Pages -->
+        <section id="pages" class="step">
+            <div class="step-header">
+                <div class="step-number">Step 5</div>
+                <h2>Serving Pages</h2>
+                <p class="step-intro">HTML templates and static files</p>
+            </div>
+
+            <p class="narrative">
+                Now we need to handle HTTP requests. The <code>homePage</code> feature set
+                serves the main HTML page. It retrieves recent messages from the repository
+                and transforms them through a template.
+            </p>
+
+            <div class="code-file">
+                <div class="code-file-header">
+                    <div class="dots">
+                        <span class="dot red"></span>
+                        <span class="dot yellow"></span>
+                        <span class="dot green"></span>
+                    </div>
+                    <span class="filename">api.aro (part 1)</span>
+                </div>
+<pre><span class="comment">(* Serve static files - CSS, JS *)</span>
+
+(<span class="keyword">serveStatic</span>: <span class="keyword">StatusPost API</span>) {
+    <span class="action">&lt;Extract&gt;</span> the <span class="variable">&lt;file&gt;</span> from the <span class="variable">&lt;pathParameters: file&gt;</span>.
+    <span class="action">&lt;Create&gt;</span> the <span class="variable">&lt;template-path&gt;</span> with <span class="string">"static/"</span> ++ <span class="variable">&lt;file&gt;</span>.
+    <span class="action">&lt;Transform&gt;</span> the <span class="variable">&lt;content&gt;</span> from the <span class="variable">&lt;template: template-path&gt;</span>.
+    <span class="action">&lt;Return&gt;</span> an <span class="variable">&lt;OK: status&gt;</span> with <span class="variable">&lt;content&gt;</span>.
+}
+
+<span class="comment">(* Serve the homepage with recent messages *)</span>
+
+(<span class="keyword">homePage</span>: <span class="keyword">StatusPost API</span>) {
+    <span class="action">&lt;Retrieve&gt;</span> the <span class="variable">&lt;all-messages&gt;</span> from the <span class="variable">&lt;message-repository&gt;</span>.
+    <span class="action">&lt;Extract&gt;</span> the <span class="variable">&lt;recent-messages: 0-19&gt;</span> from the <span class="variable">&lt;all-messages&gt;</span>.
+    <span class="action">&lt;Transform&gt;</span> the <span class="variable">&lt;html&gt;</span> from the <span class="variable">&lt;template: index.html&gt;</span>.
+    <span class="action">&lt;Return&gt;</span> an <span class="variable">&lt;OK: status&gt;</span> with <span class="variable">&lt;html&gt;</span>.
+}
+
+<span class="comment">(* Get messages as JSON for the API *)</span>
+
+(<span class="keyword">getMessages</span>: <span class="keyword">StatusPost API</span>) {
+    <span class="action">&lt;Retrieve&gt;</span> the <span class="variable">&lt;all-messages&gt;</span> from the <span class="variable">&lt;message-repository&gt;</span>.
+    <span class="action">&lt;Extract&gt;</span> the <span class="variable">&lt;recent-messages: 0-19&gt;</span> from the <span class="variable">&lt;all-messages&gt;</span>.
+    <span class="action">&lt;Return&gt;</span> an <span class="variable">&lt;OK: status&gt;</span> with <span class="variable">&lt;recent-messages&gt;</span>.
+}</pre>
+            </div>
+
+            <p class="narrative">
+                Notice the <code>&lt;Extract&gt;</code> with <code>0-19</code>? That's a range specifier.
+                It extracts the first 20 elements from the list. ARO supports
+                <code>first</code>, <code>last</code>, index access, and ranges.
+            </p>
+
+            <p class="narrative">
+                The <code>&lt;Transform&gt;</code> action processes a template file. Variables from
+                the current scope (like <code>recent-messages</code>) are available inside the template.
+            </p>
+        </section>
+
+        <!-- Step 6: Posting Messages -->
+        <section id="messages" class="step">
+            <div class="step-header">
+                <div class="step-number">Step 6</div>
+                <h2>Posting Messages</h2>
+                <p class="step-intro">Store and broadcast</p>
+            </div>
+
+            <p class="narrative">
+                When a user posts a message, we need to create a message object, store it in
+                the repository, and broadcast it to all connected WebSocket clients.
+            </p>
+
+            <div class="code-file">
+                <div class="code-file-header">
+                    <div class="dots">
+                        <span class="dot red"></span>
+                        <span class="dot yellow"></span>
+                        <span class="dot green"></span>
+                    </div>
+                    <span class="filename">api.aro (part 2)</span>
+                </div>
+<pre><span class="comment">(* Post a new message *)</span>
+
+(<span class="keyword">postMessage</span>: <span class="keyword">StatusPost API</span>) {
+    <span class="comment">(* Extract the message text from the form data *)</span>
+    <span class="action">&lt;Extract&gt;</span> the <span class="variable">&lt;body&gt;</span> from the <span class="variable">&lt;request: body&gt;</span>.
+    <span class="action">&lt;Extract&gt;</span> the <span class="variable">&lt;message-text: message&gt;</span> from the <span class="variable">&lt;body&gt;</span>.
+
+    <span class="comment">(* Create a message object with timestamp *)</span>
+    <span class="action">&lt;Create&gt;</span> the <span class="variable">&lt;message: Message&gt;</span> with {
+        message: <span class="variable">&lt;message-text&gt;</span>,
+        createdAt: <span class="variable">&lt;now&gt;</span>
+    }.
+
+    <span class="comment">(* Store in repository *)</span>
+    <span class="action">&lt;Store&gt;</span> the <span class="variable">&lt;message&gt;</span> into the <span class="variable">&lt;message-repository&gt;</span>.
+
+    <span class="comment">(* Broadcast to all WebSocket clients *)</span>
+    <span class="action">&lt;Broadcast&gt;</span> the <span class="variable">&lt;message&gt;</span> to the <span class="variable">&lt;websocket&gt;</span>.
+
+    <span class="action">&lt;Return&gt;</span> a <span class="variable">&lt;Created: status&gt;</span> with <span class="variable">&lt;message&gt;</span>.
+}</pre>
+            </div>
+
+            <p class="narrative">
+                The <code>&lt;Store&gt;</code> action saves the message to an in-memory repository.
+                Repositories are named collections that persist for the lifetime of the application.
+            </p>
+
+            <p class="narrative">
+                The <code>&lt;Broadcast&gt;</code> action sends the message to all connected WebSocket
+                clients. They'll receive it as JSON and update their UI in real-time.
+            </p>
+
+            <div class="callout">
+                <p>
+                    The <code>&lt;now&gt;</code> special variable gives you the current timestamp.
+                    ARO automatically serializes it to ISO 8601 format for JSON responses.
+                </p>
+            </div>
+        </section>
+
+        <!-- Step 7: WebSocket Handlers -->
+        <section id="websocket" class="step">
+            <div class="step-header">
+                <div class="step-number">Step 7</div>
+                <h2>Real-Time Updates</h2>
+                <p class="step-intro">WebSocket connection events</p>
+            </div>
+
+            <p class="narrative">
+                When clients connect and disconnect via WebSocket, ARO fires events that you
+                can handle with feature sets. The business activity pattern is
+                <code>WebSocket Event Handler</code>.
+            </p>
+
+            <div class="code-file">
+                <div class="code-file-header">
+                    <div class="dots">
+                        <span class="dot red"></span>
+                        <span class="dot yellow"></span>
+                        <span class="dot green"></span>
+                    </div>
+                    <span class="filename">websocket.aro</span>
+                </div>
+<pre><span class="comment">(* WebSocket Event Handlers *)</span>
+
+(<span class="keyword">Handle WebSocket Connect</span>: <span class="keyword">WebSocket Event Handler</span>) {
+    <span class="action">&lt;Extract&gt;</span> the <span class="variable">&lt;connection-id&gt;</span> from the <span class="variable">&lt;event: id&gt;</span>.
+    <span class="action">&lt;Log&gt;</span> <span class="string">"WebSocket client connected"</span> to the <span class="variable">&lt;console&gt;</span>.
+    <span class="action">&lt;Return&gt;</span> an <span class="variable">&lt;OK: status&gt;</span> for the <span class="variable">&lt;connection&gt;</span>.
+}
+
+(<span class="keyword">Handle WebSocket Disconnect</span>: <span class="keyword">WebSocket Event Handler</span>) {
+    <span class="action">&lt;Extract&gt;</span> the <span class="variable">&lt;connection-id&gt;</span> from the <span class="variable">&lt;event: connectionId&gt;</span>.
+    <span class="action">&lt;Log&gt;</span> <span class="string">"WebSocket client disconnected"</span> to the <span class="variable">&lt;console&gt;</span>.
+    <span class="action">&lt;Return&gt;</span> an <span class="variable">&lt;OK: status&gt;</span> for the <span class="variable">&lt;disconnection&gt;</span>.
+}</pre>
+            </div>
+
+            <p class="narrative">
+                These handlers are optional but useful for logging and tracking connected clients.
+                The magic happens in <code>&lt;Broadcast&gt;</code> which ARO handles internally.
+            </p>
+        </section>
+
+        <!-- Step 8: Repository Observer -->
+        <section id="observer" class="step">
+            <div class="step-header">
+                <div class="step-number">Step 8</div>
+                <h2>Cleanup Observer</h2>
+                <p class="step-intro">React when data changes</p>
+            </div>
+
+            <p class="narrative">
+                What happens when hundreds of messages pile up? We need automatic cleanup.
+                <strong>Repository observers</strong> let you react when data is stored, updated,
+                or deleted.
+            </p>
+
+            <p class="narrative">
+                We'll create an observer that triggers when the message count exceeds 40.
+                It keeps the 20 most recent messages and clears the rest.
+            </p>
+
+            <div class="code-file">
+                <div class="code-file-header">
+                    <div class="dots">
+                        <span class="dot red"></span>
+                        <span class="dot yellow"></span>
+                        <span class="dot green"></span>
+                    </div>
+                    <span class="filename">api.aro (part 3)</span>
+                </div>
+<pre><span class="comment">(* Repository Observer - cleanup when message count exceeds 40 *)</span>
+
+(<span class="keyword">Cleanup Messages</span>: <span class="keyword">message-repository Observer</span>) when <span class="variable">&lt;message-repository: count&gt;</span> &gt; 40 {
+    <span class="action">&lt;Retrieve&gt;</span> the <span class="variable">&lt;all-messages&gt;</span> from the <span class="variable">&lt;message-repository&gt;</span>.
+    <span class="action">&lt;Extract&gt;</span> the <span class="variable">&lt;keep-messages: 0-19&gt;</span> from the <span class="variable">&lt;all-messages&gt;</span>.
+    <span class="action">&lt;Clear&gt;</span> the <span class="variable">&lt;all&gt;</span> from the <span class="variable">&lt;message-repository&gt;</span>.
+    <span class="action">&lt;Store&gt;</span> the <span class="variable">&lt;keep-messages&gt;</span> into the <span class="variable">&lt;message-repository&gt;</span>.
+    <span class="action">&lt;Log&gt;</span> <span class="string">"Cleaned up messages, kept last 20"</span> to the <span class="variable">&lt;console&gt;</span>.
+    <span class="action">&lt;Return&gt;</span> an <span class="variable">&lt;OK: status&gt;</span> for the <span class="variable">&lt;cleanup&gt;</span>.
+}</pre>
+            </div>
+
+            <p class="narrative">
+                The <code>when</code> clause is a guard condition. The observer only fires when the
+                condition is true. <code>&lt;message-repository: count&gt;</code> returns the current
+                number of items in the repository.
+            </p>
+
+            <div class="callout">
+                <p>
+                    Without the <code>when</code> guard, the observer would fire on every store operation.
+                    The condition prevents unnecessary cleanup when there are few messages.
+                </p>
+            </div>
+        </section>
+
+        <!-- Step 9: Templates -->
+        <section id="templates" class="step">
+            <div class="step-header">
+                <div class="step-number">Step 9</div>
+                <h2>Templates</h2>
+                <p class="step-intro">Dynamic HTML rendering</p>
+            </div>
+
+            <p class="narrative">
+                ARO templates are HTML files with embedded expressions. Use
+                <code>{{ }}</code> for values and <code>{{ for each }}</code> for loops.
+            </p>
+
+            <div class="code-file">
+                <div class="code-file-header">
+                    <div class="dots">
+                        <span class="dot red"></span>
+                        <span class="dot yellow"></span>
+                        <span class="dot green"></span>
+                    </div>
+                    <span class="filename">templates/index.html</span>
+                </div>
+<pre>&lt;!DOCTYPE html&gt;
+&lt;html&gt;
+&lt;head&gt;
+    &lt;title&gt;StatusPost&lt;/title&gt;
+    &lt;link rel="stylesheet" href="/static/style.css"&gt;
+&lt;/head&gt;
+&lt;body&gt;
+    &lt;h1&gt;StatusPost&lt;/h1&gt;
+
+    &lt;div class="form"&gt;
+        &lt;form id="f"&gt;
+            &lt;input type="text" id="msg" placeholder="Message..." required&gt;
+            &lt;button type="submit"&gt;Post&lt;/button&gt;
+        &lt;/form&gt;
+    &lt;/div&gt;
+
+    &lt;div id="status" class="disconnected"&gt;Connecting...&lt;/div&gt;
+
+    &lt;div id="messages"&gt;
+<span class="keyword">{{ for each &lt;msg&gt; in &lt;recent-messages&gt; { }}</span>
+        &lt;div class="message"&gt;
+            &lt;div class="time"&gt;<span class="keyword">{{ &lt;msg: createdAt&gt; | date: "dd.MM.yyyy HH:mm" }}</span>&lt;/div&gt;
+            &lt;div&gt;<span class="keyword">{{ &lt;msg: message&gt; }}</span>&lt;/div&gt;
+        &lt;/div&gt;
+<span class="keyword">{{ } }}</span>
+    &lt;/div&gt;
+
+    &lt;script src="/static/app.js"&gt;&lt;/script&gt;
+&lt;/body&gt;
+&lt;/html&gt;</pre>
+            </div>
+
+            <p class="narrative">
+                The template loops through <code>recent-messages</code> and renders each one.
+                The <code>| date:</code> filter formats the timestamp.
+            </p>
+
+            <p class="narrative">
+                The client-side JavaScript connects to WebSocket and updates the page in real-time:
+            </p>
+
+            <div class="code-file">
+                <div class="code-file-header">
+                    <div class="dots">
+                        <span class="dot red"></span>
+                        <span class="dot yellow"></span>
+                        <span class="dot green"></span>
+                    </div>
+                    <span class="filename">templates/static/app.js</span>
+                </div>
+<pre>var m = document.getElementById('messages');
+var s = document.getElementById('status');
+var f = document.getElementById('f');
+var i = document.getElementById('msg');
+
+function add(msg) {
+    var d = document.createElement('div');
+    d.className = 'message';
+    d.innerHTML = '&lt;div class="time"&gt;' + formatDate(msg.createdAt) + '&lt;/div&gt;' +
+                  '&lt;div&gt;' + escapeHtml(msg.message) + '&lt;/div&gt;';
+    m.insertBefore(d, m.firstChild);
+}
+
+var ws;
+function connect() {
+    var protocol = location.protocol === 'https:' ? 'wss:' : 'ws:';
+    ws = new WebSocket(protocol + '//' + location.host + '/ws');
+
+    ws.onopen = function() {
+        s.textContent = 'Connected';
+        s.className = 'connected';
+    };
+
+    ws.onmessage = function(e) {
+        try { add(JSON.parse(e.data)); } catch(err) {}
+    };
+
+    ws.onclose = function() {
+        s.textContent = 'Disconnected';
+        s.className = 'disconnected';
+        setTimeout(connect, 3000);
+    };
+}
+connect();
+
+f.onsubmit = function(e) {
+    e.preventDefault();
+    var msg = i.value.trim();
+    if (!msg) return;
+    fetch('/messages', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+        body: 'message=' + encodeURIComponent(msg)
+    });
+    i.value = '';
+};</pre>
+            </div>
+        </section>
+
+        <!-- Step 10: Running It -->
+        <section id="run" class="step">
+            <div class="step-header">
+                <div class="step-number">Step 10</div>
+                <h2>Running It</h2>
+                <p class="step-intro">See it in action</p>
+            </div>
+
+            <p class="narrative">
+                With all files in place, run your application:
+            </p>
+
+            <div class="code-file">
+                <div class="code-file-header">
+                    <div class="dots">
+                        <span class="dot red"></span>
+                        <span class="dot yellow"></span>
+                        <span class="dot green"></span>
+                    </div>
+                    <span class="filename">Terminal</span>
+                </div>
+<pre>$ aro run ./StatusPost
+
+Starting StatusPost...
+StatusPost ready on http://localhost:8080
+WebSocket available on ws://localhost:8080/ws</pre>
+            </div>
+
+            <p class="narrative">
+                Open <code>http://localhost:8080</code> in your browser. Open another browser window.
+                Post a message. Watch it appear instantly in both windows.
+            </p>
+
+            <p class="narrative">
+                Post 41 messages. Watch the console log the cleanup. The observer keeps your
+                repository lean automatically.
+            </p>
+
+            <div class="callout">
+                <p>
+                    <strong>That's StatusPost.</strong> A real-time message board with HTTP, WebSocket,
+                    repositories, observers, and templates. All in about 50 lines of ARO code.
+                </p>
+            </div>
+        </section>
+
+        <!-- Final CTA -->
+        <section class="final-cta">
+            <h2>Keep Building</h2>
+            <p>
+                You've built a real-time application. Now explore more of what ARO can do.
+            </p>
+            <div class="cta-buttons">
+                <a href="docs.html" class="btn btn-primary">Read the Docs</a>
+                <a href="getting-started.html" class="btn btn-secondary">Get Started</a>
+            </div>
+        </section>
+    </main>
 
 {{footer}}
 </body>

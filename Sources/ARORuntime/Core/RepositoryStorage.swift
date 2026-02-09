@@ -460,19 +460,20 @@ public final class InMemoryRepositoryStorage: RepositoryStorageService, Sendable
     /// Get count synchronously (for compiled binary when guards)
     /// Uses a semaphore to block until the async operation completes
     public func countSync(repository: String, businessActivity: String) -> Int {
+        final class Box: @unchecked Sendable { var value: Int = 0 }
+        let result = Box()
         let semaphore = DispatchSemaphore(value: 0)
-        nonisolated(unsafe) var result = 0
 
         // Use DispatchQueue with a background thread to avoid blocking the main actor
         DispatchQueue.global(qos: .userInitiated).async {
             Task {
-                result = await self.count(repository: repository, businessActivity: businessActivity)
+                result.value = await self.count(repository: repository, businessActivity: businessActivity)
                 semaphore.signal()
             }
         }
 
         semaphore.wait()
-        return result
+        return result.value
     }
 
     // MARK: - Debug/Testing
