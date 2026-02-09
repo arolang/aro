@@ -293,6 +293,7 @@
         <a href="#observer" title="Cleanup Observer"></a>
         <a href="#templates" title="Templates"></a>
         <a href="#run" title="Running It"></a>
+        <a href="#build" title="Build It"></a>
     </div>
 
     <main class="container">
@@ -304,7 +305,7 @@
                 WebSockets, repositories, templates, and more.
             </p>
             <div class="tutorial-meta">
-                <span>10 steps</span>
+                <span>11 steps</span>
                 <span>~20 minutes</span>
                 <span>Intermediate</span>
             </div>
@@ -939,6 +940,58 @@ WebSocket available on ws://localhost:8080/ws</pre>
                 The complete source code is available on GitHub:
                 <a href="https://github.com/arolang/example-web-chat" style="color: var(--color-accent);">arolang/example-web-chat</a>
             </p>
+        </section>
+
+        <!-- Step 11: Build It -->
+        <section id="build" class="step">
+            <div class="step-header">
+                <div class="step-number">Step 11</div>
+                <h2>Build It</h2>
+                <p class="step-intro">Compile to a native binary</p>
+            </div>
+
+            <p class="narrative">
+                Running with <code>aro run</code> is great for development, but for production
+                you want a native binary. ARO compiles to LLVM IR and links against the runtime
+                to produce a standalone executable.
+            </p>
+
+            <div class="code-file">
+                <div class="code-file-header">
+                    <div class="dots">
+                        <span class="dot red"></span>
+                        <span class="dot yellow"></span>
+                        <span class="dot green"></span>
+                    </div>
+                    <span class="filename">Terminal</span>
+                </div>
+<pre>$ aro build ./StatusPost
+
+Compiling StatusPost...
+  Generating LLVM IR...
+  Compiling to object file...
+  Linking with runtime...
+
+Build complete: ./StatusPost/StatusPost
+
+$ ./StatusPost/StatusPost
+
+Starting StatusPost...
+StatusPost ready on http://localhost:8080
+WebSocket available on ws://localhost:8080/ws</pre>
+            </div>
+
+            <p class="narrative">
+                The compiled binary includes everything: your ARO code, the runtime, and all
+                dependencies. No interpreter needed. Just copy and run.
+            </p>
+
+            <div class="callout">
+                <p>
+                    Use <code>aro build --optimize</code> for release builds. This enables
+                    LLVM optimizations for smaller binaries and faster execution.
+                </p>
+            </div>
         </section>
 
         <!-- Final CTA -->
