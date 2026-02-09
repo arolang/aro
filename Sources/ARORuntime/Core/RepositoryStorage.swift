@@ -464,9 +464,12 @@ public final class InMemoryRepositoryStorage: RepositoryStorageService, Sendable
         let result = Box()
         let semaphore = DispatchSemaphore(value: 0)
 
-        Task {
-            result.value = await self.count(repository: repository, businessActivity: businessActivity)
-            semaphore.signal()
+        // Use DispatchQueue with a background thread to avoid blocking the main actor
+        DispatchQueue.global(qos: .userInitiated).async {
+            Task {
+                result.value = await self.count(repository: repository, businessActivity: businessActivity)
+                semaphore.signal()
+            }
         }
 
         semaphore.wait()
