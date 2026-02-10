@@ -36,7 +36,16 @@ The `<Execute>` action executes shell commands on the host system, returning str
 ### 1.1 Syntax
 
 ```aro
-(* Basic execution *)
+(* Preferred syntax: command in object specifier *)
+<Execute> the <result> for the <command: "uptime">.
+
+(* Command with arguments *)
+<Execute> the <result> for the <command: "ls"> with "-la".
+
+(* Command with multiple arguments *)
+<Execute> the <result> for the <command: "ls"> with ["-l", "-a", "-h"].
+
+(* Legacy syntax: full command in with clause *)
 <Execute> the <result> with "ls -la".
 
 (* Execute with options *)

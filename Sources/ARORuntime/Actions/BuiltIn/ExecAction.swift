@@ -119,10 +119,19 @@ public struct ExecConfig: Sendable {
 ///
 /// ## Syntax
 /// ```aro
-/// (* Simple command *)
+/// (* Command in object specifier - preferred syntax *)
+/// <Execute> the <result> for the <command: "uptime">.
+///
+/// (* Command with arguments *)
+/// <Execute> the <result> for the <command: "ls"> with "-la".
+///
+/// (* Command with multiple arguments *)
+/// <Execute> the <result> for the <command: "ls"> with ["-l", "-a", "-h"].
+///
+/// (* Legacy: Full command in with clause *)
 /// <Execute> the <result> for the <command> with "ls -la".
 ///
-/// (* With working directory *)
+/// (* With configuration object *)
 /// <Execute> the <result> on the <system> with {
 ///     command: "npm install",
 ///     workingDirectory: "/app"
@@ -184,6 +193,50 @@ public struct ExecuteAction: ActionImplementation {
         from object: ObjectDescriptor,
         context: ExecutionContext
     ) throws -> ExecConfig {
+        // NEW SYNTAX: <Exec> the <result> for the <command: "uptime"> with "-args".
+        // When object.base is "command" and specifiers contain the command name,
+        // treat the "with" clause as arguments rather than the full command.
+        if object.base == "command" && !object.specifiers.isEmpty {
+            // The first specifier is the command name (e.g., "uptime" from <command: "uptime">)
+            let commandName = object.specifiers[0]
+
+            // Check for arguments in the "with" clause
+            var arguments: [String] = []
+
+            // Check _literal_ for string arguments
+            if let literalArgs = context.resolveAny("_literal_") as? String, !literalArgs.isEmpty {
+                arguments.append(literalArgs)
+            }
+            // Check _expression_ for string or array arguments
+            else if let expr = context.resolveAny("_expression_") {
+                if let stringArgs = expr as? String, !stringArgs.isEmpty {
+                    arguments.append(stringArgs)
+                } else if let arrayArgs = expr as? [String] {
+                    arguments.append(contentsOf: arrayArgs)
+                } else if let arrayAnySendable = expr as? [any Sendable] {
+                    // Handle array of Any Sendable (convert to strings)
+                    for arg in arrayAnySendable {
+                        if let str = arg as? String {
+                            arguments.append(str)
+                        } else {
+                            arguments.append(String(describing: arg))
+                        }
+                    }
+                }
+            }
+
+            // Build the full command
+            let fullCommand: String
+            if arguments.isEmpty {
+                fullCommand = commandName
+            } else {
+                fullCommand = commandName + " " + arguments.joined(separator: " ")
+            }
+
+            return ExecConfig(command: fullCommand)
+        }
+
+        // LEGACY SYNTAX: <Exec> the <result> for the <name> with "full command".
         // Priority 1: Check for literal string command (from "with" clause)
         if let literalCommand = context.resolveAny("_literal_") as? String, !literalCommand.isEmpty {
             return ExecConfig(command: literalCommand)
@@ -222,7 +275,7 @@ public struct ExecuteAction: ActionImplementation {
             }
         }
 
-        throw ActionError.missingRequiredField("command - use 'with \"command\"' or 'with { command: \"...\" }'")
+        throw ActionError.missingRequiredField("command - use '<command: \"cmd\">' or 'with \"command\"' or 'with { command: \"...\" }'")
     }
 
     private func runCommand(_ config: ExecConfig) async -> ExecResult {

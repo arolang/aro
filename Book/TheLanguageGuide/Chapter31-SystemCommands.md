@@ -4,9 +4,26 @@ ARO provides the `<Exec>` action for executing shell commands on the host system
 
 ## Basic Execution
 
-### Simple Commands
+### Preferred Syntax
 
-Execute shell commands using the `<Exec>` action:
+The preferred syntax places the command name in the object specifier:
+
+```aro
+(* Simple command *)
+<Exec> the <result> for the <command: "uptime">.
+
+(* Command with arguments *)
+<Exec> the <result> for the <command: "ls"> with "-la".
+
+(* Command with multiple arguments *)
+<Exec> the <result> for the <command: "ls"> with ["-l", "-a", "-h"].
+```
+
+This syntax clearly separates the command from its arguments, making code more readable.
+
+### Legacy Syntax
+
+The legacy syntax with full command in the `with` clause is still supported:
 
 ```aro
 <Exec> the <result> for the <command> with "ls -la".
@@ -20,10 +37,10 @@ Build commands dynamically with variables:
 
 ```aro
 <Create> the <directory> with "/var/log".
-<Exec> the <result> for the <listing> with "ls -la ${directory}".
+<Exec> the <result> for the <command: "ls"> with "-la ${directory}".
 
 <Create> the <pattern> with "*.aro".
-<Exec> the <files> for the <search> with "find . -name '${pattern}'".
+<Exec> the <files> for the <command: "find"> with [". ", "-name", "${pattern}"].
 ```
 
 ## Result Object
@@ -170,9 +187,9 @@ output:
 
 ```aro
 (System Info: Status API) {
-    <Exec> the <hostname> for the <check> with "hostname".
-    <Exec> the <uptime> for the <check> with "uptime".
-    <Exec> the <memory> for the <check> with "free -h".
+    <Exec> the <hostname> for the <command: "hostname">.
+    <Exec> the <uptime> for the <command: "uptime">.
+    <Exec> the <memory> for the <command: "free"> with "-h".
 
     <Create> the <info> with {
         hostname: <hostname.output>,

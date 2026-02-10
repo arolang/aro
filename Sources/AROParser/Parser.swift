@@ -984,8 +984,15 @@ public final class Parser {
         if check(.colon) {
             advance()
 
-            // Parse type annotation (ARO-0006)
-            typeAnnotation = try parseTypeAnnotation()
+            // ARO-0068: Check for string literal after colon (e.g., <command: "uptime">)
+            // This allows commands and other values to be specified inline
+            if case .stringLiteral(let value) = peek().kind {
+                advance()
+                typeAnnotation = value
+            } else {
+                // Parse type annotation (ARO-0006)
+                typeAnnotation = try parseTypeAnnotation()
+            }
         }
 
         return QualifiedNoun(
