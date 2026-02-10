@@ -58,7 +58,7 @@
 
 (* Check disk usage - operationId: checkDisk *)
 (checkDisk: System Monitor API) {
-    <Exec> the <result> for the <disk-check> with "df -h".
+    <Exec> the <result> for the <command: "df"> with "-h".
 
     <Return> a <ServerError: status> with <result> when <result: error> == true.
 
@@ -67,7 +67,7 @@
 
 (* List running processes - operationId: listProcesses *)
 (listProcesses: System Monitor API) {
-    <Exec> the <result> for the <process-list> with "ps aux | head -20".
+    <Exec> the <result> for the <command: "ps"> with "aux | head -20".
 
     <Return> a <ServerError: status> with <result> when <result: error> == true.
 

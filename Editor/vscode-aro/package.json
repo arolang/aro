@@ -2,7 +2,7 @@
   "name": "aro-language",
   "displayName": "ARO Language",
   "description": "Language support for ARO - Action Result Object programming language",
-  "version": "1.1.0",
+  "version": "1.2.0",
   "publisher": "arolang",
   "repository": {
     "type": "git",
