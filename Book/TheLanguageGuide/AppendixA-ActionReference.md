@@ -14,7 +14,7 @@ Complete reference for all built-in actions in ARO.
 | **Stat** | REQUEST | Get file metadata | `<Stat> the <info> for the <file: "./doc.pdf">.` |
 | **Exists** | REQUEST | Check file existence | `<Exists> the <found> for the <file: "./config.json">.` |
 | **Receive** | REQUEST | Receive event data | `<Receive> the <message> from the <event>.` |
-| **Execute** | REQUEST | Execute shell command | `<Execute> the <result> for the <command> with "ls -la".` |
+| **Execute** | REQUEST | Execute shell command | `<Execute> the <result> for the <command: "ls"> with "-la".` |
 | **Create** | OWN | Create new data | `<Create> the <user> with { name: "Alice" }.` |
 | **Compute** | OWN | Perform calculations | `<Compute> the <total> for the <items>.` |
 | **Transform** | OWN | Convert/map data | `<Transform> the <dto> from the <entity>.` |
@@ -208,8 +208,16 @@ Executes shell commands on the host system and returns structured results.
 
 **Syntax:**
 ```aro
-<Execute> the <result> for the <command> with "command-string".
+(* Preferred: command in object specifier *)
+<Execute> the <result> for the <command: "uptime">.
+<Execute> the <result> for the <command: "ls"> with "-la".
+<Execute> the <result> for the <command: "ls"> with ["-l", "-a", "-h"].
+
+(* Legacy: full command in with clause *)
+<Execute> the <result> for the <command> with "ls -la".
 <Execute> the <result> for the <command> with <variable>.
+
+(* Configuration object *)
 <Execute> the <result> on the <system> with {
     command: "command-string",
     workingDirectory: "/path",
@@ -227,19 +235,18 @@ The Execute action returns a structured result with the following fields:
 
 **Examples:**
 ```aro
-(* Basic command execution *)
-<Execute> the <listing> for the <command> with "ls -la".
+(* Preferred syntax *)
+<Execute> the <listing> for the <command: "ls"> with "-la".
 <Return> an <OK: status> for the <listing>.
 
 (* With error handling *)
-<Execute> the <result> for the <disk-check> with "df -h".
+<Execute> the <result> for the <command: "df"> with "-h".
 <Log> <result.message> to the <console> when <result.error> = true.
 <Return> an <Error: status> for the <result> when <result.error> = true.
 <Return> an <OK: status> for the <result>.
 
-(* Using a variable for the command *)
-<Create> the <cmd> with "ps aux | head -20".
-<Execute> the <processes> for the <listing> with <cmd>.
+(* Using array for multiple arguments *)
+<Execute> the <processes> for the <command: "ps"> with ["aux"].
 
 (* With configuration options *)
 <Execute> the <result> on the <system> with {

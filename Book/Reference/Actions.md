@@ -16,7 +16,7 @@ Complete reference of all 51 ARO actions organized by category.
 | **Publish**   | Communication     | EXPORT            | Publishes an event or message to a channel.<br>`<Publish> as <app-config> <config>.` |
 | **Emit**      | Communication     | EXPORT            | Emits an event or signal.<br>`<Emit> a <UserCreated: event> with <user>.` |
 | **Make**      | Construction      | OWN               | Builds or prepares a resource (e.g., dirs).<br>`<Make> the <output-dir> to the <path: "./output">.` |
-| **Execute**   | Control           | OWN               | Runs a command or code block.<br>`<Execute> the <result> with "ls -la".` |
+| **Execute**   | Control           | OWN               | Runs a command or code block.<br>`<Execute> the <result> for the <command: "ls"> with "-la".` |
 | **Call**      | Control           | OWN               | Invokes a function or service.<br>`<Call> the <result> via <API: POST /users> with <data>.` |
 | **Return**    | Control           | RESPONSE          | Sends back a result from a call.<br>`<Return> an <OK: status> with <data>.` |
 | **Given**     | Control/Spec      | OWN               | Denotes initial precondition in scenarios.<br>`<Given> the <user> with { name: "Test" }.` |
