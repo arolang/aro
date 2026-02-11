@@ -1,0 +1,3 @@
+# Test hints for GreetingPlugin
+# This example requires installing an external plugin from GitHub
+skip: Requires plugin-swift-hello from GitHub (aro add https://github.com/arolang/plugin-swift-hello.git)

@@ -1,0 +1,3 @@
+# Test hints for CSVProcessor
+# This example requires installing an external Rust plugin from GitHub
+skip: Requires plugin-rust-csv from GitHub (aro add https://github.com/arolang/plugin-rust-csv.git)

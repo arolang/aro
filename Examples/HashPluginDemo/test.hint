@@ -1,0 +1,3 @@
+# Test hints for HashPluginDemo
+# This example requires installing an external C plugin from GitHub
+skip: Requires plugin-c-hash from GitHub (aro add https://github.com/arolang/plugin-c-hash.git)
