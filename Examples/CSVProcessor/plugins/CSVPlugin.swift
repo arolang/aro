@@ -17,7 +17,7 @@ import Foundation
 @_cdecl("aro_plugin_init")
 public func pluginInit() -> UnsafePointer<CChar> {
     let metadata = """
-    {"services": [{"name": "csv-plugin", "symbol": "csv_plugin_call"}]}
+    {"services": [{"name": "csv-plugin", "symbol": "csv_plugin_call", "methods": ["parse-csv", "csvtojson", "format-csv"]}]}
     """
     return UnsafePointer(strdup(metadata)!)
 }

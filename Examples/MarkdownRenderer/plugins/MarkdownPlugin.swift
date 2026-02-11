@@ -17,7 +17,7 @@ import Foundation
 @_cdecl("aro_plugin_init")
 public func pluginInit() -> UnsafePointer<CChar> {
     let metadata = """
-    {"services": [{"name": "markdown-plugin", "symbol": "markdown_plugin_call"}]}
+    {"services": [{"name": "markdown-plugin", "symbol": "markdown_plugin_call", "methods": ["tohtml", "headings", "wordcount"]}]}
     """
     return UnsafePointer(strdup(metadata)!)
 }

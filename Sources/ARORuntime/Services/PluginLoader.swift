@@ -789,14 +789,14 @@ public final class PluginLoader: @unchecked Sendable {
         // Parse metadata
         guard let metadataData = metadataJSON.data(using: .utf8),
               let metadata = try JSONSerialization.jsonObject(with: metadataData) as? [String: Any],
-              let services = metadata["services"] as? [[String: String]] else {
+              let services = metadata["services"] as? [[String: Any]] else {
             throw PluginError.invalidMetadata(name, message: "Invalid JSON metadata")
         }
 
         // Register each service
         for service in services {
-            guard let serviceName = service["name"],
-                  let symbolName = service["symbol"] else {
+            guard let serviceName = service["name"] as? String,
+                  let symbolName = service["symbol"] as? String else {
                 continue
             }
 
@@ -960,7 +960,271 @@ public final class PluginLoader: @unchecked Sendable {
         }
         loadedPlugins.removeAll()
         pluginFunctions.removeAll()
+        pluginMetadata.removeAll()
     }
+
+    // MARK: - Plugin Metadata Storage
+
+    /// Plugin metadata for listing
+    private var pluginMetadata: [String: LocalPluginInfo] = [:]
+
+    /// Get list of all local plugins with their metadata
+    /// - Parameter directory: Application directory containing `plugins/` folder
+    /// - Returns: Array of LocalPluginInfo
+    public func listLocalPlugins(from directory: URL) throws -> [LocalPluginInfo] {
+        let pluginsDir = directory.appendingPathComponent("plugins")
+
+        guard FileManager.default.fileExists(atPath: pluginsDir.path) else {
+            return []
+        }
+
+        var plugins: [LocalPluginInfo] = []
+
+        let contents = try FileManager.default.contentsOfDirectory(
+            at: pluginsDir,
+            includingPropertiesForKeys: [.contentModificationDateKey, .isDirectoryKey],
+            options: [.skipsHiddenFiles]
+        )
+
+        // Single-file Swift plugins
+        let swiftFiles = contents.filter { $0.pathExtension == "swift" }
+        for swiftFile in swiftFiles {
+            let pluginName = swiftFile.deletingPathExtension().lastPathComponent
+            let relativePath = "plugins/\(swiftFile.lastPathComponent)"
+
+            // Check if we have cached metadata
+            if let cached = pluginMetadata[pluginName] {
+                plugins.append(cached)
+                continue
+            }
+
+            // Try to compile and get metadata
+            do {
+                let info = try loadPluginMetadata(from: swiftFile, name: pluginName, relativePath: relativePath)
+                pluginMetadata[pluginName] = info
+                plugins.append(info)
+            } catch {
+                // Plugin exists but failed to load - show without methods
+                plugins.append(LocalPluginInfo(
+                    name: pluginName,
+                    source: relativePath,
+                    type: .swiftFile,
+                    services: [],
+                    error: error.localizedDescription
+                ))
+            }
+        }
+
+        // Swift package plugins
+        for item in contents {
+            var isDirectory: ObjCBool = false
+            if FileManager.default.fileExists(atPath: item.path, isDirectory: &isDirectory),
+               isDirectory.boolValue {
+                let packageSwift = item.appendingPathComponent("Package.swift")
+                if FileManager.default.fileExists(atPath: packageSwift.path) {
+                    let pluginName = item.lastPathComponent
+                    let relativePath = "plugins/\(pluginName)"
+
+                    // Check if we have cached metadata
+                    if let cached = pluginMetadata[pluginName] {
+                        plugins.append(cached)
+                        continue
+                    }
+
+                    // Try to build and get metadata
+                    do {
+                        let info = try loadPackagePluginMetadata(from: item, name: pluginName, relativePath: relativePath)
+                        pluginMetadata[pluginName] = info
+                        plugins.append(info)
+                    } catch {
+                        plugins.append(LocalPluginInfo(
+                            name: pluginName,
+                            source: relativePath,
+                            type: .swiftPackage,
+                            services: [],
+                            error: error.localizedDescription
+                        ))
+                    }
+                }
+            }
+        }
+
+        return plugins
+    }
+
+    /// Load plugin metadata from a single Swift file
+    private func loadPluginMetadata(from sourceFile: URL, name: String, relativePath: String) throws -> LocalPluginInfo {
+        #if os(Windows)
+        let libraryExtension = "dll"
+        #elseif os(Linux)
+        let libraryExtension = "so"
+        #else
+        let libraryExtension = "dylib"
+        #endif
+        let dylibPath = cacheDir.appendingPathComponent("\(name).\(libraryExtension)")
+
+        // Compile if needed
+        if shouldRecompile(source: sourceFile, dylib: dylibPath) {
+            try FileManager.default.createDirectory(at: cacheDir, withIntermediateDirectories: true)
+            try compilePlugin(source: sourceFile, output: dylibPath)
+        }
+
+        // Load and get metadata
+        return try getPluginInfo(from: dylibPath, name: name, relativePath: relativePath, type: .swiftFile)
+    }
+
+    /// Load plugin metadata from a Swift package
+    private func loadPackagePluginMetadata(from packageDir: URL, name: String, relativePath: String) throws -> LocalPluginInfo {
+        #if os(Windows)
+        let libraryExtension = "dll"
+        #elseif os(Linux)
+        let libraryExtension = "so"
+        #else
+        let libraryExtension = "dylib"
+        #endif
+
+        // Check for existing build
+        if let existingLib = findBuiltLibrary(
+            in: packageDir.appendingPathComponent(".build"),
+            name: name,
+            extension: libraryExtension
+        ) {
+            return try getPluginInfo(from: existingLib, name: name, relativePath: relativePath, type: .swiftPackage)
+        }
+
+        // Build the package
+        let process = Process()
+        let swiftPath = findSwiftExecutable() ?? "/usr/bin/swift"
+        process.executableURL = URL(fileURLWithPath: swiftPath)
+        process.currentDirectoryURL = packageDir
+        process.arguments = ["build", "-c", "release"]
+
+        let pipe = Pipe()
+        process.standardError = pipe
+        process.standardOutput = pipe
+
+        try process.run()
+        process.waitUntilExit()
+
+        if process.terminationStatus != 0 {
+            let errorData = pipe.fileHandleForReading.readDataToEndOfFile()
+            let errorMessage = String(data: errorData, encoding: .utf8) ?? "Unknown error"
+            throw PluginError.compilationFailed(name, message: errorMessage)
+        }
+
+        guard let dylibPath = findBuiltLibrary(
+            in: packageDir.appendingPathComponent(".build"),
+            name: name,
+            extension: libraryExtension
+        ) else {
+            throw PluginError.loadFailed(name, message: "Built library not found")
+        }
+
+        return try getPluginInfo(from: dylibPath, name: name, relativePath: relativePath, type: .swiftPackage)
+    }
+
+    /// Get plugin info by loading its metadata
+    private func getPluginInfo(from dylibPath: URL, name: String, relativePath: String, type: LocalPluginType) throws -> LocalPluginInfo {
+        // Load the library temporarily
+        #if os(Windows)
+        let handle = dylibPath.path.withCString(encodedAs: UTF16.self) { LoadLibraryW($0) }
+        guard let handle = handle else {
+            throw PluginError.loadFailed(name, message: getWindowsError())
+        }
+        defer { FreeLibrary(handle) }
+        #else
+        guard let handle = dlopen(dylibPath.path, RTLD_NOW | RTLD_LOCAL) else {
+            let error = String(cString: dlerror())
+            throw PluginError.loadFailed(name, message: error)
+        }
+        defer { dlclose(handle) }
+        #endif
+
+        // Find init function
+        #if os(Windows)
+        let initSymbol = GetProcAddress(handle, "aro_plugin_init")
+        #else
+        let initSymbol = dlsym(handle, "aro_plugin_init")
+        #endif
+
+        var services: [LocalPluginService] = []
+
+        if let initSymbol = initSymbol {
+            // Call init to get metadata
+            typealias InitFunc = @convention(c) () -> UnsafePointer<CChar>
+            let initFunc = unsafeBitCast(initSymbol, to: InitFunc.self)
+            let metadataPtr = initFunc()
+            let metadataJSON = String(cString: metadataPtr)
+
+            // Parse metadata
+            if let metadataData = metadataJSON.data(using: .utf8),
+               let metadata = try? JSONSerialization.jsonObject(with: metadataData) as? [String: Any],
+               let servicesArray = metadata["services"] as? [[String: Any]] {
+                for serviceDict in servicesArray {
+                    if let serviceName = serviceDict["name"] as? String {
+                        let methods = serviceDict["methods"] as? [String] ?? []
+                        services.append(LocalPluginService(name: serviceName, methods: methods))
+                    }
+                }
+            }
+        } else {
+            // Try simple service (function named after plugin)
+            let serviceSymbol = "\(name.lowercased())_call"
+            #if os(Windows)
+            let callSymbol = GetProcAddress(handle, serviceSymbol)
+            #else
+            let callSymbol = dlsym(handle, serviceSymbol)
+            #endif
+
+            if callSymbol != nil {
+                // Plugin exports a simple service - methods unknown
+                services.append(LocalPluginService(name: name.lowercased(), methods: []))
+            }
+        }
+
+        return LocalPluginInfo(
+            name: name,
+            source: relativePath,
+            type: type,
+            services: services,
+            error: nil
+        )
+    }
+}
+
+// MARK: - Local Plugin Info
+
+/// Information about a local plugin
+public struct LocalPluginInfo: Sendable {
+    /// Plugin name (derived from filename)
+    public let name: String
+
+    /// Source path relative to app directory
+    public let source: String
+
+    /// Plugin type
+    public let type: LocalPluginType
+
+    /// Services provided by the plugin
+    public let services: [LocalPluginService]
+
+    /// Error message if plugin failed to load
+    public let error: String?
+}
+
+/// Type of local plugin
+public enum LocalPluginType: Sendable {
+    case swiftFile
+    case swiftPackage
+}
+
+/// Service provided by a local plugin
+public struct LocalPluginService: Sendable {
+    /// Service name (used in ARO code as <service-plugin>)
+    public let name: String
+
+    /// Methods available on this service
+    public let methods: [String]
 }
 
 // MARK: - Plugin Service Wrapper
