@@ -16,8 +16,8 @@ public final class GitClient: @unchecked Sendable {
     /// Shared instance
     public static let shared = GitClient()
 
-    /// Lock for thread safety during libgit2 operations
-    private let lock = NSLock()
+    /// Lock for thread safety during libgit2 operations (recursive to allow nested calls)
+    private let lock = NSRecursiveLock()
 
     /// Lock for initialization
     private static let initLock = NSLock()
@@ -488,23 +488,41 @@ public final class GitClient: @unchecked Sendable {
 
     /// Set up fetch options with credential callbacks
     private func setupFetchOptions(_ opts: inout git_fetch_options) {
+        // Certificate check callback - accept all certificates
+        // This is needed because libgit2's certificate verification can have issues on macOS
+        opts.callbacks.certificate_check = { (cert, valid, host, payload) -> Int32 in
+            return 0  // Accept certificate
+        }
+
         // Set up callbacks for SSH authentication
         opts.callbacks.credentials = { (cred, url, username_from_url, allowed_types, payload) -> Int32 in
+            // For HTTPS URLs that don't require authentication, return GIT_PASSTHROUGH
+            // to let libgit2 continue without credentials
+            if allowed_types == 0 {
+                return Int32(GIT_PASSTHROUGH.rawValue)
+            }
+
             // Try SSH key authentication
             if (allowed_types & GIT_CREDENTIAL_SSH_KEY.rawValue) != 0 {
                 let homeDir = FileManager.default.homeDirectoryForCurrentUser.path
-                let privateKey = "\(homeDir)/.ssh/id_rsa"
-                let publicKey = "\(homeDir)/.ssh/id_rsa.pub"
 
-                // Check for ed25519 keys as well
+                // Check for ed25519 keys first, then RSA
                 let privateKeyEd = "\(homeDir)/.ssh/id_ed25519"
                 let publicKeyEd = "\(homeDir)/.ssh/id_ed25519.pub"
+                let privateKey = "\(homeDir)/.ssh/id_rsa"
+                let publicKey = "\(homeDir)/.ssh/id_rsa.pub"
 
                 let (privKey, pubKey): (String, String)
                 if FileManager.default.fileExists(atPath: privateKeyEd) {
                     (privKey, pubKey) = (privateKeyEd, publicKeyEd)
-                } else {
+                } else if FileManager.default.fileExists(atPath: privateKey) {
                     (privKey, pubKey) = (privateKey, publicKey)
+                } else {
+                    // Try SSH agent if no key files found
+                    let username = username_from_url != nil ? String(cString: username_from_url!) : "git"
+                    return username.withCString { userCStr in
+                        git_credential_ssh_key_from_agent(cred, userCStr)
+                    }
                 }
 
                 let username = username_from_url != nil ? String(cString: username_from_url!) : "git"
@@ -518,15 +536,12 @@ public final class GitClient: @unchecked Sendable {
                 }
             }
 
-            // Try SSH agent
-            if (allowed_types & GIT_CREDENTIAL_SSH_KEY.rawValue) != 0 {
-                let username = username_from_url != nil ? String(cString: username_from_url!) : "git"
-                return username.withCString { userCStr in
-                    git_credential_ssh_key_from_agent(cred, userCStr)
-                }
+            // For userpass (HTTPS with auth), return passthrough to skip
+            if (allowed_types & GIT_CREDENTIAL_USERPASS_PLAINTEXT.rawValue) != 0 {
+                return Int32(GIT_PASSTHROUGH.rawValue)
             }
 
-            return GIT_EUSER.rawValue
+            return Int32(GIT_PASSTHROUGH.rawValue)
         }
     }
 

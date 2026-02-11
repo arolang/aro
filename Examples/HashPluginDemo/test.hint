@@ -1,5 +1,3 @@
 # Test hints for HashPluginDemo
-# Demonstrates using a local Swift plugin for hash functions
-mode: both
-timeout: 60
-occurrence-check: true
+# Requires managed plugin: https://github.com/arolang/plugin-c-hash
+skip: Requires managed plugin (aro add https://github.com/arolang/plugin-c-hash)

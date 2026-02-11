@@ -1,4 +1,4 @@
-(* GreetingPlugin - Demonstrates using a local Swift plugin
+(* GreetingPlugin - Demonstrates using a managed Swift plugin
  *
  * This example shows how to:
  * 1. Define a plugin in aro.yaml
@@ -8,8 +8,8 @@
 (Application-Start: Greeting Plugin Demo) {
     <Log> "=== Greeting Plugin Demo ===" to the <console>.
 
-    (* Use the greet method from the hello-plugin service *)
-    <Call> the <greeting> from the <hello-plugin: greet> with {
+    (* Use the greet method from the plugin-swift-hello service *)
+    <Call> the <greeting> from the <plugin-swift-hello: greet> with {
         name: "ARO Developer"
     }.
 
@@ -17,7 +17,7 @@
     <Log> <message> to the <console>.
 
     (* Use the farewell method *)
-    <Call> the <goodbye> from the <hello-plugin: farewell> with {
+    <Call> the <goodbye> from the <plugin-swift-hello: farewell> with {
         name: "ARO Developer"
     }.
 

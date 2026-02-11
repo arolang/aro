@@ -1,6 +1,6 @@
 # ARO Application Configuration
-# Demonstrates using a local Swift plugin for hash functions
+# Demonstrates using a managed C plugin for hash functions
 
 plugins:
-  # Local Swift plugin (compiled on first run)
-  - source: plugins/HashPlugin.swift
+  # Managed plugin from GitHub (installed via aro add)
+  - source: https://github.com/arolang/plugin-c-hash

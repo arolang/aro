@@ -1,4 +1,4 @@
-(* MarkdownRenderer - Demonstrates using a Swift plugin for Markdown processing
+(* MarkdownRenderer - Demonstrates using a managed Python plugin for Markdown processing
  *
  * This example shows how to:
  * 1. Convert Markdown to HTML
@@ -14,7 +14,7 @@
 
     (* Convert Markdown to HTML *)
     <Log> "1. Converting to HTML..." to the <console>.
-    <Call> the <html-result> from the <markdown-plugin: tohtml> with {
+    <Call> the <html-result> from the <plugin-python-markdown: to-html> with {
         data: <markdown>
     }.
 
@@ -23,7 +23,7 @@
 
     (* Extract headings *)
     <Log> "2. Extracting headings..." to the <console>.
-    <Call> the <headings-result> from the <markdown-plugin: headings> with {
+    <Call> the <headings-result> from the <plugin-python-markdown: extract-headings> with {
         data: <markdown>
     }.
 
@@ -33,7 +33,7 @@
 
     (* Word count *)
     <Log> "3. Word count..." to the <console>.
-    <Call> the <stats> from the <markdown-plugin: wordcount> with {
+    <Call> the <stats> from the <plugin-python-markdown: word-count> with {
         data: <markdown>
     }.
 

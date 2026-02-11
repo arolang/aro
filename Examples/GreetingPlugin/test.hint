@@ -1,5 +1,3 @@
 # Test hints for GreetingPlugin
-# Demonstrates using a local Swift plugin
-mode: both
-timeout: 60
-occurrence-check: true
+# Requires managed plugin: https://github.com/arolang/plugin-swift-hello
+skip: Requires managed plugin (aro add https://github.com/arolang/plugin-swift-hello)

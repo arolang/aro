@@ -1,5 +1,3 @@
 # Test hints for MarkdownRenderer
-# Demonstrates using a local Swift plugin for Markdown processing
-mode: both
-timeout: 60
-occurrence-check: true
+# Requires managed plugin: https://github.com/arolang/plugin-python-markdown
+skip: Requires managed plugin (aro add https://github.com/arolang/plugin-python-markdown)

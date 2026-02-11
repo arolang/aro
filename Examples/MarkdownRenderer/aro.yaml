@@ -1,6 +1,6 @@
 # ARO Application Configuration
-# Demonstrates using a local Swift plugin for Markdown processing
+# Demonstrates using a managed Python plugin for Markdown processing
 
 plugins:
-  # Local Swift plugin (compiled on first run)
-  - source: plugins/MarkdownPlugin.swift
+  # Managed plugin from GitHub (installed via aro add)
+  - source: https://github.com/arolang/plugin-python-markdown

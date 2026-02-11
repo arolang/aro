@@ -1,7 +1,7 @@
-(* HashPluginDemo - Demonstrates using a Swift plugin for hashing
+(* HashPluginDemo - Demonstrates using a managed C plugin for hashing
  *
  * This example shows how to use different hash algorithms
- * provided by a plugin.
+ * provided by a plugin installed from GitHub.
  *)
 
 (Application-Start: Hash Plugin Demo) {
@@ -12,7 +12,7 @@
 
     (* Simple hash *)
     <Log> "1. Simple hash algorithm:" to the <console>.
-    <Call> the <simple-result> from the <hash-plugin: hash> with {
+    <Call> the <simple-result> from the <plugin-c-hash: hash> with {
         data: <test-string>
     }.
 
@@ -22,7 +22,7 @@
 
     (* DJB2 hash *)
     <Log> "2. DJB2 hash algorithm:" to the <console>.
-    <Call> the <djb2-result> from the <hash-plugin: djb2> with {
+    <Call> the <djb2-result> from the <plugin-c-hash: djb2> with {
         data: <test-string>
     }.
 
@@ -31,7 +31,7 @@
 
     (* FNV-1a hash *)
     <Log> "3. FNV-1a hash algorithm:" to the <console>.
-    <Call> the <fnv-result> from the <hash-plugin: fnv1a> with {
+    <Call> the <fnv-result> from the <plugin-c-hash: fnv1a> with {
         data: <test-string>
     }.
 

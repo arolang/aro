@@ -1,6 +1,6 @@
 # ARO Application Configuration
-# Demonstrates using a local Swift plugin for CSV processing
+# Demonstrates using a managed Rust plugin for CSV processing
 
 plugins:
-  # Local Swift plugin (compiled on first run)
-  - source: plugins/CSVPlugin.swift
+  # Managed plugin from GitHub (installed via aro add)
+  - source: https://github.com/arolang/plugin-rust-csv
