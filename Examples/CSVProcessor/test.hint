@@ -1,3 +1,2 @@
 # Test hints for CSVProcessor
 # Requires managed plugin: https://github.com/arolang/plugin-rust-csv
-skip: Requires managed plugin (aro add https://github.com/arolang/plugin-rust-csv)

@@ -14,7 +14,7 @@
 
     (* Parse CSV to structured data *)
     <Log> "1. Parsing CSV data..." to the <console>.
-    <Call> the <parsed> from the <plugin-rust-csv: parse-csv> with {
+    <Call> the <parsed> from the <plugin-rust-csv: parseCsv> with {
         data: <csv-data>,
         headers: true
     }.
@@ -25,7 +25,7 @@
 
     (* Convert CSV to JSON objects *)
     <Log> "2. Converting CSV to JSON..." to the <console>.
-    <Call> the <json-result> from the <plugin-rust-csv: csv-to-json> with {
+    <Call> the <json-result> from the <plugin-rust-csv: csvToJson> with {
         data: <csv-data>
     }.
 
@@ -41,7 +41,7 @@
         ["Banana", "0.75", "200"]
     ].
 
-    <Call> the <formatted> from the <plugin-rust-csv: format-csv> with {
+    <Call> the <formatted> from the <plugin-rust-csv: formatCsv> with {
         rows: <rows>,
         delimiter: ";"
     }.

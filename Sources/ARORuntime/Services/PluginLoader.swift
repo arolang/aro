@@ -203,22 +203,36 @@ public final class PluginLoader: @unchecked Sendable {
                 _ = try String(contentsOf: pluginYaml, encoding: .utf8)
                 let pluginName = item.lastPathComponent
 
-                // Look for the compiled library in src/ directory
-                let srcDir = item.appendingPathComponent("src")
-                if FileManager.default.fileExists(atPath: srcDir.path) {
-                    // Find any .dylib/.so/.dll in src/
-                    let srcContents = try FileManager.default.contentsOfDirectory(
-                        at: srcDir,
+                // Search for the compiled library in common locations:
+                // - src/ (C plugins)
+                // - target/release/ (Rust plugins)
+                let searchDirs = [
+                    item.appendingPathComponent("src"),
+                    item.appendingPathComponent("target/release")
+                ]
+
+                var found = false
+                for searchDir in searchDirs {
+                    guard FileManager.default.fileExists(atPath: searchDir.path) else {
+                        continue
+                    }
+
+                    // Find any .dylib/.so/.dll in this directory
+                    let contents = try FileManager.default.contentsOfDirectory(
+                        at: searchDir,
                         includingPropertiesForKeys: nil,
                         options: [.skipsHiddenFiles]
                     )
 
-                    for libFile in srcContents {
+                    for libFile in contents {
                         if libFile.pathExtension == libraryExtension {
                             try loadCPlugin(at: libFile, name: pluginName)
+                            found = true
                             break
                         }
                     }
+
+                    if found { break }
                 }
             } catch {
                 print("[PluginLoader] Warning: Failed to load managed plugin \(item.lastPathComponent): \(error)")
@@ -418,25 +432,39 @@ public final class PluginLoader: @unchecked Sendable {
 
             let pluginName = item.lastPathComponent
 
-            // Look for the library in src/ directory
-            let srcDir = item.appendingPathComponent("src")
-            if FileManager.default.fileExists(atPath: srcDir.path) {
+            // Search for the library in common locations:
+            // - src/ (C plugins)
+            // - target/release/ (Rust plugins)
+            let searchDirs = [
+                item.appendingPathComponent("src"),
+                item.appendingPathComponent("target/release")
+            ]
+
+            var found = false
+            for searchDir in searchDirs {
+                guard FileManager.default.fileExists(atPath: searchDir.path) else {
+                    continue
+                }
+
                 do {
-                    let srcContents = try FileManager.default.contentsOfDirectory(
-                        at: srcDir,
+                    let contents = try FileManager.default.contentsOfDirectory(
+                        at: searchDir,
                         includingPropertiesForKeys: nil,
                         options: [.skipsHiddenFiles]
                     )
 
-                    for libFile in srcContents {
+                    for libFile in contents {
                         if libFile.pathExtension == libraryExtension {
                             try loadCPlugin(at: libFile, name: pluginName)
+                            found = true
                             break
                         }
                     }
                 } catch {
                     print("[PluginLoader] Warning: Failed to load managed plugin \(pluginName): \(error)")
                 }
+
+                if found { break }
             }
         }
     }
