@@ -2038,7 +2038,10 @@ public func aro_load_precompiled_plugins() -> Int32 {
     let resolvedURL = executableURL.resolvingSymlinksInPath()
 
     do {
+        // Load local plugins from plugins/ directory
         try PluginLoader.shared.loadPrecompiledPlugins(relativeTo: resolvedURL)
+        // Load managed plugins from Plugins/ directory
+        try PluginLoader.shared.loadPrecompiledManagedPlugins(relativeTo: resolvedURL)
         return 0
     } catch {
         print("[ARO] Plugin loading error: \(error)")

@@ -455,6 +455,52 @@ struct BuildCommand: AsyncParsableCommand {
             }
         }
 
+        // Copy managed plugins if present (installed via aro add)
+        let sourceManagedPluginsDir = appConfig.rootPath.appendingPathComponent("Plugins")
+        let outputManagedPluginsDir = binaryPath.deletingLastPathComponent().appendingPathComponent("Plugins")
+
+        if FileManager.default.fileExists(atPath: sourceManagedPluginsDir.path) {
+            // Check if source and output are the same (in-place build)
+            let sourceResolved = sourceManagedPluginsDir.standardizedFileURL.path
+            let outputResolved = outputManagedPluginsDir.standardizedFileURL.path
+
+            if sourceResolved == outputResolved {
+                // Same directory - no copy needed
+                if verbose {
+                    let pluginDirs = try? FileManager.default.contentsOfDirectory(at: sourceManagedPluginsDir, includingPropertiesForKeys: [.isDirectoryKey])
+                    let pluginCount = pluginDirs?.filter {
+                        var isDir: ObjCBool = false
+                        return FileManager.default.fileExists(atPath: $0.path, isDirectory: &isDir) && isDir.boolValue
+                    }.count ?? 0
+                    print("Using \(pluginCount) managed plugin(s) from: \(sourceManagedPluginsDir.path)")
+                }
+            } else {
+                if verbose {
+                    print("Copying managed plugins...")
+                }
+
+                do {
+                    // Copy the entire Plugins directory
+                    if FileManager.default.fileExists(atPath: outputManagedPluginsDir.path) {
+                        try FileManager.default.removeItem(at: outputManagedPluginsDir)
+                    }
+                    try FileManager.default.copyItem(at: sourceManagedPluginsDir, to: outputManagedPluginsDir)
+                    if verbose {
+                        // Count managed plugins
+                        let pluginDirs = try? FileManager.default.contentsOfDirectory(at: outputManagedPluginsDir, includingPropertiesForKeys: [.isDirectoryKey])
+                        let pluginCount = pluginDirs?.filter {
+                            var isDir: ObjCBool = false
+                            return FileManager.default.fileExists(atPath: $0.path, isDirectory: &isDir) && isDir.boolValue
+                        }.count ?? 0
+                        print("  \(pluginCount) managed plugin(s) copied to: \(outputManagedPluginsDir.path)")
+                    }
+                } catch {
+                    print("Warning: Failed to copy managed plugins: \(error)")
+                    // Continue - plugins are optional
+                }
+            }
+        }
+
         let elapsed = Date().timeIntervalSince(startTime)
 
         #if os(Linux)

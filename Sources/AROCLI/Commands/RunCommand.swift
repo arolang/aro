@@ -138,18 +138,26 @@ struct RunCommand: AsyncParsableCommand {
             print()
         }
 
-        // Load plugins from plugins/ directory
+        // Load plugins from plugins/ directory (local plugins)
         do {
             try PluginLoader.shared.loadPlugins(from: appConfig.rootPath)
-            if verbose {
-                let services = ExternalServiceRegistry.shared.registeredServices
-                if services.count > 1 { // More than just built-in http
-                    print("Registered services: \(services.joined(separator: ", "))")
-                    print()
-                }
-            }
         } catch {
-            print("Warning: Failed to load plugins: \(error)")
+            print("Warning: Failed to load local plugins: \(error)")
+        }
+
+        // Load managed plugins from Plugins/ directory (installed via aro add)
+        do {
+            try PluginLoader.shared.loadManagedPlugins(from: appConfig.rootPath)
+        } catch {
+            print("Warning: Failed to load managed plugins: \(error)")
+        }
+
+        if verbose {
+            let services = ExternalServiceRegistry.shared.registeredServices
+            if services.count > 1 { // More than just built-in http
+                print("Registered services: \(services.joined(separator: ", "))")
+                print()
+            }
         }
 
         // Create and run application
