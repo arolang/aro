@@ -8,6 +8,7 @@ import Foundation
 import AROParser
 import ARORuntime
 import AROCompiler
+import AROPackageManager
 import AROVersion
 
 @main
@@ -41,6 +42,9 @@ struct ARO: AsyncParsableCommand {
             CompileCommand.self,
             CheckCommand.self,
             TestCommand.self,
+            AddCommand.self,
+            RemoveCommand.self,
+            PluginsCommand.self,
         ]
         #if !os(Windows)
         commands.append(LSPCommand.self)

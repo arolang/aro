@@ -148,6 +148,34 @@ public actor ActionRegistry {
         actions.removeValue(forKey: verb.lowercased())
     }
 
+    /// Dynamic action handlers for plugin-provided actions
+    private var dynamicHandlers: [String: DynamicActionHandler] = [:]
+
+    /// Type alias for dynamic action handler
+    public typealias DynamicActionHandler = @Sendable (
+        ResultDescriptor,
+        ObjectDescriptor,
+        ExecutionContext
+    ) async throws -> any Sendable
+
+    /// Register a dynamic action from a plugin
+    /// - Parameters:
+    ///   - verb: The action verb
+    ///   - handler: The handler function
+    public func registerDynamic(
+        verb: String,
+        handler: @escaping DynamicActionHandler
+    ) {
+        dynamicHandlers[verb.lowercased()] = handler
+    }
+
+    /// Get a dynamic action handler
+    /// - Parameter verb: The action verb
+    /// - Returns: The handler if registered
+    public func dynamicHandler(for verb: String) -> DynamicActionHandler? {
+        dynamicHandlers[verb.lowercased()]
+    }
+
     // MARK: - Lookup
 
     /// Get an action implementation for a verb

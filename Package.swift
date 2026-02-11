@@ -111,6 +111,10 @@ let package = Package(
             name: "AROCompiler",
             targets: ["AROCompiler"]
         ),
+        .library(
+            name: "AROPackageManager",
+            targets: ["AROPackageManager"]
+        ),
         .executable(
             name: "aro",
             targets: ["AROCLI"]
@@ -156,6 +160,14 @@ let package = Package(
                 path: "Sources/AROCompiler",
                 linkerSettings: llvmLinkerSettings
             ),
+            // Package manager for plugins
+            .target(
+                name: "AROPackageManager",
+                dependencies: [
+                    .product(name: "Yams", package: "Yams"),
+                ],
+                path: "Sources/AROPackageManager"
+            ),
             // CLI tool
             .executableTarget(
                 name: "AROCLI",
@@ -164,6 +176,7 @@ let package = Package(
                     "AROParser",
                     "ARORuntime",
                     "AROCompiler",
+                    "AROPackageManager",
                     .product(name: "ArgumentParser", package: "swift-argument-parser"),
                 ] + cliLspDependency,
                 path: "Sources/AROCLI",
@@ -186,6 +199,12 @@ let package = Package(
                 name: "AROCompilerTests",
                 dependencies: ["AROCompiler", "AROParser"],
                 path: "Tests/AROCompilerTests"
+            ),
+            // Package manager tests
+            .testTarget(
+                name: "AROPackageManagerTests",
+                dependencies: ["AROPackageManager"],
+                path: "Tests/AROPackageManagerTests"
             ),
         ]
 
