@@ -1,3 +1,1 @@
 # Test hints for HashPluginDemo
-# Requires managed plugin: https://github.com/arolang/plugin-c-hash
-skip: Requires managed plugin (aro add https://github.com/arolang/plugin-c-hash)
