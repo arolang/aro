@@ -50,7 +50,7 @@ test:
     policy: pull-push
   before_script:
     - apt-get update -qq
-    - apt-get install -y -qq wget gnupg software-properties-common
+    - apt-get install -y -qq wget gnupg software-properties-common libgit2-dev
     # Add LLVM APT repository for LLVM 20 (required for Swifty-LLVM)
     - wget -qO- https://apt.llvm.org/llvm-snapshot.gpg.key | gpg --dearmor -o /usr/share/keyrings/llvm-archive-keyring.gpg
     - echo "deb [signed-by=/usr/share/keyrings/llvm-archive-keyring.gpg] http://apt.llvm.org/jammy/ llvm-toolchain-jammy-20 main" > /etc/apt/sources.list.d/llvm.list
@@ -94,7 +94,7 @@ build:linux:
     policy: pull-push
   before_script:
     - apt-get update -qq
-    - apt-get install -y -qq git wget gnupg software-properties-common
+    - apt-get install -y -qq git wget gnupg software-properties-common libgit2-dev
     # Add LLVM APT repository for LLVM 20 (required for Swifty-LLVM)
     - wget -qO- https://apt.llvm.org/llvm-snapshot.gpg.key | gpg --dearmor -o /usr/share/keyrings/llvm-archive-keyring.gpg
     - echo "deb [signed-by=/usr/share/keyrings/llvm-archive-keyring.gpg] http://apt.llvm.org/jammy/ llvm-toolchain-jammy-20 main" > /etc/apt/sources.list.d/llvm.list
@@ -215,7 +215,7 @@ integration:linux:
     # Install dependencies
     - apt-get update -qq
     - export DEBIAN_FRONTEND=noninteractive
-    - apt-get install -y -qq git ca-certificates wget curl perl llvm-14 clang-14 cpanminus libipc-run-perl libyaml-libyaml-perl libhttp-tiny-perl zlib1g-dev libsqlite3-dev libxml2-dev gnupg software-properties-common
+    - apt-get install -y -qq git ca-certificates wget curl perl llvm-14 clang-14 cpanminus libipc-run-perl libyaml-libyaml-perl libhttp-tiny-perl zlib1g-dev libsqlite3-dev libxml2-dev libgit2-dev gnupg software-properties-common
 
     # Add LLVM APT repository for LLVM 20 (required for aro binary which links against libLLVM-20)
     - wget -qO- https://apt.llvm.org/llvm-snapshot.gpg.key | gpg --dearmor -o /usr/share/keyrings/llvm-archive-keyring.gpg
