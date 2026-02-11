@@ -73,6 +73,10 @@ echo ""
 echo "=== Cleaning build directory ==="
 rm -rf .build
 
+# Fix git ownership issues in Docker (mounted volume has different owner)
+git config --global --add safe.directory /workspace
+git config --global --add safe.directory "*"
+
 echo ""
 echo "=== Building ARO (release) ==="
 swift build -c release 2>&1 | tail -15
