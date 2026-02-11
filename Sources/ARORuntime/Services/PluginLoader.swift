@@ -205,9 +205,11 @@ public final class PluginLoader: @unchecked Sendable {
 
                 // Search for the compiled library in common locations:
                 // - src/ (C plugins)
+                // - Sources/ (Swift plugins)
                 // - target/release/ (Rust plugins)
                 let searchDirs = [
                     item.appendingPathComponent("src"),
+                    item.appendingPathComponent("Sources"),
                     item.appendingPathComponent("target/release")
                 ]
 
@@ -434,9 +436,11 @@ public final class PluginLoader: @unchecked Sendable {
 
             // Search for the library in common locations:
             // - src/ (C plugins)
+            // - Sources/ (Swift plugins)
             // - target/release/ (Rust plugins)
             let searchDirs = [
                 item.appendingPathComponent("src"),
+                item.appendingPathComponent("Sources"),
                 item.appendingPathComponent("target/release")
             ]
 
