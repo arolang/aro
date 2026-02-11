@@ -7,3 +7,4 @@ bfe621039f78eec8
 3. FNV-1a hash algorithm:
 70863da4963fac9c
 Hash plugin demo completed!
+startup
