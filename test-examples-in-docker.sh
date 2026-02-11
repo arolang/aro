@@ -32,6 +32,7 @@ apt-get install -y -qq \
     libhttp-tiny-perl \
     zlib1g-dev \
     libsqlite3-dev \
+    libgit2-dev \
     cpanminus \
     > /dev/null 2>&1
 
