@@ -1,0 +1,7 @@
+# ARO Application Configuration
+# Demonstrates using a C FFI plugin for hash functions
+
+plugins:
+  # Install the C hash plugin from GitHub
+  - git: "https://github.com/arolang/plugin-c-hash.git"
+    ref: main

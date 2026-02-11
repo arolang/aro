@@ -1,0 +1,7 @@
+# ARO Application Configuration
+# Demonstrates installing and using a Git-based plugin
+
+plugins:
+  # Install the Swift hello plugin from GitHub
+  - git: "https://github.com/arolang/plugin-swift-hello.git"
+    ref: main

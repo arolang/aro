@@ -1,0 +1,7 @@
+# ARO Application Configuration
+# Demonstrates using a Python plugin for Markdown processing
+
+plugins:
+  # Install the Python Markdown plugin from GitHub
+  - git: "https://github.com/arolang/plugin-python-markdown.git"
+    ref: main
