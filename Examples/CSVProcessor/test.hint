@@ -1,3 +1,5 @@
 # Test hints for CSVProcessor
-# This example requires installing an external Rust plugin from GitHub
-skip: Requires plugin-rust-csv from GitHub (aro add https://github.com/arolang/plugin-rust-csv.git)
+# Demonstrates using a local Swift plugin for CSV processing
+mode: both
+timeout: 60
+occurrence-check: true

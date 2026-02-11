@@ -1,91 +1,46 @@
-(* MarkdownRenderer - Demonstrates using a Python plugin for Markdown processing
+(* MarkdownRenderer - Demonstrates using a Swift plugin for Markdown processing
  *
  * This example shows how to:
- * 1. Install a Python plugin from GitHub using aro.yaml
- * 2. Use the plugin's actions for Markdown processing
- *
- * Install the plugin first:
- *   aro add https://github.com/arolang/plugin-python-markdown.git
+ * 1. Convert Markdown to HTML
+ * 2. Extract headings from Markdown
+ * 3. Count words in Markdown
  *)
 
 (Application-Start: Markdown Renderer Demo) {
     <Log> "=== Markdown Renderer Demo ===" to the <console>.
-    <Log> "" to the <console>.
 
     (* Sample Markdown content *)
-    <Create> the <markdown> with "# Welcome to ARO
-
-This is a **bold** statement and this is *italic*.
-
-## Features
-
-ARO is a domain-specific language for business features.
-
-### Links
-
-- [ARO Repository](https://github.com/arolang/aro)
-- [Documentation](https://github.com/arolang/aro/wiki)
-
-## Code Example
-
-```aro
-<Log> \"Hello, World!\" to the <console>.
-```
-
-That's all for now!".
+    <Create> the <markdown> with "# Welcome\n\nThis is **bold** and *italic* text.\n\n## Features\n\nCheck out [ARO](https://github.com/arolang/aro) for more.".
 
     (* Convert Markdown to HTML *)
-    <Log> "1. Converting Markdown to HTML..." to the <console>.
-    <Call> the <html-result> from the <markdown-plugin: to-html> with {
+    <Log> "1. Converting to HTML..." to the <console>.
+    <Call> the <html-result> from the <markdown-plugin: tohtml> with {
         data: <markdown>
     }.
 
     <Extract> the <html> from the <html-result: html>.
     <Log> <html> to the <console>.
 
-    (* Extract all links *)
-    <Log> "" to the <console>.
-    <Log> "2. Extracting links..." to the <console>.
-    <Call> the <links-result> from the <markdown-plugin: extract-links> with {
-        data: <markdown>
-    }.
-
-    <Extract> the <links> from the <links-result: links>.
-    <Extract> the <link-count> from the <links-result: count>.
-    <Log> "   Found links: " to the <console>.
-    <Log> <link-count> to the <console>.
-    <Log> <links> to the <console>.
-
     (* Extract headings *)
-    <Log> "" to the <console>.
-    <Log> "3. Extracting headings..." to the <console>.
-    <Call> the <headings-result> from the <markdown-plugin: extract-headings> with {
+    <Log> "2. Extracting headings..." to the <console>.
+    <Call> the <headings-result> from the <markdown-plugin: headings> with {
         data: <markdown>
     }.
 
-    <Extract> the <headings> from the <headings-result: headings>.
-    <Log> "   Document structure:" to the <console>.
-    <Log> <headings> to the <console>.
+    <Extract> the <heading-count> from the <headings-result: count>.
+    <Log> "Headings found:" to the <console>.
+    <Log> <heading-count> to the <console>.
 
     (* Word count *)
-    <Log> "" to the <console>.
-    <Log> "4. Word count statistics..." to the <console>.
-    <Call> the <stats> from the <markdown-plugin: word-count> with {
+    <Log> "3. Word count..." to the <console>.
+    <Call> the <stats> from the <markdown-plugin: wordcount> with {
         data: <markdown>
     }.
 
     <Extract> the <words> from the <stats: words>.
-    <Extract> the <chars> from the <stats: characters>.
-    <Extract> the <lines> from the <stats: lines>.
-
-    <Log> "   Words: " to the <console>.
+    <Log> "Words:" to the <console>.
     <Log> <words> to the <console>.
-    <Log> "   Characters: " to the <console>.
-    <Log> <chars> to the <console>.
-    <Log> "   Lines: " to the <console>.
-    <Log> <lines> to the <console>.
 
-    <Log> "" to the <console>.
     <Log> "Markdown processing completed!" to the <console>.
 
     <Return> an <OK: status> for the <startup>.

@@ -1,18 +1,14 @@
-(* GreetingPlugin - Demonstrates using a Git-based Swift plugin
+(* GreetingPlugin - Demonstrates using a local Swift plugin
  *
  * This example shows how to:
- * 1. Install a plugin from GitHub using aro.yaml
- * 2. Use the plugin's actions in your application
- *
- * Install the plugin first:
- *   aro add https://github.com/arolang/plugin-swift-hello.git
+ * 1. Define a plugin in aro.yaml
+ * 2. Use the plugin's service methods in your application
  *)
 
 (Application-Start: Greeting Plugin Demo) {
     <Log> "=== Greeting Plugin Demo ===" to the <console>.
-    <Log> "" to the <console>.
 
-    (* Use the greet action from the Swift plugin *)
+    (* Use the greet method from the hello-plugin service *)
     <Call> the <greeting> from the <hello-plugin: greet> with {
         name: "ARO Developer"
     }.
@@ -20,7 +16,7 @@
     <Extract> the <message> from the <greeting: message>.
     <Log> <message> to the <console>.
 
-    (* Use the farewell action *)
+    (* Use the farewell method *)
     <Call> the <goodbye> from the <hello-plugin: farewell> with {
         name: "ARO Developer"
     }.
@@ -28,7 +24,6 @@
     <Extract> the <farewell-msg> from the <goodbye: message>.
     <Log> <farewell-msg> to the <console>.
 
-    <Log> "" to the <console>.
     <Log> "Plugin demo completed!" to the <console>.
 
     <Return> an <OK: status> for the <startup>.

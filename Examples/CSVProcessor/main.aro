@@ -1,22 +1,16 @@
-(* CSVProcessor - Demonstrates using a Rust FFI plugin for CSV processing
+(* CSVProcessor - Demonstrates using a Swift plugin for CSV processing
  *
  * This example shows how to:
- * 1. Install a native plugin from GitHub using aro.yaml
- * 2. Use the plugin's FFI actions for CSV parsing and formatting
- *
- * Install the plugin first:
- *   aro add https://github.com/arolang/plugin-rust-csv.git
+ * 1. Parse CSV data into structured rows
+ * 2. Convert CSV to JSON objects
+ * 3. Format data back to CSV
  *)
 
 (Application-Start: CSV Processor Demo) {
     <Log> "=== CSV Processor Demo ===" to the <console>.
-    <Log> "" to the <console>.
 
-    (* Sample CSV data *)
-    <Create> the <csv-data> with "name,age,city
-Alice,30,New York
-Bob,25,San Francisco
-Charlie,35,Chicago".
+    (* Sample CSV data - use \n for newlines *)
+    <Create> the <csv-data> with "name,age,city\nAlice,30,New York\nBob,25,San Francisco\nCharlie,35,Chicago".
 
     (* Parse CSV to structured data *)
     <Log> "1. Parsing CSV data..." to the <console>.
@@ -26,28 +20,25 @@ Charlie,35,Chicago".
     }.
 
     <Extract> the <row-count> from the <parsed: row_count>.
-    <Log> "   Parsed rows: " to the <console>.
+    <Log> "Parsed rows:" to the <console>.
     <Log> <row-count> to the <console>.
 
     (* Convert CSV to JSON objects *)
-    <Log> "" to the <console>.
-    <Log> "2. Converting CSV to JSON objects..." to the <console>.
-    <Call> the <json-result> from the <csv-plugin: csv-to-json> with {
+    <Log> "2. Converting CSV to JSON..." to the <console>.
+    <Call> the <json-result> from the <csv-plugin: csvtojson> with {
         data: <csv-data>
     }.
 
-    <Extract> the <objects> from the <json-result: objects>.
-    <Log> "   JSON objects:" to the <console>.
-    <Log> <objects> to the <console>.
+    <Extract> the <count> from the <json-result: count>.
+    <Log> "JSON objects:" to the <console>.
+    <Log> <count> to the <console>.
 
     (* Format data back to CSV with custom delimiter *)
-    <Log> "" to the <console>.
-    <Log> "3. Formatting as semicolon-delimited CSV..." to the <console>.
+    <Log> "3. Formatting as semicolon-delimited..." to the <console>.
     <Create> the <rows> with [
         ["product", "price", "quantity"],
         ["Apple", "1.50", "100"],
-        ["Banana", "0.75", "200"],
-        ["Orange", "2.00", "50"]
+        ["Banana", "0.75", "200"]
     ].
 
     <Call> the <formatted> from the <csv-plugin: format-csv> with {
@@ -58,7 +49,6 @@ Charlie,35,Chicago".
     <Extract> the <csv-output> from the <formatted: csv>.
     <Log> <csv-output> to the <console>.
 
-    <Log> "" to the <console>.
     <Log> "CSV processing completed!" to the <console>.
 
     <Return> an <OK: status> for the <startup>.

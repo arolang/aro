@@ -1,16 +1,11 @@
-(* HashPluginDemo - Demonstrates using a C FFI plugin for hashing
+(* HashPluginDemo - Demonstrates using a Swift plugin for hashing
  *
- * This example shows how to:
- * 1. Install a native C plugin from GitHub using aro.yaml
- * 2. Use different hash algorithms provided by the plugin
- *
- * Install the plugin first:
- *   aro add https://github.com/arolang/plugin-c-hash.git
+ * This example shows how to use different hash algorithms
+ * provided by a plugin.
  *)
 
 (Application-Start: Hash Plugin Demo) {
     <Log> "=== Hash Plugin Demo ===" to the <console>.
-    <Log> "" to the <console>.
 
     (* Test data *)
     <Create> the <test-string> with "Hello, ARO!".
@@ -22,52 +17,27 @@
     }.
 
     <Extract> the <simple-hash> from the <simple-result: hash>.
-    <Log> "   Input: Hello, ARO!" to the <console>.
-    <Log> "   Hash:  " to the <console>.
+    <Log> "Input: Hello, ARO!" to the <console>.
     <Log> <simple-hash> to the <console>.
 
     (* DJB2 hash *)
-    <Log> "" to the <console>.
     <Log> "2. DJB2 hash algorithm:" to the <console>.
     <Call> the <djb2-result> from the <hash-plugin: djb2> with {
         data: <test-string>
     }.
 
     <Extract> the <djb2-hash> from the <djb2-result: hash>.
-    <Log> "   Hash:  " to the <console>.
     <Log> <djb2-hash> to the <console>.
 
     (* FNV-1a hash *)
-    <Log> "" to the <console>.
     <Log> "3. FNV-1a hash algorithm:" to the <console>.
     <Call> the <fnv-result> from the <hash-plugin: fnv1a> with {
         data: <test-string>
     }.
 
     <Extract> the <fnv-hash> from the <fnv-result: hash>.
-    <Log> "   Hash:  " to the <console>.
     <Log> <fnv-hash> to the <console>.
 
-    (* Hash different strings to show distribution *)
-    <Log> "" to the <console>.
-    <Log> "4. Hash comparison for different inputs:" to the <console>.
-
-    <Call> the <hash1> from the <hash-plugin: djb2> with { data: "apple" }.
-    <Call> the <hash2> from the <hash-plugin: djb2> with { data: "banana" }.
-    <Call> the <hash3> from the <hash-plugin: djb2> with { data: "cherry" }.
-
-    <Extract> the <h1> from the <hash1: hash>.
-    <Extract> the <h2> from the <hash2: hash>.
-    <Extract> the <h3> from the <hash3: hash>.
-
-    <Log> "   apple  -> " to the <console>.
-    <Log> <h1> to the <console>.
-    <Log> "   banana -> " to the <console>.
-    <Log> <h2> to the <console>.
-    <Log> "   cherry -> " to the <console>.
-    <Log> <h3> to the <console>.
-
-    <Log> "" to the <console>.
     <Log> "Hash plugin demo completed!" to the <console>.
 
     <Return> an <OK: status> for the <startup>.

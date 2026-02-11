@@ -1,3 +1,5 @@
 # Test hints for HashPluginDemo
-# This example requires installing an external C plugin from GitHub
-skip: Requires plugin-c-hash from GitHub (aro add https://github.com/arolang/plugin-c-hash.git)
+# Demonstrates using a local Swift plugin for hash functions
+mode: both
+timeout: 60
+occurrence-check: true

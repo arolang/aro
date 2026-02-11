@@ -1,0 +1,13 @@
+=== Markdown Renderer Demo ===
+1. Converting to HTML...
+<h1>Welcome</h1>
+This is <strong>bold</strong> and <em>italic</em> text.
+<h2>Features</h2>
+Check out <a href="https://github.com/arolang/aro">ARO</a> for more.
+2. Extracting headings...
+Headings found:
+2
+3. Word count...
+Words:
+13
+Markdown processing completed!
