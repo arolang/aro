@@ -1,0 +1,6 @@
+# ARO Application Configuration
+# Demonstrates using a pure ARO plugin for audit logging
+
+plugins:
+  # Pure ARO audit logging plugin (installed via aro add)
+  - source: https://github.com/arolang/plugin-aro-auditlog
