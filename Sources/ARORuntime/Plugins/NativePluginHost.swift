@@ -170,7 +170,8 @@ public final class NativePluginHost: @unchecked Sendable {
         let cargoPaths = [
             "\(FileManager.default.homeDirectoryForCurrentUser.path)/.cargo/bin/cargo",
             "/root/.cargo/bin/cargo",
-            "/usr/local/bin/cargo",
+            "/opt/homebrew/bin/cargo",  // Homebrew on Apple Silicon
+            "/usr/local/bin/cargo",     // Homebrew on Intel Mac / Linux
             "/usr/bin/cargo",
         ]
 
