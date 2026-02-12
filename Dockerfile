@@ -105,6 +105,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     software-properties-common \
     curl \
     python3 \
+    build-essential \
     && wget -qO- https://apt.llvm.org/llvm.sh | bash -s -- 20 \
     && apt-get install -y --no-install-recommends llvm-20 clang-20 \
     && ln -sf /usr/bin/llc-20 /usr/bin/llc \
@@ -152,6 +153,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     software-properties-common \
     pkg-config \
     python3 \
+    build-essential \
     && wget -qO- https://apt.llvm.org/llvm.sh | bash -s -- 20 \
     && apt-get install -y --no-install-recommends llvm-20-dev clang-20 \
     && ln -sf /usr/bin/llc-20 /usr/bin/llc \

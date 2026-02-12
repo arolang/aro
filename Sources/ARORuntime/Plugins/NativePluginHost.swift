@@ -9,6 +9,12 @@ import Foundation
 import WinSDK
 #endif
 
+/// Write debug message to stderr (only when ARO_DEBUG is set)
+private func debugPrint(_ message: String) {
+    guard ProcessInfo.processInfo.environment["ARO_DEBUG"] != nil else { return }
+    FileHandle.standardError.write(Data((message + "\n").utf8))
+}
+
 // MARK: - Native Plugin Host
 
 /// Host for native plugins written in C, C++, or Rust
@@ -107,10 +113,12 @@ public final class NativePluginHost: @unchecked Sendable {
 
         // If library not found, try to compile it
         if libraryPath == nil {
+            debugPrint("[NativePluginHost] No pre-built library found for \(pluginName), attempting compilation...")
             libraryPath = try compileNativePlugin(config: config, ext: ext)
         }
 
         guard let libraryPath = libraryPath else {
+            debugPrint("[NativePluginHost] Failed to find or compile library for \(pluginName)")
             throw NativePluginError.libraryNotFound(pluginName)
         }
 
@@ -132,6 +140,18 @@ public final class NativePluginHost: @unchecked Sendable {
 
     /// Compile native plugin from source if library doesn't exist
     private func compileNativePlugin(config: UnifiedProvideEntry, ext: String) throws -> URL? {
+        // Check for Cargo.toml (Rust plugin) - check current path and parent
+        let cargoTomlCandidates = [
+            pluginPath.appendingPathComponent("Cargo.toml"),
+            pluginPath.deletingLastPathComponent().appendingPathComponent("Cargo.toml"),
+        ]
+
+        if let cargoToml = cargoTomlCandidates.first(where: { FileManager.default.fileExists(atPath: $0.path) }) {
+            debugPrint("[NativePluginHost] Found Cargo.toml at \(cargoToml.path), compiling Rust plugin: \(pluginName)")
+            let rustProjectDir = cargoToml.deletingLastPathComponent()
+            return try compileRustPlugin(projectDir: rustProjectDir, ext: ext)
+        }
+
         // Check for C source files
         let cFiles = findSourceFiles(withExtension: "c")
         if !cFiles.isEmpty {
@@ -140,6 +160,67 @@ public final class NativePluginHost: @unchecked Sendable {
             return outputPath
         }
 
+        debugPrint("[NativePluginHost] No compilable sources found for plugin: \(pluginName)")
+        return nil
+    }
+
+    /// Compile Rust plugin using cargo
+    private func compileRustPlugin(projectDir: URL, ext: String) throws -> URL? {
+        // Find cargo executable
+        let cargoPaths = [
+            "\(FileManager.default.homeDirectoryForCurrentUser.path)/.cargo/bin/cargo",
+            "/root/.cargo/bin/cargo",
+            "/usr/local/bin/cargo",
+            "/usr/bin/cargo",
+        ]
+
+        debugPrint("[NativePluginHost] Looking for cargo in: \(cargoPaths)")
+
+        guard let cargoPath = cargoPaths.first(where: { FileManager.default.isExecutableFile(atPath: $0) }) else {
+            debugPrint("[NativePluginHost] Cargo not found!")
+            throw NativePluginError.compilationFailed(pluginName, message: "Cargo not found. Install Rust to compile this plugin.")
+        }
+
+        debugPrint("[NativePluginHost] Using cargo at: \(cargoPath)")
+        debugPrint("[NativePluginHost] Building in: \(projectDir.path)")
+
+        let process = Process()
+        process.executableURL = URL(fileURLWithPath: cargoPath)
+        process.arguments = ["build", "--release"]
+        process.currentDirectoryURL = projectDir
+
+        let outputPipe = Pipe()
+        let errorPipe = Pipe()
+        process.standardOutput = outputPipe
+        process.standardError = errorPipe
+
+        try process.run()
+        process.waitUntilExit()
+
+        if process.terminationStatus != 0 {
+            let errorData = errorPipe.fileHandleForReading.readDataToEndOfFile()
+            let errorMessage = String(data: errorData, encoding: .utf8) ?? "Unknown error"
+            debugPrint("[NativePluginHost] Cargo build failed: \(errorMessage)")
+            throw NativePluginError.compilationFailed(pluginName, message: "Cargo build failed: \(errorMessage)")
+        }
+
+        debugPrint("[NativePluginHost] Cargo build succeeded")
+
+        // Find the built library in target/release
+        let targetDir = projectDir.appendingPathComponent("target/release")
+        debugPrint("[NativePluginHost] Looking for library in: \(targetDir.path) with extension: \(ext)")
+
+        // Look for library file (lib*.dylib on macOS, lib*.so on Linux)
+        if let contents = try? FileManager.default.contentsOfDirectory(at: targetDir, includingPropertiesForKeys: nil) {
+            debugPrint("[NativePluginHost] Files in target/release: \(contents.map { $0.lastPathComponent })")
+            // Find lib*.dylib or lib*.so
+            if let lib = contents.first(where: { $0.pathExtension == ext && $0.lastPathComponent.hasPrefix("lib") }) {
+                debugPrint("[NativePluginHost] Found library: \(lib.path)")
+                return lib
+            }
+        }
+
+        debugPrint("[NativePluginHost] Library not found after cargo build")
         return nil
     }
 
