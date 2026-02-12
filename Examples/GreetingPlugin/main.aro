@@ -1,23 +1,23 @@
-(* GreetingPlugin - Demonstrates using a managed Swift plugin
+(* GreetingPlugin - Demonstrates using custom actions from a Swift plugin
  *
  * This example shows how to:
  * 1. Define a plugin in aro.yaml
- * 2. Use the plugin's service methods in your application
+ * 2. Use custom actions provided by the plugin: <Greet> and <Farewell>
  *)
 
 (Application-Start: Greeting Plugin Demo) {
     <Log> "=== Greeting Plugin Demo ===" to the <console>.
 
-    (* Use the greet method from the plugin-swift-hello service *)
-    <Call> the <greeting> from the <plugin-swift-hello: greet> with {
+    (* Use the Greet custom action from plugin-swift-hello *)
+    <Greet> the <greeting> with {
         name: "ARO Developer"
     }.
 
     <Extract> the <message> from the <greeting: message>.
     <Log> <message> to the <console>.
 
-    (* Use the farewell method *)
-    <Call> the <goodbye> from the <plugin-swift-hello: farewell> with {
+    (* Use the Farewell custom action *)
+    <Farewell> the <goodbye> with {
         name: "ARO Developer"
     }.
 
