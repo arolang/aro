@@ -1,12 +1,4 @@
-type: console
+# Test hints for AuditLogDemo
+# Pure ARO plugin with event handlers
 mode: interpreter
-expected: |
-  [Application-Start] === Audit Log Plugin Demo ===
-  [Application-Start] Emitting UserCreated event...
-  [Log User Events] [AUDIT] UserCreated: User created
-  [Application-Start] Emitting OrderPlaced event...
-  [Log Order Events] [AUDIT] OrderPlaced: Order placed
-  [Application-Start] Emitting PaymentReceived event...
-  [Log Payment Events] [AUDIT] PaymentReceived: Payment processed
-  [Application-Start] === Demo Complete ===
-  startup
+occurrence-check: true

@@ -1,0 +1,11 @@
+name: plugin-aro-auditlog
+version: 1.0.0
+description: Pure ARO audit logging plugin - automatically logs domain events
+aro-version: '>=0.2.0'
+source:
+  git: https://github.com/arolang/plugin-aro-auditlog.git
+  ref: main
+  commit: e65d7a12a1d7560f0e36a1d9fec0a227a78fa8be
+provides:
+- type: aro-files
+  path: features/
