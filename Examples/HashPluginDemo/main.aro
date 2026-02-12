@@ -1,7 +1,7 @@
-(* HashPluginDemo - Demonstrates using a managed C plugin for hashing
+(* HashPluginDemo - Demonstrates using custom actions from a C plugin
  *
  * This example shows how to use different hash algorithms
- * provided by a plugin installed from GitHub.
+ * as custom actions: <Hash>, <DJB2>, and <FNV1a>
  *)
 
 (Application-Start: Hash Plugin Demo) {
@@ -10,30 +10,24 @@
     (* Test data *)
     <Create> the <test-string> with "Hello, ARO!".
 
-    (* Simple hash *)
+    (* Simple hash using custom action *)
     <Log> "1. Simple hash algorithm:" to the <console>.
-    <Call> the <simple-result> from the <plugin-c-hash: hash> with {
-        data: <test-string>
-    }.
+    <Hash> the <simple-result> from the <test-string>.
 
     <Extract> the <simple-hash> from the <simple-result: hash>.
     <Log> "Input: Hello, ARO!" to the <console>.
     <Log> <simple-hash> to the <console>.
 
-    (* DJB2 hash *)
+    (* DJB2 hash using custom action *)
     <Log> "2. DJB2 hash algorithm:" to the <console>.
-    <Call> the <djb2-result> from the <plugin-c-hash: djb2> with {
-        data: <test-string>
-    }.
+    <DJB2> the <djb2-result> from the <test-string>.
 
     <Extract> the <djb2-hash> from the <djb2-result: hash>.
     <Log> <djb2-hash> to the <console>.
 
-    (* FNV-1a hash *)
+    (* FNV-1a hash using custom action *)
     <Log> "3. FNV-1a hash algorithm:" to the <console>.
-    <Call> the <fnv-result> from the <plugin-c-hash: fnv1a> with {
-        data: <test-string>
-    }.
+    <FNV1a> the <fnv-result> from the <test-string>.
 
     <Extract> the <fnv-hash> from the <fnv-result: hash>.
     <Log> <fnv-hash> to the <console>.
