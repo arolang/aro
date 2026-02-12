@@ -1,9 +1,9 @@
-(* MarkdownRenderer - Demonstrates using a managed Python plugin for Markdown processing
+(* MarkdownRenderer - Demonstrates using custom actions from a Python plugin
  *
  * This example shows how to:
- * 1. Convert Markdown to HTML
- * 2. Extract headings from Markdown
- * 3. Count words in Markdown
+ * 1. Convert Markdown to HTML using <ToHTML>
+ * 2. Extract headings from Markdown using <ExtractHeadings>
+ * 3. Count words in Markdown using <WordCount>
  *)
 
 (Application-Start: Markdown Renderer Demo) {
@@ -12,30 +12,24 @@
     (* Sample Markdown content *)
     <Create> the <markdown> with "# Welcome\n\nThis is **bold** and *italic* text.\n\n## Features\n\nCheck out [ARO](https://github.com/arolang/aro) for more.".
 
-    (* Convert Markdown to HTML *)
+    (* Convert Markdown to HTML using custom action *)
     <Log> "1. Converting to HTML..." to the <console>.
-    <Call> the <html-result> from the <plugin-python-markdown: toHtml> with {
-        data: <markdown>
-    }.
+    <ToHTML> the <html-result> from the <markdown>.
 
     <Extract> the <html> from the <html-result: html>.
     <Log> <html> to the <console>.
 
-    (* Extract headings *)
+    (* Extract headings using custom action *)
     <Log> "2. Extracting headings..." to the <console>.
-    <Call> the <headings-result> from the <plugin-python-markdown: extractHeadings> with {
-        data: <markdown>
-    }.
+    <ExtractHeadings> the <headings-result> from the <markdown>.
 
     <Extract> the <heading-count> from the <headings-result: count>.
     <Log> "Headings found:" to the <console>.
     <Log> <heading-count> to the <console>.
 
-    (* Word count *)
+    (* Word count using custom action *)
     <Log> "3. Word count..." to the <console>.
-    <Call> the <stats> from the <plugin-python-markdown: wordCount> with {
-        data: <markdown>
-    }.
+    <WordCount> the <stats> from the <markdown>.
 
     <Extract> the <words> from the <stats: words>.
     <Log> "Words:" to the <console>.

@@ -1,1 +1,4 @@
 # Test hints for HashPluginDemo
+# Requires managed plugin: https://github.com/arolang/plugin-c-hash
+# Custom actions not yet supported in compiled binaries - interpreter only
+mode: interpreter

@@ -362,14 +362,24 @@ final class NativePluginActionWrapper: @unchecked Sendable {
         // Gather input from context
         var input: [String: any Sendable] = [:]
 
-        // Add object value if bound
+        // Add object value if bound (use multiple keys for compatibility)
         if let objValue = context.resolveAny(object.base) {
-            input["object"] = objValue
+            input["data"] = objValue
+            input["object"] = objValue  // Also include as "object" for backward compat
+            input[object.base] = objValue  // Also include using original variable name
         }
 
         // Add specifiers if present
         if let specifier = object.specifiers.first {
             input["qualifier"] = specifier
+        }
+
+        // Add with clause arguments if present
+        if let withArgs = context.resolveAny("_with_") as? [String: any Sendable] {
+            input.merge(withArgs) { _, new in new }
+        }
+        if let exprArgs = context.resolveAny("_expression_") as? [String: any Sendable] {
+            input.merge(exprArgs) { _, new in new }
         }
 
         // Execute native action

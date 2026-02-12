@@ -158,6 +158,12 @@ public actor ActionRegistry {
         ExecutionContext
     ) async throws -> any Sendable
 
+    /// Normalize action name by removing hyphens and lowercasing
+    /// This allows `parse-csv` and `ParseCSV` to match as `parsecsv`
+    private func normalizeActionName(_ name: String) -> String {
+        return name.replacingOccurrences(of: "-", with: "").lowercased()
+    }
+
     /// Register a dynamic action from a plugin
     /// - Parameters:
     ///   - verb: The action verb
@@ -166,14 +172,14 @@ public actor ActionRegistry {
         verb: String,
         handler: @escaping DynamicActionHandler
     ) {
-        dynamicHandlers[verb.lowercased()] = handler
+        dynamicHandlers[normalizeActionName(verb)] = handler
     }
 
     /// Get a dynamic action handler
     /// - Parameter verb: The action verb
     /// - Returns: The handler if registered
     public func dynamicHandler(for verb: String) -> DynamicActionHandler? {
-        dynamicHandlers[verb.lowercased()]
+        dynamicHandlers[normalizeActionName(verb)]
     }
 
     // MARK: - Lookup

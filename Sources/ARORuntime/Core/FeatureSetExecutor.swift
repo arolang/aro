@@ -349,18 +349,23 @@ public final class FeatureSetExecutor: @unchecked Sendable {
             context.bind("_result_expression_", value: resultValue)
         }
 
-        // Get action implementation
-        guard let action = await actionRegistry.action(for: verb) else {
-            throw ActionError.unknownAction(verb)
-        }
-
         // Execute action with ARO-0008 error wrapping
         do {
-            let result = try await action.execute(
-                result: resultDescriptor,
-                object: objectDescriptor,
-                context: context
-            )
+            // Get action implementation (try built-in first, then dynamic plugin actions)
+            let result: any Sendable
+            if let action = await actionRegistry.action(for: verb) {
+                // Execute built-in action
+                result = try await action.execute(
+                    result: resultDescriptor,
+                    object: objectDescriptor,
+                    context: context
+                )
+            } else if let dynamicHandler = await actionRegistry.dynamicHandler(for: verb) {
+                // Execute dynamic plugin action
+                result = try await dynamicHandler(resultDescriptor, objectDescriptor, context)
+            } else {
+                throw ActionError.unknownAction(verb)
+            }
 
             // Bind result to context (unless it's a response action that already set the response)
             // Also skip binding if the action already bound the result (to avoid double-binding)
