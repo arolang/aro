@@ -1,4 +1,4 @@
 # Test hints for AuditLogDemo
 # Pure ARO plugin with event handlers
-mode: interpreter
+mode: both
 occurrence-check: true
