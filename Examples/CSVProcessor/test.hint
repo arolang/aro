@@ -1,4 +1,3 @@
 # Test hints for CSVProcessor
 # Requires managed plugin: https://github.com/arolang/plugin-rust-csv
-# Custom actions not yet supported in compiled binaries - interpreter only
-mode: interpreter
+mode: both

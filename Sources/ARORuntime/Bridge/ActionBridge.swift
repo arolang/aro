@@ -908,3 +908,19 @@ public func aro_action_signal(
 ) -> UnsafeMutableRawPointer? {
     return executeAction(verb: "signal", contextPtr: contextPtr, resultPtr: resultPtr, objectPtr: objectPtr)
 }
+
+// MARK: - Dynamic Plugin Actions
+
+/// Execute a dynamic action by verb name
+/// This is used for plugin-provided custom actions that aren't known at compile time
+@_cdecl("aro_action_dynamic")
+public func aro_action_dynamic(
+    _ verbPtr: UnsafePointer<CChar>?,
+    _ contextPtr: UnsafeMutableRawPointer?,
+    _ resultPtr: UnsafeRawPointer?,
+    _ objectPtr: UnsafeRawPointer?
+) -> UnsafeMutableRawPointer? {
+    guard let verbPtr = verbPtr else { return nil }
+    let verb = String(cString: verbPtr)
+    return executeAction(verb: verb, contextPtr: contextPtr, resultPtr: resultPtr, objectPtr: objectPtr)
+}

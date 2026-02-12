@@ -71,6 +71,9 @@ public final class LLVMExternalDeclEmitter {
     // Action functions cache
     private var actionFunctions: [String: Function] = [:]
 
+    // Dynamic action function for plugin-provided actions
+    private var _actionDynamic: Function?
+
     // MARK: - Initialization
 
     public init(context: LLVMCodeGenContext, types: LLVMTypeMapper) {
@@ -425,6 +428,15 @@ public final class LLVMExternalDeclEmitter {
             let func_ = ctx.module.declareFunction(funcName, actionType)
             actionFunctions[name] = func_
         }
+
+        // Dynamic action function for plugin-provided custom actions
+        // ptr @aro_action_dynamic(ptr verb, ptr ctx, ptr result_desc, ptr object_desc)
+        let ptr = ctx.ptrType
+        let dynamicActionType = types.functionType(
+            parameters: [ptr, ptr, ptr, ptr],
+            returning: ptr
+        )
+        _actionDynamic = ctx.module.declareFunction("aro_action_dynamic", dynamicActionType)
     }
 
     // MARK: - Standard Library
@@ -500,6 +512,9 @@ public final class LLVMExternalDeclEmitter {
     public func actionFunction(for name: String) -> Function? {
         actionFunctions[name.lowercased()]
     }
+
+    /// Dynamic action function for plugin-provided custom actions
+    public var actionDynamic: Function { _actionDynamic! }
 }
 
 #endif

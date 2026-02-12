@@ -193,13 +193,33 @@ public final class NativePluginHost: @unchecked Sendable {
         let name = dict["name"] as? String ?? pluginName
         let version = dict["version"] as? String ?? "1.0.0"
         let language = dict["language"] as? String ?? "native"
-        let actionNames = dict["actions"] as? [String] ?? []
+
+        // Parse actions - supports both old format (string array) and new format (object array with verbs)
+        var actionNames: [String] = []
+        var verbsMap: [String: [String]] = [:]  // Maps action name to its verbs
+
+        if let actionStrings = dict["actions"] as? [String] {
+            // Old format: ["action1", "action2"]
+            actionNames = actionStrings
+        } else if let actionObjects = dict["actions"] as? [[String: Any]] {
+            // New format: [{ "name": "ParseCSV", "verbs": ["parsecsv", "readcsv"], ... }]
+            for actionObj in actionObjects {
+                if let actionName = actionObj["name"] as? String {
+                    actionNames.append(actionName)
+                    // Store verbs for this action
+                    if let verbs = actionObj["verbs"] as? [String] {
+                        verbsMap[actionName] = verbs
+                    }
+                }
+            }
+        }
 
         pluginInfo = NativePluginInfo(
             name: name,
             version: version,
             language: language,
-            actions: actionNames
+            actions: actionNames,
+            verbsMap: verbsMap
         )
 
         // Create action descriptors
@@ -256,22 +276,44 @@ public final class NativePluginHost: @unchecked Sendable {
 
     /// Register actions with the global action registry
     public func registerActions() {
-        for (name, descriptor) in actions {
-            // Create a wrapper action that calls the native plugin
-            let wrapper = NativePluginActionWrapper(
-                pluginName: pluginName,
-                actionName: name,
-                host: self,
-                descriptor: descriptor
-            )
+        // Use semaphore to ensure all registrations complete before returning
+        let semaphore = DispatchSemaphore(value: 0)
+        var registrationCount = 0
 
-            // Register with ActionRegistry using dynamic verb
-            Task {
-                await ActionRegistry.shared.registerDynamic(
-                    verb: name,
-                    handler: wrapper.handle
-                )
+        for (name, descriptor) in actions {
+            // Get verbs for this action (or use the action name itself as a fallback)
+            let verbs: [String]
+            if let mappedVerbs = pluginInfo?.verbsMap[name], !mappedVerbs.isEmpty {
+                verbs = mappedVerbs
+            } else {
+                verbs = [name]
             }
+
+            // Register with ActionRegistry under all verbs
+            for verb in verbs {
+                // Create a wrapper action that calls the native plugin with this verb
+                let wrapper = NativePluginActionWrapper(
+                    pluginName: pluginName,
+                    actionName: name,
+                    verb: verb,
+                    host: self,
+                    descriptor: descriptor
+                )
+
+                registrationCount += 1
+                Task {
+                    await ActionRegistry.shared.registerDynamic(
+                        verb: verb,
+                        handler: wrapper.handle
+                    )
+                    semaphore.signal()
+                }
+            }
+        }
+
+        // Wait for all registrations to complete
+        for _ in 0..<registrationCount {
+            semaphore.wait()
         }
     }
 
@@ -329,6 +371,16 @@ struct NativePluginInfo: Sendable {
     let version: String
     let language: String
     let actions: [String]
+    /// Maps action names to their verbs (e.g., "ParseCSV" -> ["parsecsv", "readcsv"])
+    let verbsMap: [String: [String]]
+
+    init(name: String, version: String, language: String, actions: [String], verbsMap: [String: [String]] = [:]) {
+        self.name = name
+        self.version = version
+        self.language = language
+        self.actions = actions
+        self.verbsMap = verbsMap
+    }
 }
 
 /// Action descriptor
@@ -344,12 +396,15 @@ struct NativeActionDescriptor: Sendable {
 final class NativePluginActionWrapper: @unchecked Sendable {
     let pluginName: String
     let actionName: String
+    /// The verb used to invoke this action (may differ from actionName)
+    let verb: String
     let host: NativePluginHost
     let descriptor: NativeActionDescriptor
 
-    init(pluginName: String, actionName: String, host: NativePluginHost, descriptor: NativeActionDescriptor) {
+    init(pluginName: String, actionName: String, verb: String, host: NativePluginHost, descriptor: NativeActionDescriptor) {
         self.pluginName = pluginName
         self.actionName = actionName
+        self.verb = verb
         self.host = host
         self.descriptor = descriptor
     }
@@ -382,8 +437,8 @@ final class NativePluginActionWrapper: @unchecked Sendable {
             input.merge(exprArgs) { _, new in new }
         }
 
-        // Execute native action
-        let output = try host.execute(action: actionName, input: input)
+        // Execute native action using the verb (plugins expect lowercase verb, not action name)
+        let output = try host.execute(action: verb, input: input)
 
         // Bind result
         context.bind(result.base, value: output)

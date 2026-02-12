@@ -298,6 +298,75 @@ public final class PluginLoader: @unchecked Sendable {
         // Register as AROService
         let wrapper = CPluginServiceWrapper(name: name, loader: self)
         try ExternalServiceRegistry.shared.register(wrapper, withName: name)
+
+        // Parse plugin info to get custom action definitions and register them
+        if let infoSymbol = infoSymbol {
+            let infoFunc = unsafeBitCast(infoSymbol, to: CPluginInfoFunction.self)
+            if let infoPtr = infoFunc() {
+                let infoJSON = String(cString: infoPtr)
+                freeFunc?(infoPtr)
+
+                // Parse JSON to get actions
+                if let data = infoJSON.data(using: .utf8),
+                   let info = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+                   let actions = info["actions"] as? [[String: Any]] {
+
+                    // Register each action verb as a dynamic handler
+                    // Use semaphore to ensure registration completes synchronously
+                    let semaphore = DispatchSemaphore(value: 0)
+                    var registrationCount = 0
+
+                    for actionDef in actions {
+                        guard let verbs = actionDef["verbs"] as? [String] else { continue }
+
+                        for verb in verbs {
+                            registrationCount += 1
+                            let normalizedVerb = verb.lowercased().replacingOccurrences(of: "-", with: "")
+                            // Capture the original verb for plugin calls (may have hyphens)
+                            let originalVerb = verb
+                            Task {
+                                await ActionRegistry.shared.registerDynamic(
+                                    verb: normalizedVerb,
+                                    handler: { result, object, context in
+                                        // Build input from context
+                                        var input: [String: any Sendable] = [:]
+                                        if let data = context.resolveAny(object.base) {
+                                            // Pass data under multiple keys for compatibility
+                                            input["data"] = data
+                                            input["object"] = data
+                                            // Also pass under the object's base name (e.g., "rows")
+                                            input[object.base] = data
+                                        }
+
+                                        // Add with clause arguments if present
+                                        if let withArgs = context.resolveAny("_with_") as? [String: any Sendable] {
+                                            input.merge(withArgs) { _, new in new }
+                                        }
+                                        if let exprArgs = context.resolveAny("_expression_") as? [String: any Sendable] {
+                                            input.merge(exprArgs) { _, new in new }
+                                        }
+
+                                        // Call the plugin with original verb (may have hyphens)
+                                        let pluginResult = try self.callCPlugin(name, method: originalVerb, args: input)
+
+                                        // Bind result
+                                        context.bind(result.base, value: pluginResult)
+
+                                        return pluginResult
+                                    }
+                                )
+                                semaphore.signal()
+                            }
+                        }
+                    }
+
+                    // Wait for all registrations to complete
+                    for _ in 0..<registrationCount {
+                        semaphore.wait()
+                    }
+                }
+            }
+        }
     }
 
     /// Call a C plugin method

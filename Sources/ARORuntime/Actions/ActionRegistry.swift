@@ -235,10 +235,16 @@ extension ActionRegistry {
         object: ObjectDescriptor,
         context: ExecutionContext
     ) async throws -> any Sendable {
-        guard let action = action(for: verb) else {
-            throw ActionError.unknownAction(verb)
+        // Try built-in action first
+        if let action = action(for: verb) {
+            return try await action.execute(result: result, object: object, context: context)
         }
 
-        return try await action.execute(result: result, object: object, context: context)
+        // Try dynamic plugin action
+        if let handler = dynamicHandler(for: verb) {
+            return try await handler(result, object, context)
+        }
+
+        throw ActionError.unknownAction(verb)
     }
 }

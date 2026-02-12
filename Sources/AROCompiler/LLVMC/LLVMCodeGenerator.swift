@@ -306,16 +306,24 @@ public final class LLVMCodeGenerator {
 
         // Call action function
         let verb = statement.action.verb.lowercased()
-        guard let actionFunc = externals.actionFunction(for: verb) else {
-            ctx.recordError(.invalidAction(verb: verb, span: statement.span))
-            return
-        }
+        let actionResult: IRValue
 
-        let actionResult = ctx.module.insertCall(
-            actionFunc,
-            on: [ctx.currentContextVar!, resultDesc, objectDesc],
-            at: ctx.insertionPoint
-        )
+        if let actionFunc = externals.actionFunction(for: verb) {
+            // Known built-in action
+            actionResult = ctx.module.insertCall(
+                actionFunc,
+                on: [ctx.currentContextVar!, resultDesc, objectDesc],
+                at: ctx.insertionPoint
+            )
+        } else {
+            // Unknown verb - use dynamic action for plugin-provided custom actions
+            let verbStr = ctx.stringConstant(verb)
+            actionResult = ctx.module.insertCall(
+                externals.actionDynamic,
+                on: [verbStr, ctx.currentContextVar!, resultDesc, objectDesc],
+                at: ctx.insertionPoint
+            )
+        }
 
         // Store result
         ctx.module.insertStore(actionResult, to: ctx.currentResultPtr!, at: ctx.insertionPoint)
