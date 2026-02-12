@@ -504,7 +504,7 @@ public final class PluginLoader: @unchecked Sendable {
             let pluginName = item.lastPathComponent
 
             // Search for the library in common locations:
-            // - src/ (C plugins)
+            // - src/ (C plugins, Python plugins)
             // - Sources/ (Swift plugins)
             // - target/release/ (Rust plugins)
             let searchDirs = [
@@ -520,15 +520,28 @@ public final class PluginLoader: @unchecked Sendable {
                 }
 
                 do {
-                    let contents = try FileManager.default.contentsOfDirectory(
+                    let dirContents = try FileManager.default.contentsOfDirectory(
                         at: searchDir,
                         includingPropertiesForKeys: nil,
                         options: [.skipsHiddenFiles]
                     )
 
-                    for libFile in contents {
+                    // Check for native libraries first
+                    for libFile in dirContents {
                         if libFile.pathExtension == libraryExtension {
                             try loadCPlugin(at: libFile, name: pluginName)
+                            found = true
+                            break
+                        }
+                    }
+
+                    // If no native library found, check for Python plugins
+                    if !found {
+                        let pyFiles = dirContents.filter { $0.pathExtension == "py" }
+                        if !pyFiles.isEmpty {
+                            // Python plugin - load via UnifiedPluginLoader
+                            // Pass the binary directory (parent of Plugins/) as that's what UnifiedPluginLoader expects
+                            try UnifiedPluginLoader.shared.loadPlugins(from: binaryDir)
                             found = true
                             break
                         }
@@ -603,6 +616,242 @@ public final class PluginLoader: @unchecked Sendable {
                     }
                 }
             }
+        }
+    }
+
+    /// Compile managed plugins (from Plugins/ directory) for native binaries
+    /// - Parameters:
+    ///   - sourceDirectory: Source Plugins directory (containing plugin subdirectories)
+    ///   - outputDirectory: Output Plugins directory (where compiled plugins go)
+    public func compileManagedPlugins(from sourceDirectory: URL, to outputDirectory: URL) throws {
+        #if os(Windows)
+        let libraryExtension = "dll"
+        #elseif os(Linux)
+        let libraryExtension = "so"
+        #else
+        let libraryExtension = "dylib"
+        #endif
+
+        // Check if source Plugins directory exists
+        guard FileManager.default.fileExists(atPath: sourceDirectory.path) else {
+            return // No Plugins directory, nothing to compile
+        }
+
+        // Find all plugin subdirectories
+        let contents = try FileManager.default.contentsOfDirectory(
+            at: sourceDirectory,
+            includingPropertiesForKeys: [.isDirectoryKey],
+            options: [.skipsHiddenFiles]
+        )
+
+        for item in contents {
+            var isDirectory: ObjCBool = false
+            guard FileManager.default.fileExists(atPath: item.path, isDirectory: &isDirectory),
+                  isDirectory.boolValue else {
+                continue
+            }
+
+            let pluginName = item.lastPathComponent
+
+            // Check for plugin.yaml to identify managed plugins
+            let manifestPath = item.appendingPathComponent("plugin.yaml")
+            guard FileManager.default.fileExists(atPath: manifestPath.path) else {
+                continue
+            }
+
+            // Create output plugin directory
+            let outputPluginDir = outputDirectory.appendingPathComponent(pluginName)
+            try FileManager.default.createDirectory(at: outputPluginDir, withIntermediateDirectories: true)
+
+            // Copy plugin.yaml
+            let outputManifestPath = outputPluginDir.appendingPathComponent("plugin.yaml")
+            if !FileManager.default.fileExists(atPath: outputManifestPath.path) {
+                try FileManager.default.copyItem(at: manifestPath, to: outputManifestPath)
+            }
+
+            // Check for Package.swift (Swift Package)
+            let packageSwift = item.appendingPathComponent("Package.swift")
+            if FileManager.default.fileExists(atPath: packageSwift.path) {
+                // Swift Package - compile with swift build
+                let outputLibPath = outputPluginDir.appendingPathComponent("Sources")
+                    .appendingPathComponent("lib\(pluginName).\(libraryExtension)")
+                try FileManager.default.createDirectory(
+                    at: outputLibPath.deletingLastPathComponent(),
+                    withIntermediateDirectories: true
+                )
+                do {
+                    try compilePackagePlugin(source: item, output: outputLibPath)
+                } catch {
+                    print("[PluginLoader] Warning: Failed to compile managed package plugin \(pluginName): \(error)")
+                }
+                continue
+            }
+
+            // Check for Sources/ directory with Swift files
+            let sourcesDir = item.appendingPathComponent("Sources")
+            if FileManager.default.fileExists(atPath: sourcesDir.path) {
+                let sourceContents = try? FileManager.default.contentsOfDirectory(
+                    at: sourcesDir,
+                    includingPropertiesForKeys: nil,
+                    options: [.skipsHiddenFiles]
+                )
+                let swiftFiles = sourceContents?.filter { $0.pathExtension == "swift" } ?? []
+
+                if !swiftFiles.isEmpty {
+                    // Create output Sources directory
+                    let outputSourcesDir = outputPluginDir.appendingPathComponent("Sources")
+                    try FileManager.default.createDirectory(at: outputSourcesDir, withIntermediateDirectories: true)
+
+                    // Compile Swift files to dylib
+                    let outputLibPath = outputSourcesDir.appendingPathComponent("\(pluginName).\(libraryExtension)")
+                    do {
+                        // If there's only one Swift file, compile it directly
+                        if swiftFiles.count == 1 {
+                            try compilePlugin(source: swiftFiles[0], output: outputLibPath)
+                        } else {
+                            // Multiple Swift files - compile them together
+                            try compileMultipleSwiftFiles(sources: swiftFiles, output: outputLibPath)
+                        }
+                    } catch {
+                        print("[PluginLoader] Warning: Failed to compile managed Swift plugin \(pluginName): \(error)")
+                    }
+                }
+            }
+
+            // Check for src/ directory with C files
+            let srcDir = item.appendingPathComponent("src")
+            if FileManager.default.fileExists(atPath: srcDir.path) {
+                let srcContents = try? FileManager.default.contentsOfDirectory(
+                    at: srcDir,
+                    includingPropertiesForKeys: nil,
+                    options: [.skipsHiddenFiles]
+                )
+                let cFiles = srcContents?.filter { $0.pathExtension == "c" } ?? []
+
+                if !cFiles.isEmpty {
+                    // Create output src directory
+                    let outputSrcDir = outputPluginDir.appendingPathComponent("src")
+                    try FileManager.default.createDirectory(at: outputSrcDir, withIntermediateDirectories: true)
+
+                    // Compile C files to dylib
+                    let outputLibPath = outputSrcDir.appendingPathComponent("\(pluginName).\(libraryExtension)")
+                    do {
+                        try compileCPlugin(sources: cFiles, output: outputLibPath)
+                    } catch {
+                        print("[PluginLoader] Warning: Failed to compile managed C plugin \(pluginName): \(error)")
+                    }
+                }
+            }
+
+            // Check for src/ directory with Python files (Python plugins)
+            if FileManager.default.fileExists(atPath: srcDir.path) {
+                let srcContents = try? FileManager.default.contentsOfDirectory(
+                    at: srcDir,
+                    includingPropertiesForKeys: nil,
+                    options: [.skipsHiddenFiles]
+                )
+                let pyFiles = srcContents?.filter { $0.pathExtension == "py" } ?? []
+
+                if !pyFiles.isEmpty {
+                    // Python plugins - copy the entire src/ directory
+                    let outputSrcDir = outputPluginDir.appendingPathComponent("src")
+                    if !FileManager.default.fileExists(atPath: outputSrcDir.path) {
+                        try FileManager.default.copyItem(at: srcDir, to: outputSrcDir)
+                    }
+
+                    // Also copy requirements.txt if present
+                    let requirementsFile = item.appendingPathComponent("requirements.txt")
+                    if FileManager.default.fileExists(atPath: requirementsFile.path) {
+                        let outputRequirements = outputPluginDir.appendingPathComponent("requirements.txt")
+                        if !FileManager.default.fileExists(atPath: outputRequirements.path) {
+                            try FileManager.default.copyItem(at: requirementsFile, to: outputRequirements)
+                        }
+                    }
+                }
+            }
+
+            // Copy features/ directory if present (ARO files)
+            let featuresDir = item.appendingPathComponent("features")
+            if FileManager.default.fileExists(atPath: featuresDir.path) {
+                let outputFeaturesDir = outputPluginDir.appendingPathComponent("features")
+                if !FileManager.default.fileExists(atPath: outputFeaturesDir.path) {
+                    try FileManager.default.copyItem(at: featuresDir, to: outputFeaturesDir)
+                }
+            }
+        }
+    }
+
+    /// Compile multiple Swift files to a dynamic library
+    private func compileMultipleSwiftFiles(sources: [URL], output: URL) throws {
+        guard let swiftc = findSwiftCompiler() else {
+            throw PluginError.compilationFailed("swiftc", message: "Swift compiler not found")
+        }
+
+        var args = [swiftc]
+        args.append(contentsOf: sources.map { $0.path })
+        args.append("-emit-library")
+        args.append("-o")
+        args.append(output.path)
+
+        #if os(macOS)
+        args.append("-target")
+        #if arch(arm64)
+        args.append("arm64-apple-macosx14.0")
+        #else
+        args.append("x86_64-apple-macosx14.0")
+        #endif
+        #endif
+
+        let process = Process()
+        process.executableURL = URL(fileURLWithPath: args[0])
+        process.arguments = Array(args.dropFirst())
+
+        let errorPipe = Pipe()
+        process.standardError = errorPipe
+
+        try process.run()
+        process.waitUntilExit()
+
+        if process.terminationStatus != 0 {
+            let errorData = errorPipe.fileHandleForReading.readDataToEndOfFile()
+            let errorMessage = String(data: errorData, encoding: .utf8) ?? "Unknown error"
+            throw PluginError.compilationFailed("swiftc", message: errorMessage)
+        }
+    }
+
+    /// Compile C source files to a dynamic library
+    private func compileCPlugin(sources: [URL], output: URL) throws {
+        // Find clang/gcc
+        let compiler: String
+        if FileManager.default.fileExists(atPath: "/usr/bin/clang") {
+            compiler = "/usr/bin/clang"
+        } else if FileManager.default.fileExists(atPath: "/usr/bin/gcc") {
+            compiler = "/usr/bin/gcc"
+        } else {
+            throw PluginError.compilationFailed("cc", message: "C compiler not found")
+        }
+
+        var args = [compiler]
+        args.append(contentsOf: sources.map { $0.path })
+        args.append("-shared")
+        args.append("-fPIC")
+        args.append("-o")
+        args.append(output.path)
+
+        let process = Process()
+        process.executableURL = URL(fileURLWithPath: args[0])
+        process.arguments = Array(args.dropFirst())
+
+        let errorPipe = Pipe()
+        process.standardError = errorPipe
+
+        try process.run()
+        process.waitUntilExit()
+
+        if process.terminationStatus != 0 {
+            let errorData = errorPipe.fileHandleForReading.readDataToEndOfFile()
+            let errorMessage = String(data: errorData, encoding: .utf8) ?? "Unknown error"
+            throw PluginError.compilationFailed("cc", message: errorMessage)
         }
     }
 
@@ -983,9 +1232,11 @@ public final class PluginLoader: @unchecked Sendable {
     }
 
     /// Load a Swift package plugin
-    /// - Parameter packageDir: Path to the package directory containing Package.swift
-    private func loadPackagePlugin(from packageDir: URL) throws {
-        let pluginName = packageDir.lastPathComponent
+    /// - Parameters:
+    ///   - packageDir: Path to the package directory containing Package.swift
+    ///   - name: Optional plugin name override (defaults to directory name)
+    public func loadPackagePlugin(from packageDir: URL, name: String? = nil) throws {
+        let pluginName = name ?? packageDir.lastPathComponent
 
         #if os(Windows)
         let libraryExtension = "dll"
@@ -1108,7 +1359,90 @@ public final class PluginLoader: @unchecked Sendable {
 
         loadedPlugins[name] = rawHandle
 
-        // Find the init function
+        // Try new C ABI interface first (aro_plugin_info, aro_plugin_execute)
+        #if os(Windows)
+        let infoSymbol = GetProcAddress(handle, "aro_plugin_info")
+        let executeSymbol = GetProcAddress(handle, "aro_plugin_execute")
+        #else
+        let infoSymbol = dlsym(handle, "aro_plugin_info")
+        let executeSymbol = dlsym(handle, "aro_plugin_execute")
+        #endif
+
+        if let infoSymbol = infoSymbol, let executeSymbol = executeSymbol {
+            // Load as C ABI plugin (same interface as native plugins)
+            let executeFunc = unsafeBitCast(executeSymbol, to: CPluginExecuteFunction.self)
+
+            #if os(Windows)
+            let freeSymbol = GetProcAddress(handle, "aro_plugin_free")
+            #else
+            let freeSymbol = dlsym(handle, "aro_plugin_free")
+            #endif
+            let freeFunc: CPluginFreeFunction? = freeSymbol.map { unsafeBitCast($0, to: CPluginFreeFunction.self) }
+
+            // Store the execute function
+            cPluginFunctions[name.lowercased()] = (execute: executeFunc, free: freeFunc)
+
+            // Register as AROService
+            let wrapper = CPluginServiceWrapper(name: name, loader: self)
+            try ExternalServiceRegistry.shared.register(wrapper, withName: name)
+
+            // Parse plugin info for custom actions
+            let infoFunc = unsafeBitCast(infoSymbol, to: CPluginInfoFunction.self)
+            if let infoPtr = infoFunc() {
+                let infoJSON = String(cString: infoPtr)
+                freeFunc?(infoPtr)
+
+                // Parse JSON to get actions and register them
+                if let data = infoJSON.data(using: .utf8),
+                   let info = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+                   let actions = info["actions"] as? [[String: Any]] {
+
+                    let semaphore = DispatchSemaphore(value: 0)
+                    var registrationCount = 0
+
+                    for actionDef in actions {
+                        guard let verbs = actionDef["verbs"] as? [String] else { continue }
+
+                        for verb in verbs {
+                            registrationCount += 1
+                            let normalizedVerb = verb.lowercased().replacingOccurrences(of: "-", with: "")
+                            let originalVerb = verb
+                            Task {
+                                await ActionRegistry.shared.registerDynamic(
+                                    verb: normalizedVerb,
+                                    handler: { result, object, context in
+                                        var input: [String: any Sendable] = [:]
+                                        if let data = context.resolveAny(object.base) {
+                                            input["data"] = data
+                                            input["object"] = data
+                                            input[object.base] = data
+                                        }
+                                        if let withArgs = context.resolveAny("_with_") as? [String: any Sendable] {
+                                            input.merge(withArgs) { _, new in new }
+                                        }
+                                        if let exprArgs = context.resolveAny("_expression_") as? [String: any Sendable] {
+                                            input.merge(exprArgs) { _, new in new }
+                                        }
+                                        let pluginResult = try self.callCPlugin(name, method: originalVerb, args: input)
+                                        context.bind(result.base, value: pluginResult)
+                                        return pluginResult
+                                    }
+                                )
+                                semaphore.signal()
+                            }
+                        }
+                    }
+
+                    for _ in 0..<registrationCount {
+                        semaphore.wait()
+                    }
+                }
+            }
+
+            return
+        }
+
+        // Try legacy interface (aro_plugin_init)
         #if os(Windows)
         let initSymbol = GetProcAddress(handle, "aro_plugin_init")
         #else

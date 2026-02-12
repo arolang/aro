@@ -74,7 +74,15 @@ public final class NativePluginHost: @unchecked Sendable {
 
     private func loadLibrary(config: UnifiedProvideEntry) throws {
         // Determine library path
-        let libraryPath: URL
+        var libraryPath: URL?
+
+        #if os(Windows)
+        let ext = "dll"
+        #elseif os(Linux)
+        let ext = "so"
+        #else
+        let ext = "dylib"
+        #endif
 
         if let output = config.build?.output {
             // Output path may be relative to plugin root or to the path
@@ -85,20 +93,8 @@ public final class NativePluginHost: @unchecked Sendable {
                 pluginRoot.appendingPathComponent(output),
             ]
 
-            guard let found = candidates.first(where: { FileManager.default.fileExists(atPath: $0.path) }) else {
-                throw NativePluginError.libraryNotFound(pluginName)
-            }
-            libraryPath = found
+            libraryPath = candidates.first(where: { FileManager.default.fileExists(atPath: $0.path) })
         } else {
-            // Look for default library names
-            #if os(Windows)
-            let ext = "dll"
-            #elseif os(Linux)
-            let ext = "so"
-            #else
-            let ext = "dylib"
-            #endif
-
             // Try common patterns
             let candidates = [
                 pluginPath.appendingPathComponent("lib\(pluginName).\(ext)"),
@@ -106,10 +102,16 @@ public final class NativePluginHost: @unchecked Sendable {
                 pluginPath.appendingPathComponent("target/release/lib\(pluginName).\(ext)"),  // Rust
             ]
 
-            guard let found = candidates.first(where: { FileManager.default.fileExists(atPath: $0.path) }) else {
-                throw NativePluginError.libraryNotFound(pluginName)
-            }
-            libraryPath = found
+            libraryPath = candidates.first(where: { FileManager.default.fileExists(atPath: $0.path) })
+        }
+
+        // If library not found, try to compile it
+        if libraryPath == nil {
+            libraryPath = try compileNativePlugin(config: config, ext: ext)
+        }
+
+        guard let libraryPath = libraryPath else {
+            throw NativePluginError.libraryNotFound(pluginName)
         }
 
         // Load the library
@@ -126,6 +128,68 @@ public final class NativePluginHost: @unchecked Sendable {
         }
         libraryHandle = handle
         #endif
+    }
+
+    /// Compile native plugin from source if library doesn't exist
+    private func compileNativePlugin(config: UnifiedProvideEntry, ext: String) throws -> URL? {
+        // Check for C source files
+        let cFiles = findSourceFiles(withExtension: "c")
+        if !cFiles.isEmpty {
+            let outputPath = pluginPath.appendingPathComponent("\(pluginName).\(ext)")
+            try compileCPlugin(sources: cFiles, output: outputPath)
+            return outputPath
+        }
+
+        return nil
+    }
+
+    /// Find source files with a given extension in the plugin path
+    private func findSourceFiles(withExtension ext: String) -> [URL] {
+        guard let contents = try? FileManager.default.contentsOfDirectory(
+            at: pluginPath,
+            includingPropertiesForKeys: nil,
+            options: [.skipsHiddenFiles]
+        ) else {
+            return []
+        }
+
+        return contents.filter { $0.pathExtension == ext }
+    }
+
+    /// Compile C source files to a dynamic library
+    private func compileCPlugin(sources: [URL], output: URL) throws {
+        // Find clang/gcc
+        let compiler: String
+        if FileManager.default.fileExists(atPath: "/usr/bin/clang") {
+            compiler = "/usr/bin/clang"
+        } else if FileManager.default.fileExists(atPath: "/usr/bin/gcc") {
+            compiler = "/usr/bin/gcc"
+        } else {
+            throw NativePluginError.compilationFailed(pluginName, message: "C compiler not found")
+        }
+
+        var args = [compiler]
+        args.append(contentsOf: sources.map { $0.path })
+        args.append("-shared")
+        args.append("-fPIC")
+        args.append("-o")
+        args.append(output.path)
+
+        let process = Process()
+        process.executableURL = URL(fileURLWithPath: args[0])
+        process.arguments = Array(args.dropFirst())
+
+        let errorPipe = Pipe()
+        process.standardError = errorPipe
+
+        try process.run()
+        process.waitUntilExit()
+
+        if process.terminationStatus != 0 {
+            let errorData = errorPipe.fileHandleForReading.readDataToEndOfFile()
+            let errorMessage = String(data: errorData, encoding: .utf8) ?? "Unknown error"
+            throw NativePluginError.compilationFailed(pluginName, message: errorMessage)
+        }
     }
 
     private func loadPluginInfo() throws {
@@ -456,6 +520,7 @@ public enum NativePluginError: Error, CustomStringConvertible {
     case notLoaded(String)
     case missingFunction(String, function: String)
     case executionFailed(String, message: String)
+    case compilationFailed(String, message: String)
 
     public var description: String {
         switch self {
@@ -469,6 +534,8 @@ public enum NativePluginError: Error, CustomStringConvertible {
             return "Native plugin '\(name)' missing required function '\(function)'"
         case .executionFailed(let name, let message):
             return "Native plugin '\(name)' execution failed: \(message)"
+        case .compilationFailed(let name, let message):
+            return "Failed to compile native plugin '\(name)': \(message)"
         }
     }
 }

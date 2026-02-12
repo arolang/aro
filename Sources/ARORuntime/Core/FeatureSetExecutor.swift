@@ -253,12 +253,15 @@ public final class FeatureSetExecutor: @unchecked Sendable {
                 let responseVerbs: Set<String> = ["write", "read", "store", "save", "persist", "log", "print", "send", "emit"]
                 // Server lifecycle actions always need execution for side effects
                 let serverVerbs: Set<String> = ["start", "stop", "restart", "keepalive"]
+                // Check if there's a dynamic handler registered for this verb (plugin-provided action)
+                let hasDynamicHandler = await actionRegistry.dynamicHandler(for: verb) != nil
                 let needsExecution = testVerbs.contains(verb.lowercased()) ||
                     requestVerbs.contains(verb.lowercased()) ||
                     mergeVerbs.contains(verb.lowercased()) ||
                     responseVerbs.contains(verb.lowercased()) ||
                     queryVerbs.contains(verb.lowercased()) ||
                     serverVerbs.contains(verb.lowercased()) ||
+                    hasDynamicHandler ||  // Dynamic plugin actions always need execution
                     (updateVerbs.contains(verb.lowercased()) && !resultDescriptor.specifiers.isEmpty) ||
                     (createVerbs.contains(verb.lowercased()) && !resultDescriptor.specifiers.isEmpty) ||
                     (computeVerbs.contains(verb.lowercased()) && !resultDescriptor.specifiers.isEmpty) ||

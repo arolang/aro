@@ -176,6 +176,10 @@ public final class PythonPluginHost: @unchecked Sendable {
 
     /// Register actions with the global action registry
     public func registerActions() {
+        // Use semaphore to ensure all registrations complete before returning
+        let semaphore = DispatchSemaphore(value: 0)
+        let registrationCount = actions.count
+
         for action in actions {
             let wrapper = PythonPluginActionWrapper(
                 pluginName: pluginName,
@@ -189,7 +193,13 @@ public final class PythonPluginHost: @unchecked Sendable {
                     verb: action,
                     handler: wrapper.handle
                 )
+                semaphore.signal()
             }
+        }
+
+        // Wait for all registrations to complete
+        for _ in 0..<registrationCount {
+            semaphore.wait()
         }
     }
 

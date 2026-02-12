@@ -170,12 +170,32 @@ public final class UnifiedPluginLoader: @unchecked Sendable {
         // Check for Package.swift (Swift package)
         let packageSwift = path.appendingPathComponent("Package.swift")
         if FileManager.default.fileExists(atPath: packageSwift.path) {
-            // This will be handled by the legacy loader's package support
-            // For now, just note it was found
-            print("[UnifiedPluginLoader] Found Swift package at \(path.path)")
+            // Load Swift package plugin
+            try legacyLoader.loadPackagePlugin(from: path, name: pluginName)
         } else {
-            // Single-file Swift plugins are loaded on-demand
-            print("[UnifiedPluginLoader] Found Swift sources at \(path.path)")
+            // Find .swift files in the path
+            var isDirectory: ObjCBool = false
+            if FileManager.default.fileExists(atPath: path.path, isDirectory: &isDirectory) {
+                if isDirectory.boolValue {
+                    // Directory of Swift files - find and load them
+                    let contents = try FileManager.default.contentsOfDirectory(
+                        at: path,
+                        includingPropertiesForKeys: nil,
+                        options: [.skipsHiddenFiles]
+                    )
+                    let swiftFiles = contents.filter { $0.pathExtension == "swift" }
+                    for swiftFile in swiftFiles {
+                        do {
+                            try legacyLoader.loadPlugin(from: swiftFile)
+                        } catch {
+                            print("[UnifiedPluginLoader] Warning: Failed to load Swift plugin \(swiftFile.lastPathComponent): \(error)")
+                        }
+                    }
+                } else if path.pathExtension == "swift" {
+                    // Single Swift file
+                    try legacyLoader.loadPlugin(from: path)
+                }
+            }
         }
     }
 
