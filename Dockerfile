@@ -16,7 +16,7 @@ FROM swift:6.2-jammy AS builder
 ARG VERSION=dev
 ARG COMMIT_SHA=unknown
 
-# Install build dependencies including LLVM 20 (required for Swifty-LLVM)
+# Install build dependencies including LLVM 20 (required for Swifty-LLVM) and Rust (for plugins)
 RUN apt-get update && apt-get install -y --no-install-recommends \
     libcurl4-openssl-dev \
     libssl-dev \
@@ -25,6 +25,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     lsb-release \
     software-properties-common \
     pkg-config \
+    curl \
     && wget https://apt.llvm.org/llvm.sh \
     && chmod +x llvm.sh \
     && ./llvm.sh 20 \
@@ -32,6 +33,12 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && ln -sf /usr/bin/llc-20 /usr/bin/llc \
     && rm -rf /var/lib/apt/lists/* \
     && rm llvm.sh
+
+# Install Rust for plugin compilation
+RUN curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y \
+    && . $HOME/.cargo/env \
+    && rustup default stable
+ENV PATH="/root/.cargo/bin:${PATH}"
 
 # Create pkg-config file for LLVM 20
 RUN mkdir -p /usr/lib/pkgconfig && \
@@ -87,7 +94,7 @@ ARG COMMIT_SHA=unknown
 LABEL org.opencontainers.image.version="${VERSION}"
 LABEL org.opencontainers.image.revision="${COMMIT_SHA}"
 
-# Install runtime dependencies including LLVM 20
+# Install runtime dependencies including LLVM 20 and Rust (for plugins)
 RUN apt-get update && apt-get install -y --no-install-recommends \
     ca-certificates \
     libcurl4 \
@@ -96,12 +103,20 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     gnupg \
     lsb-release \
     software-properties-common \
+    curl \
+    python3 \
     && wget -qO- https://apt.llvm.org/llvm.sh | bash -s -- 20 \
     && apt-get install -y --no-install-recommends llvm-20 clang-20 \
     && ln -sf /usr/bin/llc-20 /usr/bin/llc \
     && ln -sf /usr/bin/clang-20 /usr/bin/clang \
     && rm -rf /var/lib/apt/lists/* \
     && useradd -m -s /bin/bash aro
+
+# Install Rust for plugin compilation
+RUN curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y \
+    && . $HOME/.cargo/env \
+    && rustup default stable
+ENV PATH="/root/.cargo/bin:${PATH}"
 
 # Copy the built binary and runtime library
 COPY --from=builder /build/.build/release/aro /usr/local/bin/aro
@@ -125,7 +140,7 @@ CMD ["--help"]
 # -----------------------------------------------------------------------------
 FROM swift:6.2-jammy AS dev
 
-# Install development tools including LLVM 20
+# Install development tools including LLVM 20 and Rust (for plugins)
 RUN apt-get update && apt-get install -y --no-install-recommends \
     vim \
     git \
@@ -136,11 +151,18 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     lsb-release \
     software-properties-common \
     pkg-config \
+    python3 \
     && wget -qO- https://apt.llvm.org/llvm.sh | bash -s -- 20 \
     && apt-get install -y --no-install-recommends llvm-20-dev clang-20 \
     && ln -sf /usr/bin/llc-20 /usr/bin/llc \
     && ln -sf /usr/bin/clang-20 /usr/bin/clang \
     && rm -rf /var/lib/apt/lists/*
+
+# Install Rust for plugin compilation
+RUN curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y \
+    && . $HOME/.cargo/env \
+    && rustup default stable
+ENV PATH="/root/.cargo/bin:${PATH}"
 
 # Create pkg-config file for LLVM 20
 RUN mkdir -p /usr/lib/pkgconfig && \
