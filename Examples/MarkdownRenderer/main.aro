@@ -14,7 +14,7 @@
 
     (* Convert Markdown to HTML *)
     <Log> "1. Converting to HTML..." to the <console>.
-    <Call> the <html-result> from the <plugin-python-markdown: to-html> with {
+    <Call> the <html-result> from the <plugin-python-markdown: toHtml> with {
         data: <markdown>
     }.
 
@@ -23,7 +23,7 @@
 
     (* Extract headings *)
     <Log> "2. Extracting headings..." to the <console>.
-    <Call> the <headings-result> from the <plugin-python-markdown: extract-headings> with {
+    <Call> the <headings-result> from the <plugin-python-markdown: extractHeadings> with {
         data: <markdown>
     }.
 
@@ -33,7 +33,7 @@
 
     (* Word count *)
     <Log> "3. Word count..." to the <console>.
-    <Call> the <stats> from the <plugin-python-markdown: word-count> with {
+    <Call> the <stats> from the <plugin-python-markdown: wordCount> with {
         data: <markdown>
     }.
 

@@ -77,7 +77,18 @@ public final class NativePluginHost: @unchecked Sendable {
         let libraryPath: URL
 
         if let output = config.build?.output {
-            libraryPath = pluginPath.appendingPathComponent(output)
+            // Output path may be relative to plugin root or to the path
+            // Try both: relative to pluginPath and relative to parent (plugin root)
+            let pluginRoot = pluginPath.deletingLastPathComponent()
+            let candidates = [
+                pluginPath.appendingPathComponent(output),
+                pluginRoot.appendingPathComponent(output),
+            ]
+
+            guard let found = candidates.first(where: { FileManager.default.fileExists(atPath: $0.path) }) else {
+                throw NativePluginError.libraryNotFound(pluginName)
+            }
+            libraryPath = found
         } else {
             // Look for default library names
             #if os(Windows)

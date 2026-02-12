@@ -128,8 +128,6 @@ public final class UnifiedPluginLoader: @unchecked Sendable {
                 print("[UnifiedPluginLoader] Warning: Unknown provide type '\(provide.type)'")
             }
         }
-
-        print("[UnifiedPluginLoader] Loaded plugin: \(manifest.name) v\(manifest.version)")
     }
 
     // MARK: - ARO File Loading
@@ -197,6 +195,10 @@ public final class UnifiedPluginLoader: @unchecked Sendable {
 
         // Register actions from native plugin
         host.registerActions()
+
+        // Register as an external service for Call action support
+        let wrapper = NativePluginServiceWrapper(name: pluginName, host: host)
+        try ExternalServiceRegistry.shared.register(wrapper, withName: pluginName)
     }
 
     // MARK: - Python Plugin Loading
@@ -215,6 +217,10 @@ public final class UnifiedPluginLoader: @unchecked Sendable {
 
         // Register actions from Python plugin
         host.registerActions()
+
+        // Register as an external service for Call action support
+        let wrapper = PythonPluginServiceWrapper(name: pluginName, host: host)
+        try ExternalServiceRegistry.shared.register(wrapper, withName: pluginName)
     }
 
     // MARK: - Manifest Parsing
@@ -316,4 +322,50 @@ public struct UnifiedPythonConfig: Codable, Sendable {
 public struct UnifiedDependencySpec: Codable, Sendable {
     let git: String
     let ref: String?
+}
+
+// MARK: - Native Plugin Service Wrapper
+
+/// Wraps a native (C/C++/Rust) plugin as an AROService for Call action support
+struct NativePluginServiceWrapper: AROService {
+    static let name: String = "_native_plugin_"
+
+    private let serviceName: String
+    private let host: NativePluginHost
+
+    init(name: String, host: NativePluginHost) {
+        self.serviceName = name
+        self.host = host
+    }
+
+    init() throws {
+        fatalError("NativePluginServiceWrapper requires name and host")
+    }
+
+    func call(_ method: String, args: [String: any Sendable]) async throws -> any Sendable {
+        return try host.execute(action: method, input: args)
+    }
+}
+
+// MARK: - Python Plugin Service Wrapper
+
+/// Wraps a Python plugin as an AROService for Call action support
+struct PythonPluginServiceWrapper: AROService {
+    static let name: String = "_python_plugin_"
+
+    private let serviceName: String
+    private let host: PythonPluginHost
+
+    init(name: String, host: PythonPluginHost) {
+        self.serviceName = name
+        self.host = host
+    }
+
+    init() throws {
+        fatalError("PythonPluginServiceWrapper requires name and host")
+    }
+
+    func call(_ method: String, args: [String: any Sendable]) async throws -> any Sendable {
+        return try host.execute(action: method, input: args)
+    }
 }

@@ -146,8 +146,9 @@ struct RunCommand: AsyncParsableCommand {
         }
 
         // Load managed plugins from Plugins/ directory (installed via aro add)
+        // Use UnifiedPluginLoader to handle all plugin types (native, Python, ARO files)
         do {
-            try PluginLoader.shared.loadManagedPlugins(from: appConfig.rootPath)
+            try UnifiedPluginLoader.shared.loadPlugins(from: appConfig.rootPath)
         } catch {
             print("Warning: Failed to load managed plugins: \(error)")
         }

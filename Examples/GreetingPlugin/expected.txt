@@ -2,3 +2,4 @@
 Hello, ARO Developer!
 Goodbye, ARO Developer! See you soon!
 Plugin demo completed!
+startup

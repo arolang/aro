@@ -132,6 +132,9 @@ public final class PythonPluginHost: @unchecked Sendable {
         // Escape JSON for Python string (using base64 to avoid escaping issues)
         let base64Input = inputData.base64EncodedString()
 
+        // Convert action name to snake_case for Python function
+        let pythonFuncName = toSnakeCase(action)
+
         // Create execution script
         let script = """
         import sys
@@ -139,9 +142,9 @@ public final class PythonPluginHost: @unchecked Sendable {
         import base64
         sys.path.insert(0, '\(pluginPath.path.replacingOccurrences(of: "'", with: "\\'"))')
         try:
-            from \(moduleName) import aro_action_\(action.lowercased().replacingOccurrences(of: "-", with: "_"))
+            from \(moduleName) import aro_action_\(pythonFuncName)
             input_json = base64.b64decode('\(base64Input)').decode('utf-8')
-            result = aro_action_\(action.lowercased().replacingOccurrences(of: "-", with: "_"))(input_json)
+            result = aro_action_\(pythonFuncName)(input_json)
             print(result)
         except Exception as e:
             import traceback
@@ -247,6 +250,26 @@ public final class PythonPluginHost: @unchecked Sendable {
     }
 
     // MARK: - Helpers
+
+    /// Convert action name to Python function name (snake_case)
+    /// Handles both kebab-case (to-html) and camelCase (toHtml)
+    private func toSnakeCase(_ name: String) -> String {
+        var result = ""
+        for (i, char) in name.enumerated() {
+            if char == "-" {
+                result.append("_")
+            } else if char.isUppercase {
+                // Add underscore before uppercase letter (except at start)
+                if i > 0 {
+                    result.append("_")
+                }
+                result.append(char.lowercased())
+            } else {
+                result.append(char)
+            }
+        }
+        return result
+    }
 
     private func convertToSendable(_ value: Any) -> any Sendable {
         switch value {

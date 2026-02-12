@@ -1,3 +1,4 @@
 # Test hints for MarkdownRenderer
 # Requires managed plugin: https://github.com/arolang/plugin-python-markdown
-skip: Requires managed plugin (aro add https://github.com/arolang/plugin-python-markdown)
+# Python plugins cannot be loaded by compiled binaries - interpreter only
+mode: interpreter
