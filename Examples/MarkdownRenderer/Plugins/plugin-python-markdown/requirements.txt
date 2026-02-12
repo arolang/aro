@@ -1,0 +1,3 @@
+# plugin-python-markdown dependencies
+# This plugin uses only Python standard library
+# No external dependencies required

@@ -1,0 +1,20 @@
+name: plugin-c-hash
+version: 1.0.0
+description: A C plugin for computing various hash functions
+author: ARO Team
+license: MIT
+aro-version: '>=0.1.0'
+source:
+  git: git@github.com:arolang/plugin-c-hash.git
+  ref: main
+  commit: 57feae01b1af5705f823a34ef3eb3757e40664fe
+provides:
+- type: c-plugin
+  path: src/
+  build:
+    compiler: clang
+    flags:
+    - -O2
+    - -fPIC
+    - -shared
+    output: libhash_plugin.dylib

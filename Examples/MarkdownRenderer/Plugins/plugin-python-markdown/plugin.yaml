@@ -1,0 +1,16 @@
+name: plugin-python-markdown
+version: 1.0.0
+description: A Python plugin for Markdown processing
+author: ARO Team
+license: MIT
+aro-version: '>=0.1.0'
+source:
+  git: https://github.com/arolang/plugin-python-markdown
+  ref: main
+  commit: 4b32e271e6a0588f6937098c2b23b5b2279172dd
+provides:
+- type: python-plugin
+  path: src/
+  python:
+    min-version: '3.9'
+    requirements: requirements.txt
