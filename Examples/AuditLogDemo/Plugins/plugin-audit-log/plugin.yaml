@@ -1,0 +1,8 @@
+name: plugin-audit-log
+version: 1.0.0
+description: Audit logging plugin - automatically logs domain events
+aro-version: '>=0.2.0'
+
+provides:
+  - type: aro-files
+    path: features/

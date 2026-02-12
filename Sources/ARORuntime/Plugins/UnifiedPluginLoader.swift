@@ -7,6 +7,12 @@ import Foundation
 import AROParser
 import Yams
 
+/// Write debug message to stderr (only when ARO_DEBUG is set)
+private func debugPrint(_ message: String) {
+    guard ProcessInfo.processInfo.environment["ARO_DEBUG"] != nil else { return }
+    FileHandle.standardError.write(Data((message + "\n").utf8))
+}
+
 // MARK: - Unified Plugin Loader
 
 /// Unified plugin loader that supports dual-mode plugins
@@ -73,6 +79,8 @@ public final class UnifiedPluginLoader: @unchecked Sendable {
             options: [.skipsHiddenFiles]
         )
 
+        debugPrint("[UnifiedPluginLoader] Found \(contents.count) items in Plugins/: \(contents.map { $0.lastPathComponent })")
+
         for item in contents {
             var isDirectory: ObjCBool = false
             guard FileManager.default.fileExists(atPath: item.path, isDirectory: &isDirectory),
@@ -84,12 +92,14 @@ public final class UnifiedPluginLoader: @unchecked Sendable {
             let manifestPath = item.appendingPathComponent("plugin.yaml")
             if FileManager.default.fileExists(atPath: manifestPath.path) {
                 do {
+                    debugPrint("[UnifiedPluginLoader] Loading plugin: \(item.lastPathComponent)")
                     try loadPlugin(at: item, manifestPath: manifestPath)
+                    debugPrint("[UnifiedPluginLoader] Successfully loaded plugin: \(item.lastPathComponent)")
                 } catch {
                     print("[UnifiedPluginLoader] Warning: Failed to load \(item.lastPathComponent): \(error)")
                 }
             } else {
-                print("[UnifiedPluginLoader] Warning: \(item.lastPathComponent) missing plugin.yaml, skipping")
+                debugPrint("[UnifiedPluginLoader] Warning: \(item.lastPathComponent) missing plugin.yaml, skipping")
             }
         }
 
@@ -113,6 +123,7 @@ public final class UnifiedPluginLoader: @unchecked Sendable {
 
             switch provide.type {
             case "aro-files":
+                debugPrint("[UnifiedPluginLoader] Loading ARO files from: \(providePath.path)")
                 try loadAROFiles(at: providePath, pluginName: manifest.name)
 
             case "swift-plugin":
@@ -151,7 +162,10 @@ public final class UnifiedPluginLoader: @unchecked Sendable {
             aroFiles = []
         }
 
+        debugPrint("[UnifiedPluginLoader] Found \(aroFiles.count) ARO files: \(aroFiles.map { $0.lastPathComponent })")
+
         for aroFile in aroFiles {
+            debugPrint("[UnifiedPluginLoader] Loading ARO file: \(aroFile.lastPathComponent)")
             let aroPlugin = try AROFilePlugin(file: aroFile, pluginName: pluginName)
 
             lock.lock()
@@ -159,6 +173,7 @@ public final class UnifiedPluginLoader: @unchecked Sendable {
             lock.unlock()
 
             // Register feature sets
+            debugPrint("[UnifiedPluginLoader] Registering \(aroPlugin.featureSets.count) feature sets from \(aroFile.lastPathComponent)")
             aroPlugin.registerFeatureSets()
         }
     }

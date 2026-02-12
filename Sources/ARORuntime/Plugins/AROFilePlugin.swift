@@ -14,6 +14,7 @@ import AROParser
 /// - Additional feature sets that can be used by the application
 /// - Reusable actions and patterns
 /// - Templates for common operations
+/// - Event handlers that respond to domain events
 ///
 /// ## Example plugin .aro file
 /// ```aro
@@ -38,6 +39,9 @@ public final class AROFilePlugin: @unchecked Sendable {
     /// Feature sets from this file
     public let featureSets: [FeatureSet]
 
+    /// Analyzed feature sets (with symbol tables for execution)
+    public let analyzedFeatureSets: [AnalyzedFeatureSet]
+
     /// Initialize with an ARO file
     /// - Parameters:
     ///   - file: Path to the .aro file
@@ -57,6 +61,12 @@ public final class AROFilePlugin: @unchecked Sendable {
         }
         self.program = result.program
         self.featureSets = program.featureSets
+
+        // Perform semantic analysis on feature sets for event handler execution
+        // Create a temporary Program and analyze it to get AnalyzedFeatureSets
+        let analyzer = SemanticAnalyzer()
+        let analyzedProgram = analyzer.analyze(program)
+        self.analyzedFeatureSets = analyzedProgram.featureSets
     }
 
     // MARK: - Registration
@@ -65,10 +75,10 @@ public final class AROFilePlugin: @unchecked Sendable {
     public func registerFeatureSets() {
         // Feature sets from plugins are registered with a plugin prefix
         // to avoid name collisions
-        for featureSet in featureSets {
-            let qualifiedName = "\(pluginName):\(featureSet.name)"
+        for analyzedFS in analyzedFeatureSets {
+            let qualifiedName = "\(pluginName):\(analyzedFS.featureSet.name)"
             PluginFeatureSetRegistry.shared.register(
-                featureSet: featureSet,
+                analyzedFeatureSet: analyzedFS,
                 qualifiedName: qualifiedName,
                 pluginName: pluginName
             )
@@ -96,22 +106,22 @@ public final class PluginFeatureSetRegistry: @unchecked Sendable {
 
     private init() {}
 
-    /// Register a feature set
-    public func register(featureSet: FeatureSet, qualifiedName: String, pluginName: String) {
+    /// Register an analyzed feature set
+    public func register(analyzedFeatureSet: AnalyzedFeatureSet, qualifiedName: String, pluginName: String) {
         lock.lock()
         defer { lock.unlock() }
 
         featureSets[qualifiedName] = RegisteredFeatureSet(
-            featureSet: featureSet,
+            analyzedFeatureSet: analyzedFeatureSet,
             qualifiedName: qualifiedName,
             pluginName: pluginName
         )
 
         // Also register with short name if not already taken
-        let shortName = featureSet.name
+        let shortName = analyzedFeatureSet.featureSet.name
         if featureSets[shortName] == nil {
             featureSets[shortName] = RegisteredFeatureSet(
-                featureSet: featureSet,
+                analyzedFeatureSet: analyzedFeatureSet,
                 qualifiedName: qualifiedName,
                 pluginName: pluginName
             )
@@ -122,7 +132,14 @@ public final class PluginFeatureSetRegistry: @unchecked Sendable {
     public func get(name: String) -> FeatureSet? {
         lock.lock()
         defer { lock.unlock() }
-        return featureSets[name]?.featureSet
+        return featureSets[name]?.analyzedFeatureSet.featureSet
+    }
+
+    /// Get an analyzed feature set by name (qualified or short)
+    public func getAnalyzed(name: String) -> AnalyzedFeatureSet? {
+        lock.lock()
+        defer { lock.unlock() }
+        return featureSets[name]?.analyzedFeatureSet
     }
 
     /// Get all registered feature sets
@@ -138,7 +155,7 @@ public final class PluginFeatureSetRegistry: @unchecked Sendable {
         defer { lock.unlock() }
         return featureSets.values
             .filter { $0.pluginName == name }
-            .map { $0.featureSet }
+            .map { $0.analyzedFeatureSet.featureSet }
     }
 
     /// Clear all registered feature sets
@@ -153,8 +170,8 @@ public final class PluginFeatureSetRegistry: @unchecked Sendable {
 
 /// A feature set registered from a plugin
 public struct RegisteredFeatureSet: Hashable, Sendable {
-    /// The feature set
-    public let featureSet: FeatureSet
+    /// The analyzed feature set (includes symbol table for execution)
+    public let analyzedFeatureSet: AnalyzedFeatureSet
 
     /// Fully qualified name (plugin:name)
     public let qualifiedName: String

@@ -767,6 +767,12 @@ public struct ApplicationDiscovery {
         var sourceFiles: [URL] = []
 
         for case let fileURL as URL in enumerator {
+            // Skip files in Plugins/ directory - these are loaded by UnifiedPluginLoader
+            let relativePath = fileURL.path.replacingOccurrences(of: directory.path, with: "")
+            if relativePath.hasPrefix("/Plugins/") || relativePath.contains("/Plugins/") {
+                continue
+            }
+
             let ext = fileURL.pathExtension.lowercased()
             if ext == "fdd" || ext == "aro" {
                 sourceFiles.append(fileURL)
