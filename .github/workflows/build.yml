@@ -467,10 +467,9 @@ jobs:
           retention-days: 30
 
   # ===========================================================================
-  # Windows Build & Test (temporarily disabled)
+  # Windows Build & Test
   # ===========================================================================
   windows:
-    if: false
     needs: test
     name: Windows
     permissions:
@@ -891,10 +890,9 @@ jobs:
           retention-days: 7
 
   # ===========================================================================
-  # Integration Tests - Windows (temporarily disabled)
+  # Integration Tests - Windows
   # ===========================================================================
   integration-tests-windows:
-    if: false
     needs: [windows]
     name: Integration Tests - Windows
     runs-on: windows-latest
@@ -1103,7 +1101,7 @@ jobs:
   # ===========================================================================
   release:
     name: Create Release
-    needs: [linux, macos, integration-tests-linux, integration-tests-macos, documentation]
+    needs: [linux, macos, windows, integration-tests-linux, integration-tests-macos, integration-tests-windows, documentation]
     runs-on: ubuntu-latest
     if: github.ref_type == 'tag'
     permissions:
