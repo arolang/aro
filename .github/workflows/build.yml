@@ -721,6 +721,9 @@ jobs:
           curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
           echo "$HOME/.cargo/bin" >> $GITHUB_PATH
           export PATH="$HOME/.cargo/bin:$PATH"
+          # Create symlink so ARO runtime can find cargo at known paths
+          ln -sf "$HOME/.cargo/bin/cargo" /usr/local/bin/cargo
+          ln -sf "$HOME/.cargo/bin/rustc" /usr/local/bin/rustc
           rustc --version
           cargo --version
 
