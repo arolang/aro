@@ -32,7 +32,9 @@ apt-get install -y -qq \
     libhttp-tiny-perl \
     zlib1g-dev \
     libsqlite3-dev \
+    libgit2-dev \
     cpanminus \
+    build-essential \
     > /dev/null 2>&1
 
 echo "=== Installing LLVM 20 from official apt repository ==="
@@ -63,6 +65,11 @@ EOF
 # Install additional Perl modules
 cpanm -q --notest Net::EmptyPort Term::ANSIColor 2>/dev/null || true
 
+echo "=== Installing Rust for plugin compilation ==="
+curl --proto =https --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y > /dev/null 2>&1
+. $HOME/.cargo/env
+rustc --version
+
 echo "=== Verifying LLVM 20 installation ==="
 pkg-config --modversion llvm
 echo "llc: $(llc --version 2>&1 | head -1)"
@@ -71,6 +78,14 @@ echo "llc: $(llc --version 2>&1 | head -1)"
 echo ""
 echo "=== Cleaning build directory ==="
 rm -rf .build
+
+# Clean Rust build artifacts from plugin directories (macOS dylibs will not work on Linux)
+echo "=== Cleaning Rust plugin artifacts ==="
+find Examples -type d -name target -path "*/Plugins/*" -print0 2>/dev/null | xargs -0 rm -rf 2>/dev/null || true
+
+# Fix git ownership issues in Docker (mounted volume has different owner)
+git config --global --add safe.directory /workspace
+git config --global --add safe.directory "*"
 
 echo ""
 echo "=== Building ARO (release) ==="
@@ -83,5 +98,6 @@ file .build/release/aro
 
 echo ""
 echo "=== Running test-examples.pl ==="
+. $HOME/.cargo/env
 ./test-examples.pl 2>&1
 '

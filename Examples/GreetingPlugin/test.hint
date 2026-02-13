@@ -1,0 +1,3 @@
+# Test hints for GreetingPlugin
+# Requires managed plugin: https://github.com/arolang/plugin-swift-hello
+normalize-dict: true

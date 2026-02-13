@@ -70,7 +70,7 @@ struct BuildCommand: AsyncParsableCommand {
         let appConfig: DiscoveredApplication
 
         do {
-            appConfig = try await discovery.discoverWithImports(at: resolvedPath)
+            appConfig = try await discovery.discoverWithImports(at: resolvedPath, includePlugins: true)
             #if os(Linux)
             FileHandle.standardError.write("[BUILD] Discovery completed, found \(appConfig.sourceFiles.count) files\n".data(using: .utf8)!)
             #endif
@@ -451,6 +451,44 @@ struct BuildCommand: AsyncParsableCommand {
                 }
             } catch {
                 print("Warning: Plugin compilation failed: \(error)")
+                // Continue - plugins are optional
+            }
+        }
+
+        // Compile managed plugins if present (installed via aro add)
+        let sourceManagedPluginsDir = appConfig.rootPath.appendingPathComponent("Plugins")
+        let outputManagedPluginsDir = binaryPath.deletingLastPathComponent().appendingPathComponent("Plugins")
+
+        if FileManager.default.fileExists(atPath: sourceManagedPluginsDir.path) {
+            if verbose {
+                print("Compiling managed plugins...")
+            }
+
+            do {
+                // Clean output directory if it exists and is different from source
+                let sourceResolved = sourceManagedPluginsDir.standardizedFileURL.path
+                let outputResolved = outputManagedPluginsDir.standardizedFileURL.path
+
+                if sourceResolved != outputResolved {
+                    if FileManager.default.fileExists(atPath: outputManagedPluginsDir.path) {
+                        try FileManager.default.removeItem(at: outputManagedPluginsDir)
+                    }
+                }
+
+                // Compile managed plugins (Swift, C, etc.) to dynamic libraries
+                try PluginLoader.shared.compileManagedPlugins(from: sourceManagedPluginsDir, to: outputManagedPluginsDir)
+
+                if verbose {
+                    // Count compiled plugins
+                    let pluginDirs = try? FileManager.default.contentsOfDirectory(at: outputManagedPluginsDir, includingPropertiesForKeys: [.isDirectoryKey])
+                    let pluginCount = pluginDirs?.filter {
+                        var isDir: ObjCBool = false
+                        return FileManager.default.fileExists(atPath: $0.path, isDirectory: &isDir) && isDir.boolValue
+                    }.count ?? 0
+                    print("  \(pluginCount) managed plugin(s) compiled to: \(outputManagedPluginsDir.path)")
+                }
+            } catch {
+                print("Warning: Failed to compile managed plugins: \(error)")
                 // Continue - plugins are optional
             }
         }

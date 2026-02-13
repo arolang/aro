@@ -1,0 +1,13 @@
+# Generated: Thu Feb 12 22:42:38 2026
+# Type: console
+# Command: aro run ./Examples/AuditLogDemo
+---
+=== Audit Log Plugin Demo ===
+Emitting UserCreated event...
+[AUDIT] UserCreated: User created
+Emitting OrderPlaced event...
+[AUDIT] OrderPlaced: Order placed
+Emitting PaymentReceived event...
+[AUDIT] PaymentReceived: Payment processed
+=== Demo Complete ===
+startup

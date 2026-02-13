@@ -267,6 +267,30 @@ public func aro_runtime_shutdown(_ runtimePtr: UnsafeMutableRawPointer?) {
     Unmanaged<AROCRuntimeHandle>.fromOpaque(ptr).release()
 }
 
+/// Load plugins from the application directory
+/// - Parameter path: Path to the application directory (C string)
+/// - Returns: 1 on success, 0 on failure
+@_cdecl("aro_load_plugins")
+public func aro_load_plugins(_ path: UnsafePointer<CChar>?) -> Int32 {
+    guard let path = path else { return 0 }
+
+    let pathString = String(cString: path)
+    let directory = URL(fileURLWithPath: pathString)
+
+    do {
+        // Load legacy plugins from plugins/ directory
+        try PluginLoader.shared.loadPlugins(from: directory)
+
+        // Load managed plugins from Plugins/ directory (ARO-0045)
+        try UnifiedPluginLoader.shared.loadPlugins(from: directory)
+
+        return 1
+    } catch {
+        print("[aro_load_plugins] Failed to load plugins: \(error)")
+        return 0
+    }
+}
+
 /// Parse command-line arguments into ParameterStorage (ARO-0047)
 /// - Parameters:
 ///   - argc: Argument count from main()
@@ -1999,24 +2023,6 @@ struct CustomRuntimeEvent: RuntimeEvent {
 
 // MARK: - Plugin Loading
 
-/// Load plugins from a directory (compiles if needed - for interpreter use)
-/// - Parameter dirPath: Path to the directory containing the plugins/ folder
-/// - Returns: 0 on success, non-zero on failure
-@_cdecl("aro_load_plugins")
-public func aro_load_plugins(_ dirPath: UnsafePointer<CChar>?) -> Int32 {
-    guard let dirPath = dirPath else { return -1 }
-
-    let directory = URL(fileURLWithPath: String(cString: dirPath))
-
-    do {
-        try PluginLoader.shared.loadPlugins(from: directory)
-        return 0
-    } catch {
-        print("[ARO] Plugin loading error: \(error)")
-        return 1
-    }
-}
-
 /// Load pre-compiled plugins relative to the binary's location
 /// This is used by native compiled binaries - no compilation occurs at runtime
 /// - Returns: 0 on success, non-zero on failure
@@ -2038,7 +2044,10 @@ public func aro_load_precompiled_plugins() -> Int32 {
     let resolvedURL = executableURL.resolvingSymlinksInPath()
 
     do {
+        // Load local plugins from plugins/ directory
         try PluginLoader.shared.loadPrecompiledPlugins(relativeTo: resolvedURL)
+        // Load managed plugins from Plugins/ directory
+        try PluginLoader.shared.loadPrecompiledManagedPlugins(relativeTo: resolvedURL)
         return 0
     } catch {
         print("[ARO] Plugin loading error: \(error)")

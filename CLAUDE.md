@@ -191,6 +191,62 @@ Built-in services available at runtime:
 - **AROFileSystemService**: File I/O with FileMonitor watching
 - **AROSocketServer** / **AROSocketClient**: TCP communication
 
+## Plugin System
+
+ARO supports plugins in multiple languages for extending functionality:
+
+### Plugin Types
+
+| Type | Language | Interface |
+|------|----------|-----------|
+| `swift-plugin` | Swift | `@_cdecl` functions with C ABI |
+| `rust-plugin` | Rust | `#[no_mangle] extern "C"` functions |
+| `c-plugin` | C/C++ | Standard C ABI |
+| `python-plugin` | Python | `aro_plugin_info()` + `aro_action_{name}()` functions |
+
+### Plugin Directory Structure
+
+```
+MyApp/
+├── main.aro
+├── openapi.yaml
+└── Plugins/
+    └── my-plugin/
+        ├── plugin.yaml      # Plugin manifest (required)
+        └── src/             # Source files
+```
+
+### Key Files
+
+- **PluginLoader** (`Services/PluginLoader.swift`): Discovers and loads plugins from `Plugins/` directory
+- **UnifiedPluginLoader** (`Plugins/UnifiedPluginLoader.swift`): Unified loading for all plugin types
+- **NativePluginHost** (`Plugins/NativePluginHost.swift`): Loads C/Rust plugins via `dlopen`
+- **PythonPluginHost** (`Plugins/PythonPluginHost.swift`): Runs Python plugins via subprocess
+- **SwiftPluginHost** (`Plugins/SwiftPluginHost.swift`): Loads Swift plugins
+
+### C ABI Interface (Required)
+
+All native plugins must implement:
+
+```c
+// Return plugin metadata as JSON
+char* aro_plugin_info(void);
+
+// Execute an action, return JSON result
+char* aro_plugin_execute(const char* action, const char* input_json);
+
+// Free memory allocated by plugin
+void aro_plugin_free(char* ptr);
+```
+
+### Binary Mode Support
+
+Plugins work in both interpreter (`aro run`) and compiled binary (`aro build`) modes:
+- During `aro build`, plugins in `Plugins/` are compiled and bundled
+- Swift/C plugins are compiled to dynamic libraries
+- Python plugins are copied with their source files
+- The binary loads plugins from `Plugins/` directory at runtime
+
 ## ARO Syntax
 
 ```aro
@@ -323,6 +379,8 @@ Sources/
 │   ├── FileSystem/     # File operations, FileMonitor
 │   ├── Sockets/        # TCP server/client
 │   ├── OpenAPI/        # Contract-first routing (OpenAPISpec, RouteRegistry)
+│   ├── Plugins/        # Plugin hosts (Native, Python, Swift)
+│   ├── Services/       # PluginLoader, UnifiedPluginLoader
 │   └── Application/    # App lifecycle, ApplicationLoader
 ├── AROCompiler/        # Native compilation (LLVM code generation)
 │   ├── LLVMCodeGenerator.swift  # AST to LLVM IR transformation
@@ -344,13 +402,22 @@ Examples/
 │   ├── main.aro        # Application-Start
 │   ├── users.aro       # Feature sets (named after operationIds)
 │   └── events.aro      # Event handlers
-└── RepositoryObserver/ # Repository observers example
-    ├── openapi.yaml    # API contract
-    ├── main.aro        # Application-Start
-    ├── api.aro         # CRUD operations
-    └── observers.aro   # Repository change observers
+├── RepositoryObserver/ # Repository observers example
+│   ├── openapi.yaml    # API contract
+│   ├── main.aro        # Application-Start
+│   ├── api.aro         # CRUD operations
+│   └── observers.aro   # Repository change observers
+├── GreetingPlugin/     # Swift plugin example
+│   ├── main.aro
+│   └── Plugins/plugin-swift-hello/
+├── HashPluginDemo/     # C plugin example
+│   ├── main.aro
+│   └── Plugins/plugin-c-hash/
+└── MarkdownRenderer/   # Python plugin example (managed)
+    ├── main.aro
+    └── test.hint       # References managed plugin URL
 
-Proposals/              # 27 language specifications
+Proposals/              # Language specifications
 ├── ARO-0001-language-fundamentals.md
 ├── ARO-0002-control-flow.md
 ├── ARO-0003-type-system.md
@@ -361,6 +428,7 @@ Proposals/              # 27 language specifications
 ├── ARO-0008-io-services.md
 ├── ARO-0009-native-compilation.md
 ├── ARO-0010-advanced-features.md
+├── ARO-0011-html-xml-parsing.md
 ├── ARO-0014-domain-modeling.md
 ├── ARO-0015-testing-framework.md
 ├── ARO-0016-interoperability.md
@@ -377,12 +445,18 @@ Proposals/              # 27 language specifications
 ├── ARO-0040-format-aware-io.md
 ├── ARO-0041-datetime-ranges.md
 ├── ARO-0042-set-operations.md
-└── ARO-0043-sink-syntax.md
+├── ARO-0043-sink-syntax.md
+├── ARO-0044-metrics.md
+├── ARO-0045-package-manager.md
+├── ARO-0045-template-engine.md
+├── ARO-0046-typed-event-extraction.md
+├── ARO-0047-command-line-parameters.md
+└── ARO-0048-websocket.md
 ```
 
 ## Language Proposals
 
-The `Proposals/` directory contains 28 specifications:
+The `Proposals/` directory contains language specifications:
 
 | Proposal | Topics |
 |----------|--------|
@@ -394,11 +468,12 @@ The `Proposals/` directory contains 28 specifications:
 | **0006 Error Philosophy** | "Code is the error message" |
 | **0007 Events & Reactive** | Events, state, repositories |
 | **0008 I/O Services** | HTTP, files, sockets, system objects |
-| **0009 Native Compilation** | LLVM, aro build |
+| **0009 Native Compilation** | LLVM, aro build, plugins in binaries |
 | **0010 Advanced Features** | Regex, dates, exec |
+| **0011 HTML/XML Parsing** | Parse action for HTML/XML documents |
 | **0014 Domain Modeling** | DDD patterns, entities, aggregates |
 | **0015 Testing Framework** | Colocated tests, Given/When/Then |
-| **0016 Interoperability** | External services, Call action |
+| **0016 Interoperability** | External services, Call action, plugins |
 | **0018 Data Pipelines** | Filter, transform, aggregate collections |
 | **0019 Standard Library** | Primitive types, utilities |
 | **0022 State Guards** | Event handler filtering with field:value syntax |
@@ -414,7 +489,11 @@ The `Proposals/` directory contains 28 specifications:
 | **0042 Set Operations** | intersect, difference, union on collections |
 | **0043 Sink Syntax** | Expressions in result position |
 | **0044 Runtime Metrics** | Execution counts, timing, Prometheus format |
+| **0045 Package Manager** | Plugin installation, aro add/remove, plugin.yaml |
+| **0045 Template Engine** | Mustache-style templates, Render action |
 | **0046 Typed Event Extraction** | Schema-validated event data extraction |
+| **0047 Command-Line Parameters** | CLI argument parsing, Parameters action |
+| **0048 WebSocket** | WebSocket server support, real-time messaging |
 
 ## Concurrency
 

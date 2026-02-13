@@ -253,12 +253,15 @@ public final class FeatureSetExecutor: @unchecked Sendable {
                 let responseVerbs: Set<String> = ["write", "read", "store", "save", "persist", "log", "print", "send", "emit"]
                 // Server lifecycle actions always need execution for side effects
                 let serverVerbs: Set<String> = ["start", "stop", "restart", "keepalive"]
+                // Check if there's a dynamic handler registered for this verb (plugin-provided action)
+                let hasDynamicHandler = await actionRegistry.dynamicHandler(for: verb) != nil
                 let needsExecution = testVerbs.contains(verb.lowercased()) ||
                     requestVerbs.contains(verb.lowercased()) ||
                     mergeVerbs.contains(verb.lowercased()) ||
                     responseVerbs.contains(verb.lowercased()) ||
                     queryVerbs.contains(verb.lowercased()) ||
                     serverVerbs.contains(verb.lowercased()) ||
+                    hasDynamicHandler ||  // Dynamic plugin actions always need execution
                     (updateVerbs.contains(verb.lowercased()) && !resultDescriptor.specifiers.isEmpty) ||
                     (createVerbs.contains(verb.lowercased()) && !resultDescriptor.specifiers.isEmpty) ||
                     (computeVerbs.contains(verb.lowercased()) && !resultDescriptor.specifiers.isEmpty) ||
@@ -349,18 +352,23 @@ public final class FeatureSetExecutor: @unchecked Sendable {
             context.bind("_result_expression_", value: resultValue)
         }
 
-        // Get action implementation
-        guard let action = await actionRegistry.action(for: verb) else {
-            throw ActionError.unknownAction(verb)
-        }
-
         // Execute action with ARO-0008 error wrapping
         do {
-            let result = try await action.execute(
-                result: resultDescriptor,
-                object: objectDescriptor,
-                context: context
-            )
+            // Get action implementation (try built-in first, then dynamic plugin actions)
+            let result: any Sendable
+            if let action = await actionRegistry.action(for: verb) {
+                // Execute built-in action
+                result = try await action.execute(
+                    result: resultDescriptor,
+                    object: objectDescriptor,
+                    context: context
+                )
+            } else if let dynamicHandler = await actionRegistry.dynamicHandler(for: verb) {
+                // Execute dynamic plugin action
+                result = try await dynamicHandler(resultDescriptor, objectDescriptor, context)
+            } else {
+                throw ActionError.unknownAction(verb)
+            }
 
             // Bind result to context (unless it's a response action that already set the response)
             // Also skip binding if the action already bound the result (to avoid double-binding)

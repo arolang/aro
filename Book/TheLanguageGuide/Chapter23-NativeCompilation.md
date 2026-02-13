@@ -60,7 +60,7 @@ The OpenAPI specification file must still be present at runtime for applications
 
 Any configuration files or data files your application reads must also be deployed. The native binary does not embed these files; it reads them at runtime just as the interpreted version would.
 
-Dynamically loaded plugins are not supported in native builds. All actions must either be built-in or statically linked at compile time. If you use plugins, they must be included as compile-time dependencies rather than loaded at runtime.
+Plugins in the `Plugins/` directory are automatically compiled and bundled during `aro build`. Swift and C plugins are compiled to dynamic libraries; Python plugins are copied with their source files. The compiled plugins are placed in a `Plugins/` directory alongside the binary and loaded at runtime. This means plugin-based applications work identically in both interpreter and binary modes.
 
 ---
 
@@ -145,8 +145,6 @@ Release processes should produce native binaries with release optimizations. Tag
 ## 23.10 Limitations
 
 Native compilation has limitations compared to interpreted execution.
-
-Dynamic plugin loading is not supported. Plugins must be compile-time dependencies, statically linked into the binary. This is a significant limitation for applications that depend on runtime-discoverable plugins.
 
 Some runtime reflection capabilities may not be available. Features that depend on examining the structure of running code may behave differently or not work at all in native builds.
 

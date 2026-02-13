@@ -753,7 +753,7 @@ public struct ApplicationDiscovery {
         return spec
     }
 
-    private func findSourceFiles(in directory: URL) throws -> [URL] {
+    private func findSourceFiles(in directory: URL, includePlugins: Bool = false) throws -> [URL] {
         let fileManager = FileManager.default
 
         guard let enumerator = fileManager.enumerator(
@@ -767,6 +767,16 @@ public struct ApplicationDiscovery {
         var sourceFiles: [URL] = []
 
         for case let fileURL as URL in enumerator {
+            // Skip files in Plugins/ directory unless includePlugins is true
+            // For interpreter: Plugins are loaded separately by UnifiedPluginLoader
+            // For compiler: Plugins need to be compiled into the binary
+            if !includePlugins {
+                let relativePath = fileURL.path.replacingOccurrences(of: directory.path, with: "")
+                if relativePath.hasPrefix("/Plugins/") || relativePath.contains("/Plugins/") {
+                    continue
+                }
+            }
+
             let ext = fileURL.pathExtension.lowercased()
             if ext == "fdd" || ext == "aro" {
                 sourceFiles.append(fileURL)
@@ -851,11 +861,13 @@ extension ApplicationDiscovery {
     ///   - path: Directory or file path
     ///   - entryPoint: Entry point feature set name
     ///   - visited: Already visited paths (to prevent cycles)
+    ///   - includePlugins: Whether to include plugin .aro files (true for compilation, false for interpretation)
     /// - Returns: Application configuration with all imported sources
     public func discoverWithImports(
         at path: URL,
         entryPoint: String = "Application-Start",
-        visited: Set<URL> = []
+        visited: Set<URL> = [],
+        includePlugins: Bool = false
     ) async throws -> DiscoveredApplication {
         var isDirectory: ObjCBool = false
 
@@ -867,7 +879,7 @@ extension ApplicationDiscovery {
         let rootPath: URL
 
         if isDirectory.boolValue {
-            sourceFiles = try findSourceFiles(in: path)
+            sourceFiles = try findSourceFiles(in: path, includePlugins: includePlugins)
             rootPath = path
         } else {
             sourceFiles = [path]
@@ -896,7 +908,8 @@ extension ApplicationDiscovery {
                 let importedApp = try await discoverWithImports(
                     at: importedPath,
                     entryPoint: entryPoint,
-                    visited: newVisited
+                    visited: newVisited,
+                    includePlugins: includePlugins
                 )
                 allSourceFiles.append(contentsOf: importedApp.sourceFiles)
                 allImportPaths.append(importedPath.path)

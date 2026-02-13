@@ -1,0 +1,15 @@
+(* greetings.aro — Feature sets provided by plugin-swift-hello *)
+
+(* Greet Feature — Say hello to someone *)
+(Greet User: Greeting Handler) {
+    <Extract> the <name> from the <request: name>.
+    <Greet> the <greeting> with <name>.
+    <Return> an <OK: status> with <greeting>.
+}
+
+(* Farewell Feature — Say goodbye to someone *)
+(Farewell User: Greeting Handler) {
+    <Extract> the <name> from the <request: name>.
+    <Farewell> the <farewell> with <name>.
+    <Return> an <OK: status> with <farewell>.
+}

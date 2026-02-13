@@ -6,74 +6,223 @@
 
 ## 22.1 What Are Plugins?
 
-Plugins are Swift packages that provide custom actions and services for ARO applications. They allow you to package extensions together, share them across projects, and distribute them to other developers through Swift Package Manager.
+Plugins extend ARO with custom actions, services, and feature sets. They allow you to package extensions together, share them across projects, and distribute them to other developers.
 
-The plugin system exists because real applications often need specialized capabilities that the built-in features do not provide. Plugins provide a structured way to create, distribute, and use these extensions.
+ARO supports plugins written in multiple languages:
 
-A plugin can contain two types of extensions:
+| Language | Plugin Type | Use Case |
+|----------|-------------|----------|
+| **ARO** | `.aro` files | Reusable feature sets |
+| **Swift** | Swift Package | Native integration with ARO runtime |
+| **Rust** | FFI Plugin | Performance-critical operations |
+| **C/C++** | FFI Plugin | System-level integrations |
+| **Python** | Subprocess | AI/ML, data science libraries |
+
+A plugin can contain:
 
 | Type | Adds | Invocation Pattern | Example |
 |------|------|-------------------|---------|
 | **Actions** | New verbs | `<Verb> the <result> from <object>.` | `<Geocode> the <coords> from <address>.` |
 | **Services** | External integrations | `<Call> from <service: method>` | `<Call> from <zip: compress>` |
-
-The distinction matters for plugin design. Actions extend the language vocabulary—each action adds a new verb. Services extend runtime capabilities—they share the `Call` verb but provide different methods.
-
----
-
-## 22.2 Plugin Structure
-
-A plugin follows standard Swift package conventions with ARO-specific requirements. The package contains source files, a registration function, and optionally tests and documentation.
-
-The package manifest declares the plugin as a dynamic library product. This enables runtime loading where the plugin is discovered and loaded as a shared library.
-
-**For Action Plugins:**
-- Implement the `ActionImplementation` protocol
-- Registration function calls `ActionRegistry.shared.register(YourAction.self)`
-- Each action adds a new verb to ARO
-
-**For Service Plugins:**
-- Use the C-callable interface with `aro_plugin_init`
-- Return JSON metadata describing services and their symbols
-- Each service is called via `<Call> from <service: method>`
+| **Feature Sets** | Reusable business logic | Triggered by events | `FormatCSV`, `SendNotification` |
 
 ---
 
-## 22.3 Creating an Action Plugin
+## 22.2 Package Manager
 
-Action plugins add new verbs to ARO. Here is a complete example of a Geocoding action plugin.
+ARO includes a Git-based package manager for installing and managing plugins.
+
+### Installing Plugins
+
+Install a plugin from a Git repository:
+
+```bash
+aro add git@github.com:arolang/plugin-swift-hello.git
+```
+
+Specify a version or branch:
+
+```bash
+aro add git@github.com:arolang/plugin-rust-csv.git@v1.0.0
+aro add git@github.com:arolang/plugin-python-markdown.git@main
+```
+
+### Removing Plugins
+
+Remove an installed plugin:
+
+```bash
+aro remove plugin-swift-hello
+```
+
+### Listing Plugins
+
+List all installed plugins:
+
+```bash
+aro plugins list
+```
+
+### Plugin Commands
+
+| Command | Description |
+|---------|-------------|
+| `aro add <url>[@ref]` | Install a plugin from Git |
+| `aro remove <name>` | Remove an installed plugin |
+| `aro plugins list` | List all installed plugins |
+| `aro plugins update` | Update all plugins to latest |
+| `aro plugins validate` | Check plugin integrity |
+| `aro plugins export` | Export plugin sources to `.aro-sources` |
+| `aro plugins restore` | Restore plugins from `.aro-sources` |
+
+---
+
+## 22.3 Plugin Structure
+
+All plugins live in the `Plugins/` directory and require a `plugin.yaml` manifest:
+
+```
+MyApp/
+├── main.aro
+├── openapi.yaml
+└── Plugins/
+    └── my-plugin/
+        ├── plugin.yaml      ← Required manifest
+        ├── features/        ← ARO feature sets
+        │   └── helpers.aro
+        └── Sources/         ← Swift/Native sources
+            └── MyPlugin.swift
+```
+
+### The plugin.yaml Manifest
+
+Every plugin must have a `plugin.yaml` file:
+
+```yaml
+name: my-plugin
+version: 1.0.0
+description: "A helpful plugin for ARO"
+author: "Your Name"
+license: MIT
+aro-version: ">=0.1.0"
+
+source:
+  git: "git@github.com:yourname/my-plugin.git"
+  ref: "main"
+
+provides:
+  - type: aro-files
+    path: features/
+  - type: swift-plugin
+    path: Sources/
+
+dependencies:
+  other-plugin:
+    git: "git@github.com:arolang/other-plugin.git"
+    ref: "v1.0.0"
+```
+
+### Required Fields
+
+| Field | Description |
+|-------|-------------|
+| `name` | Plugin name (lowercase, hyphens only) |
+| `version` | Semantic version (e.g., "1.0.0") |
+| `provides` | List of components this plugin provides |
+
+### Provide Types
+
+| Type | Description |
+|------|-------------|
+| `aro-files` | ARO feature set files |
+| `swift-plugin` | Swift package |
+| `rust-plugin` | Rust library (FFI) |
+| `c-plugin` | C/C++ library (FFI) |
+| `python-plugin` | Python module |
+
+---
+
+## 22.4 ARO File Plugins
+
+The simplest plugins are pure ARO files that provide reusable feature sets.
+
+**plugin.yaml:**
+
+```yaml
+name: string-helpers
+version: 1.0.0
+provides:
+  - type: aro-files
+    path: features/
+```
+
+**features/strings.aro:**
+
+```aro
+(* FormatTitle — Capitalize first letter of each word *)
+(FormatTitle: String Operations) {
+    <Extract> the <text> from the <input: text>.
+    <Transform> the <title> from <text> using <titlecase>.
+    <Return> an <OK: status> with <title>.
+}
+
+(* TruncateText — Shorten text with ellipsis *)
+(TruncateText: String Operations) {
+    <Extract> the <text> from the <input: text>.
+    <Extract> the <max-length> from the <input: maxLength>.
+    <Compute> the <length: length> from <text>.
+    when <length> > <max-length> {
+        <Transform> the <truncated> from <text> using <substring: 0> to <max-length>.
+        <Create> the <result> with <truncated> + "...".
+    } else {
+        <Create> the <result> with <text>.
+    }
+    <Return> an <OK: status> with <result>.
+}
+```
+
+Feature sets from plugins are automatically available in your application with a qualified name:
+
+```aro
+(* Use plugin feature set *)
+(Format User Name: User Processing) {
+    <Extract> the <name> from the <user: fullName>.
+    <Emit> a <FormatTitle: event> with { text: <name> }.
+    <Return> an <OK: status> with <name>.
+}
+```
+
+---
+
+## 22.5 Swift Plugins
+
+Swift plugins provide the deepest integration with ARO, allowing custom actions and services.
+
+### Creating a Swift Action Plugin
 
 **Directory Structure:**
 
 ```
 GeocodePlugin/
+├── plugin.yaml
 ├── Package.swift
-├── Sources/GeocodePlugin/
-│   ├── GeocodeAction.swift
-│   └── Registration.swift
-└── Tests/GeocodePluginTests/
-    └── GeocodeActionTests.swift
+└── Sources/GeocodePlugin/
+    ├── GeocodeAction.swift
+    └── Registration.swift
 ```
 
-**Package.swift:**
+**plugin.yaml:**
 
-```swift
-// swift-tools-version:5.9
-import PackageDescription
+```yaml
+name: geocode-plugin
+version: 1.0.0
+provides:
+  - type: swift-plugin
+    path: .
 
-let package = Package(
-    name: "GeocodePlugin",
-    platforms: [.macOS(.v13)],
-    products: [
-        .library(name: "GeocodePlugin", type: .dynamic, targets: ["GeocodePlugin"])
-    ],
-    dependencies: [
-        .package(url: "https://github.com/your-org/ARORuntime.git", from: "1.0.0")
-    ],
-    targets: [
-        .target(name: "GeocodePlugin", dependencies: ["ARORuntime"])
-    ]
-)
+build:
+  swift:
+    minimum-version: "6.2"
 ```
 
 **GeocodeAction.swift:**
@@ -93,21 +242,15 @@ public struct GeocodeAction: ActionImplementation {
         object: ObjectDescriptor,
         context: ExecutionContext
     ) async throws -> any Sendable {
-        // Get the address from context
-        let address: String = try context.require(object.identifier)
-
-        // Call geocoding API (simplified)
+        let address: String = try context.require(object.base)
         let coordinates = try await geocode(address)
-
-        // Bind result
-        context.bind(result.identifier, value: coordinates)
-
+        context.bind(result.base, value: coordinates)
         return coordinates
     }
 
     private func geocode(_ address: String) async throws -> [String: Double] {
-        // Implementation using a geocoding service
-        // Returns ["latitude": 37.7749, "longitude": -122.4194]
+        // Implementation
+        return ["latitude": 37.7749, "longitude": -122.4194]
     }
 }
 ```
@@ -123,250 +266,269 @@ public func registerPlugin() {
 }
 ```
 
-**Usage in ARO:**
+**Usage:**
 
 ```aro
-(Get Location: Address Lookup) {
-    <Create> the <address> with "1600 Amphitheatre Parkway, Mountain View, CA".
-
-    (* Custom action - new verb *)
-    <Geocode> the <coordinates> from the <address>.
-
-    <Log> <coordinates> to the <console>.
-    <Return> an <OK: status> with <coordinates>.
-}
-```
-
----
-
-## 22.4 Creating a Service Plugin
-
-Service plugins provide external integrations called via the `Call` action. Here is a complete example of a Zip service plugin.
-
-**Directory Structure:**
-
-```
-ZipPlugin/
-├── Package.swift
-└── Sources/ZipPlugin/
-    └── ZipService.swift
-```
-
-**Package.swift:**
-
-```swift
-// swift-tools-version:5.9
-import PackageDescription
-
-let package = Package(
-    name: "ZipPlugin",
-    platforms: [.macOS(.v13)],
-    products: [
-        .library(name: "ZipPlugin", type: .dynamic, targets: ["ZipPlugin"])
-    ],
-    dependencies: [
-        .package(url: "https://github.com/marmelroy/Zip.git", from: "2.1.0")
-    ],
-    targets: [
-        .target(name: "ZipPlugin", dependencies: ["Zip"])
-    ]
-)
-```
-
-**ZipService.swift:**
-
-```swift
-import Foundation
-import Zip
-
-// Plugin initialization - returns service metadata as JSON
-@_cdecl("aro_plugin_init")
-public func pluginInit() -> UnsafePointer<CChar> {
-    let metadata = """
-    {"services": [{"name": "zip", "symbol": "zip_call"}]}
-    """
-    return UnsafePointer(strdup(metadata)!)
-}
-
-// Main entry point for the zip service
-@_cdecl("zip_call")
-public func zipCall(
-    _ methodPtr: UnsafePointer<CChar>,
-    _ argsPtr: UnsafePointer<CChar>,
-    _ resultPtr: UnsafeMutablePointer<UnsafeMutablePointer<CChar>?>
-) -> Int32 {
-    let method = String(cString: methodPtr)
-    let argsJSON = String(cString: argsPtr)
-
-    do {
-        let args = try parseJSON(argsJSON)
-        let result = try executeMethod(method, args: args)
-        resultPtr.pointee = encodeJSON(result).withCString { strdup($0) }
-        return 0
-    } catch {
-        resultPtr.pointee = "{\"error\": \"\(error)\"}".withCString { strdup($0) }
-        return 1
-    }
-}
-
-private func executeMethod(_ method: String, args: [String: Any]) throws -> [String: Any] {
-    switch method.lowercased() {
-    case "compress", "zip":
-        guard let files = args["files"] as? [String],
-              let output = args["output"] as? String else {
-            throw PluginError.missingArgument
-        }
-        let fileURLs = files.map { URL(fileURLWithPath: $0) }
-        try Zip.zipFiles(paths: fileURLs, zipFilePath: URL(fileURLWithPath: output), password: nil, progress: nil)
-        return ["success": true, "output": output, "filesCompressed": files.count]
-
-    case "decompress", "unzip":
-        guard let archive = args["archive"] as? String else {
-            throw PluginError.missingArgument
-        }
-        let destination = args["destination"] as? String ?? "."
-        try Zip.unzipFile(URL(fileURLWithPath: archive), destination: URL(fileURLWithPath: destination), overwrite: true, password: nil)
-        return ["success": true, "destination": destination]
-
-    default:
-        throw PluginError.unknownMethod(method)
-    }
-}
-
-enum PluginError: Error {
-    case missingArgument, unknownMethod(String)
-}
-```
-
-**Usage in ARO:**
-
-```aro
-(Compress Files: Archive) {
-    (* Service call - uses Call action *)
-    <Call> the <result> from the <zip: compress> with {
-        files: ["file1.txt", "file2.txt"],
-        output: "archive.zip"
-    }.
-
-    <Log> <result> to the <console>.
-    <Return> an <OK: status> for the <compression>.
-}
-```
-
----
-
-## 22.5 Choosing Between Action and Service Plugins
-
-When designing a plugin, consider which approach fits better:
-
-### Choose Action Plugin When:
-
-- The operation feels like a language feature
-- You want natural syntax: `<Geocode>`, `<Encrypt>`, `<Validate>`
-- The operation is single-purpose
-- Readability is paramount
-
-```aro
-(* Natural, domain-specific syntax *)
 <Geocode> the <coordinates> from the <address>.
-<Encrypt> the <ciphertext> from the <plaintext> with <key>.
-<Validate> the <result> for the <order>.
 ```
 
-### Choose Service Plugin When:
+---
 
-- You are wrapping an external system with multiple operations
-- You want a uniform interface: `<Call> from <service: method>`
-- The integration has many related methods
-- Portability across projects matters
+## 22.6 Native Plugins (Rust/C)
 
-```aro
-(* Uniform service pattern *)
-<Call> the <result> from the <postgres: query> with { sql: "..." }.
-<Call> the <result> from the <postgres: insert> with { table: "...", data: ... }.
-<Call> the <result> from the <zip: compress> with { files: [...] }.
-<Call> the <result> from the <zip: decompress> with { archive: "..." }.
+Native plugins use a C ABI interface for high-performance operations.
+
+### Required C Interface
+
+```c
+// Get plugin info as JSON
+char* aro_plugin_info(void);
+
+// Execute an action
+char* aro_plugin_execute(const char* action, const char* input_json);
+
+// Free memory
+void aro_plugin_free(char* ptr);
 ```
 
-### Comparison Table
+### Rust Plugin Example
 
-| Aspect | Action Plugin | Service Plugin |
-|--------|---------------|----------------|
-| Syntax | `<Verb> the <result>...` | `<Call> from <service: method>` |
-| Protocol | `ActionImplementation` | C-callable with JSON |
-| Methods | One per action | Multiple per service |
-| Registration | `ActionRegistry.register()` | `aro_plugin_init` JSON |
-| Best for | Domain operations | External integrations |
+**plugin.yaml:**
+
+```yaml
+name: plugin-rust-csv
+version: 1.0.0
+provides:
+  - type: rust-plugin
+    path: src/
+    build:
+      cargo-target: release
+      output: target/release/libcsv_plugin.dylib
+```
+
+**src/lib.rs:**
+
+```rust
+use std::ffi::{CStr, CString};
+use std::os::raw::c_char;
+
+#[no_mangle]
+pub extern "C" fn aro_plugin_info() -> *mut c_char {
+    let info = r#"{"name":"plugin-rust-csv","version":"1.0.0","actions":["parse-csv"]}"#;
+    CString::new(info).unwrap().into_raw()
+}
+
+#[no_mangle]
+pub extern "C" fn aro_plugin_execute(
+    action: *const c_char,
+    input_json: *const c_char,
+) -> *mut c_char {
+    // Parse action and input, execute, return JSON result
+    let result = r#"{"rows": [], "count": 0}"#;
+    CString::new(result).unwrap().into_raw()
+}
+
+#[no_mangle]
+pub extern "C" fn aro_plugin_free(ptr: *mut c_char) {
+    if !ptr.is_null() {
+        unsafe { let _ = CString::from_raw(ptr); }
+    }
+}
+```
+
+### C Plugin Example
+
+**plugin.yaml:**
+
+```yaml
+name: plugin-c-hash
+version: 1.0.0
+provides:
+  - type: c-plugin
+    path: src/
+    build:
+      compiler: clang
+      flags: ["-O2", "-fPIC", "-shared"]
+      output: libhash_plugin.dylib
+```
+
+**src/hash_plugin.c:**
+
+```c
+#include <stdlib.h>
+#include <string.h>
+
+char* aro_plugin_info(void) {
+    const char* info = "{\"name\":\"plugin-c-hash\",\"actions\":[\"hash\"]}";
+    char* result = malloc(strlen(info) + 1);
+    strcpy(result, info);
+    return result;
+}
+
+char* aro_plugin_execute(const char* action, const char* input) {
+    // Implementation
+    char* result = malloc(256);
+    snprintf(result, 256, "{\"hash\":\"abc123\"}");
+    return result;
+}
+
+void aro_plugin_free(char* ptr) {
+    if (ptr) free(ptr);
+}
+```
 
 ---
 
-## 22.6 Plugin Loading
+## 22.7 Python Plugins
 
-Plugins load in two ways: compile-time linking and runtime discovery.
+Python plugins run as subprocesses, enabling access to Python's ecosystem.
 
-**Compile-time linking** adds the plugin as a package dependency. When you build your application, the plugin is linked in. The registration function runs during initialization.
+### Required Interface
 
-**Runtime discovery** scans a `plugins/` directory for compiled libraries. During startup, ARO loads each library and calls its registration function. This allows adding plugins without recompiling.
+```python
+def aro_plugin_info():
+    """Return plugin metadata as dict"""
+    return {
+        "name": "my-plugin",
+        "version": "1.0.0",
+        "actions": ["analyze", "transform"]
+    }
 
-For runtime loading, place compiled `.dylib` (macOS), `.so` (Linux), or `.dll` (Windows) files in `./plugins/`. ARO loads them automatically during Application-Start.
+def aro_action_analyze(input_json):
+    """Execute the analyze action"""
+    import json
+    params = json.loads(input_json)
+    result = {"analyzed": True}
+    return json.dumps(result)
+```
+
+### Python Plugin Example
+
+**plugin.yaml:**
+
+```yaml
+name: plugin-python-markdown
+version: 1.0.0
+provides:
+  - type: python-plugin
+    path: src/
+    python:
+      min-version: "3.9"
+      requirements: requirements.txt
+```
+
+**src/plugin.py:**
+
+```python
+import json
+import re
+
+def aro_plugin_info():
+    return {
+        "name": "plugin-python-markdown",
+        "version": "1.0.0",
+        "actions": ["to-html", "extract-links"]
+    }
+
+def aro_action_to_html(input_json):
+    params = json.loads(input_json)
+    markdown = params.get("data", "")
+    html = markdown_to_html(markdown)
+    return json.dumps({"html": html})
+
+def aro_action_extract_links(input_json):
+    params = json.loads(input_json)
+    markdown = params.get("data", "")
+    links = re.findall(r'\[(.+?)\]\((.+?)\)', markdown)
+    return json.dumps({"links": [{"text": t, "url": u} for t, u in links]})
+
+def markdown_to_html(md):
+    # Simple conversion
+    html = re.sub(r'^# (.+)$', r'<h1>\1</h1>', md, flags=re.MULTILINE)
+    html = re.sub(r'\*\*(.+?)\*\*', r'<strong>\1</strong>', html)
+    return html
+```
 
 ---
 
-## 22.7 Plugin Design Guidelines
+## 22.8 Plugin Dependencies
 
-**Cohesion**: Group related functionality. A database plugin provides all database operations. A compression plugin provides all compression methods.
+Plugins can depend on other plugins:
 
-**Naming**: Use distinctive names. For actions, prefix with your domain if conflicts are possible. For services, choose clear names that describe the integration.
+```yaml
+name: my-plugin
+version: 1.0.0
 
-**Configuration**: Use environment variables for credentials and connection strings. This keeps configuration separate from code and allows different values per environment.
+dependencies:
+  string-helpers:
+    git: "git@github.com:arolang/plugin-string-helpers.git"
+    ref: "v1.0.0"
 
-**Error messages**: Provide clear, actionable errors. Include what failed, why, and ideally what to do about it.
+  csv-tools:
+    git: "git@github.com:arolang/plugin-csv-tools.git"
+    ref: "main"
+```
 
----
-
-## 22.8 Documentation
-
-Document your plugin thoroughly:
-
-- **Actions**: List verbs, valid prepositions, expected inputs, outputs, errors
-- **Services**: List methods, arguments for each, return values
-- **Configuration**: Environment variables, required setup
-- **Examples**: Show typical usage in ARO code
-
-A README should provide quick start instructions. Users should be productive within minutes of adding your plugin.
+When installing a plugin, ARO automatically resolves and installs dependencies in the correct order.
 
 ---
 
-## 22.9 Publishing
+## 22.9 Choosing a Plugin Type
 
-Publish plugins through Git repositories. Swift Package Manager resolves dependencies from URLs.
+| If you need... | Choose |
+|----------------|--------|
+| Reusable ARO feature sets | ARO files |
+| Deep ARO integration | Swift plugin |
+| Maximum performance | Rust plugin |
+| System-level operations | C plugin |
+| Python libraries (ML, etc.) | Python plugin |
 
-1. Create a Git repository for your plugin
+### Performance Considerations
+
+| Type | Overhead | Best For |
+|------|----------|----------|
+| ARO files | None | Business logic |
+| Swift | None | Most extensions |
+| Rust/C | FFI call | CPU-intensive |
+| Python | Process spawn | One-time operations |
+
+---
+
+## 22.10 Publishing Plugins
+
+1. Create a Git repository with `plugin.yaml`
 2. Tag releases following semantic versioning
-3. Document installation in your README
-4. Announce in relevant communities
+3. Document installation in README
+4. Publish to GitHub (or any Git host)
 
-Example installation instruction:
+**Example README:**
 
-```swift
-// In your Package.swift
-dependencies: [
-    .package(url: "https://github.com/your-org/GeocodePlugin.git", from: "1.0.0")
-]
+```markdown
+# my-plugin
+
+Install:
+\`\`\`bash
+aro add git@github.com:yourname/my-plugin.git
+\`\`\`
+
+## Actions
+
+- `<MyAction>` — Does something useful
 ```
 
 ---
 
-## 22.10 Best Practices
+## 22.11 Example Plugins
 
-**Test thoroughly.** Plugins may be used in unexpected ways. Test edge cases and error conditions.
+The ARO team maintains several example plugins:
 
-**Version carefully.** Breaking changes require major version bumps. Users depend on stability.
-
-**Keep dependencies minimal.** Each dependency is a dependency for your users. Heavy dependencies cause conflicts.
-
-**Document everything.** Users should not need to read source code to use your plugin.
+| Plugin | Language | Purpose |
+|--------|----------|---------|
+| [plugin-swift-hello](https://github.com/arolang/plugin-swift-hello) | Swift | Greeting actions |
+| [plugin-rust-csv](https://github.com/arolang/plugin-rust-csv) | Rust | CSV parsing |
+| [plugin-c-hash](https://github.com/arolang/plugin-c-hash) | C | Hash functions |
+| [plugin-python-markdown](https://github.com/arolang/plugin-python-markdown) | Python | Markdown processing |
 
 ---
 
-*Next: Chapter 22 — Native Compilation*
+*Next: Chapter 23 — Native Compilation*

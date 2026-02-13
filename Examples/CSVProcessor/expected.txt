@@ -1,0 +1,14 @@
+=== CSV Processor Demo ===
+1. Parsing CSV data...
+Parsed rows:
+4
+2. Converting CSV to JSON...
+JSON objects:
+3
+3. Formatting as semicolon-delimited...
+product;price;quantity
+Apple;1.50;100
+Banana;0.75;200
+
+CSV processing completed!
+startup

@@ -1,0 +1,6 @@
+# ARO Application Configuration
+# Demonstrates using a managed Swift plugin
+
+plugins:
+  # Managed plugin from GitHub (installed via aro add)
+  - source: https://github.com/arolang/plugin-swift-hello

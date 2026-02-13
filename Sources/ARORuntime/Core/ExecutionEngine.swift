@@ -105,6 +105,9 @@ public actor ExecutionEngine {
         // Wire up domain event handlers (e.g., "UserCreated Handler", "OrderPlaced Handler")
         registerDomainEventHandlers(for: program, baseContext: context)
 
+        // Wire up plugin event handlers (from .aro files in plugins)
+        registerPluginEventHandlers(baseContext: context)
+
         // Wire up notification event handlers (e.g., "NotificationSent Handler")
         registerNotificationEventHandlers(for: program, baseContext: context)
 
@@ -382,6 +385,84 @@ public actor ExecutionEngine {
         }
     }
 
+    /// Register event handlers from plugin feature sets
+    /// Plugins can provide .aro files with event handler feature sets
+    private func registerPluginEventHandlers(baseContext: RuntimeContext) {
+        // Get all plugin feature sets
+        let pluginFeatureSets = PluginFeatureSetRegistry.shared.getAll()
+
+        if ProcessInfo.processInfo.environment["ARO_DEBUG"] != nil {
+            FileHandle.standardError.write(Data("[ExecutionEngine] Found \(pluginFeatureSets.count) plugin feature sets\n".utf8))
+        }
+
+        // Filter for domain event handlers
+        let domainHandlers = pluginFeatureSets.filter { registered in
+            let activity = registered.analyzedFeatureSet.featureSet.businessActivity
+            let hasHandler = activity.contains(" Handler")
+            let isSpecialHandler = activity.contains("Socket Event Handler") ||
+                                   activity.contains("WebSocket Event Handler") ||
+                                   activity.contains("File Event Handler") ||
+                                   activity.contains("Application-End")
+            return hasHandler && !isSpecialHandler
+        }
+
+        if ProcessInfo.processInfo.environment["ARO_DEBUG"] != nil {
+            FileHandle.standardError.write(Data("[ExecutionEngine] Found \(domainHandlers.count) plugin domain handlers\n".utf8))
+            for handler in domainHandlers {
+                FileHandle.standardError.write(Data("[ExecutionEngine] - \(handler.qualifiedName) (\(handler.analyzedFeatureSet.featureSet.businessActivity))\n".utf8))
+            }
+        }
+
+        for registered in domainHandlers {
+            let analyzedFS = registered.analyzedFeatureSet
+            let activity = analyzedFS.featureSet.businessActivity
+
+            // Extract event type from business activity
+            let eventType: String
+            if let handlerRange = activity.range(of: " Handler") {
+                eventType = String(activity[..<handlerRange.lowerBound])
+                    .trimmingCharacters(in: .whitespaces)
+            } else {
+                continue
+            }
+
+            // Parse state guards
+            let guardSet = StateGuardSet.parse(from: activity)
+
+            // Capture values for closure
+            let capturedActionRegistry = actionRegistry
+            let capturedEventBus = eventBus
+            let capturedGlobalSymbols = globalSymbols
+            let capturedServices = services
+
+            let capturedEventType = eventType
+            eventBus.subscribe(to: DomainEvent.self) { event in
+                if ProcessInfo.processInfo.environment["ARO_DEBUG"] != nil {
+                    FileHandle.standardError.write(Data("[ExecutionEngine] Plugin handler received event: \(event.domainEventType), expecting: \(capturedEventType)\n".utf8))
+                }
+                guard event.domainEventType == capturedEventType else { return }
+
+                if !guardSet.isEmpty {
+                    guard guardSet.allMatch(payload: event.payload) else { return }
+                }
+
+                if ProcessInfo.processInfo.environment["ARO_DEBUG"] != nil {
+                    FileHandle.standardError.write(Data("[ExecutionEngine] Executing plugin handler for: \(capturedEventType)\n".utf8))
+                }
+
+                await ExecutionEngine.executeDomainEventHandlerStatic(
+                    analyzedFS,
+                    baseContext: baseContext,
+                    event: event,
+                    actionRegistry: capturedActionRegistry,
+                    eventBus: capturedEventBus,
+                    globalSymbols: capturedGlobalSymbols,
+                    services: capturedServices
+                )
+            }
+        }
+    }
+
     /// Execute a domain event handler feature set (static version to avoid actor deadlock)
     /// This is called from event subscriptions and must NOT require actor isolation
     /// to prevent deadlock when the actor is blocked waiting for handlers.
@@ -422,8 +503,17 @@ public actor ExecutionEngine {
         )
 
         do {
+            if ProcessInfo.processInfo.environment["ARO_DEBUG"] != nil {
+                FileHandle.standardError.write(Data("[ExecutionEngine] About to execute handler: \(analyzedFS.featureSet.name)\n".utf8))
+            }
             _ = try await executor.execute(analyzedFS, context: handlerContext)
+            if ProcessInfo.processInfo.environment["ARO_DEBUG"] != nil {
+                FileHandle.standardError.write(Data("[ExecutionEngine] Handler executed successfully: \(analyzedFS.featureSet.name)\n".utf8))
+            }
         } catch {
+            if ProcessInfo.processInfo.environment["ARO_DEBUG"] != nil {
+                FileHandle.standardError.write(Data("[ExecutionEngine] Handler error: \(error)\n".utf8))
+            }
             eventBus.publish(ErrorOccurredEvent(
                 error: String(describing: error),
                 context: analyzedFS.featureSet.name,

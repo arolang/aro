@@ -1,0 +1,41 @@
+(* MarkdownRenderer - Demonstrates using custom actions from a Python plugin
+ *
+ * This example shows how to:
+ * 1. Convert Markdown to HTML using <ToHTML>
+ * 2. Extract headings from Markdown using <ExtractHeadings>
+ * 3. Count words in Markdown using <WordCount>
+ *)
+
+(Application-Start: Markdown Renderer Demo) {
+    <Log> "=== Markdown Renderer Demo ===" to the <console>.
+
+    (* Sample Markdown content *)
+    <Create> the <markdown> with "# Welcome\n\nThis is **bold** and *italic* text.\n\n## Features\n\nCheck out [ARO](https://github.com/arolang/aro) for more.".
+
+    (* Convert Markdown to HTML using custom action *)
+    <Log> "1. Converting to HTML..." to the <console>.
+    <ToHTML> the <html-result> from the <markdown>.
+
+    <Extract> the <html> from the <html-result: html>.
+    <Log> <html> to the <console>.
+
+    (* Extract headings using custom action *)
+    <Log> "2. Extracting headings..." to the <console>.
+    <ExtractHeadings> the <headings-result> from the <markdown>.
+
+    <Extract> the <heading-count> from the <headings-result: count>.
+    <Log> "Headings found:" to the <console>.
+    <Log> <heading-count> to the <console>.
+
+    (* Word count using custom action *)
+    <Log> "3. Word count..." to the <console>.
+    <WordCount> the <stats> from the <markdown>.
+
+    <Extract> the <words> from the <stats: words>.
+    <Log> "Words:" to the <console>.
+    <Log> <words> to the <console>.
+
+    <Log> "Markdown processing completed!" to the <console>.
+
+    <Return> an <OK: status> for the <startup>.
+}

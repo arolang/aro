@@ -1,0 +1,21 @@
+name: plugin-swift-hello
+version: 1.0.0
+description: A simple Swift plugin that provides greeting functionality
+author: ARO Team
+license: MIT
+aro-version: '>=0.1.0'
+source:
+  git: https://github.com/arolang/plugin-swift-hello
+  ref: main
+  commit: 29d3cd4861c3788ecd33377e8301a08fca003dee
+provides:
+- type: swift-plugin
+  path: Sources/
+- type: aro-files
+  path: features/
+build:
+  swift:
+    minimum-version: '6.2'
+    targets:
+    - name: HelloPlugin
+      path: Sources/

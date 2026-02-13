@@ -148,6 +148,40 @@ public actor ActionRegistry {
         actions.removeValue(forKey: verb.lowercased())
     }
 
+    /// Dynamic action handlers for plugin-provided actions
+    private var dynamicHandlers: [String: DynamicActionHandler] = [:]
+
+    /// Type alias for dynamic action handler
+    public typealias DynamicActionHandler = @Sendable (
+        ResultDescriptor,
+        ObjectDescriptor,
+        ExecutionContext
+    ) async throws -> any Sendable
+
+    /// Normalize action name by removing hyphens and lowercasing
+    /// This allows `parse-csv` and `ParseCSV` to match as `parsecsv`
+    private func normalizeActionName(_ name: String) -> String {
+        return name.replacingOccurrences(of: "-", with: "").lowercased()
+    }
+
+    /// Register a dynamic action from a plugin
+    /// - Parameters:
+    ///   - verb: The action verb
+    ///   - handler: The handler function
+    public func registerDynamic(
+        verb: String,
+        handler: @escaping DynamicActionHandler
+    ) {
+        dynamicHandlers[normalizeActionName(verb)] = handler
+    }
+
+    /// Get a dynamic action handler
+    /// - Parameter verb: The action verb
+    /// - Returns: The handler if registered
+    public func dynamicHandler(for verb: String) -> DynamicActionHandler? {
+        dynamicHandlers[normalizeActionName(verb)]
+    }
+
     // MARK: - Lookup
 
     /// Get an action implementation for a verb
@@ -201,10 +235,16 @@ extension ActionRegistry {
         object: ObjectDescriptor,
         context: ExecutionContext
     ) async throws -> any Sendable {
-        guard let action = action(for: verb) else {
-            throw ActionError.unknownAction(verb)
+        // Try built-in action first
+        if let action = action(for: verb) {
+            return try await action.execute(result: result, object: object, context: context)
         }
 
-        return try await action.execute(result: result, object: object, context: context)
+        // Try dynamic plugin action
+        if let handler = dynamicHandler(for: verb) {
+            return try await handler(result, object, context)
+        }
+
+        throw ActionError.unknownAction(verb)
     }
 }

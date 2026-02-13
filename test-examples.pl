@@ -229,6 +229,7 @@ sub read_test_hint {
         'keep-alive' => undef,
         'allow-error' => undef,
         'skip-build' => undef,
+        'normalize-dict' => undef,
     );
 
     # Return empty hints if file doesn't exist (backward compatible)
@@ -550,6 +551,50 @@ sub detect_example_type {
     }
 
     return 'console';
+}
+
+# Normalize dictionary literals by sorting keys
+# Handles Swift/ARO dictionary format: ["key1": "val1", "key2": "val2"]
+sub normalize_dict_literals {
+    my ($output) = @_;
+
+    # Process line by line to find dictionary literals
+    my @lines = split /\n/, $output;
+    my @result_lines;
+
+    for my $line (@lines) {
+        # Look for dictionary literals starting with [ and containing "key": patterns
+        if ($line =~ /\[("[^"]+"\s*:.*)\]/) {
+            # Extract the content between brackets
+            my $before_bracket = $`;
+            my $after_bracket = $';
+
+            # Parse key-value pairs more carefully
+            my $dict_content = $1;
+            my @pairs;
+
+            # Match "key": followed by either a quoted string or non-comma/bracket content
+            # This regex handles: "key": "value with, comma" or "key": value
+            while ($dict_content =~ /"([^"]+)"\s*:\s*("(?:[^"\\]|\\.)*"|[^,\]]+)/g) {
+                my $key = $1;
+                my $value = $2;
+                $value =~ s/\s+$//;  # Trim trailing whitespace
+                push @pairs, [$key, $value];
+            }
+
+            if (@pairs) {
+                # Sort by key
+                @pairs = sort { $a->[0] cmp $b->[0] } @pairs;
+
+                # Rebuild the dictionary literal with sorted keys
+                my $sorted = '[' . join(', ', map { qq{"$_->[0]": $_->[1]} } @pairs) . ']';
+                $line = $before_bracket . $sorted . $after_bracket;
+            }
+        }
+        push @result_lines, $line;
+    }
+
+    return join("\n", @result_lines);
 }
 
 # Normalize output for comparison
@@ -1536,6 +1581,12 @@ sub run_single_mode_test {
         my $output_normalized = normalize_output($output, $type);
         my $expected_normalized = normalize_output($expected, $type);
 
+        # Apply dictionary key sorting if normalize-dict hint is set
+        if (defined $hints->{'normalize-dict'} && $hints->{'normalize-dict'} eq 'true') {
+            $output_normalized = normalize_dict_literals($output_normalized);
+            $expected_normalized = normalize_dict_literals($expected_normalized);
+        }
+
         my ($all_found, $missing_ref) = check_output_occurrences($output_normalized, $expected_normalized);
 
         if ($all_found) {
@@ -1583,6 +1634,12 @@ sub run_single_mode_test {
         # Normalize both to remove brackets and other dynamic content
         my $output_normalized = normalize_output($output, $type);
         my $expected_normalized = normalize_output($expected, $type);
+
+        # Apply dictionary key sorting if normalize-dict hint is set
+        if (defined $hints->{'normalize-dict'} && $hints->{'normalize-dict'} eq 'true') {
+            $output_normalized = normalize_dict_literals($output_normalized);
+            $expected_normalized = normalize_dict_literals($expected_normalized);
+        }
 
         # Trim whitespace after normalization
         $output_normalized =~ s/^\s+|\s+$//g;
