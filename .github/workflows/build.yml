@@ -46,10 +46,10 @@ jobs:
           path: .build
           key: linux-swift-${{ env.SWIFT_VERSION }}-test-${{ hashFiles('Package.resolved') }}
 
-      - name: Install LLVM 20
+      - name: Install LLVM 20 and dependencies
         run: |
           apt-get update -qq
-          apt-get install -y -qq wget gnupg software-properties-common
+          apt-get install -y -qq wget gnupg software-properties-common libgit2-dev
           wget -qO- https://apt.llvm.org/llvm-snapshot.gpg.key | gpg --dearmor -o /usr/share/keyrings/llvm-archive-keyring.gpg
           echo "deb [signed-by=/usr/share/keyrings/llvm-archive-keyring.gpg] http://apt.llvm.org/jammy/ llvm-toolchain-jammy-20 main" > /etc/apt/sources.list.d/llvm.list
           apt-get update -qq
@@ -91,10 +91,10 @@ jobs:
           path: .build
           key: linux-swift-${{ env.SWIFT_VERSION }}-v3-${{ hashFiles('Package.resolved') }}
 
-      - name: Install LLVM 20
+      - name: Install LLVM 20 and dependencies
         run: |
           apt-get update -qq
-          apt-get install -y -qq wget gnupg software-properties-common
+          apt-get install -y -qq wget gnupg software-properties-common libgit2-dev
           wget -qO- https://apt.llvm.org/llvm-snapshot.gpg.key | gpg --dearmor -o /usr/share/keyrings/llvm-archive-keyring.gpg
           echo "deb [signed-by=/usr/share/keyrings/llvm-archive-keyring.gpg] http://apt.llvm.org/jammy/ llvm-toolchain-jammy-20 main" > /etc/apt/sources.list.d/llvm.list
           apt-get update -qq
@@ -218,9 +218,9 @@ jobs:
           path: .build
           key: macos-swift-${{ env.SWIFT_VERSION }}-v7-${{ hashFiles('Package.resolved') }}
 
-      - name: Install LLVM 20
+      - name: Install LLVM 20 and dependencies
         run: |
-          brew install llvm@20
+          brew install llvm@20 libgit2
           # Detect LLVM path (ARM64 vs Intel)
           if [ -d "/opt/homebrew/opt/llvm@20" ]; then
             LLVM_PREFIX="/opt/homebrew/opt/llvm@20"
@@ -660,7 +660,7 @@ jobs:
         run: |
           # Running inside container as root (no sudo needed)
           apt-get update -qq
-          apt-get install -y -qq wget gnupg software-properties-common
+          apt-get install -y -qq wget gnupg software-properties-common libgit2-dev
           wget -qO- https://apt.llvm.org/llvm-snapshot.gpg.key | gpg --dearmor -o /usr/share/keyrings/llvm-archive-keyring.gpg
           echo "deb [signed-by=/usr/share/keyrings/llvm-archive-keyring.gpg] http://apt.llvm.org/jammy/ llvm-toolchain-jammy-20 main" > /etc/apt/sources.list.d/llvm.list
           apt-get update -qq
@@ -806,9 +806,9 @@ jobs:
           echo "ERROR: Could not find Swift library path!"
           exit 1
 
-      - name: Install LLVM 20
+      - name: Install LLVM 20 and dependencies
         run: |
-          brew install llvm@20
+          brew install llvm@20 libgit2
           # Detect LLVM path (ARM64 vs Intel)
           if [ -d "/opt/homebrew/opt/llvm@20" ]; then
             LLVM_PREFIX="/opt/homebrew/opt/llvm@20"
