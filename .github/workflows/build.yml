@@ -715,6 +715,14 @@ jobs:
           echo "Swift binary: $(which swift)"
           swift --version
 
+      - name: Install Rust for plugin compilation
+        run: |
+          curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
+          echo "$HOME/.cargo/bin" >> $GITHUB_PATH
+          export PATH="$HOME/.cargo/bin:$PATH"
+          rustc --version
+          cargo --version
+
       - name: Clean plugin build directories
         run: |
           # Remove any cached plugin builds from previous runs with different Swift versions
@@ -723,6 +731,7 @@ jobs:
 
       - name: Run integration tests
         run: |
+          export PATH="$HOME/.cargo/bin:$PATH"
           chmod +x test-examples.pl
           perl test-examples.pl --verbose
 
@@ -829,6 +838,14 @@ jobs:
       - name: Install Perl modules
         run: |
           cpan -T IPC::Run YAML::XS HTTP::Tiny Net::EmptyPort Term::ANSIColor Time::HiRes 2>&1 || true
+
+      - name: Install Rust for plugin compilation
+        run: |
+          curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
+          echo "$HOME/.cargo/bin" >> $GITHUB_PATH
+          source "$HOME/.cargo/env"
+          rustc --version
+          cargo --version
 
       - name: Verify LLVM setup
         run: |
