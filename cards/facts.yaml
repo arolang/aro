@@ -1059,177 +1059,155 @@ facts:
     headline: "<Compute> the <remaining: distance> from <now> to <deadline>."
     explanation: "Calculate time between dates. Extract in various units: days, hours, minutes, seconds. Positive if future, negative if past."
 
-  # ===== WEEK 55: Plugin System =====
-  - id: "55-1"
-    week: 55
-    day: 1
+  # ===== PLUGIN SYSTEM (Weekend Cards) =====
+  # Distributed across weekends in 2026
+
+  # Week 10 Weekend: Plugin Introduction
+  - id: "10-6"
+    week: 10
+    day: 6
     category: "Plugins"
     headline: "aro add plugin-csv-parser"
     explanation: "Install plugins with one command. Plugins add new actions without changing ARO itself. Extend the language for your domain. Share capabilities across projects."
 
-  - id: "55-2"
-    week: 55
-    day: 2
+  - id: "10-7"
+    week: 10
+    day: 7
     category: "Plugins"
     headline: "<ParseCSV> the <rows> from the <data>."
     explanation: "Plugins provide custom actions. Use them like built-in actions. Same ARO syntax. Same error handling. Seamless integration."
 
-  - id: "55-3"
-    week: 55
-    day: 3
+  # Week 15 Weekend: Plugin Languages
+  - id: "15-6"
+    week: 15
+    day: 6
     category: "Plugins"
     headline: "Swift | Rust | C | Python | Pure ARO"
     explanation: "Write plugins in your language of choice. Swift for Apple ecosystem. Rust for performance. C for legacy integration. Python for rapid prototyping. Pure ARO for event handlers."
 
-  - id: "55-4"
-    week: 55
-    day: 4
+  - id: "15-7"
+    week: 15
+    day: 7
     category: "Plugins"
     headline: "aro plugins list"
     explanation: "See all installed plugins. Shows name, version, actions provided. aro plugins info for details. aro remove to uninstall. Full plugin lifecycle management."
 
-  # ===== WEEK 56: Plugin Manifest =====
-  - id: "56-1"
-    week: 56
-    day: 1
+  # Week 20 Weekend: Plugin Manifest
+  - id: "20-6"
+    week: 20
+    day: 6
     category: "Plugins"
     headline: "plugin.yaml"
     explanation: "Every plugin has a manifest. Declares name, version, dependencies, actions provided. Runtime validates before loading. No surprises at execution time."
 
-  - id: "56-2"
-    week: 56
-    day: 2
+  - id: "20-7"
+    week: 20
+    day: 7
     category: "Plugins"
     headline: "provides: [ParseCSV, FormatCSV]"
     explanation: "Manifest lists all actions the plugin provides. ARO discovers actions automatically. No registration code. Convention over configuration."
 
-  - id: "56-3"
-    week: 56
-    day: 3
-    category: "Plugins"
-    headline: "aro-version: '>=0.2.0'"
-    explanation: "Plugins declare compatible ARO versions. Runtime checks before loading. Breaking changes caught early. Semantic versioning enforced."
-
-  # ===== WEEK 57: Native Plugins =====
-  - id: "57-1"
-    week: 57
-    day: 1
+  # Week 25 Weekend: Native Plugins
+  - id: "25-6"
+    week: 25
+    day: 6
     category: "Plugins"
     headline: "Rust plugin: blazing fast CSV parsing"
     explanation: "Native plugins compile to shared libraries. Call directly from ARO. No serialization overhead. Performance-critical code stays fast."
 
-  - id: "57-2"
-    week: 57
-    day: 2
+  - id: "25-7"
+    week: 25
+    day: 7
     category: "Plugins"
     headline: "C ABI: the universal interface"
     explanation: "All native plugins use C ABI. Swift, Rust, C, C++ all compatible. Existing libraries wrap easily. Decades of code available to ARO."
 
-  - id: "57-3"
-    week: 57
-    day: 3
-    category: "Plugins"
-    headline: "<Hash> the <digest> from the <password>."
-    explanation: "Security-critical code in C. Crypto libraries in Rust. ML models in Python. Use the right tool for each job. ARO orchestrates."
-
-  # ===== WEEK 58: Pure ARO Plugins =====
-  - id: "58-1"
-    week: 58
-    day: 1
+  # Week 30 Weekend: Pure ARO Plugins
+  - id: "30-6"
+    week: 30
+    day: 6
     category: "Plugins"
     headline: "Pure ARO plugins: no native code"
     explanation: "Plugins can be pure .aro files. Event handlers, feature sets, domain logic. Share business rules across applications. No compilation needed."
 
-  - id: "58-2"
-    week: 58
-    day: 2
+  - id: "30-7"
+    week: 30
+    day: 7
     category: "Plugins"
     headline: "(Audit Log: UserCreated Handler)"
     explanation: "Plugin provides event handlers. Install plugin, handlers activate automatically. Add audit logging to any app. Zero configuration."
 
-  - id: "58-3"
-    week: 58
-    day: 3
-    category: "Plugins"
-    headline: "type: aro-files"
-    explanation: "Manifest declares plugin type. aro-files for pure ARO. native for compiled code. Runtime loads appropriately. Same installation experience."
-
-  # ===== WEEK 59: Plugin Examples =====
-  - id: "59-1"
-    week: 59
-    day: 1
+  # Week 35 Weekend: Plugin Examples - Swift & Rust
+  - id: "35-6"
+    week: 35
+    day: 6
     category: "Plugins"
     headline: "plugin-swift-hello: Hello from Swift"
     explanation: "Swift plugins leverage Apple's ecosystem. Combine Swift packages with ARO. Foundation, Networking, CoreML accessible. Best of both worlds."
 
-  - id: "59-2"
-    week: 59
-    day: 2
+  - id: "35-7"
+    week: 35
+    day: 7
     category: "Plugins"
     headline: "plugin-rust-csv: CSV at warp speed"
     explanation: "Rust plugins for performance-critical tasks. Zero-cost abstractions. Memory safety guaranteed. Parse millions of rows per second."
 
-  - id: "59-3"
-    week: 59
-    day: 3
+  # Week 40 Weekend: Plugin Examples - Python & C
+  - id: "40-6"
+    week: 40
+    day: 6
     category: "Plugins"
     headline: "plugin-python-markdown: rich text rendering"
     explanation: "Python plugins for rapid development. Vast ecosystem of libraries. Markdown, templating, data science. Prototype quickly, optimize later."
 
-  - id: "59-4"
-    week: 59
-    day: 4
+  - id: "40-7"
+    week: 40
+    day: 7
     category: "Plugins"
     headline: "plugin-c-hash: cryptographic hashing"
     explanation: "C plugins wrap battle-tested libraries. OpenSSL, zlib, SQLite. Decades of reliability. Direct integration with ARO."
 
-  # ===== WEEK 60: Plugin Development =====
-  - id: "60-1"
-    week: 60
-    day: 1
+  # Week 45 Weekend: Plugin Development
+  - id: "45-6"
+    week: 45
+    day: 6
     category: "Plugins"
     headline: "The Plugin Developer's Guide"
     explanation: "Complete documentation for plugin authors. Architecture, manifest format, C ABI reference. Examples in every supported language. Ship your first plugin today."
 
-  - id: "60-2"
-    week: 60
-    day: 2
+  - id: "45-7"
+    week: 45
+    day: 7
     category: "Plugins"
     headline: "aro_action_execute(name, input, output)"
     explanation: "One function to implement. Receive action name and input. Return output and status. C ABI makes any language compatible."
 
-  - id: "60-3"
-    week: 60
-    day: 3
+  # Week 50 Weekend: Plugin Compilation & Local Plugins
+  - id: "50-6"
+    week: 50
+    day: 6
     category: "Plugins"
     headline: "Plugins compile into native binaries"
     explanation: "aro build includes plugin code. Single binary output. No runtime plugin loading. Deploy anywhere without dependencies."
 
-  - id: "60-4"
-    week: 60
-    day: 4
+  - id: "50-7"
+    week: 50
+    day: 7
     category: "Plugins"
     headline: "Local plugins in ./Plugins directory"
     explanation: "Project-specific plugins live in Plugins/. No installation needed. Version with your code. Private capabilities stay private."
 
-  # ===== WEEK 61: Plugin Ecosystem =====
-  - id: "61-1"
-    week: 61
-    day: 1
-    category: "Plugins"
-    headline: "GitLab and GitHub plugin repositories"
-    explanation: "Plugins hosted on Git. aro add fetches from URL. Version pinning supported. Reproducible builds across environments."
-
-  - id: "61-2"
-    week: 61
-    day: 2
+  # Week 52 Weekend: Plugin Ecosystem (Year End)
+  - id: "52-6"
+    week: 52
+    day: 6
     category: "Plugins"
     headline: "aro.yaml: declare dependencies"
     explanation: "List plugins in aro.yaml. aro add installs all dependencies. Lock file ensures reproducibility. CI/CD friendly."
 
-  - id: "61-3"
-    week: 61
-    day: 3
+  - id: "52-7"
+    week: 52
+    day: 7
     category: "Plugins"
     headline: "Extend ARO without forking"
     explanation: "Need a custom action? Write a plugin. Share with your team. Contribute to the ecosystem. The language grows with its community."

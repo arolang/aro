@@ -30,6 +30,8 @@ const categoryColors = {
   'Sockets': '#f97316',
   'IDE': '#84cc16',
   'Compiler': '#ef4444',
+  'Plugins': '#06d6a0',
+  'Date': '#ff6b6b',
 };
 
 function generateCombinedHTML(fact) {
