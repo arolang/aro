@@ -1,0 +1,253 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <title>Packages - ARO Programming Language</title>
+{{head}}
+    <style>
+        .doc-page { padding: 120px 24px 80px; max-width: 900px; margin: 0 auto; }
+        .doc-header { margin-bottom: 48px; }
+        .doc-header h1 { font-size: clamp(2rem, 5vw, 3rem); font-weight: 700; margin-bottom: 16px; letter-spacing: -0.02em; }
+        .doc-header .lead { font-size: 1.25rem; color: var(--color-text-muted); line-height: 1.7; }
+        .doc-page h2 { font-size: 1.8rem; font-weight: 600; margin: 48px 0 16px; padding-top: 24px; border-top: 1px solid rgba(255, 255, 255, 0.1); }
+        .doc-page h3 { font-size: 1.3rem; font-weight: 600; margin: 32px 0 12px; color: var(--color-secondary); }
+        .doc-page p { font-size: 1.1rem; color: var(--color-text-muted); line-height: 1.8; margin-bottom: 16px; }
+        .doc-page code { font-family: var(--font-mono); background: var(--color-bg-alt); padding: 3px 8px; border-radius: 4px; font-size: 0.9rem; color: var(--color-secondary); }
+        .doc-page pre { background: var(--color-bg-alt); border-radius: var(--radius-md); padding: 24px; overflow-x: auto; margin: 24px 0; border: 1px solid rgba(255, 255, 255, 0.1); }
+        .doc-page pre code { background: none; padding: 0; font-size: 0.9rem; line-height: 1.7; color: var(--color-text); }
+        .doc-page ul, .doc-page ol { color: var(--color-text-muted); margin: 16px 0 16px 24px; line-height: 1.8; }
+        .doc-page li { margin-bottom: 8px; }
+        .doc-page strong { color: var(--color-text); }
+        .doc-page table { width: 100%; border-collapse: collapse; margin: 24px 0; }
+        .doc-page th, .doc-page td { padding: 12px 16px; text-align: left; border: 1px solid rgba(255, 255, 255, 0.1); }
+        .doc-page th { background: var(--color-bg-alt); font-weight: 600; color: var(--color-text); }
+        .doc-page td { color: var(--color-text-muted); }
+        .highlight-box { background: rgba(124, 58, 237, 0.1); border: 1px solid rgba(124, 58, 237, 0.3); border-radius: var(--radius-md); padding: 24px; margin: 32px 0; }
+        .highlight-box h4 { color: var(--color-primary); font-size: 1.1rem; margin-bottom: 12px; }
+        .highlight-box p { margin-bottom: 0; }
+        .back-link { display: inline-flex; align-items: center; gap: 8px; color: var(--color-text-muted); text-decoration: none; font-size: 0.95rem; margin-bottom: 24px; transition: color 0.2s; }
+        .back-link:hover { color: var(--color-primary); }
+        .code-comment { color: #6b7280; }
+        .code-keyword { color: #7c3aed; font-weight: 600; }
+        .code-string { color: #10b981; }
+        .code-feature { color: #f472b6; }
+        .code-result { color: #06b6d4; }
+        .tip-box { background: rgba(16, 185, 129, 0.1); border: 1px solid rgba(16, 185, 129, 0.3); border-radius: var(--radius-md); padding: 24px; margin: 32px 0; }
+        .tip-box h4 { color: var(--color-success); font-size: 1.1rem; margin-bottom: 12px; }
+        .tip-box p { margin-bottom: 0; }
+    </style>
+</head>
+<body>
+    <nav class="nav">
+        <div class="nav-content">
+            <a href="/aro/" class="logo"><span class="logo-aro">ARO</span></a>
+            <div class="nav-links">
+                <a href="../fdd.html">The FDD Story</a>
+                <a href="../getting-started.html">Get Started</a>
+                <a href="../docs.html" style="color: var(--color-text);">Docs</a>
+                <a href="../disclaimer.html">Motivation</a>
+                <a href="../download.html">Download</a>
+                <a href="https://github.com/arolang/aro" class="nav-github">
+                    <svg viewBox="0 0 16 16" fill="currentColor"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z"/></svg>
+                    <span class="github-stars">
+                        <svg viewBox="0 0 16 16"><path d="M8 .25a.75.75 0 01.673.418l1.882 3.815 4.21.612a.75.75 0 01.416 1.279l-3.046 2.97.719 4.192a.75.75 0 01-1.088.791L8 12.347l-3.766 1.98a.75.75 0 01-1.088-.79l.72-4.194L.818 6.374a.75.75 0 01.416-1.28l4.21-.611L7.327.668A.75.75 0 018 .25z"/></svg>
+                        <span class="github-stars-count"></span>
+                    </span>
+                </a>
+            </div>
+        </div>
+    </nav>
+
+    <main class="doc-page">
+        <a href="../docs.html" class="back-link">&#x2190; Back to Documentation</a>
+
+        <header class="doc-header">
+            <h1 class="gradient-text">Packages</h1>
+            <p class="lead">
+                Extend ARO with community packages and plugins. Add new actions, feature sets,
+                and capabilities to your applications with a single command.
+            </p>
+        </header>
+
+        <h2>Adding Packages</h2>
+        <p>
+            The <code>aro add</code> command installs packages from Git repositories directly
+            into your project's <code>Plugins/</code> directory:
+        </p>
+
+        <pre><code><span class="code-comment"># Add a package via SSH</span>
+aro add git@github.com:arolang/csv-tools.git
+
+<span class="code-comment"># Add a package via HTTPS</span>
+aro add https://github.com/arolang/csv-tools.git
+
+<span class="code-comment"># Add a specific version or branch</span>
+aro add git@github.com:arolang/csv-tools.git --ref v1.2.0
+aro add git@github.com:arolang/csv-tools.git --branch develop</code></pre>
+
+        <p>
+            When you run <code>aro add</code>, ARO clones the repository, validates its
+            <code>plugin.yaml</code> manifest, and installs it into <code>Plugins/</code>.
+        </p>
+
+        <h3>Example Output</h3>
+        <pre><code>$ aro add git@github.com:arolang/csv-tools.git
+
+&#x1F4E6; Resolving package: csv-tools
+   Cloning from git@github.com:arolang/csv-tools.git...
+   &#x2713; Cloned (ref: main, commit: a3f8c21)
+
+&#x1F4C2; Reading plugin.yaml:
+   Name:    csv-tools
+   Version: 1.0.0
+   Found 3 .aro files (feature sets)
+   Found 2 Swift plugin sources
+
+&#x1F517; Installing to Plugins/csv-tools/
+   &#x2713; Registered 3 ARO feature sets
+   &#x2713; Compiled 2 Swift plugins
+
+&#x2705; Package "csv-tools" v1.0.0 installed successfully.
+   Available actions: &lt;FormatCSV&gt;, &lt;ValidateCSV&gt;, &lt;ParseCSV&gt;</code></pre>
+
+        <h2>Managing Packages</h2>
+        <p>ARO provides commands to list, update, and remove installed packages:</p>
+
+        <pre><code><span class="code-comment"># List all installed packages</span>
+aro plugins list
+
+<span class="code-comment"># Update all packages</span>
+aro plugins update
+
+<span class="code-comment"># Update a specific package</span>
+aro plugins update csv-tools
+
+<span class="code-comment"># Remove a package</span>
+aro remove csv-tools</code></pre>
+
+        <h3>Listing Installed Packages</h3>
+        <pre><code>$ aro plugins list
+
+Installed Plugins (from Plugins/):
+&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;
+ Name              Version  Source                    Provides
+ csv-tools         1.0.0    git@github.com:...        3 .aro, 2 swift
+ xml-validator     2.0.0    git@github.com:...        1 .aro, 1 rust
+ my-local-plugin   0.1.0    (local)                   1 swift
+&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;&#x2500;
+ 3 plugins loaded, 0 warnings</code></pre>
+
+        <h2>Using Package Features</h2>
+        <p>
+            Once a package is installed, its feature sets and actions are automatically
+            available in your application. No import statements needed:
+        </p>
+
+        <pre><code><span class="code-comment">(* main.aro - Using actions from csv-tools package *)</span>
+
+<span class="code-feature">(processReport: Report API)</span> {
+    <span class="code-keyword">&lt;Extract&gt;</span> the <span class="code-result">&lt;file&gt;</span> from the &lt;request: body&gt;.
+
+    <span class="code-comment">(* Actions from the csv-tools package *)</span>
+    <span class="code-keyword">&lt;ParseCSV&gt;</span> the <span class="code-result">&lt;data&gt;</span> from the &lt;file&gt;.
+    <span class="code-keyword">&lt;ValidateCSV&gt;</span> the &lt;data&gt; against &lt;report-schema&gt;.
+    <span class="code-keyword">&lt;FormatCSV&gt;</span> the <span class="code-result">&lt;output&gt;</span> from the &lt;data&gt; with { delimiter: <span class="code-string">";"</span> }.
+
+    <span class="code-keyword">&lt;Return&gt;</span> an <span class="code-result">&lt;OK: status&gt;</span> with &lt;output&gt;.
+}</code></pre>
+
+        <h2>Project Structure</h2>
+        <p>
+            After installing packages, your project structure will include a <code>Plugins/</code>
+            directory:
+        </p>
+
+        <pre><code>MyProject/
+&#x251C;&#x2500;&#x2500; main.aro
+&#x251C;&#x2500;&#x2500; openapi.yaml
+&#x2514;&#x2500;&#x2500; Plugins/
+    &#x251C;&#x2500;&#x2500; csv-tools/               <span class="code-comment"># Installed via aro add</span>
+    &#x2502;   &#x251C;&#x2500;&#x2500; plugin.yaml          <span class="code-comment"># Package manifest</span>
+    &#x2502;   &#x251C;&#x2500;&#x2500; features/
+    &#x2502;   &#x2502;   &#x251C;&#x2500;&#x2500; csv-parser.aro
+    &#x2502;   &#x2502;   &#x2514;&#x2500;&#x2500; csv-formatter.aro
+    &#x2502;   &#x2514;&#x2500;&#x2500; Sources/
+    &#x2502;       &#x2514;&#x2500;&#x2500; CSVParser.swift
+    &#x2514;&#x2500;&#x2500; my-local-plugin/         <span class="code-comment"># Local plugin</span>
+        &#x251C;&#x2500;&#x2500; plugin.yaml
+        &#x2514;&#x2500;&#x2500; Sources/
+            &#x2514;&#x2500;&#x2500; MyPlugin.swift</code></pre>
+
+        <div class="tip-box">
+            <h4>No Lockfile Needed</h4>
+            <p>
+                ARO uses the <code>Plugins/</code> directory as the single source of truth.
+                Each package's <code>plugin.yaml</code> contains all metadata including the
+                Git origin. Simply run <code>ls Plugins/</code> to see what's installed.
+            </p>
+        </div>
+
+        <h2>Package Types</h2>
+        <p>ARO packages can provide different types of content:</p>
+
+        <table>
+            <thead>
+                <tr><th>Type</th><th>Description</th></tr>
+            </thead>
+            <tbody>
+                <tr><td>ARO Feature Sets</td><td>Declarative feature sets and actions</td></tr>
+                <tr><td>Swift Plugins</td><td>Native Swift implementations</td></tr>
+                <tr><td>Rust Plugins</td><td>High-performance Rust code</td></tr>
+                <tr><td>C/C++ Plugins</td><td>System-level integrations</td></tr>
+                <tr><td>Python Plugins</td><td>Scripting and data science</td></tr>
+                <tr><td>Templates</td><td>Reusable templates</td></tr>
+            </tbody>
+        </table>
+
+        <h2>Reproducible Builds</h2>
+        <p>
+            You can commit your entire <code>Plugins/</code> directory to version control
+            for fully reproducible builds. This ensures all team members have identical
+            dependencies without running <code>aro add</code>.
+        </p>
+
+        <p>
+            Alternatively, you can add <code>Plugins/</code> to <code>.gitignore</code> and
+            rely on the <code>source</code> entries in each <code>plugin.yaml</code> to restore
+            packages.
+        </p>
+
+        <h2>Manual Installation</h2>
+        <p>
+            Packages can also be installed manually by cloning into <code>Plugins/</code>:
+        </p>
+
+        <pre><code><span class="code-comment"># Manual installation</span>
+cd MyProject/Plugins
+git clone git@github.com:arolang/csv-tools.git
+
+<span class="code-comment"># The package is automatically detected at next run</span>
+aro run ..</code></pre>
+
+        <p>
+            As long as the directory contains a valid <code>plugin.yaml</code>, ARO will
+            recognize and load it.
+        </p>
+
+        <div class="highlight-box">
+            <h4>Next Steps</h4>
+            <p>
+                <a href="writing-extensions.html">Writing Extensions</a> - Create your own ARO packages<br>
+                <a href="custom-actions.html">Custom Actions</a> - Implement custom actions in Swift
+            </p>
+        </div>
+    </main>
+
+    <footer class="footer">
+        <div class="container">
+            <div class="footer-bottom">
+                <p>Sometime this page should build with ARO. Obviously.</p>
+            </div>
+        </div>
+    </footer>
+</body>
+</html>

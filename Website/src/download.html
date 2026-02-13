@@ -4,27 +4,7 @@
     <title>Download - ARO Programming Language</title>
 {{head}}
     <style>
-        .download-hero {
-            padding: 160px 24px 60px;
-            text-align: center;
-            background:
-                radial-gradient(ellipse at 50% 0%, rgba(16, 185, 129, 0.15) 0%, transparent 50%),
-                var(--color-bg);
-        }
-
-        .download-hero h1 {
-            font-size: clamp(2.5rem, 5vw, 4rem);
-            font-weight: 700;
-            margin-bottom: 16px;
-        }
-
-        .download-hero .lead {
-            font-size: 1.2rem;
-            color: var(--color-text-muted);
-            max-width: 600px;
-            margin: 0 auto;
-        }
-
+        /* Download-specific styles (extends subpage.css) */
         .download-content {
             max-width: 1000px;
             margin: 0 auto;
@@ -241,12 +221,6 @@
 
         /* Light mode overrides */
         @media (prefers-color-scheme: light) {
-            .download-hero {
-                background:
-                    radial-gradient(ellipse at 50% 0%, rgba(5, 150, 105, 0.08) 0%, transparent 50%),
-                    var(--color-bg);
-            }
-
             .download-card {
                 border: 1px solid rgba(0, 0, 0, 0.1);
             }
@@ -308,13 +282,16 @@
         <a href="getting-started.html">Get Started</a>
         <a href="tutorial.html">Tutorial</a>
         <a href="docs.html">Docs</a>
+        <a href="disclaimer.html">Motivation</a>
         <a href="download.html">Download</a>
         <a href="https://github.com/arolang/aro" class="nav-github">GitHub</a>
     </div>
 
-    <header class="download-hero">
-        <h1><span class="gradient-text">Download ARO</span></h1>
-        <p class="lead">Get the ARO CLI and IDE extensions to start building feature-driven applications.</p>
+    <header class="subpage-hero">
+        <div class="container">
+            <h1>Download <span class="accent">ARO</span></h1>
+            <p class="lead">Get the ARO CLI and IDE extensions to start building feature-driven applications.</p>
+        </div>
     </header>
 
     <main class="download-content">

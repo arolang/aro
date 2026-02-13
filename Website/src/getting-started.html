@@ -4,31 +4,11 @@
     <title>Get Started - ARO Programming Language</title>
 {{head}}
     <style>
-        .guide-hero {
-            padding: 160px 24px 60px;
-            text-align: center;
-            background:
-                radial-gradient(ellipse at 50% 0%, rgba(16, 185, 129, 0.15) 0%, transparent 50%),
-                var(--color-bg);
-        }
-
-        .guide-hero h1 {
-            font-size: clamp(2.5rem, 5vw, 4rem);
-            font-weight: 700;
-            margin-bottom: 16px;
-        }
-
-        .guide-hero .lead {
-            font-size: 1.2rem;
-            color: var(--color-text-muted);
-            max-width: 600px;
-            margin: 0 auto;
-        }
-
+        /* Getting Started specific styles (extends subpage.css) */
         .guide-content {
             max-width: 900px;
             margin: 0 auto;
-            padding: 60px 24px;
+            padding: var(--space-2xl) var(--space-lg);
         }
 
         .step {
@@ -226,12 +206,6 @@
 
         /* Light mode overrides */
         @media (prefers-color-scheme: light) {
-            .guide-hero {
-                background:
-                    radial-gradient(ellipse at 50% 0%, rgba(5, 150, 105, 0.1) 0%, transparent 50%),
-                    var(--color-bg);
-            }
-
             .step {
                 border-bottom: 1px solid rgba(0, 0, 0, 0.08);
             }
@@ -298,11 +272,13 @@
         </div>
     </nav>
 
-    <header class="guide-hero">
-        <h1 class="gradient-text-third">Get Started with ARO</h1>
-        <p class="lead">
-            Build your first API in 5 minutes. No magic required—just features.
-        </p>
+    <header class="subpage-hero">
+        <div class="container">
+            <h1>Get Started with <span class="accent">ARO</span></h1>
+            <p class="lead">
+                Build your first API in 5 minutes. No magic required—just features.
+            </p>
+        </div>
     </header>
 
     <main class="guide-content">

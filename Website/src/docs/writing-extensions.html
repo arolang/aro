@@ -1,0 +1,358 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <title>Writing Extensions - ARO Programming Language</title>
+{{head}}
+    <style>
+        .doc-page { padding: 120px 24px 80px; max-width: 900px; margin: 0 auto; }
+        .doc-header { margin-bottom: 48px; }
+        .doc-header h1 { font-size: clamp(2rem, 5vw, 3rem); font-weight: 700; margin-bottom: 16px; letter-spacing: -0.02em; }
+        .doc-header .lead { font-size: 1.25rem; color: var(--color-text-muted); line-height: 1.7; }
+        .doc-page h2 { font-size: 1.8rem; font-weight: 600; margin: 48px 0 16px; padding-top: 24px; border-top: 1px solid rgba(255, 255, 255, 0.1); }
+        .doc-page h3 { font-size: 1.3rem; font-weight: 600; margin: 32px 0 12px; color: var(--color-secondary); }
+        .doc-page p { font-size: 1.1rem; color: var(--color-text-muted); line-height: 1.8; margin-bottom: 16px; }
+        .doc-page code { font-family: var(--font-mono); background: var(--color-bg-alt); padding: 3px 8px; border-radius: 4px; font-size: 0.9rem; color: var(--color-secondary); }
+        .doc-page pre { background: var(--color-bg-alt); border-radius: var(--radius-md); padding: 24px; overflow-x: auto; margin: 24px 0; border: 1px solid rgba(255, 255, 255, 0.1); }
+        .doc-page pre code { background: none; padding: 0; font-size: 0.9rem; line-height: 1.7; color: var(--color-text); }
+        .doc-page ul, .doc-page ol { color: var(--color-text-muted); margin: 16px 0 16px 24px; line-height: 1.8; }
+        .doc-page li { margin-bottom: 8px; }
+        .doc-page strong { color: var(--color-text); }
+        .doc-page table { width: 100%; border-collapse: collapse; margin: 24px 0; }
+        .doc-page th, .doc-page td { padding: 12px 16px; text-align: left; border: 1px solid rgba(255, 255, 255, 0.1); }
+        .doc-page th { background: var(--color-bg-alt); font-weight: 600; color: var(--color-text); }
+        .doc-page td { color: var(--color-text-muted); }
+        .highlight-box { background: rgba(124, 58, 237, 0.1); border: 1px solid rgba(124, 58, 237, 0.3); border-radius: var(--radius-md); padding: 24px; margin: 32px 0; }
+        .highlight-box h4 { color: var(--color-primary); font-size: 1.1rem; margin-bottom: 12px; }
+        .highlight-box p { margin-bottom: 0; }
+        .back-link { display: inline-flex; align-items: center; gap: 8px; color: var(--color-text-muted); text-decoration: none; font-size: 0.95rem; margin-bottom: 24px; transition: color 0.2s; }
+        .back-link:hover { color: var(--color-primary); }
+        .code-comment { color: #6b7280; }
+        .code-keyword { color: #7c3aed; font-weight: 600; }
+        .code-string { color: #10b981; }
+        .code-feature { color: #f472b6; }
+        .code-result { color: #06b6d4; }
+        .warning-box { background: rgba(245, 158, 11, 0.1); border: 1px solid rgba(245, 158, 11, 0.3); border-radius: var(--radius-md); padding: 24px; margin: 32px 0; }
+        .warning-box h4 { color: #f59e0b; font-size: 1.1rem; margin-bottom: 12px; }
+        .warning-box p { margin-bottom: 0; }
+    </style>
+</head>
+<body>
+    <nav class="nav">
+        <div class="nav-content">
+            <a href="/aro/" class="logo"><span class="logo-aro">ARO</span></a>
+            <div class="nav-links">
+                <a href="../fdd.html">The FDD Story</a>
+                <a href="../getting-started.html">Get Started</a>
+                <a href="../docs.html" style="color: var(--color-text);">Docs</a>
+                <a href="../disclaimer.html">Motivation</a>
+                <a href="../download.html">Download</a>
+                <a href="https://github.com/arolang/aro" class="nav-github">
+                    <svg viewBox="0 0 16 16" fill="currentColor"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z"/></svg>
+                    <span class="github-stars">
+                        <svg viewBox="0 0 16 16"><path d="M8 .25a.75.75 0 01.673.418l1.882 3.815 4.21.612a.75.75 0 01.416 1.279l-3.046 2.97.719 4.192a.75.75 0 01-1.088.791L8 12.347l-3.766 1.98a.75.75 0 01-1.088-.79l.72-4.194L.818 6.374a.75.75 0 01.416-1.28l4.21-.611L7.327.668A.75.75 0 018 .25z"/></svg>
+                        <span class="github-stars-count"></span>
+                    </span>
+                </a>
+            </div>
+        </div>
+    </nav>
+
+    <main class="doc-page">
+        <a href="../docs.html" class="back-link">&#x2190; Back to Documentation</a>
+
+        <header class="doc-header">
+            <h1 class="gradient-text">Writing Extensions</h1>
+            <p class="lead">
+                Create your own ARO packages with custom actions, feature sets, and native
+                plugins. Share them with the community or use them in your projects.
+            </p>
+        </header>
+
+        <h2>Package Structure</h2>
+        <p>
+            An ARO package is a directory with a <code>plugin.yaml</code> manifest and
+            source files. The manifest is <strong>required</strong> - without it, ARO
+            won't recognize the directory as a package.
+        </p>
+
+        <pre><code>my-package/
+&#x251C;&#x2500;&#x2500; plugin.yaml              <span class="code-comment"># Required: Package manifest</span>
+&#x251C;&#x2500;&#x2500; README.md                <span class="code-comment"># Optional: Documentation</span>
+&#x251C;&#x2500;&#x2500; features/                <span class="code-comment"># ARO feature sets (.aro files)</span>
+&#x2502;   &#x251C;&#x2500;&#x2500; csv-parser.aro
+&#x2502;   &#x2514;&#x2500;&#x2500; csv-formatter.aro
+&#x251C;&#x2500;&#x2500; Sources/                 <span class="code-comment"># Native plugins (Swift, Rust, C)</span>
+&#x2502;   &#x2514;&#x2500;&#x2500; CSVParser.swift
+&#x2514;&#x2500;&#x2500; tests/                   <span class="code-comment"># Test files</span>
+    &#x2514;&#x2500;&#x2500; csv-parser.test.aro</code></pre>
+
+        <h2>The plugin.yaml Manifest</h2>
+        <p>
+            The <code>plugin.yaml</code> file describes your package. It's the only required
+            file and contains all metadata ARO needs to load your package.
+        </p>
+
+        <pre><code><span class="code-comment"># plugin.yaml - Package manifest</span>
+name: csv-tools
+version: 1.0.0
+description: "CSV parsing, validation, and formatting tools"
+author: "Your Name"
+license: MIT
+aro-version: ">=0.2.0"
+
+<span class="code-comment"># What this package provides</span>
+provides:
+  - type: aro-files           <span class="code-comment"># ARO feature sets</span>
+    path: features/
+  - type: swift-plugin        <span class="code-comment"># Swift native code</span>
+    path: Sources/
+  - type: aro-templates       <span class="code-comment"># Template files (optional)</span>
+    path: templates/
+
+<span class="code-comment"># Dependencies on other packages (optional)</span>
+dependencies:
+  aro-core-utils:
+    git: "git@github.com:arolang/core-utils.git"
+    ref: "v2.0.0"
+
+<span class="code-comment"># Build configuration (optional)</span>
+build:
+  swift:
+    minimum-version: "6.2"
+    targets:
+      - name: CSVTools
+        path: Sources/</code></pre>
+
+        <h3>Required Fields</h3>
+        <table>
+            <thead>
+                <tr><th>Field</th><th>Description</th></tr>
+            </thead>
+            <tbody>
+                <tr><td><code>name</code></td><td>Unique package identifier</td></tr>
+                <tr><td><code>version</code></td><td>Semantic version (e.g., 1.0.0)</td></tr>
+                <tr><td><code>provides</code></td><td>List of content types and paths</td></tr>
+            </tbody>
+        </table>
+
+        <h3>Provides Types</h3>
+        <table>
+            <thead>
+                <tr><th>Type</th><th>Description</th></tr>
+            </thead>
+            <tbody>
+                <tr><td><code>aro-files</code></td><td>ARO feature sets (.aro files)</td></tr>
+                <tr><td><code>swift-plugin</code></td><td>Swift native plugins</td></tr>
+                <tr><td><code>rust-plugin</code></td><td>Rust native plugins</td></tr>
+                <tr><td><code>c-plugin</code></td><td>C/C++ native plugins</td></tr>
+                <tr><td><code>python-plugin</code></td><td>Python plugins</td></tr>
+                <tr><td><code>aro-templates</code></td><td>HTML templates</td></tr>
+            </tbody>
+        </table>
+
+        <h2>Pure ARO Packages</h2>
+        <p>
+            The simplest packages contain only <code>.aro</code> files. These provide
+            reusable feature sets without any native code:
+        </p>
+
+        <pre><code><span class="code-comment">(* features/csv-parser.aro *)</span>
+
+<span class="code-feature">(Parse CSV File: CSV Processing)</span> {
+    <span class="code-keyword">&lt;Extract&gt;</span> the <span class="code-result">&lt;content&gt;</span> from the &lt;file&gt;.
+    <span class="code-keyword">&lt;Split&gt;</span> the <span class="code-result">&lt;lines&gt;</span> from the &lt;content&gt; by <span class="code-string">"\n"</span>.
+    <span class="code-keyword">&lt;Extract&gt;</span> the <span class="code-result">&lt;header: first&gt;</span> from the &lt;lines&gt;.
+    <span class="code-keyword">&lt;Split&gt;</span> the <span class="code-result">&lt;columns&gt;</span> from the &lt;header&gt; by <span class="code-string">","</span>.
+    <span class="code-keyword">&lt;Transform&gt;</span> each <span class="code-result">&lt;row&gt;</span> in the &lt;lines: 1-&gt; with &lt;columns&gt;.
+    <span class="code-keyword">&lt;Return&gt;</span> an <span class="code-result">&lt;OK: status&gt;</span> with &lt;rows&gt;.
+}
+
+<span class="code-feature">(Validate CSV Schema: CSV Validation)</span> {
+    <span class="code-keyword">&lt;Extract&gt;</span> the <span class="code-result">&lt;data&gt;</span> from the &lt;input: data&gt;.
+    <span class="code-keyword">&lt;Extract&gt;</span> the <span class="code-result">&lt;schema&gt;</span> from the &lt;input: schema&gt;.
+    <span class="code-keyword">&lt;Validate&gt;</span> the &lt;data&gt; against the &lt;schema&gt;.
+    <span class="code-keyword">&lt;Return&gt;</span> a <span class="code-result">&lt;Valid: status&gt;</span>.
+}</code></pre>
+
+        <h2>Native Plugins</h2>
+        <p>
+            For performance-critical operations or system integrations, you can write
+            native plugins in Swift, Rust, C, or Python.
+        </p>
+
+        <h3>Swift Plugins</h3>
+        <pre><code><span class="code-comment">// Sources/CSVParser.swift</span>
+import Foundation
+
+<span class="code-keyword">@_cdecl</span>(<span class="code-string">"aro_plugin_info"</span>)
+public func pluginInfo() -> UnsafePointer&lt;CChar&gt; {
+    let info = <span class="code-string">"""
+    {"name":"csv-parser","version":"1.0.0","actions":["ParseCSV"]}
+    """</span>
+    return (info as NSString).utf8String!
+}
+
+<span class="code-keyword">@_cdecl</span>(<span class="code-string">"aro_plugin_execute"</span>)
+public func execute(
+    action: UnsafePointer&lt;CChar&gt;,
+    input: UnsafePointer&lt;CChar&gt;
+) -> UnsafeMutablePointer&lt;CChar&gt; {
+    let actionName = String(cString: action)
+    let inputJson = String(cString: input)
+
+    <span class="code-comment">// Parse input, execute action, return result</span>
+    let result = processCSV(inputJson)
+    return strdup(result)
+}
+
+<span class="code-keyword">@_cdecl</span>(<span class="code-string">"aro_plugin_free"</span>)
+public func freeResult(ptr: UnsafeMutablePointer&lt;CChar&gt;) {
+    free(ptr)
+}</code></pre>
+
+        <h3>Rust Plugins</h3>
+        <pre><code><span class="code-comment">// src/lib.rs</span>
+use std::ffi::{CStr, CString};
+use std::os::raw::c_char;
+
+<span class="code-keyword">#[no_mangle]</span>
+pub extern <span class="code-string">"C"</span> fn aro_plugin_info() -> *const c_char {
+    let info = r#"{"name":"csv-parser-rs","version":"1.0.0","actions":["ParseCSV"]}"#;
+    CString::new(info).unwrap().into_raw()
+}
+
+<span class="code-keyword">#[no_mangle]</span>
+pub extern <span class="code-string">"C"</span> fn aro_plugin_execute(
+    action: *const c_char,
+    input: *const c_char
+) -> *mut c_char {
+    let action = unsafe { CStr::from_ptr(action).to_str().unwrap() };
+    let input = unsafe { CStr::from_ptr(input).to_str().unwrap() };
+
+    <span class="code-comment">// Process and return result</span>
+    let result = process_csv(input);
+    CString::new(result).unwrap().into_raw()
+}
+
+<span class="code-keyword">#[no_mangle]</span>
+pub extern <span class="code-string">"C"</span> fn aro_plugin_free(ptr: *mut c_char) {
+    unsafe { drop(CString::from_raw(ptr)); }
+}</code></pre>
+
+        <h3>Python Plugins</h3>
+        <pre><code><span class="code-comment"># src/csv_tools.py</span>
+import json
+import csv
+from io import StringIO
+
+def aro_plugin_info():
+    return {
+        <span class="code-string">"name"</span>: <span class="code-string">"csv-tools-py"</span>,
+        <span class="code-string">"version"</span>: <span class="code-string">"1.0.0"</span>,
+        <span class="code-string">"language"</span>: <span class="code-string">"python"</span>,
+        <span class="code-string">"actions"</span>: [<span class="code-string">"ParseCSV"</span>, <span class="code-string">"AnalyzeCSV"</span>]
+    }
+
+def aro_action_parse_csv(input_json):
+    params = json.loads(input_json)
+    content = params[<span class="code-string">"content"</span>]
+
+    reader = csv.DictReader(StringIO(content))
+    rows = list(reader)
+
+    return json.dumps({<span class="code-string">"rows"</span>: rows})
+
+def aro_action_analyze_csv(input_json):
+    params = json.loads(input_json)
+    <span class="code-comment"># Use pandas for analysis</span>
+    import pandas as pd
+    df = pd.read_csv(StringIO(params[<span class="code-string">"content"</span>]))
+    return json.dumps(df.describe().to_dict())</code></pre>
+
+        <h2>Plugin FFI Protocol</h2>
+        <p>
+            All native plugins must implement three C-compatible functions:
+        </p>
+
+        <table>
+            <thead>
+                <tr><th>Function</th><th>Purpose</th></tr>
+            </thead>
+            <tbody>
+                <tr><td><code>aro_plugin_info()</code></td><td>Returns JSON with plugin metadata</td></tr>
+                <tr><td><code>aro_plugin_execute(action, input)</code></td><td>Executes an action with JSON input/output</td></tr>
+                <tr><td><code>aro_plugin_free(ptr)</code></td><td>Frees memory allocated by the plugin</td></tr>
+            </tbody>
+        </table>
+
+        <h2>Testing Your Package</h2>
+        <p>
+            Create test files alongside your feature sets:
+        </p>
+
+        <pre><code><span class="code-comment">(* tests/csv-parser.test.aro *)</span>
+
+<span class="code-feature">(Test Parse CSV: CSV Parser Tests)</span> {
+    <span class="code-keyword">&lt;Create&gt;</span> the <span class="code-result">&lt;test-data&gt;</span> with <span class="code-string">"name,age\nAlice,30\nBob,25"</span>.
+    <span class="code-keyword">&lt;ParseCSV&gt;</span> the <span class="code-result">&lt;result&gt;</span> from the &lt;test-data&gt;.
+    <span class="code-keyword">&lt;Assert&gt;</span> that &lt;result: length&gt; equals 2.
+    <span class="code-keyword">&lt;Assert&gt;</span> that &lt;result: 0 name&gt; equals <span class="code-string">"Alice"</span>.
+    <span class="code-keyword">&lt;Return&gt;</span> a <span class="code-result">&lt;Passed: status&gt;</span>.
+}</code></pre>
+
+        <p>Run tests with:</p>
+        <pre><code>aro test ./my-package</code></pre>
+
+        <h2>Publishing Your Package</h2>
+        <p>
+            ARO uses Git repositories for package distribution. To share your package:
+        </p>
+
+        <ol>
+            <li>Create a Git repository for your package</li>
+            <li>Ensure <code>plugin.yaml</code> is in the root</li>
+            <li>Tag releases with semantic versions (e.g., <code>v1.0.0</code>)</li>
+            <li>Share the Git URL with users</li>
+        </ol>
+
+        <pre><code><span class="code-comment"># Users can install with:</span>
+aro add git@github.com:yourname/csv-tools.git
+aro add git@github.com:yourname/csv-tools.git --ref v1.0.0</code></pre>
+
+        <div class="warning-box">
+            <h4>Version Compatibility</h4>
+            <p>
+                Always specify the <code>aro-version</code> field in your <code>plugin.yaml</code>
+                to indicate which ARO versions your package supports. Use semantic version
+                ranges like <code>&gt;=0.2.0</code> or <code>^1.0.0</code>.
+            </p>
+        </div>
+
+        <h2>Best Practices</h2>
+        <ul>
+            <li><strong>Use semantic versioning</strong> - Follow semver for version numbers</li>
+            <li><strong>Document your actions</strong> - Include a README with examples</li>
+            <li><strong>Test thoroughly</strong> - Include test files for all feature sets</li>
+            <li><strong>Keep dependencies minimal</strong> - Only depend on what you need</li>
+            <li><strong>Use descriptive names</strong> - Prefix actions with your domain (e.g., <code>CSVParse</code>)</li>
+        </ul>
+
+        <div class="highlight-box">
+            <h4>Related Documentation</h4>
+            <p>
+                <a href="packages.html">Packages</a> - Installing and using packages<br>
+                <a href="custom-actions.html">Custom Actions</a> - The ActionImplementation protocol<br>
+                <a href="feature-sets.html">Feature Sets</a> - Organizing code into feature sets
+            </p>
+        </div>
+    </main>
+
+    <footer class="footer">
+        <div class="container">
+            <div class="footer-bottom">
+                <p>Sometime this page should build with ARO. Obviously.</p>
+            </div>
+        </div>
+    </footer>
+</body>
+</html>

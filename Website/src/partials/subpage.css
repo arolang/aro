@@ -1,0 +1,276 @@
+/* ============================================================
+   ARO Website - Subpage Styles
+   Common styling for all subpages (fdd, tutorial, docs, etc.)
+   Combines gradient background with spacious layout
+   ============================================================ */
+
+/* Subpage Hero */
+.subpage-hero {
+    min-height: 60vh;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    padding: 140px var(--space-lg) 80px;
+    position: relative;
+    overflow: hidden;
+}
+
+/* Colorful gradient background */
+.subpage-hero::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background:
+        radial-gradient(ellipse 60% 50% at 25% 20%, rgba(124, 58, 237, 0.15) 0%, transparent 45%),
+        radial-gradient(ellipse 50% 40% at 75% 75%, rgba(6, 182, 212, 0.12) 0%, transparent 45%),
+        radial-gradient(ellipse 40% 30% at 50% 50%, rgba(0, 255, 136, 0.05) 0%, transparent 40%);
+    pointer-events: none;
+}
+
+/* Grid pattern overlay */
+.subpage-hero::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background-image:
+        linear-gradient(rgba(0, 255, 136, 0.02) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(0, 255, 136, 0.02) 1px, transparent 1px);
+    background-size: 80px 80px;
+    mask-image: radial-gradient(ellipse at center, black 20%, transparent 70%);
+    pointer-events: none;
+}
+
+.subpage-hero > * {
+    position: relative;
+    z-index: 1;
+}
+
+.subpage-hero h1 {
+    font-size: clamp(2.5rem, 8vw, 4rem);
+    font-weight: 700;
+    margin-bottom: var(--space-lg);
+    letter-spacing: -0.03em;
+    line-height: 1.1;
+}
+
+.subpage-hero .lead {
+    font-size: 1.2rem;
+    color: var(--color-text-muted);
+    max-width: 700px;
+    line-height: 1.8;
+}
+
+.subpage-hero .lead strong {
+    color: var(--color-text);
+}
+
+.subpage-hero .lead em {
+    color: var(--color-accent);
+    font-style: normal;
+}
+
+/* Subpage Content */
+.subpage-content {
+    max-width: 800px;
+    margin: 0 auto;
+    padding: var(--space-2xl) var(--space-lg);
+}
+
+.subpage-content.wide {
+    max-width: 1000px;
+}
+
+/* Section styling */
+.subpage-section {
+    margin-bottom: var(--space-2xl);
+    padding-bottom: var(--space-xl);
+    border-bottom: 1px solid var(--color-border);
+}
+
+.subpage-section:last-child {
+    border-bottom: none;
+    margin-bottom: 0;
+}
+
+.subpage-section h2 {
+    font-size: clamp(1.75rem, 4vw, 2.25rem);
+    font-weight: 700;
+    margin-bottom: var(--space-lg);
+    letter-spacing: -0.02em;
+}
+
+.subpage-section h3 {
+    font-size: 1.3rem;
+    font-weight: 600;
+    margin: var(--space-xl) 0 var(--space-md);
+    color: var(--color-text);
+}
+
+.subpage-section p {
+    font-size: 1.05rem;
+    color: var(--color-text-muted);
+    line-height: 1.9;
+    margin-bottom: var(--space-md);
+}
+
+.subpage-section p:last-child {
+    margin-bottom: 0;
+}
+
+.subpage-section strong {
+    color: var(--color-text);
+}
+
+.subpage-section em {
+    color: var(--color-accent);
+    font-style: normal;
+}
+
+.subpage-section code {
+    font-family: var(--font-mono);
+    background: var(--color-bg-elevated);
+    padding: 2px 8px;
+    border: 1px solid var(--color-border);
+    border-radius: 4px;
+    font-size: 0.9em;
+}
+
+.subpage-section ul,
+.subpage-section ol {
+    color: var(--color-text-muted);
+    margin: var(--space-md) 0 var(--space-lg) var(--space-lg);
+    line-height: 2;
+}
+
+.subpage-section li {
+    margin-bottom: var(--space-xs);
+}
+
+/* Callout boxes */
+.subpage-callout {
+    background: var(--color-bg-elevated);
+    border-left: 3px solid var(--color-accent);
+    padding: var(--space-lg) var(--space-xl);
+    margin: var(--space-xl) 0;
+    border-radius: 0 8px 8px 0;
+}
+
+.subpage-callout p {
+    margin-bottom: 0;
+    font-size: 1rem;
+    color: var(--color-text);
+}
+
+.subpage-callout.warning {
+    border-left-color: #f59e0b;
+}
+
+.subpage-callout.success {
+    border-left-color: #10b981;
+}
+
+/* Code blocks */
+.subpage-code {
+    background: var(--color-bg-elevated);
+    border: 1px solid var(--color-border);
+    border-radius: 8px;
+    overflow: hidden;
+    margin: var(--space-lg) 0;
+}
+
+.subpage-code-header {
+    display: flex;
+    align-items: center;
+    padding: 12px 16px;
+    background: rgba(0, 0, 0, 0.3);
+    border-bottom: 1px solid var(--color-border);
+    gap: 8px;
+}
+
+.subpage-code-header .dots {
+    display: flex;
+    gap: 6px;
+}
+
+.subpage-code-header .dot {
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+}
+
+.subpage-code-header .filename {
+    margin-left: auto;
+    font-size: 0.75rem;
+    color: var(--color-text-muted);
+}
+
+.subpage-code pre {
+    padding: var(--space-lg);
+    margin: 0;
+    overflow-x: auto;
+    font-size: 0.875rem;
+    line-height: 1.8;
+}
+
+/* CTA section at bottom */
+.subpage-cta {
+    text-align: center;
+    padding: var(--space-2xl) var(--space-lg);
+    border-top: 1px solid var(--color-border);
+    position: relative;
+}
+
+.subpage-cta::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 50%;
+    transform: translateX(-50%);
+    width: 200px;
+    height: 1px;
+    background: linear-gradient(90deg, transparent, var(--color-accent), transparent);
+}
+
+.subpage-cta h2 {
+    font-size: clamp(1.75rem, 4vw, 2.5rem);
+    margin-bottom: var(--space-md);
+}
+
+.subpage-cta p {
+    color: var(--color-text-muted);
+    margin-bottom: var(--space-xl);
+    font-size: 1.1rem;
+}
+
+.subpage-cta .cta-buttons {
+    display: flex;
+    gap: var(--space-md);
+    justify-content: center;
+    flex-wrap: wrap;
+}
+
+/* Responsive */
+@media (max-width: 768px) {
+    .subpage-hero {
+        min-height: 50vh;
+        padding: 120px var(--space-md) 60px;
+    }
+
+    .subpage-hero h1 {
+        font-size: clamp(2rem, 10vw, 2.5rem);
+    }
+
+    .subpage-content {
+        padding: var(--space-xl) var(--space-md);
+    }
+
+    .subpage-cta .cta-buttons {
+        flex-direction: column;
+        align-items: center;
+    }
+
+    .subpage-cta .cta-buttons .btn {
+        width: 100%;
+        max-width: 280px;
+    }
+}

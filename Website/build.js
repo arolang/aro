@@ -17,6 +17,7 @@ const footerPartial = fs.readFileSync('src/partials/footer.html', 'utf8');
 // Copy animation files to dist
 fs.copyFileSync('src/partials/animations.css', 'dist/animations.css');
 fs.copyFileSync('src/partials/animations.js', 'dist/animations.js');
+fs.copyFileSync('src/partials/subpage.css', 'dist/subpage.css');
 
 // Copy social share image
 fs.copyFileSync('../Graphics/social.png', 'dist/social.png');
@@ -54,11 +55,13 @@ function processHtmlFile(srcPath, destPath, basePath = '') {
     // Calculate stylesheet paths based on basePath
     const stylesheetPath = basePath + 'style.css';
     const animationsStylesheetPath = basePath + 'animations.css';
+    const subpageStylesheetPath = basePath + 'subpage.css';
 
     // Replace {{head}} placeholder with head partial content
     let headContent = headPartial
         .replace('{{stylesheet}}', stylesheetPath)
-        .replace('{{animations-stylesheet}}', animationsStylesheetPath);
+        .replace('{{animations-stylesheet}}', animationsStylesheetPath)
+        .replace('{{subpage-stylesheet}}', subpageStylesheetPath);
     content = content.replace('{{head}}', headContent);
 
     // Replace {{footer}} placeholder with footer partial content
@@ -69,7 +72,7 @@ function processHtmlFile(srcPath, destPath, basePath = '') {
 }
 
 // Process main HTML files (at root level)
-const mainHtmlFiles = ['index.html', 'fdd.html', 'docs.html', 'getting-started.html', 'disclaimer.html', 'tutorial.html', 'download.html'];
+const mainHtmlFiles = ['index.html', 'fdd.html', 'docs.html', 'getting-started.html', 'disclaimer.html', 'tutorial.html', 'download.html', 'imprint.html'];
 mainHtmlFiles.forEach(file => {
     processHtmlFile(`src/${file}`, `dist/${file}`, '');
 });
@@ -100,7 +103,9 @@ const docsSubPages = [
     'ai-development-guide.html',
     'format-aware-io.html',
     'working-with-dates.html',
-    'set-operations.html'
+    'set-operations.html',
+    'packages.html',
+    'writing-extensions.html'
 ];
 docsSubPages.forEach(file => {
     processHtmlFile(`src/docs/${file}`, `dist/docs/${file}`, '../');
@@ -115,7 +120,8 @@ if (fs.existsSync('src/style.css')) {
 const docTemplate = fs.readFileSync('src/doc-template.html', 'utf8');
 const docHeadContent = headPartial
     .replace('{{stylesheet}}', '../style.css')
-    .replace('{{animations-stylesheet}}', '../animations.css');
+    .replace('{{animations-stylesheet}}', '../animations.css')
+    .replace('{{subpage-stylesheet}}', '../subpage.css');
 const docFooterContent = footerPartial.replace(/\{\{base\}\}/g, '../');
 const processedDocTemplate = docTemplate
     .replace('{{head}}', docHeadContent)
@@ -125,7 +131,8 @@ const processedDocTemplate = docTemplate
 const nestedDocTemplate = fs.readFileSync('src/doc-template-nested.html', 'utf8');
 const nestedHeadContent = headPartial
     .replace('{{stylesheet}}', '../../style.css')
-    .replace('{{animations-stylesheet}}', '../../animations.css');
+    .replace('{{animations-stylesheet}}', '../../animations.css')
+    .replace('{{subpage-stylesheet}}', '../../subpage.css');
 const nestedFooterContent = footerPartial.replace(/\{\{base\}\}/g, '../../');
 const processedNestedTemplate = nestedDocTemplate
     .replace('{{head}}', nestedHeadContent)

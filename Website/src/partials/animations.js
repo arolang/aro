@@ -154,6 +154,8 @@
 
         if (!line1) return;
 
+        const cursor = '<span class="typewriter-cursor">|</span>';
+
         const slogans = [
             ['Code that', 'reads itself.'],
             ['Features become', 'programs.'],
@@ -170,38 +172,57 @@
         let currentLine = 0;
         let isDeleting = false;
 
+        function updateDisplay(line1Text, line2Text, cursorOnLine) {
+            // Always set both lines explicitly to avoid dual cursor issues
+            if (cursorOnLine === 1) {
+                line1.innerHTML = line1Text + cursor;
+                if (line2) line2.textContent = line2Text;
+            } else if (cursorOnLine === 2) {
+                line1.textContent = line1Text;
+                if (line2) line2.innerHTML = line2Text + cursor;
+            } else {
+                line1.textContent = line1Text;
+                if (line2) line2.textContent = line2Text;
+            }
+        }
+
         function type() {
             const [text1, text2] = slogans[sloganIndex];
-            const text = currentLine === 0 ? text1 : text2;
-            const targetLine = currentLine === 0 ? line1 : line2;
-            const otherLine = currentLine === 0 ? line2 : line1;
 
             if (!isDeleting) {
                 // Typing
-                const displayText = text.substring(0, charIndex);
-
                 if (currentLine === 0) {
-                    line1.innerHTML = displayText + '<span class="typewriter-cursor">|</span>';
-                    if (line2) line2.textContent = '';
+                    const displayText = text1.substring(0, charIndex);
+                    updateDisplay(displayText, '', 1);
+                    charIndex++;
+
+                    if (charIndex > text1.length) {
+                        if (line2) {
+                            // Move to line 2
+                            currentLine = 1;
+                            charIndex = 0;
+                            setTimeout(type, 150);
+                            return;
+                        } else {
+                            // No line 2, pause then delete
+                            setTimeout(() => {
+                                isDeleting = true;
+                                charIndex = text1.length;
+                                type();
+                            }, 3000);
+                            return;
+                        }
+                    }
                 } else {
-                    line1.textContent = text1;
-                    if (line2) line2.innerHTML = displayText + '<span class="typewriter-cursor">|</span>';
-                }
+                    const displayText = text2.substring(0, charIndex);
+                    updateDisplay(text1, displayText, 2);
+                    charIndex++;
 
-                charIndex++;
-
-                if (charIndex > text.length) {
-                    if (currentLine === 0 && line2) {
-                        // Move to line 2
-                        currentLine = 1;
-                        charIndex = 0;
-                        line1.textContent = text1;
-                        setTimeout(type, 150);
-                        return;
-                    } else {
-                        // Done typing, pause then delete
+                    if (charIndex > text2.length) {
+                        // Done typing both lines, pause then delete
                         setTimeout(() => {
                             isDeleting = true;
+                            charIndex = text2.length;
                             type();
                         }, 3000);
                         return;
@@ -210,21 +231,28 @@
             } else {
                 // Deleting
                 if (currentLine === 1 && line2) {
+                    // Delete line 2 first
                     const displayText = text2.substring(0, charIndex);
-                    line2.innerHTML = displayText + '<span class="typewriter-cursor">|</span>';
+                    updateDisplay(text1, displayText, 2);
                     charIndex--;
 
                     if (charIndex < 0) {
+                        // Line 2 empty, switch to line 1
                         currentLine = 0;
                         charIndex = text1.length;
-                        line2.textContent = '';
+                        // Clear line 2 and move cursor to line 1
+                        updateDisplay(text1, '', 1);
+                        setTimeout(type, 60);
+                        return;
                     }
                 } else {
+                    // Delete line 1
                     const displayText = text1.substring(0, charIndex);
-                    line1.innerHTML = displayText + '<span class="typewriter-cursor">|</span>';
+                    updateDisplay(displayText, '', 1);
                     charIndex--;
 
                     if (charIndex < 0) {
+                        // Done deleting, move to next slogan
                         isDeleting = false;
                         currentLine = 0;
                         charIndex = 0;

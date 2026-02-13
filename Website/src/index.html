@@ -5,13 +5,6 @@
 {{head}}
 </head>
 <body>
-    <!-- Minimal floating particles -->
-    <div class="bg-particles" aria-hidden="true">
-        <div class="particle particle-1"></div>
-        <div class="particle particle-2"></div>
-        <div class="particle particle-3"></div>
-    </div>
-
     <!-- Cursor glow effect -->
     <div class="cursor-glow" aria-hidden="true"></div>
 
@@ -25,6 +18,7 @@
                 <a href="getting-started.html">Get Started</a>
                 <a href="tutorial.html">Tutorial</a>
                 <a href="docs.html">Docs</a>
+                <a href="disclaimer.html">Motivation</a>
                 <a href="download.html">Download</a>
                 <a href="https://github.com/arolang/aro" class="nav-github">
                     <svg viewBox="0 0 16 16" fill="currentColor"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z"/></svg>
@@ -47,6 +41,7 @@
         <a href="getting-started.html">Get Started</a>
         <a href="tutorial.html">Tutorial</a>
         <a href="docs.html">Docs</a>
+        <a href="disclaimer.html">Motivation</a>
         <a href="download.html">Download</a>
         <a href="https://github.com/arolang/aro">GitHub</a>
     </div>
@@ -64,25 +59,70 @@
                 Built for humans. <strong>Perfected for AI.</strong>
             </p>
             <div class="hero-cta">
-                <a href="getting-started.html" class="btn btn-primary">Get Started</a>
+                <a href="getting-started.html" class="btn btn-primary">
+                    <svg class="btn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"></polygon></svg>
+                    Get Started
+                </a>
                 <a href="fdd.html" class="btn btn-secondary">Learn More</a>
             </div>
         </div>
-        <div class="hero-code" data-parallax="-0.1">
-            <div class="code-window">
-                <div class="code-header">
-                    <span class="dot red"></span>
-                    <span class="dot yellow"></span>
-                    <span class="dot green"></span>
-                    <span class="code-title">hello.aro</span>
-                </div>
-                <pre class="code-content"><span class="comment">(* Your first ARO feature *)</span>
+        <div class="hero-diagram" data-parallax="-0.1">
+            <svg class="plugin-diagram" viewBox="0 0 400 320" xmlns="http://www.w3.org/2000/svg">
+                <defs>
+                    <!-- Animated dash pattern -->
+                    <pattern id="flowUp" patternUnits="userSpaceOnUse" width="10" height="10">
+                        <line x1="0" y1="10" x2="0" y2="0" stroke="#00ff88" stroke-width="2" stroke-dasharray="4 6">
+                            <animate attributeName="y1" values="10;0" dur="0.5s" repeatCount="indefinite"/>
+                            <animate attributeName="y2" values="0;-10" dur="0.5s" repeatCount="indefinite"/>
+                        </line>
+                    </pattern>
+                </defs>
 
-<span class="feature-name">(sayHello: Greeting API)</span> {
-    <span class="action">&lt;Create&gt;</span> the <span class="result">&lt;greeting&gt;</span> with <span class="string">"Hello, World!"</span>.
-    <span class="action">&lt;Return&gt;</span> an <span class="result">&lt;OK: status&gt;</span> with <span class="result">&lt;greeting&gt;</span>.
-}</pre>
-            </div>
+                <!-- Binary box at top -->
+                <g class="binary-node">
+                    <rect x="150" y="20" width="100" height="40" rx="6" fill="none" stroke="#00ff88" stroke-width="2"/>
+                    <text x="200" y="46" text-anchor="middle" fill="#00ff88" font-family="JetBrains Mono, monospace" font-size="14" font-weight="600">Binary</text>
+                </g>
+
+                <!-- ARO box in center -->
+                <g class="aro-node">
+                    <rect x="125" y="120" width="150" height="60" rx="8" fill="#0a0a0a" stroke="#00ff88" stroke-width="2"/>
+                    <text x="200" y="158" text-anchor="middle" fill="#ffffff" font-family="JetBrains Mono, monospace" font-size="24" font-weight="700">ARO</text>
+                </g>
+
+                <!-- Line from ARO to Binary -->
+                <line x1="200" y1="120" x2="200" y2="60" class="flow-line flow-to-binary" stroke="#00ff88" stroke-width="2" stroke-dasharray="6 4"/>
+
+                <!-- Arrow head to binary -->
+                <polygon points="200,62 195,72 205,72" fill="#00ff88" class="arrow-head"/>
+
+                <!-- Plugin languages at bottom -->
+                <g class="plugin-labels" font-family="JetBrains Mono, monospace" font-size="12">
+                    <text x="30" y="290" text-anchor="middle" class="plugin-label" data-plugin="cpp">C++</text>
+                    <text x="95" y="290" text-anchor="middle" class="plugin-label" data-plugin="swift">Swift</text>
+                    <text x="160" y="290" text-anchor="middle" class="plugin-label" data-plugin="rust">Rust</text>
+                    <text x="225" y="290" text-anchor="middle" class="plugin-label" data-plugin="aro">ARO</text>
+                    <text x="290" y="290" text-anchor="middle" class="plugin-label" data-plugin="python">Python</text>
+                    <text x="360" y="290" text-anchor="middle" class="plugin-label" data-plugin="c">C</text>
+                </g>
+
+                <!-- Lines from plugins to ARO -->
+                <g class="plugin-lines">
+                    <!-- C++ -->
+                    <path d="M30,275 Q30,220 140,180" class="flow-line flow-plugin" data-plugin="cpp" fill="none" stroke-dasharray="4 4"/>
+                    <!-- Swift -->
+                    <path d="M95,275 Q95,230 150,180" class="flow-line flow-plugin" data-plugin="swift" fill="none" stroke-dasharray="4 4"/>
+                    <!-- Rust -->
+                    <path d="M160,275 Q160,240 175,180" class="flow-line flow-plugin" data-plugin="rust" fill="none" stroke-dasharray="4 4"/>
+                    <!-- ARO -->
+                    <path d="M225,275 L225,180" class="flow-line flow-plugin" data-plugin="aro" fill="none" stroke-dasharray="4 4"/>
+                    <!-- Python -->
+                    <path d="M290,275 Q290,230 250,180" class="flow-line flow-plugin" data-plugin="python" fill="none" stroke-dasharray="4 4"/>
+                    <!-- C -->
+                    <path d="M360,275 Q360,220 260,180" class="flow-line flow-plugin" data-plugin="c" fill="none" stroke-dasharray="4 4"/>
+                </g>
+            </svg>
+            <p class="diagram-caption">Write plugins in <em>any language</em>. Compile to a <strong>standalone binary</strong>.</p>
         </div>
     </header>
 
@@ -227,12 +267,100 @@
                 Join the developers writing the future&mdash;one feature at a time.
             </p>
             <div class="cta-buttons animate-on-scroll">
-                <a href="getting-started.html" class="btn btn-primary btn-large">Get Started</a>
+                <a href="getting-started.html" class="btn btn-primary btn-large">
+                    <svg class="btn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"></polygon></svg>
+                    Get Started
+                </a>
                 <a href="fdd.html" class="btn btn-outline btn-large">Read the Story</a>
             </div>
         </div>
     </section>
 
 {{footer}}
+
+<script>
+// Navigation scroll effect
+const nav = document.querySelector('.nav');
+let lastScroll = 0;
+
+window.addEventListener('scroll', () => {
+    const currentScroll = window.pageYOffset;
+    if (currentScroll > 50) {
+        nav.classList.add('scrolled');
+    } else {
+        nav.classList.remove('scrolled');
+    }
+    lastScroll = currentScroll;
+});
+
+// Scroll animations
+const observerOptions = {
+    threshold: 0.1,
+    rootMargin: '0px 0px -50px 0px'
+};
+
+const observer = new IntersectionObserver((entries) => {
+    entries.forEach(entry => {
+        if (entry.isIntersecting) {
+            entry.target.classList.add('visible');
+        }
+    });
+}, observerOptions);
+
+document.querySelectorAll('.animate-on-scroll').forEach(el => {
+    observer.observe(el);
+});
+
+// Mobile menu
+const navToggle = document.querySelector('.nav-toggle');
+const mobileMenu = document.querySelector('.mobile-menu');
+
+navToggle.addEventListener('click', () => {
+    navToggle.classList.toggle('active');
+    mobileMenu.classList.toggle('active');
+    document.body.classList.toggle('menu-open');
+});
+
+// Close mobile menu on link click
+mobileMenu.querySelectorAll('a').forEach(link => {
+    link.addEventListener('click', () => {
+        navToggle.classList.remove('active');
+        mobileMenu.classList.remove('active');
+        document.body.classList.remove('menu-open');
+    });
+});
+
+// Blink nav cursor 5 times on homepage only
+const navLogo = document.querySelector('.nav .logo-aro');
+if (navLogo) {
+    navLogo.classList.add('blink-cursor');
+}
+
+// Cycle through plugin highlights
+const plugins = ['cpp', 'swift', 'rust', 'aro', 'python', 'c'];
+let currentPlugin = 0;
+
+function highlightPlugin() {
+    // Remove all active classes
+    document.querySelectorAll('.plugin-label, .flow-plugin').forEach(el => {
+        el.classList.remove('active');
+    });
+
+    // Add active class to current plugin
+    const plugin = plugins[currentPlugin];
+    document.querySelectorAll(`[data-plugin="${plugin}"]`).forEach(el => {
+        el.classList.add('active');
+    });
+
+    // Move to next plugin
+    currentPlugin = (currentPlugin + 1) % plugins.length;
+}
+
+// Start cycling if diagram exists
+if (document.querySelector('.plugin-diagram')) {
+    highlightPlugin();
+    setInterval(highlightPlugin, 1200);
+}
+</script>
 </body>
 </html>
