@@ -26,6 +26,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     software-properties-common \
     pkg-config \
     curl \
+    libgit2-dev \
     && wget https://apt.llvm.org/llvm.sh \
     && chmod +x llvm.sh \
     && ./llvm.sh 20 \
