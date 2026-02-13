@@ -257,7 +257,6 @@ integration:linux:
     - export PATH="$HOME/.cargo/bin:/usr/share/swift/usr/bin:/usr/lib/llvm-20/bin:$PATH"
     - export LD_LIBRARY_PATH="/usr/lib/llvm-20/lib:$LD_LIBRARY_PATH"
     - export ARO_BIN="$CI_PROJECT_DIR/aro-dist/aro"
-    - export ARO_DEBUG=1  # Enable debug output for ARO-0041 diagnostics
 
     # Debug: test aro build directly to see errors
     - echo "=== Testing aro build directly ==="
