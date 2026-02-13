@@ -164,7 +164,20 @@
             ['Action. Result.', 'Object.'],
             ['Business logic,', 'natural syntax.'],
             ['Event-driven.', 'Contract-first.'],
-            ['Less code.', 'More meaning.']
+            ['Less code.', 'More meaning.'],
+            ['Plugins in', 'any language.'],
+            ['Swift. Rust.', 'Python. C.'],
+            ['From contract', 'to code.'],
+            ['HTTP server?', 'Already running.'],
+            ['WebSockets?', 'One line.'],
+            ['No imports.', 'Just features.'],
+            ['Errors handled.', 'Automatically.'],
+            ['Think features.', 'Ship faster.'],
+            ['Build once.', 'Run native.'],
+            ['Native binaries.', 'Zero config.'],
+            ['Domain events.', 'First class.'],
+            ['Repositories', 'built in.'],
+            ['Your feature.', 'Your language.']
         ];
 
         let sloganIndex = 0;
