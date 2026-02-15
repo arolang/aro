@@ -375,7 +375,7 @@ public final class REPLShell: @unchecked Sendable {
         } else {
             // Non-interactive mode: use simple readLine
             print(prompt, terminator: "")
-            fflush(stdout)
+            FileHandle.standardOutput.synchronizeFile()
             return Swift.readLine()
         }
     }
