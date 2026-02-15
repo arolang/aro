@@ -1,40 +1,56 @@
-(* CollectionMerge - Demonstrating the Merge action *)
+(* CollectionMerge - Demonstrating the Merge action with immutable design *)
 
 (Application-Start: Collection Merge Demo) {
     <Log> "=== Collection Merge Demo ===" to the <console>.
 
-    (* Merge action supports verbs: Merge, Combine, Join, Concat *)
-    (* Supports prepositions: with, into, from *)
-    (* Merges the second operand INTO the first operand (target) *)
+    (* Merge action creates a NEW variable with merged result *)
+    (* Original variables remain unchanged (immutable) *)
+    (* Syntax: <Merge> the <result: base> with <source>. *)
 
-    (* Example 1: Merge arrays *)
+    (* Example 1: Merge arrays - creates new array *)
     <Log> "--- Array Merging ---" to the <console>.
     <Create> the <fruits> with ["apple", "banana"].
     <Create> the <more-fruits> with ["cherry", "date"].
-    <Merge> the <fruits> with the <more-fruits>.
+    <Merge> the <all-fruits: fruits> with <more-fruits>.
+    <Log> "Original fruits:" to the <console>.
     <Log> <fruits> to the <console>.
+    <Log> "Merged all-fruits:" to the <console>.
+    <Log> <all-fruits> to the <console>.
 
-    (* Example 2: Merge dictionaries/objects *)
+    (* Example 2: Merge dictionaries/objects - creates new object *)
+    <Log> "" to the <console>.
     <Log> "--- Object Merging ---" to the <console>.
-    <Create> the <person> with {"name": "Alice", "age": 30}.
-    <Create> the <details> with {"city": "Berlin", "country": "Germany"}.
-    <Merge> the <person> with the <details>.
+    <Create> the <person> with { name: "Alice", age: 30 }.
+    <Create> the <details> with { city: "Berlin", country: "Germany" }.
+    <Merge> the <full-profile: person> with <details>.
+    <Log> "Original person:" to the <console>.
     <Log> <person> to the <console>.
+    <Log> "Merged full-profile:" to the <console>.
+    <Log> <full-profile> to the <console>.
 
-    (* Example 3: Merge strings using Concat verb *)
+    (* Example 3: Merge strings - creates new string *)
+    <Log> "" to the <console>.
     <Log> "--- String Concatenation ---" to the <console>.
     <Create> the <greeting> with "Hello, ".
     <Create> the <name> with "World!".
-    <Concat> the <greeting> with the <name>.
+    <Merge> the <message: greeting> with <name>.
+    <Log> "Original greeting:" to the <console>.
     <Log> <greeting> to the <console>.
+    <Log> "Merged message:" to the <console>.
+    <Log> <message> to the <console>.
 
-    (* Example 4: Using Combine verb *)
-    <Log> "--- Using Combine verb ---" to the <console>.
-    <Create> the <numbers> with [1, 2, 3].
-    <Create> the <more-numbers> with [4, 5, 6].
-    <Combine> the <numbers> with the <more-numbers>.
-    <Log> <numbers> to the <console>.
+    (* Example 4: Merge with updates (common pattern) *)
+    <Log> "" to the <console>.
+    <Log> "--- Update Pattern ---" to the <console>.
+    <Create> the <user> with { id: "1", name: "Bob", email: "bob@old.com" }.
+    <Create> the <updates> with { email: "bob@new.com", verified: true }.
+    <Merge> the <updated-user: user> with <updates>.
+    <Log> "Original user:" to the <console>.
+    <Log> <user> to the <console>.
+    <Log> "Updated user:" to the <console>.
+    <Log> <updated-user> to the <console>.
 
-    <Log> "All merges complete!" to the <console>.
+    <Log> "" to the <console>.
+    <Log> "All merges complete! Original variables unchanged." to the <console>.
     <Return> an <OK: status> for the <demo>.
 }

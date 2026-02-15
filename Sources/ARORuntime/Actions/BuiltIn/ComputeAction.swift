@@ -1131,11 +1131,43 @@ public struct SortAction: ActionImplementation {
     }
 }
 
-/// Merges two or more values
+/// Merges two or more values into a NEW variable (immutable design)
+///
+/// The Merge action creates a new variable containing the merged result,
+/// preserving ARO's immutability principle. The original variables remain unchanged.
+///
+/// ## Syntax
+/// ```aro
+/// (* Merge source into base, creating new variable 'result' *)
+/// <Merge> the <result> from <base> with <source>.
+///
+/// (* Alternative: merge with preposition *)
+/// <Merge> the <result> from <base> with <updates>.
+/// ```
+///
+/// ## Examples
+/// ```aro
+/// (* Merge user data with updates *)
+/// <Retrieve> the <existing-user> from the <user-repository> where id = <id>.
+/// <Extract> the <updates> from the <request: body>.
+/// <Merge> the <updated-user> from <existing-user> with <updates>.
+/// <Store> the <updated-user> into the <user-repository>.
+///
+/// (* Merge arrays *)
+/// <Merge> the <all-items> from <list-a> with <list-b>.
+///
+/// (* Merge strings *)
+/// <Merge> the <full-name> from <first-name> with <last-name>.
+/// ```
+///
+/// ## Merge Rules
+/// - Dictionaries: Source keys overwrite base keys (shallow merge)
+/// - Arrays: Source elements are appended to base
+/// - Strings: Source is concatenated to base
 public struct MergeAction: ActionImplementation {
     public static let role: ActionRole = .own
-    public static let verbs: Set<String> = ["merge", "combine", "join", "concat"]
-    public static let validPrepositions: Set<Preposition> = [.with, .into, .from]
+    public static let verbs: Set<String> = ["merge", "combine"]
+    public static let validPrepositions: Set<Preposition> = [.with, .from]
 
     public init() {}
 
@@ -1146,47 +1178,95 @@ public struct MergeAction: ActionImplementation {
     ) async throws -> any Sendable {
         try validatePreposition(object.preposition)
 
-        // Get the base value to merge into
-        guard let target = context.resolveAny(result.base) else {
-            throw ActionError.undefinedVariable(result.base)
-        }
+        // New immutable design:
+        // <Merge> the <result> from <base> with <source>.
+        // - result.base = new variable name to create
+        // - result.specifiers[0] = base variable (from clause)
+        // - object.base = source variable (with clause)
 
-        // Get the value to merge from
-        guard let source = context.resolveAny(object.base) else {
-            throw ActionError.undefinedVariable(object.base)
-        }
+        // Get base variable name from specifiers or object
+        let baseName: String
+        let sourceName: String
 
-        // Merge dictionaries
-        if var targetDict = target as? [String: any Sendable],
-           let sourceDict = source as? [String: any Sendable] {
-            for (key, value) in sourceDict {
-                targetDict[key] = value
+        if !result.specifiers.isEmpty {
+            // New syntax: <Merge> the <result> from <base> with <source>.
+            baseName = result.specifiers[0]
+            sourceName = object.base
+        } else if object.preposition == .from {
+            // Alternative: <Merge> the <result> from <source>.
+            // In this case, result is the target and object is the source
+            // We need a base to merge into - check if result already exists
+            if let existing = context.resolveAny(result.base) {
+                // Merge source into existing result
+                guard let source = context.resolveAny(object.base) else {
+                    throw ActionError.undefinedVariable(object.base)
+                }
+                return mergeValues(base: existing, source: source, resultName: result.base, context: context)
             }
-            // Bind merged result back to the target variable (allow rebind)
-            context.bind(result.base, value: targetDict, allowRebind: true)
-            return targetDict
+            throw ActionError.runtimeError(
+                "Merge requires base value. Use: <Merge> the <result> from <base> with <source>."
+            )
+        } else {
+            // Legacy syntax: <Merge> the <target> with <source>.
+            // For backwards compatibility, use result as both base and target
+            baseName = result.base
+            sourceName = object.base
         }
 
-        // Merge arrays
-        if var targetArray = target as? [any Sendable],
-           let sourceArray = source as? [any Sendable] {
-            targetArray.append(contentsOf: sourceArray)
-            // Bind merged result back to the target variable (allow rebind)
-            context.bind(result.base, value: targetArray, allowRebind: true)
-            return targetArray
+        // Get base value
+        guard let base = context.resolveAny(baseName) else {
+            throw ActionError.undefinedVariable(baseName)
         }
 
-        // Merge strings
-        if let targetStr = target as? String,
-           let sourceStr = source as? String {
-            let merged = targetStr + sourceStr
-            // Bind merged result back to the target variable (allow rebind)
-            context.bind(result.base, value: merged, allowRebind: true)
+        // Get source value
+        guard let source = context.resolveAny(sourceName) else {
+            throw ActionError.undefinedVariable(sourceName)
+        }
+
+        // Perform merge and bind to NEW result variable
+        return mergeValues(base: base, source: source, resultName: result.base, context: context)
+    }
+
+    private func mergeValues(
+        base: any Sendable,
+        source: any Sendable,
+        resultName: String,
+        context: ExecutionContext
+    ) -> any Sendable {
+        // Merge dictionaries (shallow merge, source overwrites base)
+        if let baseDict = base as? [String: any Sendable],
+           let sourceDict = source as? [String: any Sendable] {
+            var merged = baseDict
+            for (key, value) in sourceDict {
+                merged[key] = value
+            }
+            // Bind to NEW variable (immutable design)
+            context.bind(resultName, value: merged)
             return merged
         }
 
-        // Return target if types don't match
-        return target
+        // Merge arrays (append source to base)
+        if let baseArray = base as? [any Sendable],
+           let sourceArray = source as? [any Sendable] {
+            var merged = baseArray
+            merged.append(contentsOf: sourceArray)
+            // Bind to NEW variable (immutable design)
+            context.bind(resultName, value: merged)
+            return merged
+        }
+
+        // Merge strings (concatenate)
+        if let baseStr = base as? String,
+           let sourceStr = source as? String {
+            let merged = baseStr + sourceStr
+            // Bind to NEW variable (immutable design)
+            context.bind(resultName, value: merged)
+            return merged
+        }
+
+        // Types don't match - return base unchanged
+        context.bind(resultName, value: base)
+        return base
     }
 }
 
