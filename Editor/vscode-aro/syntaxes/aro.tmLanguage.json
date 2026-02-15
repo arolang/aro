@@ -120,8 +120,8 @@
     "status-codes": {
       "patterns": [
         {
-          "name": "constant.language.status.aro",
-          "match": "<(OK|Created|Accepted|NoContent|BadRequest|Unauthorized|Forbidden|NotFound|Error|InternalError):\\s*status>"
+          "name": "support.constant.status.aro",
+          "match": "<(OK|Created|Accepted|NoContent|BadRequest|Unauthorized|Forbidden|NotFound|Error|InternalError):[ ]*status>"
         }
       ]
     },

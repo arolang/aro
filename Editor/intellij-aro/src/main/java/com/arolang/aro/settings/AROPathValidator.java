@@ -10,7 +10,8 @@ import java.util.stream.Collectors;
 public class AROPathValidator {
 
     private static final long VALIDATION_TIMEOUT_SECONDS = 5;
-    private static final Pattern VERSION_PATTERN = Pattern.compile("(?i)aro\\s+version\\s+\\d+\\.\\d+(\\.\\d+)?");
+    // Match either "aro version X.Y.Z" or just "X.Y.Z" or "X.Y.Z-beta.N"
+    private static final Pattern VERSION_PATTERN = Pattern.compile("(?i)(aro\\s+version\\s+)?\\d+\\.\\d+(\\.\\d+)?(-[a-zA-Z0-9.]+)?");
     // Prevent command injection by checking for suspicious characters
     private static final Pattern SUSPICIOUS_CHARS = Pattern.compile("[;&|`$<>]");
 

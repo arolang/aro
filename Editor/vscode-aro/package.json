@@ -181,7 +181,7 @@
           },
           {
             "name": "ARO Status Codes",
-            "scope": "constant.language.status.aro",
+            "scope": "support.constant.status.aro",
             "settings": {
               "foreground": "#56B6C2"
             }

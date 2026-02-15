@@ -71,6 +71,7 @@ public final class AROLanguageServer: Sendable {
                 "resolveProvider": false
             ],
             "definitionProvider": true,
+            "documentHighlightProvider": true,
             "referencesProvider": true,
             "documentSymbolProvider": true,
             "workspaceSymbolProvider": true,
@@ -79,11 +80,13 @@ public final class AROLanguageServer: Sendable {
                 "prepareProvider": true
             ],
             "foldingRangeProvider": true,
-            "semanticTokensProvider": [
-                "legend": semanticTokensHandler.legend,
-                "full": true,
-                "range": false
-            ],
+            // Semantic tokens disabled - they override TextMate grammar and cause
+            // highlighting issues (first letter appears in different color)
+            // "semanticTokensProvider": [
+            //     "legend": semanticTokensHandler.legend,
+            //     "full": true,
+            //     "range": false
+            // ],
             "signatureHelpProvider": [
                 "triggerCharacters": ["<", " "],
                 "retriggerCharacters": [","]
@@ -214,6 +217,9 @@ public final class AROLanguageServer: Sendable {
 
         case "textDocument/definition":
             result = handleDefinitionSync(params: params)
+
+        case "textDocument/documentHighlight":
+            result = handleDocumentHighlightSync(params: params)
 
         case "textDocument/completion":
             result = handleCompletionSync(params: params)
@@ -349,6 +355,80 @@ public final class AROLanguageServer: Sendable {
               let state = documentManager.getSync(uri: uri) else { return nil }
         let lspPosition = Position(line: line, character: character)
         return definitionHandler.handle(uri: uri, position: lspPosition, content: state.content, compilationResult: state.compilationResult)
+    }
+
+    private func handleDocumentHighlightSync(params: Any?) -> [[String: Any]]? {
+        guard let dict = params as? [String: Any],
+              let textDocument = dict["textDocument"] as? [String: Any],
+              let uri = textDocument["uri"] as? String,
+              let position = dict["position"] as? [String: Any],
+              let line = position["line"] as? Int,
+              let character = position["character"] as? Int,
+              let state = documentManager.getSync(uri: uri) else { return nil }
+
+        let lspPosition = Position(line: line, character: character)
+        let aroPosition = PositionConverter.fromLSP(lspPosition)
+
+        guard let result = state.compilationResult else { return nil }
+
+        // Find what's at this position and return highlight for it
+        for analyzed in result.analyzedProgram.featureSets {
+            let fs = analyzed.featureSet
+            for statement in fs.statements {
+                if let aro = statement as? AROStatement {
+                    // Check if position is on the action
+                    if isPositionInSpan(aroPosition, aro.action.span) {
+                        let lspRange = PositionConverter.toLSP(aro.action.span)
+                        return [[
+                            "range": [
+                                "start": ["line": lspRange.start.line, "character": lspRange.start.character],
+                                "end": ["line": lspRange.end.line, "character": lspRange.end.character]
+                            ],
+                            "kind": 1  // Text
+                        ]]
+                    }
+
+                    // Check if position is on the result
+                    if isPositionInSpan(aroPosition, aro.result.span) {
+                        let lspRange = PositionConverter.toLSP(aro.result.span)
+                        return [[
+                            "range": [
+                                "start": ["line": lspRange.start.line, "character": lspRange.start.character],
+                                "end": ["line": lspRange.end.line, "character": lspRange.end.character]
+                            ],
+                            "kind": 1
+                        ]]
+                    }
+
+                    // Check if position is on the object
+                    if isPositionInSpan(aroPosition, aro.object.noun.span) {
+                        let lspRange = PositionConverter.toLSP(aro.object.noun.span)
+                        return [[
+                            "range": [
+                                "start": ["line": lspRange.start.line, "character": lspRange.start.character],
+                                "end": ["line": lspRange.end.line, "character": lspRange.end.character]
+                            ],
+                            "kind": 1
+                        ]]
+                    }
+                }
+            }
+        }
+
+        return nil
+    }
+
+    private func isPositionInSpan(_ position: SourceLocation, _ span: SourceSpan) -> Bool {
+        if position.line < span.start.line || position.line > span.end.line {
+            return false
+        }
+        if position.line == span.start.line && position.column < span.start.column {
+            return false
+        }
+        if position.line == span.end.line && position.column > span.end.column {
+            return false
+        }
+        return true
     }
 
     private func handleCompletionSync(params: Any?) -> [String: Any]? {
