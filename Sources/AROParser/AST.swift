@@ -725,18 +725,21 @@ public enum ActionSemanticRole: String, Sendable, CaseIterable {
     case own        // Internal computation (Compute, Validate, Compare)
     case response   // Outputs to external (Return, Throw, Send)
     case export     // Makes available to other feature sets (Publish)
-    
+    case server     // Server/service operations (Start, Stop, Connect, Close)
+
     /// Classifies a verb into its semantic role
     public static func classify(verb: String) -> ActionSemanticRole {
         let lower = verb.lowercased()
-        
+
         let requestVerbs = ["extract", "parse", "retrieve", "fetch", "read", "receive", "get", "load"]
         let responseVerbs = ["return", "throw", "send", "emit", "respond", "output", "write", "store", "save", "persist", "log", "print", "debug", "notify", "alert", "signal", "broadcast"]
         let exportVerbs = ["publish", "export", "expose", "share"]
-        
+        let serverVerbs = ["start", "stop", "listen", "await", "connect", "close", "disconnect", "terminate", "wait", "keepalive", "block", "make", "touch", "mkdir", "createdirectory", "copy", "move", "rename"]
+
         if requestVerbs.contains(lower) { return .request }
         if responseVerbs.contains(lower) { return .response }
         if exportVerbs.contains(lower) { return .export }
+        if serverVerbs.contains(lower) { return .server }
         return .own
     }
 }

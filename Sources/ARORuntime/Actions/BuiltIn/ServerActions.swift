@@ -19,7 +19,7 @@ import AROParser
 /// <Start> the <file-monitor> with { directory: "." }.
 /// ```
 public struct StartAction: ActionImplementation {
-    public static let role: ActionRole = .own
+    public static let role: ActionRole = .server
     public static let verbs: Set<String> = ["start"]
     public static let validPrepositions: Set<Preposition> = [.with]
 
@@ -270,7 +270,7 @@ public struct StartAction: ActionImplementation {
 /// <Stop> the <file-monitor> with <application>.
 /// ```
 public struct StopAction: ActionImplementation {
-    public static let role: ActionRole = .own
+    public static let role: ActionRole = .server
     public static let verbs: Set<String> = ["stop"]
     public static let validPrepositions: Set<Preposition> = [.with]
 
@@ -374,7 +374,7 @@ public struct ServiceStoppedEvent: RuntimeEvent {
 /// <Listen> on port 9000 as <socket-server>.
 /// ```
 public struct ListenAction: ActionImplementation {
-    public static let role: ActionRole = .own
+    public static let role: ActionRole = .server
     public static let verbs: Set<String> = ["listen", "await"]
     public static let validPrepositions: Set<Preposition> = [.on, .for, .to]
 
@@ -774,7 +774,7 @@ public final class ShutdownCoordinator: @unchecked Sendable {
 /// The `shutdown-signal` event is triggered by SIGINT (Ctrl+C) or SIGTERM.
 /// Legacy syntax `<Keepalive> the <application> for the <events>.` is still supported.
 public struct WaitForEventsAction: ActionImplementation {
-    public static let role: ActionRole = .own
+    public static let role: ActionRole = .server
     public static let verbs: Set<String> = ["wait", "keepalive", "block"]
     public static let validPrepositions: Set<Preposition> = [.for]
 
@@ -912,7 +912,7 @@ public struct WaitStateEnteredEvent: RuntimeEvent {
 /// <Connect> to <host: "192.168.1.100"> on port 8080 as <server-connection>.
 /// ```
 public struct ConnectAction: ActionImplementation {
-    public static let role: ActionRole = .own
+    public static let role: ActionRole = .server
     public static let verbs: Set<String> = ["connect"]
     public static let validPrepositions: Set<Preposition> = [.to, .with]
 
@@ -1166,7 +1166,7 @@ public struct BroadcastRequestedEvent: RuntimeEvent {
 /// <Close> the <socket-server>.
 /// ```
 public struct CloseAction: ActionImplementation {
-    public static let role: ActionRole = .own
+    public static let role: ActionRole = .server
     public static let verbs: Set<String> = ["close", "disconnect", "terminate"]
     public static let validPrepositions: Set<Preposition> = [.with, .from]
 
