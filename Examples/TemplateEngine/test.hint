@@ -1,0 +1,4 @@
+# Test hints for TemplateEngine
+# Demonstrates template rendering with variable interpolation
+mode: both
+timeout: 30
