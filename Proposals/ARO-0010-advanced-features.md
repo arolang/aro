@@ -61,7 +61,7 @@ The `<Execute>` action executes shell commands on the host system, returning str
 | Property | Value |
 |----------|-------|
 | **Action** | Execute |
-| **Verbs** | `exec`, `execute`, `shell`, `run-command` |
+| **Verbs** | `exec`, `execute`, `run`, `shell` |
 | **Role** | REQUEST (External to Internal) |
 | **Prepositions** | `with`, `for`, `on` |
 
@@ -874,7 +874,7 @@ existence_check   += expression , [ "not" ] , "in" , expression ;
 ```swift
 public struct ExecuteAction: ActionImplementation {
     public static let role: ActionRole = .request
-    public static let verbs: Set<String> = ["exec", "execute", "shell", "run-command"]
+    public static let verbs: Set<String> = ["exec", "execute", "run", "shell"]
     public static let validPrepositions: Set<Preposition> = [.with, .for, .on]
 
     public func execute(
