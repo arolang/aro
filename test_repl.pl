@@ -567,15 +567,14 @@ sub test {
 sub print_test_line {
     my ($input, $output, $passed, $description) = @_;
 
-    # Truncate input/output for display
-    my $input_display = substr($input, 0, 40);
-    $input_display .= "..." if length($input) > 40;
+    # Clean up output for display (keep input full, truncate long output)
+    my $input_display = $input;
 
     my $output_clean = $output;
     $output_clean =~ s/\n/ | /g;
     $output_clean =~ s/\s+/ /g;
-    my $output_display = substr($output_clean, 0, 50);
-    $output_display .= "..." if length($output_clean) > 50;
+    my $output_display = substr($output_clean, 0, 80);
+    $output_display .= "..." if length($output_clean) > 80;
 
     if ($passed) {
         print GREEN, "[PASS]", RESET;
