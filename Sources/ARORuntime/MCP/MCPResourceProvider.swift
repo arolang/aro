@@ -4,6 +4,9 @@
 // ============================================================
 
 import Foundation
+#if canImport(FoundationNetworking)
+import FoundationNetworking
+#endif
 
 /// Provides MCP resources for ARO documentation
 /// Fetches content from GitHub when local files are not available
