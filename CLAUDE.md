@@ -447,7 +447,7 @@ Proposals/              # Language specifications
 ├── ARO-0043-sink-syntax.md
 ├── ARO-0044-metrics.md
 ├── ARO-0045-package-manager.md
-├── ARO-0045-template-engine.md
+├── ARO-0050-template-engine.md
 ├── ARO-0046-typed-event-extraction.md
 ├── ARO-0047-command-line-parameters.md
 └── ARO-0048-websocket.md
@@ -489,10 +489,10 @@ The `Proposals/` directory contains language specifications:
 | **0043 Sink Syntax** | Expressions in result position |
 | **0044 Runtime Metrics** | Execution counts, timing, Prometheus format |
 | **0045 Package Manager** | Plugin installation, aro add/remove, plugin.yaml |
-| **0045 Template Engine** | Mustache-style templates, Render action |
 | **0046 Typed Event Extraction** | Schema-validated event data extraction |
 | **0047 Command-Line Parameters** | CLI argument parsing, Parameters action |
 | **0048 WebSocket** | WebSocket server support, real-time messaging |
+| **0050 Template Engine** | Mustache-style templates, Render action |
 
 ## Concurrency
 
