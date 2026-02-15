@@ -72,6 +72,11 @@
     },
     "commands": [
       {
+        "command": "aro.restartServer",
+        "title": "ARO: Restart Language Server",
+        "category": "ARO"
+      },
+      {
         "command": "aro.openSettings",
         "title": "ARO: Open Settings",
         "category": "ARO"
@@ -83,74 +88,155 @@
       }
     ],
     "configurationDefaults": {
+      "[aro]": {
+        "editor.semanticHighlighting.enabled": false
+      },
       "editor.tokenColorCustomizations": {
-        "[*]": {
-          "textMateRules": [
-            {
-              "scope": "support.function.action.compute.aro",
-              "settings": {
-                "foreground": "#DAA520",
-                "fontStyle": "bold"
-              }
-            },
-            {
-              "scope": "entity.name.function.action.request.aro",
-              "settings": {
-                "foreground": "#4169E1",
-                "fontStyle": "bold"
-              }
-            },
-            {
-              "scope": "entity.name.function.action.own.aro",
-              "settings": {
-                "foreground": "#4169E1",
-                "fontStyle": "bold"
-              }
-            },
-            {
-              "scope": "entity.name.function.action.response.aro",
-              "settings": {
-                "foreground": "#4169E1",
-                "fontStyle": "bold"
-              }
-            },
-            {
-              "scope": "entity.name.function.action.test.aro",
-              "settings": {
-                "foreground": "#4169E1",
-                "fontStyle": "bold"
-              }
-            },
-            {
-              "scope": "entity.name.function.action.lifecycle.aro",
-              "settings": {
-                "foreground": "#4169E1",
-                "fontStyle": "bold"
-              }
-            },
-            {
-              "scope": "variable.parameter.result.aro",
-              "settings": {
-                "foreground": "#00FF00",
-                "fontStyle": "bold"
-              }
-            },
-            {
-              "scope": "entity.other.attribute-name.object.aro",
-              "settings": {
-                "foreground": "#FF0000",
-                "fontStyle": "bold"
-              }
-            },
-            {
-              "scope": "storage.modifier.preposition.aro",
-              "settings": {
-                "foreground": "#FF69B4",
-                "fontStyle": "bold"
-              }
+        "textMateRules": [
+          {
+            "name": "ARO REQUEST Actions (Extract, Parse, Retrieve, etc.)",
+            "scope": "keyword.action.request.aro",
+            "settings": {
+              "foreground": "#0078D4",
+              "fontStyle": "bold"
             }
-          ]
-        }
+          },
+          {
+            "name": "ARO OWN Actions (Compute, Validate, Transform, etc.)",
+            "scope": "keyword.action.own.aro",
+            "settings": {
+              "foreground": "#8B5CF6",
+              "fontStyle": "bold"
+            }
+          },
+          {
+            "name": "ARO RESPONSE Actions (Return, Throw)",
+            "scope": "keyword.action.response.aro",
+            "settings": {
+              "foreground": "#D97706",
+              "fontStyle": "bold"
+            }
+          },
+          {
+            "name": "ARO EXPORT Actions (Store, Log, Send, Emit, etc.)",
+            "scope": "keyword.action.export.aro",
+            "settings": {
+              "foreground": "#059669",
+              "fontStyle": "bold"
+            }
+          },
+          {
+            "name": "ARO LIFECYCLE Actions (Start, Stop, Keepalive, etc.)",
+            "scope": "keyword.action.lifecycle.aro",
+            "settings": {
+              "foreground": "#0891B2",
+              "fontStyle": "bold"
+            }
+          },
+          {
+            "name": "ARO TEST Actions (Given, When, Then, Assert)",
+            "scope": "keyword.action.test.aro",
+            "settings": {
+              "foreground": "#CA8A04",
+              "fontStyle": "bold"
+            }
+          },
+          {
+            "name": "ARO Variables",
+            "scope": "variable.other.aro",
+            "settings": {
+              "foreground": "#E06C75"
+            }
+          },
+          {
+            "name": "ARO Variable Qualifiers",
+            "scope": "variable.other.qualifier.aro",
+            "settings": {
+              "foreground": "#E06C75",
+              "fontStyle": "italic"
+            }
+          },
+          {
+            "name": "ARO Feature Set Name",
+            "scope": "entity.name.function.featureset.aro",
+            "settings": {
+              "foreground": "#61AFEF",
+              "fontStyle": "bold"
+            }
+          },
+          {
+            "name": "ARO Business Activity",
+            "scope": "entity.name.type.business-activity.aro",
+            "settings": {
+              "foreground": "#98C379"
+            }
+          },
+          {
+            "name": "ARO Handler/Observer Keyword",
+            "scope": "storage.type.handler.aro",
+            "settings": {
+              "foreground": "#C678DD",
+              "fontStyle": "italic"
+            }
+          },
+          {
+            "name": "ARO Status Codes",
+            "scope": "support.constant.status.aro",
+            "settings": {
+              "foreground": "#56B6C2"
+            }
+          },
+          {
+            "name": "ARO Prepositions",
+            "scope": "keyword.other.preposition.aro",
+            "settings": {
+              "foreground": "#ABB2BF"
+            }
+          },
+          {
+            "name": "ARO Articles",
+            "scope": "keyword.other.article.aro",
+            "settings": {
+              "foreground": "#ABB2BF"
+            }
+          },
+          {
+            "name": "ARO Control Keywords",
+            "scope": "keyword.control.aro",
+            "settings": {
+              "foreground": "#C678DD"
+            }
+          },
+          {
+            "name": "ARO Strings",
+            "scope": "string.quoted.double.aro",
+            "settings": {
+              "foreground": "#98C379"
+            }
+          },
+          {
+            "name": "ARO Numbers",
+            "scope": "constant.numeric.aro",
+            "settings": {
+              "foreground": "#D19A66"
+            }
+          },
+          {
+            "name": "ARO Comments",
+            "scope": "comment.block.aro",
+            "settings": {
+              "foreground": "#7F848E",
+              "fontStyle": "italic"
+            }
+          },
+          {
+            "name": "ARO Operators",
+            "scope": "keyword.operator.aro, keyword.operator.logical.aro",
+            "settings": {
+              "foreground": "#56B6C2"
+            }
+          }
+        ]
       }
     }
   },
@@ -162,7 +248,7 @@
     "vscode:prepublish": "npm run compile",
     "compile": "tsc -p ./",
     "watch": "tsc -watch -p ./",
-    "test": "mocha -r ts-node/register src/test/**/*.test.ts"
+    "test": "npm run compile && NODE_OPTIONS='--no-experimental-strip-types' mocha out/test/**/*.test.js"
   },
   "dependencies": {
     "vscode-languageclient": "^9.0.1"

@@ -130,6 +130,15 @@ class AROPathValidatorTest {
     }
 
     @Test
+    void testValidAROBinaryBetaVersion(@TempDir Path tempDir) throws IOException {
+        // Test beta version format like "0.3.0-beta.11"
+        Path mockScript = createMockScript(tempDir, "echo '0.3.0-beta.11'");
+
+        AROPathValidator.ValidationResult result = AROPathValidator.validate(mockScript.toString());
+        assertTrue(result.valid);
+    }
+
+    @Test
     void testNonZeroExitCode(@TempDir Path tempDir) throws IOException {
         // Create a script that exits with error code
         Path mockScript = createMockScript(tempDir, "exit 1");
