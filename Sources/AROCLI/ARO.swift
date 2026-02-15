@@ -34,7 +34,7 @@ struct ARO: AsyncParsableCommand {
         defaultSubcommand: RunCommand.self
     )
 
-    // LSP command is only available on non-Windows platforms
+    // LSP and MCP commands are only available on non-Windows platforms
     private static var subcommandsList: [any ParsableCommand.Type] {
         var commands: [any ParsableCommand.Type] = [
             RunCommand.self,
@@ -48,6 +48,7 @@ struct ARO: AsyncParsableCommand {
         ]
         #if !os(Windows)
         commands.append(LSPCommand.self)
+        commands.append(MCPCommand.self)
         #endif
         return commands
     }
