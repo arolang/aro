@@ -6,6 +6,11 @@
 import Foundation
 import AROVersion
 import LineNoise
+#if canImport(Darwin)
+@preconcurrency import Darwin
+#elseif canImport(Glibc)
+@preconcurrency import Glibc
+#endif
 
 /// The main REPL shell
 public final class REPLShell: @unchecked Sendable {
@@ -375,7 +380,7 @@ public final class REPLShell: @unchecked Sendable {
         } else {
             // Non-interactive mode: use simple readLine
             print(prompt, terminator: "")
-            FileHandle.standardOutput.synchronizeFile()
+            fflush(stdout)
             return Swift.readLine()
         }
     }
