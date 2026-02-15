@@ -685,7 +685,7 @@ Actions must be `Sendable` and thread-safe. Do not store mutable state in action
 | 45 | Store | export | store, save, persist | into, to, in |
 | 46 | Emit | export | emit | with, to |
 | 47 | Execute | own | execute, exec, run, shell | with |
-| 48 | Call | own | call, invoke | with, to |
+| 48 | Call | own | call, invoke | from, to, with, via |
 
 ---
 
