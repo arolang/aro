@@ -5,11 +5,13 @@
 
 import Foundation
 import AROVersion
+import LineNoise
 
 /// The main REPL shell
 public final class REPLShell: @unchecked Sendable {
     private let session: REPLSession
     private let commandRegistry: MetaCommandRegistry
+    private let lineNoise: LineNoise?
 
     private var multilineBuffer: String = ""
     private var isRunning = true
@@ -17,15 +19,48 @@ public final class REPLShell: @unchecked Sendable {
     /// Whether to use colors in output
     public var useColors: Bool = true
 
+    /// History file path
+    private let historyPath: String
+
+    /// Whether we're running in interactive mode (TTY)
+    private let isInteractive: Bool
+
     public init() {
         self.session = REPLSession()
         self.commandRegistry = MetaCommandRegistry.shared
+
+        // Check if we're in an interactive terminal
+        self.isInteractive = isatty(STDIN_FILENO) != 0
+
+        // Set up history file
+        let homeDir = FileManager.default.homeDirectoryForCurrentUser.path
+        let aroDir = "\(homeDir)/.aro"
+        self.historyPath = "\(aroDir)/repl_history"
+
+        // Only use LineNoise in interactive mode
+        if isInteractive {
+            let ln = LineNoise()
+
+            // Create .aro directory if needed
+            try? FileManager.default.createDirectory(atPath: aroDir, withIntermediateDirectories: true)
+
+            // Load history
+            try? ln.loadHistory(fromFile: historyPath)
+
+            // Set history limit
+            ln.setHistoryMaxLength(1000)
+
+            self.lineNoise = ln
+        } else {
+            self.lineNoise = nil
+        }
     }
 
     /// Run the REPL
     public func run() async {
         printWelcome()
         setupSignalHandlers()
+        setupCompletion()
 
         while isRunning {
             let prompt = getPrompt()
@@ -316,17 +351,61 @@ public final class REPLShell: @unchecked Sendable {
 
     /// Read a line with prompt
     private func readLine(prompt: String) -> String? {
-        print(prompt, terminator: "")
-        fflush(stdout)
-        return Swift.readLine()
+        // Use LineNoise for interactive mode, simple readLine for piped input
+        if let ln = lineNoise {
+            do {
+                let line = try ln.getLine(prompt: prompt)
+                // Add non-empty lines to history
+                if !line.trimmingCharacters(in: .whitespaces).isEmpty {
+                    ln.addHistory(line)
+                    // Save history periodically
+                    try? ln.saveHistory(toFile: historyPath)
+                }
+                return line
+            } catch LinenoiseError.CTRL_C {
+                // User pressed Ctrl+C
+                print("^C")
+                return ""
+            } catch LinenoiseError.EOF {
+                // User pressed Ctrl+D
+                return nil
+            } catch {
+                return nil
+            }
+        } else {
+            // Non-interactive mode: use simple readLine
+            print(prompt, terminator: "")
+            fflush(stdout)
+            return Swift.readLine()
+        }
     }
 
     /// Setup signal handlers
     private func setupSignalHandlers() {
-        // Handle Ctrl+C
-        signal(SIGINT) { _ in
-            print("\n^C")
-            // Don't exit, just cancel current input
+        // LineNoise handles Ctrl+C internally
+        // We just need to handle SIGINT for graceful shutdown
+        signal(SIGINT, SIG_IGN)
+    }
+
+    /// Setup tab completion
+    private func setupCompletion() {
+        guard let ln = lineNoise else { return }
+
+        ln.setCompletionCallback { currentBuffer in
+            var completions: [String] = []
+            let trimmed = currentBuffer.trimmingCharacters(in: .whitespaces)
+
+            // Complete meta-commands
+            if trimmed.hasPrefix(":") {
+                let partial = String(trimmed.dropFirst()).lowercased()
+                for name in self.commandRegistry.commandNames {
+                    if name.lowercased().hasPrefix(partial) {
+                        completions.append(":\(name)")
+                    }
+                }
+            }
+
+            return completions
         }
     }
 

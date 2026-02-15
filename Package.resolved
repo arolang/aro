@@ -1,5 +1,5 @@
 {
-  "originHash" : "7bfd3f8e4b92d3d2a4f8481bd4ea94b0f1726d655b143cd600390ed8f25a8617",
+  "originHash" : "44c73c9c6cd57e0fe62fda482d344cdd75517fced7d0a07e96829127e7c7d916",
   "pins" : [
     {
       "identity" : "async-http-client",
@@ -38,12 +38,30 @@
       }
     },
     {
+      "identity" : "linenoise-swift",
+      "kind" : "remoteSourceControl",
+      "location" : "https://github.com/andybest/linenoise-swift.git",
+      "state" : {
+        "revision" : "afc897c02b030af7333105c4fedcd843a8339238",
+        "version" : "0.0.3"
+      }
+    },
+    {
       "identity" : "lrucache",
       "kind" : "remoteSourceControl",
       "location" : "https://github.com/nicklockwood/LRUCache.git",
       "state" : {
         "revision" : "cb5b2bd0da83ad29c0bec762d39f41c8ad0eaf3e",
         "version" : "1.2.1"
+      }
+    },
+    {
+      "identity" : "nimble",
+      "kind" : "remoteSourceControl",
+      "location" : "https://github.com/Quick/Nimble.git",
+      "state" : {
+        "revision" : "e9d769113660769a4d9dd3afb855562c0b7ae7b0",
+        "version" : "7.3.4"
       }
     },
     {
