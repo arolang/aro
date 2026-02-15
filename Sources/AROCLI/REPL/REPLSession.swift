@@ -69,7 +69,7 @@ public final class REPLSession: @unchecked Sendable {
     public let id = UUID()
 
     /// The runtime context for this session
-    public let context: RuntimeContext
+    public private(set) var context: RuntimeContext
 
     /// Event bus for the session
     public let eventBus: EventBus
@@ -303,6 +303,13 @@ public final class REPLSession: @unchecked Sendable {
         _featureSets.removeAll()
         _featureSetSources.removeAll()
         _history.removeAll()
+        // Reset the runtime context to clear all variables
+        context = RuntimeContext(
+            featureSetName: "_repl_session_",
+            businessActivity: "Interactive",
+            outputContext: .human,
+            eventBus: eventBus
+        )
     }
 
     /// Get all variable names
