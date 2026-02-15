@@ -1,6 +1,6 @@
 // ============================================================
 // TemplateService.swift
-// ARO Runtime - Template Service (ARO-0045)
+// ARO Runtime - Template Service (ARO-0050)
 // ============================================================
 
 import Foundation
@@ -112,7 +112,7 @@ public final class AROTemplateService: TemplateService, @unchecked Sendable {
             throw TemplateError.invalidPath(path: path)
         }
 
-        // Check compile-time embedded templates first (ARO-0045 binary mode)
+        // Check compile-time embedded templates first (ARO-0050 binary mode)
         if let embedded = embeddedTemplates, let content = embedded[path] {
             return content
         }
@@ -142,7 +142,7 @@ public final class AROTemplateService: TemplateService, @unchecked Sendable {
             return false
         }
 
-        // Check compile-time embedded templates first (ARO-0045 binary mode)
+        // Check compile-time embedded templates first (ARO-0050 binary mode)
         if let embedded = embeddedTemplates, embedded[path] != nil {
             return true
         }
