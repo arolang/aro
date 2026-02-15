@@ -92,6 +92,7 @@ REQUEST actions bring data from external sources into the internal execution con
 | Action | Verbs | Prepositions | Description |
 |--------|-------|--------------|-------------|
 | **Extract** | extract, parse, get | from, via | Extract values from objects/structures |
+| **ParseHtml** | parsehtml | from | Parse HTML/XML and extract structured data (see ARO-0011) |
 | **Retrieve** | retrieve, fetch, load, find | from | Retrieve data from repositories |
 | **Receive** | receive | from, via | Receive data from external sources |
 | **Request** | request, http | from, to, via, with | Make HTTP requests |
