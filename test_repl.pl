@@ -345,13 +345,19 @@ test('<Log> <sorted> to the <console>.', "Log sorted result", sub {
 # ============================================================
 section("Filter Action");
 
-test('<Set> the <nums> to [1, 2, 3, 4, 5, 6, 7, 8, 9, 10].', "Set numbers", sub { shift =~ /OK/ });
+# Filter works on arrays of objects with where clause
+test('<Set> the <users> to [{ name: "Alice", age: 25 }, { name: "Bob", age: 35 }, { name: "Carol", age: 28 }].', "Set users array", sub { shift =~ /OK/ });
 
-# Filter syntax: <Filter> the <result> from <list> by <condition>.
-test('<Filter> the <evens> from <nums> by "value % 2 == 0".', "Filter even numbers", sub {
+# Filter syntax: <Filter> the <result> from the <source> where <field> <op> <value>.
+test('<Filter> the <adults> from the <users> where <age> > 30.', "Filter users over 30", sub {
     my $output = shift;
-    # Filter may need specific syntax - accept both OK and Error
-    return $output =~ /OK/ || $output =~ /Error/;
+    return $output =~ /OK/;
+});
+
+test('<Log> <adults> to the <console>.', "Log filtered users", sub {
+    my $output = shift;
+    # Should only contain Bob (age 35)
+    return $output =~ /Bob/;
 });
 
 # ============================================================
@@ -359,11 +365,16 @@ test('<Filter> the <evens> from <nums> by "value % 2 == 0".', "Filter even numbe
 # ============================================================
 section("Map Action");
 
-# Map syntax varies - test basic mapping
-test('<Map> the <doubled> from <nums> by "value * 2".', "Map double values", sub {
+# Map extracts a field from each object: <Map> the <result: field> from <source>.
+test('<Map> the <names: name> from the <users>.', "Map to extract names", sub {
     my $output = shift;
-    # Map may need specific syntax - accept both OK and Error
-    return $output =~ /OK/ || $output =~ /Error/;
+    return $output =~ /OK/;
+});
+
+test('<Log> <names> to the <console>.', "Log mapped names", sub {
+    my $output = shift;
+    # Should contain Alice, Bob, Carol
+    return $output =~ /Alice/ && $output =~ /Bob/ && $output =~ /Carol/;
 });
 
 # ============================================================
@@ -371,14 +382,14 @@ test('<Map> the <doubled> from <nums> by "value * 2".', "Map double values", sub
 # ============================================================
 section("Delete Action");
 
-test('<Set> the <temp> to "temporary".', "Set temp var", sub { shift =~ /OK/ });
-
 # Delete is for repository items, not session variables
-# Test that it gives appropriate error for non-repository use
-test('<Delete> the <temp> from the <session>.', "Delete (repo action)", sub {
+# This test verifies the action exists and gives appropriate error
+test('<Set> the <temp-data> to { id: 1, value: "test" }.', "Set temp data", sub { shift =~ /OK/ });
+
+test('<Delete> the <temp-data> from the <session>.', "Delete (error expected - not a repo)", sub {
     my $output = shift;
-    # Delete is for repositories, so error is expected in direct mode
-    return $output =~ /OK/ || $output =~ /Error/;
+    # Delete is for repositories, error is expected in direct mode
+    return $output =~ /Error/;
 });
 
 # ============================================================
