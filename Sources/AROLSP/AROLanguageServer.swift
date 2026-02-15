@@ -164,7 +164,7 @@ public final class AROLanguageServer: Sendable {
 
         while true {
             // Use POSIX read which blocks properly
-            let bytesRead = Darwin.read(STDIN_FILENO, &readBuffer, readBuffer.count)
+            let bytesRead = read(STDIN_FILENO, &readBuffer, readBuffer.count)
             if bytesRead <= 0 {
                 log("EOF received, shutting down")
                 break
