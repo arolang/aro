@@ -380,11 +380,8 @@ public final class REPLShell: @unchecked Sendable {
         } else {
             // Non-interactive mode: use simple readLine
             print(prompt, terminator: "")
-            #if canImport(Darwin)
-            fflush(Darwin.stdout)
-            #elseif canImport(Glibc)
-            fflush(Glibc.stdout)
-            #endif
+            // Flush stdout - use fflush(nil) to avoid concurrency issues with Glibc.stdout on Linux
+            fflush(nil)
             return Swift.readLine()
         }
     }
