@@ -448,4 +448,269 @@ struct MCPTests {
             #expect(content.text == "Hello, World!")
         }
     }
+
+    // MARK: - MCP Server Tests
+
+    @Suite("MCP Server Message Handling")
+    struct MCPServerTests {
+
+        @Test("Initialize response contains required fields")
+        func initializeResponseContainsRequiredFields() async throws {
+            let server = MCPServer(verbose: false, version: "1.0.0-test")
+
+            // We can't directly call handleMessage, but we can verify the
+            // MCPInitializeResult structure matches MCP spec
+            let result = MCPInitializeResult(
+                protocolVersion: MCPProtocol.version,
+                serverInfo: MCPServerInfo(name: "aro", version: "1.0.0-test"),
+                capabilities: MCPCapabilities(
+                    tools: MCPToolsCapability(listChanged: false),
+                    resources: MCPResourcesCapability(subscribe: false, listChanged: false),
+                    prompts: MCPPromptsCapability(listChanged: false)
+                )
+            )
+
+            let json = result.toJSONValue()
+
+            // Verify MCP 2025-06-18 required fields
+            #expect(json["protocolVersion"]?.stringValue == "2025-06-18")
+            #expect(json["serverInfo"]?["name"]?.stringValue == "aro")
+            #expect(json["serverInfo"]?["version"]?.stringValue == "1.0.0-test")
+            #expect(json["capabilities"] != nil)
+            #expect(json["capabilities"]?["tools"] != nil)
+            #expect(json["capabilities"]?["resources"] != nil)
+            #expect(json["capabilities"]?["prompts"] != nil)
+        }
+
+        @Test("Protocol version is correct")
+        func protocolVersionIsCorrect() {
+            #expect(MCPProtocol.version == "2025-06-18")
+        }
+
+        @Test("Server can be instantiated with custom base path")
+        func serverCanBeInstantiatedWithCustomBasePath() {
+            let server = MCPServer(basePath: "/tmp/test", verbose: false)
+            // Should not crash
+            #expect(server != nil)
+        }
+
+        @Test("JSON-RPC request routing - tools/list")
+        func jsonRpcRoutingToolsList() throws {
+            let handler = JSONRPCHandler()
+            let request = try handler.parseRequest("""
+                {"jsonrpc":"2.0","id":1,"method":"tools/list"}
+                """)
+
+            #expect(request.method == "tools/list")
+            #expect(request.id == .number(1))
+        }
+
+        @Test("JSON-RPC request routing - tools/call")
+        func jsonRpcRoutingToolsCall() throws {
+            let handler = JSONRPCHandler()
+            let request = try handler.parseRequest("""
+                {"jsonrpc":"2.0","id":2,"method":"tools/call","params":{"name":"aro_check","arguments":{"code":"test"}}}
+                """)
+
+            #expect(request.method == "tools/call")
+            #expect(request.params?["name"]?.stringValue == "aro_check")
+            #expect(request.params?["arguments"]?["code"]?.stringValue == "test")
+        }
+
+        @Test("JSON-RPC request routing - resources/list")
+        func jsonRpcRoutingResourcesList() throws {
+            let handler = JSONRPCHandler()
+            let request = try handler.parseRequest("""
+                {"jsonrpc":"2.0","id":3,"method":"resources/list"}
+                """)
+
+            #expect(request.method == "resources/list")
+        }
+
+        @Test("JSON-RPC request routing - resources/read")
+        func jsonRpcRoutingResourcesRead() throws {
+            let handler = JSONRPCHandler()
+            let request = try handler.parseRequest("""
+                {"jsonrpc":"2.0","id":4,"method":"resources/read","params":{"uri":"aro://syntax"}}
+                """)
+
+            #expect(request.method == "resources/read")
+            #expect(request.params?["uri"]?.stringValue == "aro://syntax")
+        }
+
+        @Test("JSON-RPC request routing - prompts/list")
+        func jsonRpcRoutingPromptsList() throws {
+            let handler = JSONRPCHandler()
+            let request = try handler.parseRequest("""
+                {"jsonrpc":"2.0","id":5,"method":"prompts/list"}
+                """)
+
+            #expect(request.method == "prompts/list")
+        }
+
+        @Test("JSON-RPC request routing - prompts/get")
+        func jsonRpcRoutingPromptsGet() throws {
+            let handler = JSONRPCHandler()
+            let request = try handler.parseRequest("""
+                {"jsonrpc":"2.0","id":6,"method":"prompts/get","params":{"name":"create_feature_set","arguments":{"name":"Test","purpose":"testing"}}}
+                """)
+
+            #expect(request.method == "prompts/get")
+            #expect(request.params?["name"]?.stringValue == "create_feature_set")
+            #expect(request.params?["arguments"]?["name"]?.stringValue == "Test")
+        }
+
+        @Test("JSON-RPC notification - initialized")
+        func jsonRpcNotificationInitialized() throws {
+            let handler = JSONRPCHandler()
+            let request = try handler.parseRequest("""
+                {"jsonrpc":"2.0","method":"notifications/initialized"}
+                """)
+
+            #expect(request.method == "notifications/initialized")
+            #expect(request.isNotification == true)
+            #expect(request.id == nil)
+        }
+
+        @Test("JSON-RPC notification - cancelled")
+        func jsonRpcNotificationCancelled() throws {
+            let handler = JSONRPCHandler()
+            let request = try handler.parseRequest("""
+                {"jsonrpc":"2.0","method":"notifications/cancelled","params":{"requestId":"abc-123"}}
+                """)
+
+            #expect(request.method == "notifications/cancelled")
+            #expect(request.isNotification == true)
+        }
+
+        @Test("JSON-RPC ping request")
+        func jsonRpcPingRequest() throws {
+            let handler = JSONRPCHandler()
+            let request = try handler.parseRequest("""
+                {"jsonrpc":"2.0","id":99,"method":"ping"}
+                """)
+
+            #expect(request.method == "ping")
+            #expect(request.id == .number(99))
+        }
+
+        @Test("JSON-RPC invalid JSON returns parse error")
+        func jsonRpcInvalidJsonReturnsParseError() throws {
+            let handler = JSONRPCHandler()
+
+            #expect(throws: JSONRPCError.self) {
+                try handler.parseRequest("not valid json")
+            }
+        }
+
+        @Test("JSON-RPC missing jsonrpc field returns invalid request")
+        func jsonRpcMissingVersionReturnsInvalidRequest() throws {
+            let handler = JSONRPCHandler()
+
+            #expect(throws: JSONRPCError.self) {
+                try handler.parseRequest("""
+                    {"id":1,"method":"test"}
+                    """)
+            }
+        }
+
+        @Test("JSON-RPC missing method field returns invalid request")
+        func jsonRpcMissingMethodReturnsInvalidRequest() throws {
+            let handler = JSONRPCHandler()
+
+            #expect(throws: JSONRPCError.self) {
+                try handler.parseRequest("""
+                    {"jsonrpc":"2.0","id":1}
+                    """)
+            }
+        }
+
+        @Test("JSON-RPC error codes are correct")
+        func jsonRpcErrorCodesAreCorrect() {
+            #expect(JSONRPCError.parseError.code == -32700)
+            #expect(JSONRPCError.invalidRequest.code == -32600)
+            #expect(JSONRPCError.methodNotFound.code == -32601)
+            #expect(JSONRPCError.invalidParams.code == -32602)
+            #expect(JSONRPCError.internalError.code == -32603)
+        }
+    }
+
+    // MARK: - End-to-End MCP Flow Tests
+
+    @Suite("MCP End-to-End Flows")
+    struct MCPEndToEndTests {
+
+        @Test("Full tools flow: list -> call")
+        func fullToolsFlow() async {
+            // List tools
+            let provider = MCPToolProvider()
+            let listResult = provider.listTools()
+
+            // Verify aro_check is available
+            let aroCheck = listResult.tools.first { $0.name == "aro_check" }
+            #expect(aroCheck != nil)
+            #expect(aroCheck?.inputSchema != nil)
+
+            // Call aro_check
+            let callResult = await provider.callTool(
+                name: "aro_check",
+                arguments: .object([
+                    "code": .string("(Test: App) { <Return> an <OK: status> for the <result>. }")
+                ])
+            )
+
+            #expect(callResult.isError != true)
+        }
+
+        @Test("Full resources flow: list -> read")
+        func fullResourcesFlow() async {
+            // List resources
+            let provider = MCPResourceProvider()
+            let listResult = await provider.listResources()
+
+            // Verify syntax resource is available
+            let syntaxResource = listResult.resources.first { $0.uri == "aro://syntax" }
+            #expect(syntaxResource != nil)
+
+            // Read syntax resource
+            let readResult = await provider.readResource(uri: "aro://syntax")
+
+            #expect(readResult != nil)
+            #expect(readResult?.contents.count ?? 0 > 0)
+        }
+
+        @Test("Full prompts flow: list -> get")
+        func fullPromptsFlow() {
+            // List prompts
+            let provider = MCPPromptProvider()
+            let listResult = provider.listPrompts()
+
+            // Verify create_feature_set is available
+            let createPrompt = listResult.prompts.first { $0.name == "create_feature_set" }
+            #expect(createPrompt != nil)
+
+            // Get prompt with arguments
+            let getResult = provider.getPrompt(
+                name: "create_feature_set",
+                arguments: ["name": "OrderProcessor", "purpose": "process customer orders"]
+            )
+
+            #expect(getResult != nil)
+            #expect(getResult?.messages.first?.content.text?.contains("OrderProcessor") == true)
+        }
+
+        @Test("aro_run requires directory argument")
+        func aroRunRequiresDirectoryArgument() async {
+            let provider = MCPToolProvider()
+
+            // Missing directory argument should return error
+            let result = await provider.callTool(
+                name: "aro_run",
+                arguments: .object([:])
+            )
+
+            #expect(result.isError == true)
+            #expect(result.content.first?.text?.contains("directory") == true)
+        }
+    }
 }
