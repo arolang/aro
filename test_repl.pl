@@ -293,9 +293,10 @@ test('<Split> the <fruits> from <csv> by /,/.', "Split by comma regex", sub {
     return $output =~ /OK/;
 });
 
-test('<Log> <fruits> to the <console>.', "Log split result", sub {
+test('<Log> <fruits> to the <console>.', "Log split result [apple, banana, cherry]", sub {
     my $output = shift;
-    return $output =~ /apple/ && $output =~ /banana/ && $output =~ /cherry/;
+    # Should show array format: [apple, banana, cherry]
+    return $output =~ /\[/ && $output =~ /apple/ && $output =~ /banana/ && $output =~ /cherry/;
 });
 
 # ============================================================
