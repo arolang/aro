@@ -1,0 +1,5 @@
+# Test hints for WebSocketDemo
+# This is a server example - tests startup only
+mode: run
+timeout: 10
+startup_only: true

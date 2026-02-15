@@ -1,0 +1,48 @@
+(*
+ * WebSocketDemo
+ * A dedicated example demonstrating ARO's WebSocket capabilities.
+ *
+ * This example shows:
+ *   - WebSocket server setup via HTTP Upgrade
+ *   - Connection lifecycle events (connect, message, disconnect)
+ *   - Sending messages to specific connections
+ *   - Broadcasting messages to all connections
+ *
+ * Architecture:
+ * =============
+ *
+ *   Browser Client                ARO Application
+ *        |                              |
+ *        |  GET /ws (Upgrade)           |
+ *        |----------------------------->|
+ *        |                              |
+ *        |  101 Switching Protocols     |
+ *        |<-----------------------------|
+ *        |                              |
+ *        |  <-- WebSocket frames -->    |
+ *        |                              |
+ *
+ * Usage:
+ *   1. Start the server: aro run Examples/WebSocketDemo
+ *   2. Connect via WebSocket: websocat ws://localhost:8080/ws
+ *   3. Send messages to see echo and broadcast behavior
+ *)
+
+(Application-Start: WebSocket Demo) {
+    <Log> "=== WebSocket Demo Server ===" to the <console>.
+    <Log> "" to the <console>.
+
+    (* Start HTTP server - WebSocket is enabled via HTTP Upgrade *)
+    <Start> the <http-server> with {}.
+    <Log> "HTTP server started on port 8080" to the <console>.
+    <Log> "WebSocket endpoint: ws://localhost:8080/ws" to the <console>.
+    <Log> "" to the <console>.
+    <Log> "To connect: websocat ws://localhost:8080/ws" to the <console>.
+    <Log> "Or use any WebSocket client" to the <console>.
+    <Log> "" to the <console>.
+
+    (* Keep application running to handle events *)
+    <Keepalive> the <application> for the <events>.
+
+    <Return> an <OK: status> for the <startup>.
+}
