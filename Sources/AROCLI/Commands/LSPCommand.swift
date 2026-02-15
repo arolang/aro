@@ -8,7 +8,7 @@ import ArgumentParser
 import Foundation
 import AROLSP
 
-struct LSPCommand: AsyncParsableCommand {
+struct LSPCommand: ParsableCommand {
     static let configuration = CommandConfiguration(
         commandName: "lsp",
         abstract: "Start the ARO Language Server",
@@ -50,9 +50,15 @@ struct LSPCommand: AsyncParsableCommand {
     @Flag(name: .long, help: "Enable debug logging to stderr")
     var debug: Bool = false
 
-    func run() async throws {
+    @Flag(name: .long, help: "Use stdio transport (default, accepted for compatibility)")
+    var stdio: Bool = false
+
+    func run() {
+        // --stdio is accepted for compatibility with VSCode language client
+        // but stdio is already the default and only transport
         let server = AROLanguageServer(debug: debug)
-        try await server.runStdio()
+        // Run synchronously using RunLoop to avoid async runtime issues
+        server.runStdioSync()
     }
 }
 #endif

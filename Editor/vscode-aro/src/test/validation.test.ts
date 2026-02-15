@@ -186,7 +186,8 @@ describe('ARO Path Validation', () => {
 });
 
 describe('ARO Version Pattern Validation', () => {
-    const VERSION_PATTERN = /aro\s+version\s+\d+\.\d+(\.\d+)?/i;
+    // Match either "aro version X.Y.Z" or just "X.Y.Z" or "X.Y.Z-beta.N"
+    const VERSION_PATTERN = /^(\d+\.\d+(\.\d+)?(-[a-zA-Z0-9.]+)?|aro\s+version\s+\d+\.\d+(\.\d+)?)/im;
 
     it('should match "ARO version 1.0.0"', () => {
         assert.strictEqual(VERSION_PATTERN.test('ARO version 1.0.0'), true);
@@ -200,8 +201,12 @@ describe('ARO Version Pattern Validation', () => {
         assert.strictEqual(VERSION_PATTERN.test('Aro Version 1.2'), true);
     });
 
-    it('should not match "aro 1.0.0" (missing "version")', () => {
-        assert.strictEqual(VERSION_PATTERN.test('aro 1.0.0'), false);
+    it('should match "1.0.0" (just version number)', () => {
+        assert.strictEqual(VERSION_PATTERN.test('1.0.0'), true);
+    });
+
+    it('should match "0.3.0-beta.11" (version with prerelease)', () => {
+        assert.strictEqual(VERSION_PATTERN.test('0.3.0-beta.11'), true);
     });
 
     it('should not match "error in aro"', () => {
