@@ -14,7 +14,9 @@ private func uniqueKey(_ base: String = "key") -> String {
 
 // MARK: - ParameterStorage Tests
 
-@Suite("ParameterStorage Tests")
+// Tests must run serially because they share ParameterStorage.shared singleton
+// and one test calls clear() which would affect other tests running in parallel
+@Suite("ParameterStorage Tests", .serialized)
 struct ParameterStorageTests {
 
     @Test("Set and get parameter")
@@ -127,7 +129,7 @@ struct ParameterStorageTests {
 
 // MARK: - Argument Parsing Tests
 
-@Suite("Argument Parsing Tests")
+@Suite("Argument Parsing Tests", .serialized)
 struct ArgumentParsingTests {
 
     @Test("Parse long option with space")
@@ -243,7 +245,7 @@ struct ArgumentParsingTests {
 
 // MARK: - Type Coercion Tests
 
-@Suite("Type Coercion Tests")
+@Suite("Type Coercion Tests", .serialized)
 struct TypeCoercionTests {
 
     @Test("Coerce integer value")
@@ -443,7 +445,7 @@ struct ParameterObjectTests {
 
 // MARK: - Integration Tests
 
-@Suite("Parameters Integration Tests")
+@Suite("Parameters Integration Tests", .serialized)
 struct ParametersIntegrationTests {
 
     @Test("Full workflow with argument parsing and object read")
