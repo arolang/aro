@@ -1,0 +1,38 @@
+openapi: 3.0.3
+info:
+  title: WebSocket Demo API
+  description: Minimal API for WebSocket demo - WebSocket connects via HTTP Upgrade
+  version: 1.0.0
+servers:
+  - url: http://localhost:8080
+
+paths:
+  /health:
+    get:
+      operationId: healthCheck
+      summary: Health check endpoint
+      responses:
+        '200':
+          description: Server is healthy
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    example: "healthy"
+                  websocket:
+                    type: string
+                    example: "ws://localhost:8080/ws"
+
+  /ws:
+    get:
+      operationId: websocketEndpoint
+      summary: WebSocket endpoint (upgrade connection)
+      description: |
+        Connect to this endpoint with a WebSocket client.
+        The server will upgrade the HTTP connection to WebSocket.
+      responses:
+        '101':
+          description: Switching Protocols (WebSocket upgrade)
