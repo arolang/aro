@@ -33,7 +33,7 @@
     <Log> "" to the <console>.
 
     (* Create watched directory if it doesn't exist *)
-    <Make> the <directory> with "watched-dir".
+    <Make> the <directory> to the <path: "watched-dir">.
     <Log> "Monitored directory: ./watched-dir" to the <console>.
 
     (* Start HTTP Server *)

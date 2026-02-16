@@ -1,5 +1,5 @@
 # Test hints for MultiService
-# This is a server example - tests startup only
-mode: run
-timeout: 10
-startup_only: true
+# Multi-service example with HTTP, Socket, and File Monitor
+mode: both
+timeout: 15
+pre-script: mkdir -p watched-dir

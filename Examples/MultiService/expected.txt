@@ -1,0 +1,6 @@
+# Generated: Sun Feb 16 15:55:00 2026
+# Type: http
+# Command: aro run ./Examples/MultiService
+---
+POST /broadcast => {"message":"Message broadcast to all socket clients","success":true}
+GET /status => {"fileMonitor":"watching","httpServer":"running","socketServer":"running","watchedDirectory":"watched-dir"}
