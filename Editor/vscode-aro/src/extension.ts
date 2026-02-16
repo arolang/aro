@@ -2,8 +2,7 @@ import * as vscode from 'vscode';
 import {
     LanguageClient,
     LanguageClientOptions,
-    ServerOptions,
-    TransportKind
+    ServerOptions
 } from 'vscode-languageclient/node';
 import { validateAroPath } from './validation';
 
@@ -29,20 +28,29 @@ export function activate(context: vscode.ExtensionContext) {
     const aroPath = config.get<string>('path', 'aro');
     const debug = config.get<boolean>('debug', false);
 
+    console.log(`ARO LSP: Using path: ${aroPath}, debug: ${debug}`);
+
     // Server options - run the ARO language server
     const serverOptions: ServerOptions = {
         command: aroPath,
         args: debug ? ['lsp', '--debug'] : ['lsp'],
-        transport: TransportKind.stdio
+        options: {
+            shell: false,
+            env: { ...process.env, PATH: process.env.PATH + ':/opt/homebrew/bin:/usr/local/bin' }
+        }
     };
+
+    // Create output channel for logging
+    const outputChannel = vscode.window.createOutputChannel('ARO Language Server');
+    outputChannel.appendLine(`Starting ARO Language Server...`);
+    outputChannel.appendLine(`Path: ${aroPath}`);
+    outputChannel.appendLine(`Debug: ${debug}`);
 
     // Client options
     const clientOptions: LanguageClientOptions = {
         documentSelector: [{ scheme: 'file', language: 'aro' }],
-        synchronize: {
-            fileEvents: vscode.workspace.createFileSystemWatcher('**/*.aro')
-        },
-        outputChannelName: 'ARO Language Server'
+        outputChannel: outputChannel,
+        traceOutputChannel: outputChannel
     };
 
     // Create and start the language client
@@ -68,10 +76,12 @@ export function activate(context: vscode.ExtensionContext) {
         statusBarItem.backgroundColor = undefined;
     }).catch(async (error) => {
         console.error('Failed to start ARO Language Server:', error);
+        console.error('Error details:', JSON.stringify(error, null, 2));
 
         // Update status: error
         statusBarItem.text = '$(error) ARO LSP: Failed';
-        statusBarItem.tooltip = `Failed to start: ${error.message}. Click to configure.`;
+        const errorMsg = error.message || String(error);
+        statusBarItem.tooltip = `Failed to start: ${errorMsg}. Click to configure.`;
         statusBarItem.backgroundColor = new vscode.ThemeColor('statusBarItem.errorBackground');
 
         const action = await vscode.window.showErrorMessage(

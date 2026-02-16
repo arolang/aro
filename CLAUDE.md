@@ -387,35 +387,34 @@ Sources/
 │   └── Linker.swift    # Compilation and linking
 ├── AROCRuntime/        # C-callable Swift runtime bridge
 │   ├── RuntimeBridge.swift   # Core runtime C interface
-│   ├── ActionBridge.swift    # All 48 actions via @_cdecl
+│   ├── ActionBridge.swift    # All 50+ actions via @_cdecl
 │   └── ServiceBridge.swift   # HTTP/File/Socket C interface
 └── AROCLI/             # CLI (run, compile, check, build commands)
 
-Examples/
-├── HelloWorld/         # Single-file example
+Examples/               # 60+ examples (see Examples/ directory for full list)
+├── HelloWorld/         # Minimal single-file example
 ├── Computations/       # Compute operations and qualifier-as-name syntax
-├── HTTPServer/         # HTTP server example
-├── FileWatcher/        # File monitoring example
-├── EchoSocket/         # Socket example
-├── UserService/        # Multi-file application example
-│   ├── openapi.yaml    # OpenAPI contract (defines HTTP routes)
-│   ├── main.aro        # Application-Start
-│   ├── users.aro       # Feature sets (named after operationIds)
-│   └── events.aro      # Event handlers
-├── RepositoryObserver/ # Repository observers example
-│   ├── openapi.yaml    # API contract
-│   ├── main.aro        # Application-Start
-│   ├── api.aro         # CRUD operations
-│   └── observers.aro   # Repository change observers
+├── Expressions/        # Arithmetic, comparison, and logical operators
+├── HTTPServer/         # HTTP server with Keepalive
+├── HTTPClient/         # HTTP client requests
+├── FileWatcher/        # File system monitoring
+├── FileOperations/     # File I/O (read, write, copy, move)
+├── EchoSocket/         # TCP socket server
+├── UserService/        # Multi-file REST API application
+├── RepositoryObserver/ # Repository change observers
+├── OrderService/       # State machine with Accept action
+├── SimpleChat/         # WebSocket real-time messaging
+├── DateTimeDemo/       # Date/time operations
+├── DateRangeDemo/      # Date ranges and recurrence
+├── SetOperations/      # Union, intersect, difference
+├── DataPipeline/       # Filter, transform, aggregate
+├── TemplateEngine/     # Mustache-style templates
+├── MetricsDemo/        # Prometheus metrics export
+├── Parameters/         # Command-line argument parsing
 ├── GreetingPlugin/     # Swift plugin example
-│   ├── main.aro
-│   └── Plugins/plugin-swift-hello/
 ├── HashPluginDemo/     # C plugin example
-│   ├── main.aro
-│   └── Plugins/plugin-c-hash/
-└── MarkdownRenderer/   # Python plugin example (managed)
-    ├── main.aro
-    └── test.hint       # References managed plugin URL
+├── CSVProcessor/       # Rust plugin example
+└── MarkdownRenderer/   # Python plugin example
 
 Proposals/              # Language specifications
 ├── ARO-0001-language-fundamentals.md
@@ -448,7 +447,7 @@ Proposals/              # Language specifications
 ├── ARO-0043-sink-syntax.md
 ├── ARO-0044-metrics.md
 ├── ARO-0045-package-manager.md
-├── ARO-0045-template-engine.md
+├── ARO-0050-template-engine.md
 ├── ARO-0046-typed-event-extraction.md
 ├── ARO-0047-command-line-parameters.md
 └── ARO-0048-websocket.md
@@ -490,10 +489,10 @@ The `Proposals/` directory contains language specifications:
 | **0043 Sink Syntax** | Expressions in result position |
 | **0044 Runtime Metrics** | Execution counts, timing, Prometheus format |
 | **0045 Package Manager** | Plugin installation, aro add/remove, plugin.yaml |
-| **0045 Template Engine** | Mustache-style templates, Render action |
 | **0046 Typed Event Extraction** | Schema-validated event data extraction |
 | **0047 Command-Line Parameters** | CLI argument parsing, Parameters action |
 | **0048 WebSocket** | WebSocket server support, real-time messaging |
+| **0050 Template Engine** | Mustache-style templates, Render action |
 
 ## Concurrency
 

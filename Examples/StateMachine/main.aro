@@ -1,0 +1,117 @@
+(*
+ * StateMachine Example
+ * Demonstrates ARO's state machine capabilities with the <Accept> action.
+ *
+ * This example shows a document review workflow:
+ *
+ *   State Diagram:
+ *   ==============
+ *
+ *   +-------+     +------------+     +----------+
+ *   | draft |---->| submitted  |---->| approved |
+ *   +-------+     +------------+     +----------+
+ *       |               |
+ *       v               v
+ *   +-----------+   +----------+
+ *   | cancelled |   | rejected |
+ *   +-----------+   +----------+
+ *
+ *   Valid Transitions:
+ *   - draft -> submitted  (submit for review)
+ *   - draft -> cancelled  (cancel before submission)
+ *   - submitted -> approved  (approve the document)
+ *   - submitted -> rejected  (reject the document)
+ *
+ *   Invalid Transitions:
+ *   - draft -> approved  (cannot approve without submission)
+ *   - approved -> rejected  (final state, no transitions out)
+ *   - rejected -> approved  (final state, no transitions out)
+ *   - cancelled -> submitted  (final state, no transitions out)
+ *)
+
+(Application-Start: State Machine Demo) {
+    <Log> "=== ARO State Machine Demo ===" to the <console>.
+    <Log> "" to the <console>.
+
+    (* Create a document in draft state *)
+    <Create> the <document> with {
+        id: "DOC-001",
+        title: "Project Proposal",
+        author: "Alice",
+        status: "draft"
+    }.
+
+    <Log> "Created document:" to the <console>.
+    <Log> <document> to the <console>.
+    <Log> "" to the <console>.
+
+    (* Valid transition: draft -> submitted *)
+    <Log> "--- Valid Transition: draft -> submitted ---" to the <console>.
+    <Accept> the <transition: draft_to_submitted> on <document: status>.
+    <Log> "Transition successful. New status:" to the <console>.
+    <Log> <document> to the <console>.
+    <Log> "" to the <console>.
+
+    (* Valid transition: submitted -> approved *)
+    <Log> "--- Valid Transition: submitted -> approved ---" to the <console>.
+    <Accept> the <transition: submitted_to_approved> on <document: status>.
+    <Log> "Transition successful. New status:" to the <console>.
+    <Log> <document> to the <console>.
+    <Log> "" to the <console>.
+
+    (* Now test invalid transitions *)
+    <Log> "=== Testing Invalid Transitions ===" to the <console>.
+    <Log> "" to the <console>.
+
+    (* Create another document to test rejection path *)
+    <Create> the <doc2> with {
+        id: "DOC-002",
+        title: "Budget Report",
+        author: "Bob",
+        status: "draft"
+    }.
+
+    <Log> "Created second document:" to the <console>.
+    <Log> <doc2> to the <console>.
+    <Log> "" to the <console>.
+
+    (* Try invalid transition: draft -> approved (skipping submitted) *)
+    <Log> "--- Attempting Invalid: draft -> approved ---" to the <console>.
+    <Log> "This should fail because documents must be submitted first." to the <console>.
+
+    (* The following would throw an error:
+       <Accept> the <transition: draft_to_approved> on <doc2: status>.
+       Error: Cannot accept state draft->approved on doc2: status. Current state is "draft".
+
+       Instead, let's demonstrate the correct path first:
+    *)
+
+    (* Valid path: submit, then reject *)
+    <Accept> the <transition: draft_to_submitted> on <doc2: status>.
+    <Log> "Submitted for review." to the <console>.
+
+    <Accept> the <transition: submitted_to_rejected> on <doc2: status>.
+    <Log> "Document rejected. Final status:" to the <console>.
+    <Log> <doc2> to the <console>.
+    <Log> "" to the <console>.
+
+    (* Test cancellation path *)
+    <Create> the <doc3> with {
+        id: "DOC-003",
+        title: "Meeting Notes",
+        author: "Charlie",
+        status: "draft"
+    }.
+
+    <Log> "--- Testing Cancellation Path ---" to the <console>.
+    <Log> "Created document in draft state:" to the <console>.
+    <Log> <doc3> to the <console>.
+
+    <Accept> the <transition: draft_to_cancelled> on <doc3: status>.
+    <Log> "Document cancelled. Final status:" to the <console>.
+    <Log> <doc3> to the <console>.
+    <Log> "" to the <console>.
+
+    <Log> "=== State Machine Demo Complete ===" to the <console>.
+    <Return> an <OK: status> for the <application>.
+}

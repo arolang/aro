@@ -216,7 +216,7 @@ struct BuildCommand: AsyncParsableCommand {
             }
         }
 
-        // Discover and serialize templates for embedding (ARO-0045)
+        // Discover and serialize templates for embedding (ARO-0050)
         var templatesJSON: String? = nil
         let templatesDir = appConfig.rootPath.appendingPathComponent("templates")
         if FileManager.default.fileExists(atPath: templatesDir.path) {
