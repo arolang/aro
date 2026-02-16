@@ -201,7 +201,7 @@ public final class LLVMExternalDeclEmitter {
             types.voidFunctionType(parameters: [ptr])
         )
 
-        // void @aro_set_embedded_templates(ptr) - ARO-0045
+        // void @aro_set_embedded_templates(ptr) - ARO-0050
         _setEmbeddedTemplates = ctx.module.declareFunction(
             "aro_set_embedded_templates",
             types.voidFunctionType(parameters: [ptr])

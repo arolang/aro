@@ -128,7 +128,7 @@ public actor ActionRegistry {
         // System execute action (ARO-0033)
         addAction(ExecuteAction.self)
 
-        // Template actions (ARO-0045)
+        // Template actions (ARO-0050)
         addAction(IncludeAction.self)
 
         return actions

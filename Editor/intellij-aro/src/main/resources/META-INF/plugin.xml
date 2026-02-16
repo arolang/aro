@@ -1,7 +1,7 @@
 <idea-plugin>
     <id>com.arolang.aro</id>
     <name>ARO Language</name>
-    <version>1.1.0</version>
+    <version>1.2.0</version>
     <vendor email="team@arolang.org" url="https://arolang.github.io/aro/">ARO Team</vendor>
 
     <description><![CDATA[
@@ -32,6 +32,15 @@
     ]]></description>
 
     <change-notes><![CDATA[
+        <h3>1.2.0</h3>
+        <ul>
+            <li>Updated syntax highlighting with action categories (REQUEST, OWN, RESPONSE, EXPORT, LIFECYCLE, TEST)</li>
+            <li>Improved LSP server path resolution for common installations</li>
+            <li>Fixed version validation for beta versions</li>
+            <li>Added missing actions: Parameters, Render, Connect, Disconnect, Broadcast</li>
+            <li>Unified variable highlighting</li>
+        </ul>
+
         <h3>1.1.0</h3>
         <ul>
             <li>Added Language Server Protocol (LSP) support</li>
@@ -52,7 +61,7 @@
         </ul>
     ]]></change-notes>
 
-    <idea-version since-build="242" until-build="251.*"/>
+    <idea-version since-build="243" until-build="243.*"/>
 
     <depends>com.intellij.modules.platform</depends>
     <depends>org.jetbrains.plugins.textmate</depends>
@@ -74,6 +83,10 @@
             instance="com.arolang.aro.settings.AROSettingsConfigurable"
             id="com.arolang.aro.settings.AROSettingsConfigurable"
             displayName="ARO Language"/>
+
+        <!-- Spell checker dictionary for ARO-specific terms -->
+        <spellchecker.bundledDictionaryProvider
+            implementation="com.arolang.aro.AROSpellCheckerDictionary"/>
     </extensions>
 
     <!-- LSP4IJ Language Server Registration -->

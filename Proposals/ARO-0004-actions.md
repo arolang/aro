@@ -92,6 +92,7 @@ REQUEST actions bring data from external sources into the internal execution con
 | Action | Verbs | Prepositions | Description |
 |--------|-------|--------------|-------------|
 | **Extract** | extract, parse, get | from, via | Extract values from objects/structures |
+| **ParseHtml** | parsehtml | from | Parse HTML/XML and extract structured data (see ARO-0011) |
 | **Retrieve** | retrieve, fetch, load, find | from | Retrieve data from repositories |
 | **Receive** | receive | from, via | Receive data from external sources |
 | **Request** | request, http | from, to, via, with | Make HTTP requests |
@@ -685,7 +686,7 @@ Actions must be `Sendable` and thread-safe. Do not store mutable state in action
 | 45 | Store | export | store, save, persist | into, to, in |
 | 46 | Emit | export | emit | with, to |
 | 47 | Execute | own | execute, exec, run, shell | with |
-| 48 | Call | own | call, invoke | with, to |
+| 48 | Call | own | call, invoke | from, to, with, via |
 
 ---
 

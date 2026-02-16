@@ -7,8 +7,8 @@
     (* Start HTTP server from OpenAPI contract *)
     <Start> the <http-server> with {}.
 
-    (* TODO: File monitor not yet fully implemented *)
-    (* <Start> the <file-monitor> with { directory: "./data/users" }. *)
+    (* Optional: Enable file monitoring to watch for data directory changes *)
+    (* <Start> the <file-monitor> with { directory: "./data" }. *)
 
     <Log> "User Service ready on port 8080" to the <console>.
 

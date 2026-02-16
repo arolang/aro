@@ -38,7 +38,7 @@ public final class Application: @unchecked Sendable {
     private var httpServer: AROHTTPServer?
     #endif
 
-    /// Template service for HTML template rendering (ARO-0045)
+    /// Template service for HTML template rendering (ARO-0050)
     private var templateService: AROTemplateService?
 
     /// Whether HTTP server is enabled (requires OpenAPI contract)
@@ -110,7 +110,7 @@ public final class Application: @unchecked Sendable {
             await runtime.register(service: specService)
         }
 
-        // Register template service (ARO-0045)
+        // Register template service (ARO-0050)
         let templatesDirectory = (config.workingDirectory as NSString).appendingPathComponent("templates")
         let ts = AROTemplateService(templatesDirectory: templatesDirectory)
         let templateExecutor = TemplateExecutor(
@@ -291,7 +291,7 @@ public final class Application: @unchecked Sendable {
         }
         #endif
 
-        // Register template service for HTML template rendering (ARO-0045)
+        // Register template service for HTML template rendering (ARO-0050)
         if let ts = self.templateService {
             context.register(ts as TemplateService)
         }
