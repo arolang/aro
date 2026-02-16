@@ -901,6 +901,9 @@ sub generate_test_payload {
         'createUser' => '{"name":"Test User","email":"test@example.com"}',
         'updateUser' => '{"name":"Updated User","email":"updated@example.com"}',
 
+        # Multi-service
+        'broadcastMessage' => '{"message":"test"}',
+
         # Generic create operations
         'create' => '{"name":"Test Item"}',
     );

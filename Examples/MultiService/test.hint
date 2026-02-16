@@ -1,0 +1,5 @@
+# Test hints for MultiService
+# Multi-service example with HTTP, Socket, and File Monitor
+mode: both
+timeout: 15
+pre-script: mkdir -p watched-dir

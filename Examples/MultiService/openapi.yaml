@@ -1,0 +1,64 @@
+openapi: 3.0.3
+info:
+  title: Multi-Service Demo API
+  description: REST API for multi-service application demonstrating HTTP + Socket + File Monitor
+  version: 1.0.0
+servers:
+  - url: http://localhost:8080
+
+paths:
+  /status:
+    get:
+      operationId: getStatus
+      summary: Get service status
+      description: Returns the status of all services (HTTP, Socket, File Monitor)
+      responses:
+        '200':
+          description: Service status
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  httpServer:
+                    type: string
+                    example: "running"
+                  socketServer:
+                    type: string
+                    example: "running"
+                  fileMonitor:
+                    type: string
+                    example: "watching"
+                  watchedDirectory:
+                    type: string
+                    example: "watched-dir"
+
+  /broadcast:
+    post:
+      operationId: broadcastMessage
+      summary: Broadcast message to socket clients
+      description: Sends a message to all connected socket clients
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - message
+              properties:
+                message:
+                  type: string
+                  example: "Hello from HTTP!"
+      responses:
+        '200':
+          description: Message broadcast successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  message:
+                    type: string

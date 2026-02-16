@@ -1,0 +1,47 @@
+(*
+ * File Event Handlers
+ * Demonstrates file monitoring in a multi-service application.
+ * File events are broadcast to socket clients for real-time notifications.
+ *)
+
+(* Handle file creation events *)
+(Handle File Created: File Event Handler) {
+    <Extract> the <path> from the <event: path>.
+    <Log> ">>> File created" to the <console>.
+    <Log> <path> to the <console>.
+
+    (* Notify socket clients about the new file *)
+    <Create> the <prefix> with "FILE CREATED: ".
+    <Compute> the <notification> from <prefix> + <path>.
+    <Broadcast> the <notification> to the <socket>.
+
+    <Return> an <OK: status> for the <event>.
+}
+
+(* Handle file modification events *)
+(Handle File Modified: File Event Handler) {
+    <Extract> the <path> from the <event: path>.
+    <Log> ">>> File modified" to the <console>.
+    <Log> <path> to the <console>.
+
+    (* Notify socket clients about the modification *)
+    <Create> the <prefix> with "FILE MODIFIED: ".
+    <Compute> the <notification> from <prefix> + <path>.
+    <Broadcast> the <notification> to the <socket>.
+
+    <Return> an <OK: status> for the <event>.
+}
+
+(* Handle file deletion events *)
+(Handle File Deleted: File Event Handler) {
+    <Extract> the <path> from the <event: path>.
+    <Log> ">>> File deleted" to the <console>.
+    <Log> <path> to the <console>.
+
+    (* Notify socket clients about the deletion *)
+    <Create> the <prefix> with "FILE DELETED: ".
+    <Compute> the <notification> from <prefix> + <path>.
+    <Broadcast> the <notification> to the <socket>.
+
+    <Return> an <OK: status> for the <event>.
+}

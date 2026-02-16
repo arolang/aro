@@ -1,0 +1,62 @@
+(*
+ * MultiService Example
+ * Demonstrates running multiple services in a single ARO application:
+ *   - HTTP Server (REST API)
+ *   - Socket Server (TCP real-time)
+ *   - File Monitor (file system events)
+ *
+ * Architecture:
+ * =============
+ *
+ *   +------------------------------------------------------------------+
+ *   |                      ARO Application                              |
+ *   |                                                                    |
+ *   |  +--------------+  +--------------+  +------------------+         |
+ *   |  | HTTP Server  |  | Socket Server|  | File Monitor     |         |
+ *   |  | Port 8080    |  | Port 9000    |  | ./watched-dir    |         |
+ *   |  +--------------+  +--------------+  +------------------+         |
+ *   |         |                 |                    |                  |
+ *   |         v                 v                    v                  |
+ *   |  +----------------------------------------------------+           |
+ *   |  |                    EventBus                        |           |
+ *   |  | http.request | socket.* | file.created/modified/*  |           |
+ *   |  +----------------------------------------------------+           |
+ *   |                                                                    |
+ *   +------------------------------------------------------------------+
+ *
+ * This example shows how ARO's event-driven architecture allows
+ * multiple services to coexist and communicate through the EventBus.
+ *)
+
+(Application-Start: Multi-Service Demo) {
+    <Log> "=== Multi-Service Demo ===" to the <console>.
+    <Log> "" to the <console>.
+
+    (* Create watched directory if it doesn't exist *)
+    <Make> the <directory> to the <path: "watched-dir">.
+    <Log> "Monitored directory: ./watched-dir" to the <console>.
+
+    (* Start HTTP Server *)
+    <Start> the <http-server> with {}.
+    <Log> "HTTP Server: http://localhost:8080" to the <console>.
+
+    (* Start Socket Server *)
+    <Start> the <socket-server> with { port: 9000 }.
+    <Log> "Socket Server: localhost:9000" to the <console>.
+
+    (* Start File Monitor - path as string *)
+    <Start> the <file-monitor> with "watched-dir".
+    <Log> "File Monitor: watching ./watched-dir" to the <console>.
+
+    <Log> "" to the <console>.
+    <Log> "Services started. Try:" to the <console>.
+    <Log> "  - HTTP: curl http://localhost:8080/status" to the <console>.
+    <Log> "  - Socket: nc localhost 9000" to the <console>.
+    <Log> "  - Files: touch watched-dir/test.txt" to the <console>.
+    <Log> "" to the <console>.
+
+    (* Keep application running *)
+    <Keepalive> the <application> for the <events>.
+
+    <Return> an <OK: status> for the <startup>.
+}
