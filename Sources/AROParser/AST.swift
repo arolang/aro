@@ -765,6 +765,11 @@ public struct QualifiedNoun: Sendable, Equatable, CustomStringConvertible {
         if type.contains("<") {
             return [type]
         }
+        // If it looks like a file path, don't split by dots (preserve extensions)
+        // File paths start with /, ./, ../, or ~ (home directory)
+        if type.hasPrefix("/") || type.hasPrefix("./") || type.hasPrefix("../") || type.hasPrefix("~") {
+            return [type]
+        }
         // Split by dots for property path syntax (e.g., "customer.address.city")
         return type.split(separator: ".").map(String.init)
     }

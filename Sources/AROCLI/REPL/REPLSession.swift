@@ -104,6 +104,11 @@ public final class REPLSession: @unchecked Sendable {
             outputContext: .human,
             eventBus: eventBus
         )
+
+        // Register services for REPL session
+        let fileService = AROFileSystemService(eventBus: eventBus)
+        self.context.register(fileService as FileSystemService)
+
         self.executor = FeatureSetExecutor(
             actionRegistry: ActionRegistry.shared,
             eventBus: eventBus,
