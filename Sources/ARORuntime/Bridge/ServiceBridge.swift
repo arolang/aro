@@ -2313,7 +2313,7 @@ public func aro_set_embedded_openapi(_ specPtr: UnsafePointer<CChar>?) {
     embeddedOpenAPISpec = String(cString: ptr)
 }
 
-/// Set the embedded templates (called from generated main) - ARO-0045
+/// Set the embedded templates (called from generated main) - ARO-0050
 @_cdecl("aro_set_embedded_templates")
 public func aro_set_embedded_templates(_ jsonPtr: UnsafePointer<CChar>?) {
     guard let ptr = jsonPtr else { return }
@@ -3082,7 +3082,7 @@ public func aro_set_embedded_openapi(_ specPtr: UnsafePointer<CChar>?) {
     // No-op on Windows
 }
 
-/// Set the embedded templates (Windows stub) - ARO-0045
+/// Set the embedded templates (Windows stub) - ARO-0050
 @_cdecl("aro_set_embedded_templates")
 public func aro_set_embedded_templates(_ jsonPtr: UnsafePointer<CChar>?) {
     // No-op on Windows

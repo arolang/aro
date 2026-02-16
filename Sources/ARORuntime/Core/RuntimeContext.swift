@@ -50,7 +50,7 @@ public final class RuntimeContext: ExecutionContext, @unchecked Sendable {
     /// Whether this is a compiled binary execution
     private let _isCompiled: Bool
 
-    /// Template output buffer (ARO-0045)
+    /// Template output buffer (ARO-0050)
     private var _templateBuffer: String = ""
 
     /// Whether this is a template rendering context
@@ -391,7 +391,7 @@ public final class RuntimeContext: ExecutionContext, @unchecked Sendable {
         )
     }
 
-    /// Create a child context for template rendering (ARO-0045)
+    /// Create a child context for template rendering (ARO-0050)
     /// This context has an isolated template buffer and copies all parent variables
     public func createTemplateContext() -> RuntimeContext {
         let templateContext = RuntimeContext(
@@ -472,7 +472,7 @@ public final class RuntimeContext: ExecutionContext, @unchecked Sendable {
         _isCompiled
     }
 
-    // MARK: - Template Buffer (ARO-0045)
+    // MARK: - Template Buffer (ARO-0050)
 
     public func appendToTemplateBuffer(_ value: String) {
         lock.lock()

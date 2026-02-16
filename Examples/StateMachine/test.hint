@@ -1,0 +1,4 @@
+# Test hints for StateMachine example
+# Demonstrates Accept action for state transitions
+mode: both
+timeout: 30

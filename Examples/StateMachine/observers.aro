@@ -1,0 +1,49 @@
+(*
+ * State Transition Observers
+ * Demonstrates handling state transition events emitted by <Accept> action.
+ *
+ * When a state transition occurs, the Accept action emits a StateTransitionEvent
+ * containing:
+ *   - fromState: the previous state
+ *   - toState: the new state
+ *   - objectName: the variable name (e.g., "document")
+ *   - fieldName: the field that changed (e.g., "status")
+ *   - entityId: the id field of the entity if present
+ *   - entity: the full entity data
+ *
+ * State guards use the syntax: Handler<field:value>
+ *)
+
+(* Handle document submission - filter by toState *)
+(Document Submitted: StateTransition Handler<toState:submitted>) {
+    <Extract> the <entity-id> from the <event: entityId>.
+    <Extract> the <previous-state> from the <event: fromState>.
+    <Extract> the <new-state> from the <event: toState>.
+    <Log> ">>> Notification: Document submitted for review" to the <console>.
+    <Log> <entity-id> to the <console>.
+    <Return> an <OK: status> for the <notification>.
+}
+
+(* Handle document approval *)
+(Document Approved: StateTransition Handler<toState:approved>) {
+    <Extract> the <entity-id> from the <event: entityId>.
+    <Log> ">>> Notification: Document approved!" to the <console>.
+    <Log> <entity-id> to the <console>.
+    <Return> an <OK: status> for the <notification>.
+}
+
+(* Handle document rejection *)
+(Document Rejected: StateTransition Handler<toState:rejected>) {
+    <Extract> the <entity-id> from the <event: entityId>.
+    <Log> ">>> Notification: Document rejected" to the <console>.
+    <Log> <entity-id> to the <console>.
+    <Return> an <OK: status> for the <notification>.
+}
+
+(* Handle document cancellation *)
+(Document Cancelled: StateTransition Handler<toState:cancelled>) {
+    <Extract> the <entity-id> from the <event: entityId>.
+    <Log> ">>> Notification: Document cancelled" to the <console>.
+    <Log> <entity-id> to the <console>.
+    <Return> an <OK: status> for the <notification>.
+}

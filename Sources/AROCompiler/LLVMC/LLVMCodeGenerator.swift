@@ -45,7 +45,7 @@ public final class LLVMCodeGenerator {
     /// - Parameters:
     ///   - program: The analyzed ARO program
     ///   - openAPISpecJSON: Optional OpenAPI specification as JSON string
-    ///   - templatesJSON: Optional templates dictionary as JSON string (ARO-0045)
+    ///   - templatesJSON: Optional templates dictionary as JSON string (ARO-0050)
     /// - Returns: Code generation result with IR text
     /// - Throws: LLVMCodeGenError if generation fails
     public func generate(
@@ -1293,7 +1293,7 @@ public final class LLVMCodeGenerator {
             ctx.module.insertCall(externals.setEmbeddedOpenapi, on: [specStr], at: ip)
         }
 
-        // Set embedded templates if provided (ARO-0045)
+        // Set embedded templates if provided (ARO-0050)
         if let templates = templatesJSON {
             let templatesStr = ctx.stringConstant(templates)
             ctx.module.insertCall(externals.setEmbeddedTemplates, on: [templatesStr], at: ip)
@@ -1471,7 +1471,7 @@ private final class StringConstantCollector {
             _ = ctx.stringConstant(spec)
         }
 
-        // Register templates JSON if provided (ARO-0045)
+        // Register templates JSON if provided (ARO-0050)
         if let templates = templatesJSON {
             _ = ctx.stringConstant(templates)
         }

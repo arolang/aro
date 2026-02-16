@@ -387,7 +387,7 @@ public struct LogAction: ActionImplementation {
         // Get log target (e.g., console, file, template)
         let target = object.base
 
-        // ARO-0045: Check for template target
+        // ARO-0050: Check for template target
         // Syntax: <Print> "message" to the <template>.
         if target.lowercased() == "template" {
             // Append to template buffer instead of stdout/stderr
