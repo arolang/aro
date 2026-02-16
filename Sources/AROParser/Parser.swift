@@ -547,7 +547,7 @@ public final class Parser {
             } else {
                 op = .greaterThan
             }
-        case .equalEqual:
+        case .equalEqual, .equals:
             advance()
             op = .equal
         case .bangEqual:
@@ -572,7 +572,7 @@ public final class Parser {
                 throw ParserError.unexpectedToken(expected: "'in' after 'not' in where clause", got: peek())
             }
         default:
-            throw ParserError.unexpectedToken(expected: "comparison operator (is, <, >, <=, >=, contains, matches, in, not in)", got: peek())
+            throw ParserError.unexpectedToken(expected: "comparison operator (is, =, <, >, <=, >=, !=, contains, matches, in, not in)", got: peek())
         }
 
         // Parse value expression
