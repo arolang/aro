@@ -669,7 +669,7 @@ public struct CompareAction: ActionImplementation {
     }
 }
 
-/// Transforms a value or renders a template (ARO-0045)
+/// Transforms a value or renders a template (ARO-0050)
 public struct TransformAction: ActionImplementation {
     public static let role: ActionRole = .own
     public static let verbs: Set<String> = ["transform", "convert", "map"]
@@ -684,7 +684,7 @@ public struct TransformAction: ActionImplementation {
     ) async throws -> any Sendable {
         try validatePreposition(object.preposition)
 
-        // ARO-0045: Check for template rendering
+        // ARO-0050: Check for template rendering
         // Syntax: <Transform> the <result> from the <template: path>.
         if object.base.lowercased() == "template" {
             return try await renderTemplate(object: object, context: context)
@@ -738,7 +738,7 @@ public struct TransformAction: ActionImplementation {
         }
     }
 
-    /// Render a template (ARO-0045)
+    /// Render a template (ARO-0050)
     private func renderTemplate(
         object: ObjectDescriptor,
         context: ExecutionContext

@@ -1,8 +1,8 @@
-# ARO-0045: Template Engine
+# ARO-0050: Template Engine
 
-* Proposal: ARO-0045
+* Proposal: ARO-0050
 * Author: ARO Language Team
-* Status: **Draft**
+* Status: **Implemented**
 * Requires: ARO-0001, ARO-0002, ARO-0004, ARO-0005, ARO-0008, ARO-0009
 
 ## Abstract
