@@ -9,7 +9,8 @@ use IO::Select;
 use Term::ANSIColor qw(:constants);
 
 # Configuration
-my $ARO_CMD = ".build/debug/aro repl --no-color";
+my $aro_bin = $ENV{ARO_BIN} // ".build/debug/aro";
+my $ARO_CMD = "$aro_bin repl --no-color";
 my $TIMEOUT = 5;  # seconds
 
 # Test counters
