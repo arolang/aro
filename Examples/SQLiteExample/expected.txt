@@ -1,4 +1,4 @@
-# Generated: Sun Feb  1 15:39:19 2026
+# Generated: Sun Feb 16 2026
 # Type: console
 # Command: aro run ./Examples/SQLiteExample
 # Timeout: 120s
@@ -16,13 +16,17 @@ Inserted Bob with ID:
 
 Step 3: Querying all users...
 All users:
-[email: alice@example.com
+email: alice@example.com
 id: 1
-name: Alice, email: bob@example.com
+name: Alice
+
+email: bob@example.com
 id: 2
-name: Bob, email: charlie@example.com
+name: Bob
+
+email: charlie@example.com
 id: 3
-name: Charlie]
+name: Charlie
 
 Step 4: Updating Bob's email...
 Updated rows:
@@ -30,9 +34,9 @@ Updated rows:
 
 Step 5: Querying Bob after update...
 Bob's data:
-[email: robert@example.com
+email: robert@example.com
 id: 2
-name: Bob]
+name: Bob
 
 Step 6: Deleting Charlie...
 Deleted rows:
@@ -40,11 +44,13 @@ Deleted rows:
 
 Step 7: Final users list...
 Remaining users:
-[email: alice@example.com
+email: alice@example.com
 id: 1
-name: Alice, email: robert@example.com
+name: Alice
+
+email: robert@example.com
 id: 2
-name: Bob]
+name: Bob
 
 All CRUD operations completed successfully!
 SQLite demo completed.

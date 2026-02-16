@@ -1,4 +1,4 @@
-# Generated: Sat Jan 17 2026
+# Generated: Sun Feb 16 2026
 # Type: console
 # Command: aro run ./Examples/DataPipeline
 ---
@@ -17,25 +17,37 @@ Max:
 5.00
 === Test 2: Object Array with Filter ===
 All Orders:
-[amount: 100
+amount: 100
 id: 1
-status: active, amount: 250
+status: active
+
+amount: 250
 id: 2
-status: pending, amount: 500
+status: pending
+
+amount: 500
 id: 3
-status: active, amount: 75
+status: active
+
+amount: 75
 id: 4
-status: cancelled, amount: 300
+status: cancelled
+
+amount: 300
 id: 5
-status: active]
+status: active
 Active Orders:
-[amount: 100
+amount: 100
 id: 1
-status: active, amount: 500
+status: active
+
+amount: 500
 id: 3
-status: active, amount: 300
+status: active
+
+amount: 300
 id: 5
-status: active]
+status: active
 Active Orders Total:
 900.00
 Active Orders Count:
@@ -44,22 +56,30 @@ Active Orders Average:
 300.00
 === Test 3: Map Operation ===
 Mapped Active Orders (pass-through):
-[amount: 100
+amount: 100
 id: 1
-status: active, amount: 500
+status: active
+
+amount: 500
 id: 3
-status: active, amount: 300
+status: active
+
+amount: 300
 id: 5
-status: active]
+status: active
 === Test 4: Numeric Filter ===
 High Value Orders (amount > 200):
-[amount: 250
+amount: 250
 id: 2
-status: pending, amount: 500
+status: pending
+
+amount: 500
 id: 3
-status: active, amount: 300
+status: active
+
+amount: 300
 id: 5
-status: active]
+status: active
 High Value Total:
 1050.00
 pipeline-test

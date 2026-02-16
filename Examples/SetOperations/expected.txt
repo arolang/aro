@@ -1,4 +1,4 @@
-# Generated: Sun Jan 18 18:05:51 2026
+# Generated: Sun Feb 16 2026
 # Type: console
 # Command: aro run ./Examples/SetOperations
 ---
@@ -58,13 +58,17 @@ Items: [{id:1,v:2}, {id:2,v:3}, {id:3,v:5}, {id:4,v:7}]
 Exclude list: [3, 5]
 
 Items where value IN exclude-list:
-[id: 2
-value: 3, id: 3
-value: 5]
+id: 2
+value: 3
+
+id: 3
+value: 5
 Items where value NOT IN exclude-list:
-[id: 1
-value: 2, id: 4
-value: 7]
+id: 1
+value: 2
+
+id: 4
+value: 7
 
 === Demo Complete ===
 demo
