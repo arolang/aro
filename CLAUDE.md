@@ -391,30 +391,74 @@ Sources/
 │   └── ServiceBridge.swift   # HTTP/File/Socket C interface
 └── AROCLI/             # CLI (run, compile, check, build commands)
 
-Examples/               # 60+ examples (see Examples/ directory for full list)
+Examples/               # 65 examples organized by category (run `ls Examples/` for full list)
+│
+│   # Getting Started
 ├── HelloWorld/         # Minimal single-file example
+├── HelloWorldAPI/      # Simple HTTP API
+├── Calculator/         # Basic arithmetic operations
+│
+│   # Core Language
 ├── Computations/       # Compute operations and qualifier-as-name syntax
 ├── Expressions/        # Arithmetic, comparison, and logical operators
+├── Conditionals/       # When guards and conditional execution
+├── Iteration/          # For-each loops and collection iteration
+├── Scoping/            # Variable scoping and immutability
+├── ErrorHandling/      # Error philosophy demonstration
+│
+│   # Events & Lifecycle
+├── EventExample/       # Custom event emission and handling
+├── EventListener/      # Event subscription patterns
+├── ApplicationEnd/     # Graceful shutdown handlers
+├── StateMachine/       # State transitions with Accept action
+├── OrderService/       # Full state machine example
+│
+│   # HTTP & WebSocket
 ├── HTTPServer/         # HTTP server with Keepalive
 ├── HTTPClient/         # HTTP client requests
+├── UserService/        # Multi-file REST API application
+├── SimpleChat/         # WebSocket real-time messaging
+├── WebSocketDemo/      # WebSocket server patterns
+│
+│   # File System
 ├── FileWatcher/        # File system monitoring
 ├── FileOperations/     # File I/O (read, write, copy, move)
-├── EchoSocket/         # TCP socket server
-├── UserService/        # Multi-file REST API application
+├── FileMetadata/       # File stats and attributes
+├── FormatAwareIO/      # Auto-detect JSON, YAML, CSV
+├── DirectoryReplicator/ # Directory operations
+│
+│   # Data Processing
+├── DataPipeline/       # Filter, transform, aggregate
+├── SetOperations/      # Union, intersect, difference
+├── CollectionMerge/    # Merging collections and objects
 ├── RepositoryObserver/ # Repository change observers
-├── OrderService/       # State machine with Accept action
-├── SimpleChat/         # WebSocket real-time messaging
+├── SQLiteExample/      # Database plugin usage
+│
+│   # Dates & Time
 ├── DateTimeDemo/       # Date/time operations
 ├── DateRangeDemo/      # Date ranges and recurrence
-├── SetOperations/      # Union, intersect, difference
-├── DataPipeline/       # Filter, transform, aggregate
+│
+│   # Sockets & Services
+├── EchoSocket/         # TCP socket server
+├── SocketClient/       # TCP client connections
+├── MultiService/       # Multiple services in one app
+├── ExternalService/    # External service integration
+│
+│   # Templates & Output
 ├── TemplateEngine/     # Mustache-style templates
+├── ContextAware/       # Human/machine/developer formatting
 ├── MetricsDemo/        # Prometheus metrics export
+│
+│   # CLI & Parameters
 ├── Parameters/         # Command-line argument parsing
+├── ConfigurableTimeout/ # Runtime configuration
+│
+│   # Plugins (multi-language)
 ├── GreetingPlugin/     # Swift plugin example
 ├── HashPluginDemo/     # C plugin example
 ├── CSVProcessor/       # Rust plugin example
-└── MarkdownRenderer/   # Python plugin example
+├── MarkdownRenderer/   # Python plugin example
+└── ZipService/         # Plugin with external dependencies
 
 Proposals/              # Language specifications
 ├── ARO-0001-language-fundamentals.md
