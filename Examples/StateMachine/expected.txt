@@ -1,0 +1,58 @@
+# Generated: Sun Feb 16 12:00:00 2026
+# Type: console
+# Command: aro run ./Examples/StateMachine
+# Workdir: Examples/StateMachine
+---
+=== ARO State Machine Demo ===
+
+Created document:
+author: Alice
+id: DOC-001
+status: draft
+title: Project Proposal
+
+--- Valid Transition: draft -> submitted ---
+Transition successful. New status:
+author: Alice
+id: DOC-001
+status: submitted
+title: Project Proposal
+
+--- Valid Transition: submitted -> approved ---
+Transition successful. New status:
+author: Alice
+id: DOC-001
+status: approved
+title: Project Proposal
+
+=== Testing Invalid Transitions ===
+
+Created second document:
+author: Bob
+id: DOC-002
+status: draft
+title: Budget Report
+
+--- Attempting Invalid: draft -> approved ---
+This should fail because documents must be submitted first.
+Submitted for review.
+Document rejected. Final status:
+author: Bob
+id: DOC-002
+status: rejected
+title: Budget Report
+
+--- Testing Cancellation Path ---
+Created document in draft state:
+author: Charlie
+id: DOC-003
+status: draft
+title: Meeting Notes
+Document cancelled. Final status:
+author: Charlie
+id: DOC-003
+status: cancelled
+title: Meeting Notes
+
+=== State Machine Demo Complete ===
+application
