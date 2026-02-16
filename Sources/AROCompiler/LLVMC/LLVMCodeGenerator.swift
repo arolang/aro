@@ -482,7 +482,7 @@ public final class LLVMCodeGenerator {
 
         case .expression(let expr):
             let exprJSON = ctx.stringConstant(serializeExpression(expr))
-            ctx.module.insertCall(
+            _ = ctx.module.insertCall(
                 externals.evaluateExpression,
                 on: [ctx.currentContextVar!, exprJSON],
                 at: ip
@@ -492,7 +492,7 @@ public final class LLVMCodeGenerator {
             // Sink expression: evaluate and bind to _result_expression_ for LogAction/response actions
             let resultExprName = ctx.stringConstant("_result_expression_")
             let exprJSON = ctx.stringConstant(serializeExpression(expr))
-            ctx.module.insertCall(
+            _ = ctx.module.insertCall(
                 externals.evaluateAndBind,
                 on: [ctx.currentContextVar!, resultExprName, exprJSON],
                 at: ip
@@ -511,7 +511,7 @@ public final class LLVMCodeGenerator {
             // Bind _where_field_
             let fieldName = ctx.stringConstant("_where_field_")
             let fieldValue = ctx.stringConstant(whereClause.field)
-            ctx.module.insertCall(
+            _ = ctx.module.insertCall(
                 externals.variableBindString,
                 on: [ctx.currentContextVar!, fieldName, fieldValue],
                 at: ip
@@ -520,7 +520,7 @@ public final class LLVMCodeGenerator {
             // Bind _where_op_
             let opName = ctx.stringConstant("_where_op_")
             let opValue = ctx.stringConstant(whereClause.op.rawValue)
-            ctx.module.insertCall(
+            _ = ctx.module.insertCall(
                 externals.variableBindString,
                 on: [ctx.currentContextVar!, opName, opValue],
                 at: ip
@@ -529,7 +529,7 @@ public final class LLVMCodeGenerator {
             // Bind _where_value_ by evaluating the expression
             let valueName = ctx.stringConstant("_where_value_")
             let valueJSON = ctx.stringConstant(serializeExpression(whereClause.value))
-            ctx.module.insertCall(
+            _ = ctx.module.insertCall(
                 externals.evaluateAndBind,
                 on: [ctx.currentContextVar!, valueName, valueJSON],
                 at: ip
@@ -541,7 +541,7 @@ public final class LLVMCodeGenerator {
             // Bind _aggregation_type_
             let typeName = ctx.stringConstant("_aggregation_type_")
             let typeValue = ctx.stringConstant(aggregation.type.rawValue)
-            ctx.module.insertCall(
+            _ = ctx.module.insertCall(
                 externals.variableBindString,
                 on: [ctx.currentContextVar!, typeName, typeValue],
                 at: ip
@@ -550,7 +550,7 @@ public final class LLVMCodeGenerator {
             // Bind _aggregation_field_ (can be nil for count())
             let fieldName = ctx.stringConstant("_aggregation_field_")
             let fieldValue = ctx.stringConstant(aggregation.field ?? "")
-            ctx.module.insertCall(
+            _ = ctx.module.insertCall(
                 externals.variableBindString,
                 on: [ctx.currentContextVar!, fieldName, fieldValue],
                 at: ip
@@ -562,7 +562,7 @@ public final class LLVMCodeGenerator {
             // Bind _by_pattern_
             let patternName = ctx.stringConstant("_by_pattern_")
             let patternValue = ctx.stringConstant(byClause.pattern)
-            ctx.module.insertCall(
+            _ = ctx.module.insertCall(
                 externals.variableBindString,
                 on: [ctx.currentContextVar!, patternName, patternValue],
                 at: ip
@@ -571,7 +571,7 @@ public final class LLVMCodeGenerator {
             // Bind _by_flags_
             let flagsName = ctx.stringConstant("_by_flags_")
             let flagsValue = ctx.stringConstant(byClause.flags)
-            ctx.module.insertCall(
+            _ = ctx.module.insertCall(
                 externals.variableBindString,
                 on: [ctx.currentContextVar!, flagsName, flagsValue],
                 at: ip
@@ -587,7 +587,7 @@ public final class LLVMCodeGenerator {
         if let toClause = modifiers.toClause {
             let toName = ctx.stringConstant("_to_")
             let toJSON = ctx.stringConstant(serializeExpression(toClause))
-            ctx.module.insertCall(
+            _ = ctx.module.insertCall(
                 externals.evaluateAndBind,
                 on: [ctx.currentContextVar!, toName, toJSON],
                 at: ip
@@ -598,7 +598,7 @@ public final class LLVMCodeGenerator {
         if let withClause = modifiers.withClause {
             let withName = ctx.stringConstant("_with_")
             let withJSON = ctx.stringConstant(serializeExpression(withClause))
-            ctx.module.insertCall(
+            _ = ctx.module.insertCall(
                 externals.evaluateAndBind,
                 on: [ctx.currentContextVar!, withName, withJSON],
                 at: ip
@@ -613,28 +613,28 @@ public final class LLVMCodeGenerator {
         switch literal {
         case .string(let value):
             let valueStr = ctx.stringConstant(value)
-            ctx.module.insertCall(
+            _ = ctx.module.insertCall(
                 externals.variableBindString,
                 on: [ctx.currentContextVar!, literalVar, valueStr],
                 at: ip
             )
 
         case .integer(let value):
-            ctx.module.insertCall(
+            _ = ctx.module.insertCall(
                 externals.variableBindInt,
                 on: [ctx.currentContextVar!, literalVar, ctx.i64Type.constant(value)],
                 at: ip
             )
 
         case .float(let value):
-            ctx.module.insertCall(
+            _ = ctx.module.insertCall(
                 externals.variableBindDouble,
                 on: [ctx.currentContextVar!, literalVar, ctx.doubleType.constant(value)],
                 at: ip
             )
 
         case .boolean(let value):
-            ctx.module.insertCall(
+            _ = ctx.module.insertCall(
                 externals.variableBindBool,
                 on: [ctx.currentContextVar!, literalVar, ctx.i32Type.constant(value ? 1 : 0)],
                 at: ip
@@ -648,7 +648,7 @@ public final class LLVMCodeGenerator {
             // Serialize array as plain JSON (not expression-wrapped) for variableBindArray
             let json = serializeLiteralArrayPlain(elements)
             let jsonStr = ctx.stringConstant(json)
-            ctx.module.insertCall(
+            _ = ctx.module.insertCall(
                 externals.variableBindArray,
                 on: [ctx.currentContextVar!, literalVar, jsonStr],
                 at: ip
@@ -658,7 +658,7 @@ public final class LLVMCodeGenerator {
             // Serialize object as plain JSON (not expression-wrapped) for variableBindDict
             let json = serializeLiteralObjectPlain(entries)
             let jsonStr = ctx.stringConstant(json)
-            ctx.module.insertCall(
+            _ = ctx.module.insertCall(
                 externals.variableBindDict,
                 on: [ctx.currentContextVar!, literalVar, jsonStr],
                 at: ip
@@ -667,7 +667,7 @@ public final class LLVMCodeGenerator {
         case .regex(let pattern, let flags):
             // Bind regex as pattern string
             let regexStr = ctx.stringConstant("/\(pattern)/\(flags)")
-            ctx.module.insertCall(
+            _ = ctx.module.insertCall(
                 externals.variableBindString,
                 on: [ctx.currentContextVar!, literalVar, regexStr],
                 at: ip
@@ -1008,12 +1008,12 @@ public final class LLVMCodeGenerator {
 
         // Unbind and rebind element to item variable (unbind allows rebinding on each iteration)
         let itemVarName = ctx.stringConstant(loop.itemVariable)
-        ctx.module.insertCall(
+        _ = ctx.module.insertCall(
             externals.variableUnbind,
             on: [ctx.currentContextVar!, itemVarName],
             at: ctx.insertionPoint
         )
-        ctx.module.insertCall(
+        _ = ctx.module.insertCall(
             externals.variableBindValue,
             on: [ctx.currentContextVar!, itemVarName, element],
             at: ctx.insertionPoint
@@ -1025,7 +1025,7 @@ public final class LLVMCodeGenerator {
             let indexVarName = ctx.stringConstant(indexVar)
 
             // Unbind first to allow rebinding on each iteration
-            ctx.module.insertCall(
+            _ = ctx.module.insertCall(
                 externals.variableUnbind,
                 on: [ctx.currentContextVar!, indexVarName],
                 at: ctx.insertionPoint
@@ -1037,7 +1037,7 @@ public final class LLVMCodeGenerator {
                 on: [curIndex],
                 at: ctx.insertionPoint
             )
-            ctx.module.insertCall(
+            _ = ctx.module.insertCall(
                 externals.variableBindValue,
                 on: [ctx.currentContextVar!, indexVarName, indexValue],
                 at: ctx.insertionPoint
@@ -1045,9 +1045,8 @@ public final class LLVMCodeGenerator {
         }
 
         // Check filter if present
-        var filterSkipBlock: BasicBlock?
         if let filter = loop.filter {
-            filterSkipBlock = incrBlock  // Skip to increment if filter fails
+            // Filter: if condition fails, skip to increment block
 
             let filterJSON = ctx.stringConstant(serializeExpression(filter))
             let filterResult = ctx.module.insertCall(
@@ -1092,7 +1091,7 @@ public final class LLVMCodeGenerator {
         // Bind the publish alias
         let aliasName = ctx.stringConstant("_publish_alias_")
         let aliasValue = ctx.stringConstant(statement.externalName)
-        ctx.module.insertCall(
+        _ = ctx.module.insertCall(
             externals.variableBindString,
             on: [ctx.currentContextVar!, aliasName, aliasValue],
             at: ip
@@ -1101,7 +1100,7 @@ public final class LLVMCodeGenerator {
         // Bind the internal variable name
         let varName = ctx.stringConstant("_publish_variable_")
         let varValue = ctx.stringConstant(statement.internalVariable)
-        ctx.module.insertCall(
+        _ = ctx.module.insertCall(
             externals.variableBindString,
             on: [ctx.currentContextVar!, varName, varValue],
             at: ip
@@ -1182,7 +1181,7 @@ public final class LLVMCodeGenerator {
         // Bind the required variable name
         let varNameStr = ctx.stringConstant("_require_variable_")
         let varValue = ctx.stringConstant(statement.variableName)
-        ctx.module.insertCall(
+        _ = ctx.module.insertCall(
             externals.variableBindString,
             on: [ctx.currentContextVar!, varNameStr, varValue],
             at: ip
@@ -1200,7 +1199,7 @@ public final class LLVMCodeGenerator {
             sourceValue = name
         }
         let sourceStr = ctx.stringConstant(sourceValue)
-        ctx.module.insertCall(
+        _ = ctx.module.insertCall(
             externals.variableBindString,
             on: [ctx.currentContextVar!, sourceName, sourceStr],
             at: ip
@@ -1285,22 +1284,22 @@ public final class LLVMCodeGenerator {
         // Parse command-line arguments (ARO-0047)
         let argc = mainFunc.parameters[0]
         let argv = mainFunc.parameters[1]
-        ctx.module.insertCall(externals.parseArguments, on: [argc, argv], at: ip)
+        _ = ctx.module.insertCall(externals.parseArguments, on: [argc, argv], at: ip)
 
         // Set embedded OpenAPI spec if provided
         if let spec = openAPISpecJSON {
             let specStr = ctx.stringConstant(spec)
-            ctx.module.insertCall(externals.setEmbeddedOpenapi, on: [specStr], at: ip)
+            _ = ctx.module.insertCall(externals.setEmbeddedOpenapi, on: [specStr], at: ip)
         }
 
         // Set embedded templates if provided (ARO-0050)
         if let templates = templatesJSON {
             let templatesStr = ctx.stringConstant(templates)
-            ctx.module.insertCall(externals.setEmbeddedTemplates, on: [templatesStr], at: ip)
+            _ = ctx.module.insertCall(externals.setEmbeddedTemplates, on: [templatesStr], at: ip)
         }
 
         // Load precompiled plugins
-        ctx.module.insertCall(externals.loadPrecompiledPlugins, on: [], at: ip)
+        _ = ctx.module.insertCall(externals.loadPrecompiledPlugins, on: [], at: ip)
 
         // Register event handlers
         registerEventHandlers(program: program, runtime: runtime)
@@ -1330,7 +1329,7 @@ public final class LLVMCodeGenerator {
             // Call the Application-Start function
             let funcName = applicationStartFunctionName(activity)
             if let appStartFunc = ctx.module.function(named: funcName) {
-                ctx.module.insertCall(appStartFunc, on: [appCtx], at: ip)
+                _ = ctx.module.insertCall(appStartFunc, on: [appCtx], at: ip)
             }
 
             // Keep main context for response printing, destroy imported module contexts
@@ -1363,7 +1362,7 @@ public final class LLVMCodeGenerator {
                     on: [runtime, endContextName],
                     at: ip
                 )
-                ctx.module.insertCall(endFunc, on: [endCtx], at: ip)
+                _ = ctx.module.insertCall(endFunc, on: [endCtx], at: ip)
                 _ = ctx.module.insertCall(externals.contextDestroy, on: [endCtx], at: ip)
             }
         }
@@ -1401,7 +1400,7 @@ public final class LLVMCodeGenerator {
                     let funcName = featureSetFunctionName(analyzed.featureSet.name)
                     if let handlerFunc = ctx.module.function(named: funcName) {
                         let eventTypeStr = ctx.stringConstant(eventType)
-                        ctx.module.insertCall(
+                        _ = ctx.module.insertCall(
                             externals.runtimeRegisterHandler,
                             on: [runtime, eventTypeStr, handlerFunc],
                             at: ip
@@ -1425,14 +1424,14 @@ public final class LLVMCodeGenerator {
                             // Serialize the when condition to JSON
                             let conditionJSON = serializeExpression(whenCondition)
                             let conditionStr = ctx.stringConstant(conditionJSON)
-                            ctx.module.insertCall(
+                            _ = ctx.module.insertCall(
                                 externals.registerRepositoryObserverWithGuard,
                                 on: [runtime, repoNameStr, observerFunc, conditionStr],
                                 at: ip
                             )
                         } else {
                             // No when condition, use the legacy function
-                            ctx.module.insertCall(
+                            _ = ctx.module.insertCall(
                                 externals.registerRepositoryObserver,
                                 on: [runtime, repoNameStr, observerFunc],
                                 at: ip
