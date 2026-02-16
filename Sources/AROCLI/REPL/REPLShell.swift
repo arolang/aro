@@ -362,6 +362,8 @@ public final class REPLShell: @unchecked Sendable {
         if let ln = lineNoise {
             do {
                 let line = try ln.getLine(prompt: prompt)
+                // LineNoise doesn't print a newline after input, so add one
+                print()
                 // Add non-empty lines to history
                 if !line.trimmingCharacters(in: .whitespaces).isEmpty {
                     ln.addHistory(line)
