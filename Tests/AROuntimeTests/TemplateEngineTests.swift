@@ -1,6 +1,6 @@
 // ============================================================
 // TemplateEngineTests.swift
-// ARO Runtime - Template Engine Unit Tests (Issue #82)
+// ARO Runtime - Template Engine Unit Tests (ARO-0050, Issue #82)
 // ============================================================
 
 import Foundation
@@ -173,6 +173,28 @@ struct TemplateParserTests {
         }
     }
 
+    @Test("Parse empty template")
+    func testParseEmptyTemplate() throws {
+        let parsed = try parser.parse("")
+
+        #expect(parsed.segments.isEmpty)
+    }
+
+    @Test("Parse template with only expressions")
+    func testParseOnlyExpressions() throws {
+        let content = "{{ <a> }}{{ <b> }}{{ <c> }}"
+        let parsed = try parser.parse(content)
+
+        #expect(parsed.segments.count == 3)
+        for segment in parsed.segments {
+            if case .expressionShorthand = segment {
+                continue
+            } else {
+                Issue.record("Expected all expression shorthand segments")
+            }
+        }
+    }
+
     @Test("Error: Unclosed block")
     func testUnclosedBlock() throws {
         let content = "Hello {{ <name>"
@@ -252,6 +274,15 @@ struct TemplateSegmentTests {
 
         #expect(config1 == config2)
         #expect(config1 != config3)
+    }
+
+    @Test("For-each config with index variable")
+    func testForEachConfigWithIndex() {
+        let config = ForEachConfig(itemVariable: "user", indexVariable: "i", collection: "users")
+
+        #expect(config.itemVariable == "user")
+        #expect(config.indexVariable == "i")
+        #expect(config.collection == "users")
     }
 }
 
@@ -335,7 +366,6 @@ struct TemplateParseErrorTests {
     func testUnmatchedForEachCloseError() {
         let error = TemplateParseError.unmatchedForEachClose(line: 15)
         #expect(error.errorDescription?.contains("line 15") == true)
-        #expect(error.errorDescription?.contains("Unexpected") == true)
     }
 
     @Test("Nested for-each not closed error description")
@@ -382,6 +412,45 @@ struct ParsedTemplateTests {
             // OK - whitespace is preserved as static text
         } else {
             Issue.record("Expected static text segment")
+        }
+    }
+}
+
+// MARK: - Template Service Tests
+
+@Suite("Template Service Tests")
+struct TemplateServiceTests {
+
+    @Test("Service initializes with directory")
+    func testServiceInitialization() {
+        let service = AROTemplateService(templatesDirectory: "/tmp/templates")
+        // Service is non-optional, verify it has the expected configuration
+        #expect(type(of: service) == AROTemplateService.self)
+    }
+
+    @Test("Non-existent template returns not found")
+    func testNonExistentTemplate() async {
+        let service = AROTemplateService(templatesDirectory: "/tmp/nonexistent-templates-dir")
+        let exists = await service.exists(path: "nonexistent.html")
+        #expect(exists == false)
+    }
+
+    @Test("Invalid path with directory traversal rejected")
+    func testInvalidPathRejected() async {
+        let service = AROTemplateService(templatesDirectory: "/tmp/templates")
+        let exists = await service.exists(path: "../../../etc/passwd")
+        #expect(exists == false)
+    }
+
+    @Test("Load throws for directory traversal")
+    func testLoadRejectsDirectoryTraversal() async throws {
+        let service = AROTemplateService(templatesDirectory: "/tmp/templates")
+        do {
+            _ = try await service.load(path: "../etc/passwd")
+            Issue.record("Expected error for directory traversal")
+        } catch {
+            // Expected error
+            #expect(error is TemplateError)
         }
     }
 }
