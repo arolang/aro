@@ -1,4 +1,4 @@
-(* Template Engine Example - ARO-0045 *)
+(* Template Engine Example - ARO-0050 *)
 (* Demonstrates template rendering with variable interpolation *)
 
 (Application-Start: Template Engine Demo) {
