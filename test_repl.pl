@@ -308,10 +308,9 @@ section("Merge/Concat Action");
 test('<Set> the <list1> to [1, 2, 3].', "Set list1", sub { shift =~ /OK/ });
 test('<Set> the <list2> to [4, 5, 6].', "Set list2", sub { shift =~ /OK/ });
 
-# Merge action: first create target, then merge source INTO it
-# Syntax: <Merge> the <target> with <source>. (target must exist)
-test('<Set> the <merged> to <list1>.', "Initialize merged from list1", sub { shift =~ /OK/ });
-test('<Merge> the <merged> with <list2>.', "Merge list2 into merged", sub {
+# Merge action: creates a new variable with merged result (immutable design)
+# Syntax: <Merge> the <result: base> with <source>.
+test('<Merge> the <merged: list1> with <list2>.', "Merge list1 with list2", sub {
     my $output = shift;
     return $output =~ /OK/ || $output =~ /\[/;
 });
