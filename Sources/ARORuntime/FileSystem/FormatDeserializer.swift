@@ -645,11 +645,13 @@ public struct FormatDeserializer: Sendable {
             }
 
             // Parse as array of objects
+            // Normalize header names: replace dots with hyphens for ARO compatibility
+            let normalizedHeaders = headers.map { normalizeFieldName($0) }
             var result: [[String: any Sendable]] = []
             for line in lines.dropFirst() where !line.isEmpty {
                 let values = parseCSVLine(line, delimiter: delimiter, quoteChar: quoteCharacter)
                 var row: [String: any Sendable] = [:]
-                for (index, header) in headers.enumerated() where index < values.count {
+                for (index, header) in normalizedHeaders.enumerated() where index < values.count {
                     row[header] = parseCSVValue(values[index])
                 }
                 result.append(row)
@@ -701,6 +703,12 @@ public struct FormatDeserializer: Sendable {
         if trimmed.lowercased() == "false" { return false }
 
         return trimmed
+    }
+
+    /// Normalize field names for ARO compatibility
+    /// Converts dots to hyphens since ARO doesn't support dots in identifiers
+    private static func normalizeFieldName(_ name: String) -> String {
+        name.replacingOccurrences(of: ".", with: "-")
     }
 
     // MARK: - Plain Text Deserialization
