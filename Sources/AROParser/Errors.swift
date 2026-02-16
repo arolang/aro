@@ -219,6 +219,12 @@ public final class DiagnosticCollector: @unchecked Sendable {
         defer { lock.unlock() }
         _diagnostics.append(diagnostic)
     }
+
+    public func clear() {
+        lock.lock()
+        defer { lock.unlock() }
+        _diagnostics.removeAll()
+    }
     
     public func error(_ message: String, at location: SourceLocation? = nil, hints: [String] = []) {
         add(Diagnostic(severity: .error, message: message, location: location, hints: hints))

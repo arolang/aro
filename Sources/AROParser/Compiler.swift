@@ -41,6 +41,9 @@ public final class Compiler {
     
     /// Compiles ARO source code
     public func compile(_ source: String) -> CompilationResult {
+        // Clear diagnostics from previous compilations
+        diagnostics.clear()
+
         do {
             // Phase 1: Lexical Analysis
             let tokens = try Lexer.tokenize(source)

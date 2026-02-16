@@ -36,6 +36,9 @@ public struct SplitAction: ActionImplementation {
         // Split using regex
         let parts = try splitByRegex(input, pattern: pattern, flags: flags)
 
+        // Bind result to context
+        context.bind(result.base, value: parts)
+
         return parts
     }
 

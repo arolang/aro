@@ -248,7 +248,8 @@ public final class FeatureSetExecutor: @unchecked Sendable {
                 let computeVerbs: Set<String> = ["compute", "calculate", "derive"]
                 let extractVerbs: Set<String> = ["extract", "parse", "get"]
                 // Query actions always need execution for where clause processing
-                let queryVerbs: Set<String> = ["filter", "map", "reduce", "aggregate"]
+                // "split" needs execution for regex splitting via by clause
+                let queryVerbs: Set<String> = ["filter", "map", "reduce", "aggregate", "split"]
                 // Response actions like write/read/store should NOT have their result bound to expression value
                 let responseVerbs: Set<String> = ["write", "read", "store", "save", "persist", "log", "print", "send", "emit"]
                 // Server lifecycle actions always need execution for side effects

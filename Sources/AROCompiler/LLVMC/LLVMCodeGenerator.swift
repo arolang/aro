@@ -946,6 +946,45 @@ public final class LLVMCodeGenerator {
         }
     }
 
+    // MARK: - Loop Body Variable Collection
+
+    /// Collects all variable names that will be bound by statements in the loop body.
+    /// This is used to unbind them at the start of each iteration, simulating the
+    /// child context behavior of the interpreter.
+    private func collectBoundVariables(from statements: [any Statement]) -> Set<String> {
+        var variables = Set<String>()
+        for statement in statements {
+            collectBoundVariablesFromStatement(statement, into: &variables)
+        }
+        return variables
+    }
+
+    private func collectBoundVariablesFromStatement(_ statement: any Statement, into variables: inout Set<String>) {
+        if let aroStatement = statement as? AROStatement {
+            // The result of an ARO statement is bound to a variable
+            variables.insert(aroStatement.result.base)
+        } else if let matchStatement = statement as? MatchStatement {
+            // Recurse into match statement cases
+            for caseClause in matchStatement.cases {
+                for stmt in caseClause.body {
+                    collectBoundVariablesFromStatement(stmt, into: &variables)
+                }
+            }
+            if let otherwise = matchStatement.otherwise {
+                for stmt in otherwise {
+                    collectBoundVariablesFromStatement(stmt, into: &variables)
+                }
+            }
+        } else if let forEachLoop = statement as? ForEachLoop {
+            // The item and index variables are managed by the nested loop
+            // But we still need to collect variables from the nested body
+            for stmt in forEachLoop.body {
+                collectBoundVariablesFromStatement(stmt, into: &variables)
+            }
+        }
+        // PublishStatement and RequireStatement don't bind new variables
+    }
+
     private func generateForEachLoop(_ loop: ForEachLoop, index: Int, errorBlock: BasicBlock) {
         let prefix = "foreach\(index)"
 
@@ -1062,6 +1101,19 @@ public final class LLVMCodeGenerator {
             ctx.module.insertCondBr(if: passed, then: filterBodyBlock, else: incrBlock, at: ctx.insertionPoint)
 
             ctx.setInsertionPoint(atEndOf: filterBodyBlock)
+        }
+
+        // Unbind all variables that will be bound in the loop body
+        // This simulates the child context behavior of the interpreter,
+        // allowing variables to be rebound on each iteration
+        let bodyVariables = collectBoundVariables(from: loop.body)
+        for varName in bodyVariables {
+            let varNameConst = ctx.stringConstant(varName)
+            ctx.module.insertCall(
+                externals.variableUnbind,
+                on: [ctx.currentContextVar!, varNameConst],
+                at: ctx.insertionPoint
+            )
         }
 
         // Generate body statements

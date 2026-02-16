@@ -127,6 +127,8 @@ let package = Package(
         .package(url: "https://github.com/jpsim/Yams.git", from: "6.2.0"),
         // Swift Crypto for cryptographic operations (SHA256, etc.)
         .package(url: "https://github.com/apple/swift-crypto.git", from: "4.0.0"),
+        // LineNoise for REPL line editing (arrow keys, history)
+        .package(url: "https://github.com/andybest/linenoise-swift.git", from: "0.0.3"),
     ],
     targets: {
         // Core targets available on all platforms
@@ -189,6 +191,7 @@ let package = Package(
                     "AROCompiler",
                     "AROPackageManager",
                     .product(name: "ArgumentParser", package: "swift-argument-parser"),
+                    .product(name: "LineNoise", package: "linenoise-swift"),
                 ] + cliLspDependency,
                 path: "Sources/AROCLI",
                 linkerSettings: llvmLinkerSettings

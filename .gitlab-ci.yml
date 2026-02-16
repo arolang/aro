@@ -278,6 +278,34 @@ integration:linux:
   tags:
     - spencer
 
+integration:repl:
+  stage: integration
+  image: ubuntu:22.04
+  needs:
+    - job: build:linux
+      artifacts: true
+  before_script:
+    - apt-get update -qq
+    - export DEBIAN_FRONTEND=noninteractive
+    - apt-get install -y -qq wget gnupg software-properties-common perl libgit2-dev libcurl4
+    # Add LLVM APT repository for LLVM 20 (required for aro binary which links against libLLVM-20)
+    - wget -qO- https://apt.llvm.org/llvm-snapshot.gpg.key | gpg --dearmor -o /usr/share/keyrings/llvm-archive-keyring.gpg
+    - echo "deb [signed-by=/usr/share/keyrings/llvm-archive-keyring.gpg] http://apt.llvm.org/jammy/ llvm-toolchain-jammy-20 main" > /etc/apt/sources.list.d/llvm.list
+    - apt-get update -qq
+    - apt-get install -y -qq libllvm20
+    # Prepare ARO binary
+    - chmod +x ./aro-dist/aro
+    - export ARO_BIN="$CI_PROJECT_DIR/aro-dist/aro"
+    # Verify installation
+    - ./aro-dist/aro --version
+  script:
+    - export LD_LIBRARY_PATH="/usr/lib/llvm-20/lib:$LD_LIBRARY_PATH"
+    - export ARO_BIN="$CI_PROJECT_DIR/aro-dist/aro"
+    - chmod +x test_repl.pl
+    - perl test_repl.pl
+  tags:
+    - spencer
+
 # =============================================================================
 # Documentation Stage
 # =============================================================================
