@@ -20,12 +20,13 @@
     <Extract> the <user-data> from the <request: body>.
 
     <Create> the <user> with <user-data>.
-    <Store> the <user> into the <user-repository>.
+    (* Store returns the stored data with generated ID *)
+    <Store> the <stored-user: user> into the <user-repository>.
 
     (* Emit event for other handlers to react *)
-    <Emit> a <UserCreated: event> with <user>.
+    <Emit> a <UserCreated: event> with <stored-user>.
 
-    <Return> a <Created: status> with <user>.
+    <Return> a <Created: status> with <stored-user>.
 }
 
 (* Update user - matches operationId: updateUser *)

@@ -1,19 +1,41 @@
-# Generated: Mon Jan 20 2026
+# Generated: Mon Feb 10 2026
 # Type: console
 # Command: aro run ./Examples/CollectionMerge
 ---
 === Collection Merge Demo ===
 --- Array Merging ---
+Original fruits:
+[apple, banana]
+Merged all-fruits:
 [apple, banana, cherry, date]
+
 --- Object Merging ---
+Original person:
+age: 30
+name: Alice
+Merged full-profile:
 age: 30
 city: Berlin
 country: Germany
 name: Alice
+
 --- String Concatenation ---
+Original greeting:
+Hello,
+Merged message:
 Hello, World!
---- Using Combine verb ---
-[1, 2, 3, 4, 5, 6]
-All merges complete!
+
+--- Update Pattern ---
+Original user:
+email: bob@old.com
+id: 1
+name: Bob
+Updated user:
+email: bob@new.com
+id: 1
+name: Bob
+verified: true
+
+All merges complete! Original variables unchanged.
 demo
-  value: Hello, World!
+  value: Hello,
