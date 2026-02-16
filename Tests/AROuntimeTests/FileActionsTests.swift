@@ -78,9 +78,9 @@ struct ExistsActionTests {
 @Suite("Make Action Tests")
 struct MakeActionTests {
 
-    @Test("Make action role is own")
+    @Test("Make action role is server")
     func testMakeActionRole() {
-        #expect(MakeAction.role == .own)
+        #expect(MakeAction.role == .server)
     }
 
     @Test("Make action verbs - make is canonical")
@@ -104,9 +104,9 @@ struct MakeActionTests {
 @Suite("Copy Action Tests")
 struct CopyActionTests {
 
-    @Test("Copy action role is own")
+    @Test("Copy action role is server")
     func testCopyActionRole() {
-        #expect(CopyAction.role == .own)
+        #expect(CopyAction.role == .server)
     }
 
     @Test("Copy action verbs")
@@ -125,9 +125,9 @@ struct CopyActionTests {
 @Suite("Move Action Tests")
 struct MoveActionTests {
 
-    @Test("Move action role is own")
+    @Test("Move action role is server")
     func testMoveActionRole() {
-        #expect(MoveAction.role == .own)
+        #expect(MoveAction.role == .server)
     }
 
     @Test("Move action verbs")

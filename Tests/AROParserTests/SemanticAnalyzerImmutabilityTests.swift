@@ -83,8 +83,11 @@ struct SemanticAnalyzerImmutabilityTests {
         let result = compiler.compile(source)
 
         let errors = result.diagnostics.filter { $0.severity == .error }
-        #expect(errors.count >= 1)
-        #expect(errors[0].message.contains("Cannot rebind variable 'item'"))
+        #expect(errors.count >= 1, "Expected at least 1 error, got \(errors.count): \(result.diagnostics)")
+        guard let error = errors.first else {
+            return  // Test already failed above
+        }
+        #expect(error.message.contains("Cannot rebind variable 'item'"))
     }
 
     @Test("Match case variables are immutable")
@@ -108,8 +111,11 @@ struct SemanticAnalyzerImmutabilityTests {
         let result = compiler.compile(source)
 
         let errors = result.diagnostics.filter { $0.severity == .error }
-        #expect(errors.count >= 1)
-        #expect(errors[0].message.contains("Cannot rebind variable 'status'"))
+        #expect(errors.count >= 1, "Expected at least 1 error, got \(errors.count): \(result.diagnostics)")
+        guard let error = errors.first else {
+            return  // Test already failed above
+        }
+        #expect(error.message.contains("Cannot rebind variable 'status'"))
     }
 
     @Test("Can create new variables from existing ones")
@@ -145,7 +151,10 @@ struct SemanticAnalyzerImmutabilityTests {
         let result = compiler.compile(source)
 
         let errors = result.diagnostics.filter { $0.severity == .error }
-        #expect(errors.count == 2)
+        #expect(errors.count == 2, "Expected 2 errors, got \(errors.count): \(result.diagnostics)")
+        guard errors.count >= 2 else {
+            return  // Test already failed above
+        }
         #expect(errors[0].message.contains("Cannot rebind variable 'counter'"))
         #expect(errors[1].message.contains("Cannot rebind variable 'counter'"))
     }

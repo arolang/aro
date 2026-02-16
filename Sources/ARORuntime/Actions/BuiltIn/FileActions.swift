@@ -216,7 +216,7 @@ public struct ExistsAction: ActionImplementation {
 /// - `createdirectory` (synonym)
 /// - `mkdir` (synonym)
 public struct MakeAction: ActionImplementation {
-    public static let role: ActionRole = .own
+    public static let role: ActionRole = .server
     public static let verbs: Set<String> = ["make", "touch", "createdirectory", "mkdir"]
     public static let validPrepositions: Set<Preposition> = [.to, .for, .at]
 
@@ -284,7 +284,7 @@ public struct MakeResult: Sendable, Equatable {
 /// <Copy> the <directory: "./src"> to the <destination: "./backup/src">.
 /// ```
 public struct CopyAction: ActionImplementation {
-    public static let role: ActionRole = .own
+    public static let role: ActionRole = .server
     public static let verbs: Set<String> = ["copy"]
     public static let validPrepositions: Set<Preposition> = [.to]
 
@@ -354,7 +354,7 @@ public struct CopyResult: Sendable, Equatable {
 /// <Move> the <directory: "./temp"> to the <destination: "./processed">.
 /// ```
 public struct MoveAction: ActionImplementation {
-    public static let role: ActionRole = .own
+    public static let role: ActionRole = .server
     public static let verbs: Set<String> = ["move", "rename"]
     public static let validPrepositions: Set<Preposition> = [.to]
 

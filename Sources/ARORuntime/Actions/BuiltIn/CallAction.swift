@@ -38,7 +38,7 @@ import AROParser
 /// }.
 /// ```
 public struct CallAction: ActionImplementation {
-    public static let role: ActionRole = .request
+    public static let role: ActionRole = .own
     public static let verbs: Set<String> = ["call", "invoke"]
     public static let validPrepositions: Set<Preposition> = [.from, .to, .with, .via]
 

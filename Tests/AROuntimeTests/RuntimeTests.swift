@@ -19,6 +19,7 @@ struct ActionRoleTests {
         #expect(ActionRole.own.rawValue == "own")
         #expect(ActionRole.response.rawValue == "response")
         #expect(ActionRole.export.rawValue == "export")
+        #expect(ActionRole.server.rawValue == "server")
     }
 
     @Test("Action role conversion from parser role")
@@ -27,11 +28,12 @@ struct ActionRoleTests {
         #expect(ActionRole(from: .own) == .own)
         #expect(ActionRole(from: .response) == .response)
         #expect(ActionRole(from: .export) == .export)
+        #expect(ActionRole(from: .server) == .server)
     }
 
     @Test("Action roles are case iterable")
     func testCaseIterable() {
-        #expect(ActionRole.allCases.count == 4)
+        #expect(ActionRole.allCases.count == 5)
     }
 }
 
@@ -101,6 +103,7 @@ struct ActionRegistryTests {
         #expect(byRole[.own]?.isEmpty == false)
         #expect(byRole[.response]?.isEmpty == false)
         #expect(byRole[.export]?.isEmpty == false)
+        #expect(byRole[.server]?.isEmpty == false)
     }
 }
 

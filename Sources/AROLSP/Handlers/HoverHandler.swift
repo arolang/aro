@@ -147,6 +147,8 @@ public struct HoverHandler: Sendable {
             content += "*Returns data or produces output*\n\n"
         case .export:
             content += "*Exports data or makes it globally available*\n\n"
+        case .server:
+            content += "*Manages server or service infrastructure*\n\n"
         }
 
         // Show context

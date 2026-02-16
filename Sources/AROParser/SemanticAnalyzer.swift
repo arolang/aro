@@ -404,6 +404,51 @@ public final class SemanticAnalyzer {
         case .export:
             // Handled by PublishStatement
             break
+
+        case .server:
+            // SERVER: service/infrastructure operations
+            // Similar to OWN but for server/service management (Start, Stop, Connect, etc.)
+            if !isKnownExternal(objectName) && !definedSymbols.contains(objectName) && !dependencies.contains(objectName) {
+                // Server operations may reference services that are created dynamically
+                // Don't warn about undefined service names like "http-server"
+                if !isServiceObject(objectName) {
+                    dependencies.insert(objectName)
+                }
+            }
+            inputs.insert(objectName)
+            outputs.insert(resultName)
+
+            // ARO-0006: Infer type from type annotation or expression
+            let dataType: DataType
+            if let annotatedType = statement.result.dataType {
+                dataType = annotatedType
+            } else if let expr = statement.valueSource.asExpression {
+                dataType = inferExpressionType(expr)
+            } else {
+                dataType = .unknown
+            }
+
+            // Check for duplicate binding (immutability enforcement)
+            if definedSymbols.contains(resultName) && !isInternalVariable(resultName) && !isRebindingAllowed(statement.action.verb) {
+                diagnostics.error(
+                    "Cannot rebind variable '\(resultName)' - variables are immutable",
+                    at: statement.result.span.start,
+                    hints: [
+                        "Variable '\(resultName)' was already defined earlier in this feature set",
+                        "Create a new variable with a different name instead",
+                        "Example: <\(statement.action.verb)> the <\(resultName)-updated> \(statement.object.preposition.rawValue) the <\(objectName)>"
+                    ]
+                )
+            }
+
+            builder.define(
+                name: resultName,
+                definedAt: statement.span,
+                visibility: .internal,
+                source: .computed,
+                dataType: dataType
+            )
+            definedSymbols.insert(resultName)
         }
 
         return (
@@ -897,6 +942,31 @@ public final class SemanticAnalyzer {
             return true
         }
         return knownExternals.contains(name.lowercased())
+    }
+
+    /// Determines if a name represents a service/infrastructure object
+    /// These are dynamically created by server actions and don't need prior definition
+    private func isServiceObject(_ name: String) -> Bool {
+        let serviceObjects: Set<String> = [
+            // Server services
+            "http-server", "socket-server", "file-monitor", "websocket-server",
+            // Connection targets
+            "connection", "server-connection", "client-connection",
+            // File system operations
+            "file", "directory", "path",
+            // Generic application
+            "application", "events", "shutdown-signal"
+        ]
+        let lower = name.lowercased()
+        // Check direct match
+        if serviceObjects.contains(lower) {
+            return true
+        }
+        // Check for common patterns
+        if lower.hasSuffix("-server") || lower.hasSuffix("-connection") || lower.hasSuffix("-monitor") {
+            return true
+        }
+        return false
     }
 
     /// Determines if a variable name represents a side-effect producing binding.

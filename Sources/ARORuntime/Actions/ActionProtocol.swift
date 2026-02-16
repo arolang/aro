@@ -14,6 +14,7 @@ public enum ActionRole: String, Sendable, CaseIterable {
     case own        // Internal -> Internal (Compute, Validate, Compare)
     case response   // Internal -> External (Return, Throw, Send)
     case export     // Publish mechanism
+    case server     // Server/service operations (Start, Stop, Connect, Close)
 
     /// Convert from parser's ActionSemanticRole
     public init(from parserRole: ActionSemanticRole) {
@@ -22,6 +23,7 @@ public enum ActionRole: String, Sendable, CaseIterable {
         case .own: self = .own
         case .response: self = .response
         case .export: self = .export
+        case .server: self = .server
         }
     }
 }

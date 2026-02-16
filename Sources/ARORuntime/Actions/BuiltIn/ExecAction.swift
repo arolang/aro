@@ -162,7 +162,7 @@ public struct ExecConfig: Sendable {
 /// - `run` (synonym)
 /// - `shell` (synonym)
 public struct ExecuteAction: ActionImplementation {
-    public static let role: ActionRole = .request
+    public static let role: ActionRole = .own
     public static let verbs: Set<String> = ["execute", "exec", "run", "shell"]
     public static let validPrepositions: Set<Preposition> = [.on, .with, .for]
 

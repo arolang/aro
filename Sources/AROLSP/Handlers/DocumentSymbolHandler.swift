@@ -50,6 +50,8 @@ public struct DocumentSymbolHandler: Sendable {
                         kind = 23  // Operator
                     case .export:
                         kind = 9   // Module
+                    case .server:
+                        kind = 25  // TypeParameter (server/service ops)
                     }
 
                     let stmtSymbol: [String: Any] = [
