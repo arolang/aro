@@ -214,27 +214,49 @@ public struct StartAction: ActionImplementation {
 
     private func startFileMonitor(object: ObjectDescriptor, context: ExecutionContext) async throws -> any Sendable {
         // Get path from various sources with the standardized "with" syntax:
-        // 1. From literal string: <Start> the <file-monitor> with ".".
-        // 2. From object property: <Start> the <file-monitor> with { directory: "." }.
+        // 1. From _with_ binding: <Start> the <file-monitor> with "." or { directory: "." }.
+        // 2. Legacy support: _literal_, _object_, _expression_
         // 3. From variable: <Start> the <file-monitor> with <config>.
         let path: String
 
-        if let literalPath: String = context.resolve("_literal_") {
-            // Direct string literal
+        // Priority 1: Check _with_ binding (ARO-0042: standardized with clause)
+        if let withValue = context.resolveAny("_with_") {
+            if let withPath = withValue as? String {
+                // Direct string: with "."
+                path = withPath
+            } else if let withConfig = withValue as? [String: any Sendable],
+                      let dirPath = withConfig["directory"] as? String {
+                // Config object: with { directory: "." }
+                path = dirPath
+            } else if let withConfig = withValue as? [String: any Sendable],
+                      let dirPath = withConfig["path"] as? String {
+                // Config object: with { path: "." }
+                path = dirPath
+            } else {
+                // Default if _with_ exists but has unexpected type
+                path = "."
+            }
+        }
+        // Priority 2: Legacy _literal_ binding
+        else if let literalPath: String = context.resolve("_literal_") {
             path = literalPath
-        } else if let objectConfig = context.resolveAny("_object_") as? [String: Any],
+        }
+        // Priority 3: Legacy _object_ binding
+        else if let objectConfig = context.resolveAny("_object_") as? [String: Any],
                   let dirPath = objectConfig["directory"] as? String {
-            // Object literal with directory property
             path = dirPath
-        } else if let exprValue = context.resolveAny("_expression_") as? [String: Any],
+        }
+        // Priority 4: Legacy _expression_ binding
+        else if let exprValue = context.resolveAny("_expression_") as? [String: Any],
                   let dirPath = exprValue["directory"] as? String {
-            // Expression that resolved to object
             path = dirPath
-        } else if let specPath = object.specifiers.first {
-            // Object specifier (fallback)
+        }
+        // Priority 5: Object specifier (fallback)
+        else if let specPath = object.specifiers.first {
             path = specPath
-        } else {
-            // Default to current directory
+        }
+        // Priority 6: Default to current directory
+        else {
             path = "."
         }
 

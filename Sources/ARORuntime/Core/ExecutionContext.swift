@@ -279,7 +279,7 @@ public protocol ExecutionContext: AnyObject, Sendable {
     /// Whether execution is from a compiled binary (vs interpreter)
     var isCompiled: Bool { get }
 
-    // MARK: - Template Buffer (ARO-0045)
+    // MARK: - Template Buffer (ARO-0050)
 
     /// Append content to the template output buffer
     /// Used by Print action when target is "template"

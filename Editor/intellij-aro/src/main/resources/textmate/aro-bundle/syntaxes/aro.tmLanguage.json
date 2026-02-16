@@ -4,15 +4,20 @@
   "scopeName": "source.aro",
   "patterns": [
     { "include": "#comments" },
-    { "include": "#featureset" },
     { "include": "#strings" },
     { "include": "#numbers" },
-    { "include": "#keywords" },
-    { "include": "#actions" },
-    { "include": "#results" },
-    { "include": "#objects" },
+    { "include": "#status-codes" },
+    { "include": "#request-actions" },
+    { "include": "#own-actions" },
+    { "include": "#response-actions" },
+    { "include": "#export-actions" },
+    { "include": "#lifecycle-actions" },
+    { "include": "#test-actions" },
+    { "include": "#featureset-header" },
+    { "include": "#variables" },
     { "include": "#prepositions" },
     { "include": "#articles" },
+    { "include": "#keywords" },
     { "include": "#operators" }
   ],
   "repository": {
@@ -21,118 +26,98 @@
         {
           "name": "comment.block.aro",
           "begin": "\\(\\*",
-          "end": "\\*\\)",
-          "patterns": [
-            {
-              "name": "comment.block.aro",
-              "match": "."
-            }
-          ]
+          "end": "\\*\\)"
         }
       ]
     },
-    "featureset": {
+    "featureset-header": {
       "patterns": [
         {
-          "name": "meta.featureset.aro",
-          "begin": "\\(([^:]+):\\s*([^)]+)\\)",
-          "beginCaptures": {
-            "1": { "name": "entity.name.function.featureset.aro" },
-            "2": { "name": "entity.name.type.business-activity.aro" }
-          },
-          "end": "(?=\\()|$",
-          "patterns": [
-            { "include": "#featureset-body" }
-          ]
+          "match": "\\(([^:]+):\\s*([^)]+)\\)",
+          "captures": {
+            "1": { "name": "entity.name.function.aro" },
+            "2": { "name": "entity.name.type.aro" }
+          }
         }
       ]
     },
-    "featureset-body": {
+    "request-actions": {
       "patterns": [
-        {
-          "begin": "\\{",
-          "end": "\\}",
-          "patterns": [
-            { "include": "#comments" },
-            { "include": "#strings" },
-            { "include": "#numbers" },
-            { "include": "#keywords" },
-            { "include": "#actions" },
-            { "include": "#results" },
-            { "include": "#objects" },
-            { "include": "#prepositions" },
-            { "include": "#articles" },
-            { "include": "#operators" }
-          ]
-        }
-      ]
-    },
-    "actions": {
-      "patterns": [
-        {
-          "name": "keyword.control.import.aro",
-          "match": "<(Extract|Parse|Retrieve|Fetch|Read|Accept|List|Stat|Exists)>",
-          "comment": "REQUEST actions (External → Internal): Blue/Cyan on both themes"
-        },
-        {
-          "name": "keyword.operator.aro",
-          "match": "<(Compute|Validate|Compare|Create|Transform|Filter|Match|Split|Set|Merge|Copy|Move|Append)>",
-          "comment": "OWN actions (Internal → Internal): Purple/Violet on both themes"
-        },
-        {
-          "name": "keyword.control.flow.return.aro",
-          "match": "<(Return|Throw)>",
-          "comment": "RESPONSE actions (Internal → External): Orange/Red on both themes"
-        },
-        {
-          "name": "keyword.control.export.aro",
-          "match": "<(Publish|Store|Log|Send|Emit|Write|CreateDirectory)>",
-          "comment": "EXPORT actions (Persistence/Export): Green/Teal on both themes"
-        },
-        {
-          "name": "support.function.builtin.aro",
-          "match": "<(Start|Stop|Keepalive|Watch|Configure|Request)>",
-          "comment": "LIFECYCLE actions (System management): Cyan on both themes"
-        },
         {
           "name": "entity.name.tag.aro",
-          "match": "<(Given|When|Then|Assert)>",
-          "comment": "TEST actions (BDD testing): Yellow/Gold on both themes"
+          "match": "<Extract>|<Parse>|<Retrieve>|<Fetch>|<Read>|<Accept>|<List>|<Stat>|<Exists>|<Parameters>"
         }
       ]
     },
-    "results": {
+    "own-actions": {
       "patterns": [
         {
-          "name": "variable.parameter.result.aro",
-          "match": "<([a-zA-Z][a-zA-Z0-9-]*)(?::\\s*([a-zA-Z][a-zA-Z0-9-]*))?>",
-          "comment": "Results - bright color"
+          "name": "storage.type.aro",
+          "match": "<Compute>|<Validate>|<Compare>|<Create>|<Transform>|<Filter>|<Match>|<Split>|<Set>|<Merge>|<Copy>|<Move>|<Append>|<Render>"
         }
       ]
     },
-    "objects": {
+    "response-actions": {
       "patterns": [
         {
-          "name": "entity.other.attribute-name.object.aro",
-          "match": "(?<=from|to|with|for|into|on)\\s+(?:the|a|an)?\\s*<([^>]+)>",
-          "comment": "Objects - bright color"
+          "name": "constant.language.aro",
+          "match": "<Return>|<Throw>"
+        }
+      ]
+    },
+    "export-actions": {
+      "patterns": [
+        {
+          "name": "entity.other.attribute-name.aro",
+          "match": "<Publish>|<Store>|<Log>|<Send>|<Emit>|<Write>|<CreateDirectory>"
+        }
+      ]
+    },
+    "lifecycle-actions": {
+      "patterns": [
+        {
+          "name": "support.function.aro",
+          "match": "<Start>|<Stop>|<Keepalive>|<Watch>|<Configure>|<Request>|<Connect>|<Disconnect>|<Broadcast>"
+        }
+      ]
+    },
+    "test-actions": {
+      "patterns": [
+        {
+          "name": "markup.heading.aro",
+          "match": "<Given>|<When>|<Then>|<Assert>"
+        }
+      ]
+    },
+    "variables": {
+      "patterns": [
+        {
+          "name": "variable.other.aro",
+          "match": "<[a-zA-Z][a-zA-Z0-9-]*(?::[^>]+)?>"
+        }
+      ]
+    },
+    "status-codes": {
+      "patterns": [
+        {
+          "name": "support.constant.aro",
+          "match": "<(?:OK|Created|Accepted|NoContent|BadRequest|Unauthorized|Forbidden|NotFound|Error|InternalError):\\s*status>"
         }
       ]
     },
     "prepositions": {
       "patterns": [
         {
-          "name": "storage.modifier.preposition.aro",
-          "match": "\\b(from|to|with|for|into|on|where)\\b",
-          "comment": "Prepositions - darker color"
+          "name": "keyword.other.aro",
+          "match": "\\b(?:from|to|with|for|into|on|where|against|as)\\b"
         }
       ]
     },
     "articles": {
       "patterns": [
         {
-          "name": "keyword.other.article.aro",
-          "match": "\\b(the|a|an)\\b"
+          "name": "keyword.other.aro",
+          "match": "\\b(?:the|a|an)\\b"
         }
       ]
     },
@@ -140,15 +125,7 @@
       "patterns": [
         {
           "name": "keyword.control.aro",
-          "match": "\\b(match|when|for|each|in|if|else|repeat|until|while)\\b"
-        },
-        {
-          "name": "keyword.other.publish.aro",
-          "match": "\\b(Publish)\\b"
-        },
-        {
-          "name": "constant.language.status.aro",
-          "match": "<(OK|Created|Accepted|NoContent|BadRequest|Unauthorized|Forbidden|NotFound|Error):\\s*status>"
+          "match": "\\b(?:match|when|for|each|in|if|else|repeat|until|while)\\b"
         }
       ]
     },
@@ -170,32 +147,16 @@
     "numbers": {
       "patterns": [
         {
-          "name": "constant.numeric.float.aro",
-          "match": "\\b[0-9]+\\.[0-9]+\\b"
-        },
-        {
-          "name": "constant.numeric.integer.aro",
-          "match": "\\b[0-9]+\\b"
+          "name": "constant.numeric.aro",
+          "match": "\\b[0-9]+(?:\\.[0-9]+)?\\b"
         }
       ]
     },
     "operators": {
       "patterns": [
         {
-          "name": "keyword.operator.arithmetic.aro",
-          "match": "[+\\-*/]"
-        },
-        {
-          "name": "keyword.operator.comparison.aro",
-          "match": "(==|!=|<=|>=|<|>)"
-        },
-        {
-          "name": "keyword.operator.logical.aro",
-          "match": "\\b(and|or|not)\\b"
-        },
-        {
-          "name": "keyword.operator.assignment.aro",
-          "match": "="
+          "name": "keyword.operator.aro",
+          "match": "==|!=|<=|>=|[+\\-*/%]|\\b(?:and|or|not)\\b"
         }
       ]
     }
