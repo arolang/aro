@@ -428,6 +428,19 @@ public final class SemanticAnalyzer {
                 dataType = .unknown
             }
 
+            // Check for duplicate binding (immutability enforcement)
+            if definedSymbols.contains(resultName) && !isInternalVariable(resultName) && !isRebindingAllowed(statement.action.verb) {
+                diagnostics.error(
+                    "Cannot rebind variable '\(resultName)' - variables are immutable",
+                    at: statement.result.span.start,
+                    hints: [
+                        "Variable '\(resultName)' was already defined earlier in this feature set",
+                        "Create a new variable with a different name instead",
+                        "Example: <\(statement.action.verb)> the <\(resultName)-updated> \(statement.object.preposition.rawValue) the <\(objectName)>"
+                    ]
+                )
+            }
+
             builder.define(
                 name: resultName,
                 definedAt: statement.span,
