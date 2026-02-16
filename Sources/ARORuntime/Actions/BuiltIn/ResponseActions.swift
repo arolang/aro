@@ -454,9 +454,14 @@ public struct LogAction: ActionImplementation {
 /// the RepositoryStorage service, which persists across HTTP requests
 /// within the same business activity.
 ///
-/// ## Example
+/// ## Examples
 /// ```
+/// // Basic: Store data (no ID capture)
 /// <Store> the <message> into the <message-repository>.
+///
+/// // Immutable pattern: Capture stored value with generated ID
+/// <Store> the <stored-user: user> into the <user-repository>.
+/// // Now <stored-user> contains the user data WITH the generated ID
 /// ```
 public struct StoreAction: ActionImplementation {
     public static let role: ActionRole = .response
@@ -472,9 +477,25 @@ public struct StoreAction: ActionImplementation {
     ) async throws -> any Sendable {
         try validatePreposition(object.preposition)
 
+        // Support immutable pattern: <Store> the <stored-user: user> into <repository>
+        // - result.base = new variable to bind (e.g., "stored-user")
+        // - result.specifiers[0] = data to store (e.g., "user")
+        let dataVarName: String
+        let bindResultVar: Bool
+
+        if !result.specifiers.isEmpty {
+            // Immutable pattern: <Store> the <stored-user: user> into <repository>
+            dataVarName = result.specifiers[0]
+            bindResultVar = true
+        } else {
+            // Legacy pattern: <Store> the <user> into <repository>
+            dataVarName = result.base
+            bindResultVar = false
+        }
+
         // Get data to store
-        guard let data = context.resolveAny(result.base) else {
-            throw ActionError.undefinedVariable(result.base)
+        guard let data = context.resolveAny(dataVarName) else {
+            throw ActionError.undefinedVariable(dataVarName)
         }
 
         // Get repository name
@@ -551,6 +572,11 @@ public struct StoreAction: ActionImplementation {
             // Value is 1 if newly created, 0 if duplicate/update - enables `when <new-entry> > 0` guards
             if let storeResult = lastStoreResult {
                 context.bind("new-entry", value: storeResult.isUpdate ? 0 : 1, allowRebind: true)
+
+                // Immutable pattern: bind the stored value (with generated ID) to result variable
+                if bindResultVar {
+                    context.bind(result.base, value: storeResult.storedValue)
+                }
             }
         }
 

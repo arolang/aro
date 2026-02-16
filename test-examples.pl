@@ -667,8 +667,8 @@ sub expected_to_pattern {
     # __ID__ - matches hex IDs like 19b8607cf80ae931b1f (timestamp + random)
     $pattern =~ s/__ID__/(?:[a-f0-9]{15,20}|__ID__)/g;
 
-    # __UUID__ - matches UUIDs like 550e8400-e29b-41d4-a716-446655440000
-    $pattern =~ s/__UUID__/(?:[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}|__UUID__)/g;
+    # __UUID__ - matches UUIDs like 550e8400-e29b-41d4-a716-446655440000 (case-insensitive)
+    $pattern =~ s/__UUID__/(?:[a-fA-F0-9]{8}-[a-fA-F0-9]{4}-[a-fA-F0-9]{4}-[a-fA-F0-9]{4}-[a-fA-F0-9]{12}|__UUID__)/g;
 
     # __TIMESTAMP__ - matches ISO timestamps like 2025-01-03T23:43:37.478982169+01:00 or 2026-01-03T22:45
     $pattern =~ s/__TIMESTAMP__/(?:\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}(?::\\d{2})?(?:\\.\\d+)?(?:Z|[+-]\\d{2}:\\d{2})?|__TIMESTAMP__)/g;

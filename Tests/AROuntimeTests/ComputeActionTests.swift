@@ -933,10 +933,11 @@ struct MergeActionTests {
 
     @Test("Merge action verbs")
     func testMergeActionVerbs() {
+        // Merge action uses 'merge' and 'combine' verbs
+        // (join/concat removed - use Compute for string concatenation)
         #expect(MergeAction.verbs.contains("merge"))
         #expect(MergeAction.verbs.contains("combine"))
-        #expect(MergeAction.verbs.contains("join"))
-        #expect(MergeAction.verbs.contains("concat"))
+        #expect(MergeAction.verbs.count == 2)
     }
 
     @Test("Merge dictionaries")

@@ -1,9 +1,9 @@
-# Generated: Fri Jan 17 2026
+# Generated: Mon Feb 10 2026
 # Type: http
 # Command: aro run ./Examples/UserService
 ---
 GET /users => {"data":[]}
 GET /users/{id} => {"data":[]}
-POST /users => {"email":"test@example.com","name":"Test User"}
-PUT /users/{id} => {"email":"updated@example.com","name":"Updated User"}
+POST /users => {"email":"test@example.com","id":"__UUID__","name":"Test User"}
+PUT /users/{id} => {"email":"updated@example.com","id":"__UUID__","name":"Updated User"}
 DELETE /users/{id} =>
