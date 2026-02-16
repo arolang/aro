@@ -158,6 +158,75 @@ Use parentheses to override precedence:
 <Compute> the <result> from (<a> + <b>) * <c>.
 ```
 
+### Type Behavior
+
+ARO takes a strict approach to types in expressions—**no implicit coercion**. Operations require compatible types:
+
+| Operation | Required Types | Example |
+|-----------|---------------|---------|
+| Arithmetic (`+`, `-`, `*`, `/`, `%`) | Both numeric (Integer or Float) | `<price> + <tax>` |
+| String concat (`++`) | At least one String | `"Total: " ++ <amount>` |
+| Comparison (`<`, `>`, `<=`, `>=`) | Both numeric or both strings | `<age> >= 18` |
+| Equality (`==`, `!=`, `is`, `is not`) | Any matching types | `<status> == "active"` |
+| Logical (`and`, `or`, `not`) | Boolean operands | `<active> and <verified>` |
+
+When types don't match, ARO reports a clear error rather than guessing your intent:
+
+```aro
+(* Error: Cannot add String and Integer *)
+<Compute> the <result> from "5" + 3.
+
+(* Correct: Use ++ for string building *)
+<Compute> the <result> from "Count: " ++ <count>.
+```
+
+For explicit type conversion, use the Transform action:
+
+```aro
+<Transform> the <count-string> from <count> as String.
+<Transform> the <amount-int> from <amount> as Integer.
+```
+
+### Short-Circuit Evaluation
+
+Logical operators `and` and `or` use **short-circuit evaluation**—the right operand is only evaluated if necessary:
+
+```aro
+(* 'or' stops at first true *)
+<active> or <check-expensive-condition>
+(* If <active> is true, <check-expensive-condition> is never evaluated *)
+
+(* 'and' stops at first false *)
+<exists> and <process-if-exists>
+(* If <exists> is false, <process-if-exists> is never evaluated *)
+```
+
+This behavior is particularly useful for guarding operations:
+
+```aro
+(* Safe: division only happens if count > 0 *)
+<count> > 0 and (<total> / <count>) > <threshold>
+```
+
+### Evaluation Order
+
+Within the same precedence level, operators evaluate **left-to-right**:
+
+```aro
+(* Left-to-right: (10 - 5) - 2 = 3, not 10 - (5 - 2) = 7 *)
+<Compute> the <result> from 10 - 5 - 2.
+```
+
+Method-style accessors (`.` and `[]`) bind tightest and chain naturally:
+
+```aro
+(* Evaluates as: ((users.first).address).city *)
+<user>.address.city
+
+(* Evaluates as: (items[0]).name *)
+<items>[0].name
+```
+
 ---
 
 ## 8.4 Naming Your Results
