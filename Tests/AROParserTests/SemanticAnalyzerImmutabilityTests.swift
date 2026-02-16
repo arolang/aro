@@ -22,9 +22,13 @@ struct SemanticAnalyzerImmutabilityTests {
         let result = compiler.compile(source)
 
         let errors = result.diagnostics.filter { $0.severity == .error }
-        #expect(errors.count == 1)
-        #expect(errors[0].message.contains("Cannot rebind variable 'value'"))
-        #expect(errors[0].message.contains("variables are immutable"))
+        #expect(errors.count == 1, "Expected 1 immutability error, got \(errors.count): \(result.diagnostics)")
+
+        guard let error = errors.first else {
+            return  // Test already failed above
+        }
+        #expect(error.message.contains("Cannot rebind variable 'value'"))
+        #expect(error.message.contains("variables are immutable"))
     }
 
     @Test("Allow framework variables to rebind")
@@ -177,8 +181,11 @@ struct SemanticAnalyzerImmutabilityTests {
         let result = compiler.compile(source)
 
         let errors = result.diagnostics.filter { $0.severity == .error }
-        #expect(errors.count > 0)
-        let error = errors[0]
+        #expect(errors.count > 0, "Expected immutability error for duplicate 'value' binding, got: \(result.diagnostics)")
+
+        guard let error = errors.first else {
+            return  // Test already failed above
+        }
         #expect(error.hints.count > 0)
         #expect(error.hints.contains(where: { $0.contains("Create a new variable") }))
         #expect(error.hints.contains(where: { $0.contains("value-updated") }))
