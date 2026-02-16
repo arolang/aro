@@ -235,17 +235,19 @@ public final class REPLShell: @unchecked Sendable {
     }
 
     /// Get the current prompt
+    /// Note: LineNoise doesn't handle ANSI escape codes in prompts correctly,
+    /// so we use plain text prompts to ensure correct cursor positioning.
     private func getPrompt() -> String {
         switch session.mode {
         case .direct:
             if multilineBuffer.isEmpty {
-                return colorizePrompt("aro> ", .cyan)
+                return "aro> "
             } else {
-                return colorizePrompt("...> ", .cyan)
+                return "...> "
             }
         case .featureSetDefinition(let name, _, _):
             let shortName = name.prefix(20)
-            return colorizePrompt("(\(shortName))> ", .yellow)
+            return "(\(shortName))> "
         }
     }
 
@@ -442,15 +444,5 @@ public final class REPLShell: @unchecked Sendable {
             return text
         }
         return "\(color.code)\(text)\(ANSIColor.reset.code)"
-    }
-
-    /// Colorize text for use in prompts (with non-printing markers for correct cursor positioning)
-    private func colorizePrompt(_ text: String, _ color: ANSIColor) -> String {
-        guard useColors && isatty(STDOUT_FILENO) != 0 else {
-            return text
-        }
-        // Wrap ANSI codes in \x01 and \x02 to mark them as non-printing
-        // This tells readline/linenoise not to count them for cursor positioning
-        return "\u{01}\(color.code)\u{02}\(text)\u{01}\(ANSIColor.reset.code)\u{02}"
     }
 }
