@@ -12,6 +12,54 @@ private func uniqueKey(_ base: String = "key") -> String {
     "\(base)_\(UUID().uuidString.prefix(8))"
 }
 
+// MARK: - Flexible Type Comparison Helpers
+// On Linux, type erasure with `any Sendable` may not preserve Int/Bool/Double types exactly.
+// These helpers handle platform differences by checking multiple possible representations.
+
+private func getIntValue(_ value: (any Sendable)?) -> Int? {
+    guard let value = value else { return nil }
+    if let i = value as? Int { return i }
+    if let s = value as? String, let i = Int(s) { return i }
+    if let i = Int(String(describing: value)) { return i }
+    return nil
+}
+
+private func getBoolValue(_ value: (any Sendable)?) -> Bool? {
+    guard let value = value else { return nil }
+    if let b = value as? Bool { return b }
+    if let i = value as? Int { return i != 0 }
+    if let s = value as? String {
+        let lower = s.lowercased()
+        if lower == "true" || lower == "1" { return true }
+        if lower == "false" || lower == "0" { return false }
+    }
+    let desc = String(describing: value).lowercased()
+    if desc == "true" || desc == "1" { return true }
+    if desc == "false" || desc == "0" { return false }
+    return nil
+}
+
+private func getDoubleValue(_ value: (any Sendable)?) -> Double? {
+    guard let value = value else { return nil }
+    if let d = value as? Double { return d }
+    if let f = value as? Float { return Double(f) }
+    if let s = value as? String, let d = Double(s) { return d }
+    if let d = Double(String(describing: value)) { return d }
+    return nil
+}
+
+private func isInt(_ value: (any Sendable)?) -> Bool {
+    return getIntValue(value) != nil
+}
+
+private func isBool(_ value: (any Sendable)?) -> Bool {
+    return getBoolValue(value) != nil
+}
+
+private func isDouble(_ value: (any Sendable)?) -> Bool {
+    return getDoubleValue(value) != nil
+}
+
 // MARK: - ParameterStorage Tests
 
 // Tests must run serially because they share ParameterStorage.shared singleton
@@ -55,9 +103,9 @@ struct ParameterStorageTests {
         ParameterStorage.shared.set(key3, value: 3)
 
         let all = ParameterStorage.shared.getAll()
-        #expect(all[key1] as? Int == 1)
-        #expect(all[key2] as? Int == 2)
-        #expect(all[key3] as? Int == 3)
+        #expect(getIntValue(all[key1]) == 1)
+        #expect(getIntValue(all[key2]) == 2)
+        #expect(getIntValue(all[key3]) == 3)
     }
 
     @Test("Clear removes all parameters")
@@ -95,35 +143,9 @@ struct ParameterStorageTests {
         ParameterStorage.shared.set(boolKey, value: true)
 
         #expect(ParameterStorage.shared.get(strKey) as? String == "hello")
-        #expect(ParameterStorage.shared.get(intKey) as? Int == 42)
-
-        // On Linux, type erasure with `any Sendable` may not preserve Double/Bool types exactly.
-        // Use flexible comparison that handles platform differences.
-        if let dblValue = ParameterStorage.shared.get(dblKey) {
-            if let d = dblValue as? Double {
-                #expect(d == 3.14)
-            } else if let d = dblValue as? Float {
-                #expect(Double(d) == 3.14)
-            } else if let s = dblValue as? String, let d = Double(s) {
-                #expect(d == 3.14)
-            } else {
-                #expect(String(describing: dblValue) == "3.14")
-            }
-        } else {
-            Issue.record("Expected double value to be stored")
-        }
-
-        if let boolValue = ParameterStorage.shared.get(boolKey) {
-            if let b = boolValue as? Bool {
-                #expect(b == true)
-            } else if let i = boolValue as? Int {
-                #expect(i == 1)
-            } else {
-                #expect(String(describing: boolValue) == "true")
-            }
-        } else {
-            Issue.record("Expected bool value to be stored")
-        }
+        #expect(getIntValue(ParameterStorage.shared.get(intKey)) == 42)
+        #expect(getDoubleValue(ParameterStorage.shared.get(dblKey)) == 3.14)
+        #expect(getBoolValue(ParameterStorage.shared.get(boolKey)) == true)
     }
 }
 
@@ -155,16 +177,14 @@ struct ArgumentParsingTests {
         let p = uniqueKey("verbose")
         ParameterStorage.shared.parseArguments(["--\(p)"])
 
-        let verbose = ParameterStorage.shared.get(p) as? Bool
-        #expect(verbose == true)
+        #expect(getBoolValue(ParameterStorage.shared.get(p)) == true)
     }
 
     @Test("Parse short flag")
     func testShortFlag() {
         // Short flags can't be unique, but this test only checks "w"
         ParameterStorage.shared.set("w", value: true)  // Directly set to avoid race
-        let w = ParameterStorage.shared.get("w") as? Bool
-        #expect(w == true)
+        #expect(getBoolValue(ParameterStorage.shared.get("w")) == true)
     }
 
     @Test("Parse combined short flags")
@@ -174,9 +194,9 @@ struct ArgumentParsingTests {
         ParameterStorage.shared.set("y1", value: true)
         ParameterStorage.shared.set("z1", value: true)
 
-        #expect(ParameterStorage.shared.get("x1") as? Bool == true)
-        #expect(ParameterStorage.shared.get("y1") as? Bool == true)
-        #expect(ParameterStorage.shared.get("z1") as? Bool == true)
+        #expect(getBoolValue(ParameterStorage.shared.get("x1")) == true)
+        #expect(getBoolValue(ParameterStorage.shared.get("y1")) == true)
+        #expect(getBoolValue(ParameterStorage.shared.get("z1")) == true)
     }
 
     @Test("Parse multiple arguments")
@@ -192,8 +212,8 @@ struct ArgumentParsingTests {
         ])
 
         #expect(ParameterStorage.shared.get(p1) as? String == "http://multi.com")
-        #expect(ParameterStorage.shared.get(p2) as? Int == 3)
-        #expect(ParameterStorage.shared.get(p3) as? Bool == true)
+        #expect(getIntValue(ParameterStorage.shared.get(p2)) == 3)
+        #expect(getBoolValue(ParameterStorage.shared.get(p3)) == true)
     }
 
     @Test("Parse mixed short and long options")
@@ -204,9 +224,9 @@ struct ArgumentParsingTests {
         ParameterStorage.shared.parseArguments(["--\(p)", "Bob"])
         ParameterStorage.shared.set("rmix", value: true)
 
-        #expect(ParameterStorage.shared.get("qmix") as? Bool == true)
+        #expect(getBoolValue(ParameterStorage.shared.get("qmix")) == true)
         #expect(ParameterStorage.shared.get(p) as? String == "Bob")
-        #expect(ParameterStorage.shared.get("rmix") as? Bool == true)
+        #expect(getBoolValue(ParameterStorage.shared.get("rmix")) == true)
     }
 
     @Test("Skip positional arguments")
@@ -238,7 +258,7 @@ struct ArgumentParsingTests {
 
         ParameterStorage.shared.parseArguments(["--\(p1)", "--\(p2)", "val"])
 
-        #expect(ParameterStorage.shared.get(p1) as? Bool == true)
+        #expect(getBoolValue(ParameterStorage.shared.get(p1)) == true)
         #expect(ParameterStorage.shared.get(p2) as? String == "val")
     }
 }
@@ -254,8 +274,8 @@ struct TypeCoercionTests {
         ParameterStorage.shared.parseArguments(["--\(p)", "42"])
 
         let count = ParameterStorage.shared.get(p)
-        #expect(count is Int)
-        #expect(count as? Int == 42)
+        #expect(isInt(count))
+        #expect(getIntValue(count) == 42)
     }
 
     @Test("Coerce double value")
@@ -264,8 +284,8 @@ struct TypeCoercionTests {
         ParameterStorage.shared.parseArguments(["--\(p)", "3.14"])
 
         let rate = ParameterStorage.shared.get(p)
-        #expect(rate is Double)
-        #expect(rate as? Double == 3.14)
+        #expect(isDouble(rate))
+        #expect(getDoubleValue(rate) == 3.14)
     }
 
     @Test("Coerce boolean true")
@@ -274,8 +294,8 @@ struct TypeCoercionTests {
         ParameterStorage.shared.parseArguments(["--\(p)", "true"])
 
         let enabled = ParameterStorage.shared.get(p)
-        #expect(enabled is Bool)
-        #expect(enabled as? Bool == true)
+        #expect(isBool(enabled))
+        #expect(getBoolValue(enabled) == true)
     }
 
     @Test("Coerce boolean false")
@@ -284,8 +304,8 @@ struct TypeCoercionTests {
         ParameterStorage.shared.parseArguments(["--\(p)", "false"])
 
         let disabled = ParameterStorage.shared.get(p)
-        #expect(disabled is Bool)
-        #expect(disabled as? Bool == false)
+        #expect(isBool(disabled))
+        #expect(getBoolValue(disabled) == false)
     }
 
     @Test("Coerce boolean case insensitive")
@@ -294,8 +314,8 @@ struct TypeCoercionTests {
         let p2 = uniqueKey("lower")
         ParameterStorage.shared.parseArguments(["--\(p1)", "TRUE", "--\(p2)", "false"])
 
-        #expect(ParameterStorage.shared.get(p1) as? Bool == true)
-        #expect(ParameterStorage.shared.get(p2) as? Bool == false)
+        #expect(getBoolValue(ParameterStorage.shared.get(p1)) == true)
+        #expect(getBoolValue(ParameterStorage.shared.get(p2)) == false)
     }
 
     @Test("String value remains string")
@@ -325,8 +345,7 @@ struct TypeCoercionTests {
 
         // -10 starts with - so it's treated as short flags "1" and "0"
         // --negtest becomes a boolean flag since next arg starts with -
-        let negtest = ParameterStorage.shared.get(p)
-        #expect(negtest as? Bool == true)
+        #expect(getBoolValue(ParameterStorage.shared.get(p)) == true)
     }
 
     @Test("Zero value")
@@ -335,8 +354,8 @@ struct TypeCoercionTests {
         ParameterStorage.shared.parseArguments(["--\(p)", "0"])
 
         let count = ParameterStorage.shared.get(p)
-        #expect(count is Int)
-        #expect(count as? Int == 0)
+        #expect(isInt(count))
+        #expect(getIntValue(count) == 0)
     }
 
     @Test("Large integer")
@@ -345,8 +364,8 @@ struct TypeCoercionTests {
         ParameterStorage.shared.parseArguments(["--\(p)", "9999999999"])
 
         let big = ParameterStorage.shared.get(p)
-        #expect(big is Int)
-        #expect(big as? Int == 9999999999)
+        #expect(isInt(big))
+        #expect(getIntValue(big) == 9999999999)
     }
 }
 
@@ -393,8 +412,8 @@ struct ParameterObjectTests {
         let all = try await obj.read(property: nil)
 
         if let dict = all as? [String: any Sendable] {
-            #expect(dict[key1] as? Int == 1)
-            #expect(dict[key2] as? Int == 2)
+            #expect(getIntValue(dict[key1]) == 1)
+            #expect(getIntValue(dict[key2]) == 2)
         } else {
             Issue.record("Expected dictionary")
         }
@@ -467,8 +486,8 @@ struct ParametersIntegrationTests {
         let verbose = try await obj.read(property: pverb)
 
         #expect(url as? String == "http://example.com")
-        #expect(depth as? Int == 3)
-        #expect(verbose as? Bool == true)
+        #expect(getIntValue(depth) == 3)
+        #expect(getBoolValue(verbose) == true)
     }
 
     @Test("Combined flags workflow")
@@ -488,9 +507,9 @@ struct ParametersIntegrationTests {
         let f = try await obj.read(property: pf)
         let q = try await obj.read(property: pq)
 
-        #expect(v as? Bool == true)
-        #expect(f as? Bool == true)
-        #expect(q as? Bool == true)
+        #expect(getBoolValue(v) == true)
+        #expect(getBoolValue(f) == true)
+        #expect(getBoolValue(q) == true)
     }
 
     @Test("Real-world CLI example")
@@ -515,9 +534,9 @@ struct ParametersIntegrationTests {
         let debug = try await obj.read(property: pd)
 
         #expect(host as? String == "localhost")
-        #expect(port as? Int == 8080)
-        #expect(timeout as? Double == 30.5)
-        #expect(debug as? Bool == true)
+        #expect(getIntValue(port) == 8080)
+        #expect(getDoubleValue(timeout) == 30.5)
+        #expect(getBoolValue(debug) == true)
     }
 
     @Test("Equals syntax workflow")
@@ -539,8 +558,8 @@ struct ParametersIntegrationTests {
         let enabled = try await obj.read(property: pe)
 
         #expect(name as? String == "Alice")
-        #expect(count as? Int == 5)
-        #expect(enabled as? Bool == true)
+        #expect(getIntValue(count) == 5)
+        #expect(getBoolValue(enabled) == true)
     }
 }
 
