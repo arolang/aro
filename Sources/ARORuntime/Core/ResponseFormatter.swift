@@ -236,8 +236,17 @@ public struct ResponseFormatter: Sendable {
                 .map { "\($0.0): \($0.1)" }
                 .joined(separator: "\n")
         case let array as [any Sendable]:
-            let items = array.map { formatValueForHuman($0) }
-            return "[\(items.joined(separator: ", "))]"
+            // Check if array contains dictionaries (e.g., CSV rows)
+            let containsDicts = array.contains { $0 is [String: any Sendable] }
+            if containsDicts {
+                // Format each row on its own block, separated by blank line
+                let items = array.map { formatValueForHuman($0) }
+                return items.joined(separator: "\n\n")
+            } else {
+                // Simple array - comma separated
+                let items = array.map { formatValueForHuman($0) }
+                return "[\(items.joined(separator: ", "))]"
+            }
         case let response as Response:
             return "[\(response.status)] \(response.reason)"
         default:
