@@ -239,13 +239,13 @@ public final class REPLShell: @unchecked Sendable {
         switch session.mode {
         case .direct:
             if multilineBuffer.isEmpty {
-                return colorize("aro> ", .cyan)
+                return colorizePrompt("aro> ", .cyan)
             } else {
-                return colorize("...> ", .cyan)
+                return colorizePrompt("...> ", .cyan)
             }
         case .featureSetDefinition(let name, _, _):
             let shortName = name.prefix(20)
-            return colorize("(\(shortName))> ", .yellow)
+            return colorizePrompt("(\(shortName))> ", .yellow)
         }
     }
 
@@ -442,5 +442,15 @@ public final class REPLShell: @unchecked Sendable {
             return text
         }
         return "\(color.code)\(text)\(ANSIColor.reset.code)"
+    }
+
+    /// Colorize text for use in prompts (with non-printing markers for correct cursor positioning)
+    private func colorizePrompt(_ text: String, _ color: ANSIColor) -> String {
+        guard useColors && isatty(STDOUT_FILENO) != 0 else {
+            return text
+        }
+        // Wrap ANSI codes in \x01 and \x02 to mark them as non-printing
+        // This tells readline/linenoise not to count them for cursor positioning
+        return "\u{01}\(color.code)\u{02}\(text)\u{01}\(ANSIColor.reset.code)\u{02}"
     }
 }
