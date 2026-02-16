@@ -1,6 +1,8 @@
 # Template Engine Example
 
-This example demonstrates the ARO-0050 Template Engine syntax.
+This example demonstrates the ARO-0050 Template Engine syntax (formerly ARO-0045).
+
+> **Status**: The template engine is fully implemented. This example shows all supported features.
 
 ## Features Demonstrated
 
@@ -19,8 +21,8 @@ This example demonstrates the ARO-0050 Template Engine syntax.
 ```
 TemplateEngine/
 ├── main.aro              # Application entry point
-├── api.aro               # HTTP endpoints
-├── openapi.yaml          # API contract
+├── expected.txt          # Expected output for testing
+├── test.hint             # Test configuration
 └── templates/
     ├── user-list.html    # User listing with for-each loop
     ├── emails/
@@ -32,13 +34,19 @@ TemplateEngine/
         └── footer.html   # Reusable footer partial
 ```
 
-## API Endpoints
+## Running the Example
 
-| Endpoint | Description |
-|----------|-------------|
-| `GET /users` | Renders user list as HTML table |
-| `GET /welcome/{name}` | Generates welcome email for user |
-| `GET /dashboard` | Shows dashboard with nested templates |
+```bash
+# Run the template demo
+aro run Examples/TemplateEngine
+
+# Expected output:
+# === Template Engine Demo ===
+# Rendering welcome template...
+# --- Rendered Output ---
+# Dear Alice,
+# ...
+```
 
 ## Template Syntax Summary
 
