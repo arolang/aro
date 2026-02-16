@@ -369,6 +369,109 @@ components:
 
 ---
 
+## Performance Considerations
+
+When working with data pipelines, keep these performance guidelines in mind:
+
+### Operation Costs
+
+| Operation | Time Complexity | Notes |
+|-----------|-----------------|-------|
+| Filter | O(n) | Scans entire collection once |
+| Map | O(n) | Transforms each element |
+| Reduce | O(n) | Single pass aggregation |
+| Retrieve | O(n) + sort | Filtering and optional sorting |
+| Sort | O(n log n) | Standard comparison sort |
+
+### Best Practices
+
+1. **Filter Early**: Apply filters before map operations to reduce the working set.
+
+```aro
+(* Good: Filter first, then transform *)
+<Filter> the <active: List<User>> from the <users>
+    where <status> is "active".
+<Map> the <summaries: List<UserSummary>> from the <active>.
+
+(* Less efficient: Transform all, filter none *)
+<Map> the <all-summaries: List<UserSummary>> from the <users>.
+```
+
+2. **Limit Results**: Use `limit` with sorting to avoid processing unnecessary data.
+
+```aro
+(* Good: Retrieve only top 10 *)
+<Retrieve> the <top-orders: List<Order>> from the <orders>
+    order by <amount> desc
+    limit 10.
+
+(* Expensive: Retrieve all, then filter in application *)
+<Retrieve> the <all-orders: List<Order>> from the <orders>
+    order by <amount> desc.
+```
+
+3. **Combine Where Clauses**: Multiple conditions in one `where` clause are more efficient than chained filters.
+
+```aro
+(* Good: Single filter with combined conditions *)
+<Filter> the <premium-active: List<User>> from the <users>
+    where <status> is "active" and <tier> is "premium".
+
+(* Less efficient: Two separate filter passes *)
+<Filter> the <active: List<User>> from the <users>
+    where <status> is "active".
+<Filter> the <premium-active: List<User>> from the <active>
+    where <tier> is "premium".
+```
+
+4. **Use Reduce for Counts**: Prefer `count()` over retrieving all items.
+
+```aro
+(* Good: Aggregate directly *)
+<Reduce> the <user-count: Integer> from the <users>
+    with count().
+
+(* Expensive: Retrieve all just to count *)
+<Retrieve> the <all-users: List<User>> from the <users>.
+<Compute> the <count: length> from <all-users>.
+```
+
+### Memory Considerations
+
+- Each pipeline operation creates a new collection (immutability)
+- For large datasets, use `limit` and `offset` for pagination
+- Intermediate results are garbage-collected when no longer referenced
+- Map operations to smaller types reduce memory usage
+
+### When to Split Feature Sets
+
+For very complex data transformations, consider splitting into multiple feature sets:
+
+```aro
+(* Feature set 1: Heavy data processing *)
+(Process Orders: Order Handler) {
+    <Retrieve> the <orders: List<Order>> from the <order-repository>
+        where <status> is "pending"
+        limit 1000.
+    <Store> the <orders> into the <pending-cache>.
+    <Emit> a <OrdersProcessed: event> with { count: <orders>.count() }.
+    <Return> an <OK: status> for the <processing>.
+}
+
+(* Feature set 2: Analytics on cached data *)
+(Generate Report: OrdersProcessed Handler) {
+    <Retrieve> the <orders: List<Order>> from the <pending-cache>.
+    <Reduce> the <total: Float> from the <orders>
+        with sum(<amount>).
+    (* ... additional analytics ... *)
+    <Return> an <OK: status> with { total: <total> }.
+}
+```
+
+This approach keeps each feature set focused and allows the event bus to manage execution flow.
+
+---
+
 ## Design Philosophy
 
 ARO's data pipelines follow these principles:
@@ -382,4 +485,4 @@ For complex data needs, use multiple feature sets and compose results in your bu
 
 ---
 
-*Next: Chapter 29 — Repositories*
+*Next: Chapter 30 — Repositories*
