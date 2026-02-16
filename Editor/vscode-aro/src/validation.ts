@@ -4,7 +4,8 @@ import { realpath, access, constants } from 'fs/promises';
 
 const execFileAsync = promisify(execFile);
 const VALIDATION_TIMEOUT_MS = 5000;
-const VERSION_PATTERN = /aro\s+version\s+\d+\.\d+(\.\d+)?/i;
+// Match either "aro version X.Y.Z" or just "X.Y.Z" or "X.Y.Z-beta.N"
+const VERSION_PATTERN = /^(\d+\.\d+(\.\d+)?(-[a-zA-Z0-9.]+)?|aro\s+version\s+\d+\.\d+(\.\d+)?)/im;
 const SUSPICIOUS_CHARS = /[;&|`$<>]/;
 
 /**

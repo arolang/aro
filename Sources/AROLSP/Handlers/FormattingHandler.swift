@@ -159,17 +159,33 @@ public struct FormattingHandler: Sendable {
     private func formatStatement(_ statement: String) -> String {
         var result = statement
 
-        // Ensure spaces around articles
-        result = result.replacingOccurrences(of: ">the<", with: "> the <")
-        result = result.replacingOccurrences(of: ">a<", with: "> a <")
-        result = result.replacingOccurrences(of: ">an<", with: "> an <")
+        // Ensure space after > when followed by non-space (but not before .)
+        // Pattern: >X where X is not space, >, or .
+        result = result.replacingOccurrences(
+            of: ">([^\\s>.)])",
+            with: "> $1",
+            options: .regularExpression
+        )
 
-        // Ensure spaces around prepositions
-        let prepositions = ["from", "to", "with", "for", "against", "into", "via"]
-        for prep in prepositions {
-            result = result.replacingOccurrences(of: ">\(prep)<", with: "> \(prep) <")
-            result = result.replacingOccurrences(of: ">\(prep) ", with: "> \(prep) ")
-            result = result.replacingOccurrences(of: " \(prep)<", with: " \(prep) <")
+        // Ensure space before < when preceded by non-space
+        // Pattern: X< where X is not space or <
+        result = result.replacingOccurrences(
+            of: "([^\\s<])<",
+            with: "$1 <",
+            options: .regularExpression
+        )
+
+        // Ensure space after closing quote when followed by word character
+        // Pattern: letter"word -> letter" word (only for closing quotes)
+        result = result.replacingOccurrences(
+            of: "([a-zA-Z0-9])\"([a-zA-Z])",
+            with: "$1\" $2",
+            options: .regularExpression
+        )
+
+        // Fix double spaces
+        while result.contains("  ") {
+            result = result.replacingOccurrences(of: "  ", with: " ")
         }
 
         // Ensure period at end

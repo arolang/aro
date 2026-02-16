@@ -107,7 +107,7 @@ class AROCContextHandle {
         // when no HTTPServerService is registered.
         self.httpServer = nil
 
-        // Register template service (ARO-0045)
+        // Register template service (ARO-0050)
         let cwd = FileManager.default.currentDirectoryPath
         let templatesDirectory = (cwd as NSString).appendingPathComponent("templates")
         let ts = AROTemplateService(templatesDirectory: templatesDirectory)

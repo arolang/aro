@@ -206,8 +206,10 @@ public final class Parser {
     private func parseAROStatement(startToken: Token) throws -> AROStatement {
         // Parse action verb
         let actionToken = try expectIdentifier(message: "action verb")
-        let action = Action(verb: actionToken.lexeme, span: actionToken.span)
-        try expect(.rightAngle, message: "'>'")
+        let actionEndToken = try expect(.rightAngle, message: "'>'")
+        // Action span includes the angle brackets: <Log>
+        let actionSpan = startToken.span.merged(with: actionEndToken.span)
+        let action = Action(verb: actionToken.lexeme, span: actionSpan)
 
         // ARO-0043: Check for sink verb syntax
         // Sink verbs: log, print, output, debug, write, send, dispatch

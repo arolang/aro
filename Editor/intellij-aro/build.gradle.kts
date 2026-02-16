@@ -4,7 +4,7 @@ plugins {
 }
 
 group = "com.arolang"
-version = "1.1.0"
+version = "1.2.0"
 
 repositories {
     mavenCentral()
@@ -27,6 +27,12 @@ dependencies {
         pluginVerifier()
         instrumentationTools()
     }
+    testImplementation("org.junit.jupiter:junit-jupiter:5.10.0")
+    testRuntimeOnly("org.junit.platform:junit-platform-launcher")
+}
+
+tasks.test {
+    useJUnitPlatform()
 }
 
 intellijPlatform {

@@ -1,8 +1,6 @@
 # Template Engine Example
 
-This example demonstrates the proposed ARO-0045 Template Engine syntax.
-
-> **Note**: The template engine is not yet implemented. This example serves as a reference for the proposed syntax and features.
+This example demonstrates the ARO-0050 Template Engine syntax.
 
 ## Features Demonstrated
 

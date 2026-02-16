@@ -72,7 +72,95 @@ Here, the expression `<price> * <quantity>` is the actual computation. The resul
 
 ---
 
-## 8.3 Naming Your Results
+## 8.3 Expressions and Operators
+
+Computations often involve expressions that combine values using operators. ARO provides operators for arithmetic, string manipulation, comparison, and logic.
+
+### Arithmetic Operators
+
+The standard arithmetic operators work on numeric values:
+
+| Operator | Description | Example |
+|----------|-------------|---------|
+| `+` | Addition | `<price> + <shipping>` |
+| `-` | Subtraction | `<total> - <discount>` |
+| `*` | Multiplication | `<quantity> * <unit-price>` |
+| `/` | Division | `<total> / <count>` |
+| `%` | Modulo (remainder) | `<index> % 2` |
+
+```aro
+<Compute> the <subtotal> from <price> * <quantity>.
+<Compute> the <total> from <subtotal> + <tax>.
+<Compute> the <average> from <sum> / <count>.
+```
+
+### String Concatenation
+
+ARO uses `++` for string concatenation, distinct from the `+` arithmetic operator:
+
+```aro
+<Compute> the <greeting> from "Hello, " ++ <name> ++ "!".
+<Compute> the <full-name> from <first-name> ++ " " ++ <last-name>.
+<Compute> the <path> from <directory> ++ "/" ++ <filename>.
+```
+
+Why `++` instead of `+`? This design choice provides **type clarity**:
+
+- `1 + 2` → `3` (arithmetic, always)
+- `"1" ++ "2"` → `"12"` (concatenation, always)
+
+There's no ambiguity about what happens when you combine values. The operator tells you exactly whether you're doing math or building strings. Languages that overload `+` for both purposes often produce surprising results through implicit type coercion—ARO avoids this by making the intent explicit.
+
+### Comparison Operators
+
+Comparison operators return boolean values:
+
+| Operator | Description | Example |
+|----------|-------------|---------|
+| `==` | Equal to | `<status> == "active"` |
+| `!=` | Not equal to | `<count> != 0` |
+| `<` | Less than | `<age> < 18` |
+| `>` | Greater than | `<score> > 100` |
+| `<=` | Less than or equal | `<quantity> <= <stock>` |
+| `>=` | Greater than or equal | `<total> >= <minimum>` |
+| `is` | Identity/equality | `<user> is <admin>` |
+| `is not` | Negated identity | `<status> is not "deleted"` |
+
+### Logical Operators
+
+Combine boolean expressions:
+
+| Operator | Description | Example |
+|----------|-------------|---------|
+| `and` | Logical AND | `<active> and <verified>` |
+| `or` | Logical OR | `<admin> or <moderator>` |
+| `not` | Logical NOT | `not <expired>` |
+
+### Operator Precedence
+
+When expressions contain multiple operators, ARO evaluates them in this order (highest precedence first):
+
+| Precedence | Operators | Associativity |
+|------------|-----------|---------------|
+| 1 (highest) | `.` `[]` | Left |
+| 2 | unary `-` `not` | Right |
+| 3 | `*` `/` `%` | Left |
+| 4 | `+` `-` `++` | Left |
+| 5 | `<` `>` `<=` `>=` | Left |
+| 6 | `==` `!=` `is` `is not` | Left |
+| 7 | `and` | Left |
+| 8 (lowest) | `or` | Left |
+
+Use parentheses to override precedence:
+
+```aro
+<Compute> the <with-tax> from <price> * (1 + <tax-rate>).
+<Compute> the <result> from (<a> + <b>) * <c>.
+```
+
+---
+
+## 8.4 Naming Your Results
 
 A subtle problem arises when you need multiple results of the same operation. Consider computing the lengths of two different messages:
 
@@ -112,7 +200,7 @@ For backward compatibility, the original syntax still works. Writing `<Compute> 
 
 ---
 
-## 8.4 Set Operations
+## 8.5 Set Operations
 
 When working with collections, you often need to find commonalities or differences between datasets. ARO provides three polymorphic set operations that work across Lists, Strings, and Objects.
 
@@ -231,7 +319,7 @@ For objects, set operations perform **deep recursive comparison**. The intersect
 
 ---
 
-## 8.5 Extending Computations
+## 8.6 Extending Computations
 
 The built-in operations cover common cases, but real applications often need domain-specific computations. ARO's plugin system allows you to add custom operations that integrate seamlessly with the Compute action.
 
@@ -265,7 +353,7 @@ See Chapter 17 for the full plugin development guide.
 
 ---
 
-## 8.6 Computation Patterns
+## 8.7 Computation Patterns
 
 Several patterns emerge in how computations are used within feature sets.
 
