@@ -861,44 +861,34 @@ jobs:
         run: |
           swift --version
           # Determine Swift library path for aro build linker
-          # swift-actions/setup-swift uses swiftly, which installs to SWIFTLY_HOME_DIR
           SWIFT_BIN=$(which swift)
           echo "Swift binary: $SWIFT_BIN"
-          echo "SWIFTLY_HOME_DIR: $SWIFTLY_HOME_DIR"
 
-          # First, try swiftly's toolchain directory structure
-          if [ -n "$SWIFTLY_HOME_DIR" ]; then
-            # Find the active toolchain in swiftly
-            for toolchain in "$SWIFTLY_HOME_DIR/toolchains"/swift-*; do
-              if [ -d "$toolchain/usr/lib/swift/macosx" ]; then
-                SWIFT_LIB="$toolchain/usr/lib/swift/macosx"
-                echo "SWIFT_LIB_PATH=$SWIFT_LIB" >> $GITHUB_ENV
-                echo "Found Swift lib path (swiftly): $SWIFT_LIB"
-                ls -la "$SWIFT_LIB" | head -5
-                break
-              fi
-            done
-          fi
+          # Follow symlinks to find the real swift binary location
+          REAL_SWIFT=$(readlink -f "$SWIFT_BIN" 2>/dev/null || python3 -c "import os; print(os.path.realpath('$SWIFT_BIN'))")
+          echo "Real Swift binary: $REAL_SWIFT"
 
-          # If swiftly didn't work, try standard paths
-          if [ -z "$SWIFT_LIB_PATH" ]; then
-            SWIFT_BASE=$(dirname $(dirname $SWIFT_BIN))
-            for path in "$SWIFT_BASE/lib/swift/macosx" "$SWIFT_BASE/usr/lib/swift/macosx"; do
-              if [ -d "$path" ]; then
-                echo "SWIFT_LIB_PATH=$path" >> $GITHUB_ENV
-                echo "Found Swift lib path: $path"
-                ls -la "$path" | head -5
-                break
-              fi
-            done
-          fi
+          # The Swift toolchain structure is: .../usr/bin/swift -> .../usr/lib/swift/macosx
+          SWIFT_USR_DIR=$(dirname $(dirname "$REAL_SWIFT"))
+          echo "Swift usr dir: $SWIFT_USR_DIR"
 
-          # Final verification
-          if [ -z "$SWIFT_LIB_PATH" ] && [ ! -f "$GITHUB_ENV" ] || ! grep -q "SWIFT_LIB_PATH" "$GITHUB_ENV" 2>/dev/null; then
-            echo "WARNING: Could not find Swift library path!"
-            echo "Searched in swiftly toolchains and standard paths"
+          SWIFT_LIB="$SWIFT_USR_DIR/lib/swift/macosx"
+          if [ -d "$SWIFT_LIB" ]; then
+            echo "SWIFT_LIB_PATH=$SWIFT_LIB" >> $GITHUB_ENV
+            echo "Found Swift lib path: $SWIFT_LIB"
+            ls -la "$SWIFT_LIB" | head -5
+          else
+            echo "WARNING: Could not find Swift library at $SWIFT_LIB"
             # Try to find it by searching
-            find /var/folders -name "libswiftCore.dylib" -path "*/swift/macosx/*" 2>/dev/null | head -3 || true
+            echo "Searching for libswiftCore.dylib..."
+            FOUND_LIB=$(find /var/folders -name "libswiftCore.dylib" -path "*/swift/macosx/*" 2>/dev/null | head -1)
+            if [ -n "$FOUND_LIB" ]; then
+              SWIFT_LIB=$(dirname "$FOUND_LIB")
+              echo "SWIFT_LIB_PATH=$SWIFT_LIB" >> $GITHUB_ENV
+              echo "Found Swift lib path via search: $SWIFT_LIB"
+            else
+              echo "ERROR: Could not find Swift library path!"
+            fi
           fi
 
       - name: Install LLVM 20 and dependencies
