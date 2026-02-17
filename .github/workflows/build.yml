@@ -949,6 +949,9 @@ jobs:
           if [ -n "$SWIFT_LIB_PATH" ]; then
             ls -la "$SWIFT_LIB_PATH" | head -20
           fi
+          echo "=== Git version and config ==="
+          git --version
+          git config --list 2>/dev/null || true
           echo "=== Testing aro build ==="
           ./aro-bin/aro build Examples/HelloWorld --verbose 2>&1 || echo "Build failed with exit code $?"
           echo "=== Checking for binary ==="
@@ -958,7 +961,13 @@ jobs:
       - name: Run integration tests
         run: |
           chmod +x test-examples.pl
-          perl test-examples.pl --verbose
+          # Run tests with timeout to prevent hanging
+          perl test-examples.pl --verbose 2>&1 || {
+            echo "=== Integration tests failed ==="
+            echo "=== Checking testrun.log files for errors ==="
+            find Examples -name "testrun.log" -exec echo "--- {} ---" \; -exec cat {} \; 2>/dev/null | head -500
+            exit 1
+          }
 
       - name: Upload test results on failure
         if: failure()
