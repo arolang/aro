@@ -5,6 +5,10 @@
 
 import Foundation
 
+#if canImport(Darwin)
+import CoreFoundation
+#endif
+
 /// Streaming JSON parser that processes JSON data incrementally.
 ///
 /// Supports two modes:
@@ -220,10 +224,20 @@ public struct JSONStreamParser: Sendable {
         case let str as String:
             return str
         case let num as NSNumber:
-            // Check if it's a boolean
+            // Check if it's a boolean (Apple platforms have CFBoolean APIs)
+            #if canImport(Darwin)
             if CFGetTypeID(num) == CFBooleanGetTypeID() {
                 return num.boolValue
             }
+            #else
+            // On Linux, check type encoding for boolean
+            let objCType = String(cString: num.objCType)
+            if objCType == "B" || objCType == "c" {
+                if num.intValue == 0 || num.intValue == 1 {
+                    return num.boolValue
+                }
+            }
+            #endif
             // Check if it's an integer
             if floor(num.doubleValue) == num.doubleValue && abs(num.doubleValue) < Double(Int.max) {
                 return num.intValue
