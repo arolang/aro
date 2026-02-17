@@ -108,7 +108,9 @@ struct ParameterStorageTests {
         #expect(getIntValue(all[key3]) == 3)
     }
 
-    @Test("Clear removes all parameters")
+    // This test must run serialized because clear() removes ALL parameters,
+    // which would interfere with other tests running in parallel
+    @Test("Clear removes all parameters", .serialized)
     func testClear() {
         let key = uniqueKey("cleartest")
         ParameterStorage.shared.set(key, value: "value")
