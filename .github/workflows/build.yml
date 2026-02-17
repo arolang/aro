@@ -857,9 +857,28 @@ jobs:
         with:
           swift-version: ${{ env.SWIFT_VERSION }}
 
-      - name: Verify Swift version
+      - name: Verify Swift version and set library path
         run: |
           swift --version
+          # Determine Swift library path for aro build linker
+          SWIFT_BIN=$(which swift)
+          SWIFT_BASE=$(dirname $(dirname $SWIFT_BIN))
+          SWIFT_LIB="$SWIFT_BASE/lib/swift/macosx"
+          if [ -d "$SWIFT_LIB" ]; then
+            echo "SWIFT_LIB_PATH=$SWIFT_LIB" >> $GITHUB_ENV
+            echo "Found Swift lib path: $SWIFT_LIB"
+          else
+            # Try usr/lib/swift/macosx structure
+            SWIFT_LIB="$SWIFT_BASE/usr/lib/swift/macosx"
+            if [ -d "$SWIFT_LIB" ]; then
+              echo "SWIFT_LIB_PATH=$SWIFT_LIB" >> $GITHUB_ENV
+              echo "Found Swift lib path: $SWIFT_LIB"
+            else
+              echo "WARNING: Could not find Swift library path"
+              echo "Checked: $(dirname $(dirname $SWIFT_BIN))/lib/swift/macosx"
+              echo "Checked: $(dirname $(dirname $SWIFT_BIN))/usr/lib/swift/macosx"
+            fi
+          fi
 
       - name: Install LLVM 20 and dependencies
         run: |
@@ -925,6 +944,11 @@ jobs:
         run: |
           echo "=== Swift version ==="
           swift --version
+          echo "=== Swift library path ==="
+          echo "SWIFT_LIB_PATH=$SWIFT_LIB_PATH"
+          if [ -n "$SWIFT_LIB_PATH" ]; then
+            ls -la "$SWIFT_LIB_PATH" | head -20
+          fi
           echo "=== Testing aro build ==="
           ./aro-bin/aro build Examples/HelloWorld --verbose 2>&1 || echo "Build failed with exit code $?"
           echo "=== Checking for binary ==="
