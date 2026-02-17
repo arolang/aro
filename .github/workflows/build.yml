@@ -754,6 +754,51 @@ jobs:
           retention-days: 7
 
   # ===========================================================================
+  # REPL Integration Tests - Linux
+  # ===========================================================================
+  integration-tests-repl:
+    needs: [linux]
+    name: REPL Tests - Linux
+    runs-on: ubuntu-latest
+    container:
+      image: ubuntu:22.04
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v6
+
+      - name: Install dependencies
+        run: |
+          apt-get update -qq
+          export DEBIAN_FRONTEND=noninteractive
+          apt-get install -y -qq wget gnupg software-properties-common perl libgit2-dev libcurl4
+          # Add LLVM APT repository for LLVM 20 (required for aro binary which links against libLLVM-20)
+          wget -qO- https://apt.llvm.org/llvm-snapshot.gpg.key | gpg --dearmor -o /usr/share/keyrings/llvm-archive-keyring.gpg
+          echo "deb [signed-by=/usr/share/keyrings/llvm-archive-keyring.gpg] http://apt.llvm.org/jammy/ llvm-toolchain-jammy-20 main" > /etc/apt/sources.list.d/llvm.list
+          apt-get update -qq
+          apt-get install -y -qq libllvm20
+          # Install Perl modules for REPL tests
+          apt-get install -y -qq cpanminus
+          cpanm -q --notest Term::ANSIColor 2>/dev/null || true
+
+      - name: Download ARO artifact
+        uses: actions/download-artifact@v7
+        with:
+          name: aro-linux-amd64
+          path: ./aro-bin
+
+      - name: Prepare ARO binary
+        run: |
+          chmod +x ./aro-bin/aro
+          echo "ARO_BIN=$GITHUB_WORKSPACE/aro-bin/aro" >> $GITHUB_ENV
+          ./aro-bin/aro --version
+
+      - name: Run REPL tests
+        run: |
+          export LD_LIBRARY_PATH="/usr/lib/llvm-20/lib:$LD_LIBRARY_PATH"
+          chmod +x test_repl.pl
+          perl test_repl.pl
+
+  # ===========================================================================
   # Integration Tests - macOS
   # ===========================================================================
   integration-tests-macos:
@@ -1128,7 +1173,7 @@ jobs:
   # ===========================================================================
   release:
     name: Create Release
-    needs: [linux, macos, integration-tests-linux, integration-tests-macos, documentation]
+    needs: [linux, macos, integration-tests-linux, integration-tests-repl, integration-tests-macos, documentation]
     runs-on: ubuntu-latest
     if: github.ref_type == 'tag'
     permissions:
