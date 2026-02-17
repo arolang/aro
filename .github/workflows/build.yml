@@ -207,16 +207,20 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Setup Swift
-        uses: swift-actions/setup-swift@364295d9c23900ce04d4e5cc708387921b4e50f9  # v3
-        with:
-          swift-version: ${{ env.SWIFT_VERSION }}
+      # Use Xcode's built-in Swift instead of swift-actions/setup-swift
+      # The swift.org toolchain has known compiler crashes (signal 6) that
+      # don't occur with Xcode's bundled toolchain. See:
+      # https://github.com/apple/swift-configuration/issues/115
+      - name: Verify Swift version
+        run: |
+          swift --version
+          xcodebuild -version
 
       - name: Cache Swift packages
         uses: actions/cache@v5
         with:
           path: .build
-          key: macos-swift-${{ env.SWIFT_VERSION }}-v7-${{ hashFiles('Package.resolved') }}
+          key: macos-swift-xcode-v8-${{ hashFiles('Package.resolved') }}
 
       - name: Install LLVM 20 and dependencies
         run: |
