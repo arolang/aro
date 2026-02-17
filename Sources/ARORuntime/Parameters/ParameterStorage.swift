@@ -24,7 +24,9 @@ public final class ParameterStorage: @unchecked Sendable {
     /// Lock for thread-safe access
     private let lock = NSLock()
 
-    private init() {}
+    /// Initialize a new ParameterStorage instance.
+    /// Use `shared` for the singleton instance. Direct initialization is primarily for testing.
+    public init() {}
 
     // MARK: - Public API
 
