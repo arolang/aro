@@ -860,34 +860,39 @@ jobs:
       - name: Verify Swift version and set library path
         run: |
           swift --version
-          # Determine Swift library path for aro build linker
-          SWIFT_BIN=$(which swift)
-          echo "Swift binary: $SWIFT_BIN"
+          echo "SWIFTLY_HOME_DIR: $SWIFTLY_HOME_DIR"
 
-          # Follow symlinks to find the real swift binary location
-          REAL_SWIFT=$(readlink -f "$SWIFT_BIN" 2>/dev/null || python3 -c "import os; print(os.path.realpath('$SWIFT_BIN'))")
-          echo "Real Swift binary: $REAL_SWIFT"
+          # swiftly stores toolchains in $SWIFTLY_HOME_DIR/toolchains/
+          if [ -n "$SWIFTLY_HOME_DIR" ] && [ -d "$SWIFTLY_HOME_DIR/toolchains" ]; then
+            echo "Looking for Swift toolchains in $SWIFTLY_HOME_DIR/toolchains/"
+            ls -la "$SWIFTLY_HOME_DIR/toolchains/" || true
 
-          # The Swift toolchain structure is: .../usr/bin/swift -> .../usr/lib/swift/macosx
-          SWIFT_USR_DIR=$(dirname $(dirname "$REAL_SWIFT"))
-          echo "Swift usr dir: $SWIFT_USR_DIR"
+            # Find the Swift 6.2 toolchain
+            for toolchain in "$SWIFTLY_HOME_DIR/toolchains"/swift-*; do
+              echo "Checking toolchain: $toolchain"
+              SWIFT_LIB="$toolchain/usr/lib/swift/macosx"
+              if [ -d "$SWIFT_LIB" ]; then
+                echo "SWIFT_LIB_PATH=$SWIFT_LIB" >> $GITHUB_ENV
+                echo "Found Swift lib path: $SWIFT_LIB"
+                ls -la "$SWIFT_LIB" | head -5
+                break
+              fi
+            done
+          fi
 
-          SWIFT_LIB="$SWIFT_USR_DIR/lib/swift/macosx"
-          if [ -d "$SWIFT_LIB" ]; then
-            echo "SWIFT_LIB_PATH=$SWIFT_LIB" >> $GITHUB_ENV
-            echo "Found Swift lib path: $SWIFT_LIB"
-            ls -la "$SWIFT_LIB" | head -5
-          else
-            echo "WARNING: Could not find Swift library at $SWIFT_LIB"
-            # Try to find it by searching
-            echo "Searching for libswiftCore.dylib..."
-            FOUND_LIB=$(find /var/folders -name "libswiftCore.dylib" -path "*/swift/macosx/*" 2>/dev/null | head -1)
+          # Verify it was set
+          if ! grep -q "SWIFT_LIB_PATH" "$GITHUB_ENV" 2>/dev/null; then
+            echo "ERROR: Could not find Swift library path in swiftly toolchains!"
+            echo "Trying fallback search..."
+            # Search for Swift libraries
+            FOUND_LIB=$(find "$SWIFTLY_HOME_DIR" -name "libswiftCore.dylib" -path "*/swift/macosx/*" 2>/dev/null | head -1)
             if [ -n "$FOUND_LIB" ]; then
               SWIFT_LIB=$(dirname "$FOUND_LIB")
               echo "SWIFT_LIB_PATH=$SWIFT_LIB" >> $GITHUB_ENV
               echo "Found Swift lib path via search: $SWIFT_LIB"
             else
-              echo "ERROR: Could not find Swift library path!"
+              echo "FATAL: Could not find Swift library path anywhere!"
+              exit 1
             fi
           fi
 
