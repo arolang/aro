@@ -1928,6 +1928,7 @@ public final class NativeHTTPServer: @unchecked Sendable {
         case 400: statusText = "Bad Request"
         case 404: statusText = "Not Found"
         case 500: statusText = "Internal Server Error"
+        case 501: statusText = "Not Implemented"
         default: statusText = "Unknown"
         }
 
@@ -2616,8 +2617,8 @@ public func aro_native_http_server_start(_ port: Int32, _ contextPtr: UnsafeMuta
                     aro_context_destroy(ctx)
                 }
 
-                // Route matched but no handler - return placeholder success
-                return (200, ["Content-Type": "application/json"], "{\"status\":\"ok\"}".data(using: .utf8))
+                // Route matched but no handler - return 501 Not Implemented (matches interpreter behavior)
+                return (501, ["Content-Type": "application/json"], "{\"error\":\"Not Implemented\",\"operationId\":\"\(opId)\"}".data(using: .utf8))
             }
 
             // Default: Not found

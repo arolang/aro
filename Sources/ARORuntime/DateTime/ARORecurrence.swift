@@ -202,7 +202,7 @@ public struct ARORecurrence: Sendable {
     // MARK: - Property Access
 
     /// Access a property by name
-    public func property(_ name: String) -> Any? {
+    public func property(_ name: String) -> (any Sendable)? {
         switch name.lowercased() {
         case "next": return next()
         case "previous": return previous()

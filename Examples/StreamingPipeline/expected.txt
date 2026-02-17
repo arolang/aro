@@ -1,8 +1,12 @@
-[Application-Start] === Streaming Pipeline Demo ===
-[Application-Start] Processing transactions with multi-stage filtering...
-[Application-Start] 
-[Application-Start] === Stage 1: All Transactions (10 total) ===
-[Application-Start] amount: 750
+# Generated: Tue Feb 17 12:36:49 2026
+# Type: console
+# Command: aro run ./Examples/StreamingPipeline
+---
+=== Streaming Pipeline Demo ===
+Processing transactions with multi-stage filtering...
+
+=== Stage 1: All Transactions (10 total) ===
+amount: 750
 category: electronics
 customer: Alice
 id: 1
@@ -71,9 +75,9 @@ customer: Jack
 id: 10
 status: completed
 year: 2024
-[Application-Start] 
-[Application-Start] === Stage 2: 2024 Transactions (9 remain) ===
-[Application-Start] amount: 200
+
+=== Stage 2: 2024 Transactions (9 remain) ===
+amount: 200
 category: clothing
 customer: Bob
 id: 2
@@ -135,9 +139,9 @@ customer: Jack
 id: 10
 status: completed
 year: 2024
-[Application-Start] 
-[Application-Start] === Stage 3: High Value >500 (6 remain) ===
-[Application-Start] amount: 1200
+
+=== Stage 3: High Value >500 (6 remain) ===
+amount: 1200
 category: electronics
 customer: Charlie
 id: 3
@@ -178,9 +182,9 @@ customer: Jack
 id: 10
 status: completed
 year: 2024
-[Application-Start] 
-[Application-Start] === Stage 4: Completed (5 remain) ===
-[Application-Start] amount: 1200
+
+=== Stage 4: Completed (5 remain) ===
+amount: 1200
 category: electronics
 customer: Charlie
 id: 3
@@ -221,9 +225,9 @@ customer: Jack
 id: 10
 status: completed
 year: 2024
-[Application-Start] 
-[Application-Start] === Stage 5: Electronics Only (4 remain) ===
-[Application-Start] amount: 1200
+
+=== Stage 5: Electronics Only (4 remain) ===
+amount: 1200
 category: electronics
 customer: Charlie
 id: 3
@@ -250,18 +254,18 @@ customer: Jack
 id: 10
 status: completed
 year: 2024
-[Application-Start] 
-[Application-Start] === Aggregation Results ===
-[Application-Start] Total Amount:
-[Application-Start] 5650.00
-[Application-Start] Transaction Count:
-[Application-Start] 4
-[Application-Start] Average Amount:
-[Application-Start] 1412.50
-[Application-Start] Max Amount:
-[Application-Start] 2000.00
-[Application-Start] 
-[Application-Start] === Pipeline Complete ===
-[Application-Start] In streaming mode, each row flows through all 5 filter stages.
-[Application-Start] Non-matching rows are discarded immediately - O(1) memory!
-[OK] streaming-demo
+
+=== Aggregation Results ===
+Total Amount:
+5650.00
+Transaction Count:
+4
+Average Amount:
+1412.50
+Max Amount:
+2000.00
+
+=== Pipeline Complete ===
+In streaming mode, each row flows through all 5 filter stages.
+Non-matching rows are discarded immediately - O(1) memory!
+streaming-demo

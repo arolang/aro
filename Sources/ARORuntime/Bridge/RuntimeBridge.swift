@@ -1295,7 +1295,7 @@ private func resolveVariableExpression(_ expr: String, context: RuntimeContext) 
             if let dict = value as? [String: any Sendable], let nested = dict[specifier] {
                 value = nested
             } else if let dict = value as? [String: Any], let nested = dict[specifier] {
-                value = nested as! any Sendable
+                value = convertToSendable(nested)
             } else {
                 return ""  // Property not found
             }
@@ -1447,12 +1447,6 @@ private func evaluateBinaryOp(op: String, left: any Sendable, right: any Sendabl
         }
         // Fallback to string comparison (works for ISO 8601 dates)
         return asString(left) >= asString(right)
-
-    // String containment
-    case "contains":
-        let leftStr = asString(left)
-        let rightStr = asString(right)
-        return leftStr.contains(rightStr)
 
     // Logical
     case "and":
@@ -1748,7 +1742,7 @@ private func resolveInterpolationExpression(_ expr: String, context: RuntimeCont
             }
             // Also try [String: Any] for dictionaries from JSON parsing
             else if let dict = value as? [String: Any], let nested = dict[specifier] {
-                value = nested as! any Sendable
+                value = convertToSendable(nested)
             } else {
                 return ""  // Property not found
             }

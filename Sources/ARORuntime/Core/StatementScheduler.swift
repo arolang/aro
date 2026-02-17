@@ -110,6 +110,7 @@ public actor StatementFuture {
         // Use Task to hop back to actor context for safe registration
         return try await withCheckedThrowingContinuation { continuation in
             Task {
+                // Call actor-isolated method (await required for isolation crossing)
                 await self.registerOrComplete(continuation)
             }
         }

@@ -47,7 +47,24 @@ public struct MapAction: ActionImplementation {
         // Find field specifier (skip known type specifiers)
         let fieldSpecifier = result.specifiers.first { !Self.typeSpecifiers.contains($0) }
 
-        // Handle array mapping
+        // ARO-0051: Streaming support - only use streaming for lazy values
+        if let runtimeContext = context as? RuntimeContext,
+           runtimeContext.isLazy(object.base),
+           let stream = runtimeContext.resolveAsRowStream(object.base) {
+            // Return mapped stream (lazy - preserves streaming)
+            if let field = fieldSpecifier {
+                // Extract specific field from each row
+                let mappedStream: AROStream<any Sendable> = stream.compactMap { item in
+                    item[field]
+                }
+                return mappedStream
+            }
+            // Pass through entire rows as stream
+            runtimeContext.bindLazy(result.base, stream: stream)
+            return stream
+        }
+
+        // Handle array mapping (eager mode)
         if let array = source as? [any Sendable] {
             // If there's a field specifier, extract that field from each item
             if let field = fieldSpecifier {
@@ -125,7 +142,15 @@ public struct ReduceAction: ActionImplementation {
             field = result.specifiers.count > 1 ? result.specifiers[1] : nil
         }
 
-        // Handle array aggregation
+        // ARO-0051: Streaming support - only use streaming for lazy values
+        if let runtimeContext = context as? RuntimeContext,
+           runtimeContext.isLazy(object.base),
+           let stream = runtimeContext.resolveAsRowStream(object.base) {
+            // Reduce stream with O(1) memory using accumulators
+            return try await reduceStream(stream, aggregateFunc: aggregateFunc, field: field)
+        }
+
+        // Handle array aggregation (eager mode)
         guard let array = source as? [any Sendable] else {
             // Single value - return as-is for count=1, value for others
             switch aggregateFunc {
@@ -170,6 +195,71 @@ public struct ReduceAction: ActionImplementation {
 
         default:
             return array.count
+        }
+    }
+
+    /// Reduce a stream with O(1) memory using accumulators
+    private func reduceStream(
+        _ stream: AROStream<[String: any Sendable]>,
+        aggregateFunc: String,
+        field: String?
+    ) async throws -> any Sendable {
+        switch aggregateFunc {
+        case "count":
+            return try await stream.count()
+
+        case "sum":
+            var sum: Double = 0
+            for try await item in stream.stream {
+                if let field = field, let value = asDouble(item[field]) {
+                    sum += value
+                } else if field == nil, let value = asDouble(item) {
+                    sum += value
+                }
+            }
+            return sum
+
+        case "avg", "average":
+            var sum: Double = 0
+            var count: Int = 0
+            for try await item in stream.stream {
+                if let field = field, let value = asDouble(item[field]) {
+                    sum += value
+                    count += 1
+                }
+            }
+            return count > 0 ? sum / Double(count) : 0.0
+
+        case "min":
+            var minValue: Double?
+            for try await item in stream.stream {
+                if let field = field, let value = asDouble(item[field]) {
+                    minValue = minValue.map { Swift.min($0, value) } ?? value
+                }
+            }
+            return minValue ?? 0.0
+
+        case "max":
+            var maxValue: Double?
+            for try await item in stream.stream {
+                if let field = field, let value = asDouble(item[field]) {
+                    maxValue = maxValue.map { Swift.max($0, value) } ?? value
+                }
+            }
+            return maxValue ?? 0.0
+
+        case "first":
+            return try await stream.first() ?? ([:] as [String: any Sendable])
+
+        case "last":
+            var lastItem: [String: any Sendable]?
+            for try await item in stream.stream {
+                lastItem = item
+            }
+            return lastItem ?? ([:] as [String: any Sendable])
+
+        default:
+            return try await stream.count()
         }
     }
 
@@ -237,7 +327,23 @@ public struct FilterAction: ActionImplementation {
             return source
         }
 
-        // Handle array filtering with predicate
+        // ARO-0051: Streaming support - only use streaming for lazy values
+        if let runtimeContext = context as? RuntimeContext,
+           runtimeContext.isLazy(object.base),
+           let stream = runtimeContext.resolveAsRowStream(object.base) {
+            // Return filtered stream (lazy - preserves streaming)
+            let filteredStream = stream.filter { [field, op, expectedValue] item in
+                guard let actualValue = item[field] else {
+                    return false
+                }
+                return self.matchesPredicate(actual: actualValue, op: op, expected: expectedValue)
+            }
+            // Bind as streaming value
+            runtimeContext.bindLazy(result.base, stream: filteredStream)
+            return filteredStream
+        }
+
+        // Handle array filtering with predicate (eager mode)
         guard let array = source as? [any Sendable] else {
             return source
         }

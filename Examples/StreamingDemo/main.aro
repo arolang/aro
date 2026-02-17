@@ -1,0 +1,88 @@
+(* ARO-0051: Streaming Execution Demo *)
+(* Demonstrates streaming data pipelines with JSONL files *)
+(* Memory-efficient processing of large datasets *)
+
+(Application-Start: Streaming Demo) {
+    <Log> "=== ARO Streaming Execution Demo ===" to the <console>.
+    <Log> "" to the <console>.
+
+    (* Create sample event log data *)
+    <Create> the <events> with [
+        { "timestamp": "2024-01-15T10:00:00Z", "level": "INFO", "service": "api", "message": "Request received", "time": 45 },
+        { "timestamp": "2024-01-15T10:00:01Z", "level": "ERROR", "service": "api", "message": "Database timeout", "time": 5000 },
+        { "timestamp": "2024-01-15T10:00:02Z", "level": "WARN", "service": "auth", "message": "Rate limit exceeded", "time": 120 },
+        { "timestamp": "2024-01-15T10:00:03Z", "level": "INFO", "service": "api", "message": "Request completed", "time": 89 },
+        { "timestamp": "2024-01-15T10:00:04Z", "level": "ERROR", "service": "auth", "message": "Authentication failed", "time": 15 },
+        { "timestamp": "2024-01-15T10:00:05Z", "level": "INFO", "service": "api", "message": "Cache hit", "time": 5 },
+        { "timestamp": "2024-01-15T10:00:06Z", "level": "ERROR", "service": "api", "message": "Connection refused", "time": 3000 },
+        { "timestamp": "2024-01-15T10:00:07Z", "level": "DEBUG", "service": "worker", "message": "Task started", "time": 0 },
+        { "timestamp": "2024-01-15T10:00:08Z", "level": "INFO", "service": "worker", "message": "Task completed", "time": 250 }
+    ].
+
+    (* Write to JSONL format - ideal for streaming *)
+    (* Each line is an independent JSON object *)
+    <Write> the <events> to "./events.jsonl".
+    <Log> "1. Wrote events to events.jsonl (JSON Lines format)" to the <console>.
+    <Log> "   JSONL is ideal for streaming: each line is independently parseable" to the <console>.
+    <Log> "" to the <console>.
+
+    (* Read JSONL file - in production, this streams line by line *)
+    <Read> the <log-data> from "./events.jsonl".
+    <Log> "2. Read events.jsonl:" to the <console>.
+    <Log> <log-data> to the <console>.
+    <Log> "" to the <console>.
+
+    (* Filter errors - streaming: pass/reject each element *)
+    <Filter> the <errors> from <log-data> where <level> = "ERROR".
+    <Log> "3. Filtered ERROR level events:" to the <console>.
+    <Log> <errors> to the <console>.
+    <Log> "" to the <console>.
+
+    (* Multi-stage filter - streaming pipeline: Read -> Filter(service) -> Filter(level) *)
+    <Filter> the <api-events> from <log-data> where <service> = "api".
+    <Filter> the <api-errors> from <api-events> where <level> = "ERROR".
+    <Log> "4. API Errors (multi-stage filter):" to the <console>.
+    <Log> <api-errors> to the <console>.
+    <Log> "" to the <console>.
+
+    (* Reduce operations - streaming with O(1) memory accumulators *)
+    <Reduce> the <error-count> from <errors> with count().
+    <Log> "5. Error count: " to the <console>.
+    <Log> <error-count> to the <console>.
+
+    <Reduce> the <total-time> from <api-events> with sum(<time>).
+    <Log> "6. Total API response time: " to the <console>.
+    <Log> <total-time> to the <console>.
+
+    <Reduce> the <avg-time> from <api-events> with avg(<time>).
+    <Log> "7. Average API response time: " to the <console>.
+    <Log> <avg-time> to the <console>.
+    <Log> "" to the <console>.
+
+    (* Aggregation fusion: multiple reduces on same source = single pass *)
+    (* The semantic analyzer detects this pattern and fuses the operations *)
+    <Reduce> the <min-time> from <api-events> with min(<time>).
+    <Reduce> the <max-time> from <api-events> with max(<time>).
+    <Log> "8. API response time range (aggregation fusion - single pass):" to the <console>.
+    <Log> "   Min: " to the <console>.
+    <Log> <min-time> to the <console>.
+    <Log> "   Max: " to the <console>.
+    <Log> <max-time> to the <console>.
+    <Log> "" to the <console>.
+
+    (* Demonstrate filtering with slow responses *)
+    <Filter> the <slow-requests> from <log-data> where <time> > 1000.
+    <Log> "9. Slow requests (>1000ms):" to the <console>.
+    <Log> <slow-requests> to the <console>.
+    <Log> "" to the <console>.
+
+    <Log> "=== Streaming Demo Complete ===" to the <console>.
+    <Log> "" to the <console>.
+    <Log> "Key streaming benefits demonstrated:" to the <console>.
+    <Log> "- JSONL format: each line is independently parseable" to the <console>.
+    <Log> "- Multi-stage filtering: pipeline processes incrementally" to the <console>.
+    <Log> "- Reduce operations: O(1) memory with streaming accumulators" to the <console>.
+    <Log> "- Aggregation fusion: multiple reduces on same source = single pass" to the <console>.
+
+    <Return> an <OK: status> for the <demo>.
+}

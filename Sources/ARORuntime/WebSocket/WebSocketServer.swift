@@ -92,9 +92,9 @@ public protocol WebSocketServerService: Sendable {
 
 #if !os(Windows)
 
-import NIO
-import NIOHTTP1
-import NIOWebSocket
+@preconcurrency import NIO
+@preconcurrency import NIOHTTP1
+@preconcurrency import NIOWebSocket
 
 /// WebSocket Server implementation using SwiftNIO
 ///

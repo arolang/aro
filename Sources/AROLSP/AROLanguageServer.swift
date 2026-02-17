@@ -158,7 +158,6 @@ public final class AROLanguageServer: Sendable {
 
         // Use a simple blocking read loop on the main thread
         var buffer = Data()
-        let input = FileHandle.standardInput
         let output = FileHandle.standardOutput
         var readBuffer = [UInt8](repeating: 0, count: 4096)
 
@@ -291,7 +290,7 @@ public final class AROLanguageServer: Sendable {
                   let text = textDocument["text"] as? String,
                   let version = textDocument["version"] as? Int else { return }
             log("Document opened: \(uri)")
-            documentManager.openSync(uri: uri, content: text, version: version)
+            _ = documentManager.openSync(uri: uri, content: text, version: version)
 
         case "textDocument/didChange":
             guard let dict = params as? [String: Any],
@@ -319,7 +318,7 @@ public final class AROLanguageServer: Sendable {
                     changes.append(TextDocumentContentChangeEvent(range: nil, rangeLength: nil, text: text))
                 }
             }
-            documentManager.applyChangesSync(uri: uri, changes: changes, version: version)
+            _ = documentManager.applyChangesSync(uri: uri, changes: changes, version: version)
 
         case "textDocument/didClose":
             guard let dict = params as? [String: Any],
@@ -738,8 +737,8 @@ public final class AROLanguageServer: Sendable {
         }
 
         log("Document opened: \(uri)")
-        let state = await documentManager.open(uri: uri, content: text, version: version)
-        await publishDiagnostics(for: uri, state: state)
+        let state = documentManager.open(uri: uri, content: text, version: version)
+        publishDiagnostics(for: uri, state: state)
     }
 
     private func handleDidChange(params: Any?) async {
@@ -777,8 +776,8 @@ public final class AROLanguageServer: Sendable {
             }
         }
 
-        if let state = await documentManager.applyChanges(uri: uri, changes: changes, version: version) {
-            await publishDiagnostics(for: uri, state: state)
+        if let state = documentManager.applyChanges(uri: uri, changes: changes, version: version) {
+            publishDiagnostics(for: uri, state: state)
         }
     }
 
@@ -790,9 +789,9 @@ public final class AROLanguageServer: Sendable {
         }
 
         log("Document closed: \(uri)")
-        await documentManager.close(uri: uri)
+        documentManager.close(uri: uri)
         // Clear diagnostics
-        await publishDiagnostics(for: uri, diagnostics: [])
+        publishDiagnostics(for: uri, diagnostics: [])
     }
 
     private func handleDidSave(params: Any?) async {
@@ -804,8 +803,8 @@ public final class AROLanguageServer: Sendable {
         }
 
         log("Document saved: \(uri)")
-        if let state = await documentManager.get(uri: uri) {
-            await publishDiagnostics(for: uri, state: state)
+        if let state = documentManager.get(uri: uri) {
+            publishDiagnostics(for: uri, state: state)
         }
     }
 
@@ -821,7 +820,7 @@ public final class AROLanguageServer: Sendable {
             return nil
         }
 
-        guard let state = await documentManager.get(uri: uri) else {
+        guard let state = documentManager.get(uri: uri) else {
             return nil
         }
 
@@ -843,7 +842,7 @@ public final class AROLanguageServer: Sendable {
             return nil
         }
 
-        guard let state = await documentManager.get(uri: uri) else {
+        guard let state = documentManager.get(uri: uri) else {
             return nil
         }
 
@@ -866,7 +865,7 @@ public final class AROLanguageServer: Sendable {
             return nil
         }
 
-        guard let state = await documentManager.get(uri: uri) else {
+        guard let state = documentManager.get(uri: uri) else {
             return nil
         }
 
@@ -892,7 +891,7 @@ public final class AROLanguageServer: Sendable {
             return nil
         }
 
-        guard let state = await documentManager.get(uri: uri) else {
+        guard let state = documentManager.get(uri: uri) else {
             return nil
         }
 
@@ -912,7 +911,7 @@ public final class AROLanguageServer: Sendable {
             return nil
         }
 
-        guard let state = await documentManager.get(uri: uri) else {
+        guard let state = documentManager.get(uri: uri) else {
             return nil
         }
 
@@ -925,7 +924,7 @@ public final class AROLanguageServer: Sendable {
             return nil
         }
 
-        let allDocuments = await documentManager.all()
+        let allDocuments = documentManager.all()
         return workspaceSymbolHandler.handle(query: query, documents: allDocuments)
     }
 
@@ -937,7 +936,7 @@ public final class AROLanguageServer: Sendable {
             return nil
         }
 
-        guard let state = await documentManager.get(uri: uri) else {
+        guard let state = documentManager.get(uri: uri) else {
             return nil
         }
 
@@ -960,7 +959,7 @@ public final class AROLanguageServer: Sendable {
             return nil
         }
 
-        guard let state = await documentManager.get(uri: uri) else {
+        guard let state = documentManager.get(uri: uri) else {
             return nil
         }
 
@@ -984,7 +983,7 @@ public final class AROLanguageServer: Sendable {
             return nil
         }
 
-        guard let state = await documentManager.get(uri: uri) else {
+        guard let state = documentManager.get(uri: uri) else {
             return nil
         }
 
@@ -1005,7 +1004,7 @@ public final class AROLanguageServer: Sendable {
             return nil
         }
 
-        guard let state = await documentManager.get(uri: uri) else {
+        guard let state = documentManager.get(uri: uri) else {
             return nil
         }
 
@@ -1019,7 +1018,7 @@ public final class AROLanguageServer: Sendable {
             return nil
         }
 
-        guard let state = await documentManager.get(uri: uri) else {
+        guard let state = documentManager.get(uri: uri) else {
             return nil
         }
 
@@ -1039,7 +1038,7 @@ public final class AROLanguageServer: Sendable {
             return nil
         }
 
-        guard let state = await documentManager.get(uri: uri) else {
+        guard let state = documentManager.get(uri: uri) else {
             return nil
         }
 
@@ -1065,7 +1064,7 @@ public final class AROLanguageServer: Sendable {
             return nil
         }
 
-        guard let state = await documentManager.get(uri: uri) else {
+        guard let state = documentManager.get(uri: uri) else {
             return nil
         }
 
@@ -1086,17 +1085,17 @@ public final class AROLanguageServer: Sendable {
 
     // MARK: - Diagnostics Publishing
 
-    private func publishDiagnostics(for uri: String, state: DocumentManager.DocumentState) async {
+    private func publishDiagnostics(for uri: String, state: DocumentManager.DocumentState) {
         guard let result = state.compilationResult else {
-            await publishDiagnostics(for: uri, diagnostics: [])
+            publishDiagnostics(for: uri, diagnostics: [])
             return
         }
 
         let lspDiagnostics = diagnosticsHandler.convert(result.diagnostics)
-        await publishDiagnostics(for: uri, diagnostics: lspDiagnostics)
+        publishDiagnostics(for: uri, diagnostics: lspDiagnostics)
     }
 
-    private func publishDiagnostics(for uri: String, diagnostics: [[String: Any]]) async {
+    private func publishDiagnostics(for uri: String, diagnostics: [[String: Any]]) {
         let notification: [String: Any] = [
             "jsonrpc": "2.0",
             "method": "textDocument/publishDiagnostics",

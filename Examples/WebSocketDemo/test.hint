@@ -1,7 +1,5 @@
 # Test hints for WebSocketDemo
 # Tests the HTTP health endpoint (WebSocket requires manual testing)
-mode: interpreter
-# Skip binary mode: WebSocket upgrade behavior differs in compiled binary
-skip-build: WebSocket upgrade returns different response in binary mode
+mode: both
 # WebSocket servers hang on Windows CI
 skip-on-windows: WebSocket tests not supported on Windows CI

@@ -68,6 +68,15 @@ let analyzed = try analyzer.analyze(program)
 | `EventTypes.swift` | ~320 | RuntimeEvent implementations |
 | `StateGuard.swift` | ~130 | Event filtering by entity state |
 
+### Streaming (`Streaming/`)
+
+| File | Lines | Description |
+|------|-------|-------------|
+| `JSONStreamParser.swift` | ~250 | Incremental JSON/JSONL parsing |
+| `PipelineOptimizer.swift` | ~200 | Aggregation fusion, stream teeing |
+| `ExternalSort.swift` | ~300 | Spill-to-disk sorting for large datasets |
+| `SpillableHashMap.swift` | ~250 | Memory-bounded hash map with disk spill |
+
 ### Bridge (`Bridge/`)
 
 | File | Lines | Description |
@@ -180,6 +189,8 @@ The compiler uses Swifty-LLVM for type-safe LLVM IR generation:
 | How descriptor types are defined | `LLVMC/LLVMTypeMapper.swift` |
 | How C calls Swift | `Bridge/ActionBridge.swift:executeAction()` |
 | How pointers are managed | `Bridge/RuntimeBridge.swift:AROCRuntimeHandle` |
+| How streaming works | `Streaming/JSONStreamParser.swift`, `RuntimeContext:isLazy()` |
+| How aggregations are fused | `Streaming/PipelineOptimizer.swift` |
 
 ---
 

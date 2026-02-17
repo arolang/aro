@@ -1109,7 +1109,7 @@ public final class LLVMCodeGenerator {
         let bodyVariables = collectBoundVariables(from: loop.body)
         for varName in bodyVariables {
             let varNameConst = ctx.stringConstant(varName)
-            ctx.module.insertCall(
+            _ = ctx.module.insertCall(
                 externals.variableUnbind,
                 on: [ctx.currentContextVar!, varNameConst],
                 at: ctx.insertionPoint
