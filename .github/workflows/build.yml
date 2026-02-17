@@ -809,64 +809,12 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v6
 
-      - name: Setup Swift
-        uses: swift-actions/setup-swift@364295d9c23900ce04d4e5cc708387921b4e50f9  # v3
-        with:
-          swift-version: ${{ env.SWIFT_VERSION }}
-
-      - name: Configure Swift library path
+      # Use Xcode's built-in Swift to match the main build job
+      # The swift.org toolchain has known compiler crashes - see main macOS build job
+      - name: Verify Swift version
         run: |
-          set -x  # Enable debug output
-
-          echo "Swift version: $(swift --version | head -1)"
-
-          # Use Swift's own mechanism to find its resource directory
-          # This is the official way to find Swift libraries
-          echo "=== Swift target info ==="
-          swift -print-target-info
-
-          # Extract the runtimeResourcePath from swift -print-target-info
-          RESOURCE_PATH=$(swift -print-target-info | grep -o '"runtimeResourcePath": "[^"]*"' | cut -d'"' -f4)
-          echo "Runtime resource path: $RESOURCE_PATH"
-
-          if [ -n "$RESOURCE_PATH" ] && [ -d "$RESOURCE_PATH" ]; then
-            # The resource path is typically .../lib/swift
-            # We need .../lib/swift/macosx for linking
-            SWIFT_LIB="$RESOURCE_PATH/macosx"
-            echo "Checking: $SWIFT_LIB"
-            if [ -d "$SWIFT_LIB" ]; then
-              echo "SWIFT_LIB_PATH=$SWIFT_LIB" >> $GITHUB_ENV
-              echo "Found Swift library path: $SWIFT_LIB"
-              ls -la "$SWIFT_LIB" | head -10
-              exit 0
-            fi
-          fi
-
-          # Fallback: try to extract from swiftc -print-target-info
-          echo "=== Trying swiftc ==="
-          RESOURCE_PATH=$(swiftc -print-target-info | grep -o '"runtimeResourcePath": "[^"]*"' | cut -d'"' -f4)
-          echo "swiftc resource path: $RESOURCE_PATH"
-
-          if [ -n "$RESOURCE_PATH" ] && [ -d "$RESOURCE_PATH" ]; then
-            SWIFT_LIB="$RESOURCE_PATH/macosx"
-            if [ -d "$SWIFT_LIB" ]; then
-              echo "SWIFT_LIB_PATH=$SWIFT_LIB" >> $GITHUB_ENV
-              echo "Found Swift library path: $SWIFT_LIB"
-              ls -la "$SWIFT_LIB" | head -10
-              exit 0
-            fi
-          fi
-
-          # Last resort: Xcode toolchain (WARNING: may have ABI mismatch)
-          XCODE_LIB="/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/lib/swift/macosx"
-          if [ -d "$XCODE_LIB" ]; then
-            echo "WARNING: Using Xcode toolchain - may have Swift ABI mismatch!"
-            echo "SWIFT_LIB_PATH=$XCODE_LIB" >> $GITHUB_ENV
-            exit 0
-          fi
-
-          echo "ERROR: Could not find Swift library path!"
-          exit 1
+          swift --version
+          xcodebuild -version
 
       - name: Install LLVM 20 and dependencies
         run: |
@@ -930,9 +878,8 @@ jobs:
 
       - name: Test binary compilation
         run: |
-          echo "=== Environment check ==="
-          echo "SWIFT_LIB_PATH=$SWIFT_LIB_PATH"
-          ls -la "$SWIFT_LIB_PATH" 2>/dev/null | head -5 || echo "SWIFT_LIB_PATH directory not found"
+          echo "=== Swift version ==="
+          swift --version
           echo "=== Testing aro build ==="
           ./aro-bin/aro build Examples/HelloWorld --verbose 2>&1 || echo "Build failed with exit code $?"
           echo "=== Checking for binary ==="
@@ -942,12 +889,6 @@ jobs:
       - name: Run integration tests
         run: |
           chmod +x test-examples.pl
-          # Set DYLD_LIBRARY_PATH so compiled binaries load Swift 6.2 runtime
-          # instead of system Swift from /usr/lib/swift (which causes ABI conflicts)
-          if [ -n "$SWIFT_LIB_PATH" ]; then
-            export DYLD_LIBRARY_PATH="$SWIFT_LIB_PATH:$DYLD_LIBRARY_PATH"
-            echo "DYLD_LIBRARY_PATH set to: $DYLD_LIBRARY_PATH"
-          fi
           perl test-examples.pl --verbose
 
       - name: Upload test results on failure
