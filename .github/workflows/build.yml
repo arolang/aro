@@ -25,7 +25,7 @@ concurrency:
   cancel-in-progress: true
 
 env:
-  SWIFT_VERSION: '6.2.3'
+  SWIFT_VERSION: '6.2.1'
 
 jobs:
   # ===========================================================================
@@ -1159,7 +1159,7 @@ jobs:
   # ===========================================================================
   release:
     name: Create Release
-    needs: [linux, macos, integration-tests-linux, integration-tests-repl, integration-tests-macos, integration-tests-repl-macos, documentation]
+    needs: [integration-tests-linux, integration-tests-repl, integration-tests-macos, integration-tests-repl-macos, documentation]
     runs-on: ubuntu-latest
     if: github.ref_type == 'tag'
     permissions:
