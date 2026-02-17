@@ -319,7 +319,7 @@ public struct InvokeCommand: MetaCommand {
             let jsonStr = args[jsonStart...].joined(separator: " ")
             if let data = jsonStr.data(using: .utf8),
                let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any] {
-                input = json.mapValues { $0 as! any Sendable }
+                input = json.mapValues { convertToSendable($0) }
             } else {
                 return .error("Invalid JSON input")
             }
@@ -376,7 +376,7 @@ public struct SetCommand: MetaCommand {
         // Try to parse as JSON
         if let data = valueStr.data(using: .utf8),
            let json = try? JSONSerialization.jsonObject(with: data) {
-            session.setVariable(name, value: json as! any Sendable)
+            session.setVariable(name, value: convertToSendable(json))
             return .output("=> OK")
         }
 
@@ -517,5 +517,29 @@ public struct QuitCommand: MetaCommand {
 
     public func execute(args: [String], session: REPLSession) async throws -> MetaCommandResult {
         return .exit
+    }
+}
+
+// MARK: - Sendable Conversion Helper
+
+/// Convert Any to Sendable-safe values (for JSON parsing results)
+private func convertToSendable(_ value: Any) -> any Sendable {
+    switch value {
+    case let str as String:
+        return str
+    case let num as NSNumber:
+        // Check if it's an integer
+        if floor(num.doubleValue) == num.doubleValue {
+            return num.intValue
+        }
+        return num.doubleValue
+    case let dict as [String: Any]:
+        return dict.mapValues { convertToSendable($0) }
+    case let array as [Any]:
+        return array.map { convertToSendable($0) }
+    case is NSNull:
+        return Optional<String>.none as any Sendable
+    default:
+        return String(describing: value)
     }
 }

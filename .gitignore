@@ -121,3 +121,7 @@ testrun.log
 **/Plugins/**/*.so
 **/Plugins/**/*.dll
 **/Cargo.lock
+/Examples/MultiService/MultiService
+/Examples/AuditLogDemo/AuditLogDemo
+/Examples/WebSocketDemo/WebSocketDemo
+/Examples/StateMachine/StateMachine

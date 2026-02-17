@@ -435,6 +435,68 @@ for each <item> in <items> {
 
 ---
 
+## Streaming Execution
+
+ARO supports streaming execution for processing large datasets with constant memory (ARO-0051). The key architectural decision is **lazy vs eager evaluation**.
+
+### Lazy Value Detection
+
+The runtime distinguishes between lazy streams and regular arrays using the `isLazy()` check:
+
+```swift
+// RuntimeContext.swift
+public func isLazy(_ name: String) -> Bool {
+    guard let value = resolve(name) else { return false }
+    return value is AnyStreamingValue
+}
+```
+
+This check is critical for actions like Filter, Reduce, and Log. Without it, regular arrays would be incorrectly routed through the streaming pipeline.
+
+### Streaming Pipeline Architecture
+
+```
+┌─────────────┐    ┌─────────────┐    ┌─────────────┐    ┌─────────────┐
+│   Read      │───▶│   Filter    │───▶│   Reduce    │───▶│   Result    │
+│ (lazy load) │    │ (transform) │    │   (drain)   │    │             │
+└─────────────┘    └─────────────┘    └─────────────┘    └─────────────┘
+     │                   │                   │
+     ▼                   ▼                   ▼
+  Produces           Transforms          Consumes
+  stream              stream              stream
+```
+
+### Key Implementation Points
+
+1. **File-based sources** (`Read` action with large files) produce lazy streams
+2. **Transformations** (`Filter`, `Map`) are applied lazily, element by element
+3. **Drains** (`Reduce`, `Log`, `Return`) trigger actual execution
+4. **The `isLazy()` check** prevents regular arrays from entering the streaming path
+
+```swift
+// QueryActions.swift - Filter action
+// ARO-0051: Streaming support - only use streaming for lazy values
+if let runtimeContext = context as? RuntimeContext,
+   runtimeContext.isLazy(object.base),
+   let stream = runtimeContext.resolveAsRowStream(object.base) {
+    // Use streaming path
+    let filtered = stream.filter { /* predicate */ }
+    context.bind(result.identifier, value: filtered)
+} else {
+    // Use eager path for regular arrays
+    let array: [Any] = try context.require(object.base)
+    let filtered = array.filter { /* predicate */ }
+    context.bind(result.identifier, value: filtered)
+}
+```
+
+Implementation references:
+- `Sources/ARORuntime/Core/RuntimeContext.swift` (isLazy check)
+- `Sources/ARORuntime/Streaming/JSONStreamParser.swift` (incremental parsing)
+- `Sources/ARORuntime/Actions/BuiltIn/QueryActions.swift` (streaming filter/reduce)
+
+---
+
 ## Chapter Summary
 
 The interpreted execution model is straightforward:

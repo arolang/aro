@@ -24,6 +24,63 @@ public struct DataFlowInfo: Sendable, Equatable, CustomStringConvertible {
     }
 }
 
+// MARK: - Aggregation Fusion (ARO-0051)
+
+/// Represents a single aggregation operation in a fusion group
+public struct AggregationOperation: Sendable, Equatable {
+    public let output: String
+    public let function: String
+    public let field: String?
+
+    public init(output: String, function: String, field: String?) {
+        self.output = output
+        self.function = function
+        self.field = field
+    }
+}
+
+/// Represents a group of Reduce operations that can be fused into a single pass
+public struct AggregationFusionGroup: Sendable, Equatable {
+    /// The source variable being reduced
+    public let source: String
+
+    /// The reduce operations (output variable → aggregation function)
+    /// e.g., ["total": "sum(amount)", "count": "count()", "avg": "avg(amount)"]
+    public let operations: [AggregationOperation]
+
+    /// Statement indices in the feature set
+    public let statementIndices: [Int]
+
+    public init(source: String, operations: [AggregationOperation], statementIndices: [Int]) {
+        self.source = source
+        self.operations = operations
+        self.statementIndices = statementIndices
+    }
+}
+
+// MARK: - Stream Consumer Info (ARO-0051)
+
+/// Tracks how many times a stream variable is consumed
+public struct StreamConsumerInfo: Sendable, Equatable {
+    /// The stream variable name
+    public let variable: String
+
+    /// Number of consumers (statements that use this variable)
+    public let consumerCount: Int
+
+    /// Statement indices that consume this stream
+    public let consumerIndices: [Int]
+
+    /// Whether this requires stream teeing (multiple diverse consumers)
+    public var requiresTee: Bool { consumerCount > 1 }
+
+    public init(variable: String, consumerCount: Int, consumerIndices: [Int]) {
+        self.variable = variable
+        self.consumerCount = consumerCount
+        self.consumerIndices = consumerIndices
+    }
+}
+
 // MARK: - Analyzed Feature Set
 
 /// A feature set with semantic annotations
@@ -33,19 +90,27 @@ public struct AnalyzedFeatureSet: Sendable {
     public let dataFlows: [DataFlowInfo]
     public let dependencies: Set<String>    // External dependencies
     public let exports: Set<String>         // Published symbols
-    
+
+    // ARO-0051: Streaming optimizations
+    public let aggregationFusions: [AggregationFusionGroup]  // Groups of fusible reduces
+    public let streamConsumers: [StreamConsumerInfo]          // Multi-consumer streams
+
     public init(
         featureSet: FeatureSet,
         symbolTable: SymbolTable,
         dataFlows: [DataFlowInfo],
         dependencies: Set<String>,
-        exports: Set<String>
+        exports: Set<String>,
+        aggregationFusions: [AggregationFusionGroup] = [],
+        streamConsumers: [StreamConsumerInfo] = []
     ) {
         self.featureSet = featureSet
         self.symbolTable = symbolTable
         self.dataFlows = dataFlows
         self.dependencies = dependencies
         self.exports = exports
+        self.aggregationFusions = aggregationFusions
+        self.streamConsumers = streamConsumers
     }
 }
 
@@ -180,13 +245,105 @@ public final class SemanticAnalyzer {
             }
         }
 
+        // ARO-0051: Detect streaming optimizations
+        let aggregationFusions = detectAggregationFusions(featureSet.statements)
+        let streamConsumers = detectStreamConsumers(dataFlows, statements: featureSet.statements)
+
         return AnalyzedFeatureSet(
             featureSet: featureSet,
             symbolTable: symbolTable,
             dataFlows: dataFlows,
             dependencies: dependencies,
-            exports: exports
+            exports: exports,
+            aggregationFusions: aggregationFusions,
+            streamConsumers: streamConsumers
         )
+    }
+
+    // MARK: - Aggregation Fusion Detection (ARO-0051)
+
+    /// Detects groups of Reduce operations on the same source that can be fused
+    private func detectAggregationFusions(_ statements: [Statement]) -> [AggregationFusionGroup] {
+        // Group Reduce statements by their source variable
+        var reducesBySource: [String: [(index: Int, output: String, function: String, field: String?)]] = [:]
+
+        for (index, statement) in statements.enumerated() {
+            guard let aro = statement as? AROStatement,
+                  aro.action.verb.lowercased() == "reduce" else {
+                continue
+            }
+
+            let source = aro.object.noun.base
+            let output = aro.result.base
+
+            // Parse the aggregation function from the "with" clause
+            let (function, field) = parseAggregationFunction(aro)
+
+            reducesBySource[source, default: []].append((index, output, function, field))
+        }
+
+        // Create fusion groups for sources with multiple reduces
+        var fusions: [AggregationFusionGroup] = []
+
+        for (source, reduces) in reducesBySource where reduces.count > 1 {
+            let operations = reduces.map { AggregationOperation(output: $0.output, function: $0.function, field: $0.field) }
+            let indices = reduces.map { $0.index }
+
+            fusions.append(AggregationFusionGroup(
+                source: source,
+                operations: operations,
+                statementIndices: indices
+            ))
+        }
+
+        return fusions
+    }
+
+    /// Parses the aggregation function from a Reduce statement
+    private func parseAggregationFunction(_ statement: AROStatement) -> (function: String, field: String?) {
+        // Check the aggregation clause for aggregation function
+        // e.g., "with sum(<amount>)" or "with count()"
+        if let aggregation = statement.queryModifiers.aggregation {
+            return (aggregation.type.rawValue, aggregation.field)
+        }
+
+        // Fallback: check result type annotation for common aggregations
+        if let typeAnnotation = statement.result.typeAnnotation {
+            let lower = typeAnnotation.lowercased()
+            if ["sum", "count", "avg", "min", "max", "first", "last"].contains(lower) {
+                return (lower, nil)
+            }
+        }
+
+        return ("unknown", nil)
+    }
+
+    /// Detects variables that are consumed by multiple statements (need stream teeing)
+    private func detectStreamConsumers(_ dataFlows: [DataFlowInfo], statements: [Statement]) -> [StreamConsumerInfo] {
+        // Count how many times each variable is used as input
+        var inputCounts: [String: [Int]] = [:]
+
+        for (index, flow) in dataFlows.enumerated() {
+            for input in flow.inputs {
+                inputCounts[input, default: []].append(index)
+            }
+        }
+
+        // Find variables with multiple consumers
+        var consumers: [StreamConsumerInfo] = []
+
+        for (variable, indices) in inputCounts where indices.count > 1 {
+            // Skip framework-provided variables (they're not streams)
+            if isKnownExternal(variable) { continue }
+
+            consumers.append(StreamConsumerInfo(
+                variable: variable,
+                consumerCount: indices.count,
+                consumerIndices: indices
+            ))
+        }
+
+        return consumers
     }
 
     // MARK: - Statement Analysis

@@ -1,0 +1,271 @@
+# Generated: Tue Feb 17 12:36:49 2026
+# Type: console
+# Command: aro run ./Examples/StreamingPipeline
+---
+=== Streaming Pipeline Demo ===
+Processing transactions with multi-stage filtering...
+
+=== Stage 1: All Transactions (10 total) ===
+amount: 750
+category: electronics
+customer: Alice
+id: 1
+status: completed
+year: 2023
+
+amount: 200
+category: clothing
+customer: Bob
+id: 2
+status: completed
+year: 2024
+
+amount: 1200
+category: electronics
+customer: Charlie
+id: 3
+status: completed
+year: 2024
+
+amount: 450
+category: electronics
+customer: Diana
+id: 4
+status: pending
+year: 2024
+
+amount: 800
+category: furniture
+customer: Eve
+id: 5
+status: completed
+year: 2024
+
+amount: 950
+category: electronics
+customer: Frank
+id: 6
+status: completed
+year: 2024
+
+amount: 300
+category: electronics
+customer: Grace
+id: 7
+status: cancelled
+year: 2024
+
+amount: 1500
+category: electronics
+customer: Henry
+id: 8
+status: completed
+year: 2024
+
+amount: 600
+category: clothing
+customer: Ivy
+id: 9
+status: completed
+year: 2024
+
+amount: 2000
+category: electronics
+customer: Jack
+id: 10
+status: completed
+year: 2024
+
+=== Stage 2: 2024 Transactions (9 remain) ===
+amount: 200
+category: clothing
+customer: Bob
+id: 2
+status: completed
+year: 2024
+
+amount: 1200
+category: electronics
+customer: Charlie
+id: 3
+status: completed
+year: 2024
+
+amount: 450
+category: electronics
+customer: Diana
+id: 4
+status: pending
+year: 2024
+
+amount: 800
+category: furniture
+customer: Eve
+id: 5
+status: completed
+year: 2024
+
+amount: 950
+category: electronics
+customer: Frank
+id: 6
+status: completed
+year: 2024
+
+amount: 300
+category: electronics
+customer: Grace
+id: 7
+status: cancelled
+year: 2024
+
+amount: 1500
+category: electronics
+customer: Henry
+id: 8
+status: completed
+year: 2024
+
+amount: 600
+category: clothing
+customer: Ivy
+id: 9
+status: completed
+year: 2024
+
+amount: 2000
+category: electronics
+customer: Jack
+id: 10
+status: completed
+year: 2024
+
+=== Stage 3: High Value >500 (6 remain) ===
+amount: 1200
+category: electronics
+customer: Charlie
+id: 3
+status: completed
+year: 2024
+
+amount: 800
+category: furniture
+customer: Eve
+id: 5
+status: completed
+year: 2024
+
+amount: 950
+category: electronics
+customer: Frank
+id: 6
+status: completed
+year: 2024
+
+amount: 1500
+category: electronics
+customer: Henry
+id: 8
+status: completed
+year: 2024
+
+amount: 600
+category: clothing
+customer: Ivy
+id: 9
+status: completed
+year: 2024
+
+amount: 2000
+category: electronics
+customer: Jack
+id: 10
+status: completed
+year: 2024
+
+=== Stage 4: Completed (5 remain) ===
+amount: 1200
+category: electronics
+customer: Charlie
+id: 3
+status: completed
+year: 2024
+
+amount: 800
+category: furniture
+customer: Eve
+id: 5
+status: completed
+year: 2024
+
+amount: 950
+category: electronics
+customer: Frank
+id: 6
+status: completed
+year: 2024
+
+amount: 1500
+category: electronics
+customer: Henry
+id: 8
+status: completed
+year: 2024
+
+amount: 600
+category: clothing
+customer: Ivy
+id: 9
+status: completed
+year: 2024
+
+amount: 2000
+category: electronics
+customer: Jack
+id: 10
+status: completed
+year: 2024
+
+=== Stage 5: Electronics Only (4 remain) ===
+amount: 1200
+category: electronics
+customer: Charlie
+id: 3
+status: completed
+year: 2024
+
+amount: 950
+category: electronics
+customer: Frank
+id: 6
+status: completed
+year: 2024
+
+amount: 1500
+category: electronics
+customer: Henry
+id: 8
+status: completed
+year: 2024
+
+amount: 2000
+category: electronics
+customer: Jack
+id: 10
+status: completed
+year: 2024
+
+=== Aggregation Results ===
+Total Amount:
+5650.00
+Transaction Count:
+4
+Average Amount:
+1412.50
+Max Amount:
+2000.00
+
+=== Pipeline Complete ===
+In streaming mode, each row flows through all 5 filter stages.
+Non-matching rows are discarded immediately - O(1) memory!
+streaming-demo

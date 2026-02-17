@@ -396,7 +396,7 @@ public struct BuiltInHTTPService: AROService {
         case let array as [Any]:
             return convertArrayToSendable(array)
         case is NSNull:
-            return Optional<String>.none as Any as! (any Sendable)
+            return Optional<String>.none as any Sendable
         default:
             return String(describing: value)
         }

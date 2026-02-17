@@ -514,6 +514,131 @@ public final class RuntimeContext: ExecutionContext, @unchecked Sendable {
         defer { lock.unlock() }
         _schemaRegistry = registry
     }
+
+    // MARK: - Streaming Support (ARO-0051)
+
+    /// Bind a lazy stream without materializing it
+    ///
+    /// The stream will only be consumed when a drain action (Log, Return, etc.)
+    /// is executed on the variable.
+    ///
+    /// - Parameters:
+    ///   - name: Variable name
+    ///   - stream: The lazy stream to bind
+    public func bindLazy<T: Sendable>(_ name: String, stream: AROStream<T>) {
+        let value = AROValue<T>.lazy(stream)
+        bindStreamingValue(name, value: value)
+    }
+
+    /// Bind a streaming value (can be eager or lazy)
+    public func bindStreamingValue<T: Sendable>(_ name: String, value: AROValue<T>) {
+        // Wrap in AnyStreamingValue for type-erased storage
+        let anyValue = AnyStreamingValue(value)
+        bind(name, value: anyValue)
+    }
+
+    /// Resolve a variable as a stream
+    ///
+    /// This preserves laziness - if the variable is a lazy stream, it returns
+    /// the stream without materializing. If it's an eager array, it wraps it.
+    ///
+    /// - Parameter name: Variable name
+    /// - Returns: An AROStream, or nil if variable doesn't exist
+    public func resolveAsStream<T: Sendable>(_ name: String, as type: T.Type = T.self) -> AROStream<T>? {
+        guard let value = resolveAny(name) else {
+            return nil
+        }
+
+        // If already a streaming value, get stream
+        if let anyStreaming = value as? AnyStreamingValue {
+            // Try to get typed stream
+            if let typedStream = anyStreaming.asStream() as? AROStream<T> {
+                return typedStream
+            }
+            // Fall back to mapping
+            return anyStreaming.asStream().compactMap { $0 as? T }
+        }
+
+        // If it's an AROValue, unwrap
+        if let aroValue = value as? AROValue<T> {
+            return aroValue.asStream()
+        }
+
+        // If it's an array, wrap as stream
+        if let array = value as? [T] {
+            return AROStream.from(array)
+        }
+
+        // If it's an array of dictionaries (common case)
+        if let dictArray = value as? [[String: any Sendable]] {
+            if T.self == [String: any Sendable].self {
+                return AROStream.from(dictArray as! [T])
+            }
+        }
+
+        return nil
+    }
+
+    /// Resolve a variable as a stream of dictionaries (common case for CSV/JSON)
+    public func resolveAsRowStream(_ name: String) -> AROStream<[String: any Sendable]>? {
+        resolveAsStream(name, as: [String: any Sendable].self)
+    }
+
+    /// Check if a variable is a lazy stream (not yet materialized)
+    ///
+    /// - Parameter name: Variable name
+    /// - Returns: true if the variable is a lazy stream
+    public func isLazy(_ name: String) -> Bool {
+        guard let value = resolveAny(name) else {
+            return false
+        }
+
+        if let anyStreaming = value as? AnyStreamingValue {
+            return !anyStreaming.isMaterialized
+        }
+
+        return false
+    }
+
+    /// Materialize a lazy variable (collect stream into array)
+    ///
+    /// If the variable is already materialized, this is a no-op.
+    /// Otherwise, it consumes the stream and replaces the binding with the array.
+    ///
+    /// - Parameter name: Variable name
+    public func materialize(_ name: String) async throws {
+        guard let value = resolveAny(name) else {
+            return
+        }
+
+        if let anyStreaming = value as? AnyStreamingValue, !anyStreaming.isMaterialized {
+            let array = try await anyStreaming.materialize()
+            // Rebind as eager (using allowRebind since we're replacing the same variable)
+            bind(name, value: array, allowRebind: true)
+        }
+    }
+
+    /// Check if a variable needs to be teed for multiple consumers
+    ///
+    /// Called by the executor when it detects multiple uses of the same variable.
+    /// Returns a teed version of the stream if needed.
+    ///
+    /// - Parameter name: Variable name
+    /// - Parameter consumers: Number of consumers
+    public func teeIfNeeded(_ name: String, consumers: Int) async {
+        guard consumers > 1 else { return }
+
+        guard let value = resolveAny(name) else {
+            return
+        }
+
+        // Only tee lazy streams
+        if let anyStreaming = value as? AnyStreamingValue, !anyStreaming.isMaterialized {
+            // The value is already bound - for multi-consumer scenarios,
+            // the StreamTee will be created on-demand when consumers are created
+            // This is handled by the AROValue.teed() wrapper
+        }
+    }
 }
 
 // MARK: - Convenience Extensions

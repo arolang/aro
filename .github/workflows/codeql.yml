@@ -72,6 +72,7 @@ jobs:
         echo "PKG_CONFIG_PATH=$LLVM_PREFIX/lib/pkgconfig" >> $GITHUB_ENV
 
     # Initializes the CodeQL tools for scanning.
+    - name: Initialize CodeQL
       uses: github/codeql-action/init@v4
       with:
         languages: ${{ matrix.language }}

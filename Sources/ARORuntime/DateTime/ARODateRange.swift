@@ -92,7 +92,7 @@ public struct ARODateRange: Sendable, Equatable {
     // MARK: - Property Access
 
     /// Access a property by name
-    public func property(_ name: String) -> Any? {
+    public func property(_ name: String) -> (any Sendable)? {
         switch name.lowercased() {
         case "start": return start
         case "end": return end

@@ -193,7 +193,7 @@ public struct DateDistance: Sendable {
     }
 
     /// Access a property by name
-    public func property(_ name: String) -> Any? {
+    public func property(_ name: String) -> (any Sendable)? {
         switch name.lowercased() {
         case "seconds": return seconds
         case "minutes": return minutes

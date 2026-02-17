@@ -494,7 +494,8 @@ Proposals/              # Language specifications
 ├── ARO-0050-template-engine.md
 ├── ARO-0046-typed-event-extraction.md
 ├── ARO-0047-command-line-parameters.md
-└── ARO-0048-websocket.md
+├── ARO-0048-websocket.md
+└── ARO-0051-streaming-execution.md
 ```
 
 ## Language Proposals
@@ -537,6 +538,7 @@ The `Proposals/` directory contains language specifications:
 | **0047 Command-Line Parameters** | CLI argument parsing, Parameters action |
 | **0048 WebSocket** | WebSocket server support, real-time messaging |
 | **0050 Template Engine** | Mustache-style templates, Render action |
+| **0051 Streaming Execution** | Lazy evaluation, Stream Tee, Aggregation Fusion |
 
 ## Concurrency
 

@@ -117,7 +117,7 @@ public struct ARODate: Sendable, Equatable, CustomStringConvertible {
     // MARK: - Property Access
 
     /// Access a property by name (for qualifier-based access)
-    public func property(_ name: String) -> Any? {
+    public func property(_ name: String) -> (any Sendable)? {
         switch name.lowercased() {
         case "year": return year
         case "month": return month

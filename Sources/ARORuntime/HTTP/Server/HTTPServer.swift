@@ -129,10 +129,10 @@ public struct HTTPServerStoppedEvent: RuntimeEvent {
 
 #if !os(Windows)
 
-import NIO
-import NIOHTTP1
-import NIOFoundationCompat
-import NIOWebSocket
+@preconcurrency import NIO
+@preconcurrency import NIOHTTP1
+@preconcurrency import NIOFoundationCompat
+@preconcurrency import NIOWebSocket
 
 /// HTTP Server implementation using SwiftNIO
 ///

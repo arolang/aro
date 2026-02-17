@@ -1,0 +1,130 @@
+# Generated: Tue Feb 17 12:36:40 2026
+# Type: console
+# Command: aro run ./Examples/StreamingDemo
+---
+=== ARO Streaming Execution Demo ===
+
+1. Wrote events to events.jsonl (JSON Lines format)
+JSONL is ideal for streaming: each line is independently parseable
+
+2. Read events.jsonl:
+level: INFO
+message: Request received
+service: api
+time: 45
+timestamp: __TIMESTAMP__
+
+level: ERROR
+message: Database timeout
+service: api
+time: 5000
+timestamp: __TIMESTAMP__
+
+level: WARN
+message: Rate limit exceeded
+service: auth
+time: 120
+timestamp: __TIMESTAMP__
+
+level: INFO
+message: Request completed
+service: api
+time: 89
+timestamp: __TIMESTAMP__
+
+level: ERROR
+message: Authentication failed
+service: auth
+time: 15
+timestamp: __TIMESTAMP__
+
+level: INFO
+message: Cache hit
+service: api
+time: 5
+timestamp: __TIMESTAMP__
+
+level: ERROR
+message: Connection refused
+service: api
+time: 3000
+timestamp: __TIMESTAMP__
+
+level: DEBUG
+message: Task started
+service: worker
+time: 0
+timestamp: __TIMESTAMP__
+
+level: INFO
+message: Task completed
+service: worker
+time: 250
+timestamp: __TIMESTAMP__
+
+3. Filtered ERROR level events:
+level: ERROR
+message: Database timeout
+service: api
+time: 5000
+timestamp: __TIMESTAMP__
+
+level: ERROR
+message: Authentication failed
+service: auth
+time: 15
+timestamp: __TIMESTAMP__
+
+level: ERROR
+message: Connection refused
+service: api
+time: 3000
+timestamp: __TIMESTAMP__
+
+4. API Errors (multi-stage filter):
+level: ERROR
+message: Database timeout
+service: api
+time: 5000
+timestamp: __TIMESTAMP__
+
+level: ERROR
+message: Connection refused
+service: api
+time: 3000
+timestamp: __TIMESTAMP__
+
+5. Error count:
+3
+6. Total API response time:
+8139.00
+7. Average API response time:
+1627.80
+
+8. API response time range (aggregation fusion - single pass):
+Min:
+5.00
+Max:
+5000.00
+
+9. Slow requests (>1000ms):
+level: ERROR
+message: Database timeout
+service: api
+time: 5000
+timestamp: __TIMESTAMP__
+
+level: ERROR
+message: Connection refused
+service: api
+time: 3000
+timestamp: __TIMESTAMP__
+
+=== Streaming Demo Complete ===
+
+Key streaming benefits demonstrated:
+- JSONL format: each line is independently parseable
+- Multi-stage filtering: pipeline processes incrementally
+- Reduce operations: O(1) memory with streaming accumulators
+- Aggregation fusion: multiple reduces on same source = single pass
+demo

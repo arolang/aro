@@ -345,6 +345,50 @@ public struct LogAction: ActionImplementation {
     ) async throws -> any Sendable {
         try validatePreposition(object.preposition)
 
+        // ARO-0051: Streaming support - only drain lazy streams
+        if let runtimeContext = context as? RuntimeContext,
+           runtimeContext.isLazy(result.base),
+           let stream = runtimeContext.resolveAsRowStream(result.base) {
+            // Drain stream by logging each element as it arrives
+            let target = object.base
+            var count = 0
+            for try await item in stream.stream {
+                let formatted = ResponseFormatter.formatValue(item, for: context.outputContext)
+                let formattedMessage: String
+                if context.isCompiled {
+                    formattedMessage = formatted
+                } else {
+                    formattedMessage = "[\(context.featureSetName)] \(formatted)"
+                }
+                if let data = (formattedMessage + "\n").data(using: .utf8) {
+                    try FileHandle.standardOutput.write(contentsOf: data)
+                }
+                count += 1
+            }
+            return LogResult(message: "Logged \(count) items", target: target)
+        }
+
+        // ARO-0051: Fallback - check for AnyStreamingValue directly
+        if let anyStreaming = context.resolveAny(result.base) as? AnyStreamingValue {
+            let target = object.base
+            var count = 0
+            let stream = anyStreaming.asStream()
+            for try await item in stream.stream {
+                let formatted = ResponseFormatter.formatValue(item, for: context.outputContext)
+                let formattedMessage: String
+                if context.isCompiled {
+                    formattedMessage = formatted
+                } else {
+                    formattedMessage = "[\(context.featureSetName)] \(formatted)"
+                }
+                if let data = (formattedMessage + "\n").data(using: .utf8) {
+                    try FileHandle.standardOutput.write(contentsOf: data)
+                }
+                count += 1
+            }
+            return LogResult(message: "Logged \(count) items", target: target)
+        }
+
         // Get message to log
         // Priority:
         //   1. Metrics with format qualifier (ARO-0044)
@@ -493,13 +537,40 @@ public struct StoreAction: ActionImplementation {
             bindResultVar = false
         }
 
+        // Get repository name
+        let repoName = object.base
+
+        // ARO-0051: Streaming support - only stream lazy values
+        if let runtimeContext = context as? RuntimeContext,
+           runtimeContext.isLazy(dataVarName),
+           let stream = runtimeContext.resolveAsRowStream(dataVarName),
+           InMemoryRepositoryStorage.isRepositoryName(repoName) {
+            // Drain stream by storing each element as it arrives
+            let storage = context.service(RepositoryStorageService.self) ?? InMemoryRepositoryStorage.shared
+            var count = 0
+            var lastStoreResult: RepositoryStoreResult?
+
+            for try await item in stream.stream {
+                lastStoreResult = await storage.storeWithChangeInfo(
+                    value: item,
+                    in: repoName,
+                    businessActivity: context.businessActivity
+                )
+                count += 1
+            }
+
+            // Return the last stored item or count
+            if bindResultVar, let lastResult = lastStoreResult {
+                context.bind(result.base, value: lastResult.storedValue)
+                return lastResult.storedValue
+            }
+            return count
+        }
+
         // Get data to store
         guard let data = context.resolveAny(dataVarName) else {
             throw ActionError.undefinedVariable(dataVarName)
         }
-
-        // Get repository name
-        let repoName = object.base
 
         // Check if this is a repository (ends with -repository)
         if InMemoryRepositoryStorage.isRepositoryName(repoName) {

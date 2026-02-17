@@ -653,3 +653,117 @@ struct AnalyzedProgramTests {
         #expect(analyzed.globalRegistry.allPublished.isEmpty || analyzed.globalRegistry.allPublished.count >= 0)
     }
 }
+
+// MARK: - Streaming Optimization Tests (ARO-0051)
+
+@Suite("Streaming Optimization Tests")
+struct StreamingOptimizationTests {
+
+    @Test("Aggregation fusion detects multiple reduces on same source")
+    func testAggregationFusionDetection() throws {
+        let source = """
+        (Analytics: Data Processing) {
+            <Filter> the <orders> from the <all-orders> where <status> = "active".
+            <Reduce> the <total> from the <orders> with sum(<amount>).
+            <Reduce> the <count> from the <orders> with count().
+            <Reduce> the <average> from the <orders> with avg(<amount>).
+            <Return> an <OK: status> with { total: <total>, count: <count>, average: <average> }.
+        }
+        """
+        let analyzed = try SemanticAnalyzer.analyze(source)
+
+        #expect(analyzed.featureSets.count == 1)
+        let featureSet = analyzed.featureSets[0]
+
+        // Should detect fusion group for "orders" source
+        #expect(featureSet.aggregationFusions.count == 1)
+
+        let fusion = featureSet.aggregationFusions[0]
+        #expect(fusion.source == "orders")
+        #expect(fusion.operations.count == 3)
+
+        // Verify operations
+        let operations = fusion.operations
+        #expect(operations.contains { $0.output == "total" && $0.function == "sum" })
+        #expect(operations.contains { $0.output == "count" && $0.function == "count" })
+        #expect(operations.contains { $0.output == "average" && $0.function == "avg" })
+    }
+
+    @Test("Aggregation fusion ignores single reduces")
+    func testNoFusionForSingleReduce() throws {
+        let source = """
+        (Sum Only: Calculation) {
+            <Reduce> the <total> from the <items> with sum(<value>).
+            <Return> an <OK: status> with <total>.
+        }
+        """
+        let analyzed = try SemanticAnalyzer.analyze(source)
+
+        let featureSet = analyzed.featureSets[0]
+
+        // Single reduce should not create a fusion group
+        #expect(featureSet.aggregationFusions.isEmpty)
+    }
+
+    @Test("Aggregation fusion groups by source")
+    func testFusionGroupsBySource() throws {
+        let source = """
+        (Multi Source: Analytics) {
+            <Reduce> the <total-a> from the <items-a> with sum(<value>).
+            <Reduce> the <count-a> from the <items-a> with count().
+            <Reduce> the <total-b> from the <items-b> with sum(<value>).
+            <Reduce> the <count-b> from the <items-b> with count().
+            <Return> an <OK: status> for the <result>.
+        }
+        """
+        let analyzed = try SemanticAnalyzer.analyze(source)
+
+        let featureSet = analyzed.featureSets[0]
+
+        // Should detect two fusion groups (one per source)
+        #expect(featureSet.aggregationFusions.count == 2)
+
+        let sources = Set(featureSet.aggregationFusions.map { $0.source })
+        #expect(sources.contains("items-a"))
+        #expect(sources.contains("items-b"))
+    }
+
+    @Test("Stream consumer detection identifies multi-use variables")
+    func testStreamConsumerDetection() throws {
+        let source = """
+        (Multi Use: Processing) {
+            <Filter> the <active> from the <data> where <status> = "active".
+            <Reduce> the <total> from the <active> with sum(<amount>).
+            <Log> <active> to the <console>.
+            <Return> an <OK: status> with <total>.
+        }
+        """
+        let analyzed = try SemanticAnalyzer.analyze(source)
+
+        let featureSet = analyzed.featureSets[0]
+
+        // Should detect "active" as multi-consumer (Reduce + Log)
+        let activeConsumer = featureSet.streamConsumers.first { $0.variable == "active" }
+        #expect(activeConsumer != nil)
+        #expect(activeConsumer?.consumerCount == 2)
+        #expect(activeConsumer?.requiresTee == true)
+    }
+
+    @Test("Stream consumer detection skips external variables")
+    func testStreamConsumerSkipsExternals() throws {
+        let source = """
+        (Request Handler: API) {
+            <Extract> the <id> from the <request: id>.
+            <Log> <request> to the <console>.
+            <Return> an <OK: status> with <id>.
+        }
+        """
+        let analyzed = try SemanticAnalyzer.analyze(source)
+
+        let featureSet = analyzed.featureSets[0]
+
+        // "request" is external, should not be in stream consumers
+        let requestConsumer = featureSet.streamConsumers.first { $0.variable == "request" }
+        #expect(requestConsumer == nil)
+    }
+}
