@@ -126,6 +126,131 @@
         </div>
     </header>
 
+    <section class="streaming-section">
+        <div class="container">
+            <div class="streaming-content">
+                <div class="streaming-diagram animate-on-scroll">
+                    <svg class="stream-diagram" viewBox="0 0 420 380" xmlns="http://www.w3.org/2000/svg">
+                        <defs>
+                            <!-- Animated dash pattern for streaming -->
+                            <linearGradient id="streamGradient" x1="0%" y1="100%" x2="100%" y2="0%">
+                                <stop offset="0%" style="stop-color:#00ff88;stop-opacity:0.3"/>
+                                <stop offset="50%" style="stop-color:#00ff88;stop-opacity:1"/>
+                                <stop offset="100%" style="stop-color:#00ff88;stop-opacity:0.3"/>
+                            </linearGradient>
+                        </defs>
+
+                        <!-- Input files (bottom-left) -->
+                        <g class="input-files" font-family="JetBrains Mono, monospace" font-size="10">
+                            <!-- File 1 -->
+                            <g class="input-file" data-file="1">
+                                <rect x="15" y="280" width="85" height="28" rx="4" fill="none" stroke="#444" stroke-width="1.5"/>
+                                <text x="57" y="298" text-anchor="middle" fill="#888">data.csv</text>
+                            </g>
+                            <!-- File 2 -->
+                            <g class="input-file" data-file="2">
+                                <rect x="15" y="315" width="85" height="28" rx="4" fill="none" stroke="#444" stroke-width="1.5"/>
+                                <text x="57" y="333" text-anchor="middle" fill="#888">users.json</text>
+                            </g>
+                            <!-- File 3 -->
+                            <g class="input-file" data-file="3">
+                                <rect x="15" y="350" width="85" height="28" rx="4" fill="none" stroke="#444" stroke-width="1.5"/>
+                                <text x="57" y="368" text-anchor="middle" fill="#888">events.log</text>
+                            </g>
+                        </g>
+
+                        <!-- ARO box (center) -->
+                        <g class="aro-stream-node">
+                            <rect x="155" y="160" width="110" height="60" rx="8" fill="#0a0a0a" stroke="#00ff88" stroke-width="2"/>
+                            <text x="210" y="198" text-anchor="middle" fill="#ffffff" font-family="JetBrains Mono, monospace" font-size="24" font-weight="700">ARO</text>
+                        </g>
+
+                        <!-- Output files (top-right) -->
+                        <g class="output-files" font-family="JetBrains Mono, monospace" font-size="10">
+                            <!-- File 1 -->
+                            <g class="output-file" data-file="1">
+                                <rect x="320" y="10" width="90" height="28" rx="4" fill="none" stroke="#00ff88" stroke-width="1.5"/>
+                                <text x="365" y="28" text-anchor="middle" fill="#00ff88">report.json</text>
+                            </g>
+                            <!-- File 2 -->
+                            <g class="output-file" data-file="2">
+                                <rect x="320" y="45" width="90" height="28" rx="4" fill="none" stroke="#00ff88" stroke-width="1.5"/>
+                                <text x="365" y="63" text-anchor="middle" fill="#00ff88">metrics.csv</text>
+                            </g>
+                            <!-- File 3 -->
+                            <g class="output-file" data-file="3">
+                                <rect x="320" y="80" width="90" height="28" rx="4" fill="none" stroke="#00ff88" stroke-width="1.5"/>
+                                <text x="365" y="98" text-anchor="middle" fill="#00ff88">alerts.log</text>
+                            </g>
+                        </g>
+
+                        <!-- Streaming lines: Input -> ARO -->
+                        <g class="stream-lines-in">
+                            <path d="M100,294 Q130,260 155,200" class="stream-line stream-in" data-file="1" fill="none" stroke="#444" stroke-width="1.5" stroke-dasharray="4 4"/>
+                            <path d="M100,329 Q140,280 155,210" class="stream-line stream-in" data-file="2" fill="none" stroke="#444" stroke-width="1.5" stroke-dasharray="4 4"/>
+                            <path d="M100,364 Q150,300 155,220" class="stream-line stream-in" data-file="3" fill="none" stroke="#444" stroke-width="1.5" stroke-dasharray="4 4"/>
+                        </g>
+
+                        <!-- Streaming lines: ARO -> Output -->
+                        <g class="stream-lines-out">
+                            <path d="M265,175 Q290,100 320,24" class="stream-line stream-out" data-file="1" fill="none" stroke-dasharray="4 4"/>
+                            <path d="M265,185 Q295,130 320,59" class="stream-line stream-out" data-file="2" fill="none" stroke-dasharray="4 4"/>
+                            <path d="M265,195 Q300,150 320,94" class="stream-line stream-out" data-file="3" fill="none" stroke-dasharray="4 4"/>
+                        </g>
+
+                        <!-- Data particles flowing (animated dots) -->
+                        <g class="stream-particles">
+                            <circle r="3" fill="#00ff88" opacity="0.8">
+                                <animateMotion dur="2s" repeatCount="indefinite" path="M100,294 Q130,260 155,200"/>
+                            </circle>
+                            <circle r="3" fill="#00ff88" opacity="0.8">
+                                <animateMotion dur="2.2s" repeatCount="indefinite" path="M100,329 Q140,280 155,210"/>
+                            </circle>
+                            <circle r="3" fill="#00ff88" opacity="0.8">
+                                <animateMotion dur="1.8s" repeatCount="indefinite" path="M100,364 Q150,300 155,220"/>
+                            </circle>
+                            <circle r="3" fill="#00ff88">
+                                <animateMotion dur="1.5s" repeatCount="indefinite" path="M265,175 Q290,100 320,24"/>
+                            </circle>
+                            <circle r="3" fill="#00ff88">
+                                <animateMotion dur="1.7s" repeatCount="indefinite" path="M265,185 Q295,130 320,59"/>
+                            </circle>
+                            <circle r="3" fill="#00ff88">
+                                <animateMotion dur="1.9s" repeatCount="indefinite" path="M265,195 Q300,150 320,94"/>
+                            </circle>
+                        </g>
+
+                        <!-- "STREAM" label -->
+                        <text x="210" y="250" text-anchor="middle" fill="#00ff88" font-family="JetBrains Mono, monospace" font-size="11" letter-spacing="0.2em" opacity="0.6">STREAMING</text>
+                    </svg>
+                    <p class="diagram-caption">Data flows through ARO as <em>lazy streams</em>. Process <strong>gigabytes</strong> with minimal memory.</p>
+                </div>
+                <div class="streaming-text animate-on-scroll">
+                    <h2>Everything is a <span class="accent">Stream</span></h2>
+                    <p class="lead">
+                        In ARO, data doesn't sit in memory waiting to be processed.
+                        It <em>flows</em>.
+                    </p>
+                    <p>
+                        When you write <code>&lt;Filter&gt; the &lt;records&gt; where status = "active"</code>,
+                        ARO doesn't load all records first. It creates a <strong>lazy pipeline</strong> that
+                        processes data as it arrives.
+                    </p>
+                    <p>
+                        Chain operations like <code>Filter</code>, <code>Transform</code>, and <code>Aggregate</code>
+                        without intermediate allocations. ARO fuses them into a single pass.
+                    </p>
+                    <div class="streaming-features">
+                        <span class="stream-feature">Lazy Evaluation</span>
+                        <span class="stream-feature">Pipeline Fusion</span>
+                        <span class="stream-feature">Backpressure</span>
+                    </div>
+                    <a href="docs/data-pipelines.html" class="example-link">Learn about Data Pipelines &rarr;</a>
+                </div>
+            </div>
+        </div>
+    </section>
+
     <section class="features-section">
         <div class="container">
             <h2 class="section-title animate-on-scroll">
@@ -360,6 +485,51 @@ function highlightPlugin() {
 if (document.querySelector('.plugin-diagram')) {
     highlightPlugin();
     setInterval(highlightPlugin, 1200);
+}
+
+// Cycle through stream file highlights
+const streamFiles = ['1', '2', '3'];
+// Different delays per file - upper lines "overtake" lower lines
+const outputDelays = { '1': 300, '2': 400, '3': 500 };
+// Patterns: single files, pairs, or all three
+const highlightPatterns = [
+    ['1'], ['2'], ['3'],           // singles
+    ['1'], ['2'], ['3'],           // singles again (more common)
+    ['1', '2'], ['2', '3'],        // pairs
+    ['1', '2', '3']                // all three
+];
+let currentPattern = 0;
+
+function highlightStreamFile() {
+    // Remove all active classes
+    document.querySelectorAll('.input-file, .output-file, .stream-in, .stream-out').forEach(el => {
+        el.classList.remove('active');
+    });
+
+    const fileIds = highlightPatterns[currentPattern];
+
+    // Highlight input side first for all files in pattern
+    fileIds.forEach(fileId => {
+        document.querySelectorAll(`.input-file[data-file="${fileId}"], .stream-in[data-file="${fileId}"]`).forEach(el => {
+            el.classList.add('active');
+        });
+
+        // Highlight output side after delay (varies per file - creates overtaking effect)
+        setTimeout(() => {
+            document.querySelectorAll(`.output-file[data-file="${fileId}"], .stream-out[data-file="${fileId}"]`).forEach(el => {
+                el.classList.add('active');
+            });
+        }, outputDelays[fileId]);
+    });
+
+    // Move to next pattern
+    currentPattern = (currentPattern + 1) % highlightPatterns.length;
+}
+
+// Start cycling if stream diagram exists
+if (document.querySelector('.stream-diagram')) {
+    highlightStreamFile();
+    setInterval(highlightStreamFile, 1500);
 }
 </script>
 </body>

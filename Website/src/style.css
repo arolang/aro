@@ -746,6 +746,220 @@ section {
 }
 
 /* ============================================================
+   Streaming Section
+   ============================================================ */
+
+.streaming-section {
+    background: var(--color-bg);
+    position: relative;
+    overflow: hidden;
+    padding: var(--space-2xl) 0;
+}
+
+.streaming-section::before {
+    content: '';
+    position: absolute;
+    top: 50%;
+    left: -10%;
+    width: 50%;
+    height: 60%;
+    background: radial-gradient(ellipse, rgba(0, 255, 136, 0.04) 0%, transparent 60%);
+    transform: translateY(-50%);
+    pointer-events: none;
+}
+
+.streaming-content {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: var(--space-2xl);
+    align-items: center;
+}
+
+.streaming-diagram {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+}
+
+.stream-diagram {
+    width: 100%;
+    max-width: 420px;
+    height: auto;
+}
+
+/* ARO node glow effect */
+.aro-stream-node rect {
+    filter: drop-shadow(0 0 10px rgba(0, 255, 136, 0.3));
+}
+
+/* Streaming line animations */
+.stream-line {
+    stroke-dasharray: 4 4;
+}
+
+.stream-in {
+    animation: stream-flow-in 1.5s linear infinite;
+}
+
+.stream-out {
+    animation: stream-flow-out 1.2s linear infinite;
+}
+
+@keyframes stream-flow-in {
+    from { stroke-dashoffset: 16; }
+    to { stroke-dashoffset: 0; }
+}
+
+@keyframes stream-flow-out {
+    from { stroke-dashoffset: 0; }
+    to { stroke-dashoffset: -16; }
+}
+
+/* Input/Output file styling */
+.input-file rect,
+.output-file rect {
+    transition: stroke 0.3s, filter 0.3s;
+}
+
+.input-file rect {
+    transition: stroke 0.3s, filter 0.3s;
+}
+
+.input-file text,
+.output-file text {
+    transition: fill 0.3s;
+}
+
+.input-file:hover rect,
+.input-file.active rect {
+    stroke: var(--color-accent);
+    filter: drop-shadow(0 0 5px rgba(0, 255, 136, 0.3));
+}
+
+.input-file:hover text,
+.input-file.active text {
+    fill: var(--color-accent);
+}
+
+.output-file rect {
+    filter: drop-shadow(0 0 5px rgba(0, 255, 136, 0.2));
+    transition: filter 0.3s;
+}
+
+.output-file.active rect {
+    filter: drop-shadow(0 0 12px rgba(0, 255, 136, 0.5));
+}
+
+.output-file.active text {
+    fill: #ffffff;
+}
+
+/* Stream line highlight states */
+.stream-in {
+    stroke: #444;
+    stroke-width: 1.5;
+    transition: stroke 0.3s, stroke-width 0.3s;
+}
+
+.stream-in.active {
+    stroke: var(--color-accent);
+    stroke-width: 2.5;
+}
+
+.stream-out {
+    stroke: #444;
+    stroke-width: 1.5;
+    transition: stroke 0.3s, stroke-width 0.3s, filter 0.3s;
+}
+
+.stream-out.active {
+    stroke: var(--color-accent);
+    stroke-width: 3;
+    filter: drop-shadow(0 0 6px rgba(0, 255, 136, 0.6));
+}
+
+/* Streaming text content */
+.streaming-text h2 {
+    font-size: clamp(2rem, 4vw, 2.75rem);
+    margin-bottom: var(--space-lg);
+    line-height: 1.2;
+}
+
+.streaming-text .lead {
+    font-size: 1.15rem;
+    color: var(--color-text);
+    margin-bottom: var(--space-md);
+    line-height: 1.7;
+}
+
+.streaming-text .lead em {
+    color: var(--color-accent);
+    font-style: normal;
+}
+
+.streaming-text p {
+    margin-bottom: var(--space-md);
+    line-height: 1.8;
+}
+
+.streaming-text strong {
+    color: var(--color-accent);
+    font-weight: 600;
+}
+
+.streaming-text code {
+    color: var(--color-accent);
+}
+
+.streaming-features {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+    margin: var(--space-lg) 0;
+}
+
+.stream-feature {
+    font-size: 0.75rem;
+    color: var(--color-accent);
+    padding: 8px 16px;
+    background: var(--color-accent-dim);
+    border: 1px solid rgba(0, 255, 136, 0.2);
+    border-radius: 4px;
+    letter-spacing: 0.05em;
+}
+
+/* Responsive adjustments */
+@media (max-width: 1024px) {
+    .streaming-content {
+        grid-template-columns: 1fr;
+        gap: var(--space-xl);
+    }
+
+    .streaming-diagram {
+        order: 1;
+    }
+
+    .streaming-text {
+        order: 2;
+    }
+}
+
+@media (max-width: 768px) {
+    .stream-diagram {
+        max-width: 350px;
+    }
+
+    .streaming-features {
+        gap: 8px;
+    }
+
+    .stream-feature {
+        font-size: 0.7rem;
+        padding: 6px 12px;
+    }
+}
+
+/* ============================================================
    Features Section
    ============================================================ */
 
