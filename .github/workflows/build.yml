@@ -207,20 +207,20 @@ jobs:
         with:
           fetch-depth: 0
 
-      # Use Xcode's built-in Swift instead of swift-actions/setup-swift
-      # The swift.org toolchain has known compiler crashes (signal 6) that
-      # don't occur with Xcode's bundled toolchain. See:
-      # https://github.com/apple/swift-configuration/issues/115
+      - name: Setup Swift
+        uses: swift-actions/setup-swift@364295d9c23900ce04d4e5cc708387921b4e50f9  # v3
+        with:
+          swift-version: ${{ env.SWIFT_VERSION }}
+
       - name: Verify Swift version
         run: |
           swift --version
-          xcodebuild -version
 
       - name: Cache Swift packages
         uses: actions/cache@v5
         with:
           path: .build
-          key: macos-swift-xcode-v8-${{ hashFiles('Package.resolved') }}
+          key: macos-swift-${{ env.SWIFT_VERSION }}-v1-${{ hashFiles('Package.resolved') }}
 
       - name: Install LLVM 20 and dependencies
         run: |
@@ -799,6 +799,49 @@ jobs:
           perl test_repl.pl
 
   # ===========================================================================
+  # REPL Integration Tests - macOS
+  # ===========================================================================
+  integration-tests-repl-macos:
+    needs: [macos]
+    name: REPL Tests - macOS
+    runs-on: macos-15
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v6
+
+      - name: Setup Swift
+        uses: swift-actions/setup-swift@364295d9c23900ce04d4e5cc708387921b4e50f9  # v3
+        with:
+          swift-version: ${{ env.SWIFT_VERSION }}
+
+      - name: Install LLVM 20
+        run: |
+          brew install llvm@20
+          if [ -d "/opt/homebrew/opt/llvm@20" ]; then
+            LLVM_PREFIX="/opt/homebrew/opt/llvm@20"
+          else
+            LLVM_PREFIX="/usr/local/opt/llvm@20"
+          fi
+          echo "DYLD_LIBRARY_PATH=$LLVM_PREFIX/lib" >> $GITHUB_ENV
+
+      - name: Download ARO artifact
+        uses: actions/download-artifact@v7
+        with:
+          name: aro-macos-arm64
+          path: ./aro-bin
+
+      - name: Prepare ARO binary
+        run: |
+          chmod +x ./aro-bin/aro
+          echo "ARO_BIN=$GITHUB_WORKSPACE/aro-bin/aro" >> $GITHUB_ENV
+          ./aro-bin/aro --version
+
+      - name: Run REPL tests
+        run: |
+          chmod +x test_repl.pl
+          perl test_repl.pl
+
+  # ===========================================================================
   # Integration Tests - macOS
   # ===========================================================================
   integration-tests-macos:
@@ -809,12 +852,14 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v6
 
-      # Use Xcode's built-in Swift to match the main build job
-      # The swift.org toolchain has known compiler crashes - see main macOS build job
+      - name: Setup Swift
+        uses: swift-actions/setup-swift@364295d9c23900ce04d4e5cc708387921b4e50f9  # v3
+        with:
+          swift-version: ${{ env.SWIFT_VERSION }}
+
       - name: Verify Swift version
         run: |
           swift --version
-          xcodebuild -version
 
       - name: Install LLVM 20 and dependencies
         run: |
@@ -1114,7 +1159,7 @@ jobs:
   # ===========================================================================
   release:
     name: Create Release
-    needs: [linux, macos, integration-tests-linux, integration-tests-repl, integration-tests-macos, documentation]
+    needs: [linux, macos, integration-tests-linux, integration-tests-repl, integration-tests-macos, integration-tests-repl-macos, documentation]
     runs-on: ubuntu-latest
     if: github.ref_type == 'tag'
     permissions:
