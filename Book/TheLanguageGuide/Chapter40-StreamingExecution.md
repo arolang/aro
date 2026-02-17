@@ -205,35 +205,133 @@ This keeps memory at O(1) regardless of collection size.
 
 ---
 
-## Streaming File Formats
+## Choosing the Right Format for Streaming
 
-Different file formats have different streaming characteristics:
+Different file formats have dramatically different streaming characteristics. Choosing the right format can mean the difference between O(1) and O(n) memory usage.
 
-| Format | Streaming Support | Notes |
-|--------|-------------------|-------|
-| CSV | Native streaming | Line-by-line parsing |
-| JSONL | Native streaming | One JSON object per line |
-| JSON (array) | Incremental | Parses array elements as found |
-| XML | SAX-style | Event-driven parsing |
-| Binary | Chunk-based | Configurable chunk size |
+### Format Comparison
 
-### JSONL: The Streaming-Native Format
+| Feature | CSV | JSON Array | JSONL | XML |
+|---------|-----|------------|-------|-----|
+| **True streaming** | ⚠️ Header needed | ❌ Must parse full array | ✅ Line = record | ⚠️ SAX required |
+| **Self-describing** | ❌ Types ambiguous | ✅ | ✅ | ✅ |
+| **Memory efficient** | ✅ | ❌ | ✅ | ⚠️ |
+| **Error recovery** | ⚠️ Skip line | ❌ Corrupts parse | ✅ Skip bad line | ❌ |
+| **Human readable** | ✅ | ✅ | ✅ | ⚠️ |
+| **Nested data** | ❌ | ✅ | ✅ | ✅ |
 
-JSON Lines (JSONL) is ideal for streaming because each line is a complete JSON object:
+### JSONL: The Ideal Streaming Format
+
+**JSON Lines (JSONL)** is the recommended format for streaming workloads. Each line is a complete, independent JSON object:
 
 ```jsonl
-{"id": 1, "name": "Alice", "amount": 100}
-{"id": 2, "name": "Bob", "amount": 200}
-{"id": 3, "name": "Charlie", "amount": 150}
+{"id": 1, "name": "Alice", "amount": 100, "status": "active"}
+{"id": 2, "name": "Bob", "amount": 200, "status": "pending"}
+{"id": 3, "name": "Charlie", "amount": 150, "status": "active"}
 ```
+
+**Why JSONL excels for streaming:**
+
+1. **Line = Record**: Each line is independently parseable
+2. **No global state**: No header row, no array boundaries
+3. **Error isolation**: A corrupted line doesn't break the entire file
+4. **Append-friendly**: Add new records by appending lines
+5. **Self-describing**: Each record contains its own field names
+
+### Streaming JSONL in ARO
 
 ```aro
-<Read> the <records> from the <file: "data.jsonl">.
-<Filter> the <high-value> from <records> where <amount> > 100.
-<Log> <high-value> to the <console>.
+(Process Events: Log Processor) {
+    (* Read JSONL file - automatically streams line by line *)
+    <Read> the <events> from the <file: "events.jsonl">.
+
+    (* Filter errors - each line processed independently *)
+    <Filter> the <errors> from <events>
+        where <level> = "error".
+
+    (* Filter by service *)
+    <Filter> the <api-errors> from <errors>
+        where <service> = "api".
+
+    (* Aggregate - O(1) memory regardless of file size *)
+    <Reduce> the <error-count> from <api-errors>
+        with count().
+
+    <Log> "API errors found: " to the <console>.
+    <Log> <error-count> to the <console>.
+
+    <Return> an <OK: status> for the <processing>.
+}
 ```
 
-Each line is parsed and filtered independently, enabling true O(1) memory streaming.
+### JSONL vs JSON Array
+
+**JSON Array** (not recommended for large data):
+```json
+[
+  {"id": 1, "name": "Alice"},
+  {"id": 2, "name": "Bob"},
+  {"id": 3, "name": "Charlie"}
+]
+```
+
+The parser must find the closing `]` before knowing the array is complete. This prevents true streaming.
+
+**JSONL** (recommended):
+```jsonl
+{"id": 1, "name": "Alice"}
+{"id": 2, "name": "Bob"}
+{"id": 3, "name": "Charlie"}
+```
+
+Each line can be parsed and processed immediately upon reading.
+
+### Best Practices for Format Selection
+
+| Use Case | Recommended Format | Reason |
+|----------|-------------------|--------|
+| Log files | JSONL | Append-only, error recovery |
+| Event streams | JSONL | Real-time processing |
+| ETL pipelines | JSONL or CSV | Line-by-line streaming |
+| API exports | JSONL | Incremental processing |
+| Configuration | JSON/YAML | Small, needs random access |
+| Tabular data | CSV | Universal compatibility |
+| Documents | JSON | Nested structure |
+
+### Converting to JSONL
+
+If you have JSON arrays, convert them to JSONL for better streaming:
+
+**Before (events.json):**
+```json
+[
+  {"timestamp": "2024-01-01", "event": "login"},
+  {"timestamp": "2024-01-02", "event": "purchase"}
+]
+```
+
+**After (events.jsonl):**
+```jsonl
+{"timestamp": "2024-01-01", "event": "login"}
+{"timestamp": "2024-01-02", "event": "purchase"}
+```
+
+### Error Recovery with JSONL
+
+One of JSONL's key advantages is error isolation:
+
+```jsonl
+{"id": 1, "valid": true}
+{"id": 2, "broken json here
+{"id": 3, "valid": true}
+```
+
+With JSONL streaming, ARO can:
+1. Process record 1 successfully
+2. Log warning for malformed record 2
+3. Continue processing record 3
+
+With JSON arrays, a single malformed record corrupts the entire parse.
 
 ---
 

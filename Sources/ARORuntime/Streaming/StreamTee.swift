@@ -49,7 +49,7 @@ public actor StreamTee<Element: Sendable> {
     ///
     /// - Parameters:
     ///   - source: The source stream to tee
-    ///   - bufferCapacity: Maximum elements to buffer (default: 1024)
+    ///   - bufferCapacity: Maximum elements to buffer (default: 4096)
     public init(source: AROStream<Element>, bufferCapacity: Int = RingBuffer<Element>.defaultCapacity) {
         self.source = source
         self.buffer = RingBuffer(capacity: bufferCapacity)

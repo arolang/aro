@@ -48,7 +48,7 @@ public actor RingBuffer<Element: Sendable> {
     public var nextIndex: Int { baseIndex + _count }
 
     /// Create a ring buffer with the specified capacity
-    public init(capacity: Int = 1024) {
+    public init(capacity: Int = 4096) {
         precondition(capacity > 0, "RingBuffer capacity must be positive")
         self.capacity = capacity
         self.storage = Array(repeating: nil, count: capacity)
@@ -144,8 +144,8 @@ extension RingBuffer {
         return RingBuffer(capacity: capacity)
     }
 
-    /// Default buffer size for streaming operations (1MB assuming ~1KB per row)
-    public static var defaultCapacity: Int { 1024 }
+    /// Default buffer size for streaming operations (~800KB assuming ~200 bytes per row)
+    public static var defaultCapacity: Int { 4096 }
 
     /// Large buffer for high-throughput scenarios
     public static var largeCapacity: Int { 16384 }
