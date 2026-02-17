@@ -1,0 +1,6 @@
+# Generated: Mon Feb 17 10:00:00 2026
+# Type: http
+# Command: aro run ./Examples/WebSocketDemo
+---
+GET /health => {"status":"healthy","websocket":"ws:\/\/localhost:8080\/ws"}
+GET /ws => ERROR: 501 Not Implemented
