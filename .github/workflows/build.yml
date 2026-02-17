@@ -814,9 +814,9 @@ jobs:
         with:
           swift-version: ${{ env.SWIFT_VERSION }}
 
-      - name: Install LLVM 20
+      - name: Install LLVM 20 and dependencies
         run: |
-          brew install llvm@20
+          brew install llvm@20 libgit2
           if [ -d "/opt/homebrew/opt/llvm@20" ]; then
             LLVM_PREFIX="/opt/homebrew/opt/llvm@20"
           else
