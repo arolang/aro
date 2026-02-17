@@ -671,67 +671,69 @@ extension ReduceAction {
         if let streamValue = source as? AROValue<[String: any Sendable]> {
             let stream = streamValue.asStream()
 
-            // Perform streaming reduction using reduce (no mutable captures)
+            // Perform streaming reduction using explicit iteration
+            // (avoids Swift 6.2.x compiler crash with async reduce closures)
+            let asyncStream = stream.stream
             switch aggregateFunc {
             case "count":
-                return try await stream.reduce(0) { count, _ in count + 1 }
+                var count = 0
+                for try await _ in asyncStream { count += 1 }
+                return count
 
             case "sum":
-                let fieldName = field
-                return try await stream.reduce(0.0) { sum, item in
-                    if let fieldName = fieldName, let value = item[fieldName] {
-                        return sum + (asDouble(value) ?? 0)
+                var sum = 0.0
+                for try await item in asyncStream {
+                    if let fieldName = field, let value = item[fieldName] {
+                        sum += asDouble(value) ?? 0
                     }
-                    return sum
                 }
+                return sum
 
             case "avg", "average":
-                let fieldName = field
-                let (sum, count) = try await stream.reduce((0.0, 0)) { acc, item in
-                    if let fieldName = fieldName, let value = item[fieldName], let num = asDouble(value) {
-                        return (acc.0 + num, acc.1 + 1)
+                var sum = 0.0
+                var count = 0
+                for try await item in asyncStream {
+                    if let fieldName = field, let value = item[fieldName], let num = asDouble(value) {
+                        sum += num
+                        count += 1
                     }
-                    return acc
                 }
                 return count > 0 ? sum / Double(count) : 0.0
 
             case "min":
-                let fieldName = field
-                let result = try await stream.reduce(Double?.none) { minValue, item in
-                    if let fieldName = fieldName, let value = item[fieldName], let num = asDouble(value) {
-                        return minValue.map { Swift.min($0, num) } ?? num
+                var minValue: Double?
+                for try await item in asyncStream {
+                    if let fieldName = field, let value = item[fieldName], let num = asDouble(value) {
+                        minValue = minValue.map { Swift.min($0, num) } ?? num
                     }
-                    return minValue
                 }
-                return result ?? 0.0
+                return minValue ?? 0.0
 
             case "max":
-                let fieldName = field
-                let result = try await stream.reduce(Double?.none) { maxValue, item in
-                    if let fieldName = fieldName, let value = item[fieldName], let num = asDouble(value) {
-                        return maxValue.map { Swift.max($0, num) } ?? num
+                var maxValue: Double?
+                for try await item in asyncStream {
+                    if let fieldName = field, let value = item[fieldName], let num = asDouble(value) {
+                        maxValue = maxValue.map { Swift.max($0, num) } ?? num
                     }
-                    return maxValue
                 }
-                return result ?? 0.0
+                return maxValue ?? 0.0
 
             case "first":
-                // Collect just the first element
-                let result = try await stream.reduce([String: any Sendable]?.none) { first, item in
-                    return first ?? item
-                }
-                return result ?? ([:] as [String: any Sendable])
-
-            case "last":
-                // Keep overwriting with latest
-                let result = try await stream.reduce([String: any Sendable]?.none) { _, item in
+                for try await item in asyncStream {
                     return item
                 }
-                return result ?? ([:] as [String: any Sendable])
+                return [:] as [String: any Sendable]
+
+            case "last":
+                var lastItem: [String: any Sendable]?
+                for try await item in asyncStream { lastItem = item }
+                return lastItem ?? ([:] as [String: any Sendable])
 
             default:
                 // Default to count
-                return try await stream.reduce(0) { count, _ in count + 1 }
+                var count = 0
+                for try await _ in asyncStream { count += 1 }
+                return count
             }
         }
 
@@ -741,51 +743,59 @@ extension ReduceAction {
 }
 
 /// Streaming aggregation helpers
+/// Note: Uses explicit iteration instead of reduce to avoid Swift 6.2.x compiler crash
 extension Aggregations {
     /// Stream-based count
     public static func streamCount<T: Sendable>(_ stream: AROStream<T>) async throws -> Int {
-        try await stream.reduce(0) { count, _ in count + 1 }
+        var count = 0
+        for try await _ in stream.stream { count += 1 }
+        return count
     }
 
     /// Stream-based sum
     public static func streamSum(_ stream: AROStream<[String: any Sendable]>, field: String) async throws -> Double {
-        try await stream.reduce(0.0) { sum, item in
+        var sum = 0.0
+        for try await item in stream.stream {
             if let value = item[field], let num = asDouble(value) {
-                return sum + num
+                sum += num
             }
-            return sum
         }
+        return sum
     }
 
     /// Stream-based average
     public static func streamAvg(_ stream: AROStream<[String: any Sendable]>, field: String) async throws -> Double {
-        let (sum, count) = try await stream.reduce((0.0, 0)) { acc, item in
+        var sum = 0.0
+        var count = 0
+        for try await item in stream.stream {
             if let value = item[field], let num = asDouble(value) {
-                return (acc.0 + num, acc.1 + 1)
+                sum += num
+                count += 1
             }
-            return acc
         }
         return count > 0 ? sum / Double(count) : 0.0
     }
 
     /// Stream-based min
     public static func streamMin(_ stream: AROStream<[String: any Sendable]>, field: String) async throws -> Double? {
-        try await stream.reduce(Double?.none) { minValue, item in
+        var minValue: Double?
+        for try await item in stream.stream {
             if let value = item[field], let num = asDouble(value) {
-                return minValue.map { Swift.min($0, num) } ?? num
+                minValue = minValue.map { Swift.min($0, num) } ?? num
             }
-            return minValue
         }
+        return minValue
     }
 
     /// Stream-based max
     public static func streamMax(_ stream: AROStream<[String: any Sendable]>, field: String) async throws -> Double? {
-        try await stream.reduce(Double?.none) { maxValue, item in
+        var maxValue: Double?
+        for try await item in stream.stream {
             if let value = item[field], let num = asDouble(value) {
-                return maxValue.map { Swift.max($0, num) } ?? num
+                maxValue = maxValue.map { Swift.max($0, num) } ?? num
             }
-            return maxValue
         }
+        return maxValue
     }
 }
 
