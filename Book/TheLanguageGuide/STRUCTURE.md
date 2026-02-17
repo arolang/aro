@@ -52,6 +52,7 @@
 36. **Runtime Metrics** — Execution counts, timing, and Prometheus integration
 37. **Template Engine** — Dynamic content generation with `{{ }}` blocks
 38. **WebSockets** — Real-time bidirectional communication
+39. **Streaming Execution** — Process large datasets with constant memory
 
 ## Appendices
 - A: Action Reference (all 50 built-in actions)

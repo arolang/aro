@@ -1,0 +1,267 @@
+[Application-Start] === Streaming Pipeline Demo ===
+[Application-Start] Processing transactions with multi-stage filtering...
+[Application-Start] 
+[Application-Start] === Stage 1: All Transactions (10 total) ===
+[Application-Start] amount: 750
+category: electronics
+customer: Alice
+id: 1
+status: completed
+year: 2023
+
+amount: 200
+category: clothing
+customer: Bob
+id: 2
+status: completed
+year: 2024
+
+amount: 1200
+category: electronics
+customer: Charlie
+id: 3
+status: completed
+year: 2024
+
+amount: 450
+category: electronics
+customer: Diana
+id: 4
+status: pending
+year: 2024
+
+amount: 800
+category: furniture
+customer: Eve
+id: 5
+status: completed
+year: 2024
+
+amount: 950
+category: electronics
+customer: Frank
+id: 6
+status: completed
+year: 2024
+
+amount: 300
+category: electronics
+customer: Grace
+id: 7
+status: cancelled
+year: 2024
+
+amount: 1500
+category: electronics
+customer: Henry
+id: 8
+status: completed
+year: 2024
+
+amount: 600
+category: clothing
+customer: Ivy
+id: 9
+status: completed
+year: 2024
+
+amount: 2000
+category: electronics
+customer: Jack
+id: 10
+status: completed
+year: 2024
+[Application-Start] 
+[Application-Start] === Stage 2: 2024 Transactions (9 remain) ===
+[Application-Start] amount: 200
+category: clothing
+customer: Bob
+id: 2
+status: completed
+year: 2024
+
+amount: 1200
+category: electronics
+customer: Charlie
+id: 3
+status: completed
+year: 2024
+
+amount: 450
+category: electronics
+customer: Diana
+id: 4
+status: pending
+year: 2024
+
+amount: 800
+category: furniture
+customer: Eve
+id: 5
+status: completed
+year: 2024
+
+amount: 950
+category: electronics
+customer: Frank
+id: 6
+status: completed
+year: 2024
+
+amount: 300
+category: electronics
+customer: Grace
+id: 7
+status: cancelled
+year: 2024
+
+amount: 1500
+category: electronics
+customer: Henry
+id: 8
+status: completed
+year: 2024
+
+amount: 600
+category: clothing
+customer: Ivy
+id: 9
+status: completed
+year: 2024
+
+amount: 2000
+category: electronics
+customer: Jack
+id: 10
+status: completed
+year: 2024
+[Application-Start] 
+[Application-Start] === Stage 3: High Value >500 (6 remain) ===
+[Application-Start] amount: 1200
+category: electronics
+customer: Charlie
+id: 3
+status: completed
+year: 2024
+
+amount: 800
+category: furniture
+customer: Eve
+id: 5
+status: completed
+year: 2024
+
+amount: 950
+category: electronics
+customer: Frank
+id: 6
+status: completed
+year: 2024
+
+amount: 1500
+category: electronics
+customer: Henry
+id: 8
+status: completed
+year: 2024
+
+amount: 600
+category: clothing
+customer: Ivy
+id: 9
+status: completed
+year: 2024
+
+amount: 2000
+category: electronics
+customer: Jack
+id: 10
+status: completed
+year: 2024
+[Application-Start] 
+[Application-Start] === Stage 4: Completed (5 remain) ===
+[Application-Start] amount: 1200
+category: electronics
+customer: Charlie
+id: 3
+status: completed
+year: 2024
+
+amount: 800
+category: furniture
+customer: Eve
+id: 5
+status: completed
+year: 2024
+
+amount: 950
+category: electronics
+customer: Frank
+id: 6
+status: completed
+year: 2024
+
+amount: 1500
+category: electronics
+customer: Henry
+id: 8
+status: completed
+year: 2024
+
+amount: 600
+category: clothing
+customer: Ivy
+id: 9
+status: completed
+year: 2024
+
+amount: 2000
+category: electronics
+customer: Jack
+id: 10
+status: completed
+year: 2024
+[Application-Start] 
+[Application-Start] === Stage 5: Electronics Only (4 remain) ===
+[Application-Start] amount: 1200
+category: electronics
+customer: Charlie
+id: 3
+status: completed
+year: 2024
+
+amount: 950
+category: electronics
+customer: Frank
+id: 6
+status: completed
+year: 2024
+
+amount: 1500
+category: electronics
+customer: Henry
+id: 8
+status: completed
+year: 2024
+
+amount: 2000
+category: electronics
+customer: Jack
+id: 10
+status: completed
+year: 2024
+[Application-Start] 
+[Application-Start] === Aggregation Results ===
+[Application-Start] Total Amount:
+[Application-Start] 5650.00
+[Application-Start] Transaction Count:
+[Application-Start] 4
+[Application-Start] Average Amount:
+[Application-Start] 1412.50
+[Application-Start] Max Amount:
+[Application-Start] 2000.00
+[Application-Start] 
+[Application-Start] === Pipeline Complete ===
+[Application-Start] In streaming mode, each row flows through all 5 filter stages.
+[Application-Start] Non-matching rows are discarded immediately - O(1) memory!
+[OK] streaming-demo

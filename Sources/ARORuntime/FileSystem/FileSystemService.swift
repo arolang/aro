@@ -271,6 +271,136 @@ public final class AROFileSystemService: FileSystemService, FileMonitorService, 
         }
     }
 
+    // MARK: - Streaming File Reads (ARO-0051)
+
+    /// Read file as a stream of chunks
+    ///
+    /// Memory-efficient for large files - processes data in chunks without loading entire file.
+    /// - Parameters:
+    ///   - path: Path to the file
+    ///   - chunkSize: Size of each chunk in bytes (default: 64KB)
+    /// - Returns: Stream of Data chunks
+    public func readChunks(path: String, chunkSize: Int = 65536) -> AROStream<Data> {
+        AROStream {
+            AsyncThrowingStream { continuation in
+                Task {
+                    do {
+                        let url = URL(fileURLWithPath: path)
+                        let handle = try FileHandle(forReadingFrom: url)
+                        defer { try? handle.close() }
+
+                        while let chunk = try handle.read(upToCount: chunkSize), !chunk.isEmpty {
+                            continuation.yield(chunk)
+                        }
+                        continuation.finish()
+                    } catch {
+                        continuation.finish(throwing: FileSystemError.readError(path, error.localizedDescription))
+                    }
+                }
+            }
+        }
+    }
+
+    /// Read file as a stream of lines
+    ///
+    /// Memory-efficient for large text files - yields one line at a time.
+    /// - Parameter path: Path to the file
+    /// - Returns: Stream of String lines
+    public func readLines(path: String) -> AROStream<String> {
+        AROStream {
+            AsyncThrowingStream { continuation in
+                Task {
+                    do {
+                        let url = URL(fileURLWithPath: path)
+                        let handle = try FileHandle(forReadingFrom: url)
+                        defer { try? handle.close() }
+
+                        var buffer = Data()
+                        let chunkSize = 65536
+                        let newline = UInt8(ascii: "\n")
+
+                        while let chunk = try handle.read(upToCount: chunkSize), !chunk.isEmpty {
+                            buffer.append(chunk)
+
+                            // Extract complete lines from buffer
+                            while let newlineIndex = buffer.firstIndex(of: newline) {
+                                let lineData = buffer[..<newlineIndex]
+                                buffer = Data(buffer[(newlineIndex + 1)...])
+
+                                if let line = String(data: Data(lineData), encoding: .utf8) {
+                                    // Remove trailing \r for Windows line endings
+                                    let trimmed = line.hasSuffix("\r") ? String(line.dropLast()) : line
+                                    continuation.yield(trimmed)
+                                }
+                            }
+                        }
+
+                        // Yield any remaining content without trailing newline
+                        if !buffer.isEmpty, let line = String(data: buffer, encoding: .utf8) {
+                            continuation.yield(line)
+                        }
+
+                        continuation.finish()
+                    } catch {
+                        continuation.finish(throwing: FileSystemError.readError(path, error.localizedDescription))
+                    }
+                }
+            }
+        }
+    }
+
+    /// Read CSV file as a stream of rows
+    ///
+    /// Memory-efficient for large CSV files - yields one row at a time.
+    /// - Parameters:
+    ///   - path: Path to the CSV file
+    ///   - config: CSV parser configuration
+    ///   - chunkSize: Read chunk size (default: 64KB)
+    /// - Returns: Stream of dictionary rows
+    public func readCSVStream(
+        path: String,
+        config: CSVStreamParser.Config = .init(),
+        chunkSize: Int = 65536
+    ) -> AROStream<[String: any Sendable]> {
+        AROStream.fromCSV(path: path, config: config, chunkSize: chunkSize)
+    }
+
+    /// Determine if file should be streamed based on size
+    ///
+    /// Uses heuristics to decide if streaming is appropriate.
+    /// - Parameter path: Path to the file
+    /// - Returns: True if file should be streamed
+    public func shouldStream(path: String) -> Bool {
+        do {
+            let attributes = try fileManager.attributesOfItem(atPath: path)
+            if let size = attributes[.size] as? Int {
+                return StreamingHeuristics.shouldStream(fileSize: size)
+            }
+        } catch {
+            // Default to eager loading if we can't determine size
+            return false
+        }
+        return false
+    }
+
+    /// Read file, automatically choosing streaming or eager based on size
+    ///
+    /// - Parameter path: Path to the file
+    /// - Returns: AROValue that is lazy (stream) for large files, eager for small files
+    public func readAuto(path: String) async throws -> AROValue<String> {
+        if shouldStream(path: path) {
+            // Large file - return lazy stream of lines joined
+            // Note: For very large files, callers should use readLines() directly
+            return .lazy(readLines(path: path))
+        } else {
+            // Small file - eager load
+            let content = try await read(path: path)
+            return .eager([content])
+        }
+    }
+
+    // MARK: - File Write Operations
+
     /// Write Data to file
     public func writeData(path: String, data: Data) async throws {
         let url = URL(fileURLWithPath: path)
@@ -721,6 +851,136 @@ public final class AROFileSystemService: FileSystemService, @unchecked Sendable 
             throw FileSystemError.readError(path, error.localizedDescription)
         }
     }
+
+    // MARK: - Streaming File Reads (ARO-0051)
+
+    /// Read file as a stream of chunks
+    ///
+    /// Memory-efficient for large files - processes data in chunks without loading entire file.
+    /// - Parameters:
+    ///   - path: Path to the file
+    ///   - chunkSize: Size of each chunk in bytes (default: 64KB)
+    /// - Returns: Stream of Data chunks
+    public func readChunks(path: String, chunkSize: Int = 65536) -> AROStream<Data> {
+        AROStream {
+            AsyncThrowingStream { continuation in
+                Task {
+                    do {
+                        let url = URL(fileURLWithPath: path)
+                        let handle = try FileHandle(forReadingFrom: url)
+                        defer { try? handle.close() }
+
+                        while let chunk = try handle.read(upToCount: chunkSize), !chunk.isEmpty {
+                            continuation.yield(chunk)
+                        }
+                        continuation.finish()
+                    } catch {
+                        continuation.finish(throwing: FileSystemError.readError(path, error.localizedDescription))
+                    }
+                }
+            }
+        }
+    }
+
+    /// Read file as a stream of lines
+    ///
+    /// Memory-efficient for large text files - yields one line at a time.
+    /// - Parameter path: Path to the file
+    /// - Returns: Stream of String lines
+    public func readLines(path: String) -> AROStream<String> {
+        AROStream {
+            AsyncThrowingStream { continuation in
+                Task {
+                    do {
+                        let url = URL(fileURLWithPath: path)
+                        let handle = try FileHandle(forReadingFrom: url)
+                        defer { try? handle.close() }
+
+                        var buffer = Data()
+                        let chunkSize = 65536
+                        let newline = UInt8(ascii: "\n")
+
+                        while let chunk = try handle.read(upToCount: chunkSize), !chunk.isEmpty {
+                            buffer.append(chunk)
+
+                            // Extract complete lines from buffer
+                            while let newlineIndex = buffer.firstIndex(of: newline) {
+                                let lineData = buffer[..<newlineIndex]
+                                buffer = Data(buffer[(newlineIndex + 1)...])
+
+                                if let line = String(data: Data(lineData), encoding: .utf8) {
+                                    // Remove trailing \r for Windows line endings
+                                    let trimmed = line.hasSuffix("\r") ? String(line.dropLast()) : line
+                                    continuation.yield(trimmed)
+                                }
+                            }
+                        }
+
+                        // Yield any remaining content without trailing newline
+                        if !buffer.isEmpty, let line = String(data: buffer, encoding: .utf8) {
+                            continuation.yield(line)
+                        }
+
+                        continuation.finish()
+                    } catch {
+                        continuation.finish(throwing: FileSystemError.readError(path, error.localizedDescription))
+                    }
+                }
+            }
+        }
+    }
+
+    /// Read CSV file as a stream of rows
+    ///
+    /// Memory-efficient for large CSV files - yields one row at a time.
+    /// - Parameters:
+    ///   - path: Path to the CSV file
+    ///   - config: CSV parser configuration
+    ///   - chunkSize: Read chunk size (default: 64KB)
+    /// - Returns: Stream of dictionary rows
+    public func readCSVStream(
+        path: String,
+        config: CSVStreamParser.Config = .init(),
+        chunkSize: Int = 65536
+    ) -> AROStream<[String: any Sendable]> {
+        AROStream.fromCSV(path: path, config: config, chunkSize: chunkSize)
+    }
+
+    /// Determine if file should be streamed based on size
+    ///
+    /// Uses heuristics to decide if streaming is appropriate.
+    /// - Parameter path: Path to the file
+    /// - Returns: True if file should be streamed
+    public func shouldStream(path: String) -> Bool {
+        do {
+            let attributes = try fileManager.attributesOfItem(atPath: path)
+            if let size = attributes[.size] as? Int {
+                return StreamingHeuristics.shouldStream(fileSize: size)
+            }
+        } catch {
+            // Default to eager loading if we can't determine size
+            return false
+        }
+        return false
+    }
+
+    /// Read file, automatically choosing streaming or eager based on size
+    ///
+    /// - Parameter path: Path to the file
+    /// - Returns: AROValue that is lazy (stream) for large files, eager for small files
+    public func readAuto(path: String) async throws -> AROValue<String> {
+        if shouldStream(path: path) {
+            // Large file - return lazy stream of lines joined
+            // Note: For very large files, callers should use readLines() directly
+            return .lazy(readLines(path: path))
+        } else {
+            // Small file - eager load
+            let content = try await read(path: path)
+            return .eager([content])
+        }
+    }
+
+    // MARK: - File Write Operations
 
     /// Write Data to file
     public func writeData(path: String, data: Data) async throws {
