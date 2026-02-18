@@ -161,10 +161,17 @@ private func listContents(args: [String: Any]) throws -> [String: Any] {
 
     // List extracted files
     var files: [String] = []
+    let prefixToRemove = tempDir.path + "/"
     if let enumerator = FileManager.default.enumerator(at: tempDir, includingPropertiesForKeys: nil) {
         while let fileURL = enumerator.nextObject() as? URL {
-            let relativePath = fileURL.path.replacingOccurrences(of: tempDir.path + "/", with: "")
-            files.append(relativePath)
+            let fullPath = fileURL.path
+            // Use pure Swift string handling to avoid Foundation bridging issues
+            if fullPath.hasPrefix(prefixToRemove) {
+                let relativePath = String(fullPath.dropFirst(prefixToRemove.count))
+                files.append(relativePath)
+            } else {
+                files.append(fullPath)
+            }
         }
     }
 
@@ -181,13 +188,21 @@ private func encodeResult(_ result: [String: Any]) throws -> String {
 }
 
 /// Escape string for JSON
+/// Uses manual character replacement to avoid Foundation bridging issues
 private func escapeJSON(_ string: String) -> String {
-    return string
-        .replacingOccurrences(of: "\\", with: "\\\\")
-        .replacingOccurrences(of: "\"", with: "\\\"")
-        .replacingOccurrences(of: "\n", with: "\\n")
-        .replacingOccurrences(of: "\r", with: "\\r")
-        .replacingOccurrences(of: "\t", with: "\\t")
+    var result = ""
+    result.reserveCapacity(string.count)
+    for char in string {
+        switch char {
+        case "\\": result += "\\\\"
+        case "\"": result += "\\\""
+        case "\n": result += "\\n"
+        case "\r": result += "\\r"
+        case "\t": result += "\\t"
+        default: result.append(char)
+        }
+    }
+    return result
 }
 
 // MARK: - Errors
