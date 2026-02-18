@@ -935,6 +935,24 @@ public final class PluginLoader: @unchecked Sendable {
 
     /// Find the Swift executable (swift command) in PATH or common locations
     private func findSwiftExecutable() -> String? {
+        // Check for SWIFT environment variable first - allows CI to specify exact Swift
+        if let swiftEnv = ProcessInfo.processInfo.environment["SWIFT"],
+           !swiftEnv.isEmpty,
+           FileManager.default.isExecutableFile(atPath: swiftEnv) {
+            return swiftEnv
+        }
+
+        // Check SWIFTC and derive swift path from it
+        if let swiftcEnv = ProcessInfo.processInfo.environment["SWIFTC"],
+           !swiftcEnv.isEmpty,
+           swiftcEnv.hasSuffix("swiftc") {
+            // swiftc path like "/path/to/bin/swiftc" -> "/path/to/bin/swift"
+            let swiftPath = String(swiftcEnv.dropLast(1))  // Remove 'c'
+            if FileManager.default.isExecutableFile(atPath: swiftPath) {
+                return swiftPath
+            }
+        }
+
         #if os(Windows)
         // On Windows, use 'where' command to find swift.exe
         let whereProcess = Process()
