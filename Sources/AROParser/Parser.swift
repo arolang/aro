@@ -293,7 +293,7 @@ public final class Parser {
         // This happens for: `to <expr>`, `from <expr>`, `with <expr>`, `for <expr>` when followed by expression-starting token
         let shouldParseExpression = (prep == .to || prep == .from || prep == .with || prep == .for) && isExpressionStart(peek())
 
-        if shouldParseExpression && !isArticleFollowedByAngle() {
+        if shouldParseExpression && !isObjectPattern() {
             // Parse expression (ARO-0002)
             expression = try parseExpression()
             // Create a placeholder object noun for the expression
@@ -468,15 +468,19 @@ public final class Parser {
         }
     }
 
-    /// Check if current position is article followed by angle bracket (standard object syntax)
-    private func isArticleFollowedByAngle() -> Bool {
+    /// Check if current position looks like an object pattern (not an expression)
+    /// An object pattern requires an article: "the <x>" or "an <x>" or bare identifier "console"
+    /// Without article, <x> is treated as an expression (variable reference)
+    private func isObjectPattern() -> Bool {
+        // Case 1: article followed by < or identifier = object
         if case .article = peek().kind {
-            // Look ahead to see if it's followed by <
-            let nextIndex = current + 1
-            if nextIndex < tokens.count && tokens[nextIndex].kind == .leftAngle {
-                return true
-            }
+            return true
         }
+        // Case 2: bare identifier (no angle brackets, no article) = object
+        if case .identifier = peek().kind {
+            return true
+        }
+        // Case 3: <...> without article = expression (not object)
         return false
     }
 
