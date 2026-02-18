@@ -15,7 +15,7 @@
     Log <age> to the <console>.
 
     (* This throw will NOT execute because the condition is false *)
-    Throw the ValidationError for the <invalid-age> when <age> < 0.
+    Throw the <ValidationError> for the <invalid-age> when <age> < 0.
     Log "Age validation passed!" to the <console>.
 
     (* Example 2: Authorization check with guarded throw *)
@@ -25,7 +25,7 @@
     Log <user-role> to the <console>.
 
     (* This throw will NOT execute because the condition is false *)
-    Throw the AuthorizationError for the <access-denied> when <user-role> == "guest".
+    Throw the <AuthorizationError> for the <access-denied> when <user-role> == "guest".
     Log "Authorization check passed!" to the <console>.
 
     (* Example 3: Resource validation with guarded throw *)
@@ -35,7 +35,7 @@
     Log <resource-exists> to the <console>.
 
     (* This throw will NOT execute because the condition is false *)
-    Throw the NotFoundError for the <resource-missing> when <resource-exists> == false.
+    Throw the <NotFoundError> for the <resource-missing> when <resource-exists> == false.
     Log "Resource validation passed!" to the <console>.
 
     Log "All validations passed!" to the <console>.
@@ -47,7 +47,7 @@
     Log <invalid-input> to the <console>.
 
     (* This throw WILL execute because the condition is true *)
-    Throw the InputError for the <negative-value> when <invalid-input> < 0.
+    Throw the <InputError> for the <negative-value> when <invalid-input> < 0.
 
     (* This line should NOT be reached *)
     Log "This should not appear!" to the <console>.

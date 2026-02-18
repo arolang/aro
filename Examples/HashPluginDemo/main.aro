@@ -20,14 +20,14 @@
 
     (* DJB2 hash using custom action *)
     Log "2. DJB2 hash algorithm:" to the <console>.
-    <DJB2> the <djb2-result> from the <test-string>.
+    DJB2 the <djb2-result> from the <test-string>.
 
     Extract the <djb2-hash> from the <djb2-result: hash>.
     Log <djb2-hash> to the <console>.
 
     (* FNV-1a hash using custom action *)
     Log "3. FNV-1a hash algorithm:" to the <console>.
-    <FNV1a> the <fnv-result> from the <test-string>.
+    FNV1a the <fnv-result> from the <test-string>.
 
     Extract the <fnv-hash> from the <fnv-result: hash>.
     Log <fnv-hash> to the <console>.

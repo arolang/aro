@@ -208,10 +208,10 @@ public final class Parser {
         let actionToken: Token
         let action: Action
 
-        // Check for testing keywords (when, then, assert) which are lexed as keywords
+        // Check for keywords that can also be action verbs
         // Note: 'Given' is NOT a keyword - it's parsed as an identifier
         switch peek().kind {
-        case .when, .then, .assert:
+        case .when, .then, .assert, .exists:
             actionToken = advance()
             // Capitalize the keyword for consistency (when -> When, then -> Then, etc.)
             let capitalizedVerb = actionToken.lexeme.prefix(1).uppercased() + actionToken.lexeme.dropFirst()
