@@ -21,23 +21,26 @@ public struct HelloPlugin {
 /// Returns plugin metadata as JSON string with custom action definitions
 @_cdecl("aro_plugin_info")
 public func aroPluginInfo() -> UnsafeMutablePointer<CChar>? {
-    let info: [String: Any] = [
+    // Use explicit Foundation types to ensure correct bridging when loaded as dylib
+    // Swift Dictionary bridging can fail in cross-binary scenarios
+    let greetAction: NSDictionary = [
+        "name": "Greet",
+        "role": "own",
+        "verbs": ["greet", "hello"] as NSArray,
+        "prepositions": ["with", "for"] as NSArray
+    ]
+
+    let farewellAction: NSDictionary = [
+        "name": "Farewell",
+        "role": "own",
+        "verbs": ["farewell", "goodbye"] as NSArray,
+        "prepositions": ["with", "for"] as NSArray
+    ]
+
+    let info: NSDictionary = [
         "name": "plugin-swift-hello",
         "version": "1.0.0",
-        "actions": [
-            [
-                "name": "Greet",
-                "role": "own",
-                "verbs": ["greet", "hello"],
-                "prepositions": ["with", "for"]
-            ],
-            [
-                "name": "Farewell",
-                "role": "own",
-                "verbs": ["farewell", "goodbye"],
-                "prepositions": ["with", "for"]
-            ]
-        ]
+        "actions": [greetAction, farewellAction] as NSArray
     ]
 
     guard let jsonData = try? JSONSerialization.data(withJSONObject: info),
