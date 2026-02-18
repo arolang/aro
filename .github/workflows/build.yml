@@ -861,39 +861,37 @@ jobs:
         run: |
           swift --version
           echo "SWIFTLY_HOME_DIR: $SWIFTLY_HOME_DIR"
+          echo "SWIFTLY_BIN_DIR: $SWIFTLY_BIN_DIR"
 
-          # swiftly stores toolchains in $SWIFTLY_HOME_DIR/toolchains/
-          if [ -n "$SWIFTLY_HOME_DIR" ] && [ -d "$SWIFTLY_HOME_DIR/toolchains" ]; then
-            echo "Looking for Swift toolchains in $SWIFTLY_HOME_DIR/toolchains/"
-            ls -la "$SWIFTLY_HOME_DIR/toolchains/" || true
+          # Debug: show full swiftly directory structure
+          echo "=== Full Swiftly HOME directory structure ==="
+          find "$SWIFTLY_HOME_DIR" -type d 2>/dev/null | head -30 || echo "Cannot find dirs"
+          echo "=== Looking for lib directories ==="
+          find "$SWIFTLY_HOME_DIR" -type d -name "lib" 2>/dev/null || true
+          echo "=== Looking for swift directories ==="
+          find "$SWIFTLY_HOME_DIR" -type d -name "swift" 2>/dev/null || true
 
-            # Find the Swift 6.2 toolchain
-            for toolchain in "$SWIFTLY_HOME_DIR/toolchains"/swift-*; do
-              echo "Checking toolchain: $toolchain"
-              SWIFT_LIB="$toolchain/usr/lib/swift/macosx"
-              if [ -d "$SWIFT_LIB" ]; then
-                echo "SWIFT_LIB_PATH=$SWIFT_LIB" >> $GITHUB_ENV
-                echo "Found Swift lib path: $SWIFT_LIB"
-                ls -la "$SWIFT_LIB" | head -5
-                break
-              fi
-            done
-          fi
+          # Search for libswiftCore anywhere in /var/folders (where swiftly installs)
+          echo "=== Searching for libswiftCore.dylib in /var/folders ==="
+          find /var/folders -name "libswiftCore.dylib" 2>/dev/null || true
 
-          # Verify it was set
-          if ! grep -q "SWIFT_LIB_PATH" "$GITHUB_ENV" 2>/dev/null; then
-            echo "ERROR: Could not find Swift library path in swiftly toolchains!"
-            echo "Trying fallback search..."
-            # Search for Swift libraries
-            FOUND_LIB=$(find "$SWIFTLY_HOME_DIR" -name "libswiftCore.dylib" -path "*/swift/macosx/*" 2>/dev/null | head -1)
-            if [ -n "$FOUND_LIB" ]; then
-              SWIFT_LIB=$(dirname "$FOUND_LIB")
-              echo "SWIFT_LIB_PATH=$SWIFT_LIB" >> $GITHUB_ENV
-              echo "Found Swift lib path via search: $SWIFT_LIB"
-            else
-              echo "FATAL: Could not find Swift library path anywhere!"
-              exit 1
-            fi
+          # Get the runtime path from swift itself
+          echo "=== Swift resource dir ==="
+          swift -print-target-info 2>/dev/null || true
+
+          # Check if there's a toolchains symlink
+          echo "=== Checking parent directory of SWIFTLY_BIN_DIR ==="
+          SWIFTLY_BASE=$(dirname "$SWIFTLY_BIN_DIR")
+          ls -laR "$SWIFTLY_BASE" 2>/dev/null | head -100 || true
+
+          # Find Swift lib by checking swift's own knowledge
+          SWIFT_RESOURCE_DIR=$(swift -print-target-info 2>/dev/null | grep -o '"runtimeResourcePath" *: *"[^"]*"' | cut -d'"' -f4)
+          echo "Swift resource dir from target-info: $SWIFT_RESOURCE_DIR"
+          if [ -n "$SWIFT_RESOURCE_DIR" ] && [ -d "$SWIFT_RESOURCE_DIR/macosx" ]; then
+            echo "SWIFT_LIB_PATH=$SWIFT_RESOURCE_DIR/macosx" >> $GITHUB_ENV
+            echo "Found Swift lib path from target-info: $SWIFT_RESOURCE_DIR/macosx"
+          else
+            echo "Could not extract Swift lib path from target-info"
           fi
 
       - name: Install LLVM 20 and dependencies
