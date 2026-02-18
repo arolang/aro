@@ -3,62 +3,62 @@
 
 (Application-Start: Format Aware IO Demo) {
     (* Create sample data *)
-    <Create> the <users> with [
+    Create the <users> with [
         { "id": 1, "name": "Alice", "email": "alice@example.com" },
         { "id": 2, "name": "Bob", "email": "bob@example.com" },
         { "id": 3, "name": "Charlie", "email": "charlie@example.com" }
     ].
 
-    <Log> "=== Writing data to multiple formats ===" to the <console>.
+    Log "=== Writing data to multiple formats ===" to the <console>.
 
     (* Write to JSON - automatically serialized as JSON *)
-    <Write> the <users> to "./output/users.json".
-    <Log> "Wrote users.json" to the <console>.
+    Write the <users> to "./output/users.json".
+    Log "Wrote users.json" to the <console>.
 
     (* Write to JSON Lines - one object per line, ideal for streaming/logging *)
-    <Write> the <users> to "./output/users.jsonl".
-    <Log> "Wrote users.jsonl (JSON Lines)" to the <console>.
+    Write the <users> to "./output/users.jsonl".
+    Log "Wrote users.jsonl (JSON Lines)" to the <console>.
 
     (* Write to YAML - automatically serialized as YAML *)
-    <Write> the <users> to "./output/users.yaml".
-    <Log> "Wrote users.yaml" to the <console>.
+    Write the <users> to "./output/users.yaml".
+    Log "Wrote users.yaml" to the <console>.
 
     (* Write to CSV - automatically serialized as CSV with header row *)
-    <Write> the <users> to "./output/users.csv".
-    <Log> "Wrote users.csv" to the <console>.
+    Write the <users> to "./output/users.csv".
+    Log "Wrote users.csv" to the <console>.
 
     (* Write to TSV - automatically serialized as TSV *)
-    <Write> the <users> to "./output/users.tsv".
-    <Log> "Wrote users.tsv" to the <console>.
+    Write the <users> to "./output/users.tsv".
+    Log "Wrote users.tsv" to the <console>.
 
     (* Write to Markdown - automatically serialized as markdown table *)
-    <Write> the <users> to "./output/users.md".
-    <Log> "Wrote users.md" to the <console>.
+    Write the <users> to "./output/users.md".
+    Log "Wrote users.md" to the <console>.
 
     (* Write to XML - automatically serialized as XML with <users> root element *)
-    <Write> the <users> to "./output/users.xml".
-    <Log> "Wrote users.xml" to the <console>.
+    Write the <users> to "./output/users.xml".
+    Log "Wrote users.xml" to the <console>.
 
     (* Write to SQL - automatically serialized as INSERT statements *)
-    <Write> the <users> to "./output/users.sql".
-    <Log> "Wrote users.sql" to the <console>.
+    Write the <users> to "./output/users.sql".
+    Log "Wrote users.sql" to the <console>.
 
     (* Write to TOML - automatically serialized as TOML *)
-    <Write> the <users> to "./output/users.toml".
-    <Log> "Wrote users.toml" to the <console>.
+    Write the <users> to "./output/users.toml".
+    Log "Wrote users.toml" to the <console>.
 
     (* Write to HTML - automatically serialized as HTML table *)
-    <Write> the <users> to "./output/users.html".
-    <Log> "Wrote users.html" to the <console>.
+    Write the <users> to "./output/users.html".
+    Log "Wrote users.html" to the <console>.
 
     (* Write to plain text - automatically serialized as key=value *)
-    <Create> the <config> with { "host": "localhost", "port": 8080, "debug": true }.
-    <Write> the <config> to "./output/config.txt".
-    <Log> "Wrote config.txt" to the <console>.
+    Create the <config> with { "host": "localhost", "port": 8080, "debug": true }.
+    Write the <config> to "./output/config.txt".
+    Log "Wrote config.txt" to the <console>.
 
     (* Write to .env - automatically serialized with uppercase keys *)
     (* Nested entries become PARENT_CHILD format *)
-    <Create> the <env-config> with {
+    Create the <env-config> with {
         "database": {
             "host": "localhost",
             "port": 5432,
@@ -70,39 +70,39 @@
         },
         "app_name": "FormatAwareIO"
     }.
-    <Write> the <env-config> to "./output/config.env".
-    <Log> "Wrote config.env (with nested entries)" to the <console>.
+    Write the <env-config> to "./output/config.env".
+    Log "Wrote config.env (with nested entries)" to the <console>.
 
-    <Log> "" to the <console>.
-    <Log> "=== Reading data back ===" to the <console>.
+    Log "" to the <console>.
+    Log "=== Reading data back ===" to the <console>.
 
     (* Read JSON - automatically parsed to structured data *)
-    <Read> the <json-data> from "./output/users.json".
-    <Log> "Read JSON:" to the <console>.
-    <Log> <json-data> to the <console>.
+    Read the <json-data> from "./output/users.json".
+    Log "Read JSON:" to the <console>.
+    Log <json-data> to the <console>.
 
     (* Read JSON Lines - parsed to array of objects *)
-    <Read> the <jsonl-data> from "./output/users.jsonl".
-    <Log> "Read JSONL:" to the <console>.
-    <Log> <jsonl-data> to the <console>.
+    Read the <jsonl-data> from "./output/users.jsonl".
+    Log "Read JSONL:" to the <console>.
+    Log <jsonl-data> to the <console>.
 
     (* Read CSV - automatically parsed to array of objects *)
-    <Read> the <csv-data> from "./output/users.csv".
-    <Log> "Read CSV:" to the <console>.
-    <Log> <csv-data> to the <console>.
+    Read the <csv-data> from "./output/users.csv".
+    Log "Read CSV:" to the <console>.
+    Log <csv-data> to the <console>.
 
     (* Read YAML - automatically parsed *)
-    <Read> the <yaml-data> from "./output/users.yaml".
-    <Log> "Read YAML:" to the <console>.
-    <Log> <yaml-data> to the <console>.
+    Read the <yaml-data> from "./output/users.yaml".
+    Log "Read YAML:" to the <console>.
+    Log <yaml-data> to the <console>.
 
     (* Read .env - automatically parsed to key-value map *)
-    <Read> the <env-data> from "./output/config.env".
-    <Log> "Read ENV:" to the <console>.
-    <Log> <env-data> to the <console>.
+    Read the <env-data> from "./output/config.env".
+    Log "Read ENV:" to the <console>.
+    Log <env-data> to the <console>.
 
-    <Log> "" to the <console>.
-    <Log> "=== Format-Aware I/O demo complete! ===" to the <console>.
+    Log "" to the <console>.
+    Log "=== Format-Aware I/O demo complete! ===" to the <console>.
 
-    <Return> an <OK: status> for the <demo>.
+    Return an <OK: status> for the <demo>.
 }

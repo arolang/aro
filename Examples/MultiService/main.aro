@@ -29,34 +29,34 @@
  *)
 
 (Application-Start: Multi-Service Demo) {
-    <Log> "=== Multi-Service Demo ===" to the <console>.
-    <Log> "" to the <console>.
+    Log "=== Multi-Service Demo ===" to the <console>.
+    Log "" to the <console>.
 
     (* Create watched directory if it doesn't exist *)
-    <Make> the <directory> to the <path: "watched-dir">.
-    <Log> "Monitored directory: ./watched-dir" to the <console>.
+    Make the <directory> to the <path: "watched-dir">.
+    Log "Monitored directory: ./watched-dir" to the <console>.
 
     (* Start HTTP Server *)
-    <Start> the <http-server> with {}.
-    <Log> "HTTP Server: http://localhost:8080" to the <console>.
+    Start the <http-server> with {}.
+    Log "HTTP Server: http://localhost:8080" to the <console>.
 
     (* Start Socket Server *)
-    <Start> the <socket-server> with { port: 9000 }.
-    <Log> "Socket Server: localhost:9000" to the <console>.
+    Start the <socket-server> with { port: 9000 }.
+    Log "Socket Server: localhost:9000" to the <console>.
 
     (* Start File Monitor - path as string *)
-    <Start> the <file-monitor> with "watched-dir".
-    <Log> "File Monitor: watching ./watched-dir" to the <console>.
+    Start the <file-monitor> with "watched-dir".
+    Log "File Monitor: watching ./watched-dir" to the <console>.
 
-    <Log> "" to the <console>.
-    <Log> "Services started. Try:" to the <console>.
-    <Log> "  - HTTP: curl http://localhost:8080/status" to the <console>.
-    <Log> "  - Socket: nc localhost 9000" to the <console>.
-    <Log> "  - Files: touch watched-dir/test.txt" to the <console>.
-    <Log> "" to the <console>.
+    Log "" to the <console>.
+    Log "Services started. Try:" to the <console>.
+    Log "  - HTTP: curl http://localhost:8080/status" to the <console>.
+    Log "  - Socket: nc localhost 9000" to the <console>.
+    Log "  - Files: touch watched-dir/test.txt" to the <console>.
+    Log "" to the <console>.
 
     (* Keep application running *)
-    <Keepalive> the <application> for the <events>.
+    Keepalive the <application> for the <events>.
 
-    <Return> an <OK: status> for the <startup>.
+    Return an <OK: status> for the <startup>.
 }

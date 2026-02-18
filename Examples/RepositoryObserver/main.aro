@@ -2,8 +2,8 @@
 (* Demonstrates repository observers that react to data changes *)
 
 (Application-Start: Repository Observer Demo) {
-    <Log> "Starting Repository Observer Demo..." to the <console>.
-    <Start> the <http-server> for the <contract>.
-    <Keepalive> the <application> for the <events>.
-    <Return> an <OK: status> for the <startup>.
+    Log "Starting Repository Observer Demo..." to the <console>.
+    Start the <http-server> for the <contract>.
+    Keepalive the <application> for the <events>.
+    Return an <OK: status> for the <startup>.
 }

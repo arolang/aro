@@ -39,7 +39,7 @@ Here are ideas for extending what you built:
 Track how many links deep you have traveled from the starting URL. Stop crawling after a certain depth to limit the scope.
 
 ```aro
-<Emit> a <CrawlPage: event> with { url: <url>, base: <base>, depth: <current-depth> }.
+Emit a <CrawlPage: event> with { url: <url>, base: <base>, depth: <current-depth> }.
 ```
 
 **Rate Limiting**
@@ -47,7 +47,7 @@ Track how many links deep you have traveled from the starting URL. Stop crawling
 Add delays between requests to avoid overwhelming servers. ARO has a `<Wait>` action:
 
 ```aro
-<Wait> for 1000.  (* milliseconds *)
+Wait for 1000.  (* milliseconds *)
 ```
 
 **Content Filtering**
@@ -55,7 +55,7 @@ Add delays between requests to avoid overwhelming servers. ARO has a `<Wait>` ac
 Skip pages based on URL patterns, content type, or page size:
 
 ```aro
-<Request> the <html> from the <url> when <url> contains "/docs/".
+Request the <html> from the <url> when <url> contains "/docs/".
 ```
 
 **Robots.txt Compliance**
@@ -82,8 +82,8 @@ ARO can serve HTTP APIs using OpenAPI contracts:
 
 ```aro
 (listUsers: User API) {
-    <Retrieve> the <users> from the <user-repository>.
-    <Return> an <OK: status> with <users>.
+    Retrieve the <users> from the <user-repository>.
+    Return an <OK: status> with <users>.
 }
 ```
 
@@ -95,13 +95,13 @@ Watch a directory for new files and process them:
 
 ```aro
 (Application-Start: File Processor) {
-    <Start> the <file-monitor> with "./inbox".
-    <Keepalive> the <application> for the <events>.
-    <Return> an <OK: status> for the <startup>.
+    Start the <file-monitor> with "./inbox".
+    Keepalive the <application> for the <events>.
+    Return an <OK: status> for the <startup>.
 }
 
 (Process File: File Event Handler) {
-    <Extract> the <path> from the <event: path>.
+    Extract the <path> from the <event: path>.
     (* Process the file *)
 }
 ```

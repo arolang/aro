@@ -45,9 +45,9 @@ Here is ARO code followed by the runtime error messages it produces when operati
 **Code:**
 ```aro
 (getUser: User API) {
-    <Extract> the <id> from the <pathParameters: id>.
-    <Retrieve> the <user> from the <user-repository> where id = <id>.
-    <Return> an <OK: status> with <user>.
+    Extract the <id> from the <pathParameters: id>.
+    Retrieve the <user> from the <user-repository> where id = <id>.
+    Return an <OK: status> with <user>.
 }
 ```
 
@@ -56,7 +56,7 @@ Here is ARO code followed by the runtime error messages it produces when operati
 Runtime Error: Cannot retrieve the user from the user-repository where id = 530
   Feature: getUser
   Business Activity: User API
-  Statement: <Retrieve> the <user> from the <user-repository> where id = <id>
+  Statement: Retrieve the <user> from the <user-repository> where id = <id>
 ```
 
 **When pathParameters does not contain id:**
@@ -64,17 +64,17 @@ Runtime Error: Cannot retrieve the user from the user-repository where id = 530
 Runtime Error: Cannot extract the id from the pathParameters: id
   Feature: getUser
   Business Activity: User API
-  Statement: <Extract> the <id> from the <pathParameters: id>
+  Statement: Extract the <id> from the <pathParameters: id>
   Cause: Key 'id' not found in pathParameters
 ```
 
 **Another example with validation:**
 ```aro
 (createOrder: Order API) {
-    <Extract> the <data> from the <request: body>.
-    <Validate> the <data> against the <order-schema>.
-    <Store> the <order> in the <order-repository>.
-    <Return> a <Created: status> with <order>.
+    Extract the <data> from the <request: body>.
+    Validate the <data> against the <order-schema>.
+    Store the <order> in the <order-repository>.
+    Return a <Created: status> with <order>.
 }
 ```
 
@@ -83,7 +83,7 @@ Runtime Error: Cannot extract the id from the pathParameters: id
 Runtime Error: Cannot validate the data against the order-schema
   Feature: createOrder
   Business Activity: Order API
-  Statement: <Validate> the <data> against the <order-schema>
+  Statement: Validate the <data> against the <order-schema>
   Cause: Validation failed
 ```
 
@@ -92,7 +92,7 @@ Runtime Error: Cannot validate the data against the order-schema
 Runtime Error: Cannot store the order in the order-repository
   Feature: createOrder
   Business Activity: Order API
-  Statement: <Store> the <order> in the <order-repository>
+  Statement: Store the <order> in the <order-repository>
   Cause: Connection refused
 ```
 

@@ -98,7 +98,7 @@ Array literals are enclosed in square brackets with elements separated by commas
 Object literals are enclosed in curly braces with fields written as key-colon-value pairs separated by commas. The keys are identifiers; the values can be any valid expression. Object literals allow you to construct structured data inline, which is particularly useful for return values and event payloads.
 
 ```aro
-<Create> the <user> with { name: "Alice", email: "alice@example.com", active: true }.
+Create the <user> with { name: "Alice", email: "alice@example.com", active: true }.
 ```
 
 ## 4.8 Where Clauses
@@ -112,7 +112,7 @@ Conditions in where clauses can use equality checks with "is" or "=" and inequal
 Where clauses can also appear with Filter actions, where they specify which elements of a collection to include in the result. The semantics are the same: only elements satisfying the condition are included.
 
 ```aro
-<Retrieve> the <order> from the <order-repository> where id = <order-id>.
+Retrieve the <order> from the <order-repository> where id = <order-id>.
 ```
 
 ## 4.9 When Conditions
@@ -126,7 +126,7 @@ When conditions are useful for optional operations—things that should happen o
 The condition can be any boolean expression. You can reference bound variables, compare values, check for existence, and combine conditions with logical operators. The same expression syntax used elsewhere in ARO applies within when conditions.
 
 ```aro
-<Send> the <notification> to the <user: email> when <user: notifications> is true.
+Send the <notification> to the <user: email> when <user: notifications> is true.
 ```
 
 ## 4.10 Comments
@@ -148,39 +148,39 @@ Having examined each component in isolation, let us see how they combine in comp
 A minimal statement has an action, an article, a result, a preposition, an article, and an object:
 
 ```aro
-<Retrieve> the <users> from the <user-repository>.
+Retrieve the <users> from the <user-repository>.
 ```
 *Source: [Examples/UserService/users.aro:7](../Examples/UserService/users.aro)*
 
 A statement with a qualifier on the result and object adds more specificity:
 
 ```aro
-<Extract> the <user-id: String> from the <pathParameters: id>.
+Extract the <user-id: String> from the <pathParameters: id>.
 ```
 
 A statement with a literal value provides data inline:
 
 ```aro
-<Create> the <greeting> with "Hello, World!".
+Create the <greeting> with "Hello, World!".
 ```
 
 A statement with an expression computes a value:
 
 ```aro
-<Compute> the <total> with <subtotal> + <tax>.
+Compute the <total> with <subtotal> + <tax>.
 ```
 
 A statement with a where clause filters the operation:
 
 ```aro
-<Retrieve> the <user> from the <user-repository> where <id> is <user-id>.
+Retrieve the <user> from the <user-repository> where <id> is <user-id>.
 ```
 *Source: [Examples/UserService/users.aro:14](../Examples/UserService/users.aro)*
 
 A statement with a when condition executes conditionally:
 
 ```aro
-<Send> the <notification> to the <user> when <user: notifications> is true.
+Send the <notification> to the <user> when <user: notifications> is true.
 ```
 
 Each of these statements follows the same fundamental pattern while using optional elements to add precision and expressiveness. The pattern is the constant; the optional elements are the variables. Once you internalize the pattern, you can read and write any ARO statement fluently.

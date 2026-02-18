@@ -71,7 +71,7 @@ Press `Tab` for intelligent completion:
 
 ```
 aro> <Com[TAB]
-<Compute>  <Compare>  <Connect>
+Compute  Compare  <Connect>
 
 aro> :h[TAB]
 :help     :history
@@ -85,11 +85,11 @@ See what you've done:
 
 ```
 aro> :history 5
-1. [ok]  <Set> the <x> to 10.           2ms
-2. [ok]  <Set> the <y> to 20.           1ms
-3. [ok]  <Compute> the <sum> from...    3ms
-4. [err] <Get> the <missing> from...   --
-5. [ok]  <Log> "test" to <console>.    1ms
+1. [ok]  Set the <x> to 10.           2ms
+2. [ok]  Set the <y> to 20.           1ms
+3. [ok]  Compute the <sum> from...    3ms
+4. [err] Get the <missing> from...   --
+5. [ok]  Log "test" to <console>.    1ms
 ```
 
 Status, statement, timing. A record of your conversation.

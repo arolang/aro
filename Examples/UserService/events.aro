@@ -3,46 +3,46 @@
 
 (* Handler 1: Write user data to file when created via API *)
 (Write New User File: UserCreated Handler) {
-    <Extract> the <user> from the <event: user>.
-    <Extract> the <name> from the <user: name>.
-    <Compute> the <file-path> from "./data/users/" ++ <name> ++ ".json".
-    <Write> the <user> to the <file: file-path>.
-    <Log> "New user file created" to the <console>.
-    <Return> an <OK: status> for the <file-write>.
+    Extract the <user> from the <event: user>.
+    Extract the <name> from the <user: name>.
+    Compute the <file-path> from "./data/users/" ++ <name> ++ ".json".
+    Write the <user> to the <file: file-path>.
+    Log "New user file created" to the <console>.
+    Return an <OK: status> for the <file-write>.
 }
 
 (* Handler 2: Log when a user is updated via API *)
 (Log User Update: UserUpdated Handler) {
-    <Extract> the <user> from the <event: existing-user>.
-    <Log> "User was updated" to the <console>.
-    <Return> an <OK: status> for the <audit>.
+    Extract the <user> from the <event: existing-user>.
+    Log "User was updated" to the <console>.
+    Return an <OK: status> for the <audit>.
 }
 
 (* Handler 3: Write user data to file when updated via API *)
 (Write User File: UserUpdated Handler) {
-    <Extract> the <user> from the <event: existing-user>.
-    <Extract> the <name> from the <user: name>.
-    <Compute> the <file-path> from "./data/users/" ++ <name> ++ ".json".
-    <Write> the <user> to the <file: file-path>.
-    <Log> "User file written" to the <console>.
-    <Return> an <OK: status> for the <file-write>.
+    Extract the <user> from the <event: existing-user>.
+    Extract the <name> from the <user: name>.
+    Compute the <file-path> from "./data/users/" ++ <name> ++ ".json".
+    Write the <user> to the <file: file-path>.
+    Log "User file written" to the <console>.
+    Return an <OK: status> for the <file-write>.
 }
 
 (* Handler 4: Sync user data from file when file is externally modified *)
 (Handle File Modified: File Event Handler) {
-    <Extract> the <path> from the <event: path>.
-    <Read> the <content> from the <file: path>.
-    <Parse> the <user-data> from the <content>.
-    <Store> the <user-data> into the <user-repository>.
-    <Log> "User synced from file" to the <console>.
-    <Return> an <OK: status> for the <sync>.
+    Extract the <path> from the <event: path>.
+    Read the <content> from the <file: path>.
+    Parse the <user-data> from the <content>.
+    Store the <user-data> into the <user-repository>.
+    Log "User synced from file" to the <console>.
+    Return an <OK: status> for the <sync>.
 }
 
 (* Handler 5: Delete user from repository when file is removed *)
 (Handle File Deleted: File Event Handler) {
-    <Extract> the <path> from the <event: path>.
-    <Extract> the <filename> from the <path: filename>.
-    <Delete> the <user> from the <user-repository> where <name> is <filename>.
-    <Log> "User deleted (file removed)" to the <console>.
-    <Return> an <OK: status> for the <delete>.
+    Extract the <path> from the <event: path>.
+    Extract the <filename> from the <path: filename>.
+    Delete the <user> from the <user-repository> where <name> is <filename>.
+    Log "User deleted (file removed)" to the <console>.
+    Return an <OK: status> for the <delete>.
 }

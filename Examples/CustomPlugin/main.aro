@@ -6,26 +6,26 @@
  *)
 
 (Application-Start: Custom Plugin Demo) {
-    <Log> "Testing custom greeting plugin..." to the <console>.
+    Log "Testing custom greeting plugin..." to the <console>.
 
     (* Call the custom greeting service (provided by plugin) *)
-    <Call> the <hello-msg> from the <greeting: hello> with {
+    Call the <hello-msg> from the <greeting: hello> with {
         name: "ARO Developer"
     }.
 
-    <Log> <hello-msg> to the <console>.
+    Log <hello-msg> to the <console>.
 
     (* Call another method on the same service *)
-    <Call> the <goodbye-msg> from the <greeting: goodbye> with {
+    Call the <goodbye-msg> from the <greeting: goodbye> with {
         name: "ARO Developer"
     }.
 
-    <Log> <goodbye-msg> to the <console>.
+    Log <goodbye-msg> to the <console>.
 
-    <Return> an <OK: status> for the <startup>.
+    Return an <OK: status> for the <startup>.
 }
 
 (Application-End: Success) {
-    <Log> "Custom plugin demo completed." to the <console>.
-    <Return> an <OK: status> for the <shutdown>.
+    Log "Custom plugin demo completed." to the <console>.
+    Return an <OK: status> for the <shutdown>.
 }

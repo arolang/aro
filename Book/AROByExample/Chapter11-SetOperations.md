@@ -38,9 +38,9 @@ ARO provides three key set operations through `<Compute>`:
 
 | Operation | Syntax | Result |
 |-----------|--------|--------|
-| `union` | `<Compute> the <result: union> from <set-a> with <set-b>.` | All items from both sets |
-| `difference` | `<Compute> the <result: difference> from <set-a> with <set-b>.` | Items in set-a but not in set-b |
-| `count` | `<Compute> the <result: count> from <set>.` | Number of items |
+| `union` | `Compute the <result: union> from <set-a> with <set-b>.` | All items from both sets |
+| `difference` | `Compute the <result: difference> from <set-a> with <set-b>.` | Items in set-a but not in set-b |
+| `count` | `Compute the <result: count> from <set>.` | Number of items |
 
 These operations treat lists as sets—duplicate items within a list are considered once.
 
@@ -51,16 +51,16 @@ These operations treat lists as sets—duplicate items within a list are conside
 Union combines two sets:
 
 ```aro
-<Create> the <set-a> with ["apple", "banana"].
-<Create> the <set-b> with ["banana", "cherry"].
-<Compute> the <combined: union> from <set-a> with <set-b>.
+Create the <set-a> with ["apple", "banana"].
+Create the <set-b> with ["banana", "cherry"].
+Compute the <combined: union> from <set-a> with <set-b>.
 (* combined = ["apple", "banana", "cherry"] *)
 ```
 
 In our crawler, we use union to add new URLs to the crawled set:
 
 ```aro
-<Compute> the <updated-crawled: union> from <crawled-urls> with <single-url-list>.
+Compute the <updated-crawled: union> from <crawled-urls> with <single-url-list>.
 ```
 
 This adds the new URL to the existing set of crawled URLs.
@@ -72,18 +72,18 @@ This adds the new URL to the existing set of crawled URLs.
 Difference finds items in one set but not another:
 
 ```aro
-<Create> the <all-urls> with ["a", "b", "c"].
-<Create> the <crawled> with ["a", "c"].
-<Compute> the <uncrawled: difference> from <all-urls> with <crawled>.
+Create the <all-urls> with ["a", "b", "c"].
+Create the <crawled> with ["a", "c"].
+Compute the <uncrawled: difference> from <all-urls> with <crawled>.
 (* uncrawled = ["b"] *)
 ```
 
 In our crawler, we use difference to check if a URL is new:
 
 ```aro
-<Create> the <single-url-list> with [<url>].
-<Compute> the <new-urls: difference> from <single-url-list> with <crawled-urls>.
-<Compute> the <new-url-count: count> from <new-urls>.
+Create the <single-url-list> with [<url>].
+Compute the <new-urls: difference> from <single-url-list> with <crawled-urls>.
+Compute the <new-url-count: count> from <new-urls>.
 ```
 
 If `new-url-count` is 0, the URL is already in `crawled-urls`. If it is 1, the URL is new.
@@ -96,10 +96,10 @@ Handlers are stateless—they execute and end. To persist data across handler ex
 
 ```aro
 (* Store data *)
-<Store> the <value> into the <repository-name>.
+Store the <value> into the <repository-name>.
 
 (* Retrieve data *)
-<Retrieve> the <value> from the <repository-name>.
+Retrieve the <value> from the <repository-name>.
 ```
 
 Repository names are arbitrary identifiers. In our crawler, we use `crawled-repository` to store the set of crawled URLs.
@@ -120,25 +120,25 @@ The set operations from Sections 11.4 and 11.5 can be combined into a general-pu
 
 ```aro
 (* 1. Retrieve the current set *)
-<Retrieve> the <crawled-urls> from the <crawled-repository>.
+Retrieve the <crawled-urls> from the <crawled-repository>.
 
 (* 2. Wrap the new URL in a list *)
-<Create> the <single-url-list> with [<url>].
+Create the <single-url-list> with [<url>].
 
 (* 3. Check if it's new *)
-<Compute> the <new-urls: difference> from <single-url-list> with <crawled-urls>.
-<Compute> the <new-url-count: count> from <new-urls>.
+Compute the <new-urls: difference> from <single-url-list> with <crawled-urls>.
+Compute the <new-url-count: count> from <new-urls>.
 
 (* 4. If count is 0, URL is already crawled *)
 match <new-url-count> {
     case 0 {
-        <Return> an <OK: status> for the <skip>.
+        Return an <OK: status> for the <skip>.
     }
 }
 
 (* 5. Add URL to crawled set *)
-<Compute> the <updated-crawled: union> from <crawled-urls> with <single-url-list>.
-<Store> the <updated-crawled> into the <crawled-repository>.
+Compute the <updated-crawled: union> from <crawled-urls> with <single-url-list>.
+Store the <updated-crawled> into the <crawled-repository>.
 
 (* 6. Proceed with crawling *)
 ```
@@ -159,19 +159,19 @@ Here is the pattern our crawler actually uses:
 ```aro
 (Queue URL: QueueUrl Handler) {
     (* Extract from event data structure *)
-    <Extract> the <event-data> from the <event: data>.
-    <Extract> the <url> from the <event-data: url>.
-    <Extract> the <base-domain> from the <event-data: base>.
+    Extract the <event-data> from the <event: data>.
+    Extract the <url> from the <event-data: url>.
+    Extract the <base-domain> from the <event-data: base>.
 
     (* Atomic store - the repository Actor serializes concurrent access,
        so only the first caller for a given URL gets is-new-entry = 1 *)
-    <Store> the <url> into the <crawled-repository>.
+    Store the <url> into the <crawled-repository>.
 
     (* Only emit CrawlPage if this URL was newly stored *)
-    <Log> "Queued: ${<url>}" to the <console> when <new-entry> > 0.
-    <Emit> a <CrawlPage: event> with { url: <url>, base: <base-domain> } when <new-entry> > 0.
+    Log "Queued: ${<url>}" to the <console> when <new-entry> > 0.
+    Emit a <CrawlPage: event> with { url: <url>, base: <base-domain> } when <new-entry> > 0.
 
-    <Return> an <OK: status> for the <queue>.
+    Return an <OK: status> for the <queue>.
 }
 ```
 

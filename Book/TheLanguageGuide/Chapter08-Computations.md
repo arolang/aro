@@ -65,7 +65,7 @@ The **length** and **count** operations count elements—characters in strings, 
 The **identity** operation, while seemingly trivial, serves an important purpose: it allows arithmetic expressions to be written naturally:
 
 ```aro
-<Compute> the <total> from <price> * <quantity>.
+Compute the <total> from <price> * <quantity>.
 ```
 
 Here, the expression `<price> * <quantity>` is the actual computation. The result binds to `total`. This is identity in action—the expression's result passes through unchanged.
@@ -89,9 +89,9 @@ The standard arithmetic operators work on numeric values:
 | `%` | Modulo (remainder) | `<index> % 2` |
 
 ```aro
-<Compute> the <subtotal> from <price> * <quantity>.
-<Compute> the <total> from <subtotal> + <tax>.
-<Compute> the <average> from <sum> / <count>.
+Compute the <subtotal> from <price> * <quantity>.
+Compute the <total> from <subtotal> + <tax>.
+Compute the <average> from <sum> / <count>.
 ```
 
 ### String Concatenation
@@ -99,9 +99,9 @@ The standard arithmetic operators work on numeric values:
 ARO uses `++` for string concatenation, distinct from the `+` arithmetic operator:
 
 ```aro
-<Compute> the <greeting> from "Hello, " ++ <name> ++ "!".
-<Compute> the <full-name> from <first-name> ++ " " ++ <last-name>.
-<Compute> the <path> from <directory> ++ "/" ++ <filename>.
+Compute the <greeting> from "Hello, " ++ <name> ++ "!".
+Compute the <full-name> from <first-name> ++ " " ++ <last-name>.
+Compute the <path> from <directory> ++ "/" ++ <filename>.
 ```
 
 Why `++` instead of `+`? This design choice provides **type clarity**:
@@ -154,8 +154,8 @@ When expressions contain multiple operators, ARO evaluates them in this order (h
 Use parentheses to override precedence:
 
 ```aro
-<Compute> the <with-tax> from <price> * (1 + <tax-rate>).
-<Compute> the <result> from (<a> + <b>) * <c>.
+Compute the <with-tax> from <price> * (1 + <tax-rate>).
+Compute the <result> from (<a> + <b>) * <c>.
 ```
 
 ### Type Behavior
@@ -174,17 +174,17 @@ When types don't match, ARO reports a clear error rather than guessing your inte
 
 ```aro
 (* Error: Cannot add String and Integer *)
-<Compute> the <result> from "5" + 3.
+Compute the <result> from "5" + 3.
 
 (* Correct: Use ++ for string building *)
-<Compute> the <result> from "Count: " ++ <count>.
+Compute the <result> from "Count: " ++ <count>.
 ```
 
 For explicit type conversion, use the Transform action:
 
 ```aro
-<Transform> the <count-string> from <count> as String.
-<Transform> the <amount-int> from <amount> as Integer.
+Transform the <count-string> from <count> as String.
+Transform the <amount-int> from <amount> as Integer.
 ```
 
 ### Short-Circuit Evaluation
@@ -214,7 +214,7 @@ Within the same precedence level, operators evaluate **left-to-right**:
 
 ```aro
 (* Left-to-right: (10 - 5) - 2 = 3, not 10 - (5 - 2) = 7 *)
-<Compute> the <result> from 10 - 5 - 2.
+Compute the <result> from 10 - 5 - 2.
 ```
 
 Method-style accessors (`.` and `[]`) bind tightest and chain naturally:
@@ -234,8 +234,8 @@ Method-style accessors (`.` and `[]`) bind tightest and chain naturally:
 A subtle problem arises when you need multiple results of the same operation. Consider computing the lengths of two different messages:
 
 ```aro
-<Compute> the <length> from the <greeting>.
-<Compute> the <length> from the <farewell>.  (* Compile error! *)
+Compute the <length> from the <greeting>.
+Compute the <length> from the <farewell>.  (* Compile error! *)
 ```
 
 Since ARO variables are immutable, the compiler rejects the second statement—you cannot rebind a name that already exists. This is a compile-time error, not a silent overwrite.
@@ -243,14 +243,14 @@ Since ARO variables are immutable, the compiler rejects the second statement—y
 The solution is the **qualifier-as-name** syntax. In this pattern, the qualifier specifies the operation while the base becomes the variable name:
 
 ```aro
-<Compute> the <greeting-length: length> from the <greeting>.
-<Compute> the <farewell-length: length> from the <farewell>.
+Compute the <greeting-length: length> from the <greeting>.
+Compute the <farewell-length: length> from the <farewell>.
 ```
 
 Now both lengths exist with distinct names. You can compare them:
 
 ```aro
-<Compare> the <greeting-length> against the <farewell-length>.
+Compare the <greeting-length> against the <farewell-length>.
 ```
 
 This syntax separates two concerns that were previously conflated:
@@ -260,12 +260,12 @@ This syntax separates two concerns that were previously conflated:
 The same pattern works with all computed operations:
 
 ```aro
-<Compute> the <name-upper: uppercase> from the <name>.
-<Compute> the <name-lower: lowercase> from the <name>.
-<Compute> the <password-hash: hash> from the <password>.
+Compute the <name-upper: uppercase> from the <name>.
+Compute the <name-lower: lowercase> from the <name>.
+Compute the <password-hash: hash> from the <password>.
 ```
 
-For backward compatibility, the original syntax still works. Writing `<Compute> the <length> from <msg>.` recognizes `length` as both the variable name and the operation.
+For backward compatibility, the original syntax still works. Writing `Compute the <length> from <msg>.` recognizes `length` as both the variable name and the operation.
 
 ---
 
@@ -308,29 +308,29 @@ When working with collections, you often need to find commonalities or differenc
 The most common use case is comparing two lists:
 
 ```aro
-<Create> the <list-a> with [2, 3, 5].
-<Create> the <list-b> with [1, 2, 3, 4].
+Create the <list-a> with [2, 3, 5].
+Create the <list-b> with [1, 2, 3, 4].
 
-<Compute> the <common: intersect> from <list-a> with <list-b>.
+Compute the <common: intersect> from <list-a> with <list-b>.
 (* Result: [2, 3] — elements in both *)
 
-<Compute> the <only-in-a: difference> from <list-a> with <list-b>.
+Compute the <only-in-a: difference> from <list-a> with <list-b>.
 (* Result: [5] — elements in A but not B *)
 
-<Compute> the <all: union> from <list-a> with <list-b>.
+Compute the <all: union> from <list-a> with <list-b>.
 (* Result: [2, 3, 5, 1, 4] — all unique elements *)
 ```
 
 Set operations use **multiset semantics** for duplicates. When lists contain repeated elements, the intersection preserves duplicates up to the minimum count in either list:
 
 ```aro
-<Create> the <a> with [1, 2, 2, 3].
-<Create> the <b> with [2, 2, 2, 4].
+Create the <a> with [1, 2, 2, 3].
+Create the <b> with [2, 2, 2, 4].
 
-<Compute> the <common: intersect> from <a> with <b>.
+Compute the <common: intersect> from <a> with <b>.
 (* Result: [2, 2] — two 2s appear in both *)
 
-<Compute> the <remaining: difference> from <a> with <b>.
+Compute the <remaining: difference> from <a> with <b>.
 (* Result: [1, 3] — removes two 2s from a *)
 ```
 
@@ -339,13 +339,13 @@ Set operations use **multiset semantics** for duplicates. When lists contain rep
 The same operations work on strings at the character level:
 
 ```aro
-<Compute> the <shared: intersect> from "hello" with "bello".
+Compute the <shared: intersect> from "hello" with "bello".
 (* Result: "ello" — characters in both, preserving order *)
 
-<Compute> the <unique: difference> from "hello" with "bello".
+Compute the <unique: difference> from "hello" with "bello".
 (* Result: "h" — characters in first, not in second *)
 
-<Compute> the <combined: union> from "hello" with "bello".
+Compute the <combined: union> from "hello" with "bello".
 (* Result: "hellob" — all unique characters *)
 ```
 
@@ -354,27 +354,27 @@ The same operations work on strings at the character level:
 For objects, set operations perform **deep recursive comparison**. The intersection finds keys where both objects have matching values:
 
 ```aro
-<Create> the <obj-a> with {
+Create the <obj-a> with {
     name: "Alice",
     age: 30,
     address: { city: "NYC", zip: "10001" }
 }.
 
-<Create> the <obj-b> with {
+Create the <obj-b> with {
     name: "Alice",
     age: 31,
     address: { city: "NYC", state: "NY" }
 }.
 
-<Compute> the <common: intersect> from <obj-a> with <obj-b>.
+Compute the <common: intersect> from <obj-a> with <obj-b>.
 (* Result: { name: "Alice", address: { city: "NYC" } } *)
 (* Only fields with matching values are included *)
 
-<Compute> the <diff: difference> from <obj-a> with <obj-b>.
+Compute the <diff: difference> from <obj-a> with <obj-b>.
 (* Result: { age: 30, address: { zip: "10001" } } *)
 (* Fields in A that differ from or don't exist in B *)
 
-<Compute> the <merged: union> from <obj-a> with <obj-b>.
+Compute the <merged: union> from <obj-a> with <obj-b>.
 (* Result: merged object with A winning conflicts *)
 ```
 
@@ -405,15 +405,15 @@ When the Compute action executes, it first checks for a registered computation s
 A cryptography plugin might provide:
 
 ```aro
-<Compute> the <password-hash: sha256> from the <password>.
-<Compute> the <signature: hmac> from the <message>.
+Compute the <password-hash: sha256> from the <password>.
+Compute the <signature: hmac> from the <message>.
 ```
 
 A formatting plugin might provide:
 
 ```aro
-<Compute> the <formatted-date: iso8601> from the <timestamp>.
-<Compute> the <money-display: currency> from the <amount>.
+Compute the <formatted-date: iso8601> from the <timestamp>.
+Compute the <money-display: currency> from the <amount>.
 ```
 
 The syntax remains consistent regardless of whether the operation is built-in or plugin-provided. This uniformity means you can start with built-in operations and add plugins later without changing how your code reads.
@@ -429,33 +429,33 @@ Several patterns emerge in how computations are used within feature sets.
 **Derived values** compute new data from existing bindings:
 
 ```aro
-<Extract> the <price> from the <product: price>.
-<Extract> the <quantity> from the <order: quantity>.
-<Compute> the <subtotal> from <price> * <quantity>.
-<Compute> the <tax> from <subtotal> * 0.08.
-<Compute> the <total> from <subtotal> + <tax>.
+Extract the <price> from the <product: price>.
+Extract the <quantity> from the <order: quantity>.
+Compute the <subtotal> from <price> * <quantity>.
+Compute the <tax> from <subtotal> * 0.08.
+Compute the <total> from <subtotal> + <tax>.
 ```
 
 **Normalization** ensures consistent data formats:
 
 ```aro
-<Extract> the <email> from the <input: email>.
-<Compute> the <normalized-email: lowercase> from the <email>.
+Extract the <email> from the <input: email>.
+Compute the <normalized-email: lowercase> from the <email>.
 ```
 
 **Chained transformations** build complex results step by step:
 
 ```aro
-<Compute> the <base> from <quantity> * <unit-price>.
-<Compute> the <discounted> from <base> * (1 - <discount-rate>).
-<Compute> the <with-tax> from <discounted> * (1 + <tax-rate>).
+Compute the <base> from <quantity> * <unit-price>.
+Compute the <discounted> from <base> * (1 - <discount-rate>).
+Compute the <with-tax> from <discounted> * (1 + <tax-rate>).
 ```
 
 **Aggregation** combines collection data:
 
 ```aro
-<Retrieve> the <orders> from the <order-repository>.
-<Compute> the <order-count: count> from the <orders>.
+Retrieve the <orders> from the <order-repository>.
+Compute the <order-count: count> from the <orders>.
 ```
 
 Each pattern follows the read-transform-bind rhythm. Data flows forward, transformations produce new values, and the symbol table accumulates bindings that subsequent statements can use.

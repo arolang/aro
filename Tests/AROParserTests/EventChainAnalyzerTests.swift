@@ -50,10 +50,10 @@ struct EventChainAnalyzerTests {
     func testNoCyclesSimple() throws {
         let source = """
         (Create User: User API) {
-            <Extract> the <data> from the <request>.
-            <Create> the <user> with <data>.
-            <Emit> a <UserCreated: event> with <user>.
-            <Return> an <OK: status> for the <user>.
+            Extract the <data> from the <request>.
+            Create the <user> with <data>.
+            Emit a <UserCreated: event> with <user>.
+            Return an <OK: status> for the <user>.
         }
         """
         let diagnostics = DiagnosticCollector()
@@ -67,14 +67,14 @@ struct EventChainAnalyzerTests {
     func testNoCyclesNoEmit() throws {
         let source = """
         (Create User: User API) {
-            <Emit> a <UserCreated: event> with <user>.
-            <Return> an <OK: status> for the <user>.
+            Emit a <UserCreated: event> with <user>.
+            Return an <OK: status> for the <user>.
         }
 
         (Log User: UserCreated Handler) {
-            <Extract> the <user> from the <event>.
-            <Log> "User created" to the <console>.
-            <Return> an <OK: status> for the <log>.
+            Extract the <user> from the <event>.
+            Log "User created" to the <console>.
+            Return an <OK: status> for the <log>.
         }
         """
         let diagnostics = DiagnosticCollector()
@@ -88,18 +88,18 @@ struct EventChainAnalyzerTests {
     func testNoCyclesLinearChain() throws {
         let source = """
         (Create User: User API) {
-            <Emit> a <UserCreated: event> with <user>.
-            <Return> an <OK: status> for the <user>.
+            Emit a <UserCreated: event> with <user>.
+            Return an <OK: status> for the <user>.
         }
 
         (Handle User Created: UserCreated Handler) {
-            <Emit> a <EmailSent: event> with <notification>.
-            <Return> an <OK: status> for the <handler>.
+            Emit a <EmailSent: event> with <notification>.
+            Return an <OK: status> for the <handler>.
         }
 
         (Handle Email Sent: EmailSent Handler) {
-            <Log> <message> to the <console>.
-            <Return> an <OK: status> for the <handler>.
+            Log <message> to the <console>.
+            Return an <OK: status> for the <handler>.
         }
         """
         let diagnostics = DiagnosticCollector()
@@ -113,13 +113,13 @@ struct EventChainAnalyzerTests {
     func testSimpleCycleABA() throws {
         let source = """
         (Handle Alpha: EventAlpha Handler) {
-            <Emit> the <EventBeta: event> for the <trigger>.
-            <Return> an <OK: status> for the <handler>.
+            Emit the <EventBeta: event> for the <trigger>.
+            Return an <OK: status> for the <handler>.
         }
 
         (Handle Beta: EventBeta Handler) {
-            <Emit> the <EventAlpha: event> for the <trigger>.
-            <Return> an <OK: status> for the <handler>.
+            Emit the <EventAlpha: event> for the <trigger>.
+            Return an <OK: status> for the <handler>.
         }
         """
         let diagnostics = DiagnosticCollector()
@@ -134,18 +134,18 @@ struct EventChainAnalyzerTests {
     func testLongerCycleABCA() throws {
         let source = """
         (Handle Alpha: EventAlpha Handler) {
-            <Emit> the <EventBeta: event> for the <trigger>.
-            <Return> an <OK: status> for the <handler>.
+            Emit the <EventBeta: event> for the <trigger>.
+            Return an <OK: status> for the <handler>.
         }
 
         (Handle Beta: EventBeta Handler) {
-            <Emit> the <EventGamma: event> for the <trigger>.
-            <Return> an <OK: status> for the <handler>.
+            Emit the <EventGamma: event> for the <trigger>.
+            Return an <OK: status> for the <handler>.
         }
 
         (Handle Gamma: EventGamma Handler) {
-            <Emit> the <EventAlpha: event> for the <trigger>.
-            <Return> an <OK: status> for the <handler>.
+            Emit the <EventAlpha: event> for the <trigger>.
+            Return an <OK: status> for the <handler>.
         }
         """
         let diagnostics = DiagnosticCollector()
@@ -160,8 +160,8 @@ struct EventChainAnalyzerTests {
     func testSelfLoop() throws {
         let source = """
         (Handle Event: SomeEvent Handler) {
-            <Emit> the <SomeEvent: event> for the <trigger>.
-            <Return> an <OK: status> for the <handler>.
+            Emit the <SomeEvent: event> for the <trigger>.
+            Return an <OK: status> for the <handler>.
         }
         """
         let diagnostics = DiagnosticCollector()
@@ -176,21 +176,21 @@ struct EventChainAnalyzerTests {
     func testEmitInsideMatch() throws {
         let source = """
         (Handle Alpha: EventAlpha Handler) {
-            <Extract> the <status> from the <event: status>.
+            Extract the <status> from the <event: status>.
             match <status> {
                 case "success" {
-                    <Emit> the <EventBeta: event> for the <trigger>.
+                    Emit the <EventBeta: event> for the <trigger>.
                 }
                 otherwise {
-                    <Log> <message> to the <console>.
+                    Log <message> to the <console>.
                 }
             }
-            <Return> an <OK: status> for the <handler>.
+            Return an <OK: status> for the <handler>.
         }
 
         (Handle Beta: EventBeta Handler) {
-            <Emit> the <EventAlpha: event> for the <trigger>.
-            <Return> an <OK: status> for the <handler>.
+            Emit the <EventAlpha: event> for the <trigger>.
+            Return an <OK: status> for the <handler>.
         }
         """
         let diagnostics = DiagnosticCollector()
@@ -205,15 +205,16 @@ struct EventChainAnalyzerTests {
     func testEmitInsideForEach() throws {
         let source = """
         (Handle Alpha: EventAlpha Handler) {
-            <Extract> the <items> from the <event: items>.
-            <For-each> <item> in <items>:
-                <Emit> the <EventBeta: event> for the <trigger>.
-            <Return> an <OK: status> for the <handler>.
+            Extract the <items> from the <event: items>.
+            for each <item> in <items> {
+                Emit the <EventBeta: event> for the <trigger>.
+            }
+            Return an <OK: status> for the <handler>.
         }
 
         (Handle Beta: EventBeta Handler) {
-            <Emit> the <EventAlpha: event> for the <trigger>.
-            <Return> an <OK: status> for the <handler>.
+            Emit the <EventAlpha: event> for the <trigger>.
+            Return an <OK: status> for the <handler>.
         }
         """
         let diagnostics = DiagnosticCollector()
@@ -228,13 +229,13 @@ struct EventChainAnalyzerTests {
     func testExcludesSocketHandler() throws {
         let source = """
         (Handle Socket: Socket Event Handler) {
-            <Emit> the <EventAlpha: event> for the <trigger>.
-            <Return> an <OK: status> for the <handler>.
+            Emit the <EventAlpha: event> for the <trigger>.
+            Return an <OK: status> for the <handler>.
         }
 
         (Handle Alpha: EventAlpha Handler) {
-            <Log> <message> to the <console>.
-            <Return> an <OK: status> for the <handler>.
+            Log <message> to the <console>.
+            Return an <OK: status> for the <handler>.
         }
         """
         let diagnostics = DiagnosticCollector()
@@ -249,13 +250,13 @@ struct EventChainAnalyzerTests {
     func testExcludesFileHandler() throws {
         let source = """
         (Handle File: File Event Handler) {
-            <Emit> the <EventAlpha: event> for the <trigger>.
-            <Return> an <OK: status> for the <handler>.
+            Emit the <EventAlpha: event> for the <trigger>.
+            Return an <OK: status> for the <handler>.
         }
 
         (Handle Alpha: EventAlpha Handler) {
-            <Log> <message> to the <console>.
-            <Return> an <OK: status> for the <handler>.
+            Log <message> to the <console>.
+            Return an <OK: status> for the <handler>.
         }
         """
         let diagnostics = DiagnosticCollector()
@@ -270,13 +271,13 @@ struct EventChainAnalyzerTests {
     func testMultipleHandlersSameEvent() throws {
         let source = """
         (Handler One: EventAlpha Handler) {
-            <Log> <message> to the <console>.
-            <Return> an <OK: status> for the <handler>.
+            Log <message> to the <console>.
+            Return an <OK: status> for the <handler>.
         }
 
         (Handler Two: EventAlpha Handler) {
-            <Emit> the <EventBeta: event> for the <trigger>.
-            <Return> an <OK: status> for the <handler>.
+            Emit the <EventBeta: event> for the <trigger>.
+            Return an <OK: status> for the <handler>.
         }
         """
         let diagnostics = DiagnosticCollector()
@@ -291,14 +292,14 @@ struct EventChainAnalyzerTests {
     func testHandlerEmitsMultipleEvents() throws {
         let source = """
         (Handle Alpha: EventAlpha Handler) {
-            <Emit> the <EventBeta: event> for the <trigger>.
-            <Emit> the <EventGamma: event> for the <trigger>.
-            <Return> an <OK: status> for the <handler>.
+            Emit the <EventBeta: event> for the <trigger>.
+            Emit the <EventGamma: event> for the <trigger>.
+            Return an <OK: status> for the <handler>.
         }
 
         (Handle Beta: EventBeta Handler) {
-            <Emit> the <EventAlpha: event> for the <trigger>.
-            <Return> an <OK: status> for the <handler>.
+            Emit the <EventAlpha: event> for the <trigger>.
+            Return an <OK: status> for the <handler>.
         }
         """
         let diagnostics = DiagnosticCollector()
@@ -313,13 +314,13 @@ struct EventChainAnalyzerTests {
     func testErrorMessageContent() throws {
         let source = """
         (Handle Alpha: Alpha Handler) {
-            <Emit> the <Beta: event> for the <trigger>.
-            <Return> an <OK: status> for the <handler>.
+            Emit the <Beta: event> for the <trigger>.
+            Return an <OK: status> for the <handler>.
         }
 
         (Handle Beta: Beta Handler) {
-            <Emit> the <Alpha: event> for the <trigger>.
-            <Return> an <OK: status> for the <handler>.
+            Emit the <Alpha: event> for the <trigger>.
+            Return an <OK: status> for the <handler>.
         }
         """
         let diagnostics = DiagnosticCollector()
@@ -338,8 +339,8 @@ struct EventChainAnalyzerTests {
     func testErrorIncludesHints() throws {
         let source = """
         (Handle Alpha: EventAlpha Handler) {
-            <Emit> the <EventAlpha: event> for the <trigger>.
-            <Return> an <OK: status> for the <handler>.
+            Emit the <EventAlpha: event> for the <trigger>.
+            Return an <OK: status> for the <handler>.
         }
         """
         let diagnostics = DiagnosticCollector()
@@ -363,13 +364,13 @@ struct EventChainIntegrationTests {
     func testCycleDetectionWithCompiler() throws {
         let source = """
         (Handle Alpha: EventAlpha Handler) {
-            <Emit> the <EventBeta: event> for the <trigger>.
-            <Return> an <OK: status> for the <handler>.
+            Emit the <EventBeta: event> for the <trigger>.
+            Return an <OK: status> for the <handler>.
         }
 
         (Handle Beta: EventBeta Handler) {
-            <Emit> the <EventAlpha: event> for the <trigger>.
-            <Return> an <OK: status> for the <handler>.
+            Emit the <EventAlpha: event> for the <trigger>.
+            Return an <OK: status> for the <handler>.
         }
         """
         let compiler = Compiler()

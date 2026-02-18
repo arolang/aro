@@ -30,7 +30,7 @@ ARO takes a different approach. Code emits events, and other code listens for th
 
 ```aro
 (* In one file *)
-<Emit> a <PageProcessed: event> with { content: <result>, url: <url> }.
+Emit a <PageProcessed: event> with { content: <result>, url: <url> }.
 
 (* In another file, maybe added later *)
 (Save Content: PageProcessed Handler) {
@@ -81,7 +81,7 @@ The runtime matches `{EventType} Handler` to events of type `EventType`. When a 
 The `<Emit>` action sends an event to the event bus:
 
 ```aro
-<Emit> a <CrawlPage: event> with { url: <url>, base: <domain> }.
+Emit a <CrawlPage: event> with { url: <url>, base: <domain> }.
 ```
 
 Breaking this down:
@@ -95,13 +95,13 @@ The event data can contain any values:
 
 ```aro
 (* Simple values *)
-<Emit> a <LogMessage: event> with { message: "Hello" }.
+Emit a <LogMessage: event> with { message: "Hello" }.
 
 (* Multiple fields *)
-<Emit> a <UserCreated: event> with { id: <user-id>, name: <name>, email: <email> }.
+Emit a <UserCreated: event> with { id: <user-id>, name: <name>, email: <email> }.
 
 (* Nested data *)
-<Emit> a <OrderPlaced: event> with { order: <order-data>, customer: <customer> }.
+Emit a <OrderPlaced: event> with { order: <order-data>, customer: <customer> }.
 ```
 
 ---
@@ -113,23 +113,23 @@ When a handler receives an event, it extracts data using nested `<Extract>` acti
 ```aro
 (Process Order: OrderPlaced Handler) {
     (* First, extract the event data object *)
-    <Extract> the <event-data> from the <event: data>.
+    Extract the <event-data> from the <event: data>.
 
     (* Then, extract individual fields from the object *)
-    <Extract> the <order-id> from the <event-data: id>.
-    <Extract> the <customer-name> from the <event-data: customer>.
+    Extract the <order-id> from the <event-data: id>.
+    Extract the <customer-name> from the <event-data: customer>.
 
     (* Now use the extracted values *)
-    <Log> "Processing order ${<order-id>} for ${<customer-name>}" to the <console>.
+    Log "Processing order ${<order-id>} for ${<customer-name>}" to the <console>.
 
-    <Return> an <OK: status> for the <processing>.
+    Return an <OK: status> for the <processing>.
 }
 ```
 
 The pattern is always:
 
-1. `<Extract> the <event-data> from the <event: data>.` — Get the data object
-2. `<Extract> the <field-name> from the <event-data: field>.` — Get each field
+1. `Extract the <event-data> from the <event: data>.` — Get the data object
+2. `Extract the <field-name> from the <event-data: field>.` — Get each field
 
 ---
 
@@ -179,41 +179,41 @@ Let us write a simple two-handler pipeline to see this in action. Create a file 
 
 ```aro
 (Application-Start: Event Demo) {
-    <Log> "Starting event demo..." to the <console>.
+    Log "Starting event demo..." to the <console>.
 
     (* Emit first event *)
-    <Emit> a <Greet: event> with { name: "World" }.
+    Emit a <Greet: event> with { name: "World" }.
 
-    <Log> "Event emitted, waiting..." to the <console>.
-    <Keepalive> the <application> for the <events>.
+    Log "Event emitted, waiting..." to the <console>.
+    Keepalive the <application> for the <events>.
 
-    <Return> an <OK: status> for the <startup>.
+    Return an <OK: status> for the <startup>.
 }
 
 (Say Hello: Greet Handler) {
-    <Log> "Greet handler triggered!" to the <console>.
+    Log "Greet handler triggered!" to the <console>.
 
     (* Extract the name from event data *)
-    <Extract> the <event-data> from the <event: data>.
-    <Extract> the <name> from the <event-data: name>.
+    Extract the <event-data> from the <event: data>.
+    Extract the <name> from the <event-data: name>.
 
-    <Log> "Hello, ${<name>}!" to the <console>.
+    Log "Hello, ${<name>}!" to the <console>.
 
     (* Emit another event *)
-    <Emit> a <Farewell: event> with { name: <name> }.
+    Emit a <Farewell: event> with { name: <name> }.
 
-    <Return> an <OK: status> for the <greeting>.
+    Return an <OK: status> for the <greeting>.
 }
 
 (Say Goodbye: Farewell Handler) {
-    <Log> "Farewell handler triggered!" to the <console>.
+    Log "Farewell handler triggered!" to the <console>.
 
-    <Extract> the <event-data> from the <event: data>.
-    <Extract> the <name> from the <event-data: name>.
+    Extract the <event-data> from the <event: data>.
+    Extract the <name> from the <event-data: name>.
 
-    <Log> "Goodbye, ${<name>}!" to the <console>.
+    Log "Goodbye, ${<name>}!" to the <console>.
 
-    <Return> an <OK: status> for the <farewell>.
+    Return an <OK: status> for the <farewell>.
 }
 ```
 
@@ -252,7 +252,7 @@ Notice the flow: Start → Greet event → Hello handler → Farewell event → 
 
 **No Event Tracing.** When something goes wrong, there is no built-in way to trace which events led to the error. You add `<Log>` statements manually.
 
-**Event Schema Validation.** Event data is untyped by default. If a handler expects `name` but the emitter sends `userName`, you get a runtime error. However, ARO-0046 introduces **typed event extraction** which validates event data against OpenAPI schemas defined in `components.schemas`. See Chapter 6 for details on using `<Extract> the <data: SchemaName> from the <event: data>.`
+**Event Schema Validation.** Event data is untyped by default. If a handler expects `name` but the emitter sends `userName`, you get a runtime error. However, ARO-0046 introduces **typed event extraction** which validates event data against OpenAPI schemas defined in `components.schemas`. See Chapter 6 for details on using `Extract the <data: SchemaName> from the <event: data>.`
 
 **No Guaranteed Order.** If multiple handlers listen to the same event, their execution order is not guaranteed. Usually this is fine, but sometimes order matters.
 

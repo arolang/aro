@@ -2,41 +2,41 @@
 
 (* POST /users - Create a new user *)
 (createUser: User API) {
-    <Extract> the <user-data> from the <request: body>.
-    <Create> the <user> with <user-data>.
-    <Store> the <user> into the <user-repository>.
-    <Return> a <Created: status> with <user>.
+    Extract the <user-data> from the <request: body>.
+    Create the <user> with <user-data>.
+    Store the <user> into the <user-repository>.
+    Return a <Created: status> with <user>.
 }
 
 (* GET /users - List all users *)
 (listUsers: User API) {
-    <Retrieve> the <users> from the <user-repository>.
-    <Return> an <OK: status> with { users: <users> }.
+    Retrieve the <users> from the <user-repository>.
+    Return an <OK: status> with { users: <users> }.
 }
 
 (* GET /users/{id} - Get a specific user *)
 (getUser: User API) {
-    <Extract> the <userId> from the <pathParameters: id>.
-    <Retrieve> the <user> from the <user-repository> where <id> is <userId>.
-    <Return> an <OK: status> with <user>.
+    Extract the <userId> from the <pathParameters: id>.
+    Retrieve the <user> from the <user-repository> where <id> is <userId>.
+    Return an <OK: status> with <user>.
 }
 
 (* PUT /users/{id} - Update a user *)
 (updateUser: User API) {
-    <Extract> the <id> from the <pathParameters: id>.
-    <Extract> the <update-data> from the <request: body>.
-    <Create> the <user> with {
+    Extract the <id> from the <pathParameters: id>.
+    Extract the <update-data> from the <request: body>.
+    Create the <user> with {
         id: <id>,
         name: <update-data: name>,
         email: <update-data: email>
     }.
-    <Store> the <user> into the <user-repository>.
-    <Return> an <OK: status> with <user>.
+    Store the <user> into the <user-repository>.
+    Return an <OK: status> with <user>.
 }
 
 (* DELETE /users/{id} - Delete a user *)
 (deleteUser: User API) {
-    <Extract> the <userId> from the <pathParameters: id>.
-    <Delete> the <user> from the <user-repository> where <id> is <userId>.
-    <Return> an <OK: status> with { deleted: <userId> }.
+    Extract the <userId> from the <pathParameters: id>.
+    Delete the <user> from the <user-repository> where <id> is <userId>.
+    Return an <OK: status> with { deleted: <userId> }.
 }

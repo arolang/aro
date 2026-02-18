@@ -6,12 +6,12 @@
 
 (Application-Start: Parameter Demo) {
     (* Extract parameters with defaults *)
-    <Extract> the <name> from the <parameter: name>.
-    <Extract> the <count> from the <parameter: count>.
+    Extract the <name> from the <parameter: name>.
+    Extract the <count> from the <parameter: count>.
 
     (* Use the parameters *)
-    <Log> "Hello, ${<name>}!" to the <console>.
-    <Log> "Count: ${<count>}" to the <console>.
+    Log "Hello, ${<name>}!" to the <console>.
+    Log "Count: ${<count>}" to the <console>.
 
-    <Return> an <OK: status> with <name>.
+    Return an <OK: status> with <name>.
 }

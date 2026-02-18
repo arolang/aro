@@ -2,60 +2,60 @@
 (* Shows: List, Stat, Exists, CreateDirectory, Copy, Move, Append *)
 
 (Application-Start: File Operations Demo) {
-    <Log> "=== ARO File Operations Demo ===" to the <console>.
-    <Log> "" to the <console>.
+    Log "=== ARO File Operations Demo ===" to the <console>.
+    Log "" to the <console>.
 
     (* Define paths for reuse *)
-    <Create> the <demo-dir> with "./demo-output".
-    <Create> the <hello-file> with "./demo-output/hello.txt".
-    <Create> the <backup-file> with "./demo-output/hello-backup.txt".
-    <Create> the <copy-file> with "./demo-output/hello-copy.txt".
+    Create the <demo-dir> with "./demo-output".
+    Create the <hello-file> with "./demo-output/hello.txt".
+    Create the <backup-file> with "./demo-output/hello-backup.txt".
+    Create the <copy-file> with "./demo-output/hello-copy.txt".
 
     (* 1. Create demo directory *)
-    <Log> "1. Creating demo directory..." to the <console>.
-    <CreateDirectory> the <created-directory> to the <path: demo-dir>.
-    <Log> "   Created ./demo-output" to the <console>.
+    Log "1. Creating demo directory..." to the <console>.
+    CreateDirectory the <created-directory> to the <path: demo-dir>.
+    Log "   Created ./demo-output" to the <console>.
 
     (* 2. Write a new file *)
-    <Log> "2. Writing hello.txt..." to the <console>.
-    <Create> the <content> with "Hello from ARO!".
-    <Write> the <content> to the <file: hello-file>.
-    <Log> "   Wrote hello.txt" to the <console>.
+    Log "2. Writing hello.txt..." to the <console>.
+    Create the <content> with "Hello from ARO!".
+    Write the <content> to the <file: hello-file>.
+    Log "   Wrote hello.txt" to the <console>.
 
     (* 3. Append to the file *)
-    <Log> "3. Appending to hello.txt..." to the <console>.
-    <Create> the <append-line> with "\nThis line was appended.".
-    <Append> the <appended> to the <file: hello-file> with <append-line>.
-    <Log> "   Appended to hello.txt" to the <console>.
+    Log "3. Appending to hello.txt..." to the <console>.
+    Create the <append-line> with "\nThis line was appended.".
+    Append the <appended> to the <file: hello-file> with <append-line>.
+    Log "   Appended to hello.txt" to the <console>.
 
     (* 4. Read the file back *)
-    <Log> "4. Reading hello.txt..." to the <console>.
-    <Read> the <file-content> from the <file: hello-file>.
-    <Log> "   Content:" to the <console>.
-    <Log> <file-content> to the <console>.
+    Log "4. Reading hello.txt..." to the <console>.
+    Read the <file-content> from the <file: hello-file>.
+    Log "   Content:" to the <console>.
+    Log <file-content> to the <console>.
 
     (* 5. Copy the file *)
-    <Log> "5. Copying to backup..." to the <console>.
-    <Copy> the <file: hello-file> to the <destination: backup-file>.
-    <Log> "   Copied to hello-backup.txt" to the <console>.
+    Log "5. Copying to backup..." to the <console>.
+    Copy the <file: hello-file> to the <destination: backup-file>.
+    Log "   Copied to hello-backup.txt" to the <console>.
 
     (* 6. List directory contents *)
-    <Log> "6. Listing demo-output directory..." to the <console>.
-    <List> the <files> from the <directory: demo-dir>.
-    <Log> "   Files in demo-output:" to the <console>.
+    Log "6. Listing demo-output directory..." to the <console>.
+    List the <files> from the <directory: demo-dir>.
+    Log "   Files in demo-output:" to the <console>.
 
     (* 7. Move/rename the backup *)
-    <Log> "7. Renaming backup file..." to the <console>.
-    <Move> the <moved-file: backup-file> to the <destination: copy-file>.
-    <Log> "   Renamed to hello-copy.txt" to the <console>.
+    Log "7. Renaming backup file..." to the <console>.
+    Move the <moved-file: backup-file> to the <destination: copy-file>.
+    Log "   Renamed to hello-copy.txt" to the <console>.
 
     (* 8. Final listing *)
-    <Log> "8. Final directory listing..." to the <console>.
-    <List> the <final-files> from the <directory: demo-dir>.
-    <Log> "   Final files listed" to the <console>.
+    Log "8. Final directory listing..." to the <console>.
+    List the <final-files> from the <directory: demo-dir>.
+    Log "   Final files listed" to the <console>.
 
-    <Log> "" to the <console>.
-    <Log> "=== Demo Complete ===" to the <console>.
+    Log "" to the <console>.
+    Log "=== Demo Complete ===" to the <console>.
 
-    <Return> an <OK: status> for the <demo>.
+    Return an <OK: status> for the <demo>.
 }

@@ -25,10 +25,10 @@ ARO's feature-set-centric design excels for production applications but creates 
 A REPL where you can immediately write:
 
 ```
-aro> <Set> the <name> to "Alice".
+aro> Set the <name> to "Alice".
 => OK
 
-aro> <Compute> the <greeting> from "Hello, " ++ <name> ++ "!".
+aro> Compute the <greeting> from "Hello, " ++ <name> ++ "!".
 => "Hello, Alice!"
 ```
 
@@ -38,8 +38,8 @@ Yet when you need feature sets, you define them naturally:
 
 ```
 aro> (Greet User: API) {
-(Greet User)> <Extract> the <name> from the <request: body>.
-(Greet User)> <Return> an <OK: status> with { greeting: "Hello, ${<name>}!" }.
+(Greet User)> Extract the <name> from the <request: body>.
+(Greet User)> Return an <OK: status> with { greeting: "Hello, ${<name>}!" }.
 (Greet User)> }
 Feature set 'Greet User' defined
 ```
@@ -133,16 +133,16 @@ aro repl --http 8080
 Statements execute immediately against the session context:
 
 ```
-aro> <Set> the <x> to 10.
+aro> Set the <x> to 10.
 => OK
 
-aro> <Set> the <y> to 20.
+aro> Set the <y> to 20.
 => OK
 
-aro> <Compute> the <sum> from <x> + <y>.
+aro> Compute the <sum> from <x> + <y>.
 => 30
 
-aro> <Log> "Sum is ${<sum>}" to the <console>.
+aro> Log "Sum is ${<sum>}" to the <console>.
 Sum is 30
 => OK
 ```
@@ -179,11 +179,11 @@ Start a feature set with the standard syntax:
 
 ```
 aro> (Calculate Tax: Finance) {
-(Calculate Tax)> <Extract> the <amount> from the <input: value>.
+(Calculate Tax)> Extract the <amount> from the <input: value>.
   +
-(Calculate Tax)> <Compute> the <tax> from <amount> * 0.2.
+(Calculate Tax)> Compute the <tax> from <amount> * 0.2.
   +
-(Calculate Tax)> <Return> an <OK: status> with { tax: <tax> }.
+(Calculate Tax)> Return an <OK: status> with { tax: <tax> }.
   +
 (Calculate Tax)> }
 Feature set 'Calculate Tax' defined
@@ -194,7 +194,7 @@ Feature set 'Calculate Tax' defined
 The REPL detects incomplete input:
 
 ```
-aro> <Create> the <user> with {
+aro> Create the <user> with {
 ...>   name: "Alice",
 ...>   age: 30
 ...> }.
@@ -278,11 +278,11 @@ Object { name: String, age: Integer, email: String }
 
 ```
 aro> :history 5
-1. [ok]  <Set> the <name> to "Alice".           2ms
-2. [ok]  <Set> the <age> to 30.                 1ms
-3. [ok]  <Compute> the <sum> from <x> + <y>.    3ms
-4. [err] <Get> the <missing> from <nowhere>.   --
-5. [ok]  <Log> "test" to the <console>.        1ms
+1. [ok]  Set the <name> to "Alice".           2ms
+2. [ok]  Set the <age> to 30.                 1ms
+3. [ok]  Compute the <sum> from <x> + <y>.    3ms
+4. [err] Get the <missing> from <nowhere>.   --
+5. [ok]  Log "test" to the <console>.        1ms
 ```
 
 ## 7. Tab Completion
@@ -294,21 +294,21 @@ The REPL provides intelligent completion based on cursor position:
 | Position | Completes |
 |----------|-----------|
 | `<` | Action verbs |
-| `<Action> the <` | Variables, type hints |
-| `<Action> the <result> ` | Prepositions (from, to, with, for) |
+| `Action the <` | Variables, type hints |
+| `Action the <result> ` | Prepositions (from, to, with, for) |
 | `:` | Meta-commands |
-| `<Action> the <result> from the <` | Variables, services, repositories |
+| `Action the <result> from the <` | Variables, services, repositories |
 
 ### 7.2 Examples
 
 ```
 aro> <Com[TAB]
-<Compute>  <Compare>  <Connect>
+Compute  Compare  <Connect>
 
-aro> <Compute> the <result> fr[TAB]
+aro> Compute the <result> fr[TAB]
 from
 
-aro> <Compute> the <result> from <[TAB]
+aro> Compute the <result> from <[TAB]
 <x>       <y>       <name>    <user>
 
 aro> :h[TAB]
@@ -322,7 +322,7 @@ aro> <Compute>[TAB][TAB]
 Compute [OWN]
   Transforms data using built-in operations.
   Operations: length, uppercase, lowercase, hash, arithmetic
-  Example: <Compute> the <total> from <price> * <qty>.
+  Example: Compute the <total> from <price> * <qty>.
 ```
 
 ## 8. Service Integration
@@ -340,7 +340,7 @@ Routes loaded from openapi.yaml:
   GET  /users/:id → getUser
 
 aro> (listUsers: API) {
-(listUsers)> <Return> an <OK: status> with [{ id: 1, name: "Alice" }].
+(listUsers)> Return an <OK: status> with [{ id: 1, name: "Alice" }].
 (listUsers)> }
 Feature set 'listUsers' defined
 Route GET /users now handled by 'listUsers'
@@ -353,8 +353,8 @@ aro> :service start file-watcher --path ./data
 File watcher started on ./data
 
 aro> (File Change Handler: File Event Handler) {
-(File Change...)> <Extract> the <path> from the <event: path>.
-(File Change...)> <Log> "Changed: ${<path>}" to the <console>.
+(File Change...)> Extract the <path> from the <event: path>.
+(File Change...)> Log "Changed: ${<path>}" to the <console>.
 (File Change...)> }
 Feature set 'File Change Handler' registered for file events
 ```
@@ -396,13 +396,13 @@ aro> :plugins
 ### 9.2 Testing Plugin Actions
 
 ```
-aro> <Set> the <data> to { name: "test", valid: true }.
+aro> Set the <data> to { name: "test", valid: true }.
 => OK
 
 aro> <Validate-json> the <result> from the <data>.
 => { valid: true, errors: [] }
 
-aro> <Set> the <bad-data> to "{ invalid json }".
+aro> Set the <bad-data> to "{ invalid json }".
 => OK
 
 aro> <Validate-json> the <result> from the <bad-data>.
@@ -426,11 +426,11 @@ Plugin reloaded successfully
 Convert your REPL session into a proper `.aro` file:
 
 ```
-aro> <Set> the <base-price> to 100.
+aro> Set the <base-price> to 100.
 => OK
-aro> <Compute> the <tax> from <base-price> * 0.2.
+aro> Compute the <tax> from <base-price> * 0.2.
 => 20
-aro> <Compute> the <total> from <base-price> + <tax>.
+aro> Compute the <total> from <base-price> + <tax>.
 => 120
 
 aro> :export
@@ -438,9 +438,9 @@ aro> :export
 (* Date: 2024-01-15T10:30:00Z *)
 
 (REPL Session: Interactive) {
-    <Set> the <base-price> to 100.
-    <Compute> the <tax> from <base-price> * 0.2.
-    <Compute> the <total> from <base-price> + <tax>.
+    Set the <base-price> to 100.
+    Compute the <tax> from <base-price> * 0.2.
+    Compute the <total> from <base-price> + <tax>.
 }
 
 aro> :export ./pricing.aro
@@ -456,14 +456,14 @@ aro> :export --test ./pricing-test.aro
 (* Generated test from ARO REPL session *)
 
 (Pricing Test: Test) {
-    <Set> the <base-price> to 100.
-    <Assert> the <base-price> is 100.
+    Set the <base-price> to 100.
+    Assert the <base-price> is 100.
 
-    <Compute> the <tax> from <base-price> * 0.2.
-    <Assert> the <tax> is 20.
+    Compute the <tax> from <base-price> * 0.2.
+    Assert the <tax> is 20.
 
-    <Compute> the <total> from <base-price> + <tax>.
-    <Assert> the <total> is 120.
+    Compute the <total> from <base-price> + <tax>.
+    Assert the <total> is 120.
 }
 ```
 
@@ -482,7 +482,7 @@ aro> :export --test ./pricing-test.aro
 ### 11.1 Interactive Error Display
 
 ```
-aro> <Compute> the <result> from <undefined-var> + 1.
+aro> Compute the <result> from <undefined-var> + 1.
 Error: Undefined variable 'undefined-var'
 
   Suggestion: Use :vars to see available variables
@@ -497,10 +497,10 @@ Error: Undefined variable 'undefined-var'
 ### 11.2 Syntax Help
 
 ```
-aro> <Compute> the result from x + 1
+aro> Compute the result from x + 1
 Error: Missing angle brackets around 'result'
 
-  Expected: <Compute> the <result> from <x> + 1.
+  Expected: Compute the <result> from <x> + 1.
                           ^      ^
 
   ARO variables must be wrapped in angle brackets.
@@ -572,8 +572,8 @@ A `prelude.aro` file for common definitions:
 (* Loaded automatically on REPL startup *)
 
 (Debug Helper: Utilities) {
-    <Log> <message> to the <console>.
-    <Return> an <OK: status> for <debug>.
+    Log <message> to the <console>.
+    Return an <OK: status> for <debug>.
 }
 ```
 
@@ -662,20 +662,20 @@ public protocol MetaCommand: Sendable {
 ### 15.1 Data Processing Pipeline
 
 ```
-aro> <Set> the <data> to [
+aro> Set the <data> to [
 ...>   { name: "Alice", score: 85 },
 ...>   { name: "Bob", score: 92 },
 ...>   { name: "Carol", score: 78 }
 ...> ].
 => OK
 
-aro> <Filter> the <passing> from <data> where score >= 80.
+aro> Filter the <passing> from <data> where score >= 80.
 => [{ name: "Alice", score: 85 }, { name: "Bob", score: 92 }]
 
-aro> <Map> the <names> from <passing> select name.
+aro> Map the <names> from <passing> select name.
 => ["Alice", "Bob"]
 
-aro> <Compute> the <average: average> from <data> by score.
+aro> Compute the <average: average> from <data> by score.
 => 85
 ```
 
@@ -685,11 +685,11 @@ aro> <Compute> the <average: average> from <data> by score.
 aro> :service start http --port 3000
 
 aro> (getHealth: API) {
-(getHealth)> <Return> an <OK: status> with { status: "healthy" }.
+(getHealth)> Return an <OK: status> with { status: "healthy" }.
 (getHealth)> }
 Feature set 'getHealth' defined
 
-aro> <Fetch> the <response> from "http://localhost:3000/health".
+aro> Fetch the <response> from "http://localhost:3000/health".
 => { status: "healthy" }
 ```
 

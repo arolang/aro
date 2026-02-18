@@ -1,55 +1,55 @@
 (* ErrorHandling - Demonstrating the Throw action *)
 
 (Application-Start: ErrorHandling Demo) {
-    <Log> "=== Error Handling Demo ===" to the <console>.
+    Log "=== Error Handling Demo ===" to the <console>.
 
     (* Throw action throws an error with type and reason *)
     (* Supports verbs: Throw, Raise, Fail *)
     (* Supports preposition: for *)
-    (* Syntax: <Throw> the <error-type> for the <reason>. *)
+    (* Syntax: Throw the <error-type> for the <reason>. *)
 
     (* Example 1: Validation with guarded throw *)
-    <Log> "--- Validation Example ---" to the <console>.
-    <Create> the <age> with 25.
-    <Log> "Age is: " to the <console>.
-    <Log> <age> to the <console>.
+    Log "--- Validation Example ---" to the <console>.
+    Create the <age> with 25.
+    Log "Age is: " to the <console>.
+    Log <age> to the <console>.
 
     (* This throw will NOT execute because the condition is false *)
-    <Throw> the <ValidationError> for the <invalid-age> when <age> < 0.
-    <Log> "Age validation passed!" to the <console>.
+    Throw the ValidationError for the <invalid-age> when <age> < 0.
+    Log "Age validation passed!" to the <console>.
 
     (* Example 2: Authorization check with guarded throw *)
-    <Log> "--- Authorization Example ---" to the <console>.
-    <Create> the <user-role> with "admin".
-    <Log> "User role is: " to the <console>.
-    <Log> <user-role> to the <console>.
+    Log "--- Authorization Example ---" to the <console>.
+    Create the <user-role> with "admin".
+    Log "User role is: " to the <console>.
+    Log <user-role> to the <console>.
 
     (* This throw will NOT execute because the condition is false *)
-    <Throw> the <AuthorizationError> for the <access-denied> when <user-role> == "guest".
-    <Log> "Authorization check passed!" to the <console>.
+    Throw the AuthorizationError for the <access-denied> when <user-role> == "guest".
+    Log "Authorization check passed!" to the <console>.
 
     (* Example 3: Resource validation with guarded throw *)
-    <Log> "--- Resource Validation ---" to the <console>.
-    <Create> the <resource-exists> with true.
-    <Log> "Resource exists: " to the <console>.
-    <Log> <resource-exists> to the <console>.
+    Log "--- Resource Validation ---" to the <console>.
+    Create the <resource-exists> with true.
+    Log "Resource exists: " to the <console>.
+    Log <resource-exists> to the <console>.
 
     (* This throw will NOT execute because the condition is false *)
-    <Throw> the <NotFoundError> for the <resource-missing> when <resource-exists> == false.
-    <Log> "Resource validation passed!" to the <console>.
+    Throw the NotFoundError for the <resource-missing> when <resource-exists> == false.
+    Log "Resource validation passed!" to the <console>.
 
-    <Log> "All validations passed!" to the <console>.
+    Log "All validations passed!" to the <console>.
 
     (* Example 4: Throw that actually triggers *)
-    <Log> "--- Triggered Throw Example ---" to the <console>.
-    <Create> the <invalid-input> with -5.
-    <Log> "Invalid input value: " to the <console>.
-    <Log> <invalid-input> to the <console>.
+    Log "--- Triggered Throw Example ---" to the <console>.
+    Create the <invalid-input> with -5.
+    Log "Invalid input value: " to the <console>.
+    Log <invalid-input> to the <console>.
 
     (* This throw WILL execute because the condition is true *)
-    <Throw> the <InputError> for the <negative-value> when <invalid-input> < 0.
+    Throw the InputError for the <negative-value> when <invalid-input> < 0.
 
     (* This line should NOT be reached *)
-    <Log> "This should not appear!" to the <console>.
-    <Return> an <OK: status> for the <demo>.
+    Log "This should not appear!" to the <console>.
+    Return an <OK: status> for the <demo>.
 }

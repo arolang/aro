@@ -55,18 +55,18 @@ Execution blocks are delimited by `{{ }}` and contain ARO statements. Any valid 
 
 ```aro
 (* templates/greeting.tpl *)
-Hello, {{ <Print> <user: name> to the <template>. }}!
+Hello, {{ Print <user: name> to the <template>. }}!
 
 Welcome to our service. Your account was created on
-{{ <Print> <user: createdAt> to the <template>. }}.
+{{ Print <user: createdAt> to the <template>. }}.
 ```
 
 Multiple statements can appear in a single block:
 
 ```aro
 {{
-    <Compute> the <total> from <price> * <quantity>.
-    <Print> <total> to the <template>.
+    Compute the <total> from <price> * <quantity>.
+    Print <total> to the <template>.
 }}
 ```
 
@@ -75,9 +75,9 @@ Multiple statements can appear in a single block:
 The `<Print>` action with `to the <template>` writes output to the template's result buffer:
 
 ```aro
-<Print> <value> to the <template>.
-<Print> "literal text" to the <template>.
-<Print> <price> * 1.1 to the <template>.
+Print <value> to the <template>.
+Print "literal text" to the <template>.
+Print <price> * 1.1 to the <template>.
 ```
 
 ## 38.3 Variable Interpolation Shorthand
@@ -86,7 +86,7 @@ For simple variable output, ARO provides a shorthand syntax. When an execution b
 
 ```aro
 (* Full syntax *)
-{{ <Print> <username> to the <template>. }}
+{{ Print <username> to the <template>. }}
 
 (* Shorthand - equivalent to above *)
 {{ <username> }}
@@ -112,18 +112,18 @@ The `<Transform>` action renders a template with the current context:
 
 ```aro
 (Send Welcome Email: User Notification) {
-    <Extract> the <user> from the <event: user>.
+    Extract the <user> from the <event: user>.
 
     (* Render the email template *)
-    <Transform> the <email-body> from the <template: welcome.tpl>.
+    Transform the <email-body> from the <template: welcome.tpl>.
 
     (* Send the email with the rendered content *)
-    <Send> the <email> to the <user: email> with {
+    Send the <email> to the <user: email> with {
         subject: "Welcome!",
         body: <email-body>
     }.
 
-    <Return> an <OK: status> for the <notification>.
+    Return an <OK: status> for the <notification>.
 }
 ```
 
@@ -221,14 +221,14 @@ Use `when` guards for conditional output:
 
 ```aro
 (* Conditional print *)
-{{ <Print> "Premium Member" to the <template> when <user: isPremium>. }}
+{{ Print "Premium Member" to the <template> when <user: isPremium>. }}
 
 (* With else using match *)
 {{
     match <user: tier> {
-        "gold" => <Print> "Gold Member" to the <template>.
-        "silver" => <Print> "Silver Member" to the <template>.
-        _ => <Print> "Standard Member" to the <template>.
+        "gold" => Print "Gold Member" to the <template>.
+        "silver" => Print "Silver Member" to the <template>.
+        _ => Print "Standard Member" to the <template>.
     }
 }}
 ```
@@ -237,7 +237,7 @@ For conditional sections, combine with for-each over a filtered collection or us
 
 ```aro
 {{ for each <item> in <items> { }}
-{{ <Print> <item: name> to the <template> when <item: isActive>. }}
+{{ Print <item: name> to the <template> when <item: isActive>. }}
 {{ } }}
 ```
 
@@ -253,13 +253,13 @@ The `<Include>` action embeds one template inside another:
     <title>{{ <page: title> }}</title>
 </head>
 <body>
-    {{ <Include> the <template: partials/header.tpl>. }}
+    {{ Include the <template: partials/header.tpl>. }}
 
     <main>
         {{ <content> }}
     </main>
 
-    {{ <Include> the <template: partials/footer.tpl>. }}
+    {{ Include the <template: partials/footer.tpl>. }}
 </body>
 </html>
 ```
@@ -269,7 +269,7 @@ The `<Include>` action embeds one template inside another:
 Use the `with` clause to pass additional variables:
 
 ```aro
-{{ <Include> the <template: partials/user-card.tpl> with {
+{{ Include the <template: partials/user-card.tpl> with {
     user: <current-user>,
     showEmail: true
 }. }}
@@ -290,7 +290,7 @@ This pattern enables component-style template composition:
 (* templates/form.tpl *)
 <form action="/submit">
     <input type="text" name="email" />
-    {{ <Include> the <template: components/button.tpl> with {
+    {{ Include the <template: components/button.tpl> with {
         class: "primary",
         type: "submit",
         label: "Subscribe"
@@ -321,12 +321,12 @@ Use with the Transform action:
 
 ```aro
 (Render Event Cards: Calendar Display) {
-    <Retrieve> the <events> from the <calendar-repository>
+    Retrieve the <events> from the <calendar-repository>
         where date >= <today> and date <= <nextWeek>.
 
-    <Transform> the <cards> from the <template: cards/event-list.tpl>.
+    Transform the <cards> from the <template: cards/event-list.tpl>.
 
-    <Return> an <OK: status> with <cards>.
+    Return an <OK: status> with <cards>.
 }
 ```
 
@@ -350,18 +350,18 @@ For displaying upcoming dates like birthdays, deadlines, or appointments:
 
 ```aro
 (Show Upcoming Dates: Dashboard) {
-    <Retrieve> the <deadlines> from the <task-repository>
+    Retrieve the <deadlines> from the <task-repository>
         where dueDate >= <today>.
 
     (* Compute days until each deadline *)
     {{ for each <deadline> in <deadlines> { }}
-        <Compute> the <days> from <deadline: dueDate> - <today>.
+        Compute the <days> from <deadline: dueDate> - <today>.
         (* Add to processed list *)
     {{ } }}
 
-    <Transform> the <widget> from the <template: cards/upcoming-dates.tpl>.
+    Transform the <widget> from the <template: cards/upcoming-dates.tpl>.
 
-    <Return> an <OK: status> with <widget>.
+    Return an <OK: status> with <widget>.
 }
 ```
 
@@ -401,19 +401,19 @@ Here's a complete example showing a feature set that renders a user profile page
 ```aro
 (* main.aro *)
 (Application-Start: Profile App) {
-    <Start> the <http-server> with <contract>.
-    <Keepalive> the <application> for the <events>.
-    <Return> an <OK: status> for the <startup>.
+    Start the <http-server> with <contract>.
+    Keepalive the <application> for the <events>.
+    Return an <OK: status> for the <startup>.
 }
 
 (getUserProfile: Profile API) {
-    <Extract> the <userId> from the <pathParameters: id>.
-    <Retrieve> the <user> from the <user-repository> where id = <userId>.
-    <Retrieve> the <posts> from the <post-repository> where authorId = <userId>.
+    Extract the <userId> from the <pathParameters: id>.
+    Retrieve the <user> from the <user-repository> where id = <userId>.
+    Retrieve the <posts> from the <post-repository> where authorId = <userId>.
 
-    <Transform> the <html> from the <template: profile.tpl>.
+    Transform the <html> from the <template: profile.tpl>.
 
-    <Return> an <OK: status> with <html>.
+    Return an <OK: status> with <html>.
 }
 ```
 
@@ -430,7 +430,7 @@ Here's a complete example showing a feature set that renders a user profile page
 </head>
 <body>
     <div class="profile">
-        {{ <Include> the <template: partials/header.tpl>. }}
+        {{ Include the <template: partials/header.tpl>. }}
 
         <h1>{{ <user: name> }}</h1>
         <p>{{ <user: bio> }}</p>
@@ -444,7 +444,7 @@ Here's a complete example showing a feature set that renders a user profile page
         </article>
         {{ } }}
 
-        {{ <Include> the <template: partials/footer.tpl>. }}
+        {{ Include the <template: partials/footer.tpl>. }}
     </div>
 </body>
 </html>
@@ -476,13 +476,13 @@ Do computations and data preparation in your feature set, not in templates. Temp
 ```aro
 (* Good: Prepare data first *)
 (Render Dashboard: Admin View) {
-    <Retrieve> the <users> from the <user-repository>.
-    <Compute> the <user-count: count> from <users>.
-    <Compute> the <active-users> from <users> where isActive = true.
-    <Compute> the <active-count: count> from <active-users>.
+    Retrieve the <users> from the <user-repository>.
+    Compute the <user-count: count> from <users>.
+    Compute the <active-users> from <users> where isActive = true.
+    Compute the <active-count: count> from <active-users>.
 
-    <Transform> the <page> from the <template: dashboard.tpl>.
-    <Return> an <OK: status> with <page>.
+    Transform the <page> from the <template: dashboard.tpl>.
+    Return an <OK: status> with <page>.
 }
 
 (* Template just displays prepared values *)
@@ -497,10 +497,10 @@ Since templates access variables by name, use descriptive names that make templa
 
 ```aro
 (* Clear what each variable represents *)
-<Transform> the <confirmation-email> from the <template: order-confirmation.tpl>.
+Transform the <confirmation-email> from the <template: order-confirmation.tpl>.
 
 (* Instead of generic names *)
-<Transform> the <result> from the <template: email.tpl>.
+Transform the <result> from the <template: email.tpl>.
 ```
 
 ### Handle Missing Data Gracefully
@@ -509,8 +509,8 @@ Consider what happens when optional data is missing:
 
 ```aro
 (* Template with conditional rendering *)
-{{ <Print> <user: bio> to the <template> when <user: bio>. }}
-{{ <Print> "No bio provided" to the <template> when not <user: bio>. }}
+{{ Print <user: bio> to the <template> when <user: bio>. }}
+{{ Print "No bio provided" to the <template> when not <user: bio>. }}
 ```
 
 ## Summary
@@ -519,11 +519,11 @@ Consider what happens when optional data is missing:
 |---------|--------|-------------|
 | Execution block | `{{ ... }}` | Execute ARO statements |
 | Variable interpolation | `{{ <var> }}` | Print variable value |
-| Print to template | `<Print> x to the <template>.` | Output to template buffer |
-| Render template | `<Transform> the <result> from the <template: path>.` | Render and capture output |
+| Print to template | `Print x to the <template>.` | Output to template buffer |
+| Render template | `Transform the <result> from the <template: path>.` | Render and capture output |
 | For-each loop | `{{ for each <x> in <list> { }} ... {{ } }}` | Iterate over collection |
-| Include template | `{{ <Include> the <template: path>. }}` | Embed another template |
-| Include with vars | `{{ <Include> the <template: path> with { k: v }. }}` | Pass variables to include |
+| Include template | `{{ Include the <template: path>. }}` | Embed another template |
+| Include with vars | `{{ Include the <template: path> with { k: v }. }}` | Pass variables to include |
 
 The template engine bridges ARO's action-oriented paradigm with the need for dynamic content generation. By maintaining context isolation and embracing the familiar `{{ }}` delimiter syntax, templates integrate naturally into ARO applications while preserving safety and predictability.
 

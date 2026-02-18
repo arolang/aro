@@ -8,52 +8,52 @@
    ============================================================ *)
 
 (Application-Start: Calculator) {
-    <Log> "=== ARO Calculator Demo ===" to the <console>.
+    Log "=== ARO Calculator Demo ===" to the <console>.
 
     (* Addition *)
-    <Create> the <a> with 15.
-    <Create> the <b> with 7.
-    <Compute> the <sum> from <a> + <b>.
-    <Log> "15 + 7 = " to the <console>.
-    <Log> <sum> to the <console>.
+    Create the <a> with 15.
+    Create the <b> with 7.
+    Compute the <sum> from <a> + <b>.
+    Log "15 + 7 = " to the <console>.
+    Log <sum> to the <console>.
 
     (* Subtraction *)
-    <Create> the <x> with 25.
-    <Create> the <y> with 10.
-    <Compute> the <result-subtract> from <x> - <y>.
-    <Log> "25 - 10 = " to the <console>.
-    <Log> <result-subtract> to the <console>.
+    Create the <x> with 25.
+    Create the <y> with 10.
+    Compute the <result-subtract> from <x> - <y>.
+    Log "25 - 10 = " to the <console>.
+    Log <result-subtract> to the <console>.
 
     (* Multiplication *)
-    <Create> the <m> with 6.
-    <Create> the <n> with 8.
-    <Compute> the <product> from <m> * <n>.
-    <Log> "6 * 8 = " to the <console>.
-    <Log> <product> to the <console>.
+    Create the <m> with 6.
+    Create the <n> with 8.
+    Compute the <product> from <m> * <n>.
+    Log "6 * 8 = " to the <console>.
+    Log <product> to the <console>.
 
     (* Division *)
-    <Create> the <p> with 100.
-    <Create> the <q> with 4.
-    <Compute> the <quotient> from <p> / <q>.
-    <Log> "100 / 4 = " to the <console>.
-    <Log> <quotient> to the <console>.
+    Create the <p> with 100.
+    Create the <q> with 4.
+    Compute the <quotient> from <p> / <q>.
+    Log "100 / 4 = " to the <console>.
+    Log <quotient> to the <console>.
 
     (* Complex expression *)
-    <Create> the <price> with 50.
-    <Create> the <quantity> with 3.
-    <Create> the <tax-rate> with 0.08.
-    <Compute> the <subtotal> from <price> * <quantity>.
-    <Compute> the <tax> from <subtotal> * <tax-rate>.
-    <Compute> the <total> from <subtotal> + <tax>.
-    <Log> "Shopping cart: 3 items @ $50 each" to the <console>.
-    <Log> "Subtotal: $" to the <console>.
-    <Log> <subtotal> to the <console>.
-    <Log> "Tax (8%): $" to the <console>.
-    <Log> <tax> to the <console>.
-    <Log> "Total: $" to the <console>.
-    <Log> <total> to the <console>.
+    Create the <price> with 50.
+    Create the <quantity> with 3.
+    Create the <tax-rate> with 0.08.
+    Compute the <subtotal> from <price> * <quantity>.
+    Compute the <tax> from <subtotal> * <tax-rate>.
+    Compute the <total> from <subtotal> + <tax>.
+    Log "Shopping cart: 3 items @ $50 each" to the <console>.
+    Log "Subtotal: $" to the <console>.
+    Log <subtotal> to the <console>.
+    Log "Tax (8%): $" to the <console>.
+    Log <tax> to the <console>.
+    Log "Total: $" to the <console>.
+    Log <total> to the <console>.
 
-    <Log> "=== Calculator Demo Complete ===" to the <console>.
+    Log "=== Calculator Demo Complete ===" to the <console>.
 
-    <Return> an <OK: status> for the <calculator>.
+    Return an <OK: status> for the <calculator>.
 }

@@ -244,7 +244,7 @@ ARO's error handling is unusual: there is none. Programmers write only the succe
 
 ```
 Statement:
-<Retrieve> the <user> from the <user-repository> where id = <id>.
+Retrieve the <user> from the <user-repository> where id = <id>.
 
 On failure, becomes:
 "Cannot retrieve the user from the user-repository where id = 530."

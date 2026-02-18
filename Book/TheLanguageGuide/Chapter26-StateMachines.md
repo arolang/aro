@@ -119,7 +119,7 @@ The `Accept` action validates and applies state transitions. It checks that an o
 The syntax uses the `_to_` separator to specify the transition:
 
 ```aro
-<Accept> the <transition: from_to_target> on <object: field>.
+Accept the <transition: from_to_target> on <object: field>.
 ```
 
 The transition specifier contains both states separated by `_to_`. The object specifier identifies which entity and which field to examine and update.
@@ -127,7 +127,7 @@ The transition specifier contains both states separated by `_to_`. The object sp
 Here is a concrete example that transitions an order from draft to placed:
 
 ```aro
-<Accept> the <transition: draft_to_placed> on <order: status>.
+Accept the <transition: draft_to_placed> on <order: status>.
 ```
 
 This statement does three things:
@@ -258,23 +258,23 @@ Now the ARO feature sets that implement these transitions:
 ```aro
 (* Create a new order in draft state *)
 (createOrder: Order Management) {
-    <Extract> the <data> from the <request: body>.
-    <Create> the <order: Order> with <data>.
-    <Update> the <order: status> with "draft".
-    <Store> the <order> into the <order-repository>.
-    <Return> a <Created: status> with <order>.
+    Extract the <data> from the <request: body>.
+    Create the <order: Order> with <data>.
+    Update the <order: status> with "draft".
+    Store the <order> into the <order-repository>.
+    Return a <Created: status> with <order>.
 }
 
 (* Place an order - transitions from draft to placed *)
 (placeOrder: Order Management) {
-    <Extract> the <order-id> from the <pathParameters: id>.
-    <Retrieve> the <order> from the <order-repository>
+    Extract the <order-id> from the <pathParameters: id>.
+    Retrieve the <order> from the <order-repository>
         where <id> is <order-id>.
 
-    <Accept> the <transition: draft_to_placed> on <order: status>.
+    Accept the <transition: draft_to_placed> on <order: status>.
 
-    <Store> the <order> into the <order-repository>.
-    <Return> an <OK: status> with <order>.
+    Store the <order> into the <order-repository>.
+    Return an <OK: status> with <order>.
 }
 ```
 
@@ -285,43 +285,43 @@ The remaining transitions follow the same pattern:
 ```aro
 (* Pay for an order - transitions from placed to paid *)
 (payOrder: Order Management) {
-    <Extract> the <order-id> from the <pathParameters: id>.
-    <Extract> the <payment> from the <request: body>.
-    <Retrieve> the <order> from the <order-repository>
+    Extract the <order-id> from the <pathParameters: id>.
+    Extract the <payment> from the <request: body>.
+    Retrieve the <order> from the <order-repository>
         where <id> is <order-id>.
 
-    <Accept> the <transition: placed_to_paid> on <order: status>.
+    Accept the <transition: placed_to_paid> on <order: status>.
 
-    <Update> the <order: paymentMethod> from the <payment: paymentMethod>.
-    <Store> the <order> into the <order-repository>.
-    <Return> an <OK: status> with <order>.
+    Update the <order: paymentMethod> from the <payment: paymentMethod>.
+    Store the <order> into the <order-repository>.
+    Return an <OK: status> with <order>.
 }
 
 (* Ship an order - transitions from paid to shipped *)
 (shipOrder: Order Management) {
-    <Extract> the <order-id> from the <pathParameters: id>.
-    <Extract> the <shipping> from the <request: body>.
-    <Retrieve> the <order> from the <order-repository>
+    Extract the <order-id> from the <pathParameters: id>.
+    Extract the <shipping> from the <request: body>.
+    Retrieve the <order> from the <order-repository>
         where <id> is <order-id>.
 
-    <Accept> the <transition: paid_to_shipped> on <order: status>.
+    Accept the <transition: paid_to_shipped> on <order: status>.
 
-    <Update> the <order: trackingNumber>
+    Update the <order: trackingNumber>
         from the <shipping: trackingNumber>.
-    <Store> the <order> into the <order-repository>.
-    <Return> an <OK: status> with <order>.
+    Store the <order> into the <order-repository>.
+    Return an <OK: status> with <order>.
 }
 
 (* Deliver an order - transitions from shipped to delivered *)
 (deliverOrder: Order Management) {
-    <Extract> the <order-id> from the <pathParameters: id>.
-    <Retrieve> the <order> from the <order-repository>
+    Extract the <order-id> from the <pathParameters: id>.
+    Retrieve the <order> from the <order-repository>
         where <id> is <order-id>.
 
-    <Accept> the <transition: shipped_to_delivered> on <order: status>.
+    Accept the <transition: shipped_to_delivered> on <order: status>.
 
-    <Store> the <order> into the <order-repository>.
-    <Return> an <OK: status> with <order>.
+    Store the <order> into the <order-repository>.
+    Return an <OK: status> with <order>.
 }
 ```
 
@@ -336,14 +336,14 @@ Real business processes have more than one terminal state. Orders can be cancell
 ```aro
 (* Cancel an order - only valid from draft state *)
 (cancelOrder: Order Management) {
-    <Extract> the <order-id> from the <pathParameters: id>.
-    <Retrieve> the <order> from the <order-repository>
+    Extract the <order-id> from the <pathParameters: id>.
+    Retrieve the <order> from the <order-repository>
         where <id> is <order-id>.
 
-    <Accept> the <transition: draft_to_cancelled> on <order: status>.
+    Accept the <transition: draft_to_cancelled> on <order: status>.
 
-    <Store> the <order> into the <order-repository>.
-    <Return> an <OK: status> with <order>.
+    Store the <order> into the <order-repository>.
+    Return an <OK: status> with <order>.
 }
 ```
 
@@ -355,15 +355,15 @@ One approach is multiple feature sets with different transitions:
 (* Cancel from draft *)
 (cancelDraftOrder: Order Management) {
     (* ... *)
-    <Accept> the <transition: draft_to_cancelled> on <order: status>.
+    Accept the <transition: draft_to_cancelled> on <order: status>.
     (* ... *)
 }
 
 (* Cancel from placed - might require refund logic *)
 (cancelPlacedOrder: Order Management) {
     (* ... *)
-    <Accept> the <transition: placed_to_cancelled> on <order: status>.
-    <Emit> a <RefundRequired: event> with <order>.
+    Accept the <transition: placed_to_cancelled> on <order: status>.
+    Emit a <RefundRequired: event> with <order>.
     (* ... *)
 }
 ```
@@ -372,23 +372,23 @@ Another approach is conditional logic using standard control flow:
 
 ```aro
 (cancelOrder: Order Management) {
-    <Extract> the <order-id> from the <pathParameters: id>.
-    <Retrieve> the <order> from the <order-repository>
+    Extract the <order-id> from the <pathParameters: id>.
+    Retrieve the <order> from the <order-repository>
         where <id> is <order-id>.
 
     (* Check current state and apply appropriate transition *)
     match <order: status> {
         case "draft" {
-            <Accept> the <transition: draft_to_cancelled> on <order: status>.
+            Accept the <transition: draft_to_cancelled> on <order: status>.
         }
         case "placed" {
-            <Accept> the <transition: placed_to_cancelled> on <order: status>.
-            <Emit> a <RefundRequired: event> with <order>.
+            Accept the <transition: placed_to_cancelled> on <order: status>.
+            Emit a <RefundRequired: event> with <order>.
         }
     }
 
-    <Store> the <order> into the <order-repository>.
-    <Return> an <OK: status> with <order>.
+    Store the <order> into the <order-repository>.
+    Return an <OK: status> with <order>.
 }
 ```
 
@@ -420,30 +420,30 @@ State transitions naturally pair with events. When an order moves to a new state
 
 ```aro
 (shipOrder: Order Management) {
-    <Extract> the <order-id> from the <pathParameters: id>.
-    <Retrieve> the <order> from the <order-repository>
+    Extract the <order-id> from the <pathParameters: id>.
+    Retrieve the <order> from the <order-repository>
         where <id> is <order-id>.
 
-    <Accept> the <transition: paid_to_shipped> on <order: status>.
+    Accept the <transition: paid_to_shipped> on <order: status>.
 
-    <Store> the <order> into the <order-repository>.
+    Store the <order> into the <order-repository>.
 
     (* Notify interested parties *)
-    <Emit> an <OrderShipped: event> with <order>.
+    Emit an <OrderShipped: event> with <order>.
 
-    <Return> an <OK: status> with <order>.
+    Return an <OK: status> with <order>.
 }
 
 (* Handler reacts to the state change *)
 (Notify Customer: OrderShipped Handler) {
-    <Extract> the <order> from the <event: order>.
-    <Extract> the <customer-email> from the <order: customerEmail>.
-    <Extract> the <tracking> from the <order: trackingNumber>.
+    Extract the <order> from the <event: order>.
+    Extract the <customer-email> from the <order: customerEmail>.
+    Extract the <tracking> from the <order: trackingNumber>.
 
-    <Send> the <shipping-notification: email> to <customer-email>
+    Send the <shipping-notification: email> to <customer-email>
         with <tracking>.
 
-    <Return> an <OK: status> for the <notification>.
+    Return an <OK: status> for the <notification>.
 }
 ```
 
@@ -458,10 +458,10 @@ Sometimes you want handlers to only execute when an entity is in a specific stat
 ```aro
 (* Only process orders that are in "paid" state *)
 (Process Paid Order: OrderUpdated Handler<status:paid>) {
-    <Extract> the <order> from the <event: order>.
+    Extract the <order> from the <event: order>.
     (* This handler only runs when order.status = "paid" *)
-    <Process> the <fulfillment> for the <order>.
-    <Return> an <OK: status> for the <processing>.
+    Process the <fulfillment> for the <order>.
+    Return an <OK: status> for the <processing>.
 }
 ```
 
@@ -474,16 +474,16 @@ State guards use angle bracket syntax after "Handler":
 ```aro
 (* Handle orders that are paid OR shipped *)
 (Track Fulfillment: OrderUpdated Handler<status:paid,shipped>) {
-    <Extract> the <order> from the <event: order>.
-    <Log> "Tracking update" to the <console>.
-    <Return> an <OK: status> for the <tracking>.
+    Extract the <order> from the <event: order>.
+    Log "Tracking update" to the <console>.
+    Return an <OK: status> for the <tracking>.
 }
 
 (* Only premium customers with delivered orders *)
 (VIP Reward: OrderUpdated Handler<status:delivered;tier:premium>) {
-    <Extract> the <order> from the <event: order>.
-    <Send> the <reward> to the <order: email>.
-    <Return> an <OK: status> for the <reward>.
+    Extract the <order> from the <event: order>.
+    Send the <reward> to the <order: email>.
+    Return an <OK: status> for the <reward>.
 }
 ```
 

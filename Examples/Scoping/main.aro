@@ -5,19 +5,19 @@
 
 (Application-Start: Scoping Demo) {
     (* Explicit external dependency declaration *)
-    <Require> the <console> from the <framework>.
+    Require the <console> from the <framework>.
 
     (* Create internal variables *)
-    <Create> the <app-name> with "Scoping Demo".
-    <Create> the <version> with "1.0".
+    Create the <app-name> with "Scoping Demo".
+    Create the <version> with "1.0".
 
     (* Log startup using variables *)
-    <Log> "Starting application..." to the <console>.
-    <Log> <app-name> to the <console>.
-    <Log> <version> to the <console>.
+    Log "Starting application..." to the <console>.
+    Log <app-name> to the <console>.
+    Log <version> to the <console>.
 
     (* Demonstrate nested object scoping *)
-    <Create> the <config> with {
+    Create the <config> with {
         name: "Scoping Demo",
         version: "1.0",
         settings: {
@@ -26,9 +26,9 @@
         }
     }.
 
-    <Log> "Configuration:" to the <console>.
-    <Log> <config: name> to the <console>.
-    <Log> <config: version> to the <console>.
+    Log "Configuration:" to the <console>.
+    Log <config: name> to the <console>.
+    Log <config: version> to the <console>.
 
-    <Return> an <OK: status> for the <startup>.
+    Return an <OK: status> for the <startup>.
 }

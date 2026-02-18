@@ -16,7 +16,7 @@ struct ErrorTests {
             message: "Cannot retrieve the user from the user-repository where id = 530",
             featureSet: "getUser",
             businessActivity: "User API",
-            statement: "<Retrieve> the <user> from the <user-repository> where id = <id>",
+            statement: "Retrieve the <user> from the <user-repository> where id = <id>",
             resolvedValues: ["id": "530"]
         )
 

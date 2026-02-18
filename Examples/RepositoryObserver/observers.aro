@@ -2,35 +2,35 @@
 
 (* Audit Observer - Logs all changes to the console *)
 (Audit Changes: user-repository Observer) {
-    <Extract> the <changeType> from the <event: changeType>.
-    <Extract> the <entityId> from the <event: entityId>.
-    <Extract> the <repositoryName> from the <event: repositoryName>.
+    Extract the <changeType> from the <event: changeType>.
+    Extract the <entityId> from the <event: entityId>.
+    Extract the <repositoryName> from the <event: repositoryName>.
 
-    <Compute> the <message> from "[AUDIT] " + <repositoryName> + ": " + <changeType> + " (id: " + <entityId> + ")".
-    <Log> <message> to the <console>.
+    Compute the <message> from "[AUDIT] " + <repositoryName> + ": " + <changeType> + " (id: " + <entityId> + ")".
+    Log <message> to the <console>.
 
-    <Return> an <OK: status> for the <audit>.
+    Return an <OK: status> for the <audit>.
 }
 
 (* Change Tracker - Compares old and new values on updates *)
 (Track Updates: user-repository Observer) {
-    <Extract> the <changeType> from the <event: changeType>.
-    <Extract> the <entityId> from the <event: entityId>.
+    Extract the <changeType> from the <event: changeType>.
+    Extract the <entityId> from the <event: entityId>.
 
     (* Log all updates with entity info *)
-    <Compute> the <message> from "[CHANGE] User " + <entityId> + " changed: " + <changeType>.
-    <Log> <message> to the <console>.
+    Compute the <message> from "[CHANGE] User " + <entityId> + " changed: " + <changeType>.
+    Log <message> to the <console>.
 
-    <Return> an <OK: status> for the <tracking>.
+    Return an <OK: status> for the <tracking>.
 }
 
 (* Delete Monitor - Logs entity info for all changes *)
 (Monitor Deletions: user-repository Observer) {
-    <Extract> the <changeType> from the <event: changeType>.
-    <Extract> the <entityId> from the <event: entityId>.
+    Extract the <changeType> from the <event: changeType>.
+    Extract the <entityId> from the <event: entityId>.
 
-    <Compute> the <message> from "[MONITOR] Entity " + <entityId> + " - operation: " + <changeType>.
-    <Log> <message> to the <console>.
+    Compute the <message> from "[MONITOR] Entity " + <entityId> + " - operation: " + <changeType>.
+    Log <message> to the <console>.
 
-    <Return> an <OK: status> for the <monitoring>.
+    Return an <OK: status> for the <monitoring>.
 }

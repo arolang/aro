@@ -1,105 +1,105 @@
 (* Order Operations - State Machine Transitions *)
-(* Uses <Accept> action for validated state transitions *)
-(* State transition syntax: <Accept> the <transition: from_to_target> on <object: field>. *)
+(* Uses Accept action for validated state transitions *)
+(* State transition syntax: Accept the <transition: from_to_target> on <object: field>. *)
 
 (* List all orders *)
 (listOrders: Order Management) {
-    <Retrieve> the <orders> from the <order-repository>.
-    <Return> an <OK: status> with <orders>.
+    Retrieve the <orders> from the <order-repository>.
+    Return an <OK: status> with <orders>.
 }
 
 (* Get a single order by ID *)
 (getOrder: Order Management) {
-    <Extract> the <order-id> from the <pathParameters: id>.
-    <Retrieve> the <order> from the <order-repository> where <id> is <order-id>.
-    <Return> an <OK: status> with <order>.
+    Extract the <order-id> from the <pathParameters: id>.
+    Retrieve the <order> from the <order-repository> where <id> is <order-id>.
+    Return an <OK: status> with <order>.
 }
 
 (* Create a new order in draft state *)
 (createOrder: Order Management) {
-    <Extract> the <data> from the <request: body>.
-    <Create> the <order: Order> with <data>.
+    Extract the <data> from the <request: body>.
+    Create the <order: Order> with <data>.
     (* New orders start in draft state *)
-    <Update> the <order: status> with "draft".
-    <Store> the <order> into the <order-repository>.
-    <Log> "Created order in draft state" to the <console>.
-    <Return> a <Created: status> with <order>.
+    Update the <order: status> with "draft".
+    Store the <order> into the <order-repository>.
+    Log "Created order in draft state" to the <console>.
+    Return a <Created: status> with <order>.
 }
 
 (* Place an order - transitions from draft to placed *)
 (placeOrder: Order Management) {
-    <Extract> the <order-id> from the <pathParameters: id>.
-    <Retrieve> the <order> from the <order-repository> where <id> is <order-id>.
+    Extract the <order-id> from the <pathParameters: id>.
+    Retrieve the <order> from the <order-repository> where <id> is <order-id>.
 
     (* Accept state transition: draft -> placed *)
     (* This validates that current state is "draft" before transitioning to "placed" *)
-    <Accept> the <transition: draft_to_placed> on <order: status>.
+    Accept the <transition: draft_to_placed> on <order: status>.
 
-    <Store> the <order> into the <order-repository>.
-    <Log> "Order placed successfully" to the <console>.
-    <Return> an <OK: status> with <order>.
+    Store the <order> into the <order-repository>.
+    Log "Order placed successfully" to the <console>.
+    Return an <OK: status> with <order>.
 }
 
 (* Pay for an order - transitions from placed to paid *)
 (payOrder: Order Management) {
-    <Extract> the <order-id> from the <pathParameters: id>.
-    <Extract> the <payment> from the <request: body>.
-    <Retrieve> the <order> from the <order-repository> where <id> is <order-id>.
+    Extract the <order-id> from the <pathParameters: id>.
+    Extract the <payment> from the <request: body>.
+    Retrieve the <order> from the <order-repository> where <id> is <order-id>.
 
     (* Accept state transition: placed -> paid *)
     (* Order must be in "placed" state to accept payment *)
-    <Accept> the <transition: placed_to_paid> on <order: status>.
+    Accept the <transition: placed_to_paid> on <order: status>.
 
     (* Store payment details on the order *)
-    <Update> the <order: paymentMethod> from the <payment: paymentMethod>.
-    <Update> the <order: paymentAmount> from the <payment: amount>.
+    Update the <order: paymentMethod> from the <payment: paymentMethod>.
+    Update the <order: paymentAmount> from the <payment: amount>.
 
-    <Store> the <order> into the <order-repository>.
-    <Log> "Payment received for order" to the <console>.
-    <Return> an <OK: status> with <order>.
+    Store the <order> into the <order-repository>.
+    Log "Payment received for order" to the <console>.
+    Return an <OK: status> with <order>.
 }
 
 (* Ship an order - transitions from paid to shipped *)
 (shipOrder: Order Management) {
-    <Extract> the <order-id> from the <pathParameters: id>.
-    <Extract> the <shipping> from the <request: body>.
-    <Retrieve> the <order> from the <order-repository> where <id> is <order-id>.
+    Extract the <order-id> from the <pathParameters: id>.
+    Extract the <shipping> from the <request: body>.
+    Retrieve the <order> from the <order-repository> where <id> is <order-id>.
 
     (* Accept state transition: paid -> shipped *)
     (* Order must be paid before it can be shipped *)
-    <Accept> the <transition: paid_to_shipped> on <order: status>.
+    Accept the <transition: paid_to_shipped> on <order: status>.
 
     (* Update tracking information *)
-    <Update> the <order: trackingNumber> from the <shipping: trackingNumber>.
-    <Store> the <order> into the <order-repository>.
-    <Log> "Order shipped" to the <console>.
-    <Return> an <OK: status> with <order>.
+    Update the <order: trackingNumber> from the <shipping: trackingNumber>.
+    Store the <order> into the <order-repository>.
+    Log "Order shipped" to the <console>.
+    Return an <OK: status> with <order>.
 }
 
 (* Deliver an order - transitions from shipped to delivered *)
 (deliverOrder: Order Management) {
-    <Extract> the <order-id> from the <pathParameters: id>.
-    <Retrieve> the <order> from the <order-repository> where <id> is <order-id>.
+    Extract the <order-id> from the <pathParameters: id>.
+    Retrieve the <order> from the <order-repository> where <id> is <order-id>.
 
     (* Accept state transition: shipped -> delivered *)
     (* Order must be shipped before it can be marked as delivered *)
-    <Accept> the <transition: shipped_to_delivered> on <order: status>.
+    Accept the <transition: shipped_to_delivered> on <order: status>.
 
-    <Store> the <order> into the <order-repository>.
-    <Log> "Order delivered" to the <console>.
-    <Return> an <OK: status> with <order>.
+    Store the <order> into the <order-repository>.
+    Log "Order delivered" to the <console>.
+    Return an <OK: status> with <order>.
 }
 
 (* Cancel an order - can only cancel from draft state *)
 (cancelOrder: Order Management) {
-    <Extract> the <order-id> from the <pathParameters: id>.
-    <Retrieve> the <order> from the <order-repository> where <id> is <order-id>.
+    Extract the <order-id> from the <pathParameters: id>.
+    Retrieve the <order> from the <order-repository> where <id> is <order-id>.
 
     (* Orders can only be cancelled from draft state in this example *)
     (* The Accept action will throw if current state is not "draft" *)
-    <Accept> the <transition: draft_to_cancelled> on <order: status>.
+    Accept the <transition: draft_to_cancelled> on <order: status>.
 
-    <Store> the <order> into the <order-repository>.
-    <Log> "Order cancelled" to the <console>.
-    <Return> an <OK: status> with <order>.
+    Store the <order> into the <order-repository>.
+    Log "Order cancelled" to the <console>.
+    Return an <OK: status> with <order>.
 }

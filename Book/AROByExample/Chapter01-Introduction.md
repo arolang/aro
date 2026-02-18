@@ -21,7 +21,7 @@ ARO is a domain-specific language for expressing business logic as natural langu
 Here is your first ARO statement:
 
 ```aro
-<Log> "Hello, World!" to the <console>.
+Log "Hello, World!" to the <console>.
 ```
 
 This reads naturally: "Log 'Hello, World!' to the console." The angle brackets mark the key elements: `<Log>` is the action, `"Hello, World!"` is what we're logging, and `<console>` is where we're sending it.
@@ -35,7 +35,7 @@ This reads naturally: "Log 'Hello, World!' to the console." The angle brackets m
 Every ARO statement follows a consistent pattern:
 
 ```
-<Action> the <result> preposition the <object>.
+Action the <result> preposition the <object>.
 ```
 
 The components are:
@@ -48,7 +48,7 @@ The components are:
 For example:
 
 ```aro
-<Extract> the <username> from the <request: body>.
+Extract the <username> from the <request: body>.
 ```
 
 This extracts a value called `username` from the request body. The result `username` is now available for use in subsequent statements.

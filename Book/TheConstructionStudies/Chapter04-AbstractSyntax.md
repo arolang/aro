@@ -126,9 +126,9 @@ The five statement types:
 
 | Statement | Purpose | Example |
 |-----------|---------|---------|
-| `AROStatement` | Core action-result-object | `<Extract> the <user> from the <request>.` |
-| `PublishStatement` | Variable export | `<Publish> as <alias> <variable>.` |
-| `RequireStatement` | Dependency declaration | `<Require> the <config> from the <environment>.` |
+| `AROStatement` | Core action-result-object | `Extract the <user> from the <request>.` |
+| `PublishStatement` | Variable export | `Publish as <alias> <variable>.` |
+| `RequireStatement` | Dependency declaration | `Require the <config> from the <environment>.` |
 | `MatchStatement` | Pattern matching | `match <status> { case "active" { ... } }` |
 | `ForEachLoop` | Iteration | `for each <item> in <items> { ... }` |
 
@@ -423,7 +423,7 @@ public struct SourceSpan: Sendable, Equatable {
 Spans propagate through parsing via `merged(with:)`:
 
 ```swift
-// When parsing: <Extract> the <user> from the <request>.
+// When parsing: Extract the <user> from the <request>.
 let startToken = try expect(.leftAngle, ...)  // start location
 // ... parse contents ...
 let endToken = try expect(.dot, ...)          // end location
@@ -442,7 +442,7 @@ Spans enable precise error messages:
 Error: Cannot retrieve the user from the user-repository
   at line 5, columns 4-52
 
-  5 |     <Retrieve> the <user> from the <user-repository>.
+  5 |     Retrieve the <user> from the <user-repository>.
     |     ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 ```
 
@@ -497,13 +497,13 @@ public enum ValueSource: Sendable {
     case none                           // standard syntax
     case literal(LiteralValue)          // with "string"
     case expression(any Expression)     // from <x> * <y>
-    case sinkExpression(any Expression) // <Log> "msg" to <console> (ARO-0043)
+    case sinkExpression(any Expression) // Log "msg" to <console> (ARO-0043)
 }
 ```
 
 The enum makes invalid states unrepresentable. A statement cannot have both a literal value and an expression—the type system enforces this.
 
-**Sink Syntax (ARO-0043)**: The `sinkExpression` case handles statements like `<Log> "Hello" to the <console>` where the result position contains an expression rather than a variable binding.
+**Sink Syntax (ARO-0043)**: The `sinkExpression` case handles statements like `Log "Hello" to the <console>` where the result position contains an expression rather than a variable binding.
 
 ### Query Modifiers
 
@@ -519,7 +519,7 @@ public struct QueryModifiers: Sendable {
 
 These clauses work together for data pipeline operations (ARO-0018):
 ```aro
-<Retrieve> the <total: sum> from the <orders> where status = "shipped".
+Retrieve the <total: sum> from the <orders> where status = "shipped".
 ```
 
 ### Range Modifiers
@@ -535,8 +535,8 @@ public struct RangeModifiers: Sendable {
 
 Used by date range (ARO-0041) and set operations (ARO-0042):
 ```aro
-<Generate> the <dates> from <start-date> to <end-date>.
-<Compute> the <result: intersect> from <set-a> with <set-b>.
+Generate the <dates> from <start-date> to <end-date>.
+Compute the <result: intersect> from <set-a> with <set-b>.
 ```
 
 ### Statement Guard
@@ -551,7 +551,7 @@ public struct StatementGuard: Sendable {
 
 Used for state guards (ARO-0022) and conditional actions (ARO-0004):
 ```aro
-<Send> the <notification> to the <user> when <user: subscribed> is true.
+Send the <notification> to the <user> when <user: subscribed> is true.
 ```
 
 ### Semantic Analyzer Validation

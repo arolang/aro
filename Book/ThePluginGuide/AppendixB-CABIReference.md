@@ -87,8 +87,8 @@ const char* aro_plugin_info(void);
 
 This enables ARO code like:
 ```aro
-<Hash> the <result: sha256> from the <password>.
-<Encrypt> the <ciphertext> with <data> using <key>.
+Hash the <result: sha256> from the <password>.
+Encrypt the <ciphertext> with <data> using <key>.
 ```
 
 **Example Implementation (C):**

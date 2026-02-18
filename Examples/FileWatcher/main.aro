@@ -1,38 +1,38 @@
 (* File Watcher Example - Using FileMonitor *)
 
 (Application-Start: File Watcher) {
-    <Log> "Starting file watcher" to the <console>.
+    Log "Starting file watcher" to the <console>.
 
     (* Start file monitor for the current directory *)
-    <Start> the <file-monitor> with ".".
+    Start the <file-monitor> with ".".
 
-    <Log> "Watching for file changes... Press Ctrl+C to stop." to the <console>.
+    Log "Watching for file changes... Press Ctrl+C to stop." to the <console>.
 
     (* Keep the application running until Ctrl+C *)
-    <Keepalive> the <application> for the <events>.
+    Keepalive the <application> for the <events>.
 
-    <Return> an <OK: status> for the <startup>.
+    Return an <OK: status> for the <startup>.
 }
 
 (Handle File Created: File Event Handler) {
-    <Extract> the <path> from the <event: path>.
-    <Log> <file-created: message> to the <console>.
-    <Return> an <OK: status> for the <event>.
+    Extract the <path> from the <event: path>.
+    Log <file-created: message> to the <console>.
+    Return an <OK: status> for the <event>.
 }
 
 (Handle File Modified: File Event Handler) {
-    <Extract> the <path> from the <event: path>.
-    <Log> <file-modified: message> to the <console>.
-    <Return> an <OK: status> for the <event>.
+    Extract the <path> from the <event: path>.
+    Log <file-modified: message> to the <console>.
+    Return an <OK: status> for the <event>.
 }
 
 (Handle File Deleted: File Event Handler) {
-    <Extract> the <path> from the <event: path>.
-    <Log> <file-deleted: message> to the <console>.
-    <Return> an <OK: status> for the <event>.
+    Extract the <path> from the <event: path>.
+    Log <file-deleted: message> to the <console>.
+    Return an <OK: status> for the <event>.
 }
 
 (Application-End: Success) {
-    <Log> "File watcher stopped." to the <console>.
-    <Return> an <OK: status> for the <shutdown>.
+    Log "File watcher stopped." to the <console>.
+    Return an <OK: status> for the <shutdown>.
 }

@@ -13,8 +13,8 @@ struct SemanticAnalyzerImmutabilityTests {
     func testDuplicateBindingError() throws {
         let source = """
         (Test: Feature) {
-            <Make> the <value> with "first".
-            <Make> the <value> with "second".
+            Make the <value> with "first".
+            Make the <value> with "second".
         }
         """
 
@@ -35,9 +35,9 @@ struct SemanticAnalyzerImmutabilityTests {
     func testFrameworkVariableRebindAllowed() throws {
         let source = """
         (Test: Feature) {
-            <Make> the <_internal> with "first".
-            <Make> the <_internal> with "second".
-            <Return> an <OK: status> for the <test>.
+            Make the <_internal> with "first".
+            Make the <_internal> with "second".
+            Return an <OK: status> for the <test>.
         }
         """
 
@@ -52,11 +52,11 @@ struct SemanticAnalyzerImmutabilityTests {
     func testLoopVariableUsage() throws {
         let source = """
         (Test: Feature) {
-            <Create> the <items> with ["a", "b", "c"].
+            Create the <items> with ["a", "b", "c"].
             for each <item> in <items> {
-                <Log> <item> to the <console>.
+                Log <item> to the <console>.
             }
-            <Return> an <OK: status> for the <test>.
+            Return an <OK: status> for the <test>.
         }
         """
 
@@ -71,11 +71,11 @@ struct SemanticAnalyzerImmutabilityTests {
     func testLoopVariableImmutable() throws {
         let source = """
         (Test: Feature) {
-            <Create> the <items> with [1, 2, 3].
+            Create the <items> with [1, 2, 3].
             for each <item> in <items> {
-                <Compute> the <item> from <item> + 1.
+                Compute the <item> from <item> + 1.
             }
-            <Return> an <OK: status> for the <test>.
+            Return an <OK: status> for the <test>.
         }
         """
 
@@ -94,16 +94,16 @@ struct SemanticAnalyzerImmutabilityTests {
     func testMatchVariablesImmutable() throws {
         let source = """
         (Test: Feature) {
-            <Create> the <status> with "success".
+            Create the <status> with "success".
             match <status> {
                 case "success" {
-                    <Create> the <status> with "done".
+                    Create the <status> with "done".
                 }
                 otherwise {
-                    <Log> "default" to the <console>.
+                    Log "default" to the <console>.
                 }
             }
-            <Return> an <OK: status> for the <test>.
+            Return an <OK: status> for the <test>.
         }
         """
 
@@ -122,10 +122,10 @@ struct SemanticAnalyzerImmutabilityTests {
     func testCreateNewVariables() throws {
         let source = """
         (Test: Feature) {
-            <Make> the <value> with 10.
-            <Compute> the <value-incremented> from <value> + 5.
-            <Compute> the <value-doubled> from <value-incremented> * 2.
-            <Return> an <OK: status> with <value-doubled>.
+            Make the <value> with 10.
+            Compute the <value-incremented> from <value> + 5.
+            Compute the <value-doubled> from <value-incremented> * 2.
+            Return an <OK: status> with <value-doubled>.
         }
         """
 
@@ -140,10 +140,10 @@ struct SemanticAnalyzerImmutabilityTests {
     func testMultipleRebindingErrors() throws {
         let source = """
         (Test: Feature) {
-            <Make> the <counter> with 0.
-            <Compute> the <counter> from <counter> + 1.
-            <Compute> the <counter> from <counter> + 1.
-            <Return> an <OK: status> for the <test>.
+            Make the <counter> with 0.
+            Compute the <counter> from <counter> + 1.
+            Compute the <counter> from <counter> + 1.
+            Return an <OK: status> for the <test>.
         }
         """
 
@@ -163,10 +163,10 @@ struct SemanticAnalyzerImmutabilityTests {
     func testDifferentVariableSameSuffix() throws {
         let source = """
         (Test: Feature) {
-            <Make> the <user-name> with "Alice".
-            <Make> the <product-name> with "Widget".
-            <Make> the <file-name> with "data.txt".
-            <Return> an <OK: status> for the <test>.
+            Make the <user-name> with "Alice".
+            Make the <product-name> with "Widget".
+            Make the <file-name> with "data.txt".
+            Return an <OK: status> for the <test>.
         }
         """
 
@@ -181,8 +181,8 @@ struct SemanticAnalyzerImmutabilityTests {
     func testErrorHintsProvided() throws {
         let source = """
         (Test: Feature) {
-            <Make> the <value> with "first".
-            <Make> the <value> with "second".
+            Make the <value> with "first".
+            Make the <value> with "second".
         }
         """
 

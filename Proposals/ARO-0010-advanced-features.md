@@ -16,7 +16,7 @@ Business applications frequently need capabilities beyond basic data processing:
 ```
 +------------------+     +------------------+     +------------------+
 |   System Exec    |     | Regular Exprs    |     | Date/Time        |
-|   <Exec> ...     |     | /pattern/flags   |     | <now>, offsets   |
+|   Exec ...     |     | /pattern/flags   |     | <now>, offsets   |
 +--------+---------+     +--------+---------+     +--------+---------+
          |                        |                        |
          v                        v                        v
@@ -37,19 +37,19 @@ The `<Execute>` action executes shell commands on the host system, returning str
 
 ```aro
 (* Preferred syntax: command in object specifier *)
-<Execute> the <result> for the <command: "uptime">.
+Execute the <result> for the <command: "uptime">.
 
 (* Command with arguments *)
-<Execute> the <result> for the <command: "ls"> with "-la".
+Execute the <result> for the <command: "ls"> with "-la".
 
 (* Command with multiple arguments *)
-<Execute> the <result> for the <command: "ls"> with ["-l", "-a", "-h"].
+Execute the <result> for the <command: "ls"> with ["-l", "-a", "-h"].
 
 (* Legacy syntax: full command in with clause *)
-<Execute> the <result> with "ls -la".
+Execute the <result> with "ls -la".
 
 (* Execute with options *)
-<Execute> the <result> with {
+Execute the <result> with {
     command: "npm install",
     workingDirectory: "/app",
     timeout: 60000
@@ -104,16 +104,16 @@ Every `<Execute>` action returns a structured result object:
 
 ```aro
 (System Check: DevOps) {
-    <Execute> the <result> with "df -h".
+    Execute the <result> with "df -h".
 
     match <result: error> {
         case true {
-            <Log> "Command failed" to the <console>.
-            <Return> an <Error: status> with <result>.
+            Log "Command failed" to the <console>.
+            Return an <Error: status> with <result>.
         }
         case false {
-            <Log> <result: output> to the <console>.
-            <Return> an <OK: status> with <result>.
+            Log <result: output> to the <console>.
+            Return an <OK: status> with <result>.
         }
     }
 }
@@ -124,23 +124,23 @@ Every `<Execute>` action returns a structured result object:
 ```aro
 (Build Project: CI Pipeline) {
     (* Run tests *)
-    <Execute> the <test-result> with {
+    Execute the <test-result> with {
         command: "npm test",
         workingDirectory: "/app",
         timeout: 120000
     }.
 
-    <Return> an <Error: status> with <test-result>
+    Return an <Error: status> with <test-result>
         when <test-result: error> is true.
 
     (* Build if tests pass *)
-    <Execute> the <build-result> with {
+    Execute the <build-result> with {
         command: "npm run build",
         workingDirectory: "/app",
         environment: { NODE_ENV: "production" }
     }.
 
-    <Return> an <OK: status> with <build-result>.
+    Return an <OK: status> with <build-result>.
 }
 ```
 
@@ -148,7 +148,7 @@ Every `<Execute>` action returns a structured result object:
 
 ```aro
 (Deploy: Infrastructure) {
-    <Execute> the <result> with {
+    Execute the <result> with {
         command: "make release",
         environment: {
             CC: "clang",
@@ -157,7 +157,7 @@ Every `<Execute>` action returns a structured result object:
         }
     }.
 
-    <Return> an <OK: status> with <result>.
+    Return an <OK: status> with <result>.
 }
 ```
 
@@ -167,19 +167,19 @@ When a command fails, the result captures the error state:
 
 ```aro
 (Health Check: Monitoring) {
-    <Execute> the <result> with "curl -s http://localhost:8080/health".
+    Execute the <result> with "curl -s http://localhost:8080/health".
 
     match <result: error> {
         case true {
-            <Log> "Health check failed" to the <console>.
-            <Emit> a <HealthCheckFailed: event> with <result>.
+            Log "Health check failed" to the <console>.
+            Emit a <HealthCheckFailed: event> with <result>.
         }
         case false {
-            <Log> "Service healthy" to the <console>.
+            Log "Service healthy" to the <console>.
         }
     }
 
-    <Return> an <OK: status> with <result>.
+    Return an <OK: status> with <result>.
 }
 ```
 
@@ -191,15 +191,15 @@ Validate and sanitize user input before using in commands:
 
 ```aro
 (Lookup File: File API) {
-    <Extract> the <path> from the <request: path>.
+    Extract the <path> from the <request: path>.
 
     (* Validate input before use *)
-    <Validate> the <safe-path> for the <path> against "^[a-zA-Z0-9_/.-]+$".
-    <Return> a <BadRequest: status> with "Invalid path characters"
+    Validate the <safe-path> for the <path> against "^[a-zA-Z0-9_/.-]+$".
+    Return a <BadRequest: status> with "Invalid path characters"
         when <safe-path> is not <valid>.
 
-    <Execute> the <result> with "ls -la ${safe-path}".
-    <Return> an <OK: status> with <result>.
+    Execute the <result> with "ls -la ${safe-path}".
+    Return an <OK: status> with <result>.
 }
 ```
 
@@ -260,25 +260,25 @@ Regex patterns work as case patterns in match statements:
 
 ```aro
 (Route Message: Message Handler) {
-    <Extract> the <content> from the <message: content>.
+    Extract the <content> from the <message: content>.
 
     match <content> {
         case /^\/help/i {
-            <Emit> a <HelpRequested: event> with <message>.
+            Emit a <HelpRequested: event> with <message>.
         }
         case /^\/status\s+(\w+)$/i {
-            <Emit> a <StatusQuery: event> with <message>.
+            Emit a <StatusQuery: event> with <message>.
         }
         case /^ERROR:/i {
-            <Log> "Error detected" to the <console>.
-            <Emit> an <ErrorReceived: event> with <message>.
+            Log "Error detected" to the <console>.
+            Emit an <ErrorReceived: event> with <message>.
         }
         otherwise {
-            <Emit> a <MessageReceived: event> with <message>.
+            Emit a <MessageReceived: event> with <message>.
         }
     }
 
-    <Return> an <OK: status> for the <routing>.
+    Return an <OK: status> for the <routing>.
 }
 ```
 
@@ -295,15 +295,15 @@ Regex literals work with the `matches` operator:
 
 ```aro
 (* Filter by pattern *)
-<Retrieve> the <users> from the <user-repository>
+Retrieve the <users> from the <user-repository>
     where <name> matches /Frodo\s+.*$/i.
 
 (* Validate email format *)
-<Filter> the <valid-emails> from the <emails>
+Filter the <valid-emails> from the <emails>
     where <address> matches /^[\w.+-]+@[\w.-]+\.[a-zA-Z]{2,}$/i.
 
 (* Find admin users by email *)
-<Retrieve> the <admins> from the <user-repository>
+Retrieve the <admins> from the <user-repository>
     where <email> matches /^admin@|@admin\./i.
 ```
 
@@ -313,16 +313,16 @@ The Split action divides strings using regex delimiters:
 
 ```aro
 (* Split by comma *)
-<Split> the <fields> from the <csv-line> by /,/.
+Split the <fields> from the <csv-line> by /,/.
 
 (* Split by whitespace *)
-<Split> the <words> from the <sentence> by /\s+/.
+Split the <words> from the <sentence> by /\s+/.
 
 (* Split by multiple delimiters *)
-<Split> the <tokens> from the <code> by /[;,\s]+/.
+Split the <tokens> from the <code> by /[;,\s]+/.
 
 (* Case-insensitive split *)
-<Split> the <sections> from the <text> by /SECTION/i.
+Split the <sections> from the <text> by /SECTION/i.
 ```
 
 #### Split Behavior
@@ -336,33 +336,33 @@ The Split action divides strings using regex delimiters:
 
 ```aro
 (Validate Registration: Form Handler) {
-    <Extract> the <email> from the <form: email>.
-    <Extract> the <phone> from the <form: phone>.
+    Extract the <email> from the <form: email>.
+    Extract the <phone> from the <form: phone>.
 
     (* Email validation *)
     match <email> {
         case /^[\w.+-]+@[\w.-]+\.[a-zA-Z]{2,}$/ {
-            <Log> "Valid email" to the <console>.
+            Log "Valid email" to the <console>.
         }
         otherwise {
-            <Return> a <BadRequest: status> with "Invalid email format".
+            Return a <BadRequest: status> with "Invalid email format".
         }
     }
 
     (* Phone validation - US format *)
     match <phone> {
         case /^\d{3}-\d{3}-\d{4}$/ {
-            <Log> "Valid phone" to the <console>.
+            Log "Valid phone" to the <console>.
         }
         case /^\(\d{3}\)\s?\d{3}-\d{4}$/ {
-            <Log> "Valid phone (parentheses)" to the <console>.
+            Log "Valid phone (parentheses)" to the <console>.
         }
         otherwise {
-            <Return> a <BadRequest: status> with "Invalid phone format".
+            Return a <BadRequest: status> with "Invalid phone format".
         }
     }
 
-    <Return> an <OK: status> for the <validation>.
+    Return an <OK: status> for the <validation>.
 }
 ```
 
@@ -374,7 +374,7 @@ When the lexer encounters `/`:
 
 ```aro
 (* Division - space after / *)
-<Compute> the <result> from <a> / <b>.
+Compute the <result> from <a> / <b>.
 
 (* Regex - no space, forms complete literal *)
 case /pattern/ { ... }
@@ -392,7 +392,7 @@ ARO provides native date/time support through the magic `<now>` variable, timezo
 `<now>` is a built-in variable that resolves to the current timestamp:
 
 ```aro
-<Log> <now> to the <console>.
+Log <now> to the <console>.
 (* Output: 2025-01-15T10:30:00Z *)
 ```
 
@@ -454,8 +454,8 @@ Qualifiers on `<now>` (or any date variable) create relative dates:
 #### Relative to Any Date
 
 ```aro
-<Extract> the <start-date> from the <project: start>.
-<Compute> the <deadline: +14d> from <start-date>.  (* 14 days after start *)
+Extract the <start-date> from the <project: start>.
+Compute the <deadline: +14d> from <start-date>.  (* 14 days after start *)
 ```
 
 ### 3.4 Date Parsing
@@ -463,8 +463,8 @@ Qualifiers on `<now>` (or any date variable) create relative dates:
 Parse ISO 8601 strings into date objects using the `date` computation:
 
 ```aro
-<Compute> the <meeting: date> from "2025-06-15T14:00:00Z".
-<Compute> the <birthday: date> from "1990-03-21".
+Compute the <meeting: date> from "2025-06-15T14:00:00Z".
+Compute the <birthday: date> from "1990-03-21".
 ```
 
 **Supported ISO 8601 Formats:**
@@ -480,15 +480,15 @@ ARO supports arithmetic operations on dates:
 #### Adding Offsets
 
 ```aro
-<Compute> the <due-date> from <start-date> + 14d.
-<Compute> the <reminder> from <appointment> - 1h.
-<Compute> the <extended-deadline> from <deadline> + 1w + 2d.
+Compute the <due-date> from <start-date> + 14d.
+Compute the <reminder> from <appointment> - 1h.
+Compute the <extended-deadline> from <deadline> + 1w + 2d.
 ```
 
 #### Subtracting Dates (Duration)
 
 ```aro
-<Compute> the <duration> from <end-date> - <start-date>.
+Compute the <duration> from <end-date> - <start-date>.
 <duration: days>      (* Number of days between dates *)
 <duration: hours>     (* Number of hours between dates *)
 ```
@@ -498,8 +498,8 @@ ARO supports arithmetic operations on dates:
 Create date ranges using the `Create` action:
 
 ```aro
-<Create> the <vacation: date-range> from <start-date> to <end-date>.
-<Create> the <this-month: date-range> from <month-start> to <now>.
+Create the <vacation: date-range> from <start-date> to <end-date>.
+Create the <this-month: date-range> from <month-start> to <now>.
 ```
 
 #### Span Extraction
@@ -544,7 +544,7 @@ when <date1> >= <date2>
 Calculate the distance between two dates:
 
 ```aro
-<Compute> the <time-until: distance> from <now> to <deadline>.
+Compute the <time-until: distance> from <now> to <deadline>.
 <time-until: days>     (* Days until deadline *)
 <time-until: hours>    (* Hours until deadline *)
 ```
@@ -556,13 +556,13 @@ If the first date is after the second, the result is negative.
 Format dates for display using format strings:
 
 ```aro
-<Compute> the <formatted: format> from <date> with "MMM dd, yyyy".
+Compute the <formatted: format> from <date> with "MMM dd, yyyy".
 (* Output: "Jan 15, 2025" *)
 
-<Compute> the <time-display: format> from <now> with "HH:mm:ss".
+Compute the <time-display: format> from <now> with "HH:mm:ss".
 (* Output: "10:30:00" *)
 
-<Compute> the <full-datetime: format> from <date> with "yyyy-MM-dd'T'HH:mm:ss".
+Compute the <full-datetime: format> from <date> with "yyyy-MM-dd'T'HH:mm:ss".
 (* Output: "2025-01-15T10:30:00" *)
 ```
 
@@ -590,10 +590,10 @@ Format dates for display using format strings:
 #### Locale Formatting
 
 ```aro
-<Compute> the <german-date: format> from <date> with "dd.MM.yyyy".
+Compute the <german-date: format> from <date> with "dd.MM.yyyy".
 (* Output: "15.01.2025" *)
 
-<Compute> the <us-date: format> from <date> with "MM/dd/yyyy".
+Compute the <us-date: format> from <date> with "MM/dd/yyyy".
 (* Output: "01/15/2025" *)
 ```
 
@@ -622,9 +622,9 @@ When a date is resolved, these properties are accessible via qualifiers:
 
 **Access:**
 ```aro
-<Extract> the <year> from the <now: year>.
-<Extract> the <day-name> from the <appointment: dayOfWeek>.
-<Extract> the <unix-time> from the <now: timestamp>.
+Extract the <year> from the <now: year>.
+Extract the <day-name> from the <appointment: dayOfWeek>.
+Extract the <unix-time> from the <now: timestamp>.
 ```
 
 ### 3.11 Common Patterns
@@ -633,16 +633,16 @@ When a date is resolved, these properties are accessible via qualifiers:
 
 ```aro
 (Create Token: Auth API) {
-    <Create> the <token> with <user>.
-    <Compute> the <expires-at: +7d> from <now>.
+    Create the <token> with <user>.
+    Compute the <expires-at: +7d> from <now>.
 
-    <Store> the <session> with {
+    Store the <session> with {
         token: <token>,
         created: <now>,
         expires: <expires-at>
     } into the <session-repository>.
 
-    <Return> an <OK: status> with <session>.
+    Return an <OK: status> with <session>.
 }
 ```
 
@@ -650,26 +650,26 @@ When a date is resolved, these properties are accessible via qualifiers:
 
 ```aro
 (Create Booking: Booking API) {
-    <Extract> the <date-str> from the <request: date>.
-    <Compute> the <booking-date: date> from <date-str>.
+    Extract the <date-str> from the <request: date>.
+    Compute the <booking-date: date> from <date-str>.
 
     (* Must book at least 24 hours in advance *)
-    <Compute> the <min-time: +24h> from <now>.
-    <Return> a <BadRequest: status> with "Must book 24 hours in advance"
+    Compute the <min-time: +24h> from <now>.
+    Return a <BadRequest: status> with "Must book 24 hours in advance"
         when <booking-date> before <min-time>.
 
     (* Cannot book more than 90 days out *)
-    <Compute> the <max-time: +90d> from <now>.
-    <Return> a <BadRequest: status> with "Cannot book more than 90 days ahead"
+    Compute the <max-time: +90d> from <now>.
+    Return a <BadRequest: status> with "Cannot book more than 90 days ahead"
         when <booking-date> after <max-time>.
 
-    <Create> the <booking> with {
+    Create the <booking> with {
         date: <booking-date>,
         created: <now>,
         status: "confirmed"
     }.
 
-    <Return> an <OK: status> with <booking>.
+    Return an <OK: status> with <booking>.
 }
 ```
 
@@ -678,22 +678,22 @@ When a date is resolved, these properties are accessible via qualifiers:
 ```aro
 (Monthly Report: Analytics) {
     (* Calculate date range for last 30 days *)
-    <Compute> the <report-start: -30d> from <now>.
-    <Create> the <report-period: date-range> from <report-start> to <now>.
+    Compute the <report-start: -30d> from <now>.
+    Create the <report-period: date-range> from <report-start> to <now>.
 
     (* Get the span *)
-    <Extract> the <days-count: days> from <report-period>.
+    Extract the <days-count: days> from <report-period>.
 
     (* Retrieve records in range *)
-    <Retrieve> the <orders> from the <order-repository>
+    Retrieve the <orders> from the <order-repository>
         where <created> in <report-period>.
 
-    <Compute> the <order-count: count> from <orders>.
+    Compute the <order-count: count> from <orders>.
 
     (* Format report date *)
-    <Compute> the <report-date: format> from <now> with "MMMM dd, yyyy".
+    Compute the <report-date: format> from <now> with "MMMM dd, yyyy".
 
-    <Return> an <OK: status> with {
+    Return an <OK: status> with {
         period: <report-period>,
         days: <days-count>,
         totalOrders: <order-count>,
@@ -707,17 +707,17 @@ When a date is resolved, these properties are accessible via qualifiers:
 ```aro
 (Cleanup Expired: Scheduled Task) {
     (* Find records older than 90 days *)
-    <Retrieve> the <old-records> from the <record-repository>
+    Retrieve the <old-records> from the <record-repository>
         where <created> before <now: -90d>.
 
     for each <record> in <old-records> {
-        <Delete> the <record> from the <record-repository>.
+        Delete the <record> from the <record-repository>.
     }
 
-    <Compute> the <deleted-count: count> from <old-records>.
-    <Log> "Cleaned up expired records" to the <console>.
+    Compute the <deleted-count: count> from <old-records>.
+    Log "Cleaned up expired records" to the <console>.
 
-    <Return> an <OK: status> with { deleted: <deleted-count> }.
+    Return an <OK: status> with { deleted: <deleted-count> }.
 }
 ```
 
@@ -727,19 +727,19 @@ When a date is resolved, these properties are accessible via qualifiers:
 
 ```aro
 (Application-Start: DevOps Dashboard) {
-    <Log> "Starting DevOps Dashboard..." to the <console>.
-    <Start> the <http-server> with <contract>.
-    <Keepalive> the <application> for the <events>.
-    <Return> an <OK: status> for the <startup>.
+    Log "Starting DevOps Dashboard..." to the <console>.
+    Start the <http-server> with <contract>.
+    Keepalive the <application> for the <events>.
+    Return an <OK: status> for the <startup>.
 }
 
 (healthCheck: Health API) {
     (* Run system health checks *)
-    <Execute> the <disk-check> with "df -h /".
-    <Execute> the <memory-check> with "free -m".
+    Execute the <disk-check> with "df -h /".
+    Execute the <memory-check> with "free -m".
 
     (* Check for errors *)
-    <Create> the <health-status> with {
+    Create the <health-status> with {
         disk: <disk-check: error> is false,
         memory: <memory-check: error> is false,
         timestamp: <now>
@@ -747,35 +747,35 @@ When a date is resolved, these properties are accessible via qualifiers:
 
     match <disk-check: error> or <memory-check: error> {
         case true {
-            <Return> a <ServerError: status> with <health-status>.
+            Return a <ServerError: status> with <health-status>.
         }
         case false {
-            <Return> an <OK: status> with <health-status>.
+            Return an <OK: status> with <health-status>.
         }
     }
 }
 
 (searchLogs: Logs API) {
-    <Extract> the <pattern> from the <request: pattern>.
-    <Extract> the <since> from the <request: since>.
+    Extract the <pattern> from the <request: pattern>.
+    Extract the <since> from the <request: since>.
 
     (* Parse the since date *)
-    <Compute> the <since-date: date> from <since>.
+    Compute the <since-date: date> from <since>.
 
     (* Execute log search *)
-    <Execute> the <search-result> with "grep -r '${pattern}' /var/log/app/".
+    Execute the <search-result> with "grep -r '${pattern}' /var/log/app/".
 
-    <Return> an <Error: status> with <search-result>
+    Return an <Error: status> with <search-result>
         when <search-result: error> is true.
 
     (* Split into lines and filter by pattern *)
-    <Split> the <log-lines> from <search-result: output> by /\n/.
+    Split the <log-lines> from <search-result: output> by /\n/.
 
     (* Filter lines matching timestamp format after since-date *)
-    <Filter> the <recent-lines> from <log-lines>
+    Filter the <recent-lines> from <log-lines>
         where <line> matches /^\d{4}-\d{2}-\d{2}/.
 
-    <Return> an <OK: status> with {
+    Return an <OK: status> with {
         pattern: <pattern>,
         since: <since-date>,
         matches: <recent-lines>,
@@ -784,44 +784,44 @@ When a date is resolved, these properties are accessible via qualifiers:
 }
 
 (validateInput: Input Validation) {
-    <Extract> the <email> from the <request: email>.
-    <Extract> the <code> from the <request: code>.
+    Extract the <email> from the <request: email>.
+    Extract the <code> from the <request: code>.
 
     (* Validate email format *)
     match <email> {
         case /^[\w.+-]+@[\w.-]+\.[a-zA-Z]{2,}$/i {
-            <Log> "Valid email" to the <console>.
+            Log "Valid email" to the <console>.
         }
         otherwise {
-            <Return> a <BadRequest: status> with "Invalid email".
+            Return a <BadRequest: status> with "Invalid email".
         }
     }
 
     (* Validate product code format: XX-0000 *)
     match <code> {
         case /^[A-Z]{2}-\d{4}$/ {
-            <Log> "Valid product code" to the <console>.
+            Log "Valid product code" to the <console>.
         }
         otherwise {
-            <Return> a <BadRequest: status> with "Invalid product code".
+            Return a <BadRequest: status> with "Invalid product code".
         }
     }
 
-    <Return> an <OK: status> with { validated: true }.
+    Return an <OK: status> with { validated: true }.
 }
 
 (scheduleTask: Scheduler API) {
-    <Extract> the <task-name> from the <request: name>.
-    <Extract> the <delay-minutes> from the <request: delayMinutes>.
+    Extract the <task-name> from the <request: name>.
+    Extract the <delay-minutes> from the <request: delayMinutes>.
 
     (* Calculate scheduled time *)
-    <Compute> the <offset> from "+" + <delay-minutes> + "m".
-    <Compute> the <scheduled-at: ${offset}> from <now>.
+    Compute the <offset> from "+" + <delay-minutes> + "m".
+    Compute the <scheduled-at: ${offset}> from <now>.
 
     (* Format for display *)
-    <Compute> the <display-time: format> from <scheduled-at> with "MMM dd, yyyy HH:mm".
+    Compute the <display-time: format> from <scheduled-at> with "MMM dd, yyyy HH:mm".
 
-    <Create> the <scheduled-task> with {
+    Create the <scheduled-task> with {
         name: <task-name>,
         createdAt: <now>,
         scheduledAt: <scheduled-at>,
@@ -829,9 +829,9 @@ When a date is resolved, these properties are accessible via qualifiers:
         status: "pending"
     }.
 
-    <Store> the <scheduled-task> into the <task-repository>.
+    Store the <scheduled-task> into the <task-repository>.
 
-    <Return> an <OK: status> with <scheduled-task>.
+    Return an <OK: status> with <scheduled-task>.
 }
 ```
 

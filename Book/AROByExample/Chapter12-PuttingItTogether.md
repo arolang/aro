@@ -195,19 +195,19 @@ Here are all four files for reference:
 **main.aro** (13 lines)
 ```aro
 (Application-Start: Web Crawler) {
-    <Log> "Starting Web Crawler..." to the <console>.
-    <Extract> the <start-url> from the <env: CRAWL_URL>.
-    <Log> "Starting URL: ${<start-url>}" to the <console>.
-    <Create> the <output-path> with "./output".
-    <Make> the <output-dir> to the <directory: output-path>.
-    <Log> "Output directory created" to the <console>.
-    <Emit> a <QueueUrl: event> with { url: <start-url>, base: <start-url> }.
-    <Return> an <OK: status> for the <startup>.
+    Log "Starting Web Crawler..." to the <console>.
+    Extract the <start-url> from the <env: CRAWL_URL>.
+    Log "Starting URL: ${<start-url>}" to the <console>.
+    Create the <output-path> with "./output".
+    Make the <output-dir> to the <directory: output-path>.
+    Log "Output directory created" to the <console>.
+    Emit a <QueueUrl: event> with { url: <start-url>, base: <start-url> }.
+    Return an <OK: status> for the <startup>.
 }
 
 (Application-End: Success) {
-    <Log> "Web Crawler completed!" to the <console>.
-    <Return> an <OK: status> for the <shutdown>.
+    Log "Web Crawler completed!" to the <console>.
+    Return an <OK: status> for the <shutdown>.
 }
 ```
 

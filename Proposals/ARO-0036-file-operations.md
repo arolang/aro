@@ -18,8 +18,8 @@ Check if a file or directory exists.
 ### 1.1 Syntax
 
 ```aro
-<Exists> the <result> for the <file: path>.
-<Exists> the <result> for the <directory: path>.
+Exists the <result> for the <file: path>.
+Exists the <result> for the <directory: path>.
 ```
 
 ### 1.2 Result
@@ -30,12 +30,12 @@ Returns a boolean: `true` if exists, `false` otherwise.
 
 ```aro
 (* Check file existence *)
-<Exists> the <config-exists> for the <file: "./config.json">.
-<Log> "Config found" to the <console> when <config-exists> = true.
+Exists the <config-exists> for the <file: "./config.json">.
+Log "Config found" to the <console> when <config-exists> = true.
 
 (* Check directory existence *)
-<Exists> the <output-exists> for the <directory: "./output">.
-<Make> the <output-dir> to the <path: "./output"> when <output-exists> = false.
+Exists the <output-exists> for the <directory: "./output">.
+Make the <output-dir> to the <path: "./output"> when <output-exists> = false.
 ```
 
 ---
@@ -47,8 +47,8 @@ Retrieve file or directory metadata.
 ### 2.1 Syntax
 
 ```aro
-<Stat> the <result> for the <file: path>.
-<Stat> the <result> for the <directory: path>.
+Stat the <result> for the <file: path>.
+Stat the <result> for the <directory: path>.
 ```
 
 ### 2.2 Result Properties
@@ -70,14 +70,14 @@ Retrieve file or directory metadata.
 
 ```aro
 (* Get file metadata *)
-<Stat> the <info> for the <file: "./document.pdf">.
-<Extract> the <size> from the <info: size>.
-<Extract> the <modified> from the <info: modified>.
-<Log> "File size: ${size} bytes, modified: ${modified}" to the <console>.
+Stat the <info> for the <file: "./document.pdf">.
+Extract the <size> from the <info: size>.
+Extract the <modified> from the <info: modified>.
+Log "File size: ${size} bytes, modified: ${modified}" to the <console>.
 
 (* Check if path is directory *)
-<Stat> the <info> for the <directory: "./src">.
-<Extract> the <is-dir> from the <info: isDirectory>.
+Stat the <info> for the <directory: "./src">.
+Extract the <is-dir> from the <info: isDirectory>.
 ```
 
 ---
@@ -89,7 +89,7 @@ Create a directory with all intermediate directories.
 ### 3.1 Syntax
 
 ```aro
-<Make> the <result> to the <path: directory-path>.
+Make the <result> to the <path: directory-path>.
 ```
 
 ### 3.2 Behavior
@@ -103,11 +103,11 @@ Create a directory with all intermediate directories.
 
 ```aro
 (* Create nested directory structure *)
-<Make> the <output-dir> to the <path: "./output/reports/2024">.
+Make the <output-dir> to the <path: "./output/reports/2024">.
 
 (* Create directory for file output *)
-<Make> the <logs-dir> to the <path: "./logs">.
-<Write> the <content> to the <file: "./logs/app.log">.
+Make the <logs-dir> to the <path: "./logs">.
+Write the <content> to the <file: "./logs/app.log">.
 ```
 
 ---
@@ -119,8 +119,8 @@ Copy files or directories.
 ### 4.1 Syntax
 
 ```aro
-<Copy> the <file: source> to the <destination: target>.
-<Copy> the <directory: source> to the <destination: target>.
+Copy the <file: source> to the <destination: target>.
+Copy the <directory: source> to the <destination: target>.
 ```
 
 ### 4.2 Behavior
@@ -134,15 +134,15 @@ Copy files or directories.
 
 ```aro
 (* Copy a file *)
-<Copy> the <file: "./template.txt"> to the <destination: "./output/copy.txt">.
+Copy the <file: "./template.txt"> to the <destination: "./output/copy.txt">.
 
 (* Copy a directory *)
-<Copy> the <directory: "./src"> to the <destination: "./backup/src">.
+Copy the <directory: "./src"> to the <destination: "./backup/src">.
 
 (* Copy with variable paths *)
-<Create> the <source-path> with "./data/input.json".
-<Create> the <dest-path> with "./archive/input.json".
-<Copy> the <file: source-path> to the <destination: dest-path>.
+Create the <source-path> with "./data/input.json".
+Create the <dest-path> with "./archive/input.json".
+Copy the <file: source-path> to the <destination: dest-path>.
 ```
 
 ---
@@ -154,8 +154,8 @@ Move or rename files and directories.
 ### 5.1 Syntax
 
 ```aro
-<Move> the <file: source> to the <destination: target>.
-<Move> the <directory: source> to the <destination: target>.
+Move the <file: source> to the <destination: target>.
+Move the <directory: source> to the <destination: target>.
 ```
 
 ### 5.2 Behavior
@@ -169,13 +169,13 @@ Move or rename files and directories.
 
 ```aro
 (* Rename a file *)
-<Move> the <file: "./draft.txt"> to the <destination: "./final.txt">.
+Move the <file: "./draft.txt"> to the <destination: "./final.txt">.
 
 (* Move to different directory *)
-<Move> the <file: "./temp/data.json"> to the <destination: "./processed/data.json">.
+Move the <file: "./temp/data.json"> to the <destination: "./processed/data.json">.
 
 (* Move a directory *)
-<Move> the <directory: "./uploads/pending"> to the <destination: "./uploads/completed">.
+Move the <directory: "./uploads/pending"> to the <destination: "./uploads/completed">.
 ```
 
 ---
@@ -187,35 +187,35 @@ List directory contents with filtering and recursion.
 ### 6.1 Basic Syntax
 
 ```aro
-<List> the <result> from the <directory: path>.
+List the <result> from the <directory: path>.
 ```
 
 ### 6.2 With Pattern Matching
 
 ```aro
-<List> the <result> from the <directory: path> matching "pattern".
+List the <result> from the <directory: path> matching "pattern".
 ```
 
 ### 6.3 Recursive Listing
 
 ```aro
-<List> the <result> from the <directory: path> recursively.
+List the <result> from the <directory: path> recursively.
 ```
 
 ### 6.4 Examples
 
 ```aro
 (* List all files in directory *)
-<List> the <entries> from the <directory: "./src">.
+List the <entries> from the <directory: "./src">.
 
 (* List only .aro files *)
-<List> the <aro-files> from the <directory: "./src"> matching "*.aro".
+List the <aro-files> from the <directory: "./src"> matching "*.aro".
 
 (* Recursive listing *)
-<List> the <all-files> from the <directory: "./project"> recursively.
+List the <all-files> from the <directory: "./project"> recursively.
 
 (* Combine pattern and recursion *)
-<List> the <all-tests> from the <directory: "."> matching "*_test.aro" recursively.
+List the <all-tests> from the <directory: "."> matching "*_test.aro" recursively.
 ```
 
 ### 6.5 Result Properties
@@ -238,8 +238,8 @@ Remove files and directories.
 ### 7.1 Syntax
 
 ```aro
-<Delete> the <file: path>.
-<Delete> the <directory: path>.
+Delete the <file: path>.
+Delete the <directory: path>.
 ```
 
 ### 7.2 Behavior
@@ -252,10 +252,10 @@ Remove files and directories.
 
 ```aro
 (* Delete a file *)
-<Delete> the <file: "./temp/cache.json">.
+Delete the <file: "./temp/cache.json">.
 
 (* Delete a directory *)
-<Delete> the <directory: "./build">.
+Delete the <directory: "./build">.
 ```
 
 ---
@@ -276,13 +276,13 @@ File operations follow ARO's error philosophy—errors are descriptive and autom
 
 | Action | Purpose | Syntax |
 |--------|---------|--------|
-| **Exists** | Check existence | `<Exists> the <r> for the <file: p>.` |
-| **Stat** | Get metadata | `<Stat> the <r> for the <file: p>.` |
-| **Make** | Create directory | `<Make> the <r> to the <path: p>.` |
-| **Copy** | Copy file/dir | `<Copy> the <file: s> to the <destination: d>.` |
-| **Move** | Move/rename | `<Move> the <file: s> to the <destination: d>.` |
-| **List** | List directory | `<List> the <r> from the <directory: p>.` |
-| **Delete** | Remove file/dir | `<Delete> the <file: p>.` |
+| **Exists** | Check existence | `Exists the <r> for the <file: p>.` |
+| **Stat** | Get metadata | `Stat the <r> for the <file: p>.` |
+| **Make** | Create directory | `Make the <r> to the <path: p>.` |
+| **Copy** | Copy file/dir | `Copy the <file: s> to the <destination: d>.` |
+| **Move** | Move/rename | `Move the <file: s> to the <destination: d>.` |
+| **List** | List directory | `List the <r> from the <directory: p>.` |
+| **Delete** | Remove file/dir | `Delete the <file: p>.` |
 
 ---
 

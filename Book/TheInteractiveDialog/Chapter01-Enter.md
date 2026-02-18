@@ -43,7 +43,7 @@ ARO REPL Commands:
   :quit, :q, :exit      Exit the REPL
 
 Type ARO statements directly, ending with .
-Example: <Set> the <x> to 42.
+Example: Set the <x> to 42.
 ```
 
 Commands that start with `:` talk to the REPL itself. Everything else is ARO.

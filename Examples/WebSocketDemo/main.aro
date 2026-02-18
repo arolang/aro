@@ -29,20 +29,20 @@
  *)
 
 (Application-Start: WebSocket Demo) {
-    <Log> "=== WebSocket Demo Server ===" to the <console>.
-    <Log> "" to the <console>.
+    Log "=== WebSocket Demo Server ===" to the <console>.
+    Log "" to the <console>.
 
     (* Start HTTP server - WebSocket is enabled via HTTP Upgrade *)
-    <Start> the <http-server> with {}.
-    <Log> "HTTP server started on port 8080" to the <console>.
-    <Log> "WebSocket endpoint: ws://localhost:8080/ws" to the <console>.
-    <Log> "" to the <console>.
-    <Log> "To connect: websocat ws://localhost:8080/ws" to the <console>.
-    <Log> "Or use any WebSocket client" to the <console>.
-    <Log> "" to the <console>.
+    Start the <http-server> with {}.
+    Log "HTTP server started on port 8080" to the <console>.
+    Log "WebSocket endpoint: ws://localhost:8080/ws" to the <console>.
+    Log "" to the <console>.
+    Log "To connect: websocat ws://localhost:8080/ws" to the <console>.
+    Log "Or use any WebSocket client" to the <console>.
+    Log "" to the <console>.
 
     (* Keep application running to handle events *)
-    <Keepalive> the <application> for the <events>.
+    Keepalive the <application> for the <events>.
 
-    <Return> an <OK: status> for the <startup>.
+    Return an <OK: status> for the <startup>.
 }

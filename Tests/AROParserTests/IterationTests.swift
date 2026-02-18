@@ -15,11 +15,11 @@ struct ForEachLoopParsingTests {
     func testParseBasicForEachLoop() throws {
         let source = """
         (Test: Demo) {
-            <Create> the <items> with [1, 2, 3].
+            Create the <items> with [1, 2, 3].
             for each <item> in <items> {
-                <Log> <item> to the <console>.
+                Log <item> to the <console>.
             }
-            <Return> an <OK: status> for the <test>.
+            Return an <OK: status> for the <test>.
         }
         """
 
@@ -47,11 +47,11 @@ struct ForEachLoopParsingTests {
     func testParseForEachLoopWithIndex() throws {
         let source = """
         (Test: Demo) {
-            <Create> the <items> with [1, 2, 3].
+            Create the <items> with [1, 2, 3].
             for each <item> at <index> in <items> {
-                <Log> <index> to the <console>.
+                Log <index> to the <console>.
             }
-            <Return> an <OK: status> for the <test>.
+            Return an <OK: status> for the <test>.
         }
         """
 
@@ -71,11 +71,11 @@ struct ForEachLoopParsingTests {
     func testParseForEachLoopWithFilter() throws {
         let source = """
         (Test: Demo) {
-            <Create> the <users> with [].
+            Create the <users> with [].
             for each <user> in <users> where <user: active> is true {
-                <Log> <user> to the <console>.
+                Log <user> to the <console>.
             }
-            <Return> an <OK: status> for the <test>.
+            Return an <OK: status> for the <test>.
         }
         """
 
@@ -98,11 +98,11 @@ struct ForEachLoopParsingTests {
     func testParseParallelForEachLoop() throws {
         let source = """
         (Test: Demo) {
-            <Create> the <items> with [1, 2, 3].
+            Create the <items> with [1, 2, 3].
             parallel for each <item> in <items> {
-                <Process> the <result> for the <item>.
+                Process the <result> for the <item>.
             }
-            <Return> an <OK: status> for the <test>.
+            Return an <OK: status> for the <test>.
         }
         """
 
@@ -121,11 +121,11 @@ struct ForEachLoopParsingTests {
     func testParseParallelForEachLoopWithConcurrency() throws {
         let source = """
         (Test: Demo) {
-            <Create> the <items> with [1, 2, 3].
+            Create the <items> with [1, 2, 3].
             parallel for each <item> in <items> with <concurrency: 4> {
-                <Fetch> the <data> from the <api>.
+                Fetch the <data> from the <api>.
             }
-            <Return> an <OK: status> for the <test>.
+            Return an <OK: status> for the <test>.
         }
         """
 
@@ -144,13 +144,13 @@ struct ForEachLoopParsingTests {
     func testParseNestedForEachLoops() throws {
         let source = """
         (Test: Demo) {
-            <Create> the <outer> with [[1, 2], [3, 4]].
+            Create the <outer> with [[1, 2], [3, 4]].
             for each <row> in <outer> {
                 for each <cell> in <row> {
-                    <Log> <cell> to the <console>.
+                    Log <cell> to the <console>.
                 }
             }
-            <Return> an <OK: status> for the <test>.
+            Return an <OK: status> for the <test>.
         }
         """
 
@@ -180,9 +180,9 @@ struct ForEachLoopSemanticTests {
         let source = """
         (Test: Demo) {
             for each <item> in <undefined-collection> {
-                <Log> <item> to the <console>.
+                Log <item> to the <console>.
             }
-            <Return> an <OK: status> for the <test>.
+            Return an <OK: status> for the <test>.
         }
         """
 
@@ -199,11 +199,11 @@ struct ForEachLoopSemanticTests {
     func testLoopVariableAvailable() throws {
         let source = """
         (Test: Demo) {
-            <Create> the <items> with [1, 2, 3].
+            Create the <items> with [1, 2, 3].
             for each <item> in <items> {
-                <Compute> the <doubled> from <item> * 2.
+                Compute the <doubled> from <item> * 2.
             }
-            <Return> an <OK: status> for the <test>.
+            Return an <OK: status> for the <test>.
         }
         """
 
@@ -220,11 +220,11 @@ struct ForEachLoopSemanticTests {
     func testParallelLoopSideEffect() throws {
         let source = """
         (Test: Demo) {
-            <Create> the <items> with [1, 2, 3].
+            Create the <items> with [1, 2, 3].
             parallel for each <item> in <items> with <concurrency: 4> {
-                <Process> the <result> for the <item>.
+                Process the <result> for the <item>.
             }
-            <Return> an <OK: status> for the <test>.
+            Return an <OK: status> for the <test>.
         }
         """
 

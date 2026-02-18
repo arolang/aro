@@ -152,7 +152,7 @@ struct MCPTests {
             let result = await provider.callTool(
                 name: "aro_check",
                 arguments: .object([
-                    "code": .string("(Test: Demo) { <Log> \"Hello\" to the <console>. <Return> an <OK: status> for the <result>. }")
+                    "code": .string("(Test: Demo) { Log \"Hello\" to the <console>. Return an <OK: status> for the <result>. }")
                 ])
             )
 
@@ -166,7 +166,7 @@ struct MCPTests {
             let result = await provider.callTool(
                 name: "aro_check",
                 arguments: .object([
-                    "code": .string("(Test: Demo) { <Log> invalid syntax }")
+                    "code": .string("(Test: Demo) { Log invalid syntax }")
                 ])
             )
 
@@ -218,7 +218,7 @@ struct MCPTests {
             let result = await provider.callTool(
                 name: "aro_parse",
                 arguments: .object([
-                    "code": .string("(Test: Demo) { <Log> \"Hello\" to the <console>. }")
+                    "code": .string("(Test: Demo) { Log \"Hello\" to the <console>. }")
                 ])
             )
 
@@ -655,7 +655,7 @@ struct MCPTests {
             let callResult = await provider.callTool(
                 name: "aro_check",
                 arguments: .object([
-                    "code": .string("(Test: App) { <Return> an <OK: status> for the <result>. }")
+                    "code": .string("(Test: App) { Return an <OK: status> for the <result>. }")
                 ])
             )
 

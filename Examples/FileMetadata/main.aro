@@ -1,24 +1,24 @@
 (* FileMetadata - Demonstrating the Stat action *)
 
 (Application-Start: File Metadata Demo) {
-    <Log> "=== File Metadata Demo ===" to the <console>.
+    Log "=== File Metadata Demo ===" to the <console>.
 
     (* Stat action retrieves file/directory metadata *)
     (* Supports verb: Stat *)
     (* Supports preposition: for *)
 
     (* Example 1: Get metadata for a file *)
-    <Log> "--- File Metadata ---" to the <console>.
-    <Create> the <filepath> with "Examples/FileMetadata/main.aro".
-    <Stat> the <file-info> for the <file: filepath>.
-    <Log> <file-info> to the <console>.
+    Log "--- File Metadata ---" to the <console>.
+    Create the <filepath> with "Examples/FileMetadata/main.aro".
+    Stat the <file-info> for the <file: filepath>.
+    Log <file-info> to the <console>.
 
     (* Example 2: Get metadata for a directory *)
-    <Log> "--- Directory Metadata ---" to the <console>.
-    <Create> the <dirpath> with "Examples/FileMetadata".
-    <Stat> the <dir-info> for the <directory: dirpath>.
-    <Log> <dir-info> to the <console>.
+    Log "--- Directory Metadata ---" to the <console>.
+    Create the <dirpath> with "Examples/FileMetadata".
+    Stat the <dir-info> for the <directory: dirpath>.
+    Log <dir-info> to the <console>.
 
-    <Log> "All metadata retrieved!" to the <console>.
-    <Return> an <OK: status> for the <demo>.
+    Log "All metadata retrieved!" to the <console>.
+    Return an <OK: status> for the <demo>.
 }

@@ -228,30 +228,30 @@ The observer pattern is declared through business activity naming. A feature set
 ```aro
 (* Observe ALL status transitions *)
 (Audit Order Status: status StateObserver) {
-    <Extract> the <orderId> from the <transition: entityId>.
-    <Extract> the <fromState> from the <transition: fromState>.
-    <Extract> the <toState> from the <transition: toState>.
+    Extract the <orderId> from the <transition: entityId>.
+    Extract the <fromState> from the <transition: fromState>.
+    Extract the <toState> from the <transition: toState>.
 
-    <Log> "[AUDIT] Order ${orderId}: ${fromState} -> ${toState}" to the <console>.
+    Log "[AUDIT] Order ${orderId}: ${fromState} -> ${toState}" to the <console>.
 
-    <Return> an <OK: status> for the <audit>.
+    Return an <OK: status> for the <audit>.
 }
 
 (* Observe ONLY when order is placed *)
 (Notify Order Placed: status StateObserver<draft_to_placed>) {
-    <Extract> the <orderId> from the <transition: entityId>.
-    <Log> "Order ${orderId} has been placed!" to the <console>.
-    <Return> an <OK: status> for the <notification>.
+    Extract the <orderId> from the <transition: entityId>.
+    Log "Order ${orderId} has been placed!" to the <console>.
+    Return an <OK: status> for the <notification>.
 }
 
 (* Observe ONLY when order ships *)
 (Send Shipping Notification: status StateObserver<paid_to_shipped>) {
-    <Extract> the <order> from the <transition: entity>.
-    <Extract> the <tracking> from the <order: trackingNumber>.
+    Extract the <order> from the <transition: entity>.
+    Extract the <tracking> from the <order: trackingNumber>.
 
-    <Log> "Order shipped! Tracking: ${tracking}" to the <console>.
+    Log "Order shipped! Tracking: ${tracking}" to the <console>.
 
-    <Return> an <OK: status> for the <notification>.
+    Return an <OK: status> for the <notification>.
 }
 ```
 

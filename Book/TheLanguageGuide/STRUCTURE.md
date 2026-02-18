@@ -6,7 +6,7 @@
 3. **Getting Started** — Installation, first application, `aro run`
 
 ## Part II: Core Language
-4. **Anatomy of a Statement** — `<Action> the <Result> preposition the <Object>`
+4. **Anatomy of a Statement** — `Action the <Result> preposition the <Object>`
 5. **Feature Sets** — Naming, business activities, scoping
 6. **Data Flow** — Semantic roles (REQUEST, OWN, RESPONSE, EXPORT)
 7. **Export Actions** — Choosing between Store, Emit, and Publish

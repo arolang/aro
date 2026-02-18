@@ -434,52 +434,52 @@ Create `.aro` files specifically for testing:
 (* Component tests for the validation plugin *)
 
 (Application-Start: Validation Tests) {
-    <Log> "Running validation plugin component tests..." to the <console>.
+    Log "Running validation plugin component tests..." to the <console>.
 
     (* Test 1: Email validation - valid *)
-    <Call> the <result1> from the <validation: validateEmail> with {
+    Call the <result1> from the <validation: validateEmail> with {
         email: "test@example.com"
     }.
-    <Extract> the <valid1> from the <result1: valid>.
-    <When> <valid1> is false:
-        <Log> "FAIL: Test 1 - valid email rejected" to the <console: error>.
-        <Return> a <ServerError: status> for the <test-failure>.
-    <Log> "PASS: Test 1 - valid email accepted" to the <console>.
+    Extract the <valid1> from the <result1: valid>.
+    When <valid1> is false:
+        Log "FAIL: Test 1 - valid email rejected" to the <console: error>.
+        Return a <ServerError: status> for the <test-failure>.
+    Log "PASS: Test 1 - valid email accepted" to the <console>.
 
     (* Test 2: Email validation - invalid *)
-    <Call> the <result2> from the <validation: validateEmail> with {
+    Call the <result2> from the <validation: validateEmail> with {
         email: "not-an-email"
     }.
-    <Extract> the <valid2> from the <result2: valid>.
-    <When> <valid2> is true:
-        <Log> "FAIL: Test 2 - invalid email accepted" to the <console: error>.
-        <Return> a <ServerError: status> for the <test-failure>.
-    <Log> "PASS: Test 2 - invalid email rejected" to the <console>.
+    Extract the <valid2> from the <result2: valid>.
+    When <valid2> is true:
+        Log "FAIL: Test 2 - invalid email accepted" to the <console: error>.
+        Return a <ServerError: status> for the <test-failure>.
+    Log "PASS: Test 2 - invalid email rejected" to the <console>.
 
     (* Test 3: URL validation *)
-    <Call> the <result3> from the <validation: validateURL> with {
+    Call the <result3> from the <validation: validateURL> with {
         url: "https://example.com/path?query=value"
     }.
-    <Extract> the <valid3> from the <result3: valid>.
-    <When> <valid3> is false:
-        <Log> "FAIL: Test 3 - valid URL rejected" to the <console: error>.
-        <Return> a <ServerError: status> for the <test-failure>.
-    <Log> "PASS: Test 3 - valid URL accepted" to the <console>.
+    Extract the <valid3> from the <result3: valid>.
+    When <valid3> is false:
+        Log "FAIL: Test 3 - valid URL rejected" to the <console: error>.
+        Return a <ServerError: status> for the <test-failure>.
+    Log "PASS: Test 3 - valid URL accepted" to the <console>.
 
     (* Test 4: Phone validation with locale *)
-    <Call> the <result4> from the <validation: validatePhone> with {
+    Call the <result4> from the <validation: validatePhone> with {
         phone: "+1-555-123-4567",
         locale: "US"
     }.
-    <Extract> the <valid4> from the <result4: valid>.
-    <When> <valid4> is false:
-        <Log> "FAIL: Test 4 - valid US phone rejected" to the <console: error>.
-        <Return> a <ServerError: status> for the <test-failure>.
-    <Log> "PASS: Test 4 - valid US phone accepted" to the <console>.
+    Extract the <valid4> from the <result4: valid>.
+    When <valid4> is false:
+        Log "FAIL: Test 4 - valid US phone rejected" to the <console: error>.
+        Return a <ServerError: status> for the <test-failure>.
+    Log "PASS: Test 4 - valid US phone accepted" to the <console>.
 
-    <Log> "" to the <console>.
-    <Log> "All component tests passed!" to the <console>.
-    <Return> an <OK: status> for the <tests>.
+    Log "" to the <console>.
+    Log "All component tests passed!" to the <console>.
+    Return an <OK: status> for the <tests>.
 }
 ```
 
@@ -582,44 +582,44 @@ For plugins that depend on external services, use mocks:
 (* Test Redis plugin with a mock server *)
 
 (Application-Start: Redis Integration Tests) {
-    <Log> "Starting Redis integration tests..." to the <console>.
+    Log "Starting Redis integration tests..." to the <console>.
 
     (* Use test Redis instance *)
-    <Create> the <test-prefix> with "test:" ++ <uuid>.
+    Create the <test-prefix> with "test:" ++ <uuid>.
 
     (* Test 1: Write and read string *)
-    <Write> "test-value" to the <redis: <test-prefix> ++ "string">.
-    <Read> the <value> from the <redis: <test-prefix> ++ "string">.
-    <When> <value> is not "test-value":
-        <Log> "FAIL: String read/write mismatch" to the <console: error>.
-        <Return> a <ServerError: status> for the <test-failure>.
-    <Log> "PASS: String read/write" to the <console>.
+    Write "test-value" to the <redis: <test-prefix> ++ "string">.
+    Read the <value> from the <redis: <test-prefix> ++ "string">.
+    When <value> is not "test-value":
+        Log "FAIL: String read/write mismatch" to the <console: error>.
+        Return a <ServerError: status> for the <test-failure>.
+    Log "PASS: String read/write" to the <console>.
 
     (* Test 2: Write and read object *)
-    <Create> the <test-obj> with { name: "Test", count: 42 }.
-    <Write> <test-obj> to the <redis: <test-prefix> ++ "object">.
-    <Read> the <retrieved> from the <redis: <test-prefix> ++ "object">.
-    <When> <retrieved: name> is not "Test":
-        <Log> "FAIL: Object read/write mismatch" to the <console: error>.
-        <Return> a <ServerError: status> for the <test-failure>.
-    <Log> "PASS: Object read/write" to the <console>.
+    Create the <test-obj> with { name: "Test", count: 42 }.
+    Write <test-obj> to the <redis: <test-prefix> ++ "object">.
+    Read the <retrieved> from the <redis: <test-prefix> ++ "object">.
+    When <retrieved: name> is not "Test":
+        Log "FAIL: Object read/write mismatch" to the <console: error>.
+        Return a <ServerError: status> for the <test-failure>.
+    Log "PASS: Object read/write" to the <console>.
 
     (* Test 3: TTL expiration *)
-    <Write> "expiring" to the <redis: <test-prefix> ++ "ttl"> with { ttl: 1 }.
-    <Wait> 2 seconds.
-    <Read> the <expired> from the <redis: <test-prefix> ++ "ttl">.
-    <When> <expired> is not null:
-        <Log> "FAIL: TTL did not expire" to the <console: error>.
-        <Return> a <ServerError: status> for the <test-failure>.
-    <Log> "PASS: TTL expiration" to the <console>.
+    Write "expiring" to the <redis: <test-prefix> ++ "ttl"> with { ttl: 1 }.
+    Wait 2 seconds.
+    Read the <expired> from the <redis: <test-prefix> ++ "ttl">.
+    When <expired> is not null:
+        Log "FAIL: TTL did not expire" to the <console: error>.
+        Return a <ServerError: status> for the <test-failure>.
+    Log "PASS: TTL expiration" to the <console>.
 
     (* Cleanup *)
-    <Call> the <keys> from the <redis: list> with { pattern: <test-prefix> ++ "*" }.
-    <For> each <key> in <keys>:
-        <Write> null to the <redis: <key>>.
+    Call the <keys> from the <redis: list> with { pattern: <test-prefix> ++ "*" }.
+    For each <key> in <keys>:
+        Write null to the <redis: <key>>.
 
-    <Log> "All Redis integration tests passed!" to the <console>.
-    <Return> an <OK: status> for the <tests>.
+    Log "All Redis integration tests passed!" to the <console>.
+    Return an <OK: status> for the <tests>.
 }
 ```
 
@@ -632,78 +632,78 @@ Test your plugin as part of a complete application:
 (* End-to-end tests for a user service using validation plugin *)
 
 (Application-Start: E2E User Service Tests) {
-    <Log> "Running E2E user service tests..." to the <console>.
-    <Keepalive> the <application> for the <events>.
-    <Return> an <OK: status> for the <startup>.
+    Log "Running E2E user service tests..." to the <console>.
+    Keepalive the <application> for the <events>.
+    Return an <OK: status> for the <startup>.
 }
 
 (* Test endpoint handlers *)
 
 (Test Create User Valid: E2E Tests) {
     (* Simulate HTTP request *)
-    <Create> the <request-body> with {
+    Create the <request-body> with {
         email: "newuser@example.com",
         password: "SecureP@ss123",
         name: "New User"
     }.
 
     (* Call the create user endpoint logic *)
-    <Call> the <email-check> from the <validation: validateEmail> with {
+    Call the <email-check> from the <validation: validateEmail> with {
         email: <request-body: email>
     }.
-    <When> <email-check: valid> is false:
-        <Log> "FAIL: Valid email was rejected" to the <console: error>.
-        <Return> a <ServerError: status> for the <test-failure>.
+    When <email-check: valid> is false:
+        Log "FAIL: Valid email was rejected" to the <console: error>.
+        Return a <ServerError: status> for the <test-failure>.
 
-    <Call> the <password-check> from the <validation: validatePassword> with {
+    Call the <password-check> from the <validation: validatePassword> with {
         password: <request-body: password>,
         minLength: 8,
         requireSpecial: true
     }.
-    <When> <password-check: valid> is false:
-        <Log> "FAIL: Valid password was rejected" to the <console: error>.
-        <Return> a <ServerError: status> for the <test-failure>.
+    When <password-check: valid> is false:
+        Log "FAIL: Valid password was rejected" to the <console: error>.
+        Return a <ServerError: status> for the <test-failure>.
 
-    <Log> "PASS: Create user with valid data" to the <console>.
-    <Return> an <OK: status> for the <test>.
+    Log "PASS: Create user with valid data" to the <console>.
+    Return an <OK: status> for the <test>.
 }
 
 (Test Create User Invalid Email: E2E Tests) {
-    <Create> the <request-body> with {
+    Create the <request-body> with {
         email: "invalid-email",
         password: "SecureP@ss123",
         name: "Test User"
     }.
 
-    <Call> the <email-check> from the <validation: validateEmail> with {
+    Call the <email-check> from the <validation: validateEmail> with {
         email: <request-body: email>
     }.
-    <When> <email-check: valid> is true:
-        <Log> "FAIL: Invalid email was accepted" to the <console: error>.
-        <Return> a <ServerError: status> for the <test-failure>.
+    When <email-check: valid> is true:
+        Log "FAIL: Invalid email was accepted" to the <console: error>.
+        Return a <ServerError: status> for the <test-failure>.
 
-    <Log> "PASS: Reject invalid email" to the <console>.
-    <Return> an <OK: status> for the <test>.
+    Log "PASS: Reject invalid email" to the <console>.
+    Return an <OK: status> for the <test>.
 }
 
 (Test Create User Weak Password: E2E Tests) {
-    <Create> the <request-body> with {
+    Create the <request-body> with {
         email: "user@example.com",
         password: "weak",
         name: "Test User"
     }.
 
-    <Call> the <password-check> from the <validation: validatePassword> with {
+    Call the <password-check> from the <validation: validatePassword> with {
         password: <request-body: password>,
         minLength: 8,
         requireSpecial: true
     }.
-    <When> <password-check: valid> is true:
-        <Log> "FAIL: Weak password was accepted" to the <console: error>.
-        <Return> a <ServerError: status> for the <test-failure>.
+    When <password-check: valid> is true:
+        Log "FAIL: Weak password was accepted" to the <console: error>.
+        Return a <ServerError: status> for the <test-failure>.
 
-    <Log> "PASS: Reject weak password" to the <console>.
-    <Return> an <OK: status> for the <test>.
+    Log "PASS: Reject weak password" to the <console>.
+    Return an <OK: status> for the <test>.
 }
 ```
 
@@ -772,36 +772,36 @@ Verify errors are handled correctly:
 (* tests/error-handling.aro *)
 
 (Application-Start: Error Handling Tests) {
-    <Log> "Testing error handling..." to the <console>.
+    Log "Testing error handling..." to the <console>.
 
     (* Test 1: Missing required argument *)
-    <Call> the <result1> from the <formatter: formatDate> with {}.
-    <When> <result1: error> does not exist:
-        <Log> "FAIL: No error for missing argument" to the <console: error>.
-        <Return> a <ServerError: status> for the <test-failure>.
-    <Log> "PASS: Error returned for missing argument" to the <console>.
+    Call the <result1> from the <formatter: formatDate> with {}.
+    When <result1: error> does not exist:
+        Log "FAIL: No error for missing argument" to the <console: error>.
+        Return a <ServerError: status> for the <test-failure>.
+    Log "PASS: Error returned for missing argument" to the <console>.
 
     (* Test 2: Invalid argument type *)
-    <Call> the <result2> from the <formatter: formatDate> with {
+    Call the <result2> from the <formatter: formatDate> with {
         date: 12345
     }.
-    <When> <result2: error> does not exist:
-        <Log> "FAIL: No error for invalid type" to the <console: error>.
-        <Return> a <ServerError: status> for the <test-failure>.
-    <Log> "PASS: Error returned for invalid type" to the <console>.
+    When <result2: error> does not exist:
+        Log "FAIL: No error for invalid type" to the <console: error>.
+        Return a <ServerError: status> for the <test-failure>.
+    Log "PASS: Error returned for invalid type" to the <console>.
 
     (* Test 3: Malformed JSON in options *)
-    <Call> the <result3> from the <formatter: formatCurrency> with {
+    Call the <result3> from the <formatter: formatCurrency> with {
         amount: 100,
         options: "not-json"
     }.
-    <When> <result3: error> does not exist:
-        <Log> "FAIL: No error for malformed options" to the <console: error>.
-        <Return> a <ServerError: status> for the <test-failure>.
-    <Log> "PASS: Error returned for malformed options" to the <console>.
+    When <result3: error> does not exist:
+        Log "FAIL: No error for malformed options" to the <console: error>.
+        Return a <ServerError: status> for the <test-failure>.
+    Log "PASS: Error returned for malformed options" to the <console>.
 
-    <Log> "All error handling tests passed!" to the <console>.
-    <Return> an <OK: status> for the <tests>.
+    Log "All error handling tests passed!" to the <console>.
+    Return an <OK: status> for the <tests>.
 }
 ```
 

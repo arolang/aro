@@ -8,18 +8,18 @@
 
 (* Handler for UserCreated events *)
 (Log User Events: UserCreated Handler) {
-    <Log> "[AUDIT] UserCreated: User created" to the <console>.
-    <Return> an <OK: status> for the <audit>.
+    Log "[AUDIT] UserCreated: User created" to the <console>.
+    Return an <OK: status> for the <audit>.
 }
 
 (* Handler for OrderPlaced events *)
 (Log Order Events: OrderPlaced Handler) {
-    <Log> "[AUDIT] OrderPlaced: Order placed" to the <console>.
-    <Return> an <OK: status> for the <audit>.
+    Log "[AUDIT] OrderPlaced: Order placed" to the <console>.
+    Return an <OK: status> for the <audit>.
 }
 
 (* Handler for PaymentReceived events *)
 (Log Payment Events: PaymentReceived Handler) {
-    <Log> "[AUDIT] PaymentReceived: Payment processed" to the <console>.
-    <Return> an <OK: status> for the <audit>.
+    Log "[AUDIT] PaymentReceived: Payment processed" to the <console>.
+    Return an <OK: status> for the <audit>.
 }

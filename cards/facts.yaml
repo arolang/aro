@@ -9,14 +9,14 @@ facts:
     week: 1
     day: 1
     category: "Philosophy"
-    headline: "<Retrieve> the <user> from the <database>."
+    headline: "Retrieve the <user> from the <database>."
     explanation: "ARO statements read like English sentences. Business stakeholders review code directly. No translation layer between requirements and implementation."
 
   - id: "01-2"
     week: 1
     day: 2
     category: "Syntax"
-    headline: "<Action> the <Result> from the <Object>."
+    headline: "Action the <Result> from the <Object>."
     explanation: "Every statement follows one pattern. Action = verb, Result = output, Object = input. Angle brackets mark identifiers. Period ends statements."
 
   # ===== WEEK 2: Contract-First =====
@@ -46,7 +46,7 @@ facts:
     week: 3
     day: 2
     category: "API"
-    headline: "<Return> an <OK: status> with <user>."
+    headline: "Return an <OK: status> with <user>."
     explanation: "Return ends execution with a status code. OK=200, Created=201, NotFound=404, BadRequest=400, Error=500. Status codes as English words."
 
   - id: "03-3"
@@ -61,7 +61,7 @@ facts:
     week: 4
     day: 1
     category: "Events"
-    headline: "<Emit> a <UserCreated: event> with <user>."
+    headline: "Emit a <UserCreated: event> with <user>."
     explanation: "Emit events without knowing who handles them. Add new handlers without touching existing code. Scale teams independently. True microservice thinking."
 
   - id: "04-2"
@@ -112,14 +112,14 @@ facts:
     week: 6
     day: 2
     category: "Actions"
-    headline: "<Extract> the <id> from the <pathParameters: id>."
+    headline: "Extract the <id> from the <pathParameters: id>."
     explanation: "Extract pulls data from sources. Colon navigates nested fields. Works with pathParameters, queryParameters, request:body, event:payload."
 
   - id: "06-3"
     week: 6
     day: 3
     category: "Actions"
-    headline: "<Extract> the <email> from the <request: body: user>."
+    headline: "Extract the <email> from the <request: body: user>."
     explanation: "Colons chain to navigate deep structures. request:body:user:email gets the email from nested JSON. Schema validates the path exists."
 
   # ===== WEEK 7: Compilation =====
@@ -163,7 +163,7 @@ facts:
     week: 8
     day: 2
     category: "Data"
-    headline: "<Retrieve> the <user> from <user-repo> where id = <id>."
+    headline: "Retrieve the <user> from <user-repo> where id = <id>."
     explanation: "where clause filters data. Natural language operators: is, is not, contains, starts with, ends with. Reads like a sentence."
 
   - id: "08-3"
@@ -200,14 +200,14 @@ facts:
     week: 10
     day: 1
     category: "HTTP"
-    headline: "<Start> the <http-server> on port 8080."
+    headline: "Start the <http-server> on port 8080."
     explanation: "One action launches the HTTP server. Async and performant by default. Combine with Keepalive for long-running services. Production-ready."
 
   - id: "10-2"
     week: 10
     day: 2
     category: "HTTP"
-    headline: "<Keepalive> the <application>."
+    headline: "Keepalive the <application>."
     explanation: "Keepalive blocks execution until shutdown signal. Application continues processing events. SIGINT/SIGTERM trigger graceful shutdown."
 
   - id: "10-3"
@@ -229,14 +229,14 @@ facts:
     week: 11
     day: 2
     category: "Events"
-    headline: "<Extract> the <user> from the <event: payload>."
+    headline: "Extract the <user> from the <event: payload>."
     explanation: "Inside a handler, event:payload contains the emitted data. Access nested fields with colons. Type-safe access to event properties."
 
   - id: "11-3"
     week: 11
     day: 3
     category: "Events"
-    headline: "<Store> the <users> into <user-repository>."
+    headline: "Store the <users> into <user-repository>."
     explanation: "Storing a list emits one event per item, not one event for the whole list. Process items individually with handlers. No Keepalive needed for event processing."
 
   # ===== WEEK 12: Repositories =====
@@ -244,28 +244,28 @@ facts:
     week: 12
     day: 1
     category: "Data"
-    headline: "<Store> the <user> in the <user-repository>."
+    headline: "Store the <user> in the <user-repository>."
     explanation: "Repositories store data in memory across requests. Perfect for prototypes and tests. Swap implementations later without changing code."
 
   - id: "12-2"
     week: 12
     day: 2
     category: "Data"
-    headline: "<Retrieve> the <users> from the <user-repository>."
+    headline: "Retrieve the <users> from the <user-repository>."
     explanation: "Retrieve reads stored data. Returns single item or collection. Add where clause to filter. Repository name must end with -repository."
 
   - id: "12-3"
     week: 12
     day: 3
     category: "Data"
-    headline: "<Update> the <user> in the <user-repository>."
+    headline: "Update the <user> in the <user-repository>."
     explanation: "Update modifies existing records. Matches by id field. Triggers repository observers. Atomic operation within the repository."
 
   - id: "12-4"
     week: 12
     day: 4
     category: "Data"
-    headline: "<Delete> from the <user-repository> where id = <id>."
+    headline: "Delete from the <user-repository> where id = <id>."
     explanation: "Delete removes records matching the where clause. Triggers repository observers. Returns count of deleted items."
 
   # ===== WEEK 13: Compute =====
@@ -273,21 +273,21 @@ facts:
     week: 13
     day: 1
     category: "Actions"
-    headline: "<Compute> the <hash> from the <password>."
+    headline: "Compute the <hash> from the <password>."
     explanation: "Hash passwords, count items, transform strings without external libraries. Every ARO installation has the same capabilities. Consistent everywhere."
 
   - id: "13-2"
     week: 13
     day: 2
     category: "Actions"
-    headline: "<Compute> the <total> from <price> * <quantity>."
+    headline: "Compute the <total> from <price> * <quantity>."
     explanation: "Compute transforms data. Supports arithmetic: + - * / %. Operations: length, count, uppercase, lowercase, hash. Result qualifier names the operation."
 
   - id: "13-3"
     week: 13
     day: 3
     category: "Actions"
-    headline: "<Compute> the <len: length> from the <text>."
+    headline: "Compute the <len: length> from the <text>."
     explanation: "Qualifier specifies the operation. length counts characters. count counts items in lists. uppercase/lowercase transforms case. hash creates secure hash."
 
   # ===== WEEK 14: Articles =====
@@ -295,7 +295,7 @@ facts:
     week: 14
     day: 1
     category: "Syntax"
-    headline: "<Extract> the <user> from the <request>."
+    headline: "Extract the <user> from the <request>."
     explanation: "Articles (a, an, the) make code read like requirements documents. Auditors understand what the code does. Regulatory compliance simplified."
 
   - id: "14-2"
@@ -332,14 +332,14 @@ facts:
     week: 16
     day: 1
     category: "API"
-    headline: "<Extract> the <data> from the <request: body>."
+    headline: "Extract the <data> from the <request: body>."
     explanation: "Request bodies validate against OpenAPI schema before your code runs. Invalid data returns 400 automatically. No validation code to write."
 
   - id: "16-2"
     week: 16
     day: 2
     category: "API"
-    headline: "<Extract> the <email> from the <request: body: user: email>."
+    headline: "Extract the <email> from the <request: body: user: email>."
     explanation: "Request body parsed per Content-Type header. JSON, form data handled automatically. Colons navigate nested fields. Schema validates structure."
 
   # ===== WEEK 17: Path Parameters =====
@@ -354,7 +354,7 @@ facts:
     week: 17
     day: 2
     category: "API"
-    headline: "<Extract> the <userId> from the <pathParameters: userId>."
+    headline: "Extract the <userId> from the <pathParameters: userId>."
     explanation: "OpenAPI path parameters map to pathParameters object. Access by name. Types validated per schema. Integer paths become integers."
 
   # ===== WEEK 18: Repository Observers =====
@@ -369,7 +369,7 @@ facts:
     week: 18
     day: 2
     category: "Data"
-    headline: "<Extract> the <user> from the <change: entity>."
+    headline: "Extract the <user> from the <change: entity>."
     explanation: "Observer receives change object. change:entity is the affected record. change:operation is store/update/delete. React to any data mutation."
 
   - id: "18-3"
@@ -391,14 +391,14 @@ facts:
     week: 19
     day: 2
     category: "Syntax"
-    headline: "<Store> the <user> into the <user-repository>."
+    headline: "Store the <user> into the <user-repository>."
     explanation: "into emphasizes insertion into a container. to emphasizes sending to a destination. Both work with Store. Grammar guides intent."
 
   - id: "19-3"
     week: 19
     day: 3
     category: "Syntax"
-    headline: "<Send> the <email> to the <user: address> via <smtp>."
+    headline: "Send the <email> to the <user: address> via <smtp>."
     explanation: "via specifies the transport method. to specifies the destination. Prepositions make data flow explicit in the code."
 
   # ===== WEEK 20: HTTP Client =====
@@ -406,14 +406,14 @@ facts:
     week: 20
     day: 1
     category: "HTTP"
-    headline: "<Request> the <data> from the <api: url>."
+    headline: "Request the <data> from the <api: url>."
     explanation: "Call external services without HTTP library setup. Headers, auth, timeouts in config object. Response parsing included. Integration simplified."
 
   - id: "20-2"
     week: 20
     day: 2
     category: "HTTP"
-    headline: "<Request> the <response> from <api> with { method: \"POST\", body: <data> }."
+    headline: "Request the <response> from <api> with { method: \"POST\", body: <data> }."
     explanation: "Config object for method, headers, body, timeout. from for GET, to for POST. Response includes status, headers, body."
 
   # ===== WEEK 21: Pattern Matching =====
@@ -428,7 +428,7 @@ facts:
     week: 21
     day: 2
     category: "Syntax"
-    headline: "case \"pending\" => <Return> an <Accepted>."
+    headline: "case \"pending\" => Return an <Accepted>."
     explanation: "Match tests value against patterns. case for each pattern. otherwise for fallback. Value, type, and regex patterns supported."
 
   - id: "21-3"
@@ -443,14 +443,14 @@ facts:
     week: 22
     day: 1
     category: "Files"
-    headline: "<Read> the <content> from the <file: ./data.json>."
+    headline: "Read the <content> from the <file: ./data.json>."
     explanation: "Read, write, copy, move, delete files with simple actions. No streams to manage. No buffers to allocate. Cross-platform paths handled."
 
   - id: "22-2"
     week: 22
     day: 2
     category: "Files"
-    headline: "<Write> the <users> to the <file: ./data.json>."
+    headline: "Write the <users> to the <file: ./data.json>."
     explanation: "File extension determines format. .json writes JSON, .yaml writes YAML, .csv writes CSV. Format detection is automatic."
 
   - id: "22-3"
@@ -464,14 +464,14 @@ facts:
     week: 22
     day: 4
     category: "Files"
-    headline: "<Write> the <logs> to the <file: ./events.jsonl>."
+    headline: "Write the <logs> to the <file: ./events.jsonl>."
     explanation: ".jsonl writes one JSON object per line. .csv adds headers automatically. .sql generates INSERT statements. .md creates tables."
 
   - id: "22-5"
     week: 22
     day: 5
     category: "Files"
-    headline: "<Write> the <data> to <file> with { delimiter: \";\" }."
+    headline: "Write the <data> to <file> with { delimiter: \";\" }."
     explanation: "CSV/TSV options: delimiter, header, quote, encoding. Override defaults with config object. Same options work for reading."
 
   # ===== WEEK 23: File Watching =====
@@ -479,7 +479,7 @@ facts:
     week: 23
     day: 1
     category: "Files"
-    headline: "<Watch> the <directory: ./uploads>."
+    headline: "Watch the <directory: ./uploads>."
     explanation: "Monitor directories for new, modified, deleted files. Build file processors, backup systems, sync tools. Platform-native performance."
 
   - id: "23-2"
@@ -494,14 +494,14 @@ facts:
     week: 24
     day: 1
     category: "Data"
-    headline: "<Publish> as <config> the <settings>."
+    headline: "Publish as <config> the <settings>."
     explanation: "Publish makes variables globally accessible. Feature sets share config, computed values, state. No dependency injection. No service locators."
 
   - id: "24-2"
     week: 24
     day: 2
     category: "Data"
-    headline: "<Extract> the <timeout> from the <config: timeout>."
+    headline: "Extract the <timeout> from the <config: timeout>."
     explanation: "Access published variables by alias. Original name stays local. Other feature sets use the published alias. Clean separation of concerns."
 
   # ===== WEEK 25: Validate =====
@@ -509,7 +509,7 @@ facts:
     week: 25
     day: 1
     category: "Actions"
-    headline: "<Validate> the <email> with required, email."
+    headline: "Validate the <email> with required, email."
     explanation: "Chain validators with commas. Built-in rules for common cases. Validation logic centralized and reusable. Fails fast on first error."
 
   - id: "25-2"
@@ -524,14 +524,14 @@ facts:
     week: 26
     day: 1
     category: "Actions"
-    headline: "<Create> the <user> with { name: \"Alice\", role: \"admin\" }."
+    headline: "Create the <user> with { name: \"Alice\", role: \"admin\" }."
     explanation: "Create typed objects from literals. OpenAPI types become runtime objects. No separate DTO classes. Schema is the model."
 
   - id: "26-2"
     week: 26
     day: 2
     category: "Actions"
-    headline: "<Create> the <order> from the <template> with <overrides>."
+    headline: "Create the <order> from the <template> with <overrides>."
     explanation: "from provides base object. with provides overrides. Merged into new object. Original unchanged. Immutable data patterns."
 
   # ===== WEEK 27: Iteration =====
@@ -554,14 +554,14 @@ facts:
     week: 28
     day: 1
     category: "Syntax"
-    headline: "<Return> a <Created> when <valid> is true."
+    headline: "Return a <Created> when <valid> is true."
     explanation: "Add conditions without nesting. Statement runs only when guard is true. Cleaner than if-then for simple cases. Business rules stay visible."
 
   - id: "28-2"
     week: 28
     day: 2
     category: "Syntax"
-    headline: "<Emit> an <Alert: event> when <count> > 100."
+    headline: "Emit an <Alert: event> when <count> > 100."
     explanation: "when clause guards any statement. Condition follows when. Supports comparison operators: is, >, <, >=, <=, contains."
 
   # ===== WEEK 29: Split =====
@@ -569,14 +569,14 @@ facts:
     week: 29
     day: 1
     category: "Actions"
-    headline: "<Split> the <parts> from the <csv-line> by \",\"."
+    headline: "Split the <parts> from the <csv-line> by \",\"."
     explanation: "Split strings into parts. Handle CSV, logs, structured text. String or regex delimiter. Text processing built in."
 
   - id: "29-2"
     week: 29
     day: 2
     category: "Actions"
-    headline: "<Split> the <words> from the <text> by /\\s+/."
+    headline: "Split the <words> from the <text> by /\\s+/."
     explanation: "Regex delimiter after by. Flags: i (case-insensitive), g (global), m (multiline). Pattern in slashes."
 
   # ===== WEEK 30: Filter/Map/Reduce =====
@@ -584,21 +584,21 @@ facts:
     week: 30
     day: 1
     category: "Data"
-    headline: "<Filter> the <active> from <users> where <active> is true."
+    headline: "Filter the <active> from <users> where <active> is true."
     explanation: "Transform collections without loops. Filter, map, reduce express intent clearly. Chain operations for complex transformations."
 
   - id: "30-2"
     week: 30
     day: 2
     category: "Data"
-    headline: "<Map> the <names> from the <users: name>."
+    headline: "Map the <names> from the <users: name>."
     explanation: "Map extracts a field from each item. Qualifier specifies which field. Result is list of that field's values."
 
   - id: "30-3"
     week: 30
     day: 3
     category: "Data"
-    headline: "<Reduce> the <total> from the <orders: amount> with sum."
+    headline: "Reduce the <total> from the <orders: amount> with sum."
     explanation: "Reduce aggregates to single value. sum, avg, min, max, count built in. with specifies the aggregation function."
 
   # ===== WEEK 31: Regex =====
@@ -613,7 +613,7 @@ facts:
     week: 31
     day: 2
     category: "Syntax"
-    headline: "<Match> the <email> against /^[\\w]+@[\\w]+\\.[\\w]+$/."
+    headline: "Match the <email> against /^[\\w]+@[\\w]+\\.[\\w]+$/."
     explanation: "Match tests value against pattern. Returns boolean. Use in when guards. Flags after closing slash: i, g, m, s."
 
   - id: "31-3"
@@ -635,7 +635,7 @@ facts:
     week: 32
     day: 2
     category: "Data"
-    headline: "<Extract> the <third> from the <items: 2>."
+    headline: "Extract the <third> from the <items: 2>."
     explanation: "Numeric qualifier is 0-based index. Ranges: 2-5 (inclusive). Picks: 0,3,7 (specific indices). Negative from end: -1 is last."
 
   # ===== WEEK 33: Testing =====
@@ -650,21 +650,21 @@ facts:
     week: 33
     day: 2
     category: "Testing"
-    headline: "<Given> the <a> with 5."
+    headline: "Given the <a> with 5."
     explanation: "Given binds test data. Sets up preconditions. Works like Create but semantically for testing. BDD-style setup."
 
   - id: "33-3"
     week: 33
     day: 3
     category: "Testing"
-    headline: "<When> the <result> from the <add-numbers>."
+    headline: "When the <result> from the <add-numbers>."
     explanation: "When executes a feature set. Passes current context as input. Captures result. Calls the feature set under test."
 
   - id: "33-4"
     week: 33
     day: 4
     category: "Testing"
-    headline: "<Then> the <result> with 8."
+    headline: "Then the <result> with 8."
     explanation: "Then asserts expected value. Throws AssertionError on mismatch. Assert is synonym. Failure message includes actual vs expected."
 
   - id: "33-5"
@@ -679,7 +679,7 @@ facts:
     week: 34
     day: 1
     category: "State"
-    headline: "<Accept> the <transition: draft_to_placed> on <order: status>."
+    headline: "Accept the <transition: draft_to_placed> on <order: status>."
     explanation: "Accept validates and applies state transition. States defined in OpenAPI enums. Invalid transitions throw descriptive errors."
 
   - id: "34-2"
@@ -716,7 +716,7 @@ facts:
     week: 36
     day: 2
     category: "Syntax"
-    headline: "<Filter> the <active> as List from <users>."
+    headline: "Filter the <active> as List from <users>."
     explanation: "as keyword for type annotation. Clearer than colon syntax. Works on Filter, Map, Reduce results. Both syntaxes valid."
 
   # ===== WEEK 37: Sockets =====
@@ -724,7 +724,7 @@ facts:
     week: 37
     day: 1
     category: "Sockets"
-    headline: "<Listen> on port 9000 as <socket-server>."
+    headline: "Listen on port 9000 as <socket-server>."
     explanation: "Start a TCP socket server. Accept incoming connections. Async and event-driven. Combine with Keepalive for long-running servers."
 
   - id: "37-2"
@@ -738,14 +738,14 @@ facts:
     week: 37
     day: 3
     category: "Sockets"
-    headline: "<Send> the <response> to the <client>."
+    headline: "Send the <response> to the <client>."
     explanation: "Send data to a specific connected client. client is the connection from the event. Bidirectional real-time communication."
 
   - id: "37-4"
     week: 37
     day: 4
     category: "Sockets"
-    headline: "<Broadcast> the <message> to the <socket-server>."
+    headline: "Broadcast the <message> to the <socket-server>."
     explanation: "Send to all connected clients at once. No loops, no tracking. Server manages connections automatically. Chat, dashboards, live updates."
 
   # ===== WEEK 38: Socket Client =====
@@ -753,14 +753,14 @@ facts:
     week: 38
     day: 1
     category: "Sockets"
-    headline: "<Connect> to <host: 192.168.1.100> on port 8080."
+    headline: "Connect to <host: 192.168.1.100> on port 8080."
     explanation: "Connect to external TCP services. Databases, message brokers, legacy systems. Returns connection for Extract/Send."
 
   - id: "38-2"
     week: 38
     day: 2
     category: "Sockets"
-    headline: "<Close> the <connection>."
+    headline: "Close the <connection>."
     explanation: "Close when done. Graceful shutdown. Events for connection closed. Clean resource management."
 
   # ===== WEEK 39: Execute =====
@@ -768,7 +768,7 @@ facts:
     week: 39
     day: 1
     category: "DevOps"
-    headline: "<Execute> the <result> for <command: \"git status\">."
+    headline: "Execute the <result> for <command: \"git status\">."
     explanation: "Sometimes you need the system. Execute runs commands, captures output. Build tools, deployment scripts, system integration."
 
   - id: "39-2"
@@ -790,21 +790,21 @@ facts:
     week: 40
     day: 1
     category: "Files"
-    headline: "<Copy> the <source> to the <destination>."
+    headline: "Copy the <source> to the <destination>."
     explanation: "Copy, move, delete without shell commands. Recursive directory operations. Cross-platform paths. File tasks in ARO style."
 
   - id: "40-2"
     week: 40
     day: 2
     category: "Files"
-    headline: "<Move> | <Delete> | <Make>"
+    headline: "Move | Delete | <Make>"
     explanation: "Move relocates files/dirs. Delete removes. Make creates directories. Paths auto-normalized per platform."
 
   - id: "40-3"
     week: 40
     day: 3
     category: "Files"
-    headline: "<Stat> the <info> for the <file: ./data.json>."
+    headline: "Stat the <info> for the <file: ./data.json>."
     explanation: "Stat returns metadata: size, permissions, created, modified, accessed timestamps. Check existence before operations."
 
   # ===== WEEK 41: Event Chains =====
@@ -879,7 +879,7 @@ facts:
     week: 45
     day: 2
     category: "Syntax"
-    headline: "<Create> the <updated-user> with <user> + { role: \"admin\" }."
+    headline: "Create the <updated-user> with <user> + { role: \"admin\" }."
     explanation: "Create new names for new values. Original unchanged. Same name in nested scope shadows outer. Functional data patterns."
 
   # ===== WEEK 46: Query Parameters =====
@@ -887,7 +887,7 @@ facts:
     week: 46
     day: 1
     category: "API"
-    headline: "<Extract> the <page> from the <queryParameters: page>."
+    headline: "Extract the <page> from the <queryParameters: page>."
     explanation: "Query parameters available via queryParameters object. Access by name like path parameters. Types coerced per OpenAPI schema."
 
   - id: "46-2"
@@ -902,7 +902,7 @@ facts:
     week: 47
     day: 1
     category: "DevOps"
-    headline: "<Extract> the <key> from the <environment: API_KEY>."
+    headline: "Extract the <key> from the <environment: API_KEY>."
     explanation: "Access environment variables with Extract. Secrets stay out of code. Twelve-factor app methodology built in."
 
   - id: "47-2"
@@ -924,14 +924,14 @@ facts:
     week: 48
     day: 1
     category: "HTTP"
-    headline: "<Extract> the <token> from the <headers: Authorization>."
+    headline: "Extract the <token> from the <headers: Authorization>."
     explanation: "Access request headers via headers object. Authorization, Content-Type, custom headers. Case-insensitive header names."
 
   - id: "48-2"
     week: 48
     day: 2
     category: "HTTP"
-    headline: "<Return> an <OK> with <data> and { headers: <response-headers> }."
+    headline: "Return an <OK> with <data> and { headers: <response-headers> }."
     explanation: "Set response headers with Return. Add custom headers, caching directives, CORS headers. Full control over HTTP response."
 
   # ===== WEEK 49: Concurrency =====
@@ -961,7 +961,7 @@ facts:
     week: 50
     day: 2
     category: "Syntax"
-    headline: "<Compute> the <upper: uppercase> from the <text>."
+    headline: "Compute the <upper: uppercase> from the <text>."
     explanation: "Operation as qualifier: length, count, uppercase, lowercase, hash. Result stored in base name. No variable shadowing."
 
   # ===== WEEK 51: Comments =====
@@ -984,14 +984,14 @@ facts:
     week: 52
     day: 1
     category: "Actions"
-    headline: "<Log> \"Starting...\" to the <console>."
+    headline: "Log \"Starting...\" to the <console>."
     explanation: "Log outputs to console or log files. to specifies destination. Structured logging built in."
 
   - id: "52-2"
     week: 52
     day: 2
     category: "Actions"
-    headline: "<Log> the <event> for the <file: ./app.log> with <data>."
+    headline: "Log the <event> for the <file: ./app.log> with <data>."
     explanation: "Log to files with automatic timestamps. JSON objects logged as JSON. Append mode by default. Rotation configurable."
 
   # ===== WEEK 53: Date and Time =====
@@ -1006,28 +1006,28 @@ facts:
     week: 53
     day: 2
     category: "Date"
-    headline: "<Extract> the <year> from the <now: year>."
+    headline: "Extract the <year> from the <now: year>."
     explanation: "Access date properties via qualifiers. year, month, day, hour, minute, second, dayOfWeek, timestamp, iso. All integers except iso (string)."
 
   - id: "53-3"
     week: 53
     day: 3
     category: "Date"
-    headline: "<Compute> the <meeting: date> from \"2025-06-15T14:00:00Z\"."
+    headline: "Compute the <meeting: date> from \"2025-06-15T14:00:00Z\"."
     explanation: "Parse ISO 8601 strings to date objects. Supports full ISO, date-only, and timezone offsets. Once parsed, all date operations available."
 
   - id: "53-4"
     week: 53
     day: 4
     category: "Date"
-    headline: "<Compute> the <formatted: format> from <now> with \"MMMM dd, yyyy\"."
+    headline: "Compute the <formatted: format> from <now> with \"MMMM dd, yyyy\"."
     explanation: "Format dates for display. Patterns: yyyy=year, MMMM=month name, dd=day, HH:mm=time. Use with parameter for pattern string."
 
   - id: "53-5"
     week: 53
     day: 5
     category: "Date"
-    headline: "<Compute> the <tomorrow: +1d> from <now>."
+    headline: "Compute the <tomorrow: +1d> from <now>."
     explanation: "Relative date offsets. Units: s/m/h/d/w/M/y. Add (+) or subtract (-). Works with any date, not just <now>. Chain for complex offsets."
 
   # ===== WEEK 54: Date Ranges and Recurrence =====
@@ -1035,7 +1035,7 @@ facts:
     week: 54
     day: 1
     category: "Date"
-    headline: "<Create> the <vacation: date-range> from <start> to <end>."
+    headline: "Create the <vacation: date-range> from <start> to <end>."
     explanation: "Date ranges for periods. Properties: days, hours, minutes, seconds, start, end. Use 'in' operator to check if date falls within range."
 
   - id: "54-2"
@@ -1049,14 +1049,14 @@ facts:
     week: 54
     day: 3
     category: "Date"
-    headline: "<Create> the <schedule: recurrence> with \"every monday\"."
+    headline: "Create the <schedule: recurrence> with \"every monday\"."
     explanation: "Recurrence patterns for scheduling. 'every day', 'every 2 weeks', 'every second friday'. Get next occurrence with <schedule: next>."
 
   - id: "54-4"
     week: 54
     day: 4
     category: "Date"
-    headline: "<Compute> the <remaining: distance> from <now> to <deadline>."
+    headline: "Compute the <remaining: distance> from <now> to <deadline>."
     explanation: "Calculate time between dates. Extract in various units: days, hours, minutes, seconds. Positive if future, negative if past."
 
   # ===== PLUGIN SYSTEM (Weekend Cards) =====
@@ -1074,7 +1074,7 @@ facts:
     week: 10
     day: 7
     category: "Plugins"
-    headline: "<ParseCSV> the <rows> from the <data>."
+    headline: "ParseCSV the <rows> from the <data>."
     explanation: "Plugins provide custom actions. Use them like built-in actions. Same ARO syntax. Same error handling. Seamless integration."
 
   # Week 15 Weekend: Plugin Languages

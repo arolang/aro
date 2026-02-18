@@ -9,13 +9,13 @@
 Variables don't disappear between statements. The session remembers:
 
 ```
-aro> <Set> the <x> to 10.
+aro> Set the <x> to 10.
 => OK
 
-aro> <Set> the <y> to 20.
+aro> Set the <y> to 20.
 => OK
 
-aro> <Compute> the <sum> from <x> + <y>.
+aro> Compute the <sum> from <x> + <y>.
 => 30
 ```
 
@@ -43,7 +43,7 @@ A table of your world. Every variable, its type, its value.
 For complex objects, inspect them individually:
 
 ```
-aro> <Create> the <user> with { name: "Alice", age: 30 }.
+aro> Create the <user> with { name: "Alice", age: 30 }.
 => { name: "Alice", age: 30 }
 
 aro> :vars user
@@ -73,13 +73,13 @@ The structure revealed.
 The REPL is perfect for building complexity gradually:
 
 ```
-aro> <Set> the <base-price> to 100.
+aro> Set the <base-price> to 100.
 => OK
 
-aro> <Compute> the <tax> from <base-price> * 0.2.
+aro> Compute the <tax> from <base-price> * 0.2.
 => 20
 
-aro> <Compute> the <total> from <base-price> + <tax>.
+aro> Compute the <total> from <base-price> + <tax>.
 => 120
 
 aro> :vars

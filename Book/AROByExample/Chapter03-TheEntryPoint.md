@@ -24,7 +24,7 @@ The basic structure is:
 ```aro
 (Application-Start: Application Name) {
     (* Initialization statements *)
-    <Return> an <OK: status> for the <startup>.
+    Return an <OK: status> for the <startup>.
 }
 ```
 
@@ -50,8 +50,8 @@ Let us build `main.aro` step by step.
 
 ```aro
 (Application-Start: Web Crawler) {
-    <Log> "Starting Web Crawler..." to the <console>.
-    <Return> an <OK: status> for the <startup>.
+    Log "Starting Web Crawler..." to the <console>.
+    Return an <OK: status> for the <startup>.
 }
 ```
 
@@ -61,13 +61,13 @@ This logs a startup message and exits. Run it with `aro run .` to verify it work
 
 ```aro
 (Application-Start: Web Crawler) {
-    <Log> "Starting Web Crawler..." to the <console>.
+    Log "Starting Web Crawler..." to the <console>.
 
     (* Read starting URL from environment *)
-    <Extract> the <start-url> from the <env: CRAWL_URL>.
-    <Log> "Starting URL: ${<start-url>}" to the <console>.
+    Extract the <start-url> from the <env: CRAWL_URL>.
+    Log "Starting URL: ${<start-url>}" to the <console>.
 
-    <Return> an <OK: status> for the <startup>.
+    Return an <OK: status> for the <startup>.
 }
 ```
 
@@ -87,17 +87,17 @@ You should see both log messages, with the URL in the second one.
 
 ```aro
 (Application-Start: Web Crawler) {
-    <Log> "Starting Web Crawler..." to the <console>.
+    Log "Starting Web Crawler..." to the <console>.
 
-    <Extract> the <start-url> from the <env: CRAWL_URL>.
-    <Log> "Starting URL: ${<start-url>}" to the <console>.
+    Extract the <start-url> from the <env: CRAWL_URL>.
+    Log "Starting URL: ${<start-url>}" to the <console>.
 
     (* Create output directory *)
-    <Create> the <output-path> with "./output".
-    <Make> the <output-dir> to the <directory: output-path>.
-    <Log> "Output directory created" to the <console>.
+    Create the <output-path> with "./output".
+    Make the <output-dir> to the <directory: output-path>.
+    Log "Output directory created" to the <console>.
 
-    <Return> an <OK: status> for the <startup>.
+    Return an <OK: status> for the <startup>.
 }
 ```
 
@@ -107,19 +107,19 @@ You should see both log messages, with the URL in the second one.
 
 ```aro
 (Application-Start: Web Crawler) {
-    <Log> "Starting Web Crawler..." to the <console>.
+    Log "Starting Web Crawler..." to the <console>.
 
-    <Extract> the <start-url> from the <env: CRAWL_URL>.
-    <Log> "Starting URL: ${<start-url>}" to the <console>.
+    Extract the <start-url> from the <env: CRAWL_URL>.
+    Log "Starting URL: ${<start-url>}" to the <console>.
 
-    <Create> the <output-path> with "./output".
-    <Make> the <output-dir> to the <directory: output-path>.
-    <Log> "Output directory created" to the <console>.
+    Create the <output-path> with "./output".
+    Make the <output-dir> to the <directory: output-path>.
+    Log "Output directory created" to the <console>.
 
     (* Queue initial URL for crawling *)
-    <Emit> a <QueueUrl: event> with { url: <start-url>, base: <start-url> }.
+    Emit a <QueueUrl: event> with { url: <start-url>, base: <start-url> }.
 
-    <Return> an <OK: status> for the <startup>.
+    Return an <OK: status> for the <startup>.
 }
 ```
 
@@ -137,8 +137,8 @@ Optionally, we can add a handler that runs when the application shuts down:
 
 ```aro
 (Application-End: Success) {
-    <Log> "🥁 Web Crawler completed!" to the <console>.
-    <Return> an <OK: status> for the <shutdown>.
+    Log "🥁 Web Crawler completed!" to the <console>.
+    Return an <OK: status> for the <shutdown>.
 }
 ```
 
@@ -158,27 +158,27 @@ Here is the complete entry point file:
    ============================================================ *)
 
 (Application-Start: Web Crawler) {
-    <Log> "Starting Web Crawler..." to the <console>.
+    Log "Starting Web Crawler..." to the <console>.
 
     (* Read starting URL from environment *)
-    <Extract> the <start-url> from the <env: CRAWL_URL>.
+    Extract the <start-url> from the <env: CRAWL_URL>.
 
-    <Log> "Starting URL: ${<start-url>}" to the <console>.
+    Log "Starting URL: ${<start-url>}" to the <console>.
 
     (* Create output directory *)
-    <Create> the <output-path> with "./output".
-    <Make> the <output-dir> to the <directory: output-path>.
-    <Log> "Output directory created" to the <console>.
+    Create the <output-path> with "./output".
+    Make the <output-dir> to the <directory: output-path>.
+    Log "Output directory created" to the <console>.
 
     (* Queue initial URL - Emit blocks until the entire crawl chain completes *)
-    <Emit> a <QueueUrl: event> with { url: <start-url>, base: <start-url> }.
+    Emit a <QueueUrl: event> with { url: <start-url>, base: <start-url> }.
 
-    <Return> an <OK: status> for the <startup>.
+    Return an <OK: status> for the <startup>.
 }
 
 (Application-End: Success) {
-    <Log> "🥁 Web Crawler completed!" to the <console>.
-    <Return> an <OK: status> for the <shutdown>.
+    Log "🥁 Web Crawler completed!" to the <console>.
+    Return an <OK: status> for the <shutdown>.
 }
 ```
 
@@ -205,7 +205,7 @@ Here is the complete entry point file:
 ## Chapter Recap
 
 - `Application-Start` is the entry point; exactly one must exist
-- `<Extract> ... from the <env: VAR>` reads environment variables
+- `Extract ... from the <env: VAR>` reads environment variables
 - `<Create>` makes values; `<Make>` creates filesystem objects
 - `<Emit>` sends events to trigger other feature sets and blocks until the chain completes
 - `Application-End: Success` runs automatically when `Application-Start` completes normally

@@ -18,13 +18,13 @@ This proposal defines automatic file format detection and conversion for Read an
 When reading or writing files, ARO detects the format from the file extension:
 
 ```aro
-<Read> the <data> from the <file: "./config.json">.
+Read the <data> from the <file: "./config.json">.
 (* Automatically parsed as JSON → dictionary/array *)
 
-<Read> the <settings> from the <file: "./settings.yaml">.
+Read the <settings> from the <file: "./settings.yaml">.
 (* Automatically parsed as YAML → dictionary *)
 
-<Read> the <records> from the <file: "./data.csv">.
+Read the <records> from the <file: "./data.csv">.
 (* Automatically parsed as CSV → array of rows *)
 ```
 
@@ -33,14 +33,14 @@ When reading or writing files, ARO detects the format from the file extension:
 Without format-aware I/O:
 ```aro
 (* Manual approach - verbose and error-prone *)
-<Read> the <raw-content> from the <file: "./config.json">.
-<Parse> the <data: JSON> from the <raw-content>.
+Read the <raw-content> from the <file: "./config.json">.
+Parse the <data: JSON> from the <raw-content>.
 ```
 
 With format-aware I/O:
 ```aro
 (* Automatic approach - clean and concise *)
-<Read> the <data> from the <file: "./config.json">.
+Read the <data> from the <file: "./config.json">.
 ```
 
 ---
@@ -88,43 +88,43 @@ With format-aware I/O:
 ### 3.1 JSON Files
 
 ```aro
-<Read> the <config> from the <file: "./config.json">.
+Read the <config> from the <file: "./config.json">.
 (* config is now a dictionary *)
-<Extract> the <port> from the <config: server.port>.
+Extract the <port> from the <config: server.port>.
 ```
 
 ### 3.2 YAML Files
 
 ```aro
-<Read> the <settings> from the <file: "./settings.yaml">.
-<Extract> the <database-url> from the <settings: database.url>.
+Read the <settings> from the <file: "./settings.yaml">.
+Extract the <database-url> from the <settings: database.url>.
 ```
 
 ### 3.3 CSV Files
 
 ```aro
-<Read> the <records> from the <file: "./data.csv">.
+Read the <records> from the <file: "./data.csv">.
 (* records = [{"name": "Alice", "age": "30"}, ...] *)
 
 for each <record> in <records> {
-    <Extract> the <name> from the <record: name>.
-    <Log> <name> to the <console>.
+    Extract the <name> from the <record: name>.
+    Log <name> to the <console>.
 }
 ```
 
 ### 3.4 JSON Lines (JSONL)
 
 ```aro
-<Read> the <logs> from the <file: "./events.jsonl">.
+Read the <logs> from the <file: "./events.jsonl">.
 (* logs = [{...}, {...}, {...}] - one object per line *)
 ```
 
 ### 3.5 Environment Files
 
 ```aro
-<Read> the <env> from the <file: "./.env">.
+Read the <env> from the <file: "./.env">.
 (* env = {"DATABASE_URL": "...", "API_KEY": "..."} *)
-<Extract> the <api-key> from the <env: API_KEY>.
+Extract the <api-key> from the <env: API_KEY>.
 ```
 
 ---
@@ -134,26 +134,26 @@ for each <record> in <records> {
 ### 4.1 JSON Output
 
 ```aro
-<Create> the <data> with { name: "Alice", age: 30 }.
-<Write> the <data> to the <file: "./output.json">.
+Create the <data> with { name: "Alice", age: 30 }.
+Write the <data> to the <file: "./output.json">.
 (* Writes: {"age":30,"name":"Alice"} *)
 ```
 
 ### 4.2 YAML Output
 
 ```aro
-<Create> the <config> with { server: { port: 8080, host: "localhost" } }.
-<Write> the <config> to the <file: "./config.yaml">.
+Create the <config> with { server: { port: 8080, host: "localhost" } }.
+Write the <config> to the <file: "./config.yaml">.
 ```
 
 ### 4.3 CSV Output
 
 ```aro
-<Create> the <records> with [
+Create the <records> with [
     { name: "Alice", age: 30 },
     { name: "Bob", age: 25 }
 ].
-<Write> the <records> to the <file: "./users.csv">.
+Write the <records> to the <file: "./users.csv">.
 (* Writes:
    name,age
    Alice,30
@@ -176,7 +176,7 @@ Bob,25,LA
 ```
 
 ```aro
-<Read> the <data> from the <file: "./users.csv">.
+Read the <data> from the <file: "./users.csv">.
 (* data = [
      {"name": "Alice", "age": "30", "city": "NYC"},
      {"name": "Bob", "age": "25", "city": "LA"}
@@ -194,7 +194,7 @@ Bob,25,LA
 ```
 
 ```aro
-<Read> the <data> from the <file: "./users.csv">.
+Read the <data> from the <file: "./users.csv">.
 (* data = [["Alice", "30", "NYC"], ["Bob", "25", "LA"]] *)
 ```
 
@@ -203,7 +203,7 @@ Bob,25,LA
 Same behavior with tab delimiters:
 
 ```aro
-<Read> the <data> from the <file: "./data.tsv">.
+Read the <data> from the <file: "./data.tsv">.
 ```
 
 ---
@@ -215,7 +215,7 @@ Same behavior with tab delimiters:
 Override auto-detection with explicit format:
 
 ```aro
-<Read> the <data: JSON> from the <file: "./data.txt">.
+Read the <data: JSON> from the <file: "./data.txt">.
 (* Force JSON parsing even though extension is .txt *)
 ```
 

@@ -15,16 +15,16 @@ struct MatchStatementParsingTests {
     func testParseMatchWithStringCases() throws {
         let source = """
         (Test: Demo) {
-            <Create> the <method> with "GET".
+            Create the <method> with "GET".
             match <method> {
                 case "GET" {
-                    <Return> an <OK: status> for the <request>.
+                    Return an <OK: status> for the <request>.
                 }
                 case "POST" {
-                    <Return> a <Created: status> for the <request>.
+                    Return a <Created: status> for the <request>.
                 }
                 otherwise {
-                    <Return> a <BadRequest: status> for the <request>.
+                    Return a <BadRequest: status> for the <request>.
                 }
             }
         }
@@ -58,13 +58,13 @@ struct MatchStatementParsingTests {
     func testParseMatchWithIntegerCases() throws {
         let source = """
         (Test: Demo) {
-            <Create> the <code> with 200.
+            Create the <code> with 200.
             match <code> {
                 case 200 {
-                    <Return> an <OK: status> for the <request>.
+                    Return an <OK: status> for the <request>.
                 }
                 case 404 {
-                    <Return> a <NotFound: status> for the <request>.
+                    Return a <NotFound: status> for the <request>.
                 }
             }
         }
@@ -92,14 +92,14 @@ struct MatchStatementParsingTests {
     func testParseMatchWithVariablePattern() throws {
         let source = """
         (Test: Demo) {
-            <Create> the <expected> with "admin".
-            <Create> the <role> with "admin".
+            Create the <expected> with "admin".
+            Create the <role> with "admin".
             match <role> {
                 case <expected> {
-                    <Return> an <OK: status> for the <request>.
+                    Return an <OK: status> for the <request>.
                 }
                 otherwise {
-                    <Return> a <BadRequest: status> for the <request>.
+                    Return a <BadRequest: status> for the <request>.
                 }
             }
         }
@@ -126,14 +126,14 @@ struct MatchStatementParsingTests {
     func testParseMatchWithGuardCondition() throws {
         let source = """
         (Test: Demo) {
-            <Create> the <user> with "premium".
-            <Create> the <credits> with 100.
+            Create the <user> with "premium".
+            Create the <credits> with 100.
             match <user> {
                 case "premium" where <credits> > 0 {
-                    <Return> an <OK: status> for the <request>.
+                    Return an <OK: status> for the <request>.
                 }
                 otherwise {
-                    <Return> a <BadRequest: status> for the <request>.
+                    Return a <BadRequest: status> for the <request>.
                 }
             }
         }
@@ -165,9 +165,9 @@ struct WhenClauseParsingTests {
     func testParseStatementWithWhenClause() throws {
         let source = """
         (Test: Demo) {
-            <Create> the <role> with "admin".
-            <Log> "Admin!" to the <console> when <role> == "admin".
-            <Return> an <OK: status> for the <request>.
+            Create the <role> with "admin".
+            Log "Admin!" to the <console> when <role> == "admin".
+            Return an <OK: status> for the <request>.
         }
         """
 
@@ -193,9 +193,9 @@ struct WhenClauseParsingTests {
     func testParseStatementWithComplexWhenCondition() throws {
         let source = """
         (Test: Demo) {
-            <Create> the <age> with 25.
-            <Create> the <verified> with true.
-            <Return> an <OK: status> for the <request> when <age> >= 18 and <verified> == true.
+            Create the <age> with 25.
+            Create the <verified> with true.
+            Return an <OK: status> for the <request> when <age> >= 18 and <verified> == true.
         }
         """
 
@@ -219,7 +219,7 @@ struct WhenClauseParsingTests {
     func testParseStatementWithoutWhenClause() throws {
         let source = """
         (Test: Demo) {
-            <Return> an <OK: status> for the <request>.
+            Return an <OK: status> for the <request>.
         }
         """
 
@@ -246,10 +246,10 @@ struct MatchStatementSemanticTests {
         (Test: Demo) {
             match <undefined-var> {
                 case "value" {
-                    <Return> an <OK: status> for the <request>.
+                    Return an <OK: status> for the <request>.
                 }
             }
-            <Return> an <OK: status> for the <test>.
+            Return an <OK: status> for the <test>.
         }
         """
 
@@ -266,9 +266,9 @@ struct MatchStatementSemanticTests {
     func testWhenClauseVariablesTracked() throws {
         let source = """
         (Test: Demo) {
-            <Create> the <role> with "admin".
-            <Log> "Admin!" to the <console> when <role> == "admin".
-            <Return> an <OK: status> for the <test>.
+            Create the <role> with "admin".
+            Log "Admin!" to the <console> when <role> == "admin".
+            Return an <OK: status> for the <test>.
         }
         """
 

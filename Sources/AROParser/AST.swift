@@ -286,7 +286,7 @@ public struct PublishStatement: Statement {
     }
     
     public var description: String {
-        "<Publish> as <\(externalName)> <\(internalVariable)>."
+        "Publish as <\(externalName)> <\(internalVariable)>."
     }
     
     public func accept<V: ASTVisitor>(_ visitor: V) throws -> V.Result {
@@ -562,7 +562,7 @@ public struct RequireStatement: Statement {
     }
 
     public var description: String {
-        "<Require> the <\(variableName)> from the <\(source)>."
+        "Require the <\(variableName)> from the <\(source)>."
     }
 
     public func accept<V: ASTVisitor>(_ visitor: V) throws -> V.Result {

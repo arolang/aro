@@ -148,9 +148,9 @@ For sink operations, ARO provides a clean, intuitive syntax where the value come
 
 ```aro
 (* Sink syntax - direct value to system object *)
-<Log> "Hello, World!" to the <console>.
-<Log> <data> to the <console>.
-<Log> { status: "ok", count: 42 } to the <console>.
+Log "Hello, World!" to the <console>.
+Log <data> to the <console>.
+Log { status: "ok", count: 42 } to the <console>.
 ```
 
 Sink verbs that support this syntax include:
@@ -174,19 +174,19 @@ ARO provides three console-related system objects:
 
 ```aro
 (* Write to console (stdout) *)
-<Log> "Starting server..." to the <console>.
+Log "Starting server..." to the <console>.
 
 (* Write to console stdout (explicit) *)
-<Log> "Processing data..." to the <console: output>.
+Log "Processing data..." to the <console: output>.
 
 (* Write to console stderr *)
-<Log> "Warning: config missing" to the <console: error>.
+Log "Warning: config missing" to the <console: error>.
 
 (* Write to stderr object (alternative syntax) *)
-<Log> "Error message" to the <stderr>.
+Log "Error message" to the <stderr>.
 
 (* Read from stdin *)
-<Read> the <input> from the <stdin>.
+Read the <input> from the <stdin>.
 ```
 
 **Console Output Streams:**
@@ -321,10 +321,10 @@ The `env` system object provides access to environment variables:
 
 ```aro
 (* Read a specific environment variable *)
-<Extract> the <api-key> from the <env: API_KEY>.
+Extract the <api-key> from the <env: API_KEY>.
 
 (* Read all environment variables *)
-<Extract> the <all-vars> from the <env>.
+Extract the <all-vars> from the <env>.
 ```
 
 ### Command-Line Parameters
@@ -333,11 +333,11 @@ The `parameter` system object provides access to command-line arguments passed t
 
 ```aro
 (* Read a specific parameter *)
-<Extract> the <url> from the <parameter: url>.
-<Extract> the <count> from the <parameter: count>.
+Extract the <url> from the <parameter: url>.
+Extract the <count> from the <parameter: count>.
 
 (* Read all parameters as a dictionary *)
-<Extract> the <all-params> from the <parameter>.
+Extract the <all-params> from the <parameter>.
 ```
 
 **Passing Parameters:**
@@ -375,13 +375,13 @@ Parameter values are automatically converted to appropriate types:
 
 ```aro
 (Application-Start: Greeter) {
-    <Extract> the <name> from the <parameter: name>.
-    <Extract> the <count> from the <parameter: count>.
+    Extract the <name> from the <parameter: name>.
+    Extract the <count> from the <parameter: count>.
 
-    <Log> "Hello, ${<name>}!" to the <console>.
-    <Log> "Count: ${<count>}" to the <console>.
+    Log "Hello, ${<name>}!" to the <console>.
+    Log "Count: ${<count>}" to the <console>.
 
-    <Return> an <OK: status> with <name>.
+    Return an <OK: status> with <name>.
 }
 ```
 
@@ -397,10 +397,10 @@ The `file` system object provides bidirectional file I/O with automatic format d
 
 ```aro
 (* Read from a file *)
-<Read> the <config> from the <file: "./config.json">.
+Read the <config> from the <file: "./config.json">.
 
 (* Write to a file *)
-<Write> <data> to the <file: "./output.json">.
+Write <data> to the <file: "./output.json">.
 ```
 
 The file object automatically detects the format based on file extension and serializes/deserializes accordingly. See Chapter 16B for details on format-aware I/O.
@@ -422,21 +422,21 @@ When handling HTTP requests, ARO provides context-specific system objects:
 ```aro
 (getUser: User API) {
     (* Access path parameters *)
-    <Extract> the <id> from the <pathParameters: id>.
+    Extract the <id> from the <pathParameters: id>.
 
     (* Access query parameters *)
-    <Extract> the <limit> from the <queryParameters: limit>.
+    Extract the <limit> from the <queryParameters: limit>.
 
     (* Access headers *)
-    <Extract> the <auth> from the <headers: Authorization>.
+    Extract the <auth> from the <headers: Authorization>.
 
     (* Access request body *)
-    <Extract> the <data> from the <body>.
+    Extract the <data> from the <body>.
 
     (* Access full request properties *)
-    <Extract> the <method> from the <request: method>.
+    Extract the <method> from the <request: method>.
 
-    <Return> an <OK: status> with <user>.
+    Return an <OK: status> with <user>.
 }
 ```
 
@@ -455,15 +455,15 @@ Event handlers have access to event-specific system objects:
 
 ```aro
 (Send Email: UserCreated Handler) {
-    <Extract> the <user> from the <event: user>.
-    <Send> the <welcome-email> to the <user: email>.
-    <Return> an <OK: status> for the <notification>.
+    Extract the <user> from the <event: user>.
+    Send the <welcome-email> to the <user: email>.
+    Return an <OK: status> for the <notification>.
 }
 
 (Application-End: Success) {
-    <Extract> the <reason> from the <shutdown: reason>.
-    <Log> <reason> to the <console>.
-    <Return> an <OK: status> for the <shutdown>.
+    Extract the <reason> from the <shutdown: reason>.
+    Log <reason> to the <console>.
+    Return an <OK: status> for the <shutdown>.
 }
 ```
 
@@ -480,9 +480,9 @@ Socket handlers have access to connection-related system objects:
 
 ```aro
 (Echo Server: Socket Event Handler) {
-    <Extract> the <data> from the <packet>.
-    <Send> <data> to the <connection>.
-    <Return> an <OK: status> for the <echo>.
+    Extract the <data> from the <packet>.
+    Send <data> to the <connection>.
+    Return an <OK: status> for the <echo>.
 }
 ```
 
@@ -508,16 +508,16 @@ When an ARO application has an `openapi.yaml` file, the `Contract` magic object 
 ```aro
 (Application-Start: Order Service) {
     (* Start HTTP server using Contract configuration *)
-    <Start> the <http-server> with <Contract>.
+    Start the <http-server> with <Contract>.
 
     (* Access Contract properties *)
-    <Log> <Contract.http-server.port> to the <console>.
-    <Log> <Contract.http-server.routes> to the <console>.
+    Log <Contract.http-server.port> to the <console>.
+    Log <Contract.http-server.routes> to the <console>.
 
     (* Shorthand: <http-server> resolves to Contract.http-server *)
-    <Log> <http-server.port> to the <console>.
+    Log <http-server.port> to the <console>.
 
-    <Return> an <OK: status> for the <startup>.
+    Return an <OK: status> for the <startup>.
 }
 ```
 
@@ -534,8 +534,8 @@ Plugins can provide custom system objects that integrate seamlessly with ARO's s
 
 ```aro
 (* Plugin-provided Redis system object *)
-<Get> the <session> from the <redis: "session:123">.
-<Set> <userData> to the <redis: "user:456">.
+Get the <session> from the <redis: "session:123">.
+Set <userData> to the <redis: "user:456">.
 ```
 
 See Chapter 18 for details on creating plugins that provide system objects.
@@ -551,7 +551,7 @@ System objects provide a unified interface for interacting with external resourc
 - **Bidirectional**: `file`, `connection`
 - **Magic Objects**: `Contract`, `now`
 
-The sink syntax (`<Log> "message" to the <console>`) provides a clean, intuitive way to write to system objects.
+The sink syntax (`Log "message" to the <console>`) provides a clean, intuitive way to write to system objects.
 
 ---
 

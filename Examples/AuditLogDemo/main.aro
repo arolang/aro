@@ -11,26 +11,26 @@
    ============================================================================= *)
 
 (Application-Start: Audit Log Demo) {
-    <Log> "=== Audit Log Plugin Demo ===" to the <console>.
+    Log "=== Audit Log Plugin Demo ===" to the <console>.
 
     (* Emit a UserCreated event - the plugin handler will respond *)
-    <Log> "Emitting UserCreated event..." to the <console>.
-    <Emit> a <UserCreated: event> with {
+    Log "Emitting UserCreated event..." to the <console>.
+    Emit a <UserCreated: event> with {
         user: { id: "user-123", name: "Alice", email: "alice@example.com" }
     }.
 
     (* Emit an OrderPlaced event - the plugin handler will respond *)
-    <Log> "Emitting OrderPlaced event..." to the <console>.
-    <Emit> an <OrderPlaced: event> with {
+    Log "Emitting OrderPlaced event..." to the <console>.
+    Emit an <OrderPlaced: event> with {
         order: { id: "order-456", total: 99.99, items: 3 }
     }.
 
     (* Emit a PaymentReceived event - the plugin handler will respond *)
-    <Log> "Emitting PaymentReceived event..." to the <console>.
-    <Emit> a <PaymentReceived: event> with {
+    Log "Emitting PaymentReceived event..." to the <console>.
+    Emit a <PaymentReceived: event> with {
         payment: { id: "pay-789", amount: 99.99, method: "credit_card" }
     }.
 
-    <Log> "=== Demo Complete ===" to the <console>.
-    <Return> an <OK: status> for the <startup>.
+    Log "=== Demo Complete ===" to the <console>.
+    Return an <OK: status> for the <startup>.
 }

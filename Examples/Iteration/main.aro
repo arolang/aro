@@ -2,10 +2,10 @@
 (* Demonstrates for-each loops: serial, indexed, filtered, and parallel *)
 
 (Application-Start: Iteration Demo) {
-    <Require> the <console> from the <framework>.
+    Require the <console> from the <framework>.
 
     (* Create test data *)
-    <Create> the <users> with [
+    Create the <users> with [
         { name: "Alice", active: true, score: 95 },
         { name: "Bob", active: false, score: 72 },
         { name: "Charlie", active: true, score: 88 },
@@ -13,42 +13,42 @@
     ].
 
     (* 1. Basic for-each loop *)
-    <Log> "=== Basic For-Each ===" to the <console>.
+    Log "=== Basic For-Each ===" to the <console>.
     for each <user> in <users> {
-        <Log> <user: name> to the <console>.
+        Log <user: name> to the <console>.
     }
 
-    <Log> "=== Object For-Each ===" to the <console>.
+    Log "=== Object For-Each ===" to the <console>.
     for each <user> in <users> {
-        <Log> <user> to the <console>.
+        Log <user> to the <console>.
     }
 
 
     (* 2. For-each with filter (replaces break/continue) *)
-    <Log> "=== Filtered For-Each ===" to the <console>.
+    Log "=== Filtered For-Each ===" to the <console>.
     for each <user> in <users> where <user: active> is true {
-        <Log> <user: name> to the <console>.
+        Log <user: name> to the <console>.
     }
 
     (* 3. Indexed for-each *)
-    <Log> "=== Indexed For-Each ===" to the <console>.
+    Log "=== Indexed For-Each ===" to the <console>.
     for each <user> at <index> in <users> {
-        <Compute> the <position> from <index> + 1.
-        <Log> <position> to the <console>.
+        Compute the <position> from <index> + 1.
+        Log <position> to the <console>.
     }
 
     (* 4. Nested for-each *)
-    <Log> "=== Nested For-Each ===" to the <console>.
-    <Create> the <teams> with [
+    Log "=== Nested For-Each ===" to the <console>.
+    Create the <teams> with [
         { name: "Alpha", members: ["Alice", "Bob"] },
         { name: "Beta", members: ["Charlie", "Diana"] }
     ].
     for each <team> in <teams> {
-        <Log> <team: name> to the <console>.
+        Log <team: name> to the <console>.
         for each <member> in <team: members> {
-            <Log> <member> to the <console>.
+            Log <member> to the <console>.
         }
     }
 
-    <Return> an <OK: status> for the <demo>.
+    Return an <OK: status> for the <demo>.
 }

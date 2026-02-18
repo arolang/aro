@@ -93,35 +93,35 @@ Plugins provide **custom actions** that work like built-in ARO verbs. Once insta
 
 ```aro
 (* Plugin actions feel native *)
-<Hash> the <digest: sha256> from the <password>.
-<Encrypt> the <ciphertext> with the <secret-data> using <key>.
-<ParseCSV> the <records> from the <csv-file>.
-<Summarize> the <summary> from the <document> with { maxLength: 200 }.
+Hash the <digest: sha256> from the <password>.
+Encrypt the <ciphertext> with the <secret-data> using <key>.
+ParseCSV the <records> from the <csv-file>.
+Summarize the <summary> from the <document> with { maxLength: 200 }.
 ```
 
 This is the primary way to use plugins. Each action follows the standard ARO pattern:
 
 ```
-<Action> the <result> preposition the <object>.
+Action the <result> preposition the <object>.
 ```
 
 ### Example: Crypto Plugin
 
 ```aro
 (Secure Password: User Registration) {
-    <Extract> the <password> from the <request: body password>.
+    Extract the <password> from the <request: body password>.
 
     (* Hash the password using the plugin's Hash action *)
-    <Hash> the <password-hash: argon2> from the <password>.
+    Hash the <password-hash: argon2> from the <password>.
 
     (* Store the hashed password *)
-    <Create> the <user> with {
+    Create the <user> with {
         email: <request: body email>,
         passwordHash: <password-hash>
     }.
-    <Store> the <user> into the <user-repository>.
+    Store the <user> into the <user-repository>.
 
-    <Return> a <Created: status> with { id: <user: id> }.
+    Return a <Created: status> with { id: <user: id> }.
 }
 ```
 
@@ -129,20 +129,20 @@ This is the primary way to use plugins. Each action follows the standard ARO pat
 
 ```aro
 (Import Data: Data Handler) {
-    <Read> the <csv-content> from the <file: "./data/users.csv">.
+    Read the <csv-content> from the <file: "./data/users.csv">.
 
     (* Parse CSV using the plugin's ParseCSV action *)
-    <ParseCSV> the <records> from the <csv-content> with {
+    ParseCSV the <records> from the <csv-content> with {
         headers: true,
         delimiter: ","
     }.
 
     (* Process each record *)
-    <For> each <record> in <records>:
-        <Create> the <user> with <record>.
-        <Store> the <user> into the <user-repository>.
+    For each <record> in <records>:
+        Create the <user> with <record>.
+        Store the <user> into the <user-repository>.
 
-    <Return> an <OK: status> with { imported: <records: length> }.
+    Return an <OK: status> with { imported: <records: length> }.
 }
 ```
 
@@ -150,23 +150,23 @@ This is the primary way to use plugins. Each action follows the standard ARO pat
 
 ```aro
 (Analyze Feedback: Feedback Handler) {
-    <Extract> the <text> from the <feedback: content>.
+    Extract the <text> from the <feedback: content>.
 
     (* Use plugin actions for AI analysis *)
-    <Summarize> the <summary> from the <text> with { maxLength: 100 }.
-    <Classify> the <sentiment> from the <text> with {
+    Summarize the <summary> from the <text> with { maxLength: 100 }.
+    Classify the <sentiment> from the <text> with {
         labels: ["positive", "negative", "neutral"]
     }.
     <Embed> the <embedding> from the <text>.
 
-    <Create> the <analysis> with {
+    Create the <analysis> with {
         original: <text>,
         summary: <summary>,
         sentiment: <sentiment>,
         embedding: <embedding>
     }.
 
-    <Return> an <OK: status> with <analysis>.
+    Return an <OK: status> with <analysis>.
 }
 ```
 
@@ -180,13 +180,13 @@ Use qualifiers to specify variants or algorithms:
 
 ```aro
 (* Qualifier specifies the hash algorithm *)
-<Hash> the <md5-hash: md5> from the <data>.
-<Hash> the <sha256-hash: sha256> from the <data>.
-<Hash> the <sha512-hash: sha512> from the <data>.
+Hash the <md5-hash: md5> from the <data>.
+Hash the <sha256-hash: sha256> from the <data>.
+Hash the <sha512-hash: sha512> from the <data>.
 
 (* Qualifier specifies output format *)
-<Encode> the <base64: base64> from the <binary-data>.
-<Encode> the <hex: hex> from the <binary-data>.
+Encode the <base64: base64> from the <binary-data>.
+Encode the <hex: hex> from the <binary-data>.
 ```
 
 ### Options with `with { }`
@@ -195,21 +195,21 @@ Pass additional parameters using the `with` clause:
 
 ```aro
 (* Options for encryption *)
-<Encrypt> the <ciphertext> with the <plaintext> using {
+Encrypt the <ciphertext> with the <plaintext> using {
     key: <encryption-key>,
     algorithm: "aes-256-gcm",
     encoding: "base64"
 }.
 
 (* Options for text generation *)
-<Generate> the <response> from the <prompt> with {
+Generate the <response> from the <prompt> with {
     maxTokens: 500,
     temperature: 0.7,
     model: "gpt-4"
 }.
 
 (* Options for image processing *)
-<Resize> the <thumbnail> from the <image> with {
+Resize the <thumbnail> from the <image> with {
     width: 200,
     height: 200,
     quality: 85
@@ -221,7 +221,7 @@ Pass additional parameters using the `with` clause:
 For plugins that expose multiple related methods as a service API, use the `<Call>` action:
 
 ```aro
-<Call> the <result> from the <service: method> with { arguments }.
+Call the <result> from the <service: method> with { arguments }.
 ```
 
 This is useful when:
@@ -235,26 +235,26 @@ This is useful when:
 |----------|-------------------|
 | Single-purpose operation | Custom action: `<Hash>`, `<Encrypt>` |
 | Clear, focused functionality | Custom action: `<Summarize>`, `<Resize>` |
-| Multi-method API | Call: `<Call> ... from <db: query>` |
+| Multi-method API | Call: `Call ... from <db: query>` |
 | Legacy plugin compatibility | Call |
-| CRUD operations on a resource | Call: `<Call> ... from <users: create>` |
+| CRUD operations on a resource | Call: `Call ... from <users: create>` |
 
 ### Call Example
 
 ```aro
 (Database Query: Data Handler) {
     (* When a plugin exposes a multi-method database service *)
-    <Call> the <users> from the <postgres: query> with {
+    Call the <users> from the <postgres: query> with {
         sql: "SELECT * FROM users WHERE active = true",
         params: []
     }.
 
-    <Call> the <count> from the <postgres: count> with {
+    Call the <count> from the <postgres: count> with {
         table: "users",
         where: { active: true }
     }.
 
-    <Return> an <OK: status> with { users: <users>, total: <count> }.
+    Return an <OK: status> with { users: <users>, total: <count> }.
 }
 ```
 
@@ -263,21 +263,21 @@ This is useful when:
 Plugin results are typically structured data. Use `Extract` to pull out specific fields:
 
 ```aro
-<Hash> the <result> from the <password>.
+Hash the <result> from the <password>.
 
 (* Extract specific fields from the result *)
-<Extract> the <hash-value> from the <result: hash>.
-<Extract> the <algorithm> from the <result: algorithm>.
+Extract the <hash-value> from the <result: hash>.
+Extract the <algorithm> from the <result: algorithm>.
 ```
 
 For nested results:
 
 ```aro
-<Classify> the <analysis> from the <text>.
+Classify the <analysis> from the <text>.
 
 (* Access nested data *)
-<Extract> the <label> from the <analysis: prediction label>.
-<Extract> the <confidence> from the <analysis: prediction confidence>.
+Extract the <label> from the <analysis: prediction label>.
+Extract the <confidence> from the <analysis: prediction confidence>.
 ```
 
 ## 3.7 Error Handling
@@ -285,21 +285,21 @@ For nested results:
 When a plugin action fails, ARO follows its "code is the error message" philosophy—the failed statement describes what went wrong:
 
 ```
-Cannot <Hash> the <digest> from the <input>.
+Cannot Hash the <digest> from the <input>.
   Plugin error: Unsupported algorithm 'sha999'
 ```
 
 For controlled error handling, check for error fields:
 
 ```aro
-<Encrypt> the <result> with the <data> using <key>.
+Encrypt the <result> with the <data> using <key>.
 
-<When> <result: error> exists:
-    <Log> "Encryption failed: " ++ <result: error> to the <console>.
-    <Return> a <Failed: status> with <result>.
+When <result: error> exists:
+    Log "Encryption failed: " ++ <result: error> to the <console>.
+    Return a <Failed: status> with <result>.
 
 (* Continue with successful result *)
-<Extract> the <ciphertext> from the <result: encrypted>.
+Extract the <ciphertext> from the <result: encrypted>.
 ```
 
 ## 3.8 Practical Patterns
@@ -310,14 +310,14 @@ Chain multiple plugin actions:
 
 ```aro
 (Process Document: Document Handler) {
-    <Read> the <content> from the <file: document-path>.
+    Read the <content> from the <file: document-path>.
 
     (* Chain of plugin actions *)
     <ExtractText> the <text> from the <content>.
-    <Summarize> the <summary> from the <text> with { maxLength: 200 }.
-    <Translate> the <translated> from the <summary> with { target: "es" }.
+    Summarize the <summary> from the <text> with { maxLength: 200 }.
+    Translate the <translated> from the <summary> with { target: "es" }.
 
-    <Return> an <OK: status> with {
+    Return an <OK: status> with {
         original: <text>,
         summary: <summary>,
         translated: <translated>
@@ -331,15 +331,15 @@ Choose actions based on input:
 
 ```aro
 (Process File: File Handler) {
-    <Extract> the <extension> from the <file: extension>.
+    Extract the <extension> from the <file: extension>.
 
-    <Match> <extension>:
-        "csv" => <ParseCSV> the <data> from the <file: content>.
-        "json" => <Parse> the <data> from the <file: content> as JSON.
+    Match <extension>:
+        "csv" => ParseCSV the <data> from the <file: content>.
+        "json" => Parse the <data> from the <file: content> as JSON.
         "xml" => <ParseXML> the <data> from the <file: content>.
-        _ => <Return> an <UnsupportedFormat: error> with <extension>.
+        _ => Return an <UnsupportedFormat: error> with <extension>.
 
-    <Return> an <OK: status> with <data>.
+    Return an <OK: status> with <data>.
 }
 ```
 
@@ -349,7 +349,7 @@ Process multiple items efficiently:
 
 ```aro
 (Analyze Batch: Batch Handler) {
-    <Retrieve> the <documents> from the <document-repository>.
+    Retrieve the <documents> from the <document-repository>.
 
     (* Some plugins support batch operations *)
     <EmbedBatch> the <embeddings> from the <documents> with {
@@ -357,13 +357,13 @@ Process multiple items efficiently:
     }.
 
     (* Or iterate with individual actions *)
-    <For> each <doc> in <documents>:
-        <Summarize> the <summary> from the <doc: content>.
-        <Update> the <document-repository> where id = <doc: id> with {
+    For each <doc> in <documents>:
+        Summarize the <summary> from the <doc: content>.
+        Update the <document-repository> where id = <doc: id> with {
             summary: <summary>
         }.
 
-    <Return> an <OK: status> with { processed: <documents: length> }.
+    Return an <OK: status> with { processed: <documents: length> }.
 }
 ```
 
@@ -371,20 +371,20 @@ Process multiple items efficiently:
 
 ```aro
 (Store Secret: Security Handler) {
-    <Extract> the <api-key> from the <request: body apiKey>.
+    Extract the <api-key> from the <request: body apiKey>.
 
     (* Encrypt before storage *)
-    <Encrypt> the <encrypted-key> with the <api-key> using <master-key>.
+    Encrypt the <encrypted-key> with the <api-key> using <master-key>.
 
     (* Hash for indexing *)
-    <Hash> the <key-hash: sha256> from the <api-key>.
+    Hash the <key-hash: sha256> from the <api-key>.
 
-    <Store> the <secret> with {
+    Store the <secret> with {
         hash: <key-hash>,
         encrypted: <encrypted-key>
     } into the <secrets-repository>.
 
-    <Return> a <Created: status> for the <secret>.
+    Return a <Created: status> for the <secret>.
 }
 ```
 

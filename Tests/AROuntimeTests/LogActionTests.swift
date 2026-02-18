@@ -105,8 +105,8 @@ struct LogActionStreamTests {
     func testLogToConsoleDefault() async throws {
         let aroCode = """
         (Application-Start: Test Default Stdout) {
-            <Log> "Default stdout message" to the <console>.
-            <Return> an <OK: status> for the <test>.
+            Log "Default stdout message" to the <console>.
+            Return an <OK: status> for the <test>.
         }
         """
 
@@ -126,8 +126,8 @@ struct LogActionStreamTests {
     func testLogToConsoleOutputQualifier() async throws {
         let aroCode = """
         (Application-Start: Test Explicit Stdout) {
-            <Log> "Explicit stdout message" to the <console: output>.
-            <Return> an <OK: status> for the <test>.
+            Log "Explicit stdout message" to the <console: output>.
+            Return an <OK: status> for the <test>.
         }
         """
 
@@ -147,8 +147,8 @@ struct LogActionStreamTests {
     func testLogToConsoleErrorQualifier() async throws {
         let aroCode = """
         (Application-Start: Test Stderr) {
-            <Log> "Error message to stderr" to the <console: error>.
-            <Return> an <OK: status> for the <test>.
+            Log "Error message to stderr" to the <console: error>.
+            Return an <OK: status> for the <test>.
         }
         """
 
@@ -168,8 +168,8 @@ struct LogActionStreamTests {
     func testLogToConsoleInvalidQualifier() async throws {
         let aroCode = """
         (Application-Start: Test Invalid Qualifier) {
-            <Log> "Message with invalid qualifier" to the <console: unknown>.
-            <Return> an <OK: status> for the <test>.
+            Log "Message with invalid qualifier" to the <console: unknown>.
+            Return an <OK: status> for the <test>.
         }
         """
 
@@ -189,8 +189,8 @@ struct LogActionStreamTests {
     func testLogToStderrObject() async throws {
         let aroCode = """
         (Application-Start: Test Stderr Object) {
-            <Log> "Direct stderr message" to the <stderr>.
-            <Return> an <OK: status> for the <test>.
+            Log "Direct stderr message" to the <stderr>.
+            Return an <OK: status> for the <test>.
         }
         """
 
@@ -210,11 +210,11 @@ struct LogActionStreamTests {
     func testMixedStdoutStderrLogging() async throws {
         let aroCode = """
         (Application-Start: Test Mixed Streams) {
-            <Log> "Stdout message 1" to the <console>.
-            <Log> "Stderr message 1" to the <console: error>.
-            <Log> "Stdout message 2" to the <console: output>.
-            <Log> "Stderr message 2" to the <console: error>.
-            <Return> an <OK: status> for the <test>.
+            Log "Stdout message 1" to the <console>.
+            Log "Stderr message 1" to the <console: error>.
+            Log "Stdout message 2" to the <console: output>.
+            Log "Stderr message 2" to the <console: error>.
+            Return an <OK: status> for the <test>.
         }
         """
 

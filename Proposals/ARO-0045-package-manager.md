@@ -267,20 +267,20 @@ Plugins/
 (* csv-processing.aro — Provided by aro-packages-additionaltools *)
 
 (FormatCSV: Data Processing) {
-    <Extract> the <raw-data> from the <input: data>.
-    <Parse> the <raw-data> as <CSV: format>.
-    <Transform> each <row> in the <parsed-data> with <column-mapping>.
-    <Return> the <formatted-output> as <CSV: string>.
+    Extract the <raw-data> from the <input: data>.
+    Parse the <raw-data> as <CSV: format>.
+    Transform each <row> in the <parsed-data> with <column-mapping>.
+    Return the <formatted-output> as <CSV: string>.
 }
 
 (ValidateCSVSchema: Data Validation) {
-    <Extract> the <csv-data> from the <input: data>.
-    <Extract> the <schema> from the <input: schema>.
-    <Validate> the <csv-data> against the <schema>.
-    <When> the <validation: failed> <Then> {
-        <Throw> a <ValidationError> with <validation: errors>.
+    Extract the <csv-data> from the <input: data>.
+    Extract the <schema> from the <input: schema>.
+    Validate the <csv-data> against the <schema>.
+    When the <validation: failed> Then {
+        Throw a <ValidationError> with <validation: errors>.
     }.
-    <Return> a <Valid: status>.
+    Return a <Valid: status>.
 }
 ```
 
@@ -289,8 +289,8 @@ Plugins/
 ```aro
 (* Defines a reusable action *)
 (Define Action: FormatCSV) {
-    <Accept> the <data: string> as <input>.
-    <Accept> the <delimiter: string> as <option> with default ",".
+    Accept the <data: string> as <input>.
+    Accept the <delimiter: string> as <option> with default ",".
     <Produce> the <formatted: string> as <output>.
 }
 ```
@@ -320,11 +320,11 @@ After a package is installed, its feature sets can be used in your own `.aro` fi
 (* Uses actions from the installed package *)
 
 (processReport: Report API) {
-    <Extract> the <file> from the <request: body>.
+    Extract the <file> from the <request: body>.
     <FormatCSV> the <file> with { delimiter: ";", encoding: "UTF-8" }.
     <ValidateCSVSchema> the <formatted-file> against <report-schema>.
-    <Store> the <validated-report> into the <report-repository>.
-    <Return> a <Created: status> with <validated-report>.
+    Store the <validated-report> into the <report-repository>.
+    Return a <Created: status> with <validated-report>.
 }
 ```
 

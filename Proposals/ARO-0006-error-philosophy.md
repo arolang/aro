@@ -60,9 +60,9 @@ In ARO, you only write the successful case:
 
 ```aro
 (getUser: User API) {
-    <Extract> the <id> from the <pathParameters: id>.
-    <Retrieve> the <user> from the <user-repository> where id = <id>.
-    <Return> an <OK: status> with <user>.
+    Extract the <id> from the <pathParameters: id>.
+    Retrieve the <user> from the <user-repository> where id = <id>.
+    Return an <OK: status> with <user>.
 }
 ```
 
@@ -90,7 +90,7 @@ When any step fails, the runtime generates an error message from the statement:
 |                    Error Generation Flow                          |
 |                                                                    |
 |   Statement:                                                       |
-|   <Retrieve> the <user> from the <user-repository> where id = <id>|
+|   Retrieve the <user> from the <user-repository> where id = <id>|
 |                                                                    |
 |                            |                                      |
 |                            v (failure)                            |
@@ -112,17 +112,17 @@ When any step fails, the runtime generates an error message from the statement:
 
 | Statement | Generated Error |
 |-----------|-----------------|
-| `<Extract> the <id> from the <pathParameters: id>.` | `Cannot extract the id from the pathParameters: id.` |
-| `<Retrieve> the <user> from the <user-repository> where id = <id>.` | `Cannot retrieve the user from the user-repository where id = 530.` |
-| `<Validate> the <email> for the <email-format>.` | `Cannot validate the email for the email-format.` |
-| `<Store> the <order> in the <order-repository>.` | `Cannot store the order in the order-repository.` |
+| `Extract the <id> from the <pathParameters: id>.` | `Cannot extract the id from the pathParameters: id.` |
+| `Retrieve the <user> from the <user-repository> where id = <id>.` | `Cannot retrieve the user from the user-repository where id = 530.` |
+| `Validate the <email> for the <email-format>.` | `Cannot validate the email for the email-format.` |
+| `Store the <order> in the <order-repository>.` | `Cannot store the order in the order-repository.` |
 
 ### Conditions Become Part of the Error
 
 When a statement includes conditions, they appear in the error:
 
 ```aro
-<Retrieve> the <order> from the <order-repository> where userId = <userId> and status = "pending".
+Retrieve the <order> from the <order-repository> where userId = <userId> and status = "pending".
 ```
 
 Error:
@@ -155,7 +155,7 @@ Cannot <action> the <result> [preposition] the <object> [conditions].
 Error messages include all resolved variable values:
 
 ```aro
-<Retrieve> the <paymentMethod> from the <payment-repository> where userId = <userId> and type = <type>.
+Retrieve the <paymentMethod> from the <payment-repository> where userId = <userId> and type = <type>.
 ```
 
 With `userId = 42` and `type = "credit"`:
@@ -231,16 +231,16 @@ For cases where you need explicit error control, ARO provides the `<Throw>` acti
 
 ```aro
 (deleteUser: Admin API) {
-    <Extract> the <id> from the <pathParameters: id>.
-    <Retrieve> the <user> from the <user-repository> where id = <id>.
+    Extract the <id> from the <pathParameters: id>.
+    Retrieve the <user> from the <user-repository> where id = <id>.
 
     (* Custom business rule - cannot delete admin users *)
     if <user: role> == "admin" then {
-        <Throw> a <Forbidden: error> for the <admin-deletion>.
+        Throw a <Forbidden: error> for the <admin-deletion>.
     }
 
-    <Delete> the <user> from the <user-repository>.
-    <Return> an <OK: status> for the <deletion>.
+    Delete the <user> from the <user-repository>.
+    Return an <OK: status> for the <deletion>.
 }
 ```
 
@@ -273,12 +273,12 @@ For custom error text, use the Log action before throwing:
 
 ```aro
 (updateOrder: Order API) {
-    <Extract> the <id> from the <pathParameters: id>.
-    <Retrieve> the <order> from the <order-repository> where id = <id>.
+    Extract the <id> from the <pathParameters: id>.
+    Retrieve the <order> from the <order-repository> where id = <id>.
 
     if <order: status> == "shipped" then {
-        <Log> "Cannot modify shipped orders" to the <console>.
-        <Throw> a <Conflict: error> for the <order-modification>.
+        Log "Cannot modify shipped orders" to the <console>.
+        Throw a <Conflict: error> for the <order-modification>.
     }
 
     (* Continue with update... *)
@@ -294,7 +294,7 @@ For custom error text, use the Log action before throwing:
 Error messages in ARO expose everything: variable names, values, conditions, and internal state. If you write:
 
 ```aro
-<Retrieve> the <user> from the <user-repository> where password = <password>.
+Retrieve the <user> from the <user-repository> where password = <password>.
 ```
 
 And this fails, the error message will be:
@@ -338,12 +338,12 @@ ARO is NOT designed for:
 
 ```aro
 (registerUser: User API) {
-    <Extract> the <data> from the <request: body>.
-    <Validate> the <data: email> for the <email-format>.
-    <Validate> the <data: password> for the <password-strength>.
-    <Create> the <user> with <data>.
-    <Store> the <user> in the <user-repository>.
-    <Return> a <Created: status> with <user>.
+    Extract the <data> from the <request: body>.
+    Validate the <data: email> for the <email-format>.
+    Validate the <data: password> for the <password-strength>.
+    Create the <user> with <data>.
+    Store the <user> in the <user-repository>.
+    Return a <Created: status> with <user>.
 }
 ```
 
@@ -375,9 +375,9 @@ function getUser(id):
 **ARO approach:**
 ```aro
 (getUser: User API) {
-    <Extract> the <id> from the <pathParameters: id>.
-    <Retrieve> the <user> from the <user-repository> where id = <id>.
-    <Return> an <OK: status> with <user>.
+    Extract the <id> from the <pathParameters: id>.
+    Retrieve the <user> from the <user-repository> where id = <id>.
+    Return an <OK: status> with <user>.
 }
 ```
 
@@ -387,11 +387,11 @@ Same result. Less code. Perfect error messages.
 
 ```aro
 (processPayment: Checkout) {
-    <Retrieve> the <order> from the <order-repository> where id = <orderId>.
-    <Retrieve> the <paymentMethod> from the <payment-repository> where userId = <userId>.
+    Retrieve the <order> from the <order-repository> where id = <orderId>.
+    Retrieve the <paymentMethod> from the <payment-repository> where userId = <userId>.
     <Charge> the <amount> to the <paymentMethod>.
-    <Update> the <order: status> to "paid".
-    <Return> an <OK: status> with <receipt>.
+    Update the <order: status> to "paid".
+    Return an <OK: status> with <receipt>.
 }
 ```
 

@@ -90,65 +90,65 @@ ecommerce-api/
 **main.aro** — Lifecycle only, no business logic:
 ```aro
 (Application-Start: E-commerce API) {
-    <Log> "Starting e-commerce API..." to the <console>.
-    <Start> the <http-server> on port 8080.
-    <Keepalive> the <application> for the <events>.
-    <Return> an <OK: status> for the <startup>.
+    Log "Starting e-commerce API..." to the <console>.
+    Start the <http-server> on port 8080.
+    Keepalive the <application> for the <events>.
+    Return an <OK: status> for the <startup>.
 }
 
 (Application-End: Success) {
-    <Stop> the <http-server>.
-    <Log> "E-commerce API stopped." to the <console>.
-    <Return> an <OK: status> for the <shutdown>.
+    Stop the <http-server>.
+    Log "E-commerce API stopped." to the <console>.
+    Return an <OK: status> for the <shutdown>.
 }
 ```
 
 **products/products.aro** — Product domain:
 ```aro
 (listProducts: Product API) {
-    <Retrieve> the <products> from the <product-repository>.
-    <Return> an <OK: status> with <products>.
+    Retrieve the <products> from the <product-repository>.
+    Return an <OK: status> with <products>.
 }
 
 (getProduct: Product API) {
-    <Extract> the <id> from the <pathParameters: id>.
-    <Retrieve> the <product> from the <product-repository> where id = <id>.
-    <Return> an <OK: status> with <product>.
+    Extract the <id> from the <pathParameters: id>.
+    Retrieve the <product> from the <product-repository> where id = <id>.
+    Return an <OK: status> with <product>.
 }
 ```
 
 **orders/orders.aro** — Order domain:
 ```aro
 (createOrder: Order API) {
-    <Extract> the <order-data> from the <request: body>.
-    <Create> the <order> with <order-data>.
-    <Store> the <order> in the <order-repository>.
-    <Emit> an <OrderPlaced: event> with <order>.
-    <Return> a <Created: status> with <order>.
+    Extract the <order-data> from the <request: body>.
+    Create the <order> with <order-data>.
+    Store the <order> in the <order-repository>.
+    Emit an <OrderPlaced: event> with <order>.
+    Return a <Created: status> with <order>.
 }
 ```
 
 **orders/order-events.aro** — Separated event handlers:
 ```aro
 (Reserve Stock: OrderPlaced Handler) {
-    <Extract> the <order> from the <event: order>.
-    <Extract> the <items> from the <order: items>.
-    <Update> the <inventory> for <items> with { reserved: true }.
-    <Emit> an <StockReserved: event> with <order>.
+    Extract the <order> from the <event: order>.
+    Extract the <items> from the <order: items>.
+    Update the <inventory> for <items> with { reserved: true }.
+    Emit an <StockReserved: event> with <order>.
 }
 ```
 
 **notifications/notifications.aro** — Cross-domain event handlers:
 ```aro
 (Send Order Confirmation: OrderPlaced Handler) {
-    <Extract> the <order> from the <event: order>.
-    <Extract> the <email> from the <order: customerEmail>.
-    <Send> the <confirmation-email> to the <email-service> with {
+    Extract the <order> from the <event: order>.
+    Extract the <email> from the <order: customerEmail>.
+    Send the <confirmation-email> to the <email-service> with {
         to: <email>,
         template: "order-confirmation",
         order: <order>
     }.
-    <Return> an <OK: status> for the <notification>.
+    Return an <OK: status> for the <notification>.
 }
 ```
 

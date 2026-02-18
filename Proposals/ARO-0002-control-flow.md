@@ -40,23 +40,23 @@ guarded_statement = aro_statement_base , "when" , condition , "." ;
 
 **Format:**
 ```aro
-<Action> the <result> preposition the <object> when <condition>.
+Action the <result> preposition the <object> when <condition>.
 ```
 
 ### 1.2 Examples
 
 ```aro
 (* Only return OK when authentication is valid *)
-<Return> an <OK: status> for the <user> when <authentication> is <valid>.
+Return an <OK: status> for the <user> when <authentication> is <valid>.
 
 (* Only send notification when user has email *)
-<Send> the <notification> to the <user: email> when <user: email> exists.
+Send the <notification> to the <user: email> when <user: email> exists.
 
 (* Throw error when user not found *)
-<Throw> a <NotFoundError> for the <user> when <user: record> is null.
+Throw a <NotFoundError> for the <user> when <user: record> is null.
 
 (* Log admin access *)
-<Log> "Admin access detected" to the <audit> when <user: role> == "admin".
+Log "Admin access detected" to the <audit> when <user: role> == "admin".
 ```
 
 ### 1.3 Semantics
@@ -205,19 +205,19 @@ match <variable> {
 ```aro
 match <http: method> {
     case "GET" {
-        <Retrieve> the <resource> from the <database>.
+        Retrieve the <resource> from the <database>.
     }
     case "POST" {
-        <Create> the <resource> in the <database>.
+        Create the <resource> in the <database>.
     }
     case "PUT" {
-        <Update> the <resource> in the <database>.
+        Update the <resource> in the <database>.
     }
     case "DELETE" {
         <Remove> the <resource> from the <database>.
     }
     otherwise {
-        <Return> a <MethodNotAllowed: error> for the <request>.
+        Return a <MethodNotAllowed: error> for the <request>.
     }
 }
 ```
@@ -229,18 +229,18 @@ Guards add conditions to case clauses using `where`:
 ```aro
 match <user: subscription> {
     case <premium> where <user: credits> > 0 {
-        <Grant> the <premium-features> for the <user>.
-        <Deduct> the <credit> from the <user: account>.
+        Grant the <premium-features> for the <user>.
+        Deduct the <credit> from the <user: account>.
     }
     case <premium> {
-        <Log> "Low credits for premium user" to the <console>.
-        <Grant> the <basic-features> for the <user>.
+        Log "Low credits for premium user" to the <console>.
+        Grant the <basic-features> for the <user>.
     }
     case <basic> {
-        <Grant> the <basic-features> for the <user>.
+        Grant the <basic-features> for the <user>.
     }
     otherwise {
-        <Redirect> the <user> to the <subscription-page>.
+        Redirect the <user> to the <subscription-page>.
     }
 }
 ```
@@ -253,18 +253,18 @@ Match against regex patterns in case clauses:
 match <input: text> {
     case /^[A-Z]{2}\d{4}$/ {
         (* Matches pattern like "AB1234" *)
-        <Log> "Valid product code" to the <console>.
+        Log "Valid product code" to the <console>.
     }
     case /^\d{3}-\d{2}-\d{4}$/ {
         (* Matches SSN pattern *)
-        <Log> "SSN format detected" to the <console>.
+        Log "SSN format detected" to the <console>.
     }
     case /^[a-z]+@[a-z]+\.[a-z]+$/ {
         (* Simple email pattern *)
-        <Log> "Email format detected" to the <console>.
+        Log "Email format detected" to the <console>.
     }
     otherwise {
-        <Log> "Unknown format" to the <console>.
+        Log "Unknown format" to the <console>.
     }
 }
 ```
@@ -274,18 +274,18 @@ match <input: text> {
 ```aro
 match <status-code> {
     case 200 {
-        <Parse> the <response: body> from the <http-response>.
-        <Return> the <data> for the <request>.
+        Parse the <response: body> from the <http-response>.
+        Return the <data> for the <request>.
     }
     case 404 {
-        <Return> a <NotFound: error> for the <request>.
+        Return a <NotFound: error> for the <request>.
     }
     case 500 {
-        <Log> "Server error occurred" to the <monitoring>.
-        <Return> a <ServerError> for the <request>.
+        Log "Server error occurred" to the <monitoring>.
+        Return a <ServerError> for the <request>.
     }
     otherwise {
-        <Return> an <UnknownError> for the <request>.
+        Return an <UnknownError> for the <request>.
     }
 }
 ```
@@ -297,23 +297,23 @@ Match expressions can be nested:
 ```aro
 match <user: status> {
     case "active" {
-        <Compute> the <password-hash> for the <password>.
+        Compute the <password-hash> for the <password>.
 
         match <password-hash> {
             case <user: password-hash> {
-                <Create> the <session-token> for the <user>.
-                <Return> an <OK: status> with the <session-token>.
+                Create the <session-token> for the <user>.
+                Return an <OK: status> with the <session-token>.
             }
             otherwise {
-                <Return> an <Unauthorized: error> for the <request>.
+                Return an <Unauthorized: error> for the <request>.
             }
         }
     }
     case "locked" {
-        <Return> an <AccountLocked: error> for the <request>.
+        Return an <AccountLocked: error> for the <request>.
     }
     otherwise {
-        <Return> an <InvalidStatus: error> for the <request>.
+        Return an <InvalidStatus: error> for the <request>.
     }
 }
 ```
@@ -359,14 +359,14 @@ for each <item> at <index> in <collection> {
 
 ```aro
 (Order Processing: E-Commerce) {
-    <Retrieve> the <items> from the <order>.
+    Retrieve the <items> from the <order>.
 
     for each <item> in <items> {
-        <Validate> the <availability> for the <item>.
-        <Reserve> the <quantity> for the <item>.
+        Validate the <availability> for the <item>.
+        Reserve the <quantity> for the <item>.
     }
 
-    <Return> an <OK: status> for the <order>.
+    Return an <OK: status> for the <order>.
 }
 ```
 
@@ -376,14 +376,14 @@ Use `where` to filter items during iteration:
 
 ```aro
 (Notification: Communication) {
-    <Retrieve> the <users> from the <user-repository>.
+    Retrieve the <users> from the <user-repository>.
 
     (* Only process users with notifications enabled *)
     for each <user> in <users> where <user: notifications-enabled> is true {
-        <Send> the <newsletter> to the <user: email>.
+        Send the <newsletter> to the <user: email>.
     }
 
-    <Return> an <OK: status> for the <notification>.
+    Return an <OK: status> for the <notification>.
 }
 ```
 
@@ -393,14 +393,14 @@ Access the current index with `at`:
 
 ```aro
 (Ranking: Display) {
-    <Sort> the <contestants> from the <competition> by <score>.
+    Sort the <contestants> from the <competition> by <score>.
 
     for each <contestant> at <rank> in <contestants> {
-        <Compute> the <position> from <rank> + 1.
-        <Log> "Position assigned" to the <console>.
+        Compute the <position> from <rank> + 1.
+        Log "Position assigned" to the <console>.
     }
 
-    <Return> an <OK: status> for the <ranking>.
+    Return an <OK: status> for the <ranking>.
 }
 ```
 
@@ -408,20 +408,20 @@ Access the current index with `at`:
 
 ```aro
 (Report: Analytics) {
-    <Retrieve> the <departments> from the <organization>.
+    Retrieve the <departments> from the <organization>.
 
     for each <department> in <departments> {
-        <Retrieve> the <employees> from the <department>.
+        Retrieve the <employees> from the <department>.
 
         for each <employee> in <employees> {
-            <Compute> the <score> for the <employee>.
+            Compute the <score> for the <employee>.
             <Add> the <score> to the <department: metrics>.
         }
 
-        <Generate> the <report> for the <department>.
+        Generate the <report> for the <department>.
     }
 
-    <Return> an <OK: status> for the <analytics>.
+    Return an <OK: status> for the <analytics>.
 }
 ```
 
@@ -442,11 +442,11 @@ parallel_foreach = "parallel" , "for" , "each" , "<" , item_name , ">" ,
 **Format:**
 ```aro
 parallel for each <item> in <items> {
-    <Process> the <result> for the <item>.
+    Process the <result> for the <item>.
 }
 
 parallel for each <item> in <items> with <concurrency: 4> {
-    <Fetch> the <data> from the <external-api>.
+    Fetch the <data> from the <external-api>.
 }
 ```
 
@@ -454,14 +454,14 @@ parallel for each <item> in <items> with <concurrency: 4> {
 
 ```aro
 (Image Processing: Media) {
-    <Retrieve> the <images> from the <upload-batch>.
+    Retrieve the <images> from the <upload-batch>.
 
     parallel for each <image> in <images> {
         <Resize> the <thumbnail> from the <image>.
-        <Store> the <thumbnail> in the <storage>.
+        Store the <thumbnail> in the <storage>.
     }
 
-    <Return> an <OK: status> for the <processing>.
+    Return an <OK: status> for the <processing>.
 }
 ```
 
@@ -469,14 +469,14 @@ parallel for each <item> in <items> with <concurrency: 4> {
 
 ```aro
 (API Sync: Integration) {
-    <Retrieve> the <records> from the <database>.
+    Retrieve the <records> from the <database>.
 
     (* Limit concurrent API calls to avoid rate limiting *)
     parallel for each <record> in <records> with <concurrency: 4> {
         <Sync> the <data> to the <external-api>.
     }
 
-    <Return> an <OK: status> for the <sync>.
+    Return an <OK: status> for the <sync>.
 }
 ```
 
@@ -497,9 +497,9 @@ Declarative actions for functional-style collection processing:
 Select items matching a condition:
 
 ```aro
-<Filter> the <active-users> from the <users> where <active> is true.
-<Filter> the <adults> from the <people> where <age> >= 18.
-<Filter> the <excluded> from <items> where <value> not in <exclude-list>.
+Filter the <active-users> from the <users> where <active> is true.
+Filter the <adults> from the <people> where <age> >= 18.
+Filter the <excluded> from <items> where <value> not in <exclude-list>.
 ```
 
 #### Transform
@@ -507,8 +507,8 @@ Select items matching a condition:
 Apply transformation to each item:
 
 ```aro
-<Transform> the <names> from the <users> with <name>.
-<Transform> the <totals> from the <items> with <price> * <quantity>.
+Transform the <names> from the <users> with <name>.
+Transform the <totals> from the <items> with <price> * <quantity>.
 ```
 
 #### Aggregation
@@ -517,7 +517,7 @@ Compute aggregate values:
 
 ```aro
 <Sum> the <total> from the <prices>.
-<Count> the <amount> from the <items>.
+Count the <amount> from the <items>.
 <Average> the <mean> from the <scores>.
 <Min> the <lowest> from the <values>.
 <Max> the <highest> from the <values>.
@@ -538,8 +538,8 @@ Find specific items:
 Sort and reorder collections:
 
 ```aro
-<Sort> the <sorted-users> from the <users> by <name>.
-<Sort> the <ranked> from the <scores> by <value> descending.
+Sort the <sorted-users> from the <users> by <name>.
+Sort the <ranked> from the <scores> by <value> descending.
 <Reverse> the <reversed> from the <items>.
 ```
 
@@ -574,15 +574,15 @@ Access individual elements, ranges, and selections from lists using specifiers o
 Element access uses specifiers on the **result** (left side), not the object:
 
 ```aro
-<Extract> the <result: specifier> from the <source>.
+Extract the <result: specifier> from the <source>.
 ```
 
 ### 5.2 Keyword Access
 
 | Specifier | Description | Example |
 |-----------|-------------|---------|
-| `first` | First element | `<Extract> the <item: first> from the <list>.` |
-| `last` | Last element | `<Extract> the <item: last> from the <list>.` |
+| `first` | First element | `Extract the <item: first> from the <list>.` |
+| `last` | Last element | `Extract the <item: last> from the <list>.` |
 
 ### 5.3 Numeric Index Access
 
@@ -603,8 +603,8 @@ Index:  4  3  2  1  0
 | n | (count - 1 - n)th element |
 
 ```aro
-<Extract> the <item: 0> from the <list>.   (* last element *)
-<Extract> the <item: 1> from the <list>.   (* second-to-last *)
+Extract the <item: 0> from the <list>.   (* last element *)
+Extract the <item: 1> from the <list>.   (* second-to-last *)
 ```
 
 ### 5.4 Range Access
@@ -612,7 +612,7 @@ Index:  4  3  2  1  0
 Extract consecutive elements using `start-end` syntax:
 
 ```aro
-<Extract> the <subset: 2-5> from the <list>.   (* elements at indices 2, 3, 4, 5 *)
+Extract the <subset: 2-5> from the <list>.   (* elements at indices 2, 3, 4, 5 *)
 ```
 
 Returns an array of elements at the specified indices.
@@ -622,7 +622,7 @@ Returns an array of elements at the specified indices.
 Extract specific elements by listing indices separated by commas:
 
 ```aro
-<Extract> the <selection: 0,3,7> from the <list>.   (* elements at 0, 3, 7 *)
+Extract the <selection: 0,3,7> from the <list>.   (* elements at 0, 3, 7 *)
 ```
 
 Returns an array of elements at the specified indices.
@@ -633,41 +633,41 @@ Returns an array of elements at the specified indices.
 
 ```aro
 (* Create a list *)
-<Create> the <fruits> with ["apple", "banana", "cherry", "date", "elderberry"].
+Create the <fruits> with ["apple", "banana", "cherry", "date", "elderberry"].
 
 (* Access by keyword *)
-<Extract> the <first-fruit: first> from the <fruits>.   (* "apple" *)
-<Extract> the <last-fruit: last> from the <fruits>.     (* "elderberry" *)
+Extract the <first-fruit: first> from the <fruits>.   (* "apple" *)
+Extract the <last-fruit: last> from the <fruits>.     (* "elderberry" *)
 
 (* Access by index (0 = last) *)
-<Extract> the <recent: 0> from the <fruits>.    (* "elderberry" *)
-<Extract> the <second: 1> from the <fruits>.    (* "date" *)
+Extract the <recent: 0> from the <fruits>.    (* "elderberry" *)
+Extract the <second: 1> from the <fruits>.    (* "date" *)
 ```
 
 #### Split String and Access Parts
 
 ```aro
 (* Split CSV line *)
-<Create> the <csv-line> with "name,email,phone,address".
-<Split> the <fields> from the <csv-line> by /,/.
+Create the <csv-line> with "name,email,phone,address".
+Split the <fields> from the <csv-line> by /,/.
 
 (* Access specific fields *)
-<Extract> the <name: first> from the <fields>.      (* "name" *)
-<Extract> the <address: last> from the <fields>.    (* "address" *)
+Extract the <name: first> from the <fields>.      (* "name" *)
+Extract the <address: last> from the <fields>.    (* "address" *)
 ```
 
 #### Range and Pick Access
 
 ```aro
-<Create> the <numbers> with [1, 2, 3, 4, 5, 6, 7, 8, 9, 10].
+Create the <numbers> with [1, 2, 3, 4, 5, 6, 7, 8, 9, 10].
 
 (* Extract range *)
-<Extract> the <middle: 3-6> from the <numbers>.
+Extract the <middle: 3-6> from the <numbers>.
 
-<Create> the <letters> with ["a", "b", "c", "d", "e", "f", "g"].
+Create the <letters> with ["a", "b", "c", "d", "e", "f", "g"].
 
 (* Pick specific elements *)
-<Extract> the <selected: 0,2,4> from the <letters>.
+Extract the <selected: 0,2,4> from the <letters>.
 ```
 
 ### 5.7 Return Values
@@ -691,36 +691,36 @@ Set operations work uniformly across Lists, Strings, and Objects.
 Set operations use the Compute action with a qualifier specifying the operation:
 
 ```aro
-<Compute> the <result: operation> from <first> with <second>.
+Compute the <result: operation> from <first> with <second>.
 ```
 
 ### 6.2 Operations
 
 | Operation | Description | Example |
 |-----------|-------------|---------|
-| `intersect` | Elements in both | `<Compute> the <common: intersect> from <a> with <b>.` |
-| `difference` | In first but not second | `<Compute> the <only-in-a: difference> from <a> with <b>.` |
-| `union` | All unique elements | `<Compute> the <all: union> from <a> with <b>.` |
+| `intersect` | Elements in both | `Compute the <common: intersect> from <a> with <b>.` |
+| `difference` | In first but not second | `Compute the <only-in-a: difference> from <a> with <b>.` |
+| `union` | All unique elements | `Compute the <all: union> from <a> with <b>.` |
 
 ### 6.3 Behavior by Type
 
 #### Lists
 
 ```aro
-<Create> the <a> with [2, 3, 5].
-<Create> the <b> with [1, 2, 3, 4].
+Create the <a> with [2, 3, 5].
+Create the <b> with [1, 2, 3, 4].
 
-<Compute> the <common: intersect> from <a> with <b>.    (* [2, 3] *)
-<Compute> the <diff: difference> from <a> with <b>.     (* [5] *)
-<Compute> the <all: union> from <a> with <b>.           (* [2, 3, 5, 1, 4] *)
+Compute the <common: intersect> from <a> with <b>.    (* [2, 3] *)
+Compute the <diff: difference> from <a> with <b>.     (* [5] *)
+Compute the <all: union> from <a> with <b>.           (* [2, 3, 5, 1, 4] *)
 ```
 
 **Multiset semantics** - duplicates are preserved up to minimum count:
 
 ```aro
-<Create> the <a> with [1, 2, 2, 3].
-<Create> the <b> with [2, 2, 2, 4].
-<Compute> the <result: intersect> from <a> with <b>.    (* [2, 2] *)
+Create the <a> with [1, 2, 2, 3].
+Create the <b> with [2, 2, 2, 4].
+Compute the <result: intersect> from <a> with <b>.    (* [2, 2] *)
 ```
 
 #### Strings
@@ -728,9 +728,9 @@ Set operations use the Compute action with a qualifier specifying the operation:
 Operations work at the character level, preserving order from the first operand:
 
 ```aro
-<Compute> the <shared: intersect> from "hello" with "bello".   (* "ello" *)
-<Compute> the <unique: difference> from "hello" with "bello".  (* "h" *)
-<Compute> the <all: union> from "hello" with "bello".          (* "helob" *)
+Compute the <shared: intersect> from "hello" with "bello".   (* "ello" *)
+Compute the <unique: difference> from "hello" with "bello".  (* "h" *)
+Compute the <all: union> from "hello" with "bello".          (* "helob" *)
 ```
 
 #### Objects
@@ -738,24 +738,24 @@ Operations work at the character level, preserving order from the first operand:
 Operations recursively compare nested structures:
 
 ```aro
-<Create> the <obj-a> with {
+Create the <obj-a> with {
     name: "Alice",
     age: 30,
     address: { city: "NYC", zip: "10001" }
 }.
-<Create> the <obj-b> with {
+Create the <obj-b> with {
     name: "Alice",
     age: 31,
     address: { city: "NYC", state: "NY" }
 }.
 
-<Compute> the <common: intersect> from <obj-a> with <obj-b>.
+Compute the <common: intersect> from <obj-a> with <obj-b>.
 (* Result: { name: "Alice", address: { city: "NYC" } } *)
 
-<Compute> the <diff: difference> from <obj-a> with <obj-b>.
+Compute the <diff: difference> from <obj-a> with <obj-b>.
 (* Result: { age: 30, address: { zip: "10001" } } *)
 
-<Compute> the <merged: union> from <obj-a> with <obj-b>.
+Compute the <merged: union> from <obj-a> with <obj-b>.
 (* Result: { name: "Alice", age: 30, address: { city: "NYC", zip: "10001", state: "NY" } } *)
 (* Note: First operand wins on conflicts (age: 30, not 31) *)
 ```
@@ -773,9 +773,9 @@ Operations recursively compare nested structures:
 Use `in` and `not in` for membership testing:
 
 ```aro
-<Create> the <valid-ids> with [1, 2, 3].
-<Filter> the <included> from <items> where <id> in <valid-ids>.
-<Filter> the <excluded> from <items> where <id> not in <valid-ids>.
+Create the <valid-ids> with [1, 2, 3].
+Filter the <included> from <items> where <id> in <valid-ids>.
+Filter the <excluded> from <items> where <id> not in <valid-ids>.
 ```
 
 ---
@@ -860,11 +860,11 @@ keyword          += "when" | "match" | "case" | "otherwise" | "where"
 
 ```aro
 (Order Fulfillment: E-Commerce) {
-    <Retrieve> the <orders> from the <order-repository>.
-    <Filter> the <pending-orders> from the <orders> where <status> is "pending".
+    Retrieve the <orders> from the <order-repository>.
+    Filter the <pending-orders> from the <orders> where <status> is "pending".
 
     for each <order> in <pending-orders> {
-        <Retrieve> the <items> from the <order>.
+        Retrieve the <items> from the <order>.
 
         (* Check all items are in stock *)
         <All> the <in-stock> from the <items> where <inventory: available> > 0.
@@ -873,95 +873,95 @@ keyword          += "when" | "match" | "case" | "otherwise" | "where"
             case true {
                 (* Reserve inventory for all items *)
                 for each <item> in <items> {
-                    <Reserve> the <quantity> from the <inventory> for the <item>.
+                    Reserve the <quantity> from the <inventory> for the <item>.
                 }
 
                 (* Update order status *)
-                <Update> the <order: status> to "processing".
+                Update the <order: status> to "processing".
 
                 (* Send confirmation *)
-                <Send> the <confirmation> to the <order: customer-email>.
+                Send the <confirmation> to the <order: customer-email>.
             }
             case false {
-                <Update> the <order: status> to "backordered".
-                <Send> the <backorder-notice> to the <order: customer-email>.
+                Update the <order: status> to "backordered".
+                Send the <backorder-notice> to the <order: customer-email>.
             }
         }
     }
 
     (* Calculate summary *)
-    <Count> the <processed-count> from the <pending-orders>.
-    <Log> "Orders processed" to the <console>.
+    Count the <processed-count> from the <pending-orders>.
+    Log "Orders processed" to the <console>.
 
-    <Return> an <OK: status> for the <fulfillment>.
+    Return an <OK: status> for the <fulfillment>.
 }
 
 (User Authentication: Security) {
-    <Extract> the <username> from the <request: body>.
-    <Extract> the <password> from the <request: body>.
+    Extract the <username> from the <request: body>.
+    Extract the <password> from the <request: body>.
 
     (* Validate input - guarded return *)
-    <Return> a <BadRequest: error> for the <request>
+    Return a <BadRequest: error> for the <request>
         when <username> is empty or <password> is empty.
 
     (* Look up user *)
-    <Retrieve> the <user> from the <user-repository>.
+    Retrieve the <user> from the <user-repository>.
 
     (* Handle user not found - guarded statements *)
-    <Log> "Failed login attempt" to the <audit> when <user> is null.
-    <Return> an <Unauthorized: error> for the <request> when <user> is null.
+    Log "Failed login attempt" to the <audit> when <user> is null.
+    Return an <Unauthorized: error> for the <request> when <user> is null.
 
     (* Check account status with match *)
     match <user: status> {
         case "locked" {
-            <Return> an <AccountLocked: error> for the <request>.
+            Return an <AccountLocked: error> for the <request>.
         }
         case "pending" {
-            <Send> the <verification-email> to the <user: email>.
-            <Return> a <PendingVerification: status> for the <request>.
+            Send the <verification-email> to the <user: email>.
+            Return a <PendingVerification: status> for the <request>.
         }
         case "active" {
-            <Compute> the <password-hash: hash> from the <password>.
+            Compute the <password-hash: hash> from the <password>.
 
             match <password-hash> {
                 case <user: password-hash> {
-                    <Create> the <session-token> for the <user>.
-                    <Log> "Successful login" to the <audit>.
-                    <Return> an <OK: status> with the <session-token>.
+                    Create the <session-token> for the <user>.
+                    Log "Successful login" to the <audit>.
+                    Return an <OK: status> with the <session-token>.
                 }
                 otherwise {
-                    <Increment> the <failed-attempts> for the <user>.
+                    Increment the <failed-attempts> for the <user>.
                     <Lock> the <user: account> for the <security-policy>
                         when <failed-attempts> >= 5.
-                    <Return> an <Unauthorized: error> for the <request>.
+                    Return an <Unauthorized: error> for the <request>.
                 }
             }
         }
         otherwise {
-            <Return> an <InvalidAccountStatus: error> for the <request>.
+            Return an <InvalidAccountStatus: error> for the <request>.
         }
     }
 }
 
 (Set Operations Demo: Data Processing) {
     (* List operations *)
-    <Create> the <list-a> with [2, 3, 5].
-    <Create> the <list-b> with [1, 2, 3, 4].
+    Create the <list-a> with [2, 3, 5].
+    Create the <list-b> with [1, 2, 3, 4].
 
-    <Compute> the <common: intersect> from <list-a> with <list-b>.
-    <Compute> the <only-in-a: difference> from <list-a> with <list-b>.
-    <Compute> the <all: union> from <list-a> with <list-b>.
+    Compute the <common: intersect> from <list-a> with <list-b>.
+    Compute the <only-in-a: difference> from <list-a> with <list-b>.
+    Compute the <all: union> from <list-a> with <list-b>.
 
     (* String operations *)
-    <Compute> the <shared-chars: intersect> from "hello" with "bello".
+    Compute the <shared-chars: intersect> from "hello" with "bello".
 
     (* Element access *)
-    <Create> the <fruits> with ["apple", "banana", "cherry", "date"].
-    <Extract> the <first-fruit: first> from the <fruits>.
-    <Extract> the <last-fruit: last> from the <fruits>.
-    <Extract> the <middle: 1-2> from the <fruits>.
+    Create the <fruits> with ["apple", "banana", "cherry", "date"].
+    Extract the <first-fruit: first> from the <fruits>.
+    Extract the <last-fruit: last> from the <fruits>.
+    Extract the <middle: 1-2> from the <fruits>.
 
-    <Return> an <OK: status> for the <demo>.
+    Return an <OK: status> for the <demo>.
 }
 ```
 

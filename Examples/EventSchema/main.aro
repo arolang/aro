@@ -8,13 +8,13 @@
    ============================================================ *)
 
 (Application-Start: Event Schema Demo) {
-    <Log> "=== Event Schema Example ===" to the <console>.
-    <Log> "Testing ARO-0046: Typed Event Extraction" to the <console>.
-    <Log> "" to the <console>.
+    Log "=== Event Schema Example ===" to the <console>.
+    Log "Testing ARO-0046: Typed Event Extraction" to the <console>.
+    Log "" to the <console>.
 
     (* Test 1: User registration event *)
-    <Log> "Test 1: Emitting UserRegistered event..." to the <console>.
-    <Emit> a <UserRegistered: event> with {
+    Log "Test 1: Emitting UserRegistered event..." to the <console>.
+    Emit a <UserRegistered: event> with {
         userId: "user-123",
         email: "alice@example.com",
         name: "Alice Smith",
@@ -22,9 +22,9 @@
     }.
 
     (* Test 2: Order placed event with nested data *)
-    <Log> "" to the <console>.
-    <Log> "Test 2: Emitting OrderPlaced event..." to the <console>.
-    <Emit> an <OrderPlaced: event> with {
+    Log "" to the <console>.
+    Log "Test 2: Emitting OrderPlaced event..." to the <console>.
+    Emit an <OrderPlaced: event> with {
         orderId: "order-456",
         customerId: "user-123",
         items: [
@@ -35,60 +35,60 @@
     }.
 
     (* Test 3: Simple notification *)
-    <Log> "" to the <console>.
-    <Log> "Test 3: Emitting Notification event..." to the <console>.
-    <Emit> a <Notification: event> with {
+    Log "" to the <console>.
+    Log "Test 3: Emitting Notification event..." to the <console>.
+    Emit a <Notification: event> with {
         message: "Welcome to the platform!",
         priority: "high"
     }.
 
-    <Log> "" to the <console>.
-    <Log> "=== All events emitted ===" to the <console>.
+    Log "" to the <console>.
+    Log "=== All events emitted ===" to the <console>.
 
-    <Return> an <OK: status> for the <demo>.
+    Return an <OK: status> for the <demo>.
 }
 
 (* Handler using typed extraction - validates against UserRegisteredEvent schema *)
 (Handle User Registration: UserRegistered Handler) {
     (* Typed extraction: validates event data against UserRegisteredEvent schema *)
-    <Extract> the <user: UserRegisteredEvent> from the <event: data>.
+    Extract the <user: UserRegisteredEvent> from the <event: data>.
 
     (* Access validated properties directly using specifier syntax *)
-    <Log> "UserRegistered: Received valid event" to the <console>.
-    <Log> "- User ID: ${<user: userId>}" to the <console>.
-    <Log> "- Email: ${<user: email>}" to the <console>.
-    <Log> "- Name: ${<user: name>}" to the <console>.
-    <Log> "- Premium: ${<user: premium>}" to the <console>.
+    Log "UserRegistered: Received valid event" to the <console>.
+    Log "- User ID: ${<user: userId>}" to the <console>.
+    Log "- Email: ${<user: email>}" to the <console>.
+    Log "- Name: ${<user: name>}" to the <console>.
+    Log "- Premium: ${<user: premium>}" to the <console>.
 
-    <Return> an <OK: status> for the <handler>.
+    Return an <OK: status> for the <handler>.
 }
 
 (* Handler using typed extraction for complex event with nested objects *)
 (Handle Order Placed: OrderPlaced Handler) {
     (* Typed extraction: validates against OrderPlacedEvent schema *)
-    <Extract> the <order: OrderPlacedEvent> from the <event: data>.
+    Extract the <order: OrderPlacedEvent> from the <event: data>.
 
-    <Log> "OrderPlaced: Received valid event" to the <console>.
-    <Log> "- Order ID: ${<order: orderId>}" to the <console>.
-    <Log> "- Customer: ${<order: customerId>}" to the <console>.
-    <Log> "- Total: $${<order: total>}" to the <console>.
+    Log "OrderPlaced: Received valid event" to the <console>.
+    Log "- Order ID: ${<order: orderId>}" to the <console>.
+    Log "- Customer: ${<order: customerId>}" to the <console>.
+    Log "- Total: $${<order: total>}" to the <console>.
 
     (* Extract nested items array *)
-    <Extract> the <items> from the <order: items>.
-    <Compute> the <item-count: length> from the <items>.
-    <Log> "- Items: ${<item-count>} item(s)" to the <console>.
+    Extract the <items> from the <order: items>.
+    Compute the <item-count: length> from the <items>.
+    Log "- Items: ${<item-count>} item(s)" to the <console>.
 
-    <Return> an <OK: status> for the <handler>.
+    Return an <OK: status> for the <handler>.
 }
 
 (* Handler using typed extraction for simple event *)
 (Handle Notification: Notification Handler) {
     (* Typed extraction: validates against NotificationEvent schema *)
-    <Extract> the <notif: NotificationEvent> from the <event: data>.
+    Extract the <notif: NotificationEvent> from the <event: data>.
 
-    <Log> "Notification: Received valid event" to the <console>.
-    <Log> "- Message: ${<notif: message>}" to the <console>.
-    <Log> "- Priority: ${<notif: priority>}" to the <console>.
+    Log "Notification: Received valid event" to the <console>.
+    Log "- Message: ${<notif: message>}" to the <console>.
+    Log "- Priority: ${<notif: priority>}" to the <console>.
 
-    <Return> an <OK: status> for the <handler>.
+    Return an <OK: status> for the <handler>.
 }

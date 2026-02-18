@@ -330,7 +330,7 @@ For each ARO statement, the generator:
 4. **Calls the action function**
 
 ```llvm
-; <Log> "Hello, World!" to the <console>.
+; Log "Hello, World!" to the <console>.
 s0:
   ; Bind literal to _literal_
   call void @aro_variable_bind_string(ptr %ctx, ptr @.str._literal_, ptr @.str.hello)

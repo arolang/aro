@@ -2,19 +2,19 @@
 
 (* GET /welcome - Welcome endpoint *)
 (handleRoot: HTTP Server API) {
-    <Create> the <message> with "Welcome to ARO!".
-    <Return> an <OK: status> with { message: <message> }.
+    Create the <message> with "Welcome to ARO!".
+    Return an <OK: status> with { message: <message> }.
 }
 
 (* GET /health - Health check endpoint *)
 (checkHealth: HTTP Server API) {
-    <Create> the <status> with "healthy".
-    <Return> an <OK: status> with { status: <status> }.
+    Create the <status> with "healthy".
+    Return an <OK: status> with { status: <status> }.
 }
 
 (* POST /echo - Echo back the message *)
 (echoMessage: HTTP Server API) {
-    <Extract> the <message> from the <request: body>.
-    <Create> the <echo> with <message>.
-    <Return> an <OK: status> with <echo>.
+    Extract the <message> from the <request: body>.
+    Create the <echo> with <message>.
+    Return an <OK: status> with <echo>.
 }

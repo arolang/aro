@@ -184,32 +184,44 @@ public final class Parser {
             return try parseParallelForEachLoop()
         }
 
-        let startToken = try expect(.leftAngle, message: "'<'")
-
-        // Check if this is a publish statement
+        // Check for Publish/Require special forms (no angle brackets, like other actions)
         if check(.publish) {
+            let startToken = advance()
             return try parsePublishStatement(startToken: startToken)
         }
-
-        // Check if this is a require statement (ARO-0003)
         if check(.require) {
+            let startToken = advance()
             return try parseRequireStatement(startToken: startToken)
         }
 
-        return try parseAROStatement(startToken: startToken)
+        // Parse ARO statement (action without angle brackets)
+        return try parseAROStatement()
     }
     
-    /// Parses: "<" action ">" [article] "<" result ">" preposition [article] "<" object ">" ["when" condition] "."
+    /// Parses: Action [article] "<" result ">" preposition [article] "<" object ">" ["when" condition] "."
     /// ARO-0002: Also supports expressions after prepositions like `from <x> * <y>` or `to 30`
     /// ARO-0004: Also supports guarded statements with `when` clause
-    /// ARO-0043: Also supports sink syntax like `<Log> "message" to the <console>.`
-    private func parseAROStatement(startToken: Token) throws -> AROStatement {
-        // Parse action verb
-        let actionToken = try expectIdentifier(message: "action verb")
-        let actionEndToken = try expect(.rightAngle, message: "'>'")
-        // Action span includes the angle brackets: <Log>
-        let actionSpan = startToken.span.merged(with: actionEndToken.span)
-        let action = Action(verb: actionToken.lexeme, span: actionSpan)
+    /// ARO-0043: Also supports sink syntax like `Log "message" to the <console>.`
+    private func parseAROStatement() throws -> AROStatement {
+        // Parse action verb (capitalized identifier or testing keyword)
+        let startToken = peek()
+        let actionToken: Token
+        let action: Action
+
+        // Check for testing keywords (when, then, assert) which are lexed as keywords
+        // Note: 'Given' is NOT a keyword - it's parsed as an identifier
+        switch peek().kind {
+        case .when, .then, .assert:
+            actionToken = advance()
+            // Capitalize the keyword for consistency (when -> When, then -> Then, etc.)
+            let capitalizedVerb = actionToken.lexeme.prefix(1).uppercased() + actionToken.lexeme.dropFirst()
+            action = Action(verb: capitalizedVerb, span: actionToken.span)
+        case .identifier(let verb) where verb.first?.isUppercase == true:
+            actionToken = advance()
+            action = Action(verb: actionToken.lexeme, span: actionToken.span)
+        default:
+            throw ParserError.unexpectedToken(expected: "action verb (e.g., Extract, Filter, Return)", got: peek())
+        }
 
         // ARO-0043: Check for sink verb syntax
         // Sink verbs: log, print, output, debug, write, send, dispatch
@@ -705,11 +717,10 @@ public final class Parser {
         return (key, value)
     }
     
-    /// Parses: "<Publish>" "as" "<" external ">" "<" internal ">" "."
+    /// Parses: "Publish" "as" "<" external ">" "<" internal ">" "."
     private func parsePublishStatement(startToken: Token) throws -> PublishStatement {
-        advance() // consume 'Publish'
-        try expect(.rightAngle, message: "'>'")
-        
+        // 'Publish' already consumed in parseStatement()
+
         try expect(.as, message: "'as'")
         
         try expect(.leftAngle, message: "'<'")
@@ -729,10 +740,9 @@ public final class Parser {
         )
     }
 
-    /// Parses: "<Require>" [article] "<" variable ">" "from" [article] "<" source ">" "."
+    /// Parses: "Require" [article] "<" variable ">" "from" [article] "<" source ">" "."
     private func parseRequireStatement(startToken: Token) throws -> RequireStatement {
-        advance() // consume 'Require'
-        try expect(.rightAngle, message: "'>'")
+        // 'Require' already consumed in parseStatement()
 
         // Skip optional article before variable
         if case .article = peek().kind {
@@ -1485,12 +1495,17 @@ extension Parser {
         case .star, .slash, .percent: return .factor
         case .leftBracket: return .postfix
         case .dot:
-            // Only treat . as member access if followed by identifier
+            // Only treat . as member access if followed by a lowercase identifier
             // This prevents statement-ending . from being parsed as member access
+            // Capitalized identifiers are action verbs (Log, Return, etc.) and start new statements
             let nextIndex = current + 1
             if nextIndex < tokens.count {
-                if case .identifier = tokens[nextIndex].kind {
-                    return .postfix
+                if case .identifier(let name) = tokens[nextIndex].kind {
+                    // Only treat as member access if identifier starts with lowercase
+                    // Uppercase identifiers are action verbs that start new statements
+                    if let first = name.first, first.isLowercase {
+                        return .postfix
+                    }
                 }
             }
             return nil

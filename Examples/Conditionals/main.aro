@@ -4,50 +4,50 @@
  *)
 
 (Application-Start: Conditionals Demo) {
-    <Require> the <console> from the <framework>.
+    Require the <console> from the <framework>.
 
     (* Create test variables *)
-    <Create> the <method> with "POST".
-    <Create> the <user-role> with "admin".
-    <Create> the <status-code> with 200.
+    Create the <method> with "POST".
+    Create the <user-role> with "admin".
+    Create the <status-code> with 200.
 
     (* Guarded statement with when clause *)
-    <Log> "Admin access detected!" to the <console> when <user-role> == "admin".
+    Log "Admin access detected!" to the <console> when <user-role> == "admin".
 
     (* Match expression for HTTP method routing *)
     match <method> {
         case "GET" {
-            <Log> "Handling GET request" to the <console>.
+            Log "Handling GET request" to the <console>.
         }
         case "POST" {
-            <Log> "Handling POST request" to the <console>.
+            Log "Handling POST request" to the <console>.
         }
         case "PUT" {
-            <Log> "Handling PUT request" to the <console>.
+            Log "Handling PUT request" to the <console>.
         }
         case "DELETE" {
-            <Log> "Handling DELETE request" to the <console>.
+            Log "Handling DELETE request" to the <console>.
         }
         otherwise {
-            <Log> "Unknown HTTP method" to the <console>.
+            Log "Unknown HTTP method" to the <console>.
         }
     }
 
     (* Match expression for status code handling *)
     match <status-code> {
         case 200 {
-            <Log> "Request successful" to the <console>.
+            Log "Request successful" to the <console>.
         }
         case 404 {
-            <Log> "Resource not found" to the <console>.
+            Log "Resource not found" to the <console>.
         }
         case 500 {
-            <Log> "Server error" to the <console>.
+            Log "Server error" to the <console>.
         }
         otherwise {
-            <Log> "Other status code" to the <console>.
+            Log "Other status code" to the <console>.
         }
     }
 
-    <Return> an <OK: status> for the <demo>.
+    Return an <OK: status> for the <demo>.
 }

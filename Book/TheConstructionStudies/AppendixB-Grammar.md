@@ -251,7 +251,7 @@ program = feature_set
 ### ARO Statement Parse
 
 ```
-"<Extract> the <user-id> from the <request: parameters>."
+"Extract the <user-id> from the <request: parameters>."
 
 = aro_statement
 = action , article , result , preposition , article , object , "."
@@ -261,7 +261,7 @@ program = feature_set
 ### Guarded Statement Parse
 
 ```
-"<Return> a <NotFound: status> for the <user> when <user> is empty."
+"Return a <NotFound: status> for the <user> when <user> is empty."
 
 = guarded_statement
 = aro_statement_base , "when" , condition , "."

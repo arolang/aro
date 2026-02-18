@@ -59,7 +59,7 @@ The compiler enforces immutability at compile-time. If you attempt to bind a var
 ```
 error: Cannot rebind variable 'value' - variables are immutable
   Hint: Create a new variable with a different name instead
-  Example: <Create> the <value-updated> with "second"
+  Example: Create the <value-updated> with "second"
 ```
 
 This compile-time check prevents a common class of bugs where variables change unexpectedly and makes it easier to reason about program behavior. The runtime also includes a safety check as a defense against compiler bugs, but in normal operation, all rebinding attempts are caught during compilation.
@@ -71,20 +71,20 @@ To work with transformed values, create new variables with descriptive names tha
 ```aro
 (* Immutability Example *)
 (Process Data: Computation) {
-    <Create> the <value> with 10.
+    Create the <value> with 10.
 
     (* ❌ This would fail: Cannot rebind 'value' *)
-    (* <Compute> the <value> from <value> + 5. *)
+    (* Compute the <value> from <value> + 5. *)
 
     (* ✅ Correct: Create new variable *)
-    <Compute> the <value-incremented> from <value> + 5.
-    <Compute> the <value-doubled> from <value-incremented> * 2.
+    Compute the <value-incremented> from <value> + 5.
+    Compute the <value-doubled> from <value-incremented> * 2.
 
-    <Log> <value> to the <console>.              (* 10 *)
-    <Log> <value-incremented> to the <console>.  (* 15 *)
-    <Log> <value-doubled> to the <console>.      (* 30 *)
+    Log <value> to the <console>.              (* 10 *)
+    Log <value-incremented> to the <console>.  (* 15 *)
+    Log <value-doubled> to the <console>.      (* 30 *)
 
-    <Return> an <OK: status> with <value-doubled>.
+    Return an <OK: status> with <value-doubled>.
 }
 ```
 
@@ -97,11 +97,11 @@ Loop variables are immutable within each iteration. Each iteration gets fresh bi
 ```aro
 for each <item> in <items> {
     (* ❌ Cannot rebind loop variable *)
-    (* <Compute> the <item> from <item> + 1. *)
+    (* Compute the <item> from <item> + 1. *)
 
     (* ✅ Create new variable from loop variable *)
-    <Compute> the <item-incremented> from <item> + 1.
-    <Log> <item-incremented> to the <console>.
+    Compute the <item-incremented> from <item> + 1.
+    Log <item-incremented> to the <console>.
 }
 ```
 
@@ -159,7 +159,7 @@ Events provide a structured way to pass data between feature sets while maintain
 
 Repositories act as shared persistent storage. One feature set can store a value to a repository, and another feature set can retrieve it later. This communication is asynchronous in the sense that the retriever does not need to execute while the storer is executing. The repository holds the data between executions. This is appropriate for persistent data that outlives individual requests.
 
-Repository names must end with `-repository`—this is not merely a convention but a requirement that enables the runtime to identify storage targets. When you write `<Store> the <user> into the <user-repository>`, the runtime recognizes `user-repository` as persistent storage because of its suffix. Names like `users` or `user-data` would not trigger repository semantics.
+Repository names must end with `-repository`—this is not merely a convention but a requirement that enables the runtime to identify storage targets. When you write `Store the <user> into the <user-repository>`, the runtime recognizes `user-repository` as persistent storage because of its suffix. Names like `users` or `user-data` would not trigger repository semantics.
 
 Repositories are scoped to business activities by default. A `user-repository` accessed by feature sets with the business activity "User Management" is separate from a `user-repository` accessed by feature sets with the business activity "Admin Tools". This scoping prevents unintended data sharing between different domains of your application.
 

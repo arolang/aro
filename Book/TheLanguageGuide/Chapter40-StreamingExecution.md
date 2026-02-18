@@ -7,10 +7,10 @@ ARO's streaming execution engine enables processing of arbitrarily large dataset
 Consider this simple pipeline processing a 10GB CSV file:
 
 ```aro
-<Read> the <data> from the <file: "transactions.csv">.
-<Filter> the <high-value> from the <data> where <amount> > 1000.
-<Reduce> the <total> from the <high-value> with sum(<amount>).
-<Log> <total> to the <console>.
+Read the <data> from the <file: "transactions.csv">.
+Filter the <high-value> from the <data> where <amount> > 1000.
+Reduce the <total> from the <high-value> with sum(<amount>).
+Log <total> to the <console>.
 ```
 
 **Without streaming:** The runtime loads the entire 10GB file into memory, parses it into ~15-20GB of dictionaries, then filters and reduces. This causes out-of-memory crashes on most systems.
@@ -66,9 +66,9 @@ ARO streams data **by default**. No syntax changes are required:
 
 ```aro
 (* This automatically streams - same syntax as always *)
-<Read> the <data> from the <file: "huge.csv">.
-<Filter> the <filtered> from <data> where <status> = "active".
-<Log> <filtered> to the <console>.
+Read the <data> from the <file: "huge.csv">.
+Filter the <filtered> from <data> where <status> = "active".
+Log <filtered> to the <console>.
 ```
 
 The runtime automatically:
@@ -106,28 +106,28 @@ Streaming shines with chained operations. Each stage processes data as it flows 
 ```aro
 (Process Transactions: Analytics) {
     (* Stage 1: Read CSV file incrementally *)
-    <Read> the <transactions> from the <file: "transactions.csv">.
+    Read the <transactions> from the <file: "transactions.csv">.
 
     (* Stage 2: Filter by date range *)
-    <Filter> the <recent> from <transactions>
+    Filter the <recent> from <transactions>
         where <date> >= "2024-01-01".
 
     (* Stage 3: Filter by amount *)
-    <Filter> the <significant> from <recent>
+    Filter the <significant> from <recent>
         where <amount> > 100.
 
     (* Stage 4: Filter by status *)
-    <Filter> the <completed> from <significant>
+    Filter the <completed> from <significant>
         where <status> = "completed".
 
     (* Stage 5: Aggregate - triggers pipeline execution *)
-    <Reduce> the <total> from <completed>
+    Reduce the <total> from <completed>
         with sum(<amount>).
 
-    <Log> "Total completed transactions: " to the <console>.
-    <Log> <total> to the <console>.
+    Log "Total completed transactions: " to the <console>.
+    Log <total> to the <console>.
 
-    <Return> an <OK: status> with { total: <total> }.
+    Return an <OK: status> with { total: <total> }.
 }
 ```
 
@@ -151,21 +151,21 @@ When a variable is used by multiple operations, ARO uses **stream teeing**:
 
 ```aro
 (Order Analytics: Report Generator) {
-    <Read> the <orders> from the <file: "orders.csv">.
+    Read the <orders> from the <file: "orders.csv">.
 
     (* Filter to active orders - consumed by 3 operations *)
-    <Filter> the <active> from <orders> where <status> = "active".
+    Filter the <active> from <orders> where <status> = "active".
 
     (* Consumer 1: Calculate total *)
-    <Reduce> the <total> from <active> with sum(<amount>).
+    Reduce the <total> from <active> with sum(<amount>).
 
     (* Consumer 2: Count orders *)
-    <Reduce> the <count> from <active> with count().
+    Reduce the <count> from <active> with count().
 
     (* Consumer 3: Find average *)
-    <Reduce> the <average> from <active> with avg(<amount>).
+    Reduce the <average> from <active> with avg(<amount>).
 
-    <Return> an <OK: status> with {
+    Return an <OK: status> with {
         total: <total>,
         count: <count>,
         average: <average>
@@ -191,9 +191,9 @@ For multiple `Reduce` operations on the same source, ARO can **fuse** them into 
 
 ```aro
 (* User writes: *)
-<Reduce> the <total> from <orders> with sum(<amount>).
-<Reduce> the <count> from <orders> with count().
-<Reduce> the <avg> from <orders> with avg(<amount>).
+Reduce the <total> from <orders> with sum(<amount>).
+Reduce the <count> from <orders> with count().
+Reduce the <avg> from <orders> with avg(<amount>).
 
 (* ARO executes as single pass: *)
 (* sum=0, count=0 *)
@@ -243,24 +243,24 @@ Different file formats have dramatically different streaming characteristics. Ch
 ```aro
 (Process Events: Log Processor) {
     (* Read JSONL file - automatically streams line by line *)
-    <Read> the <events> from the <file: "events.jsonl">.
+    Read the <events> from the <file: "events.jsonl">.
 
     (* Filter errors - each line processed independently *)
-    <Filter> the <errors> from <events>
+    Filter the <errors> from <events>
         where <level> = "error".
 
     (* Filter by service *)
-    <Filter> the <api-errors> from <errors>
+    Filter the <api-errors> from <errors>
         where <service> = "api".
 
     (* Aggregate - O(1) memory regardless of file size *)
-    <Reduce> the <error-count> from <api-errors>
+    Reduce the <error-count> from <api-errors>
         with count().
 
-    <Log> "API errors found: " to the <console>.
-    <Log> <error-count> to the <console>.
+    Log "API errors found: " to the <console>.
+    Log <error-count> to the <console>.
 
-    <Return> an <OK: status> for the <processing>.
+    Return an <OK: status> for the <processing>.
 }
 ```
 
@@ -381,38 +381,38 @@ timestamp,level,service,message,response_time
 
 ```aro
 (Application-Start: Log Analyzer) {
-    <Log> "Starting log analysis..." to the <console>.
+    Log "Starting log analysis..." to the <console>.
 
     (* Stage 1: Read logs incrementally *)
-    <Read> the <logs> from the <file: "logs.csv">.
+    Read the <logs> from the <file: "logs.csv">.
 
     (* Stage 2: Filter to errors only *)
-    <Filter> the <errors> from <logs>
+    Filter the <errors> from <logs>
         where <level> = "ERROR".
 
     (* Stage 3: Filter to API service *)
-    <Filter> the <api-errors> from <errors>
+    Filter the <api-errors> from <errors>
         where <service> = "api".
 
     (* Stage 4: Filter slow responses *)
-    <Filter> the <slow-errors> from <api-errors>
+    Filter the <slow-errors> from <api-errors>
         where <response-time> > 1000.
 
     (* Stage 5: Count critical issues *)
-    <Reduce> the <critical-count> from <slow-errors>
+    Reduce the <critical-count> from <slow-errors>
         with count().
 
     (* Stage 6: Average response time of errors *)
-    <Reduce> the <avg-response> from <api-errors>
+    Reduce the <avg-response> from <api-errors>
         with avg(<response-time>).
 
-    <Log> "Analysis complete:" to the <console>.
-    <Log> "  Critical issues: " to the <console>.
-    <Log> <critical-count> to the <console>.
-    <Log> "  Avg error response time: " to the <console>.
-    <Log> <avg-response> to the <console>.
+    Log "Analysis complete:" to the <console>.
+    Log "  Critical issues: " to the <console>.
+    Log <critical-count> to the <console>.
+    Log "  Avg error response time: " to the <console>.
+    Log <avg-response> to the <console>.
 
-    <Return> an <OK: status> for the <analysis>.
+    Return an <OK: status> for the <analysis>.
 }
 ```
 

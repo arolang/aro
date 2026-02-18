@@ -1,40 +1,40 @@
 (* Echo Socket Server - Bidirectional TCP communication *)
 
 (Application-Start: Echo Socket) {
-    <Log> "Starting echo socket on port 9000" to the <console>.
+    Log "Starting echo socket on port 9000" to the <console>.
 
     (* Start TCP socket server *)
-    <Start> the <socket-server> with { port: 9000 }.
+    Start the <socket-server> with { port: 9000 }.
 
-    <Log> "Socket server listening on port 9000" to the <console>.
+    Log "Socket server listening on port 9000" to the <console>.
 
     (* Keep the application running until Ctrl+C *)
-    <Keepalive> the <application> for the <events>.
+    Keepalive the <application> for the <events>.
 
-    <Return> an <OK: status> for the <startup>.
+    Return an <OK: status> for the <startup>.
 }
 
 (Handle Client Connected: Socket Event Handler) {
-    <Extract> the <client-id> from the <connection: id>.
-    <Extract> the <remote-address> from the <connection: remoteAddress>.
-    <Log> "Client connected" to the <console>.
-    <Return> an <OK: status> for the <connection>.
+    Extract the <client-id> from the <connection: id>.
+    Extract the <remote-address> from the <connection: remoteAddress>.
+    Log "Client connected" to the <console>.
+    Return an <OK: status> for the <connection>.
 }
 
 (Handle Data Received: Socket Event Handler) {
-    <Extract> the <received-data> from the <packet: buffer>.
-    <Extract> the <client> from the <packet: connection>.
+    Extract the <received-data> from the <packet: buffer>.
+    Extract the <client> from the <packet: connection>.
 
     (* Echo back the received data *)
-    <Send> the <received-data> to the <client>.
+    Send the <received-data> to the <client>.
 
-    <Log> "Echoed data back to client" to the <console>.
+    Log "Echoed data back to client" to the <console>.
 
-    <Return> an <OK: status> for the <packet>.
+    Return an <OK: status> for the <packet>.
 }
 
 (Handle Client Disconnected: Socket Event Handler) {
-    <Extract> the <client-id> from the <event: connectionId>.
-    <Log> "Client disconnected" to the <console>.
-    <Return> an <OK: status> for the <event>.
+    Extract the <client-id> from the <event: connectionId>.
+    Log "Client disconnected" to the <console>.
+    Return an <OK: status> for the <event>.
 }

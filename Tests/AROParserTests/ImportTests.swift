@@ -17,7 +17,7 @@ struct ImportParsingTests {
         import ../user-service
 
         (Test: Demo) {
-            <Return> an <OK: status> for the <test>.
+            Return an <OK: status> for the <test>.
         }
         """
 
@@ -39,7 +39,7 @@ struct ImportParsingTests {
         import ../orders
 
         (Test: Demo) {
-            <Return> an <OK: status> for the <test>.
+            Return an <OK: status> for the <test>.
         }
         """
 
@@ -61,7 +61,7 @@ struct ImportParsingTests {
         import ./utilities
 
         (Test: Demo) {
-            <Return> an <OK: status> for the <test>.
+            Return an <OK: status> for the <test>.
         }
         """
 
@@ -82,7 +82,7 @@ struct ImportParsingTests {
         import ../user-auth-service
 
         (Test: Demo) {
-            <Return> an <OK: status> for the <test>.
+            Return an <OK: status> for the <test>.
         }
         """
 
@@ -100,7 +100,7 @@ struct ImportParsingTests {
     func testProgramWithoutImports() throws {
         let source = """
         (Test: Demo) {
-            <Return> an <OK: status> for the <test>.
+            Return an <OK: status> for the <test>.
         }
         """
 
@@ -119,11 +119,11 @@ struct ImportParsingTests {
         import ../auth
 
         (First: Demo) {
-            <Return> an <OK: status> for the <test>.
+            Return an <OK: status> for the <test>.
         }
 
         (Second: Demo) {
-            <Return> an <OK: status> for the <test>.
+            Return an <OK: status> for the <test>.
         }
         """
 

@@ -2,23 +2,23 @@
 (* Demonstrates template rendering with variable interpolation *)
 
 (Application-Start: Template Engine Demo) {
-    <Log> "=== Template Engine Demo ===" to the <console>.
+    Log "=== Template Engine Demo ===" to the <console>.
 
     (* Create user data for template *)
-    <Create> the <user> with {
+    Create the <user> with {
         firstName: "Alice",
         email: "alice@example.com",
         plan: "premium"
     }.
 
-    <Log> "Rendering welcome template..." to the <console>.
+    Log "Rendering welcome template..." to the <console>.
 
     (* Render the welcome email template - tests slash in path *)
-    <Transform> the <email-content> from the <template: emails/welcome.tpl>.
+    Transform the <email-content> from the <template: emails/welcome.tpl>.
 
-    <Log> "--- Rendered Output ---" to the <console>.
-    <Log> <email-content> to the <console>.
-    <Log> "--- End Output ---" to the <console>.
+    Log "--- Rendered Output ---" to the <console>.
+    Log <email-content> to the <console>.
+    Log "--- End Output ---" to the <console>.
 
-    <Return> an <OK: status> for the <startup>.
+    Return an <OK: status> for the <startup>.
 }

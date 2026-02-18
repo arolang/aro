@@ -1,7 +1,7 @@
 (* HelloWorld - The simplest ARO application *)
 
 (Application-Start: Entry Point) {
-    <Create> the <greeting: String> with "Hello, ARO World!".
-    <Log> <greeting> to the <console>.
-    <Return> an <OK: status> for the <application>.
+    Create the <greeting: String> with "Hello, ARO World!".
+    Log <greeting> to the <console>.
+    Return an <OK: status> for the <application>.
 }

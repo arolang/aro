@@ -49,7 +49,7 @@ The third component is the **Object**, which represents the input or context for
 These three components combine to form a complete sentence. Consider this statement:
 
 ```aro
-<Extract> the <user-id> from the <pathParameters: id>.
+Extract the <user-id> from the <pathParameters: id>.
 ```
 
 The action is Extract, telling us that we are pulling data out of something. The result is user-id, which will hold the extracted value. The object is pathParameters with a qualifier of id, indicating where the data comes from. The preposition "from" establishes that data flows from the path parameters into the user-id variable.
@@ -116,9 +116,9 @@ Consider a typical operation: getting a user by their identifier. In an imperati
 
 ```aro
 (getUser: User API) {
-    <Extract> the <user-id> from the <pathParameters: id>.
-    <Retrieve> the <user> from the <user-repository> where <id> is <user-id>.
-    <Return> an <OK: status> with <user>.
+    Extract the <user-id> from the <pathParameters: id>.
+    Retrieve the <user> from the <user-repository> where <id> is <user-id>.
+    Return an <OK: status> with <user>.
 }
 ```
 

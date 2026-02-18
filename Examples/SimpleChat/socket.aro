@@ -1,18 +1,18 @@
 (* Socket: Client connected *)
 (Handle Client Connected: Socket Event Handler) {
-    <Extract> the <client-id> from the <connection: id>.
-    <Log> "Chat client connected" to the <console>.
+    Extract the <client-id> from the <connection: id>.
+    Log "Chat client connected" to the <console>.
 
     (* Send welcome message to the new client *)
-    <Create> the <welcome> with "Welcome to Simple Chat! You will receive messages when posted via HTTP.\n".
-    <Send> the <welcome> to the <client-id>.
+    Create the <welcome> with "Welcome to Simple Chat! You will receive messages when posted via HTTP.\n".
+    Send the <welcome> to the <client-id>.
 
-    <Return> an <OK: status> for the <connection>.
+    Return an <OK: status> for the <connection>.
 }
 
 (* Socket: Client disconnected *)
 (Handle Client Disconnected: Socket Event Handler) {
-    <Extract> the <client-id> from the <event: connectionId>.
-    <Log> "Chat client disconnected" to the <console>.
-    <Return> an <OK: status> for the <event>.
+    Extract the <client-id> from the <event: connectionId>.
+    Log "Chat client disconnected" to the <console>.
+    Return an <OK: status> for the <event>.
 }

@@ -37,22 +37,22 @@ ARO uses eight prepositions, each with specific semantic meaning:
 
 ```aro
 (* Extract from request context *)
-<Extract> the <user-id> from the <pathParameters: id>.
-<Extract> the <body> from the <request: body>.
-<Extract> the <token> from the <headers: authorization>.
+Extract the <user-id> from the <pathParameters: id>.
+Extract the <body> from the <request: body>.
+Extract the <token> from the <headers: authorization>.
 
 (* Retrieve from repository *)
-<Retrieve> the <user> from the <user-repository>.
-<Retrieve> the <orders> from the <order-repository> where <status> is "active".
+Retrieve the <user> from the <user-repository>.
+Retrieve the <orders> from the <order-repository> where <status> is "active".
 
 (* Request from external URL *)
-<Request> the <data> from "https://api.example.com/users".
+Request the <data> from "https://api.example.com/users".
 
 (* Read from file *)
-<Read> the <config> from the <file> with "config.json".
+Read the <config> from the <file> with "config.json".
 
 (* Filter from collection *)
-<Filter> the <active> from the <users> where <status> is "active".
+Filter the <active> from the <users> where <status> is "active".
 ```
 
 ### Semantic Notes
@@ -75,26 +75,26 @@ ARO uses eight prepositions, each with specific semantic meaning:
 
 ```aro
 (* Create with data *)
-<Create> the <user> with <user-data>.
-<Create> the <greeting> with "Hello, World!".
-<Create> the <total> with <subtotal> + <tax>.
+Create the <user> with <user-data>.
+Create the <greeting> with "Hello, World!".
+Create the <total> with <subtotal> + <tax>.
 
 (* Return with payload *)
-<Return> an <OK: status> with <users>.
-<Return> a <Created: status> with <user>.
+Return an <OK: status> with <users>.
+Return a <Created: status> with <user>.
 
 (* Emit with event data *)
-<Emit> a <UserCreated: event> with <user>.
-<Emit> an <OrderPlaced: event> with { orderId: <id>, total: <total> }.
+Emit a <UserCreated: event> with <user>.
+Emit an <OrderPlaced: event> with { orderId: <id>, total: <total> }.
 
 (* Merge with updates *)
-<Merge> the <updated> from <existing> with <changes>.
+Merge the <updated> from <existing> with <changes>.
 
 (* Log to console *)
-<Log> "Application started" to the <console>.
+Log "Application started" to the <console>.
 
 (* Read with path *)
-<Read> the <content> from the <file> with "data.json".
+Read the <content> from the <file> with "data.json".
 ```
 
 ### Semantic Notes
@@ -117,19 +117,19 @@ ARO uses eight prepositions, each with specific semantic meaning:
 
 ```aro
 (* Return for a target *)
-<Return> an <OK: status> for the <request>.
-<Return> a <NoContent: status> for the <deletion>.
+Return an <OK: status> for the <request>.
+Return a <NoContent: status> for the <deletion>.
 
 (* Log to destination *)
-<Log> <message> to the <console>.
-<Log> <error> to the <error-log>.
+Log <message> to the <console>.
+Log <error> to the <error-log>.
 
 (* Compute for an input *)
-<Compute> the <total> for the <items>.
-<Compute> the <hash> for the <password>.
+Compute the <total> for the <items>.
+Compute the <hash> for the <password>.
 
 (* Validate for a type *)
-<Validate> the <input> for the <user-type>.
+Validate the <input> for the <user-type>.
 ```
 
 ### Semantic Notes
@@ -152,16 +152,16 @@ ARO uses eight prepositions, each with specific semantic meaning:
 
 ```aro
 (* Send to destination *)
-<Send> the <email> to the <user: email>.
-<Send> the <notification> to the <admin>.
-<Send> the <request> to "https://api.example.com/webhook".
+Send the <email> to the <user: email>.
+Send the <notification> to the <admin>.
+Send the <request> to "https://api.example.com/webhook".
 
 (* Write to file *)
-<Write> the <data> to the <file> with "output.json".
+Write the <data> to the <file> with "output.json".
 
 (* Connect to service *)
-<Connect> the <database> to "postgres://localhost/mydb".
-<Connect> the <socket> to "localhost:9000".
+Connect the <database> to "postgres://localhost/mydb".
+Connect the <socket> to "localhost:9000".
 ```
 
 ### Semantic Notes
@@ -184,13 +184,13 @@ ARO uses eight prepositions, each with specific semantic meaning:
 
 ```aro
 (* Store into repository *)
-<Store> the <user> into the <user-repository>.
-<Store> the <order> into the <order-repository>.
-<Store> the <cache-entry> into the <cache>.
+Store the <user> into the <user-repository>.
+Store the <order> into the <order-repository>.
+Store the <cache-entry> into the <cache>.
 
 (* Transform into format *)
-<Transform> the <dto> into the <json>.
-<Transform> the <entity> into the <response-model>.
+Transform the <dto> into the <json>.
+Transform the <entity> into the <response-model>.
 ```
 
 ### Semantic Notes
@@ -213,13 +213,13 @@ ARO uses eight prepositions, each with specific semantic meaning:
 
 ```aro
 (* Validate against schema *)
-<Validate> the <input> against the <user: schema>.
-<Validate> the <password> against the <password-rules>.
-<Validate> the <token> against the <auth-service>.
+Validate the <input> against the <user: schema>.
+Validate the <password> against the <password-rules>.
+Validate the <token> against the <auth-service>.
 
 (* Compare against reference *)
-<Compare> the <old-value> against the <new-value>.
-<Compare> the <actual> against the <expected>.
+Compare the <old-value> against the <new-value>.
+Compare the <actual> against the <expected>.
 ```
 
 ### Semantic Notes
@@ -242,11 +242,11 @@ ARO uses eight prepositions, each with specific semantic meaning:
 
 ```aro
 (* Request via proxy *)
-<Request> the <data> from "https://api.example.com" via the <proxy>.
+Request the <data> from "https://api.example.com" via the <proxy>.
 
 (* Send via channel *)
-<Send> the <message> to the <user> via the <email-service>.
-<Send> the <notification> to the <subscriber> via the <websocket>.
+Send the <message> to the <user> via the <email-service>.
+Send the <notification> to the <subscriber> via the <websocket>.
 ```
 
 ### Semantic Notes
@@ -269,11 +269,11 @@ ARO uses eight prepositions, each with specific semantic meaning:
 
 ```aro
 (* Start on port *)
-<Start> the <http-server> on port 8080.
-<Start> the <socket-server> on port 9000.
+Start the <http-server> on port 8080.
+Start the <socket-server> on port 9000.
 
 (* Serve on host *)
-<Start> the <http-server> on "0.0.0.0:8080".
+Start the <http-server> on "0.0.0.0:8080".
 ```
 
 ### Semantic Notes
@@ -288,14 +288,14 @@ ARO uses eight prepositions, each with specific semantic meaning:
 
 | Intent | Preposition | Example |
 |--------|-------------|---------|
-| Pull data in | `from` | `<Extract> the <x> from the <y>` |
-| Provide data | `with` | `<Create> the <x> with <y>` |
-| Indicate purpose | `for` | `<Return> the <x> for the <y>` |
-| Push data out | `to` | `<Send> the <x> to the <y>` |
-| Store/transform | `into` | `<Store> the <x> into the <y>` |
-| Compare/validate | `against` | `<Validate> the <x> against the <y>` |
-| Specify channel | `via` | `<Request> the <x> via the <y>` |
-| Specify location | `on` | `<Start> the <x> on <y>` |
+| Pull data in | `from` | `Extract the <x> from the <y>` |
+| Provide data | `with` | `Create the <x> with <y>` |
+| Indicate purpose | `for` | `Return the <x> for the <y>` |
+| Push data out | `to` | `Send the <x> to the <y>` |
+| Store/transform | `into` | `Store the <x> into the <y>` |
+| Compare/validate | `against` | `Validate the <x> against the <y>` |
+| Specify channel | `via` | `Request the <x> via the <y>` |
+| Specify location | `on` | `Start the <x> on <y>` |
 
 ---
 

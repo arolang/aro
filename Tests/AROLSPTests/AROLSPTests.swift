@@ -129,7 +129,7 @@ struct HoverHandlerTests {
     func testFeatureSetHover() {
         let source = """
         (Test Feature: Business) {
-            <Extract> the <data> from the <source>.
+            Extract the <data> from the <source>.
         }
         """
         let compilationResult = Compiler.compile(source)
@@ -152,7 +152,7 @@ struct HoverHandlerTests {
     func testActionHover() {
         let source = """
         (Test: Business) {
-            <Extract> the <data> from the <source>.
+            Extract the <data> from the <source>.
         }
         """
         let compilationResult = Compiler.compile(source)
@@ -236,7 +236,7 @@ struct CompletionHandlerTests {
     func testVariableCompletions() {
         let source = """
         (Test: Business) {
-            <Extract> the <user> from the <request>.
+            Extract the <user> from the <request>.
         }
         """
         let compilationResult = Compiler.compile(source)
@@ -297,18 +297,18 @@ struct DefinitionHandlerTests {
     func testFindVariableDefinition() {
         let source = """
         (Test: Business) {
-            <Extract> the <user> from the <request>.
-            <Compute> the <hash> for the <user>.
+            Extract the <user> from the <request>.
+            Compute the <hash> for the <user>.
         }
         """
         let compilationResult = Compiler.compile(source)
         let handler = DefinitionHandler()
 
         // Position on "user" in the second statement (object position)
-        // Line 3, around character 37 where <user> is in "for the <user>"
+        // Line 2 (0-indexed), character 33 is in the middle of "user" in "<user>"
         let result = handler.handle(
             uri: "file:///test.aro",
-            position: Position(line: 2, character: 37),
+            position: Position(line: 2, character: 33),
             content: source,
             compilationResult: compilationResult
         )
@@ -340,9 +340,9 @@ struct ReferencesHandlerTests {
     func testFindAllReferences() {
         let source = """
         (Test: Business) {
-            <Extract> the <user> from the <request>.
-            <Compute> the <hash> for the <user>.
-            <Return> the <result> for the <user>.
+            Extract the <user> from the <request>.
+            Compute the <hash> for the <user>.
+            Return the <result> for the <user>.
         }
         """
         let compilationResult = Compiler.compile(source)
@@ -379,8 +379,8 @@ struct DocumentSymbolHandlerTests {
     func testFeatureSetSymbols() {
         let source = """
         (Test Feature: Business) {
-            <Extract> the <data> from the <source>.
-            <Return> the <result> for the <operation>.
+            Extract the <data> from the <source>.
+            Return the <result> for the <operation>.
         }
         """
         let compilationResult = Compiler.compile(source)
@@ -406,11 +406,11 @@ struct DocumentSymbolHandlerTests {
     func testMultipleFeatureSetSymbols() {
         let source = """
         (First: Business) {
-            <Extract> the <data> from the <source>.
+            Extract the <data> from the <source>.
         }
 
         (Second: Business) {
-            <Return> the <result> for the <operation>.
+            Return the <result> for the <operation>.
         }
         """
         let compilationResult = Compiler.compile(source)
@@ -434,7 +434,7 @@ struct DocumentManagerTests {
         let uri = "file:///test.aro"
         let content = """
         (Test: Business) {
-            <Extract> the <data> from the <source>.
+            Extract the <data> from the <source>.
         }
         """
 
@@ -494,11 +494,11 @@ struct WorkspaceSymbolHandlerTests {
 
         let content = """
         (User Auth: Security) {
-            <Extract> the <user> from the <request>.
+            Extract the <user> from the <request>.
         }
 
         (Order Process: Business) {
-            <Create> the <order> for the <user>.
+            Create the <order> for the <user>.
         }
         """
         _ = await manager.open(uri: "file:///test.aro", content: content, version: 1)
@@ -516,7 +516,7 @@ struct WorkspaceSymbolHandlerTests {
 
         let content = """
         (Test: Business) {
-            <Extract> the <data> from the <source>.
+            Extract the <data> from the <source>.
         }
         """
         _ = await manager.open(uri: "file:///test.aro", content: content, version: 1)
@@ -562,8 +562,8 @@ struct RenameHandlerTests {
     func testPrepareRename() {
         let source = """
         (Test: Business) {
-            <Extract> the <user> from the <request>.
-            <Return> the <result> for the <user>.
+            Extract the <user> from the <request>.
+            Return the <result> for the <user>.
         }
         """
         let compilationResult = Compiler.compile(source)
@@ -583,8 +583,8 @@ struct RenameHandlerTests {
     func testRename() {
         let source = """
         (Test: Business) {
-            <Extract> the <user> from the <request>.
-            <Return> the <result> for the <user>.
+            Extract the <user> from the <request>.
+            Return the <result> for the <user>.
         }
         """
         let compilationResult = Compiler.compile(source)
@@ -611,13 +611,13 @@ struct FoldingRangeHandlerTests {
     func testFeatureSetFolding() {
         let source = """
         (First Feature: Business) {
-            <Extract> the <data> from the <source>.
-            <Compute> the <result> for the <data>.
-            <Return> the <output> for the <result>.
+            Extract the <data> from the <source>.
+            Compute the <result> for the <data>.
+            Return the <output> for the <result>.
         }
 
         (Second Feature: Business) {
-            <Log> the <message> to the <console>.
+            Log the <message> to the <console>.
         }
         """
         let compilationResult = Compiler.compile(source)
@@ -661,7 +661,7 @@ struct SemanticTokensHandlerTests {
     func testTokensForSource() {
         let source = """
         (Test: Business) {
-            <Extract> the <data> from the <source>.
+            Extract the <data> from the <source>.
         }
         """
         let compilationResult = Compiler.compile(source)

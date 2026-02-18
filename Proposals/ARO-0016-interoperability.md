@@ -29,7 +29,7 @@ ARO provides a simple, unified approach: **external libraries become Services**.
 All external integrations use the same pattern:
 
 ```aro
-<Call> the <result> from the <service: method> with { args }.
+Call the <result> from the <service: method> with { args }.
 ```
 
 ---
@@ -39,7 +39,7 @@ All external integrations use the same pattern:
 ### Syntax
 
 ```aro
-<Call> the <result> from the <service: method> with { key: value, ... }.
+Call the <result> from the <service: method> with { key: value, ... }.
 ```
 
 ### Components
@@ -55,17 +55,17 @@ All external integrations use the same pattern:
 
 ```aro
 (* HTTP GET request *)
-<Call> the <response> from the <http: get> with {
+Call the <response> from the <http: get> with {
     url: "https://api.example.com/users"
 }.
 
 (* Database query *)
-<Call> the <users> from the <postgres: query> with {
+Call the <users> from the <postgres: query> with {
     sql: "SELECT * FROM users WHERE active = true"
 }.
 
 (* Media transcoding *)
-<Call> the <result> from the <ffmpeg: transcode> with {
+Call the <result> from the <ffmpeg: transcode> with {
     input: "/path/to/video.mov",
     output: "/path/to/video.mp4",
     format: "mp4"
@@ -82,20 +82,20 @@ The `http` service is built-in and provides HTTP request capabilities.
 
 ```aro
 (* GET request *)
-<Call> the <response> from the <http: get> with {
+Call the <response> from the <http: get> with {
     url: "https://api.example.com/data",
     headers: { "Authorization": "Bearer token123" }
 }.
 
 (* POST request *)
-<Call> the <response> from the <http: post> with {
+Call the <response> from the <http: post> with {
     url: "https://api.example.com/users",
     body: { name: "Alice", email: "alice@example.com" },
     headers: { "Content-Type": "application/json" }
 }.
 
 (* Other methods: put, patch, delete *)
-<Call> the <response> from the <http: delete> with {
+Call the <response> from the <http: delete> with {
     url: "https://api.example.com/users/123"
 }.
 ```
@@ -358,24 +358,24 @@ components:
 
 ```aro
 (Application-Start: Weather Service) {
-    <Log> the <message> for the <console> with "Weather Service starting...".
+    Log the <message> for the <console> with "Weather Service starting...".
 
     (* Fetch weather from external API *)
-    <Call> the <response> from the <http: get> with {
+    Call the <response> from the <http: get> with {
         url: "https://api.open-meteo.com/v1/forecast?latitude=52.52&longitude=13.41&current_weather=true"
     }.
 
-    <Extract> the <weather> from the <response: body>.
+    Extract the <weather> from the <response: body>.
 
-    <Log> the <message> for the <console> with "Current weather:".
-    <Log> the <message> for the <console> with <weather>.
+    Log the <message> for the <console> with "Current weather:".
+    Log the <message> for the <console> with <weather>.
 
-    <Return> an <OK: status> for the <startup>.
+    Return an <OK: status> for the <startup>.
 }
 
 (Application-End: Success) {
-    <Log> the <message> for the <console> with "Weather Service shutting down...".
-    <Return> an <OK: status> for the <shutdown>.
+    Log the <message> for the <console> with "Weather Service shutting down...".
+    Return an <OK: status> for the <shutdown>.
 }
 ```
 

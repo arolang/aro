@@ -8,59 +8,59 @@
 
 (* Handle new WebSocket connections *)
 (Handle WebSocket Connect: WebSocket Event Handler) {
-    <Extract> the <connection-id> from the <event: connectionId>.
-    <Extract> the <path> from the <event: path>.
-    <Extract> the <remote-address> from the <event: remoteAddress>.
+    Extract the <connection-id> from the <event: connectionId>.
+    Extract the <path> from the <event: path>.
+    Extract the <remote-address> from the <event: remoteAddress>.
 
-    <Log> ">>> New WebSocket Connection" to the <console>.
-    <Log> <connection-id> to the <console>.
-    <Log> <path> to the <console>.
-    <Log> <remote-address> to the <console>.
+    Log ">>> New WebSocket Connection" to the <console>.
+    Log <connection-id> to the <console>.
+    Log <path> to the <console>.
+    Log <remote-address> to the <console>.
 
     (* Send welcome message to the new client *)
-    <Create> the <welcome> with "Welcome to WebSocket Demo! Send any message to see it echoed.".
-    <Send> the <welcome> to the <websocket-connection: connectionId>.
+    Create the <welcome> with "Welcome to WebSocket Demo! Send any message to see it echoed.".
+    Send the <welcome> to the <websocket-connection: connectionId>.
 
     (* Notify all other clients about the new connection *)
-    <Create> the <notification> with "A new user has joined the chat.".
-    <Broadcast> the <notification> to the <websocket>.
+    Create the <notification> with "A new user has joined the chat.".
+    Broadcast the <notification> to the <websocket>.
 
-    <Return> an <OK: status> for the <connection>.
+    Return an <OK: status> for the <connection>.
 }
 
 (* Handle incoming WebSocket messages *)
 (Handle WebSocket Message: WebSocket Event Handler) {
-    <Extract> the <message> from the <event: message>.
-    <Extract> the <connection-id> from the <event: connectionId>.
+    Extract the <message> from the <event: message>.
+    Extract the <connection-id> from the <event: connectionId>.
 
-    <Log> ">>> Message received" to the <console>.
-    <Log> <message> to the <console>.
+    Log ">>> Message received" to the <console>.
+    Log <message> to the <console>.
 
     (* Echo the message back to the sender with prefix *)
-    <Create> the <echo-prefix> with "Echo: ".
-    <Compute> the <echo> from <echo-prefix> + <message>.
-    <Send> the <echo> to the <websocket-connection: connectionId>.
+    Create the <echo-prefix> with "Echo: ".
+    Compute the <echo> from <echo-prefix> + <message>.
+    Send the <echo> to the <websocket-connection: connectionId>.
 
     (* Also broadcast to all connected clients *)
-    <Create> the <broadcast-prefix> with "Broadcast: ".
-    <Compute> the <broadcast-message> from <broadcast-prefix> + <message>.
-    <Broadcast> the <broadcast-message> to the <websocket>.
+    Create the <broadcast-prefix> with "Broadcast: ".
+    Compute the <broadcast-message> from <broadcast-prefix> + <message>.
+    Broadcast the <broadcast-message> to the <websocket>.
 
-    <Return> an <OK: status> for the <message>.
+    Return an <OK: status> for the <message>.
 }
 
 (* Handle WebSocket disconnections *)
 (Handle WebSocket Disconnect: WebSocket Event Handler) {
-    <Extract> the <connection-id> from the <event: connectionId>.
-    <Extract> the <reason> from the <event: reason>.
+    Extract the <connection-id> from the <event: connectionId>.
+    Extract the <reason> from the <event: reason>.
 
-    <Log> ">>> WebSocket Disconnected" to the <console>.
-    <Log> <connection-id> to the <console>.
-    <Log> <reason> to the <console>.
+    Log ">>> WebSocket Disconnected" to the <console>.
+    Log <connection-id> to the <console>.
+    Log <reason> to the <console>.
 
     (* Notify remaining clients *)
-    <Create> the <notification> with "A user has left the chat.".
-    <Broadcast> the <notification> to the <websocket>.
+    Create the <notification> with "A user has left the chat.".
+    Broadcast the <notification> to the <websocket>.
 
-    <Return> an <OK: status> for the <disconnection>.
+    Return an <OK: status> for the <disconnection>.
 }

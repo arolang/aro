@@ -21,15 +21,15 @@ Without context-aware formatting, developers would need to manually format outpu
 
 ```aro
 (* Without context-aware formatting - manual formatting everywhere *)
-<Create> the <json-output> with { status: <status>, data: <data> }.
-<Return> an <OK: status> with <json-output>.
+Create the <json-output> with { status: <status>, data: <data> }.
+Return an <OK: status> with <json-output>.
 ```
 
 With context-aware formatting, the runtime handles adaptation:
 
 ```aro
 (* With context-aware formatting - runtime adapts automatically *)
-<Return> an <OK: status> with <data>.
+Return an <OK: status> with <data>.
 ```
 
 ---
@@ -88,8 +88,8 @@ HTTP responses automatically use machine context:
 
 ```aro
 (getUser: User API) {
-    <Retrieve> the <user> from the <user-repository> where id = <id>.
-    <Return> an <OK: status> with <user>.
+    Retrieve the <user> from the <user-repository> where id = <id>.
+    Return an <OK: status> with <user>.
 }
 ```
 
@@ -197,7 +197,7 @@ The Log action respects output context for console output:
 ### 5.1 Basic Logging
 
 ```aro
-<Log> "Server started" to the <console>.
+Log "Server started" to the <console>.
 ```
 
 | Context | Output |
@@ -209,7 +209,7 @@ The Log action respects output context for console output:
 ### 5.2 Structured Data Logging
 
 ```aro
-<Log> <user> to the <console>.
+Log <user> to the <console>.
 ```
 
 | Context | Output |
@@ -293,11 +293,11 @@ Don't manually construct JSON for responses:
 
 ```aro
 (* Don't do this *)
-<Create> the <json> with "{ \"status\": 200 }".
-<Return> an <OK: status> with <json>.
+Create the <json> with "{ \"status\": 200 }".
+Return an <OK: status> with <json>.
 
 (* Do this instead *)
-<Return> an <OK: status> with <data>.
+Return an <OK: status> with <data>.
 ```
 
 ### 8.2 Use Structured Data
@@ -306,10 +306,10 @@ Return structured data and let the formatter handle presentation:
 
 ```aro
 (* Good - structured data *)
-<Return> an <OK: status> with { users: <users>, count: <count> }.
+Return an <OK: status> with { users: <users>, count: <count> }.
 
 (* Avoid - pre-formatted strings *)
-<Return> an <OK: status> with "Found 5 users".
+Return an <OK: status> with "Found 5 users".
 ```
 
 ### 8.3 Debug Mode for Development

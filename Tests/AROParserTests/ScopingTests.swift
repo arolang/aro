@@ -15,8 +15,8 @@ struct RequireStatementParsingTests {
     func testRequireFromFramework() throws {
         let source = """
         (Test: Demo) {
-            <Require> the <request> from the <framework>.
-            <Return> an <OK: status> for the <test>.
+            Require the <request> from the <framework>.
+            Return an <OK: status> for the <test>.
         }
         """
 
@@ -39,8 +39,8 @@ struct RequireStatementParsingTests {
     func testRequireFromEnvironment() throws {
         let source = """
         (Test: Demo) {
-            <Require> the <api-key> from the <environment>.
-            <Return> an <OK: status> for the <test>.
+            Require the <api-key> from the <environment>.
+            Return an <OK: status> for the <test>.
         }
         """
 
@@ -60,8 +60,8 @@ struct RequireStatementParsingTests {
     func testRequireFromFeatureSet() throws {
         let source = """
         (Test: Demo) {
-            <Require> the <user> from the <auth-service>.
-            <Return> an <OK: status> for the <test>.
+            Require the <user> from the <auth-service>.
+            Return an <OK: status> for the <test>.
         }
         """
 
@@ -86,7 +86,7 @@ struct RequireStatementParsingTests {
             span: span
         )
 
-        #expect(stmt.description == "<Require> the <database> from the <framework>.")
+        #expect(stmt.description == "Require the <database> from the <framework>.")
     }
 }
 
@@ -121,8 +121,8 @@ struct SemanticAnalyzerScopingTests {
     func testRequireAddsDependency() throws {
         let source = """
         (Test: Demo) {
-            <Require> the <database> from the <framework>.
-            <Return> an <OK: status> for the <test>.
+            Require the <database> from the <framework>.
+            Return an <OK: status> for the <test>.
         }
         """
 
@@ -138,9 +138,9 @@ struct SemanticAnalyzerScopingTests {
     func testPublishedVariableVisibility() throws {
         let source = """
         (Test: Demo) {
-            <Create> the <user> with "John".
-            <Publish> as <current-user> <user>.
-            <Return> an <OK: status> for the <test>.
+            Create the <user> with "John".
+            Publish as <current-user> <user>.
+            Return an <OK: status> for the <test>.
         }
         """
 
@@ -165,8 +165,8 @@ struct SemanticAnalyzerScopingTests {
     func testRequireRegistersExternal() throws {
         let source = """
         (Test: Demo) {
-            <Require> the <request> from the <framework>.
-            <Return> an <OK: status> for the <test>.
+            Require the <request> from the <framework>.
+            Return an <OK: status> for the <test>.
         }
         """
 
@@ -189,10 +189,10 @@ struct UnusedVariableDetectionTests {
     func testWarnsUnusedVariable() throws {
         let source = """
         (Test: Demo) {
-            <Create> the <used-var> with "hello".
-            <Create> the <unused-var> with "world".
-            <Log> <used-var> to the <console>.
-            <Return> an <OK: status> for the <test>.
+            Create the <used-var> with "hello".
+            Create the <unused-var> with "world".
+            Log <used-var> to the <console>.
+            Return an <OK: status> for the <test>.
         }
         """
 
@@ -208,9 +208,9 @@ struct UnusedVariableDetectionTests {
     func testNoWarningForPublishedVariable() throws {
         let source = """
         (Test: Demo) {
-            <Create> the <user> with "John".
-            <Publish> as <current-user> <user>.
-            <Return> an <OK: status> for the <test>.
+            Create the <user> with "John".
+            Publish as <current-user> <user>.
+            Return an <OK: status> for the <test>.
         }
         """
 
@@ -226,8 +226,8 @@ struct UnusedVariableDetectionTests {
     func testNoWarningForExternalDependency() throws {
         let source = """
         (Test: Demo) {
-            <Require> the <database> from the <framework>.
-            <Return> an <OK: status> for the <test>.
+            Require the <database> from the <framework>.
+            Return an <OK: status> for the <test>.
         }
         """
 

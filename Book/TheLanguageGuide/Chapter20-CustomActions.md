@@ -28,12 +28,12 @@ ARO provides two extension mechanisms:
 
 | Mechanism | What It Adds | Syntax | Best For |
 |-----------|--------------|--------|----------|
-| **Custom Actions** | New verbs | `<Geocode> the <coords> from <addr>.` | Domain-specific operations |
-| **Custom Services** | External integrations | `<Call> from <postgres: query>` | Systems with multiple methods |
+| **Custom Actions** | New verbs | `Geocode the <coords> from <addr>.` | Domain-specific operations |
+| **Custom Services** | External integrations | `Call from <postgres: query>` | Systems with multiple methods |
 
-Custom actions, covered in this chapter, let you add new verbs to the language. When you implement a custom action, you can write statements like `<Geocode> the <coordinates> from the <address>` that feel native to ARO.
+Custom actions, covered in this chapter, let you add new verbs to the language. When you implement a custom action, you can write statements like `Geocode the <coordinates> from the <address>` that feel native to ARO.
 
-Custom services, covered in Chapter 20, let you integrate external systems through the `Call` action. Services provide multiple methods under a single service name: `<Call> from <postgres: query>`, `<Call> from <postgres: insert>`.
+Custom services, covered in Chapter 20, let you integrate external systems through the `Call` action. Services provide multiple methods under a single service name: `Call from <postgres: query>`, `Call from <postgres: insert>`.
 
 Plugins, covered in Chapter 21, let you package and share both actions and services with the community.
 

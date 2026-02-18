@@ -214,9 +214,9 @@ Pattern: `{EventName} Handler`
 
 ```aro
 (Send Welcome Email: UserCreated Handler) {
-    <Extract> the <user> from the <event: user>.
-    <Send> the <welcome-email> to the <user: email>.
-    <Return> an <OK: status> for the <notification>.
+    Extract the <user> from the <event: user>.
+    Send the <welcome-email> to the <user: email>.
+    Return an <OK: status> for the <notification>.
 }
 ```
 
@@ -250,9 +250,9 @@ Pattern: `{repository-name} Observer`
 
 ```aro
 (Log User Changes: user-repository Observer) {
-    <Extract> the <changeType> from the <event: changeType>.
-    <Log> "User ${<changeType>}" to the <console>.
-    <Return> an <OK: status> for the <logging>.
+    Extract the <changeType> from the <event: changeType>.
+    Log "User ${<changeType>}" to the <console>.
+    Return an <OK: status> for the <logging>.
 }
 ```
 
@@ -274,9 +274,9 @@ Pattern: `{description}: File Event Handler`
 
 ```aro
 (Handle Modified: File Event Handler) {
-    <Extract> the <path> from the <event: path>.
-    <Log> "File changed: ${<path>}" to the <console>.
-    <Return> an <OK: status> for the <notification>.
+    Extract the <path> from the <event: path>.
+    Log "File changed: ${<path>}" to the <console>.
+    Return an <OK: status> for the <notification>.
 }
 ```
 
@@ -291,9 +291,9 @@ Pattern: `{description}: Socket Event Handler`
 
 ```aro
 (Data Received: Socket Event Handler) {
-    <Extract> the <data> from the <packet: data>.
-    <Send> the <data> to the <packet: connectionId>.
-    <Return> an <OK: status> for the <echo>.
+    Extract the <data> from the <packet: data>.
+    Send the <data> to the <packet: connectionId>.
+    Return an <OK: status> for the <echo>.
 }
 ```
 
@@ -304,17 +304,17 @@ Pattern: `{fieldName} StateObserver` or `{fieldName} StateObserver<from_to_to>`
 ```aro
 (* Observe all transitions on 'status' field *)
 (Audit Changes: status StateObserver) {
-    <Extract> the <fromState> from the <transition: fromState>.
-    <Extract> the <toState> from the <transition: toState>.
-    <Log> "Status: ${<fromState>} → ${<toState>}" to the <console>.
-    <Return> an <OK: status> for the <audit>.
+    Extract the <fromState> from the <transition: fromState>.
+    Extract the <toState> from the <transition: toState>.
+    Log "Status: ${<fromState>} → ${<toState>}" to the <console>.
+    Return an <OK: status> for the <audit>.
 }
 
 (* Observe specific transition: draft → placed *)
 (Notify Placed: status StateObserver<draft_to_placed>) {
-    <Extract> the <order> from the <transition: entity>.
-    <Send> the <order-confirmation> to the <order: customerEmail>.
-    <Return> an <OK: status> for the <notification>.
+    Extract the <order> from the <transition: entity>.
+    Send the <order-confirmation> to the <order: customerEmail>.
+    Return an <OK: status> for the <notification>.
 }
 ```
 

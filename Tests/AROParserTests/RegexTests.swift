@@ -107,10 +107,10 @@ struct RegexParserTests {
     func testRegexPatternInMatch() throws {
         let source = """
         (Test: Demo) {
-            <Create> the <text> with "hello".
+            Create the <text> with "hello".
             match <text> {
                 case /^hello/ {
-                    <Return> an <OK: status> for the <request>.
+                    Return an <OK: status> for the <request>.
                 }
             }
         }
@@ -141,10 +141,10 @@ struct RegexParserTests {
     func testRegexPatternWithFlags() throws {
         let source = """
         (Test: Demo) {
-            <Create> the <text> with "HELLO".
+            Create the <text> with "HELLO".
             match <text> {
                 case /^hello/i {
-                    <Return> an <OK: status> for the <request>.
+                    Return an <OK: status> for the <request>.
                 }
             }
         }
@@ -170,16 +170,16 @@ struct RegexParserTests {
     func testMixedCases() throws {
         let source = """
         (Test: Demo) {
-            <Create> the <msg> with "test".
+            Create the <msg> with "test".
             match <msg> {
                 case "exact" {
-                    <Return> an <OK: status> for the <request>.
+                    Return an <OK: status> for the <request>.
                 }
                 case /^prefix/ {
-                    <Return> an <OK: status> for the <request>.
+                    Return an <OK: status> for the <request>.
                 }
                 otherwise {
-                    <Return> a <NotFound: status> for the <request>.
+                    Return a <NotFound: status> for the <request>.
                 }
             }
         }
@@ -214,7 +214,7 @@ struct RegexParserTests {
     func testRegexInWhereClause() throws {
         let source = """
         (Test: Demo) {
-            <Retrieve> the <users> from the <user-repository>
+            Retrieve the <users> from the <user-repository>
                 where <name> matches /^Admin/i.
         }
         """
