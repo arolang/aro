@@ -299,16 +299,26 @@ public final class Parser {
             // Create a placeholder object noun for the expression
             objectNoun = QualifiedNoun(base: "_expression_", specifiers: [], span: previous().span)
         } else {
-            // Standard syntax: [article] <object>
+            // Standard syntax: [article] <object> or [article] bare-identifier
             // Skip optional article before object
             if case .article = peek().kind {
                 advance()
             }
 
-            // Parse object
-            try expect(.leftAngle, message: "'<'")
-            objectNoun = try parseQualifiedNoun()
-            try expect(.rightAngle, message: "'>'")
+            // Parse object - angle brackets optional for simple objects (no qualifier)
+            if check(.leftAngle) {
+                // Standard syntax: <object> or <object: qualifier>
+                advance()
+                objectNoun = try parseQualifiedNoun()
+                try expect(.rightAngle, message: "'>'")
+            } else if case .identifier = peek().kind {
+                // Bare identifier syntax: object or object-hyphenated (no qualifier allowed)
+                let startSpan = peek().span
+                let base = try parseCompoundIdentifier()
+                objectNoun = QualifiedNoun(base: base, specifiers: [], span: startSpan.merged(with: previous().span))
+            } else {
+                throw ParserError.unexpectedToken(expected: "object ('<' or identifier)", got: peek())
+            }
         }
 
         // Parse optional with clause: `with "string"` or `with <expr>` or `with sum(<field>)`
