@@ -887,6 +887,12 @@ jobs:
             exit 1
           fi
 
+          # Set SWIFTC for plugin compilation to use the same Swift version
+          # This ensures plugins are compiled with the same ABI as the runtime
+          SWIFTC_PATH=$(which swiftc)
+          echo "SWIFTC=$SWIFTC_PATH" >> $GITHUB_ENV
+          echo "Swift compiler for plugins: $SWIFTC_PATH"
+
       - name: Install LLVM 20 and dependencies
         run: |
           brew install llvm@20 libgit2

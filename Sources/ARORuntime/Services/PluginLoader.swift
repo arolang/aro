@@ -1023,6 +1023,13 @@ public final class PluginLoader: @unchecked Sendable {
 
     /// Find the Swift compiler in PATH or common locations
     private func findSwiftCompiler() -> String? {
+        // Check for SWIFTC environment variable first - allows CI to specify exact compiler
+        if let swiftcEnv = ProcessInfo.processInfo.environment["SWIFTC"],
+           !swiftcEnv.isEmpty,
+           FileManager.default.isExecutableFile(atPath: swiftcEnv) {
+            return swiftcEnv
+        }
+
         #if os(Windows)
         // On Windows, use 'where' command to find swiftc.exe
         let whereProcess = Process()
