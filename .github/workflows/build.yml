@@ -909,9 +909,10 @@ jobs:
           fi
           echo "LLVM_PATH=$LLVM_PREFIX" >> $GITHUB_ENV
           echo "$LLVM_PREFIX/bin" >> $GITHUB_PATH
-          # Set runtime library path for LLVM
-          echo "DYLD_LIBRARY_PATH=$LLVM_PREFIX/lib" >> $GITHUB_ENV
-          echo "DYLD_FALLBACK_LIBRARY_PATH=$LLVM_PREFIX/lib" >> $GITHUB_ENV
+          # Set runtime library path for LLVM and Swift (SWIFT_LIB_PATH set in previous step)
+          # This ensures plugins loaded at runtime use the correct Swift runtime
+          echo "DYLD_LIBRARY_PATH=$SWIFT_LIB_PATH:$LLVM_PREFIX/lib" >> $GITHUB_ENV
+          echo "DYLD_FALLBACK_LIBRARY_PATH=$SWIFT_LIB_PATH:$LLVM_PREFIX/lib" >> $GITHUB_ENV
 
       - name: Install Perl modules
         run: |

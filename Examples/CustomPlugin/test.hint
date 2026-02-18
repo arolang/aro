@@ -1,8 +1,6 @@
 # Test hints for CustomPlugin
 # Binary mode: plugins are compiled at build time by 'aro build'
 # Plugin requires Swift compiler at build time (available in CI via swift:6.2-jammy)
-# Swift ABI mismatch in GitHub Actions macOS (swiftly Swift 6.2 vs Xcode Swift 6.1)
-skip-on-macos: Swift plugin ABI incompatibility in GitHub Actions CI
 mode: both
 timeout: 60
 # Use occurrence-check since binary output has extra logging lines

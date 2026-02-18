@@ -1,5 +1,3 @@
 # Test hints for GreetingPlugin
 # Requires managed plugin: https://github.com/arolang/plugin-swift-hello
-# Swift ABI mismatch in GitHub Actions macOS (swiftly Swift 6.2 vs Xcode Swift 6.1)
-skip-on-macos: Swift plugin ABI incompatibility in GitHub Actions CI
 normalize-dict: true
