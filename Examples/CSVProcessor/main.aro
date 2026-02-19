@@ -7,45 +7,45 @@
  *)
 
 (Application-Start: CSV Processor Demo) {
-    <Log> "=== CSV Processor Demo ===" to the <console>.
+    Log "=== CSV Processor Demo ===" to the <console>.
 
     (* Sample CSV data - use \n for newlines *)
-    <Create> the <csv-data> with "name,age,city\nAlice,30,New York\nBob,25,San Francisco\nCharlie,35,Chicago".
+    Create the <csv-data> with "name,age,city\nAlice,30,New York\nBob,25,San Francisco\nCharlie,35,Chicago".
 
     (* Parse CSV to structured data using custom action *)
-    <Log> "1. Parsing CSV data..." to the <console>.
-    <ParseCSV> the <parsed> from the <csv-data> with {
+    Log "1. Parsing CSV data..." to the <console>.
+    ParseCSV the <parsed> from the <csv-data> with {
         headers: true
     }.
 
-    <Extract> the <row-count> from the <parsed: row_count>.
-    <Log> "Parsed rows:" to the <console>.
-    <Log> <row-count> to the <console>.
+    Extract the <row-count> from the <parsed: row_count>.
+    Log "Parsed rows:" to the <console>.
+    Log <row-count> to the <console>.
 
     (* Convert CSV to JSON objects using custom action *)
-    <Log> "2. Converting CSV to JSON..." to the <console>.
-    <CSVToJSON> the <json-result> from the <csv-data>.
+    Log "2. Converting CSV to JSON..." to the <console>.
+    CSVToJSON the <json-result> from the <csv-data>.
 
-    <Extract> the <count> from the <json-result: count>.
-    <Log> "JSON objects:" to the <console>.
-    <Log> <count> to the <console>.
+    Extract the <count> from the <json-result: count>.
+    Log "JSON objects:" to the <console>.
+    Log <count> to the <console>.
 
     (* Format data back to CSV with custom delimiter *)
-    <Log> "3. Formatting as semicolon-delimited..." to the <console>.
-    <Create> the <rows> with [
+    Log "3. Formatting as semicolon-delimited..." to the <console>.
+    Create the <rows> with [
         ["product", "price", "quantity"],
         ["Apple", "1.50", "100"],
         ["Banana", "0.75", "200"]
     ].
 
-    <FormatCSV> the <formatted> from the <rows> with {
+    FormatCSV the <formatted> from the <rows> with {
         delimiter: ";"
     }.
 
-    <Extract> the <csv-output> from the <formatted: csv>.
-    <Log> <csv-output> to the <console>.
+    Extract the <csv-output> from the <formatted: csv>.
+    Log <csv-output> to the <console>.
 
-    <Log> "CSV processing completed!" to the <console>.
+    Log "CSV processing completed!" to the <console>.
 
-    <Return> an <OK: status> for the <startup>.
+    Return an <OK: status> for the <startup>.
 }

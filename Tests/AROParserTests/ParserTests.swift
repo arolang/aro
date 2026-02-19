@@ -172,7 +172,7 @@ struct ParserBasicTests {
     func testSimpleFeatureSet() throws {
         let source = """
         (User Auth: Security) {
-            <Extract> the <user> from the <request>.
+            Extract the <user> from the <request>.
         }
         """
         let program = try Parser.parse(source)
@@ -187,10 +187,10 @@ struct ParserBasicTests {
     func testMultipleFeatureSets() throws {
         let source = """
         (Feature One: Activity One) {
-            <Extract> the <data> from the <source>.
+            Extract the <data> from the <source>.
         }
         (Feature Two: Activity Two) {
-            <Compute> the <result> for the <input>.
+            Compute the <result> for the <input>.
         }
         """
         let program = try Parser.parse(source)
@@ -204,7 +204,7 @@ struct ParserBasicTests {
     func testHyphenatedFeatureSetName() throws {
         let source = """
         (Application-Start: Entry Point) {
-            <Log> <message> to the <console>.
+            Log <message> to the <console>.
         }
         """
         let program = try Parser.parse(source)
@@ -223,7 +223,7 @@ struct AROStatementParsingTests {
     func testBasicAROStatement() throws {
         let source = """
         (Test: Test) {
-            <Extract> the <user> from the <request>.
+            Extract the <user> from the <request>.
         }
         """
         let program = try Parser.parse(source)
@@ -239,7 +239,7 @@ struct AROStatementParsingTests {
     func testQualifiedResult() throws {
         let source = """
         (Test: Test) {
-            <Extract> the <user: id.name> from the <request>.
+            Extract the <user: id.name> from the <request>.
         }
         """
         let program = try Parser.parse(source)
@@ -253,7 +253,7 @@ struct AROStatementParsingTests {
     func testQualifiedObject() throws {
         let source = """
         (Test: Test) {
-            <Extract> the <data> from the <request: body>.
+            Extract the <data> from the <request: body>.
         }
         """
         let program = try Parser.parse(source)
@@ -267,7 +267,7 @@ struct AROStatementParsingTests {
     func testStringLiteral() throws {
         let source = """
         (Test: Test) {
-            <Log> "Hello World" to the <console>.
+            Log "Hello World" to the <console>.
         }
         """
         let program = try Parser.parse(source)
@@ -285,7 +285,7 @@ struct AROStatementParsingTests {
     func testIntegerLiteral() throws {
         let source = """
         (Test: Test) {
-            <Start> the <server> for the <http> with 8080.
+            Start the <server> for the <http> with 8080.
         }
         """
         let program = try Parser.parse(source)
@@ -303,7 +303,7 @@ struct AROStatementParsingTests {
     func testFloatLiteral() throws {
         let source = """
         (Test: Test) {
-            <Set> the <timeout> for the <connection> with 3.14.
+            Set the <timeout> for the <connection> with 3.14.
         }
         """
         let program = try Parser.parse(source)
@@ -321,7 +321,7 @@ struct AROStatementParsingTests {
     func testBooleanLiteral() throws {
         let source = """
         (Test: Test) {
-            <Set> the <flag> for the <config> with true.
+            Set the <flag> for the <config> with true.
         }
         """
         let program = try Parser.parse(source)
@@ -339,7 +339,7 @@ struct AROStatementParsingTests {
     func testForPreposition() throws {
         let source = """
         (Test: Test) {
-            <Compute> the <result> for the <input>.
+            Compute the <result> for the <input>.
         }
         """
         let program = try Parser.parse(source)
@@ -352,7 +352,7 @@ struct AROStatementParsingTests {
     func testToPreposition() throws {
         let source = """
         (Test: Test) {
-            <Send> the <email> to the <user>.
+            Send the <email> to the <user>.
         }
         """
         let program = try Parser.parse(source)
@@ -365,7 +365,7 @@ struct AROStatementParsingTests {
     func testIntoPreposition() throws {
         let source = """
         (Test: Test) {
-            <Transform> the <data> into the <json>.
+            Transform the <data> into the <json>.
         }
         """
         let program = try Parser.parse(source)
@@ -378,7 +378,7 @@ struct AROStatementParsingTests {
     func testViaPreposition() throws {
         let source = """
         (Test: Test) {
-            <Fetch> the <data> via the <api>.
+            Fetch the <data> via the <api>.
         }
         """
         let program = try Parser.parse(source)
@@ -391,7 +391,7 @@ struct AROStatementParsingTests {
     func testAgainstPreposition() throws {
         let source = """
         (Test: Test) {
-            <Validate> the <input> against the <schema>.
+            Validate the <input> against the <schema>.
         }
         """
         let program = try Parser.parse(source)
@@ -404,9 +404,9 @@ struct AROStatementParsingTests {
     func testMultipleStatements() throws {
         let source = """
         (Test: Test) {
-            <Extract> the <user> from the <request>.
-            <Validate> the <user> against the <schema>.
-            <Return> the <response> for the <success>.
+            Extract the <user> from the <request>.
+            Validate the <user> against the <schema>.
+            Return the <response> for the <success>.
         }
         """
         let program = try Parser.parse(source)
@@ -418,7 +418,7 @@ struct AROStatementParsingTests {
     func testCompoundIdentifiers() throws {
         let source = """
         (Test: Test) {
-            <Extract> the <user-data> from the <http-request>.
+            Extract the <user-data> from the <http-request>.
         }
         """
         let program = try Parser.parse(source)
@@ -426,6 +426,111 @@ struct AROStatementParsingTests {
 
         #expect(statement.result.base == "user-data")
         #expect(statement.object.noun.base == "http-request")
+    }
+
+    @Test("Parses bare simple object without angle brackets")
+    func testBareSimpleObject() throws {
+        let source = """
+        (Test: Test) {
+            Log "Hello" to console.
+        }
+        """
+        let program = try Parser.parse(source)
+        let statement = program.featureSets[0].statements[0] as! AROStatement
+
+        #expect(statement.object.noun.base == "console")
+        #expect(statement.object.noun.specifiers.isEmpty)
+    }
+
+    @Test("Parses bare simple object with article")
+    func testBareSimpleObjectWithArticle() throws {
+        let source = """
+        (Test: Test) {
+            Log "Hello" to the console.
+        }
+        """
+        let program = try Parser.parse(source)
+        let statement = program.featureSets[0].statements[0] as! AROStatement
+
+        #expect(statement.object.noun.base == "console")
+    }
+
+    @Test("Parses bare hyphenated object without angle brackets")
+    func testBareHyphenatedObject() throws {
+        let source = """
+        (Test: Test) {
+            Store <data> into user-repository.
+        }
+        """
+        let program = try Parser.parse(source)
+        let statement = program.featureSets[0].statements[0] as! AROStatement
+
+        #expect(statement.object.noun.base == "user-repository")
+        #expect(statement.object.noun.specifiers.isEmpty)
+    }
+
+    @Test("Parses bare hyphenated object with article")
+    func testBareHyphenatedObjectWithArticle() throws {
+        let source = """
+        (Test: Test) {
+            Store <data> into the user-repository.
+        }
+        """
+        let program = try Parser.parse(source)
+        let statement = program.featureSets[0].statements[0] as! AROStatement
+
+        #expect(statement.object.noun.base == "user-repository")
+    }
+
+    @Test("Angle brackets still work for simple objects")
+    func testAngleBracketsStillWorkForSimpleObjects() throws {
+        let source = """
+        (Test: Test) {
+            Log "Hello" to the <console>.
+        }
+        """
+        let program = try Parser.parse(source)
+        let statement = program.featureSets[0].statements[0] as! AROStatement
+
+        #expect(statement.object.noun.base == "console")
+    }
+
+    @Test("Qualified object still requires angle brackets")
+    func testQualifiedObjectRequiresBrackets() throws {
+        let source = """
+        (Test: Test) {
+            Extract <data> from the <request: body>.
+        }
+        """
+        let program = try Parser.parse(source)
+        let statement = program.featureSets[0].statements[0] as! AROStatement
+
+        #expect(statement.object.noun.base == "request")
+        #expect(statement.object.noun.specifiers == ["body"])
+    }
+
+    @Test("Multiple statements with mixed bare and bracketed objects")
+    func testMixedBareAndBracketedObjects() throws {
+        let source = """
+        (Test: Test) {
+            Log "Starting" to console.
+            Extract <data> from the <request: body>.
+            Store <data> into user-repository.
+        }
+        """
+        let program = try Parser.parse(source)
+
+        #expect(program.featureSets[0].statements.count == 3)
+
+        let stmt1 = program.featureSets[0].statements[0] as! AROStatement
+        #expect(stmt1.object.noun.base == "console")
+
+        let stmt2 = program.featureSets[0].statements[1] as! AROStatement
+        #expect(stmt2.object.noun.base == "request")
+        #expect(stmt2.object.noun.specifiers == ["body"])
+
+        let stmt3 = program.featureSets[0].statements[2] as! AROStatement
+        #expect(stmt3.object.noun.base == "user-repository")
     }
 }
 
@@ -438,7 +543,7 @@ struct PublishStatementParsingTests {
     func testBasicPublishStatement() throws {
         let source = """
         (Test: Test) {
-            <Publish> as <external-name> <internal>.
+            Publish as <external-name> <internal>.
         }
         """
         let program = try Parser.parse(source)
@@ -452,7 +557,7 @@ struct PublishStatementParsingTests {
     func testPublishSimpleNames() throws {
         let source = """
         (Test: Test) {
-            <Publish> as <userData> <data>.
+            Publish as <userData> <data>.
         }
         """
         let program = try Parser.parse(source)
@@ -487,7 +592,7 @@ struct ParserErrorTests {
     @Test("Reports unexpected token")
     func testUnexpectedToken() throws {
         let diagnostics = DiagnosticCollector()
-        _ = try Parser.parse("(Name: Activity) { <Extract> }", diagnostics: diagnostics)
+        _ = try Parser.parse("(Name: Activity) { Extract }", diagnostics: diagnostics)
 
         #expect(diagnostics.hasErrors)
     }
@@ -499,7 +604,7 @@ struct ParserErrorTests {
             <Invalid syntax here
         }
         (Second: Two) {
-            <Extract> the <data> from the <source>.
+            Extract the <data> from the <source>.
         }
         """
         let diagnostics = DiagnosticCollector()
@@ -563,7 +668,7 @@ struct ASTVisitorTests {
     func testASTPrinter() throws {
         let source = """
         (Test: Activity) {
-            <Extract> the <user> from the <request>.
+            Extract the <user> from the <request>.
         }
         """
         let program = try Parser.parse(source)
@@ -579,7 +684,7 @@ struct ASTVisitorTests {
     func testASTPrinterPublish() throws {
         let source = """
         (Test: Activity) {
-            <Publish> as <external> <internal>.
+            Publish as <external> <internal>.
         }
         """
         let program = try Parser.parse(source)

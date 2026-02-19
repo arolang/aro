@@ -1,7 +1,7 @@
 (* EventListener - Demonstrating the Listen action *)
 
 (Application-Start: EventListener Demo) {
-    <Log> "=== Event Listener Demo ===" to the <console>.
+    Log "=== Event Listener Demo ===" to the <console>.
 
     (* Listen action sets up event listeners *)
     (* Supports verbs: Listen, Await *)
@@ -9,26 +9,26 @@
     (* Types: port, events, file/directory *)
 
     (* Example 1: Listen for port events *)
-    <Log> "--- Port Listener Setup ---" to the <console>.
-    <Create> the <port-number> with 8080.
-    <Listen> the <port-listener> for the <port: port-number>.
-    <Log> "Port listener configured for port 8080" to the <console>.
-    <Log> <port-listener> to the <console>.
+    Log "--- Port Listener Setup ---" to the <console>.
+    Create the <port-number> with 8080.
+    Listen the <port-listener> for the <port: port-number>.
+    Log "Port listener configured for port 8080" to the <console>.
+    Log <port-listener> to the <console>.
 
     (* Example 2: Listen for custom events *)
-    <Log> "--- Event Listener Setup ---" to the <console>.
-    <Create> the <eventname> with "user-created".
-    <Listen> the <event-listener> for the <events: eventname>.
-    <Log> "Event listener configured for user-created events" to the <console>.
-    <Log> <event-listener> to the <console>.
+    Log "--- Event Listener Setup ---" to the <console>.
+    Create the <eventname> with "user-created".
+    Listen the <event-listener> for the <events: eventname>.
+    Log "Event listener configured for user-created events" to the <console>.
+    Log <event-listener> to the <console>.
 
     (* Example 3: Listen for file changes *)
-    <Log> "--- File Listener Setup ---" to the <console>.
-    <Create> the <watch-path> with "./Examples/EventListener".
-    <Listen> the <file-listener> for the <file: watch-path>.
-    <Log> "File listener configured" to the <console>.
-    <Log> <file-listener> to the <console>.
+    Log "--- File Listener Setup ---" to the <console>.
+    Create the <watch-path> with "./Examples/EventListener".
+    Listen the <file-listener> for the <file: watch-path>.
+    Log "File listener configured" to the <console>.
+    Log <file-listener> to the <console>.
 
-    <Log> "All listeners configured!" to the <console>.
-    <Return> an <OK: status> for the <demo>.
+    Log "All listeners configured!" to the <console>.
+    Return an <OK: status> for the <demo>.
 }

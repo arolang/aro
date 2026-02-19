@@ -57,7 +57,7 @@ struct AcceptActionTests {
         ]
         context.bind("order", value: order)
 
-        // Create descriptors for: <Accept> the <transition: draft_to_placed> on <order: status>
+        // Create descriptors for: Accept the <transition: draft_to_placed> on <order: status>
         let (result, object) = createDescriptors(
             resultBase: "transition",
             resultSpecifiers: ["draft_to_placed"],

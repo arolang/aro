@@ -5,38 +5,38 @@
 
 (* Handle new socket connections *)
 (Handle Socket Connect: Socket Event Handler) {
-    <Extract> the <client-id> from the <connection: id>.
-    <Log> ">>> Socket client connected" to the <console>.
-    <Log> <client-id> to the <console>.
+    Extract the <client-id> from the <connection: id>.
+    Log ">>> Socket client connected" to the <console>.
+    Log <client-id> to the <console>.
 
     (* Send welcome message *)
-    <Create> the <welcome> with "Welcome to Multi-Service Demo!\nYou will receive notifications about:\n- HTTP requests\n- File changes\n\n".
-    <Send> the <welcome> to the <client-id>.
+    Create the <welcome> with "Welcome to Multi-Service Demo!\nYou will receive notifications about:\n- HTTP requests\n- File changes\n\n".
+    Send the <welcome> to the <client-id>.
 
-    <Return> an <OK: status> for the <connection>.
+    Return an <OK: status> for the <connection>.
 }
 
 (* Handle socket messages *)
 (Handle Socket Message: Socket Event Handler) {
-    <Extract> the <message> from the <event: message>.
-    <Extract> the <client-id> from the <event: connectionId>.
+    Extract the <message> from the <event: message>.
+    Extract the <client-id> from the <event: connectionId>.
 
-    <Log> ">>> Socket message received" to the <console>.
-    <Log> <message> to the <console>.
+    Log ">>> Socket message received" to the <console>.
+    Log <message> to the <console>.
 
     (* Echo back *)
-    <Create> the <echo-prefix> with "Echo: ".
-    <Compute> the <echo> from <echo-prefix> + <message>.
-    <Send> the <echo> to the <client-id>.
+    Create the <echo-prefix> with "Echo: ".
+    Compute the <echo> from <echo-prefix> + <message>.
+    Send the <echo> to the <client-id>.
 
-    <Return> an <OK: status> for the <message>.
+    Return an <OK: status> for the <message>.
 }
 
 (* Handle socket disconnections *)
 (Handle Socket Disconnect: Socket Event Handler) {
-    <Extract> the <client-id> from the <event: connectionId>.
-    <Log> ">>> Socket client disconnected" to the <console>.
-    <Log> <client-id> to the <console>.
+    Extract the <client-id> from the <event: connectionId>.
+    Log ">>> Socket client disconnected" to the <console>.
+    Log <client-id> to the <console>.
 
-    <Return> an <OK: status> for the <disconnection>.
+    Return an <OK: status> for the <disconnection>.
 }

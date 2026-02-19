@@ -30,10 +30,10 @@ Whole numbers without decimals.
 
 ```aro
 (Calculate Total: Math Example) {
-    <Create> the <quantity> with 42.
-    <Create> the <price> with 100.
-    <Compute> the <total> from the <quantity> with <price>.
-    <Return> an <OK: status> with <total>.
+    Create the <quantity> with 42.
+    Create the <price> with 100.
+    Compute the <total> from the <quantity> with <price>.
+    Return an <OK: status> with <total>.
 }
 ```
 
@@ -43,10 +43,10 @@ Decimal numbers for precision calculations.
 
 ```aro
 (Calculate Tax: Financial Example) {
-    <Create> the <subtotal> with 99.99.
-    <Create> the <tax-rate> with 0.08.
-    <Compute> the <tax> from the <subtotal> with <tax-rate>.
-    <Return> an <OK: status> with <tax>.
+    Create the <subtotal> with 99.99.
+    Create the <tax-rate> with 0.08.
+    Compute the <tax> from the <subtotal> with <tax-rate>.
+    Return an <OK: status> with <tax>.
 }
 ```
 
@@ -56,10 +56,10 @@ Text values enclosed in double quotes.
 
 ```aro
 (Greet User: String Example) {
-    <Create> the <greeting> with "Hello, World!".
-    <Create> the <name> with "Alice".
-    <Log> the <message> for the <console> with <greeting>.
-    <Return> an <OK: status> with <name>.
+    Create the <greeting> with "Hello, World!".
+    Create the <name> with "Alice".
+    Log the <message> for the <console> with <greeting>.
+    Return an <OK: status> with <name>.
 }
 ```
 
@@ -69,10 +69,10 @@ Logical true/false values.
 
 ```aro
 (Check Status: Boolean Example) {
-    <Create> the <is-active> with true.
-    <Create> the <is-verified> with false.
-    <Validate> the <user: status> with <is-active>.
-    <Return> an <OK: status> for the <validation>.
+    Create the <is-active> with true.
+    Create the <is-verified> with false.
+    Validate the <user: status> with <is-active>.
+    Return an <OK: status> for the <validation>.
 }
 ```
 
@@ -82,10 +82,10 @@ Date and time values for temporal operations.
 
 ```aro
 (Log Event: DateTime Example) {
-    <Create> the <timestamp> with now.
-    <Create> the <event-name> with "UserLogin".
-    <Log> the <event: info> for the <console> with <timestamp>.
-    <Return> an <OK: status> for the <event>.
+    Create the <timestamp> with now.
+    Create the <event-name> with "UserLogin".
+    Log the <event: info> for the <console> with <timestamp>.
+    Return an <OK: status> for the <event>.
 }
 ```
 
@@ -99,10 +99,10 @@ Ordered collections of values.
 
 ```aro
 (Process Users: List Example) {
-    <Retrieve> the <users> from the <user-repository>.
-    <Filter> the <active-users> from the <users> where status = "active".
-    <Map> the <names> from the <active-users> with name.
-    <Return> an <OK: status> with <names>.
+    Retrieve the <users> from the <user-repository>.
+    Filter the <active-users> from the <users> where status = "active".
+    Map the <names> from the <active-users> with name.
+    Return an <OK: status> with <names>.
 }
 ```
 
@@ -112,9 +112,9 @@ Key-value associations.
 
 ```aro
 (Build Response: Map Example) {
-    <Extract> the <user-id> from the <request: id>.
-    <Retrieve> the <user> from the <user-repository> where id = <user-id>.
-    <Return> an <OK: status> with <user>.
+    Extract the <user-id> from the <request: id>.
+    Retrieve the <user> from the <user-repository> where id = <user-id>.
+    Return an <OK: status> with <user>.
 }
 ```
 
@@ -126,10 +126,10 @@ Strings support common operations through actions.
 
 ```aro
 (Process Text: String Operations) {
-    <Extract> the <name> from the <request: name>.
-    <Transform> the <upper-name> from the <name> with uppercase.
-    <Validate> the <name: format> with pattern "^[A-Za-z]+$".
-    <Return> an <OK: status> with <upper-name>.
+    Extract the <name> from the <request: name>.
+    Transform the <upper-name> from the <name> with uppercase.
+    Validate the <name: format> with pattern "^[A-Za-z]+$".
+    Return an <OK: status> with <upper-name>.
 }
 ```
 
@@ -141,10 +141,10 @@ DateTime operations for temporal logic.
 
 ```aro
 (Schedule Event: DateTime Operations) {
-    <Create> the <start-time> with now.
-    <Compute> the <end-time> from the <start-time> with "1 hour".
-    <Log> the <schedule: info> for the <console> with <start-time>.
-    <Return> an <OK: status> for the <schedule>.
+    Create the <start-time> with now.
+    Compute the <end-time> from the <start-time> with "1 hour".
+    Log the <schedule: info> for the <console> with <start-time>.
+    Return an <OK: status> for the <schedule>.
 }
 ```
 
@@ -156,11 +156,11 @@ Mathematical computations via the `<Compute>` action.
 
 ```aro
 (Calculate Statistics: Math Example) {
-    <Retrieve> the <values> from the <data-source>.
-    <Reduce> the <sum: Integer> from the <values> with sum().
-    <Reduce> the <average: Float> from the <values> with avg().
-    <Reduce> the <count: Integer> from the <values> with count().
-    <Return> an <OK: status> with <average>.
+    Retrieve the <values> from the <data-source>.
+    Reduce the <sum: Integer> from the <values> with sum().
+    Reduce the <average: Float> from the <values> with avg().
+    Reduce the <count: Integer> from the <values> with count().
+    Return an <OK: status> with <average>.
 }
 ```
 
@@ -172,11 +172,11 @@ JSON is handled automatically by the runtime for HTTP requests and responses.
 
 ```aro
 (Parse Request: JSON Example) {
-    <Extract> the <data> from the <request: body>.
-    <Extract> the <name> from the <data: name>.
-    <Extract> the <email> from the <data: email>.
-    <Create> the <user> with <data>.
-    <Return> a <Created: status> with <user>.
+    Extract the <data> from the <request: body>.
+    Extract the <name> from the <data: name>.
+    Extract the <email> from the <data: email>.
+    Create the <user> with <data>.
+    Return a <Created: status> with <user>.
 }
 ```
 

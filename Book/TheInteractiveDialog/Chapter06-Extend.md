@@ -26,7 +26,7 @@ That's it. A server is running. Now define handlers:
 
 ```
 aro> (healthCheck: API) {
-(healthCheck)> <Return> an <OK: status> with { status: "healthy" }.
+(healthCheck)> Return an <OK: status> with { status: "healthy" }.
 (healthCheck)> }
 Feature set 'healthCheck' defined
 ```
@@ -73,7 +73,7 @@ Plugin loaded successfully
 Now use them:
 
 ```
-aro> <Set> the <data> to { name: "test", valid: true }.
+aro> Set the <data> to { name: "test", valid: true }.
 => OK
 
 aro> <Validate-json> the <result> from the <data>.
@@ -118,8 +118,8 @@ aro> :service start file-watcher --path ./data
 File watcher started on ./data
 
 aro> (File Handler: File Event Handler) {
-(File Handler)> <Extract> the <path> from the <event: path>.
-(File Handler)> <Log> "Changed: ${<path>}" to the <console>.
+(File Handler)> Extract the <path> from the <event: path>.
+(File Handler)> Log "Changed: ${<path>}" to the <console>.
 (File Handler)> }
 Feature set registered for file events
 ```

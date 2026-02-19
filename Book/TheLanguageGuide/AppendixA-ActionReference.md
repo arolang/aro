@@ -6,54 +6,54 @@ Complete reference for all built-in actions in ARO.
 
 | Action | Role | Description | Example |
 |--------|------|-------------|---------|
-| **Extract** | REQUEST | Pull data from structured source | `<Extract> the <id> from the <request: params>.` |
-| **Retrieve** | REQUEST | Fetch from repository | `<Retrieve> the <user> from the <users> where id = <id>.` |
-| **Request** | REQUEST | Make HTTP request | `<Request> the <data> from the <api-url>.` |
-| **Read** | REQUEST | Read from file | `<Read> the <config> from the <file: "./config.json">.` |
-| **List** | REQUEST | List directory contents | `<List> the <files> from the <directory: src-path>.` |
-| **Stat** | REQUEST | Get file metadata | `<Stat> the <info> for the <file: "./doc.pdf">.` |
-| **Exists** | REQUEST | Check file existence | `<Exists> the <found> for the <file: "./config.json">.` |
-| **Receive** | REQUEST | Receive event data | `<Receive> the <message> from the <event>.` |
-| **Execute** | REQUEST | Execute shell command | `<Execute> the <result> for the <command: "ls"> with "-la".` |
-| **Create** | OWN | Create new data | `<Create> the <user> with { name: "Alice" }.` |
-| **Compute** | OWN | Perform calculations | `<Compute> the <total> for the <items>.` |
-| **Transform** | OWN | Convert/map data | `<Transform> the <dto> from the <entity>.` |
-| **Validate** | OWN | Check against rules | `<Validate> the <data> for the <schema>.` |
-| **Compare** | OWN | Compare values | `<Compare> the <hash> against the <stored>.` |
-| **Update** | OWN | Modify existing data | `<Update> the <user> with <changes>.` |
-| **Make** | OWN | Create directory | `<Make> the <dir> to the <path: "./out">.` |
-| **Copy** | OWN | Copy file/directory | `<Copy> the <file: "./a.txt"> to the <destination: "./b.txt">.` |
-| **Move** | OWN | Move/rename file | `<Move> the <file: "./old.txt"> to the <destination: "./new.txt">.` |
-| **Map** | OWN | Transform collection elements | `<Map> the <names> from the <users: name>.` |
-| **Filter** | OWN | Select matching elements | `<Filter> the <active> from the <users> where status = "active".` |
-| **Reduce** | OWN | Aggregate collection | `<Reduce> the <total> from the <items> with sum(<amount>).` |
-| **Sort** | OWN | Order collection | `<Sort> the <users> by <name>.` |
-| **Split** | OWN | Split string by regex | `<Split> the <parts> from the <string> by /,/.` |
-| **Merge** | OWN | Combine data | `<Merge> the <existing-user> with <update-data>.` |
-| **Return** | RESPONSE | Return result | `<Return> an <OK: status> with <data>.` |
-| **Throw** | RESPONSE | Throw error | `<Throw> a <NotFound: error> for the <user>.` |
-| **Log** | EXPORT | Write to logs | `<Log> "Done" to the <console>.` |
-| **Store** | EXPORT | Save to repository | `<Store> the <user> into the <users>.` |
-| **Write** | EXPORT | Write to file | `<Write> the <data> to the <file: "./out.txt">.` |
-| **Append** | EXPORT | Append to file | `<Append> the <line> to the <file: "./log.txt">.` |
-| **Send** | EXPORT | Send to destination | `<Send> the <email> to the <recipient>.` |
-| **Emit** | EXPORT | Emit domain event | `<Emit> a <UserCreated: event> with <user>.` |
-| **Publish** | EXPORT | Make globally available | `<Publish> as <config> <settings>.` |
-| **Notify** | EXPORT | Send notification | `<Notify> the <alert> to the <admin>.` |
-| **Delete** | EXPORT | Remove data | `<Delete> the <user> from the <users> where id = <id>.` |
-| **Start** | SERVICE | Start a service | `<Start> the <http-server> with <contract>.` |
-| **Stop** | SERVICE | Stop a service | `<Stop> the <http-server> with <application>.` |
-| **Listen** | SERVICE | Listen for connections | `<Listen> on port 9000 as <socket-server>.` |
-| **Connect** | SERVICE | Connect to service | `<Connect> to <host: "db"> on port 5432.` |
-| **Close** | SERVICE | Close connection | `<Close> the <connection>.` |
-| **Broadcast** | SERVICE | Send to all connections | `<Broadcast> the <msg> to the <server>.` |
-| **Keepalive** | SERVICE | Keep app running | `<Keepalive> the <app> for the <events>.` |
-| **Call** | SERVICE | Call external API | `<Call> the <result> via <API: POST /users>.` |
-| **Accept** | STATE | Accept state transition | `<Accept> the <order: placed>.` |
-| **Given** | TEST | Test precondition | `<Given> the <user> with { name: "Test" }.` |
-| **When** | TEST | Test action | `<When> the <action> is performed.` |
-| **Then** | TEST | Test expectation | `<Then> the <result> should be <expected>.` |
-| **Assert** | TEST | Assert condition | `<Assert> the <value> equals <expected>.` |
+| **Extract** | REQUEST | Pull data from structured source | `Extract the <id> from the <request: params>.` |
+| **Retrieve** | REQUEST | Fetch from repository | `Retrieve the <user> from the <users> where id = <id>.` |
+| **Request** | REQUEST | Make HTTP request | `Request the <data> from the <api-url>.` |
+| **Read** | REQUEST | Read from file | `Read the <config> from the <file: "./config.json">.` |
+| **List** | REQUEST | List directory contents | `List the <files> from the <directory: src-path>.` |
+| **Stat** | REQUEST | Get file metadata | `Stat the <info> for the <file: "./doc.pdf">.` |
+| **Exists** | REQUEST | Check file existence | `Exists the <found> for the <file: "./config.json">.` |
+| **Receive** | REQUEST | Receive event data | `Receive the <message> from the <event>.` |
+| **Execute** | REQUEST | Execute shell command | `Execute the <result> for the <command: "ls"> with "-la".` |
+| **Create** | OWN | Create new data | `Create the <user> with { name: "Alice" }.` |
+| **Compute** | OWN | Perform calculations | `Compute the <total> for the <items>.` |
+| **Transform** | OWN | Convert/map data | `Transform the <dto> from the <entity>.` |
+| **Validate** | OWN | Check against rules | `Validate the <data> for the <schema>.` |
+| **Compare** | OWN | Compare values | `Compare the <hash> against the <stored>.` |
+| **Update** | OWN | Modify existing data | `Update the <user> with <changes>.` |
+| **Make** | OWN | Create directory | `Make the <dir> to the <path: "./out">.` |
+| **Copy** | OWN | Copy file/directory | `Copy the <file: "./a.txt"> to the <destination: "./b.txt">.` |
+| **Move** | OWN | Move/rename file | `Move the <file: "./old.txt"> to the <destination: "./new.txt">.` |
+| **Map** | OWN | Transform collection elements | `Map the <names> from the <users: name>.` |
+| **Filter** | OWN | Select matching elements | `Filter the <active> from the <users> where status = "active".` |
+| **Reduce** | OWN | Aggregate collection | `Reduce the <total> from the <items> with sum(<amount>).` |
+| **Sort** | OWN | Order collection | `Sort the <users> by <name>.` |
+| **Split** | OWN | Split string by regex | `Split the <parts> from the <string> by /,/.` |
+| **Merge** | OWN | Combine data | `Merge the <existing-user> with <update-data>.` |
+| **Return** | RESPONSE | Return result | `Return an <OK: status> with <data>.` |
+| **Throw** | RESPONSE | Throw error | `Throw a <NotFound: error> for the <user>.` |
+| **Log** | EXPORT | Write to logs | `Log "Done" to the <console>.` |
+| **Store** | EXPORT | Save to repository | `Store the <user> into the <users>.` |
+| **Write** | EXPORT | Write to file | `Write the <data> to the <file: "./out.txt">.` |
+| **Append** | EXPORT | Append to file | `Append the <line> to the <file: "./log.txt">.` |
+| **Send** | EXPORT | Send to destination | `Send the <email> to the <recipient>.` |
+| **Emit** | EXPORT | Emit domain event | `Emit a <UserCreated: event> with <user>.` |
+| **Publish** | EXPORT | Make globally available | `Publish as <config> <settings>.` |
+| **Notify** | EXPORT | Send notification | `Notify the <alert> to the <admin>.` |
+| **Delete** | EXPORT | Remove data | `Delete the <user> from the <users> where id = <id>.` |
+| **Start** | SERVICE | Start a service | `Start the <http-server> with <contract>.` |
+| **Stop** | SERVICE | Stop a service | `Stop the <http-server> with <application>.` |
+| **Listen** | SERVICE | Listen for connections | `Listen on port 9000 as <socket-server>.` |
+| **Connect** | SERVICE | Connect to service | `Connect to <host: "db"> on port 5432.` |
+| **Close** | SERVICE | Close connection | `Close the <connection>.` |
+| **Broadcast** | SERVICE | Send to all connections | `Broadcast the <msg> to the <server>.` |
+| **Keepalive** | SERVICE | Keep app running | `Keepalive the <app> for the <events>.` |
+| **Call** | SERVICE | Call external API | `Call the <result> via <API: POST /users>.` |
+| **Accept** | STATE | Accept state transition | `Accept the <order: placed>.` |
+| **Given** | TEST | Test precondition | `Given the <user> with { name: "Test" }.` |
+| **When** | TEST | Test action | `When the <action> is performed.` |
+| **Then** | TEST | Test expectation | `Then the <result> should be <expected>.` |
+| **Assert** | TEST | Assert condition | `Assert the <value> equals <expected>.` |
 
 ## Action Categories
 
@@ -77,17 +77,17 @@ Pulls data from a structured source.
 
 **Syntax:**
 ```aro
-<Extract> the <result> from the <source: property>.
-<Extract> the <result: specifier> from the <list>.
+Extract the <result> from the <source: property>.
+Extract the <result: specifier> from the <list>.
 ```
 
 **Examples:**
 ```aro
-<Extract> the <user-id> from the <request: parameters>.
-<Extract> the <body> from the <request: body>.
-<Extract> the <token> from the <request: headers.Authorization>.
-<Extract> the <email> from the <user: email>.
-<Extract> the <order> from the <event: order>.
+Extract the <user-id> from the <request: parameters>.
+Extract the <body> from the <request: body>.
+Extract the <token> from the <request: headers.Authorization>.
+Extract the <email> from the <user: email>.
+Extract the <order> from the <event: order>.
 ```
 
 **List Element Access (ARO-0038):**
@@ -96,18 +96,18 @@ Extract specific elements from arrays using result specifiers:
 
 ```aro
 (* Keywords *)
-<Extract> the <item: first> from the <list>.
-<Extract> the <item: last> from the <list>.
+Extract the <item: first> from the <list>.
+Extract the <item: last> from the <list>.
 
 (* Numeric index: 0 = last, 1 = second-to-last *)
-<Extract> the <item: 0> from the <list>.
-<Extract> the <item: 1> from the <list>.
+Extract the <item: 0> from the <list>.
+Extract the <item: 1> from the <list>.
 
 (* Range: elements 2, 3, 4, 5 *)
-<Extract> the <subset: 2-5> from the <list>.
+Extract the <subset: 2-5> from the <list>.
 
 (* Pick: elements at indices 0, 3, 7 *)
-<Extract> the <selection: 0,3,7> from the <list>.
+Extract the <selection: 0,3,7> from the <list>.
 ```
 
 | Specifier | Returns |
@@ -129,15 +129,15 @@ Fetches data from a repository.
 
 **Syntax:**
 ```aro
-<Retrieve> the <result> from the <repository> [where <condition>].
+Retrieve the <result> from the <repository> [where <condition>].
 ```
 
 **Examples:**
 ```aro
-<Retrieve> the <user> from the <user-repository>.
-<Retrieve> the <user> from the <user-repository> where id = <user-id>.
-<Retrieve> the <orders> from the <order-repository> where status = "pending".
-<Retrieve> the <products> from the <repository> where category = <cat> and active = true.
+Retrieve the <user> from the <user-repository>.
+Retrieve the <user> from the <user-repository> where id = <user-id>.
+Retrieve the <orders> from the <order-repository> where status = "pending".
+Retrieve the <products> from the <repository> where category = <cat> and active = true.
 ```
 
 **Valid Prepositions:** `from`
@@ -150,24 +150,24 @@ Makes HTTP requests to external URLs or APIs.
 
 **Syntax:**
 ```aro
-<Request> the <result> from <url>.              (* GET request *)
-<Request> the <result> to <url> with <data>.    (* POST request *)
-<Request> the <result> via METHOD <url>.        (* Explicit method *)
+Request the <result> from <url>.              (* GET request *)
+Request the <result> to <url> with <data>.    (* POST request *)
+Request the <result> via METHOD <url>.        (* Explicit method *)
 ```
 
 **Examples:**
 ```aro
 (* GET request *)
-<Create> the <api-url> with "https://api.open-meteo.com/v1/forecast".
-<Request> the <weather> from the <api-url>.
+Create the <api-url> with "https://api.open-meteo.com/v1/forecast".
+Request the <weather> from the <api-url>.
 
 (* POST request *)
-<Create> the <user-data> with { name: "Alice", email: "alice@example.com" }.
-<Request> the <result> to the <api-url> with <user-data>.
+Create the <user-data> with { name: "Alice", email: "alice@example.com" }.
+Request the <result> to the <api-url> with <user-data>.
 
 (* PUT/DELETE/PATCH via explicit method *)
-<Request> the <result> via PUT the <url> with <update-data>.
-<Request> the <result> via DELETE the <url>.
+Request the <result> via PUT the <url> with <update-data>.
+Request the <result> via DELETE the <url>.
 ```
 
 **Response Metadata:**
@@ -187,15 +187,15 @@ Reads from files.
 
 **Syntax:**
 ```aro
-<Read> the <result> from the <file: path>.
-<Read> the <result: type> from the <file: path>.
+Read the <result> from the <file: path>.
+Read the <result: type> from the <file: path>.
 ```
 
 **Examples:**
 ```aro
-<Read> the <content> from the <file: "./data.txt">.
-<Read> the <config: JSON> from the <file: "./config.json">.
-<Read> the <image: bytes> from the <file: "./logo.png">.
+Read the <content> from the <file: "./data.txt">.
+Read the <config: JSON> from the <file: "./config.json">.
+Read the <image: bytes> from the <file: "./logo.png">.
 ```
 
 **Valid Prepositions:** `from`
@@ -209,16 +209,16 @@ Executes shell commands on the host system and returns structured results.
 **Syntax:**
 ```aro
 (* Preferred: command in object specifier *)
-<Execute> the <result> for the <command: "uptime">.
-<Execute> the <result> for the <command: "ls"> with "-la".
-<Execute> the <result> for the <command: "ls"> with ["-l", "-a", "-h"].
+Execute the <result> for the <command: "uptime">.
+Execute the <result> for the <command: "ls"> with "-la".
+Execute the <result> for the <command: "ls"> with ["-l", "-a", "-h"].
 
 (* Legacy: full command in with clause *)
-<Execute> the <result> for the <command> with "ls -la".
-<Execute> the <result> for the <command> with <variable>.
+Execute the <result> for the <command> with "ls -la".
+Execute the <result> for the <command> with <variable>.
 
 (* Configuration object *)
-<Execute> the <result> on the <system> with {
+Execute the <result> on the <system> with {
     command: "command-string",
     workingDirectory: "/path",
     timeout: 30000
@@ -236,20 +236,20 @@ The Execute action returns a structured result with the following fields:
 **Examples:**
 ```aro
 (* Preferred syntax *)
-<Execute> the <listing> for the <command: "ls"> with "-la".
-<Return> an <OK: status> for the <listing>.
+Execute the <listing> for the <command: "ls"> with "-la".
+Return an <OK: status> for the <listing>.
 
 (* With error handling *)
-<Execute> the <result> for the <command: "df"> with "-h".
-<Log> <result.message> to the <console> when <result.error> = true.
-<Return> an <Error: status> for the <result> when <result.error> = true.
-<Return> an <OK: status> for the <result>.
+Execute the <result> for the <command: "df"> with "-h".
+Log <result.message> to the <console> when <result.error> = true.
+Return an <Error: status> for the <result> when <result.error> = true.
+Return an <OK: status> for the <result>.
 
 (* Using array for multiple arguments *)
-<Execute> the <processes> for the <command: "ps"> with ["aux"].
+Execute the <processes> for the <command: "ps"> with ["aux"].
 
 (* With configuration options *)
-<Execute> the <result> on the <system> with {
+Execute the <result> on the <system> with {
     command: "npm install",
     workingDirectory: "/app",
     timeout: 60000
@@ -279,14 +279,14 @@ Creates new data structures.
 
 **Syntax:**
 ```aro
-<Create> the <result> with <data>.
+Create the <result> with <data>.
 ```
 
 **Examples:**
 ```aro
-<Create> the <user> with <user-data>.
-<Create> the <response> with { message: "Success" }.
-<Create> the <order> with {
+Create the <user> with <user-data>.
+Create the <response> with { message: "Success" }.
+Create the <order> with {
     items: <items>,
     total: <total>,
     customer: <customer-id>
@@ -303,38 +303,38 @@ Performs calculations and transformations.
 
 **Syntax:**
 ```aro
-<Compute> the <result> for the <input>.
-<Compute> the <result> from <expression>.
-<Compute> the <result: operation> from <input>.
-<Compute> the <result: operation> from <input> with <second-input>.
+Compute the <result> for the <input>.
+Compute the <result> from <expression>.
+Compute the <result: operation> from <input>.
+Compute the <result: operation> from <input> with <second-input>.
 ```
 
 **Built-in Operations:**
 
 | Operation | Description | Example |
 |-----------|-------------|---------|
-| `length`, `count` | Count elements | `<Compute> the <len: length> from <text>.` |
-| `uppercase` | Convert to UPPERCASE | `<Compute> the <upper: uppercase> from <text>.` |
-| `lowercase` | Convert to lowercase | `<Compute> the <lower: lowercase> from <text>.` |
-| `hash` | Compute hash value | `<Compute> the <h: hash> from <password>.` |
-| `intersect` | Find common elements | `<Compute> the <common: intersect> from <a> with <b>.` |
-| `difference` | Find elements in A not in B | `<Compute> the <diff: difference> from <a> with <b>.` |
-| `union` | Combine all unique elements | `<Compute> the <all: union> from <a> with <b>.` |
+| `length`, `count` | Count elements | `Compute the <len: length> from <text>.` |
+| `uppercase` | Convert to UPPERCASE | `Compute the <upper: uppercase> from <text>.` |
+| `lowercase` | Convert to lowercase | `Compute the <lower: lowercase> from <text>.` |
+| `hash` | Compute hash value | `Compute the <h: hash> from <password>.` |
+| `intersect` | Find common elements | `Compute the <common: intersect> from <a> with <b>.` |
+| `difference` | Find elements in A not in B | `Compute the <diff: difference> from <a> with <b>.` |
+| `union` | Combine all unique elements | `Compute the <all: union> from <a> with <b>.` |
 
 **Examples:**
 ```aro
 (* Basic computations *)
-<Compute> the <total> for the <items>.
-<Compute> the <hash> for the <password>.
-<Compute> the <sum> from <a> + <b>.
+Compute the <total> for the <items>.
+Compute the <hash> for the <password>.
+Compute the <sum> from <a> + <b>.
 
 (* Set operations *)
-<Create> the <list-a> with [2, 3, 5].
-<Create> the <list-b> with [1, 2, 3, 4].
-<Compute> the <common: intersect> from <list-a> with <list-b>.
+Create the <list-a> with [2, 3, 5].
+Create the <list-b> with [1, 2, 3, 4].
+Compute the <common: intersect> from <list-a> with <list-b>.
 (* Result: [2, 3] *)
 
-<Compute> the <only-in-a: difference> from <list-a> with <list-b>.
+Compute the <only-in-a: difference> from <list-a> with <list-b>.
 (* Result: [5] *)
 ```
 
@@ -348,15 +348,15 @@ Converts or maps data.
 
 **Syntax:**
 ```aro
-<Transform> the <result> from the <source>.
-<Transform> the <result> from the <source> with <modifications>.
+Transform the <result> from the <source>.
+Transform the <result> from the <source> with <modifications>.
 ```
 
 **Examples:**
 ```aro
-<Transform> the <dto> from the <entity>.
-<Transform> the <updated-user> from the <user> with <updates>.
-<Transform> the <response> from the <data>.
+Transform the <dto> from the <entity>.
+Transform the <updated-user> from the <user> with <updates>.
+Transform the <response> from the <data>.
 ```
 
 **Valid Prepositions:** `from`
@@ -369,14 +369,14 @@ Checks data against rules.
 
 **Syntax:**
 ```aro
-<Validate> the <data> for the <schema>.
+Validate the <data> for the <schema>.
 ```
 
 **Examples:**
 ```aro
-<Validate> the <user-data> for the <user-schema>.
-<Validate> the <email> for the <email-pattern>.
-<Validate> the <order> for the <order-rules>.
+Validate the <user-data> for the <user-schema>.
+Validate the <email> for the <email-pattern>.
+Validate the <order> for the <order-rules>.
 ```
 
 **Valid Prepositions:** `for`
@@ -389,13 +389,13 @@ Compares two values.
 
 **Syntax:**
 ```aro
-<Compare> the <value1> against the <value2>.
+Compare the <value1> against the <value2>.
 ```
 
 **Examples:**
 ```aro
-<Compare> the <password-hash> against the <stored-hash>.
-<Compare> the <signature> against the <expected>.
+Compare the <password-hash> against the <stored-hash>.
+Compare the <signature> against the <expected>.
 ```
 
 **Valid Prepositions:** `against`
@@ -408,24 +408,24 @@ Splits a string into an array of parts using a regex delimiter.
 
 **Syntax:**
 ```aro
-<Split> the <parts> from the <string> by /delimiter/.
+Split the <parts> from the <string> by /delimiter/.
 ```
 
 **Examples:**
 ```aro
 (* Split CSV line by comma *)
-<Create> the <csv-line> with "apple,banana,cherry".
-<Split> the <fruits> from the <csv-line> by /,/.
+Create the <csv-line> with "apple,banana,cherry".
+Split the <fruits> from the <csv-line> by /,/.
 (* fruits = ["apple", "banana", "cherry"] *)
 
 (* Split by whitespace *)
-<Split> the <words> from the <sentence> by /\s+/.
+Split the <words> from the <sentence> by /\s+/.
 
 (* Split by multiple delimiters *)
-<Split> the <tokens> from the <code> by /[;,\s]+/.
+Split the <tokens> from the <code> by /[;,\s]+/.
 
 (* Case-insensitive split *)
-<Split> the <sections> from the <text> by /SECTION/i.
+Split the <sections> from the <text> by /SECTION/i.
 ```
 
 **Behavior:**
@@ -444,26 +444,26 @@ Combines two data structures together. The source values are merged into the tar
 
 **Syntax:**
 ```aro
-<Merge> the <target> with <source>.
-<Merge> the <target> from <source>.
+Merge the <target> with <source>.
+Merge the <target> from <source>.
 ```
 
 **Examples:**
 ```aro
 (* Merge update data into existing entity *)
-<Retrieve> the <existing-user> from the <user-repository> where id = <id>.
-<Extract> the <update-data> from the <request: body>.
-<Merge> the <existing-user> with <update-data>.
-<Store> the <existing-user> into the <user-repository>.
+Retrieve the <existing-user> from the <user-repository> where id = <id>.
+Extract the <update-data> from the <request: body>.
+Merge the <existing-user> with <update-data>.
+Store the <existing-user> into the <user-repository>.
 
 (* Combine configuration objects *)
-<Merge> the <defaults> with <overrides>.
+Merge the <defaults> with <overrides>.
 
 (* Concatenate arrays *)
-<Merge> the <all-items> with <new-items>.
+Merge the <all-items> with <new-items>.
 
 (* Concatenate strings *)
-<Merge> the <greeting> with <name>.
+Merge the <greeting> with <name>.
 ```
 
 **Supported Types:**
@@ -483,16 +483,16 @@ Returns a result with status.
 
 **Syntax:**
 ```aro
-<Return> [article] <status> [with <data>] [for <context>].
+Return [article] <status> [with <data>] [for <context>].
 ```
 
 **Examples:**
 ```aro
-<Return> an <OK: status> with <data>.
-<Return> a <Created: status> with <resource>.
-<Return> a <NoContent: status> for the <deletion>.
-<Return> a <BadRequest: status> with <errors>.
-<Return> a <NotFound: status> for the <missing: user>.
+Return an <OK: status> with <data>.
+Return a <Created: status> with <resource>.
+Return a <NoContent: status> for the <deletion>.
+Return a <BadRequest: status> with <errors>.
+Return a <NotFound: status> for the <missing: user>.
 ```
 
 **Valid Prepositions:** `with`, `for`
@@ -505,14 +505,14 @@ Throws an error.
 
 **Syntax:**
 ```aro
-<Throw> [article] <error-type> for the <context>.
+Throw [article] <error-type> for the <context>.
 ```
 
 **Examples:**
 ```aro
-<Throw> a <ValidationError> for the <invalid: input>.
-<Throw> a <NotFoundError> for the <missing: user>.
-<Throw> an <AuthenticationError> for the <invalid: token>.
+Throw a <ValidationError> for the <invalid: input>.
+Throw a <NotFoundError> for the <missing: user>.
+Throw an <AuthenticationError> for the <invalid: token>.
 ```
 
 **Valid Prepositions:** `for`
@@ -527,13 +527,13 @@ Saves to a repository. Triggers repository observers for new entries and updates
 
 **Syntax:**
 ```aro
-<Store> the <data> into the <repository>.
+Store the <data> into the <repository>.
 ```
 
 **Examples:**
 ```aro
-<Store> the <user> into the <user-repository>.
-<Store> the <order> into the <order-repository>.
+Store the <user> into the <user-repository>.
+Store the <order> into the <order-repository>.
 ```
 
 **Behavior:**
@@ -554,13 +554,13 @@ Makes variables globally available.
 
 **Syntax:**
 ```aro
-<Publish> as <alias> <variable>.
+Publish as <alias> <variable>.
 ```
 
 **Examples:**
 ```aro
-<Publish> as <app-config> <config>.
-<Publish> as <current-user> <user>.
+Publish as <app-config> <config>.
+Publish as <current-user> <user>.
 ```
 
 **Valid Prepositions:** `as`
@@ -577,10 +577,10 @@ Outputs messages to console (stdout or stderr).
 
 **Syntax:**
 ```aro
-<Log> <message> to the <console>.
-<Log> <message> to the <console: output>.
-<Log> <message> to the <console: error>.
-<Log> "literal message" to the <console>.
+Log <message> to the <console>.
+Log <message> to the <console: output>.
+Log <message> to the <console: error>.
+Log "literal message" to the <console>.
 ```
 
 **Qualifiers:**
@@ -590,15 +590,15 @@ Outputs messages to console (stdout or stderr).
 **Examples:**
 ```aro
 (* Standard output *)
-<Log> "Server started successfully" to the <console>.
+Log "Server started successfully" to the <console>.
 
 (* Error output *)
-<Log> "Warning: Configuration file not found" to the <console: error>.
-<Log> <error-message> to the <console: error>.
+Log "Warning: Configuration file not found" to the <console: error>.
+Log <error-message> to the <console: error>.
 
 (* Data pipeline - stdout for data, stderr for diagnostics *)
-<Log> <json-data> to the <console>.
-<Log> "Processed 1000 records" to the <console: error>.
+Log <json-data> to the <console>.
+Log "Processed 1000 records" to the <console: error>.
 ```
 
 **Output Contexts:**
@@ -619,15 +619,15 @@ Sends data to external destinations using sink syntax (ARO-0043).
 
 **Syntax:**
 ```aro
-<Send> <value> to the <destination>.
+Send <value> to the <destination>.
 ```
 
 **Examples:**
 ```aro
-<Send> "Hello" to the <connection>.
-<Send> <data> to the <connection>.
-<Send> <email> to the <user: email>.
-<Send> <notification> to the <push-service>.
+Send "Hello" to the <connection>.
+Send <data> to the <connection>.
+Send <email> to the <user: email>.
+Send <notification> to the <push-service>.
 ```
 
 **Valid Prepositions:** `to`
@@ -640,14 +640,14 @@ Emits domain events.
 
 **Syntax:**
 ```aro
-<Emit> [article] <event-type: event> with <data>.
+Emit [article] <event-type: event> with <data>.
 ```
 
 **Examples:**
 ```aro
-<Emit> a <UserCreated: event> with <user>.
-<Emit> an <OrderPlaced: event> with <order>.
-<Emit> a <PaymentProcessed: event> with <payment>.
+Emit a <UserCreated: event> with <user>.
+Emit an <OrderPlaced: event> with <order>.
+Emit a <PaymentProcessed: event> with <payment>.
 ```
 
 **Valid Prepositions:** `with`
@@ -662,21 +662,21 @@ Sends notifications to users, administrators, or systems. The action automatical
 
 **Syntax:**
 ```aro
-<Notify> the <message> to the <recipient>.
-<Alert> the <message> to the <recipient>.
-<Signal> the <message> to the <recipient>.
+Notify the <message> to the <recipient>.
+Alert the <message> to the <recipient>.
+Signal the <message> to the <recipient>.
 ```
 
 **Examples:**
 ```aro
 (* User notification *)
-<Notify> the <welcome-message> to the <user>.
+Notify the <welcome-message> to the <user>.
 
 (* Admin alert *)
-<Alert> the <system-warning> to the <admin>.
+Alert the <system-warning> to the <admin>.
 
 (* System signal *)
-<Signal> the <shutdown-notice> to the <processes>.
+Signal the <shutdown-notice> to the <processes>.
 ```
 
 **NotificationSent Handler:**
@@ -684,10 +684,10 @@ Feature sets can subscribe to notification events:
 
 ```aro
 (Log All Notifications: NotificationSent Handler) {
-    <Extract> the <message> from the <event: message>.
-    <Extract> the <type> from the <event: type>.
-    <Log> "Notification [${type}]: ${message}" to the <console>.
-    <Return> an <OK: status> for the <logging>.
+    Extract the <message> from the <event: message>.
+    Extract the <type> from the <event: type>.
+    Log "Notification [${type}]: ${message}" to the <console>.
+    Return an <OK: status> for the <logging>.
 }
 ```
 
@@ -707,13 +707,13 @@ Writes to files.
 
 **Syntax:**
 ```aro
-<Write> the <data> to the <file: path>.
+Write the <data> to the <file: path>.
 ```
 
 **Examples:**
 ```aro
-<Write> the <content> to the <file: "./output.txt">.
-<Write> the <data: JSON> to the <file: "./data.json">.
+Write the <content> to the <file: "./output.txt">.
+Write the <data: JSON> to the <file: "./data.json">.
 ```
 
 **Valid Prepositions:** `to`
@@ -726,13 +726,13 @@ Appends content to a file.
 
 **Syntax:**
 ```aro
-<Append> the <data> to the <file: path>.
+Append the <data> to the <file: path>.
 ```
 
 **Examples:**
 ```aro
-<Append> the <log-line> to the <file: "./logs/app.log">.
-<Append> the <entry> to the <file: "./data.txt">.
+Append the <log-line> to the <file: "./logs/app.log">.
+Append the <entry> to the <file: "./data.txt">.
 ```
 
 **Valid Prepositions:** `to`, `into`
@@ -745,18 +745,18 @@ Lists directory contents.
 
 **Syntax:**
 ```aro
-<Create> the <dir-path> with "./path".
-<List> the <result> from the <directory: dir-path>.
-<List> the <result> from the <directory: dir-path> matching "pattern".
-<List> the <result> from the <directory: dir-path> recursively.
+Create the <dir-path> with "./path".
+List the <result> from the <directory: dir-path>.
+List the <result> from the <directory: dir-path> matching "pattern".
+List the <result> from the <directory: dir-path> recursively.
 ```
 
 **Examples:**
 ```aro
-<Create> the <uploads-path> with "./uploads".
-<List> the <entries> from the <directory: uploads-path>.
-<List> the <aro-files> from the <directory: src-path> matching "*.aro".
-<List> the <all-files> from the <directory: project-path> recursively.
+Create the <uploads-path> with "./uploads".
+List the <entries> from the <directory: uploads-path>.
+List the <aro-files> from the <directory: src-path> matching "*.aro".
+List the <all-files> from the <directory: project-path> recursively.
 ```
 
 **Valid Prepositions:** `from`
@@ -769,14 +769,14 @@ Gets file or directory metadata.
 
 **Syntax:**
 ```aro
-<Stat> the <result> for the <file: path>.
-<Stat> the <result> for the <directory: path>.
+Stat the <result> for the <file: path>.
+Stat the <result> for the <directory: path>.
 ```
 
 **Examples:**
 ```aro
-<Stat> the <info> for the <file: "./document.pdf">.
-<Stat> the <dir-info> for the <directory: "./src">.
+Stat the <info> for the <file: "./document.pdf">.
+Stat the <dir-info> for the <directory: "./src">.
 ```
 
 **Result Properties:**
@@ -799,14 +799,14 @@ Checks if a file or directory exists.
 
 **Syntax:**
 ```aro
-<Exists> the <result> for the <file: path>.
-<Exists> the <result> for the <directory: path>.
+Exists the <result> for the <file: path>.
+Exists the <result> for the <directory: path>.
 ```
 
 **Examples:**
 ```aro
-<Exists> the <found> for the <file: "./config.json">.
-<Exists> the <dir-exists> for the <directory: "./output">.
+Exists the <found> for the <file: "./config.json">.
+Exists the <dir-exists> for the <directory: "./output">.
 ```
 
 **Valid Prepositions:** `for`
@@ -819,12 +819,12 @@ Creates a directory with all intermediate directories.
 
 **Syntax:**
 ```aro
-<Make> the <result> to the <path: path>.
+Make the <result> to the <path: path>.
 ```
 
 **Examples:**
 ```aro
-<Make> the <output-dir> to the <path: "./output/reports/2024">.
+Make the <output-dir> to the <path: "./output/reports/2024">.
 ```
 
 **Valid Prepositions:** `to`, `for`
@@ -837,14 +837,14 @@ Copies files or directories.
 
 **Syntax:**
 ```aro
-<Copy> the <file: source> to the <destination: dest>.
-<Copy> the <directory: source> to the <destination: dest>.
+Copy the <file: source> to the <destination: dest>.
+Copy the <directory: source> to the <destination: dest>.
 ```
 
 **Examples:**
 ```aro
-<Copy> the <file: "./template.txt"> to the <destination: "./copy.txt">.
-<Copy> the <directory: "./src"> to the <destination: "./backup/src">.
+Copy the <file: "./template.txt"> to the <destination: "./copy.txt">.
+Copy the <directory: "./src"> to the <destination: "./backup/src">.
 ```
 
 **Valid Prepositions:** `to`
@@ -857,14 +857,14 @@ Moves or renames files and directories.
 
 **Syntax:**
 ```aro
-<Move> the <file: source> to the <destination: dest>.
-<Move> the <directory: source> to the <destination: dest>.
+Move the <file: source> to the <destination: dest>.
+Move the <directory: source> to the <destination: dest>.
 ```
 
 **Examples:**
 ```aro
-<Move> the <file: "./draft.txt"> to the <destination: "./final.txt">.
-<Move> the <directory: "./temp"> to the <destination: "./processed">.
+Move the <file: "./draft.txt"> to the <destination: "./final.txt">.
+Move the <directory: "./temp"> to the <destination: "./processed">.
 ```
 
 **Valid Prepositions:** `to`
@@ -877,15 +877,15 @@ Removes data.
 
 **Syntax:**
 ```aro
-<Delete> the <target> from the <source> [where <condition>].
-<Delete> the <file: path>.
+Delete the <target> from the <source> [where <condition>].
+Delete the <file: path>.
 ```
 
 **Examples:**
 ```aro
-<Delete> the <user> from the <user-repository> where id = <user-id>.
-<Delete> the <file: "./temp.txt">.
-<Delete> the <sessions> from the <repository> where expired = true.
+Delete the <user> from the <user-repository> where id = <user-id>.
+Delete the <file: "./temp.txt">.
+Delete the <sessions> from the <repository> where expired = true.
 ```
 
 **Valid Prepositions:** `from`
@@ -901,21 +901,21 @@ Starts a service. All services use the standardized `with` preposition.
 **Syntax:**
 ```aro
 (* HTTP server from OpenAPI contract *)
-<Start> the <http-server> with <contract>.
+Start the <http-server> with <contract>.
 
 (* Socket server with port configuration *)
-<Start> the <socket-server> with { port: 9000 }.
+Start the <socket-server> with { port: 9000 }.
 
 (* File monitor with directory path *)
-<Start> the <file-monitor> with ".".
-<Start> the <file-monitor> with { directory: "./data" }.
+Start the <file-monitor> with ".".
+Start the <file-monitor> with { directory: "./data" }.
 ```
 
 **Examples:**
 ```aro
-<Start> the <http-server> with <contract>.
-<Start> the <socket-server> with { port: 9000 }.
-<Start> the <file-monitor> with "./uploads".
+Start the <http-server> with <contract>.
+Start the <socket-server> with { port: 9000 }.
+Start the <file-monitor> with "./uploads".
 ```
 
 **Valid Prepositions:** `with`
@@ -928,14 +928,14 @@ Stops a service gracefully.
 
 **Syntax:**
 ```aro
-<Stop> the <service> with <application>.
+Stop the <service> with <application>.
 ```
 
 **Examples:**
 ```aro
-<Stop> the <http-server> with <application>.
-<Stop> the <socket-server> with <application>.
-<Stop> the <file-monitor> with <application>.
+Stop the <http-server> with <application>.
+Stop the <socket-server> with <application>.
+Stop the <file-monitor> with <application>.
 ```
 
 **Valid Prepositions:** `with`
@@ -948,12 +948,12 @@ Listens for connections.
 
 **Syntax:**
 ```aro
-<Listen> on port <number> as <name>.
+Listen on port <number> as <name>.
 ```
 
 **Examples:**
 ```aro
-<Listen> on port 9000 as <socket-server>.
+Listen on port 9000 as <socket-server>.
 ```
 
 **Valid Prepositions:** `on`, `as`
@@ -966,13 +966,13 @@ Connects to a service.
 
 **Syntax:**
 ```aro
-<Connect> to <host: address> on port <number> as <name>.
+Connect to <host: address> on port <number> as <name>.
 ```
 
 **Examples:**
 ```aro
-<Connect> to <host: "localhost"> on port 5432 as <database>.
-<Connect> to <host: "redis.local"> on port 6379 as <cache>.
+Connect to <host: "localhost"> on port 5432 as <database>.
+Connect to <host: "redis.local"> on port 6379 as <cache>.
 ```
 
 **Valid Prepositions:** `to`, `on`, `as`
@@ -985,14 +985,14 @@ Closes connections.
 
 **Syntax:**
 ```aro
-<Close> the <connection>.
+Close the <connection>.
 ```
 
 **Examples:**
 ```aro
-<Close> the <database-connections>.
-<Close> the <socket-server>.
-<Close> the <connection>.
+Close the <database-connections>.
+Close the <socket-server>.
+Close the <connection>.
 ```
 
 **Valid Prepositions:** None
@@ -1005,13 +1005,13 @@ Makes API calls.
 
 **Syntax:**
 ```aro
-<Call> the <result> via <api-reference> [with <data>].
+Call the <result> via <api-reference> [with <data>].
 ```
 
 **Examples:**
 ```aro
-<Call> the <result> via <UserAPI: POST /users> with <user-data>.
-<Call> the <response> via <PaymentAPI: POST /charge> with <payment>.
+Call the <result> via <UserAPI: POST /users> with <user-data>.
+Call the <response> via <PaymentAPI: POST /charge> with <payment>.
 ```
 
 **Valid Prepositions:** `via`, `with`
@@ -1024,13 +1024,13 @@ Sends to all connections.
 
 **Syntax:**
 ```aro
-<Broadcast> the <message> to the <server>.
+Broadcast the <message> to the <server>.
 ```
 
 **Examples:**
 ```aro
-<Broadcast> the <message> to the <socket-server>.
-<Broadcast> the <notification> to the <chat-server> with "User joined".
+Broadcast the <message> to the <socket-server>.
+Broadcast the <notification> to the <chat-server> with "User joined".
 ```
 
 **Valid Prepositions:** `to`, `with`
@@ -1043,7 +1043,7 @@ Keeps a long-running application alive to process events.
 
 **Syntax:**
 ```aro
-<Keepalive> the <application> for the <events>.
+Keepalive the <application> for the <events>.
 ```
 
 **Description:**
@@ -1053,15 +1053,15 @@ The `Keepalive` action blocks execution until a shutdown signal is received (SIG
 ```aro
 (* HTTP server auto-starts when openapi.yaml is present *)
 (Application-Start: My API) {
-    <Log> "API starting..." to the <console>.
-    <Keepalive> the <application> for the <events>.
-    <Return> an <OK: status> for the <startup>.
+    Log "API starting..." to the <console>.
+    Keepalive the <application> for the <events>.
+    Return an <OK: status> for the <startup>.
 }
 
 (Application-Start: File Watcher) {
-    <Watch> the <directory> for the <changes> with "./watched".
-    <Keepalive> the <application> for the <events>.
-    <Return> an <OK: status> for the <startup>.
+    Watch the <directory> for the <changes> with "./watched".
+    Keepalive the <application> for the <events>.
+    Return an <OK: status> for the <startup>.
 }
 ```
 

@@ -16,9 +16,9 @@ This proposal introduces a **streaming execution model** for ARO that enables pr
 Consider this simple ARO script:
 
 ```aro
-<Read> the <csv-content> from the <file: "/data/earthquakes.csv">.
-<Filter> the <filtered> from the <csv-content> where <impact-significance> = 37.
-<Log> <filtered> to the <Console>.
+Read the <csv-content> from the <file: "/data/earthquakes.csv">.
+Filter the <filtered> from the <csv-content> where <impact-significance> = 37.
+Log <filtered> to the <Console>.
 ```
 
 **Current behavior with a 10GB CSV file:**
@@ -69,9 +69,9 @@ Apache Spark pioneered the concept of **lazy evaluation** with **transformations
 ┌─────────────────────────────────────────────────────────────────┐
 │                     USER'S PERSPECTIVE                          │
 │                                                                 │
-│  <Read> the <data> from the <file: "huge.csv">.                │
-│  <Filter> the <results> from <data> where <x> > 100.           │
-│  <Log> <results> to the <Console>.                             │
+│  Read the <data> from the <file: "huge.csv">.                │
+│  Filter the <results> from <data> where <x> > 100.           │
+│  Log <results> to the <Console>.                             │
 │                                                                 │
 │  (Same 3 lines of code - no changes required)                  │
 └─────────────────────────────────────────────────────────────────┘
@@ -103,11 +103,11 @@ Apache Spark pioneered the concept of **lazy evaluation** with **transformations
 ARO's immutable variables **naturally form streaming pipelines**:
 
 ```aro
-<Read> the <raw> from the <file: "data.csv">.        (* raw = Stream<Row> *)
-<Filter> the <filtered> from <raw> where x > 10.    (* filtered = Stream<Row> filtered *)
-<Filter> the <refined> from <filtered> where y < 5. (* refined = Stream<Row> *)
-<Map> the <mapped> from <refined> with upper(name). (* mapped = Stream<Row> *)
-<Log> <mapped> to the <Console>.                    (* DRAIN: triggers execution *)
+Read the <raw> from the <file: "data.csv">.        (* raw = Stream<Row> *)
+Filter the <filtered> from <raw> where x > 10.    (* filtered = Stream<Row> filtered *)
+Filter the <refined> from <filtered> where y < 5. (* refined = Stream<Row> *)
+Map the <mapped> from <refined> with upper(name). (* mapped = Stream<Row> *)
+Log <mapped> to the <Console>.                    (* DRAIN: triggers execution *)
 ```
 
 Each statement binds a NEW immutable variable. The chain `raw → filtered → refined → mapped` is a lazy pipeline that only executes when `<Log>` drains it.
@@ -115,10 +115,10 @@ Each statement binds a NEW immutable variable. The chain `raw → filtered → r
 ### The Variable Reuse Problem
 
 ```aro
-<Filter> the <active-orders> from <orders> where status = "active".
-<Reduce> the <total> from <active-orders> with sum(amount).   (* Use 1 *)
-<Reduce> the <count> from <active-orders> with count().       (* Use 2 *)
-<Reduce> the <avg> from <active-orders> with avg(amount).     (* Use 3 *)
+Filter the <active-orders> from <orders> where status = "active".
+Reduce the <total> from <active-orders> with sum(amount).   (* Use 1 *)
+Reduce the <count> from <active-orders> with count().       (* Use 2 *)
+Reduce the <avg> from <active-orders> with avg(amount).     (* Use 3 *)
 ```
 
 **Problem:** `active-orders` is consumed by 3 different operations. A stream can only be consumed ONCE.
@@ -133,9 +133,9 @@ When multiple Reduce operations consume the same stream, **fuse them into a sing
 
 ```aro
 (* User writes: *)
-<Reduce> the <total> from <active-orders> with sum(amount).
-<Reduce> the <count> from <active-orders> with count().
-<Reduce> the <avg> from <active-orders> with avg(amount).
+Reduce the <total> from <active-orders> with sum(amount).
+Reduce the <count> from <active-orders> with count().
+Reduce the <avg> from <active-orders> with avg(amount).
 ```
 
 ```
@@ -150,9 +150,9 @@ Memory:         O(1) - just 3 accumulators
 When stream must go to **different operation types** (e.g., Reduce AND Log):
 
 ```aro
-<Filter> the <active> from <orders> where status = "active".
-<Reduce> the <total> from <active> with sum(amount).  (* consumer 1 *)
-<Log> <active> to the <Console>.                       (* consumer 2 *)
+Filter the <active> from <orders> where status = "active".
+Reduce the <total> from <active> with sum(amount).  (* consumer 1 *)
+Log <active> to the <Console>.                       (* consumer 2 *)
 ```
 
 ```
@@ -266,27 +266,27 @@ This approach ensures ARO can handle **arbitrarily large datasets** without memo
 
 | Source | ARO Syntax | Stream Type | Chunk Strategy |
 |--------|------------|-------------|----------------|
-| CSV File | `<Read> from <file: "x.csv">` | `AROStream<[String:Any]>` | Line-by-line |
-| JSON File | `<Read> from <file: "x.json">` | `AROStream<[String:Any]>` | Parse array elements |
-| JSONL File | `<Read> from <file: "x.jsonl">` | `AROStream<[String:Any]>` | Line-by-line (native!) |
-| HTTP Response | `<Request> from <url>` | `AROStream<[String:Any]>` | Chunked transfer |
-| HTTP Body | `<Extract> from <request: body>` | `AROStream<UInt8>` | Chunk by chunk |
-| TCP Socket | `<Extract> from <packet: data>` | `AROStream<UInt8>` | Packet by packet |
+| CSV File | `Read from <file: "x.csv">` | `AROStream<[String:Any]>` | Line-by-line |
+| JSON File | `Read from <file: "x.json">` | `AROStream<[String:Any]>` | Parse array elements |
+| JSONL File | `Read from <file: "x.jsonl">` | `AROStream<[String:Any]>` | Line-by-line (native!) |
+| HTTP Response | `Request from <url>` | `AROStream<[String:Any]>` | Chunked transfer |
+| HTTP Body | `Extract from <request: body>` | `AROStream<UInt8>` | Chunk by chunk |
+| TCP Socket | `Extract from <packet: data>` | `AROStream<UInt8>` | Packet by packet |
 | WebSocket | Event handler | `AROStream<Message>` | Message by message |
-| Repository | `<Retrieve> from <repo>` | `AROStream<Entity>` | Cursor-based |
-| Directory | `<List> from <directory>` | `AROStream<FileInfo>` | Entry by entry |
-| Env/Params | `<Extract> from <env: X>` | Single value | N/A (not streamable) |
+| Repository | `Retrieve from <repo>` | `AROStream<Entity>` | Cursor-based |
+| Directory | `List from <directory>` | `AROStream<FileInfo>` | Entry by entry |
+| Env/Params | `Extract from <env: X>` | Single value | N/A (not streamable) |
 
 ### Sink Type Mapping
 
 | Sink | ARO Syntax | Streaming Behavior |
 |------|------------|-------------------|
-| Console | `<Log> to <console>` | Print each element immediately |
-| File | `<Write> to <file: "x.csv">` | Append each row |
-| HTTP Response | `<Return> with <data>` | Collect then serialize* |
-| Socket | `<Send> to <connection>` | Send each chunk |
-| Repository | `<Store> in <repo>` | Store each entity |
-| Event | `<Emit> event` | Emit per element |
+| Console | `Log to <console>` | Print each element immediately |
+| File | `Write to <file: "x.csv">` | Append each row |
+| HTTP Response | `Return with <data>` | Collect then serialize* |
+| Socket | `Send to <connection>` | Send each chunk |
+| Repository | `Store in <repo>` | Store each entity |
+| Event | `Emit event` | Emit per element |
 
 *HTTP Response requires materialization for Content-Length header, unless chunked encoding.
 
@@ -305,9 +305,9 @@ ARO **always streams** by default. This is transparent to users:
 
 ```aro
 (* This is automatically streamed - no syntax change needed *)
-<Read> the <data> from the <file: "huge.csv">.
-<Filter> the <filtered> from <data> where <status> = "active".
-<Log> <filtered> to the <Console>.
+Read the <data> from the <file: "huge.csv">.
+Filter the <filtered> from <data> where <status> = "active".
+Log <filtered> to the <Console>.
 ```
 
 ### Explicit Control (Optional Qualifiers)

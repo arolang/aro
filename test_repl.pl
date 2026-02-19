@@ -63,27 +63,27 @@ test(":history", "Empty history check", sub {
 # ============================================================
 section("Set Action - Variable Binding");
 
-test('<Set> the <x> to 42.', "Set integer", sub {
+test('Set the <x> to 42.', "Set integer", sub {
     my $output = shift;
     return $output =~ /OK/;
 });
 
-test('<Set> the <name> to "Alice".', "Set string", sub {
+test('Set the <name> to "Alice".', "Set string", sub {
     my $output = shift;
     return $output =~ /OK/;
 });
 
-test('<Set> the <pi> to 3.14159.', "Set float", sub {
+test('Set the <pi> to 3.14159.', "Set float", sub {
     my $output = shift;
     return $output =~ /OK/;
 });
 
-test('<Set> the <active> to true.', "Set boolean true", sub {
+test('Set the <active> to true.', "Set boolean true", sub {
     my $output = shift;
     return $output =~ /OK/;
 });
 
-test('<Set> the <disabled> to false.', "Set boolean false", sub {
+test('Set the <disabled> to false.', "Set boolean false", sub {
     my $output = shift;
     return $output =~ /OK/;
 });
@@ -108,55 +108,55 @@ test(':type name', "Check string type", sub {
 # ============================================================
 section("Compute Action - Arithmetic");
 
-test('<Set> the <a> to 10.', "Set a=10", sub { shift =~ /OK/ });
-test('<Set> the <b> to 5.', "Set b=5", sub { shift =~ /OK/ });
+test('Set the <a> to 10.', "Set a=10", sub { shift =~ /OK/ });
+test('Set the <b> to 5.', "Set b=5", sub { shift =~ /OK/ });
 
-test('<Compute> the <sum> from <a> + <b>.', "Addition", sub {
+test('Compute the <sum> from <a> + <b>.', "Addition", sub {
     my $output = shift;
     return $output =~ /OK/;
 });
 
-test('<Log> <sum> to the <console>.', "Log sum=15", sub {
+test('Log <sum> to the <console>.', "Log sum=15", sub {
     my $output = shift;
     return $output =~ /15/;
 });
 
-test('<Compute> the <diff> from <a> - <b>.', "Subtraction", sub {
+test('Compute the <diff> from <a> - <b>.', "Subtraction", sub {
     my $output = shift;
     return $output =~ /OK/;
 });
 
-test('<Log> <diff> to the <console>.', "Log diff=5", sub {
+test('Log <diff> to the <console>.', "Log diff=5", sub {
     my $output = shift;
     return $output =~ /\b5\b/;
 });
 
-test('<Compute> the <product> from <a> * <b>.', "Multiplication", sub {
+test('Compute the <product> from <a> * <b>.', "Multiplication", sub {
     my $output = shift;
     return $output =~ /OK/;
 });
 
-test('<Log> <product> to the <console>.', "Log product=50", sub {
+test('Log <product> to the <console>.', "Log product=50", sub {
     my $output = shift;
     return $output =~ /50/;
 });
 
-test('<Compute> the <quotient> from <a> / <b>.', "Division", sub {
+test('Compute the <quotient> from <a> / <b>.', "Division", sub {
     my $output = shift;
     return $output =~ /OK/;
 });
 
-test('<Log> <quotient> to the <console>.', "Log quotient=2", sub {
+test('Log <quotient> to the <console>.', "Log quotient=2", sub {
     my $output = shift;
     return $output =~ /\b2\b/;
 });
 
-test('<Compute> the <remainder> from <a> % 3.', "Modulo", sub {
+test('Compute the <remainder> from <a> % 3.', "Modulo", sub {
     my $output = shift;
     return $output =~ /OK/;
 });
 
-test('<Log> <remainder> to the <console>.', "Log 10%3=1", sub {
+test('Log <remainder> to the <console>.', "Log 10%3=1", sub {
     my $output = shift;
     return $output =~ /\b1\b/;
 });
@@ -166,34 +166,34 @@ test('<Log> <remainder> to the <console>.', "Log 10%3=1", sub {
 # ============================================================
 section("Compute Action - String Operations");
 
-test('<Set> the <text> to "hello world".', "Set text", sub { shift =~ /OK/ });
+test('Set the <text> to "hello world".', "Set text", sub { shift =~ /OK/ });
 
-test('<Compute> the <upper: uppercase> from <text>.', "Uppercase", sub {
+test('Compute the <upper: uppercase> from <text>.', "Uppercase", sub {
     my $output = shift;
     return $output =~ /OK/;
 });
 
-test('<Log> <upper> to the <console>.', "Log HELLO WORLD", sub {
+test('Log <upper> to the <console>.', "Log HELLO WORLD", sub {
     my $output = shift;
     return $output =~ /HELLO WORLD/;
 });
 
-test('<Compute> the <lower: lowercase> from "HELLO".', "Lowercase", sub {
+test('Compute the <lower: lowercase> from "HELLO".', "Lowercase", sub {
     my $output = shift;
     return $output =~ /OK/;
 });
 
-test('<Log> <lower> to the <console>.', "Log hello", sub {
+test('Log <lower> to the <console>.', "Log hello", sub {
     my $output = shift;
     return $output =~ /hello/;
 });
 
-test('<Compute> the <len: length> from <text>.', "String length", sub {
+test('Compute the <len: length> from <text>.', "String length", sub {
     my $output = shift;
     return $output =~ /OK/;
 });
 
-test('<Log> <len> to the <console>.', "Log length=11", sub {
+test('Log <len> to the <console>.', "Log length=11", sub {
     my $output = shift;
     return $output =~ /11/;
 });
@@ -203,22 +203,22 @@ test('<Log> <len> to the <console>.', "Log length=11", sub {
 # ============================================================
 section("Create Action - Objects and Lists");
 
-test('<Create> the <user> with { name: "Bob", age: 30 }.', "Create object", sub {
+test('Create the <user> with { name: "Bob", age: 30 }.', "Create object", sub {
     my $output = shift;
     return $output =~ /OK/;
 });
 
-test('<Log> <user> to the <console>.', "Log user object", sub {
+test('Log <user> to the <console>.', "Log user object", sub {
     my $output = shift;
     return $output =~ /Bob/ && $output =~ /30/;
 });
 
-test('<Create> the <numbers> with [1, 2, 3, 4, 5].', "Create list", sub {
+test('Create the <numbers> with [1, 2, 3, 4, 5].', "Create list", sub {
     my $output = shift;
     return $output =~ /OK/;
 });
 
-test('<Log> <numbers> to the <console>.', "Log numbers list", sub {
+test('Log <numbers> to the <console>.', "Log numbers list", sub {
     my $output = shift;
     return $output =~ /1.*2.*3.*4.*5/;
 });
@@ -228,14 +228,14 @@ test('<Log> <numbers> to the <console>.', "Log numbers list", sub {
 # ============================================================
 section("Transform Action");
 
-test('<Set> the <celsius> to 100.', "Set celsius", sub { shift =~ /OK/ });
+test('Set the <celsius> to 100.', "Set celsius", sub { shift =~ /OK/ });
 
-test('<Transform> the <fahrenheit> from <celsius> * 9 / 5 + 32.', "Celsius to Fahrenheit", sub {
+test('Transform the <fahrenheit> from <celsius> * 9 / 5 + 32.', "Celsius to Fahrenheit", sub {
     my $output = shift;
     return $output =~ /OK/;
 });
 
-test('<Log> <fahrenheit> to the <console>.', "Log 212F", sub {
+test('Log <fahrenheit> to the <console>.', "Log 212F", sub {
     my $output = shift;
     return $output =~ /212/;
 });
@@ -245,15 +245,15 @@ test('<Log> <fahrenheit> to the <console>.', "Log 212F", sub {
 # ============================================================
 section("Validate Action");
 
-test('<Set> the <email> to "test@example.com".', "Set email", sub { shift =~ /OK/ });
+test('Set the <email> to "test@example.com".', "Set email", sub { shift =~ /OK/ });
 
-# Validate syntax: <Validate> the <result: rule> for <value>
-test('<Validate> the <email-valid: email> for <email>.', "Validate email format", sub {
+# Validate syntax: Validate the <result: rule> for <value>
+test('Validate the <email-valid: email> for <email>.', "Validate email format", sub {
     my $output = shift;
     return $output =~ /OK/;
 });
 
-test('<Log> <email-valid> to the <console>.', "Log validation result", sub {
+test('Log <email-valid> to the <console>.', "Log validation result", sub {
     my $output = shift;
     # Validate returns the validated value itself, not a boolean
     return $output =~ /test\@example\.com/ || $output =~ /valid/i || $output =~ /true/i;
@@ -264,17 +264,17 @@ test('<Log> <email-valid> to the <console>.', "Log validation result", sub {
 # ============================================================
 section("Compare Action");
 
-test('<Set> the <val1> to 100.', "Set val1", sub { shift =~ /OK/ });
-test('<Set> the <val2> to 100.', "Set val2", sub { shift =~ /OK/ });
+test('Set the <val1> to 100.', "Set val1", sub { shift =~ /OK/ });
+test('Set the <val2> to 100.', "Set val2", sub { shift =~ /OK/ });
 
 # Compare uses the result base as the LHS (must already exist)
 # and stores the comparison result there
-test('<Compare> the <val1> against <val2>.', "Compare equal values", sub {
+test('Compare the <val1> against <val2>.', "Compare equal values", sub {
     my $output = shift;
     return $output =~ /OK/;
 });
 
-test('<Log> <val1> to the <console>.', "Log comparison result", sub {
+test('Log <val1> to the <console>.', "Log comparison result", sub {
     my $output = shift;
     # Compare returns comparison result but val1 keeps original value
     # Test passes if we see the original value or any comparison-related output
@@ -286,15 +286,15 @@ test('<Log> <val1> to the <console>.', "Log comparison result", sub {
 # ============================================================
 section("Split Action");
 
-test('<Set> the <csv> to "apple,banana,cherry".', "Set CSV string", sub { shift =~ /OK/ });
+test('Set the <csv> to "apple,banana,cherry".', "Set CSV string", sub { shift =~ /OK/ });
 
 # Split requires regex literal syntax: /pattern/
-test('<Split> the <fruits> from <csv> by /,/.', "Split by comma regex", sub {
+test('Split the <fruits> from <csv> by /,/.', "Split by comma regex", sub {
     my $output = shift;
     return $output =~ /OK/;
 });
 
-test('<Log> <fruits> to the <console>.', "Log split result [apple, banana, cherry]", sub {
+test('Log <fruits> to the <console>.', "Log split result [apple, banana, cherry]", sub {
     my $output = shift;
     # Should show array format: [apple, banana, cherry]
     return $output =~ /\[/ && $output =~ /apple/ && $output =~ /banana/ && $output =~ /cherry/;
@@ -305,17 +305,17 @@ test('<Log> <fruits> to the <console>.', "Log split result [apple, banana, cherr
 # ============================================================
 section("Merge/Concat Action");
 
-test('<Set> the <list1> to [1, 2, 3].', "Set list1", sub { shift =~ /OK/ });
-test('<Set> the <list2> to [4, 5, 6].', "Set list2", sub { shift =~ /OK/ });
+test('Set the <list1> to [1, 2, 3].', "Set list1", sub { shift =~ /OK/ });
+test('Set the <list2> to [4, 5, 6].', "Set list2", sub { shift =~ /OK/ });
 
 # Merge action: creates a new variable with merged result (immutable design)
-# Syntax: <Merge> the <result: base> with <source>.
-test('<Merge> the <merged: list1> with <list2>.', "Merge list1 with list2", sub {
+# Syntax: Merge the <result: base> with <source>.
+test('Merge the <merged: list1> with <list2>.', "Merge list1 with list2", sub {
     my $output = shift;
     return $output =~ /OK/ || $output =~ /\[/;
 });
 
-test('<Log> <merged> to the <console>.', "Log merged [1,2,3,4,5,6]", sub {
+test('Log <merged> to the <console>.', "Log merged [1,2,3,4,5,6]", sub {
     my $output = shift;
     # Should output [1, 2, 3, 4, 5, 6]
     return $output =~ /1.*2.*3.*4.*5.*6/;
@@ -326,15 +326,15 @@ test('<Log> <merged> to the <console>.', "Log merged [1,2,3,4,5,6]", sub {
 # ============================================================
 section("Sort Action");
 
-test('<Set> the <unsorted> to [5, 2, 8, 1, 9].', "Set unsorted list", sub { shift =~ /OK/ });
+test('Set the <unsorted> to [5, 2, 8, 1, 9].', "Set unsorted list", sub { shift =~ /OK/ });
 
 # Sort uses 'for' or 'with' preposition
-test('<Sort> the <sorted> for <unsorted>.', "Sort list", sub {
+test('Sort the <sorted> for <unsorted>.', "Sort list", sub {
     my $output = shift;
     return $output =~ /OK/;
 });
 
-test('<Log> <sorted> to the <console>.', "Log sorted result", sub {
+test('Log <sorted> to the <console>.', "Log sorted result", sub {
     my $output = shift;
     # Note: Sort may return original if type is [Any] instead of [Int]
     # Accept any array output containing the numbers
@@ -347,15 +347,15 @@ test('<Log> <sorted> to the <console>.', "Log sorted result", sub {
 section("Filter Action");
 
 # Filter works on arrays of objects with where clause
-test('<Set> the <users> to [{ name: "Alice", age: 25 }, { name: "Bob", age: 35 }, { name: "Carol", age: 28 }].', "Set users array", sub { shift =~ /OK/ });
+test('Set the <users> to [{ name: "Alice", age: 25 }, { name: "Bob", age: 35 }, { name: "Carol", age: 28 }].', "Set users array", sub { shift =~ /OK/ });
 
-# Filter syntax: <Filter> the <result> from the <source> where <field> <op> <value>.
-test('<Filter> the <adults> from the <users> where <age> > 30.', "Filter users over 30", sub {
+# Filter syntax: Filter the <result> from the <source> where <field> <op> <value>.
+test('Filter the <adults> from the <users> where <age> > 30.', "Filter users over 30", sub {
     my $output = shift;
     return $output =~ /OK/;
 });
 
-test('<Log> <adults> to the <console>.', "Log filtered users", sub {
+test('Log <adults> to the <console>.', "Log filtered users", sub {
     my $output = shift;
     # Should only contain Bob (age 35)
     return $output =~ /Bob/;
@@ -366,13 +366,13 @@ test('<Log> <adults> to the <console>.', "Log filtered users", sub {
 # ============================================================
 section("Map Action");
 
-# Map extracts a field from each object: <Map> the <result: field> from <source>.
-test('<Map> the <names: name> from the <users>.', "Map to extract names", sub {
+# Map extracts a field from each object: Map the <result: field> from <source>.
+test('Map the <names: name> from the <users>.', "Map to extract names", sub {
     my $output = shift;
     return $output =~ /OK/;
 });
 
-test('<Log> <names> to the <console>.', "Log mapped names", sub {
+test('Log <names> to the <console>.', "Log mapped names", sub {
     my $output = shift;
     # Should contain Alice, Bob, Carol
     return $output =~ /Alice/ && $output =~ /Bob/ && $output =~ /Carol/;
@@ -385,9 +385,9 @@ section("Delete Action");
 
 # Delete is for repository items, not session variables
 # This test verifies the action exists and gives appropriate error
-test('<Set> the <temp-data> to { id: 1, value: "test" }.', "Set temp data", sub { shift =~ /OK/ });
+test('Set the <temp-data> to { id: 1, value: "test" }.', "Set temp data", sub { shift =~ /OK/ });
 
-test('<Delete> the <temp-data> from the <session>.', "Delete (error expected - not a repo)", sub {
+test('Delete the <temp-data> from the <session>.', "Delete (error expected - not a repo)", sub {
     my $output = shift;
     # Delete is for repositories, error is expected in direct mode
     return $output =~ /Error/;
@@ -428,17 +428,17 @@ send_line('(Add Numbers: Math) {');
 my $fs_start = read_until_prompt();
 print_test_line('(Add Numbers: Math) {', $fs_start, $fs_start =~ /Defining/ ? 1 : 0, "Start feature set");
 
-send_line('<Set> the <a> to 10.');
+send_line('Set the <a> to 10.');
 my $fs_stmt1 = read_until_prompt();
-print_test_line('<Set> the <a> to 10.', $fs_stmt1, $fs_stmt1 =~ /\+/ ? 1 : 0, "Add statement 1");
+print_test_line('Set the <a> to 10.', $fs_stmt1, $fs_stmt1 =~ /\+/ ? 1 : 0, "Add statement 1");
 
-send_line('<Set> the <b> to 20.');
+send_line('Set the <b> to 20.');
 my $fs_stmt2 = read_until_prompt();
-print_test_line('<Set> the <b> to 20.', $fs_stmt2, $fs_stmt2 =~ /\+/ ? 1 : 0, "Add statement 2");
+print_test_line('Set the <b> to 20.', $fs_stmt2, $fs_stmt2 =~ /\+/ ? 1 : 0, "Add statement 2");
 
-send_line('<Compute> the <sum> from <a> + <b>.');
+send_line('Compute the <sum> from <a> + <b>.');
 my $fs_stmt3 = read_until_prompt();
-print_test_line('<Compute> the <sum> from <a> + <b>.', $fs_stmt3, $fs_stmt3 =~ /\+/ ? 1 : 0, "Add compute statement");
+print_test_line('Compute the <sum> from <a> + <b>.', $fs_stmt3, $fs_stmt3 =~ /\+/ ? 1 : 0, "Add compute statement");
 
 send_line('}');
 my $fs_end = read_until_prompt();
@@ -459,7 +459,7 @@ test(':invoke Add Numbers', "Invoke feature set", sub {
 # ============================================================
 section("Export Session");
 
-test('<Set> the <export_test> to "exported".', "Set for export", sub { shift =~ /OK/ });
+test('Set the <export_test> to "exported".', "Set for export", sub { shift =~ /OK/ });
 
 test(':export', "Export session", sub {
     my $output = shift;
@@ -488,12 +488,12 @@ section("Complex Expressions");
 
 test(':clear', "Clear for complex tests", sub { shift =~ /cleared/i });
 
-test('<Set> the <data> to { items: [1, 2, 3], total: 6 }.', "Complex object", sub {
+test('Set the <data> to { items: [1, 2, 3], total: 6 }.', "Complex object", sub {
     my $output = shift;
     return $output =~ /OK/;
 });
 
-test('<Set> the <nested> to { user: { name: "Test", settings: { theme: "dark" } } }.', "Nested object", sub {
+test('Set the <nested> to { user: { name: "Test", settings: { theme: "dark" } } }.', "Nested object", sub {
     my $output = shift;
     return $output =~ /OK/;
 });
@@ -503,12 +503,12 @@ test('<Set> the <nested> to { user: { name: "Test", settings: { theme: "dark" } 
 # ============================================================
 section("Error Handling");
 
-test('<Set> the <incomplete>', "Incomplete statement", sub {
+test('Set the <incomplete>', "Incomplete statement", sub {
     my $output = shift;
     return $output =~ /Error/i || $output =~ /expected/i;
 });
 
-test('<Compute> the <err> from <undefined_var> + 1.', "Undefined variable", sub {
+test('Compute the <err> from <undefined_var> + 1.', "Undefined variable", sub {
     my $output = shift;
     return $output =~ /Error/i || $output =~ /undefined/i || $output =~ /not found/i;
 });

@@ -15,7 +15,7 @@ struct CompilationResultTests {
     func testSuccessfulCompilation() {
         let source = """
         (Test: Testing) {
-            <Extract> the <data> from the <request>.
+            Extract the <data> from the <request>.
         }
         """
         let result = Compiler.compile(source)
@@ -37,7 +37,7 @@ struct CompilationResultTests {
     func testCompilationResultProgram() {
         let source = """
         (Test: Testing) {
-            <Extract> the <data> from the <request>.
+            Extract the <data> from the <request>.
         }
         """
         let result = Compiler.compile(source)
@@ -49,7 +49,7 @@ struct CompilationResultTests {
     func testCompilationResultAnalyzedProgram() {
         let source = """
         (Test: Testing) {
-            <Extract> the <data> from the <request>.
+            Extract the <data> from the <request>.
         }
         """
         let result = Compiler.compile(source)
@@ -61,7 +61,7 @@ struct CompilationResultTests {
     func testCompilationResultDiagnostics() {
         let source = """
         (Test: Testing) {
-            <Publish> as <ext> <undefined>.
+            Publish as <ext> <undefined>.
         }
         """
         let result = Compiler.compile(source)
@@ -87,7 +87,7 @@ struct CompilerPipelineTests {
     func testSingleFeatureSet() {
         let source = """
         (User Auth: Security) {
-            <Extract> the <user> from the <request>.
+            Extract the <user> from the <request>.
         }
         """
         let result = Compiler.compile(source)
@@ -101,13 +101,13 @@ struct CompilerPipelineTests {
     func testMultipleFeatureSets() {
         let source = """
         (First: One) {
-            <Extract> the <a> from the <request>.
+            Extract the <a> from the <request>.
         }
         (Second: Two) {
-            <Extract> the <b> from the <request>.
+            Extract the <b> from the <request>.
         }
         (Third: Three) {
-            <Extract> the <c> from the <request>.
+            Extract the <c> from the <request>.
         }
         """
         let result = Compiler.compile(source)
@@ -120,9 +120,9 @@ struct CompilerPipelineTests {
     func testStatementProcessing() {
         let source = """
         (Test: Testing) {
-            <Extract> the <user> from the <request>.
-            <Validate> the <user-validated> against the <schema>.
-            <Return> the <response> for the <success>.
+            Extract the <user> from the <request>.
+            Validate the <user-validated> against the <schema>.
+            Return the <response> for the <success>.
         }
         """
         let result = Compiler.compile(source)
@@ -135,8 +135,8 @@ struct CompilerPipelineTests {
     func testPublishProcessing() {
         let source = """
         (Test: Testing) {
-            <Extract> the <data> from the <request>.
-            <Publish> as <external-data> <data>.
+            Extract the <data> from the <request>.
+            Publish as <external-data> <data>.
         }
         """
         let result = Compiler.compile(source)
@@ -149,8 +149,8 @@ struct CompilerPipelineTests {
     func testSymbolTableTracking() {
         let source = """
         (Test: Testing) {
-            <Extract> the <user: identifier> from the <request>.
-            <Compute> the <hash> for the <user>.
+            Extract the <user: identifier> from the <request>.
+            Compute the <hash> for the <user>.
         }
         """
         let result = Compiler.compile(source)
@@ -165,7 +165,7 @@ struct CompilerPipelineTests {
     func testDataFlowTracking() {
         let source = """
         (Test: Testing) {
-            <Extract> the <data> from the <source>.
+            Extract the <data> from the <source>.
         }
         """
         let result = Compiler.compile(source)
@@ -179,8 +179,8 @@ struct CompilerPipelineTests {
     func testGlobalSymbolRegistration() {
         let source = """
         (Test: Testing) {
-            <Extract> the <data> from the <request>.
-            <Publish> as <published-data> <data>.
+            Extract the <data> from the <request>.
+            Publish as <published-data> <data>.
         }
         """
         let result = Compiler.compile(source)
@@ -217,7 +217,7 @@ struct CompilerErrorHandlingTests {
     func testSemanticErrorHandling() {
         let source = """
         (Test: Testing) {
-            <Publish> as <ext> <undefined-var>.
+            Publish as <ext> <undefined-var>.
         }
         """
         let result = Compiler.compile(source)
@@ -238,8 +238,8 @@ struct CompilerErrorHandlingTests {
     func testMultipleDiagnostics() {
         let source = """
         (Test: Testing) {
-            <Publish> as <a> <undefined1>.
-            <Publish> as <b> <undefined2>.
+            Publish as <a> <undefined1>.
+            Publish as <b> <undefined2>.
         }
         """
         let result = Compiler.compile(source)
@@ -257,7 +257,7 @@ struct CompilerReportTests {
     func testReportSuccess() {
         let source = """
         (Test: Testing) {
-            <Extract> the <data> from the <request>.
+            Extract the <data> from the <request>.
         }
         """
         let report = Compiler.compileWithReport(source)
@@ -277,7 +277,7 @@ struct CompilerReportTests {
     func testReportASTSummary() {
         let source = """
         (Test: Testing) {
-            <Extract> the <data> from the <request>.
+            Extract the <data> from the <request>.
         }
         """
         let report = Compiler.compileWithReport(source)
@@ -290,7 +290,7 @@ struct CompilerReportTests {
     func testReportSymbolTables() {
         let source = """
         (Test: Testing) {
-            <Extract> the <data> from the <request>.
+            Extract the <data> from the <request>.
         }
         """
         let report = Compiler.compileWithReport(source)
@@ -302,7 +302,7 @@ struct CompilerReportTests {
     func testReportDataFlow() {
         let source = """
         (Test: Testing) {
-            <Extract> the <data> from the <request>.
+            Extract the <data> from the <request>.
         }
         """
         let report = Compiler.compileWithReport(source)
@@ -314,7 +314,7 @@ struct CompilerReportTests {
     func testReportDiagnostics() {
         let source = """
         (Test: Testing) {
-            <Publish> as <ext> <undefined>.
+            Publish as <ext> <undefined>.
         }
         """
         let report = Compiler.compileWithReport(source)
@@ -326,7 +326,7 @@ struct CompilerReportTests {
     func testReportFeatureSetDetails() {
         let source = """
         (User Auth: Security) {
-            <Extract> the <user> from the <request>.
+            Extract the <user> from the <request>.
         }
         """
         let report = Compiler.compileWithReport(source)
@@ -354,7 +354,7 @@ struct CompilerInstanceTests {
         let compiler = Compiler()
         let source = """
         (Test: Testing) {
-            <Extract> the <data> from the <request>.
+            Extract the <data> from the <request>.
         }
         """
         let result = compiler.compile(source)
@@ -367,7 +367,7 @@ struct CompilerInstanceTests {
         let compiler = Compiler()
         let source = """
         (Test: Testing) {
-            <Extract> the <data> from the <request>.
+            Extract the <data> from the <request>.
         }
         """
         let report = compiler.compileWithReport(source)
@@ -397,20 +397,20 @@ struct FullPipelineIntegrationTests {
     func testCompleteApplication() {
         let source = """
         (Application-Start: Entry Point) {
-            <Log> <startup: message> to the <console>.
-            <Return> an <OK: status> for the <startup>.
+            Log <startup: message> to the <console>.
+            Return an <OK: status> for the <startup>.
         }
 
         (Get Users: User API) {
-            <Retrieve> the <users> from the <user-repository>.
-            <Return> an <OK: status> with <users>.
+            Retrieve the <users> from the <user-repository>.
+            Return an <OK: status> with <users>.
         }
 
         (Create User: User Creation) {
-            <Extract> the <user-data> from the <request: body>.
-            <Validate> the <user-data-validated> against the <user-schema>.
-            <Store> the <user> into the <user-repository>.
-            <Return> a <Created: status> with <user>.
+            Extract the <user-data> from the <request: body>.
+            Validate the <user-data-validated> against the <user-schema>.
+            Store the <user> into the <user-repository>.
+            Return a <Created: status> with <user>.
         }
         """
         let result = Compiler.compile(source)
@@ -423,9 +423,9 @@ struct FullPipelineIntegrationTests {
     func testEventHandlerCompilation() {
         let source = """
         (Send Notification: UserCreated Handler) {
-            <Extract> the <user> from the <event: user>.
-            <Send> the <notification> to the <user: email>.
-            <Return> an <OK: status> for the <notification>.
+            Extract the <user> from the <event: user>.
+            Send the <notification> to the <user: email>.
+            Return an <OK: status> for the <notification>.
         }
         """
         let result = Compiler.compile(source)
@@ -438,13 +438,13 @@ struct FullPipelineIntegrationTests {
     func testCrossFeatureSetPublishing() {
         let source = """
         (Auth: Security) {
-            <Extract> the <user> from the <request>.
-            <Publish> as <authenticated-user> <user>.
+            Extract the <user> from the <request>.
+            Publish as <authenticated-user> <user>.
         }
 
         (Logging: Audit) {
-            <Log> the <action> for the <authenticated-user>.
-            <Return> an <OK: status> for the <log>.
+            Log the <action> for the <authenticated-user>.
+            Return an <OK: status> for the <log>.
         }
         """
         let result = Compiler.compile(source)
@@ -457,11 +457,11 @@ struct FullPipelineIntegrationTests {
     func testComplexDataFlow() {
         let source = """
         (Test: Testing) {
-            <Extract> the <input> from the <request>.
-            <Parse> the <json> from the <input>.
-            <Validate> the <json-validated> against the <schema>.
-            <Transform> the <data> into the <output>.
-            <Return> the <response> for the <success>.
+            Extract the <input> from the <request>.
+            Parse the <json> from the <input>.
+            Validate the <json-validated> against the <schema>.
+            Transform the <data> into the <output>.
+            Return the <response> for the <success>.
         }
         """
         let result = Compiler.compile(source)

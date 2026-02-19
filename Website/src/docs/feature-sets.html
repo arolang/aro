@@ -90,15 +90,15 @@
 
         <pre><code><span class="code-comment">(* Entry point - exactly one per application *)</span>
 <span class="code-feature">(Application-Start: My Application)</span> {
-    <span class="code-keyword">&lt;Log&gt;</span> <span class="code-string">"Starting..."</span> to the &lt;console&gt;.
-    <span class="code-keyword">&lt;Start&gt;</span> the &lt;http-server&gt; on port 8080.
-    <span class="code-keyword">&lt;Return&gt;</span> an <span class="code-result">&lt;OK: status&gt;</span> for the &lt;startup&gt;.
+    <span class="code-keyword">Log</span> <span class="code-string">"Starting..."</span> to the &lt;console&gt;.
+    <span class="code-keyword">Start</span> the &lt;http-server&gt; on port 8080.
+    <span class="code-keyword">Return</span> an <span class="code-result">&lt;OK: status&gt;</span> for the &lt;startup&gt;.
 }
 
 <span class="code-comment">(* Called on graceful shutdown - optional *)</span>
 <span class="code-feature">(Application-End: Success)</span> {
-    <span class="code-keyword">&lt;Stop&gt;</span> the &lt;http-server&gt;.
-    <span class="code-keyword">&lt;Return&gt;</span> an <span class="code-result">&lt;OK: status&gt;</span> for the &lt;shutdown&gt;.
+    <span class="code-keyword">Stop</span> the &lt;http-server&gt;.
+    <span class="code-keyword">Return</span> an <span class="code-result">&lt;OK: status&gt;</span> for the &lt;shutdown&gt;.
 }</code></pre>
 
         <h3>HTTP Route Handlers (Contract-First)</h3>
@@ -106,21 +106,21 @@
 
         <pre><code><span class="code-comment">(* Feature sets named after operationIds in openapi.yaml *)</span>
 <span class="code-feature">(listUsers: User API)</span> {
-    <span class="code-keyword">&lt;Retrieve&gt;</span> the <span class="code-result">&lt;users&gt;</span> from the &lt;user-repository&gt;.
-    <span class="code-keyword">&lt;Return&gt;</span> an <span class="code-result">&lt;OK: status&gt;</span> with &lt;users&gt;.
+    <span class="code-keyword">Retrieve</span> the <span class="code-result">&lt;users&gt;</span> from the &lt;user-repository&gt;.
+    <span class="code-keyword">Return</span> an <span class="code-result">&lt;OK: status&gt;</span> with &lt;users&gt;.
 }
 
 <span class="code-feature">(createUser: User API)</span> {
-    <span class="code-keyword">&lt;Extract&gt;</span> the <span class="code-result">&lt;user-data&gt;</span> from the &lt;request: body&gt;.
-    <span class="code-keyword">&lt;Create&gt;</span> the <span class="code-result">&lt;user&gt;</span> with &lt;user-data&gt;.
-    <span class="code-keyword">&lt;Store&gt;</span> the &lt;user&gt; into the &lt;user-repository&gt;.
-    <span class="code-keyword">&lt;Return&gt;</span> a <span class="code-result">&lt;Created: status&gt;</span> with &lt;user&gt;.
+    <span class="code-keyword">Extract</span> the <span class="code-result">&lt;user-data&gt;</span> from the &lt;request: body&gt;.
+    <span class="code-keyword">Create</span> the <span class="code-result">&lt;user&gt;</span> with &lt;user-data&gt;.
+    <span class="code-keyword">Store</span> the &lt;user&gt; into the &lt;user-repository&gt;.
+    <span class="code-keyword">Return</span> a <span class="code-result">&lt;Created: status&gt;</span> with &lt;user&gt;.
 }
 
 <span class="code-feature">(getUser: User API)</span> {
-    <span class="code-keyword">&lt;Extract&gt;</span> the <span class="code-result">&lt;user-id&gt;</span> from the &lt;pathParameters: id&gt;.
-    <span class="code-keyword">&lt;Retrieve&gt;</span> the <span class="code-result">&lt;user&gt;</span> from the &lt;user-repository&gt; where id = &lt;user-id&gt;.
-    <span class="code-keyword">&lt;Return&gt;</span> an <span class="code-result">&lt;OK: status&gt;</span> with &lt;user&gt;.
+    <span class="code-keyword">Extract</span> the <span class="code-result">&lt;user-id&gt;</span> from the &lt;pathParameters: id&gt;.
+    <span class="code-keyword">Retrieve</span> the <span class="code-result">&lt;user&gt;</span> from the &lt;user-repository&gt; where id = &lt;user-id&gt;.
+    <span class="code-keyword">Return</span> an <span class="code-result">&lt;OK: status&gt;</span> with &lt;user&gt;.
 }</code></pre>
 
         <h3>Event Handlers</h3>
@@ -128,18 +128,18 @@
 
         <pre><code><span class="code-comment">(* Handle domain events *)</span>
 <span class="code-feature">(Send Welcome Email: UserCreated Handler)</span> {
-    <span class="code-keyword">&lt;Extract&gt;</span> the <span class="code-result">&lt;user&gt;</span> from the &lt;event: user&gt;.
-    <span class="code-keyword">&lt;Extract&gt;</span> the <span class="code-result">&lt;email&gt;</span> from the &lt;user: email&gt;.
-    <span class="code-keyword">&lt;Send&gt;</span> the &lt;welcome-email&gt; to the &lt;email&gt;.
-    <span class="code-keyword">&lt;Return&gt;</span> an <span class="code-result">&lt;OK: status&gt;</span> for the &lt;notification&gt;.
+    <span class="code-keyword">Extract</span> the <span class="code-result">&lt;user&gt;</span> from the &lt;event: user&gt;.
+    <span class="code-keyword">Extract</span> the <span class="code-result">&lt;email&gt;</span> from the &lt;user: email&gt;.
+    <span class="code-keyword">Send</span> the &lt;welcome-email&gt; to the &lt;email&gt;.
+    <span class="code-keyword">Return</span> an <span class="code-result">&lt;OK: status&gt;</span> for the &lt;notification&gt;.
 }
 
 <span class="code-comment">(* Handle file system events *)</span>
 <span class="code-feature">(Process Upload: FileCreated Handler)</span> {
-    <span class="code-keyword">&lt;Extract&gt;</span> the <span class="code-result">&lt;path&gt;</span> from the &lt;event: path&gt;.
-    <span class="code-keyword">&lt;Read&gt;</span> the <span class="code-result">&lt;content&gt;</span> from the &lt;file: path&gt;.
-    <span class="code-keyword">&lt;Transform&gt;</span> the <span class="code-result">&lt;processed&gt;</span> from the &lt;content&gt;.
-    <span class="code-keyword">&lt;Return&gt;</span> an <span class="code-result">&lt;OK: status&gt;</span> for the &lt;processing&gt;.
+    <span class="code-keyword">Extract</span> the <span class="code-result">&lt;path&gt;</span> from the &lt;event: path&gt;.
+    <span class="code-keyword">Read</span> the <span class="code-result">&lt;content&gt;</span> from the &lt;file: path&gt;.
+    <span class="code-keyword">Transform</span> the <span class="code-result">&lt;processed&gt;</span> from the &lt;content&gt;.
+    <span class="code-keyword">Return</span> an <span class="code-result">&lt;OK: status&gt;</span> for the &lt;processing&gt;.
 }</code></pre>
 
         <h2>Feature Set Execution</h2>
@@ -158,36 +158,36 @@
 
         <pre><code><span class="code-feature">(Process Order: Order Management)</span> {
     <span class="code-comment">(* 1. Extract data *)</span>
-    <span class="code-keyword">&lt;Extract&gt;</span> the <span class="code-result">&lt;order-data&gt;</span> from the &lt;request: body&gt;.
+    <span class="code-keyword">Extract</span> the <span class="code-result">&lt;order-data&gt;</span> from the &lt;request: body&gt;.
 
     <span class="code-comment">(* 2. Validate *)</span>
-    <span class="code-keyword">&lt;Validate&gt;</span> the &lt;order-data&gt; for the &lt;order-schema&gt;.
+    <span class="code-keyword">Validate</span> the &lt;order-data&gt; for the &lt;order-schema&gt;.
 
     <span class="code-comment">(* 3. Create order *)</span>
-    <span class="code-keyword">&lt;Create&gt;</span> the <span class="code-result">&lt;order&gt;</span> with &lt;order-data&gt;.
+    <span class="code-keyword">Create</span> the <span class="code-result">&lt;order&gt;</span> with &lt;order-data&gt;.
 
     <span class="code-comment">(* 4. Store *)</span>
-    <span class="code-keyword">&lt;Store&gt;</span> the &lt;order&gt; into the &lt;order-repository&gt;.
+    <span class="code-keyword">Store</span> the &lt;order&gt; into the &lt;order-repository&gt;.
 
     <span class="code-comment">(* 5. Emit event *)</span>
-    <span class="code-keyword">&lt;Emit&gt;</span> an <span class="code-result">&lt;OrderCreated: event&gt;</span> with &lt;order&gt;.
+    <span class="code-keyword">Emit</span> an <span class="code-result">&lt;OrderCreated: event&gt;</span> with &lt;order&gt;.
 
     <span class="code-comment">(* 6. Return response *)</span>
-    <span class="code-keyword">&lt;Return&gt;</span> a <span class="code-result">&lt;Created: status&gt;</span> with &lt;order&gt;.
+    <span class="code-keyword">Return</span> a <span class="code-result">&lt;Created: status&gt;</span> with &lt;order&gt;.
 }</code></pre>
 
         <h3>Early Returns</h3>
         <p>Use control flow to return early:</p>
 
         <pre><code><span class="code-feature">(getUser: User API)</span> {
-    <span class="code-keyword">&lt;Extract&gt;</span> the <span class="code-result">&lt;user-id&gt;</span> from the &lt;pathParameters: id&gt;.
-    <span class="code-keyword">&lt;Retrieve&gt;</span> the <span class="code-result">&lt;user&gt;</span> from the &lt;user-repository&gt; where id = &lt;user-id&gt;.
+    <span class="code-keyword">Extract</span> the <span class="code-result">&lt;user-id&gt;</span> from the &lt;pathParameters: id&gt;.
+    <span class="code-keyword">Retrieve</span> the <span class="code-result">&lt;user&gt;</span> from the &lt;user-repository&gt; where id = &lt;user-id&gt;.
 
     if &lt;user&gt; is empty then {
-        <span class="code-keyword">&lt;Return&gt;</span> a <span class="code-result">&lt;NotFound: status&gt;</span> for the &lt;missing: user&gt;.
+        <span class="code-keyword">Return</span> a <span class="code-result">&lt;NotFound: status&gt;</span> for the &lt;missing: user&gt;.
     }
 
-    <span class="code-keyword">&lt;Return&gt;</span> an <span class="code-result">&lt;OK: status&gt;</span> with &lt;user&gt;.
+    <span class="code-keyword">Return</span> an <span class="code-result">&lt;OK: status&gt;</span> with &lt;user&gt;.
 }</code></pre>
 
         <h2>Organizing Feature Sets</h2>
@@ -211,15 +211,15 @@
 
         <pre><code><span class="code-comment">(* In config.aro *)</span>
 <span class="code-feature">(Load Configuration: Initialization)</span> {
-    <span class="code-keyword">&lt;Read&gt;</span> the <span class="code-result">&lt;config: JSON&gt;</span> from the &lt;file: <span class="code-string">"./config.json"</span>&gt;.
-    <span class="code-keyword">&lt;Publish&gt;</span> as &lt;app-config&gt; &lt;config&gt;.
-    <span class="code-keyword">&lt;Return&gt;</span> an <span class="code-result">&lt;OK: status&gt;</span> for the &lt;loading&gt;.
+    <span class="code-keyword">Read</span> the <span class="code-result">&lt;config: JSON&gt;</span> from the &lt;file: <span class="code-string">"./config.json"</span>&gt;.
+    <span class="code-keyword">Publish</span> as &lt;app-config&gt; &lt;config&gt;.
+    <span class="code-keyword">Return</span> an <span class="code-result">&lt;OK: status&gt;</span> for the &lt;loading&gt;.
 }
 
 <span class="code-comment">(* In any other file *)</span>
 <span class="code-feature">(getSettings: Settings API)</span> {
-    <span class="code-keyword">&lt;Extract&gt;</span> the <span class="code-result">&lt;timeout&gt;</span> from the &lt;app-config: timeout&gt;.
-    <span class="code-keyword">&lt;Return&gt;</span> an <span class="code-result">&lt;OK: status&gt;</span> with &lt;timeout&gt;.
+    <span class="code-keyword">Extract</span> the <span class="code-result">&lt;timeout&gt;</span> from the &lt;app-config: timeout&gt;.
+    <span class="code-keyword">Return</span> an <span class="code-result">&lt;OK: status&gt;</span> with &lt;timeout&gt;.
 }</code></pre>
 
         <h3>Emitting Events</h3>
@@ -227,17 +227,17 @@
 
         <pre><code><span class="code-comment">(* In orders.aro *)</span>
 <span class="code-feature">(createOrder: Order API)</span> {
-    <span class="code-keyword">&lt;Create&gt;</span> the <span class="code-result">&lt;order&gt;</span> with &lt;order-data&gt;.
-    <span class="code-keyword">&lt;Store&gt;</span> the &lt;order&gt; into the &lt;order-repository&gt;.
-    <span class="code-keyword">&lt;Emit&gt;</span> an <span class="code-result">&lt;OrderCreated: event&gt;</span> with &lt;order&gt;.
-    <span class="code-keyword">&lt;Return&gt;</span> a <span class="code-result">&lt;Created: status&gt;</span> with &lt;order&gt;.
+    <span class="code-keyword">Create</span> the <span class="code-result">&lt;order&gt;</span> with &lt;order-data&gt;.
+    <span class="code-keyword">Store</span> the &lt;order&gt; into the &lt;order-repository&gt;.
+    <span class="code-keyword">Emit</span> an <span class="code-result">&lt;OrderCreated: event&gt;</span> with &lt;order&gt;.
+    <span class="code-keyword">Return</span> a <span class="code-result">&lt;Created: status&gt;</span> with &lt;order&gt;.
 }
 
 <span class="code-comment">(* In notifications.aro - automatically triggered *)</span>
 <span class="code-feature">(Send Confirmation: OrderCreated Handler)</span> {
-    <span class="code-keyword">&lt;Extract&gt;</span> the <span class="code-result">&lt;order&gt;</span> from the &lt;event: order&gt;.
-    <span class="code-keyword">&lt;Send&gt;</span> the &lt;confirmation-email&gt; to the &lt;order: customerEmail&gt;.
-    <span class="code-keyword">&lt;Return&gt;</span> an <span class="code-result">&lt;OK: status&gt;</span> for the &lt;notification&gt;.
+    <span class="code-keyword">Extract</span> the <span class="code-result">&lt;order&gt;</span> from the &lt;event: order&gt;.
+    <span class="code-keyword">Send</span> the &lt;confirmation-email&gt; to the &lt;order: customerEmail&gt;.
+    <span class="code-keyword">Return</span> an <span class="code-result">&lt;OK: status&gt;</span> for the &lt;notification&gt;.
 }</code></pre>
 
         <h2>Best Practices</h2>
@@ -247,9 +247,9 @@
 
         <pre><code><span class="code-comment">(* Good - focused on one task *)</span>
 <span class="code-feature">(Validate Email Format: Validation)</span> {
-    <span class="code-keyword">&lt;Extract&gt;</span> the <span class="code-result">&lt;email&gt;</span> from the &lt;input: email&gt;.
-    <span class="code-keyword">&lt;Validate&gt;</span> the &lt;email&gt; for the &lt;email-pattern&gt;.
-    <span class="code-keyword">&lt;Return&gt;</span> an <span class="code-result">&lt;OK: status&gt;</span> for the &lt;validation&gt;.
+    <span class="code-keyword">Extract</span> the <span class="code-result">&lt;email&gt;</span> from the &lt;input: email&gt;.
+    <span class="code-keyword">Validate</span> the &lt;email&gt; for the &lt;email-pattern&gt;.
+    <span class="code-keyword">Return</span> an <span class="code-result">&lt;OK: status&gt;</span> for the &lt;validation&gt;.
 }
 
 <span class="code-comment">(* Avoid - too many responsibilities *)</span>
@@ -262,19 +262,19 @@
 
         <pre><code><span class="code-feature">(Feature Name: Domain)</span> {
     <span class="code-comment">(* 1. Extract/validate inputs *)</span>
-    <span class="code-keyword">&lt;Extract&gt;</span> the <span class="code-result">&lt;input&gt;</span> from the &lt;source&gt;.
-    <span class="code-keyword">&lt;Validate&gt;</span> the &lt;input&gt; for the &lt;schema&gt;.
+    <span class="code-keyword">Extract</span> the <span class="code-result">&lt;input&gt;</span> from the &lt;source&gt;.
+    <span class="code-keyword">Validate</span> the &lt;input&gt; for the &lt;schema&gt;.
 
     <span class="code-comment">(* 2. Business logic *)</span>
-    <span class="code-keyword">&lt;Create&gt;</span> the <span class="code-result">&lt;result&gt;</span> with &lt;input&gt;.
-    <span class="code-keyword">&lt;Transform&gt;</span> the <span class="code-result">&lt;output&gt;</span> from the &lt;result&gt;.
+    <span class="code-keyword">Create</span> the <span class="code-result">&lt;result&gt;</span> with &lt;input&gt;.
+    <span class="code-keyword">Transform</span> the <span class="code-result">&lt;output&gt;</span> from the &lt;result&gt;.
 
     <span class="code-comment">(* 3. Side effects *)</span>
-    <span class="code-keyword">&lt;Store&gt;</span> the &lt;output&gt; into the &lt;repository&gt;.
-    <span class="code-keyword">&lt;Emit&gt;</span> an <span class="code-result">&lt;Event: type&gt;</span> with &lt;output&gt;.
+    <span class="code-keyword">Store</span> the &lt;output&gt; into the &lt;repository&gt;.
+    <span class="code-keyword">Emit</span> an <span class="code-result">&lt;Event: type&gt;</span> with &lt;output&gt;.
 
     <span class="code-comment">(* 4. Return *)</span>
-    <span class="code-keyword">&lt;Return&gt;</span> an <span class="code-result">&lt;OK: status&gt;</span> with &lt;output&gt;.
+    <span class="code-keyword">Return</span> an <span class="code-result">&lt;OK: status&gt;</span> with &lt;output&gt;.
 }</code></pre>
 
         <div class="highlight-box">

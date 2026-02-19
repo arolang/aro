@@ -179,12 +179,12 @@ object_clause = preposition , [ article ] , "<" , qualified_noun , ">" ;
 
 **Syntax:**
 ```
-<Action> [article] <result: qualifier> preposition [article] <object: qualifier>.
+Action [article] <result: qualifier> preposition [article] <object: qualifier>.
 ```
 
 **Example:**
 ```aro
-<Extract> the <user: identifier> from the <incoming-request: parameters>.
+Extract the <user: identifier> from the <incoming-request: parameters>.
 ```
 
 ### Statement Components
@@ -307,9 +307,9 @@ identifier_sequence = identifier , { identifier } ;
 **Example:**
 ```aro
 (User Authentication: Security and Access Control) {
-    <Extract> the <credentials> from the <request: body>.
-    <Validate> the <credentials> for the <authentication>.
-    <Return> an <OK: status> for the <authentication>.
+    Extract the <credentials> from the <request: body>.
+    Validate the <credentials> for the <authentication>.
+    Return an <OK: status> for the <authentication>.
 }
 ```
 
@@ -332,23 +332,23 @@ Special feature sets manage application lifecycle:
 ```aro
 (* Entry point - exactly one per application *)
 (Application-Start: My App) {
-    <Log> "Starting application..." to the <console>.
-    <Start> the <http-server> with <contract>.
-    <Return> an <OK: status> for the <startup>.
+    Log "Starting application..." to the <console>.
+    Start the <http-server> with <contract>.
+    Return an <OK: status> for the <startup>.
 }
 
 (* Exit handler for graceful shutdown - optional *)
 (Application-End: Success) {
-    <Log> "Shutting down..." to the <console>.
-    <Stop> the <http-server> with <application>.
-    <Return> an <OK: status> for the <shutdown>.
+    Log "Shutting down..." to the <console>.
+    Stop the <http-server> with <application>.
+    Return an <OK: status> for the <shutdown>.
 }
 
 (* Exit handler for errors - optional *)
 (Application-End: Error) {
-    <Extract> the <error> from the <shutdown: error>.
-    <Log> "Error occurred" to the <console>.
-    <Return> an <OK: status> for the <error-handling>.
+    Extract the <error> from the <shutdown: error>.
+    Log "Error occurred" to the <console>.
+    Return an <OK: status> for the <error-handling>.
 }
 ```
 
@@ -619,7 +619,7 @@ ARO has two scope levels:
 Variables are implicitly defined by ARO statements. The **result** of an action creates a new variable:
 
 ```aro
-<Extract> the <user> from the <request>.
+Extract the <user> from the <request>.
            ^^^^
            Creates variable "user" with visibility "internal"
 ```
@@ -650,12 +650,12 @@ publish_statement = "<Publish>" , "as" , "<" , external_name , ">" ,
 
 **Syntax:**
 ```aro
-<Publish> as <external-name> <internal-variable>.
+Publish as <external-name> <internal-variable>.
 ```
 
 **Example:**
 ```aro
-<Publish> as <authenticated-user> <user>.
+Publish as <authenticated-user> <user>.
 ```
 
 **Semantics:**
@@ -671,18 +671,18 @@ Published variables are only accessible within the **same business activity**:
 (* Both feature sets share "User Management" business activity *)
 
 (Authentication: User Management) {
-    <Extract> the <user> from the <request>.
-    <Publish> as <authenticated-user> <user>.
+    Extract the <user> from the <request>.
+    Publish as <authenticated-user> <user>.
 }
 
 (Profile Service: User Management) {
     (* Can access - same business activity *)
-    <Retrieve> the <profile> for the <authenticated-user>.
+    Retrieve the <profile> for the <authenticated-user>.
 }
 
 (Order Processing: Commerce) {
     (* ERROR - different business activity *)
-    <Retrieve> the <orders> for the <authenticated-user>.
+    Retrieve the <orders> for the <authenticated-user>.
 }
 ```
 
@@ -722,7 +722,7 @@ error: Cannot rebind variable 'value' - variables are immutable
   Variable 'value' was already defined at line 1, column 13
 
   Hint: Create a new variable with a different name instead
-  Example: <Create> the <value-updated> with "second"
+  Example: Create the <value-updated> with "second"
 ```
 
 **Runtime**: A safety check prevents rebinding (should never trigger if compiler works correctly):
@@ -737,13 +737,13 @@ To transform existing values, create new variables with descriptive names:
 
 ```aro
 (* ❌ Invalid - attempts to rebind *)
-<Create> the <value> with 10.
-<Compute> the <value> from <value> + 5.  (* Error: Cannot rebind 'value' *)
+Create the <value> with 10.
+Compute the <value> from <value> + 5.  (* Error: Cannot rebind 'value' *)
 
 (* ✅ Valid - creates new variables *)
-<Create> the <value> with 10.
-<Compute> the <value-incremented> from <value> + 5.
-<Compute> the <value-doubled> from <value-incremented> * 2.
+Create the <value> with 10.
+Compute the <value-incremented> from <value> + 5.
+Compute the <value-doubled> from <value-incremented> * 2.
 ```
 
 Variable names should reflect their state in the transformation pipeline:
@@ -756,10 +756,10 @@ Loop variables are immutable **per iteration**. Each iteration creates fresh bin
 ```aro
 for each <item> in <items> {
     (* ❌ Cannot rebind loop variable within iteration *)
-    <Compute> the <item> from <item> + 1.  (* Error *)
+    Compute the <item> from <item> + 1.  (* Error *)
 
     (* ✅ Create new variable from loop variable *)
-    <Compute> the <item-incremented> from <item> + 1.
+    Compute the <item-incremented> from <item> + 1.
 }
 ```
 
@@ -771,8 +771,8 @@ Variables with `_` prefix are framework-internal and exempt from immutability ch
 
 ```aro
 (* Framework variables can be rebound *)
-<Create> the <_internal> with "first".
-<Create> the <_internal> with "second".  (* Allowed *)
+Create the <_internal> with "first".
+Create the <_internal> with "second".  (* Allowed *)
 ```
 
 **User code should not use `_` prefixed names.**
@@ -799,8 +799,8 @@ Without this feature, computing multiple values of the same type overwrites prev
 
 ```aro
 (* Problem: Both bind to 'length', second overwrites first *)
-<Compute> the <length> from the <first-message>.
-<Compute> the <length> from the <second-message>.  (* overwrites! *)
+Compute the <length> from the <first-message>.
+Compute the <length> from the <second-message>.  (* overwrites! *)
 ```
 
 ### Solution
@@ -809,11 +809,11 @@ Use the qualifier to specify the operation:
 
 ```aro
 (* Solution: Distinct variable names, same operation *)
-<Compute> the <first-len: length> from the <first-message>.
-<Compute> the <second-len: length> from the <second-message>.
+Compute the <first-len: length> from the <first-message>.
+Compute the <second-len: length> from the <second-message>.
 
 (* Both values available for comparison *)
-<Compare> the <first-len> against the <second-len>.
+Compare the <first-len> against the <second-len>.
 ```
 
 ### Backward Compatibility
@@ -822,10 +822,10 @@ Legacy syntax continues to work when the base identifier matches a known operati
 
 ```aro
 (* Legacy syntax: 'length' is both variable name AND operation *)
-<Compute> the <length> from the <message>.
+Compute the <length> from the <message>.
 
 (* New syntax: variable name and operation are separate *)
-<Compute> the <msg-length: length> from the <message>.
+Compute the <msg-length: length> from the <message>.
 ```
 
 ### Supported Operations
@@ -841,10 +841,10 @@ Legacy syntax continues to work when the base identifier matches a known operati
 
 | Statement | Variable | Operation |
 |-----------|----------|-----------|
-| `<Compute> the <msg-len: length> from <msg>.` | msg-len | length |
-| `<Compute> the <length> from <msg>.` | length | length |
-| `<Compute> the <upper-name: uppercase> from <name>.` | upper-name | uppercase |
-| `<Validate> the <email-valid: email> for <input>.` | email-valid | email |
+| `Compute the <msg-len: length> from <msg>.` | msg-len | length |
+| `Compute the <length> from <msg>.` | length | length |
+| `Compute the <upper-name: uppercase> from <name>.` | upper-name | uppercase |
+| `Validate the <email-valid: email> for <input>.` | email-valid | email |
 
 ### Security Note: Hash Operation
 
@@ -871,32 +871,32 @@ SHA256 without salt and key stretching is vulnerable to rainbow table and brute 
 
 (File Integrity Verification: Security) {
     // Extract file content and expected checksum from request
-    <Extract> the <content> from the <request: body content>.
-    <Extract> the <expected-checksum> from the <request: body checksum>.
+    Extract the <content> from the <request: body content>.
+    Extract the <expected-checksum> from the <request: body checksum>.
 
     // Compute file checksum for integrity verification
-    <Compute> the <actual-checksum: hash> from the <content>.
+    Compute the <actual-checksum: hash> from the <content>.
 
     // Compare checksums
-    <Compare> the <actual-checksum> against the <expected-checksum>.
+    Compare the <actual-checksum> against the <expected-checksum>.
 
     // Validate and respond
-    <Validate> the <integrity> for the <comparison>.
-    <Return> an <OK: status> for the <integrity>.
+    Validate the <integrity> for the <comparison>.
+    Return an <OK: status> for the <integrity>.
 
     // Publish verification result for other feature sets
-    <Publish> as <verified-content> <content>.
+    Publish as <verified-content> <content>.
 }
 
 (Content Processing: Security) {
     // Access published variable from same business activity
-    <Transform> the <processed-data: uppercase> from the <verified-content>.
-    <Return> an <OK: status> with <processed-data>.
+    Transform the <processed-data: uppercase> from the <verified-content>.
+    Return an <OK: status> with <processed-data>.
 }
 
 (Audit Logging: Security) {
-    <Log> "File integrity verified" to the <console>.
-    <Store> the <audit-record> into the <audit-repository>.
+    Log "File integrity verified" to the <console>.
+    Store the <audit-record> into the <audit-repository>.
 }
 ```
 

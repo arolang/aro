@@ -9,12 +9,12 @@ Language support for **ARO** (Action Result Object) - a declarative programming 
 Elegant, semantic syntax highlighting that works beautifully on both light and dark themes. Actions are colored by their **semantic role**:
 
 **Actions by Role:**
-- **REQUEST** (External → Internal) - **Blue/Cyan**: `<Extract>`, `<Retrieve>`, `<Fetch>`, `<Read>`, `<Accept>`
-- **OWN** (Internal → Internal) - **Purple/Violet**: `<Compute>`, `<Validate>`, `<Compare>`, `<Create>`, `<Transform>`, `<Filter>`
-- **RESPONSE** (Internal → External) - **Orange/Red**: `<Return>`, `<Throw>`
-- **EXPORT** (Persistence/Export) - **Green/Teal**: `<Publish>`, `<Store>`, `<Log>`, `<Send>`, `<Emit>`, `<Write>`
-- **LIFECYCLE** (System Management) - **Cyan**: `<Start>`, `<Stop>`, `<Keepalive>`, `<Watch>`, `<Configure>`
-- **TEST** (BDD Testing) - **Yellow/Gold**: `<Given>`, `<When>`, `<Then>`, `<Assert>`
+- **REQUEST** (External → Internal) - **Blue/Cyan**: `Extract`, `Retrieve`, `Fetch`, `Read`, `Accept`
+- **OWN** (Internal → Internal) - **Purple/Violet**: `Compute`, `Validate`, `Compare`, `Create`, `Transform`, `Filter`
+- **RESPONSE** (Internal → External) - **Orange/Red**: `Return`, `Throw`
+- **EXPORT** (Persistence/Export) - **Green/Teal**: `Publish`, `Store`, `Log`, `Send`, `Emit`, `Write`
+- **LIFECYCLE** (System Management) - **Cyan**: `Start`, `Stop`, `Keepalive`, `Watch`, `Configure`
+- **TEST** (BDD Testing) - **Yellow/Gold**: `Given`, `When`, `Then`, `Assert`
 
 **Other Elements:**
 - **Feature set declarations** - Blue feature names, purple business activities
@@ -311,7 +311,7 @@ Edit `src/main/resources/liveTemplates/ARO.xml` to add new templates:
 
 ```xml
 <template name="mytemplate"
-          value="&lt;Action&gt; the &lt;$RESULT$&gt;."
+          value="Action the &lt;$RESULT$&gt;."
           description="My Template">
     <variable name="RESULT" expression="" defaultValue="&quot;result&quot;" alwaysStopAt="true"/>
     <context>
@@ -376,24 +376,24 @@ Create a file with the `.aro` extension and start writing ARO code:
 ```aro
 (* Entry point *)
 (Application-Start: My Service) {
-    <Log> "Starting..." to the <console>.
-    <Start> the <http-server> on <port> with 8080.
-    <Keepalive> the <application> for the <events>.
-    <Return> an <OK: status> for the <startup>.
+    Log "Starting..." to the <console>.
+    Start the <http-server> on <port> with 8080.
+    Keepalive the <application> for the <events>.
+    Return an <OK: status> for the <startup>.
 }
 
 (* HTTP route handler *)
 (listUsers: User API) {
-    <Retrieve> the <users> from the <user-repository>.
-    <Return> an <OK: status> with <users>.
+    Retrieve the <users> from the <user-repository>.
+    Return an <OK: status> with <users>.
 }
 
 (* Test *)
 (add-numbers-test: Calculator Test) {
-    <Given> the <a> with 5.
-    <Given> the <b> with 3.
-    <When> the <sum> from the <add-numbers>.
-    <Then> the <sum> with 8.
+    Given the <a> with 5.
+    Given the <b> with 3.
+    When the <sum> from the <add-numbers>.
+    Then the <sum> with 8.
 }
 ```
 

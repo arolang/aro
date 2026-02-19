@@ -269,17 +269,17 @@
                 <tr>
                     <td><code>intersect</code></td>
                     <td>Elements present in both A and B</td>
-                    <td><code>&lt;Compute&gt; the &lt;result: intersect&gt; from &lt;a&gt; with &lt;b&gt;.</code></td>
+                    <td><code>Compute the &lt;result: intersect&gt; from &lt;a&gt; with &lt;b&gt;.</code></td>
                 </tr>
                 <tr>
                     <td><code>difference</code></td>
                     <td>Elements in A but not in B</td>
-                    <td><code>&lt;Compute&gt; the &lt;result: difference&gt; from &lt;a&gt; with &lt;b&gt;.</code></td>
+                    <td><code>Compute the &lt;result: difference&gt; from &lt;a&gt; with &lt;b&gt;.</code></td>
                 </tr>
                 <tr>
                     <td><code>union</code></td>
                     <td>All unique elements from both</td>
-                    <td><code>&lt;Compute&gt; the &lt;result: union&gt; from &lt;a&gt; with &lt;b&gt;.</code></td>
+                    <td><code>Compute the &lt;result: union&gt; from &lt;a&gt; with &lt;b&gt;.</code></td>
                 </tr>
             </tbody>
         </table>
@@ -289,19 +289,19 @@
             The most common use case. Find common elements, differences, or combine lists:
         </p>
 
-        <pre><code><span class="code-keyword">&lt;Create&gt;</span> the <span class="code-result">&lt;list-a&gt;</span> with [2, 3, 5].
-<span class="code-keyword">&lt;Create&gt;</span> the <span class="code-result">&lt;list-b&gt;</span> with [1, 2, 3, 4].
+        <pre><code><span class="code-keyword">Create</span> the <span class="code-result">&lt;list-a&gt;</span> with [2, 3, 5].
+<span class="code-keyword">Create</span> the <span class="code-result">&lt;list-b&gt;</span> with [1, 2, 3, 4].
 
 <span class="code-comment">(* Find elements in both lists *)</span>
-<span class="code-keyword">&lt;Compute&gt;</span> the <span class="code-result">&lt;common: intersect&gt;</span> from &lt;list-a&gt; with &lt;list-b&gt;.
+<span class="code-keyword">Compute</span> the <span class="code-result">&lt;common: intersect&gt;</span> from &lt;list-a&gt; with &lt;list-b&gt;.
 <span class="code-comment">(* Result: [2, 3] *)</span>
 
 <span class="code-comment">(* Find elements in A not in B *)</span>
-<span class="code-keyword">&lt;Compute&gt;</span> the <span class="code-result">&lt;only-in-a: difference&gt;</span> from &lt;list-a&gt; with &lt;list-b&gt;.
+<span class="code-keyword">Compute</span> the <span class="code-result">&lt;only-in-a: difference&gt;</span> from &lt;list-a&gt; with &lt;list-b&gt;.
 <span class="code-comment">(* Result: [5] *)</span>
 
 <span class="code-comment">(* Combine all unique elements *)</span>
-<span class="code-keyword">&lt;Compute&gt;</span> the <span class="code-result">&lt;all: union&gt;</span> from &lt;list-a&gt; with &lt;list-b&gt;.
+<span class="code-keyword">Compute</span> the <span class="code-result">&lt;all: union&gt;</span> from &lt;list-a&gt; with &lt;list-b&gt;.
 <span class="code-comment">(* Result: [2, 3, 5, 1, 4] *)</span></code></pre>
 
         <h3>Multiset Semantics</h3>
@@ -309,10 +309,10 @@
             When lists contain duplicates, <code>intersect</code> preserves duplicates up to the minimum count in either list:
         </p>
 
-        <pre><code><span class="code-keyword">&lt;Create&gt;</span> the <span class="code-result">&lt;a&gt;</span> with [1, 2, 2, 3].
-<span class="code-keyword">&lt;Create&gt;</span> the <span class="code-result">&lt;b&gt;</span> with [2, 2, 2, 4].
+        <pre><code><span class="code-keyword">Create</span> the <span class="code-result">&lt;a&gt;</span> with [1, 2, 2, 3].
+<span class="code-keyword">Create</span> the <span class="code-result">&lt;b&gt;</span> with [2, 2, 2, 4].
 
-<span class="code-keyword">&lt;Compute&gt;</span> the <span class="code-result">&lt;common: intersect&gt;</span> from &lt;a&gt; with &lt;b&gt;.
+<span class="code-keyword">Compute</span> the <span class="code-result">&lt;common: intersect&gt;</span> from &lt;a&gt; with &lt;b&gt;.
 <span class="code-comment">(* Result: [2, 2] - two 2s appear in both *)</span></code></pre>
 
         <h2>String Operations</h2>
@@ -321,15 +321,15 @@
         </p>
 
         <pre><code><span class="code-comment">(* Find common characters *)</span>
-<span class="code-keyword">&lt;Compute&gt;</span> the <span class="code-result">&lt;shared: intersect&gt;</span> from <span class="code-string">"hello"</span> with <span class="code-string">"bello"</span>.
+<span class="code-keyword">Compute</span> the <span class="code-result">&lt;shared: intersect&gt;</span> from <span class="code-string">"hello"</span> with <span class="code-string">"bello"</span>.
 <span class="code-comment">(* Result: "ello" *)</span>
 
 <span class="code-comment">(* Find unique characters in first string *)</span>
-<span class="code-keyword">&lt;Compute&gt;</span> the <span class="code-result">&lt;unique: difference&gt;</span> from <span class="code-string">"hello"</span> with <span class="code-string">"bello"</span>.
+<span class="code-keyword">Compute</span> the <span class="code-result">&lt;unique: difference&gt;</span> from <span class="code-string">"hello"</span> with <span class="code-string">"bello"</span>.
 <span class="code-comment">(* Result: "h" *)</span>
 
 <span class="code-comment">(* All unique characters *)</span>
-<span class="code-keyword">&lt;Compute&gt;</span> the <span class="code-result">&lt;combined: union&gt;</span> from <span class="code-string">"hello"</span> with <span class="code-string">"bello"</span>.
+<span class="code-keyword">Compute</span> the <span class="code-result">&lt;combined: union&gt;</span> from <span class="code-string">"hello"</span> with <span class="code-string">"bello"</span>.
 <span class="code-comment">(* Result: "hellob" *)</span></code></pre>
 
         <h2>Object Operations (Deep Comparison)</h2>
@@ -338,24 +338,24 @@
             Only key-value pairs that match exactly are included in intersections:
         </p>
 
-        <pre><code><span class="code-keyword">&lt;Create&gt;</span> the <span class="code-result">&lt;obj-a&gt;</span> with {
+        <pre><code><span class="code-keyword">Create</span> the <span class="code-result">&lt;obj-a&gt;</span> with {
     name: <span class="code-string">"Alice"</span>,
     age: 30,
     address: { city: <span class="code-string">"NYC"</span>, zip: <span class="code-string">"10001"</span> }
 }.
 
-<span class="code-keyword">&lt;Create&gt;</span> the <span class="code-result">&lt;obj-b&gt;</span> with {
+<span class="code-keyword">Create</span> the <span class="code-result">&lt;obj-b&gt;</span> with {
     name: <span class="code-string">"Alice"</span>,
     age: 31,
     address: { city: <span class="code-string">"NYC"</span>, state: <span class="code-string">"NY"</span> }
 }.
 
 <span class="code-comment">(* Find matching key-value pairs *)</span>
-<span class="code-keyword">&lt;Compute&gt;</span> the <span class="code-result">&lt;common: intersect&gt;</span> from &lt;obj-a&gt; with &lt;obj-b&gt;.
+<span class="code-keyword">Compute</span> the <span class="code-result">&lt;common: intersect&gt;</span> from &lt;obj-a&gt; with &lt;obj-b&gt;.
 <span class="code-comment">(* Result: { name: "Alice", address: { city: "NYC" } } *)</span>
 
 <span class="code-comment">(* Find differences *)</span>
-<span class="code-keyword">&lt;Compute&gt;</span> the <span class="code-result">&lt;diff: difference&gt;</span> from &lt;obj-a&gt; with &lt;obj-b&gt;.
+<span class="code-keyword">Compute</span> the <span class="code-result">&lt;diff: difference&gt;</span> from &lt;obj-a&gt; with &lt;obj-b&gt;.
 <span class="code-comment">(* Result: { age: 30, address: { zip: "10001" } } *)</span></code></pre>
 
         <h2>Type Behavior Summary</h2>
@@ -398,14 +398,14 @@
         </p>
 
         <pre><code><span class="code-comment">(* Create an exclusion list *)</span>
-<span class="code-keyword">&lt;Create&gt;</span> the <span class="code-result">&lt;exclude-statuses&gt;</span> with [<span class="code-string">"cancelled"</span>, <span class="code-string">"refunded"</span>].
+<span class="code-keyword">Create</span> the <span class="code-result">&lt;exclude-statuses&gt;</span> with [<span class="code-string">"cancelled"</span>, <span class="code-string">"refunded"</span>].
 
 <span class="code-comment">(* Filter using array variable *)</span>
-<span class="code-keyword">&lt;Filter&gt;</span> the <span class="code-result">&lt;active-orders&gt;</span> from the &lt;orders&gt;
+<span class="code-keyword">Filter</span> the <span class="code-result">&lt;active-orders&gt;</span> from the &lt;orders&gt;
     where &lt;status&gt; not in &lt;exclude-statuses&gt;.
 
 <span class="code-comment">(* Or use CSV string syntax *)</span>
-<span class="code-keyword">&lt;Filter&gt;</span> the <span class="code-result">&lt;pending&gt;</span> from the &lt;orders&gt;
+<span class="code-keyword">Filter</span> the <span class="code-result">&lt;pending&gt;</span> from the &lt;orders&gt;
     where &lt;status&gt; in <span class="code-string">"pending,processing"</span>.</code></pre>
 
         <h2>Complete Example</h2>
@@ -415,22 +415,22 @@
 
         <pre><code><span class="code-feature">(Catalog Comparison: Inventory)</span> {
     <span class="code-comment">(* Two product ID lists *)</span>
-    <span class="code-keyword">&lt;Create&gt;</span> the <span class="code-result">&lt;warehouse-a&gt;</span> with [<span class="code-string">"SKU-001"</span>, <span class="code-string">"SKU-002"</span>, <span class="code-string">"SKU-005"</span>].
-    <span class="code-keyword">&lt;Create&gt;</span> the <span class="code-result">&lt;warehouse-b&gt;</span> with [<span class="code-string">"SKU-001"</span>, <span class="code-string">"SKU-003"</span>, <span class="code-string">"SKU-004"</span>].
+    <span class="code-keyword">Create</span> the <span class="code-result">&lt;warehouse-a&gt;</span> with [<span class="code-string">"SKU-001"</span>, <span class="code-string">"SKU-002"</span>, <span class="code-string">"SKU-005"</span>].
+    <span class="code-keyword">Create</span> the <span class="code-result">&lt;warehouse-b&gt;</span> with [<span class="code-string">"SKU-001"</span>, <span class="code-string">"SKU-003"</span>, <span class="code-string">"SKU-004"</span>].
 
     <span class="code-comment">(* Find products in both warehouses *)</span>
-    <span class="code-keyword">&lt;Compute&gt;</span> the <span class="code-result">&lt;in-both: intersect&gt;</span> from &lt;warehouse-a&gt; with &lt;warehouse-b&gt;.
+    <span class="code-keyword">Compute</span> the <span class="code-result">&lt;in-both: intersect&gt;</span> from &lt;warehouse-a&gt; with &lt;warehouse-b&gt;.
 
     <span class="code-comment">(* Find products only in warehouse A *)</span>
-    <span class="code-keyword">&lt;Compute&gt;</span> the <span class="code-result">&lt;only-in-a: difference&gt;</span> from &lt;warehouse-a&gt; with &lt;warehouse-b&gt;.
+    <span class="code-keyword">Compute</span> the <span class="code-result">&lt;only-in-a: difference&gt;</span> from &lt;warehouse-a&gt; with &lt;warehouse-b&gt;.
 
     <span class="code-comment">(* Find products only in warehouse B *)</span>
-    <span class="code-keyword">&lt;Compute&gt;</span> the <span class="code-result">&lt;only-in-b: difference&gt;</span> from &lt;warehouse-b&gt; with &lt;warehouse-a&gt;.
+    <span class="code-keyword">Compute</span> the <span class="code-result">&lt;only-in-b: difference&gt;</span> from &lt;warehouse-b&gt; with &lt;warehouse-a&gt;.
 
     <span class="code-comment">(* Get complete inventory *)</span>
-    <span class="code-keyword">&lt;Compute&gt;</span> the <span class="code-result">&lt;all-products: union&gt;</span> from &lt;warehouse-a&gt; with &lt;warehouse-b&gt;.
+    <span class="code-keyword">Compute</span> the <span class="code-result">&lt;all-products: union&gt;</span> from &lt;warehouse-a&gt; with &lt;warehouse-b&gt;.
 
-    <span class="code-keyword">&lt;Return&gt;</span> an <span class="code-result">&lt;OK: status&gt;</span> with {
+    <span class="code-keyword">Return</span> an <span class="code-result">&lt;OK: status&gt;</span> with {
         in-both: &lt;in-both&gt;,
         exclusive-a: &lt;only-in-a&gt;,
         exclusive-b: &lt;only-in-b&gt;,

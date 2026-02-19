@@ -9,7 +9,7 @@
 Type this:
 
 ```
-aro> <Set> the <greeting> to "Hello, World".
+aro> Set the <greeting> to "Hello, World".
 => OK
 ```
 
@@ -26,7 +26,7 @@ The `=> OK` confirms: the statement executed. The variable `greeting` now exists
 Want to see what you created? Log it:
 
 ```
-aro> <Log> <greeting> to the <console>.
+aro> Log <greeting> to the <console>.
 Hello, World
 => OK
 ```
@@ -40,13 +40,13 @@ This is the power of the REPL: immediate feedback. No files. No compilation. You
 Try some arithmetic:
 
 ```
-aro> <Set> the <x> to 10.
+aro> Set the <x> to 10.
 => OK
 
-aro> <Set> the <y> to 20.
+aro> Set the <y> to 20.
 => OK
 
-aro> <Compute> the <sum> from <x> + <y>.
+aro> Compute the <sum> from <x> + <y>.
 => 30
 ```
 
@@ -71,7 +71,7 @@ The REPL can evaluate bare expressions too. No action needed.
 Make a mistake. It's safe here.
 
 ```
-aro> <Compute> the <result> from <undefined> + 1.
+aro> Compute the <result> from <undefined> + 1.
 Error: Undefined variable 'undefined'
 
   Suggestion: Use :vars to see available variables
@@ -95,14 +95,14 @@ The REPL is patient. It corrects. It waits for you to try again.
 Every statement ends with a period. It's ARO's way of knowing you're done:
 
 ```
-aro> <Set> the <name> to "Alice".
+aro> Set the <name> to "Alice".
 => OK
 ```
 
 Forget the period and press Enter? The REPL waits for more:
 
 ```
-aro> <Set> the <name> to "Alice"
+aro> Set the <name> to "Alice"
 ...> .
 => OK
 ```

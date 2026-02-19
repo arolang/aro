@@ -273,7 +273,7 @@ private func parsePrecedence(_ minPrecedence: Precedence) throws -> any Expressi
 
 ## The AROStatement Parse
 
-The core statement form is: `<Action> [article] <Result> preposition [article] <Object> [clauses] .`
+The core statement form is: `Action [article] <Result> preposition [article] <Object> [clauses] .`
 
 ```swift
 // Parser.swift:197-350 (simplified)

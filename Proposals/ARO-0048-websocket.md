@@ -119,11 +119,11 @@ The handler name determines which event type triggers it:
 
 ```aro
 (Handle WebSocket Connect: WebSocket Event Handler) {
-    <Extract> the <connection-id> from the <event: connectionId>.
-    <Extract> the <path> from the <event: path>.
-    <Log> "WebSocket connected: " to the <console>.
-    <Log> <connection-id> to the <console>.
-    <Return> an <OK: status> for the <connection>.
+    Extract the <connection-id> from the <event: connectionId>.
+    Extract the <path> from the <event: path>.
+    Log "WebSocket connected: " to the <console>.
+    Log <connection-id> to the <console>.
+    Return an <OK: status> for the <connection>.
 }
 ```
 
@@ -131,17 +131,17 @@ The handler name determines which event type triggers it:
 
 ```aro
 (Handle WebSocket Message: WebSocket Event Handler) {
-    <Extract> the <message> from the <event: message>.
-    <Extract> the <connection-id> from the <event: connectionId>.
+    Extract the <message> from the <event: message>.
+    Extract the <connection-id> from the <event: connectionId>.
 
     (* Process the message *)
-    <Log> "Received: " to the <console>.
-    <Log> <message> to the <console>.
+    Log "Received: " to the <console>.
+    Log <message> to the <console>.
 
     (* Optionally respond to sender *)
-    <Send> <response> to the <websocket-connection: connectionId>.
+    Send <response> to the <websocket-connection: connectionId>.
 
-    <Return> an <OK: status> for the <message>.
+    Return an <OK: status> for the <message>.
 }
 ```
 
@@ -149,10 +149,10 @@ The handler name determines which event type triggers it:
 
 ```aro
 (Handle WebSocket Disconnect: WebSocket Event Handler) {
-    <Extract> the <connection-id> from the <event: connectionId>.
-    <Extract> the <reason> from the <event: reason>.
-    <Log> "WebSocket disconnected" to the <console>.
-    <Return> an <OK: status> for the <disconnection>.
+    Extract the <connection-id> from the <event: connectionId>.
+    Extract the <reason> from the <event: reason>.
+    Log "WebSocket disconnected" to the <console>.
+    Return an <OK: status> for the <disconnection>.
 }
 ```
 
@@ -167,7 +167,7 @@ WebSocket integrates with existing ARO actions through context-aware dispatch.
 Send a message to all connected WebSocket clients:
 
 ```aro
-<Broadcast> the <message> to the <websocket>.
+Broadcast the <message> to the <websocket>.
 ```
 
 The runtime detects the `websocket` target and dispatches to the WebSocket server service.
@@ -177,14 +177,14 @@ The runtime detects the `websocket` target and dispatches to the WebSocket serve
 Send a message to a specific WebSocket connection:
 
 ```aro
-<Send> the <message> to the <websocket-connection: connectionId>.
+Send the <message> to the <websocket-connection: connectionId>.
 ```
 
 Or using the connection object from an event:
 
 ```aro
-<Extract> the <connection> from the <event: connection>.
-<Send> the <response> to the <connection>.
+Extract the <connection> from the <event: connection>.
+Send the <response> to the <connection>.
 ```
 
 ### 3.3 Close Action
@@ -192,7 +192,7 @@ Or using the connection object from an event:
 Close a specific WebSocket connection:
 
 ```aro
-<Close> the <websocket-connection: connectionId>.
+Close the <websocket-connection: connectionId>.
 ```
 
 ---
@@ -213,8 +213,8 @@ Available in WebSocket event handlers. Represents the current connection.
 
 Usage:
 ```aro
-<Extract> the <id> from the <websocket-connection: id>.
-<Send> the <message> to the <websocket-connection>.
+Extract the <id> from the <websocket-connection: id>.
+Send the <message> to the <websocket-connection>.
 ```
 
 ### 4.2 websocket-message
@@ -229,7 +229,7 @@ Available in message handlers. Represents the received message.
 
 Usage:
 ```aro
-<Extract> the <content> from the <websocket-message: text>.
+Extract the <content> from the <websocket-message: text>.
 ```
 
 ---
@@ -252,7 +252,7 @@ Future extension: Support multiple WebSocket endpoints with different handlers:
 
 ```aro
 (* Not in initial implementation *)
-<Configure> the <websocket: path> with "/notifications".
+Configure the <websocket: path> with "/notifications".
 ```
 
 ---
@@ -277,17 +277,17 @@ StatusBoard/
 
 ```aro
 (Application-Start: Status Board) {
-    <Log> "Starting Status Board..." to the <console>.
-    <Start> the <http-server> with {}.
-    <Log> "Server ready on http://localhost:8080" to the <console>.
-    <Keepalive> the <application> for the <events>.
-    <Return> an <OK: status> for the <startup>.
+    Log "Starting Status Board..." to the <console>.
+    Start the <http-server> with {}.
+    Log "Server ready on http://localhost:8080" to the <console>.
+    Keepalive the <application> for the <events>.
+    Return an <OK: status> for the <startup>.
 }
 
 (Application-End: Success) {
-    <Log> "Shutting down..." to the <console>.
-    <Stop> the <http-server> with <application>.
-    <Return> an <OK: status> for the <shutdown>.
+    Log "Shutting down..." to the <console>.
+    Stop the <http-server> with <application>.
+    Return an <OK: status> for the <shutdown>.
 }
 ```
 
@@ -295,28 +295,28 @@ StatusBoard/
 
 ```aro
 (homePage: Status Board API) {
-    <Transform> the <html> from the <template: index.html>.
-    <Return> an <OK: status> with <html>.
+    Transform the <html> from the <template: index.html>.
+    Return an <OK: status> with <html>.
 }
 
 (postStatus: Status Board API) {
-    <Extract> the <status-text> from the <request: body status>.
-    <Create> the <status> with {
+    Extract the <status-text> from the <request: body status>.
+    Create the <status> with {
         id: <generated-id>,
         text: <status-text>,
         createdAt: now
     }.
-    <Store> the <status> into the <status-repository>.
+    Store the <status> into the <status-repository>.
 
     (* Broadcast to all WebSocket clients *)
-    <Broadcast> the <status> to the <websocket>.
+    Broadcast the <status> to the <websocket>.
 
-    <Return> a <Created: status> with <status>.
+    Return a <Created: status> with <status>.
 }
 
 (getStatuses: Status Board API) {
-    <Retrieve> the <statuses> from the <status-repository>.
-    <Return> an <OK: status> with <statuses>.
+    Retrieve the <statuses> from the <status-repository>.
+    Return an <OK: status> with <statuses>.
 }
 ```
 
@@ -324,17 +324,17 @@ StatusBoard/
 
 ```aro
 (Handle WebSocket Connect: WebSocket Event Handler) {
-    <Extract> the <connection-id> from the <event: connectionId>.
-    <Log> "Client connected: " to the <console>.
-    <Log> <connection-id> to the <console>.
-    <Return> an <OK: status> for the <connection>.
+    Extract the <connection-id> from the <event: connectionId>.
+    Log "Client connected: " to the <console>.
+    Log <connection-id> to the <console>.
+    Return an <OK: status> for the <connection>.
 }
 
 (Handle WebSocket Disconnect: WebSocket Event Handler) {
-    <Extract> the <connection-id> from the <event: connectionId>.
-    <Log> "Client disconnected: " to the <console>.
-    <Log> <connection-id> to the <console>.
-    <Return> an <OK: status> for the <disconnection>.
+    Extract the <connection-id> from the <event: connectionId>.
+    Log "Client disconnected: " to the <console>.
+    Log <connection-id> to the <console>.
+    Return an <OK: status> for the <disconnection>.
 }
 ```
 
@@ -445,7 +445,7 @@ Support for binary WebSocket frames:
 
 ```aro
 (Handle WebSocket Binary: WebSocket Event Handler) {
-    <Extract> the <data> from the <event: binary>.
+    Extract the <data> from the <event: binary>.
     (* Process binary data *)
 }
 ```
@@ -455,7 +455,7 @@ Support for binary WebSocket frames:
 WebSocket subprotocol negotiation:
 
 ```aro
-<Configure> the <websocket> with { protocols: ["chat", "json"] }.
+Configure the <websocket> with { protocols: ["chat", "json"] }.
 ```
 
 ### 9.3 Per-Path Handlers

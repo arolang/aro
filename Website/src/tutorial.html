@@ -474,7 +474,7 @@ components:
 
             <p class="narrative">
                 StatusPost needs an HTTP server with WebSocket support. We enable WebSocket by
-                passing a configuration object to the <code>&lt;Start&gt;</code> action.
+                passing a configuration object to the <code>Start</code> action.
             </p>
 
             <div class="code-file">
@@ -489,30 +489,30 @@ components:
 <pre><span class="comment">(* StatusPost - Real-time message board with WebSocket updates *)</span>
 
 (<span class="keyword">Application-Start</span>: <span class="keyword">StatusPost</span>) {
-    <span class="action">&lt;Log&gt;</span> <span class="string">"Starting StatusPost..."</span> to the <span class="variable">&lt;console&gt;</span>.
+    <span class="action">Log</span> <span class="string">"Starting StatusPost..."</span> to the <span class="variable">&lt;console&gt;</span>.
 
     <span class="comment">(* Start HTTP server with WebSocket on /ws path *)</span>
-    <span class="action">&lt;Start&gt;</span> the <span class="variable">&lt;http-server&gt;</span> with { websocket: <span class="string">"/ws"</span> }.
+    <span class="action">Start</span> the <span class="variable">&lt;http-server&gt;</span> with { websocket: <span class="string">"/ws"</span> }.
 
-    <span class="action">&lt;Log&gt;</span> <span class="string">"StatusPost ready on http://localhost:8080"</span> to the <span class="variable">&lt;console&gt;</span>.
-    <span class="action">&lt;Log&gt;</span> <span class="string">"WebSocket available on ws://localhost:8080/ws"</span> to the <span class="variable">&lt;console&gt;</span>.
+    <span class="action">Log</span> <span class="string">"StatusPost ready on http://localhost:8080"</span> to the <span class="variable">&lt;console&gt;</span>.
+    <span class="action">Log</span> <span class="string">"WebSocket available on ws://localhost:8080/ws"</span> to the <span class="variable">&lt;console&gt;</span>.
 
     <span class="comment">(* Keep the application running to handle events *)</span>
-    <span class="action">&lt;Keepalive&gt;</span> the <span class="variable">&lt;application&gt;</span> for the <span class="variable">&lt;events&gt;</span>.
+    <span class="action">Keepalive</span> the <span class="variable">&lt;application&gt;</span> for the <span class="variable">&lt;events&gt;</span>.
 
-    <span class="action">&lt;Return&gt;</span> an <span class="variable">&lt;OK: status&gt;</span> for the <span class="variable">&lt;startup&gt;</span>.
+    <span class="action">Return</span> an <span class="variable">&lt;OK: status&gt;</span> for the <span class="variable">&lt;startup&gt;</span>.
 }
 
 (<span class="keyword">Application-End</span>: <span class="keyword">Success</span>) {
-    <span class="action">&lt;Log&gt;</span> <span class="string">"StatusPost shutting down..."</span> to the <span class="variable">&lt;console&gt;</span>.
-    <span class="action">&lt;Stop&gt;</span> the <span class="variable">&lt;http-server&gt;</span> with {}.
-    <span class="action">&lt;Return&gt;</span> an <span class="variable">&lt;OK: status&gt;</span> for the <span class="variable">&lt;shutdown&gt;</span>.
+    <span class="action">Log</span> <span class="string">"StatusPost shutting down..."</span> to the <span class="variable">&lt;console&gt;</span>.
+    <span class="action">Stop</span> the <span class="variable">&lt;http-server&gt;</span> with {}.
+    <span class="action">Return</span> an <span class="variable">&lt;OK: status&gt;</span> for the <span class="variable">&lt;shutdown&gt;</span>.
 }</pre>
             </div>
 
             <div class="callout">
                 <p>
-                    The <code>&lt;Keepalive&gt;</code> action is essential for long-running applications.
+                    The <code>Keepalive</code> action is essential for long-running applications.
                     Without it, the application would exit after startup completes.
                 </p>
             </div>
@@ -544,38 +544,38 @@ components:
 <pre><span class="comment">(* Serve static files - CSS, JS *)</span>
 
 (<span class="keyword">serveStatic</span>: <span class="keyword">StatusPost API</span>) {
-    <span class="action">&lt;Extract&gt;</span> the <span class="variable">&lt;file&gt;</span> from the <span class="variable">&lt;pathParameters: file&gt;</span>.
-    <span class="action">&lt;Create&gt;</span> the <span class="variable">&lt;template-path&gt;</span> with <span class="string">"static/"</span> ++ <span class="variable">&lt;file&gt;</span>.
-    <span class="action">&lt;Transform&gt;</span> the <span class="variable">&lt;content&gt;</span> from the <span class="variable">&lt;template: template-path&gt;</span>.
-    <span class="action">&lt;Return&gt;</span> an <span class="variable">&lt;OK: status&gt;</span> with <span class="variable">&lt;content&gt;</span>.
+    <span class="action">Extract</span> the <span class="variable">&lt;file&gt;</span> from the <span class="variable">&lt;pathParameters: file&gt;</span>.
+    <span class="action">Create</span> the <span class="variable">&lt;template-path&gt;</span> with <span class="string">"static/"</span> ++ <span class="variable">&lt;file&gt;</span>.
+    <span class="action">Transform</span> the <span class="variable">&lt;content&gt;</span> from the <span class="variable">&lt;template: template-path&gt;</span>.
+    <span class="action">Return</span> an <span class="variable">&lt;OK: status&gt;</span> with <span class="variable">&lt;content&gt;</span>.
 }
 
 <span class="comment">(* Serve the homepage with recent messages *)</span>
 
 (<span class="keyword">homePage</span>: <span class="keyword">StatusPost API</span>) {
-    <span class="action">&lt;Retrieve&gt;</span> the <span class="variable">&lt;all-messages&gt;</span> from the <span class="variable">&lt;message-repository&gt;</span>.
-    <span class="action">&lt;Extract&gt;</span> the <span class="variable">&lt;recent-messages: 0-19&gt;</span> from the <span class="variable">&lt;all-messages&gt;</span>.
-    <span class="action">&lt;Transform&gt;</span> the <span class="variable">&lt;html&gt;</span> from the <span class="variable">&lt;template: index.html&gt;</span>.
-    <span class="action">&lt;Return&gt;</span> an <span class="variable">&lt;OK: status&gt;</span> with <span class="variable">&lt;html&gt;</span>.
+    <span class="action">Retrieve</span> the <span class="variable">&lt;all-messages&gt;</span> from the <span class="variable">&lt;message-repository&gt;</span>.
+    <span class="action">Extract</span> the <span class="variable">&lt;recent-messages: 0-19&gt;</span> from the <span class="variable">&lt;all-messages&gt;</span>.
+    <span class="action">Transform</span> the <span class="variable">&lt;html&gt;</span> from the <span class="variable">&lt;template: index.html&gt;</span>.
+    <span class="action">Return</span> an <span class="variable">&lt;OK: status&gt;</span> with <span class="variable">&lt;html&gt;</span>.
 }
 
 <span class="comment">(* Get messages as JSON for the API *)</span>
 
 (<span class="keyword">getMessages</span>: <span class="keyword">StatusPost API</span>) {
-    <span class="action">&lt;Retrieve&gt;</span> the <span class="variable">&lt;all-messages&gt;</span> from the <span class="variable">&lt;message-repository&gt;</span>.
-    <span class="action">&lt;Extract&gt;</span> the <span class="variable">&lt;recent-messages: 0-19&gt;</span> from the <span class="variable">&lt;all-messages&gt;</span>.
-    <span class="action">&lt;Return&gt;</span> an <span class="variable">&lt;OK: status&gt;</span> with <span class="variable">&lt;recent-messages&gt;</span>.
+    <span class="action">Retrieve</span> the <span class="variable">&lt;all-messages&gt;</span> from the <span class="variable">&lt;message-repository&gt;</span>.
+    <span class="action">Extract</span> the <span class="variable">&lt;recent-messages: 0-19&gt;</span> from the <span class="variable">&lt;all-messages&gt;</span>.
+    <span class="action">Return</span> an <span class="variable">&lt;OK: status&gt;</span> with <span class="variable">&lt;recent-messages&gt;</span>.
 }</pre>
             </div>
 
             <p class="narrative">
-                Notice the <code>&lt;Extract&gt;</code> with <code>0-19</code>? That's a range specifier.
+                Notice the <code>Extract</code> with <code>0-19</code>? That's a range specifier.
                 It extracts the first 20 elements from the list. ARO supports
                 <code>first</code>, <code>last</code>, index access, and ranges.
             </p>
 
             <p class="narrative">
-                The <code>&lt;Transform&gt;</code> action processes a template file. Variables from
+                The <code>Transform</code> action processes a template file. Variables from
                 the current scope (like <code>recent-messages</code>) are available inside the template.
             </p>
         </section>
@@ -606,32 +606,32 @@ components:
 
 (<span class="keyword">postMessage</span>: <span class="keyword">StatusPost API</span>) {
     <span class="comment">(* Extract the message text from the form data *)</span>
-    <span class="action">&lt;Extract&gt;</span> the <span class="variable">&lt;body&gt;</span> from the <span class="variable">&lt;request: body&gt;</span>.
-    <span class="action">&lt;Extract&gt;</span> the <span class="variable">&lt;message-text: message&gt;</span> from the <span class="variable">&lt;body&gt;</span>.
+    <span class="action">Extract</span> the <span class="variable">&lt;body&gt;</span> from the <span class="variable">&lt;request: body&gt;</span>.
+    <span class="action">Extract</span> the <span class="variable">&lt;message-text: message&gt;</span> from the <span class="variable">&lt;body&gt;</span>.
 
     <span class="comment">(* Create a message object with timestamp *)</span>
-    <span class="action">&lt;Create&gt;</span> the <span class="variable">&lt;message: Message&gt;</span> with {
+    <span class="action">Create</span> the <span class="variable">&lt;message: Message&gt;</span> with {
         message: <span class="variable">&lt;message-text&gt;</span>,
         createdAt: <span class="variable">&lt;now&gt;</span>
     }.
 
     <span class="comment">(* Store in repository *)</span>
-    <span class="action">&lt;Store&gt;</span> the <span class="variable">&lt;message&gt;</span> into the <span class="variable">&lt;message-repository&gt;</span>.
+    <span class="action">Store</span> the <span class="variable">&lt;message&gt;</span> into the <span class="variable">&lt;message-repository&gt;</span>.
 
     <span class="comment">(* Broadcast to all WebSocket clients *)</span>
-    <span class="action">&lt;Broadcast&gt;</span> the <span class="variable">&lt;message&gt;</span> to the <span class="variable">&lt;websocket&gt;</span>.
+    <span class="action">Broadcast</span> the <span class="variable">&lt;message&gt;</span> to the <span class="variable">&lt;websocket&gt;</span>.
 
-    <span class="action">&lt;Return&gt;</span> a <span class="variable">&lt;Created: status&gt;</span> with <span class="variable">&lt;message&gt;</span>.
+    <span class="action">Return</span> a <span class="variable">&lt;Created: status&gt;</span> with <span class="variable">&lt;message&gt;</span>.
 }</pre>
             </div>
 
             <p class="narrative">
-                The <code>&lt;Store&gt;</code> action saves the message to an in-memory repository.
+                The <code>Store</code> action saves the message to an in-memory repository.
                 Repositories are named collections that persist for the lifetime of the application.
             </p>
 
             <p class="narrative">
-                The <code>&lt;Broadcast&gt;</code> action sends the message to all connected WebSocket
+                The <code>Broadcast</code> action sends the message to all connected WebSocket
                 clients. They'll receive it as JSON and update their UI in real-time.
             </p>
 
@@ -669,21 +669,21 @@ components:
 <pre><span class="comment">(* WebSocket Event Handlers *)</span>
 
 (<span class="keyword">Handle WebSocket Connect</span>: <span class="keyword">WebSocket Event Handler</span>) {
-    <span class="action">&lt;Extract&gt;</span> the <span class="variable">&lt;connection-id&gt;</span> from the <span class="variable">&lt;event: id&gt;</span>.
-    <span class="action">&lt;Log&gt;</span> <span class="string">"WebSocket client connected"</span> to the <span class="variable">&lt;console&gt;</span>.
-    <span class="action">&lt;Return&gt;</span> an <span class="variable">&lt;OK: status&gt;</span> for the <span class="variable">&lt;connection&gt;</span>.
+    <span class="action">Extract</span> the <span class="variable">&lt;connection-id&gt;</span> from the <span class="variable">&lt;event: id&gt;</span>.
+    <span class="action">Log</span> <span class="string">"WebSocket client connected"</span> to the <span class="variable">&lt;console&gt;</span>.
+    <span class="action">Return</span> an <span class="variable">&lt;OK: status&gt;</span> for the <span class="variable">&lt;connection&gt;</span>.
 }
 
 (<span class="keyword">Handle WebSocket Disconnect</span>: <span class="keyword">WebSocket Event Handler</span>) {
-    <span class="action">&lt;Extract&gt;</span> the <span class="variable">&lt;connection-id&gt;</span> from the <span class="variable">&lt;event: connectionId&gt;</span>.
-    <span class="action">&lt;Log&gt;</span> <span class="string">"WebSocket client disconnected"</span> to the <span class="variable">&lt;console&gt;</span>.
-    <span class="action">&lt;Return&gt;</span> an <span class="variable">&lt;OK: status&gt;</span> for the <span class="variable">&lt;disconnection&gt;</span>.
+    <span class="action">Extract</span> the <span class="variable">&lt;connection-id&gt;</span> from the <span class="variable">&lt;event: connectionId&gt;</span>.
+    <span class="action">Log</span> <span class="string">"WebSocket client disconnected"</span> to the <span class="variable">&lt;console&gt;</span>.
+    <span class="action">Return</span> an <span class="variable">&lt;OK: status&gt;</span> for the <span class="variable">&lt;disconnection&gt;</span>.
 }</pre>
             </div>
 
             <p class="narrative">
                 These handlers are optional but useful for logging and tracking connected clients.
-                The magic happens in <code>&lt;Broadcast&gt;</code> which ARO handles internally.
+                The magic happens in <code>Broadcast</code> which ARO handles internally.
             </p>
         </section>
 
@@ -718,12 +718,12 @@ components:
 <pre><span class="comment">(* Repository Observer - cleanup when message count exceeds 40 *)</span>
 
 (<span class="keyword">Cleanup Messages</span>: <span class="keyword">message-repository Observer</span>) when <span class="variable">&lt;message-repository: count&gt;</span> &gt; 40 {
-    <span class="action">&lt;Retrieve&gt;</span> the <span class="variable">&lt;all-messages&gt;</span> from the <span class="variable">&lt;message-repository&gt;</span>.
-    <span class="action">&lt;Extract&gt;</span> the <span class="variable">&lt;keep-messages: 0-19&gt;</span> from the <span class="variable">&lt;all-messages&gt;</span>.
+    <span class="action">Retrieve</span> the <span class="variable">&lt;all-messages&gt;</span> from the <span class="variable">&lt;message-repository&gt;</span>.
+    <span class="action">Extract</span> the <span class="variable">&lt;keep-messages: 0-19&gt;</span> from the <span class="variable">&lt;all-messages&gt;</span>.
     <span class="action">&lt;Clear&gt;</span> the <span class="variable">&lt;all&gt;</span> from the <span class="variable">&lt;message-repository&gt;</span>.
-    <span class="action">&lt;Store&gt;</span> the <span class="variable">&lt;keep-messages&gt;</span> into the <span class="variable">&lt;message-repository&gt;</span>.
-    <span class="action">&lt;Log&gt;</span> <span class="string">"Cleaned up messages, kept last 20"</span> to the <span class="variable">&lt;console&gt;</span>.
-    <span class="action">&lt;Return&gt;</span> an <span class="variable">&lt;OK: status&gt;</span> for the <span class="variable">&lt;cleanup&gt;</span>.
+    <span class="action">Store</span> the <span class="variable">&lt;keep-messages&gt;</span> into the <span class="variable">&lt;message-repository&gt;</span>.
+    <span class="action">Log</span> <span class="string">"Cleaned up messages, kept last 20"</span> to the <span class="variable">&lt;console&gt;</span>.
+    <span class="action">Return</span> an <span class="variable">&lt;OK: status&gt;</span> for the <span class="variable">&lt;cleanup&gt;</span>.
 }</pre>
             </div>
 

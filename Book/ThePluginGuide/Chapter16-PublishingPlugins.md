@@ -58,7 +58,7 @@ aro add github.com/username/plugin-name
 
 ```aro
 (* Example usage *)
-<Call> the <result> from the <my-plugin: action> with { arg: "value" }.
+Call the <result> from the <my-plugin: action> with { arg: "value" }.
 ```
 
 ## Features
@@ -92,7 +92,7 @@ Description of what the action does.
 
 **Example:**
 ```aro
-<Call> the <result> from the <my-plugin: actionName> with {
+Call the <result> from the <my-plugin: actionName> with {
     arg1: "value"
 }.
 ```
@@ -228,7 +228,7 @@ Validates an email address according to RFC 5322 standards.
 
 **Syntax:**
 ```aro
-<Call> the <result> from the <validation: validateEmail> with {
+Call the <result> from the <validation: validateEmail> with {
     email: <email-string>,
     allowPlusAddressing: true,
     allowSubdomains: true
@@ -284,16 +284,16 @@ Or on validation failure:
 
 Basic validation:
 ```aro
-<Call> the <result> from the <validation: validateEmail> with {
+Call the <result> from the <validation: validateEmail> with {
     email: "user@example.com"
 }.
-<When> <result: valid> is false:
-    <Log> "Invalid email: " ++ <result: errors 0 message> to the <console>.
+When <result: valid> is false:
+    Log "Invalid email: " ++ <result: errors 0 message> to the <console>.
 ```
 
 Strict validation:
 ```aro
-<Call> the <result> from the <validation: validateEmail> with {
+Call the <result> from the <validation: validateEmail> with {
     email: <user-input>,
     allowPlusAddressing: false,
     maxLength: 100
@@ -320,11 +320,11 @@ Each example should be runnable:
 (* Complete form validation example *)
 
 (Application-Start: Form Validation Demo) {
-    <Log> "Form Validation Demo" to the <console>.
-    <Log> "===================" to the <console>.
+    Log "Form Validation Demo" to the <console>.
+    Log "===================" to the <console>.
 
     (* Sample user registration data *)
-    <Create> the <form-data> with {
+    Create the <form-data> with {
         email: "user@example.com",
         password: "SecureP@ss123",
         phone: "+1-555-123-4567",
@@ -332,39 +332,39 @@ Each example should be runnable:
     }.
 
     (* Validate each field *)
-    <Call> the <email-result> from the <validation: validateEmail> with {
+    Call the <email-result> from the <validation: validateEmail> with {
         email: <form-data: email>
     }.
-    <Log> "Email: " ++ <form-data: email> ++ " -> " ++
+    Log "Email: " ++ <form-data: email> ++ " -> " ++
           (if <email-result: valid> then "Valid" else "Invalid")
           to the <console>.
 
-    <Call> the <password-result> from the <validation: validatePassword> with {
+    Call the <password-result> from the <validation: validatePassword> with {
         password: <form-data: password>,
         minLength: 8,
         requireUppercase: true,
         requireSpecial: true
     }.
-    <Log> "Password: " ++
+    Log "Password: " ++
           (if <password-result: valid> then "Strong" else "Weak")
           to the <console>.
 
-    <Call> the <phone-result> from the <validation: validatePhone> with {
+    Call the <phone-result> from the <validation: validatePhone> with {
         phone: <form-data: phone>,
         locale: "US"
     }.
-    <Log> "Phone: " ++ <form-data: phone> ++ " -> " ++
+    Log "Phone: " ++ <form-data: phone> ++ " -> " ++
           (if <phone-result: valid> then "Valid" else "Invalid")
           to the <console>.
 
-    <Call> the <url-result> from the <validation: validateURL> with {
+    Call the <url-result> from the <validation: validateURL> with {
         url: <form-data: website>
     }.
-    <Log> "Website: " ++ <form-data: website> ++ " -> " ++
+    Log "Website: " ++ <form-data: website> ++ " -> " ++
           (if <url-result: valid> then "Valid" else "Invalid")
           to the <console>.
 
-    <Return> an <OK: status> for the <demo>.
+    Return an <OK: status> for the <demo>.
 }
 ```
 

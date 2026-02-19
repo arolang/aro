@@ -2,9 +2,9 @@
 
 (* Health check endpoint *)
 (healthCheck: WebSocket Demo API) {
-    <Create> the <response> with {
+    Create the <response> with {
         status: "healthy",
         websocket: "ws://localhost:8080/ws"
     }.
-    <Return> an <OK: status> with <response>.
+    Return an <OK: status> with <response>.
 }

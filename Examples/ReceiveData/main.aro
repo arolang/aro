@@ -1,27 +1,27 @@
 (* ReceiveData Example - Demonstrating the Receive action with domain events *)
 
 (Application-Start: Receive Data Demo) {
-    <Log> "=== Receive Data Demo ===" to the <console>.
+    Log "=== Receive Data Demo ===" to the <console>.
 
     (* Create sample data to send via event *)
-    <Create> the <message> with "Hello from event system!".
+    Create the <message> with "Hello from event system!".
 
     (* Emit event with data payload *)
-    <Log> "Emitting MessageReceived event..." to the <console>.
-    <Emit> a <MessageReceived: event> with <message>.
+    Log "Emitting MessageReceived event..." to the <console>.
+    Emit a <MessageReceived: event> with <message>.
 
-    <Log> "Event processing complete!" to the <console>.
-    <Return> an <OK: status> for the <demo>.
+    Log "Event processing complete!" to the <console>.
+    Return an <OK: status> for the <demo>.
 }
 
 (* Handler demonstrates Receive action for getting event data *)
 (Process Message: MessageReceived Handler) {
-    <Log> "Handler triggered!" to the <console>.
+    Log "Handler triggered!" to the <console>.
 
     (* Use Receive to get the event payload *)
-    <Receive> the <payload> from the <event>.
-    <Log> "Received payload:" to the <console>.
-    <Log> <payload> to the <console>.
+    Receive the <payload> from the <event>.
+    Log "Received payload:" to the <console>.
+    Log <payload> to the <console>.
 
-    <Return> an <OK: status> for the <handler>.
+    Return an <OK: status> for the <handler>.
 }

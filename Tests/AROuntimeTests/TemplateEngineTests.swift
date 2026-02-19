@@ -68,12 +68,13 @@ struct TemplateParserTests {
 
     @Test("Parse ARO statements with action")
     func testParseAROStatements() throws {
-        let content = "{{ <Log> \"Hello\" to the <console>. }}"
+        // New syntax: actions are capitalized identifiers without angle brackets
+        let content = "{{ Log \"Hello\" to the <console>. }}"
         let result = try parser.parse(content)
 
         #expect(result.segments.count == 1)
         if case .statements(let stmts) = result.segments[0] {
-            #expect(stmts.contains("<Log>"))
+            #expect(stmts.contains("Log"))
             #expect(stmts.contains("<console>"))
         } else {
             Issue.record("Expected statements segment")
@@ -161,12 +162,13 @@ struct TemplateParserTests {
 
     @Test("Parse Include action")
     func testParseIncludeAction() throws {
-        let content = "{{ <Include> the <template: header.tpl>. }}"
+        // New syntax: actions are capitalized identifiers without angle brackets
+        let content = "{{ Include the <template: header.tpl>. }}"
         let result = try parser.parse(content)
 
         #expect(result.segments.count == 1)
         if case .statements(let stmts) = result.segments[0] {
-            #expect(stmts.contains("<Include>"))
+            #expect(stmts.contains("Include"))
             #expect(stmts.contains("header.tpl"))
         } else {
             Issue.record("Expected statements segment for Include")
@@ -546,8 +548,8 @@ struct ComplexTemplateTests {
     func testParseMatchExpression() throws {
         let content = """
         {{ match <status> {
-            when "active" { <Log> "Active" to the <console>. }
-            when "inactive" { <Log> "Inactive" to the <console>. }
+            when "active" { Log "Active" to the <console>. }
+            when "inactive" { Log "Inactive" to the <console>. }
         } }}
         """
         let result = try parser.parse(content)

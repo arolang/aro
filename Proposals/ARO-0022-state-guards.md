@@ -16,11 +16,11 @@ Event handlers often need to react only to specific states or conditions within 
 ```aro
 (* Without state guards - verbose conditional filtering *)
 (Process Payment: OrderUpdated Handler) {
-    <Extract> the <status> from the <event: status>.
-    <Compare> the <status> equals "paid".
+    Extract the <status> from the <event: status>.
+    Compare the <status> equals "paid".
     (* Only executes if comparison passes *)
-    <Process> the <payment> for the <event: order>.
-    <Return> an <OK: status> for the <processing>.
+    Process the <payment> for the <event: order>.
+    Return an <OK: status> for the <processing>.
 }
 ```
 
@@ -29,8 +29,8 @@ State guards move this filtering to the handler declaration:
 ```aro
 (* With state guards - declarative filtering *)
 (Process Payment: OrderUpdated Handler<status:paid>) {
-    <Process> the <payment> for the <event: order>.
-    <Return> an <OK: status> for the <processing>.
+    Process the <payment> for the <event: order>.
+    Return an <OK: status> for the <processing>.
 }
 ```
 
@@ -51,9 +51,9 @@ Example:
 ```aro
 (* Only handles events where status is "paid" *)
 (Process Payment: OrderUpdated Handler<status:paid>) {
-    <Extract> the <order> from the <event: order>.
-    <Process> the <payment> for the <order>.
-    <Return> an <OK: status> for the <processing>.
+    Extract the <order> from the <event: order>.
+    Process the <payment> for the <order>.
+    Return an <OK: status> for the <processing>.
 }
 ```
 
@@ -83,9 +83,9 @@ Multiple values for the same field use comma separation. The handler executes if
 ```aro
 (* Handles events where status is "paid" OR "shipped" *)
 (Track Fulfillment: OrderUpdated Handler<status:paid,shipped>) {
-    <Extract> the <order> from the <event: order>.
-    <Log> "Fulfillment update for order" to the <console>.
-    <Return> an <OK: status> for the <tracking>.
+    Extract the <order> from the <event: order>.
+    Log "Fulfillment update for order" to the <console>.
+    Return an <OK: status> for the <tracking>.
 }
 ```
 
@@ -112,9 +112,9 @@ Multiple conditions use semicolon separation. The handler executes only if **all
 ```aro
 (* Only handles premium customers with delivered orders *)
 (VIP Notification: OrderUpdated Handler<status:delivered;tier:premium>) {
-    <Extract> the <order> from the <event: order>.
-    <Send> the <vip-reward> to the <order: email>.
-    <Return> an <OK: status> for the <notification>.
+    Extract the <order> from the <event: order>.
+    Send the <vip-reward> to the <order: email>.
+    Return an <OK: status> for the <notification>.
 }
 ```
 
@@ -125,9 +125,9 @@ Each semicolon-separated guard can have comma-separated values:
 ```aro
 (* status is (paid OR shipped) AND tier is (premium OR enterprise) *)
 (Priority Processing: OrderUpdated Handler<status:paid,shipped;tier:premium,enterprise>) {
-    <Extract> the <order> from the <event: order>.
+    Extract the <order> from the <event: order>.
     <Prioritize> the <processing> for the <order>.
-    <Return> an <OK: status> for the <priority>.
+    Return an <OK: status> for the <priority>.
 }
 ```
 
@@ -148,16 +148,16 @@ Guards support dot notation for accessing nested fields in the event payload.
 ```aro
 (* Access nested user.status field *)
 (Handle Active Users: UserUpdated Handler<user.status:active>) {
-    <Extract> the <user> from the <event: user>.
-    <Log> "Active user updated" to the <console>.
-    <Return> an <OK: status> for the <handling>.
+    Extract the <user> from the <event: user>.
+    Log "Active user updated" to the <console>.
+    Return an <OK: status> for the <handling>.
 }
 
 (* Deep nesting *)
 (Premium Region: OrderCreated Handler<customer.address.region:premium>) {
-    <Extract> the <order> from the <event: order>.
+    Extract the <order> from the <event: order>.
     <Apply> the <premium-shipping> to the <order>.
-    <Return> an <OK: status> for the <shipping>.
+    Return an <OK: status> for the <shipping>.
 }
 ```
 
@@ -239,16 +239,16 @@ Non-string field values are converted to strings for comparison:
 ```aro
 (* State Guard: Triggers on ANY OrderUpdated where status=shipped *)
 (Track Shipment: OrderUpdated Handler<status:shipped>) {
-    <Extract> the <order> from the <event: order>.
-    <Notify> the <customer> for the <order>.
-    <Return> an <OK: status>.
+    Extract the <order> from the <event: order>.
+    Notify the <customer> for the <order>.
+    Return an <OK: status>.
 }
 
 (* State Observer: Triggers ONLY when status transitions from paid TO shipped *)
 (Log Transition: status StateObserver<paid_to_shipped>) {
-    <Extract> the <orderId> from the <transition: entityId>.
-    <Log> "Order ${orderId} shipped" to the <console>.
-    <Return> an <OK: status>.
+    Extract the <orderId> from the <transition: entityId>.
+    Log "Order ${orderId} shipped" to the <console>.
+    Return an <OK: status>.
 }
 ```
 

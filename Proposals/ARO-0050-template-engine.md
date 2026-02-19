@@ -25,7 +25,7 @@ Template rendering is essential for generating dynamic HTML, emails, reports, an
 
 ```
 +------------------+     +------------------+     +------------------+
-|  Feature Set     | --> | <Transform>      | --> | Template Engine  |
+|  Feature Set     | --> | Transform      | --> | Template Engine  |
 |  Context         |     | template: foo    |     |                  |
 +------------------+     +------------------+     +------------------+
         |                        |                        |
@@ -78,22 +78,22 @@ The `template:` qualifier specifies the template path relative to `./templates/`
 The existing `<Transform>` action is extended to support template rendering:
 
 ```aro
-<Transform> the <result> from the <template: path>.
+Transform the <result> from the <template: path>.
 ```
 
 ### 3.2 Examples
 
 ```aro
 (* Simple template rendering *)
-<Transform> the <html> from the <template: welcome.tpl>.
+Transform the <html> from the <template: welcome.tpl>.
 
 (* Template with path variable *)
-<Create> the <template-name> with "user-profile.html".
-<Transform> the <output> from the <template: template-name>.
+Create the <template-name> with "user-profile.html".
+Transform the <output> from the <template: template-name>.
 
 (* Render and return in HTTP response *)
-<Transform> the <page> from the <template: home.html>.
-<Return> an <OK: status> with <page>.
+Transform the <page> from the <template: home.html>.
+Return an <OK: status> with <page>.
 ```
 
 ### 3.3 Semantic Role
@@ -155,9 +155,9 @@ Any valid ARO statement can appear inside execution blocks:
 ```html
 <html>
 <body>
-{{ <Extract> the <name> from the <user: name>. }}
-{{ <Compute> the <greeting> from "Hello, " ++ <name> ++ "!". }}
-<h1>{{ <Print> <greeting> to the <template>. }}</h1>
+{{ Extract the <name> from the <user: name>. }}
+{{ Compute the <greeting> from "Hello, " ++ <name> ++ "!". }}
+<h1>{{ Print <greeting> to the <template>. }}</h1>
 </body>
 </html>
 ```
@@ -168,10 +168,10 @@ Multiple statements can appear in a single block:
 
 ```
 {{
-    <Extract> the <first-name> from the <user: firstName>.
-    <Extract> the <last-name> from the <user: lastName>.
-    <Compute> the <full-name> from <first-name> ++ " " ++ <last-name>.
-    <Print> <full-name> to the <template>.
+    Extract the <first-name> from the <user: firstName>.
+    Extract the <last-name> from the <user: lastName>.
+    Compute the <full-name> from <first-name> ++ " " ++ <last-name>.
+    Print <full-name> to the <template>.
 }}
 ```
 
@@ -182,7 +182,7 @@ Multiple statements can appear in a single block:
 The `<Print>` action is extended with the `template` target:
 
 ```aro
-<Print> expression to the <template>.
+Print expression to the <template>.
 ```
 
 ### 6.2 Behavior
@@ -194,9 +194,9 @@ The `<Print>` action is extended with the `template` target:
 ### 6.3 Examples
 
 ```
-{{ <Print> "Hello, World!" to the <template>. }}
-{{ <Print> <user: name> to the <template>. }}
-{{ <Print> <count> * 100 to the <template>. }}
+{{ Print "Hello, World!" to the <template>. }}
+{{ Print <user: name> to the <template>. }}
+{{ Print <count> * 100 to the <template>. }}
 ```
 
 ## 7. Variable Interpolation Shorthand
@@ -219,7 +219,7 @@ For simple variable output, a shorthand syntax avoids full `<Print>` statements:
 Is equivalent to:
 
 ```
-{{ <Print> <user: name> to the <template>. }}
+{{ Print <user: name> to the <template>. }}
 ```
 
 ### 7.3 Expression Support
@@ -311,7 +311,7 @@ Loops can be nested:
 Use when guards for conditional output:
 
 ```
-{{ <Print> "Premium User" to the <template> when <user: isPremium> = true. }}
+{{ Print "Premium User" to the <template> when <user: isPremium> = true. }}
 ```
 
 ### 9.2 Match Expression
@@ -321,13 +321,13 @@ Match expressions work in templates:
 ```
 {{ match <status> {
     case "active" {
-        <Print> "<span class='active'>Active</span>" to the <template>.
+        Print "<span class='active'>Active</span>" to the <template>.
     }
     case "pending" {
-        <Print> "<span class='pending'>Pending</span>" to the <template>.
+        Print "<span class='pending'>Pending</span>" to the <template>.
     }
     otherwise {
-        <Print> "<span class='unknown'>Unknown</span>" to the <template>.
+        Print "<span class='unknown'>Unknown</span>" to the <template>.
     }
 } }}
 ```
@@ -339,7 +339,7 @@ Match expressions work in templates:
 The `<Include>` action embeds another template:
 
 ```aro
-{{ <Include> the <template: header.tpl>. }}
+{{ Include the <template: header.tpl>. }}
 ```
 
 ### 10.2 Context Inheritance
@@ -360,13 +360,13 @@ Included templates:
   <title>{{ <page-title> }} | MyApp</title>
 </head>
 <body>
-  {{ <Include> the <template: partials/header.tpl>. }}
+  {{ Include the <template: partials/header.tpl>. }}
 
   <main>
-    {{ <Print> <content> to the <template>. }}
+    {{ Print <content> to the <template>. }}
   </main>
 
-  {{ <Include> the <template: partials/footer.tpl>. }}
+  {{ Include the <template: partials/footer.tpl>. }}
 </body>
 </html>
 ```
@@ -377,8 +377,8 @@ Included templates:
 <header>
   <nav>
     <a href="/">Home</a>
-    {{ <Print> " | " to the <template> when <user> exists. }}
-    {{ <Print> <user: name> to the <template> when <user> exists. }}
+    {{ Print " | " to the <template> when <user> exists. }}
+    {{ Print <user: name> to the <template> when <user> exists. }}
   </nav>
 </header>
 ```
@@ -388,7 +388,7 @@ Included templates:
 Use `with` to pass/override variables to included template:
 
 ```
-{{ <Include> the <template: user-card.tpl> with { user: <current-user>, showDetails: true }. }}
+{{ Include the <template: user-card.tpl> with { user: <current-user>, showDetails: true }. }}
 ```
 
 ## 11. Examples
@@ -404,7 +404,7 @@ Welcome to our service! Your account has been created with the following details
 Email: {{ <user: email> }}
 Plan: {{ <user: plan> }}
 
-{{ <Print> "Your premium benefits are now active!" to the <template> when <user: plan> = "premium". }}
+{{ Print "Your premium benefits are now active!" to the <template> when <user: plan> = "premium". }}
 
 Best regards,
 The Team
@@ -413,10 +413,10 @@ The Team
 **Usage:**
 ```aro
 (Send Welcome Email: UserCreated Handler) {
-    <Extract> the <user> from the <event: user>.
-    <Transform> the <email-body> from the <template: welcome-email.tpl>.
-    <Send> the <email-body> to the <user: email>.
-    <Return> an <OK: status> for the <notification>.
+    Extract the <user> from the <event: user>.
+    Transform the <email-body> from the <template: welcome-email.tpl>.
+    Send the <email-body> to the <user: email>.
+    Return an <OK: status> for the <notification>.
 }
 ```
 
@@ -429,7 +429,7 @@ The Team
 <head><title>Users</title></head>
 <body>
   <h1>User Directory</h1>
-  {{ <Compute> the <user-count: length> from <users>. }}
+  {{ Compute the <user-count: length> from <users>. }}
   <p>Total users: {{ <user-count> }}</p>
 
   <table>
@@ -453,9 +453,9 @@ The Team
 **Usage:**
 ```aro
 (listUsersPage: User UI) {
-    <Retrieve> the <users> from the <user-repository>.
-    <Transform> the <html> from the <template: user-list.html>.
-    <Return> an <OK: status> with <html>.
+    Retrieve the <users> from the <user-repository>.
+    Transform the <html> from the <template: user-list.html>.
+    Return an <OK: status> with <html>.
 }
 ```
 
@@ -467,14 +467,14 @@ The Team
 <html>
 <head>
   <title>{{ <title> }} | MyApp</title>
-  {{ <Include> the <template: partials/head.tpl>. }}
+  {{ Include the <template: partials/head.tpl>. }}
 </head>
 <body>
-  {{ <Include> the <template: partials/nav.tpl>. }}
+  {{ Include the <template: partials/nav.tpl>. }}
   <main>
-    {{ <Print> <body-content> to the <template>. }}
+    {{ Print <body-content> to the <template>. }}
   </main>
-  {{ <Include> the <template: partials/footer.tpl>. }}
+  {{ Include the <template: partials/footer.tpl>. }}
 </body>
 </html>
 ```
@@ -482,7 +482,7 @@ The Team
 **templates/pages/dashboard.tpl:**
 ```html
 {{
-    <Create> the <title> with "Dashboard".
+    Create the <title> with "Dashboard".
 }}
 <h1>Welcome, {{ <user: name> }}</h1>
 <div class="stats">
@@ -749,12 +749,12 @@ Error: Can not extract the <name> from the <user: name> in template welcome.tpl
 |--------|-------------|
 | **Directory** | `./templates/` relative to application |
 | **Path Syntax** | `template: path/to/file.tpl` |
-| **Action** | `<Transform> the <result> from the <template: path>.` |
+| **Action** | `Transform the <result> from the <template: path>.` |
 | **Execution Blocks** | `{{ <statement> }}` |
 | **Variable Shorthand** | `{{ <variable> }}` |
-| **Output Action** | `<Print> expression to the <template>.` |
+| **Output Action** | `Print expression to the <template>.` |
 | **For-Each** | `{{ for each <item> in <list> { }} ... {{ } }}` |
-| **Include** | `{{ <Include> the <template: partial.tpl>. }}` |
+| **Include** | `{{ Include the <template: partial.tpl>. }}` |
 | **Isolation** | Context cloned, no bleed-back |
 | **Binary Mode** | Templates embedded in compiled binary |
 

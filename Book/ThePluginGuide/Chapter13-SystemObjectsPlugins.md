@@ -3,7 +3,7 @@
 > *"The best abstractions feel inevitable—as if the system could work no other way."*
 > — Rob Pike
 
-Throughout this book, we've seen how plugins extend ARO with new actions. But there's another dimension to extensibility that we haven't yet explored: **system objects**. When you write `<Log> "Hello" to the <console>.` or `<Read> the <config> from the <file: "settings.yaml">.`, you're interacting with system objects—built-in I/O targets that ARO provides. This chapter reveals how plugins can contribute their own system objects, enabling syntax like `<Read> the <session> from the <redis: "user:123">.` or `<Write> <document> to the <elasticsearch: "products">.`
+Throughout this book, we've seen how plugins extend ARO with new actions. But there's another dimension to extensibility that we haven't yet explored: **system objects**. When you write `Log "Hello" to the <console>.` or `Read the <config> from the <file: "settings.yaml">.`, you're interacting with system objects—built-in I/O targets that ARO provides. This chapter reveals how plugins can contribute their own system objects, enabling syntax like `Read the <session> from the <redis: "user:123">.` or `Write <document> to the <elasticsearch: "products">.`
 
 ## 12.1 Understanding System Objects
 
@@ -15,27 +15,27 @@ ARO classifies I/O targets into three categories based on their capabilities:
 
 **Sources** are objects you read *from*:
 ```aro
-<Read> the <input> from the <stdin>.
-<Get> the <api-key> from the <env: "API_KEY">.
-<Extract> the <id> from the <pathParameters: id>.
+Read the <input> from the <stdin>.
+Get the <api-key> from the <env: "API_KEY">.
+Extract the <id> from the <pathParameters: id>.
 ```
 
 **Sinks** are objects you write *to*:
 ```aro
-<Log> "Starting..." to the <console>.
-<Write> <data> to the <file: "./output.json">.
-<Send> <message> to the <connection>.
+Log "Starting..." to the <console>.
+Write <data> to the <file: "./output.json">.
+Send <message> to the <connection>.
 ```
 
 **Bidirectional** objects support both operations:
 ```aro
 (* File: read and write *)
-<Read> the <config> from the <file: "./settings.yaml">.
-<Write> <updated-config> to the <file: "./settings.yaml">.
+Read the <config> from the <file: "./settings.yaml">.
+Write <updated-config> to the <file: "./settings.yaml">.
 
 (* Socket connection: send and receive *)
-<Send> <request> to the <connection>.
-<Extract> the <response> from the <connection>.
+Send <request> to the <connection>.
+Extract the <response> from the <connection>.
 ```
 
 ### Built-in System Objects
@@ -63,19 +63,19 @@ System objects often use **qualifiers** to specify details:
 
 ```aro
 (* File path as qualifier *)
-<Read> the <data> from the <file: "./data.json">.
+Read the <data> from the <file: "./data.json">.
 
 (* Environment variable name as qualifier *)
-<Get> the <port> from the <env: "PORT">.
+Get the <port> from the <env: "PORT">.
 
 (* Property path as qualifier *)
-<Extract> the <name> from the <user: name>.
+Extract the <name> from the <user: name>.
 ```
 
 This pattern is central to how custom system objects work. When you create a Redis plugin, the key becomes the qualifier:
 
 ```aro
-<Read> the <session> from the <redis: "session:user:123">.
+Read the <session> from the <redis: "session:user:123">.
 ```
 
 ## 12.2 The System Objects Protocol
@@ -603,44 +603,44 @@ Once installed, the Redis plugin enables natural syntax for cache operations:
 
 ```aro
 (Application-Start: Session Manager) {
-    <Log> "Session Manager starting..." to the <console>.
-    <Keepalive> the <application> for the <events>.
-    <Return> an <OK: status> for the <startup>.
+    Log "Session Manager starting..." to the <console>.
+    Keepalive the <application> for the <events>.
+    Return an <OK: status> for the <startup>.
 }
 
 (createSession: Session API) {
-    <Extract> the <user-id> from the <body: userId>.
+    Extract the <user-id> from the <body: userId>.
 
     (* Generate session data *)
-    <Create> the <session-id> with <uuid>.
-    <Create> the <session> with {
+    Create the <session-id> with <uuid>.
+    Create the <session> with {
         userId: <user-id>,
         createdAt: <now>,
         expiresAt: <now + 3600>
     }.
 
     (* Store in Redis with 1 hour TTL *)
-    <Write> <session> to the <redis: "session:" ++ <session-id>> with { ttl: 3600 }.
+    Write <session> to the <redis: "session:" ++ <session-id>> with { ttl: 3600 }.
 
-    <Return> a <Created: status> with { sessionId: <session-id> }.
+    Return a <Created: status> with { sessionId: <session-id> }.
 }
 
 (getSession: Session API) {
-    <Extract> the <session-id> from the <pathParameters: id>.
+    Extract the <session-id> from the <pathParameters: id>.
 
     (* Read from Redis *)
-    <Read> the <session> from the <redis: "session:" ++ <session-id>>.
+    Read the <session> from the <redis: "session:" ++ <session-id>>.
 
-    <Return> an <OK: status> with <session>.
+    Return an <OK: status> with <session>.
 }
 
 (deleteSession: Session API) {
-    <Extract> the <session-id> from the <pathParameters: id>.
+    Extract the <session-id> from the <pathParameters: id>.
 
     (* Delete by writing null *)
-    <Write> null to the <redis: "session:" ++ <session-id>>.
+    Write null to the <redis: "session:" ++ <session-id>>.
 
-    <Return> a <NoContent: status> for the <deletion>.
+    Return a <NoContent: status> for the <deletion>.
 }
 ```
 
@@ -1042,35 +1042,35 @@ The plugin enables powerful document operations with clean syntax:
 
 ```aro
 (Application-Start: Product Catalog) {
-    <Log> "Product Catalog starting..." to the <console>.
-    <Keepalive> the <application> for the <events>.
-    <Return> an <OK: status> for the <startup>.
+    Log "Product Catalog starting..." to the <console>.
+    Keepalive the <application> for the <events>.
+    Return an <OK: status> for the <startup>.
 }
 
 (createProduct: Products API) {
-    <Extract> the <product-data> from the <body>.
+    Extract the <product-data> from the <body>.
 
     (* Index the product - Elasticsearch generates ID *)
-    <Write> <product-data> to the <elasticsearch: "products">.
+    Write <product-data> to the <elasticsearch: "products">.
 
-    <Return> a <Created: status> with <product-data>.
+    Return a <Created: status> with <product-data>.
 }
 
 (getProduct: Products API) {
-    <Extract> the <id> from the <pathParameters: id>.
+    Extract the <id> from the <pathParameters: id>.
 
     (* Fetch specific document *)
-    <Read> the <product> from the <elasticsearch: "products/" ++ <id>>.
+    Read the <product> from the <elasticsearch: "products/" ++ <id>>.
 
-    <Return> an <OK: status> with <product>.
+    Return an <OK: status> with <product>.
 }
 
 (searchProducts: Products API) {
-    <Extract> the <query> from the <queryParameters: q>.
-    <Extract> the <category> from the <queryParameters: category>.
+    Extract the <query> from the <queryParameters: q>.
+    Extract the <category> from the <queryParameters: category>.
 
     (* Build search query *)
-    <Create> the <search-query> with {
+    Create the <search-query> with {
         bool: {
             must: [
                 { match: { name: <query> } }
@@ -1082,32 +1082,32 @@ The plugin enables powerful document operations with clean syntax:
     }.
 
     (* Search with query and pagination *)
-    <Read> the <results> from the <elasticsearch: "products"> with {
+    Read the <results> from the <elasticsearch: "products"> with {
         query: <search-query>,
         limit: 20,
         offset: 0
     }.
 
-    <Return> an <OK: status> with <results>.
+    Return an <OK: status> with <results>.
 }
 
 (updateProduct: Products API) {
-    <Extract> the <id> from the <pathParameters: id>.
-    <Extract> the <update-data> from the <body>.
+    Extract the <id> from the <pathParameters: id>.
+    Extract the <update-data> from the <body>.
 
     (* Update by writing to specific ID *)
-    <Write> <update-data> to the <elasticsearch: "products/" ++ <id>>.
+    Write <update-data> to the <elasticsearch: "products/" ++ <id>>.
 
-    <Return> an <OK: status> with <update-data>.
+    Return an <OK: status> with <update-data>.
 }
 
 (deleteProduct: Products API) {
-    <Extract> the <id> from the <pathParameters: id>.
+    Extract the <id> from the <pathParameters: id>.
 
     (* Delete by writing null *)
-    <Write> null to the <elasticsearch: "products/" ++ <id>>.
+    Write null to the <elasticsearch: "products/" ++ <id>>.
 
-    <Return> a <NoContent: status> for the <deletion>.
+    Return a <NoContent: status> for the <deletion>.
 }
 ```
 
@@ -1122,29 +1122,29 @@ System objects use qualifiers consistently. Follow these conventions:
 **Path-based addressing** (hierarchical resources):
 ```aro
 (* File system: path *)
-<Read> the <data> from the <file: "./data/users.json">.
+Read the <data> from the <file: "./data/users.json">.
 
 (* Elasticsearch: index/document *)
-<Read> the <doc> from the <elasticsearch: "products/abc123">.
+Read the <doc> from the <elasticsearch: "products/abc123">.
 
 (* S3: bucket/key *)
-<Read> the <object> from the <s3: "my-bucket/images/logo.png">.
+Read the <object> from the <s3: "my-bucket/images/logo.png">.
 ```
 
 **Key-based addressing** (flat key-value stores):
 ```aro
 (* Redis: key *)
-<Read> the <session> from the <redis: "session:user:123">.
+Read the <session> from the <redis: "session:user:123">.
 
 (* Memcached: key *)
-<Read> the <cached> from the <memcached: "api:response:xyz">.
+Read the <cached> from the <memcached: "api:response:xyz">.
 ```
 
 **Query-based addressing** (databases):
 ```aro
 (* PostgreSQL: table or query *)
-<Read> the <users> from the <postgres: "users">.
-<Read> the <active-users> from the <postgres: "SELECT * FROM users WHERE active">.
+Read the <users> from the <postgres: "users">.
+Read the <active-users> from the <postgres: "SELECT * FROM users WHERE active">.
 ```
 
 ### Options for Fine-Grained Control
@@ -1153,17 +1153,17 @@ Use the `with { ... }` syntax for parameters that don't fit in qualifiers:
 
 ```aro
 (* TTL for cache entries *)
-<Write> <session> to the <redis: "session:123"> with { ttl: 3600 }.
+Write <session> to the <redis: "session:123"> with { ttl: 3600 }.
 
 (* Query parameters for search *)
-<Read> the <results> from the <elasticsearch: "products"> with {
+Read the <results> from the <elasticsearch: "products"> with {
     query: { match: { name: "widget" } },
     limit: 10,
     offset: 0
 }.
 
 (* Consistency level for distributed stores *)
-<Read> the <data> from the <cassandra: "users/123"> with {
+Read the <data> from the <cassandra: "users/123"> with {
     consistency: "quorum"
 }.
 ```
@@ -1289,28 +1289,28 @@ Create test ARO files that exercise your system object:
 (* test-redis.aro - Integration tests for Redis plugin *)
 
 (Application-Start: Redis Tests) {
-    <Log> "Running Redis plugin tests..." to the <console>.
+    Log "Running Redis plugin tests..." to the <console>.
 
     (* Test 1: Write and read string *)
-    <Write> "test-value" to the <redis: "test:string">.
-    <Read> the <value> from the <redis: "test:string">.
-    <Compare> the <value> against "test-value".
-    <Log> "Test 1 passed: string read/write" to the <console>.
+    Write "test-value" to the <redis: "test:string">.
+    Read the <value> from the <redis: "test:string">.
+    Compare the <value> against "test-value".
+    Log "Test 1 passed: string read/write" to the <console>.
 
     (* Test 2: Write and read object *)
-    <Create> the <obj> with { name: "Alice", age: 30 }.
-    <Write> <obj> to the <redis: "test:object">.
-    <Read> the <retrieved> from the <redis: "test:object">.
-    <Extract> the <name> from the <retrieved: name>.
-    <Compare> the <name> against "Alice".
-    <Log> "Test 2 passed: object read/write" to the <console>.
+    Create the <obj> with { name: "Alice", age: 30 }.
+    Write <obj> to the <redis: "test:object">.
+    Read the <retrieved> from the <redis: "test:object">.
+    Extract the <name> from the <retrieved: name>.
+    Compare the <name> against "Alice".
+    Log "Test 2 passed: object read/write" to the <console>.
 
     (* Cleanup *)
-    <Write> null to the <redis: "test:string">.
-    <Write> null to the <redis: "test:object">.
+    Write null to the <redis: "test:string">.
+    Write null to the <redis: "test:object">.
 
-    <Log> "All Redis tests passed!" to the <console>.
-    <Return> an <OK: status> for the <tests>.
+    Log "All Redis tests passed!" to the <console>.
+    Return an <OK: status> for the <tests>.
 }
 ```
 

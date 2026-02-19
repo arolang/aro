@@ -55,13 +55,13 @@ ARO provides four built-in primitive types:
 
 ```aro
 (Primitives Demo: Type System) {
-    <Create> the <name> with "Alice".           // name: String
-    <Create> the <age> with 30.                  // age: Integer
-    <Create> the <price> with 19.99.             // price: Float
-    <Create> the <active> with true.             // active: Boolean
+    Create the <name> with "Alice".           // name: String
+    Create the <age> with 30.                  // age: Integer
+    Create the <price> with 19.99.             // price: Float
+    Create the <active> with true.             // active: Boolean
 
-    <Log> "Name and age created" to the <console>.
-    <Return> an <OK: status> for the <demo>.
+    Log "Name and age created" to the <console>.
+    Return an <OK: status> for the <demo>.
 }
 ```
 
@@ -80,11 +80,11 @@ ARO provides two generic collection types:
 
 ```aro
 (Collections Demo: Type System) {
-    <Create> the <numbers> with [1, 2, 3].                 // List<Integer>
-    <Create> the <names> with ["Alice", "Bob"].            // List<String>
-    <Create> the <config> with { port: 8080, host: "localhost" }.  // Map<String, Any>
+    Create the <numbers> with [1, 2, 3].                 // List<Integer>
+    Create the <names> with ["Alice", "Bob"].            // List<String>
+    Create the <config> with { port: 8080, host: "localhost" }.  // Map<String, Any>
 
-    <Return> an <OK: status> for the <collections>.
+    Return an <OK: status> for the <collections>.
 }
 ```
 
@@ -161,15 +161,15 @@ components:
 
 ```aro
 (Create User: User Management) {
-    <Extract> the <data> from the <request: body>.
+    Extract the <data> from the <request: body>.
 
     (* User type comes from openapi.yaml components/schemas/User *)
-    <Create> the <user: User> with <data>.
+    Create the <user: User> with <data>.
 
     (* Access fields defined in the schema *)
-    <Log> "Created user" to the <console>.
+    Log "Created user" to the <console>.
 
-    <Return> a <Created: status> with <user>.
+    Return a <Created: status> with <user>.
 }
 ```
 
@@ -220,21 +220,21 @@ paths:
 (* Feature sets named after operationIds *)
 
 (listUsers: User API) {
-    <Retrieve> the <users> from the <user-repository>.
-    <Return> an <OK: status> with <users>.
+    Retrieve the <users> from the <user-repository>.
+    Return an <OK: status> with <users>.
 }
 
 (createUser: User API) {
-    <Extract> the <data> from the <request: body>.
-    <Create> the <user> with <data>.
-    <Emit> a <UserCreated: event> with <user>.
-    <Return> a <Created: status> with <user>.
+    Extract the <data> from the <request: body>.
+    Create the <user> with <data>.
+    Emit a <UserCreated: event> with <user>.
+    Return a <Created: status> with <user>.
 }
 
 (getUser: User API) {
-    <Extract> the <id> from the <pathParameters: id>.
-    <Retrieve> the <user> from the <user-repository> where id = <id>.
-    <Return> an <OK: status> with <user>.
+    Extract the <id> from the <pathParameters: id>.
+    Retrieve the <user> from the <user-repository> where id = <id>.
+    Return an <OK: status> with <user>.
 }
 ```
 
@@ -255,7 +255,7 @@ paths:
 
 ```aro
 (getUser: User API) {
-    <Extract> the <user-id> from the <pathParameters: id>.
+    Extract the <user-id> from the <pathParameters: id>.
     (* user-id contains the path parameter value *)
 }
 ```
@@ -332,9 +332,9 @@ For clarity, especially when disambiguating from qualifier syntax, use `as`:
 
 ```aro
 (* Using 'as' for type annotations *)
-<Filter> the <active-users> as List<User> from the <users> where <active> is true.
-<Reduce> the <total> as Float from the <orders> with sum(<amount>).
-<Map> the <names> as List<String> from the <users: name>.
+Filter the <active-users> as List<User> from the <users> where <active> is true.
+Reduce the <total> as Float from the <orders> with sum(<amount>).
+Map the <names> as List<String> from the <users: name>.
 ```
 
 ### When to Use Type Annotations
@@ -343,10 +343,10 @@ Type annotations are **optional** because ARO infers types from context:
 
 ```aro
 (* Types are inferred - no annotation needed *)
-<Create> the <count> with 42.              // count: Integer
-<Create> the <name> with "John".           // name: String
-<Create> the <active> with true.           // active: Boolean
-<Create> the <items> with [1, 2, 3].       // items: List<Integer>
+Create the <count> with 42.              // count: Integer
+Create the <name> with "John".           // name: String
+Create the <active> with true.           // active: Boolean
+Create the <items> with [1, 2, 3].       // items: List<Integer>
 ```
 
 Use explicit annotations when:
@@ -397,13 +397,13 @@ In ARO, values either exist or the operation fails with a descriptive error:
 
 ```aro
 (Get User: API) {
-    <Extract> the <id> from the <pathParameters: id>.
-    <Retrieve> the <user> from the <user-repository> where id = <id>.
+    Extract the <id> from the <pathParameters: id>.
+    Retrieve the <user> from the <user-repository> where id = <id>.
 
     (* If user doesn't exist, runtime throws: *)
     (* "Cannot retrieve the user from the user-repository where id = 123" *)
 
-    <Return> an <OK: status> with <user>.
+    Return an <OK: status> with <user>.
 }
 ```
 
@@ -413,9 +413,9 @@ The runtime error message directly reflects the ARO statement:
 
 | ARO Statement | Error When Fails |
 |---------------|------------------|
-| `<Retrieve> the <user> from the <user-repository>...` | `Cannot retrieve the user from the user-repository where id = 123` |
-| `<Extract> the <email> from the <user>...` | `Cannot extract the email from the user` |
-| `<Compute> the <hash> from the <password>...` | `Cannot compute the hash from the password` |
+| `Retrieve the <user> from the <user-repository>...` | `Cannot retrieve the user from the user-repository where id = 123` |
+| `Extract the <email> from the <user>...` | `Cannot extract the email from the user` |
+| `Compute the <hash> from the <password>...` | `Cannot compute the hash from the password` |
 
 ### Benefits
 
@@ -554,26 +554,26 @@ components:
 (* Feature set named after operationId *)
 
 (createOrder: E-Commerce) {
-    <Extract> the <userId: String> from the <request: body>.
-    <Extract> the <items> as List<OrderItem> from the <request: body>.
+    Extract the <userId: String> from the <request: body>.
+    Extract the <items> as List<OrderItem> from the <request: body>.
 
     (* This throws if user doesn't exist - no null check needed *)
-    <Retrieve> the <user: User> from the <user-repository> where id = <userId>.
+    Retrieve the <user: User> from the <user-repository> where id = <userId>.
 
     (* Compute order total *)
-    <Reduce> the <total> as Float from the <items> with sum(<price>).
+    Reduce the <total> as Float from the <items> with sum(<price>).
 
     (* Create and store the order *)
-    <Create> the <order: Order> with {
+    Create the <order: Order> with {
         id: <generated-id>,
         userId: <userId>,
         items: <items>,
         total: <total>
     }.
-    <Store> the <order> into the <order-repository>.
+    Store the <order> into the <order-repository>.
 
-    <Log> "Order created successfully" to the <console>.
-    <Return> a <Created: status> with <order>.
+    Log "Order created successfully" to the <console>.
+    Return a <Created: status> with <order>.
 }
 ```
 

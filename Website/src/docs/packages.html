@@ -145,14 +145,14 @@ Installed Plugins (from Plugins/):
         <pre><code><span class="code-comment">(* main.aro - Using actions from csv-tools package *)</span>
 
 <span class="code-feature">(processReport: Report API)</span> {
-    <span class="code-keyword">&lt;Extract&gt;</span> the <span class="code-result">&lt;file&gt;</span> from the &lt;request: body&gt;.
+    <span class="code-keyword">Extract</span> the <span class="code-result">&lt;file&gt;</span> from the &lt;request: body&gt;.
 
     <span class="code-comment">(* Actions from the csv-tools package *)</span>
     <span class="code-keyword">&lt;ParseCSV&gt;</span> the <span class="code-result">&lt;data&gt;</span> from the &lt;file&gt;.
     <span class="code-keyword">&lt;ValidateCSV&gt;</span> the &lt;data&gt; against &lt;report-schema&gt;.
     <span class="code-keyword">&lt;FormatCSV&gt;</span> the <span class="code-result">&lt;output&gt;</span> from the &lt;data&gt; with { delimiter: <span class="code-string">";"</span> }.
 
-    <span class="code-keyword">&lt;Return&gt;</span> an <span class="code-result">&lt;OK: status&gt;</span> with &lt;output&gt;.
+    <span class="code-keyword">Return</span> an <span class="code-result">&lt;OK: status&gt;</span> with &lt;output&gt;.
 }</code></pre>
 
         <h2>Project Structure</h2>

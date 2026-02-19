@@ -25,7 +25,7 @@ ARO describes *what* should happen; actions define *how* it executes:
 ```
 +---------------------------------------------+
 |           ARO Statement                     |
-|  <Extract> the <user> from the <request>.   |
+|  Extract the <user> from the <request>.   |
 +----------------------+----------------------+
                        |
                        v
@@ -147,13 +147,13 @@ The Log action supports directing output to stdout (default) or stderr using qua
 
 ```aro
 (* Default: stdout *)
-<Log> "Application started" to the <console>.
+Log "Application started" to the <console>.
 
 (* Explicit stdout *)
-<Log> "Processing..." to the <console: output>.
+Log "Processing..." to the <console: output>.
 
 (* Error stream *)
-<Log> "Warning: configuration missing" to the <console: error>.
+Log "Warning: configuration missing" to the <console: error>.
 ```
 
 **Stream Selection:**
@@ -165,10 +165,10 @@ This enables proper separation of diagnostic/error messages from normal output i
 
 ```aro
 (* Data to stdout *)
-<Log> <json-record> to the <console>.
+Log <json-record> to the <console>.
 
 (* Progress to stderr *)
-<Log> "Processed 1000 records" to the <console: error>.
+Log "Processed 1000 records" to the <console: error>.
 ```
 
 #### 2.4 EXPORT Actions (Internal to Persistent)
@@ -267,7 +267,7 @@ public struct ResultDescriptor: Sendable {
 }
 ```
 
-Example: In `<Extract> the <user: identifier> from ...`, the ResultDescriptor has:
+Example: In `Extract the <user: identifier> from ...`, the ResultDescriptor has:
 - `base` = "user"
 - `specifiers` = ["identifier"]
 
@@ -300,7 +300,7 @@ public struct ObjectDescriptor: Sendable {
 }
 ```
 
-Example: In `<Extract> ... from the <request: parameters>`, the ObjectDescriptor has:
+Example: In `Extract ... from the <request: parameters>`, the ObjectDescriptor has:
 - `preposition` = .from
 - `base` = "request"
 - `specifiers` = ["parameters"]
@@ -417,10 +417,10 @@ Usage in ARO:
 
 ```aro
 (Send Alert: Notification Handler) {
-    <Create> the <message> with "Your order has shipped!".
-    <Extract> the <phone> from the <user: phoneNumber>.
-    <SMS> the <message> to the <phone>.
-    <Return> an <OK: status> for the <notification>.
+    Create the <message> with "Your order has shipped!".
+    Extract the <phone> from the <user: phoneNumber>.
+    SMS the <message> to the <phone>.
+    Return an <OK: status> for the <notification>.
 }
 ```
 
@@ -715,26 +715,26 @@ preposition = "from" | "for" | "into" | "to" | "via"
 
 ```aro
 (* REQUEST: Extract data from structures *)
-<Extract> the <user-id> from the <request: parameters>.
+Extract the <user-id> from the <request: parameters>.
 
 (* OWN: Compute derived values *)
-<Compute> the <hash: hash> from the <password>.
+Compute the <hash: hash> from the <password>.
 
 (* RESPONSE: Return results *)
-<Return> an <OK: status> with <user>.
+Return an <OK: status> with <user>.
 
 (* EXPORT: Store to repository *)
-<Store> the <user> into the <user-repository>.
+Store the <user> into the <user-repository>.
 ```
 
 ### Service Management
 
 ```aro
 (Application-Start: My Server) {
-    <Log> "Starting server..." to the <console>.
-    <Start> the <http-server> with <contract>.
-    <Keepalive> the <application> for the <events>.
-    <Return> an <OK: status> for the <startup>.
+    Log "Starting server..." to the <console>.
+    Start the <http-server> with <contract>.
+    Keepalive the <application> for the <events>.
+    Return an <OK: status> for the <startup>.
 }
 ```
 
@@ -742,10 +742,10 @@ preposition = "from" | "for" | "into" | "to" | "via"
 
 ```aro
 (Send Welcome: UserCreated Handler) {
-    <Extract> the <user> from the <event: user>.
-    <Extract> the <phone> from the <user: phoneNumber>.
-    <SMS> the <welcome-message> to the <phone>.
-    <Return> an <OK: status> for the <notification>.
+    Extract the <user> from the <event: user>.
+    Extract the <phone> from the <user: phoneNumber>.
+    SMS the <welcome-message> to the <phone>.
+    Return an <OK: status> for the <notification>.
 }
 ```
 

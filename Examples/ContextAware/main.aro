@@ -11,7 +11,7 @@
 
 (Application-Start: Context-Aware Demo) {
     (* Create sample user data *)
-    <Create> the <user> with {
+    Create the <user> with {
         id: 42,
         name: "Alice Smith",
         email: "alice@example.com",
@@ -21,7 +21,7 @@
     }.
 
     (* Create an order with nested data *)
-    <Create> the <order> with {
+    Create the <order> with {
         order-id: "ORD-2024-001",
         customer: "Alice Smith",
         items: 3,
@@ -30,14 +30,14 @@
     }.
 
     (* Create a list of tags *)
-    <Create> the <tags> with ["featured", "premium", "verified"].
+    Create the <tags> with ["featured", "premium", "verified"].
 
     (* Log information - format varies by context *)
-    <Log> "=== Context-Aware Response Demo ===" to the <console>.
-    <Log> "User data:" to the <console>.
-    <Log> <user> to the <console>.
-    <Log> "Order data:" to the <console>.
-    <Log> <order> to the <console>.
+    Log "=== Context-Aware Response Demo ===" to the <console>.
+    Log "User data:" to the <console>.
+    Log <user> to the <console>.
+    Log "Order data:" to the <console>.
+    Log <order> to the <console>.
 
     (* Return response with structured data *)
     (* Output format depends on execution context:
@@ -53,7 +53,7 @@
 
        - Developer (aro run --debug):
            ┌────────────────┬─────────────────────────────┐
-           │ Response<OK>                                   │
+           │ ResponseOK                                   │
            ├────────────────┬─────────────────────────────┤
            │ order.customer │ String("Alice Smith")       │
            │ order.items    │ Int(3)                      │
@@ -63,7 +63,7 @@
 
        - Machine (HTTP API): JSON response
     *)
-    <Return> an <OK: status> for the <context-demo> with {
+    Return an <OK: status> for the <context-demo> with {
         user: <user>,
         order: <order>,
         tags: <tags>,

@@ -10,10 +10,10 @@ ARO programs are made of feature sets—groups of statements that work together.
 
 ```aro
 (Calculate Area: Geometry) {
-    <Extract> the <width> from the <input: width>.
-    <Extract> the <height> from the <input: height>.
-    <Compute> the <area> from <width> * <height>.
-    <Return> an <OK: status> with { area: <area> }.
+    Extract the <width> from the <input: width>.
+    Extract the <height> from the <input: height>.
+    Compute the <area> from <width> * <height>.
+    Return an <OK: status> with { area: <area> }.
 }
 ```
 
@@ -31,13 +31,13 @@ aro> (Calculate Area: Geometry) {
 The prompt changes. You're now inside the feature set. Each statement you type becomes part of it:
 
 ```
-(Calculate Area)> <Extract> the <width> from the <input: width>.
+(Calculate Area)> Extract the <width> from the <input: width>.
   +
-(Calculate Area)> <Extract> the <height> from the <input: height>.
+(Calculate Area)> Extract the <height> from the <input: height>.
   +
-(Calculate Area)> <Compute> the <area> from <width> * <height>.
+(Calculate Area)> Compute the <area> from <width> * <height>.
   +
-(Calculate Area)> <Return> an <OK: status> with { area: <area> }.
+(Calculate Area)> Return an <OK: status> with { area: <area> }.
   +
 ```
 
@@ -88,7 +88,7 @@ aro> :invoke Calculate Area { width: 3, height: 4 }
 Feature sets aren't the only multi-line construct. Objects work too:
 
 ```
-aro> <Create> the <config> with {
+aro> Create the <config> with {
 ...>   host: "localhost",
 ...>   port: 8080,
 ...>   debug: true

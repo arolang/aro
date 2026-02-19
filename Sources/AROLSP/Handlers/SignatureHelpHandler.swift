@@ -15,7 +15,7 @@ public struct SignatureHelpHandler: Sendable {
     private static let actionSignatures: [String: ActionSignature] = [
         // REQUEST actions
         "Extract": ActionSignature(
-            label: "<Extract> the <result: qualifier> from the <source: qualifier>.",
+            label: "Extract the <result: qualifier> from the <source: qualifier>.",
             documentation: "Extracts or retrieves data from external sources into the local scope.",
             parameters: [
                 ParameterInfo(label: "result", documentation: "The variable to store the extracted data"),
@@ -23,7 +23,7 @@ public struct SignatureHelpHandler: Sendable {
             ]
         ),
         "Parse": ActionSignature(
-            label: "<Parse> the <result: qualifier> from the <source: qualifier>.",
+            label: "Parse the <result: qualifier> from the <source: qualifier>.",
             documentation: "Parses structured data from a string or raw format.",
             parameters: [
                 ParameterInfo(label: "result", documentation: "The parsed data structure"),
@@ -31,7 +31,7 @@ public struct SignatureHelpHandler: Sendable {
             ]
         ),
         "Retrieve": ActionSignature(
-            label: "<Retrieve> the <result> from the <repository> where <field> = <value>.",
+            label: "Retrieve the <result> from the <repository> where <field> = <value>.",
             documentation: "Retrieves data from a repository or data store.",
             parameters: [
                 ParameterInfo(label: "result", documentation: "The retrieved record(s)"),
@@ -40,7 +40,7 @@ public struct SignatureHelpHandler: Sendable {
             ]
         ),
         "Fetch": ActionSignature(
-            label: "<Fetch> the <result> from the <url>.",
+            label: "Fetch the <result> from the <url>.",
             documentation: "Fetches data from a remote URL or API endpoint.",
             parameters: [
                 ParameterInfo(label: "result", documentation: "The fetched data"),
@@ -50,7 +50,7 @@ public struct SignatureHelpHandler: Sendable {
 
         // OWN actions
         "Create": ActionSignature(
-            label: "<Create> the <result> with <data>.",
+            label: "Create the <result> with <data>.",
             documentation: "Creates a new data structure or entity.",
             parameters: [
                 ParameterInfo(label: "result", documentation: "The newly created entity"),
@@ -58,7 +58,7 @@ public struct SignatureHelpHandler: Sendable {
             ]
         ),
         "Compute": ActionSignature(
-            label: "<Compute> the <result: operation> from <input>.",
+            label: "Compute the <result: operation> from <input>.",
             documentation: "Computes or transforms data. Operations: length, uppercase, lowercase, hash, arithmetic (+, -, *, /, %).",
             parameters: [
                 ParameterInfo(label: "result", documentation: "The computed value"),
@@ -67,7 +67,7 @@ public struct SignatureHelpHandler: Sendable {
             ]
         ),
         "Validate": ActionSignature(
-            label: "<Validate> the <result> for the <input>.",
+            label: "Validate the <result> for the <input>.",
             documentation: "Validates input data against rules or schemas.",
             parameters: [
                 ParameterInfo(label: "result", documentation: "The validation result"),
@@ -75,7 +75,7 @@ public struct SignatureHelpHandler: Sendable {
             ]
         ),
         "Compare": ActionSignature(
-            label: "<Compare> the <result> against the <other>.",
+            label: "Compare the <result> against the <other>.",
             documentation: "Compares two values and stores the comparison result.",
             parameters: [
                 ParameterInfo(label: "result", documentation: "The comparison result"),
@@ -83,7 +83,7 @@ public struct SignatureHelpHandler: Sendable {
             ]
         ),
         "Transform": ActionSignature(
-            label: "<Transform> the <result> from the <input>.",
+            label: "Transform the <result> from the <input>.",
             documentation: "Transforms data from one format to another.",
             parameters: [
                 ParameterInfo(label: "result", documentation: "The transformed data"),
@@ -93,7 +93,7 @@ public struct SignatureHelpHandler: Sendable {
 
         // RESPONSE actions
         "Return": ActionSignature(
-            label: "<Return> an <status: code> for the <result>.",
+            label: "Return an <status: code> for the <result>.",
             documentation: "Returns a result with a status code. Used to end feature set execution.",
             parameters: [
                 ParameterInfo(label: "status", documentation: "The status code (OK, Created, Error, etc.)"),
@@ -101,7 +101,7 @@ public struct SignatureHelpHandler: Sendable {
             ]
         ),
         "Throw": ActionSignature(
-            label: "<Throw> an <error: type> for the <reason>.",
+            label: "Throw an <error: type> for the <reason>.",
             documentation: "Throws an error and terminates execution.",
             parameters: [
                 ParameterInfo(label: "error", documentation: "The error type"),
@@ -111,7 +111,7 @@ public struct SignatureHelpHandler: Sendable {
 
         // EXPORT actions
         "Log": ActionSignature(
-            label: "<Log> <message> to the <destination>.",
+            label: "Log <message> to the <destination>.",
             documentation: "Logs a message to a destination (console, file, etc.).",
             parameters: [
                 ParameterInfo(label: "message", documentation: "The message to log"),
@@ -119,7 +119,7 @@ public struct SignatureHelpHandler: Sendable {
             ]
         ),
         "Send": ActionSignature(
-            label: "<Send> the <data> to the <destination>.",
+            label: "Send the <data> to the <destination>.",
             documentation: "Sends data to an external destination.",
             parameters: [
                 ParameterInfo(label: "data", documentation: "The data to send"),
@@ -127,7 +127,7 @@ public struct SignatureHelpHandler: Sendable {
             ]
         ),
         "Store": ActionSignature(
-            label: "<Store> the <data> into the <repository>.",
+            label: "Store the <data> into the <repository>.",
             documentation: "Stores data into a repository.",
             parameters: [
                 ParameterInfo(label: "data", documentation: "The data to store"),
@@ -135,7 +135,7 @@ public struct SignatureHelpHandler: Sendable {
             ]
         ),
         "Emit": ActionSignature(
-            label: "<Emit> a <event: type> with <data>.",
+            label: "Emit a <event: type> with <data>.",
             documentation: "Emits an event that can be handled by event handlers.",
             parameters: [
                 ParameterInfo(label: "event", documentation: "The event name/type"),
@@ -153,7 +153,7 @@ public struct SignatureHelpHandler: Sendable {
 
         // LIFECYCLE actions
         "Start": ActionSignature(
-            label: "<Start> the <service> with <config>.",
+            label: "Start the <service> with <config>.",
             documentation: "Starts a service (HTTP server, file watcher, etc.).",
             parameters: [
                 ParameterInfo(label: "service", documentation: "The service to start"),
@@ -161,7 +161,7 @@ public struct SignatureHelpHandler: Sendable {
             ]
         ),
         "Stop": ActionSignature(
-            label: "<Stop> the <service> with <context>.",
+            label: "Stop the <service> with <context>.",
             documentation: "Stops a running service.",
             parameters: [
                 ParameterInfo(label: "service", documentation: "The service to stop"),
@@ -169,7 +169,7 @@ public struct SignatureHelpHandler: Sendable {
             ]
         ),
         "Keepalive": ActionSignature(
-            label: "<Keepalive> the <application> for the <events>.",
+            label: "Keepalive the <application> for the <events>.",
             documentation: "Keeps the application running to process events.",
             parameters: [
                 ParameterInfo(label: "application", documentation: "The application context"),
@@ -192,7 +192,7 @@ public struct SignatureHelpHandler: Sendable {
 
         let currentLine = String(lines[position.line])
 
-        // Look for an action in angle brackets
+        // Look for an action verb at the start of a statement
         if let actionMatch = findActionInLine(currentLine) {
             if let signature = Self.actionSignatures[actionMatch] {
                 return formatSignatureHelp(signature)
@@ -205,8 +205,8 @@ public struct SignatureHelpHandler: Sendable {
     // MARK: - Helpers
 
     private func findActionInLine(_ line: String) -> String? {
-        // Look for <ActionVerb> pattern
-        let pattern = "<([A-Z][a-z]+)>"
+        // Look for ActionVerb at start of statement (after whitespace)
+        let pattern = "^\\s*([A-Z][a-z]+)\\s+(?:the|an|a|<)"
         guard let regex = try? NSRegularExpression(pattern: pattern) else { return nil }
 
         let range = NSRange(line.startIndex..., in: line)

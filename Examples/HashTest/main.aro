@@ -2,22 +2,22 @@
 
 (Application-Start: Hash Test) {
     (* Test basic string hashing *)
-    <Compute> the <hash1: hash> from "hello".
-    <Create> the <msg1> with "SHA256 of 'hello': ".
-    <Log> <msg1> to the <console>.
-    <Log> <hash1> to the <console>.
+    Compute the <hash1: hash> from "hello".
+    Create the <msg1> with "SHA256 of 'hello': ".
+    Log <msg1> to the <console>.
+    Log <hash1> to the <console>.
 
     (* Test password hashing *)
-    <Compute> the <password-hash: hash> from "mySecretPassword123".
-    <Create> the <msg2> with "SHA256 of 'mySecretPassword123': ".
-    <Log> <msg2> to the <console>.
-    <Log> <password-hash> to the <console>.
+    Compute the <password-hash: hash> from "mySecretPassword123".
+    Create the <msg2> with "SHA256 of 'mySecretPassword123': ".
+    Log <msg2> to the <console>.
+    Log <password-hash> to the <console>.
 
     (* Test that same input produces same hash *)
-    <Compute> the <hash2: hash> from "hello".
-    <Create> the <msg3> with "Second hash of 'hello' (should match): ".
-    <Log> <msg3> to the <console>.
-    <Log> <hash2> to the <console>.
+    Compute the <hash2: hash> from "hello".
+    Create the <msg3> with "Second hash of 'hello' (should match): ".
+    Log <msg3> to the <console>.
+    Log <hash2> to the <console>.
 
-    <Return> an <OK: status> for the <test>.
+    Return an <OK: status> for the <test>.
 }

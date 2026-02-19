@@ -3,30 +3,30 @@
 (* Main observer: Creates each directory when stored *)
 (Process Directory Entry: directory-repository Observer) {
     (* Extract the directory entry from the event *)
-    <Extract> the <entry> from the <event: newValue>.
-    <Extract> the <fullpath> from the <entry: path>.
+    Extract the <entry> from the <event: newValue>.
+    Extract the <fullpath> from the <entry: path>.
 
     (* Split to remove template/ prefix from absolute path *)
-    <Split> the <pathparts> from the <fullpath> by /template\//.
+    Split the <pathparts> from the <fullpath> by /template\//.
 
     (* Get the last element (relative path) *)
-    <Extract> the <relpath: last> from the <pathparts>.
+    Extract the <relpath: last> from the <pathparts>.
 
     (* Create the directory in current location *)
-    <Make> the <dir> to the <path: relpath>.
+    Make the <dir> to the <path: relpath>.
 
     (* Log the created directory *)
-    <Log> "Created: ${relpath}" to the <console>.
+    Log "Created: ${relpath}" to the <console>.
 
-    <Return> an <OK: status> for the <processing>.
+    Return an <OK: status> for the <processing>.
 }
 
 (* Audit observer: Tracks all repository changes *)
 (Audit Directory Changes: directory-repository Observer) {
-    <Extract> the <changeType> from the <event: changeType>.
-    <Extract> the <repositoryName> from the <event: repositoryName>.
+    Extract the <changeType> from the <event: changeType>.
+    Extract the <repositoryName> from the <event: repositoryName>.
 
-    <Log> "[AUDIT] ${repositoryName}: ${changeType}" to the <console>.
+    Log "[AUDIT] ${repositoryName}: ${changeType}" to the <console>.
 
-    <Return> an <OK: status> for the <audit>.
+    Return an <OK: status> for the <audit>.
 }

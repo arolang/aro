@@ -2,36 +2,36 @@
 
 (Application-Start: Data Pipeline Demo) {
     (* Test 1: Simple array with Reduce operations *)
-    <Log> "=== Test 1: Simple Array Reduce ===" to the <console>.
+    Log "=== Test 1: Simple Array Reduce ===" to the <console>.
 
-    <Create> the <numbers> with [1, 2, 3, 4, 5].
-    <Log> "Numbers:" to the <console>.
-    <Log> <numbers> to the <console>.
+    Create the <numbers> with [1, 2, 3, 4, 5].
+    Log "Numbers:" to the <console>.
+    Log <numbers> to the <console>.
 
-    <Reduce> the <count: Integer> from the <numbers> with count().
-    <Log> "Count:" to the <console>.
-    <Log> <count> to the <console>.
+    Reduce the <count: Integer> from the <numbers> with count().
+    Log "Count:" to the <console>.
+    Log <count> to the <console>.
 
-    <Reduce> the <sum: Integer> from the <numbers> with sum().
-    <Log> "Sum:" to the <console>.
-    <Log> <sum> to the <console>.
+    Reduce the <sum: Integer> from the <numbers> with sum().
+    Log "Sum:" to the <console>.
+    Log <sum> to the <console>.
 
-    <Reduce> the <avg: Float> from the <numbers> with avg().
-    <Log> "Average:" to the <console>.
-    <Log> <avg> to the <console>.
+    Reduce the <avg: Float> from the <numbers> with avg().
+    Log "Average:" to the <console>.
+    Log <avg> to the <console>.
 
-    <Reduce> the <minVal: Integer> from the <numbers> with min().
-    <Log> "Min:" to the <console>.
-    <Log> <minVal> to the <console>.
+    Reduce the <minVal: Integer> from the <numbers> with min().
+    Log "Min:" to the <console>.
+    Log <minVal> to the <console>.
 
-    <Reduce> the <maxVal: Integer> from the <numbers> with max().
-    <Log> "Max:" to the <console>.
-    <Log> <maxVal> to the <console>.
+    Reduce the <maxVal: Integer> from the <numbers> with max().
+    Log "Max:" to the <console>.
+    Log <maxVal> to the <console>.
 
     (* Test 2: Object array with Filter and field aggregations *)
-    <Log> "=== Test 2: Object Array with Filter ===" to the <console>.
+    Log "=== Test 2: Object Array with Filter ===" to the <console>.
 
-    <Create> the <orders> with [
+    Create the <orders> with [
         {id: 1, amount: 100, status: "active"},
         {id: 2, amount: 250, status: "pending"},
         {id: 3, amount: 500, status: "active"},
@@ -39,58 +39,58 @@
         {id: 5, amount: 300, status: "active"}
     ].
 
-    <Log> "All Orders:" to the <console>.
-    <Log> <orders> to the <console>.
+    Log "All Orders:" to the <console>.
+    Log <orders> to the <console>.
 
     (* Filter active orders *)
-    <Filter> the <active-orders: List> from the <orders>
+    Filter the <active-orders: List> from the <orders>
         where <status> is "active".
 
-    <Log> "Active Orders:" to the <console>.
-    <Log> <active-orders> to the <console>.
+    Log "Active Orders:" to the <console>.
+    Log <active-orders> to the <console>.
 
     (* Sum amounts from active orders *)
-    <Reduce> the <active-total: Float> from the <active-orders>
+    Reduce the <active-total: Float> from the <active-orders>
         with sum(<amount>).
 
-    <Log> "Active Orders Total:" to the <console>.
-    <Log> <active-total> to the <console>.
+    Log "Active Orders Total:" to the <console>.
+    Log <active-total> to the <console>.
 
     (* Count active orders *)
-    <Reduce> the <active-count: Integer> from the <active-orders>
+    Reduce the <active-count: Integer> from the <active-orders>
         with count().
 
-    <Log> "Active Orders Count:" to the <console>.
-    <Log> <active-count> to the <console>.
+    Log "Active Orders Count:" to the <console>.
+    Log <active-count> to the <console>.
 
     (* Average amount of active orders *)
-    <Reduce> the <active-avg: Float> from the <active-orders>
+    Reduce the <active-avg: Float> from the <active-orders>
         with avg(<amount>).
 
-    <Log> "Active Orders Average:" to the <console>.
-    <Log> <active-avg> to the <console>.
+    Log "Active Orders Average:" to the <console>.
+    Log <active-avg> to the <console>.
 
     (* Test 3: Map operation - pass through *)
-    <Log> "=== Test 3: Map Operation ===" to the <console>.
+    Log "=== Test 3: Map Operation ===" to the <console>.
 
-    <Map> the <mapped-orders: List> from the <active-orders>.
-    <Log> "Mapped Active Orders (pass-through):" to the <console>.
-    <Log> <mapped-orders> to the <console>.
+    Map the <mapped-orders: List> from the <active-orders>.
+    Log "Mapped Active Orders (pass-through):" to the <console>.
+    Log <mapped-orders> to the <console>.
 
     (* Test 4: Filter with numeric comparison *)
-    <Log> "=== Test 4: Numeric Filter ===" to the <console>.
+    Log "=== Test 4: Numeric Filter ===" to the <console>.
 
-    <Filter> the <high-value: List> from the <orders>
+    Filter the <high-value: List> from the <orders>
         where <amount> > 200.
 
-    <Log> "High Value Orders (amount > 200):" to the <console>.
-    <Log> <high-value> to the <console>.
+    Log "High Value Orders (amount > 200):" to the <console>.
+    Log <high-value> to the <console>.
 
-    <Reduce> the <high-value-total: Float> from the <high-value>
+    Reduce the <high-value-total: Float> from the <high-value>
         with sum(<amount>).
 
-    <Log> "High Value Total:" to the <console>.
-    <Log> <high-value-total> to the <console>.
+    Log "High Value Total:" to the <console>.
+    Log <high-value-total> to the <console>.
 
-    <Return> an <OK: status> for the <pipeline-test>.
+    Return an <OK: status> for the <pipeline-test>.
 }

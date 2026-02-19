@@ -9,9 +9,9 @@ In ARO, each HTTP request creates a fresh execution context. Variables defined i
 ```aro
 (* This won't work - count resets on each request *)
 (GET /count: Counter API) {
-    <Create> the <count> with 0.
-    <Compute> the <new-count> from <count> + 1.
-    <Return> an <OK: status> with <new-count>.
+    Create the <count> with 0.
+    Compute the <new-count> from <count> + 1.
+    Return an <OK: status> with <new-count>.
 }
 ```
 
@@ -19,16 +19,16 @@ Repositories solve this by providing shared storage:
 
 ```aro
 (POST /increment: Counter API) {
-    <Retrieve> the <counts> from the <counter-repository>.
-    <Compute> the <current> from <counts: length>.
-    <Store> the <current> into the <counter-repository>.
-    <Return> an <OK: status> with <current>.
+    Retrieve the <counts> from the <counter-repository>.
+    Compute the <current> from <counts: length>.
+    Store the <current> into the <counter-repository>.
+    Return an <OK: status> with <current>.
 }
 
 (GET /count: Counter API) {
-    <Retrieve> the <counts> from the <counter-repository>.
-    <Compute> the <total> from <counts: length>.
-    <Return> an <OK: status> with { count: <total> }.
+    Retrieve the <counts> from the <counter-repository>.
+    Compute the <total> from <counts: length>.
+    Return an <OK: status> with { count: <total> }.
 }
 ```
 
@@ -59,7 +59,7 @@ The naming convention:
 Use the `<Store>` action to save data to a repository:
 
 ```aro
-<Store> the <data> into the <name-repository>.
+Store the <data> into the <name-repository>.
 ```
 
 ### Preposition Variants
@@ -67,9 +67,9 @@ Use the `<Store>` action to save data to a repository:
 All of these are equivalent:
 
 ```aro
-<Store> the <user> into the <user-repository>.
-<Store> the <user> in the <user-repository>.
-<Store> the <user> to the <user-repository>.
+Store the <user> into the <user-repository>.
+Store the <user> in the <user-repository>.
+Store the <user> to the <user-repository>.
 ```
 
 ### Storage Semantics
@@ -78,15 +78,15 @@ Repositories use **list-based storage**. Each store operation appends to the lis
 
 ```aro
 (* First request *)
-<Store> the <user1> into the <user-repository>.
+Store the <user1> into the <user-repository>.
 (* Repository: [user1] *)
 
 (* Second request *)
-<Store> the <user2> into the <user-repository>.
+Store the <user2> into the <user-repository>.
 (* Repository: [user1, user2] *)
 
 (* Third request *)
-<Store> the <user3> into the <user-repository>.
+Store the <user3> into the <user-repository>.
 (* Repository: [user1, user2, user3] *)
 ```
 
@@ -99,16 +99,16 @@ When `<Store>` is called, the runtime automatically deduplicates plain values (s
 ```aro
 (Queue URL: QueueUrl Handler) {
     (* Just store — observer handles the rest *)
-    <Store> the <url> into the <crawled-repository>.
-    <Return> an <OK: status>.
+    Store the <url> into the <crawled-repository>.
+    Return an <OK: status>.
 }
 
 (Process New URLs: crawled-repository Observer) {
     (* Only fires for new entries, not duplicates *)
-    <Extract> the <url> from the <event: newValue>.
-    <Log> "Processing: ${<url>}" to the <console>.
-    <Emit> a <ProcessUrl: event> with { url: <url> }.
-    <Return> an <OK: status>.
+    Extract the <url> from the <event: newValue>.
+    Log "Processing: ${<url>}" to the <console>.
+    Emit a <ProcessUrl: event> with { url: <url> }.
+    Return an <OK: status>.
 }
 ```
 
@@ -125,8 +125,8 @@ This can be used with `when` guards, but **observers are preferred**:
 
 ```aro
 (* Works, but consider using an observer instead *)
-<Store> the <url> into the <crawled-repository>.
-<Log> "New: ${<url>}" to the <console> when <new-entry> > 0.
+Store the <url> into the <crawled-repository>.
+Log "New: ${<url>}" to the <console> when <new-entry> > 0.
 ```
 
 Because repository operations are serialized by the runtime's Actor model, both patterns are **race-condition-free** even under `parallel for each`.
@@ -135,19 +135,19 @@ Because repository operations are serialized by the runtime's Actor model, both 
 
 ```aro
 (postMessage: Chat API) {
-    <Extract> the <data> from the <request: body>.
-    <Extract> the <text> from the <data: message>.
-    <Extract> the <author> from the <data: author>.
+    Extract the <data> from the <request: body>.
+    Extract the <text> from the <data: message>.
+    Extract the <author> from the <data: author>.
 
-    <Create> the <message> with {
+    Create the <message> with {
         text: <text>,
         author: <author>,
         timestamp: now
     }.
 
-    <Store> the <message> into the <message-repository>.
+    Store the <message> into the <message-repository>.
 
-    <Return> a <Created: status> with <message>.
+    Return a <Created: status> with <message>.
 }
 ```
 
@@ -156,7 +156,7 @@ Because repository operations are serialized by the runtime's Actor model, both 
 Use the `<Retrieve>` action to fetch data from a repository:
 
 ```aro
-<Retrieve> the <items> from the <name-repository>.
+Retrieve the <items> from the <name-repository>.
 ```
 
 ### Return Value
@@ -169,8 +169,8 @@ Use the `<Retrieve>` action to fetch data from a repository:
 
 ```aro
 (getMessages: Chat API) {
-    <Retrieve> the <messages> from the <message-repository>.
-    <Return> an <OK: status> with { messages: <messages> }.
+    Retrieve the <messages> from the <message-repository>.
+    Return an <OK: status> with { messages: <messages> }.
 }
 ```
 
@@ -180,9 +180,9 @@ Use `where` to filter results:
 
 ```aro
 (getUserById: User API) {
-    <Extract> the <id> from the <pathParameters: id>.
-    <Retrieve> the <user> from the <user-repository> where id = <id>.
-    <Return> an <OK: status> with <user>.
+    Extract the <id> from the <pathParameters: id>.
+    Retrieve the <user> from the <user-repository> where id = <id>.
+    Return an <OK: status> with <user>.
 }
 ```
 
@@ -192,14 +192,14 @@ Use specifiers to retrieve a single item from a repository:
 
 ```aro
 (* Get the most recently stored item *)
-<Retrieve> the <message> from the <message-repository: last>.
+Retrieve the <message> from the <message-repository: last>.
 
 (* Get the first stored item *)
-<Retrieve> the <message> from the <message-repository: first>.
+Retrieve the <message> from the <message-repository: first>.
 
 (* Get by numeric index - 0 = most recent *)
-<Retrieve> the <latest> from the <message-repository: 0>.
-<Retrieve> the <second-latest> from the <message-repository: 1>.
+Retrieve the <latest> from the <message-repository: 0>.
+Retrieve the <second-latest> from the <message-repository: 1>.
 ```
 
 Numeric indices count from most recently added (0 = newest, 1 = second newest, etc.).
@@ -208,8 +208,8 @@ This is useful when you only need one item, like the latest message in a chat:
 
 ```aro
 (getLatestMessage: Chat API) {
-    <Retrieve> the <message> from the <message-repository: last>.
-    <Return> an <OK: status> with { message: <message> }.
+    Retrieve the <message> from the <message-repository: last>.
+    Return an <OK: status> with { message: <message> }.
 }
 ```
 
@@ -224,18 +224,18 @@ Repositories are scoped to their **business activity**. Feature sets with the sa
 (* These share the same <message-repository> *)
 
 (postMessage: Chat API) {
-    <Store> the <message> into the <message-repository>.
-    <Return> a <Created: status>.
+    Store the <message> into the <message-repository>.
+    Return a <Created: status>.
 }
 
 (getMessages: Chat API) {
-    <Retrieve> the <messages> from the <message-repository>.
-    <Return> an <OK: status> with <messages>.
+    Retrieve the <messages> from the <message-repository>.
+    Return an <OK: status> with <messages>.
 }
 
 (deleteMessage: Chat API) {
     (* Same repository as above *)
-    <Retrieve> the <messages> from the <message-repository>.
+    Retrieve the <messages> from the <message-repository>.
     (* ... *)
 }
 ```
@@ -245,13 +245,13 @@ Repositories are scoped to their **business activity**. Feature sets with the sa
 ```aro
 (* Business activity: "Chat API" *)
 (postMessage: Chat API) {
-    <Store> the <msg> into the <message-repository>.
+    Store the <msg> into the <message-repository>.
 }
 
 (* Business activity: "Admin API" - DIFFERENT repository! *)
 (postAuditLog: Admin API) {
     (* This <message-repository> is separate from Chat API's *)
-    <Store> the <log> into the <message-repository>.
+    Store the <log> into the <message-repository>.
 }
 ```
 
@@ -266,10 +266,10 @@ This scoping:
 
 ```aro
 (Application-Start: Simple Chat) {
-    <Log> "Starting Simple Chat..." to the <console>.
-    <Start> the <http-server> for the <contract>.
-    <Keepalive> the <application> for the <events>.
-    <Return> an <OK: status> for the <startup>.
+    Log "Starting Simple Chat..." to the <console>.
+    Start the <http-server> for the <contract>.
+    Keepalive the <application> for the <events>.
+    Return an <OK: status> for the <startup>.
 }
 ```
 
@@ -278,17 +278,17 @@ This scoping:
 ```aro
 (* GET /status - Return the last message *)
 (getStatus: Simple Chat API) {
-    <Retrieve> the <message> from the <message-repository: last>.
-    <Return> an <OK: status> with { message: <message> }.
+    Retrieve the <message> from the <message-repository: last>.
+    Return an <OK: status> with { message: <message> }.
 }
 
 (* POST /status - Store a new message *)
 (postStatus: Simple Chat API) {
-    <Extract> the <message> from the <body: message>.
+    Extract the <message> from the <body: message>.
 
-    <Store> the <message> into the <message-repository>.
+    Store the <message> into the <message-repository>.
 
-    <Return> a <Created: status> with { message: <message> }.
+    Return a <Created: status> with { message: <message> }.
 }
 ```
 
@@ -317,16 +317,16 @@ curl http://localhost:8080/status
 Use the `<Delete>` action with a `where` clause to remove items from a repository:
 
 ```aro
-<Delete> the <user> from the <user-repository> where id = <userId>.
+Delete the <user> from the <user-repository> where id = <userId>.
 ```
 
 ### Example: Deleting a User
 
 ```aro
 (deleteUser: User API) {
-    <Extract> the <userId> from the <pathParameters: id>.
-    <Delete> the <user> from the <user-repository> where id = <userId>.
-    <Return> an <OK: status> with { deleted: <userId> }.
+    Extract the <userId> from the <pathParameters: id>.
+    Delete the <user> from the <user-repository> where id = <userId>.
+    Return an <OK: status> with { deleted: <userId> }.
 }
 ```
 
@@ -342,12 +342,12 @@ Create an observer by naming your feature set's business activity as `{repositor
 
 ```aro
 (Audit Changes: user-repository Observer) {
-    <Extract> the <changeType> from the <event: changeType>.
-    <Extract> the <newValue> from the <event: newValue>.
-    <Extract> the <oldValue> from the <event: oldValue>.
+    Extract the <changeType> from the <event: changeType>.
+    Extract the <newValue> from the <event: newValue>.
+    Extract the <oldValue> from the <event: oldValue>.
 
-    <Log> <changeType> to the <console>.
-    <Return> an <OK: status> for the <audit>.
+    Log <changeType> to the <console>.
+    Return an <OK: status> for the <audit>.
 }
 ```
 
@@ -376,18 +376,18 @@ Observers are triggered for three types of changes:
 
 ```aro
 (Track User Changes: user-repository Observer) {
-    <Extract> the <changeType> from the <event: changeType>.
-    <Extract> the <entityId> from the <event: entityId>.
+    Extract the <changeType> from the <event: changeType>.
+    Extract the <entityId> from the <event: entityId>.
 
-    <Compare> the <changeType> equals "updated".
+    Compare the <changeType> equals "updated".
 
-    <Extract> the <oldName> from the <event: oldValue: name>.
-    <Extract> the <newName> from the <event: newValue: name>.
+    Extract the <oldName> from the <event: oldValue: name>.
+    Extract the <newName> from the <event: newValue: name>.
 
-    <Compute> the <message> from "User " + <entityId> + " renamed from " + <oldName> + " to " + <newName>.
-    <Log> <message> to the <console>.
+    Compute the <message> from "User " + <entityId> + " renamed from " + <oldName> + " to " + <newName>.
+    Log <message> to the <console>.
 
-    <Return> an <OK: status> for the <tracking>.
+    Return an <OK: status> for the <tracking>.
 }
 ```
 
@@ -398,17 +398,17 @@ You can have multiple observers for the same repository:
 ```aro
 (* Audit logging observer *)
 (Log All Changes: user-repository Observer) {
-    <Extract> the <changeType> from the <event: changeType>.
-    <Log> <changeType> to the <console>.
-    <Return> an <OK: status>.
+    Extract the <changeType> from the <event: changeType>.
+    Log <changeType> to the <console>.
+    Return an <OK: status>.
 }
 
 (* Email notification observer *)
 (Notify Admin: user-repository Observer) {
-    <Extract> the <changeType> from the <event: changeType>.
-    <Compare> the <changeType> equals "deleted".
-    <Send> the <notification> to the <admin-email>.
-    <Return> an <OK: status>.
+    Extract the <changeType> from the <event: changeType>.
+    Compare the <changeType> equals "deleted".
+    Send the <notification> to the <admin-email>.
+    Return an <OK: status>.
 }
 ```
 
@@ -419,12 +419,12 @@ Add a `when` clause to trigger observers only when a condition is met. This is u
 ```aro
 (* Only triggers when message count exceeds 100 *)
 (Cleanup Messages: message-repository Observer) when <message-repository: count> > 100 {
-    <Retrieve> the <all-messages> from the <message-repository>.
-    <Extract> the <keep-messages: 0-49> from the <all-messages>.
-    <Clear> the <all> from the <message-repository>.
-    <Store> the <keep-messages> into the <message-repository>.
-    <Log> "Cleaned up messages, kept last 50" to the <console>.
-    <Return> an <OK: status> for the <cleanup>.
+    Retrieve the <all-messages> from the <message-repository>.
+    Extract the <keep-messages: 0-49> from the <all-messages>.
+    Clear the <all> from the <message-repository>.
+    Store the <keep-messages> into the <message-repository>.
+    Log "Cleaned up messages, kept last 50" to the <console>.
+    Return an <OK: status> for the <cleanup>.
 }
 ```
 
@@ -435,9 +435,9 @@ The `when` guard is evaluated before the observer executes. If the condition is 
 ```aro
 (* Trigger alert when queue grows too large *)
 (Queue Alert: task-repository Observer) when <task-repository: count> > 1000 {
-    <Log> "Warning: Task queue exceeds 1000 items" to the <console>.
-    <Emit> a <QueueOverflow: event>.
-    <Return> an <OK: status>.
+    Log "Warning: Task queue exceeds 1000 items" to the <console>.
+    Emit a <QueueOverflow: event>.
+    Return an <OK: status>.
 }
 ```
 
@@ -451,35 +451,35 @@ The straightforward implementation uses sequential processing:
 
 ```aro
 (Application-Start: Directory Replicator) {
-    <Create> the <template-path> with "../template".
-    <Log> "Scanning template directory..." to the <console>.
+    Create the <template-path> with "../template".
+    Log "Scanning template directory..." to the <console>.
 
-    <List> the <all-entries: recursively> from the <directory: template-path>.
-    <Filter> the <directories: List> from the <all-entries> where <isDirectory> is true.
+    List the <all-entries: recursively> from the <directory: template-path>.
+    Filter the <directories: List> from the <all-entries> where <isDirectory> is true.
 
-    <Compute> the <count: length> from the <directories>.
-    <Log> "Found ${count} directories" to the <console>.
+    Compute the <count: length> from the <directories>.
+    Log "Found ${count} directories" to the <console>.
 
-    <Log> "Creating directory structure..." to the <console>.
+    Log "Creating directory structure..." to the <console>.
 
     (* Process each directory sequentially *)
-    <Create> the <index> with 0.
+    Create the <index> with 0.
     (For Each: <entry> in <directories>) {
-        <Extract> the <fullpath> from the <entry: path>.
+        Extract the <fullpath> from the <entry: path>.
 
         (* Remove template/ prefix *)
-        <Split> the <pathparts> from the <fullpath> by /template\//.
-        <Extract> the <relpath: last> from the <pathparts>.
+        Split the <pathparts> from the <fullpath> by /template\//.
+        Extract the <relpath: last> from the <pathparts>.
 
         (* Create the directory *)
-        <Make> the <dir> to the <path: relpath>.
-        <Log> "Created: ${relpath}" to the <console>.
+        Make the <dir> to the <path: relpath>.
+        Log "Created: ${relpath}" to the <console>.
 
-        <Compute> the <index> from <index> + 1.
+        Compute the <index> from <index> + 1.
     }
 
-    <Log> "Replication complete!" to the <console>.
-    <Return> an <OK: status> for the <replication>.
+    Log "Replication complete!" to the <console>.
+    Return an <OK: status> for the <replication>.
 }
 ```
 
@@ -505,21 +505,21 @@ The reactive implementation uses repository observers:
 **main.aro**:
 ```aro
 (Application-Start: Directory Replicator Events) {
-    <Create> the <template-path> with "../template".
-    <Log> "Scanning template directory..." to the <console>.
+    Create the <template-path> with "../template".
+    Log "Scanning template directory..." to the <console>.
 
-    <List> the <all-entries: recursively> from the <directory: template-path>.
-    <Filter> the <directories: List> from the <all-entries> where <isDirectory> is true.
+    List the <all-entries: recursively> from the <directory: template-path>.
+    Filter the <directories: List> from the <all-entries> where <isDirectory> is true.
 
-    <Compute> the <count: length> from the <directories>.
-    <Log> "Found ${count} directories" to the <console>.
+    Compute the <count: length> from the <directories>.
+    Log "Found ${count} directories" to the <console>.
 
-    <Log> "Storing directories to repository..." to the <console>.
+    Log "Storing directories to repository..." to the <console>.
 
     (* Store directories - triggers observers for each item *)
-    <Store> the <directories> into the <directory-repository>.
+    Store the <directories> into the <directory-repository>.
 
-    <Return> an <OK: status> for the <replication>.
+    Return an <OK: status> for the <replication>.
 }
 ```
 
@@ -528,32 +528,32 @@ The reactive implementation uses repository observers:
 (* Main observer: Creates each directory when stored *)
 (Process Directory Entry: directory-repository Observer) {
     (* Extract the directory entry from the event *)
-    <Extract> the <entry> from the <event: newValue>.
-    <Extract> the <fullpath> from the <entry: path>.
+    Extract the <entry> from the <event: newValue>.
+    Extract the <fullpath> from the <entry: path>.
 
     (* Split to remove template/ prefix from absolute path *)
-    <Split> the <pathparts> from the <fullpath> by /template\//.
+    Split the <pathparts> from the <fullpath> by /template\//.
 
     (* Get the last element (relative path) *)
-    <Extract> the <relpath: last> from the <pathparts>.
+    Extract the <relpath: last> from the <pathparts>.
 
     (* Create the directory in current location *)
-    <Make> the <dir> to the <path: relpath>.
+    Make the <dir> to the <path: relpath>.
 
     (* Log the created directory *)
-    <Log> "Created: ${relpath}" to the <console>.
+    Log "Created: ${relpath}" to the <console>.
 
-    <Return> an <OK: status> for the <processing>.
+    Return an <OK: status> for the <processing>.
 }
 
 (* Audit observer: Tracks all repository changes *)
 (Audit Directory Changes: directory-repository Observer) {
-    <Extract> the <changeType> from the <event: changeType>.
-    <Extract> the <repositoryName> from the <event: repositoryName>.
+    Extract the <changeType> from the <event: changeType>.
+    Extract the <repositoryName> from the <event: repositoryName>.
 
-    <Log> "[AUDIT] ${repositoryName}: ${changeType}" to the <console>.
+    Log "[AUDIT] ${repositoryName}: ${changeType}" to the <console>.
 
-    <Return> an <OK: status> for the <audit>.
+    Return an <OK: status> for the <audit>.
 }
 ```
 
@@ -638,13 +638,13 @@ To add new functionality:
     (* Existing code... *)
 
     (* NEW: Calculate total size? Must add here! *)
-    <Compute> the <total-size>...
+    Compute the <total-size>...
 
     (* NEW: Send notification? Must add here! *)
-    <Send> the <notification>...
+    Send the <notification>...
 
     (* NEW: Validate permissions? Must add here! *)
-    <Validate> the <permissions>...
+    Validate the <permissions>...
 }
 ```
 
@@ -652,7 +652,7 @@ To add new functionality:
 ```aro
 (* NEW: Calculate total size *)
 (Track Size: directory-repository Observer) {
-    <Extract> the <entry> from the <event: newValue>.
+    Extract the <entry> from the <event: newValue>.
     (* Calculate and track size *)
 }
 
@@ -663,7 +663,7 @@ To add new functionality:
 
 (* NEW: Validate permissions *)
 (Check Permissions: directory-repository Observer) {
-    <Extract> the <entry> from the <event: newValue>.
+    Extract the <entry> from the <event: newValue>.
     (* Validate permissions *)
 }
 ```
@@ -729,7 +729,7 @@ aro run main.aro
 A critical feature: when you store an **array** to a repository, ARO emits **per-item events**:
 
 ```aro
-<Store> the <directories> into the <directory-repository>.
+Store the <directories> into the <directory-repository>.
 (* If directories = [dir1, dir2, dir3] *)
 (* Emits 3 separate events: *)
 (*   - event { newValue: dir1, changeType: "created" } *)
@@ -818,15 +818,15 @@ Store simple, serializable data:
 
 ```aro
 (* Good - simple object *)
-<Create> the <user> with {
+Create the <user> with {
     id: <id>,
     name: <name>,
     email: <email>
 }.
-<Store> the <user> into the <user-repository>.
+Store the <user> into the <user-repository>.
 
 (* Avoid - complex nested structures *)
-<Store> the <entire-request-context> into the <debug-repository>.
+Store the <entire-request-context> into the <debug-repository>.
 ```
 
 ---

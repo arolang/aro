@@ -546,8 +546,8 @@ sub detect_example_type {
         my $content = do { local $/; <$fh> };
         close $fh;
 
-        return 'socket' if $content =~ /<Start>\s+the\s+<socket-server>/;
-        return 'file' if $content =~ /<Start>\s+the\s+<file-monitor>/;
+        return 'socket' if $content =~ /Start\s+the\s+<socket-server>/;
+        return 'file' if $content =~ /Start\s+the\s+<file-monitor>/;
     }
 
     return 'console';

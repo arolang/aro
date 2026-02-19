@@ -28,13 +28,13 @@ ARO embraces this natural model. Feature sets emit events; other feature sets re
 Emit an event with data:
 
 ```aro
-<Emit> a <EventType: event> with <data>.
+Emit a <EventType: event> with <data>.
 ```
 
 Or emit with an inline object:
 
 ```aro
-<Emit> a <UserCreated: event> with { email: <email>, name: <name> }.
+Emit a <UserCreated: event> with { email: <email>, name: <name> }.
 ```
 
 ### 1.2 Event Naming Conventions
@@ -51,33 +51,33 @@ Event types follow these conventions:
 
 ```aro
 (createUser: User API) {
-    <Extract> the <data> from the <request: body>.
-    <Create> the <user> with <data>.
-    <Store> the <user> in the <user-repository>.
+    Extract the <data> from the <request: body>.
+    Create the <user> with <data>.
+    Store the <user> in the <user-repository>.
 
     (* Emit event - handlers subscribe by event type *)
-    <Emit> a <UserCreated: event> with <user>.
+    Emit a <UserCreated: event> with <user>.
 
-    <Return> a <Created: status> with <user>.
+    Return a <Created: status> with <user>.
 }
 
 (updateEmail: User API) {
-    <Extract> the <userId> from the <pathParameters: id>.
-    <Extract> the <newEmail> from the <request: body>.
-    <Retrieve> the <user> from the <user-repository> where id = <userId>.
+    Extract the <userId> from the <pathParameters: id>.
+    Extract the <newEmail> from the <request: body>.
+    Retrieve the <user> from the <user-repository> where id = <userId>.
 
-    <Create> the <oldEmail> with <user: email>.
-    <Update> the <user: email> with <newEmail>.
-    <Store> the <user> in the <user-repository>.
+    Create the <oldEmail> with <user: email>.
+    Update the <user: email> with <newEmail>.
+    Store the <user> in the <user-repository>.
 
     (* Emit with inline object *)
-    <Emit> a <UserEmailChanged: event> with {
+    Emit a <UserEmailChanged: event> with {
         userId: <userId>,
         oldEmail: <oldEmail>,
         newEmail: <newEmail>
     }.
 
-    <Return> an <OK: status> with <user>.
+    Return an <OK: status> with <user>.
 }
 ```
 
@@ -97,16 +97,16 @@ The handler receives event data in the `<event>` variable:
 
 ```aro
 (Send Welcome Email: UserCreated Handler) {
-    <Extract> the <user> from the <event: user>.
-    <Extract> the <email> from the <user: email>.
-    <Extract> the <name> from the <user: name>.
+    Extract the <user> from the <event: user>.
+    Extract the <email> from the <user: email>.
+    Extract the <name> from the <user: name>.
 
-    <Send> the <welcome-email> to the <email> with {
+    Send the <welcome-email> to the <email> with {
         subject: "Welcome!",
         body: "Hello ${<name>}, welcome to our service!"
     }.
 
-    <Return> an <OK: status> for the <notification>.
+    Return an <OK: status> for the <notification>.
 }
 ```
 
@@ -118,25 +118,25 @@ Multiple handlers can subscribe to the same event type:
 (* All three handlers execute when OrderCreated is emitted *)
 
 (Send Order Confirmation: OrderCreated Handler) {
-    <Extract> the <order> from the <event: order>.
-    <Send> the <email> to the <order: email>.
-    <Return> an <OK: status> for the <confirmation>.
+    Extract the <order> from the <event: order>.
+    Send the <email> to the <order: email>.
+    Return an <OK: status> for the <confirmation>.
 }
 
 (Update Inventory: OrderCreated Handler) {
-    <Extract> the <order> from the <event: order>.
-    <Extract> the <items> from the <order: items>.
+    Extract the <order> from the <event: order>.
+    Extract the <items> from the <order: items>.
     for each <item> in <items> {
         <Decrement> the <stock> for the <item: productId> with <item: quantity>.
     }
-    <Return> an <OK: status> for the <inventory>.
+    Return an <OK: status> for the <inventory>.
 }
 
 (Track Revenue: OrderCreated Handler) {
-    <Extract> the <order> from the <event: order>.
-    <Extract> the <amount> from the <order: total>.
-    <Increment> the <daily-revenue> by <amount>.
-    <Return> an <OK: status> for the <analytics>.
+    Extract the <order> from the <event: order>.
+    Extract the <amount> from the <order: total>.
+    Increment the <daily-revenue> by <amount>.
+    Return an <OK: status> for the <analytics>.
 }
 ```
 
@@ -155,13 +155,13 @@ When the `<Notify>`, `<Alert>`, or `<Signal>` actions are executed, the runtime 
 
 ```aro
 (Log All Notifications: NotificationSent Handler) {
-    <Extract> the <message> from the <event: message>.
-    <Extract> the <recipient> from the <event: recipient>.
-    <Extract> the <type> from the <event: type>.
+    Extract the <message> from the <event: message>.
+    Extract the <recipient> from the <event: recipient>.
+    Extract the <type> from the <event: type>.
 
-    <Log> "Notification [${type}]: ${message} -> ${recipient}" to the <console>.
+    Log "Notification [${type}]: ${message} -> ${recipient}" to the <console>.
 
-    <Return> an <OK: status> for the <logging>.
+    Return an <OK: status> for the <logging>.
 }
 ```
 
@@ -187,9 +187,9 @@ Event handlers can filter events based on payload field values. Guards are speci
 ```aro
 (* Only handle OrderUpdated when status is "paid" *)
 (Process Payment: OrderUpdated Handler<status:paid>) {
-    <Extract> the <order> from the <event: order>.
-    <Process> the <payment> for the <order>.
-    <Return> an <OK: status> for the <processing>.
+    Extract the <order> from the <event: order>.
+    Process the <payment> for the <order>.
+    Return an <OK: status> for the <processing>.
 }
 ```
 
@@ -200,9 +200,9 @@ Multiple values for the same field are separated by commas:
 ```aro
 (* Handle when status is paid OR shipped *)
 (Track Fulfillment: OrderUpdated Handler<status:paid,shipped>) {
-    <Extract> the <order> from the <event: order>.
-    <Log> "Fulfillment update" to the <console>.
-    <Return> an <OK: status> for the <tracking>.
+    Extract the <order> from the <event: order>.
+    Log "Fulfillment update" to the <console>.
+    Return an <OK: status> for the <tracking>.
 }
 ```
 
@@ -213,9 +213,9 @@ Multiple conditions use semicolon for AND logic:
 ```aro
 (* Only handle premium customers with delivered orders *)
 (VIP Notification: OrderUpdated Handler<status:delivered;tier:premium>) {
-    <Extract> the <order> from the <event: order>.
-    <Send> the <vip-reward> to the <order: email>.
-    <Return> an <OK: status> for the <notification>.
+    Extract the <order> from the <event: order>.
+    Send the <vip-reward> to the <order: email>.
+    Return an <OK: status> for the <notification>.
 }
 ```
 
@@ -226,8 +226,8 @@ Use dot notation for nested fields:
 ```aro
 (* Access nested user.status field *)
 (Handle Active Users: UserUpdated Handler<user.status:active>) {
-    <Extract> the <user> from the <event: user>.
-    <Return> an <OK: status> for the <handling>.
+    Extract the <user> from the <event: user>.
+    Return an <OK: status> for the <handling>.
 }
 ```
 
@@ -292,7 +292,7 @@ components:
 Syntax:
 
 ```aro
-<Accept> the <transition: from_to_target> on <object: field>.
+Accept the <transition: from_to_target> on <object: field>.
 ```
 
 Where:
@@ -305,13 +305,13 @@ Examples:
 
 ```aro
 (* Transition from draft to placed *)
-<Accept> the <transition: draft_to_placed> on <order: status>.
+Accept the <transition: draft_to_placed> on <order: status>.
 
 (* Transition from placed to paid *)
-<Accept> the <transition: placed_to_paid> on <order: status>.
+Accept the <transition: placed_to_paid> on <order: status>.
 
 (* Transition from paid to shipped *)
-<Accept> the <transition: paid_to_shipped> on <order: status>.
+Accept the <transition: paid_to_shipped> on <order: status>.
 ```
 
 ### 4.3 Error Handling
@@ -328,39 +328,39 @@ This follows ARO's "Code Is The Error Message" philosophy.
 
 ```aro
 (placeOrder: Order Management) {
-    <Extract> the <order-id> from the <pathParameters: id>.
-    <Retrieve> the <order> from the <order-repository>.
+    Extract the <order-id> from the <pathParameters: id>.
+    Retrieve the <order> from the <order-repository>.
 
     (* Accept state transition from draft to placed *)
-    <Accept> the <transition: draft_to_placed> on <order: status>.
+    Accept the <transition: draft_to_placed> on <order: status>.
 
-    <Store> the <order> into the <order-repository>.
-    <Emit> an <OrderPlaced: event> with <order>.
-    <Return> an <OK: status> with <order>.
+    Store the <order> into the <order-repository>.
+    Emit an <OrderPlaced: event> with <order>.
+    Return an <OK: status> with <order>.
 }
 
 (payOrder: Order Management) {
-    <Extract> the <order-id> from the <pathParameters: id>.
-    <Retrieve> the <order> from the <order-repository>.
+    Extract the <order-id> from the <pathParameters: id>.
+    Retrieve the <order> from the <order-repository>.
 
     (* Must be placed to accept payment *)
-    <Accept> the <transition: placed_to_paid> on <order: status>.
+    Accept the <transition: placed_to_paid> on <order: status>.
 
-    <Store> the <order> into the <order-repository>.
-    <Emit> an <OrderPaid: event> with <order>.
-    <Return> an <OK: status> with <order>.
+    Store the <order> into the <order-repository>.
+    Emit an <OrderPaid: event> with <order>.
+    Return an <OK: status> with <order>.
 }
 
 (shipOrder: Order Management) {
-    <Extract> the <order-id> from the <pathParameters: id>.
-    <Retrieve> the <order> from the <order-repository>.
+    Extract the <order-id> from the <pathParameters: id>.
+    Retrieve the <order> from the <order-repository>.
 
     (* Must be paid to ship *)
-    <Accept> the <transition: paid_to_shipped> on <order: status>.
+    Accept the <transition: paid_to_shipped> on <order: status>.
 
-    <Store> the <order> into the <order-repository>.
-    <Emit> an <OrderShipped: event> with <order>.
-    <Return> an <OK: status> with <order>.
+    Store the <order> into the <order-repository>.
+    Emit an <OrderShipped: event> with <order>.
+    Return an <OK: status> with <order>.
 }
 ```
 
@@ -378,18 +378,18 @@ Examples:
 ```aro
 (* Observe ALL status field transitions *)
 (Audit Status Changes: status StateObserver) {
-    <Extract> the <fromState> from the <transition: fromState>.
-    <Extract> the <toState> from the <transition: toState>.
-    <Extract> the <orderId> from the <transition: entityId>.
-    <Log> "Order ${orderId}: ${fromState} -> ${toState}" to the <console>.
-    <Return> an <OK: status> for the <audit>.
+    Extract the <fromState> from the <transition: fromState>.
+    Extract the <toState> from the <transition: toState>.
+    Extract the <orderId> from the <transition: entityId>.
+    Log "Order ${orderId}: ${fromState} -> ${toState}" to the <console>.
+    Return an <OK: status> for the <audit>.
 }
 
 (* Observe ONLY draft->placed transition *)
 (Notify Order Placed: status StateObserver<draft_to_placed>) {
-    <Extract> the <orderId> from the <transition: entityId>.
-    <Log> "Order ${orderId} has been placed!" to the <console>.
-    <Return> an <OK: status> for the <notification>.
+    Extract the <orderId> from the <transition: entityId>.
+    Log "Order ${orderId} has been placed!" to the <console>.
+    Return an <OK: status> for the <notification>.
 }
 ```
 
@@ -462,7 +462,7 @@ Repositories are scoped to their business activity:
 The `<Store>` action persists data to a repository:
 
 ```aro
-<Store> the <data> into the <name-repository>.
+Store the <data> into the <name-repository>.
 ```
 
 Behavior:
@@ -471,9 +471,9 @@ Behavior:
 
 Syntax variations:
 ```aro
-<Store> the <user> into the <user-repository>.
-<Store> the <message> in the <message-repository>.
-<Store> the <order> to the <order-repository>.
+Store the <user> into the <user-repository>.
+Store the <message> in the <message-repository>.
+Store the <order> to the <order-repository>.
 ```
 
 ### 5.5 Retrieve Operation
@@ -481,7 +481,7 @@ Syntax variations:
 The `<Retrieve>` action fetches data from a repository:
 
 ```aro
-<Retrieve> the <items> from the <name-repository>.
+Retrieve the <items> from the <name-repository>.
 ```
 
 Behavior:
@@ -491,19 +491,19 @@ Behavior:
 
 Filtering:
 ```aro
-<Retrieve> the <user> from the <user-repository> where id = <user-id>.
+Retrieve the <user> from the <user-repository> where id = <user-id>.
 ```
 
 Single-value retrieval:
 ```aro
 (* Last stored value *)
-<Retrieve> the <latest> from the <user-repository: last>.
+Retrieve the <latest> from the <user-repository: last>.
 
 (* First stored value *)
-<Retrieve> the <oldest> from the <user-repository: first>.
+Retrieve the <oldest> from the <user-repository: first>.
 
 (* By numeric index - 0 = most recent *)
-<Retrieve> the <newest> from the <user-repository: 0>.
+Retrieve the <newest> from the <user-repository: 0>.
 ```
 
 ### 5.6 Repository Example
@@ -511,33 +511,33 @@ Single-value retrieval:
 ```aro
 (* POST /messages - Store a new message *)
 (postMessage: Chat API) {
-    <Extract> the <data> from the <request: body>.
-    <Extract> the <text> from the <data: message>.
-    <Extract> the <author> from the <data: author>.
+    Extract the <data> from the <request: body>.
+    Extract the <text> from the <data: message>.
+    Extract the <author> from the <data: author>.
 
-    <Create> the <message> with {
+    Create the <message> with {
         id: <generated-id>,
         text: <text>,
         author: <author>,
         timestamp: now
     }.
 
-    <Store> the <message> into the <message-repository>.
+    Store the <message> into the <message-repository>.
 
-    <Return> a <Created: status> with <message>.
+    Return a <Created: status> with <message>.
 }
 
 (* GET /messages - Retrieve all messages *)
 (getMessages: Chat API) {
-    <Retrieve> the <messages> from the <message-repository>.
-    <Return> an <OK: status> with { messages: <messages> }.
+    Retrieve the <messages> from the <message-repository>.
+    Return an <OK: status> with { messages: <messages> }.
 }
 
 (* GET /messages/{id} - Retrieve single message *)
 (getMessage: Chat API) {
-    <Extract> the <id> from the <pathParameters: id>.
-    <Retrieve> the <message> from the <message-repository> where id = <id>.
-    <Return> an <OK: status> with <message>.
+    Extract the <id> from the <pathParameters: id>.
+    Retrieve the <message> from the <message-repository> where id = <id>.
+    Return an <OK: status> with <message>.
 }
 ```
 
@@ -553,12 +553,12 @@ Observers are feature sets with business activity pattern `{repository-name} Obs
 
 ```aro
 (Audit Changes: user-repository Observer) {
-    <Extract> the <changeType> from the <event: changeType>.
-    <Extract> the <newValue> from the <event: newValue>.
-    <Extract> the <oldValue> from the <event: oldValue>.
+    Extract the <changeType> from the <event: changeType>.
+    Extract the <newValue> from the <event: newValue>.
+    Extract the <oldValue> from the <event: oldValue>.
 
-    <Log> "User repository: ${changeType}" to the <console>.
-    <Return> an <OK: status> for the <audit>.
+    Log "User repository: ${changeType}" to the <console>.
+    Return an <OK: status> for the <audit>.
 }
 ```
 
@@ -585,17 +585,17 @@ Observers are triggered for:
 
 ```aro
 (Handle User Updates: user-repository Observer) {
-    <Extract> the <changeType> from the <event: changeType>.
+    Extract the <changeType> from the <event: changeType>.
 
     (* Only process updates *)
-    <Compare> the <changeType> equals "updated".
+    Compare the <changeType> equals "updated".
 
-    <Extract> the <oldName> from the <event: oldValue: name>.
-    <Extract> the <newName> from the <event: newValue: name>.
+    Extract the <oldName> from the <event: oldValue: name>.
+    Extract the <newName> from the <event: newValue: name>.
 
-    <Log> "User renamed from ${oldName} to ${newName}" to the <console>.
+    Log "User renamed from ${oldName} to ${newName}" to the <console>.
 
-    <Return> an <OK: status> for the <update>.
+    Return an <OK: status> for the <update>.
 }
 ```
 
@@ -604,7 +604,7 @@ Observers are triggered for:
 To delete items and trigger observers:
 
 ```aro
-<Delete> the <user> from the <user-repository> where id = <userId>.
+Delete the <user> from the <user-repository> where id = <userId>.
 ```
 
 ### 6.5 Observer Flow
@@ -614,7 +614,7 @@ To delete items and trigger observers:
 |                  Feature Set Execution                       |
 +-------------------------------------------------------------+
 |                                                              |
-|   <Store> the <user> into the <user-repository>.            |
+|   Store the <user> into the <user-repository>.            |
 |                    |                                         |
 |                    v                                         |
 |   +--------------------------------------------+            |
@@ -659,8 +659,8 @@ When storing a List to a repository, the Store action automatically emits **one 
 
 ```aro
 (* Store a list of directories *)
-<Create> the <directories> with ["foo", "foo/bar", "baz"].
-<Store> the <directories> into the <directory-repository>.
+Create the <directories> with ["foo", "foo/bar", "baz"].
+Store the <directories> into the <directory-repository>.
 ```
 
 This emits **three** events:
@@ -673,13 +673,13 @@ This emits **three** events:
 ```aro
 (Process Directory: directory-repository Observer) {
     (* Extract ONE item - not the entire list *)
-    <Extract> the <dir-path> from the <event: newValue>.
+    Extract the <dir-path> from the <event: newValue>.
 
     (* Process this single directory *)
-    <Make> the <created> to the <path: dir-path>.
-    <Log> "Created: ${dir-path}" to the <console>.
+    Make the <created> to the <path: dir-path>.
+    Log "Created: ${dir-path}" to the <console>.
 
-    <Return> an <OK: status> for the <processing>.
+    Return an <OK: status> for the <processing>.
 }
 ```
 
@@ -694,20 +694,20 @@ This emits **three** events:
 ```aro
 (Application-Start: Batch Processor) {
     (* Collect items to process *)
-    <Filter> the <active-items> from the <all-items>
+    Filter the <active-items> from the <all-items>
         where <status> is "active".
 
     (* Store list - triggers observer for EACH item *)
-    <Store> the <active-items> into the <processing-queue>.
+    Store the <active-items> into the <processing-queue>.
 
-    <Keepalive> the <application> for the <events>.
-    <Return> an <OK: status> for the <batch>.
+    Keepalive the <application> for the <events>.
+    Return an <OK: status> for the <batch>.
 }
 
 (Process Item: processing-queue Observer) {
-    <Extract> the <item> from the <event: newValue>.
+    Extract the <item> from the <event: newValue>.
     (* Process individual item here *)
-    <Return> an <OK: status> for the <item-processing>.
+    Return an <OK: status> for the <item-processing>.
 }
 ```
 
@@ -791,9 +791,9 @@ ARO provides two complementary mechanisms for reacting to state:
 ```aro
 (* Triggers for any OrderUpdated where status=shipped *)
 (Notify Shipped: OrderUpdated Handler<status:shipped>) {
-    <Extract> the <order> from the <event: order>.
-    <Send> the <notification> to the <order: email>.
-    <Return> an <OK: status>.
+    Extract the <order> from the <event: order>.
+    Send the <notification> to the <order: email>.
+    Return an <OK: status>.
 }
 ```
 
@@ -802,9 +802,9 @@ ARO provides two complementary mechanisms for reacting to state:
 ```aro
 (* Triggers only when status transitions from paid to shipped *)
 (Track Shipment: status StateObserver<paid_to_shipped>) {
-    <Extract> the <orderId> from the <transition: entityId>.
-    <Log> "Order shipped: ${orderId}" to the <console>.
-    <Return> an <OK: status>.
+    Extract the <orderId> from the <transition: entityId>.
+    Log "Order shipped: ${orderId}" to the <console>.
+    Return an <OK: status>.
 }
 ```
 
@@ -850,16 +850,16 @@ repository_name = identifier , "-repository" ;
 
 | Concept | ARO Approach |
 |---------|--------------|
-| **Event Emission** | `<Emit> a <EventType: event> with <data>.` |
+| **Event Emission** | `Emit a <EventType: event> with <data>.` |
 | **Event Handler** | `(Name: EventType Handler)` |
 | **Guarded Handler** | `(Name: EventType Handler<field:value>)` |
 | **Notification Handler** | `(Name: NotificationSent Handler)` |
 | **State Definition** | OpenAPI enum |
-| **State Transition** | `<Accept> the <transition: from_to_target>` |
+| **State Transition** | `Accept the <transition: from_to_target>` |
 | **State Observer** | `(Name: fieldName StateObserver<transition>)` |
 | **Repository** | Names ending with `-repository` |
-| **Store** | `<Store> the <data> into <repo-repository>.` |
-| **Retrieve** | `<Retrieve> the <items> from <repo-repository>.` |
+| **Store** | `Store the <data> into <repo-repository>.` |
+| **Retrieve** | `Retrieve the <items> from <repo-repository>.` |
 | **Repository Observer** | `(Name: repo-repository Observer)` |
 | **Event Routing** | EventBus matches patterns to feature sets |
 

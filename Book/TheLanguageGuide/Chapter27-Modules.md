@@ -88,15 +88,15 @@ Module A provides a single endpoint at `/module-a`:
 (* Module A - Standalone Application *)
 
 (Application-Start: ModuleA) {
-    <Log> "Module A starting..." to the <console>.
-    <Start> the <http-server> for the <contract>.
-    <Keepalive> the <application> for the <events>.
-    <Return> an <OK: status> for the <startup>.
+    Log "Module A starting..." to the <console>.
+    Start the <http-server> for the <contract>.
+    Keepalive the <application> for the <events>.
+    Return an <OK: status> for the <startup>.
 }
 
 (getModuleA: ModuleA API) {
-    <Create> the <response> with { message: "Hello from Module A" }.
-    <Return> an <OK: status> with <response>.
+    Create the <response> with { message: "Hello from Module A" }.
+    Return an <OK: status> with <response>.
 }
 ```
 *Source: [Examples/ModulesExample/ModuleA/main.aro](../Examples/ModulesExample/ModuleA/main.aro)*
@@ -116,15 +116,15 @@ Module B provides a single endpoint at `/module-b`:
 (* Module B - Standalone Application *)
 
 (Application-Start: ModuleB) {
-    <Log> "Module B starting..." to the <console>.
-    <Start> the <http-server> for the <contract>.
-    <Keepalive> the <application> for the <events>.
-    <Return> an <OK: status> for the <startup>.
+    Log "Module B starting..." to the <console>.
+    Start the <http-server> for the <contract>.
+    Keepalive the <application> for the <events>.
+    Return an <OK: status> for the <startup>.
 }
 
 (getModuleB: ModuleB API) {
-    <Create> the <response> with { message: "Hello from Module B" }.
-    <Return> an <OK: status> with <response>.
+    Create the <response> with { message: "Hello from Module B" }.
+    Return an <OK: status> with <response>.
 }
 ```
 *Source: [Examples/ModulesExample/ModuleB/main.aro](../Examples/ModulesExample/ModuleB/main.aro)*
@@ -140,10 +140,10 @@ import ../ModuleA
 import ../ModuleB
 
 (Application-Start: Combined) {
-    <Log> "Combined application starting..." to the <console>.
-    <Start> the <http-server> for the <contract>.
-    <Keepalive> the <application> for the <events>.
-    <Return> an <OK: status> for the <startup>.
+    Log "Combined application starting..." to the <console>.
+    Start the <http-server> for the <contract>.
+    Keepalive the <application> for the <events>.
+    Return an <OK: status> for the <startup>.
 }
 ```
 *Source: [Examples/ModulesExample/Combined/main.aro](../Examples/ModulesExample/Combined/main.aro)*
@@ -211,10 +211,10 @@ When you import an application, you get access to its published variables within
 ```aro
 (* In auth-service/auth.aro *)
 (Authenticate User: Security) {
-    <Extract> the <credentials> from the <request: body>.
-    <Retrieve> the <user> from the <user-repository> where credentials = <credentials>.
-    <Publish> as <authenticated-user> <user>.
-    <Return> an <OK: status> with <user>.
+    Extract the <credentials> from the <request: body>.
+    Retrieve the <user> from the <user-repository> where credentials = <credentials>.
+    Publish as <authenticated-user> <user>.
+    Return an <OK: status> with <user>.
 }
 ```
 
@@ -227,7 +227,7 @@ import ../auth-service
 (Process Request: Gateway) {
     (* Access published variable from imported application *)
     <Use> the <authenticated-user> in the <authorization-check>.
-    <Return> an <OK: status> for the <request>.
+    Return an <OK: status> for the <request>.
 }
 ```
 

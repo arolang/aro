@@ -149,7 +149,7 @@ Documentation/          <span class="code-comment"># Developer guides</span></co
         <h3>Feature Set</h3>
         <pre><code>(Feature Name: Business Activity) {
     &lt;Action&gt; the &lt;result&gt; from/with/to the &lt;object&gt;.
-    &lt;Return&gt; an &lt;OK: status&gt; with &lt;result&gt;.
+    Return an &lt;OK: status&gt; with &lt;result&gt;.
 }</code></pre>
 
         <h3>Comments</h3>
@@ -240,7 +240,7 @@ ActionRegistry.shared.register(MyAction.<span class="code-keyword">self</span>)<
         <ul>
             <li>Always reference the <code>CLAUDE.md</code> file for project context</li>
             <li>Feature sets should be named after <code>operationId</code> values in <code>openapi.yaml</code></li>
-            <li>Use the <code>&lt;Keepalive&gt;</code> action for long-running servers</li>
+            <li>Use the <code>Keepalive</code> action for long-running servers</li>
             <li>Remember that ARO code is the happy path - don't add error handling</li>
             <li>Check the <code>Proposals/</code> directory for detailed language specifications</li>
         </ul>

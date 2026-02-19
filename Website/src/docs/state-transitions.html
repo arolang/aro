@@ -202,7 +202,7 @@
             <h1 class="gradient-text">State Transitions</h1>
             <p class="lead">
                 ARO handles state machines elegantly: define states as OpenAPI enums,
-                transition with the <code>&lt;Accept&gt;</code> action, and let the runtime validate everything.
+                transition with the <code>Accept</code> action, and let the runtime validate everything.
             </p>
         </header>
 
@@ -210,7 +210,7 @@
             <h4>States Are Just Enums</h4>
             <p>
                 No special state machine syntax. No transition tables. Define your states in OpenAPI,
-                use <code>&lt;Accept&gt;</code> to transition, and get automatic validation with clear error messages.
+                use <code>Accept</code> to transition, and get automatic validation with clear error messages.
             </p>
         </div>
 
@@ -269,18 +269,18 @@ components:
 
         <h2>The Accept Action</h2>
         <p>
-            Use <code>&lt;Accept&gt;</code> to validate and apply state transitions.
+            Use <code>Accept</code> to validate and apply state transitions.
             The syntax clearly shows the expected transition:
         </p>
 
         <pre><code><span class="code-comment">(* Transition from draft to placed *)</span>
-<span class="code-keyword">&lt;Accept&gt;</span> the <span class="code-result">&lt;transition: draft_to_placed&gt;</span> on &lt;order: status&gt;.
+<span class="code-keyword">Accept</span> the <span class="code-result">&lt;transition: draft_to_placed&gt;</span> on &lt;order: status&gt;.
 
 <span class="code-comment">(* Transition from placed to paid *)</span>
-<span class="code-keyword">&lt;Accept&gt;</span> the <span class="code-result">&lt;transition: placed_to_paid&gt;</span> on &lt;order: status&gt;.
+<span class="code-keyword">Accept</span> the <span class="code-result">&lt;transition: placed_to_paid&gt;</span> on &lt;order: status&gt;.
 
 <span class="code-comment">(* Transition from paid to shipped *)</span>
-<span class="code-keyword">&lt;Accept&gt;</span> the <span class="code-result">&lt;transition: paid_to_shipped&gt;</span> on &lt;order: status&gt;.</code></pre>
+<span class="code-keyword">Accept</span> the <span class="code-result">&lt;transition: paid_to_shipped&gt;</span> on &lt;order: status&gt;.</code></pre>
 
         <p>
             The syntax uses <code>_to_</code> as the separator because <code>to</code> is a reserved preposition in ARO.
@@ -292,38 +292,38 @@ components:
         </p>
 
         <pre><code><span class="code-feature">(placeOrder: Order Management)</span> {
-    <span class="code-keyword">&lt;Extract&gt;</span> the <span class="code-result">&lt;order-id&gt;</span> from the &lt;pathParameters: id&gt;.
-    <span class="code-keyword">&lt;Retrieve&gt;</span> the <span class="code-result">&lt;order&gt;</span> from the &lt;order-repository&gt;.
+    <span class="code-keyword">Extract</span> the <span class="code-result">&lt;order-id&gt;</span> from the &lt;pathParameters: id&gt;.
+    <span class="code-keyword">Retrieve</span> the <span class="code-result">&lt;order&gt;</span> from the &lt;order-repository&gt;.
 
     <span class="code-comment">(* Accept state transition from draft to placed *)</span>
-    <span class="code-keyword">&lt;Accept&gt;</span> the <span class="code-result">&lt;transition: draft_to_placed&gt;</span> on &lt;order: status&gt;.
+    <span class="code-keyword">Accept</span> the <span class="code-result">&lt;transition: draft_to_placed&gt;</span> on &lt;order: status&gt;.
 
-    <span class="code-keyword">&lt;Store&gt;</span> the &lt;order&gt; into the &lt;order-repository&gt;.
-    <span class="code-keyword">&lt;Emit&gt;</span> to <span class="code-feature">&lt;Send Order Confirmation&gt;</span> with &lt;order&gt;.
-    <span class="code-keyword">&lt;Return&gt;</span> an <span class="code-result">&lt;OK: status&gt;</span> with &lt;order&gt;.
+    <span class="code-keyword">Store</span> the &lt;order&gt; into the &lt;order-repository&gt;.
+    <span class="code-keyword">Emit</span> to <span class="code-feature">&lt;Send Order Confirmation&gt;</span> with &lt;order&gt;.
+    <span class="code-keyword">Return</span> an <span class="code-result">&lt;OK: status&gt;</span> with &lt;order&gt;.
 }
 
 <span class="code-feature">(payOrder: Order Management)</span> {
-    <span class="code-keyword">&lt;Extract&gt;</span> the <span class="code-result">&lt;order-id&gt;</span> from the &lt;pathParameters: id&gt;.
-    <span class="code-keyword">&lt;Retrieve&gt;</span> the <span class="code-result">&lt;order&gt;</span> from the &lt;order-repository&gt;.
+    <span class="code-keyword">Extract</span> the <span class="code-result">&lt;order-id&gt;</span> from the &lt;pathParameters: id&gt;.
+    <span class="code-keyword">Retrieve</span> the <span class="code-result">&lt;order&gt;</span> from the &lt;order-repository&gt;.
 
     <span class="code-comment">(* Must be placed to accept payment *)</span>
-    <span class="code-keyword">&lt;Accept&gt;</span> the <span class="code-result">&lt;transition: placed_to_paid&gt;</span> on &lt;order: status&gt;.
+    <span class="code-keyword">Accept</span> the <span class="code-result">&lt;transition: placed_to_paid&gt;</span> on &lt;order: status&gt;.
 
-    <span class="code-keyword">&lt;Store&gt;</span> the &lt;order&gt; into the &lt;order-repository&gt;.
-    <span class="code-keyword">&lt;Return&gt;</span> an <span class="code-result">&lt;OK: status&gt;</span> with &lt;order&gt;.
+    <span class="code-keyword">Store</span> the &lt;order&gt; into the &lt;order-repository&gt;.
+    <span class="code-keyword">Return</span> an <span class="code-result">&lt;OK: status&gt;</span> with &lt;order&gt;.
 }
 
 <span class="code-feature">(shipOrder: Order Management)</span> {
-    <span class="code-keyword">&lt;Extract&gt;</span> the <span class="code-result">&lt;order-id&gt;</span> from the &lt;pathParameters: id&gt;.
-    <span class="code-keyword">&lt;Retrieve&gt;</span> the <span class="code-result">&lt;order&gt;</span> from the &lt;order-repository&gt;.
+    <span class="code-keyword">Extract</span> the <span class="code-result">&lt;order-id&gt;</span> from the &lt;pathParameters: id&gt;.
+    <span class="code-keyword">Retrieve</span> the <span class="code-result">&lt;order&gt;</span> from the &lt;order-repository&gt;.
 
     <span class="code-comment">(* Must be paid to ship *)</span>
-    <span class="code-keyword">&lt;Accept&gt;</span> the <span class="code-result">&lt;transition: paid_to_shipped&gt;</span> on &lt;order: status&gt;.
+    <span class="code-keyword">Accept</span> the <span class="code-result">&lt;transition: paid_to_shipped&gt;</span> on &lt;order: status&gt;.
 
-    <span class="code-keyword">&lt;Store&gt;</span> the &lt;order&gt; into the &lt;order-repository&gt;.
-    <span class="code-keyword">&lt;Emit&gt;</span> to <span class="code-feature">&lt;Send Shipping Notification&gt;</span> with &lt;order&gt;.
-    <span class="code-keyword">&lt;Return&gt;</span> an <span class="code-result">&lt;OK: status&gt;</span> with &lt;order&gt;.
+    <span class="code-keyword">Store</span> the &lt;order&gt; into the &lt;order-repository&gt;.
+    <span class="code-keyword">Emit</span> to <span class="code-feature">&lt;Send Shipping Notification&gt;</span> with &lt;order&gt;.
+    <span class="code-keyword">Return</span> an <span class="code-result">&lt;OK: status&gt;</span> with &lt;order&gt;.
 }</code></pre>
 
         <h2>Error Handling</h2>
@@ -344,14 +344,14 @@ components:
 
         <h3>Simplicity</h3>
         <p>
-            No new keywords. No special constructs. Just OpenAPI enums + <code>&lt;Accept&gt;</code>.
+            No new keywords. No special constructs. Just OpenAPI enums + <code>Accept</code>.
             Use standard control flow (<code>if</code>, <code>match</code>) for complex logic.
         </p>
 
         <h3>Clarity</h3>
         <p>
             The transition is explicit in the code. Reading
-            <code>&lt;Accept&gt; the &lt;transition: draft_to_placed&gt; on &lt;order: status&gt;</code>
+            <code>Accept the &lt;transition: draft_to_placed&gt; on &lt;order: status&gt;</code>
             tells you exactly what's happening.
         </p>
 
@@ -379,20 +379,20 @@ components:
 
         <pre><code><span class="code-comment">(* Observe ALL status field transitions *)</span>
 <span class="code-feature">(Audit Status: status StateObserver)</span> {
-    <span class="code-keyword">&lt;Extract&gt;</span> the <span class="code-result">&lt;fromState&gt;</span> from the &lt;transition: fromState&gt;.
-    <span class="code-keyword">&lt;Extract&gt;</span> the <span class="code-result">&lt;toState&gt;</span> from the &lt;transition: toState&gt;.
-    <span class="code-keyword">&lt;Extract&gt;</span> the <span class="code-result">&lt;orderId&gt;</span> from the &lt;transition: entityId&gt;.
-    <span class="code-keyword">&lt;Log&gt;</span> the &lt;audit&gt; for the &lt;console&gt;
+    <span class="code-keyword">Extract</span> the <span class="code-result">&lt;fromState&gt;</span> from the &lt;transition: fromState&gt;.
+    <span class="code-keyword">Extract</span> the <span class="code-result">&lt;toState&gt;</span> from the &lt;transition: toState&gt;.
+    <span class="code-keyword">Extract</span> the <span class="code-result">&lt;orderId&gt;</span> from the &lt;transition: entityId&gt;.
+    <span class="code-keyword">Log</span> the &lt;audit&gt; for the &lt;console&gt;
         with <span class="code-string">"Order ${orderId}: ${fromState} -> ${toState}"</span>.
-    <span class="code-keyword">&lt;Return&gt;</span> an <span class="code-result">&lt;OK: status&gt;</span> for the &lt;audit&gt;.
+    <span class="code-keyword">Return</span> an <span class="code-result">&lt;OK: status&gt;</span> for the &lt;audit&gt;.
 }
 
 <span class="code-comment">(* Observe ONLY draft->placed transition *)</span>
 <span class="code-feature">(Notify Placed: status StateObserver&lt;draft_to_placed&gt;)</span> {
-    <span class="code-keyword">&lt;Extract&gt;</span> the <span class="code-result">&lt;orderId&gt;</span> from the &lt;transition: entityId&gt;.
-    <span class="code-keyword">&lt;Log&gt;</span> the &lt;notification&gt; for the &lt;console&gt;
+    <span class="code-keyword">Extract</span> the <span class="code-result">&lt;orderId&gt;</span> from the &lt;transition: entityId&gt;.
+    <span class="code-keyword">Log</span> the &lt;notification&gt; for the &lt;console&gt;
         with <span class="code-string">"Order ${orderId} has been placed!"</span>.
-    <span class="code-keyword">&lt;Return&gt;</span> an <span class="code-result">&lt;OK: status&gt;</span> for the &lt;notification&gt;.
+    <span class="code-keyword">Return</span> an <span class="code-result">&lt;OK: status&gt;</span> for the &lt;notification&gt;.
 }</code></pre>
 
         <h3>Transition Data</h3>
@@ -422,7 +422,7 @@ components:
             <p>
                 Observers execute <em>after</em> the transition succeeds. Multiple observers
                 can react to the same transition. Observers run in isolation - failures
-                don't affect the <code>&lt;Accept&gt;</code> action or other observers.
+                don't affect the <code>Accept</code> action or other observers.
             </p>
         </div>
 

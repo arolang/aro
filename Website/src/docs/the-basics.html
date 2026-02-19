@@ -104,11 +104,11 @@
         <h3>Example</h3>
 
         <pre><code><span class="code-feature">(Validate User Credentials: Authentication)</span> {
-    <span class="code-keyword">&lt;Extract&gt;</span> the <span class="code-result">&lt;username&gt;</span> from the &lt;request: body username&gt;.
-    <span class="code-keyword">&lt;Extract&gt;</span> the <span class="code-result">&lt;password&gt;</span> from the &lt;request: body password&gt;.
-    <span class="code-keyword">&lt;Retrieve&gt;</span> the <span class="code-result">&lt;user&gt;</span> from the &lt;user-repository&gt; where username = &lt;username&gt;.
-    <span class="code-keyword">&lt;Compare&gt;</span> the &lt;password&gt; against the &lt;user: passwordHash&gt;.
-    <span class="code-keyword">&lt;Return&gt;</span> an <span class="code-result">&lt;OK: status&gt;</span> with &lt;user&gt;.
+    <span class="code-keyword">Extract</span> the <span class="code-result">&lt;username&gt;</span> from the &lt;request: body username&gt;.
+    <span class="code-keyword">Extract</span> the <span class="code-result">&lt;password&gt;</span> from the &lt;request: body password&gt;.
+    <span class="code-keyword">Retrieve</span> the <span class="code-result">&lt;user&gt;</span> from the &lt;user-repository&gt; where username = &lt;username&gt;.
+    <span class="code-keyword">Compare</span> the &lt;password&gt; against the &lt;user: passwordHash&gt;.
+    <span class="code-keyword">Return</span> an <span class="code-result">&lt;OK: status&gt;</span> with &lt;user&gt;.
 }</code></pre>
 
         <h2>Statements</h2>
@@ -121,7 +121,7 @@
                 <tr><th>Component</th><th>Description</th><th>Example</th></tr>
             </thead>
             <tbody>
-                <tr><td>Action</td><td>The verb/operation</td><td><code>&lt;Extract&gt;</code>, <code>&lt;Create&gt;</code></td></tr>
+                <tr><td>Action</td><td>The verb/operation</td><td><code>Extract</code>, <code>Create</code></td></tr>
                 <tr><td>Article</td><td>Optional: a, an, the</td><td><code>the</code>, <code>a</code>, <code>an</code></td></tr>
                 <tr><td>Result</td><td>The output variable</td><td><code>&lt;user&gt;</code>, <code>&lt;data: processed&gt;</code></td></tr>
                 <tr><td>Preposition</td><td>Relationship word</td><td><code>from</code>, <code>to</code>, <code>with</code></td></tr>
@@ -159,26 +159,26 @@
                 <tr><th>Preposition</th><th>Meaning</th><th>Example</th></tr>
             </thead>
             <tbody>
-                <tr><td><code>from</code></td><td>Data source</td><td><code>&lt;Extract&gt; the &lt;id&gt; from the &lt;request&gt;</code></td></tr>
-                <tr><td><code>to</code></td><td>Destination</td><td><code>&lt;Send&gt; the &lt;email&gt; to the &lt;user&gt;</code></td></tr>
-                <tr><td><code>for</code></td><td>Purpose/benefit</td><td><code>&lt;Compute&gt; the &lt;hash&gt; for the &lt;password&gt;</code></td></tr>
-                <tr><td><code>with</code></td><td>Accompaniment</td><td><code>&lt;Create&gt; the &lt;user&gt; with &lt;data&gt;</code></td></tr>
-                <tr><td><code>into</code></td><td>Storage target</td><td><code>&lt;Store&gt; the &lt;user&gt; into the &lt;repository&gt;</code></td></tr>
-                <tr><td><code>against</code></td><td>Comparison</td><td><code>&lt;Compare&gt; the &lt;a&gt; against the &lt;b&gt;</code></td></tr>
-                <tr><td><code>on</code></td><td>Location/port</td><td><code>&lt;Start&gt; the &lt;server&gt; on port 8080</code></td></tr>
+                <tr><td><code>from</code></td><td>Data source</td><td><code>Extract the &lt;id&gt; from the &lt;request&gt;</code></td></tr>
+                <tr><td><code>to</code></td><td>Destination</td><td><code>Send the &lt;email&gt; to the &lt;user&gt;</code></td></tr>
+                <tr><td><code>for</code></td><td>Purpose/benefit</td><td><code>Compute the &lt;hash&gt; for the &lt;password&gt;</code></td></tr>
+                <tr><td><code>with</code></td><td>Accompaniment</td><td><code>Create the &lt;user&gt; with &lt;data&gt;</code></td></tr>
+                <tr><td><code>into</code></td><td>Storage target</td><td><code>Store the &lt;user&gt; into the &lt;repository&gt;</code></td></tr>
+                <tr><td><code>against</code></td><td>Comparison</td><td><code>Compare the &lt;a&gt; against the &lt;b&gt;</code></td></tr>
+                <tr><td><code>on</code></td><td>Location/port</td><td><code>Start the &lt;server&gt; on port 8080</code></td></tr>
             </tbody>
         </table>
 
         <h2>Literals</h2>
 
         <h3>String Literals</h3>
-        <pre><code><span class="code-keyword">&lt;Log&gt;</span> <span class="code-string">"Hello, World!"</span> to the &lt;console&gt;.</code></pre>
+        <pre><code><span class="code-keyword">Log</span> <span class="code-string">"Hello, World!"</span> to the &lt;console&gt;.</code></pre>
 
         <h3>String Interpolation</h3>
-        <pre><code><span class="code-keyword">&lt;Create&gt;</span> the <span class="code-result">&lt;greeting&gt;</span> with <span class="code-string">"Hello, ${user-name}!"</span>.</code></pre>
+        <pre><code><span class="code-keyword">Create</span> the <span class="code-result">&lt;greeting&gt;</span> with <span class="code-string">"Hello, ${user-name}!"</span>.</code></pre>
 
         <h3>Object Literals</h3>
-        <pre><code><span class="code-keyword">&lt;Create&gt;</span> the <span class="code-result">&lt;user&gt;</span> with {
+        <pre><code><span class="code-keyword">Create</span> the <span class="code-result">&lt;user&gt;</span> with {
     name: <span class="code-string">"John Doe"</span>,
     email: <span class="code-string">"john@example.com"</span>,
     role: <span class="code-string">"admin"</span>
@@ -190,19 +190,19 @@
         <p>The required entry point:</p>
         <pre><code><span class="code-feature">(Application-Start: My Application)</span> {
     <span class="code-comment">(* Initialization code *)</span>
-    <span class="code-keyword">&lt;Return&gt;</span> an <span class="code-result">&lt;OK: status&gt;</span> for the &lt;startup&gt;.
+    <span class="code-keyword">Return</span> an <span class="code-result">&lt;OK: status&gt;</span> for the &lt;startup&gt;.
 }</code></pre>
 
         <h3>Application-End</h3>
         <p>Optional exit handlers:</p>
         <pre><code><span class="code-feature">(Application-End: Success)</span> {
     <span class="code-comment">(* Cleanup on graceful shutdown *)</span>
-    <span class="code-keyword">&lt;Return&gt;</span> an <span class="code-result">&lt;OK: status&gt;</span> for the &lt;shutdown&gt;.
+    <span class="code-keyword">Return</span> an <span class="code-result">&lt;OK: status&gt;</span> for the &lt;shutdown&gt;.
 }
 
 <span class="code-feature">(Application-End: Error)</span> {
     <span class="code-comment">(* Cleanup on error *)</span>
-    <span class="code-keyword">&lt;Return&gt;</span> an <span class="code-result">&lt;OK: status&gt;</span> for the &lt;error-handling&gt;.
+    <span class="code-keyword">Return</span> an <span class="code-result">&lt;OK: status&gt;</span> for the &lt;error-handling&gt;.
 }</code></pre>
 
         <h3>Event Handlers</h3>

@@ -16,7 +16,7 @@ This proposal defines the Split action with regex-based delimiters using the `by
 ### 1.1 Basic Split
 
 ```aro
-<Split> the <result> from the <source> by /pattern/.
+Split the <result> from the <source> by /pattern/.
 ```
 
 Where:
@@ -27,7 +27,7 @@ Where:
 ### 1.2 With Regex Flags
 
 ```aro
-<Split> the <result> from the <source> by /pattern/flags.
+Split the <result> from the <source> by /pattern/flags.
 ```
 
 Supported flags:
@@ -44,8 +44,8 @@ Supported flags:
 
 ```aro
 (* Split CSV line by comma *)
-<Create> the <csv-line> with "apple,banana,cherry".
-<Split> the <fruits> from the <csv-line> by /,/.
+Create the <csv-line> with "apple,banana,cherry".
+Split the <fruits> from the <csv-line> by /,/.
 (* fruits = ["apple", "banana", "cherry"] *)
 ```
 
@@ -53,8 +53,8 @@ Supported flags:
 
 ```aro
 (* Split by any whitespace *)
-<Create> the <sentence> with "hello   world   foo".
-<Split> the <words> from the <sentence> by /\s+/.
+Create the <sentence> with "hello   world   foo".
+Split the <words> from the <sentence> by /\s+/.
 (* words = ["hello", "world", "foo"] *)
 ```
 
@@ -62,8 +62,8 @@ Supported flags:
 
 ```aro
 (* Split by comma, semicolon, or whitespace *)
-<Create> the <mixed> with "a,b;c d".
-<Split> the <tokens> from the <mixed> by /[,;\s]+/.
+Create the <mixed> with "a,b;c d".
+Split the <tokens> from the <mixed> by /[,;\s]+/.
 (* tokens = ["a", "b", "c", "d"] *)
 ```
 
@@ -71,8 +71,8 @@ Supported flags:
 
 ```aro
 (* Split by "SECTION" regardless of case *)
-<Create> the <text> with "Part1SECTIONPart2sectionPart3".
-<Split> the <parts> from the <text> by /section/i.
+Create the <text> with "Part1SECTIONPart2sectionPart3".
+Split the <parts> from the <text> by /section/i.
 (* parts = ["Part1", "Part2", "Part3"] *)
 ```
 
@@ -80,8 +80,8 @@ Supported flags:
 
 ```aro
 (* Split file path by directory separator *)
-<Create> the <path> with "/usr/local/bin/aro".
-<Split> the <components> from the <path> by /\//.
+Create the <path> with "/usr/local/bin/aro".
+Split the <components> from the <path> by /\//.
 (* components = ["", "usr", "local", "bin", "aro"] *)
 ```
 
@@ -94,7 +94,7 @@ Supported flags:
 Split always returns an array of strings:
 
 ```aro
-<Split> the <parts> from the <input> by /,/.
+Split the <parts> from the <input> by /,/.
 (* parts: List<String> *)
 ```
 
@@ -103,8 +103,8 @@ Split always returns an array of strings:
 If the pattern doesn't match, the original string is returned as a single-element array:
 
 ```aro
-<Create> the <text> with "no-commas-here".
-<Split> the <parts> from the <text> by /,/.
+Create the <text> with "no-commas-here".
+Split the <parts> from the <text> by /,/.
 (* parts = ["no-commas-here"] *)
 ```
 
@@ -113,8 +113,8 @@ If the pattern doesn't match, the original string is returned as a single-elemen
 Empty strings are included when delimiters are adjacent:
 
 ```aro
-<Create> the <data> with "a,,b".
-<Split> the <parts> from the <data> by /,/.
+Create the <data> with "a,,b".
+Split the <parts> from the <data> by /,/.
 (* parts = ["a", "", "b"] *)
 ```
 
@@ -123,8 +123,8 @@ Empty strings are included when delimiters are adjacent:
 Leading or trailing delimiters produce empty strings:
 
 ```aro
-<Create> the <csv> with ",a,b,".
-<Split> the <parts> from the <csv> by /,/.
+Create the <csv> with ",a,b,".
+Split the <parts> from the <csv> by /,/.
 (* parts = ["", "a", "b", ""] *)
 ```
 
@@ -136,31 +136,31 @@ Leading or trailing delimiters produce empty strings:
 
 ```aro
 (* Parse CSV line *)
-<Create> the <line> with "John,Doe,30,Engineer".
-<Split> the <fields> from the <line> by /,/.
-<Extract> the <first-name: first> from the <fields>.
-<Extract> the <last-name: 1> from the <fields>.
+Create the <line> with "John,Doe,30,Engineer".
+Split the <fields> from the <line> by /,/.
+Extract the <first-name: first> from the <fields>.
+Extract the <last-name: 1> from the <fields>.
 ```
 
 ### 4.2 Log Parsing
 
 ```aro
 (* Parse log entry: "2024-01-15 10:30:45 INFO Server started" *)
-<Split> the <parts> from the <log-line> by /\s+/.
-<Extract> the <date: first> from the <parts>.
-<Extract> the <time: 1> from the <parts>.
-<Extract> the <level: 2> from the <parts>.
+Split the <parts> from the <log-line> by /\s+/.
+Extract the <date: first> from the <parts>.
+Extract the <time: 1> from the <parts>.
+Extract the <level: 2> from the <parts>.
 ```
 
 ### 4.3 URL Query String
 
 ```aro
 (* Parse query string: "name=John&age=30&city=NYC" *)
-<Split> the <pairs> from the <query-string> by /&/.
+Split the <pairs> from the <query-string> by /&/.
 for each <pair> in <pairs> {
-    <Split> the <kv> from the <pair> by /=/.
-    <Extract> the <key: first> from the <kv>.
-    <Extract> the <value: last> from the <kv>.
+    Split the <kv> from the <pair> by /=/.
+    Extract the <key: first> from the <kv>.
+    Extract the <value: last> from the <kv>.
 }
 ```
 
@@ -168,7 +168,7 @@ for each <pair> in <pairs> {
 
 ```aro
 (* Split text into lines *)
-<Split> the <lines> from the <text> by /\r?\n/.
+Split the <lines> from the <text> by /\r?\n/.
 ```
 
 ---
@@ -212,12 +212,12 @@ Split pairs naturally with list element access (ARO-0038):
 
 ```aro
 (* Split and extract first element *)
-<Split> the <parts> from the <path> by /\//.
-<Extract> the <filename: last> from the <parts>.
+Split the <parts> from the <path> by /\//.
+Extract the <filename: last> from the <parts>.
 
 (* Split and get range *)
-<Split> the <words> from the <sentence> by /\s+/.
-<Extract> the <first-three: 0-2> from the <words>.
+Split the <words> from the <sentence> by /\s+/.
+Extract the <first-three: 0-2> from the <words>.
 ```
 
 ---
@@ -241,7 +241,7 @@ flags = { "i" | "s" | "m" | "g" } ;
 | Aspect | Description |
 |--------|-------------|
 | **Action** | `<Split>` |
-| **Syntax** | `<Split> the <r> from the <s> by /pattern/flags.` |
+| **Syntax** | `Split the <r> from the <s> by /pattern/flags.` |
 | **Result** | `List<String>` |
 | **No match** | Returns single-element array with original string |
 | **Flags** | `i` (case-insensitive), `s` (dotall), `m` (multiline) |

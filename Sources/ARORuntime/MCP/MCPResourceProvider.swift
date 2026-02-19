@@ -440,41 +440,41 @@ public actor MCPResourceProvider {
 
         ### Extract data
         ```aro
-        <Extract> the <field> from the <source: field>.
+        Extract the <field> from the <source: field>.
         ```
 
         ### Log output
         ```aro
-        <Log> "message" to the <console>.
-        <Log> <variable> to the <console>.
+        Log "message" to the <console>.
+        Log <variable> to the <console>.
         ```
 
         ### Return result
         ```aro
-        <Return> an <OK: status> for the <result>.
-        <Return> an <OK: status> with <data>.
+        Return an <OK: status> for the <result>.
+        Return an <OK: status> with <data>.
         ```
 
         ### Store data
         ```aro
-        <Store> the <entity> in the <entity-repository>.
+        Store the <entity> in the <entity-repository>.
         ```
 
         ### Retrieve data
         ```aro
-        <Retrieve> the <entities> from the <entity-repository>.
-        <Retrieve> the <entity> from the <entity-repository> where id = <id>.
+        Retrieve the <entities> from the <entity-repository>.
+        Retrieve the <entity> from the <entity-repository> where id = <id>.
         ```
 
         ### Emit event
         ```aro
-        <Emit> a <EventName: event> with <data>.
+        Emit a <EventName: event> with <data>.
         ```
 
         ### Compute values
         ```aro
-        <Compute> the <result> from <a> + <b>.
-        <Compute> the <length> from the <text>.
+        Compute the <result> from <a> + <b>.
+        Compute the <length> from the <text>.
         ```
 
         ## Special Feature Sets

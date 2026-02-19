@@ -488,7 +488,7 @@ struct SemanticAnalyzerComprehensiveTests {
     func testSimpleFeatureSet() throws {
         let source = """
         (Test: Testing) {
-            <Extract> the <user> from the <request>.
+            Extract the <user> from the <request>.
         }
         """
         let analyzed = try SemanticAnalyzer.analyze(source)
@@ -501,7 +501,7 @@ struct SemanticAnalyzerComprehensiveTests {
     func testRequestActionDataFlow() throws {
         let source = """
         (Test: Testing) {
-            <Extract> the <user> from the <request>.
+            Extract the <user> from the <request>.
         }
         """
         let analyzed = try SemanticAnalyzer.analyze(source)
@@ -515,8 +515,8 @@ struct SemanticAnalyzerComprehensiveTests {
     func testOwnActionDataFlow() throws {
         let source = """
         (Test: Testing) {
-            <Extract> the <input> from the <request>.
-            <Compute> the <output> for the <input>.
+            Extract the <input> from the <request>.
+            Compute the <output> for the <input>.
         }
         """
         let analyzed = try SemanticAnalyzer.analyze(source)
@@ -530,8 +530,8 @@ struct SemanticAnalyzerComprehensiveTests {
     func testResponseActionDataFlow() throws {
         let source = """
         (Test: Testing) {
-            <Extract> the <data> from the <request>.
-            <Return> the <response> for the <success>.
+            Extract the <data> from the <request>.
+            Return the <response> for the <success>.
         }
         """
         let analyzed = try SemanticAnalyzer.analyze(source)
@@ -544,7 +544,7 @@ struct SemanticAnalyzerComprehensiveTests {
     func testExternalDependencies() throws {
         let source = """
         (Test: Testing) {
-            <Extract> the <user> from the <request>.
+            Extract the <user> from the <request>.
         }
         """
         let analyzed = try SemanticAnalyzer.analyze(source)
@@ -558,8 +558,8 @@ struct SemanticAnalyzerComprehensiveTests {
     func testExportTracking() throws {
         let source = """
         (Test: Testing) {
-            <Extract> the <data> from the <request>.
-            <Publish> as <external-data> <data>.
+            Extract the <data> from the <request>.
+            Publish as <external-data> <data>.
         }
         """
         let analyzed = try SemanticAnalyzer.analyze(source)
@@ -572,7 +572,7 @@ struct SemanticAnalyzerComprehensiveTests {
         let diagnostics = DiagnosticCollector()
         let source = """
         (Test: Testing) {
-            <Publish> as <external> <undefined>.
+            Publish as <external> <undefined>.
         }
         """
         _ = try SemanticAnalyzer.analyze(source, diagnostics: diagnostics)
@@ -584,8 +584,8 @@ struct SemanticAnalyzerComprehensiveTests {
     func testGlobalRegistryRegistration() throws {
         let source = """
         (Test: Testing) {
-            <Extract> the <data> from the <request>.
-            <Publish> as <published-data> <data>.
+            Extract the <data> from the <request>.
+            Publish as <published-data> <data>.
         }
         """
         let analyzed = try SemanticAnalyzer.analyze(source)
@@ -598,10 +598,10 @@ struct SemanticAnalyzerComprehensiveTests {
     func testMultipleFeatureSets() throws {
         let source = """
         (Feature One: First) {
-            <Extract> the <a> from the <request>.
+            Extract the <a> from the <request>.
         }
         (Feature Two: Second) {
-            <Extract> the <b> from the <request>.
+            Extract the <b> from the <request>.
         }
         """
         let analyzed = try SemanticAnalyzer.analyze(source)
@@ -613,9 +613,9 @@ struct SemanticAnalyzerComprehensiveTests {
     func testDataTypeFromAnnotation() throws {
         let source = """
         (Test: Testing) {
-            <Extract> the <user: User> from the <request>.
-            <Extract> the <name: String> from the <user>.
-            <Extract> the <count: Integer> from the <data>.
+            Extract the <user: User> from the <request>.
+            Extract the <name: String> from the <user>.
+            Extract the <count: Integer> from the <data>.
         }
         """
         let analyzed = try SemanticAnalyzer.analyze(source)
@@ -642,7 +642,7 @@ struct AnalyzedProgramTests {
     func testAnalyzedProgramData() throws {
         let source = """
         (Test: Testing) {
-            <Extract> the <data> from the <request>.
+            Extract the <data> from the <request>.
         }
         """
         let analyzed = try SemanticAnalyzer.analyze(source)
@@ -663,11 +663,11 @@ struct StreamingOptimizationTests {
     func testAggregationFusionDetection() throws {
         let source = """
         (Analytics: Data Processing) {
-            <Filter> the <orders> from the <all-orders> where <status> = "active".
-            <Reduce> the <total> from the <orders> with sum(<amount>).
-            <Reduce> the <count> from the <orders> with count().
-            <Reduce> the <average> from the <orders> with avg(<amount>).
-            <Return> an <OK: status> with { total: <total>, count: <count>, average: <average> }.
+            Filter the <orders> from the <all-orders> where <status> = "active".
+            Reduce the <total> from the <orders> with sum(<amount>).
+            Reduce the <count> from the <orders> with count().
+            Reduce the <average> from the <orders> with avg(<amount>).
+            Return an <OK: status> with { total: <total>, count: <count>, average: <average> }.
         }
         """
         let analyzed = try SemanticAnalyzer.analyze(source)
@@ -693,8 +693,8 @@ struct StreamingOptimizationTests {
     func testNoFusionForSingleReduce() throws {
         let source = """
         (Sum Only: Calculation) {
-            <Reduce> the <total> from the <items> with sum(<value>).
-            <Return> an <OK: status> with <total>.
+            Reduce the <total> from the <items> with sum(<value>).
+            Return an <OK: status> with <total>.
         }
         """
         let analyzed = try SemanticAnalyzer.analyze(source)
@@ -709,11 +709,11 @@ struct StreamingOptimizationTests {
     func testFusionGroupsBySource() throws {
         let source = """
         (Multi Source: Analytics) {
-            <Reduce> the <total-a> from the <items-a> with sum(<value>).
-            <Reduce> the <count-a> from the <items-a> with count().
-            <Reduce> the <total-b> from the <items-b> with sum(<value>).
-            <Reduce> the <count-b> from the <items-b> with count().
-            <Return> an <OK: status> for the <result>.
+            Reduce the <total-a> from the <items-a> with sum(<value>).
+            Reduce the <count-a> from the <items-a> with count().
+            Reduce the <total-b> from the <items-b> with sum(<value>).
+            Reduce the <count-b> from the <items-b> with count().
+            Return an <OK: status> for the <result>.
         }
         """
         let analyzed = try SemanticAnalyzer.analyze(source)
@@ -732,10 +732,10 @@ struct StreamingOptimizationTests {
     func testStreamConsumerDetection() throws {
         let source = """
         (Multi Use: Processing) {
-            <Filter> the <active> from the <data> where <status> = "active".
-            <Reduce> the <total> from the <active> with sum(<amount>).
-            <Log> <active> to the <console>.
-            <Return> an <OK: status> with <total>.
+            Filter the <active> from the <data> where <status> = "active".
+            Reduce the <total> from the <active> with sum(<amount>).
+            Log <active> to the <console>.
+            Return an <OK: status> with <total>.
         }
         """
         let analyzed = try SemanticAnalyzer.analyze(source)
@@ -753,9 +753,9 @@ struct StreamingOptimizationTests {
     func testStreamConsumerSkipsExternals() throws {
         let source = """
         (Request Handler: API) {
-            <Extract> the <id> from the <request: id>.
-            <Log> <request> to the <console>.
-            <Return> an <OK: status> with <id>.
+            Extract the <id> from the <request: id>.
+            Log <request> to the <console>.
+            Return an <OK: status> with <id>.
         }
         """
         let analyzed = try SemanticAnalyzer.analyze(source)

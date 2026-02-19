@@ -22,8 +22,8 @@ A plugin can contain:
 
 | Type | Adds | Invocation Pattern | Example |
 |------|------|-------------------|---------|
-| **Actions** | New verbs | `<Verb> the <result> from <object>.` | `<Geocode> the <coords> from <address>.` |
-| **Services** | External integrations | `<Call> from <service: method>` | `<Call> from <zip: compress>` |
+| **Actions** | New verbs | `<Verb> the <result> from <object>.` | `Geocode the <coords> from <address>.` |
+| **Services** | External integrations | `Call from <service: method>` | `Call from <zip: compress>` |
 | **Feature Sets** | Reusable business logic | Triggered by events | `FormatCSV`, `SendNotification` |
 
 ---
@@ -161,23 +161,23 @@ provides:
 ```aro
 (* FormatTitle — Capitalize first letter of each word *)
 (FormatTitle: String Operations) {
-    <Extract> the <text> from the <input: text>.
-    <Transform> the <title> from <text> using <titlecase>.
-    <Return> an <OK: status> with <title>.
+    Extract the <text> from the <input: text>.
+    Transform the <title> from <text> using <titlecase>.
+    Return an <OK: status> with <title>.
 }
 
 (* TruncateText — Shorten text with ellipsis *)
 (TruncateText: String Operations) {
-    <Extract> the <text> from the <input: text>.
-    <Extract> the <max-length> from the <input: maxLength>.
-    <Compute> the <length: length> from <text>.
+    Extract the <text> from the <input: text>.
+    Extract the <max-length> from the <input: maxLength>.
+    Compute the <length: length> from <text>.
     when <length> > <max-length> {
-        <Transform> the <truncated> from <text> using <substring: 0> to <max-length>.
-        <Create> the <result> with <truncated> + "...".
+        Transform the <truncated> from <text> using <substring: 0> to <max-length>.
+        Create the <result> with <truncated> + "...".
     } else {
-        <Create> the <result> with <text>.
+        Create the <result> with <text>.
     }
-    <Return> an <OK: status> with <result>.
+    Return an <OK: status> with <result>.
 }
 ```
 
@@ -186,9 +186,9 @@ Feature sets from plugins are automatically available in your application with a
 ```aro
 (* Use plugin feature set *)
 (Format User Name: User Processing) {
-    <Extract> the <name> from the <user: fullName>.
-    <Emit> a <FormatTitle: event> with { text: <name> }.
-    <Return> an <OK: status> with <name>.
+    Extract the <name> from the <user: fullName>.
+    Emit a <FormatTitle: event> with { text: <name> }.
+    Return an <OK: status> with <name>.
 }
 ```
 
@@ -269,7 +269,7 @@ public func registerPlugin() {
 **Usage:**
 
 ```aro
-<Geocode> the <coordinates> from the <address>.
+Geocode the <coordinates> from the <address>.
 ```
 
 ---

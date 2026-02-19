@@ -1,18 +1,18 @@
 (* Simple Chat - HTTP + Socket Demo *)
 
 (Application-Start: Simple Chat) {
-    <Log> "Starting Simple Chat..." to the <console>.
+    Log "Starting Simple Chat..." to the <console>.
 
     (* Start HTTP server from OpenAPI contract *)
-    <Start> the <http-server> with {}.
-    <Log> "HTTP server on port 8080" to the <console>.
+    Start the <http-server> with {}.
+    Log "HTTP server on port 8080" to the <console>.
 
     (* Start socket server for real-time *)
-    <Start> the <socket-server> with { port: 9000 }.
-    <Log> "Socket server on port 9000" to the <console>.
+    Start the <socket-server> with { port: 9000 }.
+    Log "Socket server on port 9000" to the <console>.
 
     (* Keep alive *)
-    <Keepalive> the <application> for the <events>.
+    Keepalive the <application> for the <events>.
 
-    <Return> an <OK: status> for the <startup>.
+    Return an <OK: status> for the <startup>.
 }

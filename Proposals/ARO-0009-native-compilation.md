@@ -153,9 +153,9 @@ The `LLVMCodeGenerator` transforms the analyzed AST into textual LLVM IR.
 **ARO Source:**
 ```aro
 (Application-Start: Hello World) {
-    <Create> the <greeting> with "Hello, World!".
-    <Log> "Ready!" to the <console>.
-    <Return> an <OK: status> for the <application>.
+    Create the <greeting> with "Hello, World!".
+    Log "Ready!" to the <console>.
+    Return an <OK: status> for the <application>.
 }
 ```
 
@@ -192,14 +192,14 @@ entry:
   %__result = alloca ptr
   store ptr null, ptr %__result
 
-  ; <Create> the <greeting> with "Hello, World!"
+  ; Create the <greeting> with "Hello, World!"
   call void @aro_variable_bind_string(ptr %ctx, ptr @.str.greeting, ptr @.str.greeting)
   ; ... descriptor setup and action call ...
 
-  ; <Log> "Ready!" to the <console>
+  ; Log "Ready!" to the <console>
   ; ... log action call ...
 
-  ; <Return> an <OK: status> for the <application>
+  ; Return an <OK: status> for the <application>
   ; ... return action call ...
 
   %final_result = load ptr, ptr %__result
@@ -565,9 +565,9 @@ When compiling, test feature sets are automatically excluded from the binary. Fe
 **HelloWorld/main.aro:**
 ```aro
 (Application-Start: Hello World) {
-    <Log> "Hello, World!" to the <console>.
-    <Log> "Native compilation works!" to the <console>.
-    <Return> an <OK: status> for the <application>.
+    Log "Hello, World!" to the <console>.
+    Log "Native compilation works!" to the <console>.
+    Return an <OK: status> for the <application>.
 }
 ```
 

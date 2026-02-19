@@ -15,11 +15,11 @@ struct DuplicateFeatureSetTests {
     func testUniqueNames() throws {
         let source = """
         (Feature One: API) {
-            <Return> an <OK: status> for the <result>.
+            Return an <OK: status> for the <result>.
         }
 
         (Feature Two: API) {
-            <Return> an <OK: status> for the <result>.
+            Return an <OK: status> for the <result>.
         }
         """
         let diagnostics = DiagnosticCollector()
@@ -33,11 +33,11 @@ struct DuplicateFeatureSetTests {
     func testDuplicateNames() throws {
         let source = """
         (Same Name: API) {
-            <Return> an <OK: status> for the <result>.
+            Return an <OK: status> for the <result>.
         }
 
         (Same Name: API) {
-            <Return> an <OK: status> for the <result>.
+            Return an <OK: status> for the <result>.
         }
         """
         let diagnostics = DiagnosticCollector()
@@ -52,15 +52,15 @@ struct DuplicateFeatureSetTests {
     func testMultipleDuplicates() throws {
         let source = """
         (Same Name: API) {
-            <Return> an <OK: status> for the <result>.
+            Return an <OK: status> for the <result>.
         }
 
         (Same Name: API) {
-            <Return> an <OK: status> for the <result>.
+            Return an <OK: status> for the <result>.
         }
 
         (Same Name: API) {
-            <Return> an <OK: status> for the <result>.
+            Return an <OK: status> for the <result>.
         }
         """
         let compiler = Compiler()
@@ -95,7 +95,7 @@ struct EmptyFeatureSetTests {
     func testNonEmptyFeatureSet() throws {
         let source = """
         (Non Empty: API) {
-            <Return> an <OK: status> for the <result>.
+            Return an <OK: status> for the <result>.
         }
         """
         let diagnostics = DiagnosticCollector()
@@ -115,8 +115,8 @@ struct UnreachableCodeTests {
     func testCodeAfterReturn() throws {
         let source = """
         (Test Feature: API) {
-            <Return> an <OK: status> for the <result>.
-            <Log> <message> to the <console>.
+            Return an <OK: status> for the <result>.
+            Log <message> to the <console>.
         }
         """
         let diagnostics = DiagnosticCollector()
@@ -130,8 +130,8 @@ struct UnreachableCodeTests {
     func testCodeAfterThrow() throws {
         let source = """
         (Test Feature: API) {
-            <Throw> a <Failure: status> for the <operation>.
-            <Log> <message> to the <console>.
+            Throw a <Failure: status> for the <operation>.
+            Log <message> to the <console>.
         }
         """
         let compiler = Compiler()
@@ -145,8 +145,8 @@ struct UnreachableCodeTests {
     func testReturnAtEnd() throws {
         let source = """
         (Test Feature: API) {
-            <Log> <message> to the <console>.
-            <Return> an <OK: status> for the <result>.
+            Log <message> to the <console>.
+            Return an <OK: status> for the <result>.
         }
         """
         let diagnostics = DiagnosticCollector()
@@ -166,7 +166,7 @@ struct MissingReturnTests {
     func testMissingReturn() throws {
         let source = """
         (Test Feature: API) {
-            <Log> <message> to the <console>.
+            Log <message> to the <console>.
         }
         """
         let diagnostics = DiagnosticCollector()
@@ -180,7 +180,7 @@ struct MissingReturnTests {
     func testReturnPresent() throws {
         let source = """
         (Test Feature: API) {
-            <Return> an <OK: status> for the <result>.
+            Return an <OK: status> for the <result>.
         }
         """
         let diagnostics = DiagnosticCollector()
@@ -194,7 +194,7 @@ struct MissingReturnTests {
     func testThrowPresent() throws {
         let source = """
         (Test Feature: API) {
-            <Throw> an <Error: status> for the <failure>.
+            Throw an <Error: status> for the <failure>.
         }
         """
         let diagnostics = DiagnosticCollector()
@@ -214,8 +214,8 @@ struct OrphanedEventTests {
     func testOrphanedEvent() throws {
         let source = """
         (Create User: API) {
-            <Emit> a <UserCreated: event> with <user>.
-            <Return> an <OK: status> for the <result>.
+            Emit a <UserCreated: event> with <user>.
+            Return an <OK: status> for the <result>.
         }
         """
         let diagnostics = DiagnosticCollector()
@@ -230,13 +230,13 @@ struct OrphanedEventTests {
     func testHandlerExists() throws {
         let source = """
         (Create User: API) {
-            <Emit> a <UserCreated: event> with <user>.
-            <Return> an <OK: status> for the <result>.
+            Emit a <UserCreated: event> with <user>.
+            Return an <OK: status> for the <result>.
         }
 
         (Log User: UserCreated Handler) {
-            <Log> <message> to the <console>.
-            <Return> an <OK: status> for the <log>.
+            Log <message> to the <console>.
+            Return an <OK: status> for the <log>.
         }
         """
         let diagnostics = DiagnosticCollector()
@@ -250,9 +250,9 @@ struct OrphanedEventTests {
     func testMultipleOrphaned() throws {
         let source = """
         (Test Feature: API) {
-            <Emit> a <EventOne: event> for the <trigger>.
-            <Emit> a <EventTwo: event> for the <trigger>.
-            <Return> an <OK: status> for the <result>.
+            Emit a <EventOne: event> for the <trigger>.
+            Emit a <EventTwo: event> for the <trigger>.
+            Return an <OK: status> for the <result>.
         }
         """
         let diagnostics = DiagnosticCollector()
@@ -272,15 +272,15 @@ struct StaticAnalysisIntegrationTests {
     func testAllChecksWithCompiler() throws {
         let source = """
         (Good Feature: API) {
-            <Extract> the <data> from the <request>.
-            <Create> the <user> with <data>.
-            <Emit> a <UserCreated: event> with <user>.
-            <Return> an <OK: status> for the <user>.
+            Extract the <data> from the <request>.
+            Create the <user> with <data>.
+            Emit a <UserCreated: event> with <user>.
+            Return an <OK: status> for the <user>.
         }
 
         (Handle User: UserCreated Handler) {
-            <Log> <message> to the <console>.
-            <Return> an <OK: status> for the <handler>.
+            Log <message> to the <console>.
+            Return an <OK: status> for the <handler>.
         }
         """
         let compiler = Compiler()
@@ -295,8 +295,8 @@ struct StaticAnalysisIntegrationTests {
     func testBadCodeWarnings() throws {
         let source = """
         (Bad Feature: API) {
-            <Log> <message> to the <console>.
-            <Emit> a <OrphanEvent: event> for the <trigger>.
+            Log <message> to the <console>.
+            Emit a <OrphanEvent: event> for the <trigger>.
         }
         """
         let compiler = Compiler()

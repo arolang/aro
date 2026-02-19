@@ -40,7 +40,7 @@ The `FilterUrl` handler decides which URLs proceed to the queue.
 ARO has a powerful construct for conditional execution: the `when` guard.
 
 ```aro
-<Emit> a <SomeEvent: event> with <data> when <condition>.
+Emit a <SomeEvent: event> with <data> when <condition>.
 ```
 
 The action only executes if the condition is true. This is not an if/else—there is no else branch. If the condition is false, the statement is simply skipped.
@@ -49,13 +49,13 @@ Guards can use various conditions:
 
 ```aro
 (* String containment *)
-<Action> ... when <string> contains <substring>.
+Action ... when <string> contains <substring>.
 
 (* Numeric comparison *)
-<Action> ... when <count> > 0.
+Action ... when <count> > 0.
 
 (* Equality *)
-<Action> ... when <status> = "active".
+Action ... when <status> = "active".
 ```
 
 ---
@@ -67,11 +67,11 @@ Add to `links.aro`:
 ```aro
 (Filter URL: FilterUrl Handler) {
     (* Extract from event data structure *)
-    <Extract> the <event-data> from the <event: data>.
-    <Extract> the <url> from the <event-data: url>.
-    <Extract> the <base-domain> from the <event-data: base>.
+    Extract the <event-data> from the <event: data>.
+    Extract the <url> from the <event-data: url>.
+    Extract the <base-domain> from the <event-data: base>.
 
-    <Return> an <OK: status> for the <filter>.
+    Return an <OK: status> for the <filter>.
 }
 ```
 
@@ -89,14 +89,14 @@ Now add the conditional emit:
 ```aro
 (Filter URL: FilterUrl Handler) {
     (* Extract from event data structure *)
-    <Extract> the <event-data> from the <event: data>.
-    <Extract> the <url> from the <event-data: url>.
-    <Extract> the <base-domain> from the <event-data: base>.
+    Extract the <event-data> from the <event: data>.
+    Extract the <url> from the <event-data: url>.
+    Extract the <base-domain> from the <event-data: base>.
 
     (* Filter URLs that belong to the same domain as base-domain *)
-    <Emit> a <QueueUrl: event> with { url: <url>, base: <base-domain> } when <url> contains <base-domain>.
+    Emit a <QueueUrl: event> with { url: <url>, base: <base-domain> } when <url> contains <base-domain>.
 
-    <Return> an <OK: status> for the <filter>.
+    Return an <OK: status> for the <filter>.
 }
 ```
 
@@ -127,15 +127,15 @@ However, there are edge cases. `https://example.com.malicious.com` would match b
 ```aro
 (Filter URL: FilterUrl Handler) {
     (* Extract from event data structure *)
-    <Extract> the <event-data> from the <event: data>.
-    <Extract> the <url> from the <event-data: url>.
-    <Extract> the <base-domain> from the <event-data: base>.
+    Extract the <event-data> from the <event: data>.
+    Extract the <url> from the <event-data: url>.
+    Extract the <base-domain> from the <event-data: base>.
 
     (* Filter URLs that belong to the same domain as base-domain *)
-    <Log> "Queuing: ${<url>}" to the <console> when <url> contains <base-domain>.
-    <Emit> a <QueueUrl: event> with { url: <url>, base: <base-domain> } when <url> contains <base-domain>.
+    Log "Queuing: ${<url>}" to the <console> when <url> contains <base-domain>.
+    Emit a <QueueUrl: event> with { url: <url>, base: <base-domain> } when <url> contains <base-domain>.
 
-    <Return> an <OK: status> for the <filter>.
+    Return an <OK: status> for the <filter>.
 }
 ```
 
@@ -150,30 +150,30 @@ The final handler in the link pipeline queues URLs for crawling. Add to `links.a
 ```aro
 (Queue URL: QueueUrl Handler) {
     (* Extract from event data structure *)
-    <Extract> the <event-data> from the <event: data>.
-    <Extract> the <url> from the <event-data: url>.
-    <Extract> the <base-domain> from the <event-data: base>.
+    Extract the <event-data> from the <event: data>.
+    Extract the <url> from the <event-data: url>.
+    Extract the <base-domain> from the <event-data: base>.
 
     (* Generate deterministic id from URL hash for deduplication *)
-    <Compute> the <url-id: hash> from the <url>.
+    Compute the <url-id: hash> from the <url>.
 
     (* Store with id - repository deduplicates by id, observer only fires for new entries *)
-    <Create> the <crawl-request> with { id: <url-id>, url: <url>, base: <base-domain> }.
-    <Store> the <crawl-request> into the <crawled-repository>.
+    Create the <crawl-request> with { id: <url-id>, url: <url>, base: <base-domain> }.
+    Store the <crawl-request> into the <crawled-repository>.
 
-    <Return> an <OK: status> for the <queue>.
+    Return an <OK: status> for the <queue>.
 }
 
 (Trigger Crawl: crawled-repository Observer) {
     (* React to new entries in the repository *)
-    <Extract> the <crawl-request> from the <event: newValue>.
-    <Extract> the <url> from the <crawl-request: url>.
-    <Extract> the <base-domain> from the <crawl-request: base>.
+    Extract the <crawl-request> from the <event: newValue>.
+    Extract the <url> from the <crawl-request: url>.
+    Extract the <base-domain> from the <crawl-request: base>.
 
-    <Log> "Queued: ${<url>}" to the <console>.
-    <Emit> a <CrawlPage: event> with { url: <url>, base: <base-domain> }.
+    Log "Queued: ${<url>}" to the <console>.
+    Emit a <CrawlPage: event> with { url: <url>, base: <base-domain> }.
 
-    <Return> an <OK: status> for the <observer>.
+    Return an <OK: status> for the <observer>.
 }
 ```
 
@@ -201,102 +201,102 @@ We now have four handlers plus one observer in `links.aro`. Here is the complete
 
 (Extract Links: ExtractLinks Handler) {
     (* Extract from event data structure *)
-    <Extract> the <event-data> from the <event: data>.
-    <Extract> the <html> from the <event-data: html>.
-    <Extract> the <source-url> from the <event-data: url>.
-    <Extract> the <base-domain> from the <event-data: base>.
+    Extract the <event-data> from the <event: data>.
+    Extract the <html> from the <event-data: html>.
+    Extract the <source-url> from the <event-data: url>.
+    Extract the <base-domain> from the <event-data: base>.
 
     (* Use ParseHtml action to extract all href attributes from anchor tags *)
-    <ParseHtml> the <links: links> from the <html>.
+    ParseHtml the <links: links> from the <html>.
 
     (* Process links in parallel - repository Actor ensures atomic dedup *)
     parallel for each <raw-url> in <links> {
-        <Emit> a <NormalizeUrl: event> with {
+        Emit a <NormalizeUrl: event> with {
             raw: <raw-url>,
             source: <source-url>,
             base: <base-domain>
         }.
     }
 
-    <Return> an <OK: status> for the <extraction>.
+    Return an <OK: status> for the <extraction>.
 }
 
 (Normalize URL: NormalizeUrl Handler) {
     (* Extract from event data structure *)
-    <Extract> the <event-data> from the <event: data>.
-    <Extract> the <raw-url> from the <event-data: raw>.
-    <Extract> the <source-url> from the <event-data: source>.
-    <Extract> the <base-domain> from the <event-data: base>.
+    Extract the <event-data> from the <event: data>.
+    Extract the <raw-url> from the <event-data: raw>.
+    Extract the <source-url> from the <event-data: source>.
+    Extract the <base-domain> from the <event-data: base>.
 
     (* Determine URL type and normalize *)
     match <raw-url> {
         case /^https?:\/\// {
             (* Already absolute URL - strip fragment and trailing slash *)
-            <Split> the <frag-parts> from the <raw-url> by /#/.
-            <Extract> the <no-fragment: first> from the <frag-parts>.
-            <Split> the <slash-parts> from the <no-fragment> by /\/+$/.
-            <Extract> the <clean-url: first> from the <slash-parts>.
-            <Emit> a <FilterUrl: event> with { url: <clean-url>, base: <base-domain> }.
+            Split the <frag-parts> from the <raw-url> by /#/.
+            Extract the <no-fragment: first> from the <frag-parts>.
+            Split the <slash-parts> from the <no-fragment> by /\/+$/.
+            Extract the <clean-url: first> from the <slash-parts>.
+            Emit a <FilterUrl: event> with { url: <clean-url>, base: <base-domain> }.
         }
         case /^\/$/ {
             (* Just "/" means root - use base domain as-is (no trailing slash) *)
-            <Emit> a <FilterUrl: event> with { url: <base-domain>, base: <base-domain> }.
+            Emit a <FilterUrl: event> with { url: <base-domain>, base: <base-domain> }.
         }
         case /^\// {
             (* Root-relative URL: prepend base domain, strip fragment and trailing slash *)
-            <Create> the <joined-url> with "${<base-domain>}${<raw-url>}".
-            <Split> the <frag-parts> from the <joined-url> by /#/.
-            <Extract> the <no-fragment: first> from the <frag-parts>.
-            <Split> the <slash-parts> from the <no-fragment> by /\/+$/.
-            <Extract> the <clean-url: first> from the <slash-parts>.
-            <Emit> a <FilterUrl: event> with { url: <clean-url>, base: <base-domain> }.
+            Create the <joined-url> with "${<base-domain>}${<raw-url>}".
+            Split the <frag-parts> from the <joined-url> by /#/.
+            Extract the <no-fragment: first> from the <frag-parts>.
+            Split the <slash-parts> from the <no-fragment> by /\/+$/.
+            Extract the <clean-url: first> from the <slash-parts>.
+            Emit a <FilterUrl: event> with { url: <clean-url>, base: <base-domain> }.
         }
         case /^(#|mailto:|javascript:|tel:|data:)/ {
             (* Skip fragments and special URLs *)
         }
     }
 
-    <Return> an <OK: status> for the <normalization>.
+    Return an <OK: status> for the <normalization>.
 }
 
 (Filter URL: FilterUrl Handler) {
     (* Extract from event data structure *)
-    <Extract> the <event-data> from the <event: data>.
-    <Extract> the <url> from the <event-data: url>.
-    <Extract> the <base-domain> from the <event-data: base>.
+    Extract the <event-data> from the <event: data>.
+    Extract the <url> from the <event-data: url>.
+    Extract the <base-domain> from the <event-data: base>.
 
     (* Filter URLs that belong to the same domain as base-domain *)
-    <Emit> a <QueueUrl: event> with { url: <url>, base: <base-domain> } when <url> contains <base-domain>.
+    Emit a <QueueUrl: event> with { url: <url>, base: <base-domain> } when <url> contains <base-domain>.
 
-    <Return> an <OK: status> for the <filter>.
+    Return an <OK: status> for the <filter>.
 }
 
 (Queue URL: QueueUrl Handler) {
     (* Extract from event data structure *)
-    <Extract> the <event-data> from the <event: data>.
-    <Extract> the <url> from the <event-data: url>.
-    <Extract> the <base-domain> from the <event-data: base>.
+    Extract the <event-data> from the <event: data>.
+    Extract the <url> from the <event-data: url>.
+    Extract the <base-domain> from the <event-data: base>.
 
     (* Generate deterministic id from URL hash for deduplication *)
-    <Compute> the <url-id: hash> from the <url>.
+    Compute the <url-id: hash> from the <url>.
 
     (* Store with id - repository deduplicates by id, observer only fires for new entries *)
-    <Create> the <crawl-request> with { id: <url-id>, url: <url>, base: <base-domain> }.
-    <Store> the <crawl-request> into the <crawled-repository>.
+    Create the <crawl-request> with { id: <url-id>, url: <url>, base: <base-domain> }.
+    Store the <crawl-request> into the <crawled-repository>.
 
-    <Return> an <OK: status> for the <queue>.
+    Return an <OK: status> for the <queue>.
 }
 
 (Trigger Crawl: crawled-repository Observer) {
     (* React to new entries in the repository *)
-    <Extract> the <crawl-request> from the <event: newValue>.
-    <Extract> the <url> from the <crawl-request: url>.
-    <Extract> the <base-domain> from the <crawl-request: base>.
+    Extract the <crawl-request> from the <event: newValue>.
+    Extract the <url> from the <crawl-request: url>.
+    Extract the <base-domain> from the <crawl-request: base>.
 
-    <Log> "Queued: ${<url>}" to the <console>.
-    <Emit> a <CrawlPage: event> with { url: <url>, base: <base-domain> }.
+    Log "Queued: ${<url>}" to the <console>.
+    Emit a <CrawlPage: event> with { url: <url>, base: <base-domain> }.
 
-    <Return> an <OK: status> for the <observer>.
+    Return an <OK: status> for the <observer>.
 }
 ```
 

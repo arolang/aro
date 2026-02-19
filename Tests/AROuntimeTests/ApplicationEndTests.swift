@@ -98,13 +98,13 @@ struct ApplicationEndTests {
     func testApplicationEndSuccess() async throws {
         let aroCode = """
         (Application-Start: Test Graceful Shutdown) {
-            <Log> "Application started" to the <console>.
-            <Return> an <OK: status> for the <startup>.
+            Log "Application started" to the <console>.
+            Return an <OK: status> for the <startup>.
         }
 
         (Application-End: Success) {
-            <Log> "SUCCESS_SHUTDOWN_HANDLER_EXECUTED" to the <console>.
-            <Return> an <OK: status> for the <shutdown>.
+            Log "SUCCESS_SHUTDOWN_HANDLER_EXECUTED" to the <console>.
+            Return an <OK: status> for the <shutdown>.
         }
         """
 
@@ -126,13 +126,13 @@ struct ApplicationEndTests {
     func testApplicationEndError() async throws {
         let aroCode = """
         (Application-Start: Test Error Shutdown) {
-            <Log> "Application starting" to the <console>.
-            <Throw> the <FatalError> for the <test-crash>.
+            Log "Application starting" to the <console>.
+            Throw the <FatalError> for the <test-crash>.
         }
 
         (Application-End: Error) {
-            <Log> "ERROR_SHUTDOWN_HANDLER_EXECUTED" to the <console>.
-            <Return> an <OK: status> for the <error-handling>.
+            Log "ERROR_SHUTDOWN_HANDLER_EXECUTED" to the <console>.
+            Return an <OK: status> for the <error-handling>.
         }
         """
 

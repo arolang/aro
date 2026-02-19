@@ -14,8 +14,8 @@
 <p>Load and render a template using the <code>Transform</code> action:</p>
 
 <pre><code><span class="feature-name">(homePage: My App API)</span> {
-    <span class="action">&lt;Transform&gt;</span> the <span class="result">&lt;html&gt;</span> from the <span class="result">&lt;template: index.html&gt;</span>.
-    <span class="action">&lt;Return&gt;</span> an <span class="result">&lt;OK: status&gt;</span> with <span class="result">&lt;html&gt;</span>.
+    <span class="action">Transform</span> the <span class="result">&lt;html&gt;</span> from the <span class="result">&lt;template: index.html&gt;</span>.
+    <span class="action">Return</span> an <span class="result">&lt;OK: status&gt;</span> with <span class="result">&lt;html&gt;</span>.
 }</code></pre>
 
 <p>Templates are loaded from the <code>templates/</code> directory in your application.</p>
@@ -69,29 +69,29 @@
     &lt;title&gt;{{ title }}&lt;/title&gt;
 &lt;/head&gt;
 &lt;body&gt;
-    {{ &lt;Include&gt; the &lt;template: header.html&gt;. }}
+    {{ Include the &lt;template: header.html&gt;. }}
 
     &lt;main&gt;
         {{ content }}
     &lt;/main&gt;
 
-    {{ &lt;Include&gt; the &lt;template: footer.html&gt;. }}
+    {{ Include the &lt;template: footer.html&gt;. }}
 &lt;/body&gt;
 &lt;/html&gt;</code></pre>
 
 <p>Pass variables to included templates:</p>
 
-<pre><code>{{ &lt;Include&gt; the &lt;template: user-card.html&gt; with { user: currentUser, showEmail: true }. }}</code></pre>
+<pre><code>{{ Include the &lt;template: user-card.html&gt; with { user: currentUser, showEmail: true }. }}</code></pre>
 
 <h2>ARO Statements in Templates</h2>
 
 <p>Execute ARO statements directly within templates:</p>
 
 <pre><code>&lt;div class="stats"&gt;
-{{ &lt;Compute&gt; the &lt;count: length&gt; from the &lt;messages&gt;. }}
+{{ Compute the &lt;count: length&gt; from the &lt;messages&gt;. }}
 &lt;p&gt;Total messages: {{ count }}&lt;/p&gt;
 
-{{ &lt;Retrieve&gt; the &lt;latest&gt; from the &lt;messages: last&gt;. }}
+{{ Retrieve the &lt;latest&gt; from the &lt;messages: last&gt;. }}
 &lt;p&gt;Latest: {{ latest.text }}&lt;/p&gt;
 &lt;/div&gt;</code></pre>
 
@@ -115,9 +115,9 @@
 <h3>api.aro</h3>
 
 <pre><code><span class="feature-name">(homePage: Dashboard API)</span> {
-    <span class="action">&lt;Retrieve&gt;</span> the <span class="result">&lt;messages&gt;</span> from the <span class="result">&lt;message-repository&gt;</span>.
-    <span class="action">&lt;Transform&gt;</span> the <span class="result">&lt;html&gt;</span> from the <span class="result">&lt;template: dashboard.html&gt;</span>.
-    <span class="action">&lt;Return&gt;</span> an <span class="result">&lt;OK: status&gt;</span> with <span class="result">&lt;html&gt;</span>.
+    <span class="action">Retrieve</span> the <span class="result">&lt;messages&gt;</span> from the <span class="result">&lt;message-repository&gt;</span>.
+    <span class="action">Transform</span> the <span class="result">&lt;html&gt;</span> from the <span class="result">&lt;template: dashboard.html&gt;</span>.
+    <span class="action">Return</span> an <span class="result">&lt;OK: status&gt;</span> with <span class="result">&lt;html&gt;</span>.
 }</code></pre>
 
 <h3>templates/dashboard.html</h3>
@@ -183,7 +183,7 @@
         <td>Execute ARO statement</td>
     </tr>
     <tr>
-        <td><code>{{ &lt;Include&gt; the &lt;template: path&gt;. }}</code></td>
+        <td><code>{{ Include the &lt;template: path&gt;. }}</code></td>
         <td>Include another template</td>
     </tr>
 </table>

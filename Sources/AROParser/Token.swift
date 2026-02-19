@@ -287,6 +287,13 @@ extension TokenKind {
         return false
     }
 
+    /// Checks if this is a capitalized identifier (potential action verb)
+    public var isCapitalizedIdentifier: Bool {
+        guard case .identifier(let name) = self else { return false }
+        guard let first = name.first else { return false }
+        return first.isUppercase
+    }
+
     /// Extracts the preposition if this is a preposition
     public var prepositionValue: Preposition? {
         if case .preposition(let prep) = self { return prep }

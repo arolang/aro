@@ -5,71 +5,71 @@
 (*   - Debug mode shows diagnostic tables *)
 
 (Application-Start: System Monitor) {
-    <Log> "System Monitor API starting..." to the <console>.
-    <Start> the <http-server> for the <contract>.
-    <Log> "Server running at http://localhost:8080" to the <console>.
-    <Log> "Endpoints:" to the <console>.
-    <Log> "  GET /exec?cmd=<command>  - Execute any command" to the <console>.
-    <Log> "  GET /list?path=<path>    - List directory" to the <console>.
-    <Log> "  GET /disk                - Check disk usage" to the <console>.
-    <Log> "  GET /processes           - List processes" to the <console>.
-    <Keepalive> the <application> for the <events>.
-    <Return> an <OK: status> for the <startup>.
+    Log "System Monitor API starting..." to the <console>.
+    Start the <http-server> for the <contract>.
+    Log "Server running at http://localhost:8080" to the <console>.
+    Log "Endpoints:" to the <console>.
+    Log "  GET /exec?cmd=<command>  - Execute any command" to the <console>.
+    Log "  GET /list?path=<path>    - List directory" to the <console>.
+    Log "  GET /disk                - Check disk usage" to the <console>.
+    Log "  GET /processes           - List processes" to the <console>.
+    Keepalive the <application> for the <events>.
+    Return an <OK: status> for the <startup>.
 }
 
 (* Execute arbitrary command - operationId: executeCommand *)
 (executeCommand: System Monitor API) {
-    <Extract> the <cmd> from the <queryParameters: cmd>.
+    Extract the <cmd> from the <queryParameters: cmd>.
 
     (* Validate command is provided - return early if empty *)
-    <Return> a <BadRequest: status> with "Missing 'cmd' parameter" when <cmd> == "".
+    Return a <BadRequest: status> with "Missing 'cmd' parameter" when <cmd> == "".
 
     (* Execute the command *)
-    <Exec> the <result> for the <command> with <cmd>.
+    Exec the <result> for the <command> with <cmd>.
 
     (* Return error if command failed *)
-    <Return> a <ServerError: status> with <result> when <result: error> == true.
+    Return a <ServerError: status> with <result> when <result: error> == true.
 
-    <Return> an <OK: status> with <result>.
+    Return an <OK: status> with <result>.
 }
 
 (* List directory contents - operationId: listDirectory *)
 (listDirectory: System Monitor API) {
-    <Extract> the <path> from the <queryParameters: path>.
+    Extract the <path> from the <queryParameters: path>.
 
     (* Use current directory if path not specified, otherwise use provided path *)
     match <path> {
         case "" {
-            <Create> the <directory> with ".".
+            Create the <directory> with ".".
         }
         otherwise {
-            <Create> the <directory> with <path>.
+            Create the <directory> with <path>.
         }
     }
 
     (* Execute ls command with directory *)
-    <Create> the <command> with "ls -la ${directory}".
-    <Exec> the <result> for the <listing> with <command>.
+    Create the <command> with "ls -la ${directory}".
+    Exec the <result> for the <listing> with <command>.
 
-    <Return> a <NotFound: status> with <result> when <result: error> == true.
+    Return a <NotFound: status> with <result> when <result: error> == true.
 
-    <Return> an <OK: status> with <result>.
+    Return an <OK: status> with <result>.
 }
 
 (* Check disk usage - operationId: checkDisk *)
 (checkDisk: System Monitor API) {
-    <Exec> the <result> for the <command: "df"> with "-h".
+    Exec the <result> for the <command: "df"> with "-h".
 
-    <Return> a <ServerError: status> with <result> when <result: error> == true.
+    Return a <ServerError: status> with <result> when <result: error> == true.
 
-    <Return> an <OK: status> with <result>.
+    Return an <OK: status> with <result>.
 }
 
 (* List running processes - operationId: listProcesses *)
 (listProcesses: System Monitor API) {
-    <Exec> the <result> for the <command: "ps"> with "aux | head -20".
+    Exec the <result> for the <command: "ps"> with "aux | head -20".
 
-    <Return> a <ServerError: status> with <result> when <result: error> == true.
+    Return a <ServerError: status> with <result> when <result: error> == true.
 
-    <Return> an <OK: status> with <result>.
+    Return an <OK: status> with <result>.
 }

@@ -65,71 +65,71 @@ Here is a complete order processing saga showing event-driven choreography:
 ```aro
 (* Step 1: HTTP handler creates order and starts the saga *)
 (createOrder: Order API) {
-    <Extract> the <order-data> from the <request: body>.
-    <Create> the <order> with <order-data>.
-    <Store> the <order> in the <order-repository>.
+    Extract the <order-data> from the <request: body>.
+    Create the <order> with <order-data>.
+    Store the <order> in the <order-repository>.
 
     (* Emit event to start the saga *)
-    <Emit> an <OrderPlaced: event> with <order>.
+    Emit an <OrderPlaced: event> with <order>.
 
-    <Return> a <Created: status> with <order>.
+    Return a <Created: status> with <order>.
 }
 
 (* Step 2: Reserve inventory when order is placed *)
 (Reserve Inventory: OrderPlaced Handler) {
-    <Extract> the <order> from the <event: order>.
-    <Extract> the <items> from the <order: items>.
+    Extract the <order> from the <event: order>.
+    Extract the <items> from the <order: items>.
 
     (* Reserve each item in inventory *)
-    <Retrieve> the <inventory> from the <inventory-service> for <items>.
-    <Update> the <inventory> with { reserved: true }.
-    <Store> the <inventory> in the <inventory-service>.
+    Retrieve the <inventory> from the <inventory-service> for <items>.
+    Update the <inventory> with { reserved: true }.
+    Store the <inventory> in the <inventory-service>.
 
     (* Continue the saga *)
-    <Emit> an <InventoryReserved: event> with <order>.
+    Emit an <InventoryReserved: event> with <order>.
 }
 
 (* Step 3: Process payment after inventory is reserved *)
 (Process Payment: InventoryReserved Handler) {
-    <Extract> the <order> from the <event: order>.
-    <Extract> the <amount> from the <order: total>.
-    <Extract> the <payment-method> from the <order: paymentMethod>.
+    Extract the <order> from the <event: order>.
+    Extract the <amount> from the <order: total>.
+    Extract the <payment-method> from the <order: paymentMethod>.
 
     (* Charge the customer *)
-    <Send> the <charge-request> to the <payment-gateway> with {
+    Send the <charge-request> to the <payment-gateway> with {
         amount: <amount>,
         method: <payment-method>
     }.
 
     (* Continue the saga *)
-    <Emit> a <PaymentProcessed: event> with <order>.
+    Emit a <PaymentProcessed: event> with <order>.
 }
 
 (* Step 4: Ship order after payment succeeds *)
 (Ship Order: PaymentProcessed Handler) {
-    <Extract> the <order> from the <event: order>.
+    Extract the <order> from the <event: order>.
 
     (* Update order status and create shipment *)
-    <Update> the <order> with { status: "shipped" }.
-    <Store> the <order> in the <order-repository>.
-    <Send> the <shipment-request> to the <shipping-service> with <order>.
+    Update the <order> with { status: "shipped" }.
+    Store the <order> in the <order-repository>.
+    Send the <shipment-request> to the <shipping-service> with <order>.
 
     (* Final event in the happy path *)
-    <Emit> an <OrderShipped: event> with <order>.
+    Emit an <OrderShipped: event> with <order>.
 }
 
 (* Notification handler - runs in parallel with saga *)
 (Notify Customer: OrderShipped Handler) {
-    <Extract> the <order> from the <event: order>.
-    <Extract> the <email> from the <order: customerEmail>.
+    Extract the <order> from the <event: order>.
+    Extract the <email> from the <order: customerEmail>.
 
-    <Send> the <shipping-notification> to the <email-service> with {
+    Send the <shipping-notification> to the <email-service> with {
         to: <email>,
         template: "order-shipped",
         order: <order>
     }.
 
-    <Return> an <OK: status> for the <notification>.
+    Return an <OK: status> for the <notification>.
 }
 ```
 
@@ -218,11 +218,11 @@ Use a PascalCase qualifier to reference the schema:
 ```aro
 (Send Welcome Email: UserCreated Handler) {
     (* Typed extraction - validates against UserCreatedEvent schema *)
-    <Extract> the <event-data: UserCreatedEvent> from the <event: data>.
+    Extract the <event-data: UserCreatedEvent> from the <event: data>.
 
     (* Properties are now guaranteed to exist *)
-    <Send> the <welcome-email> to <event-data: email>.
-    <Return> an <OK: status> for the <notification>.
+    Send the <welcome-email> to <event-data: email>.
+    Return an <OK: status> for the <notification>.
 }
 ```
 
@@ -238,13 +238,13 @@ The PascalCase qualifier (`UserCreatedEvent`) triggers schema lookup and validat
 
 ```aro
 (* Before: field-by-field extraction *)
-<Extract> the <data> from the <event: data>.
-<Extract> the <userId> from the <data: userId>.
-<Extract> the <email> from the <data: email>.
-<Extract> the <name> from the <data: name>.
+Extract the <data> from the <event: data>.
+Extract the <userId> from the <data: userId>.
+Extract the <email> from the <data: email>.
+Extract the <name> from the <data: name>.
 
 (* After: typed extraction *)
-<Extract> the <data: UserCreatedEvent> from the <event: data>.
+Extract the <data: UserCreatedEvent> from the <event: data>.
 (* Access properties with <data: email>, <data: name>, etc. *)
 ```
 
@@ -253,7 +253,7 @@ The PascalCase qualifier (`UserCreatedEvent`) triggers schema lookup and validat
 Validation errors follow ARO-0006 "Code Is The Error Message":
 
 ```
-Cannot <Extract> the <event-data: UserCreatedEvent> from the <event: data>.
+Cannot Extract the <event-data: UserCreatedEvent> from the <event: data>.
   Schema 'UserCreatedEvent' validation failed:
     Missing required property 'email'
   Required properties: userId, email

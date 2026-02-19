@@ -71,7 +71,7 @@
         </p>
 
         <pre><code><span class="code-comment">(* Log the current time *)</span>
-<span class="code-keyword">&lt;Log&gt;</span> <span class="code-keyword">&lt;now&gt;</span> to the &lt;console&gt;.</code></pre>
+<span class="code-keyword">Log</span> <span class="code-keyword">&lt;now&gt;</span> to the &lt;console&gt;.</code></pre>
 
         <p>Output: <code>2025-12-29T15:20:49Z</code></p>
 
@@ -88,10 +88,10 @@
             Extract individual parts of a date using qualifiers:
         </p>
 
-        <pre><code><span class="code-keyword">&lt;Extract&gt;</span> the <span class="code-result">&lt;year&gt;</span> from the <span class="code-keyword">&lt;now: year&gt;</span>.
-<span class="code-keyword">&lt;Extract&gt;</span> the <span class="code-result">&lt;month&gt;</span> from the <span class="code-keyword">&lt;now: month&gt;</span>.
-<span class="code-keyword">&lt;Extract&gt;</span> the <span class="code-result">&lt;day&gt;</span> from the <span class="code-keyword">&lt;now: day&gt;</span>.
-<span class="code-keyword">&lt;Extract&gt;</span> the <span class="code-result">&lt;hour&gt;</span> from the <span class="code-keyword">&lt;now: hour&gt;</span>.</code></pre>
+        <pre><code><span class="code-keyword">Extract</span> the <span class="code-result">&lt;year&gt;</span> from the <span class="code-keyword">&lt;now: year&gt;</span>.
+<span class="code-keyword">Extract</span> the <span class="code-result">&lt;month&gt;</span> from the <span class="code-keyword">&lt;now: month&gt;</span>.
+<span class="code-keyword">Extract</span> the <span class="code-result">&lt;day&gt;</span> from the <span class="code-keyword">&lt;now: day&gt;</span>.
+<span class="code-keyword">Extract</span> the <span class="code-result">&lt;hour&gt;</span> from the <span class="code-keyword">&lt;now: hour&gt;</span>.</code></pre>
 
         <h3>Available Properties</h3>
         <table>
@@ -112,18 +112,18 @@
             Convert ISO 8601 strings into date objects:
         </p>
 
-        <pre><code><span class="code-keyword">&lt;Compute&gt;</span> the <span class="code-result">&lt;deadline: date&gt;</span> from <span class="code-string">"2025-12-31T23:59:59Z"</span>.
-<span class="code-keyword">&lt;Extract&gt;</span> the <span class="code-result">&lt;deadline-year&gt;</span> from the <span class="code-keyword">&lt;deadline: year&gt;</span>.</code></pre>
+        <pre><code><span class="code-keyword">Compute</span> the <span class="code-result">&lt;deadline: date&gt;</span> from <span class="code-string">"2025-12-31T23:59:59Z"</span>.
+<span class="code-keyword">Extract</span> the <span class="code-result">&lt;deadline-year&gt;</span> from the <span class="code-keyword">&lt;deadline: year&gt;</span>.</code></pre>
 
         <h2>Formatting Dates</h2>
         <p>
             Format dates for display using pattern strings:
         </p>
 
-        <pre><code><span class="code-keyword">&lt;Compute&gt;</span> the <span class="code-result">&lt;display: format&gt;</span> from &lt;now&gt; with <span class="code-string">"MMMM dd, yyyy"</span>.
+        <pre><code><span class="code-keyword">Compute</span> the <span class="code-result">&lt;display: format&gt;</span> from &lt;now&gt; with <span class="code-string">"MMMM dd, yyyy"</span>.
 <span class="code-comment">(* Result: "December 29, 2025" *)</span>
 
-<span class="code-keyword">&lt;Compute&gt;</span> the <span class="code-result">&lt;short: format&gt;</span> from &lt;now&gt; with <span class="code-string">"MMM dd"</span>.
+<span class="code-keyword">Compute</span> the <span class="code-result">&lt;short: format&gt;</span> from &lt;now&gt; with <span class="code-string">"MMM dd"</span>.
 <span class="code-comment">(* Result: "Dec 29" *)</span></code></pre>
 
         <h3>Format Patterns</h3>
@@ -140,10 +140,10 @@
             Calculate dates relative to other dates:
         </p>
 
-        <pre><code><span class="code-keyword">&lt;Compute&gt;</span> the <span class="code-result">&lt;tomorrow: +1d&gt;</span> from &lt;now&gt;.
-<span class="code-keyword">&lt;Compute&gt;</span> the <span class="code-result">&lt;yesterday: -1d&gt;</span> from &lt;now&gt;.
-<span class="code-keyword">&lt;Compute&gt;</span> the <span class="code-result">&lt;next-week: +7d&gt;</span> from &lt;now&gt;.
-<span class="code-keyword">&lt;Compute&gt;</span> the <span class="code-result">&lt;expires: +24h&gt;</span> from &lt;created&gt;.</code></pre>
+        <pre><code><span class="code-keyword">Compute</span> the <span class="code-result">&lt;tomorrow: +1d&gt;</span> from &lt;now&gt;.
+<span class="code-keyword">Compute</span> the <span class="code-result">&lt;yesterday: -1d&gt;</span> from &lt;now&gt;.
+<span class="code-keyword">Compute</span> the <span class="code-result">&lt;next-week: +7d&gt;</span> from &lt;now&gt;.
+<span class="code-keyword">Compute</span> the <span class="code-result">&lt;expires: +24h&gt;</span> from &lt;created&gt;.</code></pre>
 
         <h3>Offset Units</h3>
         <table>
@@ -162,8 +162,8 @@
             Create and work with date ranges:
         </p>
 
-        <pre><code><span class="code-keyword">&lt;Create&gt;</span> the <span class="code-result">&lt;vacation: date-range&gt;</span> from &lt;start&gt; to &lt;end&gt;.
-<span class="code-keyword">&lt;Extract&gt;</span> the <span class="code-result">&lt;duration&gt;</span> from the <span class="code-keyword">&lt;vacation: days&gt;</span>.</code></pre>
+        <pre><code><span class="code-keyword">Create</span> the <span class="code-result">&lt;vacation: date-range&gt;</span> from &lt;start&gt; to &lt;end&gt;.
+<span class="code-keyword">Extract</span> the <span class="code-result">&lt;duration&gt;</span> from the <span class="code-keyword">&lt;vacation: days&gt;</span>.</code></pre>
 
         <h2>Date Comparisons</h2>
         <p>
@@ -171,11 +171,11 @@
         </p>
 
         <pre><code>when &lt;booking&gt; before &lt;deadline&gt; {
-    <span class="code-keyword">&lt;Log&gt;</span> <span class="code-string">"Booking accepted"</span> to the &lt;console&gt;.
+    <span class="code-keyword">Log</span> <span class="code-string">"Booking accepted"</span> to the &lt;console&gt;.
 }
 
 when &lt;event&gt; after &lt;now&gt; {
-    <span class="code-keyword">&lt;Log&gt;</span> <span class="code-string">"Upcoming event"</span> to the &lt;console&gt;.
+    <span class="code-keyword">Log</span> <span class="code-string">"Upcoming event"</span> to the &lt;console&gt;.
 }</code></pre>
 
         <h2>Recurrence Patterns</h2>
@@ -183,8 +183,8 @@ when &lt;event&gt; after &lt;now&gt; {
             Define recurring schedules:
         </p>
 
-        <pre><code><span class="code-keyword">&lt;Create&gt;</span> the <span class="code-result">&lt;weekly: recurrence&gt;</span> with <span class="code-string">"every monday"</span>.
-<span class="code-keyword">&lt;Extract&gt;</span> the <span class="code-result">&lt;next&gt;</span> from the <span class="code-keyword">&lt;weekly: next&gt;</span>.</code></pre>
+        <pre><code><span class="code-keyword">Create</span> the <span class="code-result">&lt;weekly: recurrence&gt;</span> with <span class="code-string">"every monday"</span>.
+<span class="code-keyword">Extract</span> the <span class="code-result">&lt;next&gt;</span> from the <span class="code-keyword">&lt;weekly: next&gt;</span>.</code></pre>
 
         <h3>Pattern Examples</h3>
         <ul>

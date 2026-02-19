@@ -7,7 +7,7 @@ ARO automatically tracks execution metrics for all feature sets. The `<metrics>`
 Access metrics like any variable:
 
 ```aro
-<Log> the <metrics> to the <console>.
+Log the <metrics> to the <console>.
 ```
 
 This outputs all collected metrics in a readable format.
@@ -17,10 +17,10 @@ This outputs all collected metrics in a readable format.
 Use qualifiers to control output format:
 
 ```aro
-<Log> the <metrics: plain> to the <console>.       (* Full details *)
-<Log> the <metrics: short> to the <console>.       (* One-liner *)
-<Log> the <metrics: table> to the <console>.       (* ASCII table *)
-<Log> the <metrics: prometheus> to the <console>.  (* For monitoring *)
+Log the <metrics: plain> to the <console>.       (* Full details *)
+Log the <metrics: short> to the <console>.       (* One-liner *)
+Log the <metrics: table> to the <console>.       (* ASCII table *)
+Log the <metrics: prometheus> to the <console>.  (* For monitoring *)
 ```
 
 | Qualifier | Output |
@@ -113,9 +113,9 @@ Print metrics at shutdown to see what ran:
 
 ```aro
 (Application-End: Success) {
-    <Log> "=== Final Metrics ===" to the <console>.
-    <Log> the <metrics: table> to the <console>.
-    <Return> an <OK: status> for the <shutdown>.
+    Log "=== Final Metrics ===" to the <console>.
+    Log the <metrics: table> to the <console>.
+    Return an <OK: status> for the <shutdown>.
 }
 ```
 
@@ -124,7 +124,7 @@ Print metrics at shutdown to see what ran:
 A one-liner during execution:
 
 ```aro
-<Log> the <metrics: short> to the <console>.
+Log the <metrics: short> to the <console>.
 ```
 
 Output:
@@ -138,7 +138,7 @@ Expose metrics for monitoring systems:
 
 ```aro
 (getMetrics: Monitoring API) {
-    <Return> an <OK: status> with <metrics: prometheus>.
+    Return an <OK: status> with <metrics: prometheus>.
 }
 ```
 
@@ -166,9 +166,9 @@ Compare feature set performance:
 
 ```aro
 (analyzePerformance: Admin API) {
-    <Log> "Performance Analysis:" to the <console>.
-    <Log> the <metrics: table> to the <console>.
-    <Return> an <OK: status> with <metrics: plain>.
+    Log "Performance Analysis:" to the <console>.
+    Log the <metrics: table> to the <console>.
+    Return an <OK: status> with <metrics: plain>.
 }
 ```
 

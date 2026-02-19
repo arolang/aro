@@ -8,26 +8,26 @@
 
 Before diving into custom services, it is essential to understand how they differ from custom actions. This distinction shapes how you design extensions to ARO.
 
-**Custom Actions** add new verbs to the language. When you create a custom action, you define a new way of expressing intent. The Geocode action lets you write `<Geocode> the <coordinates> from the <address>`. The verb "Geocode" becomes part of your ARO vocabulary.
+**Custom Actions** add new verbs to the language. When you create a custom action, you define a new way of expressing intent. The Geocode action lets you write `Geocode the <coordinates> from the <address>`. The verb "Geocode" becomes part of your ARO vocabulary.
 
-**Custom Services** are external integrations invoked through the `<Call>` action. Services do not add new verbs—they add new capabilities accessible through the existing Call verb. You write `<Call> the <result> from the <postgres: query>` to invoke the postgres service's query method.
+**Custom Services** are external integrations invoked through the `<Call>` action. Services do not add new verbs—they add new capabilities accessible through the existing Call verb. You write `Call the <result> from the <postgres: query>` to invoke the postgres service's query method.
 
 The pattern reveals the distinction:
 
 ```aro
 (* Custom Action - new verb *)
-<Geocode> the <coordinates> from the <address>.
+Geocode the <coordinates> from the <address>.
 
 (* Custom Service - Call verb with service:method *)
-<Call> the <users> from the <postgres: query> with { sql: "SELECT * FROM users" }.
+Call the <users> from the <postgres: query> with { sql: "SELECT * FROM users" }.
 ```
 
 ### When to Use Each
 
 | Use Case | Choose | Why |
 |----------|--------|-----|
-| Domain-specific operation that feels like a language feature | Action | Reads naturally: `<Validate> the <order>` |
-| External system integration (database, queue, API) | Service | Uniform pattern: `<Call> from <service: method>` |
+| Domain-specific operation that feels like a language feature | Action | Reads naturally: `Validate the <order>` |
+| External system integration (database, queue, API) | Service | Uniform pattern: `Call from <service: method>` |
 | Reusable across many projects | Service | Services are more portable |
 | Single, focused operation | Action | Cleaner syntax for one thing |
 | Multiple related operations | Service | One service, many methods |
@@ -175,35 +175,35 @@ Once registered, your service is available through the Call action:
 
 ```aro
 (List Active Users: User Management) {
-    <Call> the <users> from the <postgres: query> with {
+    Call the <users> from the <postgres: query> with {
         sql: "SELECT * FROM users WHERE active = true"
     }.
 
-    <Return> an <OK: status> with <users>.
+    Return an <OK: status> with <users>.
 }
 
 (Create User: User Management) {
-    <Extract> the <data> from the <request: body>.
+    Extract the <data> from the <request: body>.
 
-    <Call> the <result> from the <postgres: insert> with {
+    Call the <result> from the <postgres: insert> with {
         table: "users",
         data: <data>
     }.
 
-    <Extract> the <id> from the <result: id>.
-    <Return> a <Created: status> with { id: <id> }.
+    Extract the <id> from the <result: id>.
+    Return a <Created: status> with { id: <id> }.
 }
 
 (Update User Status: User Management) {
-    <Extract> the <id> from the <pathParameters: id>.
-    <Extract> the <status> from the <request: status>.
+    Extract the <id> from the <pathParameters: id>.
+    Extract the <status> from the <request: status>.
 
-    <Call> the <result> from the <postgres: execute> with {
+    Call the <result> from the <postgres: execute> with {
         sql: "UPDATE users SET status = $1 WHERE id = $2",
         params: [<status>, <id>]
     }.
 
-    <Return> an <OK: status> for the <update>.
+    Return an <OK: status> for the <update>.
 }
 ```
 
@@ -342,30 +342,30 @@ public struct RedisService: AROService {
 
 ```aro
 (Cache User: Caching) {
-    <Extract> the <user-id> from the <user: id>.
+    Extract the <user-id> from the <user: id>.
 
-    <Call> the <result> from the <redis: set> with {
+    Call the <result> from the <redis: set> with {
         key: "user:" + <user-id>,
         value: <user>
     }.
 
     (* Set expiration to 1 hour *)
-    <Call> the <expire-result> from the <redis: expire> with {
+    Call the <expire-result> from the <redis: expire> with {
         key: "user:" + <user-id>,
         seconds: 3600
     }.
 
-    <Return> an <OK: status> for the <cache>.
+    Return an <OK: status> for the <cache>.
 }
 
 (Get Cached User: Caching) {
-    <Extract> the <user-id> from the <request: id>.
+    Extract the <user-id> from the <request: id>.
 
-    <Call> the <cached> from the <redis: get> with {
+    Call the <cached> from the <redis: get> with {
         key: "user:" + <user-id>
     }.
 
-    <Return> an <OK: status> with <cached>.
+    Return an <OK: status> with <cached>.
 }
 ```
 
@@ -393,21 +393,21 @@ Some capabilities in ARO are implemented as built-in actions rather than service
 
 ```aro
 (* Built-in Request action - NOT a service *)
-<Request> the <weather> from "https://api.weather.com/current".
+Request the <weather> from "https://api.weather.com/current".
 
 (* Service call pattern - for external integrations *)
-<Call> the <users> from the <postgres: query> with { sql: "..." }.
+Call the <users> from the <postgres: query> with { sql: "..." }.
 ```
 
 The distinction: built-in actions are part of the ARO language and have dedicated syntax. Services are external integrations that share the uniform Call pattern.
 
 | Capability | Implementation | Syntax |
 |------------|----------------|--------|
-| HTTP requests | Built-in action | `<Request> the <data> from <url>.` |
-| File operations | Built-in action | `<Read> the <data> from <path>.` |
-| Database queries | Custom service | `<Call> from <postgres: query>` |
-| Message queues | Custom service | `<Call> from <rabbitmq: publish>` |
-| Cloud storage | Custom service | `<Call> from <s3: upload>` |
+| HTTP requests | Built-in action | `Request the <data> from <url>.` |
+| File operations | Built-in action | `Read the <data> from <path>.` |
+| Database queries | Custom service | `Call from <postgres: query>` |
+| Message queues | Custom service | `Call from <rabbitmq: publish>` |
+| Cloud storage | Custom service | `Call from <s3: upload>` |
 
 ---
 

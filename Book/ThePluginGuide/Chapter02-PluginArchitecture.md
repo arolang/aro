@@ -371,7 +371,7 @@ if (invalid_input) {
 ARO will propagate these errors to the calling ARO code, where they can be handled normally:
 
 ```aro
-<Call> the <result> from the <my-plugin: operation> with <data>.
+Call the <result> from the <my-plugin: operation> with <data>.
 
 (* If the plugin returns an error, execution stops here *)
 (* and the error becomes the feature set's result *)
@@ -391,7 +391,7 @@ Include enough context in error messages to diagnose problems:
 
 Let's trace a complete plugin call:
 
-1. **ARO Code**: `<Call> the <hash> from the <plugin-hash: djb2> with { data: "hello" }.`
+1. **ARO Code**: `Call the <hash> from the <plugin-hash: djb2> with { data: "hello" }.`
 
 2. **Service Lookup**: ARO finds `plugin-hash` in the registry, resolves `djb2` method
 

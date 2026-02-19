@@ -34,7 +34,7 @@ Data manipulation is central to business logic:
 Retrieves and filters data into a typed collection.
 
 ```aro
-<Fetch> the <active-users: List<User>> from the <users>
+Fetch the <active-users: List<User>> from the <users>
     where <status> is "active"
     order by <name> asc
     limit 100.
@@ -51,7 +51,7 @@ fetch_statement = "<Fetch>" , "the" , typed_result , "from" , "the" , source ,
 Filters an existing collection with a predicate.
 
 ```aro
-<Filter> the <premium-users: List<User>> from the <users>
+Filter the <premium-users: List<User>> from the <users>
     where <tier> is "premium".
 ```
 
@@ -67,7 +67,7 @@ Transforms a collection to a different OpenAPI-defined type. The runtime automat
 
 ```aro
 (* Map List<User> to List<UserSummary> *)
-<Map> the <summaries: List<UserSummary>> from the <users>.
+Map the <summaries: List<UserSummary>> from the <users>.
 ```
 
 **Requirements:**
@@ -85,13 +85,13 @@ map_statement = "<Map>" , "the" , typed_result , "from" , "the" , source , "." ;
 Aggregates a collection to a single value.
 
 ```aro
-<Reduce> the <total: Float> from the <orders>
+Reduce the <total: Float> from the <orders>
     with sum(<amount>).
 
-<Reduce> the <order-count: Integer> from the <orders>
+Reduce the <order-count: Integer> from the <orders>
     with count().
 
-<Reduce> the <avg-price: Float> from the <products>
+Reduce the <avg-price: Float> from the <products>
     where <category> is "electronics"
     with avg(<price>).
 ```
@@ -122,7 +122,7 @@ reduce_statement = "<Reduce>" , "the" , typed_result , "from" , "the" , source ,
 ### 2.2 Logical Operators
 
 ```aro
-<Fetch> the <users: List<User>> from the <all-users>
+Fetch the <users: List<User>> from the <all-users>
     where (<role> is "admin" or <role> is "moderator")
           and <active> is true.
 ```
@@ -133,11 +133,11 @@ reduce_statement = "<Reduce>" , "the" , typed_result , "from" , "the" , source ,
 
 ```aro
 (* Single field *)
-<Fetch> the <users: List<User>> from the <all-users>
+Fetch the <users: List<User>> from the <all-users>
     order by <name> asc.
 
 (* Multiple fields *)
-<Fetch> the <products: List<Product>> from the <all-products>
+Fetch the <products: List<Product>> from the <all-products>
     order by <category> asc, <price> desc.
 ```
 
@@ -153,12 +153,12 @@ order_item = field_reference , [ "asc" | "desc" ] ;
 
 ```aro
 (* Limit results *)
-<Fetch> the <top-users: List<User>> from the <users>
+Fetch the <top-users: List<User>> from the <users>
     order by <score> desc
     limit 10.
 
 (* Pagination with offset *)
-<Fetch> the <page: List<User>> from the <users>
+Fetch the <page: List<User>> from the <users>
     order by <created-at> desc
     limit 20
     offset 40.
@@ -186,11 +186,11 @@ Basic window functions for ranking and running totals.
 
 ```aro
 (* Rank within partition *)
-<Compute> the <ranked: List<SalesRank>> from the <sales>
+Compute the <ranked: List<SalesRank>> from the <sales>
     with rank() over (partition by <region> order by <amount> desc).
 
 (* Running total *)
-<Compute> the <running: List<RunningTotal>> from the <transactions>
+Compute the <running: List<RunningTotal>> from the <transactions>
     with sum(<amount>) over (order by <date>).
 ```
 
@@ -313,27 +313,27 @@ components:
 ```aro
 (Sales Report: Analytics) {
     (* Fetch recent orders *)
-    <Fetch> the <recent-orders: List<Order>> from the <orders>
+    Fetch the <recent-orders: List<Order>> from the <orders>
         where <created-at> > now().minus(30.days)
         order by <created-at> desc.
 
     (* Get total revenue *)
-    <Reduce> the <total-revenue: Float> from the <recent-orders>
+    Reduce the <total-revenue: Float> from the <recent-orders>
         with sum(<amount>).
 
     (* Count pending orders *)
-    <Reduce> the <pending-count: Integer> from the <recent-orders>
+    Reduce the <pending-count: Integer> from the <recent-orders>
         where <status> is "pending"
         with count().
 
     (* Map to summaries *)
-    <Map> the <summaries: List<OrderSummary>> from the <recent-orders>.
+    Map the <summaries: List<OrderSummary>> from the <recent-orders>.
 
     (* Filter high-value orders *)
-    <Filter> the <high-value: List<Order>> from the <recent-orders>
+    Filter the <high-value: List<Order>> from the <recent-orders>
         where <amount> > 1000.
 
-    <Return> an <OK: status> with {
+    Return an <OK: status> with {
         orders: <summaries>,
         total: <total-revenue>,
         pending: <pending-count>,

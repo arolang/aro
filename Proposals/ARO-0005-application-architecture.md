@@ -77,9 +77,9 @@ Within an application:
 **users.aro:**
 ```aro
 (Load User Config: Startup) {
-    <Read> the <config> from the <file> with "./users.json".
-    <Publish> as <user-config> <config>.
-    <Return> an <OK: status> for the <config>.
+    Read the <config> from the <file> with "./users.json".
+    Publish as <user-config> <config>.
+    Return an <OK: status> for the <config>.
 }
 ```
 
@@ -88,7 +88,7 @@ Within an application:
 (Create Order: Order API) {
     (* Access published variable from users.aro *)
     <Use> the <user-config> in the <order-creation>.
-    <Return> an <OK: status> with <order>.
+    Return an <OK: status> with <order>.
 }
 ```
 
@@ -102,10 +102,10 @@ Every application must have **exactly one** feature set named `Application-Start
 
 ```aro
 (Application-Start: My Application) {
-    <Log> "Starting My Application..." to the <console>.
-    <Start> the <http-server> with <contract>.
-    <Keepalive> the <application> for the <events>.
-    <Return> an <OK: status> for the <startup>.
+    Log "Starting My Application..." to the <console>.
+    Start the <http-server> with <contract>.
+    Keepalive the <application> for the <events>.
+    Return an <OK: status> for the <startup>.
 }
 ```
 
@@ -119,11 +119,11 @@ Called when the application terminates normally (SIGTERM, graceful shutdown):
 
 ```aro
 (Application-End: Success) {
-    <Log> "Shutting down gracefully..." to the <console>.
-    <Stop> the <http-server> with <application>.
-    <Close> the <database-connections>.
-    <Log> "Goodbye!" to the <console>.
-    <Return> an <OK: status> for the <shutdown>.
+    Log "Shutting down gracefully..." to the <console>.
+    Stop the <http-server> with <application>.
+    Close the <database-connections>.
+    Log "Goodbye!" to the <console>.
+    Return an <OK: status> for the <shutdown>.
 }
 ```
 
@@ -133,10 +133,10 @@ Called when the application terminates due to an error or crash:
 
 ```aro
 (Application-End: Error) {
-    <Extract> the <error> from the <shutdown: error>.
-    <Log> "Fatal error occurred" to the <console>.
-    <Send> the <alert> to the <ops-webhook> with <error>.
-    <Return> an <OK: status> for the <error-handling>.
+    Extract the <error> from the <shutdown: error>.
+    Log "Fatal error occurred" to the <console>.
+    Send the <alert> to the <ops-webhook> with <error>.
+    Return an <OK: status> for the <error-handling>.
 }
 ```
 
@@ -236,10 +236,10 @@ import ../user-service
 import ../payment-service
 
 (Application-Start: API Gateway) {
-    <Log> "Gateway starting..." to the <console>.
-    <Start> the <http-server> on port 8080.
-    <Keepalive> the <application> for the <events>.
-    <Return> an <OK: status> for the <startup>.
+    Log "Gateway starting..." to the <console>.
+    Start the <http-server> on port 8080.
+    Keepalive the <application> for the <events>.
+    Return an <OK: status> for the <startup>.
 }
 ```
 
@@ -289,12 +289,12 @@ Inside a feature set, statements execute **synchronously** and **serially**:
 
 ```aro
 (Process Order: Order API) {
-    <Extract> the <data> from the <request: body>.      (* 1. First *)
-    <Validate> the <data> for the <order-schema>.       (* 2. Second *)
-    <Create> the <order> with <data>.                   (* 3. Third *)
-    <Store> the <order> in the <order-repository>.      (* 4. Fourth *)
-    <Emit> an <OrderCreated: event> with <order>.       (* 5. Fifth *)
-    <Return> a <Created: status> with <order>.          (* 6. Last *)
+    Extract the <data> from the <request: body>.      (* 1. First *)
+    Validate the <data> for the <order-schema>.       (* 2. Second *)
+    Create the <order> with <data>.                   (* 3. Third *)
+    Store the <order> in the <order-repository>.      (* 4. Fourth *)
+    Emit an <OrderCreated: event> with <order>.       (* 5. Fifth *)
+    Return a <Created: status> with <order>.          (* 6. Last *)
 }
 ```
 
@@ -321,10 +321,10 @@ While code appears synchronous, the runtime executes I/O operations asynchronous
 ```aro
 (Process Config: File Handler) {
     <Open> the <config-file> from the <path>.        (* Starts file load async *)
-    <Compute> the <hash> for the <request>.          (* Runs while file loads *)
-    <Log> "Processing..." to the <console>.          (* Runs while file loads *)
-    <Parse> the <config> from the <config-file>.     (* Waits for file if needed *)
-    <Return> an <OK: status> with <config>.
+    Compute the <hash> for the <request>.          (* Runs while file loads *)
+    Log "Processing..." to the <console>.          (* Runs while file loads *)
+    Parse the <config> from the <config-file>.     (* Waits for file if needed *)
+    Return an <OK: status> with <config>.
 }
 ```
 
@@ -336,22 +336,22 @@ Feature sets trigger other feature sets via events:
 
 ```aro
 (Create User: User API) {
-    <Extract> the <data> from the <request: body>.
-    <Create> the <user> with <data>.
-    <Store> the <user> in the <user-repository>.
+    Extract the <data> from the <request: body>.
+    Create the <user> with <data>.
+    Store the <user> in the <user-repository>.
 
     (* Triggers other feature sets asynchronously *)
-    <Emit> a <UserCreated: event> with <user>.
+    Emit a <UserCreated: event> with <user>.
 
     (* Continues immediately, doesn't wait for handlers *)
-    <Return> a <Created: status> with <user>.
+    Return a <Created: status> with <user>.
 }
 
 (* Runs asynchronously when UserCreated is emitted *)
 (Send Welcome Email: UserCreated Handler) {
-    <Extract> the <user> from the <event: user>.
-    <Send> the <welcome-email> to the <user: email>.
-    <Return> an <OK: status>.
+    Extract the <user> from the <event: user>.
+    Send the <welcome-email> to the <user: email>.
+    Return an <OK: status>.
 }
 ```
 
@@ -365,13 +365,13 @@ Applications that need to stay alive and process events use the `<Keepalive>` ac
 
 ```aro
 (Application-Start: File Watcher) {
-    <Log> "Starting file watcher..." to the <console>.
-    <Start> the <file-monitor> with ".".
+    Log "Starting file watcher..." to the <console>.
+    Start the <file-monitor> with ".".
 
     (* Keep the application running to process events *)
-    <Keepalive> the <application> for the <events>.
+    Keepalive the <application> for the <events>.
 
-    <Return> an <OK: status> for the <startup>.
+    Return an <OK: status> for the <startup>.
 }
 ```
 
@@ -422,28 +422,28 @@ UserService/
 
 ```aro
 (Application-Start: User Service) {
-    <Log> "Starting User Service..." to the <console>.
-    <Start> the <http-server> with <contract>.
-    <Log> "Service ready on port 8080" to the <console>.
+    Log "Starting User Service..." to the <console>.
+    Start the <http-server> with <contract>.
+    Log "Service ready on port 8080" to the <console>.
 
     (* Keep server running until Ctrl+C *)
-    <Keepalive> the <application> for the <events>.
+    Keepalive the <application> for the <events>.
 
-    <Return> an <OK: status> for the <startup>.
+    Return an <OK: status> for the <startup>.
 }
 
 (Application-End: Success) {
-    <Log> "Shutting down gracefully..." to the <console>.
-    <Stop> the <http-server> with <application>.
-    <Log> "Goodbye!" to the <console>.
-    <Return> an <OK: status> for the <shutdown>.
+    Log "Shutting down gracefully..." to the <console>.
+    Stop the <http-server> with <application>.
+    Log "Goodbye!" to the <console>.
+    Return an <OK: status> for the <shutdown>.
 }
 
 (Application-End: Error) {
-    <Extract> the <error> from the <shutdown: error>.
-    <Log> "Fatal error occurred" to the <console>.
-    <Send> the <alert> to the <ops-webhook> with <error>.
-    <Return> an <OK: status> for the <error-handling>.
+    Extract the <error> from the <shutdown: error>.
+    Log "Fatal error occurred" to the <console>.
+    Send the <alert> to the <ops-webhook> with <error>.
+    Return an <OK: status> for the <error-handling>.
 }
 ```
 
@@ -451,23 +451,23 @@ UserService/
 
 ```aro
 (listUsers: User API) {
-    <Retrieve> the <users> from the <user-repository>.
-    <Return> an <OK: status> with <users>.
+    Retrieve the <users> from the <user-repository>.
+    Return an <OK: status> with <users>.
 }
 
 (getUser: User API) {
-    <Extract> the <id> from the <pathParameters: id>.
-    <Retrieve> the <user> from the <user-repository> where id = <id>.
-    <Return> an <OK: status> with <user>.
+    Extract the <id> from the <pathParameters: id>.
+    Retrieve the <user> from the <user-repository> where id = <id>.
+    Return an <OK: status> with <user>.
 }
 
 (createUser: User API) {
-    <Extract> the <data> from the <request: body>.
-    <Validate> the <data> for the <user-schema>.
-    <Create> the <user> with <data>.
-    <Store> the <user> in the <user-repository>.
-    <Emit> a <UserCreated: event> with <user>.
-    <Return> a <Created: status> with <user>.
+    Extract the <data> from the <request: body>.
+    Validate the <data> for the <user-schema>.
+    Create the <user> with <data>.
+    Store the <user> in the <user-repository>.
+    Emit a <UserCreated: event> with <user>.
+    Return a <Created: status> with <user>.
 }
 ```
 
@@ -475,17 +475,17 @@ UserService/
 
 ```aro
 (Send Welcome Email: UserCreated Handler) {
-    <Extract> the <user> from the <event: user>.
-    <Extract> the <email> from the <user: email>.
-    <Send> the <welcome-email> to the <email>.
-    <Log> "Welcome email sent" to the <console>.
-    <Return> an <OK: status> for the <notification>.
+    Extract the <user> from the <event: user>.
+    Extract the <email> from the <user: email>.
+    Send the <welcome-email> to the <email>.
+    Log "Welcome email sent" to the <console>.
+    Return an <OK: status> for the <notification>.
 }
 
 (Track Signup: UserCreated Handler) {
-    <Extract> the <user> from the <event: user>.
+    Extract the <user> from the <event: user>.
     <Record> the <signup: metric> with <user>.
-    <Return> an <OK: status> for the <analytics>.
+    Return an <OK: status> for the <analytics>.
 }
 ```
 
@@ -511,7 +511,7 @@ Error: No entry point defined
   Hint: Add a feature set named 'Application-Start':
 
     (Application-Start: My App) {
-        <Return> an <OK: status> for the <startup>.
+        Return an <OK: status> for the <startup>.
     }
 ```
 

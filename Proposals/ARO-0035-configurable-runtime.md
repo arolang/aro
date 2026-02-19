@@ -22,7 +22,7 @@ The Configure action provides a declarative way to set configuration values that
 ### 1.1 Syntax
 
 ```aro
-<Configure> the <setting: qualifier> with <value>.
+Configure the <setting: qualifier> with <value>.
 ```
 
 Where:
@@ -34,14 +34,14 @@ Where:
 
 ```aro
 (* Set a timeout value *)
-<Configure> the <validation: timeout> with 10.
+Configure the <validation: timeout> with 10.
 
 (* Set HTTP client configuration *)
-<Configure> the <http-client: timeout> with 5000.
-<Configure> the <http-client: retries> with 3.
+Configure the <http-client: timeout> with 5000.
+Configure the <http-client: retries> with 3.
 
 (* Set custom application settings *)
-<Configure> the <batch: size> with 100.
+Configure the <batch: size> with 100.
 ```
 
 ---
@@ -51,8 +51,8 @@ Where:
 Configuration values are retrieved using Extract:
 
 ```aro
-<Extract> the <timeout> from the <validation: timeout>.
-<Extract> the <batch-size> from the <batch: size>.
+Extract the <timeout> from the <validation: timeout>.
+Extract the <batch-size> from the <batch: size>.
 ```
 
 ---
@@ -66,15 +66,15 @@ Configuration values are scoped to the application lifetime:
 ```aro
 (Application-Start: My App) {
     (* Set configuration at startup *)
-    <Configure> the <validation: timeout> with 10.
-    <Return> an <OK: status> for the <startup>.
+    Configure the <validation: timeout> with 10.
+    Return an <OK: status> for the <startup>.
 }
 
 (Process Request: Request Handler) {
     (* Configuration available in all feature sets *)
-    <Extract> the <timeout> from the <validation: timeout>.
-    <Log> <timeout> to the <console>.
-    <Return> an <OK: status>.
+    Extract the <timeout> from the <validation: timeout>.
+    Log <timeout> to the <console>.
+    Return an <OK: status>.
 }
 ```
 
@@ -83,9 +83,9 @@ Configuration values are scoped to the application lifetime:
 If a configuration value is not set, Extract returns `nil`. Feature sets should handle missing configuration:
 
 ```aro
-<Extract> the <timeout> from the <validation: timeout>.
-<Create> the <effective-timeout> with 5 when <timeout> = nil.
-<Create> the <effective-timeout> with <timeout> when <timeout> != nil.
+Extract the <timeout> from the <validation: timeout>.
+Create the <effective-timeout> with 5 when <timeout> = nil.
+Create the <effective-timeout> with <timeout> when <timeout> != nil.
 ```
 
 ---
@@ -109,9 +109,9 @@ Configure validation timeout for IDE plugin binary path validation:
 
 ```aro
 (Application-Start: IDE Support) {
-    <Create> the <validation-timeout> with 10.
-    <Configure> the <validation: timeout> with <validation-timeout>.
-    <Return> an <OK: status> for the <startup>.
+    Create the <validation-timeout> with 10.
+    Configure the <validation: timeout> with <validation-timeout>.
+    Return an <OK: status> for the <startup>.
 }
 ```
 
@@ -121,9 +121,9 @@ Configure HTTP client for slow external APIs:
 
 ```aro
 (Application-Start: External Service) {
-    <Configure> the <http-client: timeout> with 30000.
-    <Configure> the <http-client: retries> with 5.
-    <Return> an <OK: status> for the <startup>.
+    Configure the <http-client: timeout> with 30000.
+    Configure the <http-client: retries> with 5.
+    Return an <OK: status> for the <startup>.
 }
 ```
 
@@ -133,9 +133,9 @@ Configure batch sizes for data processing:
 
 ```aro
 (Application-Start: Data Processor) {
-    <Configure> the <batch: size> with 1000.
-    <Configure> the <batch: concurrency> with 4.
-    <Return> an <OK: status> for the <startup>.
+    Configure the <batch: size> with 1000.
+    Configure the <batch: concurrency> with 4.
+    Return an <OK: status> for the <startup>.
 }
 ```
 
@@ -177,9 +177,9 @@ setting = identifier ;
 | Aspect | Description |
 |--------|-------------|
 | **Action** | `<Configure>` |
-| **Syntax** | `<Configure> the <category: setting> with <value>.` |
+| **Syntax** | `Configure the <category: setting> with <value>.` |
 | **Scope** | Application lifetime |
-| **Retrieval** | `<Extract> the <var> from the <category: setting>.` |
+| **Retrieval** | `Extract the <var> from the <category: setting>.` |
 
 The Configure action provides a standardized way to set and retrieve runtime configuration values.
 

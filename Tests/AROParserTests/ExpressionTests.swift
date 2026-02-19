@@ -98,7 +98,7 @@ struct ExpressionParserTests {
 
     @Test("Parses integer literal expression")
     func testIntegerLiteral() throws {
-        let source = "(Test: Demo) { <Set> the <x> to 42. }"
+        let source = "(Test: Demo) { Set the <x> to 42. }"
         let program = try Parser.parse(source)
 
         let featureSet = program.featureSets[0]
@@ -114,7 +114,7 @@ struct ExpressionParserTests {
 
     @Test("Parses float literal expression")
     func testFloatLiteral() throws {
-        let source = "(Test: Demo) { <Set> the <pi> to 3.14. }"
+        let source = "(Test: Demo) { Set the <pi> to 3.14. }"
         let program = try Parser.parse(source)
 
         let statement = program.featureSets[0].statements[0] as! AROStatement
@@ -127,7 +127,7 @@ struct ExpressionParserTests {
 
     @Test("Parses string literal expression")
     func testStringLiteral() throws {
-        let source = "(Test: Demo) { <Set> the <msg> to \"hello\". }"
+        let source = "(Test: Demo) { Set the <msg> to \"hello\". }"
         let program = try Parser.parse(source)
 
         let statement = program.featureSets[0].statements[0] as! AROStatement
@@ -140,7 +140,7 @@ struct ExpressionParserTests {
 
     @Test("Parses boolean literal expressions")
     func testBooleanLiterals() throws {
-        let source = "(Test: Demo) { <Set> the <flag> to true. }"
+        let source = "(Test: Demo) { Set the <flag> to true. }"
         let program = try Parser.parse(source)
 
         let statement = program.featureSets[0].statements[0] as! AROStatement
@@ -153,7 +153,7 @@ struct ExpressionParserTests {
 
     @Test("Parses variable reference expression")
     func testVariableReference() throws {
-        let source = "(Test: Demo) { <Set> the <y> to <x>. }"
+        let source = "(Test: Demo) { Set the <y> to <x>. }"
         let program = try Parser.parse(source)
 
         let statement = program.featureSets[0].statements[0] as! AROStatement
@@ -166,7 +166,7 @@ struct ExpressionParserTests {
 
     @Test("Parses addition expression")
     func testAdditionExpression() throws {
-        let source = "(Test: Demo) { <Compute> the <sum> from 1 + 2. }"
+        let source = "(Test: Demo) { Compute the <sum> from 1 + 2. }"
         let program = try Parser.parse(source)
 
         let statement = program.featureSets[0].statements[0] as! AROStatement
@@ -179,7 +179,7 @@ struct ExpressionParserTests {
 
     @Test("Parses multiplication expression")
     func testMultiplicationExpression() throws {
-        let source = "(Test: Demo) { <Compute> the <product> from 3 * 4. }"
+        let source = "(Test: Demo) { Compute the <product> from 3 * 4. }"
         let program = try Parser.parse(source)
 
         let statement = program.featureSets[0].statements[0] as! AROStatement
@@ -192,7 +192,7 @@ struct ExpressionParserTests {
 
     @Test("Parses string concatenation expression")
     func testConcatExpression() throws {
-        let source = "(Test: Demo) { <Compute> the <full> from \"a\" ++ \"b\". }"
+        let source = "(Test: Demo) { Compute the <full> from \"a\" ++ \"b\". }"
         let program = try Parser.parse(source)
 
         let statement = program.featureSets[0].statements[0] as! AROStatement
@@ -206,7 +206,7 @@ struct ExpressionParserTests {
     @Test("Parses comparison expressions")
     func testComparisonExpressions() throws {
         // Use == instead of > to avoid angle bracket ambiguity
-        let source = "(Test: Demo) { <Validate> the <result> for <x> == 10. }"
+        let source = "(Test: Demo) { Validate the <result> for <x> == 10. }"
         let program = try Parser.parse(source)
 
         let statement = program.featureSets[0].statements[0] as! AROStatement
@@ -220,7 +220,7 @@ struct ExpressionParserTests {
     @Test("Parses greater than with numbers")
     func testGreaterThan() throws {
         // Use numeric comparison to avoid angle bracket issues
-        let source = "(Test: Demo) { <Validate> the <result> for 15 > 10. }"
+        let source = "(Test: Demo) { Validate the <result> for 15 > 10. }"
         let program = try Parser.parse(source)
 
         let statement = program.featureSets[0].statements[0] as! AROStatement
@@ -233,7 +233,7 @@ struct ExpressionParserTests {
 
     @Test("Parses logical and expression")
     func testLogicalAndExpression() throws {
-        let source = "(Test: Demo) { <Validate> the <ok> for true and false. }"
+        let source = "(Test: Demo) { Validate the <ok> for true and false. }"
         let program = try Parser.parse(source)
 
         let statement = program.featureSets[0].statements[0] as! AROStatement
@@ -246,7 +246,7 @@ struct ExpressionParserTests {
 
     @Test("Parses logical or expression")
     func testLogicalOrExpression() throws {
-        let source = "(Test: Demo) { <Validate> the <ok> for true or false. }"
+        let source = "(Test: Demo) { Validate the <ok> for true or false. }"
         let program = try Parser.parse(source)
 
         let statement = program.featureSets[0].statements[0] as! AROStatement
@@ -262,7 +262,7 @@ struct ExpressionParserTests {
         // Note: The lexer combines -42 into a single negative integer token
         // So -42 becomes a literal, not a unary expression
         // To test unary negation, we need: -<x>
-        let source = "(Test: Demo) { <Set> the <neg> to -<x>. }"
+        let source = "(Test: Demo) { Set the <neg> to -<x>. }"
         let program = try Parser.parse(source)
 
         let statement = program.featureSets[0].statements[0] as! AROStatement
@@ -276,7 +276,7 @@ struct ExpressionParserTests {
 
     @Test("Parses negative integer literal")
     func testNegativeIntegerLiteral() throws {
-        let source = "(Test: Demo) { <Set> the <neg> to -42. }"
+        let source = "(Test: Demo) { Set the <neg> to -42. }"
         let program = try Parser.parse(source)
 
         let statement = program.featureSets[0].statements[0] as! AROStatement
@@ -289,7 +289,7 @@ struct ExpressionParserTests {
 
     @Test("Parses unary not expression")
     func testUnaryNot() throws {
-        let source = "(Test: Demo) { <Set> the <neg> to not true. }"
+        let source = "(Test: Demo) { Set the <neg> to not true. }"
         let program = try Parser.parse(source)
 
         let statement = program.featureSets[0].statements[0] as! AROStatement
@@ -302,7 +302,7 @@ struct ExpressionParserTests {
 
     @Test("Parses grouped expression")
     func testGroupedExpression() throws {
-        let source = "(Test: Demo) { <Compute> the <result> from (1 + 2) * 3. }"
+        let source = "(Test: Demo) { Compute the <result> from (1 + 2) * 3. }"
         let program = try Parser.parse(source)
 
         let statement = program.featureSets[0].statements[0] as! AROStatement
@@ -316,7 +316,7 @@ struct ExpressionParserTests {
 
     @Test("Parses array literal expression")
     func testArrayLiteralExpression() throws {
-        let source = "(Test: Demo) { <Set> the <items> to [1, 2, 3]. }"
+        let source = "(Test: Demo) { Set the <items> to [1, 2, 3]. }"
         let program = try Parser.parse(source)
 
         let statement = program.featureSets[0].statements[0] as! AROStatement
@@ -329,7 +329,7 @@ struct ExpressionParserTests {
 
     @Test("Parses map literal expression")
     func testMapLiteralExpression() throws {
-        let source = "(Test: Demo) { <Set> the <config> to { name: \"test\", count: 5 }. }"
+        let source = "(Test: Demo) { Set the <config> to { name: \"test\", count: 5 }. }"
         let program = try Parser.parse(source)
 
         let statement = program.featureSets[0].statements[0] as! AROStatement
@@ -344,7 +344,7 @@ struct ExpressionParserTests {
 
     @Test("Parses member access expression")
     func testMemberAccessExpression() throws {
-        let source = "(Test: Demo) { <Extract> the <name> from <user>.name. }"
+        let source = "(Test: Demo) { Extract the <name> from <user>.name. }"
         let program = try Parser.parse(source)
 
         let statement = program.featureSets[0].statements[0] as! AROStatement
@@ -357,7 +357,7 @@ struct ExpressionParserTests {
 
     @Test("Parses subscript expression")
     func testSubscriptExpression() throws {
-        let source = "(Test: Demo) { <Extract> the <first> from <items>[0]. }"
+        let source = "(Test: Demo) { Extract the <first> from <items>[0]. }"
         let program = try Parser.parse(source)
 
         let statement = program.featureSets[0].statements[0] as! AROStatement
@@ -372,7 +372,7 @@ struct ExpressionParserTests {
 
     @Test("Parses existence expression")
     func testExistenceExpression() throws {
-        let source = "(Test: Demo) { <Validate> the <ok> for <user> exists. }"
+        let source = "(Test: Demo) { Validate the <ok> for <user> exists. }"
         let program = try Parser.parse(source)
 
         let statement = program.featureSets[0].statements[0] as! AROStatement
@@ -385,7 +385,7 @@ struct ExpressionParserTests {
 
     @Test("Parses type check expression")
     func testTypeCheckExpression() throws {
-        let source = "(Test: Demo) { <Validate> the <ok> for <value> is String. }"
+        let source = "(Test: Demo) { Validate the <ok> for <value> is String. }"
         let program = try Parser.parse(source)
 
         let statement = program.featureSets[0].statements[0] as! AROStatement
@@ -404,7 +404,7 @@ struct OperatorPrecedenceTests {
 
     @Test("Multiplication has higher precedence than addition")
     func testMulOverAdd() throws {
-        let source = "(Test: Demo) { <Compute> the <result> from 1 + 2 * 3. }"
+        let source = "(Test: Demo) { Compute the <result> from 1 + 2 * 3. }"
         let program = try Parser.parse(source)
 
         let statement = program.featureSets[0].statements[0] as! AROStatement
@@ -421,7 +421,7 @@ struct OperatorPrecedenceTests {
 
     @Test("And has higher precedence than or")
     func testAndOverOr() throws {
-        let source = "(Test: Demo) { <Validate> the <ok> for true or false and true. }"
+        let source = "(Test: Demo) { Validate the <ok> for true or false and true. }"
         let program = try Parser.parse(source)
 
         let statement = program.featureSets[0].statements[0] as! AROStatement
@@ -438,7 +438,7 @@ struct OperatorPrecedenceTests {
 
     @Test("Parentheses override precedence")
     func testParenthesesOverride() throws {
-        let source = "(Test: Demo) { <Compute> the <result> from (1 + 2) * 3. }"
+        let source = "(Test: Demo) { Compute the <result> from (1 + 2) * 3. }"
         let program = try Parser.parse(source)
 
         let statement = program.featureSets[0].statements[0] as! AROStatement
@@ -451,7 +451,7 @@ struct OperatorPrecedenceTests {
 
     @Test("Comparison has lower precedence than arithmetic")
     func testComparisonPrecedence() throws {
-        let source = "(Test: Demo) { <Validate> the <ok> for 1 + 2 > 2. }"
+        let source = "(Test: Demo) { Validate the <ok> for 1 + 2 > 2. }"
         let program = try Parser.parse(source)
 
         let statement = program.featureSets[0].statements[0] as! AROStatement
@@ -474,7 +474,7 @@ struct ExpressionInStatementTests {
 
     @Test("Expression with 'to' preposition")
     func testToPreposition() throws {
-        let source = "(Test: Demo) { <Set> the <x> to 10 + 5. }"
+        let source = "(Test: Demo) { Set the <x> to 10 + 5. }"
         let program = try Parser.parse(source)
 
         let statement = program.featureSets[0].statements[0] as! AROStatement
@@ -484,7 +484,7 @@ struct ExpressionInStatementTests {
 
     @Test("Expression with 'from' preposition")
     func testFromPreposition() throws {
-        let source = "(Test: Demo) { <Compute> the <result> from <a> * <b>. }"
+        let source = "(Test: Demo) { Compute the <result> from <a> * <b>. }"
         let program = try Parser.parse(source)
 
         let statement = program.featureSets[0].statements[0] as! AROStatement
@@ -494,7 +494,7 @@ struct ExpressionInStatementTests {
 
     @Test("Expression with 'for' preposition")
     func testForPreposition() throws {
-        let source = "(Test: Demo) { <Validate> the <ok> for <x> > 0. }"
+        let source = "(Test: Demo) { Validate the <ok> for <x> > 0. }"
         let program = try Parser.parse(source)
 
         let statement = program.featureSets[0].statements[0] as! AROStatement
@@ -503,7 +503,7 @@ struct ExpressionInStatementTests {
 
     @Test("Statement without expression still works")
     func testNoExpression() throws {
-        let source = "(Test: Demo) { <Extract> the <user> from the <request>. }"
+        let source = "(Test: Demo) { Extract the <user> from the <request>. }"
         let program = try Parser.parse(source)
 
         let statement = program.featureSets[0].statements[0] as! AROStatement

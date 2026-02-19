@@ -53,9 +53,9 @@ The file system service provides comprehensive operations for reading, writing, 
 Reading files uses the Read action with a file path. The action reads the file contents and binds them to a result. For JSON files, the content is parsed into a structured object. For text files, the content is a string. The path can be relative to the application directory or absolute.
 
 ```aro
-<Read> the <content> from the <file: "./README.md">.
-<Read> the <config: JSON> from the <file: "./config.json">.
-<Read> the <image: bytes> from the <file: "./logo.png">.
+Read the <content> from the <file: "./README.md">.
+Read the <config: JSON> from the <file: "./config.json">.
+Read the <image: bytes> from the <file: "./logo.png">.
 ```
 
 ### Writing Files
@@ -63,8 +63,8 @@ Reading files uses the Read action with a file path. The action reads the file c
 Writing files uses the Write action with data and a path. The action serializes the data and writes it to the specified location. Parent directories are created automatically if they do not exist.
 
 ```aro
-<Write> the <report> to the <file: "./output/report.txt">.
-<Write> the <data: JSON> to the <file: "./export.json">.
+Write the <report> to the <file: "./output/report.txt">.
+Write the <data: JSON> to the <file: "./export.json">.
 ```
 
 ### Appending to Files
@@ -72,7 +72,7 @@ Writing files uses the Write action with data and a path. The action serializes 
 The Append action adds content to the end of an existing file, creating the file if it does not exist.
 
 ```aro
-<Append> the <log-line> to the <file: "./logs/app.log">.
+Append the <log-line> to the <file: "./logs/app.log">.
 ```
 
 ### Checking File Existence
@@ -80,10 +80,10 @@ The Append action adds content to the end of an existing file, creating the file
 The Exists action checks whether a file or directory exists at a given path.
 
 ```aro
-<Exists> the <found> for the <file: "./config.json">.
+Exists the <found> for the <file: "./config.json">.
 
 when <found> is false {
-    <Log> "Config not found!" to the <console>.
+    Log "Config not found!" to the <console>.
 }
 ```
 
@@ -92,9 +92,9 @@ when <found> is false {
 The Stat action retrieves detailed metadata about a file or directory, including size, modification dates, and permissions.
 
 ```aro
-<Stat> the <info> for the <file: "./document.pdf">.
-<Log> <info: size> to the <console>.
-<Log> <info: modified> to the <console>.
+Stat the <info> for the <file: "./document.pdf">.
+Log <info: size> to the <console>.
+Log <info: modified> to the <console>.
 ```
 
 The result contains: name, path, size (bytes), isFile, isDirectory, created, modified, accessed, and permissions.
@@ -105,16 +105,16 @@ The List action retrieves the contents of a directory. You can filter by glob pa
 
 ```aro
 (* List all files in a directory *)
-<Create> the <uploads-path> with "./uploads".
-<List> the <entries> from the <directory: uploads-path>.
+Create the <uploads-path> with "./uploads".
+List the <entries> from the <directory: uploads-path>.
 
 (* Filter with glob pattern *)
-<Create> the <src-path> with "./src".
-<List> the <aro-files> from the <directory: src-path> matching "*.aro".
+Create the <src-path> with "./src".
+List the <aro-files> from the <directory: src-path> matching "*.aro".
 
 (* List recursively *)
-<Create> the <project-path> with "./project".
-<List> the <all-files> from the <directory: project-path> recursively.
+Create the <project-path> with "./project".
+List the <all-files> from the <directory: project-path> recursively.
 ```
 
 Each entry contains: name, path, size, isFile, isDirectory, and modified.
@@ -132,8 +132,8 @@ The CreateDirectory action creates a directory, including any necessary parent d
 The Copy action copies a file or directory to a new location. Directory copies are recursive by default.
 
 ```aro
-<Copy> the <file: "./template.txt"> to the <destination: "./copy.txt">.
-<Copy> the <directory: "./src"> to the <destination: "./backup/src">.
+Copy the <file: "./template.txt"> to the <destination: "./copy.txt">.
+Copy the <directory: "./src"> to the <destination: "./backup/src">.
 ```
 
 ### Moving and Renaming
@@ -141,8 +141,8 @@ The Copy action copies a file or directory to a new location. Directory copies a
 The Move action moves or renames a file or directory.
 
 ```aro
-<Move> the <file: "./draft.txt"> to the <destination: "./final.txt">.
-<Move> the <file: "./inbox/report.pdf"> to the <destination: "./archive/report.pdf">.
+Move the <file: "./draft.txt"> to the <destination: "./final.txt">.
+Move the <file: "./inbox/report.pdf"> to the <destination: "./archive/report.pdf">.
 ```
 
 ### Deleting Files
@@ -150,7 +150,7 @@ The Move action moves or renames a file or directory.
 The Delete action removes a file from the file system.
 
 ```aro
-<Delete> the <file: "./temp/cache.json">.
+Delete the <file: "./temp/cache.json">.
 ```
 
 ### File Watching
@@ -158,7 +158,7 @@ The Delete action removes a file from the file system.
 File watching monitors a directory for changes and emits events when files are created, modified, or deleted. You start watching during Application-Start by specifying the directory to monitor. When changes occur, the runtime emits File Event events that your handlers can process. This is useful for applications that need to react to external file changes—configuration reloading, data import, file synchronization.
 
 ```aro
-<Start> the <file-monitor> with "./data".
+Start the <file-monitor> with "./data".
 ```
 
 Event handlers are named according to the event type: `Handle File Created`, `Handle File Modified`, or `Handle File Deleted`.
@@ -219,48 +219,48 @@ Here is a complete example demonstrating multiple built-in services working toge
 (* Config Monitor - Watch files and report changes via HTTP *)
 
 (Application-Start: Config Monitor) {
-    <Log> "Starting configuration monitor..." to the <console>.
+    Log "Starting configuration monitor..." to the <console>.
 
     (* Load the monitoring endpoint from environment or config *)
-    <Create> the <webhook-url> with "https://monitoring.example.com/webhook".
+    Create the <webhook-url> with "https://monitoring.example.com/webhook".
 
     (* Start watching the config directory *)
-    <Start> the <file-monitor> with "./config".
+    Start the <file-monitor> with "./config".
 
-    <Log> "Watching ./config for changes..." to the <console>.
+    Log "Watching ./config for changes..." to the <console>.
 
     (* Keep running until shutdown signal *)
-    <Keepalive> the <application> for the <events>.
+    Keepalive the <application> for the <events>.
 
-    <Return> an <OK: status> for the <startup>.
+    Return an <OK: status> for the <startup>.
 }
 
 (Report Config Change: File Event Handler) {
     (* Extract the changed file path *)
-    <Extract> the <path> from the <event: path>.
-    <Extract> the <event-type> from the <event: type>.
+    Extract the <path> from the <event: path>.
+    Extract the <event-type> from the <event: type>.
 
-    <Log> "Config changed:" to the <console>.
-    <Log> <path> to the <console>.
+    Log "Config changed:" to the <console>.
+    Log <path> to the <console>.
 
     (* Build notification payload *)
-    <Create> the <notification> with {
+    Create the <notification> with {
         file: <path>,
         change: <event-type>,
         timestamp: "now"
     }.
 
     (* Send to monitoring webhook *)
-    <Send> <notification> to the <webhook-url>.
+    Send <notification> to the <webhook-url>.
 
-    <Log> "Change reported to monitoring service." to the <console>.
+    Log "Change reported to monitoring service." to the <console>.
 
-    <Return> an <OK: status> for the <event>.
+    Return an <OK: status> for the <event>.
 }
 
 (Application-End: Success) {
-    <Log> "Config monitor stopped." to the <console>.
-    <Return> an <OK: status> for the <shutdown>.
+    Log "Config monitor stopped." to the <console>.
+    Return an <OK: status> for the <shutdown>.
 }
 ```
 

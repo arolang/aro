@@ -5,26 +5,26 @@
 
 (* Get service status *)
 (getStatus: Multi-Service API) {
-    <Create> the <status> with {
+    Create the <status> with {
         httpServer: "running",
         socketServer: "running",
         fileMonitor: "watching",
         watchedDirectory: "watched-dir"
     }.
-    <Return> an <OK: status> with <status>.
+    Return an <OK: status> with <status>.
 }
 
 (* Broadcast message to all socket clients *)
 (broadcastMessage: Multi-Service API) {
-    <Extract> the <data> from the <request: body>.
-    <Extract> the <message> from the <data: message>.
+    Extract the <data> from the <request: body>.
+    Extract the <message> from the <data: message>.
 
     (* Broadcast to all socket clients *)
-    <Broadcast> the <message> to the <socket>.
+    Broadcast the <message> to the <socket>.
 
-    <Create> the <response> with {
+    Create the <response> with {
         success: true,
         message: "Message broadcast to all socket clients"
     }.
-    <Return> an <OK: status> with <response>.
+    Return an <OK: status> with <response>.
 }

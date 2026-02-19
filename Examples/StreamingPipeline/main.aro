@@ -2,12 +2,12 @@
 (* Demonstrates streaming filter chains with constant memory usage *)
 
 (Application-Start: Streaming Pipeline Demo) {
-    <Log> "=== Streaming Pipeline Demo ===" to the <console>.
-    <Log> "Processing transactions with multi-stage filtering..." to the <console>.
-    <Log> "" to the <console>.
+    Log "=== Streaming Pipeline Demo ===" to the <console>.
+    Log "Processing transactions with multi-stage filtering..." to the <console>.
+    Log "" to the <console>.
 
     (* Create sample transaction data *)
-    <Create> the <transactions> with [
+    Create the <transactions> with [
         {id: 1, year: "2023", amount: 750, status: "completed", category: "electronics", customer: "Alice"},
         {id: 2, year: "2024", amount: 200, status: "completed", category: "clothing", customer: "Bob"},
         {id: 3, year: "2024", amount: 1200, status: "completed", category: "electronics", customer: "Charlie"},
@@ -20,69 +20,69 @@
         {id: 10, year: "2024", amount: 2000, status: "completed", category: "electronics", customer: "Jack"}
     ].
 
-    <Log> "=== Stage 1: All Transactions (10 total) ===" to the <console>.
-    <Log> <transactions> to the <console>.
-    <Log> "" to the <console>.
+    Log "=== Stage 1: All Transactions (10 total) ===" to the <console>.
+    Log <transactions> to the <console>.
+    Log "" to the <console>.
 
     (* Stage 2: Filter by year - only 2024 transactions *)
-    <Filter> the <current-year> from <transactions>
+    Filter the <current-year> from <transactions>
         where <year> = "2024".
 
-    <Log> "=== Stage 2: 2024 Transactions (9 remain) ===" to the <console>.
-    <Log> <current-year> to the <console>.
-    <Log> "" to the <console>.
+    Log "=== Stage 2: 2024 Transactions (9 remain) ===" to the <console>.
+    Log <current-year> to the <console>.
+    Log "" to the <console>.
 
     (* Stage 3: Filter by amount - high value only *)
-    <Filter> the <high-value> from <current-year>
+    Filter the <high-value> from <current-year>
         where <amount> > 500.
 
-    <Log> "=== Stage 3: High Value >500 (6 remain) ===" to the <console>.
-    <Log> <high-value> to the <console>.
-    <Log> "" to the <console>.
+    Log "=== Stage 3: High Value >500 (6 remain) ===" to the <console>.
+    Log <high-value> to the <console>.
+    Log "" to the <console>.
 
     (* Stage 4: Filter by status - completed only *)
-    <Filter> the <completed> from <high-value>
+    Filter the <completed> from <high-value>
         where <status> = "completed".
 
-    <Log> "=== Stage 4: Completed (5 remain) ===" to the <console>.
-    <Log> <completed> to the <console>.
-    <Log> "" to the <console>.
+    Log "=== Stage 4: Completed (5 remain) ===" to the <console>.
+    Log <completed> to the <console>.
+    Log "" to the <console>.
 
     (* Stage 5: Filter by category - electronics only *)
-    <Filter> the <electronics> from <completed>
+    Filter the <electronics> from <completed>
         where <category> = "electronics".
 
-    <Log> "=== Stage 5: Electronics Only (4 remain) ===" to the <console>.
-    <Log> <electronics> to the <console>.
-    <Log> "" to the <console>.
+    Log "=== Stage 5: Electronics Only (4 remain) ===" to the <console>.
+    Log <electronics> to the <console>.
+    Log "" to the <console>.
 
     (* Aggregations on final filtered stream *)
-    <Log> "=== Aggregation Results ===" to the <console>.
+    Log "=== Aggregation Results ===" to the <console>.
 
-    <Reduce> the <total-amount> from <electronics>
+    Reduce the <total-amount> from <electronics>
         with sum(<amount>).
-    <Log> "Total Amount:" to the <console>.
-    <Log> <total-amount> to the <console>.
+    Log "Total Amount:" to the <console>.
+    Log <total-amount> to the <console>.
 
-    <Reduce> the <transaction-count> from <electronics>
+    Reduce the <transaction-count> from <electronics>
         with count().
-    <Log> "Transaction Count:" to the <console>.
-    <Log> <transaction-count> to the <console>.
+    Log "Transaction Count:" to the <console>.
+    Log <transaction-count> to the <console>.
 
-    <Reduce> the <avg-amount> from <electronics>
+    Reduce the <avg-amount> from <electronics>
         with avg(<amount>).
-    <Log> "Average Amount:" to the <console>.
-    <Log> <avg-amount> to the <console>.
+    Log "Average Amount:" to the <console>.
+    Log <avg-amount> to the <console>.
 
-    <Reduce> the <max-amount> from <electronics>
+    Reduce the <max-amount> from <electronics>
         with max(<amount>).
-    <Log> "Max Amount:" to the <console>.
-    <Log> <max-amount> to the <console>.
+    Log "Max Amount:" to the <console>.
+    Log <max-amount> to the <console>.
 
-    <Log> "" to the <console>.
-    <Log> "=== Pipeline Complete ===" to the <console>.
-    <Log> "In streaming mode, each row flows through all 5 filter stages." to the <console>.
-    <Log> "Non-matching rows are discarded immediately - O(1) memory!" to the <console>.
+    Log "" to the <console>.
+    Log "=== Pipeline Complete ===" to the <console>.
+    Log "In streaming mode, each row flows through all 5 filter stages." to the <console>.
+    Log "Non-matching rows are discarded immediately - O(1) memory!" to the <console>.
 
-    <Return> an <OK: status> for the <streaming-demo>.
+    Return an <OK: status> for the <streaming-demo>.
 }

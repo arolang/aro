@@ -3,23 +3,23 @@
 (* NOTE: Run with an echo server: nc -l 9999 *)
 
 (Application-Start: Socket Client Demo) {
-    <Log> "=== Socket Client Demo ===" to the <console>.
-    <Log> "Demonstrating Connect action for TCP client" to the <console>.
+    Log "=== Socket Client Demo ===" to the <console>.
+    Log "Demonstrating Connect action for TCP client" to the <console>.
 
     (* The Connect action establishes outbound TCP connections *)
-    (* Syntax: <Connect> the <result> to the <host-variable> with { port: N }. *)
+    (* Syntax: Connect the <result> to the <host-variable> with { port: N }. *)
 
     (* Example - connecting to a server: *)
-    (* <Create> the <host> with "localhost". *)
-    (* <Connect> the <conn> to the <host> with { port: 9999 }. *)
-    (* <Send> the <message> to the <conn>. *)
-    (* <Close> the <status> from the <conn>. *)
+    (* Create the <host> with "localhost". *)
+    (* Connect the <conn> to the <host> with { port: 9999 }. *)
+    (* Send the <message> to the <conn>. *)
+    (* Close the <status> from the <conn>. *)
 
-    <Log> "Connect action features:" to the <console>.
-    <Log> "- Verb: connect" to the <console>.
-    <Log> "- Prepositions: to, with" to the <console>.
-    <Log> "- Returns connection ID for Send/Close" to the <console>.
+    Log "Connect action features:" to the <console>.
+    Log "- Verb: connect" to the <console>.
+    Log "- Prepositions: to, with" to the <console>.
+    Log "- Returns connection ID for Send/Close" to the <console>.
 
-    <Log> "Demo complete" to the <console>.
-    <Return> an <OK: status> for the <demo>.
+    Log "Demo complete" to the <console>.
+    Return an <OK: status> for the <demo>.
 }

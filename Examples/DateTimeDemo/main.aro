@@ -1,62 +1,62 @@
 (* DateTime Demo - Demonstrates ARO-0041 Date and Time Handling *)
 
 (Application-Start: DateTime Demo) {
-    <Log> "=== DateTime Demo ===" to the <console>.
+    Log "=== DateTime Demo ===" to the <console>.
 
     (* Basic <now> variable - returns current UTC time *)
-    <Log> "Current UTC time:" to the <console>.
-    <Log> <now> to the <console>.
+    Log "Current UTC time:" to the <console>.
+    Log <now> to the <console>.
 
     (* Date parsing - parse ISO 8601 strings *)
-    <Log> "Parsed meeting date:" to the <console>.
-    <Compute> the <meeting: date> from "2025-06-15T14:00:00Z".
-    <Log> <meeting> to the <console>.
+    Log "Parsed meeting date:" to the <console>.
+    Compute the <meeting: date> from "2025-06-15T14:00:00Z".
+    Log <meeting> to the <console>.
 
     (* Date property access via year qualifier *)
-    <Log> "Year from now:" to the <console>.
-    <Extract> the <year> from the <now: year>.
-    <Log> <year> to the <console>.
+    Log "Year from now:" to the <console>.
+    Extract the <year> from the <now: year>.
+    Log <year> to the <console>.
 
     (* Extract month *)
-    <Log> "Month from now:" to the <console>.
-    <Extract> the <month> from the <now: month>.
-    <Log> <month> to the <console>.
+    Log "Month from now:" to the <console>.
+    Extract the <month> from the <now: month>.
+    Log <month> to the <console>.
 
     (* Extract day *)
-    <Log> "Day from now:" to the <console>.
-    <Extract> the <day> from the <now: day>.
-    <Log> <day> to the <console>.
+    Log "Day from now:" to the <console>.
+    Extract the <day> from the <now: day>.
+    Log <day> to the <console>.
 
     (* Extract hour *)
-    <Log> "Hour from now:" to the <console>.
-    <Extract> the <hour> from the <now: hour>.
-    <Log> <hour> to the <console>.
+    Log "Hour from now:" to the <console>.
+    Extract the <hour> from the <now: hour>.
+    Log <hour> to the <console>.
 
     (* Date offset calculations *)
-    <Log> "Date calculations:" to the <console>.
+    Log "Date calculations:" to the <console>.
 
-    <Compute> the <next-week: +7d> from <now>.
-    <Log> "  Next week:" to the <console>.
-    <Log> <next-week> to the <console>.
+    Compute the <next-week: +7d> from <now>.
+    Log "  Next week:" to the <console>.
+    Log <next-week> to the <console>.
 
-    <Compute> the <yesterday: -1d> from <now>.
-    <Log> "  Yesterday:" to the <console>.
-    <Log> <yesterday> to the <console>.
+    Compute the <yesterday: -1d> from <now>.
+    Log "  Yesterday:" to the <console>.
+    Log <yesterday> to the <console>.
 
-    <Compute> the <one-hour-later: +1h> from <now>.
-    <Log> "  In one hour:" to the <console>.
-    <Log> <one-hour-later> to the <console>.
+    Compute the <one-hour-later: +1h> from <now>.
+    Log "  In one hour:" to the <console>.
+    Log <one-hour-later> to the <console>.
 
     (* Date comparisons using when clauses *)
-    <Log> "Date comparisons:" to the <console>.
+    Log "Date comparisons:" to the <console>.
 
-    <Log> "  Is yesterday before now?" to the <console> when <yesterday> < <now>.
-    <Log> "  Is next week after now?" to the <console> when <next-week> > <now>.
-    <Log> "  Is meeting in the past y?" to the <console> when <meeting> < <now>.
-    <Log> "  Is meeting in the past n?" to the <console> when <meeting> > <now>.
-    <Log> "  Is meeting in 2025?" to the <console> when <meeting> < "2026-01-01T00:00:00Z".
+    Log "  Is yesterday before now?" to the <console> when <yesterday> < <now>.
+    Log "  Is next week after now?" to the <console> when <next-week> > <now>.
+    Log "  Is meeting in the past y?" to the <console> when <meeting> < <now>.
+    Log "  Is meeting in the past n?" to the <console> when <meeting> > <now>.
+    Log "  Is meeting in 2025?" to the <console> when <meeting> < "2026-01-01T00:00:00Z".
 
-    <Log> "=== Demo Complete ===" to the <console>.
+    Log "=== Demo Complete ===" to the <console>.
 
-    <Return> an <OK: status> for the <demo>.
+    Return an <OK: status> for the <demo>.
 }

@@ -17,10 +17,10 @@ Current event handlers extract data field-by-field:
 
 ```aro
 (Extract Links: ExtractLinks Handler) {
-    <Extract> the <event-data> from the <event: data>.
-    <Extract> the <html> from the <event-data: html>.
-    <Extract> the <url> from the <event-data: url>.
-    <Extract> the <base> from the <event-data: base>.
+    Extract the <event-data> from the <event: data>.
+    Extract the <html> from the <event-data: html>.
+    Extract the <url> from the <event-data: url>.
+    Extract the <base> from the <event-data: base>.
 
     (* Now use html, url, base... *)
 }
@@ -40,7 +40,7 @@ This pattern has several drawbacks:
 Use a PascalCase result qualifier to reference an OpenAPI schema:
 
 ```aro
-<Extract> the <event-data: ExtractLinksEvent> from the <event: data>.
+Extract the <event-data: ExtractLinksEvent> from the <event: data>.
 ```
 
 The qualifier `ExtractLinksEvent` references `#/components/schemas/ExtractLinksEvent` in the OpenAPI specification.
@@ -122,7 +122,7 @@ Validation errors follow ARO-0006 "Code Is The Error Message":
 ### 4.1 Schema Not Found
 
 ```
-Cannot <Extract> the <event-data: UnknownSchema> from the <event: data>.
+Cannot Extract the <event-data: UnknownSchema> from the <event: data>.
   Schema 'UnknownSchema' is not defined in openapi.yaml components.schemas.
   Available schemas: ExtractLinksEvent, CrawlPageEvent, UserData
 ```
@@ -130,7 +130,7 @@ Cannot <Extract> the <event-data: UnknownSchema> from the <event: data>.
 ### 4.2 Missing Required Property
 
 ```
-Cannot <Extract> the <event-data: ExtractLinksEvent> from the <event: data>.
+Cannot Extract the <event-data: ExtractLinksEvent> from the <event: data>.
   Schema 'ExtractLinksEvent' validation failed:
     Missing required property 'html'
   Required properties: url, html
@@ -139,7 +139,7 @@ Cannot <Extract> the <event-data: ExtractLinksEvent> from the <event: data>.
 ### 4.3 Type Mismatch
 
 ```
-Cannot <Extract> the <event-data: PageData> from the <event: data>.
+Cannot Extract the <event-data: PageData> from the <event: data>.
   Schema 'PageData' validation failed:
     Property 'depth' expected integer, got string
 ```
@@ -152,18 +152,18 @@ Cannot <Extract> the <event-data: PageData> from the <event: data>.
 
 ```aro
 (Extract Links: ExtractLinks Handler) {
-    <Extract> the <event-data> from the <event: data>.
-    <Extract> the <html> from the <event-data: html>.
-    <Extract> the <source-url> from the <event-data: url>.
-    <Extract> the <base-domain> from the <event-data: base>.
+    Extract the <event-data> from the <event: data>.
+    Extract the <html> from the <event-data: html>.
+    Extract the <source-url> from the <event-data: url>.
+    Extract the <base-domain> from the <event-data: base>.
 
-    <ParseHtml> the <links> from the <html>.
+    ParseHtml the <links> from the <html>.
 
     for each <link> in <links> {
-        <Emit> a <CrawlPage: event> with { url: <link: href> }.
+        Emit a <CrawlPage: event> with { url: <link: href> }.
     }
 
-    <Return> an <OK: status> for the <extraction>.
+    Return an <OK: status> for the <extraction>.
 }
 ```
 
@@ -171,18 +171,18 @@ Cannot <Extract> the <event-data: PageData> from the <event: data>.
 
 ```aro
 (Extract Links: ExtractLinks Handler) {
-    <Extract> the <event-data: ExtractLinksEvent> from the <event: data>.
+    Extract the <event-data: ExtractLinksEvent> from the <event: data>.
 
-    <ParseHtml> the <links> from the <event-data: html>.
+    ParseHtml the <links> from the <event-data: html>.
 
     for each <link> in <links> {
-        <Emit> a <CrawlPage: event> with {
+        Emit a <CrawlPage: event> with {
             url: <link: href>,
             referrer: <event-data: url>
         }.
     }
 
-    <Return> an <OK: status> for the <extraction>.
+    Return an <OK: status> for the <extraction>.
 }
 ```
 
@@ -191,11 +191,11 @@ Cannot <Extract> the <event-data: PageData> from the <event: data>.
 After typed extraction, access properties with standard qualifier notation:
 
 ```aro
-<Extract> the <event-data: ExtractLinksEvent> from the <event: data>.
+Extract the <event-data: ExtractLinksEvent> from the <event: data>.
 
 (* Access properties using qualifier syntax *)
-<ParseHtml> the <links> from the <event-data: html>.
-<Log> <event-data: url> to the <console>.
+ParseHtml the <links> from the <event-data: html>.
+Log <event-data: url> to the <console>.
 ```
 
 ---
@@ -209,7 +209,7 @@ After typed extraction, access properties with standard qualifier notation:
 │                    Typed Event Extraction                       │
 ├─────────────────────────────────────────────────────────────────┤
 │                                                                 │
-│  <Extract> the <event-data: ExtractLinksEvent> from <event>     │
+│  Extract the <event-data: ExtractLinksEvent> from <event>     │
 │                      │                                          │
 │                      ▼                                          │
 │            ┌─────────────────┐                                  │

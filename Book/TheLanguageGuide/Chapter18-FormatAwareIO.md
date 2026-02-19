@@ -50,9 +50,9 @@ The file extension is the key. Write to `users.json` and get JSON. Write to `use
 
 ```aro
 (* Same data, three different formats *)
-<Write> the <users> to "./output/users.json".
-<Write> the <users> to "./output/users.csv".
-<Write> the <users> to "./output/users.yaml".
+Write the <users> to "./output/users.json".
+Write the <users> to "./output/users.csv".
+Write the <users> to "./output/users.yaml".
 ```
 
 This pattern follows ARO's philosophy of reducing ceremony. The file path already tells you the intended format. Making you specify it again would be redundant.
@@ -91,12 +91,12 @@ The Write action serializes your data according to the file extension. Each form
 JSON is the most common format for structured data. ARO produces pretty-printed JSON with sorted keys for consistency and readability.
 
 ```aro
-<Create> the <users> with [
+Create the <users> with [
     { "id": 1, "name": "Alice", "email": "alice@example.com" },
     { "id": 2, "name": "Bob", "email": "bob@example.com" }
 ].
 
-<Write> the <users> to "./output/users.json".
+Write the <users> to "./output/users.json".
 ```
 
 **Output (users.json):**
@@ -118,7 +118,7 @@ JSON is the most common format for structured data. ARO produces pretty-printed 
 JSON Lines (`.jsonl` or `.ndjson`) writes one JSON object per line with no extra whitespace. This format is ideal for streaming and logging because each line is independently parseable.
 
 ```aro
-<Write> the <events> to "./logs/events.jsonl".
+Write the <events> to "./logs/events.jsonl".
 ```
 
 **Output (events.jsonl):**
@@ -132,7 +132,7 @@ JSON Lines (`.jsonl` or `.ndjson`) writes one JSON object per line with no extra
 YAML produces human-readable output that is easy to edit by hand. It uses indentation to show structure and avoids the visual noise of brackets and quotes.
 
 ```aro
-<Write> the <config> to "./settings.yaml".
+Write the <config> to "./settings.yaml".
 ```
 
 **Output (settings.yaml):**
@@ -148,7 +148,7 @@ YAML produces human-readable output that is easy to edit by hand. It uses indent
 TOML is similar but uses explicit section headers. It is particularly popular for application configuration files.
 
 ```aro
-<Write> the <users> to "./config/users.toml".
+Write the <users> to "./config/users.toml".
 ```
 
 **Output (users.toml):**
@@ -169,7 +169,7 @@ email = "bob@example.com"
 Comma-separated values (CSV) is the universal format for spreadsheet data. ARO writes a header row with field names, followed by data rows.
 
 ```aro
-<Write> the <report> to "./export/report.csv".
+Write the <report> to "./export/report.csv".
 ```
 
 **Output (report.csv):**
@@ -188,7 +188,7 @@ Values containing the delimiter character, quotes, or newlines are automatically
 XML output uses the variable name from your Write statement as the root element. This provides meaningful document structure without requiring additional configuration.
 
 ```aro
-<Write> the <users> to "./data/users.xml".
+Write the <users> to "./data/users.xml".
 ```
 
 **Output (users.xml):**
@@ -215,8 +215,8 @@ Notice how `<users>` becomes the root element because that was the variable name
 Markdown produces pipe-delimited tables suitable for documentation. HTML produces properly structured tables with thead and tbody elements.
 
 ```aro
-<Write> the <summary> to "./docs/summary.md".
-<Write> the <report> to "./output/report.html".
+Write the <summary> to "./docs/summary.md".
+Write the <report> to "./output/report.html".
 ```
 
 **Markdown output:**
@@ -232,7 +232,7 @@ Markdown produces pipe-delimited tables suitable for documentation. HTML produce
 SQL output produces INSERT statements for database migration or backup. The table name comes from the variable name.
 
 ```aro
-<Write> the <users> to "./backup/users.sql".
+Write the <users> to "./backup/users.sql".
 ```
 
 **Output (users.sql):**
@@ -248,8 +248,8 @@ String values are properly escaped to prevent SQL injection in the output.
 Log output produces date-prefixed entries, ideal for application logs and audit trails. Each entry receives an ISO8601 timestamp.
 
 ```aro
-<Write> the <message> to "./app.log" with "Server started".
-<Append> the <entry> to "./app.log" with "User logged in".
+Write the <message> to "./app.log" with "Server started".
+Append the <entry> to "./app.log" with "User logged in".
 ```
 
 **Output (app.log):**
@@ -261,8 +261,8 @@ Log output produces date-prefixed entries, ideal for application logs and audit 
 When writing an array, each element becomes a separate log entry:
 
 ```aro
-<Create> the <events> with ["Startup complete", "Listening on port 8080"].
-<Write> the <events> to "./events.log".
+Create the <events> with ["Startup complete", "Listening on port 8080"].
+Write the <events> to "./events.log".
 ```
 
 **Output:**
@@ -276,11 +276,11 @@ When writing an array, each element becomes a separate log entry:
 Environment files use KEY=VALUE format with uppercase keys. Nested objects are flattened with underscore separators.
 
 ```aro
-<Create> the <config> with {
+Create the <config> with {
     "database": { "host": "localhost", "port": 5432 },
     "apiKey": "secret123"
 }.
-<Write> the <config> to "./.env".
+Write the <config> to "./.env".
 ```
 
 **Output (.env):**
@@ -293,7 +293,7 @@ DATABASE_PORT=5432
 Environment files can also be read back:
 
 ```aro
-<Read> the <settings> from "./.env".
+Read the <settings> from "./.env".
 (* Returns { "API_KEY": "secret123", "DATABASE_HOST": "localhost", ... } *)
 ```
 
@@ -302,8 +302,8 @@ Environment files can also be read back:
 Plain text output produces key=value pairs, one per line. Nested objects use dot notation.
 
 ```aro
-<Create> the <config> with { "host": "localhost", "port": 8080, "debug": true }.
-<Write> the <config> to "./output/config.txt".
+Create the <config> with { "host": "localhost", "port": 8080, "debug": true }.
+Write the <config> to "./output/config.txt".
 ```
 
 **Output (config.txt):**
@@ -359,16 +359,16 @@ Reading files reverses the process. ARO examines the file extension and parses t
 
 ```aro
 (* JSON becomes object or array *)
-<Read> the <config> from "./settings.json".
+Read the <config> from "./settings.json".
 
 (* JSONL becomes array of objects *)
-<Read> the <events> from "./logs/events.jsonl".
+Read the <events> from "./logs/events.jsonl".
 
 (* CSV becomes array with headers as keys *)
-<Read> the <records> from "./data.csv".
+Read the <records> from "./data.csv".
 
 (* YAML becomes object or array *)
-<Read> the <settings> from "./config.yaml".
+Read the <settings> from "./config.yaml".
 ```
 
 Each format parses to an appropriate data structure:
@@ -392,10 +392,10 @@ Sometimes you want to read a file as raw text without parsing. Use the `String` 
 
 ```aro
 (* Parse JSON to structured data *)
-<Read> the <config> from "./settings.json".
+Read the <config> from "./settings.json".
 
 (* Read raw JSON as string - no parsing *)
-<Read> the <raw-json: String> from "./settings.json".
+Read the <raw-json: String> from "./settings.json".
 ```
 
 This is useful when you need to inspect the raw content or pass it to an external system without modification.
@@ -417,7 +417,7 @@ CSV and TSV formats support additional configuration options. These options cont
 Some systems use semicolons or other characters as field separators:
 
 ```aro
-<Write> the <data> to "./export.csv" with { delimiter: ";" }.
+Write the <data> to "./export.csv" with { delimiter: ";" }.
 ```
 
 ### Header Row Control
@@ -425,13 +425,13 @@ Some systems use semicolons or other characters as field separators:
 You can suppress the header row when writing:
 
 ```aro
-<Write> the <data> to "./export.csv" with { header: false }.
+Write the <data> to "./export.csv" with { header: false }.
 ```
 
 When reading, if your CSV has no header row, specify this so the parser knows to treat the first line as data:
 
 ```aro
-<Read> the <data> from "./import.csv" with { header: false }.
+Read the <data> from "./import.csv" with { header: false }.
 ```
 
 ---
@@ -445,18 +445,18 @@ A common pattern is reading data from one format and writing to another. ARO mak
 ```aro
 (Application-Start: Data Transformer) {
     (* Read from CSV *)
-    <Read> the <records> from "./input/data.csv".
+    Read the <records> from "./input/data.csv".
 
     (* Process the data *)
-    <Log> "Processing records..." to the <console>.
+    Log "Processing records..." to the <console>.
 
     (* Write to multiple formats *)
-    <Write> the <records> to "./output/data.json".
-    <Write> the <records> to "./output/data.yaml".
-    <Write> the <records> to "./output/report.md".
+    Write the <records> to "./output/data.json".
+    Write the <records> to "./output/data.yaml".
+    Write the <records> to "./output/report.md".
 
-    <Log> "Transformation complete!" to the <console>.
-    <Return> an <OK: status> for the <transform>.
+    Log "Transformation complete!" to the <console>.
+    Return an <OK: status> for the <transform>.
 }
 ```
 
@@ -466,21 +466,21 @@ When you need to provide data in multiple formats for different consumers:
 
 ```aro
 (exportData: Export API) {
-    <Retrieve> the <users> from the <user-repository>.
+    Retrieve the <users> from the <user-repository>.
 
     (* Web API consumers get JSON *)
-    <Write> the <users> to "./export/users.json".
+    Write the <users> to "./export/users.json".
 
     (* Analysts get CSV for spreadsheets *)
-    <Write> the <users> to "./export/users.csv".
+    Write the <users> to "./export/users.csv".
 
     (* Documentation gets Markdown *)
-    <Write> the <users> to "./docs/users.md".
+    Write the <users> to "./docs/users.md".
 
     (* Archive gets SQL for database restore *)
-    <Write> the <users> to "./backup/users.sql".
+    Write the <users> to "./backup/users.sql".
 
-    <Return> an <OK: status> with "Exported to 4 formats".
+    Return an <OK: status> with "Exported to 4 formats".
 }
 ```
 
@@ -525,8 +525,8 @@ While format-aware I/O handles file serialization, web applications often need t
 The `links` specifier extracts all `href` attributes from anchor tags:
 
 ```aro
-<Request> the <html> from "https://example.com".
-<ParseHtml> the <links: links> from the <html>.
+Request the <html> from "https://example.com".
+ParseHtml the <links: links> from the <html>.
 
 (* Result: ["/about", "/contact", "https://external.com", ...] *)
 ```
@@ -538,13 +538,13 @@ This is essential for web crawlers and link validation tools.
 The `content` specifier returns a structured object with the page title and cleaned body text:
 
 ```aro
-<Request> the <html> from "https://example.com/article".
-<ParseHtml> the <page: content> from the <html>.
-<Extract> the <title> from the <page: title>.
-<Extract> the <body-text> from the <page: content>.
+Request the <html> from "https://example.com/article".
+ParseHtml the <page: content> from the <html>.
+Extract the <title> from the <page: title>.
+Extract the <body-text> from the <page: content>.
 
-<Log> <title> to the <console>.
-<Log> <body-text> to the <console>.
+Log <title> to the <console>.
+Log <body-text> to the <console>.
 ```
 
 The action intelligently extracts content from `<main>`, `<article>`, or `<body>` elements and normalizes whitespace.
@@ -555,16 +555,16 @@ The `<ParseHtml>` action pairs naturally with `<Request>` for web scraping workf
 
 ```aro
 (Fetch Article: Scraper) {
-    <Request> the <html> from <article-url>.
+    Request the <html> from <article-url>.
 
     (* Extract both links and content *)
-    <ParseHtml> the <links: links> from the <html>.
-    <ParseHtml> the <article: content> from the <html>.
+    ParseHtml the <links: links> from the <html>.
+    ParseHtml the <article: content> from the <html>.
 
     (* Save the extracted content *)
-    <Write> the <article> to "./output/article.json".
+    Write the <article> to "./output/article.json".
 
-    <Return> an <OK: status> with {
+    Return an <OK: status> with {
         links: <links>,
         title: <article: title>
     }.
@@ -576,13 +576,13 @@ The `<ParseHtml>` action pairs naturally with `<Request>` for web scraping workf
 The `markdown` specifier converts HTML to structured Markdown, preserving document structure including headings, links, tables, lists, and formatting:
 
 ```aro
-<Request> the <html> from "https://example.com/article".
-<ParseHtml> the <result: markdown> from the <html>.
-<Extract> the <title> from the <result: title>.
-<Extract> the <markdown-content> from the <result: markdown>.
+Request the <html> from "https://example.com/article".
+ParseHtml the <result: markdown> from the <html>.
+Extract the <title> from the <result: title>.
+Extract the <markdown-content> from the <result: markdown>.
 
 (* Save as markdown file *)
-<Write> the <markdown-content> to "./output/article.md".
+Write the <markdown-content> to "./output/article.md".
 ```
 
 This is useful for:

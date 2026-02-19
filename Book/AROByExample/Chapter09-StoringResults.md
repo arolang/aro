@@ -50,12 +50,12 @@ Create `storage.aro`:
 
 (Save Page: SavePage Handler) {
     (* Extract from event data structure *)
-    <Extract> the <event-data> from the <event: data>.
-    <Extract> the <url> from the <event-data: url>.
-    <Extract> the <title> from the <event-data: title>.
-    <Extract> the <content> from the <event-data: content>.
+    Extract the <event-data> from the <event: data>.
+    Extract the <url> from the <event-data: url>.
+    Extract the <title> from the <event-data: title>.
+    Extract the <content> from the <event-data: content>.
 
-    <Return> an <OK: status> for the <save>.
+    Return an <OK: status> for the <save>.
 }
 ```
 
@@ -73,22 +73,22 @@ Add the hash computation:
 
 ```aro
 (Save Page: SavePage Handler) {
-    <Extract> the <event-data> from the <event: data>.
-    <Extract> the <url> from the <event-data: url>.
-    <Extract> the <title> from the <event-data: title>.
-    <Extract> the <content> from the <event-data: content>.
+    Extract the <event-data> from the <event: data>.
+    Extract the <url> from the <event-data: url>.
+    Extract the <title> from the <event-data: title>.
+    Extract the <content> from the <event-data: content>.
 
     (* Use URL hash as filename *)
-    <Compute> the <url-hash: hash> from the <url>.
-    <Create> the <file-path> with "./output/${<url-hash>}.md".
+    Compute the <url-hash: hash> from the <url>.
+    Create the <file-path> with "./output/${<url-hash>}.md".
 
-    <Log> "Saving: ${<url>} to ${<file-path>}" to the <console>.
+    Log "Saving: ${<url>} to ${<file-path>}" to the <console>.
 
-    <Return> an <OK: status> for the <save>.
+    Return an <OK: status> for the <save>.
 }
 ```
 
-The `<Compute> ... hash` operation generates a hash from the URL string. We then build the file path using string interpolation.
+The `Compute ... hash` operation generates a hash from the URL string. We then build the file path using string interpolation.
 
 ---
 
@@ -100,7 +100,7 @@ We want each file to include metadata about the source:
     (* Previous code... *)
 
     (* Format markdown file with frontmatter *)
-    <Create> the <file-content> with "# ${<title>}\n\n**Source:** ${<url>}\n\n---\n\n${<content>}".
+    Create the <file-content> with "# ${<title>}\n\n**Source:** ${<url>}\n\n---\n\n${<content>}".
 ```
 
 This creates Markdown like:
@@ -127,9 +127,9 @@ Finally, write the content:
     (* Previous code... *)
 
     (* Write content to file *)
-    <Write> the <file-content> to the <file: file-path>.
+    Write the <file-content> to the <file: file-path>.
 
-    <Return> an <OK: status> for the <save>.
+    Return an <OK: status> for the <save>.
 }
 ```
 
@@ -149,24 +149,24 @@ The `<Write>` action writes a string to a file. The `<file: ...>` specifier indi
 
 (Save Page: SavePage Handler) {
     (* Extract from event data structure *)
-    <Extract> the <event-data> from the <event: data>.
-    <Extract> the <url> from the <event-data: url>.
-    <Extract> the <title> from the <event-data: title>.
-    <Extract> the <content> from the <event-data: content>.
+    Extract the <event-data> from the <event: data>.
+    Extract the <url> from the <event-data: url>.
+    Extract the <title> from the <event-data: title>.
+    Extract the <content> from the <event-data: content>.
 
     (* Use URL hash as filename *)
-    <Compute> the <url-hash: hash> from the <url>.
-    <Create> the <file-path> with "./output/${<url-hash>}.md".
+    Compute the <url-hash: hash> from the <url>.
+    Create the <file-path> with "./output/${<url-hash>}.md".
 
-    <Log> "Saving: ${<url>} to ${<file-path>}" to the <console>.
+    Log "Saving: ${<url>} to ${<file-path>}" to the <console>.
 
     (* Format markdown file with frontmatter *)
-    <Create> the <file-content> with "# ${<title>}\n\n**Source:** ${<url>}\n\n---\n\n${<content>}".
+    Create the <file-content> with "# ${<title>}\n\n**Source:** ${<url>}\n\n---\n\n${<content>}".
 
     (* Write content to file *)
-    <Write> the <file-content> to the <file: file-path>.
+    Write the <file-content> to the <file: file-path>.
 
-    <Return> an <OK: status> for the <save>.
+    Return an <OK: status> for the <save>.
 }
 ```
 
@@ -224,7 +224,7 @@ The hash filename is not human-readable, but the content preserves the source UR
 
 ## Chapter Recap
 
-- `<Compute> ... hash` generates a hash from a string
+- `Compute ... hash` generates a hash from a string
 - Hash-based filenames ensure uniqueness across all URLs
 - `<Create>` with `\n` builds multi-line content
 - `<Write>` saves content to a file path

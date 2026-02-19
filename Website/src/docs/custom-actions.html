@@ -60,8 +60,8 @@
             <h1 class="gradient-text">Creating Custom Actions</h1>
             <p class="lead">
                 Extend ARO with custom actions. Actions are the fundamental building blocks that
-                implement ARO verbs like <code>&lt;Extract&gt;</code>, <code>&lt;Create&gt;</code>,
-                <code>&lt;Return&gt;</code>, etc.
+                implement ARO verbs like <code>Extract</code>, <code>Create</code>,
+                <code>Return</code>, etc.
             </p>
         </header>
 
@@ -196,13 +196,13 @@
 
         <h3>Step 4: Use in ARO</h3>
         <pre><code>(Send Welcome Email: User Onboarding) {
-    &lt;Create&gt; the &lt;email-content&gt; with {
+    Create the &lt;email-content&gt; with {
         subject: <span class="code-string">"Welcome to our platform!"</span>,
         body: <span class="code-string">"Thanks for signing up..."</span>
     }.
-    &lt;Extract&gt; the &lt;user-email&gt; from the &lt;user: email&gt;.
+    Extract the &lt;user-email&gt; from the &lt;user: email&gt;.
     &lt;Email&gt; the &lt;email-content&gt; to the &lt;user-email&gt;.
-    &lt;Return&gt; an &lt;OK: status&gt; for the &lt;email&gt;.
+    Return an &lt;OK: status&gt; for the &lt;email&gt;.
 }</code></pre>
 
         <h2>Execution Context</h2>

@@ -111,67 +111,67 @@ paths:
 ```aro
 (* List all items for an order *)
 (listOrderItems: Order API) {
-    <Extract> the <order-id> from the <pathParameters: orderId>.
+    Extract the <order-id> from the <pathParameters: orderId>.
 
     (* Verify order exists *)
-    <Retrieve> the <order> from the <order-repository> where id = <order-id>.
+    Retrieve the <order> from the <order-repository> where id = <order-id>.
 
     (* Get items for this order *)
-    <Retrieve> the <items> from the <item-repository> where orderId = <order-id>.
+    Retrieve the <items> from the <item-repository> where orderId = <order-id>.
 
-    <Return> an <OK: status> with <items>.
+    Return an <OK: status> with <items>.
 }
 
 (* Get a specific item, verifying it belongs to the order *)
 (getOrderItem: Order API) {
-    <Extract> the <order-id> from the <pathParameters: orderId>.
-    <Extract> the <item-id> from the <pathParameters: itemId>.
+    Extract the <order-id> from the <pathParameters: orderId>.
+    Extract the <item-id> from the <pathParameters: itemId>.
 
     (* Retrieve with both constraints to enforce ownership *)
-    <Retrieve> the <item> from the <item-repository>
+    Retrieve the <item> from the <item-repository>
         where id = <item-id> and orderId = <order-id>.
 
-    <Return> an <OK: status> with <item>.
+    Return an <OK: status> with <item>.
 }
 
 (* Create a new item for an order *)
 (createOrderItem: Order API) {
-    <Extract> the <order-id> from the <pathParameters: orderId>.
-    <Extract> the <item-data> from the <request: body>.
+    Extract the <order-id> from the <pathParameters: orderId>.
+    Extract the <item-data> from the <request: body>.
 
     (* Verify order exists before adding item *)
-    <Retrieve> the <order> from the <order-repository> where id = <order-id>.
+    Retrieve the <order> from the <order-repository> where id = <order-id>.
 
     (* Create item with parent reference *)
-    <Create> the <item> with {
+    Create the <item> with {
         orderId: <order-id>,
         productId: <item-data>.productId,
         quantity: <item-data>.quantity,
         price: <item-data>.price
     }.
 
-    <Store> the <item> in the <item-repository>.
+    Store the <item> in the <item-repository>.
 
     (* Recalculate order total *)
-    <Emit> an <OrderItemAdded: event> with { order: <order>, item: <item> }.
+    Emit an <OrderItemAdded: event> with { order: <order>, item: <item> }.
 
-    <Return> a <Created: status> with <item>.
+    Return a <Created: status> with <item>.
 }
 
 (* Delete an item from an order *)
 (deleteOrderItem: Order API) {
-    <Extract> the <order-id> from the <pathParameters: orderId>.
-    <Extract> the <item-id> from the <pathParameters: itemId>.
+    Extract the <order-id> from the <pathParameters: orderId>.
+    Extract the <item-id> from the <pathParameters: itemId>.
 
     (* Verify ownership before deletion *)
-    <Retrieve> the <item> from the <item-repository>
+    Retrieve the <item> from the <item-repository>
         where id = <item-id> and orderId = <order-id>.
 
-    <Delete> the <item> from the <item-repository>.
+    Delete the <item> from the <item-repository>.
 
-    <Emit> an <OrderItemRemoved: event> with { orderId: <order-id>, itemId: <item-id> }.
+    Emit an <OrderItemRemoved: event> with { orderId: <order-id>, itemId: <item-id> }.
 
-    <Return> a <NoContent: status> for the <deletion>.
+    Return a <NoContent: status> for the <deletion>.
 }
 ```
 

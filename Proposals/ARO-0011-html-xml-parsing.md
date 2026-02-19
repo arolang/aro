@@ -16,7 +16,7 @@ Web applications frequently need to process HTML content:
 ```
 +------------------+     +------------------+     +------------------+
 |   HTTP Request   |     |    ParseHtml     |     | Structured Data  |
-|  <Request> ...   | --> |  <ParseHtml> ... | --> |  links, content  |
+|  Request ...   | --> |  ParseHtml ... | --> |  links, content  |
 +------------------+     +------------------+     +------------------+
 ```
 
@@ -36,13 +36,13 @@ Without built-in HTML parsing, developers must rely on external services or plug
 
 ```aro
 (* Extract all links from HTML *)
-<ParseHtml> the <links: links> from the <html>.
+ParseHtml the <links: links> from the <html>.
 
 (* Extract page content with title *)
-<ParseHtml> the <content-result: content> from the <html>.
+ParseHtml the <content-result: content> from the <html>.
 
 (* Extract text from body or specific selector *)
-<ParseHtml> the <text-content: text> from the <html>.
+ParseHtml the <text-content: text> from the <html>.
 ```
 
 ### 1.2 Action Specification
@@ -80,7 +80,7 @@ The result specifier determines what data is extracted from the HTML:
 Returns an array of strings containing all `href` attribute values:
 
 ```aro
-<ParseHtml> the <links: links> from the <html>.
+ParseHtml the <links: links> from the <html>.
 (* Result: ["/about", "/contact", "https://external.com"] *)
 ```
 
@@ -89,9 +89,9 @@ Returns an array of strings containing all `href` attribute values:
 Returns a dictionary with `title` and `content` fields:
 
 ```aro
-<ParseHtml> the <result: content> from the <html>.
-<Extract> the <title> from the <result: title>.
-<Extract> the <body-text> from the <result: content>.
+ParseHtml the <result: content> from the <html>.
+Extract the <title> from the <result: title>.
+Extract the <body-text> from the <result: content>.
 ```
 
 The content is extracted in priority order:
@@ -106,7 +106,7 @@ Whitespace is normalized and empty segments removed.
 Returns an array of text strings from the document body:
 
 ```aro
-<ParseHtml> the <paragraphs: text> from the <html>.
+ParseHtml the <paragraphs: text> from the <html>.
 ```
 
 #### Markdown Specifier
@@ -114,9 +114,9 @@ Returns an array of text strings from the document body:
 Returns a dictionary with `title` and `markdown` fields. The HTML body is converted to properly formatted Markdown, preserving document structure:
 
 ```aro
-<ParseHtml> the <result: markdown> from the <html>.
-<Extract> the <title> from the <result: title>.
-<Extract> the <md-content> from the <result: markdown>.
+ParseHtml the <result: markdown> from the <html>.
+Extract the <title> from the <result: title>.
+Extract the <md-content> from the <result: markdown>.
 ```
 
 Supported HTML to Markdown conversions:
@@ -157,20 +157,20 @@ Script, style, and other non-content elements are automatically ignored.
 
 ```aro
 (Extract Links: ExtractLinks Handler) {
-    <Extract> the <html> from the <event-data: html>.
+    Extract the <html> from the <event-data: html>.
 
     (* Parse HTML and extract all anchor hrefs *)
-    <ParseHtml> the <links: links> from the <html>.
-    <Compute> the <link-count: count> from the <links>.
-    <Log> "Found links:" to the <console>.
-    <Log> <link-count> to the <console>.
+    ParseHtml the <links: links> from the <html>.
+    Compute the <link-count: count> from the <links>.
+    Log "Found links:" to the <console>.
+    Log <link-count> to the <console>.
 
     (* Process each link *)
     parallel for each <url> in <links> {
-        <Emit> a <ProcessUrl: event> with { url: <url> }.
+        Emit a <ProcessUrl: event> with { url: <url> }.
     }
 
-    <Return> an <OK: status> for the <extraction>.
+    Return an <OK: status> for the <extraction>.
 }
 ```
 
@@ -178,23 +178,23 @@ Script, style, and other non-content elements are automatically ignored.
 
 ```aro
 (Index Page: CrawlPage Handler) {
-    <Extract> the <url> from the <event-data: url>.
-    <Request> the <html> from the <url>.
+    Extract the <url> from the <event-data: url>.
+    Request the <html> from the <url>.
 
     (* Extract structured content *)
-    <ParseHtml> the <content-result: content> from the <html>.
-    <Extract> the <title> from the <content-result: title>.
-    <Extract> the <body-text> from the <content-result: content>.
+    ParseHtml the <content-result: content> from the <html>.
+    Extract the <title> from the <content-result: title>.
+    Extract the <body-text> from the <content-result: content>.
 
     (* Store for indexing *)
-    <Create> the <document> with {
+    Create the <document> with {
         url: <url>,
         title: <title>,
         content: <body-text>
     }.
-    <Store> the <document> into the <search-index>.
+    Store the <document> into the <search-index>.
 
-    <Return> an <OK: status> for the <indexing>.
+    Return an <OK: status> for the <indexing>.
 }
 ```
 
@@ -203,13 +203,13 @@ Script, style, and other non-content elements are automatically ignored.
 ```aro
 (Fetch and Parse: API Handler) {
     (* Fetch HTML from remote URL *)
-    <Request> the <html> from "https://example.com/page".
+    Request the <html> from "https://example.com/page".
 
     (* Extract links and content in sequence *)
-    <ParseHtml> the <links: links> from the <html>.
-    <ParseHtml> the <page-data: content> from the <html>.
+    ParseHtml the <links: links> from the <html>.
+    ParseHtml the <page-data: content> from the <html>.
 
-    <Return> an <OK: status> with {
+    Return an <OK: status> with {
         links: <links>,
         title: <page-data: title>,
         content: <page-data: content>
@@ -221,22 +221,22 @@ Script, style, and other non-content elements are automatically ignored.
 
 ```aro
 (Save Article: SaveArticle Handler) {
-    <Extract> the <url> from the <event-data: url>.
-    <Request> the <html> from the <url>.
+    Extract the <url> from the <event-data: url>.
+    Request the <html> from the <url>.
 
     (* Convert HTML to structured Markdown *)
-    <ParseHtml> the <result: markdown> from the <html>.
-    <Extract> the <title> from the <result: title>.
-    <Extract> the <markdown-content> from the <result: markdown>.
+    ParseHtml the <result: markdown> from the <html>.
+    Extract the <title> from the <result: title>.
+    Extract the <markdown-content> from the <result: markdown>.
 
     (* Create file with frontmatter *)
-    <Compute> the <url-hash: hash> from the <url>.
-    <Create> the <file-path> with "./output/${<url-hash>}.md".
-    <Create> the <file-content> with "# ${<title>}\n\n**Source:** ${<url>}\n\n${<markdown-content>}".
+    Compute the <url-hash: hash> from the <url>.
+    Create the <file-path> with "./output/${<url-hash>}.md".
+    Create the <file-content> with "# ${<title>}\n\n**Source:** ${<url>}\n\n${<markdown-content>}".
 
-    <Write> the <file-content> to the <file: file-path>.
+    Write the <file-content> to the <file: file-path>.
 
-    <Return> an <OK: status> for the <save>.
+    Return an <OK: status> for the <save>.
 }
 ```
 
@@ -263,7 +263,7 @@ The `<ParseHtml>` action uses CSS selectors internally:
 Following ARO's error philosophy, malformed HTML that cannot be parsed results in a runtime error with a descriptive message:
 
 ```
-Runtime error: Failed to parse HTML in <ParseHtml> action
+Runtime error: Failed to parse HTML in ParseHtml action
 ```
 
 ### 3.3 Encoding
@@ -280,7 +280,7 @@ A future enhancement could allow custom selectors via expression:
 
 ```aro
 (* Hypothetical future syntax *)
-<ParseHtml> the <headers: text> from the <html> using "h1, h2, h3".
+ParseHtml the <headers: text> from the <html> using "h1, h2, h3".
 ```
 
 ### 4.2 XML Parsing Variant
@@ -298,8 +298,8 @@ Future specifiers could extract specific attributes:
 
 ```aro
 (* Hypothetical future syntax *)
-<ParseHtml> the <images: src> from the <html>.  (* Extract img src values *)
-<ParseHtml> the <forms: action> from the <html>.  (* Extract form actions *)
+ParseHtml the <images: src> from the <html>.  (* Extract img src values *)
+ParseHtml the <forms: action> from the <html>.  (* Extract form actions *)
 ```
 
 ---

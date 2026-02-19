@@ -536,8 +536,8 @@ public struct MCPToolProvider: Sendable {
 
         ```aro
         (Application-Start: Hello World) {
-            <Log> "Hello, World!" to the <console>.
-            <Return> an <OK: status> for the <startup>.
+            Log "Hello, World!" to the <console>.
+            Return an <OK: status> for the <startup>.
         }
         ```
 
@@ -574,25 +574,25 @@ public struct MCPToolProvider: Sendable {
         ### Application-Start (required, exactly one)
         ```aro
         (Application-Start: My App) {
-            <Log> "Starting..." to the <console>.
-            <Return> an <OK: status> for the <startup>.
+            Log "Starting..." to the <console>.
+            Return an <OK: status> for the <startup>.
         }
         ```
 
         ### HTTP Handler (named after OpenAPI operationId)
         ```aro
         (listUsers: User API) {
-            <Retrieve> the <users> from the <user-repository>.
-            <Return> an <OK: status> with <users>.
+            Retrieve the <users> from the <user-repository>.
+            Return an <OK: status> with <users>.
         }
         ```
 
         ### Event Handler
         ```aro
         (Send Email: UserCreated Handler) {
-            <Extract> the <user> from the <event: user>.
-            <Send> the <welcome-email> to the <user: email>.
-            <Return> an <OK: status>.
+            Extract the <user> from the <event: user>.
+            Send the <welcome-email> to the <user: email>.
+            Return an <OK: status>.
         }
         ```
         """
@@ -606,30 +606,30 @@ public struct MCPToolProvider: Sendable {
 
         ## REQUEST Actions (External -> Internal)
         Bring data into the feature set:
-        - `<Extract>` - Get data from events, requests, parameters
-        - `<Retrieve>` - Get data from repositories
-        - `<Fetch>` - Get data from external services
-        - `<Parse>` - Parse structured data (JSON, HTML, XML)
+        - `Extract` - Get data from events, requests, parameters
+        - `Retrieve` - Get data from repositories
+        - `Fetch` - Get data from external services
+        - `Parse` - Parse structured data (JSON, HTML, XML)
 
         ## OWN Actions (Internal -> Internal)
         Transform data within the feature set:
-        - `<Compute>` - Calculate values, transform data
-        - `<Validate>` - Check data against rules
-        - `<Create>` - Create new objects
-        - `<Compare>` - Compare values
-        - `<Transform>` - Convert data formats
+        - `Compute` - Calculate values, transform data
+        - `Validate` - Check data against rules
+        - `Create` - Create new objects
+        - `Compare` - Compare values
+        - `Transform` - Convert data formats
 
         ## RESPONSE Actions (Internal -> External)
         Return results from the feature set:
-        - `<Return>` - Return success with optional data
-        - `<Throw>` - Return error/exception
+        - `Return` - Return success with optional data
+        - `Throw` - Return error/exception
 
         ## EXPORT Actions (Internal -> External)
         Send data outside the feature set:
-        - `<Log>` - Write to console/logs
-        - `<Store>` - Save to repository
-        - `<Send>` - Send to external service
-        - `<Emit>` - Emit domain event
+        - `Log` - Write to console/logs
+        - `Store` - Save to repository
+        - `Send` - Send to external service
+        - `Emit` - Emit domain event
         - `<Publish>` - Make variable globally visible
         """
     }
@@ -646,7 +646,7 @@ public struct MCPToolProvider: Sendable {
 
         ## Components
 
-        - **Action**: Verb in angle brackets `<Extract>`
+        - **Action**: Verb without angle brackets: `Extract`, `Return`, `Log`
         - **Article**: a, an, the (semantic, not syntactic)
         - **Result**: Output variable `<user>` or `<user: name>`
         - **Preposition**: from, to, with, for, in, on, against
@@ -656,16 +656,16 @@ public struct MCPToolProvider: Sendable {
 
         ```aro
         (* Simple *)
-        <Log> "Hello" to the <console>.
+        Log "Hello" to the <console>.
 
         (* With qualifiers *)
-        <Extract> the <user-id: id> from the <request: pathParameters>.
+        Extract the <user-id: id> from the <request: pathParameters>.
 
         (* Computation *)
-        <Compute> the <total> from <price> * <quantity>.
+        Compute the <total> from <price> * <quantity>.
 
         (* Conditional Return *)
-        <Return> an <OK: status> for a <valid: result>.
+        Return an <OK: status> for a <valid: result>.
         ```
 
         ## Qualifiers
@@ -711,32 +711,32 @@ public struct MCPToolProvider: Sendable {
         ```aro
         (* GET /users - listUsers *)
         (listUsers: User API) {
-            <Retrieve> the <users> from the <user-repository>.
-            <Return> an <OK: status> with <users>.
+            Retrieve the <users> from the <user-repository>.
+            Return an <OK: status> with <users>.
         }
 
         (* POST /users - createUser *)
         (createUser: User API) {
-            <Extract> the <data> from the <request: body>.
-            <Create> the <user> with <data>.
-            <Store> the <user> in the <user-repository>.
-            <Return> a <Created: status> with <user>.
+            Extract the <data> from the <request: body>.
+            Create the <user> with <data>.
+            Store the <user> in the <user-repository>.
+            Return a <Created: status> with <user>.
         }
 
         (* GET /users/{id} - getUser *)
         (getUser: User API) {
-            <Extract> the <id> from the <pathParameters: id>.
-            <Retrieve> the <user> from the <user-repository> where id = <id>.
-            <Return> an <OK: status> with <user>.
+            Extract the <id> from the <pathParameters: id>.
+            Retrieve the <user> from the <user-repository> where id = <id>.
+            Return an <OK: status> with <user>.
         }
         ```
 
         ## Accessing Request Data
 
-        - Path parameters: `<Extract> the <id> from the <pathParameters: id>.`
-        - Query parameters: `<Extract> the <page> from the <queryParameters: page>.`
-        - Request body: `<Extract> the <data> from the <request: body>.`
-        - Headers: `<Extract> the <auth> from the <headers: Authorization>.`
+        - Path parameters: `Extract the <id> from the <pathParameters: id>.`
+        - Query parameters: `Extract the <page> from the <queryParameters: page>.`
+        - Request body: `Extract the <data> from the <request: body>.`
+        - Headers: `Extract the <auth> from the <headers: Authorization>.`
         """
     }
 
@@ -749,8 +749,8 @@ public struct MCPToolProvider: Sendable {
         ## Emitting Events
 
         ```aro
-        <Emit> a <UserCreated: event> with <user>.
-        <Emit> an <OrderPlaced: event> with { order: <order>, timestamp: <now> }.
+        Emit a <UserCreated: event> with <user>.
+        Emit an <OrderPlaced: event> with { order: <order>, timestamp: <now> }.
         ```
 
         ## Handling Events
@@ -759,15 +759,15 @@ public struct MCPToolProvider: Sendable {
 
         ```aro
         (Send Welcome Email: UserCreated Handler) {
-            <Extract> the <user> from the <event: user>.
-            <Send> the <welcome-email> to the <user: email>.
-            <Return> an <OK: status> for the <notification>.
+            Extract the <user> from the <event: user>.
+            Send the <welcome-email> to the <user: email>.
+            Return an <OK: status> for the <notification>.
         }
 
         (Update Inventory: OrderPlaced Handler) {
-            <Extract> the <items> from the <event: order>.
-            <Update> the <inventory> with <items>.
-            <Return> an <OK: status> for the <inventory-update>.
+            Extract the <items> from the <event: order>.
+            Update the <inventory> with <items>.
+            Return an <OK: status> for the <inventory-update>.
         }
         ```
 
@@ -775,7 +775,7 @@ public struct MCPToolProvider: Sendable {
 
         Extract data from events using:
         ```aro
-        <Extract> the <field> from the <event: field>.
+        Extract the <field> from the <event: field>.
         ```
         """
     }
@@ -789,32 +789,32 @@ public struct MCPToolProvider: Sendable {
         ## Storing Data
 
         ```aro
-        <Store> the <user> in the <user-repository>.
+        Store the <user> in the <user-repository>.
         ```
 
         ## Retrieving Data
 
         ```aro
         (* Get all *)
-        <Retrieve> the <users> from the <user-repository>.
+        Retrieve the <users> from the <user-repository>.
 
         (* Get by ID *)
-        <Retrieve> the <user> from the <user-repository> where id = <id>.
+        Retrieve the <user> from the <user-repository> where id = <id>.
 
         (* Get with condition *)
-        <Retrieve> the <orders> from the <order-repository> where status = "pending".
+        Retrieve the <orders> from the <order-repository> where status = "pending".
         ```
 
         ## Updating Data
 
         ```aro
-        <Update> the <user> in the <user-repository>.
+        Update the <user> in the <user-repository>.
         ```
 
         ## Deleting Data
 
         ```aro
-        <Delete> the <user> from the <user-repository>.
+        Delete the <user> from the <user-repository>.
         ```
 
         ## Repository Observers
@@ -823,10 +823,10 @@ public struct MCPToolProvider: Sendable {
 
         ```aro
         (Log User Changes: user-repository Observer) {
-            <Extract> the <user> from the <change: entity>.
-            <Extract> the <type> from the <change: type>.
-            <Log> "User changed" to the <console>.
-            <Return> an <OK: status> for the <observation>.
+            Extract the <user> from the <change: entity>.
+            Extract the <type> from the <change: type>.
+            Log "User changed" to the <console>.
+            Return an <OK: status> for the <observation>.
         }
         ```
         """

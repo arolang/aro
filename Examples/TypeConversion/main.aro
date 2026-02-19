@@ -1,7 +1,7 @@
 (* TypeConversion - Demonstrating the Transform action *)
 
 (Application-Start: TypeConversion Demo) {
-    <Log> "=== Type Conversion Demo ===" to the <console>.
+    Log "=== Type Conversion Demo ===" to the <console>.
 
     (* Transform action converts values between types *)
     (* Supports verbs: Transform, Convert, Map *)
@@ -9,47 +9,47 @@
     (* Supports types: string, int, double, bool, json, identity *)
 
     (* Example 1: Convert string to integer *)
-    <Log> "--- String to Integer ---" to the <console>.
-    <Create> the <str-num> with "42".
-    <Transform> the <int-num: int> from the <str-num>.
-    <Log> "String '42' as integer: " to the <console>.
-    <Log> <int-num> to the <console>.
+    Log "--- String to Integer ---" to the <console>.
+    Create the <str-num> with "42".
+    Transform the <int-num: int> from the <str-num>.
+    Log "String '42' as integer: " to the <console>.
+    Log <int-num> to the <console>.
 
     (* Example 2: Convert integer to string *)
-    <Log> "--- Integer to String ---" to the <console>.
-    <Create> the <number> with 123.
-    <Transform> the <str-val: string> from the <number>.
-    <Log> "Integer 123 as string: " to the <console>.
-    <Log> <str-val> to the <console>.
+    Log "--- Integer to String ---" to the <console>.
+    Create the <number> with 123.
+    Transform the <str-val: string> from the <number>.
+    Log "Integer 123 as string: " to the <console>.
+    Log <str-val> to the <console>.
 
     (* Example 3: Convert string to double *)
-    <Log> "--- String to Double ---" to the <console>.
-    <Create> the <str-price> with "19.99".
-    <Transform> the <price: double> from the <str-price>.
-    <Log> "String '19.99' as double: " to the <console>.
-    <Log> <price> to the <console>.
+    Log "--- String to Double ---" to the <console>.
+    Create the <str-price> with "19.99".
+    Transform the <price: double> from the <str-price>.
+    Log "String '19.99' as double: " to the <console>.
+    Log <price> to the <console>.
 
     (* Example 4: Convert string to boolean *)
-    <Log> "--- String to Boolean ---" to the <console>.
-    <Create> the <str-bool> with "true".
-    <Transform> the <flag: bool> from the <str-bool>.
-    <Log> "String 'true' as boolean: " to the <console>.
-    <Log> <flag> to the <console>.
+    Log "--- String to Boolean ---" to the <console>.
+    Create the <str-bool> with "true".
+    Transform the <flag: bool> from the <str-bool>.
+    Log "String 'true' as boolean: " to the <console>.
+    Log <flag> to the <console>.
 
     (* Example 5: Convert object to JSON string *)
-    <Log> "--- Object to JSON ---" to the <console>.
-    <Create> the <person> with {"name": "Alice", "age": 30}.
-    <Transform> the <json-str: json> from the <person>.
-    <Log> "Object as JSON: " to the <console>.
-    <Log> <json-str> to the <console>.
+    Log "--- Object to JSON ---" to the <console>.
+    Create the <person> with {"name": "Alice", "age": 30}.
+    Transform the <json-str: json> from the <person>.
+    Log "Object as JSON: " to the <console>.
+    Log <json-str> to the <console>.
 
     (* Example 6: Integer to double *)
-    <Log> "--- Integer to Double ---" to the <console>.
-    <Create> the <int-val> with 100.
-    <Transform> the <double-val: double> from the <int-val>.
-    <Log> "Integer 100 as double: " to the <console>.
-    <Log> <double-val> to the <console>.
+    Log "--- Integer to Double ---" to the <console>.
+    Create the <int-val> with 100.
+    Transform the <double-val: double> from the <int-val>.
+    Log "Integer 100 as double: " to the <console>.
+    Log <double-val> to the <console>.
 
-    <Log> "All conversions complete!" to the <console>.
-    <Return> an <OK: status> for the <demo>.
+    Log "All conversions complete!" to the <console>.
+    Return an <OK: status> for the <demo>.
 }

@@ -124,8 +124,8 @@ Let us add a minimal program to verify everything works. Open `main.aro` and add
 
 ```aro
 (Application-Start: Web Crawler) {
-    <Log> "Hello from ARO!" to the <console>.
-    <Return> an <OK: status> for the <startup>.
+    Log "Hello from ARO!" to the <console>.
+    Return an <OK: status> for the <startup>.
 }
 ```
 

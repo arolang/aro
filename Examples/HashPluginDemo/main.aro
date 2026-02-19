@@ -5,34 +5,34 @@
  *)
 
 (Application-Start: Hash Plugin Demo) {
-    <Log> "=== Hash Plugin Demo ===" to the <console>.
+    Log "=== Hash Plugin Demo ===" to the <console>.
 
     (* Test data *)
-    <Create> the <test-string> with "Hello, ARO!".
+    Create the <test-string> with "Hello, ARO!".
 
     (* Simple hash using custom action *)
-    <Log> "1. Simple hash algorithm:" to the <console>.
-    <Hash> the <simple-result> from the <test-string>.
+    Log "1. Simple hash algorithm:" to the <console>.
+    Hash the <simple-result> from the <test-string>.
 
-    <Extract> the <simple-hash> from the <simple-result: hash>.
-    <Log> "Input: Hello, ARO!" to the <console>.
-    <Log> <simple-hash> to the <console>.
+    Extract the <simple-hash> from the <simple-result: hash>.
+    Log "Input: Hello, ARO!" to the <console>.
+    Log <simple-hash> to the <console>.
 
     (* DJB2 hash using custom action *)
-    <Log> "2. DJB2 hash algorithm:" to the <console>.
-    <DJB2> the <djb2-result> from the <test-string>.
+    Log "2. DJB2 hash algorithm:" to the <console>.
+    DJB2 the <djb2-result> from the <test-string>.
 
-    <Extract> the <djb2-hash> from the <djb2-result: hash>.
-    <Log> <djb2-hash> to the <console>.
+    Extract the <djb2-hash> from the <djb2-result: hash>.
+    Log <djb2-hash> to the <console>.
 
     (* FNV-1a hash using custom action *)
-    <Log> "3. FNV-1a hash algorithm:" to the <console>.
-    <FNV1a> the <fnv-result> from the <test-string>.
+    Log "3. FNV-1a hash algorithm:" to the <console>.
+    FNV1a the <fnv-result> from the <test-string>.
 
-    <Extract> the <fnv-hash> from the <fnv-result: hash>.
-    <Log> <fnv-hash> to the <console>.
+    Extract the <fnv-hash> from the <fnv-result: hash>.
+    Log <fnv-hash> to the <console>.
 
-    <Log> "Hash plugin demo completed!" to the <console>.
+    Log "Hash plugin demo completed!" to the <console>.
 
-    <Return> an <OK: status> for the <startup>.
+    Return an <OK: status> for the <startup>.
 }

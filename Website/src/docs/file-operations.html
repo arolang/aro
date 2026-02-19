@@ -250,20 +250,20 @@
 
         <h3>Read Files</h3>
         <pre><code><span class="code-comment">(* Read text file *)</span>
-<span class="code-keyword">&lt;Read&gt;</span> the <span class="code-result">&lt;content&gt;</span> from the &lt;file: <span class="code-string">"./README.md"</span>&gt;.
+<span class="code-keyword">Read</span> the <span class="code-result">&lt;content&gt;</span> from the &lt;file: <span class="code-string">"./README.md"</span>&gt;.
 
 <span class="code-comment">(* Read JSON file - automatically parsed *)</span>
-<span class="code-keyword">&lt;Read&gt;</span> the <span class="code-result">&lt;config: JSON&gt;</span> from the &lt;file: <span class="code-string">"./config.json"</span>&gt;.
+<span class="code-keyword">Read</span> the <span class="code-result">&lt;config: JSON&gt;</span> from the &lt;file: <span class="code-string">"./config.json"</span>&gt;.
 
 <span class="code-comment">(* Read binary file *)</span>
-<span class="code-keyword">&lt;Read&gt;</span> the <span class="code-result">&lt;image: bytes&gt;</span> from the &lt;file: <span class="code-string">"./logo.png"</span>&gt;.</code></pre>
+<span class="code-keyword">Read</span> the <span class="code-result">&lt;image: bytes&gt;</span> from the &lt;file: <span class="code-string">"./logo.png"</span>&gt;.</code></pre>
 
         <h3>Write Files</h3>
         <pre><code><span class="code-comment">(* Write text - creates parent directories automatically *)</span>
-<span class="code-keyword">&lt;Write&gt;</span> the <span class="code-result">&lt;report&gt;</span> to the &lt;file: <span class="code-string">"./output/report.txt"</span>&gt;.
+<span class="code-keyword">Write</span> the <span class="code-result">&lt;report&gt;</span> to the &lt;file: <span class="code-string">"./output/report.txt"</span>&gt;.
 
 <span class="code-comment">(* Write JSON *)</span>
-<span class="code-keyword">&lt;Write&gt;</span> the <span class="code-result">&lt;data: JSON&gt;</span> to the &lt;file: <span class="code-string">"./export.json"</span>&gt;.</code></pre>
+<span class="code-keyword">Write</span> the <span class="code-result">&lt;data: JSON&gt;</span> to the &lt;file: <span class="code-string">"./export.json"</span>&gt;.</code></pre>
 
         <h3>Append to Files</h3>
         <pre><code><span class="code-comment">(* Append to log file *)</span>
@@ -292,14 +292,14 @@
 
         <h3>Check Existence</h3>
         <pre><code><span class="code-comment">(* Check if file exists *)</span>
-<span class="code-keyword">&lt;Exists&gt;</span> the <span class="code-result">&lt;found&gt;</span> for the &lt;file: <span class="code-string">"./config.json"</span>&gt;.
+<span class="code-keyword">Exists</span> the <span class="code-result">&lt;found&gt;</span> for the &lt;file: <span class="code-string">"./config.json"</span>&gt;.
 
 when &lt;found&gt; is false {
-    <span class="code-keyword">&lt;Log&gt;</span> <span class="code-string">"Config not found!"</span> to the &lt;console&gt;.
+    <span class="code-keyword">Log</span> <span class="code-string">"Config not found!"</span> to the &lt;console&gt;.
 }
 
 <span class="code-comment">(* Check if directory exists *)</span>
-<span class="code-keyword">&lt;Exists&gt;</span> the <span class="code-result">&lt;dir-exists&gt;</span> for the &lt;directory: <span class="code-string">"./output"</span>&gt;.</code></pre>
+<span class="code-keyword">Exists</span> the <span class="code-result">&lt;dir-exists&gt;</span> for the &lt;directory: <span class="code-string">"./output"</span>&gt;.</code></pre>
 
         <h3>Create Directories</h3>
         <pre><code><span class="code-comment">(* Create directory with all parent directories *)</span>
@@ -307,26 +307,26 @@ when &lt;found&gt; is false {
 
         <h3>Get File Metadata</h3>
         <pre><code><span class="code-comment">(* Get detailed file stats *)</span>
-<span class="code-keyword">&lt;Stat&gt;</span> the <span class="code-result">&lt;info&gt;</span> for the &lt;file: <span class="code-string">"./document.pdf"</span>&gt;.
+<span class="code-keyword">Stat</span> the <span class="code-result">&lt;info&gt;</span> for the &lt;file: <span class="code-string">"./document.pdf"</span>&gt;.
 
-<span class="code-keyword">&lt;Log&gt;</span> &lt;info: size&gt; to the &lt;console&gt;.
-<span class="code-keyword">&lt;Log&gt;</span> &lt;info: modified&gt; to the &lt;console&gt;.</code></pre>
+<span class="code-keyword">Log</span> &lt;info: size&gt; to the &lt;console&gt;.
+<span class="code-keyword">Log</span> &lt;info: modified&gt; to the &lt;console&gt;.</code></pre>
 
         <h2>Copy and Move</h2>
 
         <h3>Copy Files</h3>
         <pre><code><span class="code-comment">(* Copy a file *)</span>
-<span class="code-keyword">&lt;Copy&gt;</span> the &lt;file: <span class="code-string">"./template.txt"</span>&gt; to the &lt;destination: <span class="code-string">"./copy.txt"</span>&gt;.
+<span class="code-keyword">Copy</span> the &lt;file: <span class="code-string">"./template.txt"</span>&gt; to the &lt;destination: <span class="code-string">"./copy.txt"</span>&gt;.
 
 <span class="code-comment">(* Copy a directory - recursive by default *)</span>
-<span class="code-keyword">&lt;Copy&gt;</span> the &lt;directory: <span class="code-string">"./src"</span>&gt; to the &lt;destination: <span class="code-string">"./backup/src"</span>&gt;.</code></pre>
+<span class="code-keyword">Copy</span> the &lt;directory: <span class="code-string">"./src"</span>&gt; to the &lt;destination: <span class="code-string">"./backup/src"</span>&gt;.</code></pre>
 
         <h3>Move and Rename</h3>
         <pre><code><span class="code-comment">(* Rename a file *)</span>
-<span class="code-keyword">&lt;Move&gt;</span> the &lt;file: <span class="code-string">"./draft.txt"</span>&gt; to the &lt;destination: <span class="code-string">"./final.txt"</span>&gt;.
+<span class="code-keyword">Move</span> the &lt;file: <span class="code-string">"./draft.txt"</span>&gt; to the &lt;destination: <span class="code-string">"./final.txt"</span>&gt;.
 
 <span class="code-comment">(* Move to different directory *)</span>
-<span class="code-keyword">&lt;Move&gt;</span> the &lt;file: <span class="code-string">"./inbox/report.pdf"</span>&gt; to the &lt;destination: <span class="code-string">"./archive/report.pdf"</span>&gt;.</code></pre>
+<span class="code-keyword">Move</span> the &lt;file: <span class="code-string">"./inbox/report.pdf"</span>&gt; to the &lt;destination: <span class="code-string">"./archive/report.pdf"</span>&gt;.</code></pre>
 
         <h2>Complete Example</h2>
         <p>
@@ -334,18 +334,18 @@ when &lt;found&gt; is false {
         </p>
 
         <pre><code><span class="code-feature">(Application-Start: File Operations Demo)</span> {
-    <span class="code-keyword">&lt;Log&gt;</span> <span class="code-string">"=== File Operations ==="</span> to the &lt;console&gt;.
+    <span class="code-keyword">Log</span> <span class="code-string">"=== File Operations ==="</span> to the &lt;console&gt;.
 
     <span class="code-comment">(* Check and create output directory *)</span>
-    <span class="code-keyword">&lt;Exists&gt;</span> the <span class="code-result">&lt;dir-exists&gt;</span> for the &lt;directory: <span class="code-string">"./demo-output"</span>&gt;.
+    <span class="code-keyword">Exists</span> the <span class="code-result">&lt;dir-exists&gt;</span> for the &lt;directory: <span class="code-string">"./demo-output"</span>&gt;.
 
     when &lt;dir-exists&gt; is false {
         <span class="code-keyword">&lt;CreateDirectory&gt;</span> the <span class="code-result">&lt;output&gt;</span> to the &lt;path: <span class="code-string">"./demo-output"</span>&gt;.
-        <span class="code-keyword">&lt;Log&gt;</span> <span class="code-string">"Created directory"</span> to the &lt;console&gt;.
+        <span class="code-keyword">Log</span> <span class="code-string">"Created directory"</span> to the &lt;console&gt;.
     }
 
     <span class="code-comment">(* Write a file *)</span>
-    <span class="code-keyword">&lt;Write&gt;</span> the <span class="code-result">&lt;content&gt;</span> to the &lt;file: <span class="code-string">"./demo-output/hello.txt"</span>&gt;
+    <span class="code-keyword">Write</span> the <span class="code-result">&lt;content&gt;</span> to the &lt;file: <span class="code-string">"./demo-output/hello.txt"</span>&gt;
         with <span class="code-string">"Hello from ARO!"</span>.
 
     <span class="code-comment">(* Append to it *)</span>
@@ -353,18 +353,18 @@ when &lt;found&gt; is false {
         with <span class="code-string">"\nAppended line."</span>.
 
     <span class="code-comment">(* Get stats *)</span>
-    <span class="code-keyword">&lt;Stat&gt;</span> the <span class="code-result">&lt;info&gt;</span> for the &lt;file: <span class="code-string">"./demo-output/hello.txt"</span>&gt;.
-    <span class="code-keyword">&lt;Log&gt;</span> <span class="code-string">"Size: &lt;info: size&gt; bytes"</span> to the &lt;console&gt;.
+    <span class="code-keyword">Stat</span> the <span class="code-result">&lt;info&gt;</span> for the &lt;file: <span class="code-string">"./demo-output/hello.txt"</span>&gt;.
+    <span class="code-keyword">Log</span> <span class="code-string">"Size: &lt;info: size&gt; bytes"</span> to the &lt;console&gt;.
 
     <span class="code-comment">(* Copy the file *)</span>
-    <span class="code-keyword">&lt;Copy&gt;</span> the &lt;file: <span class="code-string">"./demo-output/hello.txt"</span>&gt;
+    <span class="code-keyword">Copy</span> the &lt;file: <span class="code-string">"./demo-output/hello.txt"</span>&gt;
         to the &lt;destination: <span class="code-string">"./demo-output/hello-copy.txt"</span>&gt;.
 
     <span class="code-comment">(* List directory *)</span>
     <span class="code-keyword">&lt;List&gt;</span> the <span class="code-result">&lt;files&gt;</span> in the &lt;directory: <span class="code-string">"./demo-output"</span>&gt;.
 
-    <span class="code-keyword">&lt;Log&gt;</span> <span class="code-string">"=== Complete ==="</span> to the &lt;console&gt;.
-    <span class="code-keyword">&lt;Return&gt;</span> an <span class="code-result">&lt;OK: status&gt;</span> for the &lt;demo&gt;.
+    <span class="code-keyword">Log</span> <span class="code-string">"=== Complete ==="</span> to the &lt;console&gt;.
+    <span class="code-keyword">Return</span> an <span class="code-result">&lt;OK: status&gt;</span> for the &lt;demo&gt;.
 }</code></pre>
 
         <h2>Actions Reference</h2>

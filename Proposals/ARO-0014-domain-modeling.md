@@ -95,12 +95,12 @@ components:
 
 ```aro
 (Create Order: Sales) {
-    <Create> the <shipping-cost: Money> with {
+    Create the <shipping-cost: Money> with {
         amount: 9.99,
         currency: "USD"
     }.
 
-    <Create> the <shipping-address: Address> with {
+    Create the <shipping-address: Address> with {
         street: "123 Main St",
         city: "Springfield",
         postal-code: "12345",
@@ -164,24 +164,24 @@ components:
 
 ```aro
 (Get User: User Management) {
-    <Extract> the <user-id> from the <pathParameters: id>.
-    <Retrieve> the <user: User> from the <user-repository>
+    Extract the <user-id> from the <pathParameters: id>.
+    Retrieve the <user: User> from the <user-repository>
         where id = <user-id>.
-    <Return> an <OK: status> with <user>.
+    Return an <OK: status> with <user>.
 }
 
 (Update User Email: User Management) {
-    <Extract> the <user-id> from the <pathParameters: id>.
-    <Extract> the <new-email> from the <request: email>.
+    Extract the <user-id> from the <pathParameters: id>.
+    Extract the <new-email> from the <request: email>.
 
-    <Retrieve> the <user: User> from the <user-repository>
+    Retrieve the <user: User> from the <user-repository>
         where id = <user-id>.
 
-    <Update> the <user: email> with <new-email>.
-    <Store> the <user> in the <user-repository>.
+    Update the <user: email> with <new-email>.
+    Store the <user> in the <user-repository>.
 
-    <Emit> a <UserEmailChanged: event> with <user>.
-    <Return> an <OK: status> with <user>.
+    Emit a <UserEmailChanged: event> with <user>.
+    Return an <OK: status> with <user>.
 }
 ```
 
@@ -260,20 +260,20 @@ components:
 
 ```aro
 (Add Item to Order: Sales) {
-    <Extract> the <order-id> from the <pathParameters: order-id>.
-    <Extract> the <product-id> from the <request: product-id>.
-    <Extract> the <quantity> from the <request: quantity>.
+    Extract the <order-id> from the <pathParameters: order-id>.
+    Extract the <product-id> from the <request: product-id>.
+    Extract the <quantity> from the <request: quantity>.
 
     (* Load aggregate root *)
-    <Retrieve> the <order: Order> from the <order-repository>
+    Retrieve the <order: Order> from the <order-repository>
         where id = <order-id>.
 
     (* Load related entity for item details *)
-    <Retrieve> the <product: Product> from the <product-repository>
+    Retrieve the <product: Product> from the <product-repository>
         where id = <product-id>.
 
     (* Create nested entity *)
-    <Create> the <item: OrderItem> with {
+    Create the <item: OrderItem> with {
         line-id: generate-id(),
         product-id: <product-id>,
         product-name: <product: name>,
@@ -282,17 +282,17 @@ components:
     }.
 
     (* Modify aggregate through root *)
-    <Update> the <order: items> with <item>.
+    Update the <order: items> with <item>.
 
     (* Recalculate totals *)
-    <Compute> the <new-totals: OrderTotals> from the <order: items>.
-    <Update> the <order: totals> with <new-totals>.
+    Compute the <new-totals: OrderTotals> from the <order: items>.
+    Update the <order: totals> with <new-totals>.
 
     (* Persist entire aggregate *)
-    <Store> the <order> in the <order-repository>.
+    Store the <order> in the <order-repository>.
 
-    <Emit> an <ItemAddedToOrder: event> with <order>.
-    <Return> an <OK: status> with <order>.
+    Emit an <ItemAddedToOrder: event> with <order>.
+    Return an <OK: status> with <order>.
 }
 ```
 
@@ -375,22 +375,22 @@ Use domain events to communicate between contexts:
 (* Sales context places order *)
 (Place Order: Sales) {
     <Handle> order placement...
-    <Emit> an <OrderPlaced: event> with <order>.
-    <Return> an <OK: status> with <order>.
+    Emit an <OrderPlaced: event> with <order>.
+    Return an <OK: status> with <order>.
 }
 
 (* Inventory context responds *)
 (Reserve Stock: OrderPlaced Handler) {
-    <Extract> the <order> from the <event: order>.
+    Extract the <order> from the <event: order>.
     (* Reserve inventory for order items *)
-    <Return> an <OK: status> for the <reservation>.
+    Return an <OK: status> for the <reservation>.
 }
 
 (* Shipping context responds *)
 (Create Shipment: OrderPlaced Handler) {
-    <Extract> the <order> from the <event: order>.
+    Extract the <order> from the <event: order>.
     (* Create shipment for order *)
-    <Return> an <OK: status> for the <shipment>.
+    Return an <OK: status> for the <shipment>.
 }
 ```
 
@@ -406,28 +406,28 @@ Use the `<Emit>` action to publish domain events:
 
 ```aro
 (Register User: User Management) {
-    <Extract> the <data> from the <request: body>.
-    <Create> the <user: User> with <data>.
-    <Store> the <user> in the <user-repository>.
+    Extract the <data> from the <request: body>.
+    Create the <user: User> with <data>.
+    Store the <user> in the <user-repository>.
 
     (* Publish domain event *)
-    <Emit> a <UserRegistered: event> with <user>.
+    Emit a <UserRegistered: event> with <user>.
 
-    <Return> a <Created: status> with <user>.
+    Return a <Created: status> with <user>.
 }
 
 (Place Order: Sales) {
     (* ... order placement logic ... *)
 
     (* Publish domain event *)
-    <Emit> an <OrderPlaced: event> with {
+    Emit an <OrderPlaced: event> with {
         order-id: <order: id>,
         customer-id: <order: customer-id>,
         total: <order: totals.total>,
         placed-at: now()
     }.
 
-    <Return> an <OK: status> with <order>.
+    Return an <OK: status> with <order>.
 }
 ```
 
@@ -439,16 +439,16 @@ Feature sets with `Handler` suffix subscribe to events:
 (* Naming pattern: (Feature Name: EventName Handler) *)
 
 (Send Welcome Email: UserRegistered Handler) {
-    <Extract> the <user> from the <event: user>.
-    <Send> the <welcome-email> to the <user: email>.
-    <Return> an <OK: status> for the <notification>.
+    Extract the <user> from the <event: user>.
+    Send the <welcome-email> to the <user: email>.
+    Return an <OK: status> for the <notification>.
 }
 
 (Update Analytics: OrderPlaced Handler) {
-    <Extract> the <order-id> from the <event: order-id>.
-    <Extract> the <total> from the <event: total>.
-    <Log> the <message> for the <analytics> with "Order placed: " + <order-id>.
-    <Return> an <OK: status> for the <analytics>.
+    Extract the <order-id> from the <event: order-id>.
+    Extract the <total> from the <event: total>.
+    Log the <message> for the <analytics> with "Order placed: " + <order-id>.
+    Return an <OK: status> for the <analytics>.
 }
 ```
 
@@ -464,18 +464,18 @@ ARO uses `<Retrieve>` and `<Store>` actions for repository operations:
 
 ```aro
 (* Find by ID *)
-<Retrieve> the <order: Order> from the <order-repository>
+Retrieve the <order: Order> from the <order-repository>
     where id = <order-id>.
 
 (* Find with filter *)
-<Retrieve> the <pending-orders: List<Order>> from the <order-repository>
+Retrieve the <pending-orders: List<Order>> from the <order-repository>
     where status = "pending".
 
 (* Save *)
-<Store> the <order> in the <order-repository>.
+Store the <order> in the <order-repository>.
 
 (* Delete *)
-<Delete> the <order> from the <order-repository>.
+Delete the <order> from the <order-repository>.
 ```
 
 ### Repository Naming Convention
@@ -498,38 +498,38 @@ Feature sets naturally serve as domain services:
 
 ```aro
 (Calculate Shipping Cost: Pricing) {
-    <Extract> the <order> from the <request: order>.
-    <Extract> the <destination> from the <request: destination>.
+    Extract the <order> from the <request: order>.
+    Extract the <destination> from the <request: destination>.
 
     (* Business logic spanning multiple entities *)
-    <Compute> the <weight> from the <order: items>.
-    <Compute> the <zone> from the <destination>.
-    <Compute> the <shipping-cost: Money> from {
+    Compute the <weight> from the <order: items>.
+    Compute the <zone> from the <destination>.
+    Compute the <shipping-cost: Money> from {
         weight: <weight>,
         zone: <zone>
     }.
 
-    <Return> an <OK: status> with <shipping-cost>.
+    Return an <OK: status> with <shipping-cost>.
 }
 
 (Apply Discount: Pricing) {
-    <Extract> the <order> from the <request: order>.
-    <Extract> the <customer> from the <request: customer>.
+    Extract the <order> from the <request: order>.
+    Extract the <customer> from the <request: customer>.
 
     (* Volume discount *)
-    <Compute> the <volume-discount> from the <order: totals.subtotal>
+    Compute the <volume-discount> from the <order: totals.subtotal>
         where amount > 1000.
 
     (* Loyalty discount *)
-    <Compute> the <loyalty-discount> from the <customer: tier>
+    Compute the <loyalty-discount> from the <customer: tier>
         where tier is "gold".
 
-    <Compute> the <total-discount: Money> from {
+    Compute the <total-discount: Money> from {
         volume: <volume-discount>,
         loyalty: <loyalty-discount>
     }.
 
-    <Return> an <OK: status> with <total-discount>.
+    Return an <OK: status> with <total-discount>.
 }
 ```
 
@@ -545,11 +545,11 @@ Feature sets that create objects serve as factories:
 
 ```aro
 (Create Order: Sales) {
-    <Extract> the <customer-id> from the <request: customer-id>.
-    <Extract> the <items> from the <request: items>.
+    Extract the <customer-id> from the <request: customer-id>.
+    Extract the <items> from the <request: items>.
 
     (* Factory logic - create aggregate with proper initialization *)
-    <Create> the <order: Order> with {
+    Create the <order: Order> with {
         id: generate-id(),
         customer-id: <customer-id>,
         status: "draft",
@@ -563,16 +563,16 @@ Feature sets that create objects serve as factories:
     }.
 
     (* Add items through aggregate operations *)
-    <Process> each <item> in <items> {
-        <Update> the <order: items> with <item>.
+    Process each <item> in <items> {
+        Update the <order: items> with <item>.
     }.
 
     (* Calculate totals *)
-    <Compute> the <totals: OrderTotals> from the <order: items>.
-    <Update> the <order: totals> with <totals>.
+    Compute the <totals: OrderTotals> from the <order: items>.
+    Update the <order: totals> with <totals>.
 
-    <Store> the <order> in the <order-repository>.
-    <Return> a <Created: status> with <order>.
+    Store the <order> in the <order-repository>.
+    Return a <Created: status> with <order>.
 }
 ```
 
@@ -667,9 +667,9 @@ components:
 
 (* Factory: Create new order *)
 (Create Order: Sales) {
-    <Extract> the <customer-id> from the <request: customer-id>.
+    Extract the <customer-id> from the <request: customer-id>.
 
-    <Create> the <order: Order> with {
+    Create the <order: Order> with {
         id: generate-id(),
         customer-id: <customer-id>,
         status: "draft",
@@ -677,23 +677,23 @@ components:
         totals: { subtotal: { amount: 0, currency: "USD" } }
     }.
 
-    <Store> the <order> in the <order-repository>.
-    <Return> a <Created: status> with <order>.
+    Store the <order> in the <order-repository>.
+    Return a <Created: status> with <order>.
 }
 
 (* Aggregate operation: Add item *)
 (Add Item: Sales) {
-    <Extract> the <order-id> from the <pathParameters: order-id>.
-    <Extract> the <product-id> from the <request: product-id>.
-    <Extract> the <quantity> from the <request: quantity>.
+    Extract the <order-id> from the <pathParameters: order-id>.
+    Extract the <product-id> from the <request: product-id>.
+    Extract the <quantity> from the <request: quantity>.
 
-    <Retrieve> the <order: Order> from the <order-repository>
+    Retrieve the <order: Order> from the <order-repository>
         where id = <order-id>.
 
-    <Retrieve> the <product: Product> from the <product-repository>
+    Retrieve the <product: Product> from the <product-repository>
         where id = <product-id>.
 
-    <Create> the <item: OrderItem> with {
+    Create the <item: OrderItem> with {
         line-id: generate-id(),
         product-id: <product-id>,
         product-name: <product: name>,
@@ -701,28 +701,28 @@ components:
         quantity: <quantity>
     }.
 
-    <Update> the <order: items> with <item>.
-    <Store> the <order> in the <order-repository>.
+    Update the <order: items> with <item>.
+    Store the <order> in the <order-repository>.
 
-    <Return> an <OK: status> with <order>.
+    Return an <OK: status> with <order>.
 }
 
 (* Domain operation: Place order *)
 (Place Order: Sales) {
-    <Extract> the <order-id> from the <pathParameters: order-id>.
+    Extract the <order-id> from the <pathParameters: order-id>.
 
-    <Retrieve> the <order: Order> from the <order-repository>
+    Retrieve the <order: Order> from the <order-repository>
         where id = <order-id>.
 
-    <Validate> the <order: items> is not empty.
+    Validate the <order: items> is not empty.
 
-    <Update> the <order: status> with "placed".
-    <Store> the <order> in the <order-repository>.
+    Update the <order: status> with "placed".
+    Store the <order> in the <order-repository>.
 
     (* Publish domain event *)
-    <Emit> an <OrderPlaced: event> with <order>.
+    Emit an <OrderPlaced: event> with <order>.
 
-    <Return> an <OK: status> with <order>.
+    Return an <OK: status> with <order>.
 }
 ```
 
@@ -735,20 +735,20 @@ components:
 
 (* Event Handler: Reserve stock when order placed *)
 (Reserve Stock: OrderPlaced Handler) {
-    <Extract> the <order> from the <event: order>.
+    Extract the <order> from the <event: order>.
 
     (* Reserve inventory for each item *)
-    <Process> each <item> in <order: items> {
-        <Retrieve> the <product: Product> from the <product-repository>
+    Process each <item> in <order: items> {
+        Retrieve the <product: Product> from the <product-repository>
             where id = <item: product-id>.
 
-        <Compute> the <new-stock> from <product: stock> - <item: quantity>.
-        <Update> the <product: stock> with <new-stock>.
-        <Store> the <product> in the <product-repository>.
+        Compute the <new-stock> from <product: stock> - <item: quantity>.
+        Update the <product: stock> with <new-stock>.
+        Store the <product> in the <product-repository>.
     }.
 
-    <Emit> a <StockReserved: event> with <order: id>.
-    <Return> an <OK: status> for the <reservation>.
+    Emit a <StockReserved: event> with <order: id>.
+    Return an <OK: status> for the <reservation>.
 }
 ```
 
@@ -761,20 +761,20 @@ components:
 
 (* Event Handler: Create shipment when stock reserved *)
 (Create Shipment: StockReserved Handler) {
-    <Extract> the <order-id> from the <event: order-id>.
+    Extract the <order-id> from the <event: order-id>.
 
-    <Retrieve> the <order: Order> from the <order-repository>
+    Retrieve the <order: Order> from the <order-repository>
         where id = <order-id>.
 
-    <Create> the <shipment: Shipment> with {
+    Create the <shipment: Shipment> with {
         id: generate-id(),
         order-id: <order-id>,
         destination: <order: shipping-address>,
         status: "pending"
     }.
 
-    <Store> the <shipment> in the <shipment-repository>.
-    <Return> an <OK: status> with <shipment>.
+    Store the <shipment> in the <shipment-repository>.
+    Return an <OK: status> with <shipment>.
 }
 ```
 

@@ -319,12 +319,12 @@ These `.aro` files are parsed and their feature sets registered with the runtime
 ```aro
 (* In plugin's features/handlers.aro *)
 (Log User Events: UserCreated Handler) {
-    <Log> "[AUDIT] User created" to the <console>.
-    <Return> an <OK: status> for the <audit>.
+    Log "[AUDIT] User created" to the <console>.
+    Return an <OK: status> for the <audit>.
 }
 ```
 
-When any application using this plugin emits `<Emit> a <UserCreated: event>`, the handler runs automatically.
+When any application using this plugin emits `Emit a <UserCreated: event>`, the handler runs automatically.
 
 **2. Reusable Feature Sets**: Other feature sets become available for use via the `<Invoke>` action or as building blocks for your application logic.
 

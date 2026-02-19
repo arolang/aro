@@ -9,7 +9,7 @@ Add support for command-line parameters that ARO applications can extract using 
 Currently, ARO applications receive external configuration through environment variables:
 
 ```aro
-<Extract> the <start-url> from the <env: CRAWL_URL>.
+Extract the <start-url> from the <env: CRAWL_URL>.
 ```
 
 While environment variables work, they have limitations:
@@ -34,9 +34,9 @@ This proposal adds a `parameter` system object that provides access to command-l
 Extract parameters using the same pattern as environment variables:
 
 ```aro
-<Extract> the <url> from the <parameter: url>.
-<Extract> the <depth> from the <parameter: depth>.
-<Extract> the <all-params> from the <parameter>.  (* Returns dictionary *)
+Extract the <url> from the <parameter: url>.
+Extract the <depth> from the <parameter: depth>.
+Extract the <all-params> from the <parameter>.  (* Returns dictionary *)
 ```
 
 ### Parameter Passing
@@ -101,7 +101,7 @@ Missing parameters follow ARO's happy-path philosophy:
 ```aro
 (* If --url was not provided, this fails with a descriptive error: *)
 (* "Could not extract the url from the parameter: url" *)
-<Extract> the <url> from the <parameter: url>.
+Extract the <url> from the <parameter: url>.
 ```
 
 ### All Parameters
@@ -109,7 +109,7 @@ Missing parameters follow ARO's happy-path philosophy:
 Extract all parameters as a dictionary:
 
 ```aro
-<Extract> the <params> from the <parameter>.
+Extract the <params> from the <parameter>.
 (* Returns: { "url": "http://...", "count": 5, "verbose": true } *)
 ```
 
@@ -119,9 +119,9 @@ Extract all parameters as a dictionary:
 
 ```aro
 (Application-Start: Greeter) {
-    <Extract> the <name> from the <parameter: name>.
-    <Log> "Hello, ${<name>}!" to the <console>.
-    <Return> an <OK: status> for the <greeting>.
+    Extract the <name> from the <parameter: name>.
+    Log "Hello, ${<name>}!" to the <console>.
+    Return an <OK: status> for the <greeting>.
 }
 ```
 
@@ -134,16 +134,16 @@ aro run . --name Alice
 
 ```aro
 (Application-Start: Web Crawler) {
-    <Extract> the <url> from the <parameter: url>.
-    <Extract> the <depth> from the <parameter: depth>.
-    <Extract> the <verbose> from the <parameter: verbose>.
+    Extract the <url> from the <parameter: url>.
+    Extract the <depth> from the <parameter: depth>.
+    Extract the <verbose> from the <parameter: verbose>.
 
     when <verbose> is true {
-        <Log> "Starting crawl of ${<url>} to depth ${<depth>}" to the <console>.
+        Log "Starting crawl of ${<url>} to depth ${<depth>}" to the <console>.
     }
 
-    <Emit> a <CrawlPage: event> with { url: <url>, depth: <depth> }.
-    <Return> an <OK: status> for the <startup>.
+    Emit a <CrawlPage: event> with { url: <url>, depth: <depth> }.
+    Return an <OK: status> for the <startup>.
 }
 ```
 
@@ -156,14 +156,14 @@ aro run ./Crawler --url http://example.com --depth 3 --verbose
 ```aro
 (Application-Start: Server) {
     (* Extract all parameters *)
-    <Extract> the <params> from the <parameter>.
+    Extract the <params> from the <parameter>.
 
     (* Use parameter or default *)
-    <Create> the <port> with <params: port> or 8080.
-    <Create> the <host> with <params: host> or "0.0.0.0".
+    Create the <port> with <params: port> or 8080.
+    Create the <host> with <params: host> or "0.0.0.0".
 
-    <Log> "Starting server on ${<host>}:${<port>}" to the <console>.
-    <Return> an <OK: status> for the <startup>.
+    Log "Starting server on ${<host>}:${<port>}" to the <console>.
+    Return an <OK: status> for the <startup>.
 }
 ```
 
@@ -175,17 +175,17 @@ aro run . --port 3000  # Uses port 3000, host defaults to 0.0.0.0
 
 ```aro
 (Application-Start: Tool) {
-    <Extract> the <params> from the <parameter>.
+    Extract the <params> from the <parameter>.
 
     when <params: v> is true {
-        <Log> "Verbose mode enabled" to the <console>.
+        Log "Verbose mode enabled" to the <console>.
     }
 
     when <params: f> is true {
-        <Log> "Force mode enabled" to the <console>.
+        Log "Force mode enabled" to the <console>.
     }
 
-    <Return> an <OK: status> for the <tool>.
+    Return an <OK: status> for the <tool>.
 }
 ```
 

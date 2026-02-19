@@ -282,10 +282,10 @@
 
         <h3>JSON and JSON Lines</h3>
         <pre><code><span class="code-comment">(* Pretty-printed JSON *)</span>
-<span class="code-keyword">&lt;Write&gt;</span> the <span class="code-result">&lt;users&gt;</span> to <span class="code-string">"./output/users.json"</span>.
+<span class="code-keyword">Write</span> the <span class="code-result">&lt;users&gt;</span> to <span class="code-string">"./output/users.json"</span>.
 
 <span class="code-comment">(* JSON Lines - one object per line, compact *)</span>
-<span class="code-keyword">&lt;Write&gt;</span> the <span class="code-result">&lt;events&gt;</span> to <span class="code-string">"./logs/events.jsonl"</span>.</code></pre>
+<span class="code-keyword">Write</span> the <span class="code-result">&lt;events&gt;</span> to <span class="code-string">"./logs/events.jsonl"</span>.</code></pre>
 
         <p><strong>JSON output:</strong></p>
         <pre><code>[
@@ -299,17 +299,17 @@
 
         <h3>YAML and TOML</h3>
         <pre><code><span class="code-comment">(* YAML - human readable *)</span>
-<span class="code-keyword">&lt;Write&gt;</span> the <span class="code-result">&lt;config&gt;</span> to <span class="code-string">"./settings.yaml"</span>.
+<span class="code-keyword">Write</span> the <span class="code-result">&lt;config&gt;</span> to <span class="code-string">"./settings.yaml"</span>.
 
 <span class="code-comment">(* TOML - configuration files *)</span>
-<span class="code-keyword">&lt;Write&gt;</span> the <span class="code-result">&lt;config&gt;</span> to <span class="code-string">"./settings.toml"</span>.</code></pre>
+<span class="code-keyword">Write</span> the <span class="code-result">&lt;config&gt;</span> to <span class="code-string">"./settings.toml"</span>.</code></pre>
 
         <h3>CSV and TSV</h3>
         <pre><code><span class="code-comment">(* CSV with header row *)</span>
-<span class="code-keyword">&lt;Write&gt;</span> the <span class="code-result">&lt;report&gt;</span> to <span class="code-string">"./export/report.csv"</span>.
+<span class="code-keyword">Write</span> the <span class="code-result">&lt;report&gt;</span> to <span class="code-string">"./export/report.csv"</span>.
 
 <span class="code-comment">(* TSV - tab separated *)</span>
-<span class="code-keyword">&lt;Write&gt;</span> the <span class="code-result">&lt;data&gt;</span> to <span class="code-string">"./export/data.tsv"</span>.</code></pre>
+<span class="code-keyword">Write</span> the <span class="code-result">&lt;data&gt;</span> to <span class="code-string">"./export/data.tsv"</span>.</code></pre>
 
         <p><strong>CSV output:</strong></p>
         <pre><code>id,name,email
@@ -318,7 +318,7 @@
 
         <h3>XML</h3>
         <pre><code><span class="code-comment">(* XML - variable name becomes root element *)</span>
-<span class="code-keyword">&lt;Write&gt;</span> the <span class="code-result">&lt;products&gt;</span> to <span class="code-string">"./catalog/products.xml"</span>.</code></pre>
+<span class="code-keyword">Write</span> the <span class="code-result">&lt;products&gt;</span> to <span class="code-string">"./catalog/products.xml"</span>.</code></pre>
 
         <p><strong>XML output:</strong> (note: <code>&lt;products&gt;</code> is the root)</p>
         <pre><code>&lt;?xml version="1.0" encoding="UTF-8"?&gt;
@@ -331,22 +331,22 @@
 
         <h3>Other Formats</h3>
         <pre><code><span class="code-comment">(* Markdown table *)</span>
-<span class="code-keyword">&lt;Write&gt;</span> the <span class="code-result">&lt;summary&gt;</span> to <span class="code-string">"./docs/summary.md"</span>.
+<span class="code-keyword">Write</span> the <span class="code-result">&lt;summary&gt;</span> to <span class="code-string">"./docs/summary.md"</span>.
 
 <span class="code-comment">(* HTML table *)</span>
-<span class="code-keyword">&lt;Write&gt;</span> the <span class="code-result">&lt;report&gt;</span> to <span class="code-string">"./output/report.html"</span>.
+<span class="code-keyword">Write</span> the <span class="code-result">&lt;report&gt;</span> to <span class="code-string">"./output/report.html"</span>.
 
 <span class="code-comment">(* SQL INSERT statements *)</span>
-<span class="code-keyword">&lt;Write&gt;</span> the <span class="code-result">&lt;users&gt;</span> to <span class="code-string">"./backup/users.sql"</span>.
+<span class="code-keyword">Write</span> the <span class="code-result">&lt;users&gt;</span> to <span class="code-string">"./backup/users.sql"</span>.
 
 <span class="code-comment">(* Log file with timestamp *)</span>
-<span class="code-keyword">&lt;Write&gt;</span> the <span class="code-result">&lt;message&gt;</span> to <span class="code-string">"./app.log"</span> with <span class="code-string">"Server started"</span>.
+<span class="code-keyword">Write</span> the <span class="code-result">&lt;message&gt;</span> to <span class="code-string">"./app.log"</span> with <span class="code-string">"Server started"</span>.
 
 <span class="code-comment">(* Environment file - uppercase keys with underscore nesting *)</span>
-<span class="code-keyword">&lt;Write&gt;</span> the <span class="code-result">&lt;config&gt;</span> to <span class="code-string">"./.env"</span>.
+<span class="code-keyword">Write</span> the <span class="code-result">&lt;config&gt;</span> to <span class="code-string">"./.env"</span>.
 
 <span class="code-comment">(* Plain text key=value *)</span>
-<span class="code-keyword">&lt;Write&gt;</span> the <span class="code-result">&lt;config&gt;</span> to <span class="code-string">"./output/config.txt"</span>.</code></pre>
+<span class="code-keyword">Write</span> the <span class="code-result">&lt;config&gt;</span> to <span class="code-string">"./output/config.txt"</span>.</code></pre>
 
         <h2>Reading Structured Data</h2>
 
@@ -355,20 +355,20 @@
         </p>
 
         <pre><code><span class="code-comment">(* JSON - parsed to object/array *)</span>
-<span class="code-keyword">&lt;Read&gt;</span> the <span class="code-result">&lt;config&gt;</span> from <span class="code-string">"./settings.json"</span>.
+<span class="code-keyword">Read</span> the <span class="code-result">&lt;config&gt;</span> from <span class="code-string">"./settings.json"</span>.
 
 <span class="code-comment">(* JSONL - parsed to array of objects *)</span>
-<span class="code-keyword">&lt;Read&gt;</span> the <span class="code-result">&lt;events&gt;</span> from <span class="code-string">"./logs/events.jsonl"</span>.
+<span class="code-keyword">Read</span> the <span class="code-result">&lt;events&gt;</span> from <span class="code-string">"./logs/events.jsonl"</span>.
 
 <span class="code-comment">(* CSV - parsed to array with headers as keys *)</span>
-<span class="code-keyword">&lt;Read&gt;</span> the <span class="code-result">&lt;records&gt;</span> from <span class="code-string">"./data.csv"</span>.
+<span class="code-keyword">Read</span> the <span class="code-result">&lt;records&gt;</span> from <span class="code-string">"./data.csv"</span>.
 
 <span class="code-comment">(* YAML - parsed to object/array *)</span>
-<span class="code-keyword">&lt;Read&gt;</span> the <span class="code-result">&lt;settings&gt;</span> from <span class="code-string">"./config.yaml"</span>.</code></pre>
+<span class="code-keyword">Read</span> the <span class="code-result">&lt;settings&gt;</span> from <span class="code-string">"./config.yaml"</span>.</code></pre>
 
         <h3>Bypass Parsing with as String</h3>
         <pre><code><span class="code-comment">(* Read raw content without parsing *)</span>
-<span class="code-keyword">&lt;Read&gt;</span> the <span class="code-result">&lt;raw-json: String&gt;</span> from <span class="code-string">"./data.json"</span>.</code></pre>
+<span class="code-keyword">Read</span> the <span class="code-result">&lt;raw-json: String&gt;</span> from <span class="code-string">"./data.json"</span>.</code></pre>
 
         <h2>Format Reference</h2>
 
@@ -507,13 +507,13 @@
         </table>
 
         <pre><code><span class="code-comment">(* Custom delimiter *)</span>
-<span class="code-keyword">&lt;Write&gt;</span> the <span class="code-result">&lt;data&gt;</span> to <span class="code-string">"./export.csv"</span> with { delimiter: <span class="code-string">";"</span> }.
+<span class="code-keyword">Write</span> the <span class="code-result">&lt;data&gt;</span> to <span class="code-string">"./export.csv"</span> with { delimiter: <span class="code-string">";"</span> }.
 
 <span class="code-comment">(* Without header row *)</span>
-<span class="code-keyword">&lt;Write&gt;</span> the <span class="code-result">&lt;data&gt;</span> to <span class="code-string">"./export.csv"</span> with { header: false }.
+<span class="code-keyword">Write</span> the <span class="code-result">&lt;data&gt;</span> to <span class="code-string">"./export.csv"</span> with { header: false }.
 
 <span class="code-comment">(* Read with custom options *)</span>
-<span class="code-keyword">&lt;Read&gt;</span> the <span class="code-result">&lt;data&gt;</span> from <span class="code-string">"./import.csv"</span> with { delimiter: <span class="code-string">";"</span> }.</code></pre>
+<span class="code-keyword">Read</span> the <span class="code-result">&lt;data&gt;</span> from <span class="code-string">"./import.csv"</span> with { delimiter: <span class="code-string">";"</span> }.</code></pre>
 
         <h2>Complete Example</h2>
 
@@ -523,27 +523,27 @@
 
         <pre><code><span class="code-feature">(Application-Start: Multi-Format Export)</span> {
     <span class="code-comment">(* Create sample data *)</span>
-    <span class="code-keyword">&lt;Create&gt;</span> the <span class="code-result">&lt;users&gt;</span> with [
+    <span class="code-keyword">Create</span> the <span class="code-result">&lt;users&gt;</span> with [
         { "id": 1, "name": "Alice", "email": "alice@example.com" },
         { "id": 2, "name": "Bob", "email": "bob@example.com" },
         { "id": 3, "name": "Charlie", "email": "charlie@example.com" }
     ].
 
     <span class="code-comment">(* Export to multiple formats - same data, different files *)</span>
-    <span class="code-keyword">&lt;Write&gt;</span> the <span class="code-result">&lt;users&gt;</span> to <span class="code-string">"./output/users.json"</span>.
-    <span class="code-keyword">&lt;Write&gt;</span> the <span class="code-result">&lt;users&gt;</span> to <span class="code-string">"./output/users.jsonl"</span>.
-    <span class="code-keyword">&lt;Write&gt;</span> the <span class="code-result">&lt;users&gt;</span> to <span class="code-string">"./output/users.yaml"</span>.
-    <span class="code-keyword">&lt;Write&gt;</span> the <span class="code-result">&lt;users&gt;</span> to <span class="code-string">"./output/users.csv"</span>.
-    <span class="code-keyword">&lt;Write&gt;</span> the <span class="code-result">&lt;users&gt;</span> to <span class="code-string">"./output/users.xml"</span>.
-    <span class="code-keyword">&lt;Write&gt;</span> the <span class="code-result">&lt;users&gt;</span> to <span class="code-string">"./output/users.md"</span>.
+    <span class="code-keyword">Write</span> the <span class="code-result">&lt;users&gt;</span> to <span class="code-string">"./output/users.json"</span>.
+    <span class="code-keyword">Write</span> the <span class="code-result">&lt;users&gt;</span> to <span class="code-string">"./output/users.jsonl"</span>.
+    <span class="code-keyword">Write</span> the <span class="code-result">&lt;users&gt;</span> to <span class="code-string">"./output/users.yaml"</span>.
+    <span class="code-keyword">Write</span> the <span class="code-result">&lt;users&gt;</span> to <span class="code-string">"./output/users.csv"</span>.
+    <span class="code-keyword">Write</span> the <span class="code-result">&lt;users&gt;</span> to <span class="code-string">"./output/users.xml"</span>.
+    <span class="code-keyword">Write</span> the <span class="code-result">&lt;users&gt;</span> to <span class="code-string">"./output/users.md"</span>.
 
-    <span class="code-keyword">&lt;Log&gt;</span> <span class="code-string">"Exported to 6 formats!"</span> to the &lt;console&gt;.
+    <span class="code-keyword">Log</span> <span class="code-string">"Exported to 6 formats!"</span> to the &lt;console&gt;.
 
     <span class="code-comment">(* Read back and verify *)</span>
-    <span class="code-keyword">&lt;Read&gt;</span> the <span class="code-result">&lt;json-data&gt;</span> from <span class="code-string">"./output/users.json"</span>.
-    <span class="code-keyword">&lt;Read&gt;</span> the <span class="code-result">&lt;csv-data&gt;</span> from <span class="code-string">"./output/users.csv"</span>.
+    <span class="code-keyword">Read</span> the <span class="code-result">&lt;json-data&gt;</span> from <span class="code-string">"./output/users.json"</span>.
+    <span class="code-keyword">Read</span> the <span class="code-result">&lt;csv-data&gt;</span> from <span class="code-string">"./output/users.csv"</span>.
 
-    <span class="code-keyword">&lt;Return&gt;</span> an <span class="code-result">&lt;OK: status&gt;</span> for the &lt;export&gt;.
+    <span class="code-keyword">Return</span> an <span class="code-result">&lt;OK: status&gt;</span> for the &lt;export&gt;.
 }</code></pre>
 
         <div class="highlight-box">

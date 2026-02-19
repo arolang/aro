@@ -40,12 +40,12 @@ Inside a feature set, statements execute **synchronously** and **serially**:
 
 ```aro
 (Process Order: Order API) {
-    <Extract> the <data> from the <request: body>.      (* 1. First *)
-    <Validate> the <data> for the <order-schema>.       (* 2. Second *)
-    <Create> the <order> with <data>.                   (* 3. Third *)
-    <Store> the <order> in the <order-repository>.      (* 4. Fourth *)
-    <Emit> to <Send Confirmation> with <order>.         (* 5. Fifth *)
-    <Return> a <Created: status> with <order>.          (* 6. Last *)
+    Extract the <data> from the <request: body>.      (* 1. First *)
+    Validate the <data> for the <order-schema>.       (* 2. Second *)
+    Create the <order> with <data>.                   (* 3. Third *)
+    Store the <order> in the <order-repository>.      (* 4. Fourth *)
+    Emit to <Send Confirmation> with <order>.         (* 5. Fifth *)
+    Return a <Created: status> with <order>.          (* 6. Last *)
 }
 ```
 
@@ -72,12 +72,12 @@ ARO code:
 
 ```aro
 (Process Order: Order API) {
-    <Extract> the <data> from the <request: body>.
-    <Validate> the <data> for the <order-schema>.
-    <Create> the <order> with <data>.
-    <Store> the <order> in the <order-repository>.
-    <Emit> to <Send Confirmation> with <order>.
-    <Return> a <Created: status> with <order>.
+    Extract the <data> from the <request: body>.
+    Validate the <data> for the <order-schema>.
+    Create the <order> with <data>.
+    Store the <order> in the <order-repository>.
+    Emit to <Send Confirmation> with <order>.
+    Return a <Created: status> with <order>.
 }
 ```
 
@@ -116,11 +116,11 @@ The runtime performs **data-flow driven execution**:
 
 ```aro
 (Process Config: File Handler) {
-    <Open> the <config-file> from the <path>.        (* 1. Starts file load *)
-    <Compute> the <hash> for the <request>.          (* 2. Runs immediately *)
-    <Log> <request> to the <console>.                 (* 3. Runs immediately *)
-    <Parse> the <config> from the <config-file>.     (* 4. Waits for file *)
-    <Return> an <OK: status> with <config>.
+    Open the <config-file> from the <path>.        (* 1. Starts file load *)
+    Compute the <hash> for the <request>.          (* 2. Runs immediately *)
+    Log <request> to the <console>.                 (* 3. Runs immediately *)
+    Parse the <config> from the <config-file>.     (* 4. Waits for file *)
+    Return an <OK: status> with <config>.
 }
 ```
 
@@ -140,21 +140,21 @@ Feature sets can trigger other feature sets:
 
 ```aro
 (Create User: User API) {
-    <Extract> the <data> from the <request: body>.
-    <Create> the <user> with <data>.
-    <Store> the <user> in the <user-repository>.
+    Extract the <data> from the <request: body>.
+    Create the <user> with <data>.
+    Store the <user> in the <user-repository>.
 
     (* Triggers other feature sets asynchronously *)
-    <Emit> to <Send Welcome Email> with <user>.
+    Emit to <Send Welcome Email> with <user>.
 
     (* Continues immediately, doesn't wait for handler *)
-    <Return> a <Created: status> with <user>.
+    Return a <Created: status> with <user>.
 }
 
 (Send Welcome Email: Notifications) {
-    <Extract> the <email> from the <event: email>.
-    <Send> the <welcome-email> to the <email>.
-    <Return> an <OK: status>.
+    Extract the <email> from the <event: email>.
+    Send the <welcome-email> to the <email>.
+    Return an <OK: status>.
 }
 ```
 
@@ -187,7 +187,7 @@ By default, `for each` loops execute serially—one item after another:
 
 ```aro
 for each <number> in <numbers> {
-    <Log> <number> to the <console>.
+    Log <number> to the <console>.
 }
 ```
 
@@ -197,7 +197,7 @@ The `parallel for each` variant executes iterations concurrently:
 
 ```aro
 parallel for each <number> in <numbers> {
-    <Log> <number> to the <console>.
+    Log <number> to the <console>.
 }
 ```
 
@@ -231,7 +231,7 @@ By default, parallel loops use `System.coreCount` threads (matching your CPU's l
 ```aro
 (* Uses all available cores *)
 parallel for each <item> in <items> {
-    <Compute> the <result> from <item>.
+    Compute the <result> from <item>.
 }
 ```
 
@@ -240,7 +240,7 @@ You can override concurrency with the `with` clause:
 ```aro
 (* Limit to 4 concurrent iterations *)
 parallel for each <item> in <items> with <concurrency: 4> {
-    <Compute> the <result> from <item>.
+    Compute the <result> from <item>.
 }
 ```
 
@@ -277,19 +277,19 @@ From `Examples/ParallelForEach/main.aro`:
 
 ```aro
 (Application-Start: ForEach Demo) {
-    <Create> the <numbers> with [1, 2, 3, 4, 5, 6, 7, 8, 9, 10].
+    Create the <numbers> with [1, 2, 3, 4, 5, 6, 7, 8, 9, 10].
 
-    <Log> "=== Serial Iteration ===" to the <console>.
+    Log "=== Serial Iteration ===" to the <console>.
     for each <number> in <numbers> {
-        <Log> <number> to the <console>.
+        Log <number> to the <console>.
     }
 
-    <Log> "=== Parallel Iteration ===" to the <console>.
+    Log "=== Parallel Iteration ===" to the <console>.
     parallel for each <number> in <numbers> {
-        <Log> <number> to the <console>.
+        Log <number> to the <console>.
     }
 
-    <Return> an <OK: status> for the <demo>.
+    Return an <OK: status> for the <demo>.
 }
 ```
 
@@ -334,16 +334,16 @@ Output (example):
 
 ```aro
 (Application-Start: My API) {
-    <Start> the <http-server> on port 8080.
-    <Keepalive> the <application> for the <events>.
-    <Return> an <OK: status>.
+    Start the <http-server> on port 8080.
+    Keepalive the <application> for the <events>.
+    Return an <OK: status>.
 }
 
 (* Each request triggers this independently *)
 (getUser: User API) {
-    <Extract> the <id> from the <pathParameters: id>.
-    <Retrieve> the <user> from the <user-repository> where id = <id>.
-    <Return> an <OK: status> with <user>.
+    Extract the <id> from the <pathParameters: id>.
+    Retrieve the <user> from the <user-repository> where id = <id>.
+    Return an <OK: status> with <user>.
 }
 ```
 
@@ -351,17 +351,17 @@ Output (example):
 
 ```aro
 (Application-Start: Echo Server) {
-    <Start> the <socket-server> on port 9000.
-    <Keepalive> the <application> for the <events>.
-    <Return> an <OK: status>.
+    Start the <socket-server> on port 9000.
+    Keepalive the <application> for the <events>.
+    Return an <OK: status>.
 }
 
 (* Each client message triggers this independently *)
 (Handle Data: Socket Event Handler) {
-    <Extract> the <data> from the <event: data>.
-    <Extract> the <connection> from the <event: connection>.
-    <Send> the <data> to the <connection>.
-    <Return> an <OK: status>.
+    Extract the <data> from the <event: data>.
+    Extract the <connection> from the <event: connection>.
+    Send the <data> to the <connection>.
+    Return an <OK: status>.
 }
 ```
 
@@ -369,18 +369,18 @@ Output (example):
 
 ```aro
 (Application-Start: File Watcher) {
-    <Watch> the <directory> for the <changes> with "./watched".
-    <Keepalive> the <application> for the <events>.
-    <Return> an <OK: status>.
+    Watch the <directory> for the <changes> with "./watched".
+    Keepalive the <application> for the <events>.
+    Return an <OK: status>.
 }
 
 (* Each file change triggers this independently *)
 (Handle File Change: File Event Handler) {
-    <Extract> the <path> from the <event: path>.
-    <Extract> the <type> from the <event: type>.
-    <Compute> the <message> from "File " + <path> + " " + <type>.
-    <Log> <message> to the <console>.
-    <Return> an <OK: status>.
+    Extract the <path> from the <event: path>.
+    Extract the <type> from the <event: type>.
+    Compute the <message> from "File " + <path> + " " + <type>.
+    Log <message> to the <console>.
+    Return an <OK: status>.
 }
 ```
 

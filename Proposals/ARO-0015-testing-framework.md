@@ -34,16 +34,16 @@ Tests are identified by the **`Test` suffix** in the business activity:
 ```aro
 (* Production code - included in binary *)
 (add-numbers: Calculator) {
-    <Create> the <sum> with <a>.
-    <Return> an <OK: status> with <sum>.
+    Create the <sum> with <a>.
+    Return an <OK: status> with <sum>.
 }
 
 (* Test code - stripped from binary *)
 (add-positive-numbers: Calculator Test) {
-    <Given> the <a> with 5.
-    <Given> the <b> with 3.
-    <When> the <sum> from the <add-numbers>.
-    <Then> the <sum> with 8.
+    Given the <a> with 5.
+    Given the <b> with 3.
+    When the <sum> from the <add-numbers>.
+    Then the <sum> with 8.
 }
 ```
 
@@ -63,8 +63,8 @@ Four actions support BDD-style testing:
 Sets up test data by binding a value to a variable.
 
 ```aro
-<Given> the <variable> with <value>.
-<Given> the <request> with { email: "test@example.com" }.
+Given the <variable> with <value>.
+Given the <request> with { email: "test@example.com" }.
 ```
 
 - Role: `OWN`
@@ -76,7 +76,7 @@ Sets up test data by binding a value to a variable.
 Executes a feature set and captures the result.
 
 ```aro
-<When> the <result> from the <feature-set-name>.
+When the <result> from the <feature-set-name>.
 ```
 
 - Role: `OWN`
@@ -91,7 +91,7 @@ Executes a feature set and captures the result.
 Asserts that a value matches an expected result.
 
 ```aro
-<Then> the <variable> with <expected-value>.
+Then the <variable> with <expected-value>.
 ```
 
 - Role: `OWN`
@@ -104,7 +104,7 @@ Asserts that a value matches an expected result.
 Direct equality assertion (alternative to Then).
 
 ```aro
-<Assert> the <variable> with <expected-value>.
+Assert the <variable> with <expected-value>.
 ```
 
 - Role: `OWN`
@@ -167,55 +167,55 @@ aro build ./Examples/Calculator --verbose
 (* --- Application Entry Point --- *)
 
 (Application-Start: Calculator) {
-    <Log> the <message> for the <console> with "Calculator ready".
-    <Return> an <OK: status> for the <startup>.
+    Log the <message> for the <console> with "Calculator ready".
+    Return an <OK: status> for the <startup>.
 }
 
 (* --- Production Feature Sets --- *)
 
 (add-numbers: Calculator) {
-    <Create> the <sum> with <a>.
-    <Return> an <OK: status> with <sum>.
+    Create the <sum> with <a>.
+    Return an <OK: status> with <sum>.
 }
 
 (subtract-numbers: Calculator) {
-    <Create> the <difference> with <a>.
-    <Return> an <OK: status> with <difference>.
+    Create the <difference> with <a>.
+    Return an <OK: status> with <difference>.
 }
 
 (multiply-numbers: Calculator) {
-    <Create> the <product> with <a>.
-    <Return> an <OK: status> with <product>.
+    Create the <product> with <a>.
+    Return an <OK: status> with <product>.
 }
 
 (* --- Test Feature Sets --- *)
 
 (add-positive-numbers: Calculator Test) {
-    <Given> the <a> with 5.
-    <Given> the <b> with 3.
-    <When> the <sum> from the <add-numbers>.
-    <Then> the <sum> with 8.
+    Given the <a> with 5.
+    Given the <b> with 3.
+    When the <sum> from the <add-numbers>.
+    Then the <sum> with 8.
 }
 
 (add-zero: Calculator Test) {
-    <Given> the <a> with 10.
-    <Given> the <b> with 0.
-    <When> the <sum> from the <add-numbers>.
-    <Then> the <sum> with 10.
+    Given the <a> with 10.
+    Given the <b> with 0.
+    When the <sum> from the <add-numbers>.
+    Then the <sum> with 10.
 }
 
 (subtract-basic: Calculator Test) {
-    <Given> the <a> with 10.
-    <Given> the <b> with 4.
-    <When> the <difference> from the <subtract-numbers>.
-    <Then> the <difference> with 6.
+    Given the <a> with 10.
+    Given the <b> with 4.
+    When the <difference> from the <subtract-numbers>.
+    Then the <difference> with 6.
 }
 
 (multiply-basic: Calculator Test) {
-    <Given> the <a> with 6.
-    <Given> the <b> with 7.
-    <When> the <product> from the <multiply-numbers>.
-    <Then> the <product> with 42.
+    Given the <a> with 6.
+    Given the <b> with 7.
+    When the <product> from the <multiply-numbers>.
+    Then the <product> with 42.
 }
 ```
 

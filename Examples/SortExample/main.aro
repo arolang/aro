@@ -1,7 +1,7 @@
 (* SortExample - Demonstrating the Sort action *)
 
 (Application-Start: Sort Demo) {
-    <Log> "=== Sort Demo ===" to the <console>.
+    Log "=== Sort Demo ===" to the <console>.
 
     (* Sort action sorts arrays in ascending or descending order *)
     (* Supports verbs: Sort, Order, Arrange *)
@@ -9,41 +9,41 @@
     (* Sort order: ascending (default), descending *)
 
     (* Example 1: Sort numbers ascending *)
-    <Log> "--- Sorting Numbers (Ascending) ---" to the <console>.
-    <Create> the <numbers> with [5, 2, 8, 1, 9, 3].
-    <Log> "Original: " to the <console>.
-    <Log> <numbers> to the <console>.
-    <Sort> the <sorted-numbers> for the <numbers>.
-    <Log> "Sorted: " to the <console>.
-    <Log> <sorted-numbers> to the <console>.
+    Log "--- Sorting Numbers (Ascending) ---" to the <console>.
+    Create the <numbers> with [5, 2, 8, 1, 9, 3].
+    Log "Original: " to the <console>.
+    Log <numbers> to the <console>.
+    Sort the <sorted-numbers> for the <numbers>.
+    Log "Sorted: " to the <console>.
+    Log <sorted-numbers> to the <console>.
 
     (* Example 2: Sort numbers descending *)
-    <Log> "--- Sorting Numbers (Descending) ---" to the <console>.
-    <Create> the <more-numbers> with [10, 40, 20, 50, 30].
-    <Log> "Original: " to the <console>.
-    <Log> <more-numbers> to the <console>.
-    <Sort> the <descending-numbers: descending> for the <more-numbers>.
-    <Log> "Sorted descending: " to the <console>.
-    <Log> <descending-numbers> to the <console>.
+    Log "--- Sorting Numbers (Descending) ---" to the <console>.
+    Create the <more-numbers> with [10, 40, 20, 50, 30].
+    Log "Original: " to the <console>.
+    Log <more-numbers> to the <console>.
+    Sort the <descending-numbers: descending> for the <more-numbers>.
+    Log "Sorted descending: " to the <console>.
+    Log <descending-numbers> to the <console>.
 
     (* Example 3: Sort strings *)
-    <Log> "--- Sorting Strings ---" to the <console>.
-    <Create> the <fruits> with ["banana", "apple", "cherry", "date"].
-    <Log> "Original: " to the <console>.
-    <Log> <fruits> to the <console>.
-    <Sort> the <sorted-fruits> for the <fruits>.
-    <Log> "Sorted: " to the <console>.
-    <Log> <sorted-fruits> to the <console>.
+    Log "--- Sorting Strings ---" to the <console>.
+    Create the <fruits> with ["banana", "apple", "cherry", "date"].
+    Log "Original: " to the <console>.
+    Log <fruits> to the <console>.
+    Sort the <sorted-fruits> for the <fruits>.
+    Log "Sorted: " to the <console>.
+    Log <sorted-fruits> to the <console>.
 
     (* Example 4: Using Order verb *)
-    <Log> "--- Using Order Verb ---" to the <console>.
-    <Create> the <values> with [100, 50, 75, 25].
-    <Log> "Original: " to the <console>.
-    <Log> <values> to the <console>.
-    <Order> the <ordered-values> for the <values>.
-    <Log> "Ordered: " to the <console>.
-    <Log> <ordered-values> to the <console>.
+    Log "--- Using Order Verb ---" to the <console>.
+    Create the <values> with [100, 50, 75, 25].
+    Log "Original: " to the <console>.
+    Log <values> to the <console>.
+    Order the <ordered-values> for the <values>.
+    Log "Ordered: " to the <console>.
+    Log <ordered-values> to the <console>.
 
-    <Log> "All sorting complete!" to the <console>.
-    <Return> an <OK: status> for the <demo>.
+    Log "All sorting complete!" to the <console>.
+    Return an <OK: status> for the <demo>.
 }

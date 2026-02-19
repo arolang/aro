@@ -50,7 +50,7 @@ Create `crawler.aro` with the basic handler structure:
    ============================================================ *)
 
 (Crawl Page: CrawlPage Handler) {
-    <Return> an <OK: status> for the <crawl>.
+    Return an <OK: status> for the <crawl>.
 }
 ```
 
@@ -71,13 +71,13 @@ Add extraction of the URL and base domain:
 ```aro
 (Crawl Page: CrawlPage Handler) {
     (* Extract from event data *)
-    <Extract> the <event-data> from the <event: data>.
-    <Extract> the <url> from the <event-data: url>.
-    <Extract> the <base-domain> from the <event-data: base>.
+    Extract the <event-data> from the <event: data>.
+    Extract the <url> from the <event-data: url>.
+    Extract the <base-domain> from the <event-data: base>.
 
-    <Log> "Crawling: ${<url>}" to the <console>.
+    Log "Crawling: ${<url>}" to the <console>.
 
-    <Return> an <OK: status> for the <crawl>.
+    Return an <OK: status> for the <crawl>.
 }
 ```
 
@@ -93,7 +93,7 @@ Now we fetch the actual content:
     (* Previous code... *)
 
     (* Fetch the page *)
-    <Request> the <html> from the <url>.
+    Request the <html> from the <url>.
 ```
 
 `<Request>` makes an HTTP GET request and returns the response body. It is that simple. ARO handles redirects, HTTPS, and common errors automatically.
@@ -108,9 +108,9 @@ The `<ParseHtml>` action converts HTML to structured data:
     (* Previous code... *)
 
     (* Extract markdown content from HTML using ParseHtml action *)
-    <ParseHtml> the <markdown-result: markdown> from the <html>.
-    <Extract> the <title> from the <markdown-result: title>.
-    <Extract> the <markdown-content> from the <markdown-result: markdown>.
+    ParseHtml the <markdown-result: markdown> from the <html>.
+    Extract the <title> from the <markdown-result: title>.
+    Extract the <markdown-content> from the <markdown-result: markdown>.
 ```
 
 The `<ParseHtml>` action with the `markdown` specifier returns an object containing:
@@ -130,12 +130,12 @@ Finally, we emit events for the next stages:
     (* Previous code... *)
 
     (* Save the markdown content to file *)
-    <Emit> a <SavePage: event> with { url: <url>, title: <title>, content: <markdown-content>, base: <base-domain> }.
+    Emit a <SavePage: event> with { url: <url>, title: <title>, content: <markdown-content>, base: <base-domain> }.
 
     (* Extract links from the HTML *)
-    <Emit> a <ExtractLinks: event> with { url: <url>, html: <html>, base: <base-domain> }.
+    Emit a <ExtractLinks: event> with { url: <url>, html: <html>, base: <base-domain> }.
 
-    <Return> an <OK: status> for the <crawl>.
+    Return an <OK: status> for the <crawl>.
 ```
 
 We emit two events:
@@ -160,17 +160,17 @@ Here is everything we have built:
    ============================================================ *)
 
 (Crawl Page: CrawlPage Handler) {
-    <Extract> the <event-data> from the <event: data>.
-    <Extract> the <url> from the <event-data: url>.
-    <Extract> the <base-domain> from the <event-data: base>.
-    <Log> "Crawling: ${<url>}" to the <console>.
-    <Request> the <html> from the <url>.
-    <ParseHtml> the <markdown-result: markdown> from the <html>.
-    <Extract> the <title> from the <markdown-result: title>.
-    <Extract> the <markdown-content> from the <markdown-result: markdown>.
-    <Emit> a <SavePage: event> with { url: <url>, title: <title>, content: <markdown-content>, base: <base-domain> }.
-    <Emit> a <ExtractLinks: event> with { url: <url>, html: <html>, base: <base-domain> }.
-    <Return> an <OK: status> for the <crawl>.
+    Extract the <event-data> from the <event: data>.
+    Extract the <url> from the <event-data: url>.
+    Extract the <base-domain> from the <event-data: base>.
+    Log "Crawling: ${<url>}" to the <console>.
+    Request the <html> from the <url>.
+    ParseHtml the <markdown-result: markdown> from the <html>.
+    Extract the <title> from the <markdown-result: title>.
+    Extract the <markdown-content> from the <markdown-result: markdown>.
+    Emit a <SavePage: event> with { url: <url>, title: <title>, content: <markdown-content>, base: <base-domain> }.
+    Emit a <ExtractLinks: event> with { url: <url>, html: <html>, base: <base-domain> }.
+    Return an <OK: status> for the <crawl>.
 }
 ```
 
@@ -180,7 +180,7 @@ Eleven lines. Extract, log, fetch, parse, emit, return. Every line does exactly 
 
 ## 5.9 What ARO Does Well Here
 
-**Simple HTTP.** `<Request> the <html> from the <url>.` -- One line for HTTP GET. No client setup, no promise handling, no error callbacks.
+**Simple HTTP.** `Request the <html> from the <url>.` -- One line for HTTP GET. No client setup, no promise handling, no error callbacks.
 
 **Built-in HTML Parsing.** The `<ParseHtml>` action handles real-world HTML. It extracts titles, converts content, and produces clean Markdown without external libraries.
 
@@ -203,7 +203,7 @@ Eleven lines. Extract, log, fetch, parse, emit, return. Every line does exactly 
 - The `CrawlPage` handler is the core of our crawler
 - Deduplication is handled upstream by `QueueUrl`, keeping this handler focused
 - `<Request>` makes HTTP requests; the response body is returned directly
-- `<ParseHtml> ... markdown` converts HTML to Markdown and extracts the title
+- `ParseHtml ... markdown` converts HTML to Markdown and extracts the title
 - We emit `SavePage` and `ExtractLinks` events for downstream handlers
 - Event-driven design lets each handler focus on a single responsibility
 

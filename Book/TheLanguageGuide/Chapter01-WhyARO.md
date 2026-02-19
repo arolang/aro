@@ -29,7 +29,7 @@ ARO makes specific choices about what it will and won't express:
 
 **What ARO Has:**
 - 50 built-in actions (verbs like Extract, Compute, Return, Emit)
-- A fixed sentence structure: `<Action> the <Result> preposition the <Object>`
+- A fixed sentence structure: `Action the <Result> preposition the <Object>`
 - Feature sets that respond to events
 - First-class support for HTTP, files, and sockets
 - Native compilation to standalone binaries
@@ -79,11 +79,11 @@ Consider this ARO feature set:
 
 ```aro
 (createUser: User API) {
-    <Extract> the <data> from the <request: body>.
-    <Validate> the <data> against the <user: schema>.
-    <Create> the <user> with <data>.
-    <Emit> a <UserCreated: event> with <user>.
-    <Return> a <Created: status> with <user>.
+    Extract the <data> from the <request: body>.
+    Validate the <data> against the <user: schema>.
+    Create the <user> with <data>.
+    Emit a <UserCreated: event> with <user>.
+    Return a <Created: status> with <user>.
 }
 ```
 

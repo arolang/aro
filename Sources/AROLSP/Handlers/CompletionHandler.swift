@@ -381,14 +381,14 @@ public struct CompletionHandler: Sendable {
                 "label": "app start",
                 "kind": 15,
                 "detail": "Application start handler",
-                "insertText": "(Application-Start: ${1:App Name}) {\n\t<Log> \"Starting...\" to the <console>.\n\t$0\n\t<Return> an <OK: status> for the <startup>.\n}",
+                "insertText": "(Application-Start: ${1:App Name}) {\n\tLog \"Starting...\" to the <console>.\n\t$0\n\tReturn an <OK: status> for the <startup>.\n}",
                 "insertTextFormat": 2
             ],
             [
                 "label": "http handler",
                 "kind": 15,
                 "detail": "HTTP operation handler",
-                "insertText": "(${1:operationId}: ${2:API}) {\n\t<Extract> the <data> from the <request: body>.\n\t$0\n\t<Return> an <OK: status> with <result>.\n}",
+                "insertText": "(${1:operationId}: ${2:API}) {\n\tExtract the <data> from the <request: body>.\n\t$0\n\tReturn an <OK: status> with <result>.\n}",
                 "insertTextFormat": 2
             ],
         ]

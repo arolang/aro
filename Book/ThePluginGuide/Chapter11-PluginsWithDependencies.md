@@ -296,19 +296,19 @@ build:
 ```aro
 (Database Demo: Application-Start) {
     (* Open database *)
-    <Call> the <db> from the <sqlite: open> with {
+    Call the <db> from the <sqlite: open> with {
         path: "users.db",
         name: "users"
     }.
 
     (* Create table *)
-    <Call> the <_> from the <sqlite: execute> with {
+    Call the <_> from the <sqlite: execute> with {
         name: "users",
         sql: "CREATE TABLE IF NOT EXISTS users (id INTEGER PRIMARY KEY, name TEXT, email TEXT)"
     }.
 
     (* Insert data *)
-    <Call> the <inserted> from the <sqlite: insert> with {
+    Call the <inserted> from the <sqlite: insert> with {
         name: "users",
         table: "users",
         values: {
@@ -316,16 +316,16 @@ build:
             email: "alice@example.com"
         }
     }.
-    <Log> "Inserted row: " with <inserted: lastInsertRowid> to the <console>.
+    Log "Inserted row: " with <inserted: lastInsertRowid> to the <console>.
 
     (* Query data *)
-    <Call> the <results> from the <sqlite: query> with {
+    Call the <results> from the <sqlite: query> with {
         name: "users",
         sql: "SELECT * FROM users"
     }.
-    <Log> "Found " with <results: count> to the <console>.
+    Log "Found " with <results: count> to the <console>.
 
-    <Return> an <OK: status> for the <startup>.
+    Return an <OK: status> for the <startup>.
 }
 ```
 

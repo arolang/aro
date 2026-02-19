@@ -67,13 +67,13 @@ The simplest form of Store appends a value to a repository:
 
 ```aro
 (createUser: User API) {
-    <Extract> the <user-data> from the <request: body>.
-    <Create> the <user> with <user-data>.
+    Extract the <user-data> from the <request: body>.
+    Create the <user> with <user-data>.
 
     (* Store saves the user to the repository *)
-    <Store> the <user> into the <user-repository>.
+    Store the <user> into the <user-repository>.
 
-    <Return> a <Created: status> with <user>.
+    Return a <Created: status> with <user>.
 }
 ```
 
@@ -86,23 +86,23 @@ Data stored in a repository can be retrieved by any feature set:
 ```aro
 (listUsers: User API) {
     (* Retrieve all users from the repository *)
-    <Retrieve> the <users> from the <user-repository>.
-    <Return> an <OK: status> with <users>.
+    Retrieve the <users> from the <user-repository>.
+    Return an <OK: status> with <users>.
 }
 
 (getUser: User API) {
-    <Extract> the <id> from the <pathParameters: id>.
+    Extract the <id> from the <pathParameters: id>.
 
     (* Retrieve with a filter *)
-    <Retrieve> the <user> from the <user-repository> where id = <id>.
-    <Return> an <OK: status> with <user>.
+    Retrieve the <user> from the <user-repository> where id = <id>.
+    Return an <OK: status> with <user>.
 }
 ```
 
 The where clause filters the repository contents. Multiple conditions can be combined:
 
 ```aro
-<Retrieve> the <orders> from the <order-repository>
+Retrieve the <orders> from the <order-repository>
     where status = "pending" and customer = <customer-id>.
 ```
 
@@ -113,13 +113,13 @@ When data is stored, updated, or deleted in a repository, observers can react au
 ```aro
 (* This observer runs automatically when user-repository changes *)
 (Audit Changes: user-repository Observer) {
-    <Extract> the <changeType> from the <event: changeType>.
-    <Extract> the <entityId> from the <event: entityId>.
+    Extract the <changeType> from the <event: changeType>.
+    Extract the <entityId> from the <event: entityId>.
 
-    <Compute> the <message> from "[AUDIT] user-repository: " + <changeType> + " (id: " + <entityId> + ")".
-    <Log> <message> to the <console>.
+    Compute the <message> from "[AUDIT] user-repository: " + <changeType> + " (id: " + <entityId> + ")".
+    Log <message> to the <console>.
 
-    <Return> an <OK: status> for the <audit>.
+    Return an <OK: status> for the <audit>.
 }
 ```
 
@@ -154,14 +154,14 @@ Emit creates a domain event with a type and payload:
 
 ```aro
 (createUser: User API) {
-    <Extract> the <user-data> from the <request: body>.
-    <Create> the <user> with <user-data>.
-    <Store> the <user> into the <user-repository>.
+    Extract the <user-data> from the <request: body>.
+    Create the <user> with <user-data>.
+    Store the <user> into the <user-repository>.
 
     (* Emit notifies interested handlers *)
-    <Emit> a <UserCreated: event> with <user>.
+    Emit a <UserCreated: event> with <user>.
 
-    <Return> a <Created: status> with <user>.
+    Return a <Created: status> with <user>.
 }
 ```
 
@@ -172,30 +172,30 @@ The event type is derived from the result descriptor. In this case, `UserCreated
 Handlers receive the event payload and can extract data from it:
 
 ```aro
-(* Triggered by <Emit> a <UserCreated: event> with <user> *)
+(* Triggered by Emit a <UserCreated: event> with <user> *)
 (Send Welcome Email: UserCreated Handler) {
-    <Extract> the <user> from the <event: user>.
-    <Extract> the <email> from the <user: email>.
+    Extract the <user> from the <event: user>.
+    Extract the <email> from the <user: email>.
 
-    <Send> the <welcome-email> to the <email-service> with {
+    Send the <welcome-email> to the <email-service> with {
         to: <email>,
         subject: "Welcome!",
         template: "welcome"
     }.
 
-    <Return> an <OK: status> for the <notification>.
+    Return an <OK: status> for the <notification>.
 }
 
 (* Another handler for the same event *)
 (Track Signup: UserCreated Handler) {
-    <Extract> the <user> from the <event: user>.
+    Extract the <user> from the <event: user>.
 
-    <Send> the <analytics-event> to the <analytics-service> with {
+    Send the <analytics-event> to the <analytics-service> with {
         event: "user_signup",
         properties: <user>
     }.
 
-    <Return> an <OK: status> for the <tracking>.
+    Return an <OK: status> for the <tracking>.
 }
 ```
 
@@ -208,24 +208,24 @@ Handlers can emit additional events, creating processing chains:
 ```aro
 (* OrderPlaced triggers inventory reservation *)
 (Reserve Inventory: OrderPlaced Handler) {
-    <Extract> the <order> from the <event: order>.
-    <Update> the <inventory> for the <order: items>.
+    Extract the <order> from the <event: order>.
+    Update the <inventory> for the <order: items>.
 
     (* Continue the chain *)
-    <Emit> an <InventoryReserved: event> with <order>.
+    Emit an <InventoryReserved: event> with <order>.
 
-    <Return> an <OK: status> for the <reservation>.
+    Return an <OK: status> for the <reservation>.
 }
 
 (* InventoryReserved triggers payment *)
 (Process Payment: InventoryReserved Handler) {
-    <Extract> the <order> from the <event: order>.
-    <Send> the <charge> to the <payment-gateway> with <order>.
+    Extract the <order> from the <event: order>.
+    Send the <charge> to the <payment-gateway> with <order>.
 
     (* Continue the chain *)
-    <Emit> a <PaymentProcessed: event> with <order>.
+    Emit a <PaymentProcessed: event> with <order>.
 
-    <Return> an <OK: status> for the <payment>.
+    Return an <OK: status> for the <payment>.
 }
 ```
 
@@ -253,13 +253,13 @@ Publish registers a value under an alias:
 
 ```aro
 (Application-Start: Config Loader) {
-    <Read> the <config-data> from the <file: "./config.json">.
-    <Parse> the <config: JSON> from the <config-data>.
+    Read the <config-data> from the <file: "./config.json">.
+    Parse the <config: JSON> from the <config-data>.
 
     (* Make config available to all feature sets *)
-    <Publish> as <app-config> <config>.
+    Publish as <app-config> <config>.
 
-    <Return> an <OK: status> for the <startup>.
+    Return an <OK: status> for the <startup>.
 }
 ```
 
@@ -272,9 +272,9 @@ Published values can be referenced directly by their alias:
 ```aro
 (getApiUrl: Configuration Handler) {
     (* app-config was published at startup *)
-    <Extract> the <url> from the <app-config: apiUrl>.
+    Extract the <url> from the <app-config: apiUrl>.
 
-    <Return> an <OK: status> with <url>.
+    Return an <OK: status> with <url>.
 }
 ```
 
@@ -351,13 +351,13 @@ A common mistake is emitting an event when you need persistent data:
 ```aro
 (* WRONG: Events are transient *)
 (createMessage: Chat API) {
-    <Extract> the <message-data> from the <request: body>.
-    <Create> the <message> with <message-data>.
+    Extract the <message-data> from the <request: body>.
+    Create the <message> with <message-data>.
 
     (* This event disappears after handlers complete! *)
-    <Emit> a <MessageCreated: event> with <message>.
+    Emit a <MessageCreated: event> with <message>.
 
-    <Return> a <Created: status> with <message>.
+    Return a <Created: status> with <message>.
 }
 
 (listMessages: Chat API) {
@@ -371,22 +371,22 @@ The fix is to Store the data:
 ```aro
 (* CORRECT: Store for persistence, Emit for notifications *)
 (createMessage: Chat API) {
-    <Extract> the <message-data> from the <request: body>.
-    <Create> the <message> with <message-data>.
+    Extract the <message-data> from the <request: body>.
+    Create the <message> with <message-data>.
 
     (* Store the message for later retrieval *)
-    <Store> the <message> into the <message-repository>.
+    Store the <message> into the <message-repository>.
 
     (* Also emit for any handlers that want to react *)
-    <Emit> a <MessageCreated: event> with <message>.
+    Emit a <MessageCreated: event> with <message>.
 
-    <Return> a <Created: status> with <message>.
+    Return a <Created: status> with <message>.
 }
 
 (listMessages: Chat API) {
     (* Now we can retrieve stored messages *)
-    <Retrieve> the <messages> from the <message-repository>.
-    <Return> an <OK: status> with <messages>.
+    Retrieve the <messages> from the <message-repository>.
+    Return an <OK: status> with <messages>.
 }
 ```
 
@@ -397,18 +397,18 @@ Another mistake is storing data just to trigger an observer when Emit would be c
 ```aro
 (* AWKWARD: Using store just to trigger behavior *)
 (processPayment: Payment API) {
-    <Extract> the <payment> from the <request: body>.
+    Extract the <payment> from the <request: body>.
 
     (* Storing just to trigger the observer *)
-    <Store> the <payment> into the <payment-notification-repository>.
+    Store the <payment> into the <payment-notification-repository>.
 
-    <Return> an <OK: status> with <payment>.
+    Return an <OK: status> with <payment>.
 }
 
 (Send Receipt: payment-notification-repository Observer) {
     (* This works but is awkward *)
-    <Extract> the <payment> from the <event: newValue>.
-    <Send> the <receipt> to the <email-service>.
+    Extract the <payment> from the <event: newValue>.
+    Send the <receipt> to the <email-service>.
 }
 ```
 
@@ -417,17 +417,17 @@ The fix is to use Emit for reactive behavior:
 ```aro
 (* BETTER: Use Emit for reactive communication *)
 (processPayment: Payment API) {
-    <Extract> the <payment> from the <request: body>.
+    Extract the <payment> from the <request: body>.
 
     (* Emit for handlers that need to react *)
-    <Emit> a <PaymentProcessed: event> with <payment>.
+    Emit a <PaymentProcessed: event> with <payment>.
 
-    <Return> an <OK: status> with <payment>.
+    Return an <OK: status> with <payment>.
 }
 
 (Send Receipt: PaymentProcessed Handler) {
-    <Extract> the <payment> from the <event: payment>.
-    <Send> the <receipt> to the <email-service>.
+    Extract the <payment> from the <event: payment>.
+    Send the <receipt> to the <email-service>.
 }
 ```
 
@@ -440,13 +440,13 @@ Publish is sometimes overused when Emit would provide better decoupling:
 ```aro
 (* QUESTIONABLE: Publishing user for other feature sets *)
 (createUser: User API) {
-    <Create> the <user> with <user-data>.
-    <Store> the <user> into the <user-repository>.
+    Create the <user> with <user-data>.
+    Store the <user> into the <user-repository>.
 
     (* Publishing forces other feature sets to poll for this value *)
-    <Publish> as <latest-user> <user>.
+    Publish as <latest-user> <user>.
 
-    <Return> a <Created: status> with <user>.
+    Return a <Created: status> with <user>.
 }
 ```
 
@@ -455,13 +455,13 @@ The problem is that other feature sets must know to check for the published valu
 ```aro
 (* BETTER: Emit notifies interested parties automatically *)
 (createUser: User API) {
-    <Create> the <user> with <user-data>.
-    <Store> the <user> into the <user-repository>.
+    Create the <user> with <user-data>.
+    Store the <user> into the <user-repository>.
 
     (* Handlers are triggered automatically *)
-    <Emit> a <UserCreated: event> with <user>.
+    Emit a <UserCreated: event> with <user>.
 
-    <Return> a <Created: status> with <user>.
+    Return a <Created: status> with <user>.
 }
 ```
 
@@ -477,15 +477,15 @@ Here is a realistic example that uses all three export actions appropriately. Th
 
 ```aro
 (Application-Start: User Service) {
-    <Read> the <config-data> from the <file: "./config.json">.
-    <Parse> the <config: JSON> from the <config-data>.
+    Read the <config-data> from the <file: "./config.json">.
+    Parse the <config: JSON> from the <config-data>.
 
     (* Publish config for all feature sets *)
-    <Publish> as <app-config> <config>.
+    Publish as <app-config> <config>.
 
-    <Start> the <http-server> with <contract>.
-    <Keepalive> the <application> for the <events>.
-    <Return> an <OK: status> for the <startup>.
+    Start the <http-server> with <contract>.
+    Keepalive the <application> for the <events>.
+    Return an <OK: status> for the <startup>.
 }
 ```
 
@@ -493,32 +493,32 @@ Here is a realistic example that uses all three export actions appropriately. Th
 
 ```aro
 (createUser: User API) {
-    <Extract> the <user-data> from the <request: body>.
-    <Create> the <user> with <user-data>.
+    Extract the <user-data> from the <request: body>.
+    Create the <user> with <user-data>.
 
     (* Store for persistence — we need to retrieve users later *)
-    <Store> the <user> into the <user-repository>.
+    Store the <user> into the <user-repository>.
 
     (* Emit for reactive behavior — handlers will send emails, track analytics *)
-    <Emit> a <UserCreated: event> with <user>.
+    Emit a <UserCreated: event> with <user>.
 
-    <Return> a <Created: status> with <user>.
+    Return a <Created: status> with <user>.
 }
 
 (getUser: User API) {
-    <Extract> the <id> from the <pathParameters: id>.
+    Extract the <id> from the <pathParameters: id>.
 
     (* Retrieve stored user *)
-    <Retrieve> the <user> from the <user-repository> where id = <id>.
+    Retrieve the <user> from the <user-repository> where id = <id>.
 
-    <Return> an <OK: status> with <user>.
+    Return an <OK: status> with <user>.
 }
 
 (listUsers: User API) {
     (* Retrieve all stored users *)
-    <Retrieve> the <users> from the <user-repository>.
+    Retrieve the <users> from the <user-repository>.
 
-    <Return> an <OK: status> with <users>.
+    Return an <OK: status> with <users>.
 }
 ```
 
@@ -527,30 +527,30 @@ Here is a realistic example that uses all three export actions appropriately. Th
 ```aro
 (* Send welcome email when user is created *)
 (Send Welcome Email: UserCreated Handler) {
-    <Extract> the <user> from the <event: user>.
-    <Extract> the <email> from the <user: email>.
+    Extract the <user> from the <event: user>.
+    Extract the <email> from the <user: email>.
 
     (* Access published config *)
-    <Extract> the <from-address> from the <app-config: email.fromAddress>.
+    Extract the <from-address> from the <app-config: email.fromAddress>.
 
-    <Send> the <welcome-email> to the <email-service> with {
+    Send the <welcome-email> to the <email-service> with {
         to: <email>,
         from: <from-address>,
         subject: "Welcome to our service!",
         template: "welcome"
     }.
 
-    <Return> an <OK: status> for the <notification>.
+    Return an <OK: status> for the <notification>.
 }
 
 (* Track signup in analytics *)
 (Track Signup: UserCreated Handler) {
-    <Extract> the <user> from the <event: user>.
+    Extract the <user> from the <event: user>.
 
     (* Access published config *)
-    <Extract> the <analytics-key> from the <app-config: analytics.apiKey>.
+    Extract the <analytics-key> from the <app-config: analytics.apiKey>.
 
-    <Send> the <analytics-event> to the <analytics-service> with {
+    Send the <analytics-event> to the <analytics-service> with {
         apiKey: <analytics-key>,
         event: "user_signup",
         properties: {
@@ -560,7 +560,7 @@ Here is a realistic example that uses all three export actions appropriately. Th
         }
     }.
 
-    <Return> an <OK: status> for the <tracking>.
+    Return an <OK: status> for the <tracking>.
 }
 ```
 
@@ -569,14 +569,14 @@ Here is a realistic example that uses all three export actions appropriately. Th
 ```aro
 (* Audit all changes to user repository *)
 (Audit User Changes: user-repository Observer) {
-    <Extract> the <changeType> from the <event: changeType>.
-    <Extract> the <entityId> from the <event: entityId>.
-    <Extract> the <timestamp> from the <event: timestamp>.
+    Extract the <changeType> from the <event: changeType>.
+    Extract the <entityId> from the <event: entityId>.
+    Extract the <timestamp> from the <event: timestamp>.
 
-    <Compute> the <message> from "[AUDIT] " + <timestamp> + " user-repository: " + <changeType> + " (id: " + <entityId> + ")".
-    <Log> <message> to the <console>.
+    Compute the <message> from "[AUDIT] " + <timestamp> + " user-repository: " + <changeType> + " (id: " + <entityId> + ")".
+    Log <message> to the <console>.
 
-    <Return> an <OK: status> for the <audit>.
+    Return an <OK: status> for the <audit>.
 }
 ```
 

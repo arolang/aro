@@ -53,7 +53,7 @@ Without metrics, developers cannot answer:
 The `<metrics>` variable is automatically available in all feature sets:
 
 ```aro
-<Log> the <metrics> to the <console>.
+Log the <metrics> to the <console>.
 ```
 
 ### 2.2 Format Qualifiers
@@ -62,10 +62,10 @@ Use qualifiers to specify output format:
 
 ```aro
 (* Different output formats *)
-<Log> the <metrics: plain> to the <console>.       (* Context-aware full output *)
-<Log> the <metrics: short> to the <console>.       (* One-liner summary *)
-<Log> the <metrics: table> to the <console>.       (* ASCII table *)
-<Log> the <metrics: prometheus> to the <console>.  (* Prometheus text format *)
+Log the <metrics: plain> to the <console>.       (* Context-aware full output *)
+Log the <metrics: short> to the <console>.       (* One-liner summary *)
+Log the <metrics: table> to the <console>.       (* ASCII table *)
+Log the <metrics: prometheus> to the <console>.  (* Prometheus text format *)
 ```
 
 | Qualifier | Description | Use Case |
@@ -81,8 +81,8 @@ Without a qualifier, `<metrics>` uses `plain` format:
 
 ```aro
 (* These are equivalent *)
-<Log> the <metrics> to the <console>.
-<Log> the <metrics: plain> to the <console>.
+Log the <metrics> to the <console>.
+Log the <metrics: plain> to the <console>.
 ```
 
 ---
@@ -288,12 +288,12 @@ if result.base == "metrics" {
 
 ```aro
 (Application-Start: Metrics Demo) {
-    <Log> "Starting application..." to the <console>.
+    Log "Starting application..." to the <console>.
 
     (* Log metrics at startup - will show 1 execution *)
-    <Log> the <metrics: short> to the <console>.
+    Log the <metrics: short> to the <console>.
 
-    <Return> an <OK: status> for the <startup>.
+    Return an <OK: status> for the <startup>.
 }
 ```
 
@@ -301,7 +301,7 @@ if result.base == "metrics" {
 
 ```aro
 (getMetrics: Monitoring API) {
-    <Return> an <OK: status> with <metrics: prometheus>.
+    Return an <OK: status> with <metrics: prometheus>.
 }
 ```
 
@@ -324,8 +324,8 @@ paths:
 
 ```aro
 (Log Metrics: Timer Handler) {
-    <Log> the <metrics: table> to the <console>.
-    <Return> an <OK: status> for the <logging>.
+    Log the <metrics: table> to the <console>.
+    Return an <OK: status> for the <logging>.
 }
 ```
 
@@ -333,9 +333,9 @@ paths:
 
 ```aro
 (Application-End: Success) {
-    <Log> "Final metrics:" to the <console>.
-    <Log> the <metrics: plain> to the <console>.
-    <Return> an <OK: status> for the <shutdown>.
+    Log "Final metrics:" to the <console>.
+    Log the <metrics: plain> to the <console>.
+    Return an <OK: status> for the <shutdown>.
 }
 ```
 

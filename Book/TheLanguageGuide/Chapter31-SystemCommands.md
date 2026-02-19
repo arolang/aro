@@ -10,13 +10,13 @@ The preferred syntax places the command name in the object specifier:
 
 ```aro
 (* Simple command *)
-<Exec> the <result> for the <command: "uptime">.
+Exec the <result> for the <command: "uptime">.
 
 (* Command with arguments *)
-<Exec> the <result> for the <command: "ls"> with "-la".
+Exec the <result> for the <command: "ls"> with "-la".
 
 (* Command with multiple arguments *)
-<Exec> the <result> for the <command: "ls"> with ["-l", "-a", "-h"].
+Exec the <result> for the <command: "ls"> with ["-l", "-a", "-h"].
 ```
 
 This syntax clearly separates the command from its arguments, making code more readable.
@@ -26,9 +26,9 @@ This syntax clearly separates the command from its arguments, making code more r
 The legacy syntax with full command in the `with` clause is still supported:
 
 ```aro
-<Exec> the <result> for the <command> with "ls -la".
-<Exec> the <listing> for the <files> with "find . -name '*.txt'".
-<Exec> the <status> for the <check> with "git status".
+Exec the <result> for the <command> with "ls -la".
+Exec the <listing> for the <files> with "find . -name '*.txt'".
+Exec the <status> for the <check> with "git status".
 ```
 
 ### Using Variables
@@ -36,11 +36,11 @@ The legacy syntax with full command in the `with` clause is still supported:
 Build commands dynamically with variables:
 
 ```aro
-<Create> the <directory> with "/var/log".
-<Exec> the <result> for the <command: "ls"> with "-la ${directory}".
+Create the <directory> with "/var/log".
+Exec the <result> for the <command: "ls"> with "-la ${directory}".
 
-<Create> the <pattern> with "*.aro".
-<Exec> the <files> for the <command: "find"> with [". ", "-name", "${pattern}"].
+Create the <pattern> with "*.aro".
+Exec the <files> for the <command: "find"> with [". ", "-name", "${pattern}"].
 ```
 
 ## Result Object
@@ -58,14 +58,14 @@ Every `<Exec>` action returns a structured result object:
 ### Accessing Result Fields
 
 ```aro
-<Exec> the <result> for the <command> with "whoami".
+Exec the <result> for the <command> with "whoami".
 
 (* Access individual fields *)
-<Log> <result.output> to the <console>.
-<Log> <result.exitCode> to the <console>.
+Log <result.output> to the <console>.
+Log <result.exitCode> to the <console>.
 
 (* Check for errors *)
-<Log> <result.message> to the <console> when <result.error> = true.
+Log <result.message> to the <console> when <result.error> = true.
 ```
 
 ## Error Handling
@@ -74,12 +74,12 @@ Every `<Exec>` action returns a structured result object:
 
 ```aro
 (Check Disk Space: System Monitor) {
-    <Exec> the <result> for the <disk-check> with "df -h".
+    Exec the <result> for the <disk-check> with "df -h".
 
-    <Log> <result.message> to the <console> when <result.error> = true.
-    <Return> an <Error: status> with <result> when <result.error> = true.
+    Log <result.message> to the <console> when <result.error> = true.
+    Return an <Error: status> with <result> when <result.error> = true.
 
-    <Return> an <OK: status> with <result>.
+    Return an <OK: status> with <result>.
 }
 ```
 
@@ -87,14 +87,14 @@ Every `<Exec>` action returns a structured result object:
 
 ```aro
 (Git Status: Version Control) {
-    <Exec> the <result> for the <git> with "git status --porcelain".
+    Exec the <result> for the <git> with "git status --porcelain".
 
-    <Log> "Not a git repository" to the <console> when <result.exitCode> != 0.
-    <Return> a <BadRequest: status> with { error: "Not a git repository" } when <result.exitCode> != 0.
+    Log "Not a git repository" to the <console> when <result.exitCode> != 0.
+    Return a <BadRequest: status> with { error: "Not a git repository" } when <result.exitCode> != 0.
 
-    <Return> an <OK: status> with { message: "Working tree clean" } when <result.output> is empty.
+    Return an <OK: status> with { message: "Working tree clean" } when <result.output> is empty.
 
-    <Return> an <OK: status> with { changes: <result.output> }.
+    Return an <OK: status> with { changes: <result.output> }.
 }
 ```
 
@@ -103,12 +103,12 @@ Every `<Exec>` action returns a structured result object:
 Commands that exceed the timeout return with `exitCode: -1`:
 
 ```aro
-<Exec> the <result> for the <long-task> with {
+Exec the <result> for the <long-task> with {
     command: "sleep 60",
     timeout: 5000
 }.
 
-<Log> "Command timed out" to the <console> when <result.exitCode> = -1.
+Log "Command timed out" to the <console> when <result.exitCode> = -1.
 ```
 
 ## Configuration Options
@@ -116,7 +116,7 @@ Commands that exceed the timeout return with `exitCode: -1`:
 For advanced control, use object syntax:
 
 ```aro
-<Exec> the <result> on the <system> with {
+Exec the <result> on the <system> with {
     command: "npm install",
     workingDirectory: "/app",
     timeout: 60000,
@@ -177,9 +177,9 @@ output:
 
 ```aro
 (Application-Start: Directory Lister) {
-    <Log> "Directory Lister" to the <console>.
-    <Exec> the <listing> for the <command> with "ls -la".
-    <Return> an <OK: status> for the <listing>.
+    Log "Directory Lister" to the <console>.
+    Exec the <listing> for the <command> with "ls -la".
+    Return an <OK: status> for the <listing>.
 }
 ```
 
@@ -187,17 +187,17 @@ output:
 
 ```aro
 (System Info: Status API) {
-    <Exec> the <hostname> for the <command: "hostname">.
-    <Exec> the <uptime> for the <command: "uptime">.
-    <Exec> the <memory> for the <command: "free"> with "-h".
+    Exec the <hostname> for the <command: "hostname">.
+    Exec the <uptime> for the <command: "uptime">.
+    Exec the <memory> for the <command: "free"> with "-h".
 
-    <Create> the <info> with {
+    Create the <info> with {
         hostname: <hostname.output>,
         uptime: <uptime.output>,
         memory: <memory.output>
     }.
 
-    <Return> an <OK: status> with <info>.
+    Return an <OK: status> with <info>.
 }
 ```
 
@@ -205,30 +205,30 @@ output:
 
 ```aro
 (Run Build: CI Pipeline) {
-    <Log> "Installing dependencies..." to the <console>.
-    <Exec> the <install> for the <npm> with {
+    Log "Installing dependencies..." to the <console>.
+    Exec the <install> for the <npm> with {
         command: "npm install",
         workingDirectory: "./app",
         timeout: 120000
     }.
 
-    <Return> an <Error: status> with <install> when <install.error> = true.
+    Return an <Error: status> with <install> when <install.error> = true.
 
-    <Log> "Running tests..." to the <console>.
-    <Exec> the <test> for the <npm> with {
+    Log "Running tests..." to the <console>.
+    Exec the <test> for the <npm> with {
         command: "npm test",
         workingDirectory: "./app"
     }.
 
-    <Return> an <Error: status> with <test> when <test.error> = true.
+    Return an <Error: status> with <test> when <test.error> = true.
 
-    <Log> "Building..." to the <console>.
-    <Exec> the <build> for the <npm> with {
+    Log "Building..." to the <console>.
+    Exec the <build> for the <npm> with {
         command: "npm run build",
         workingDirectory: "./app"
     }.
 
-    <Return> an <OK: status> with <build>.
+    Return an <OK: status> with <build>.
 }
 ```
 
@@ -236,17 +236,17 @@ output:
 
 ```aro
 (Health Check: Monitoring) {
-    <Exec> the <curl> for the <health> with {
+    Exec the <curl> for the <health> with {
         command: "curl -s http://localhost:8080/health",
         timeout: 5000
     }.
 
-    <Return> a <ServiceUnavailable: status> with {
+    Return a <ServiceUnavailable: status> with {
         service: "api",
         error: <curl.message>
     } when <curl.error> = true.
 
-    <Return> an <OK: status> with { healthy: true }.
+    Return an <OK: status> with { healthy: true }.
 }
 ```
 
@@ -254,17 +254,17 @@ output:
 
 ```aro
 (List Processes: Admin API) {
-    <Exec> the <processes> for the <list> with "ps aux | head -20".
-    <Return> an <OK: status> with <processes>.
+    Exec the <processes> for the <list> with "ps aux | head -20".
+    Return an <OK: status> with <processes>.
 }
 
 (Check Process: Admin API) {
-    <Extract> the <name> from the <queryParameters: name>.
-    <Exec> the <result> for the <check> with "pgrep -l ${name}".
+    Extract the <name> from the <queryParameters: name>.
+    Exec the <result> for the <check> with "pgrep -l ${name}".
 
-    <Return> an <OK: status> with { running: false, process: <name> } when <result.error> = true.
+    Return an <OK: status> with { running: false, process: <name> } when <result.error> = true.
 
-    <Return> an <OK: status> with { running: true, process: <name>, pids: <result.output> }.
+    Return an <OK: status> with { running: true, process: <name>, pids: <result.output> }.
 }
 ```
 
@@ -276,12 +276,12 @@ Be cautious when constructing commands from user input:
 
 ```aro
 (* DANGEROUS - user input directly in command *)
-<Exec> the <result> for the <command> with "ls ${userInput}".
+Exec the <result> for the <command> with "ls ${userInput}".
 
 (* SAFER - validate input first *)
-<Validate> the <path> for the <userInput> against "^[a-zA-Z0-9_/.-]+$".
-<Return> a <BadRequest: status> with "Invalid path characters" when <path> is not <valid>.
-<Exec> the <result> for the <command> with "ls ${path}".
+Validate the <path> for the <userInput> against "^[a-zA-Z0-9_/.-]+$".
+Return a <BadRequest: status> with "Invalid path characters" when <path> is not <valid>.
+Exec the <result> for the <command> with "ls ${path}".
 ```
 
 ### Best Practices
@@ -297,7 +297,7 @@ Be cautious when constructing commands from user input:
 Future versions may support sandboxing options:
 
 ```aro
-<Exec> the <result> for the <command> with {
+Exec the <result> for the <command> with {
     command: "npm install",
     sandbox: {
         network: false,

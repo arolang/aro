@@ -70,9 +70,9 @@ After the server starts, you use the Keepalive action to keep the application ru
 
 ```aro
 (Application-Start: User API) {
-    <Log> "API starting..." to the <console>.
-    <Keepalive> the <application> for the <events>.
-    <Return> an <OK: status> for the <startup>.
+    Log "API starting..." to the <console>.
+    Keepalive the <application> for the <events>.
+    Return an <OK: status> for the <startup>.
 }
 ```
 

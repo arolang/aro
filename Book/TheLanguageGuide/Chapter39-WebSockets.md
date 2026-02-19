@@ -51,9 +51,9 @@ Handle WebSocket events using the `WebSocket Event Handler` business activity pa
 
 ```aro
 (Handle WebSocket Connect: WebSocket Event Handler) {
-    <Extract> the <connection-id> from the <event: id>.
-    <Log> "WebSocket client connected" to the <console>.
-    <Return> an <OK: status> for the <connection>.
+    Extract the <connection-id> from the <event: id>.
+    Log "WebSocket client connected" to the <console>.
+    Return an <OK: status> for the <connection>.
 }
 ```
 
@@ -69,11 +69,11 @@ The `event` object contains:
 
 ```aro
 (Handle WebSocket Message: WebSocket Event Handler) {
-    <Extract> the <message> from the <event: message>.
-    <Extract> the <connection-id> from the <event: connectionId>.
-    <Log> "Received: " to the <console>.
-    <Log> <message> to the <console>.
-    <Return> an <OK: status> for the <message>.
+    Extract the <message> from the <event: message>.
+    Extract the <connection-id> from the <event: connectionId>.
+    Log "Received: " to the <console>.
+    Log <message> to the <console>.
+    Return an <OK: status> for the <message>.
 }
 ```
 
@@ -88,9 +88,9 @@ The `event` object contains:
 
 ```aro
 (Handle WebSocket Disconnect: WebSocket Event Handler) {
-    <Extract> the <connection-id> from the <event: connectionId>.
-    <Log> "WebSocket client disconnected" to the <console>.
-    <Return> an <OK: status> for the <disconnection>.
+    Extract the <connection-id> from the <event: connectionId>.
+    Log "WebSocket client disconnected" to the <console>.
+    Return an <OK: status> for the <disconnection>.
 }
 ```
 
@@ -108,7 +108,7 @@ The `event` object contains:
 Send a message to all connected WebSocket clients:
 
 ```aro
-<Broadcast> the <message> to the <websocket>.
+Broadcast the <message> to the <websocket>.
 ```
 
 This is commonly used when new data should be pushed to all clients, such as a new chat message or status update.
@@ -118,7 +118,7 @@ This is commonly used when new data should be pushed to all clients, such as a n
 Send a message to a single connection (future extension):
 
 ```aro
-<Send> the <message> to the <websocket-connection: connectionId>.
+Send the <message> to the <websocket-connection: connectionId>.
 ```
 
 ## Complete Example: Web Chat
@@ -141,18 +141,18 @@ WebChat/
 
 ```aro
 (Application-Start: Web Chat) {
-    <Log> "Starting Web Chat..." to the <console>.
-    <Start> the <http-server> with { websocket: "/ws" }.
-    <Log> "Server ready on http://localhost:8080" to the <console>.
-    <Log> "WebSocket available on ws://localhost:8080/ws" to the <console>.
-    <Keepalive> the <application> for the <events>.
-    <Return> an <OK: status> for the <startup>.
+    Log "Starting Web Chat..." to the <console>.
+    Start the <http-server> with { websocket: "/ws" }.
+    Log "Server ready on http://localhost:8080" to the <console>.
+    Log "WebSocket available on ws://localhost:8080/ws" to the <console>.
+    Keepalive the <application> for the <events>.
+    Return an <OK: status> for the <startup>.
 }
 
 (Application-End: Success) {
-    <Log> "Web Chat shutting down..." to the <console>.
-    <Stop> the <http-server> with {}.
-    <Return> an <OK: status> for the <shutdown>.
+    Log "Web Chat shutting down..." to the <console>.
+    Stop the <http-server> with {}.
+    Return an <OK: status> for the <shutdown>.
 }
 ```
 
@@ -160,28 +160,28 @@ WebChat/
 
 ```aro
 (homePage: Web Chat API) {
-    <Transform> the <html> from the <template: index.html>.
-    <Return> an <OK: status> with <html>.
+    Transform the <html> from the <template: index.html>.
+    Return an <OK: status> with <html>.
 }
 
 (getMessages: Web Chat API) {
-    <Retrieve> the <all-messages> from the <message-repository>.
-    <Return> an <OK: status> with <all-messages>.
+    Retrieve the <all-messages> from the <message-repository>.
+    Return an <OK: status> with <all-messages>.
 }
 
 (postMessage: Web Chat API) {
-    <Extract> the <body> from the <request: body>.
-    <Extract> the <message-text: message> from the <body>.
-    <Create> the <message: Message> with {
+    Extract the <body> from the <request: body>.
+    Extract the <message-text: message> from the <body>.
+    Create the <message: Message> with {
         message: <message-text>,
         createdAt: <now>
     }.
-    <Store> the <message> into the <message-repository>.
+    Store the <message> into the <message-repository>.
 
     (* Broadcast to all WebSocket clients *)
-    <Broadcast> the <message> to the <websocket>.
+    Broadcast the <message> to the <websocket>.
 
-    <Return> a <Created: status> with <message>.
+    Return a <Created: status> with <message>.
 }
 ```
 
@@ -189,15 +189,15 @@ WebChat/
 
 ```aro
 (Handle WebSocket Connect: WebSocket Event Handler) {
-    <Extract> the <connection-id> from the <event: id>.
-    <Log> "WebSocket client connected" to the <console>.
-    <Return> an <OK: status> for the <connection>.
+    Extract the <connection-id> from the <event: id>.
+    Log "WebSocket client connected" to the <console>.
+    Return an <OK: status> for the <connection>.
 }
 
 (Handle WebSocket Disconnect: WebSocket Event Handler) {
-    <Extract> the <connection-id> from the <event: connectionId>.
-    <Log> "WebSocket client disconnected" to the <console>.
-    <Return> an <OK: status> for the <disconnection>.
+    Extract the <connection-id> from the <event: connectionId>.
+    Log "WebSocket client disconnected" to the <console>.
+    Return an <OK: status> for the <disconnection>.
 }
 ```
 
@@ -272,7 +272,7 @@ async function postMessage(text) {
 WebSocket is enabled by specifying the path in the `Start` action:
 
 ```aro
-<Start> the <http-server> with { websocket: "/ws" }.
+Start the <http-server> with { websocket: "/ws" }.
 ```
 
 This enables WebSocket upgrades on the specified path. Clients can then connect:
@@ -285,14 +285,14 @@ You can choose any path for your WebSocket endpoint:
 
 ```aro
 (* Custom WebSocket path *)
-<Start> the <http-server> with { websocket: "/realtime" }.
+Start the <http-server> with { websocket: "/realtime" }.
 ```
 
 If you omit the websocket configuration, WebSocket connections will not be available:
 
 ```aro
 (* HTTP only, no WebSocket *)
-<Start> the <http-server> with {}.
+Start the <http-server> with {}.
 ```
 
 ## Comparison with TCP Sockets

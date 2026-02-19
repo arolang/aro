@@ -10,7 +10,7 @@ This chapter provides an honest evaluation of ARO's design decisions—what work
 
 ### Uniform Syntax
 
-ARO's rigid `<Action> the <Result> from the <Object>` structure enables simple tooling:
+ARO's rigid `Action the <Result> from the <Object>` structure enables simple tooling:
 
 - **Parsing**: Every statement follows the same pattern
 - **Analysis**: Data flow is explicit in the syntax
@@ -24,10 +24,10 @@ The constraint that seemed limiting during design has proven valuable in practic
 Sequential execution with explicit short-circuit points makes debugging straightforward:
 
 ```aro
-<Extract> the <user> from the <request: body>.    (* 1 *)
-<Validate> the <user> with <schema>.              (* 2 - might short-circuit *)
-<Store> the <user> into the <user-repository>.   (* 3 *)
-<Return> an <OK: status> for the <creation>.     (* 4 *)
+Extract the <user> from the <request: body>.    (* 1 *)
+Validate the <user> with <schema>.              (* 2 - might short-circuit *)
+Store the <user> into the <user-repository>.   (* 3 *)
+Return an <OK: status> for the <creation>.     (* 4 *)
 ```
 
 When something fails, you know exactly which statement failed and why.
@@ -47,8 +47,8 @@ No explicit wiring code; the EventBus handles all routing.
 The verbose syntax reads like prose:
 
 ```aro
-<Extract> the <email> from the <user: profile: contact: email>.
-<Send> the <welcome-message> to the <email>.
+Extract the <email> from the <user: profile: contact: email>.
+Send the <welcome-message> to the <email>.
 ```
 
 Even non-programmers can follow the logic.
@@ -151,14 +151,14 @@ let handlerFunc = unsafeBitCast(funcPtr, to: HandlerFunc.self)
 The idea: prepositions carry semantic meaning (from = source, to = destination, with = modification).
 
 ```aro
-<Extract> the <data> from the <request>.   (* from = source *)
-<Send> the <message> to the <user>.        (* to = destination *)
-<Update> the <user> with <changes>.        (* with = modification *)
+Extract the <data> from the <request>.   (* from = source *)
+Send the <message> to the <user>.        (* to = destination *)
+Update the <user> with <changes>.        (* with = modification *)
 ```
 
 **The Problem**: Too subtle. Developers don't intuitively distinguish between:
-- `<Store> the <user> into the <repository>.`
-- `<Store> the <user> to the <repository>.`
+- `Store the <user> into the <repository>.`
+- `Store the <user> to the <repository>.`
 
 Both seem valid, but only one is correct.
 
@@ -171,7 +171,7 @@ Both seem valid, but only one is correct.
 The idea: Types are inferred from usage and OpenAPI schemas.
 
 ```aro
-<Extract> the <user> from the <request: body>.  (* user type comes from OpenAPI *)
+Extract the <user> from the <request: body>.  (* user type comes from OpenAPI *)
 ```
 
 **The Problem**: Tooling becomes harder:
@@ -181,7 +181,7 @@ The idea: Types are inferred from usage and OpenAPI schemas.
 
 **What We'd Change**: Optional type annotations with inference as fallback:
 ```aro
-<Extract> the <user: User> from the <request: body>.
+Extract the <user: User> from the <request: body>.
 ```
 
 ---

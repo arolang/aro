@@ -13,11 +13,12 @@ struct LexerTests {
     
     @Test("Tokenizes simple statement")
     func testSimpleStatement() throws {
-        let source = "<Extract> the <user: identifier> from the <request: parameters>."
+        // New syntax: actions are capitalized identifiers without angle brackets
+        let source = "Extract the <user: identifier> from the <request: parameters>."
         let tokens = try Lexer.tokenize(source)
-        
+
         #expect(tokens.count > 0)
-        #expect(tokens.first?.kind == .leftAngle)
+        #expect(tokens.first?.kind == .identifier("Extract"))
     }
     
     @Test("Tokenizes feature set header")
@@ -57,10 +58,11 @@ struct LexerTests {
     
     @Test("Skips block comments")
     func testBlockComments() throws {
-        let source = "(* This is a comment *) <Extract>"
+        // New syntax: actions are capitalized identifiers without angle brackets
+        let source = "(* This is a comment *) Extract"
         let tokens = try Lexer.tokenize(source)
-        
-        #expect(tokens.first?.kind == .leftAngle)
+
+        #expect(tokens.first?.kind == .identifier("Extract"))
     }
     
     @Test("Handles compound identifiers")
@@ -90,7 +92,7 @@ struct ParserTests {
     func testFeatureSet() throws {
         let source = """
         (Test: Activity) {
-            <Extract> the <data> from the <source>.
+            Extract the <data> from the <source>.
         }
         """
         let program = try Parser.parse(source)
@@ -104,7 +106,7 @@ struct ParserTests {
     func testAROStatement() throws {
         let source = """
         (Test: Activity) {
-            <Extract> the <user: identifier> from the <request: parameters>.
+            Extract the <user: identifier> from the <request: parameters>.
         }
         """
         let program = try Parser.parse(source)
@@ -120,7 +122,7 @@ struct ParserTests {
     func testPublishStatement() throws {
         let source = """
         (Test: Activity) {
-            <Publish> as <external-name> <internal-var>.
+            Publish as <external-name> <internal-var>.
         }
         """
         let program = try Parser.parse(source)
@@ -135,9 +137,9 @@ struct ParserTests {
     func testMultipleStatements() throws {
         let source = """
         (Test: Activity) {
-            <Extract> the <a> from the <b>.
-            <Compute> the <c> for the <d>.
-            <Return> the <e> for the <f>.
+            Extract the <a> from the <b>.
+            Compute the <c> for the <d>.
+            Return the <e> for the <f>.
         }
         """
         let program = try Parser.parse(source)
@@ -163,8 +165,8 @@ struct SemanticAnalyzerTests {
     func testSymbolTable() throws {
         let source = """
         (Test: Activity) {
-            <Extract> the <user: identifier> from the <request>.
-            <Compute> the <hash> for the <user>.
+            Extract the <user: identifier> from the <request>.
+            Compute the <hash> for the <user>.
         }
         """
         let analyzed = try SemanticAnalyzer.analyze(source)
@@ -178,7 +180,7 @@ struct SemanticAnalyzerTests {
     func testDataFlow() throws {
         let source = """
         (Test: Activity) {
-            <Extract> the <user> from the <request>.
+            Extract the <user> from the <request>.
         }
         """
         let analyzed = try SemanticAnalyzer.analyze(source)
@@ -192,7 +194,7 @@ struct SemanticAnalyzerTests {
     func testDependencies() throws {
         let source = """
         (Test: Activity) {
-            <Extract> the <user> from the <external-source>.
+            Extract the <user> from the <external-source>.
         }
         """
         let analyzed = try SemanticAnalyzer.analyze(source)
@@ -204,8 +206,8 @@ struct SemanticAnalyzerTests {
     func testPublishHandling() throws {
         let source = """
         (Test: Activity) {
-            <Extract> the <user> from the <request>.
-            <Publish> as <exported-user> <user>.
+            Extract the <user> from the <request>.
+            Publish as <exported-user> <user>.
         }
         """
         let analyzed = try SemanticAnalyzer.analyze(source)
@@ -285,14 +287,14 @@ struct IntegrationTests {
         // Note: "and" is a keyword, so we use "Security Access Control" instead
         let source = """
         (User Authentication: Security Access Control) {
-            <Extract> the <user: identifier> from the <incoming-request: parameters>.
-            <Parse> the <signed: checksum> from the <request: headers>.
-            <Retrieve> the <user-record: record> from the <user: repository>.
-            <Compute> the <password: hash> for the <user: credentials>.
-            <Compare> the <comparison: result> against the <computed: password-hash>.
-            <Validate> the <authentication: result> for the <user: request>.
-            <Return> an <OK: status> for the <valid: authentication>.
-            <Publish> as <authenticated-user> <user>.
+            Extract the <user: identifier> from the <incoming-request: parameters>.
+            Parse the <signed: checksum> from the <request: headers>.
+            Retrieve the <user-record: record> from the <user: repository>.
+            Compute the <password: hash> for the <user: credentials>.
+            Compare the <comparison: result> against the <computed: password-hash>.
+            Validate the <authentication: result> for the <user: request>.
+            Return an <OK: status> for the <valid: authentication>.
+            Publish as <authenticated-user> <user>.
         }
         """
 
@@ -307,12 +309,12 @@ struct IntegrationTests {
     func testMultipleFeatureSets() {
         let source = """
         (Auth: Security) {
-            <Extract> the <user> from the <request>.
-            <Publish> as <authenticated-user> <user>.
+            Extract the <user> from the <request>.
+            Publish as <authenticated-user> <user>.
         }
         
         (Logging: Audit) {
-            <Log> the <action> for the <authenticated-user>.
+            Log the <action> for the <authenticated-user>.
         }
         """
         

@@ -178,23 +178,23 @@
 
         <h2>Event Emission</h2>
         <p>
-            Use the <code>&lt;Emit&gt;</code> action to dispatch events to other feature sets.
+            Use the <code>Emit</code> action to dispatch events to other feature sets.
             The target is simply the feature set name.
         </p>
 
         <pre><code><span class="code-comment">(* Creating a user and emitting events *)</span>
 <span class="code-feature">(Create User: Registration)</span> {
-    <span class="code-keyword">&lt;Extract&gt;</span> the <span class="code-result">&lt;data&gt;</span> from the &lt;request: body&gt;.
-    <span class="code-keyword">&lt;Create&gt;</span> the <span class="code-result">&lt;user: User&gt;</span> with &lt;data&gt;.
-    <span class="code-keyword">&lt;Store&gt;</span> the &lt;user&gt; in the &lt;user-repository&gt;.
+    <span class="code-keyword">Extract</span> the <span class="code-result">&lt;data&gt;</span> from the &lt;request: body&gt;.
+    <span class="code-keyword">Create</span> the <span class="code-result">&lt;user: User&gt;</span> with &lt;data&gt;.
+    <span class="code-keyword">Store</span> the &lt;user&gt; in the &lt;user-repository&gt;.
 
     <span class="code-comment">(* Emit to a specific feature set by name *)</span>
-    <span class="code-keyword">&lt;Emit&gt;</span> to <span class="code-feature">&lt;Send Welcome Email&gt;</span> with {
+    <span class="code-keyword">Emit</span> to <span class="code-feature">&lt;Send Welcome Email&gt;</span> with {
         email: &lt;user: email&gt;,
         name: &lt;user: name&gt;
     }.
 
-    <span class="code-keyword">&lt;Return&gt;</span> a <span class="code-result">&lt;Created: status&gt;</span> with &lt;user&gt;.
+    <span class="code-keyword">Return</span> a <span class="code-result">&lt;Created: status&gt;</span> with &lt;user&gt;.
 }</code></pre>
 
         <h2>Receiving Events</h2>
@@ -204,15 +204,15 @@
         </p>
 
         <pre><code><span class="code-feature">(Send Welcome Email: Notifications)</span> {
-    <span class="code-keyword">&lt;Extract&gt;</span> the <span class="code-result">&lt;email&gt;</span> from the <span class="code-result">&lt;event: email&gt;</span>.
-    <span class="code-keyword">&lt;Extract&gt;</span> the <span class="code-result">&lt;name&gt;</span> from the <span class="code-result">&lt;event: name&gt;</span>.
+    <span class="code-keyword">Extract</span> the <span class="code-result">&lt;email&gt;</span> from the <span class="code-result">&lt;event: email&gt;</span>.
+    <span class="code-keyword">Extract</span> the <span class="code-result">&lt;name&gt;</span> from the <span class="code-result">&lt;event: name&gt;</span>.
 
-    <span class="code-keyword">&lt;Send&gt;</span> the &lt;welcome-email&gt; to the &lt;email&gt; with {
+    <span class="code-keyword">Send</span> the &lt;welcome-email&gt; to the &lt;email&gt; with {
         subject: <span class="code-string">"Welcome!"</span>,
         body: <span class="code-string">"Hello ${&lt;name&gt;}, welcome to our service!"</span>
     }.
 
-    <span class="code-keyword">&lt;Return&gt;</span> an <span class="code-result">&lt;OK: status&gt;</span> for the &lt;notification&gt;.
+    <span class="code-keyword">Return</span> an <span class="code-result">&lt;OK: status&gt;</span> for the &lt;notification&gt;.
 }</code></pre>
 
         <h2>Multiple Event Handlers</h2>
@@ -222,24 +222,24 @@
         </p>
 
         <pre><code><span class="code-feature">(createOrder: E-Commerce)</span> {
-    <span class="code-keyword">&lt;Extract&gt;</span> the <span class="code-result">&lt;userId&gt;</span> from the &lt;request: body&gt;.
-    <span class="code-keyword">&lt;Extract&gt;</span> the <span class="code-result">&lt;items&gt;</span> from the &lt;request: body&gt;.
+    <span class="code-keyword">Extract</span> the <span class="code-result">&lt;userId&gt;</span> from the &lt;request: body&gt;.
+    <span class="code-keyword">Extract</span> the <span class="code-result">&lt;items&gt;</span> from the &lt;request: body&gt;.
 
-    <span class="code-keyword">&lt;Create&gt;</span> the <span class="code-result">&lt;order: Order&gt;</span> with {
+    <span class="code-keyword">Create</span> the <span class="code-result">&lt;order: Order&gt;</span> with {
         id: &lt;generated-id&gt;,
         userId: &lt;userId&gt;,
         items: &lt;items&gt;,
         status: <span class="code-string">"placed"</span>
     }.
 
-    <span class="code-keyword">&lt;Store&gt;</span> the &lt;order&gt; in the &lt;order-repository&gt;.
+    <span class="code-keyword">Store</span> the &lt;order&gt; in the &lt;order-repository&gt;.
 
     <span class="code-comment">(* Dispatch events to multiple handlers *)</span>
-    <span class="code-keyword">&lt;Emit&gt;</span> to <span class="code-feature">&lt;Send Order Confirmation&gt;</span> with &lt;order&gt;.
-    <span class="code-keyword">&lt;Emit&gt;</span> to <span class="code-feature">&lt;Update Inventory&gt;</span> with { items: &lt;items&gt; }.
-    <span class="code-keyword">&lt;Emit&gt;</span> to <span class="code-feature">&lt;Track Revenue&gt;</span> with { amount: &lt;order: total&gt; }.
+    <span class="code-keyword">Emit</span> to <span class="code-feature">&lt;Send Order Confirmation&gt;</span> with &lt;order&gt;.
+    <span class="code-keyword">Emit</span> to <span class="code-feature">&lt;Update Inventory&gt;</span> with { items: &lt;items&gt; }.
+    <span class="code-keyword">Emit</span> to <span class="code-feature">&lt;Track Revenue&gt;</span> with { amount: &lt;order: total&gt; }.
 
-    <span class="code-keyword">&lt;Return&gt;</span> a <span class="code-result">&lt;Created: status&gt;</span> with &lt;order&gt;.
+    <span class="code-keyword">Return</span> a <span class="code-result">&lt;Created: status&gt;</span> with &lt;order&gt;.
 }</code></pre>
 
         <h2>Event Handlers</h2>
@@ -248,31 +248,31 @@
         </p>
 
         <pre><code><span class="code-feature">(Send Order Confirmation: Notifications)</span> {
-    <span class="code-keyword">&lt;Extract&gt;</span> the <span class="code-result">&lt;orderId&gt;</span> from the <span class="code-result">&lt;event: id&gt;</span>.
-    <span class="code-keyword">&lt;Extract&gt;</span> the <span class="code-result">&lt;userEmail&gt;</span> from the <span class="code-result">&lt;event: userEmail&gt;</span>.
+    <span class="code-keyword">Extract</span> the <span class="code-result">&lt;orderId&gt;</span> from the <span class="code-result">&lt;event: id&gt;</span>.
+    <span class="code-keyword">Extract</span> the <span class="code-result">&lt;userEmail&gt;</span> from the <span class="code-result">&lt;event: userEmail&gt;</span>.
 
-    <span class="code-keyword">&lt;Send&gt;</span> the &lt;email&gt; to the &lt;userEmail&gt; with {
+    <span class="code-keyword">Send</span> the &lt;email&gt; to the &lt;userEmail&gt; with {
         subject: <span class="code-string">"Order Confirmed"</span>,
         body: <span class="code-string">"Your order ${&lt;orderId&gt;} has been placed."</span>
     }.
 
-    <span class="code-keyword">&lt;Return&gt;</span> an <span class="code-result">&lt;OK: status&gt;</span> for the &lt;confirmation&gt;.
+    <span class="code-keyword">Return</span> an <span class="code-result">&lt;OK: status&gt;</span> for the &lt;confirmation&gt;.
 }
 
 <span class="code-feature">(Update Inventory: Inventory Management)</span> {
-    <span class="code-keyword">&lt;Extract&gt;</span> the <span class="code-result">&lt;items&gt;</span> from the <span class="code-result">&lt;event: items&gt;</span>.
+    <span class="code-keyword">Extract</span> the <span class="code-result">&lt;items&gt;</span> from the <span class="code-result">&lt;event: items&gt;</span>.
 
     for each &lt;item&gt; in &lt;items&gt; {
         <span class="code-keyword">&lt;Decrement&gt;</span> the &lt;stock&gt; for the &lt;item: productId&gt;.
     }
 
-    <span class="code-keyword">&lt;Return&gt;</span> an <span class="code-result">&lt;OK: status&gt;</span> for the &lt;inventory&gt;.
+    <span class="code-keyword">Return</span> an <span class="code-result">&lt;OK: status&gt;</span> for the &lt;inventory&gt;.
 }
 
 <span class="code-feature">(Track Revenue: Analytics)</span> {
-    <span class="code-keyword">&lt;Extract&gt;</span> the <span class="code-result">&lt;amount&gt;</span> from the <span class="code-result">&lt;event: amount&gt;</span>.
+    <span class="code-keyword">Extract</span> the <span class="code-result">&lt;amount&gt;</span> from the <span class="code-result">&lt;event: amount&gt;</span>.
     <span class="code-keyword">&lt;Increment&gt;</span> the &lt;daily-revenue&gt; by &lt;amount&gt;.
-    <span class="code-keyword">&lt;Return&gt;</span> an <span class="code-result">&lt;OK: status&gt;</span> for the &lt;analytics&gt;.
+    <span class="code-keyword">Return</span> an <span class="code-result">&lt;OK: status&gt;</span> for the &lt;analytics&gt;.
 }</code></pre>
 
         <h2>Why This Approach?</h2>
@@ -309,12 +309,12 @@
 
         <pre><code><span class="code-comment">(* Audit all user changes *)</span>
 <span class="code-feature">(Audit Changes: user-repository Observer)</span> {
-    <span class="code-keyword">&lt;Extract&gt;</span> the <span class="code-result">&lt;changeType&gt;</span> from the <span class="code-result">&lt;event: changeType&gt;</span>.
-    <span class="code-keyword">&lt;Extract&gt;</span> the <span class="code-result">&lt;newValue&gt;</span> from the <span class="code-result">&lt;event: newValue&gt;</span>.
-    <span class="code-keyword">&lt;Extract&gt;</span> the <span class="code-result">&lt;oldValue&gt;</span> from the <span class="code-result">&lt;event: oldValue&gt;</span>.
+    <span class="code-keyword">Extract</span> the <span class="code-result">&lt;changeType&gt;</span> from the <span class="code-result">&lt;event: changeType&gt;</span>.
+    <span class="code-keyword">Extract</span> the <span class="code-result">&lt;newValue&gt;</span> from the <span class="code-result">&lt;event: newValue&gt;</span>.
+    <span class="code-keyword">Extract</span> the <span class="code-result">&lt;oldValue&gt;</span> from the <span class="code-result">&lt;event: oldValue&gt;</span>.
 
-    <span class="code-keyword">&lt;Log&gt;</span> &lt;changeType&gt; to the &lt;console&gt;.
-    <span class="code-keyword">&lt;Return&gt;</span> an <span class="code-result">&lt;OK: status&gt;</span> for the &lt;audit&gt;.
+    <span class="code-keyword">Log</span> &lt;changeType&gt; to the &lt;console&gt;.
+    <span class="code-keyword">Return</span> an <span class="code-result">&lt;OK: status&gt;</span> for the &lt;audit&gt;.
 }</code></pre>
 
         <h3>Event Payload</h3>
@@ -332,13 +332,13 @@
 
         <h3>Deleting from Repositories</h3>
         <p>
-            Use the <code>&lt;Delete&gt;</code> action with a <code>where</code> clause to remove items:
+            Use the <code>Delete</code> action with a <code>where</code> clause to remove items:
         </p>
 
         <pre><code><span class="code-feature">(deleteUser: User API)</span> {
-    <span class="code-keyword">&lt;Extract&gt;</span> the <span class="code-result">&lt;userId&gt;</span> from the &lt;pathParameters: id&gt;.
-    <span class="code-keyword">&lt;Delete&gt;</span> the <span class="code-result">&lt;user&gt;</span> from the &lt;user-repository&gt; where id = &lt;userId&gt;.
-    <span class="code-keyword">&lt;Return&gt;</span> an <span class="code-result">&lt;OK: status&gt;</span> with { deleted: &lt;userId&gt; }.
+    <span class="code-keyword">Extract</span> the <span class="code-result">&lt;userId&gt;</span> from the &lt;pathParameters: id&gt;.
+    <span class="code-keyword">Delete</span> the <span class="code-result">&lt;user&gt;</span> from the &lt;user-repository&gt; where id = &lt;userId&gt;.
+    <span class="code-keyword">Return</span> an <span class="code-result">&lt;OK: status&gt;</span> with { deleted: &lt;userId&gt; }.
 }</code></pre>
 
         <div class="highlight-box">

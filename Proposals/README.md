@@ -32,15 +32,15 @@ For newcomers to ARO, read the proposals in order:
 ### Core Language
 
 ```
-ARO Statement:    <Action> [article] <result: qualifier> preposition [article] <object: qualifier>.
+ARO Statement:    Action [article] <result: qualifier> preposition [article] <object: qualifier>.
 Feature Set:      (Name: Business Activity) { ... }
-Publish:          <Publish> as <alias> <variable>.
+Publish:          Publish as <alias> <variable>.
 ```
 
 ### Control Flow
 
 ```
-Guard:            <Action> ... when <condition>.
+Guard:            Action ... when <condition>.
 Match:            match <value> { case <pattern> { ... } otherwise { ... } }
 Iteration:        for each <item> in <collection> { ... }
 ```
@@ -58,9 +58,9 @@ Iteration:        for each <item> in <collection> { ... }
 ### I/O Syntax
 
 ```
-Sink:             <Log> "message" to the <console>.
-Source:           <Read> the <data> from the <file: "path">.
-HTTP:             <Request> the <response> from the <url>.
+Sink:             Log "message" to the <console>.
+Source:           Read the <data> from the <file: "path">.
+HTTP:             Request the <response> from the <url>.
 ```
 
 ## Directory Structure

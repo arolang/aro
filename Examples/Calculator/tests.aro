@@ -5,39 +5,39 @@
    ============================================================ *)
 
 (addition-test: Calculator Test) {
-    <Given> the <a> with 15.
-    <Given> the <b> with 7.
-    <Compute> the <sum> from <a> + <b>.
-    <Then> the <sum> with 22.
+    Given the <a> with 15.
+    Given the <b> with 7.
+    Compute the <sum> from <a> + <b>.
+    Then the <sum> with 22.
 }
 
 (subtraction-test: Calculator Test) {
-    <Given> the <x> with 25.
-    <Given> the <y> with 10.
-    <Compute> the <difference> from <x> - <y>.
-    <Then> the <difference> with 15.
+    Given the <x> with 25.
+    Given the <y> with 10.
+    Compute the <difference> from <x> - <y>.
+    Then the <difference> with 15.
 }
 
 (multiplication-test: Calculator Test) {
-    <Given> the <m> with 6.
-    <Given> the <n> with 8.
-    <Compute> the <product> from <m> * <n>.
-    <Then> the <product> with 48.
+    Given the <m> with 6.
+    Given the <n> with 8.
+    Compute the <product> from <m> * <n>.
+    Then the <product> with 48.
 }
 
 (division-test: Calculator Test) {
-    <Given> the <p> with 100.
-    <Given> the <q> with 4.
-    <Compute> the <quotient> from <p> / <q>.
-    <Then> the <quotient> with 25.
+    Given the <p> with 100.
+    Given the <q> with 4.
+    Compute the <quotient> from <p> / <q>.
+    Then the <quotient> with 25.
 }
 
 (complex-expression-test: Calculator Test) {
-    <Given> the <price> with 50.
-    <Given> the <quantity> with 3.
-    <Given> the <tax-rate> with 0.08.
-    <Compute> the <subtotal> from <price> * <quantity>.
-    <Compute> the <tax> from <subtotal> * <tax-rate>.
-    <Compute> the <total> from <subtotal> + <tax>.
-    <Then> the <total> with 162.
+    Given the <price> with 50.
+    Given the <quantity> with 3.
+    Given the <tax-rate> with 0.08.
+    Compute the <subtotal> from <price> * <quantity>.
+    Compute the <tax> from <subtotal> * <tax-rate>.
+    Compute the <total> from <subtotal> + <tax>.
+    Then the <total> with 162.
 }

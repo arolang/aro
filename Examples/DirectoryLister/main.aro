@@ -3,16 +3,16 @@
 (* Lists a fixed test-data directory for consistent cross-environment testing *)
 
 (Application-Start: Directory Lister) {
-    <Log> "Directory Lister - Cross-Platform Example" to the <console>.
-    <Log> "Using native List action (works on Windows, macOS, Linux)" to the <console>.
-    <Log> "----------------------------------------" to the <console>.
+    Log "Directory Lister - Cross-Platform Example" to the <console>.
+    Log "Using native List action (works on Windows, macOS, Linux)" to the <console>.
+    Log "----------------------------------------" to the <console>.
 
     (* Define the path to list *)
-    <Create> the <path> with "Examples/DirectoryLister/test-data".
+    Create the <path> with "Examples/DirectoryLister/test-data".
 
     (* Use native List action - cross-platform, no shell dependency *)
-    <List> the <entries> from the <directory: path>.
+    List the <entries> from the <directory: path>.
 
     (* Return structured file information *)
-    <Return> an <OK: status> for the <entries>.
+    Return an <OK: status> for the <entries>.
 }

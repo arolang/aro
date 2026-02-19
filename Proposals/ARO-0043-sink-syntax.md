@@ -19,15 +19,15 @@ Standard ARO syntax requires a variable binding in the result position:
 
 ```aro
 (* Standard syntax - binds a variable *)
-<Create> the <message> with "Hello, World!".
-<Log> the <message> to the <console>.
+Create the <message> with "Hello, World!".
+Log the <message> to the <console>.
 ```
 
 Sink syntax allows expressions directly in the result position:
 
 ```aro
 (* Sink syntax - direct expression, no binding *)
-<Log> "Hello, World!" to the <console>.
+Log "Hello, World!" to the <console>.
 ```
 
 ### 1.2 Use Cases
@@ -45,7 +45,7 @@ Sink syntax is ideal for:
 ### 2.1 General Form
 
 ```aro
-<Action> expression preposition <object>.
+Action expression preposition <object>.
 ```
 
 Where `expression` can be:
@@ -63,11 +63,11 @@ With sink syntax, the article `the` is omitted before the expression:
 
 ```aro
 (* Standard syntax - with "the" *)
-<Log> the <message> to the <console>.
+Log the <message> to the <console>.
 
 (* Sink syntax - without "the" *)
-<Log> "message" to the <console>.
-<Log> <message> to the <console>.
+Log "message" to the <console>.
+Log <message> to the <console>.
 ```
 
 ---
@@ -78,58 +78,58 @@ With sink syntax, the article `the` is omitted before the expression:
 
 ```aro
 (* Direct string logging *)
-<Log> "Application starting..." to the <console>.
-<Log> "Processing complete!" to the <console>.
+Log "Application starting..." to the <console>.
+Log "Processing complete!" to the <console>.
 
 (* With stderr *)
-<Log> "Error: Connection failed" to the <console: error>.
+Log "Error: Connection failed" to the <console: error>.
 ```
 
 ### 3.2 Variable References
 
 ```aro
-<Create> the <user> with { name: "Alice", role: "admin" }.
+Create the <user> with { name: "Alice", role: "admin" }.
 
 (* Log the entire variable *)
-<Log> <user> to the <console>.
+Log <user> to the <console>.
 
 (* Log a property *)
-<Log> <user: name> to the <console>.
+Log <user: name> to the <console>.
 ```
 
 ### 3.3 Numeric Values
 
 ```aro
-<Compute> the <count> from 42.
-<Log> <count> to the <console>.
+Compute the <count> from 42.
+Log <count> to the <console>.
 
 (* Direct number - less common but supported *)
-<Log> 100 to the <console>.
+Log 100 to the <console>.
 ```
 
 ### 3.4 Object Literals
 
 ```aro
-<Create> the <status> with { code: 200, message: "OK" }.
-<Log> <status> to the <console>.
+Create the <status> with { code: 200, message: "OK" }.
+Log <status> to the <console>.
 ```
 
 ### 3.5 Send Action
 
 ```aro
 (* Send data to socket client *)
-<Send> <response-data> to the <client>.
+Send <response-data> to the <client>.
 
 (* Send string directly *)
-<Send> "Welcome to the server!" to the <client>.
+Send "Welcome to the server!" to the <client>.
 ```
 
 ### 3.6 Notify Action
 
 ```aro
 (* Alert with message *)
-<Notify> the <user> with "Your order has shipped!".
-<Alert> the <admin> with "System health check failed".
+Notify the <user> with "Your order has shipped!".
+Alert the <admin> with "System health check failed".
 ```
 
 ---
@@ -186,10 +186,10 @@ The description format changes for sink syntax:
 ```swift
 public var description: String {
     if case .sinkExpression(let expr) = valueSource {
-        // Sink syntax: <Log> "message" to the <console>
+        // Sink syntax: Log "message" to the <console>
         return "<\(action.verb)> \(expr) \(object.preposition) the <\(object.noun)>"
     } else {
-        // Standard: <Log> the <message> to the <console>
+        // Standard: Log the <message> to the <console>
         return "<\(action.verb)> the <\(result)> \(object.preposition) the <\(object.noun)>"
     }
 }
@@ -216,9 +216,9 @@ public var description: String {
 - The value is reused multiple times
 
 ```aro
-<Create> the <message> with "User " ++ <name> ++ " logged in".
-<Log> the <message> to the <console>.
-<Send> the <message> to the <admin-socket>.
+Create the <message> with "User " ++ <name> ++ " logged in".
+Log the <message> to the <console>.
+Send the <message> to the <admin-socket>.
 ```
 
 **Use Sink Syntax when:**
@@ -227,8 +227,8 @@ public var description: String {
 - You want concise, readable code
 
 ```aro
-<Log> "Starting server..." to the <console>.
-<Log> "Server ready on port 8080" to the <console>.
+Log "Starting server..." to the <console>.
+Log "Server ready on port 8080" to the <console>.
 ```
 
 ---
@@ -259,7 +259,7 @@ variable_reference = "<" , identifier , [ ":" , qualifier ] , ">" ;
 | Aspect | Description |
 |--------|-------------|
 | **Purpose** | Concise value consumption without binding |
-| **Syntax** | `<Action> expression preposition <object>.` |
+| **Syntax** | `Action expression preposition <object>.` |
 | **Article** | Omits `the` before expression |
 | **Actions** | Log, Send, Notify, Alert, Signal |
 | **Types** | Strings, numbers, variables, objects, arrays |

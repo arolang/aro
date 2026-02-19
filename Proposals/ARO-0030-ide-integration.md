@@ -128,9 +128,9 @@ ARO Statement:
 
 Test:
 (${1:test-name}: ${2:Component} Test) {
-    <Given> the <${3:setup}> with ${4:value}.
-    <When> the <${5:result}> from the <${6:action}>.
-    <Then> the <${7:result}> with ${8:expected}.
+    Given the <${3:setup}> with ${4:value}.
+    When the <${5:result}> from the <${6:action}>.
+    Then the <${7:result}> with ${8:expected}.
 }
 ```
 

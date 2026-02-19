@@ -6,16 +6,16 @@
 In previous chapters, we explored how plugins provide services called via the `<Call>` action. But there's a more powerful integration: **custom actions**. Instead of:
 
 ```aro
-<Call> the <hash> from the <crypto: sha256> with { input: <password> }.
+Call the <hash> from the <crypto: sha256> with { input: <password> }.
 ```
 
 Your plugin can provide a native action verb:
 
 ```aro
-<Hash> the <hash> from the <password> with sha256.
+Hash the <hash> from the <password> with sha256.
 ```
 
-Custom actions feel like built-in ARO features. They follow the same `<Action> the <result> preposition the <object>` syntax, support the same prepositions, and integrate seamlessly with ARO's execution model. This chapter shows you how to create them.
+Custom actions feel like built-in ARO features. They follow the same `Action the <result> preposition the <object>` syntax, support the same prepositions, and integrate seamlessly with ARO's execution model. This chapter shows you how to create them.
 
 ## 5.1 Actions vs Services
 
@@ -27,7 +27,7 @@ Services are invoked through the `<Call>` action with explicit service and metho
 
 ```aro
 (* Service invocation - explicit naming *)
-<Call> the <result> from the <image: resize> with {
+Call the <result> from the <image: resize> with {
     file: <input-file>,
     width: 800,
     height: 600
@@ -47,10 +47,10 @@ Custom actions provide new verbs that work like built-in actions:
 
 ```aro
 (* Custom action - native feel *)
-<Resize> the <thumbnail> from the <image> with { width: 200, height: 200 }.
+Resize the <thumbnail> from the <image> with { width: 200, height: 200 }.
 
 (* Or with qualifier syntax *)
-<Resize> the <thumbnail: 200x200> from the <image>.
+Resize the <thumbnail: 200x200> from the <image>.
 ```
 
 **Characteristics:**
@@ -116,14 +116,14 @@ Prepositions connect the result and object:
 
 | Preposition | Typical Use |
 |-------------|-------------|
-| `from` | Data source: `<Extract> the <id> from the <request>` |
-| `to` | Destination: `<Send> the <message> to the <client>` |
-| `with` | Parameters: `<Create> the <user> with { name: "Alice" }` |
-| `for` | Purpose: `<Return> an <OK: status> for the <request>` |
-| `into` | Container: `<Store> the <user> into the <repository>` |
-| `as` | Type/format: `<Parse> the <data> as <JSON: format>` |
-| `against` | Comparison: `<Compare> the <a> against the <b>` |
-| `via` | Method: `<Request> the <data> via GET the <url>` |
+| `from` | Data source: `Extract the <id> from the <request>` |
+| `to` | Destination: `Send the <message> to the <client>` |
+| `with` | Parameters: `Create the <user> with { name: "Alice" }` |
+| `for` | Purpose: `Return an <OK: status> for the <request>` |
+| `into` | Container: `Store the <user> into the <repository>` |
+| `as` | Type/format: `Parse the <data> as <JSON: format>` |
+| `against` | Comparison: `Compare the <a> against the <b>` |
+| `via` | Method: `Request the <data> via GET the <url>` |
 
 ### Result and Object Descriptors
 
@@ -377,8 +377,8 @@ fn execute_hash(input: &Value) -> Result<Value, String> {
         .ok_or("Missing data to hash")?;
 
     // Get algorithm from qualifier or argument
-    // Supports: <Hash> the <result: sha256> from <data>
-    // Or: <Hash> the <result> from <data> with { algorithm: "sha256" }
+    // Supports: Hash the <result: sha256> from <data>
+    // Or: Hash the <result> from <data> with { algorithm: "sha256" }
     let algorithm = input.get("qualifier")
         .or_else(|| input.get("algorithm"))
         .and_then(|v| v.as_str())
@@ -526,27 +526,27 @@ Now your actions work like native ARO verbs:
 
 ```aro
 (Application-Start: Crypto Demo) {
-    <Create> the <password> with "my-secret-password".
-    <Create> the <encryption-key> with "32-byte-key-for-aes-encryption!".
+    Create the <password> with "my-secret-password".
+    Create the <encryption-key> with "32-byte-key-for-aes-encryption!".
 
     (* Hash with qualifier syntax *)
-    <Hash> the <password-hash: sha256> from the <password>.
-    <Log> "SHA-256: " ++ <password-hash: hash> to the <console>.
+    Hash the <password-hash: sha256> from the <password>.
+    Log "SHA-256: " ++ <password-hash: hash> to the <console>.
 
     (* Hash with argument syntax *)
-    <Hash> the <sha512-hash> from the <password> with { algorithm: "sha512" }.
-    <Log> "SHA-512: " ++ <sha512-hash: hash> to the <console>.
+    Hash the <sha512-hash> from the <password> with { algorithm: "sha512" }.
+    Log "SHA-512: " ++ <sha512-hash: hash> to the <console>.
 
     (* Encrypt data *)
-    <Create> the <secret-data> with "Sensitive information here".
-    <Encrypt> the <encrypted> with <secret-data> using <encryption-key>.
-    <Log> "Encrypted: " ++ <encrypted: encrypted> to the <console>.
+    Create the <secret-data> with "Sensitive information here".
+    Encrypt the <encrypted> with <secret-data> using <encryption-key>.
+    Log "Encrypted: " ++ <encrypted: encrypted> to the <console>.
 
     (* Decrypt data *)
-    <Decrypt> the <decrypted> from the <encrypted: encrypted> with <encryption-key>.
-    <Log> "Decrypted: " ++ <decrypted: decrypted> to the <console>.
+    Decrypt the <decrypted> from the <encrypted: encrypted> with <encryption-key>.
+    Log "Decrypted: " ++ <decrypted: decrypted> to the <console>.
 
-    <Return> an <OK: status> for the <demo>.
+    Return an <OK: status> for the <demo>.
 }
 ```
 
@@ -561,8 +561,8 @@ actions:
   - name: HashAction
     verbs: [hash, digest, checksum, fingerprint]
     # All these work:
-    # <Hash> the <result> from <data>.
-    # <Digest> the <result> from <data>.
+    # Hash the <result> from <data>.
+    # Digest the <result> from <data>.
     # <Checksum> the <result> from <data>.
     # <Fingerprint> the <result> from <data>.
 ```
@@ -573,9 +573,9 @@ Use the result qualifier to specify options:
 
 ```aro
 (* Qualifier specifies algorithm *)
-<Hash> the <result: sha256> from the <data>.
-<Hash> the <result: sha512> from the <data>.
-<Hash> the <result: md5> from the <data>.
+Hash the <result: sha256> from the <data>.
+Hash the <result: sha512> from the <data>.
+Hash the <result: md5> from the <data>.
 ```
 
 Implementation:
@@ -604,10 +604,10 @@ actions:
 
 ```aro
 (* Different prepositions, different meanings *)
-<Transform> the <json> from the <xml>.        (* Convert XML to JSON *)
-<Transform> the <data> to uppercase.          (* Apply transformation *)
-<Transform> the <user> into the <dto>.        (* Map to different type *)
-<Transform> the <text> as <Base64: encoding>. (* Encode as format *)
+Transform the <json> from the <xml>.        (* Convert XML to JSON *)
+Transform the <data> to uppercase.          (* Apply transformation *)
+Transform the <user> into the <dto>.        (* Map to different type *)
+Transform the <text> as <Base64: encoding>. (* Encode as format *)
 ```
 
 Implementation:
@@ -763,27 +763,27 @@ Test with ARO code:
 (* tests/crypto-actions.aro *)
 
 (Application-Start: Crypto Action Tests) {
-    <Log> "Testing crypto actions..." to the <console>.
+    Log "Testing crypto actions..." to the <console>.
 
     (* Test 1: Hash action *)
-    <Hash> the <hash1: sha256> from "test".
-    <When> <hash1: hash> is empty:
-        <Return> a <ServerError: status> with "Hash failed".
-    <Log> "PASS: Hash action" to the <console>.
+    Hash the <hash1: sha256> from "test".
+    When <hash1: hash> is empty:
+        Return a <ServerError: status> with "Hash failed".
+    Log "PASS: Hash action" to the <console>.
 
     (* Test 2: Encrypt/Decrypt roundtrip *)
-    <Create> the <key> with "test-encryption-key-32bytes!".
-    <Create> the <secret> with "sensitive data".
+    Create the <key> with "test-encryption-key-32bytes!".
+    Create the <secret> with "sensitive data".
 
-    <Encrypt> the <encrypted> with <secret> using <key>.
-    <Decrypt> the <decrypted> from <encrypted: encrypted> with <key>.
+    Encrypt the <encrypted> with <secret> using <key>.
+    Decrypt the <decrypted> from <encrypted: encrypted> with <key>.
 
-    <When> <decrypted: decrypted> is not <secret>:
-        <Return> a <ServerError: status> with "Roundtrip failed".
-    <Log> "PASS: Encrypt/Decrypt roundtrip" to the <console>.
+    When <decrypted: decrypted> is not <secret>:
+        Return a <ServerError: status> with "Roundtrip failed".
+    Log "PASS: Encrypt/Decrypt roundtrip" to the <console>.
 
-    <Log> "All tests passed!" to the <console>.
-    <Return> an <OK: status> for the <tests>.
+    Log "All tests passed!" to the <console>.
+    Return an <OK: status> for the <tests>.
 }
 ```
 
@@ -794,7 +794,7 @@ Custom actions are the most powerful form of ARO extension. They let you add new
 - **Declare actions** in `plugin.yaml` with role, verbs, and prepositions
 - **Return metadata** from `aro_plugin_info()` with full action specifications
 - **Implement execution** in `aro_plugin_execute()` handling all registered verbs
-- **Use natural syntax** like `<Hash> the <result> from the <data>`
+- **Use natural syntax** like `Hash the <result> from the <data>`
 
 Custom actions work best for:
 - Core data transformations (hash, encrypt, compress)

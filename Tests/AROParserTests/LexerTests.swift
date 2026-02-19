@@ -803,33 +803,33 @@ struct LexerFeatureSetTests {
 
     @Test("Tokenizes complete ARO statement")
     func testAROStatement() throws {
-        let tokens = try Lexer.tokenize("<Extract> the <user: identifier> from the <request>.")
+        // New syntax: actions are capitalized identifiers without angle brackets
+        let tokens = try Lexer.tokenize("Extract the <user: identifier> from the <request>.")
 
-        #expect(tokens[0].kind == .leftAngle)
-        #expect(tokens[1].kind == .identifier("Extract"))
-        #expect(tokens[2].kind == .rightAngle)
-        #expect(tokens[3].kind == .article(.the))
-        #expect(tokens[4].kind == .leftAngle)
-        #expect(tokens[5].kind == .identifier("user"))
-        #expect(tokens[6].kind == .colon)
-        #expect(tokens[7].kind == .identifier("identifier"))
-        #expect(tokens[8].kind == .rightAngle)
-        #expect(tokens[9].kind == .preposition(.from))
-        #expect(tokens[10].kind == .article(.the))
-        #expect(tokens[11].kind == .leftAngle)
-        #expect(tokens[12].kind == .identifier("request"))
-        #expect(tokens[13].kind == .rightAngle)
-        #expect(tokens[14].kind == .dot)
+        #expect(tokens[0].kind == .identifier("Extract"))
+        #expect(tokens[1].kind == .article(.the))
+        #expect(tokens[2].kind == .leftAngle)
+        #expect(tokens[3].kind == .identifier("user"))
+        #expect(tokens[4].kind == .colon)
+        #expect(tokens[5].kind == .identifier("identifier"))
+        #expect(tokens[6].kind == .rightAngle)
+        #expect(tokens[7].kind == .preposition(.from))
+        #expect(tokens[8].kind == .article(.the))
+        #expect(tokens[9].kind == .leftAngle)
+        #expect(tokens[10].kind == .identifier("request"))
+        #expect(tokens[11].kind == .rightAngle)
+        #expect(tokens[12].kind == .dot)
     }
 
     @Test("Tokenizes publish statement")
     func testPublishStatement() throws {
-        let tokens = try Lexer.tokenize("<Publish> as <external-name> <internal>.")
+        // New syntax: Publish without angle brackets
+        let tokens = try Lexer.tokenize("Publish as <external-name> <internal>.")
 
-        #expect(tokens[0].kind == .leftAngle)
-        #expect(tokens[1].kind == .publish)
-        #expect(tokens[2].kind == .rightAngle)
-        #expect(tokens[3].kind == .as)
+        #expect(tokens[0].kind == .publish)
+        #expect(tokens[1].kind == .as)
+        #expect(tokens[2].kind == .leftAngle)
+        #expect(tokens[3].kind == .identifier("external"))
     }
 
     @Test("Tokenizes hyphenated identifier")
@@ -846,7 +846,7 @@ struct LexerFeatureSetTests {
 
     @Test("Tokenizes statement with literal value")
     func testLiteralValue() throws {
-        let tokens = try Lexer.tokenize("<Log> the <message> with \"Hello World\".")
+        let tokens = try Lexer.tokenize("Log the <message> with \"Hello World\".")
 
         let hasStringLiteral = tokens.contains {
             if case .stringLiteral("Hello World") = $0.kind { return true }

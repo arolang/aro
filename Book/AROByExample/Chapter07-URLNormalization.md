@@ -71,12 +71,12 @@ Add to `links.aro`:
 ```aro
 (Normalize URL: NormalizeUrl Handler) {
     (* Extract from event data structure *)
-    <Extract> the <event-data> from the <event: data>.
-    <Extract> the <raw-url> from the <event-data: raw>.
-    <Extract> the <source-url> from the <event-data: source>.
-    <Extract> the <base-domain> from the <event-data: base>.
+    Extract the <event-data> from the <event: data>.
+    Extract the <raw-url> from the <event-data: raw>.
+    Extract the <source-url> from the <event-data: source>.
+    Extract the <base-domain> from the <event-data: base>.
 
-    <Return> an <OK: status> for the <normalization>.
+    Return an <OK: status> for the <normalization>.
 }
 ```
 
@@ -101,24 +101,24 @@ Similarly, `https://example.com/page/` and `https://example.com/page` are typica
 
 ```aro
 (Normalize URL: NormalizeUrl Handler) {
-    <Extract> the <event-data> from the <event: data>.
-    <Extract> the <raw-url> from the <event-data: raw>.
-    <Extract> the <source-url> from the <event-data: source>.
-    <Extract> the <base-domain> from the <event-data: base>.
+    Extract the <event-data> from the <event: data>.
+    Extract the <raw-url> from the <event-data: raw>.
+    Extract the <source-url> from the <event-data: source>.
+    Extract the <base-domain> from the <event-data: base>.
 
     (* Determine URL type and normalize *)
     match <raw-url> {
         case /^https?:\/\// {
             (* Already absolute URL - strip fragment and trailing slash *)
-            <Split> the <frag-parts> from the <raw-url> by /#/.
-            <Extract> the <no-fragment: first> from the <frag-parts>.
-            <Split> the <slash-parts> from the <no-fragment> by /\/+$/.
-            <Extract> the <clean-url: first> from the <slash-parts>.
-            <Emit> a <FilterUrl: event> with { url: <clean-url>, base: <base-domain> }.
+            Split the <frag-parts> from the <raw-url> by /#/.
+            Extract the <no-fragment: first> from the <frag-parts>.
+            Split the <slash-parts> from the <no-fragment> by /\/+$/.
+            Extract the <clean-url: first> from the <slash-parts>.
+            Emit a <FilterUrl: event> with { url: <clean-url>, base: <base-domain> }.
         }
     }
 
-    <Return> an <OK: status> for the <normalization>.
+    Return an <OK: status> for the <normalization>.
 }
 ```
 
@@ -134,14 +134,14 @@ If the URL starts with `http://` or `https://`, we clean it before emitting to t
 The cleaning logic above introduces a new action: `<Split>`. It splits a string into a list using a regex delimiter:
 
 ```aro
-<Split> the <parts> from the <string> by /regex/.
+Split the <parts> from the <string> by /regex/.
 ```
 
 The result is a list of substrings. You can then use `<Extract>` with the `first` specifier to get the first element:
 
 ```aro
-<Split> the <parts> from the <url> by /#/.
-<Extract> the <before-hash: first> from the <parts>.
+Split the <parts> from the <url> by /#/.
+Extract the <before-hash: first> from the <parts>.
 ```
 
 Given `"https://example.com/page#section"`, the split on `/#/` produces `["https://example.com/page", "section"]`. Extracting the first element gives us `"https://example.com/page"` -- the URL without its fragment.
@@ -149,8 +149,8 @@ Given `"https://example.com/page#section"`, the split on `/#/` produces `["https
 For trailing slash removal, we split on the pattern `/\/+$/`, which matches one or more slashes at the end of the string:
 
 ```aro
-<Split> the <parts> from the <url> by /\/+$/.
-<Extract> the <clean: first> from the <parts>.
+Split the <parts> from the <url> by /\/+$/.
+Extract the <clean: first> from the <parts>.
 ```
 
 Given `"https://example.com/page/"`, the split produces `["https://example.com/page"]`. If there is no trailing slash, the split produces the original string as a single-element list, so the logic works in both cases.
@@ -165,24 +165,24 @@ Root-relative URLs like `/about` need the base domain prepended. After joining, 
     match <raw-url> {
         case /^https?:\/\// {
             (* Already absolute URL - strip fragment and trailing slash *)
-            <Split> the <frag-parts> from the <raw-url> by /#/.
-            <Extract> the <no-fragment: first> from the <frag-parts>.
-            <Split> the <slash-parts> from the <no-fragment> by /\/+$/.
-            <Extract> the <clean-url: first> from the <slash-parts>.
-            <Emit> a <FilterUrl: event> with { url: <clean-url>, base: <base-domain> }.
+            Split the <frag-parts> from the <raw-url> by /#/.
+            Extract the <no-fragment: first> from the <frag-parts>.
+            Split the <slash-parts> from the <no-fragment> by /\/+$/.
+            Extract the <clean-url: first> from the <slash-parts>.
+            Emit a <FilterUrl: event> with { url: <clean-url>, base: <base-domain> }.
         }
         case /^\/$/ {
             (* Just "/" means root - use base domain as-is (no trailing slash) *)
-            <Emit> a <FilterUrl: event> with { url: <base-domain>, base: <base-domain> }.
+            Emit a <FilterUrl: event> with { url: <base-domain>, base: <base-domain> }.
         }
         case /^\// {
             (* Root-relative URL: prepend base domain, strip fragment and trailing slash *)
-            <Create> the <joined-url> with "${<base-domain>}${<raw-url>}".
-            <Split> the <frag-parts> from the <joined-url> by /#/.
-            <Extract> the <no-fragment: first> from the <frag-parts>.
-            <Split> the <slash-parts> from the <no-fragment> by /\/+$/.
-            <Extract> the <clean-url: first> from the <slash-parts>.
-            <Emit> a <FilterUrl: event> with { url: <clean-url>, base: <base-domain> }.
+            Create the <joined-url> with "${<base-domain>}${<raw-url>}".
+            Split the <frag-parts> from the <joined-url> by /#/.
+            Extract the <no-fragment: first> from the <frag-parts>.
+            Split the <slash-parts> from the <no-fragment> by /\/+$/.
+            Extract the <clean-url: first> from the <slash-parts>.
+            Emit a <FilterUrl: event> with { url: <clean-url>, base: <base-domain> }.
         }
     }
 ```
@@ -207,24 +207,24 @@ Fragments and special schemes should not be crawled:
     match <raw-url> {
         case /^https?:\/\// {
             (* Already absolute URL - strip fragment and trailing slash *)
-            <Split> the <frag-parts> from the <raw-url> by /#/.
-            <Extract> the <no-fragment: first> from the <frag-parts>.
-            <Split> the <slash-parts> from the <no-fragment> by /\/+$/.
-            <Extract> the <clean-url: first> from the <slash-parts>.
-            <Emit> a <FilterUrl: event> with { url: <clean-url>, base: <base-domain> }.
+            Split the <frag-parts> from the <raw-url> by /#/.
+            Extract the <no-fragment: first> from the <frag-parts>.
+            Split the <slash-parts> from the <no-fragment> by /\/+$/.
+            Extract the <clean-url: first> from the <slash-parts>.
+            Emit a <FilterUrl: event> with { url: <clean-url>, base: <base-domain> }.
         }
         case /^\/$/ {
             (* Just "/" means root - use base domain as-is (no trailing slash) *)
-            <Emit> a <FilterUrl: event> with { url: <base-domain>, base: <base-domain> }.
+            Emit a <FilterUrl: event> with { url: <base-domain>, base: <base-domain> }.
         }
         case /^\// {
             (* Root-relative URL: prepend base domain, strip fragment and trailing slash *)
-            <Create> the <joined-url> with "${<base-domain>}${<raw-url>}".
-            <Split> the <frag-parts> from the <joined-url> by /#/.
-            <Extract> the <no-fragment: first> from the <frag-parts>.
-            <Split> the <slash-parts> from the <no-fragment> by /\/+$/.
-            <Extract> the <clean-url: first> from the <slash-parts>.
-            <Emit> a <FilterUrl: event> with { url: <clean-url>, base: <base-domain> }.
+            Create the <joined-url> with "${<base-domain>}${<raw-url>}".
+            Split the <frag-parts> from the <joined-url> by /#/.
+            Extract the <no-fragment: first> from the <frag-parts>.
+            Split the <slash-parts> from the <no-fragment> by /\/+$/.
+            Extract the <clean-url: first> from the <slash-parts>.
+            Emit a <FilterUrl: event> with { url: <clean-url>, base: <base-domain> }.
         }
         case /^(#|mailto:|javascript:|tel:|data:)/ {
             (* Skip fragments and special URLs *)
@@ -248,39 +248,39 @@ For these, we do nothing—no emit, no error. They silently disappear from the p
 
 ```aro
 (Normalize URL: NormalizeUrl Handler) {
-    <Extract> the <event-data> from the <event: data>.
-    <Extract> the <raw-url> from the <event-data: raw>.
-    <Extract> the <source-url> from the <event-data: source>.
-    <Extract> the <base-domain> from the <event-data: base>.
+    Extract the <event-data> from the <event: data>.
+    Extract the <raw-url> from the <event-data: raw>.
+    Extract the <source-url> from the <event-data: source>.
+    Extract the <base-domain> from the <event-data: base>.
 
     match <raw-url> {
         case /^https?:\/\// {
             (* Already absolute URL - strip fragment and trailing slash *)
-            <Split> the <frag-parts> from the <raw-url> by /#/.
-            <Extract> the <no-fragment: first> from the <frag-parts>.
-            <Split> the <slash-parts> from the <no-fragment> by /\/+$/.
-            <Extract> the <clean-url: first> from the <slash-parts>.
-            <Emit> a <FilterUrl: event> with { url: <clean-url>, base: <base-domain> }.
+            Split the <frag-parts> from the <raw-url> by /#/.
+            Extract the <no-fragment: first> from the <frag-parts>.
+            Split the <slash-parts> from the <no-fragment> by /\/+$/.
+            Extract the <clean-url: first> from the <slash-parts>.
+            Emit a <FilterUrl: event> with { url: <clean-url>, base: <base-domain> }.
         }
         case /^\/$/ {
             (* Just "/" means root - use base domain as-is (no trailing slash) *)
-            <Emit> a <FilterUrl: event> with { url: <base-domain>, base: <base-domain> }.
+            Emit a <FilterUrl: event> with { url: <base-domain>, base: <base-domain> }.
         }
         case /^\// {
             (* Root-relative URL: prepend base domain, strip fragment and trailing slash *)
-            <Create> the <joined-url> with "${<base-domain>}${<raw-url>}".
-            <Split> the <frag-parts> from the <joined-url> by /#/.
-            <Extract> the <no-fragment: first> from the <frag-parts>.
-            <Split> the <slash-parts> from the <no-fragment> by /\/+$/.
-            <Extract> the <clean-url: first> from the <slash-parts>.
-            <Emit> a <FilterUrl: event> with { url: <clean-url>, base: <base-domain> }.
+            Create the <joined-url> with "${<base-domain>}${<raw-url>}".
+            Split the <frag-parts> from the <joined-url> by /#/.
+            Extract the <no-fragment: first> from the <frag-parts>.
+            Split the <slash-parts> from the <no-fragment> by /\/+$/.
+            Extract the <clean-url: first> from the <slash-parts>.
+            Emit a <FilterUrl: event> with { url: <clean-url>, base: <base-domain> }.
         }
         case /^(#|mailto:|javascript:|tel:|data:)/ {
             (* Skip fragments and special URLs *)
         }
     }
 
-    <Return> an <OK: status> for the <normalization>.
+    Return an <OK: status> for the <normalization>.
 }
 ```
 
@@ -319,7 +319,7 @@ For simplicity, our crawler skips them. They fall through the `match` without em
 - URLs come in many forms: absolute, root-relative, path-relative, fragments, special schemes
 - `match` with regex patterns classifies URLs cleanly
 - `<Split>` with regex delimiters breaks strings into lists -- useful for stripping URL fragments and trailing slashes
-- `<Extract> first` retrieves the first element from a list produced by `<Split>`
+- `Extract first` retrieves the first element from a list produced by `<Split>`
 - Fragment stripping (`#section`) and trailing slash removal prevent duplicate crawling of the same page
 - String interpolation `"${<var>}"` builds absolute URLs from base domain and path
 - Non-web URLs are filtered by not emitting events

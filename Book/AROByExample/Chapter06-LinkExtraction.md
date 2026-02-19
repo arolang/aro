@@ -51,7 +51,7 @@ The `<ParseHtml>` action supports multiple specifiers:
 We have already used `markdown` in the crawl handler. Now we will use `links`:
 
 ```aro
-<ParseHtml> the <links: links> from the <html>.
+ParseHtml the <links: links> from the <html>.
 ```
 
 This returns a list like:
@@ -75,15 +75,15 @@ Create `links.aro` with the `ExtractLinks` handler:
    ============================================================ *)
 
 (Extract Links: ExtractLinks Handler) {
-    <Log> "ExtractLinks handler triggered" to the <console>.
+    Log "ExtractLinks handler triggered" to the <console>.
 
     (* Extract from event data structure *)
-    <Extract> the <event-data> from the <event: data>.
-    <Extract> the <html> from the <event-data: html>.
-    <Extract> the <source-url> from the <event-data: url>.
-    <Extract> the <base-domain> from the <event-data: base>.
+    Extract the <event-data> from the <event: data>.
+    Extract the <html> from the <event-data: html>.
+    Extract the <source-url> from the <event-data: url>.
+    Extract the <base-domain> from the <event-data: base>.
 
-    <Return> an <OK: status> for the <extraction>.
+    Return an <OK: status> for the <extraction>.
 }
 ```
 
@@ -129,12 +129,12 @@ With the schema defined, the handler becomes:
 
 ```aro
 (Extract Links: ExtractLinks Handler) {
-    <Log> "ExtractLinks handler triggered" to the <console>.
+    Log "ExtractLinks handler triggered" to the <console>.
 
     (* Typed extraction - validates against ExtractLinksEvent schema *)
-    <Extract> the <event-data: ExtractLinksEvent> from the <event: data>.
+    Extract the <event-data: ExtractLinksEvent> from the <event: data>.
 
-    <Return> an <OK: status> for the <extraction>.
+    Return an <OK: status> for the <extraction>.
 }
 ```
 
@@ -148,8 +148,8 @@ The PascalCase qualifier `ExtractLinksEvent` tells ARO to:
 After typed extraction, access properties using the qualifier syntax:
 
 ```aro
-<ParseHtml> the <links: links> from the <event-data: html>.
-<Log> "Processing links from ${<event-data: url>}" to the <console>.
+ParseHtml the <links: links> from the <event-data: html>.
+Log "Processing links from ${<event-data: url>}" to the <console>.
 ```
 
 ### Typed vs Field-by-Field
@@ -169,19 +169,19 @@ Add the link extraction:
 
 ```aro
 (Extract Links: ExtractLinks Handler) {
-    <Log> "ExtractLinks handler triggered" to the <console>.
+    Log "ExtractLinks handler triggered" to the <console>.
 
-    <Extract> the <event-data> from the <event: data>.
-    <Extract> the <html> from the <event-data: html>.
-    <Extract> the <source-url> from the <event-data: url>.
-    <Extract> the <base-domain> from the <event-data: base>.
+    Extract the <event-data> from the <event: data>.
+    Extract the <html> from the <event-data: html>.
+    Extract the <source-url> from the <event-data: url>.
+    Extract the <base-domain> from the <event-data: base>.
 
     (* Use ParseHtml action to extract all href attributes from anchor tags *)
-    <ParseHtml> the <links: links> from the <html>.
-    <Compute> the <link-count: count> from the <links>.
-    <Log> "Found ${<link-count>} links" to the <console>.
+    ParseHtml the <links: links> from the <html>.
+    Compute the <link-count: count> from the <links>.
+    Log "Found ${<link-count>} links" to the <console>.
 
-    <Return> an <OK: status> for the <extraction>.
+    Return an <OK: status> for the <extraction>.
 }
 ```
 
@@ -198,14 +198,14 @@ To process each link, we use `for each`:
 
     (* Process each extracted link *)
     for each <raw-url> in <links> {
-        <Emit> a <NormalizeUrl: event> with {
+        Emit a <NormalizeUrl: event> with {
             raw: <raw-url>,
             source: <source-url>,
             base: <base-domain>
         }.
     }
 
-    <Return> an <OK: status> for the <extraction>.
+    Return an <OK: status> for the <extraction>.
 ```
 
 The `for each` loop iterates over the list. For each item, it binds that item to `raw-url` and executes the block.
@@ -224,7 +224,7 @@ In Chapter 10, we will replace `for each` with `parallel for each`:
 
 ```aro
 parallel for each <raw-url> in <links> {
-    <Emit> a <NormalizeUrl: event> with { ... }.
+    Emit a <NormalizeUrl: event> with { ... }.
 }
 ```
 
@@ -244,29 +244,29 @@ Here is the complete `ExtractLinks` handler:
    ============================================================ *)
 
 (Extract Links: ExtractLinks Handler) {
-    <Log> "ExtractLinks handler triggered" to the <console>.
+    Log "ExtractLinks handler triggered" to the <console>.
 
     (* Extract from event data structure *)
-    <Extract> the <event-data> from the <event: data>.
-    <Extract> the <html> from the <event-data: html>.
-    <Extract> the <source-url> from the <event-data: url>.
-    <Extract> the <base-domain> from the <event-data: base>.
+    Extract the <event-data> from the <event: data>.
+    Extract the <html> from the <event-data: html>.
+    Extract the <source-url> from the <event-data: url>.
+    Extract the <base-domain> from the <event-data: base>.
 
     (* Use ParseHtml action to extract all href attributes from anchor tags *)
-    <ParseHtml> the <links: links> from the <html>.
-    <Compute> the <link-count: count> from the <links>.
-    <Log> "Found ${<link-count>} links" to the <console>.
+    ParseHtml the <links: links> from the <html>.
+    Compute the <link-count: count> from the <links>.
+    Log "Found ${<link-count>} links" to the <console>.
 
     (* Process each extracted link using for each *)
     for each <raw-url> in <links> {
-        <Emit> a <NormalizeUrl: event> with {
+        Emit a <NormalizeUrl: event> with {
             raw: <raw-url>,
             source: <source-url>,
             base: <base-domain>
         }.
     }
 
-    <Return> an <OK: status> for the <extraction>.
+    Return an <OK: status> for the <extraction>.
 }
 ```
 
@@ -292,9 +292,9 @@ Here is the complete `ExtractLinks` handler:
 
 ## Chapter Recap
 
-- `<ParseHtml> ... links` extracts all href values from anchor tags
+- `ParseHtml ... links` extracts all href values from anchor tags
 - The result is a list of raw strings (relative and absolute URLs, fragments, etc.)
-- Typed event extraction (`<Extract> the <data: SchemaName> from <event>`) validates data against OpenAPI schemas
+- Typed event extraction (`Extract the <data: SchemaName> from <event>`) validates data against OpenAPI schemas
 - `for each <item> in <list>` iterates over collections
 - We emit a `NormalizeUrl` event for each link, passing through the source and base
 - This handler is focused: extract and emit, nothing more

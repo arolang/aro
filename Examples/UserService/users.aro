@@ -4,54 +4,54 @@
 
 (* List all users - matches operationId: listUsers *)
 (listUsers: User API) {
-    <Retrieve> the <users> from the <user-repository>.
-    <Return> an <OK: status> with <users>.
+    Retrieve the <users> from the <user-repository>.
+    Return an <OK: status> with <users>.
 }
 
 (* Get user by ID - matches operationId: getUser *)
 (getUser: User API) {
-    <Extract> the <user-id> from the <pathParameters: id>.
-    <Retrieve> the <user> from the <user-repository> where <id> is <user-id>.
-    <Return> an <OK: status> with <user>.
+    Extract the <user-id> from the <pathParameters: id>.
+    Retrieve the <user> from the <user-repository> where <id> is <user-id>.
+    Return an <OK: status> with <user>.
 }
 
 (* Create user - matches operationId: createUser *)
 (createUser: User API) {
-    <Extract> the <user-data> from the <request: body>.
+    Extract the <user-data> from the <request: body>.
 
-    <Create> the <user> with <user-data>.
+    Create the <user> with <user-data>.
     (* Store returns the stored data with generated ID *)
-    <Store> the <stored-user: user> into the <user-repository>.
+    Store the <stored-user: user> into the <user-repository>.
 
     (* Emit event for other handlers to react *)
-    <Emit> a <UserCreated: event> with <stored-user>.
+    Emit a <UserCreated: event> with <stored-user>.
 
-    <Return> a <Created: status> with <stored-user>.
+    Return a <Created: status> with <stored-user>.
 }
 
 (* Update user - matches operationId: updateUser *)
 (updateUser: User API) {
-    <Extract> the <user-id> from the <pathParameters: id>.
-    <Extract> the <update-data> from the <request: body>.
+    Extract the <user-id> from the <pathParameters: id>.
+    Extract the <update-data> from the <request: body>.
 
     (* Retrieve existing user, merge with updates, store result *)
-    <Retrieve> the <existing-user> from the <user-repository> where <id> is <user-id>.
-    <Merge> the <updated-user: existing-user> with <update-data>.
-    <Store> the <updated-user> into the <user-repository>.
+    Retrieve the <existing-user> from the <user-repository> where <id> is <user-id>.
+    Merge the <updated-user: existing-user> with <update-data>.
+    Store the <updated-user> into the <user-repository>.
 
     (* Emit update event *)
-    <Emit> a <UserUpdated: event> with <updated-user>.
+    Emit a <UserUpdated: event> with <updated-user>.
 
-    <Return> an <OK: status> with <updated-user>.
+    Return an <OK: status> with <updated-user>.
 }
 
 (* Delete user - matches operationId: deleteUser *)
 (deleteUser: User API) {
-    <Extract> the <user-id> from the <pathParameters: id>.
-    <Delete> the <deleted-user> from the <user-repository> where <id> is <user-id>.
+    Extract the <user-id> from the <pathParameters: id>.
+    Delete the <deleted-user> from the <user-repository> where <id> is <user-id>.
 
     (* Emit deletion event *)
-    <Emit> a <UserDeleted: event> with <user-id>.
+    Emit a <UserDeleted: event> with <user-id>.
 
-    <Return> a <NoContent: status> for the <deletion>.
+    Return a <NoContent: status> for the <deletion>.
 }

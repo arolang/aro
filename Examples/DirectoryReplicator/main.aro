@@ -4,30 +4,30 @@
 
 (Application-Start: Directory Replicator) {
     (* Define template source path *)
-    <Create> the <template-path> with "./template".
+    Create the <template-path> with "./template".
 
-    <Log> "Scanning template directory..." to the <console>.
+    Log "Scanning template directory..." to the <console>.
 
     (* List all entries recursively from template - use specifier for recursive *)
-    <List> the <all-entries: recursively> from the <directory: template-path>.
+    List the <all-entries: recursively> from the <directory: template-path>.
 
     (* Process each directory entry *)
     for each <entry> in <all-entries> where <entry: isDirectory> is true {
         (* Extract the full path *)
-        <Extract> the <full-path> from the <entry: path>.
+        Extract the <full-path> from the <entry: path>.
 
         (* Split to remove template/ prefix from absolute path *)
-        <Split> the <path-parts> from the <full-path> by /template\//.
+        Split the <path-parts> from the <full-path> by /template\//.
 
         (* ARO-0038: Get the last element (relative path) using result specifier *)
-        <Extract> the <relative-path: last> from the <path-parts>.
+        Extract the <relative-path: last> from the <path-parts>.
 
         (* Create the directory in current location *)
-        <Make> the <created> to the <path: relative-path>.
+        Make the <created> to the <path: relative-path>.
 
-        <Log> <relative-path> to the <console>.
+        Log <relative-path> to the <console>.
     }
 
-    <Log> "Directory structure replicated." to the <console>.
-    <Return> an <OK: status> for the <replication>.
+    Log "Directory structure replicated." to the <console>.
+    Return an <OK: status> for the <replication>.
 }

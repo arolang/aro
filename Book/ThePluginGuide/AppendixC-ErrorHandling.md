@@ -352,20 +352,20 @@ When calling plugins from ARO, handle errors appropriately:
 
 ```aro
 (Validate User Input: Form Handler) {
-    <Extract> the <email> from the <body: email>.
+    Extract the <email> from the <body: email>.
 
-    <Call> the <result> from the <validation: validateEmail> with {
+    Call the <result> from the <validation: validateEmail> with {
         email: <email>
     }.
 
-    <When> <result: error> exists:
-        <Log> "Validation failed: " ++ <result: error> to the <console>.
-        <Return> a <BadRequest: status> with {
+    When <result: error> exists:
+        Log "Validation failed: " ++ <result: error> to the <console>.
+        Return a <BadRequest: status> with {
             error: <result: error>,
             code: <result: code>
         }.
 
-    <Return> an <OK: status> with <result>.
+    Return an <OK: status> with <result>.
 }
 ```
 
@@ -373,9 +373,9 @@ When calling plugins from ARO, handle errors appropriately:
 
 ```aro
 (Validate Registration: Form Handler) {
-    <Extract> the <form-data> from the <body>.
+    Extract the <form-data> from the <body>.
 
-    <Call> the <validation> from the <validation: validateForm> with {
+    Call the <validation> from the <validation: validateForm> with {
         fields: <form-data>,
         rules: {
             email: { required: true, type: "email" },
@@ -383,13 +383,13 @@ When calling plugins from ARO, handle errors appropriately:
         }
     }.
 
-    <When> <validation: errors> exists:
-        <Return> a <BadRequest: status> with {
+    When <validation: errors> exists:
+        Return a <BadRequest: status> with {
             message: "Validation failed",
             errors: <validation: errors>
         }.
 
-    <Return> an <OK: status> with { valid: true }.
+    Return an <OK: status> with { valid: true }.
 }
 ```
 
@@ -397,27 +397,27 @@ When calling plugins from ARO, handle errors appropriately:
 
 ```aro
 (Fetch With Retry: Data Handler) {
-    <Create> the <attempts> with 0.
-    <Create> the <max-attempts> with 3.
+    Create the <attempts> with 0.
+    Create the <max-attempts> with 3.
 
     <Loop>:
-        <Increment> the <attempts>.
+        Increment the <attempts>.
 
-        <Call> the <result> from the <http: fetch> with {
+        Call the <result> from the <http: fetch> with {
             url: "https://api.example.com/data"
         }.
 
-        <When> <result: error> does not exist:
-            <Return> an <OK: status> with <result>.
+        When <result: error> does not exist:
+            Return an <OK: status> with <result>.
 
-        <When> <attempts> >= <max-attempts>:
-            <Return> a <ServerError: status> with {
+        When <attempts> >= <max-attempts>:
+            Return a <ServerError: status> with {
                 error: "Failed after " ++ <max-attempts> ++ " attempts",
                 lastError: <result: error>
             }.
 
-        <Log> "Attempt " ++ <attempts> ++ " failed, retrying..." to the <console>.
-        <Wait> 1 second.
+        Log "Attempt " ++ <attempts> ++ " failed, retrying..." to the <console>.
+        Wait 1 second.
 }
 ```
 

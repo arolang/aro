@@ -282,19 +282,19 @@ pub extern "C" fn aro_plugin_free(ptr: *mut c_char) {
 // MARK: - Validation Actions
 
 /// Compiled regex patterns (created once, reused for each call)
-static EMAIL_REGEX: Lazy<Regex> = Lazy::new(|| {
+static EMAIL_REGEX: LazyRegex = Lazy::new(|| {
     Regex::new(r"^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$").unwrap()
 });
 
-static URL_REGEX: Lazy<Regex> = Lazy::new(|| {
+static URL_REGEX: LazyRegex = Lazy::new(|| {
     Regex::new(r"^https?://[^\s/$.?#].[^\s]*$").unwrap()
 });
 
-static PHONE_REGEX: Lazy<Regex> = Lazy::new(|| {
+static PHONE_REGEX: LazyRegex = Lazy::new(|| {
     Regex::new(r"^\+?[1-9]\d{1,14}$").unwrap()
 });
 
-static UUID_REGEX: Lazy<Regex> = Lazy::new(|| {
+static UUID_REGEX: LazyRegex = Lazy::new(|| {
     Regex::new(r"^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$").unwrap()
 });
 
@@ -548,30 +548,30 @@ With custom actions registered, you use native ARO syntax:
 
 ```aro
 (Validate User Input: Registration Handler) {
-    <Extract> the <email> from the <request: email>.
-    <Extract> the <phone> from the <request: phone>.
+    Extract the <email> from the <request: email>.
+    Extract the <phone> from the <request: phone>.
 
     (* Validate email using custom action - feels native! *)
     <ValidateEmail> the <email-result> from <email>.
 
-    <When> the <email-result: valid> is false {
-        <Return> a <BadRequest: status> with "Invalid email address".
+    When the <email-result: valid> is false {
+        Return a <BadRequest: status> with "Invalid email address".
     }.
 
     (* Validate phone using custom action *)
     <ValidatePhone> the <phone-result> from <phone>.
 
-    <When> the <phone-result: valid> is false {
-        <Return> a <BadRequest: status> with "Invalid phone number".
+    When the <phone-result: valid> is false {
+        Return a <BadRequest: status> with "Invalid phone number".
     }.
 
     (* Validate credit card with options *)
-    <Extract> the <card> from the <request: creditCard>.
+    Extract the <card> from the <request: creditCard>.
     <ValidateCreditCard> the <card-result> from <card>.
 
-    <Log> "Card type: " with <card-result: card_type> to the <console>.
+    Log "Card type: " with <card-result: card_type> to the <console>.
 
-    <Return> an <OK: status> with <email-result>.
+    Return an <OK: status> with <email-result>.
 }
 ```
 
@@ -590,7 +590,7 @@ use once_cell::sync::Lazy;
 use regex::Regex;
 
 // Compiled once at first use, reused for all calls
-static PATTERN: Lazy<Regex> = Lazy::new(|| {
+static PATTERN: LazyRegex = Lazy::new(|| {
     Regex::new(r"complex pattern").unwrap()
 });
 ```

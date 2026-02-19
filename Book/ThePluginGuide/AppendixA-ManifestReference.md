@@ -244,11 +244,11 @@ actions:
 When `verbs` is specified, the action registers as a native ARO verb:
 ```aro
 (* With verbs: [hash, digest] - these work: *)
-<Hash> the <result: sha256> from the <data>.
-<Digest> the <checksum> from the <file>.
+Hash the <result: sha256> from the <data>.
+Digest the <checksum> from the <file>.
 
 (* Without verbs - only via Call: *)
-<Call> the <result> from the <plugin: processData> with { ... }.
+Call the <result> from the <plugin: processData> with { ... }.
 ```
 
 ### Rust Plugin
@@ -364,8 +364,8 @@ Example event handler:
 ```aro
 (* Automatically handles UserCreated events *)
 (Log User Events: UserCreated Handler) {
-    <Log> "[AUDIT] User created" to the <console>.
-    <Return> an <OK: status> for the <audit>.
+    Log "[AUDIT] User created" to the <console>.
+    Return an <OK: status> for the <audit>.
 }
 ```
 

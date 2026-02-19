@@ -725,29 +725,29 @@ char* action_extract_audio(const char* input_json) {
 
 ```aro
 (Video Processing: Application-Start) {
-    <Log> "Starting video processing demo..." to the <console>.
+    Log "Starting video processing demo..." to the <console>.
 
     (* Get media information *)
-    <Call> the <info> from the <plugin-c-ffmpeg: info> with {
+    Call the <info> from the <plugin-c-ffmpeg: info> with {
         path: "input.mp4"
     }.
 
-    <Log> "Video info:" to the <console>.
-    <Log> "  Duration: " with <info: duration> to the <console>.
-    <Log> "  Resolution: " with <info: video: width> to the <console>.
-    <Log> "  Video codec: " with <info: video: codec> to the <console>.
+    Log "Video info:" to the <console>.
+    Log "  Duration: " with <info: duration> to the <console>.
+    Log "  Resolution: " with <info: video: width> to the <console>.
+    Log "  Video codec: " with <info: video: codec> to the <console>.
 
     (* Generate thumbnail at 5 seconds *)
-    <Call> the <thumb> from the <plugin-c-ffmpeg: thumbnail> with {
+    Call the <thumb> from the <plugin-c-ffmpeg: thumbnail> with {
         input: "input.mp4",
         output: "thumbnail.ppm",
         timestamp: 5.0,
         width: 320
     }.
-    <Log> "Thumbnail created: " with <thumb: output> to the <console>.
+    Log "Thumbnail created: " with <thumb: output> to the <console>.
 
     (* Transcode to WebM for web delivery *)
-    <Call> the <webm> from the <plugin-c-ffmpeg: transcode> with {
+    Call the <webm> from the <plugin-c-ffmpeg: transcode> with {
         input: "input.mp4",
         output: "output.webm",
         video_codec: "libvpx-vp9",
@@ -756,17 +756,17 @@ char* action_extract_audio(const char* input_json) {
         video_bitrate: 2000,
         audio_bitrate: 128
     }.
-    <Log> "Transcoded to WebM" to the <console>.
+    Log "Transcoded to WebM" to the <console>.
 
     (* Extract audio for podcast *)
-    <Call> the <audio> from the <plugin-c-ffmpeg: extract-audio> with {
+    Call the <audio> from the <plugin-c-ffmpeg: extract-audio> with {
         input: "input.mp4",
         output: "podcast.mp3",
         bitrate: 192
     }.
-    <Log> "Audio extracted: " with <audio: output> to the <console>.
+    Log "Audio extracted: " with <audio: output> to the <console>.
 
-    <Return> an <OK: status> for the <startup>.
+    Return an <OK: status> for the <startup>.
 }
 ```
 

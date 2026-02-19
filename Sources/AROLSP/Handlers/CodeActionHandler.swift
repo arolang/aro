@@ -151,7 +151,7 @@ public struct CodeActionHandler: Sendable {
                         title: "Add Return statement",
                         uri: uri,
                         position: insertPosition,
-                        text: "    <Return> an <OK: status> for the <result>.\n",
+                        text: "    Return an <OK: status> for the <result>.\n",
                         diagnostic: nil
                     ))
                 }

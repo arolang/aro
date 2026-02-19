@@ -16,8 +16,8 @@ Use `from` preposition to make GET requests:
 
 ```aro
 (* Simple GET request *)
-<Create> the <url> with "https://api.example.com/users".
-<Request> the <users> from the <url>.
+Create the <url> with "https://api.example.com/users".
+Request the <users> from the <url>.
 ```
 
 ## POST Requests
@@ -26,9 +26,9 @@ Use `to` preposition to make POST requests:
 
 ```aro
 (* POST with data from context *)
-<Create> the <user-data> with { name: "Alice", email: "alice@example.com" }.
-<Create> the <api-url> with "https://api.example.com/users".
-<Request> the <result> to the <api-url> with <user-data>.
+Create the <user-data> with { name: "Alice", email: "alice@example.com" }.
+Create the <api-url> with "https://api.example.com/users".
+Request the <result> to the <api-url> with <user-data>.
 ```
 
 ## Other HTTP Methods
@@ -37,13 +37,13 @@ Use `via` preposition with method specifier for PUT, DELETE, PATCH:
 
 ```aro
 (* PUT request *)
-<Request> the <result> via PUT the <url> with <update-data>.
+Request the <result> via PUT the <url> with <update-data>.
 
 (* DELETE request *)
-<Request> the <result> via DELETE the <url>.
+Request the <result> via DELETE the <url>.
 
 (* PATCH request *)
-<Request> the <result> via PATCH the <url> with <partial-data>.
+Request the <result> via PATCH the <url> with <partial-data>.
 ```
 
 ## Config Object Syntax
@@ -52,7 +52,7 @@ For full control over requests, use a config object with the `with { ... }` clau
 
 ```aro
 (* POST with custom headers and timeout *)
-<Request> the <response> from the <api-url> with {
+Request the <response> from the <api-url> with {
     method: "POST",
     headers: { "Content-Type": "application/json", "Authorization": "Bearer token" },
     body: <data>,
@@ -60,7 +60,7 @@ For full control over requests, use a config object with the `with { ... }` clau
 }.
 
 (* GET with authorization header *)
-<Request> the <protected-data> from the <api-url> with {
+Request the <protected-data> from the <api-url> with {
     headers: { "Authorization": "Bearer my-token" }
 }.
 ```
@@ -88,15 +88,15 @@ The `<Request>` action automatically parses JSON responses. After a request, the
 | `result.isSuccess` | Boolean: true if status 200-299 |
 
 ```aro
-<Create> the <api-url> with "https://api.example.com/users".
-<Request> the <response> from the <api-url>.
+Create the <api-url> with "https://api.example.com/users".
+Request the <response> from the <api-url>.
 
 (* Access response metadata *)
-<Extract> the <status> from the <response: statusCode>.
-<Extract> the <is-ok> from the <response: isSuccess>.
+Extract the <status> from the <response: statusCode>.
+Extract the <is-ok> from the <response: isSuccess>.
 
 (* Access response body - response IS the parsed body *)
-<Extract> the <first-user> from the <response: 0>.
+Extract the <first-user> from the <response: 0>.
 ```
 
 ## Complete Example
@@ -105,14 +105,14 @@ The `<Request>` action automatically parses JSON responses. After a request, the
 (* Fetch weather data from Open-Meteo API *)
 
 (Application-Start: Weather Client) {
-    <Log> "Fetching weather..." to the <console>.
+    Log "Fetching weather..." to the <console>.
 
-    <Create> the <api-url> with "https://api.open-meteo.com/v1/forecast?latitude=52.52&longitude=13.41&current_weather=true".
-    <Request> the <weather> from the <api-url>.
+    Create the <api-url> with "https://api.open-meteo.com/v1/forecast?latitude=52.52&longitude=13.41&current_weather=true".
+    Request the <weather> from the <api-url>.
 
-    <Log> <weather> to the <console>.
+    Log <weather> to the <console>.
 
-    <Return> an <OK: status> for the <startup>.
+    Return an <OK: status> for the <startup>.
 }
 ```
 

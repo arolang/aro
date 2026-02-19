@@ -13,13 +13,13 @@ Every statement you've typed, every variable you've created, every feature set y
 The `:export` command captures your session as a proper `.aro` file:
 
 ```
-aro> <Set> the <base-price> to 100.
+aro> Set the <base-price> to 100.
 => OK
 
-aro> <Compute> the <tax> from <base-price> * 0.2.
+aro> Compute the <tax> from <base-price> * 0.2.
 => 20
 
-aro> <Compute> the <total> from <base-price> + <tax>.
+aro> Compute the <total> from <base-price> + <tax>.
 => 120
 
 aro> :export
@@ -27,9 +27,9 @@ aro> :export
 (* Date: 2026-02-14T10:30:00Z *)
 
 (REPL Session: Interactive) {
-    <Set> the <base-price> to 100.
-    <Compute> the <tax> from <base-price> * 0.2.
-    <Compute> the <total> from <base-price> + <tax>.
+    Set the <base-price> to 100.
+    Compute the <tax> from <base-price> * 0.2.
+    Compute the <total> from <base-price> + <tax>.
 }
 ```
 
@@ -59,14 +59,14 @@ The result:
 (* Generated test from ARO REPL session *)
 
 (Pricing Test: Test) {
-    <Set> the <base-price> to 100.
-    <Assert> the <base-price> is 100.
+    Set the <base-price> to 100.
+    Assert the <base-price> is 100.
 
-    <Compute> the <tax> from <base-price> * 0.2.
-    <Assert> the <tax> is 20.
+    Compute the <tax> from <base-price> * 0.2.
+    Assert the <tax> is 20.
 
-    <Compute> the <total> from <base-price> + <tax>.
-    <Assert> the <total> is 120.
+    Compute the <total> from <base-price> + <tax>.
+    Assert the <total> is 120.
 }
 ```
 

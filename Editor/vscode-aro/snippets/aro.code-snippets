@@ -12,9 +12,9 @@
     "prefix": "appstart",
     "body": [
       "(Application-Start: ${1:App Name}) {",
-      "    <Log> \"${2:Starting...}\" to the <console>.",
+      "    Log \"${2:Starting...}\" to the <console>.",
       "    $0",
-      "    <Return> an <OK: status> for the <startup>.",
+      "    Return an <OK: status> for the <startup>.",
       "}"
     ],
     "description": "Application entry point"
@@ -23,9 +23,9 @@
     "prefix": "appendsuccess",
     "body": [
       "(Application-End: Success) {",
-      "    <Log> \"${1:Shutting down...}\" to the <console>.",
+      "    Log \"${1:Shutting down...}\" to the <console>.",
       "    $0",
-      "    <Return> an <OK: status> for the <shutdown>.",
+      "    Return an <OK: status> for the <shutdown>.",
       "}"
     ],
     "description": "Graceful shutdown handler"
@@ -34,10 +34,10 @@
     "prefix": "appenderror",
     "body": [
       "(Application-End: Error) {",
-      "    <Extract> the <error> from the <shutdown: error>.",
-      "    <Log> <error> to the <console>.",
+      "    Extract the <error> from the <shutdown: error>.",
+      "    Log <error> to the <console>.",
       "    $0",
-      "    <Return> an <OK: status> for the <error-handling>.",
+      "    Return an <OK: status> for the <error-handling>.",
       "}"
     ],
     "description": "Error shutdown handler"
@@ -47,7 +47,7 @@
     "body": [
       "(${1:operationId}: ${2:API Name}) {",
       "    $0",
-      "    <Return> an <OK: status> with <${3:result}>.",
+      "    Return an <OK: status> with <${3:result}>.",
       "}"
     ],
     "description": "HTTP route handler (operationId from openapi.yaml)"
@@ -56,9 +56,9 @@
     "prefix": "eventhandler",
     "body": [
       "(${1:Handler Name}: ${2:EventName} Handler) {",
-      "    <Extract> the <${3:data}> from the <event: ${3:data}>.",
+      "    Extract the <${3:data}> from the <event: ${3:data}>.",
       "    $0",
-      "    <Return> an <OK: status> for the <${4:processing}>.",
+      "    Return an <OK: status> for the <${4:processing}>.",
       "}"
     ],
     "description": "Event handler feature set"
@@ -67,121 +67,121 @@
     "prefix": "test",
     "body": [
       "(${1:test-name}: ${2:Component} Test) {",
-      "    <Given> the <${3:input}> with ${4:value}.",
-      "    <When> the <${5:result}> from the <${6:feature}>.",
-      "    <Then> the <${5:result}> with ${7:expected}.",
+      "    Given the <${3:input}> with ${4:value}.",
+      "    When the <${5:result}> from the <${6:feature}>.",
+      "    Then the <${5:result}> with ${7:expected}.",
       "}"
     ],
     "description": "BDD-style test feature set"
   },
   "Extract Action": {
     "prefix": "extract",
-    "body": "<Extract> the <${1:result}> from the <${2:source}>.",
+    "body": "Extract the <${1:result}> from the <${2:source}>.",
     "description": "Extract data from source"
   },
   "Retrieve Action": {
     "prefix": "retrieve",
-    "body": "<Retrieve> the <${1:result}> from the <${2:repository}>.",
+    "body": "Retrieve the <${1:result}> from the <${2:repository}>.",
     "description": "Retrieve data from repository"
   },
   "Create Action": {
     "prefix": "create",
-    "body": "<Create> the <${1:result}> with ${2:value}.",
+    "body": "Create the <${1:result}> with ${2:value}.",
     "description": "Create a new value"
   },
   "Compute Action": {
     "prefix": "compute",
-    "body": "<Compute> the <${1:result}> from ${2:expression}.",
+    "body": "Compute the <${1:result}> from ${2:expression}.",
     "description": "Compute a value from expression"
   },
   "Validate Action": {
     "prefix": "validate",
-    "body": "<Validate> the <${1:result}> for the <${2:input}>.",
+    "body": "Validate the <${1:result}> for the <${2:input}>.",
     "description": "Validate input"
   },
   "Transform Action": {
     "prefix": "transform",
-    "body": "<Transform> the <${1:result}> from the <${2:source}>.",
+    "body": "Transform the <${1:result}> from the <${2:source}>.",
     "description": "Transform data"
   },
   "Set Action": {
     "prefix": "set",
-    "body": "<Set> the <${1:variable}> to ${2:value}.",
+    "body": "Set the <${1:variable}> to ${2:value}.",
     "description": "Set a variable value"
   },
   "Return OK": {
     "prefix": "returnok",
-    "body": "<Return> an <OK: status> ${1|with,for|} ${2:the <result>}.",
+    "body": "Return an <OK: status> ${1|with,for|} ${2:the <result>}.",
     "description": "Return OK status"
   },
   "Return Created": {
     "prefix": "returncreated",
-    "body": "<Return> a <Created: status> with <${1:result}>.",
+    "body": "Return a <Created: status> with <${1:result}>.",
     "description": "Return Created status"
   },
   "Return Error": {
     "prefix": "returnerror",
-    "body": "<Return> an <Error: status> for the <${1:failure}>.",
+    "body": "Return an <Error: status> for the <${1:failure}>.",
     "description": "Return Error status"
   },
   "Throw Action": {
     "prefix": "throw",
-    "body": "<Throw> the <${1:error}> for the <${2:reason}>.",
+    "body": "Throw the <${1:error}> for the <${2:reason}>.",
     "description": "Throw an error"
   },
   "Log Action": {
     "prefix": "log",
-    "body": "<Log> \"${1:text}\" to the <console>.",
+    "body": "Log \"${1:text}\" to the <console>.",
     "description": "Log message to console"
   },
   "Send Action": {
     "prefix": "send",
-    "body": "<Send> the <${1:message}> to the <${2:destination}>.",
+    "body": "Send the <${1:message}> to the <${2:destination}>.",
     "description": "Send message"
   },
   "Emit Event": {
     "prefix": "emit",
-    "body": "<Emit> a <${1:EventName}: event> with <${2:data}>.",
+    "body": "Emit a <${1:EventName}: event> with <${2:data}>.",
     "description": "Emit a domain event"
   },
   "Store Action": {
     "prefix": "store",
-    "body": "<Store> the <${1:data}> into the <${2:repository}>.",
+    "body": "Store the <${1:data}> into the <${2:repository}>.",
     "description": "Store data in repository"
   },
   "Start Server": {
     "prefix": "startserver",
-    "body": "<Start> the <http-server> on <port> with ${1:8080}.",
+    "body": "Start the <http-server> on <port> with ${1:8080}.",
     "description": "Start HTTP server"
   },
   "Keepalive": {
     "prefix": "keepalive",
-    "body": "<Keepalive> the <application> for the <events>.",
+    "body": "Keepalive the <application> for the <events>.",
     "description": "Keep application running for events"
   },
   "Watch Files": {
     "prefix": "watch",
-    "body": "<Watch> the <file-monitor> for the <directory> with \"${1:.}\".",
+    "body": "Watch the <file-monitor> for the <directory> with \"${1:.}\".",
     "description": "Watch directory for file changes"
   },
   "Given": {
     "prefix": "given",
-    "body": "<Given> the <${1:variable}> with ${2:value}.",
+    "body": "Given the <${1:variable}> with ${2:value}.",
     "description": "Test setup - Given"
   },
   "When": {
     "prefix": "when",
-    "body": "<When> the <${1:result}> from the <${2:feature}>.",
+    "body": "When the <${1:result}> from the <${2:feature}>.",
     "description": "Test action - When"
   },
   "Then": {
     "prefix": "then",
-    "body": "<Then> the <${1:result}> with ${2:expected}.",
+    "body": "Then the <${1:result}> with ${2:expected}.",
     "description": "Test assertion - Then"
   },
   "Assert": {
     "prefix": "assert",
-    "body": "<Assert> the <${1:value}> with ${2:expected}.",
+    "body": "Assert the <${1:value}> with ${2:expected}.",
     "description": "Test assertion - Assert"
   },
   "Block Comment": {
@@ -191,12 +191,12 @@
   },
   "Publish": {
     "prefix": "publish",
-    "body": "<Publish> as <${1:external-name}> <${2:internal-variable}>.",
+    "body": "Publish as <${1:external-name}> <${2:internal-variable}>.",
     "description": "Publish variable globally"
   },
   "Fetch HTTP": {
     "prefix": "fetch",
-    "body": "<Fetch> the <${1:response}> from the <http-client> with \"${2:https://api.example.com}\".",
+    "body": "Fetch the <${1:response}> from the <http-client> with \"${2:https://api.example.com}\".",
     "description": "Fetch data from HTTP endpoint"
   },
   "Match Expression": {
@@ -221,10 +221,10 @@
     "prefix": "wsconnect",
     "body": [
       "(Handle WebSocket Connect: WebSocket Event Handler) {",
-      "    <Extract> the <connection-id> from the <event: id>.",
-      "    <Log> \"WebSocket client connected\" to the <console>.",
+      "    Extract the <connection-id> from the <event: id>.",
+      "    Log \"WebSocket client connected\" to the <console>.",
       "    $0",
-      "    <Return> an <OK: status> for the <connection>.",
+      "    Return an <OK: status> for the <connection>.",
       "}"
     ],
     "description": "WebSocket connection handler"
@@ -233,12 +233,12 @@
     "prefix": "wsmessage",
     "body": [
       "(Handle WebSocket Message: WebSocket Event Handler) {",
-      "    <Extract> the <message> from the <event: message>.",
-      "    <Extract> the <connection-id> from the <event: connectionId>.",
-      "    <Log> \"Received: \" to the <console>.",
-      "    <Log> <message> to the <console>.",
+      "    Extract the <message> from the <event: message>.",
+      "    Extract the <connection-id> from the <event: connectionId>.",
+      "    Log \"Received: \" to the <console>.",
+      "    Log <message> to the <console>.",
       "    $0",
-      "    <Return> an <OK: status> for the <message>.",
+      "    Return an <OK: status> for the <message>.",
       "}"
     ],
     "description": "WebSocket message handler"
@@ -247,22 +247,22 @@
     "prefix": "wsdisconnect",
     "body": [
       "(Handle WebSocket Disconnect: WebSocket Event Handler) {",
-      "    <Extract> the <connection-id> from the <event: connectionId>.",
-      "    <Log> \"WebSocket client disconnected\" to the <console>.",
+      "    Extract the <connection-id> from the <event: connectionId>.",
+      "    Log \"WebSocket client disconnected\" to the <console>.",
       "    $0",
-      "    <Return> an <OK: status> for the <disconnection>.",
+      "    Return an <OK: status> for the <disconnection>.",
       "}"
     ],
     "description": "WebSocket disconnection handler"
   },
   "Broadcast WebSocket": {
     "prefix": "broadcast",
-    "body": "<Broadcast> the <${1:message}> to the <websocket>.",
+    "body": "Broadcast the <${1:message}> to the <websocket>.",
     "description": "Broadcast message to all WebSocket clients"
   },
   "Start Server with WebSocket": {
     "prefix": "startws",
-    "body": "<Start> the <http-server> with { websocket: \"${1:/ws}\" }.",
+    "body": "Start the <http-server> with { websocket: \"${1:/ws}\" }.",
     "description": "Start HTTP server with WebSocket support"
   }
 }

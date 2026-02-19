@@ -5,24 +5,24 @@
 
 (Application-Start: ForEach Demo) {
     (* Create a list of items to process *)
-    <Create> the <numbers> with [1, 2, 3, 4, 5, 6, 7, 8, 9, 10].
+    Create the <numbers> with [1, 2, 3, 4, 5, 6, 7, 8, 9, 10].
 
-    <Log> "=== Serial Iteration ===" to the <console>.
+    Log "=== Serial Iteration ===" to the <console>.
 
     (* Serial iteration - items processed in order *)
     for each <number> in <numbers> {
-        <Log> <number> to the <console>.
+        Log <number> to the <console>.
     }
 
-    <Log> "=== Parallel Iteration ===" to the <console>.
+    Log "=== Parallel Iteration ===" to the <console>.
 
     (* Parallel iteration - items processed concurrently, non-deterministic order *)
     (* True parallel execution in both interpreter and compiled binaries *)
     parallel for each <number> in <numbers> {
-        <Log> <number> to the <console>.
+        Log <number> to the <console>.
     }
 
-    <Log> "=== Done ===" to the <console>.
+    Log "=== Done ===" to the <console>.
 
-    <Return> an <OK: status> for the <demo>.
+    Return an <OK: status> for the <demo>.
 }

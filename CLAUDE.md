@@ -125,36 +125,36 @@ paths:
 (* Feature set names match operationIds from openapi.yaml *)
 
 (listUsers: User API) {
-    <Retrieve> the <users> from the <user-repository>.
-    <Return> an <OK: status> with <users>.
+    Retrieve the <users> from the <user-repository>.
+    Return an <OK: status> with <users>.
 }
 
 (createUser: User API) {
-    <Extract> the <data> from the <request: body>.
-    <Create> the <user> with <data>.
-    <Emit> a <UserCreated: event> with <user>.
-    <Return> a <Created: status> with <user>.
+    Extract the <data> from the <request: body>.
+    Create the <user> with <data>.
+    Emit a <UserCreated: event> with <user>.
+    Return a <Created: status> with <user>.
 }
 
 (getUser: User API) {
-    <Extract> the <id> from the <pathParameters: id>.
-    <Retrieve> the <user> from the <user-repository> where id = <id>.
-    <Return> an <OK: status> with <user>.
+    Extract the <id> from the <pathParameters: id>.
+    Retrieve the <user> from the <user-repository> where id = <id>.
+    Return an <OK: status> with <user>.
 }
 
 (* Event handlers still work as before *)
 (Send Welcome Email: UserCreated Handler) {
-    <Extract> the <user> from the <event: user>.
-    <Send> the <welcome-email> to the <user: email>.
-    <Return> an <OK: status> for the <notification>.
+    Extract the <user> from the <event: user>.
+    Send the <welcome-email> to the <user: email>.
+    Return an <OK: status> for the <notification>.
 }
 ```
 
 **Path Parameters**: Extracted from URL and available via `pathParameters`:
-- `<Extract> the <id> from the <pathParameters: id>.`
+- `Extract the <id> from the <pathParameters: id>.`
 
 **Request Body**: Typed according to OpenAPI schema:
-- `<Extract> the <data> from the <request: body>.`
+- `Extract the <data> from the <request: body>.`
 
 ### Happy Case
 Code contains only the happy case. Errors are handled by the runtime. For example when a user cannot be retrieved from the repository, the server just returns: `Can not retrieve the user from the user-repository where id = 530`.
@@ -165,7 +165,7 @@ Do not use it for production code, it is terribly insecure.
 
 **Parser:**
 - `Program` → `FeatureSet[]` → `Statement[]` (either `AROStatement` or `PublishStatement`)
-- `AROStatement`: `<Action> the <Result> preposition the <Object>`
+- `AROStatement`: `Action [the] <Result> preposition [the] <Object>` (articles optional)
 - `SymbolTable`: Immutable, `Sendable` symbol storage per feature set
 - `GlobalSymbolRegistry`: Cross-feature-set symbol access for published variables
 
@@ -251,10 +251,10 @@ Plugins work in both interpreter (`aro run`) and compiled binary (`aro build`) m
 
 ```aro
 (Feature Name: Business Activity) {
-    <Extract> the <result: qualifier> from the <source: qualifier>.
-    <Compute> the <output> for the <input>.
-    <Return> an <OK: status> for a <valid: result>.
-    <Publish> as <alias> <variable>.
+    Extract the <result: qualifier> from the <source: qualifier>.
+    Compute the <output> for the <input>.
+    Return an <OK: status> for a <valid: result>.
+    Publish as <alias> <variable>.
 }
 ```
 
@@ -262,23 +262,23 @@ Application lifecycle handlers:
 ```aro
 (* Entry point - exactly one per application *)
 (Application-Start: My App) {
-    <Log> "Starting..." to the <console>.
-    <Start> the <http-server> with <contract>.
-    <Return> an <OK: status> for the <startup>.
+    Log "Starting..." to the <console>.
+    Start the <http-server> with <contract>.
+    Return an <OK: status> for the <startup>.
 }
 
 (* Exit handler for graceful shutdown - optional, at most one *)
 (Application-End: Success) {
-    <Log> "Shutting down..." to the <console>.
-    <Stop> the <http-server> with <application>.
-    <Return> an <OK: status> for the <shutdown>.
+    Log "Shutting down..." to the <console>.
+    Stop the <http-server> with <application>.
+    Return an <OK: status> for the <shutdown>.
 }
 
 (* Exit handler for errors/crashes - optional, at most one *)
 (Application-End: Error) {
-    <Extract> the <error> from the <shutdown: error>.
-    <Log> <error> to the <console>.
-    <Return> an <OK: status> for the <error-handling>.
+    Extract the <error> from the <shutdown: error>.
+    Log <error> to the <console>.
+    Return an <OK: status> for the <error-handling>.
 }
 ```
 
@@ -288,45 +288,45 @@ The Compute action transforms data using built-in operations:
 
 | Operation | Description | Example |
 |-----------|-------------|---------|
-| `length` / `count` | Count elements | `<Compute> the <len: length> from <text>.` |
-| `uppercase` | Convert to UPPERCASE | `<Compute> the <upper: uppercase> from <text>.` |
-| `lowercase` | Convert to lowercase | `<Compute> the <lower: lowercase> from <text>.` |
-| `hash` | Compute hash value | `<Compute> the <hash: hash> from <password>.` |
-| Arithmetic | +, -, *, /, % | `<Compute> the <total> from <price> * <qty>.` |
+| `length` / `count` | Count elements | `Compute the <len: length> from <text>.` |
+| `uppercase` | Convert to UPPERCASE | `Compute the <upper: uppercase> from <text>.` |
+| `lowercase` | Convert to lowercase | `Compute the <lower: lowercase> from <text>.` |
+| `hash` | Compute hash value | `Compute the <hash: hash> from <password>.` |
+| Arithmetic | +, -, *, /, % | `Compute the <total> from <price> * <qty>.` |
 
 **Qualifier-as-Name Syntax**: When you need multiple results of the same operation, use the qualifier to specify the operation while the base becomes the variable name:
 
 ```aro
 (* Old syntax: 'length' is both the variable name AND the operation *)
-<Compute> the <length> from the <message>.
+Compute the <length> from the <message>.
 
 (* New syntax: variable name and operation are separate *)
-<Compute> the <first-length: length> from the <first-message>.
-<Compute> the <second-length: length> from the <second-message>.
+Compute the <first-length: length> from the <first-message>.
+Compute the <second-length: length> from the <second-message>.
 
 (* Now both values are available *)
-<Compare> the <first-length> against the <second-length>.
+Compare the <first-length> against the <second-length>.
 ```
 
 See `Proposals/ARO-0001-language-fundamentals.md` for the full specification.
 
 ### Long-Running Applications
 
-For applications that need to stay alive and process events (servers, file watchers, etc.), use the `<Keepalive>` action:
+For applications that need to stay alive and process events (servers, file watchers, etc.), use the `Keepalive` action:
 
 ```aro
 (Application-Start: File Watcher) {
-    <Log> "Starting..." to the <console>.
-    <Start> the <file-monitor> with ".".
+    Log "Starting..." to the <console>.
+    Start the <file-monitor> with ".".
 
     (* Keep the application running to process events *)
-    <Keepalive> the <application> for the <events>.
+    Keepalive the <application> for the <events>.
 
-    <Return> an <OK: status> for the <startup>.
+    Return an <OK: status> for the <startup>.
 }
 ```
 
-The `<Keepalive>` action:
+The `Keepalive` action:
 - Blocks execution until a shutdown signal is received (SIGINT/SIGTERM)
 - Allows the event loop to process incoming events
 - Enables graceful shutdown with Ctrl+C

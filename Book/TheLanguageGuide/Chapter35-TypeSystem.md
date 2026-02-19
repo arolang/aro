@@ -25,23 +25,23 @@ ARO has two built-in collection types:
 ### List Examples
 
 ```aro
-<Create> the <numbers: List<Integer>> with [1, 2, 3].
-<Create> the <names: List<String>> with ["Alice", "Bob", "Charlie"].
+Create the <numbers: List<Integer>> with [1, 2, 3].
+Create the <names: List<String>> with ["Alice", "Bob", "Charlie"].
 
 for each <number> in <numbers> {
-    <Log> <number> to the <console>.
+    Log <number> to the <console>.
 }
 ```
 
 ### Map Examples
 
 ```aro
-<Create> the <config: Map<String, Integer>> with {
+Create the <config: Map<String, Integer>> with {
     port: 8080,
     timeout: 30
 }.
 
-<Extract> the <port> from the <config: port>.
+Extract the <port> from the <config: port>.
 ```
 
 ## Complex Types from OpenAPI
@@ -94,15 +94,15 @@ components:
 
 ```aro
 (Create User: User Management) {
-    <Extract> the <data> from the <request: body>.
+    Extract the <data> from the <request: body>.
 
     (* User type comes from openapi.yaml *)
-    <Create> the <user: User> with <data>.
+    Create the <user: User> with <data>.
 
     (* Access fields defined in the schema *)
-    <Log> <user: name> to the <console>.
+    Log <user: name> to the <console>.
 
-    <Return> a <Created: status> with <user>.
+    Return a <Created: status> with <user>.
 }
 ```
 
@@ -137,9 +137,9 @@ Type annotations are optional but recommended when:
 
 ```aro
 (* Recommended: explicit types for external data *)
-<Extract> the <userId: String> from the <request: body>.
-<Extract> the <items: List<OrderItem>> from the <request: body>.
-<Retrieve> the <user: User> from the <user-repository> where id = <userId>.
+Extract the <userId: String> from the <request: body>.
+Extract the <items: List<OrderItem>> from the <request: body>.
+Retrieve the <user: User> from the <user-repository> where id = <userId>.
 ```
 
 ## Type Inference
@@ -147,11 +147,11 @@ Type annotations are optional but recommended when:
 Types are inferred from literals and expressions:
 
 ```aro
-<Create> the <count> with 42.              (* count: Integer *)
-<Create> the <name> with "John".           (* name: String *)
-<Create> the <active> with true.           (* active: Boolean *)
-<Create> the <price> with 19.99.           (* price: Float *)
-<Create> the <items> with [1, 2, 3].       (* items: List<Integer> *)
+Create the <count> with 42.              (* count: Integer *)
+Create the <name> with "John".           (* name: String *)
+Create the <active> with true.           (* active: Boolean *)
+Create the <price> with 19.99.           (* price: Float *)
+Create the <items> with [1, 2, 3].       (* items: List<Integer> *)
 ```
 
 ## No Optionals
@@ -164,12 +164,12 @@ The runtime throws a descriptive error:
 
 ```aro
 (Get User: API) {
-    <Extract> the <id> from the <pathParameters: id>.
-    <Retrieve> the <user: User> from the <user-repository> where id = <id>.
+    Extract the <id> from the <pathParameters: id>.
+    Retrieve the <user: User> from the <user-repository> where id = <id>.
     (* If user doesn't exist, runtime throws: *)
     (* "Cannot retrieve the user from the user-repository where id = 123" *)
 
-    <Return> an <OK: status> with <user>.
+    Return an <OK: status> with <user>.
 }
 ```
 
@@ -188,8 +188,8 @@ console.log(user.name);
 ARO code:
 
 ```aro
-<Retrieve> the <user> from the <user-repository> where id = <id>.
-<Log> <user: name> to the <console>.
+Retrieve the <user> from the <user-repository> where id = <id>.
+Log <user: name> to the <console>.
 ```
 
 The runtime error message IS the error handling. See the Error Handling chapter for more details.

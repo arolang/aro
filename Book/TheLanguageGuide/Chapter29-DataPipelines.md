@@ -8,10 +8,10 @@ ARO supports four core data operations:
 
 | Operation | Purpose | Example |
 |-----------|---------|---------|
-| **Retrieve** | Retrieve and filter data | `<Retrieve> the <users: List<User>> from the <repository>...` |
-| **Filter** | Filter existing collection | `<Filter> the <active: List<User>> from the <users>...` |
-| **Map** | Transform to different type | `<Map> the <summaries> as List<UserSummary> from the <users>.` |
-| **Reduce** | Aggregate to single value | `<Reduce> the <total> as Float from the <orders> with sum(<amount>).` |
+| **Retrieve** | Retrieve and filter data | `Retrieve the <users: List<User>> from the <repository>...` |
+| **Filter** | Filter existing collection | `Filter the <active: List<User>> from the <users>...` |
+| **Map** | Transform to different type | `Map the <summaries> as List<UserSummary> from the <users>.` |
+| **Reduce** | Aggregate to single value | `Reduce the <total> as Float from the <orders> with sum(<amount>).` |
 
 ### Type Annotation Syntax
 
@@ -19,10 +19,10 @@ ARO supports two equivalent syntaxes for type annotations:
 
 ```aro
 (* Colon syntax: type inside angle brackets *)
-<Filter> the <active-users: List<User>> from the <users> where <active> is true.
+Filter the <active-users: List<User>> from the <users> where <active> is true.
 
 (* As syntax: type follows the result descriptor *)
-<Filter> the <active-users> as List<User> from the <users> where <active> is true.
+Filter the <active-users> as List<User> from the <users> where <active> is true.
 ```
 
 Both produce identical results. The `as Type` syntax (ARO-0038) can be more readable when the variable name is long, while the colon syntax keeps everything compact. Type annotations are optional since ARO infers types from the source collection.
@@ -35,24 +35,24 @@ Retrieves data with optional filtering, sorting, and pagination.
 
 ```aro
 (* Basic retrieve *)
-<Retrieve> the <users: List<User>> from the <user-repository>.
+Retrieve the <users: List<User>> from the <user-repository>.
 
 (* With filter *)
-<Retrieve> the <active-users: List<User>> from the <users>
+Retrieve the <active-users: List<User>> from the <users>
     where <status> is "active".
 
 (* With sorting *)
-<Retrieve> the <recent-users: List<User>> from the <users>
+Retrieve the <recent-users: List<User>> from the <users>
     order by <created-at> desc.
 
 (* With pagination *)
-<Retrieve> the <page: List<User>> from the <users>
+Retrieve the <page: List<User>> from the <users>
     order by <name> asc
     limit 20
     offset 40.
 
 (* Combined *)
-<Retrieve> the <top-customers: List<User>> from the <users>
+Retrieve the <top-customers: List<User>> from the <users>
     where <tier> is "premium"
     order by <total-purchases> desc
     limit 10.
@@ -66,15 +66,15 @@ Filters an existing collection with a predicate.
 
 ```aro
 (* Filter by equality *)
-<Filter> the <admins: List<User>> from the <users>
+Filter the <admins: List<User>> from the <users>
     where <role> is "admin".
 
 (* Filter by comparison *)
-<Filter> the <high-value: List<Order>> from the <orders>
+Filter the <high-value: List<Order>> from the <orders>
     where <amount> > 1000.
 
 (* Filter with multiple conditions *)
-<Filter> the <active-premium: List<User>> from the <users>
+Filter the <active-premium: List<User>> from the <users>
     where <status> is "active" and <tier> is "premium".
 ```
 
@@ -99,16 +99,16 @@ The `in` and `not in` operators test set membership. They accept either a CSV st
 
 ```aro
 (* Using CSV string *)
-<Filter> the <pending: List<Order>> from the <orders>
+Filter the <pending: List<Order>> from the <orders>
     where <status> in "pending,processing".
 
 (* Using array variable *)
-<Create> the <exclude-statuses> with ["cancelled", "refunded"].
-<Filter> the <active: List<Order>> from the <orders>
+Create the <exclude-statuses> with ["cancelled", "refunded"].
+Filter the <active: List<Order>> from the <orders>
     where <status> not in <exclude-statuses>.
 
 (* Combining with other conditions *)
-<Filter> the <valid-orders: List<Order>> from the <orders>
+Filter the <valid-orders: List<Order>> from the <orders>
     where <amount> > 0 and <status> not in <exclude-statuses>.
 ```
 
@@ -116,11 +116,11 @@ The `matches` operator supports regex literals with flags:
 
 ```aro
 (* Filter users with admin emails *)
-<Filter> the <admins: List<User>> from the <users>
+Filter the <admins: List<User>> from the <users>
     where <email> matches /^admin@|@admin\./i.
 
 (* Filter valid email addresses *)
-<Filter> the <valid-emails: List<User>> from the <users>
+Filter the <valid-emails: List<User>> from the <users>
     where <email> matches /^[\w.+-]+@[\w.-]+\.[a-zA-Z]{2,}$/i.
 ```
 
@@ -132,7 +132,7 @@ Transforms a collection to a different OpenAPI-defined type. The runtime automat
 
 ```aro
 (* Map User to UserSummary *)
-<Map> the <summaries: List<UserSummary>> from the <users>.
+Map the <summaries: List<UserSummary>> from the <users>.
 ```
 
 **Requirements:**
@@ -174,23 +174,23 @@ Aggregates a collection to a single value using aggregation functions.
 
 ```aro
 (* Count items *)
-<Reduce> the <user-count: Integer> from the <users>
+Reduce the <user-count: Integer> from the <users>
     with count().
 
 (* Sum numeric field *)
-<Reduce> the <total-revenue: Float> from the <orders>
+Reduce the <total-revenue: Float> from the <orders>
     with sum(<amount>).
 
 (* Average *)
-<Reduce> the <avg-price: Float> from the <products>
+Reduce the <avg-price: Float> from the <products>
     with avg(<price>).
 
 (* Min/Max *)
-<Reduce> the <highest-score: Float> from the <scores>
+Reduce the <highest-score: Float> from the <scores>
     with max(<value>).
 
 (* With filter *)
-<Reduce> the <pending-count: Integer> from the <orders>
+Reduce the <pending-count: Integer> from the <orders>
     where <status> is "pending"
     with count().
 ```
@@ -216,22 +216,22 @@ Chain operations to build complex data transformations:
 ```aro
 (Generate Report: Analytics) {
     (* Step 1: Retrieve recent orders *)
-    <Retrieve> the <recent-orders: List<Order>> from the <orders>
+    Retrieve the <recent-orders: List<Order>> from the <orders>
         where <created-at> > now().minus(30.days)
         order by <created-at> desc.
 
     (* Step 2: Filter high-value orders *)
-    <Filter> the <high-value: List<Order>> from the <recent-orders>
+    Filter the <high-value: List<Order>> from the <recent-orders>
         where <amount> > 1000.
 
     (* Step 3: Map to summaries *)
-    <Map> the <summaries: List<OrderSummary>> from the <high-value>.
+    Map the <summaries: List<OrderSummary>> from the <high-value>.
 
     (* Step 4: Calculate total *)
-    <Reduce> the <total: Float> from the <high-value>
+    Reduce the <total: Float> from the <high-value>
         with sum(<amount>).
 
-    <Return> an <OK: status> with {
+    Return an <OK: status> with {
         orders: <summaries>,
         total: <total>,
         count: <high-value>.count()
@@ -247,15 +247,15 @@ Sort results by one or more fields:
 
 ```aro
 (* Single field, ascending *)
-<Retrieve> the <users: List<User>> from the <repository>
+Retrieve the <users: List<User>> from the <repository>
     order by <name> asc.
 
 (* Single field, descending *)
-<Retrieve> the <recent: List<Order>> from the <orders>
+Retrieve the <recent: List<Order>> from the <orders>
     order by <created-at> desc.
 
 (* Multiple fields *)
-<Retrieve> the <products: List<Product>> from the <catalog>
+Retrieve the <products: List<Product>> from the <catalog>
     order by <category> asc, <price> desc.
 ```
 
@@ -267,18 +267,18 @@ Limit results with offset for pagination:
 
 ```aro
 (* First page: items 1-20 *)
-<Retrieve> the <page1: List<User>> from the <users>
+Retrieve the <page1: List<User>> from the <users>
     order by <name> asc
     limit 20.
 
 (* Second page: items 21-40 *)
-<Retrieve> the <page2: List<User>> from the <users>
+Retrieve the <page2: List<User>> from the <users>
     order by <name> asc
     limit 20
     offset 20.
 
 (* Third page: items 41-60 *)
-<Retrieve> the <page3: List<User>> from the <users>
+Retrieve the <page3: List<User>> from the <users>
     order by <name> asc
     limit 20
     offset 40.
@@ -324,38 +324,38 @@ components:
 ```aro
 (* Application entry point *)
 (Application-Start: Order Analytics) {
-    <Log> "Order Analytics ready" to the <console>.
-    <Return> an <OK: status> for the <startup>.
+    Log "Order Analytics ready" to the <console>.
+    Return an <OK: status> for the <startup>.
 }
 
 (* Analytics report generation *)
 (Generate Report: Order Analytics) {
     (* Retrieve recent orders *)
-    <Retrieve> the <recent: List<Order>> from the <orders>
+    Retrieve the <recent: List<Order>> from the <orders>
         where <created-at> > now().minus(30.days)
         order by <created-at> desc.
 
     (* Calculate metrics *)
-    <Reduce> the <total-revenue: Float> from the <recent>
+    Reduce the <total-revenue: Float> from the <recent>
         with sum(<amount>).
 
-    <Reduce> the <order-count: Integer> from the <recent>
+    Reduce the <order-count: Integer> from the <recent>
         with count().
 
-    <Reduce> the <avg-order: Float> from the <recent>
+    Reduce the <avg-order: Float> from the <recent>
         with avg(<amount>).
 
     (* Filter pending orders *)
-    <Filter> the <pending: List<Order>> from the <recent>
+    Filter the <pending: List<Order>> from the <recent>
         where <status> is "pending".
 
-    <Reduce> the <pending-count: Integer> from the <pending>
+    Reduce the <pending-count: Integer> from the <pending>
         with count().
 
     (* Map to summaries for response *)
-    <Map> the <summaries: List<OrderSummary>> from the <recent>.
+    Map the <summaries: List<OrderSummary>> from the <recent>.
 
-    <Return> an <OK: status> with {
+    Return an <OK: status> with {
         orders: <summaries>,
         metrics: {
             total-revenue: <total-revenue>,
@@ -389,24 +389,24 @@ When working with data pipelines, keep these performance guidelines in mind:
 
 ```aro
 (* Good: Filter first, then transform *)
-<Filter> the <active: List<User>> from the <users>
+Filter the <active: List<User>> from the <users>
     where <status> is "active".
-<Map> the <summaries: List<UserSummary>> from the <active>.
+Map the <summaries: List<UserSummary>> from the <active>.
 
 (* Less efficient: Transform all, filter none *)
-<Map> the <all-summaries: List<UserSummary>> from the <users>.
+Map the <all-summaries: List<UserSummary>> from the <users>.
 ```
 
 2. **Limit Results**: Use `limit` with sorting to avoid processing unnecessary data.
 
 ```aro
 (* Good: Retrieve only top 10 *)
-<Retrieve> the <top-orders: List<Order>> from the <orders>
+Retrieve the <top-orders: List<Order>> from the <orders>
     order by <amount> desc
     limit 10.
 
 (* Expensive: Retrieve all, then filter in application *)
-<Retrieve> the <all-orders: List<Order>> from the <orders>
+Retrieve the <all-orders: List<Order>> from the <orders>
     order by <amount> desc.
 ```
 
@@ -414,13 +414,13 @@ When working with data pipelines, keep these performance guidelines in mind:
 
 ```aro
 (* Good: Single filter with combined conditions *)
-<Filter> the <premium-active: List<User>> from the <users>
+Filter the <premium-active: List<User>> from the <users>
     where <status> is "active" and <tier> is "premium".
 
 (* Less efficient: Two separate filter passes *)
-<Filter> the <active: List<User>> from the <users>
+Filter the <active: List<User>> from the <users>
     where <status> is "active".
-<Filter> the <premium-active: List<User>> from the <active>
+Filter the <premium-active: List<User>> from the <active>
     where <tier> is "premium".
 ```
 
@@ -428,12 +428,12 @@ When working with data pipelines, keep these performance guidelines in mind:
 
 ```aro
 (* Good: Aggregate directly *)
-<Reduce> the <user-count: Integer> from the <users>
+Reduce the <user-count: Integer> from the <users>
     with count().
 
 (* Expensive: Retrieve all just to count *)
-<Retrieve> the <all-users: List<User>> from the <users>.
-<Compute> the <count: length> from <all-users>.
+Retrieve the <all-users: List<User>> from the <users>.
+Compute the <count: length> from <all-users>.
 ```
 
 ### Memory Considerations
@@ -450,21 +450,21 @@ For very complex data transformations, consider splitting into multiple feature 
 ```aro
 (* Feature set 1: Heavy data processing *)
 (Process Orders: Order Handler) {
-    <Retrieve> the <orders: List<Order>> from the <order-repository>
+    Retrieve the <orders: List<Order>> from the <order-repository>
         where <status> is "pending"
         limit 1000.
-    <Store> the <orders> into the <pending-cache>.
-    <Emit> a <OrdersProcessed: event> with { count: <orders>.count() }.
-    <Return> an <OK: status> for the <processing>.
+    Store the <orders> into the <pending-cache>.
+    Emit a <OrdersProcessed: event> with { count: <orders>.count() }.
+    Return an <OK: status> for the <processing>.
 }
 
 (* Feature set 2: Analytics on cached data *)
 (Generate Report: OrdersProcessed Handler) {
-    <Retrieve> the <orders: List<Order>> from the <pending-cache>.
-    <Reduce> the <total: Float> from the <orders>
+    Retrieve the <orders: List<Order>> from the <pending-cache>.
+    Reduce the <total: Float> from the <orders>
         with sum(<amount>).
     (* ... additional analytics ... *)
-    <Return> an <OK: status> with { total: <total> }.
+    Return an <OK: status> with { total: <total> }.
 }
 ```
 

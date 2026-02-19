@@ -18,12 +18,12 @@ Consider what ARO does well out of the box:
 
 ```aro
 (Process Order: Order Handler) {
-    <Extract> the <items> from the <order: items>.
-    <Validate> the <items> against the <inventory>.
-    <Compute> the <total> from the <items>.
-    <Store> the <order> in the <order-repository>.
-    <Emit> an <OrderPlaced: event> with <order>.
-    <Return> an <OK: status> with <order>.
+    Extract the <items> from the <order: items>.
+    Validate the <items> against the <inventory>.
+    Compute the <total> from the <items>.
+    Store the <order> in the <order-repository>.
+    Emit an <OrderPlaced: event> with <order>.
+    Return an <OK: status> with <order>.
 }
 ```
 
@@ -160,13 +160,13 @@ This uniformity is intentional. From ARO's perspective—and from the perspectiv
 
 ```aro
 (* Using a C plugin *)
-<Call> the <hash> from the <plugin-c-hash: djb2> with { data: "hello" }.
+Call the <hash> from the <plugin-c-hash: djb2> with { data: "hello" }.
 
 (* Using a Rust plugin *)
-<Call> the <csv> from the <plugin-rust-csv: parse-csv> with { data: <raw-data> }.
+Call the <csv> from the <plugin-rust-csv: parse-csv> with { data: <raw-data> }.
 
 (* Using a Python plugin *)
-<Call> the <result> from the <plugin-python-transformer: generate> with { prompt: <input> }.
+Call the <result> from the <plugin-python-transformer: generate> with { prompt: <input> }.
 ```
 
 The syntax is identical. The semantics are consistent. Only the implementation differs.
