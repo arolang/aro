@@ -51,12 +51,12 @@ jobs:
     - name: Checkout repository
       uses: actions/checkout@v6
 
-    # Install Swift 6.2 for Swift language analysis
-    - name: Setup Swift 6.2
+    # Install Swift 6.2.1 for Swift language analysis
+    - name: Setup Swift 6.2.1
       if: matrix.language == 'swift'
       uses: swift-actions/setup-swift@v3
       with:
-        swift-version: "6.2"
+        swift-version: "6.2.1"
 
     # Install build dependencies for Swift
     - name: Install build dependencies
