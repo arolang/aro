@@ -111,15 +111,15 @@ public struct MCPPromptProvider: Sendable {
         ```
 
         3. **Common Actions**:
-        - `<Extract>` - Get data from input
-        - `<Compute>` - Transform data
-        - `<Validate>` - Check data
-        - `<Log>` - Output to console
-        - `<Return>` - Return result
+        - `Extract` - Get data from input
+        - `Compute` - Transform data
+        - `Validate` - Check data
+        - `Log` - Output to console
+        - `Return` - Return result
 
         4. **Always end with a Return statement**:
         ```aro
-        <Return> an <OK: status> for the <result>.
+        Return an <OK: status> for the <result>.
         ```
 
         ## Example Feature Set
@@ -127,16 +127,16 @@ public struct MCPPromptProvider: Sendable {
         ```aro
         (\(name): Example) {
             (* Extract input data *)
-            <Extract> the <input> from the <request: body>.
+            Extract the <input> from the <request: body>.
 
             (* Process the data *)
-            <Compute> the <result> from the <input>.
+            Compute the <result> from the <input>.
 
             (* Log for debugging *)
-            <Log> <result> to the <console>.
+            Log <result> to the <console>.
 
             (* Return success *)
-            <Return> an <OK: status> with <result>.
+            Return an <OK: status> with <result>.
         }
         ```
 
@@ -202,23 +202,23 @@ public struct MCPPromptProvider: Sendable {
         ```aro
         (* GET /\(resource) *)
         (list\(resource.capitalized): \(resource.capitalized) API) {
-            <Retrieve> the <\(resource)> from the <\(resource.dropLast())-repository>.
-            <Return> an <OK: status> with <\(resource)>.
+            Retrieve the <\(resource)> from the <\(resource.dropLast())-repository>.
+            Return an <OK: status> with <\(resource)>.
         }
 
         (* GET /\(resource)/{id} *)
         (get\(resource.capitalized.dropLast()): \(resource.capitalized) API) {
-            <Extract> the <id> from the <pathParameters: id>.
-            <Retrieve> the <\(resource.dropLast())> from the <\(resource.dropLast())-repository> where id = <id>.
-            <Return> an <OK: status> with <\(resource.dropLast())>.
+            Extract the <id> from the <pathParameters: id>.
+            Retrieve the <\(resource.dropLast())> from the <\(resource.dropLast())-repository> where id = <id>.
+            Return an <OK: status> with <\(resource.dropLast())>.
         }
 
         (* POST /\(resource) *)
         (create\(resource.capitalized.dropLast()): \(resource.capitalized) API) {
-            <Extract> the <data> from the <request: body>.
-            <Create> the <\(resource.dropLast())> with <data>.
-            <Store> the <\(resource.dropLast())> in the <\(resource.dropLast())-repository>.
-            <Return> a <Created: status> with <\(resource.dropLast())>.
+            Extract the <data> from the <request: body>.
+            Create the <\(resource.dropLast())> with <data>.
+            Store the <\(resource.dropLast())> in the <\(resource.dropLast())-repository>.
+            Return a <Created: status> with <\(resource.dropLast())>.
         }
         ```
 
@@ -226,10 +226,10 @@ public struct MCPPromptProvider: Sendable {
 
         ```aro
         (Application-Start: \(resource.capitalized) Service) {
-            <Log> "Starting \(resource.capitalized) API..." to the <console>.
-            <Start> the <http-server> with <contract>.
-            <Keepalive> the <application> for the <events>.
-            <Return> an <OK: status> for the <startup>.
+            Log "Starting \(resource.capitalized) API..." to the <console>.
+            Start the <http-server> with <contract>.
+            Keepalive the <application> for the <events>.
+            Return an <OK: status> for the <startup>.
         }
         ```
 
@@ -261,13 +261,13 @@ public struct MCPPromptProvider: Sendable {
         ```aro
         (Descriptive Name: \(event) Handler) {
             (* Extract event data *)
-            <Extract> the <data> from the <event: data>.
+            Extract the <data> from the <event: data>.
 
             (* Process the event *)
             (* ... your logic here ... *)
 
             (* Always return a status *)
-            <Return> an <OK: status> for the <handler>.
+            Return an <OK: status> for the <handler>.
         }
         ```
 
@@ -276,20 +276,20 @@ public struct MCPPromptProvider: Sendable {
         ### Send notification on UserCreated
         ```aro
         (Send Welcome Email: UserCreated Handler) {
-            <Extract> the <user> from the <event: user>.
-            <Extract> the <email> from the <user: email>.
-            <Send> the <welcome-email> to the <email>.
-            <Log> "Welcome email sent" to the <console>.
-            <Return> an <OK: status> for the <notification>.
+            Extract the <user> from the <event: user>.
+            Extract the <email> from the <user: email>.
+            Send the <welcome-email> to the <email>.
+            Log "Welcome email sent" to the <console>.
+            Return an <OK: status> for the <notification>.
         }
         ```
 
         ### Update inventory on OrderPlaced
         ```aro
         (Update Inventory: OrderPlaced Handler) {
-            <Extract> the <items> from the <event: items>.
-            <Update> the <inventory> with <items>.
-            <Return> an <OK: status> for the <inventory-update>.
+            Extract the <items> from the <event: items>.
+            Update the <inventory> with <items>.
+            Return an <OK: status> for the <inventory-update>.
         }
         ```
 
@@ -298,7 +298,7 @@ public struct MCPPromptProvider: Sendable {
         Events are emitted from other feature sets:
 
         ```aro
-        <Emit> a <\(event): event> with <payload>.
+        Emit a <\(event): event> with <payload>.
         ```
 
         Please create the event handler for: \(event) to \(action)
@@ -342,13 +342,13 @@ public struct MCPPromptProvider: Sendable {
 
         1. **Missing period at end of statement**
            - Every statement must end with `.`
-           - Wrong: `<Log> "Hello" to the <console>`
-           - Right: `<Log> "Hello" to the <console>.`
+           - Wrong: `Log "Hello" to the <console>`
+           - Right: `Log "Hello" to the <console>.`
 
-        2. **Missing angle brackets**
-           - Actions, results, and objects use `<>`
+        2. **Missing angle brackets on results/objects**
+           - Results and objects use `<>`, but actions do NOT
            - Wrong: `Extract the user from the request`
-           - Right: `<Extract> the <user> from the <request>.`
+           - Right: `Extract the <user> from the <request>.`
 
         3. **Invalid preposition**
            - Each action has valid prepositions
@@ -429,7 +429,7 @@ public struct MCPPromptProvider: Sendable {
         ```aro
         (Use Plugin: Demo) {
             <\(action)> the <result> from the <input>.
-            <Return> an <OK: status> with <result>.
+            Return an <OK: status> with <result>.
         }
         ```
 
@@ -614,10 +614,10 @@ public struct MCPPromptProvider: Sendable {
 
         4. **Common conversions**:
            - Function → Feature Set
-           - Variable assignment → `<Compute>` or `<Extract>`
-           - If statement → `<When>` guard
-           - Return → `<Return>`
-           - Console.log → `<Log> ... to the <console>.`
+           - Variable assignment → `Compute` or `Extract`
+           - If statement → `when` guard clause
+           - Return → `Return`
+           - Console.log → `Log ... to the <console>.`
 
         ## Example Conversion
 
@@ -636,10 +636,10 @@ public struct MCPPromptProvider: Sendable {
         **ARO**:
         ```aro
         (Calculate Total: Order Processing) {
-            <Extract> the <items> from the <request: items>.
-            <Compute> the <total> from <items> using sum(price * quantity).
-            <Log> <total> to the <console>.
-            <Return> an <OK: status> with <total>.
+            Extract the <items> from the <request: items>.
+            Compute the <total> from <items> using sum(price * quantity).
+            Log <total> to the <console>.
+            Return an <OK: status> with <total>.
         }
         ```
 

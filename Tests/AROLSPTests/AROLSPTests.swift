@@ -685,14 +685,14 @@ struct SignatureHelpHandlerTests {
     func testActionSignature() {
         let source = """
         (Test: Business) {
-            <Extract>
+            Extract the <data>
         }
         """
         let compilationResult = Compiler.compile(source)
         let handler = SignatureHelpHandler()
 
         let result = handler.handle(
-            position: Position(line: 1, character: 14),
+            position: Position(line: 1, character: 8),
             content: source,
             compilationResult: compilationResult
         )
