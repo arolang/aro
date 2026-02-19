@@ -98,7 +98,9 @@ jobs:
     - name: Build Swift project
       if: matrix.language == 'swift'
       run: |
-        swift build
+        # Build for ARM64 only (macos-15 runner is ARM64)
+        # This prevents CodeQL tracing from triggering x86_64 builds
+        swift build --arch arm64
 
     - name: Perform CodeQL Analysis
       uses: github/codeql-action/analyze@v4
