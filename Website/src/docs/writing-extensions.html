@@ -294,9 +294,9 @@ def aro_action_analyze_csv(input_json):
 
 <span class="code-feature">(Test Parse CSV: CSV Parser Tests)</span> {
     <span class="code-keyword">Create</span> the <span class="code-result">&lt;test-data&gt;</span> with <span class="code-string">"name,age\nAlice,30\nBob,25"</span>.
-    <span class="code-keyword">&lt;ParseCSV&gt;</span> the <span class="code-result">&lt;result&gt;</span> from the &lt;test-data&gt;.
-    <span class="code-keyword">&lt;Assert&gt;</span> that &lt;result: length&gt; equals 2.
-    <span class="code-keyword">&lt;Assert&gt;</span> that &lt;result: 0 name&gt; equals <span class="code-string">"Alice"</span>.
+    <span class="code-keyword">ParseCSV</span> the <span class="code-result">&lt;result&gt;</span> from the &lt;test-data&gt;.
+    <span class="code-keyword">Assert</span> that &lt;result: length&gt; equals 2.
+    <span class="code-keyword">Assert</span> that &lt;result: 0 name&gt; equals <span class="code-string">"Alice"</span>.
     <span class="code-keyword">Return</span> a <span class="code-result">&lt;Passed: status&gt;</span>.
 }</code></pre>
 

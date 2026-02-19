@@ -102,9 +102,9 @@
 
         <h3>Request</h3>
         <p>Make HTTP requests to external APIs:</p>
-        <pre><code><span class="code-keyword">&lt;Request&gt;</span> the <span class="code-result">&lt;data&gt;</span> from <span class="code-string">"https://api.example.com/resource"</span>.
-<span class="code-keyword">&lt;Request&gt;</span> the <span class="code-result">&lt;users&gt;</span> from &lt;UserAPI: GET /users&gt;.
-<span class="code-keyword">&lt;Request&gt;</span> the <span class="code-result">&lt;weather&gt;</span> from &lt;WeatherAPI: GET /forecast?city=${city}&gt;.</code></pre>
+        <pre><code><span class="code-keyword">Request</span> the <span class="code-result">&lt;data&gt;</span> from <span class="code-string">"https://api.example.com/resource"</span>.
+<span class="code-keyword">Request</span> the <span class="code-result">&lt;users&gt;</span> from &lt;UserAPI: GET /users&gt;.
+<span class="code-keyword">Request</span> the <span class="code-result">&lt;weather&gt;</span> from &lt;WeatherAPI: GET /forecast?city=${city}&gt;.</code></pre>
 
         <h3>Read</h3>
         <p>Read from files:</p>
@@ -115,18 +115,18 @@
         <h3>Request</h3>
         <p>Make HTTP requests with method control:</p>
         <pre><code><span class="code-comment">(* GET request *)</span>
-<span class="code-keyword">&lt;Request&gt;</span> the <span class="code-result">&lt;data&gt;</span> from the &lt;api-url&gt;.
+<span class="code-keyword">Request</span> the <span class="code-result">&lt;data&gt;</span> from the &lt;api-url&gt;.
 
 <span class="code-comment">(* POST request with data *)</span>
-<span class="code-keyword">&lt;Request&gt;</span> the <span class="code-result">&lt;result&gt;</span> to the &lt;api-url&gt; with &lt;payload&gt;.
+<span class="code-keyword">Request</span> the <span class="code-result">&lt;result&gt;</span> to the &lt;api-url&gt; with &lt;payload&gt;.
 
 <span class="code-comment">(* Explicit method *)</span>
-<span class="code-keyword">&lt;Request&gt;</span> the <span class="code-result">&lt;result&gt;</span> via PUT the &lt;url&gt; with &lt;update&gt;.</code></pre>
+<span class="code-keyword">Request</span> the <span class="code-result">&lt;result&gt;</span> via PUT the &lt;url&gt; with &lt;update&gt;.</code></pre>
 
         <h3>Exec</h3>
         <p>Execute shell commands (ARO-0033):</p>
-        <pre><code><span class="code-keyword">&lt;Exec&gt;</span> the <span class="code-result">&lt;result&gt;</span> for the &lt;command&gt; with <span class="code-string">"ls -la"</span>.
-<span class="code-keyword">&lt;Exec&gt;</span> the <span class="code-result">&lt;output&gt;</span> on the &lt;system&gt; with {
+        <pre><code><span class="code-keyword">Exec</span> the <span class="code-result">&lt;result&gt;</span> for the &lt;command&gt; with <span class="code-string">"ls -la"</span>.
+<span class="code-keyword">Exec</span> the <span class="code-result">&lt;output&gt;</span> on the &lt;system&gt; with {
     command: <span class="code-string">"npm install"</span>,
     workingDirectory: <span class="code-string">"/app"</span>,
     timeout: 60000
@@ -289,8 +289,8 @@ if &lt;validation&gt; is failed then {
 
         <h3>Append</h3>
         <p>Append content to files:</p>
-        <pre><code><span class="code-keyword">&lt;Append&gt;</span> the &lt;log-line&gt; to the &lt;file: <span class="code-string">"./app.log"</span>&gt;.
-<span class="code-keyword">&lt;Append&gt;</span> the &lt;entry&gt; to the &lt;file: <span class="code-string">"./data.csv"</span>&gt;.</code></pre>
+        <pre><code><span class="code-keyword">Append</span> the &lt;log-line&gt; to the &lt;file: <span class="code-string">"./app.log"</span>&gt;.
+<span class="code-keyword">Append</span> the &lt;entry&gt; to the &lt;file: <span class="code-string">"./data.csv"</span>&gt;.</code></pre>
 
         <h2>File Operations</h2>
         <p>Actions for file system operations (ARO-0036).</p>
@@ -298,9 +298,9 @@ if &lt;validation&gt; is failed then {
         <h3>List</h3>
         <p>List directory contents:</p>
         <pre><code><span class="code-keyword">Create</span> the &lt;dir-path&gt; with <span class="code-string">"./uploads"</span>.
-<span class="code-keyword">&lt;List&gt;</span> the <span class="code-result">&lt;entries&gt;</span> from the &lt;directory: dir-path&gt;.
-<span class="code-keyword">&lt;List&gt;</span> the <span class="code-result">&lt;aro-files&gt;</span> from the &lt;directory: src-path&gt; matching <span class="code-string">"*.aro"</span>.
-<span class="code-keyword">&lt;List&gt;</span> the <span class="code-result">&lt;all-files&gt;</span> from the &lt;directory: path&gt; recursively.</code></pre>
+<span class="code-keyword">List</span> the <span class="code-result">&lt;entries&gt;</span> from the &lt;directory: dir-path&gt;.
+<span class="code-keyword">List</span> the <span class="code-result">&lt;aro-files&gt;</span> from the &lt;directory: src-path&gt; matching <span class="code-string">"*.aro"</span>.
+<span class="code-keyword">List</span> the <span class="code-result">&lt;all-files&gt;</span> from the &lt;directory: path&gt; recursively.</code></pre>
 
         <h3>Stat</h3>
         <p>Get file or directory metadata:</p>
@@ -314,7 +314,7 @@ if &lt;validation&gt; is failed then {
 
         <h3>CreateDirectory</h3>
         <p>Create directories (with parent directories):</p>
-        <pre><code><span class="code-keyword">&lt;CreateDirectory&gt;</span> the <span class="code-result">&lt;output-dir&gt;</span> to the &lt;path: <span class="code-string">"./output/reports/2024"</span>&gt;.</code></pre>
+        <pre><code><span class="code-keyword">CreateDirectory</span> the <span class="code-result">&lt;output-dir&gt;</span> to the &lt;path: <span class="code-string">"./output/reports/2024"</span>&gt;.</code></pre>
 
         <h3>Copy</h3>
         <p>Copy files or directories:</p>
@@ -336,7 +336,7 @@ if &lt;validation&gt; is failed then {
 
         <h3>Watch</h3>
         <p>Monitor a directory:</p>
-        <pre><code><span class="code-keyword">&lt;Watch&gt;</span> the &lt;directory: <span class="code-string">"./uploads"</span>&gt; as &lt;file-monitor&gt;.</code></pre>
+        <pre><code><span class="code-keyword">Watch</span> the &lt;directory: <span class="code-string">"./uploads"</span>&gt; as &lt;file-monitor&gt;.</code></pre>
 
         <h3>Listen / Connect</h3>
         <pre><code><span class="code-keyword">Listen</span> on port 9000 as &lt;socket-server&gt;.
@@ -344,8 +344,8 @@ if &lt;validation&gt; is failed then {
 
         <h3>Close</h3>
         <p>Close connections:</p>
-        <pre><code><span class="code-keyword">&lt;Close&gt;</span> the &lt;connection&gt;.
-<span class="code-keyword">&lt;Close&gt;</span> the &lt;socket-server&gt;.</code></pre>
+        <pre><code><span class="code-keyword">Close</span> the &lt;connection&gt;.
+<span class="code-keyword">Close</span> the &lt;socket-server&gt;.</code></pre>
 
         <h3>Broadcast</h3>
         <p>Send to all connections:</p>
@@ -375,14 +375,14 @@ if &lt;validation&gt; is failed then {
 
         <h3>Given / When / Then</h3>
         <p>BDD-style test structure:</p>
-        <pre><code><span class="code-keyword">&lt;Given&gt;</span> the &lt;user&gt; with { name: <span class="code-string">"Test"</span> }.
-<span class="code-keyword">&lt;When&gt;</span> the &lt;action&gt; is performed.
-<span class="code-keyword">&lt;Then&gt;</span> the &lt;result&gt; should be &lt;expected&gt;.</code></pre>
+        <pre><code><span class="code-keyword">Given</span> the &lt;user&gt; with { name: <span class="code-string">"Test"</span> }.
+<span class="code-keyword">When</span> the &lt;action&gt; is performed.
+<span class="code-keyword">Then</span> the &lt;result&gt; should be &lt;expected&gt;.</code></pre>
 
         <h3>Assert</h3>
         <p>Assert conditions:</p>
-        <pre><code><span class="code-keyword">&lt;Assert&gt;</span> the &lt;value&gt; equals &lt;expected&gt;.
-<span class="code-keyword">&lt;Assert&gt;</span> the &lt;list&gt; contains &lt;item&gt;.</code></pre>
+        <pre><code><span class="code-keyword">Assert</span> the &lt;value&gt; equals &lt;expected&gt;.
+<span class="code-keyword">Assert</span> the &lt;list&gt; contains &lt;item&gt;.</code></pre>
 
         <h2>Action Patterns</h2>
 

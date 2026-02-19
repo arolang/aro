@@ -107,7 +107,7 @@ aro add git@github.com:arolang/csv-tools.git --branch develop</code></pre>
    &#x2713; Compiled 2 Swift plugins
 
 &#x2705; Package "csv-tools" v1.0.0 installed successfully.
-   Available actions: &lt;FormatCSV&gt;, &lt;ValidateCSV&gt;, &lt;ParseCSV&gt;</code></pre>
+   Available actions: FormatCSV, ValidateCSV, ParseCSV</code></pre>
 
         <h2>Managing Packages</h2>
         <p>ARO provides commands to list, update, and remove installed packages:</p>
@@ -148,9 +148,9 @@ Installed Plugins (from Plugins/):
     <span class="code-keyword">Extract</span> the <span class="code-result">&lt;file&gt;</span> from the &lt;request: body&gt;.
 
     <span class="code-comment">(* Actions from the csv-tools package *)</span>
-    <span class="code-keyword">&lt;ParseCSV&gt;</span> the <span class="code-result">&lt;data&gt;</span> from the &lt;file&gt;.
-    <span class="code-keyword">&lt;ValidateCSV&gt;</span> the &lt;data&gt; against &lt;report-schema&gt;.
-    <span class="code-keyword">&lt;FormatCSV&gt;</span> the <span class="code-result">&lt;output&gt;</span> from the &lt;data&gt; with { delimiter: <span class="code-string">";"</span> }.
+    <span class="code-keyword">ParseCSV</span> the <span class="code-result">&lt;data&gt;</span> from the &lt;file&gt;.
+    <span class="code-keyword">ValidateCSV</span> the &lt;data&gt; against &lt;report-schema&gt;.
+    <span class="code-keyword">FormatCSV</span> the <span class="code-result">&lt;output&gt;</span> from the &lt;data&gt; with { delimiter: <span class="code-string">";"</span> }.
 
     <span class="code-keyword">Return</span> an <span class="code-result">&lt;OK: status&gt;</span> with &lt;output&gt;.
 }</code></pre>

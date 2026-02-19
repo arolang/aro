@@ -122,7 +122,7 @@
     <span class="code-keyword">Start</span> the &lt;http-server&gt; on port &lt;config: server port&gt;.
 
     <span class="code-comment">(* Start file watcher for uploads *)</span>
-    <span class="code-keyword">&lt;Watch&gt;</span> the &lt;directory: <span class="code-string">"./uploads"</span>&gt; as &lt;upload-watcher&gt;.
+    <span class="code-keyword">Watch</span> the &lt;directory: <span class="code-string">"./uploads"</span>&gt; as &lt;upload-watcher&gt;.
 
     <span class="code-comment">(* Keep the application running *)</span>
     <span class="code-keyword">Keepalive</span> the &lt;application&gt; for the &lt;events&gt;.
@@ -209,7 +209,7 @@
 
         <h3>File Watcher</h3>
         <pre><code><span class="code-feature">(Application-Start: File Processor)</span> {
-    <span class="code-keyword">&lt;Watch&gt;</span> the &lt;directory: <span class="code-string">"./inbox"</span>&gt; as &lt;file-watcher&gt;.
+    <span class="code-keyword">Watch</span> the &lt;directory: <span class="code-string">"./inbox"</span>&gt; as &lt;file-watcher&gt;.
     <span class="code-keyword">Keepalive</span> the &lt;application&gt; for the &lt;events&gt;.
     <span class="code-keyword">Return</span> an <span class="code-result">&lt;OK: status&gt;</span> for the &lt;startup&gt;.
 }</code></pre>
@@ -230,7 +230,7 @@
     <span class="code-keyword">Listen</span> on port 8081 as &lt;websocket-server&gt;.
 
     <span class="code-comment">(* File watcher *)</span>
-    <span class="code-keyword">&lt;Watch&gt;</span> the &lt;directory: <span class="code-string">"./uploads"</span>&gt; as &lt;upload-watcher&gt;.
+    <span class="code-keyword">Watch</span> the &lt;directory: <span class="code-string">"./uploads"</span>&gt; as &lt;upload-watcher&gt;.
 
     <span class="code-comment">(* Keep the application running *)</span>
     <span class="code-keyword">Keepalive</span> the &lt;application&gt; for the &lt;events&gt;.
@@ -241,7 +241,7 @@
 <span class="code-feature">(Application-End: Success)</span> {
     <span class="code-comment">(* Stop in reverse order *)</span>
     <span class="code-keyword">Stop</span> the &lt;upload-watcher&gt;.
-    <span class="code-keyword">&lt;Close&gt;</span> the &lt;websocket-server&gt;.
+    <span class="code-keyword">Close</span> the &lt;websocket-server&gt;.
     <span class="code-keyword">Stop</span> the &lt;http-server&gt;.
 
     <span class="code-keyword">Return</span> an <span class="code-result">&lt;OK: status&gt;</span> for the &lt;shutdown&gt;.
