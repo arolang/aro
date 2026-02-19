@@ -69,7 +69,29 @@ jobs:
         else
           LLVM_PREFIX="/usr/local/opt/llvm@20"
         fi
-        echo "PKG_CONFIG_PATH=$LLVM_PREFIX/lib/pkgconfig" >> $GITHUB_ENV
+        echo "LLVM_PATH=$LLVM_PREFIX" >> $GITHUB_ENV
+        echo "$LLVM_PREFIX/bin" >> $GITHUB_PATH
+        # Set include paths for Swifty-LLVM C shims
+        echo "C_INCLUDE_PATH=$LLVM_PREFIX/include" >> $GITHUB_ENV
+        echo "CPLUS_INCLUDE_PATH=$LLVM_PREFIX/include" >> $GITHUB_ENV
+        echo "LIBRARY_PATH=$LLVM_PREFIX/lib" >> $GITHUB_ENV
+        # Set runtime library path
+        echo "DYLD_LIBRARY_PATH=$LLVM_PREFIX/lib" >> $GITHUB_ENV
+        # Create pkg-config file for Swifty-LLVM
+        mkdir -p $HOME/.pkgconfig
+        cat > $HOME/.pkgconfig/llvm.pc << PKGCONFIG
+        prefix=$LLVM_PREFIX
+        exec_prefix=\${prefix}
+        libdir=\${prefix}/lib
+        includedir=\${prefix}/include
+
+        Name: LLVM
+        Description: Low-level Virtual Machine compiler framework
+        Version: 20.1
+        Libs: -L\${libdir} -lLLVM
+        Cflags: -I\${includedir}
+        PKGCONFIG
+        echo "PKG_CONFIG_PATH=$HOME/.pkgconfig" >> $GITHUB_ENV
 
     # Initializes the CodeQL tools for scanning.
     - name: Initialize CodeQL
