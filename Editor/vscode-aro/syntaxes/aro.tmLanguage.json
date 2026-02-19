@@ -78,32 +78,32 @@
       "patterns": [
         {
           "name": "keyword.action.request.aro",
-          "match": "<(Extract|Parse|Retrieve|Fetch|Read|Accept|List|Stat|Exists|Parameters)>",
+          "match": "\\b(Extract|Parse|Retrieve|Fetch|Read|Accept|List|Stat|Exists|Parameters)\\b",
           "comment": "REQUEST actions - data coming IN"
         },
         {
           "name": "keyword.action.own.aro",
-          "match": "<(Compute|Validate|Compare|Create|Transform|Filter|Match|Split|Set|Merge|Copy|Move|Append|Render)>",
+          "match": "\\b(Compute|Validate|Compare|Create|Transform|Filter|Match|Split|Set|Merge|Copy|Move|Append|Render)\\b",
           "comment": "OWN actions - internal processing"
         },
         {
           "name": "keyword.action.response.aro",
-          "match": "<(Return|Throw)>",
+          "match": "\\b(Return|Throw)\\b",
           "comment": "RESPONSE actions - data going OUT"
         },
         {
           "name": "keyword.action.export.aro",
-          "match": "<(Publish|Store|Log|Send|Emit|Write|CreateDirectory)>",
+          "match": "\\b(Publish|Store|Log|Send|Emit|Write|CreateDirectory)\\b",
           "comment": "EXPORT actions - persistence/external"
         },
         {
           "name": "keyword.action.lifecycle.aro",
-          "match": "<(Start|Stop|Keepalive|Watch|Configure|Request|Connect|Disconnect|Broadcast)>",
+          "match": "\\b(Start|Stop|Keepalive|Watch|Configure|Request|Connect|Disconnect|Broadcast)\\b",
           "comment": "LIFECYCLE actions - system management"
         },
         {
           "name": "keyword.action.test.aro",
-          "match": "<(Given|When|Then|Assert)>",
+          "match": "\\b(Given|When|Then|Assert)\\b",
           "comment": "TEST actions - BDD testing"
         }
       ]

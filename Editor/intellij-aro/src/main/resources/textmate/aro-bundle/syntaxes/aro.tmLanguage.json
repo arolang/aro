@@ -45,7 +45,7 @@
       "patterns": [
         {
           "name": "entity.name.tag.aro",
-          "match": "<Extract>|<Parse>|<Retrieve>|<Fetch>|<Read>|<Accept>|<List>|<Stat>|<Exists>|<Parameters>"
+          "match": "\\b(Extract|Parse|Retrieve|Fetch|Read|Accept|List|Stat|Exists|Parameters)\\b"
         }
       ]
     },
@@ -53,7 +53,7 @@
       "patterns": [
         {
           "name": "storage.type.aro",
-          "match": "<Compute>|<Validate>|<Compare>|<Create>|<Transform>|<Filter>|<Match>|<Split>|<Set>|<Merge>|<Copy>|<Move>|<Append>|<Render>"
+          "match": "\\b(Compute|Validate|Compare|Create|Transform|Filter|Match|Split|Set|Merge|Copy|Move|Append|Render)\\b"
         }
       ]
     },
@@ -61,7 +61,7 @@
       "patterns": [
         {
           "name": "constant.language.aro",
-          "match": "<Return>|<Throw>"
+          "match": "\\b(Return|Throw)\\b"
         }
       ]
     },
@@ -69,7 +69,7 @@
       "patterns": [
         {
           "name": "entity.other.attribute-name.aro",
-          "match": "<Publish>|<Store>|<Log>|<Send>|<Emit>|<Write>|<CreateDirectory>"
+          "match": "\\b(Publish|Store|Log|Send|Emit|Write|CreateDirectory)\\b"
         }
       ]
     },
@@ -77,7 +77,7 @@
       "patterns": [
         {
           "name": "support.function.aro",
-          "match": "<Start>|<Stop>|<Keepalive>|<Watch>|<Configure>|<Request>|<Connect>|<Disconnect>|<Broadcast>"
+          "match": "\\b(Start|Stop|Keepalive|Watch|Configure|Request|Connect|Disconnect|Broadcast)\\b"
         }
       ]
     },
@@ -85,7 +85,7 @@
       "patterns": [
         {
           "name": "markup.heading.aro",
-          "match": "<Given>|<When>|<Then>|<Assert>"
+          "match": "\\b(Given|When|Then|Assert)\\b"
         }
       ]
     },
