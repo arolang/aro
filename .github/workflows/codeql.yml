@@ -63,34 +63,27 @@ jobs:
       if: matrix.language == 'swift'
       run: |
         brew install llvm@20 libgit2
-        # Setup LLVM paths
+        # Setup LLVM paths (ARM64 vs Intel)
         if [ -d "/opt/homebrew/opt/llvm@20" ]; then
           LLVM_PREFIX="/opt/homebrew/opt/llvm@20"
+          LIBGIT2_PREFIX="/opt/homebrew/opt/libgit2"
         else
           LLVM_PREFIX="/usr/local/opt/llvm@20"
+          LIBGIT2_PREFIX="/usr/local/opt/libgit2"
         fi
         echo "LLVM_PATH=$LLVM_PREFIX" >> $GITHUB_ENV
         echo "$LLVM_PREFIX/bin" >> $GITHUB_PATH
-        # Set include paths for Swifty-LLVM C shims
-        echo "C_INCLUDE_PATH=$LLVM_PREFIX/include" >> $GITHUB_ENV
-        echo "CPLUS_INCLUDE_PATH=$LLVM_PREFIX/include" >> $GITHUB_ENV
-        echo "LIBRARY_PATH=$LLVM_PREFIX/lib" >> $GITHUB_ENV
-        # Set runtime library path
-        echo "DYLD_LIBRARY_PATH=$LLVM_PREFIX/lib" >> $GITHUB_ENV
+        # Set include paths for C/C++ compilation
+        echo "C_INCLUDE_PATH=$LLVM_PREFIX/include:$LIBGIT2_PREFIX/include" >> $GITHUB_ENV
+        echo "CPLUS_INCLUDE_PATH=$LLVM_PREFIX/include:$LIBGIT2_PREFIX/include" >> $GITHUB_ENV
+        # Set library paths for linking
+        echo "LIBRARY_PATH=$LLVM_PREFIX/lib:$LIBGIT2_PREFIX/lib" >> $GITHUB_ENV
+        # Set runtime library paths
+        echo "DYLD_LIBRARY_PATH=$LLVM_PREFIX/lib:$LIBGIT2_PREFIX/lib" >> $GITHUB_ENV
+        echo "DYLD_FALLBACK_LIBRARY_PATH=$LLVM_PREFIX/lib:$LIBGIT2_PREFIX/lib" >> $GITHUB_ENV
         # Create pkg-config file for Swifty-LLVM
         mkdir -p $HOME/.pkgconfig
-        cat > $HOME/.pkgconfig/llvm.pc << PKGCONFIG
-        prefix=$LLVM_PREFIX
-        exec_prefix=\${prefix}
-        libdir=\${prefix}/lib
-        includedir=\${prefix}/include
-
-        Name: LLVM
-        Description: Low-level Virtual Machine compiler framework
-        Version: 20.1
-        Libs: -L\${libdir} -lLLVM
-        Cflags: -I\${includedir}
-        PKGCONFIG
+        printf 'prefix=%s\nexec_prefix=${prefix}\nlibdir=${prefix}/lib\nincludedir=${prefix}/include\n\nName: LLVM\nDescription: Low-level Virtual Machine compiler framework\nVersion: 20.1\nLibs: -L${libdir} -lLLVM\nCflags: -I${includedir}\n' "$LLVM_PREFIX" > $HOME/.pkgconfig/llvm.pc
         echo "PKG_CONFIG_PATH=$HOME/.pkgconfig" >> $GITHUB_ENV
 
     # Initializes the CodeQL tools for scanning.
