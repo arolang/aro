@@ -685,13 +685,21 @@ public struct WriteAction: ActionImplementation {
     ) async throws -> any Sendable {
         try validatePreposition(object.preposition)
 
-        // Get file path - check specifiers first (e.g., <file: file-path>), then base
+        // Get file path - handle <file: path-variable> pattern
         let path: String
-        if let specifier = object.specifiers.first, let resolvedPath: String = context.resolve(specifier) {
-            path = resolvedPath
+        if object.base == "file", let specifier = object.specifiers.first {
+            // Pattern: <file: path-variable> - resolve the specifier as the path
+            if let resolvedPath: String = context.resolve(specifier) {
+                path = resolvedPath
+            } else {
+                // Use specifier as literal path
+                path = specifier
+            }
         } else if let resolvedPath: String = context.resolve(object.base) {
+            // Pattern: <path-variable> - resolve base as path
             path = resolvedPath
         } else {
+            // Use object base as literal path
             path = object.base
         }
 
