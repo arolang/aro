@@ -71,10 +71,10 @@
         <p>Listen for TCP connections in Application-Start:</p>
 
         <pre><code><span class="code-feature">(Application-Start: Socket Server)</span> {
-    <span class="code-keyword">&lt;Listen&gt;</span> on port 9000 as &lt;socket-server&gt;.
-    <span class="code-keyword">&lt;Log&gt;</span> <span class="code-string">"Socket server listening on port 9000"</span> to the &lt;console&gt;.
-    <span class="code-keyword">&lt;Keepalive&gt;</span> the &lt;application&gt; for the &lt;events&gt;.
-    <span class="code-keyword">&lt;Return&gt;</span> an <span class="code-result">&lt;OK: status&gt;</span> for the &lt;startup&gt;.
+    <span class="code-keyword">Listen</span> on port 9000 as &lt;socket-server&gt;.
+    <span class="code-keyword">Log</span> <span class="code-string">"Socket server listening on port 9000"</span> to the &lt;console&gt;.
+    <span class="code-keyword">Keepalive</span> the &lt;application&gt; for the &lt;events&gt;.
+    <span class="code-keyword">Return</span> an <span class="code-result">&lt;OK: status&gt;</span> for the &lt;startup&gt;.
 }</code></pre>
 
         <h3>Connection Events</h3>
@@ -93,187 +93,187 @@
 
         <h3>Handling Connections</h3>
         <pre><code><span class="code-feature">(Handle Connection: ClientConnected Handler)</span> {
-    <span class="code-keyword">&lt;Extract&gt;</span> the <span class="code-result">&lt;connection-id&gt;</span> from the &lt;event: connectionId&gt;.
-    <span class="code-keyword">&lt;Extract&gt;</span> the <span class="code-result">&lt;remote-address&gt;</span> from the &lt;event: remoteAddress&gt;.
+    <span class="code-keyword">Extract</span> the <span class="code-result">&lt;connection-id&gt;</span> from the &lt;event: connectionId&gt;.
+    <span class="code-keyword">Extract</span> the <span class="code-result">&lt;remote-address&gt;</span> from the &lt;event: remoteAddress&gt;.
 
-    <span class="code-keyword">&lt;Log&gt;</span> <span class="code-string">"Client connected: ${remote-address}"</span> to the &lt;console&gt;.
+    <span class="code-keyword">Log</span> <span class="code-string">"Client connected: ${remote-address}"</span> to the &lt;console&gt;.
 
     <span class="code-comment">(* Send welcome message *)</span>
-    <span class="code-keyword">&lt;Send&gt;</span> the &lt;welcome&gt; to the &lt;event: connection&gt; with <span class="code-string">"Welcome to the server!"</span>.
+    <span class="code-keyword">Send</span> the &lt;welcome&gt; to the &lt;event: connection&gt; with <span class="code-string">"Welcome to the server!"</span>.
 
-    <span class="code-keyword">&lt;Return&gt;</span> an <span class="code-result">&lt;OK: status&gt;</span> for the &lt;connection&gt;.
+    <span class="code-keyword">Return</span> an <span class="code-result">&lt;OK: status&gt;</span> for the &lt;connection&gt;.
 }</code></pre>
 
         <h3>Receiving Data</h3>
         <pre><code><span class="code-feature">(Handle Data: DataReceived Handler)</span> {
-    <span class="code-keyword">&lt;Extract&gt;</span> the <span class="code-result">&lt;data&gt;</span> from the &lt;event: data&gt;.
-    <span class="code-keyword">&lt;Extract&gt;</span> the <span class="code-result">&lt;connection&gt;</span> from the &lt;event: connection&gt;.
-    <span class="code-keyword">&lt;Extract&gt;</span> the <span class="code-result">&lt;connection-id&gt;</span> from the &lt;event: connectionId&gt;.
+    <span class="code-keyword">Extract</span> the <span class="code-result">&lt;data&gt;</span> from the &lt;event: data&gt;.
+    <span class="code-keyword">Extract</span> the <span class="code-result">&lt;connection&gt;</span> from the &lt;event: connection&gt;.
+    <span class="code-keyword">Extract</span> the <span class="code-result">&lt;connection-id&gt;</span> from the &lt;event: connectionId&gt;.
 
-    <span class="code-keyword">&lt;Log&gt;</span> <span class="code-string">"Received from ${connection-id}: ${data}"</span> to the &lt;console&gt;.
+    <span class="code-keyword">Log</span> <span class="code-string">"Received from ${connection-id}: ${data}"</span> to the &lt;console&gt;.
 
     <span class="code-comment">(* Process the data *)</span>
     <span class="code-keyword">&lt;Process&gt;</span> the <span class="code-result">&lt;response&gt;</span> from the &lt;data&gt;.
 
     <span class="code-comment">(* Send response back *)</span>
-    <span class="code-keyword">&lt;Send&gt;</span> the &lt;response&gt; to the &lt;connection&gt;.
+    <span class="code-keyword">Send</span> the &lt;response&gt; to the &lt;connection&gt;.
 
-    <span class="code-keyword">&lt;Return&gt;</span> an <span class="code-result">&lt;OK: status&gt;</span> for the &lt;data&gt;.
+    <span class="code-keyword">Return</span> an <span class="code-result">&lt;OK: status&gt;</span> for the &lt;data&gt;.
 }</code></pre>
 
         <h3>Handling Disconnections</h3>
         <pre><code><span class="code-feature">(Handle Disconnect: ClientDisconnected Handler)</span> {
-    <span class="code-keyword">&lt;Extract&gt;</span> the <span class="code-result">&lt;connection-id&gt;</span> from the &lt;event: connectionId&gt;.
-    <span class="code-keyword">&lt;Extract&gt;</span> the <span class="code-result">&lt;reason&gt;</span> from the &lt;event: reason&gt;.
+    <span class="code-keyword">Extract</span> the <span class="code-result">&lt;connection-id&gt;</span> from the &lt;event: connectionId&gt;.
+    <span class="code-keyword">Extract</span> the <span class="code-result">&lt;reason&gt;</span> from the &lt;event: reason&gt;.
 
-    <span class="code-keyword">&lt;Log&gt;</span> <span class="code-string">"Client ${connection-id} disconnected: ${reason}"</span> to the &lt;console&gt;.
+    <span class="code-keyword">Log</span> <span class="code-string">"Client ${connection-id} disconnected: ${reason}"</span> to the &lt;console&gt;.
 
     <span class="code-comment">(* Clean up client state *)</span>
-    <span class="code-keyword">&lt;Delete&gt;</span> the &lt;client-state&gt; from the &lt;client-registry&gt; where id = &lt;connection-id&gt;.
+    <span class="code-keyword">Delete</span> the &lt;client-state&gt; from the &lt;client-registry&gt; where id = &lt;connection-id&gt;.
 
-    <span class="code-keyword">&lt;Return&gt;</span> an <span class="code-result">&lt;OK: status&gt;</span> for the &lt;disconnect&gt;.
+    <span class="code-keyword">Return</span> an <span class="code-result">&lt;OK: status&gt;</span> for the &lt;disconnect&gt;.
 }</code></pre>
 
         <h2>Socket Client</h2>
 
         <h3>Connecting to a Server</h3>
         <pre><code><span class="code-feature">(Connect to Server: External Service)</span> {
-    <span class="code-keyword">&lt;Connect&gt;</span> to &lt;host: <span class="code-string">"192.168.1.100"</span>&gt; on port 8080 as &lt;server-connection&gt;.
+    <span class="code-keyword">Connect</span> to &lt;host: <span class="code-string">"192.168.1.100"</span>&gt; on port 8080 as &lt;server-connection&gt;.
 
     <span class="code-comment">(* Send initial handshake *)</span>
-    <span class="code-keyword">&lt;Send&gt;</span> the &lt;handshake&gt; to the &lt;server-connection&gt; with { type: <span class="code-string">"hello"</span>, client: <span class="code-string">"my-app"</span> }.
+    <span class="code-keyword">Send</span> the &lt;handshake&gt; to the &lt;server-connection&gt; with { type: <span class="code-string">"hello"</span>, client: <span class="code-string">"my-app"</span> }.
 
-    <span class="code-keyword">&lt;Return&gt;</span> an <span class="code-result">&lt;OK: status&gt;</span> for the &lt;connection&gt;.
+    <span class="code-keyword">Return</span> an <span class="code-result">&lt;OK: status&gt;</span> for the &lt;connection&gt;.
 }</code></pre>
 
         <h3>Sending Data</h3>
         <pre><code><span class="code-feature">(Send Message: Messaging)</span> {
-    <span class="code-keyword">&lt;Create&gt;</span> the <span class="code-result">&lt;message&gt;</span> with {
+    <span class="code-keyword">Create</span> the <span class="code-result">&lt;message&gt;</span> with {
         type: <span class="code-string">"chat"</span>,
         content: &lt;content&gt;,
         timestamp: &lt;current-time&gt;
     }.
 
-    <span class="code-keyword">&lt;Send&gt;</span> the &lt;message: JSON&gt; to the &lt;server-connection&gt;.
+    <span class="code-keyword">Send</span> the &lt;message: JSON&gt; to the &lt;server-connection&gt;.
 
-    <span class="code-keyword">&lt;Return&gt;</span> an <span class="code-result">&lt;OK: status&gt;</span> for the &lt;send&gt;.
+    <span class="code-keyword">Return</span> an <span class="code-result">&lt;OK: status&gt;</span> for the &lt;send&gt;.
 }</code></pre>
 
         <h2>Common Patterns</h2>
 
         <h3>Echo Server</h3>
         <pre><code><span class="code-feature">(Application-Start: Echo Server)</span> {
-    <span class="code-keyword">&lt;Listen&gt;</span> on port 9000 as &lt;echo-server&gt;.
-    <span class="code-keyword">&lt;Log&gt;</span> <span class="code-string">"Echo server listening on port 9000"</span> to the &lt;console&gt;.
-    <span class="code-keyword">&lt;Keepalive&gt;</span> the &lt;application&gt; for the &lt;events&gt;.
-    <span class="code-keyword">&lt;Return&gt;</span> an <span class="code-result">&lt;OK: status&gt;</span> for the &lt;startup&gt;.
+    <span class="code-keyword">Listen</span> on port 9000 as &lt;echo-server&gt;.
+    <span class="code-keyword">Log</span> <span class="code-string">"Echo server listening on port 9000"</span> to the &lt;console&gt;.
+    <span class="code-keyword">Keepalive</span> the &lt;application&gt; for the &lt;events&gt;.
+    <span class="code-keyword">Return</span> an <span class="code-result">&lt;OK: status&gt;</span> for the &lt;startup&gt;.
 }
 
 <span class="code-feature">(Echo Data: DataReceived Handler)</span> {
-    <span class="code-keyword">&lt;Extract&gt;</span> the <span class="code-result">&lt;data&gt;</span> from the &lt;event: data&gt;.
-    <span class="code-keyword">&lt;Extract&gt;</span> the <span class="code-result">&lt;connection&gt;</span> from the &lt;event: connection&gt;.
+    <span class="code-keyword">Extract</span> the <span class="code-result">&lt;data&gt;</span> from the &lt;event: data&gt;.
+    <span class="code-keyword">Extract</span> the <span class="code-result">&lt;connection&gt;</span> from the &lt;event: connection&gt;.
 
     <span class="code-comment">(* Echo back the received data *)</span>
-    <span class="code-keyword">&lt;Send&gt;</span> the &lt;data&gt; to the &lt;connection&gt;.
+    <span class="code-keyword">Send</span> the &lt;data&gt; to the &lt;connection&gt;.
 
-    <span class="code-keyword">&lt;Return&gt;</span> an <span class="code-result">&lt;OK: status&gt;</span> for the &lt;echo&gt;.
+    <span class="code-keyword">Return</span> an <span class="code-result">&lt;OK: status&gt;</span> for the &lt;echo&gt;.
 }</code></pre>
 
         <h3>Chat Server</h3>
         <pre><code><span class="code-feature">(Application-Start: Chat Server)</span> {
-    <span class="code-keyword">&lt;Listen&gt;</span> on port 9000 as &lt;chat-server&gt;.
-    <span class="code-keyword">&lt;Create&gt;</span> the <span class="code-result">&lt;clients&gt;</span> with [].
-    <span class="code-keyword">&lt;Publish&gt;</span> as &lt;connected-clients&gt; &lt;clients&gt;.
-    <span class="code-keyword">&lt;Keepalive&gt;</span> the &lt;application&gt; for the &lt;events&gt;.
-    <span class="code-keyword">&lt;Return&gt;</span> an <span class="code-result">&lt;OK: status&gt;</span> for the &lt;startup&gt;.
+    <span class="code-keyword">Listen</span> on port 9000 as &lt;chat-server&gt;.
+    <span class="code-keyword">Create</span> the <span class="code-result">&lt;clients&gt;</span> with [].
+    <span class="code-keyword">Publish</span> as &lt;connected-clients&gt; &lt;clients&gt;.
+    <span class="code-keyword">Keepalive</span> the &lt;application&gt; for the &lt;events&gt;.
+    <span class="code-keyword">Return</span> an <span class="code-result">&lt;OK: status&gt;</span> for the &lt;startup&gt;.
 }
 
 <span class="code-feature">(Register Client: ClientConnected Handler)</span> {
-    <span class="code-keyword">&lt;Extract&gt;</span> the <span class="code-result">&lt;connection&gt;</span> from the &lt;event: connection&gt;.
-    <span class="code-keyword">&lt;Extract&gt;</span> the <span class="code-result">&lt;connection-id&gt;</span> from the &lt;event: connectionId&gt;.
+    <span class="code-keyword">Extract</span> the <span class="code-result">&lt;connection&gt;</span> from the &lt;event: connection&gt;.
+    <span class="code-keyword">Extract</span> the <span class="code-result">&lt;connection-id&gt;</span> from the &lt;event: connectionId&gt;.
 
     <span class="code-comment">(* Add to connected clients *)</span>
-    <span class="code-keyword">&lt;Store&gt;</span> the &lt;connection&gt; into the &lt;connected-clients&gt; with id &lt;connection-id&gt;.
+    <span class="code-keyword">Store</span> the &lt;connection&gt; into the &lt;connected-clients&gt; with id &lt;connection-id&gt;.
 
     <span class="code-comment">(* Notify others *)</span>
-    <span class="code-keyword">&lt;Broadcast&gt;</span> the &lt;announcement&gt; to the &lt;chat-server&gt; with <span class="code-string">"User joined"</span>.
+    <span class="code-keyword">Broadcast</span> the &lt;announcement&gt; to the &lt;chat-server&gt; with <span class="code-string">"User joined"</span>.
 
-    <span class="code-keyword">&lt;Return&gt;</span> an <span class="code-result">&lt;OK: status&gt;</span> for the &lt;registration&gt;.
+    <span class="code-keyword">Return</span> an <span class="code-result">&lt;OK: status&gt;</span> for the &lt;registration&gt;.
 }
 
 <span class="code-feature">(Broadcast Message: DataReceived Handler)</span> {
-    <span class="code-keyword">&lt;Extract&gt;</span> the <span class="code-result">&lt;message&gt;</span> from the &lt;event: data&gt;.
-    <span class="code-keyword">&lt;Extract&gt;</span> the <span class="code-result">&lt;sender-id&gt;</span> from the &lt;event: connectionId&gt;.
+    <span class="code-keyword">Extract</span> the <span class="code-result">&lt;message&gt;</span> from the &lt;event: data&gt;.
+    <span class="code-keyword">Extract</span> the <span class="code-result">&lt;sender-id&gt;</span> from the &lt;event: connectionId&gt;.
 
-    <span class="code-keyword">&lt;Create&gt;</span> the <span class="code-result">&lt;broadcast&gt;</span> with {
+    <span class="code-keyword">Create</span> the <span class="code-result">&lt;broadcast&gt;</span> with {
         from: &lt;sender-id&gt;,
         message: &lt;message&gt;,
         timestamp: &lt;current-time&gt;
     }.
 
     <span class="code-comment">(* Send to all connected clients *)</span>
-    <span class="code-keyword">&lt;Broadcast&gt;</span> the &lt;broadcast: JSON&gt; to the &lt;chat-server&gt;.
+    <span class="code-keyword">Broadcast</span> the &lt;broadcast: JSON&gt; to the &lt;chat-server&gt;.
 
-    <span class="code-keyword">&lt;Return&gt;</span> an <span class="code-result">&lt;OK: status&gt;</span> for the &lt;broadcast&gt;.
+    <span class="code-keyword">Return</span> an <span class="code-result">&lt;OK: status&gt;</span> for the &lt;broadcast&gt;.
 }</code></pre>
 
         <h2>Data Formats</h2>
 
         <h3>Text Data</h3>
-        <pre><code><span class="code-keyword">&lt;Send&gt;</span> the &lt;text&gt; to the &lt;connection&gt; with <span class="code-string">"Hello, World!"</span>.</code></pre>
+        <pre><code><span class="code-keyword">Send</span> the &lt;text&gt; to the &lt;connection&gt; with <span class="code-string">"Hello, World!"</span>.</code></pre>
 
         <h3>JSON Data</h3>
-        <pre><code><span class="code-keyword">&lt;Create&gt;</span> the <span class="code-result">&lt;message&gt;</span> with {
+        <pre><code><span class="code-keyword">Create</span> the <span class="code-result">&lt;message&gt;</span> with {
     type: <span class="code-string">"update"</span>,
     data: { value: 42 }
 }.
-<span class="code-keyword">&lt;Send&gt;</span> the &lt;message: JSON&gt; to the &lt;connection&gt;.</code></pre>
+<span class="code-keyword">Send</span> the &lt;message: JSON&gt; to the &lt;connection&gt;.</code></pre>
 
         <h2>Broadcasting</h2>
 
         <h3>To All Clients</h3>
-        <pre><code><span class="code-keyword">&lt;Broadcast&gt;</span> the &lt;message&gt; to the &lt;socket-server&gt;.</code></pre>
+        <pre><code><span class="code-keyword">Broadcast</span> the &lt;message&gt; to the &lt;socket-server&gt;.</code></pre>
 
         <h3>To Specific Clients</h3>
         <pre><code><span class="code-comment">(* Send to specific connection *)</span>
-<span class="code-keyword">&lt;Send&gt;</span> the &lt;message&gt; to the &lt;connection&gt;.
+<span class="code-keyword">Send</span> the &lt;message&gt; to the &lt;connection&gt;.
 
 <span class="code-comment">(* Send to connection by ID *)</span>
-<span class="code-keyword">&lt;Retrieve&gt;</span> the <span class="code-result">&lt;client&gt;</span> from the &lt;connected-clients&gt; where id = &lt;client-id&gt;.
-<span class="code-keyword">&lt;Send&gt;</span> the &lt;message&gt; to the &lt;client: connection&gt;.</code></pre>
+<span class="code-keyword">Retrieve</span> the <span class="code-result">&lt;client&gt;</span> from the &lt;connected-clients&gt; where id = &lt;client-id&gt;.
+<span class="code-keyword">Send</span> the &lt;message&gt; to the &lt;client: connection&gt;.</code></pre>
 
         <h2>Best Practices</h2>
 
         <h3>Validate Incoming Data</h3>
         <pre><code><span class="code-feature">(Handle Data: DataReceived Handler)</span> {
-    <span class="code-keyword">&lt;Extract&gt;</span> the <span class="code-result">&lt;raw-data&gt;</span> from the &lt;event: data&gt;.
+    <span class="code-keyword">Extract</span> the <span class="code-result">&lt;raw-data&gt;</span> from the &lt;event: data&gt;.
 
     <span class="code-comment">(* Validate data format *)</span>
-    <span class="code-keyword">&lt;Parse&gt;</span> the <span class="code-result">&lt;message: JSON&gt;</span> from the &lt;raw-data&gt;.
+    <span class="code-keyword">Parse</span> the <span class="code-result">&lt;message: JSON&gt;</span> from the &lt;raw-data&gt;.
 
     if &lt;message&gt; is empty then {
-        <span class="code-keyword">&lt;Log&gt;</span> <span class="code-string">"Invalid message format"</span> to the &lt;console&gt;.
-        <span class="code-keyword">&lt;Return&gt;</span> an <span class="code-result">&lt;OK: status&gt;</span> for the &lt;validation&gt;.
+        <span class="code-keyword">Log</span> <span class="code-string">"Invalid message format"</span> to the &lt;console&gt;.
+        <span class="code-keyword">Return</span> an <span class="code-result">&lt;OK: status&gt;</span> for the &lt;validation&gt;.
     }
 
-    <span class="code-keyword">&lt;Validate&gt;</span> the &lt;message&gt; for the &lt;message-schema&gt;.
+    <span class="code-keyword">Validate</span> the &lt;message&gt; for the &lt;message-schema&gt;.
 
     <span class="code-comment">(* Process valid message *)</span>
     <span class="code-keyword">&lt;Process&gt;</span> the <span class="code-result">&lt;result&gt;</span> from the &lt;message&gt;.
-    <span class="code-keyword">&lt;Return&gt;</span> an <span class="code-result">&lt;OK: status&gt;</span> for the &lt;processing&gt;.
+    <span class="code-keyword">Return</span> an <span class="code-result">&lt;OK: status&gt;</span> for the &lt;processing&gt;.
 }</code></pre>
 
         <h3>Clean Up on Shutdown</h3>
         <pre><code><span class="code-feature">(Application-End: Success)</span> {
-    <span class="code-keyword">&lt;Log&gt;</span> <span class="code-string">"Closing all connections..."</span> to the &lt;console&gt;.
+    <span class="code-keyword">Log</span> <span class="code-string">"Closing all connections..."</span> to the &lt;console&gt;.
 
     <span class="code-comment">(* Notify all clients *)</span>
-    <span class="code-keyword">&lt;Broadcast&gt;</span> the &lt;shutdown-notice&gt; to the &lt;socket-server&gt; with <span class="code-string">"Server shutting down"</span>.
+    <span class="code-keyword">Broadcast</span> the &lt;shutdown-notice&gt; to the &lt;socket-server&gt; with <span class="code-string">"Server shutting down"</span>.
 
     <span class="code-comment">(* Close server *)</span>
     <span class="code-keyword">&lt;Close&gt;</span> the &lt;socket-server&gt;.
 
-    <span class="code-keyword">&lt;Return&gt;</span> an <span class="code-result">&lt;OK: status&gt;</span> for the &lt;shutdown&gt;.
+    <span class="code-keyword">Return</span> an <span class="code-result">&lt;OK: status&gt;</span> for the &lt;shutdown&gt;.
 }</code></pre>
 
         <div class="highlight-box">

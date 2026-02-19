@@ -57,9 +57,9 @@
 <h3>Connection Handler</h3>
 
 <pre><code><span class="feature-name">(Handle WebSocket Connect: WebSocket Event Handler)</span> {
-    <span class="action">&lt;Extract&gt;</span> the <span class="result">&lt;connection-id&gt;</span> from the <span class="result">&lt;event: id&gt;</span>.
-    <span class="action">&lt;Log&gt;</span> <span class="string">"WebSocket client connected"</span> to the <span class="result">&lt;console&gt;</span>.
-    <span class="action">&lt;Return&gt;</span> an <span class="result">&lt;OK: status&gt;</span> for the <span class="result">&lt;connection&gt;</span>.
+    <span class="action">Extract</span> the <span class="result">&lt;connection-id&gt;</span> from the <span class="result">&lt;event: id&gt;</span>.
+    <span class="action">Log</span> <span class="string">"WebSocket client connected"</span> to the <span class="result">&lt;console&gt;</span>.
+    <span class="action">Return</span> an <span class="result">&lt;OK: status&gt;</span> for the <span class="result">&lt;connection&gt;</span>.
 }</code></pre>
 
 <p>The <code>event</code> object provides:</p>
@@ -72,25 +72,25 @@
 <h3>Message Handler</h3>
 
 <pre><code><span class="feature-name">(Handle WebSocket Message: WebSocket Event Handler)</span> {
-    <span class="action">&lt;Extract&gt;</span> the <span class="result">&lt;message&gt;</span> from the <span class="result">&lt;event: message&gt;</span>.
-    <span class="action">&lt;Extract&gt;</span> the <span class="result">&lt;connection-id&gt;</span> from the <span class="result">&lt;event: connectionId&gt;</span>.
-    <span class="action">&lt;Log&gt;</span> <span class="result">&lt;message&gt;</span> to the <span class="result">&lt;console&gt;</span>.
-    <span class="action">&lt;Return&gt;</span> an <span class="result">&lt;OK: status&gt;</span> for the <span class="result">&lt;message&gt;</span>.
+    <span class="action">Extract</span> the <span class="result">&lt;message&gt;</span> from the <span class="result">&lt;event: message&gt;</span>.
+    <span class="action">Extract</span> the <span class="result">&lt;connection-id&gt;</span> from the <span class="result">&lt;event: connectionId&gt;</span>.
+    <span class="action">Log</span> <span class="result">&lt;message&gt;</span> to the <span class="result">&lt;console&gt;</span>.
+    <span class="action">Return</span> an <span class="result">&lt;OK: status&gt;</span> for the <span class="result">&lt;message&gt;</span>.
 }</code></pre>
 
 <h3>Disconnection Handler</h3>
 
 <pre><code><span class="feature-name">(Handle WebSocket Disconnect: WebSocket Event Handler)</span> {
-    <span class="action">&lt;Extract&gt;</span> the <span class="result">&lt;connection-id&gt;</span> from the <span class="result">&lt;event: connectionId&gt;</span>.
-    <span class="action">&lt;Log&gt;</span> <span class="string">"WebSocket client disconnected"</span> to the <span class="result">&lt;console&gt;</span>.
-    <span class="action">&lt;Return&gt;</span> an <span class="result">&lt;OK: status&gt;</span> for the <span class="result">&lt;disconnection&gt;</span>.
+    <span class="action">Extract</span> the <span class="result">&lt;connection-id&gt;</span> from the <span class="result">&lt;event: connectionId&gt;</span>.
+    <span class="action">Log</span> <span class="string">"WebSocket client disconnected"</span> to the <span class="result">&lt;console&gt;</span>.
+    <span class="action">Return</span> an <span class="result">&lt;OK: status&gt;</span> for the <span class="result">&lt;disconnection&gt;</span>.
 }</code></pre>
 
 <h2>Broadcasting Messages</h2>
 
 <p>Send a message to all connected WebSocket clients:</p>
 
-<pre><code><span class="action">&lt;Broadcast&gt;</span> the <span class="result">&lt;message&gt;</span> to the <span class="result">&lt;websocket&gt;</span>.</code></pre>
+<pre><code><span class="action">Broadcast</span> the <span class="result">&lt;message&gt;</span> to the <span class="result">&lt;websocket&gt;</span>.</code></pre>
 
 <p>
     Messages are automatically serialized to JSON if they are objects.
@@ -112,27 +112,27 @@
 <h3>main.aro</h3>
 
 <pre><code><span class="feature-name">(Application-Start: Web Chat)</span> {
-    <span class="action">&lt;Log&gt;</span> <span class="string">"Starting Web Chat..."</span> to the <span class="result">&lt;console&gt;</span>.
-    <span class="action">&lt;Start&gt;</span> the <span class="result">&lt;http-server&gt;</span> with {}.
-    <span class="action">&lt;Keepalive&gt;</span> the <span class="result">&lt;application&gt;</span> for the <span class="result">&lt;events&gt;</span>.
-    <span class="action">&lt;Return&gt;</span> an <span class="result">&lt;OK: status&gt;</span> for the <span class="result">&lt;startup&gt;</span>.
+    <span class="action">Log</span> <span class="string">"Starting Web Chat..."</span> to the <span class="result">&lt;console&gt;</span>.
+    <span class="action">Start</span> the <span class="result">&lt;http-server&gt;</span> with {}.
+    <span class="action">Keepalive</span> the <span class="result">&lt;application&gt;</span> for the <span class="result">&lt;events&gt;</span>.
+    <span class="action">Return</span> an <span class="result">&lt;OK: status&gt;</span> for the <span class="result">&lt;startup&gt;</span>.
 }</code></pre>
 
 <h3>api.aro</h3>
 
 <pre><code><span class="feature-name">(postMessage: Web Chat API)</span> {
-    <span class="action">&lt;Extract&gt;</span> the <span class="result">&lt;body&gt;</span> from the <span class="result">&lt;request: body&gt;</span>.
-    <span class="action">&lt;Extract&gt;</span> the <span class="result">&lt;text: message&gt;</span> from the <span class="result">&lt;body&gt;</span>.
-    <span class="action">&lt;Create&gt;</span> the <span class="result">&lt;message: Message&gt;</span> with {
+    <span class="action">Extract</span> the <span class="result">&lt;body&gt;</span> from the <span class="result">&lt;request: body&gt;</span>.
+    <span class="action">Extract</span> the <span class="result">&lt;text: message&gt;</span> from the <span class="result">&lt;body&gt;</span>.
+    <span class="action">Create</span> the <span class="result">&lt;message: Message&gt;</span> with {
         message: <span class="result">&lt;text&gt;</span>,
         createdAt: <span class="result">&lt;now&gt;</span>
     }.
-    <span class="action">&lt;Store&gt;</span> the <span class="result">&lt;message&gt;</span> into the <span class="result">&lt;message-repository&gt;</span>.
+    <span class="action">Store</span> the <span class="result">&lt;message&gt;</span> into the <span class="result">&lt;message-repository&gt;</span>.
 
     <span class="comment">(* Broadcast to all WebSocket clients *)</span>
-    <span class="action">&lt;Broadcast&gt;</span> the <span class="result">&lt;message&gt;</span> to the <span class="result">&lt;websocket&gt;</span>.
+    <span class="action">Broadcast</span> the <span class="result">&lt;message&gt;</span> to the <span class="result">&lt;websocket&gt;</span>.
 
-    <span class="action">&lt;Return&gt;</span> a <span class="result">&lt;Created: status&gt;</span> with <span class="result">&lt;message&gt;</span>.
+    <span class="action">Return</span> a <span class="result">&lt;Created: status&gt;</span> with <span class="result">&lt;message&gt;</span>.
 }</code></pre>
 
 <h3>Client JavaScript</h3>

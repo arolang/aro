@@ -390,16 +390,16 @@
 
 <span class="feature">(Application-Start: Hello World API)</span> {
     <span class="comment">(* Log a startup message *)</span>
-    <span class="action">&lt;Log&gt;</span> <span class="string">"Starting server..."</span> to the <span class="result">&lt;console&gt;</span>.
+    <span class="action">Log</span> <span class="string">"Starting server..."</span> to the <span class="result">&lt;console&gt;</span>.
 
     <span class="comment">(* Start the HTTP server on port 8000 *)</span>
-    <span class="action">&lt;Start&gt;</span> the <span class="result">&lt;http-server&gt;</span> on <span class="result">&lt;port&gt;</span> with <span class="string">8000</span>.
+    <span class="action">Start</span> the <span class="result">&lt;http-server&gt;</span> on <span class="result">&lt;port&gt;</span> with <span class="string">8000</span>.
 
     <span class="comment">(* Keep the application running to process HTTP requests *)</span>
-    <span class="action">&lt;Keepalive&gt;</span> the <span class="result">&lt;application&gt;</span> for the <span class="result">&lt;events&gt;</span>.
+    <span class="action">Keepalive</span> the <span class="result">&lt;application&gt;</span> for the <span class="result">&lt;events&gt;</span>.
 
     <span class="comment">(* Return OK to indicate successful startup *)</span>
-    <span class="action">&lt;Return&gt;</span> an <span class="result">&lt;OK: status&gt;</span> for the <span class="result">&lt;startup&gt;</span>.
+    <span class="action">Return</span> an <span class="result">&lt;OK: status&gt;</span> for the <span class="result">&lt;startup&gt;</span>.
 }</pre>
             </div>
         </div>
@@ -427,10 +427,10 @@
 
 <span class="feature">(sayHello: Greeting API)</span> {
     <span class="comment">(* Create our greeting message *)</span>
-    <span class="action">&lt;Create&gt;</span> the <span class="result">&lt;greeting&gt;</span> with <span class="string">"Hello, World!"</span>.
+    <span class="action">Create</span> the <span class="result">&lt;greeting&gt;</span> with <span class="string">"Hello, World!"</span>.
 
     <span class="comment">(* Return it as a successful response *)</span>
-    <span class="action">&lt;Return&gt;</span> an <span class="result">&lt;OK: status&gt;</span> with <span class="result">&lt;greeting&gt;</span>.
+    <span class="action">Return</span> an <span class="result">&lt;OK: status&gt;</span> with <span class="result">&lt;greeting&gt;</span>.
 }</pre>
             </div>
 

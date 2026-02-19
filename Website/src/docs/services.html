@@ -68,7 +68,7 @@
         <div class="highlight-box">
             <h4>One Action, Many Services</h4>
             <p>
-                All external integrations use the same pattern: <code>&lt;Call&gt; the &lt;result&gt; from the &lt;service: method&gt; with { args }</code>.
+                All external integrations use the same pattern: <code>Call the &lt;result&gt; from the &lt;service: method&gt; with { args }</code>.
                 HTTP APIs, databases, file processors - they all work the same way.
             </p>
         </div>
@@ -76,7 +76,7 @@
         <h2>The Call Action</h2>
 
         <h3>Syntax</h3>
-        <pre><code><span class="code-keyword">&lt;Call&gt;</span> the <span class="code-result">&lt;result&gt;</span> from the &lt;service: method&gt; with { key: value, ... }.</code></pre>
+        <pre><code><span class="code-keyword">Call</span> the <span class="code-result">&lt;result&gt;</span> from the &lt;service: method&gt; with { key: value, ... }.</code></pre>
 
         <table>
             <thead>
@@ -95,18 +95,18 @@
         <p>The <code>http</code> service is built-in and provides HTTP client capabilities.</p>
 
         <h3>GET Request</h3>
-        <pre><code><span class="code-keyword">&lt;Call&gt;</span> the <span class="code-result">&lt;response&gt;</span> from the &lt;http: get&gt; with {
+        <pre><code><span class="code-keyword">Call</span> the <span class="code-result">&lt;response&gt;</span> from the &lt;http: get&gt; with {
     url: <span class="code-string">"https://api.example.com/users"</span>
 }.</code></pre>
 
         <h3>GET with Headers</h3>
-        <pre><code><span class="code-keyword">&lt;Call&gt;</span> the <span class="code-result">&lt;response&gt;</span> from the &lt;http: get&gt; with {
+        <pre><code><span class="code-keyword">Call</span> the <span class="code-result">&lt;response&gt;</span> from the &lt;http: get&gt; with {
     url: <span class="code-string">"https://api.example.com/protected"</span>,
     headers: { <span class="code-string">"Authorization"</span>: <span class="code-string">"Bearer token123"</span> }
 }.</code></pre>
 
         <h3>POST Request</h3>
-        <pre><code><span class="code-keyword">&lt;Call&gt;</span> the <span class="code-result">&lt;response&gt;</span> from the &lt;http: post&gt; with {
+        <pre><code><span class="code-keyword">Call</span> the <span class="code-result">&lt;response&gt;</span> from the &lt;http: post&gt; with {
     url: <span class="code-string">"https://api.example.com/users"</span>,
     body: { name: <span class="code-string">"Alice"</span>, email: <span class="code-string">"alice@example.com"</span> },
     headers: { <span class="code-string">"Content-Type"</span>: <span class="code-string">"application/json"</span> }
@@ -218,12 +218,12 @@ let package = Package(
 
         <h3>Using Plugin Services</h3>
         <pre><code><span class="code-feature">(Application-Start: Plugin Demo)</span> {
-    <span class="code-keyword">&lt;Call&gt;</span> the <span class="code-result">&lt;greeting&gt;</span> from the &lt;greeting: hello&gt; with {
+    <span class="code-keyword">Call</span> the <span class="code-result">&lt;greeting&gt;</span> from the &lt;greeting: hello&gt; with {
         name: <span class="code-string">"ARO Developer"</span>
     }.
 
-    <span class="code-keyword">&lt;Log&gt;</span> &lt;greeting&gt; to the &lt;console&gt;.
-    <span class="code-keyword">&lt;Return&gt;</span> an <span class="code-result">&lt;OK: status&gt;</span> for the &lt;startup&gt;.
+    <span class="code-keyword">Log</span> &lt;greeting&gt; to the &lt;console&gt;.
+    <span class="code-keyword">Return</span> an <span class="code-result">&lt;OK: status&gt;</span> for the &lt;startup&gt;.
 }</code></pre>
 
         <h3>How Plugins Work</h3>

@@ -334,14 +334,14 @@ aro build ./MyApp --keep-intermediate</code></pre>
         <pre><code><span class="code-comment">; Feature Set: Application-Start</span>
 define ptr @aro_fs_application_start(ptr %ctx) {
 entry:
-  <span class="code-comment">; &lt;Create&gt; the &lt;greeting&gt; with "Hello, World!"</span>
+  <span class="code-comment">; Create the &lt;greeting&gt; with "Hello, World!"</span>
   call void @aro_variable_bind_string(ptr %ctx, ...)
   %result = call ptr @aro_action_create(ptr %ctx, ...)
 
-  <span class="code-comment">; &lt;Log&gt; the &lt;greeting&gt; for the &lt;console&gt;</span>
+  <span class="code-comment">; Log the &lt;greeting&gt; for the &lt;console&gt;</span>
   call ptr @aro_action_log(ptr %ctx, ...)
 
-  <span class="code-comment">; &lt;Return&gt; an &lt;OK: status&gt;</span>
+  <span class="code-comment">; Return an &lt;OK: status&gt;</span>
   call ptr @aro_action_return(ptr %ctx, ...)
 
   ret ptr %result

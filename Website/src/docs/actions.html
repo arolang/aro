@@ -89,16 +89,16 @@
 
         <h3>Extract</h3>
         <p>Pull data from a structured source:</p>
-        <pre><code><span class="code-keyword">&lt;Extract&gt;</span> the <span class="code-result">&lt;user-id&gt;</span> from the &lt;request: parameters&gt;.
-<span class="code-keyword">&lt;Extract&gt;</span> the <span class="code-result">&lt;body&gt;</span> from the &lt;request: body&gt;.
-<span class="code-keyword">&lt;Extract&gt;</span> the <span class="code-result">&lt;email&gt;</span> from the &lt;user: email&gt;.
-<span class="code-keyword">&lt;Extract&gt;</span> the <span class="code-result">&lt;items&gt;</span> from the &lt;order: lineItems&gt;.</code></pre>
+        <pre><code><span class="code-keyword">Extract</span> the <span class="code-result">&lt;user-id&gt;</span> from the &lt;request: parameters&gt;.
+<span class="code-keyword">Extract</span> the <span class="code-result">&lt;body&gt;</span> from the &lt;request: body&gt;.
+<span class="code-keyword">Extract</span> the <span class="code-result">&lt;email&gt;</span> from the &lt;user: email&gt;.
+<span class="code-keyword">Extract</span> the <span class="code-result">&lt;items&gt;</span> from the &lt;order: lineItems&gt;.</code></pre>
 
         <h3>Retrieve</h3>
         <p>Fetch data from a repository or data store:</p>
-        <pre><code><span class="code-keyword">&lt;Retrieve&gt;</span> the <span class="code-result">&lt;user&gt;</span> from the &lt;user-repository&gt;.
-<span class="code-keyword">&lt;Retrieve&gt;</span> the <span class="code-result">&lt;user&gt;</span> from the &lt;user-repository&gt; where id = &lt;user-id&gt;.
-<span class="code-keyword">&lt;Retrieve&gt;</span> the <span class="code-result">&lt;orders&gt;</span> from the &lt;order-repository&gt; where status = <span class="code-string">"pending"</span>.</code></pre>
+        <pre><code><span class="code-keyword">Retrieve</span> the <span class="code-result">&lt;user&gt;</span> from the &lt;user-repository&gt;.
+<span class="code-keyword">Retrieve</span> the <span class="code-result">&lt;user&gt;</span> from the &lt;user-repository&gt; where id = &lt;user-id&gt;.
+<span class="code-keyword">Retrieve</span> the <span class="code-result">&lt;orders&gt;</span> from the &lt;order-repository&gt; where status = <span class="code-string">"pending"</span>.</code></pre>
 
         <h3>Request</h3>
         <p>Make HTTP requests to external APIs:</p>
@@ -108,9 +108,9 @@
 
         <h3>Read</h3>
         <p>Read from files:</p>
-        <pre><code><span class="code-keyword">&lt;Read&gt;</span> the <span class="code-result">&lt;content&gt;</span> from the &lt;file: <span class="code-string">"./data.txt"</span>&gt;.
-<span class="code-keyword">&lt;Read&gt;</span> the <span class="code-result">&lt;config: JSON&gt;</span> from the &lt;file: <span class="code-string">"./config.json"</span>&gt;.
-<span class="code-keyword">&lt;Read&gt;</span> the <span class="code-result">&lt;data: bytes&gt;</span> from the &lt;file: <span class="code-string">"./image.png"</span>&gt;.</code></pre>
+        <pre><code><span class="code-keyword">Read</span> the <span class="code-result">&lt;content&gt;</span> from the &lt;file: <span class="code-string">"./data.txt"</span>&gt;.
+<span class="code-keyword">Read</span> the <span class="code-result">&lt;config: JSON&gt;</span> from the &lt;file: <span class="code-string">"./config.json"</span>&gt;.
+<span class="code-keyword">Read</span> the <span class="code-result">&lt;data: bytes&gt;</span> from the &lt;file: <span class="code-string">"./image.png"</span>&gt;.</code></pre>
 
         <h3>Request</h3>
         <p>Make HTTP requests with method control:</p>
@@ -137,9 +137,9 @@
 
         <h3>Create</h3>
         <p>Create new data structures:</p>
-        <pre><code><span class="code-keyword">&lt;Create&gt;</span> the <span class="code-result">&lt;user&gt;</span> with &lt;user-data&gt;.
-<span class="code-keyword">&lt;Create&gt;</span> the <span class="code-result">&lt;response&gt;</span> with { message: <span class="code-string">"Success"</span>, code: 200 }.
-<span class="code-keyword">&lt;Create&gt;</span> the <span class="code-result">&lt;order&gt;</span> with {
+        <pre><code><span class="code-keyword">Create</span> the <span class="code-result">&lt;user&gt;</span> with &lt;user-data&gt;.
+<span class="code-keyword">Create</span> the <span class="code-result">&lt;response&gt;</span> with { message: <span class="code-string">"Success"</span>, code: 200 }.
+<span class="code-keyword">Create</span> the <span class="code-result">&lt;order&gt;</span> with {
     items: &lt;items&gt;,
     total: &lt;total&gt;,
     customer: &lt;customer-id&gt;
@@ -147,66 +147,66 @@
 
         <h3>Compute</h3>
         <p>Perform calculations:</p>
-        <pre><code><span class="code-keyword">&lt;Compute&gt;</span> the <span class="code-result">&lt;total&gt;</span> for the &lt;items&gt;.
-<span class="code-keyword">&lt;Compute&gt;</span> the <span class="code-result">&lt;hash&gt;</span> for the &lt;password&gt;.
-<span class="code-keyword">&lt;Compute&gt;</span> the <span class="code-result">&lt;tax&gt;</span> for the &lt;subtotal&gt;.
-<span class="code-keyword">&lt;Compute&gt;</span> the <span class="code-result">&lt;average&gt;</span> for the &lt;values&gt;.</code></pre>
+        <pre><code><span class="code-keyword">Compute</span> the <span class="code-result">&lt;total&gt;</span> for the &lt;items&gt;.
+<span class="code-keyword">Compute</span> the <span class="code-result">&lt;hash&gt;</span> for the &lt;password&gt;.
+<span class="code-keyword">Compute</span> the <span class="code-result">&lt;tax&gt;</span> for the &lt;subtotal&gt;.
+<span class="code-keyword">Compute</span> the <span class="code-result">&lt;average&gt;</span> for the &lt;values&gt;.</code></pre>
 
         <h3>Transform</h3>
         <p>Convert or map data:</p>
-        <pre><code><span class="code-keyword">&lt;Transform&gt;</span> the <span class="code-result">&lt;dto&gt;</span> from the &lt;entity&gt;.
-<span class="code-keyword">&lt;Transform&gt;</span> the <span class="code-result">&lt;response&gt;</span> from the &lt;data&gt;.
-<span class="code-keyword">&lt;Transform&gt;</span> the <span class="code-result">&lt;updated-user&gt;</span> from the &lt;user&gt; with &lt;updates&gt;.</code></pre>
+        <pre><code><span class="code-keyword">Transform</span> the <span class="code-result">&lt;dto&gt;</span> from the &lt;entity&gt;.
+<span class="code-keyword">Transform</span> the <span class="code-result">&lt;response&gt;</span> from the &lt;data&gt;.
+<span class="code-keyword">Transform</span> the <span class="code-result">&lt;updated-user&gt;</span> from the &lt;user&gt; with &lt;updates&gt;.</code></pre>
 
         <h3>Validate</h3>
         <p>Check data against rules:</p>
-        <pre><code><span class="code-keyword">&lt;Validate&gt;</span> the &lt;user-data&gt; for the &lt;user-schema&gt;.
-<span class="code-keyword">&lt;Validate&gt;</span> the &lt;email&gt; for the &lt;email-pattern&gt;.
+        <pre><code><span class="code-keyword">Validate</span> the &lt;user-data&gt; for the &lt;user-schema&gt;.
+<span class="code-keyword">Validate</span> the &lt;email&gt; for the &lt;email-pattern&gt;.
 
 if &lt;validation&gt; is failed then {
-    <span class="code-keyword">&lt;Return&gt;</span> a <span class="code-result">&lt;BadRequest: status&gt;</span> with &lt;validation: errors&gt;.
+    <span class="code-keyword">Return</span> a <span class="code-result">&lt;BadRequest: status&gt;</span> with &lt;validation: errors&gt;.
 }</code></pre>
 
         <h3>Compare</h3>
         <p>Compare values:</p>
-        <pre><code><span class="code-keyword">&lt;Compare&gt;</span> the &lt;password-hash&gt; against the &lt;stored-hash&gt;.
-<span class="code-keyword">&lt;Compare&gt;</span> the &lt;signature&gt; against the &lt;expected-signature&gt;.</code></pre>
+        <pre><code><span class="code-keyword">Compare</span> the &lt;password-hash&gt; against the &lt;stored-hash&gt;.
+<span class="code-keyword">Compare</span> the &lt;signature&gt; against the &lt;expected-signature&gt;.</code></pre>
 
         <h3>Update</h3>
         <p>Modify existing data:</p>
-        <pre><code><span class="code-keyword">&lt;Update&gt;</span> the &lt;user&gt; with &lt;changes&gt;.
-<span class="code-keyword">&lt;Update&gt;</span> the &lt;order: status&gt; with <span class="code-string">"shipped"</span>.</code></pre>
+        <pre><code><span class="code-keyword">Update</span> the &lt;user&gt; with &lt;changes&gt;.
+<span class="code-keyword">Update</span> the &lt;order: status&gt; with <span class="code-string">"shipped"</span>.</code></pre>
 
         <h3>Sort</h3>
         <p>Order collections:</p>
-        <pre><code><span class="code-keyword">&lt;Sort&gt;</span> the <span class="code-result">&lt;sorted-users&gt;</span> from the &lt;users&gt; by &lt;name&gt;.
-<span class="code-keyword">&lt;Sort&gt;</span> the <span class="code-result">&lt;ordered&gt;</span> from the &lt;items&gt; by &lt;price&gt; with <span class="code-string">"desc"</span>.</code></pre>
+        <pre><code><span class="code-keyword">Sort</span> the <span class="code-result">&lt;sorted-users&gt;</span> from the &lt;users&gt; by &lt;name&gt;.
+<span class="code-keyword">Sort</span> the <span class="code-result">&lt;ordered&gt;</span> from the &lt;items&gt; by &lt;price&gt; with <span class="code-string">"desc"</span>.</code></pre>
 
         <h3>Split</h3>
         <p>Split strings by regex delimiter (ARO-0037):</p>
-        <pre><code><span class="code-keyword">&lt;Split&gt;</span> the <span class="code-result">&lt;parts&gt;</span> from the &lt;csv-line&gt; by /,/.
-<span class="code-keyword">&lt;Split&gt;</span> the <span class="code-result">&lt;words&gt;</span> from the &lt;sentence&gt; by /\s+/.
-<span class="code-keyword">&lt;Split&gt;</span> the <span class="code-result">&lt;tokens&gt;</span> from the &lt;code&gt; by /[;,]+/.</code></pre>
+        <pre><code><span class="code-keyword">Split</span> the <span class="code-result">&lt;parts&gt;</span> from the &lt;csv-line&gt; by /,/.
+<span class="code-keyword">Split</span> the <span class="code-result">&lt;words&gt;</span> from the &lt;sentence&gt; by /\s+/.
+<span class="code-keyword">Split</span> the <span class="code-result">&lt;tokens&gt;</span> from the &lt;code&gt; by /[;,]+/.</code></pre>
 
         <h3>Merge</h3>
         <p>Combine data structures:</p>
-        <pre><code><span class="code-keyword">&lt;Merge&gt;</span> the &lt;existing-user&gt; with &lt;update-data&gt;.
-<span class="code-keyword">&lt;Merge&gt;</span> the <span class="code-result">&lt;combined&gt;</span> from &lt;list1&gt; with &lt;list2&gt;.</code></pre>
+        <pre><code><span class="code-keyword">Merge</span> the &lt;existing-user&gt; with &lt;update-data&gt;.
+<span class="code-keyword">Merge</span> the <span class="code-result">&lt;combined&gt;</span> from &lt;list1&gt; with &lt;list2&gt;.</code></pre>
 
         <h3>Filter</h3>
         <p>Select matching elements from collections:</p>
-        <pre><code><span class="code-keyword">&lt;Filter&gt;</span> the <span class="code-result">&lt;active-users&gt;</span> from the &lt;users&gt; where &lt;status&gt; = <span class="code-string">"active"</span>.
-<span class="code-keyword">&lt;Filter&gt;</span> the <span class="code-result">&lt;expensive&gt;</span> from the &lt;products&gt; where &lt;price&gt; > 100.</code></pre>
+        <pre><code><span class="code-keyword">Filter</span> the <span class="code-result">&lt;active-users&gt;</span> from the &lt;users&gt; where &lt;status&gt; = <span class="code-string">"active"</span>.
+<span class="code-keyword">Filter</span> the <span class="code-result">&lt;expensive&gt;</span> from the &lt;products&gt; where &lt;price&gt; > 100.</code></pre>
 
         <h3>Map</h3>
         <p>Transform collection elements:</p>
-        <pre><code><span class="code-keyword">&lt;Map&gt;</span> the <span class="code-result">&lt;names&gt;</span> from the &lt;users: name&gt;.
-<span class="code-keyword">&lt;Map&gt;</span> the <span class="code-result">&lt;emails&gt;</span> from the &lt;customers: email&gt;.</code></pre>
+        <pre><code><span class="code-keyword">Map</span> the <span class="code-result">&lt;names&gt;</span> from the &lt;users: name&gt;.
+<span class="code-keyword">Map</span> the <span class="code-result">&lt;emails&gt;</span> from the &lt;customers: email&gt;.</code></pre>
 
         <h3>Reduce</h3>
         <p>Aggregate collections:</p>
-        <pre><code><span class="code-keyword">&lt;Reduce&gt;</span> the <span class="code-result">&lt;total&gt;</span> from the &lt;items&gt; with sum(&lt;price&gt;).
-<span class="code-keyword">&lt;Reduce&gt;</span> the <span class="code-result">&lt;count&gt;</span> from the &lt;orders&gt; with count().</code></pre>
+        <pre><code><span class="code-keyword">Reduce</span> the <span class="code-result">&lt;total&gt;</span> from the &lt;items&gt; with sum(&lt;price&gt;).
+<span class="code-keyword">Reduce</span> the <span class="code-result">&lt;count&gt;</span> from the &lt;orders&gt; with count().</code></pre>
 
         <h2>RESPONSE Actions</h2>
         <p>These actions send results back from your feature set.</p>
@@ -214,14 +214,14 @@ if &lt;validation&gt; is failed then {
         <h3>Return</h3>
         <p>Return a result with status:</p>
         <pre><code><span class="code-comment">(* Success responses *)</span>
-<span class="code-keyword">&lt;Return&gt;</span> an <span class="code-result">&lt;OK: status&gt;</span> with &lt;data&gt;.
-<span class="code-keyword">&lt;Return&gt;</span> a <span class="code-result">&lt;Created: status&gt;</span> with &lt;resource&gt;.
-<span class="code-keyword">&lt;Return&gt;</span> a <span class="code-result">&lt;NoContent: status&gt;</span> for the &lt;deletion&gt;.
+<span class="code-keyword">Return</span> an <span class="code-result">&lt;OK: status&gt;</span> with &lt;data&gt;.
+<span class="code-keyword">Return</span> a <span class="code-result">&lt;Created: status&gt;</span> with &lt;resource&gt;.
+<span class="code-keyword">Return</span> a <span class="code-result">&lt;NoContent: status&gt;</span> for the &lt;deletion&gt;.
 
 <span class="code-comment">(* Error responses *)</span>
-<span class="code-keyword">&lt;Return&gt;</span> a <span class="code-result">&lt;BadRequest: status&gt;</span> with &lt;errors&gt;.
-<span class="code-keyword">&lt;Return&gt;</span> a <span class="code-result">&lt;NotFound: status&gt;</span> for the &lt;missing: resource&gt;.
-<span class="code-keyword">&lt;Return&gt;</span> a <span class="code-result">&lt;Forbidden: status&gt;</span> for the &lt;unauthorized: access&gt;.</code></pre>
+<span class="code-keyword">Return</span> a <span class="code-result">&lt;BadRequest: status&gt;</span> with &lt;errors&gt;.
+<span class="code-keyword">Return</span> a <span class="code-result">&lt;NotFound: status&gt;</span> for the &lt;missing: resource&gt;.
+<span class="code-keyword">Return</span> a <span class="code-result">&lt;Forbidden: status&gt;</span> for the &lt;unauthorized: access&gt;.</code></pre>
 
         <p><strong>Status Codes:</strong></p>
         <table>
@@ -242,50 +242,50 @@ if &lt;validation&gt; is failed then {
 
         <h3>Throw</h3>
         <p>Throw an error:</p>
-        <pre><code><span class="code-keyword">&lt;Throw&gt;</span> a <span class="code-result">&lt;ValidationError&gt;</span> for the &lt;invalid: input&gt;.
-<span class="code-keyword">&lt;Throw&gt;</span> a <span class="code-result">&lt;NotFoundError&gt;</span> for the &lt;missing: user&gt;.
-<span class="code-keyword">&lt;Throw&gt;</span> an <span class="code-result">&lt;AuthError&gt;</span> with <span class="code-string">"Invalid credentials"</span>.</code></pre>
+        <pre><code><span class="code-keyword">Throw</span> a <span class="code-result">&lt;ValidationError&gt;</span> for the &lt;invalid: input&gt;.
+<span class="code-keyword">Throw</span> a <span class="code-result">&lt;NotFoundError&gt;</span> for the &lt;missing: user&gt;.
+<span class="code-keyword">Throw</span> an <span class="code-result">&lt;AuthError&gt;</span> with <span class="code-string">"Invalid credentials"</span>.</code></pre>
 
         <h2>EXPORT Actions</h2>
         <p>These actions publish data or send to external systems.</p>
 
         <h3>Store</h3>
         <p>Save to a repository:</p>
-        <pre><code><span class="code-keyword">&lt;Store&gt;</span> the &lt;user&gt; into the &lt;user-repository&gt;.
-<span class="code-keyword">&lt;Store&gt;</span> the &lt;order&gt; into the &lt;order-repository&gt;.
-<span class="code-keyword">&lt;Store&gt;</span> the &lt;log-entry&gt; into the &lt;audit-log&gt;.</code></pre>
+        <pre><code><span class="code-keyword">Store</span> the &lt;user&gt; into the &lt;user-repository&gt;.
+<span class="code-keyword">Store</span> the &lt;order&gt; into the &lt;order-repository&gt;.
+<span class="code-keyword">Store</span> the &lt;log-entry&gt; into the &lt;audit-log&gt;.</code></pre>
 
         <h3>Publish</h3>
         <p>Make variables globally available:</p>
-        <pre><code><span class="code-keyword">&lt;Publish&gt;</span> as &lt;current-user&gt; &lt;user&gt;.
-<span class="code-keyword">&lt;Publish&gt;</span> as &lt;app-config&gt; &lt;config&gt;.</code></pre>
+        <pre><code><span class="code-keyword">Publish</span> as &lt;current-user&gt; &lt;user&gt;.
+<span class="code-keyword">Publish</span> as &lt;app-config&gt; &lt;config&gt;.</code></pre>
 
         <h3>Log</h3>
         <p>Write to logs:</p>
-        <pre><code><span class="code-keyword">&lt;Log&gt;</span> <span class="code-string">"User logged in"</span> to the &lt;console&gt;.
-<span class="code-keyword">&lt;Log&gt;</span> &lt;error&gt; to the &lt;console&gt;.</code></pre>
+        <pre><code><span class="code-keyword">Log</span> <span class="code-string">"User logged in"</span> to the &lt;console&gt;.
+<span class="code-keyword">Log</span> &lt;error&gt; to the &lt;console&gt;.</code></pre>
 
         <h3>Send</h3>
         <p>Send data to external destinations:</p>
-        <pre><code><span class="code-keyword">&lt;Send&gt;</span> the &lt;email&gt; to the &lt;user: email&gt;.
-<span class="code-keyword">&lt;Send&gt;</span> the &lt;notification&gt; to the &lt;push-service&gt;.
-<span class="code-keyword">&lt;Send&gt;</span> the &lt;data&gt; to the &lt;connection&gt;.</code></pre>
+        <pre><code><span class="code-keyword">Send</span> the &lt;email&gt; to the &lt;user: email&gt;.
+<span class="code-keyword">Send</span> the &lt;notification&gt; to the &lt;push-service&gt;.
+<span class="code-keyword">Send</span> the &lt;data&gt; to the &lt;connection&gt;.</code></pre>
 
         <h3>Emit</h3>
         <p>Emit domain events:</p>
-        <pre><code><span class="code-keyword">&lt;Emit&gt;</span> a <span class="code-result">&lt;UserCreated: event&gt;</span> with &lt;user&gt;.
-<span class="code-keyword">&lt;Emit&gt;</span> an <span class="code-result">&lt;OrderPlaced: event&gt;</span> with &lt;order&gt;.
-<span class="code-keyword">&lt;Emit&gt;</span> a <span class="code-result">&lt;PaymentProcessed: event&gt;</span> with &lt;payment&gt;.</code></pre>
+        <pre><code><span class="code-keyword">Emit</span> a <span class="code-result">&lt;UserCreated: event&gt;</span> with &lt;user&gt;.
+<span class="code-keyword">Emit</span> an <span class="code-result">&lt;OrderPlaced: event&gt;</span> with &lt;order&gt;.
+<span class="code-keyword">Emit</span> a <span class="code-result">&lt;PaymentProcessed: event&gt;</span> with &lt;payment&gt;.</code></pre>
 
         <h3>Delete</h3>
         <p>Remove data:</p>
-        <pre><code><span class="code-keyword">&lt;Delete&gt;</span> the &lt;user&gt; from the &lt;user-repository&gt; where id = &lt;user-id&gt;.
-<span class="code-keyword">&lt;Delete&gt;</span> the &lt;file: <span class="code-string">"./temp.txt"</span>&gt;.</code></pre>
+        <pre><code><span class="code-keyword">Delete</span> the &lt;user&gt; from the &lt;user-repository&gt; where id = &lt;user-id&gt;.
+<span class="code-keyword">Delete</span> the &lt;file: <span class="code-string">"./temp.txt"</span>&gt;.</code></pre>
 
         <h3>Write</h3>
         <p>Write content to files:</p>
-        <pre><code><span class="code-keyword">&lt;Write&gt;</span> the &lt;content&gt; to the &lt;file: <span class="code-string">"./output.txt"</span>&gt;.
-<span class="code-keyword">&lt;Write&gt;</span> the &lt;data: JSON&gt; to the &lt;file: <span class="code-string">"./data.json"</span>&gt;.</code></pre>
+        <pre><code><span class="code-keyword">Write</span> the &lt;content&gt; to the &lt;file: <span class="code-string">"./output.txt"</span>&gt;.
+<span class="code-keyword">Write</span> the &lt;data: JSON&gt; to the &lt;file: <span class="code-string">"./data.json"</span>&gt;.</code></pre>
 
         <h3>Append</h3>
         <p>Append content to files:</p>
@@ -297,20 +297,20 @@ if &lt;validation&gt; is failed then {
 
         <h3>List</h3>
         <p>List directory contents:</p>
-        <pre><code><span class="code-keyword">&lt;Create&gt;</span> the &lt;dir-path&gt; with <span class="code-string">"./uploads"</span>.
+        <pre><code><span class="code-keyword">Create</span> the &lt;dir-path&gt; with <span class="code-string">"./uploads"</span>.
 <span class="code-keyword">&lt;List&gt;</span> the <span class="code-result">&lt;entries&gt;</span> from the &lt;directory: dir-path&gt;.
 <span class="code-keyword">&lt;List&gt;</span> the <span class="code-result">&lt;aro-files&gt;</span> from the &lt;directory: src-path&gt; matching <span class="code-string">"*.aro"</span>.
 <span class="code-keyword">&lt;List&gt;</span> the <span class="code-result">&lt;all-files&gt;</span> from the &lt;directory: path&gt; recursively.</code></pre>
 
         <h3>Stat</h3>
         <p>Get file or directory metadata:</p>
-        <pre><code><span class="code-keyword">&lt;Stat&gt;</span> the <span class="code-result">&lt;info&gt;</span> for the &lt;file: <span class="code-string">"./document.pdf"</span>&gt;.
-<span class="code-keyword">&lt;Stat&gt;</span> the <span class="code-result">&lt;dir-info&gt;</span> for the &lt;directory: <span class="code-string">"./src"</span>&gt;.</code></pre>
+        <pre><code><span class="code-keyword">Stat</span> the <span class="code-result">&lt;info&gt;</span> for the &lt;file: <span class="code-string">"./document.pdf"</span>&gt;.
+<span class="code-keyword">Stat</span> the <span class="code-result">&lt;dir-info&gt;</span> for the &lt;directory: <span class="code-string">"./src"</span>&gt;.</code></pre>
 
         <h3>Exists</h3>
         <p>Check if a file or directory exists:</p>
-        <pre><code><span class="code-keyword">&lt;Exists&gt;</span> the <span class="code-result">&lt;found&gt;</span> for the &lt;file: <span class="code-string">"./config.json"</span>&gt;.
-<span class="code-keyword">&lt;Exists&gt;</span> the <span class="code-result">&lt;dir-exists&gt;</span> for the &lt;directory: <span class="code-string">"./output"</span>&gt;.</code></pre>
+        <pre><code><span class="code-keyword">Exists</span> the <span class="code-result">&lt;found&gt;</span> for the &lt;file: <span class="code-string">"./config.json"</span>&gt;.
+<span class="code-keyword">Exists</span> the <span class="code-result">&lt;dir-exists&gt;</span> for the &lt;directory: <span class="code-string">"./output"</span>&gt;.</code></pre>
 
         <h3>CreateDirectory</h3>
         <p>Create directories (with parent directories):</p>
@@ -318,29 +318,29 @@ if &lt;validation&gt; is failed then {
 
         <h3>Copy</h3>
         <p>Copy files or directories:</p>
-        <pre><code><span class="code-keyword">&lt;Copy&gt;</span> the &lt;file: <span class="code-string">"./template.txt"</span>&gt; to the &lt;destination: <span class="code-string">"./copy.txt"</span>&gt;.
-<span class="code-keyword">&lt;Copy&gt;</span> the &lt;directory: <span class="code-string">"./src"</span>&gt; to the &lt;destination: <span class="code-string">"./backup/src"</span>&gt;.</code></pre>
+        <pre><code><span class="code-keyword">Copy</span> the &lt;file: <span class="code-string">"./template.txt"</span>&gt; to the &lt;destination: <span class="code-string">"./copy.txt"</span>&gt;.
+<span class="code-keyword">Copy</span> the &lt;directory: <span class="code-string">"./src"</span>&gt; to the &lt;destination: <span class="code-string">"./backup/src"</span>&gt;.</code></pre>
 
         <h3>Move</h3>
         <p>Move or rename files and directories:</p>
-        <pre><code><span class="code-keyword">&lt;Move&gt;</span> the &lt;file: <span class="code-string">"./draft.txt"</span>&gt; to the &lt;destination: <span class="code-string">"./final.txt"</span>&gt;.
-<span class="code-keyword">&lt;Move&gt;</span> the &lt;directory: <span class="code-string">"./temp"</span>&gt; to the &lt;destination: <span class="code-string">"./processed"</span>&gt;.</code></pre>
+        <pre><code><span class="code-keyword">Move</span> the &lt;file: <span class="code-string">"./draft.txt"</span>&gt; to the &lt;destination: <span class="code-string">"./final.txt"</span>&gt;.
+<span class="code-keyword">Move</span> the &lt;directory: <span class="code-string">"./temp"</span>&gt; to the &lt;destination: <span class="code-string">"./processed"</span>&gt;.</code></pre>
 
         <h2>Service Actions</h2>
         <p>These actions interact with runtime services.</p>
 
         <h3>Start</h3>
         <p>Start a service:</p>
-        <pre><code><span class="code-keyword">&lt;Start&gt;</span> the &lt;http-server&gt; on port 8080.
-<span class="code-keyword">&lt;Start&gt;</span> the &lt;scheduler&gt;.</code></pre>
+        <pre><code><span class="code-keyword">Start</span> the &lt;http-server&gt; on port 8080.
+<span class="code-keyword">Start</span> the &lt;scheduler&gt;.</code></pre>
 
         <h3>Watch</h3>
         <p>Monitor a directory:</p>
         <pre><code><span class="code-keyword">&lt;Watch&gt;</span> the &lt;directory: <span class="code-string">"./uploads"</span>&gt; as &lt;file-monitor&gt;.</code></pre>
 
         <h3>Listen / Connect</h3>
-        <pre><code><span class="code-keyword">&lt;Listen&gt;</span> on port 9000 as &lt;socket-server&gt;.
-<span class="code-keyword">&lt;Connect&gt;</span> to &lt;host: <span class="code-string">"localhost"</span>&gt; on port 5432 as &lt;database&gt;.</code></pre>
+        <pre><code><span class="code-keyword">Listen</span> on port 9000 as &lt;socket-server&gt;.
+<span class="code-keyword">Connect</span> to &lt;host: <span class="code-string">"localhost"</span>&gt; on port 5432 as &lt;database&gt;.</code></pre>
 
         <h3>Close</h3>
         <p>Close connections:</p>
@@ -349,17 +349,17 @@ if &lt;validation&gt; is failed then {
 
         <h3>Broadcast</h3>
         <p>Send to all connections:</p>
-        <pre><code><span class="code-keyword">&lt;Broadcast&gt;</span> the &lt;message&gt; to the &lt;socket-server&gt;.
-<span class="code-keyword">&lt;Broadcast&gt;</span> the &lt;notification&gt; to the &lt;chat-server&gt; with <span class="code-string">"User joined"</span>.</code></pre>
+        <pre><code><span class="code-keyword">Broadcast</span> the &lt;message&gt; to the &lt;socket-server&gt;.
+<span class="code-keyword">Broadcast</span> the &lt;notification&gt; to the &lt;chat-server&gt; with <span class="code-string">"User joined"</span>.</code></pre>
 
         <h3>Call</h3>
         <p>Call external APIs (ARO-0016):</p>
-        <pre><code><span class="code-keyword">&lt;Call&gt;</span> the <span class="code-result">&lt;result&gt;</span> via &lt;UserAPI: POST /users&gt; with &lt;user-data&gt;.
-<span class="code-keyword">&lt;Call&gt;</span> the <span class="code-result">&lt;response&gt;</span> via &lt;PaymentAPI: POST /charge&gt; with &lt;payment&gt;.</code></pre>
+        <pre><code><span class="code-keyword">Call</span> the <span class="code-result">&lt;result&gt;</span> via &lt;UserAPI: POST /users&gt; with &lt;user-data&gt;.
+<span class="code-keyword">Call</span> the <span class="code-result">&lt;response&gt;</span> via &lt;PaymentAPI: POST /charge&gt; with &lt;payment&gt;.</code></pre>
 
         <h3>Keepalive</h3>
         <p>Keep application running for events (ARO-0028):</p>
-        <pre><code><span class="code-keyword">&lt;Keepalive&gt;</span> the &lt;application&gt; for the &lt;events&gt;.</code></pre>
+        <pre><code><span class="code-keyword">Keepalive</span> the &lt;application&gt; for the &lt;events&gt;.</code></pre>
         <p>Blocks until shutdown signal (SIGINT/SIGTERM), essential for servers and file watchers.</p>
 
         <h2>State Actions</h2>
@@ -367,8 +367,8 @@ if &lt;validation&gt; is failed then {
 
         <h3>Accept</h3>
         <p>Accept a state transition:</p>
-        <pre><code><span class="code-keyword">&lt;Accept&gt;</span> the &lt;order: placed&gt;.
-<span class="code-keyword">&lt;Accept&gt;</span> the &lt;payment: approved&gt;.</code></pre>
+        <pre><code><span class="code-keyword">Accept</span> the &lt;order: placed&gt;.
+<span class="code-keyword">Accept</span> the &lt;payment: approved&gt;.</code></pre>
 
         <h2>Test Actions</h2>
         <p>Actions for testing and assertions.</p>
@@ -390,28 +390,28 @@ if &lt;validation&gt; is failed then {
         <p>Common pattern for request handlers:</p>
         <pre><code><span class="code-feature">(createUser: User API)</span> {
     <span class="code-comment">(* Extract *)</span>
-    <span class="code-keyword">&lt;Extract&gt;</span> the <span class="code-result">&lt;user-data&gt;</span> from the &lt;request: body&gt;.
+    <span class="code-keyword">Extract</span> the <span class="code-result">&lt;user-data&gt;</span> from the &lt;request: body&gt;.
 
     <span class="code-comment">(* Process *)</span>
-    <span class="code-keyword">&lt;Validate&gt;</span> the &lt;user-data&gt; for the &lt;user-schema&gt;.
-    <span class="code-keyword">&lt;Create&gt;</span> the <span class="code-result">&lt;user&gt;</span> with &lt;user-data&gt;.
-    <span class="code-keyword">&lt;Store&gt;</span> the &lt;user&gt; into the &lt;user-repository&gt;.
+    <span class="code-keyword">Validate</span> the &lt;user-data&gt; for the &lt;user-schema&gt;.
+    <span class="code-keyword">Create</span> the <span class="code-result">&lt;user&gt;</span> with &lt;user-data&gt;.
+    <span class="code-keyword">Store</span> the &lt;user&gt; into the &lt;user-repository&gt;.
 
     <span class="code-comment">(* Return *)</span>
-    <span class="code-keyword">&lt;Return&gt;</span> a <span class="code-result">&lt;Created: status&gt;</span> with &lt;user&gt;.
+    <span class="code-keyword">Return</span> a <span class="code-result">&lt;Created: status&gt;</span> with &lt;user&gt;.
 }</code></pre>
 
         <h3>Extract-Emit Pattern</h3>
         <p>Pattern for event-driven updates:</p>
         <pre><code><span class="code-feature">(createOrder: Order API)</span> {
-    <span class="code-keyword">&lt;Extract&gt;</span> the <span class="code-result">&lt;order-data&gt;</span> from the &lt;request: body&gt;.
-    <span class="code-keyword">&lt;Create&gt;</span> the <span class="code-result">&lt;order&gt;</span> with &lt;order-data&gt;.
-    <span class="code-keyword">&lt;Store&gt;</span> the &lt;order&gt; into the &lt;order-repository&gt;.
+    <span class="code-keyword">Extract</span> the <span class="code-result">&lt;order-data&gt;</span> from the &lt;request: body&gt;.
+    <span class="code-keyword">Create</span> the <span class="code-result">&lt;order&gt;</span> with &lt;order-data&gt;.
+    <span class="code-keyword">Store</span> the &lt;order&gt; into the &lt;order-repository&gt;.
 
     <span class="code-comment">(* Emit for other handlers *)</span>
-    <span class="code-keyword">&lt;Emit&gt;</span> an <span class="code-result">&lt;OrderCreated: event&gt;</span> with &lt;order&gt;.
+    <span class="code-keyword">Emit</span> an <span class="code-result">&lt;OrderCreated: event&gt;</span> with &lt;order&gt;.
 
-    <span class="code-keyword">&lt;Return&gt;</span> a <span class="code-result">&lt;Created: status&gt;</span> with &lt;order&gt;.
+    <span class="code-keyword">Return</span> a <span class="code-result">&lt;Created: status&gt;</span> with &lt;order&gt;.
 }</code></pre>
 
         <div class="highlight-box">

@@ -106,29 +106,29 @@
 
         <h3>Basic Example</h3>
         <pre><code><span class="code-feature">(Application-Start: My Application)</span> {
-    <span class="code-keyword">&lt;Log&gt;</span> <span class="code-string">"Starting application..."</span> to the &lt;console&gt;.
-    <span class="code-keyword">&lt;Return&gt;</span> an <span class="code-result">&lt;OK: status&gt;</span> for the &lt;startup&gt;.
+    <span class="code-keyword">Log</span> <span class="code-string">"Starting application..."</span> to the &lt;console&gt;.
+    <span class="code-keyword">Return</span> an <span class="code-result">&lt;OK: status&gt;</span> for the &lt;startup&gt;.
 }</code></pre>
 
         <h3>Full Example</h3>
         <pre><code><span class="code-feature">(Application-Start: E-Commerce Platform)</span> {
-    <span class="code-keyword">&lt;Log&gt;</span> <span class="code-string">"Starting E-Commerce Platform..."</span> to the &lt;console&gt;.
+    <span class="code-keyword">Log</span> <span class="code-string">"Starting E-Commerce Platform..."</span> to the &lt;console&gt;.
 
     <span class="code-comment">(* Load configuration *)</span>
-    <span class="code-keyword">&lt;Read&gt;</span> the <span class="code-result">&lt;config: JSON&gt;</span> from the &lt;file: <span class="code-string">"./config.json"</span>&gt;.
-    <span class="code-keyword">&lt;Publish&gt;</span> as &lt;app-config&gt; &lt;config&gt;.
+    <span class="code-keyword">Read</span> the <span class="code-result">&lt;config: JSON&gt;</span> from the &lt;file: <span class="code-string">"./config.json"</span>&gt;.
+    <span class="code-keyword">Publish</span> as &lt;app-config&gt; &lt;config&gt;.
 
     <span class="code-comment">(* Start HTTP server *)</span>
-    <span class="code-keyword">&lt;Start&gt;</span> the &lt;http-server&gt; on port &lt;config: server port&gt;.
+    <span class="code-keyword">Start</span> the &lt;http-server&gt; on port &lt;config: server port&gt;.
 
     <span class="code-comment">(* Start file watcher for uploads *)</span>
     <span class="code-keyword">&lt;Watch&gt;</span> the &lt;directory: <span class="code-string">"./uploads"</span>&gt; as &lt;upload-watcher&gt;.
 
     <span class="code-comment">(* Keep the application running *)</span>
-    <span class="code-keyword">&lt;Keepalive&gt;</span> the &lt;application&gt; for the &lt;events&gt;.
+    <span class="code-keyword">Keepalive</span> the &lt;application&gt; for the &lt;events&gt;.
 
-    <span class="code-keyword">&lt;Log&gt;</span> <span class="code-string">"Platform ready"</span> to the &lt;console&gt;.
-    <span class="code-keyword">&lt;Return&gt;</span> an <span class="code-result">&lt;OK: status&gt;</span> for the &lt;startup&gt;.
+    <span class="code-keyword">Log</span> <span class="code-string">"Platform ready"</span> to the &lt;console&gt;.
+    <span class="code-keyword">Return</span> an <span class="code-result">&lt;OK: status&gt;</span> for the &lt;startup&gt;.
 }</code></pre>
 
         <h2>Application-End</h2>
@@ -138,25 +138,25 @@
         <p>Called on graceful shutdown (SIGTERM, SIGINT, or programmatic stop):</p>
 
         <pre><code><span class="code-feature">(Application-End: Success)</span> {
-    <span class="code-keyword">&lt;Log&gt;</span> <span class="code-string">"Shutting down gracefully..."</span> to the &lt;console&gt;.
+    <span class="code-keyword">Log</span> <span class="code-string">"Shutting down gracefully..."</span> to the &lt;console&gt;.
 
     <span class="code-comment">(* Stop accepting new requests *)</span>
-    <span class="code-keyword">&lt;Stop&gt;</span> the &lt;http-server&gt;.
+    <span class="code-keyword">Stop</span> the &lt;http-server&gt;.
 
-    <span class="code-keyword">&lt;Log&gt;</span> <span class="code-string">"Shutdown complete. Goodbye!"</span> to the &lt;console&gt;.
-    <span class="code-keyword">&lt;Return&gt;</span> an <span class="code-result">&lt;OK: status&gt;</span> for the &lt;shutdown&gt;.
+    <span class="code-keyword">Log</span> <span class="code-string">"Shutdown complete. Goodbye!"</span> to the &lt;console&gt;.
+    <span class="code-keyword">Return</span> an <span class="code-result">&lt;OK: status&gt;</span> for the &lt;shutdown&gt;.
 }</code></pre>
 
         <h3>Error Handler</h3>
         <p>Called when the application crashes or encounters a fatal error:</p>
 
         <pre><code><span class="code-feature">(Application-End: Error)</span> {
-    <span class="code-keyword">&lt;Extract&gt;</span> the <span class="code-result">&lt;error&gt;</span> from the &lt;shutdown: error&gt;.
-    <span class="code-keyword">&lt;Extract&gt;</span> the <span class="code-result">&lt;reason&gt;</span> from the &lt;shutdown: reason&gt;.
+    <span class="code-keyword">Extract</span> the <span class="code-result">&lt;error&gt;</span> from the &lt;shutdown: error&gt;.
+    <span class="code-keyword">Extract</span> the <span class="code-result">&lt;reason&gt;</span> from the &lt;shutdown: reason&gt;.
 
-    <span class="code-keyword">&lt;Log&gt;</span> <span class="code-string">"FATAL ERROR: ${reason}"</span> to the &lt;console&gt;.
+    <span class="code-keyword">Log</span> <span class="code-string">"FATAL ERROR: ${reason}"</span> to the &lt;console&gt;.
 
-    <span class="code-keyword">&lt;Return&gt;</span> an <span class="code-result">&lt;OK: status&gt;</span> for the &lt;error-handling&gt;.
+    <span class="code-keyword">Return</span> an <span class="code-result">&lt;OK: status&gt;</span> for the &lt;error-handling&gt;.
 }</code></pre>
 
         <h3>Shutdown Context</h3>
@@ -183,68 +183,68 @@
         </ul>
 
         <h2>Keeping Applications Alive</h2>
-        <p>For servers that should run indefinitely, use the <code>&lt;Keepalive&gt;</code> action:</p>
+        <p>For servers that should run indefinitely, use the <code>Keepalive</code> action:</p>
 
         <pre><code><span class="code-feature">(Application-Start: My Server)</span> {
-    <span class="code-keyword">&lt;Start&gt;</span> the &lt;http-server&gt; on port 8080.
-    <span class="code-keyword">&lt;Keepalive&gt;</span> the &lt;application&gt; for the &lt;events&gt;.
-    <span class="code-keyword">&lt;Return&gt;</span> an <span class="code-result">&lt;OK: status&gt;</span> for the &lt;startup&gt;.
+    <span class="code-keyword">Start</span> the &lt;http-server&gt; on port 8080.
+    <span class="code-keyword">Keepalive</span> the &lt;application&gt; for the &lt;events&gt;.
+    <span class="code-keyword">Return</span> an <span class="code-result">&lt;OK: status&gt;</span> for the &lt;startup&gt;.
 }</code></pre>
 
-        <p>The <code>&lt;Keepalive&gt;</code> action blocks until interrupted (Ctrl+C or kill signal).</p>
+        <p>The <code>Keepalive</code> action blocks until interrupted (Ctrl+C or kill signal).</p>
 
         <h2>Service Initialization</h2>
 
         <h3>HTTP Server</h3>
         <pre><code><span class="code-feature">(Application-Start: Web Server)</span> {
-    <span class="code-keyword">&lt;Start&gt;</span> the &lt;http-server&gt; on port 8080.
-    <span class="code-keyword">&lt;Keepalive&gt;</span> the &lt;application&gt; for the &lt;events&gt;.
-    <span class="code-keyword">&lt;Return&gt;</span> an <span class="code-result">&lt;OK: status&gt;</span> for the &lt;startup&gt;.
+    <span class="code-keyword">Start</span> the &lt;http-server&gt; on port 8080.
+    <span class="code-keyword">Keepalive</span> the &lt;application&gt; for the &lt;events&gt;.
+    <span class="code-keyword">Return</span> an <span class="code-result">&lt;OK: status&gt;</span> for the &lt;startup&gt;.
 }
 
 <span class="code-feature">(Application-End: Success)</span> {
-    <span class="code-keyword">&lt;Stop&gt;</span> the &lt;http-server&gt;.
-    <span class="code-keyword">&lt;Return&gt;</span> an <span class="code-result">&lt;OK: status&gt;</span> for the &lt;shutdown&gt;.
+    <span class="code-keyword">Stop</span> the &lt;http-server&gt;.
+    <span class="code-keyword">Return</span> an <span class="code-result">&lt;OK: status&gt;</span> for the &lt;shutdown&gt;.
 }</code></pre>
 
         <h3>File Watcher</h3>
         <pre><code><span class="code-feature">(Application-Start: File Processor)</span> {
     <span class="code-keyword">&lt;Watch&gt;</span> the &lt;directory: <span class="code-string">"./inbox"</span>&gt; as &lt;file-watcher&gt;.
-    <span class="code-keyword">&lt;Keepalive&gt;</span> the &lt;application&gt; for the &lt;events&gt;.
-    <span class="code-keyword">&lt;Return&gt;</span> an <span class="code-result">&lt;OK: status&gt;</span> for the &lt;startup&gt;.
+    <span class="code-keyword">Keepalive</span> the &lt;application&gt; for the &lt;events&gt;.
+    <span class="code-keyword">Return</span> an <span class="code-result">&lt;OK: status&gt;</span> for the &lt;startup&gt;.
 }</code></pre>
 
         <h3>Socket Server</h3>
         <pre><code><span class="code-feature">(Application-Start: Socket Server)</span> {
-    <span class="code-keyword">&lt;Listen&gt;</span> on port 9000 as &lt;socket-server&gt;.
-    <span class="code-keyword">&lt;Keepalive&gt;</span> the &lt;application&gt; for the &lt;events&gt;.
-    <span class="code-keyword">&lt;Return&gt;</span> an <span class="code-result">&lt;OK: status&gt;</span> for the &lt;startup&gt;.
+    <span class="code-keyword">Listen</span> on port 9000 as &lt;socket-server&gt;.
+    <span class="code-keyword">Keepalive</span> the &lt;application&gt; for the &lt;events&gt;.
+    <span class="code-keyword">Return</span> an <span class="code-result">&lt;OK: status&gt;</span> for the &lt;startup&gt;.
 }</code></pre>
 
         <h3>Multiple Services</h3>
         <pre><code><span class="code-feature">(Application-Start: Full Stack)</span> {
     <span class="code-comment">(* HTTP API *)</span>
-    <span class="code-keyword">&lt;Start&gt;</span> the &lt;http-server&gt; on port 8080.
+    <span class="code-keyword">Start</span> the &lt;http-server&gt; on port 8080.
 
     <span class="code-comment">(* WebSocket server *)</span>
-    <span class="code-keyword">&lt;Listen&gt;</span> on port 8081 as &lt;websocket-server&gt;.
+    <span class="code-keyword">Listen</span> on port 8081 as &lt;websocket-server&gt;.
 
     <span class="code-comment">(* File watcher *)</span>
     <span class="code-keyword">&lt;Watch&gt;</span> the &lt;directory: <span class="code-string">"./uploads"</span>&gt; as &lt;upload-watcher&gt;.
 
     <span class="code-comment">(* Keep the application running *)</span>
-    <span class="code-keyword">&lt;Keepalive&gt;</span> the &lt;application&gt; for the &lt;events&gt;.
+    <span class="code-keyword">Keepalive</span> the &lt;application&gt; for the &lt;events&gt;.
 
-    <span class="code-keyword">&lt;Return&gt;</span> an <span class="code-result">&lt;OK: status&gt;</span> for the &lt;startup&gt;.
+    <span class="code-keyword">Return</span> an <span class="code-result">&lt;OK: status&gt;</span> for the &lt;startup&gt;.
 }
 
 <span class="code-feature">(Application-End: Success)</span> {
     <span class="code-comment">(* Stop in reverse order *)</span>
-    <span class="code-keyword">&lt;Stop&gt;</span> the &lt;upload-watcher&gt;.
+    <span class="code-keyword">Stop</span> the &lt;upload-watcher&gt;.
     <span class="code-keyword">&lt;Close&gt;</span> the &lt;websocket-server&gt;.
-    <span class="code-keyword">&lt;Stop&gt;</span> the &lt;http-server&gt;.
+    <span class="code-keyword">Stop</span> the &lt;http-server&gt;.
 
-    <span class="code-keyword">&lt;Return&gt;</span> an <span class="code-result">&lt;OK: status&gt;</span> for the &lt;shutdown&gt;.
+    <span class="code-keyword">Return</span> an <span class="code-result">&lt;OK: status&gt;</span> for the &lt;shutdown&gt;.
 }</code></pre>
 
         <h2>Best Practices</h2>
@@ -252,36 +252,36 @@
         <h3>Initialize Early, Fail Fast</h3>
         <pre><code><span class="code-feature">(Application-Start: Fail Fast)</span> {
     <span class="code-comment">(* Check critical config first *)</span>
-    <span class="code-keyword">&lt;Read&gt;</span> the <span class="code-result">&lt;config&gt;</span> from the &lt;file: <span class="code-string">"./config.json"</span>&gt;.
+    <span class="code-keyword">Read</span> the <span class="code-result">&lt;config&gt;</span> from the &lt;file: <span class="code-string">"./config.json"</span>&gt;.
 
     when &lt;config: database&gt; is empty {
-        <span class="code-keyword">&lt;Log&gt;</span> <span class="code-string">"Missing database configuration"</span> to the &lt;console&gt;.
-        <span class="code-keyword">&lt;Throw&gt;</span> a &lt;ConfigurationError&gt; for the &lt;missing: database&gt;.
+        <span class="code-keyword">Log</span> <span class="code-string">"Missing database configuration"</span> to the &lt;console&gt;.
+        <span class="code-keyword">Throw</span> a &lt;ConfigurationError&gt; for the &lt;missing: database&gt;.
     }
 
     <span class="code-comment">(* Then initialize services *)</span>
-    <span class="code-keyword">&lt;Start&gt;</span> the &lt;http-server&gt; on port &lt;config: port&gt;.
+    <span class="code-keyword">Start</span> the &lt;http-server&gt; on port &lt;config: port&gt;.
 
-    <span class="code-keyword">&lt;Return&gt;</span> an <span class="code-result">&lt;OK: status&gt;</span> for the &lt;startup&gt;.
+    <span class="code-keyword">Return</span> an <span class="code-result">&lt;OK: status&gt;</span> for the &lt;startup&gt;.
 }</code></pre>
 
         <h3>Log Lifecycle Events</h3>
         <pre><code><span class="code-feature">(Application-Start: Observable App)</span> {
-    <span class="code-keyword">&lt;Log&gt;</span> <span class="code-string">"APPLICATION_STARTING"</span> to the &lt;console&gt;.
+    <span class="code-keyword">Log</span> <span class="code-string">"APPLICATION_STARTING"</span> to the &lt;console&gt;.
 
-    <span class="code-keyword">&lt;Start&gt;</span> the &lt;http-server&gt; on port 8080.
+    <span class="code-keyword">Start</span> the &lt;http-server&gt; on port 8080.
 
-    <span class="code-keyword">&lt;Log&gt;</span> <span class="code-string">"APPLICATION_READY"</span> to the &lt;console&gt;.
-    <span class="code-keyword">&lt;Return&gt;</span> an <span class="code-result">&lt;OK: status&gt;</span> for the &lt;startup&gt;.
+    <span class="code-keyword">Log</span> <span class="code-string">"APPLICATION_READY"</span> to the &lt;console&gt;.
+    <span class="code-keyword">Return</span> an <span class="code-result">&lt;OK: status&gt;</span> for the &lt;startup&gt;.
 }
 
 <span class="code-feature">(Application-End: Success)</span> {
-    <span class="code-keyword">&lt;Log&gt;</span> <span class="code-string">"APPLICATION_STOPPING"</span> to the &lt;console&gt;.
+    <span class="code-keyword">Log</span> <span class="code-string">"APPLICATION_STOPPING"</span> to the &lt;console&gt;.
 
-    <span class="code-keyword">&lt;Stop&gt;</span> the &lt;http-server&gt;.
+    <span class="code-keyword">Stop</span> the &lt;http-server&gt;.
 
-    <span class="code-keyword">&lt;Log&gt;</span> <span class="code-string">"APPLICATION_STOPPED"</span> to the &lt;console&gt;.
-    <span class="code-keyword">&lt;Return&gt;</span> an <span class="code-result">&lt;OK: status&gt;</span> for the &lt;shutdown&gt;.
+    <span class="code-keyword">Log</span> <span class="code-string">"APPLICATION_STOPPED"</span> to the &lt;console&gt;.
+    <span class="code-keyword">Return</span> an <span class="code-result">&lt;OK: status&gt;</span> for the &lt;shutdown&gt;.
 }</code></pre>
 
         <div class="highlight-box">

@@ -232,7 +232,7 @@
                         It <em>flows</em>.
                     </p>
                     <p>
-                        When you write <code>&lt;Filter&gt; the &lt;records&gt; where status = "active"</code>,
+                        When you write <code>Filter the &lt;records&gt; where status = "active"</code>,
                         ARO doesn't load all records first. It creates a <strong>lazy pipeline</strong> that
                         processes data as it arrives.
                     </p>
@@ -265,19 +265,19 @@
                     <div class="card-icon">01</div>
                     <h3>Features First</h3>
                     <p>Write code the way you write user stories. Each feature set maps directly to a business capability.</p>
-                    <code>&lt;Extract&gt; the &lt;user&gt; from the &lt;request&gt;.</code>
+                    <code>Extract the &lt;user&gt; from the &lt;request&gt;.</code>
                 </div>
                 <div class="feature-card animate-on-scroll stagger-2">
                     <div class="card-icon">02</div>
                     <h3>AI Native</h3>
                     <p>The first language designed for AI collaboration. Natural language syntax that LLMs understand.</p>
-                    <code>&lt;Validate&gt; the &lt;data&gt; against &lt;schema&gt;.</code>
+                    <code>Validate the &lt;data&gt; against &lt;schema&gt;.</code>
                 </div>
                 <div class="feature-card animate-on-scroll stagger-3">
                     <div class="card-icon">03</div>
                     <h3>Contract First</h3>
                     <p>Your OpenAPI contract is your routing table. Define your API, ARO handles the rest.</p>
-                    <code>&lt;Return&gt; an &lt;OK: status&gt; with &lt;result&gt;.</code>
+                    <code>Return an &lt;OK: status&gt; with &lt;result&gt;.</code>
                 </div>
             </div>
         </div>
@@ -297,7 +297,7 @@
                     </p>
                     <p class="animate-on-scroll">
                         ARO eliminates the gap. The language <em>is</em> the specification. When you write
-                        <code>&lt;Store&gt; the &lt;user&gt; into the &lt;database&gt;</code>, there's no ambiguity.
+                        <code>Store the &lt;user&gt; into the &lt;database&gt;</code>, there's no ambiguity.
                     </p>
                     <div class="ai-quote animate-on-scroll">
                         <blockquote>
@@ -356,15 +356,15 @@
                     <pre class="code-content"><span class="comment">(* Fetch weather data from an external API *)</span>
 
 <span class="feature-name">(Application-Start: Weather Client)</span> {
-    <span class="action">&lt;Log&gt;</span> <span class="string">"Fetching weather..."</span> to the <span class="result">&lt;console&gt;</span>.
+    <span class="action">Log</span> <span class="string">"Fetching weather..."</span> to the <span class="result">&lt;console&gt;</span>.
 
-    <span class="action">&lt;Create&gt;</span> the <span class="result">&lt;api-url&gt;</span> with <span class="string">"https://api.open-meteo.com/v1/forecast?latitude=52.52&amp;longitude=13.41&amp;current_weather=true"</span>.
+    <span class="action">Create</span> the <span class="result">&lt;api-url&gt;</span> with <span class="string">"https://api.open-meteo.com/v1/forecast?latitude=52.52&amp;longitude=13.41&amp;current_weather=true"</span>.
 
     <span class="action">&lt;Request&gt;</span> the <span class="result">&lt;weather&gt;</span> from the <span class="result">&lt;api-url&gt;</span>.
 
-    <span class="action">&lt;Log&gt;</span> <span class="result">&lt;weather&gt;</span> to the <span class="result">&lt;console&gt;</span>.
+    <span class="action">Log</span> <span class="result">&lt;weather&gt;</span> to the <span class="result">&lt;console&gt;</span>.
 
-    <span class="action">&lt;Return&gt;</span> an <span class="result">&lt;OK: status&gt;</span> for the <span class="result">&lt;startup&gt;</span>.
+    <span class="action">Return</span> an <span class="result">&lt;OK: status&gt;</span> for the <span class="result">&lt;startup&gt;</span>.
 }</pre>
                 </div>
                 <div class="example-description">

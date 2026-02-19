@@ -138,20 +138,20 @@
         <pre><code><span class="code-comment">(* users.aro - Feature sets match operationIds *)</span>
 
 <span class="code-feature">(listUsers: User API)</span> {
-    <span class="code-keyword">&lt;Retrieve&gt;</span> the <span class="code-result">&lt;users&gt;</span> from the &lt;user-repository&gt;.
-    <span class="code-keyword">&lt;Return&gt;</span> an <span class="code-result">&lt;OK: status&gt;</span> with &lt;users&gt;.
+    <span class="code-keyword">Retrieve</span> the <span class="code-result">&lt;users&gt;</span> from the &lt;user-repository&gt;.
+    <span class="code-keyword">Return</span> an <span class="code-result">&lt;OK: status&gt;</span> with &lt;users&gt;.
 }
 
 <span class="code-feature">(createUser: User API)</span> {
-    <span class="code-keyword">&lt;Extract&gt;</span> the <span class="code-result">&lt;data&gt;</span> from the &lt;request: body&gt;.
-    <span class="code-keyword">&lt;Create&gt;</span> the <span class="code-result">&lt;user&gt;</span> with &lt;data&gt;.
-    <span class="code-keyword">&lt;Return&gt;</span> a <span class="code-result">&lt;Created: status&gt;</span> with &lt;user&gt;.
+    <span class="code-keyword">Extract</span> the <span class="code-result">&lt;data&gt;</span> from the &lt;request: body&gt;.
+    <span class="code-keyword">Create</span> the <span class="code-result">&lt;user&gt;</span> with &lt;data&gt;.
+    <span class="code-keyword">Return</span> a <span class="code-result">&lt;Created: status&gt;</span> with &lt;user&gt;.
 }
 
 <span class="code-feature">(getUser: User API)</span> {
-    <span class="code-keyword">&lt;Extract&gt;</span> the <span class="code-result">&lt;id&gt;</span> from the &lt;pathParameters: id&gt;.
-    <span class="code-keyword">&lt;Retrieve&gt;</span> the <span class="code-result">&lt;user&gt;</span> from the &lt;user-repository&gt; where id = &lt;id&gt;.
-    <span class="code-keyword">&lt;Return&gt;</span> an <span class="code-result">&lt;OK: status&gt;</span> with &lt;user&gt;.
+    <span class="code-keyword">Extract</span> the <span class="code-result">&lt;id&gt;</span> from the &lt;pathParameters: id&gt;.
+    <span class="code-keyword">Retrieve</span> the <span class="code-result">&lt;user&gt;</span> from the &lt;user-repository&gt; where id = &lt;id&gt;.
+    <span class="code-keyword">Return</span> an <span class="code-result">&lt;OK: status&gt;</span> with &lt;user&gt;.
 }</code></pre>
 
         <h3>Validation at Startup</h3>
@@ -177,7 +177,7 @@ Create feature sets with names matching the operationIds in your OpenAPI contrac
           <span class="code-yaml">type:</span> string</code></pre>
 
         <pre><code><span class="code-feature">(getUser: User API)</span> {
-    <span class="code-keyword">&lt;Extract&gt;</span> the <span class="code-result">&lt;user-id&gt;</span> from the &lt;pathParameters: id&gt;.
+    <span class="code-keyword">Extract</span> the <span class="code-result">&lt;user-id&gt;</span> from the &lt;pathParameters: id&gt;.
     <span class="code-comment">(* user-id contains the path parameter value *)</span>
 }</code></pre>
 
@@ -216,7 +216,7 @@ Create feature sets with names matching the operationIds in your OpenAPI contrac
         - email</code></pre>
 
         <pre><code><span class="code-feature">(createUser: User API)</span> {
-    <span class="code-keyword">&lt;Extract&gt;</span> the <span class="code-result">&lt;data&gt;</span> from the &lt;request: body&gt;.
+    <span class="code-keyword">Extract</span> the <span class="code-result">&lt;data&gt;</span> from the &lt;request: body&gt;.
     <span class="code-comment">(* data is parsed and validated against CreateUserRequest schema *)</span>
     <span class="code-comment">(* data.name and data.email are available *)</span>
 }</code></pre>
@@ -336,27 +336,27 @@ Application running (no HTTP routes available)</code></pre>
         <pre><code><span class="code-comment">(* Feature sets named after operationIds *)</span>
 
 <span class="code-feature">(listUsers: User API)</span> {
-    <span class="code-keyword">&lt;Retrieve&gt;</span> the <span class="code-result">&lt;users&gt;</span> from the &lt;user-repository&gt;.
-    <span class="code-keyword">&lt;Return&gt;</span> an <span class="code-result">&lt;OK: status&gt;</span> with &lt;users&gt;.
+    <span class="code-keyword">Retrieve</span> the <span class="code-result">&lt;users&gt;</span> from the &lt;user-repository&gt;.
+    <span class="code-keyword">Return</span> an <span class="code-result">&lt;OK: status&gt;</span> with &lt;users&gt;.
 }
 
 <span class="code-feature">(getUser: User API)</span> {
-    <span class="code-keyword">&lt;Extract&gt;</span> the <span class="code-result">&lt;id&gt;</span> from the &lt;pathParameters: id&gt;.
-    <span class="code-keyword">&lt;Retrieve&gt;</span> the <span class="code-result">&lt;user&gt;</span> from the &lt;user-repository&gt; where id = &lt;id&gt;.
+    <span class="code-keyword">Extract</span> the <span class="code-result">&lt;id&gt;</span> from the &lt;pathParameters: id&gt;.
+    <span class="code-keyword">Retrieve</span> the <span class="code-result">&lt;user&gt;</span> from the &lt;user-repository&gt; where id = &lt;id&gt;.
 
     if &lt;user&gt; is empty then {
-        <span class="code-keyword">&lt;Return&gt;</span> a <span class="code-result">&lt;NotFound: status&gt;</span> for the &lt;request&gt;.
+        <span class="code-keyword">Return</span> a <span class="code-result">&lt;NotFound: status&gt;</span> for the &lt;request&gt;.
     }
 
-    <span class="code-keyword">&lt;Return&gt;</span> an <span class="code-result">&lt;OK: status&gt;</span> with &lt;user&gt;.
+    <span class="code-keyword">Return</span> an <span class="code-result">&lt;OK: status&gt;</span> with &lt;user&gt;.
 }
 
 <span class="code-feature">(createUser: User API)</span> {
-    <span class="code-keyword">&lt;Extract&gt;</span> the <span class="code-result">&lt;data&gt;</span> from the &lt;request: body&gt;.
-    <span class="code-keyword">&lt;Create&gt;</span> the <span class="code-result">&lt;user&gt;</span> with &lt;data&gt;.
-    <span class="code-keyword">&lt;Store&gt;</span> the &lt;user&gt; into the &lt;user-repository&gt;.
-    <span class="code-keyword">&lt;Emit&gt;</span> a <span class="code-result">&lt;UserCreated: event&gt;</span> with &lt;user&gt;.
-    <span class="code-keyword">&lt;Return&gt;</span> a <span class="code-result">&lt;Created: status&gt;</span> with &lt;user&gt;.
+    <span class="code-keyword">Extract</span> the <span class="code-result">&lt;data&gt;</span> from the &lt;request: body&gt;.
+    <span class="code-keyword">Create</span> the <span class="code-result">&lt;user&gt;</span> with &lt;data&gt;.
+    <span class="code-keyword">Store</span> the &lt;user&gt; into the &lt;user-repository&gt;.
+    <span class="code-keyword">Emit</span> a <span class="code-result">&lt;UserCreated: event&gt;</span> with &lt;user&gt;.
+    <span class="code-keyword">Return</span> a <span class="code-result">&lt;Created: status&gt;</span> with &lt;user&gt;.
 }</code></pre>
 
         <div class="highlight-box">
