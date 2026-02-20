@@ -29,7 +29,13 @@ public struct FormatDeserializer: Sendable {
         case .toml:
             return deserializeTOML(content)
         case .csv:
-            let delimiter = (options["delimiter"] as? String) ?? ","
+            // Auto-detect delimiter if not explicitly provided
+            let delimiter: String
+            if let explicitDelimiter = options["delimiter"] as? String {
+                delimiter = explicitDelimiter
+            } else {
+                delimiter = detectCSVDelimiter(content)
+            }
             let hasHeader = (options["header"] as? Bool) ?? true
             let quoteChar = (options["quote"] as? String) ?? "\""
             return deserializeCSV(content, delimiter: delimiter, hasHeader: hasHeader, quoteChar: quoteChar)
@@ -709,6 +715,32 @@ public struct FormatDeserializer: Sendable {
     /// Converts dots to hyphens since ARO doesn't support dots in identifiers
     private static func normalizeFieldName(_ name: String) -> String {
         name.replacingOccurrences(of: ".", with: "-")
+    }
+
+    /// Auto-detect CSV delimiter by analyzing the first line
+    /// Checks common delimiters (semicolon, comma, tab) and returns the one
+    /// that produces the most columns. European CSVs often use semicolons
+    /// because commas are used as decimal separators.
+    private static func detectCSVDelimiter(_ content: String) -> String {
+        guard let firstLine = content.split(separator: "\n", maxSplits: 1).first else {
+            return ","
+        }
+
+        let line = String(firstLine)
+        let candidates = [";", ",", "\t"]
+
+        var bestDelimiter = ","
+        var maxColumns = 0
+
+        for delimiter in candidates {
+            let columns = line.components(separatedBy: delimiter).count
+            if columns > maxColumns {
+                maxColumns = columns
+                bestDelimiter = delimiter
+            }
+        }
+
+        return bestDelimiter
     }
 
     // MARK: - Plain Text Deserialization
