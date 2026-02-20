@@ -38,7 +38,7 @@ jobs:
       image: swift:6.2-jammy
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v6
+        uses: actions/checkout@v4
 
       - name: Cache Swift packages
         uses: actions/cache@v5
@@ -81,7 +81,7 @@ jobs:
       image: swift:6.2-jammy
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v6
+        uses: actions/checkout@v4
         with:
           fetch-depth: 0
 
@@ -188,7 +188,7 @@ jobs:
           cp .build/x86_64-unknown-linux-gnu/release/libARORuntime.a aro-dist/
 
       - name: Upload artifact
-        uses: actions/upload-artifact@v6
+        uses: actions/upload-artifact@v4
         with:
           name: aro-linux-amd64
           path: aro-dist/
@@ -203,7 +203,7 @@ jobs:
     runs-on: macos-15
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v6
+        uses: actions/checkout@v4
         with:
           fetch-depth: 0
 
@@ -464,7 +464,7 @@ jobs:
           cp .build/arm64-apple-macosx/release/libARORuntime.a aro-dist/
 
       - name: Upload artifact
-        uses: actions/upload-artifact@v6
+        uses: actions/upload-artifact@v4
         with:
           name: aro-macos-arm64
           path: aro-dist/
@@ -482,7 +482,7 @@ jobs:
     runs-on: windows-latest
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v6
+        uses: actions/checkout@v4
         with:
           fetch-depth: 0
 
@@ -641,7 +641,7 @@ jobs:
           file aro-dist/libARORuntime.a 2>/dev/null || true
 
       - name: Upload artifact
-        uses: actions/upload-artifact@v6
+        uses: actions/upload-artifact@v4
         with:
           name: aro-windows-amd64
           path: aro-dist/
@@ -658,7 +658,7 @@ jobs:
       image: swift:6.2-jammy
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v6
+        uses: actions/checkout@v4
 
       - name: Install LLVM 20 and dependencies
         run: |
@@ -702,7 +702,7 @@ jobs:
           cpanm -q --notest Net::EmptyPort Term::ANSIColor 2>/dev/null || true
 
       - name: Download ARO artifact
-        uses: actions/download-artifact@v7
+        uses: actions/download-artifact@v4
         with:
           name: aro-linux-amd64
           path: ./aro-bin
@@ -745,7 +745,7 @@ jobs:
 
       - name: Upload test results on failure
         if: failure()
-        uses: actions/upload-artifact@v6
+        uses: actions/upload-artifact@v4
         with:
           name: test-failures-Linux
           path: |
@@ -764,7 +764,7 @@ jobs:
       image: ubuntu:22.04
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v6
+        uses: actions/checkout@v4
 
       - name: Install dependencies
         run: |
@@ -781,7 +781,7 @@ jobs:
           cpanm -q --notest Term::ANSIColor 2>/dev/null || true
 
       - name: Download ARO artifact
-        uses: actions/download-artifact@v7
+        uses: actions/download-artifact@v4
         with:
           name: aro-linux-amd64
           path: ./aro-bin
@@ -807,7 +807,7 @@ jobs:
     runs-on: macos-15
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v6
+        uses: actions/checkout@v4
 
       - name: Setup Swift
         uses: swift-actions/setup-swift@364295d9c23900ce04d4e5cc708387921b4e50f9  # v3
@@ -825,7 +825,7 @@ jobs:
           echo "DYLD_LIBRARY_PATH=$LLVM_PREFIX/lib" >> $GITHUB_ENV
 
       - name: Download ARO artifact
-        uses: actions/download-artifact@v7
+        uses: actions/download-artifact@v4
         with:
           name: aro-macos-arm64
           path: ./aro-bin
@@ -850,7 +850,7 @@ jobs:
     runs-on: macos-15
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v6
+        uses: actions/checkout@v4
 
       - name: Setup Swift
         uses: swift-actions/setup-swift@364295d9c23900ce04d4e5cc708387921b4e50f9  # v3
@@ -940,7 +940,7 @@ jobs:
           echo "DYLD_LIBRARY_PATH=$DYLD_LIBRARY_PATH"
 
       - name: Download ARO artifact
-        uses: actions/download-artifact@v7
+        uses: actions/download-artifact@v4
         with:
           name: aro-macos-arm64
           path: ./aro-bin
@@ -985,7 +985,7 @@ jobs:
 
       - name: Upload test results on failure
         if: failure()
-        uses: actions/upload-artifact@v6
+        uses: actions/upload-artifact@v4
         with:
           name: test-failures-macOS
           path: |
@@ -1003,7 +1003,7 @@ jobs:
     runs-on: windows-latest
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v6
+        uses: actions/checkout@v4
 
       - name: Setup Swift
         uses: compnerd/gha-setup-swift@c8363f1001fbb4b12d127c432f9eaadec5f56e8c  # main
@@ -1071,7 +1071,7 @@ jobs:
           exit 0  # Always succeed - test script has fallback handling
 
       - name: Download ARO artifact
-        uses: actions/download-artifact@v7
+        uses: actions/download-artifact@v4
         with:
           name: aro-windows-amd64
           path: ./aro-bin
@@ -1138,7 +1138,7 @@ jobs:
 
       - name: Upload test results on failure
         if: failure()
-        uses: actions/upload-artifact@v6
+        uses: actions/upload-artifact@v4
         with:
           name: test-failures-Windows
           path: |
@@ -1155,7 +1155,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v6
+        uses: actions/checkout@v4
 
       - name: Install dependencies
         run: |
@@ -1181,21 +1181,21 @@ jobs:
           ./build-pdf.sh
 
       - name: Upload Language Guide PDF
-        uses: actions/upload-artifact@v6
+        uses: actions/upload-artifact@v4
         with:
           name: aro-language-guide
           path: Book/TheLanguageGuide/output/ARO-Language-Guide.pdf
           retention-days: 30
 
       - name: Upload Construction Studies PDF
-        uses: actions/upload-artifact@v6
+        uses: actions/upload-artifact@v4
         with:
           name: aro-construction-studies
           path: Book/TheConstructionStudies/output/ARO-Construction-Studies.pdf
           retention-days: 30
 
       - name: Upload ARO By Example PDF
-        uses: actions/upload-artifact@v6
+        uses: actions/upload-artifact@v4
         with:
           name: aro-by-example
           path: Book/AROByExample/output/ARO-By-Example.pdf
@@ -1213,10 +1213,10 @@ jobs:
       contents: write
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v6
+        uses: actions/checkout@v4
 
       - name: Download all artifacts
-        uses: actions/download-artifact@v7
+        uses: actions/download-artifact@v4
         with:
           path: artifacts
 
