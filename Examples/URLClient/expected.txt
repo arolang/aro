@@ -1,0 +1,16 @@
+=== ARO URL I/O Demo ===
+
+1. Fetching TODO from JSONPlaceholder API...
+   Title: delectus aut autem
+   Completed: false
+
+2. Fetching with custom headers...
+   Server received our custom header
+
+3. Creating a new post via POST...
+   Post created successfully!
+
+4. Fetching a user...
+   User: Leanne Graham (Sincere@april.biz)
+
+=== Demo Complete ===

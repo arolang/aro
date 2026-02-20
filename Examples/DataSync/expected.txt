@@ -1,0 +1,17 @@
+=== ARO Data Sync Demo ===
+
+1. Fetching remote data from API...
+   Downloaded post: sunt aut facere repellat provident occaecati excepturi optio reprehenderit
+
+2. Saving to local file...
+   Saved to /tmp/synced-post.json
+
+3. Reading local file...
+   Read back: sunt aut facere repellat provident occaecati excepturi optio reprehenderit
+
+4. Creating transformed data...
+
+5. Uploading transformed data...
+   Uploaded successfully!
+
+=== Sync Complete ===

@@ -817,7 +817,19 @@ public struct ReadAction: ActionImplementation {
     ) async throws -> any Sendable {
         try validatePreposition(object.preposition)
 
-        // Get file service
+        // Handle <url: ...> pattern for HTTP GET (ARO-0052)
+        // Check URL first before requiring FileSystemService
+        if object.base == "url", let specifier = object.specifiers.first {
+            let urlString: String
+            if let resolvedURL: String = context.resolve(specifier) {
+                urlString = resolvedURL
+            } else {
+                urlString = specifier
+            }
+            return try await readFromURL(urlString, result: result, context: context)
+        }
+
+        // Get file service for file operations
         guard let fileService = context.service(FileSystemService.self) else {
             throw ActionError.missingService("FileSystemService")
         }
@@ -871,6 +883,82 @@ public struct ReadAction: ActionImplementation {
         // Detect format from file extension and deserialize (ARO-0040)
         let format = FileFormat.detect(from: path)
         return FormatDeserializer.deserialize(content, format: format, options: formatOptions)
+    }
+
+    // MARK: - URL Support (ARO-0052)
+
+    /// Read content from a URL via HTTP GET
+    private func readFromURL(
+        _ urlString: String,
+        result: ResultDescriptor,
+        context: ExecutionContext
+    ) async throws -> any Sendable {
+        #if !os(Windows)
+        // Get or create HTTP client
+        let httpClient: URLSessionHTTPClient
+        if let existingClient = context.service(URLSessionHTTPClient.self) {
+            httpClient = existingClient
+        } else {
+            let newClient = URLSessionHTTPClient()
+            context.register(newClient)
+            httpClient = newClient
+        }
+
+        // Extract options from with { ... } clause
+        var headers: [String: String] = [:]
+        var timeout: TimeInterval? = nil
+
+        if let config = context.resolveAny("_literal_") as? [String: any Sendable] {
+            // Extract headers
+            if let headersValue = config["headers"] {
+                if let headersDict = headersValue as? [String: String] {
+                    headers = headersDict
+                } else if let headersDict = headersValue as? [String: any Sendable] {
+                    for (key, value) in headersDict {
+                        headers[key] = String(describing: value)
+                    }
+                }
+            }
+
+            // Extract timeout
+            if let t = config["timeout"] as? Int {
+                timeout = TimeInterval(t)
+            } else if let t = config["timeout"] as? Double {
+                timeout = t
+            }
+        }
+
+        // Validate URL
+        guard urlString.hasPrefix("http://") || urlString.hasPrefix("https://") else {
+            throw ActionError.runtimeError("Invalid URL: \(urlString). URL must start with http:// or https://")
+        }
+
+        // Perform GET request
+        let response = try await httpClient.get(url: urlString, headers: headers, timeout: timeout)
+
+        // Check for "as String" specifier to bypass format detection
+        let asString = result.specifiers.contains { specifier in
+            specifier.lowercased() == "string" || specifier.lowercased() == "as string"
+        }
+
+        if asString {
+            return response.bodyString ?? ""
+        }
+
+        // Get Content-Type header for format detection
+        let contentType = response.headers["Content-Type"]
+            ?? response.headers["content-type"]
+            ?? "text/plain"
+
+        // Detect format from Content-Type (ARO-0052)
+        let format = FormatDeserializer.formatFromContentType(contentType)
+
+        // Deserialize response body
+        let content = response.bodyString ?? ""
+        return FormatDeserializer.deserialize(content, format: format, options: [:])
+        #else
+        throw ActionError.runtimeError("HTTP client not available on Windows")
+        #endif
     }
 }
 

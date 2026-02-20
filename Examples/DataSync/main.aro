@@ -1,0 +1,53 @@
+(* ============================================================
+   DataSync - ARO-0052: Data Pipeline Example
+   ============================================================
+   Demonstrates syncing data between local files and remote URLs
+   using the unified Read/Write syntax.
+
+   Key patterns:
+   - Remote to local: Read from URL, Write to file
+   - Local to remote: Read from file, Write to URL
+   ============================================================ *)
+
+(Application-Start: Data Sync Demo) {
+    Log "=== ARO Data Sync Demo ===" to the <console>.
+    Log "" to the <console>.
+
+    (* Step 1: Fetch remote data *)
+    Log "1. Fetching remote data from API..." to the <console>.
+    Read the <remotedata> from the <url: "https://jsonplaceholder.typicode.com/posts/1">.
+    Extract the <title> from the <remotedata: title>.
+    Log "   Downloaded post: ${title}" to the <console>.
+    Log "" to the <console>.
+
+    (* Step 2: Save to local file *)
+    Log "2. Saving to local file..." to the <console>.
+    Write the <remotedata> to the <file: "/tmp/synced-post.json">.
+    Log "   Saved to /tmp/synced-post.json" to the <console>.
+    Log "" to the <console>.
+
+    (* Step 3: Read local file back *)
+    Log "3. Reading local file..." to the <console>.
+    Read the <localdata> from the <file: "/tmp/synced-post.json">.
+    Extract the <localtitle> from the <localdata: title>.
+    Log "   Read back: ${localtitle}" to the <console>.
+    Log "" to the <console>.
+
+    (* Step 4: Transform and create new data *)
+    Log "4. Creating transformed data..." to the <console>.
+    Create the <newpost> with {
+        title: "Transformed: ${localtitle}",
+        body: "This was synced from remote to local and back",
+        userId: 99
+    }.
+    Log "" to the <console>.
+
+    (* Step 5: Upload to remote endpoint *)
+    Log "5. Uploading transformed data..." to the <console>.
+    Write the <newpost> to the <url: "https://jsonplaceholder.typicode.com/posts">.
+    Log "   Uploaded successfully!" to the <console>.
+    Log "" to the <console>.
+
+    Log "=== Sync Complete ===" to the <console>.
+    Return an <OK: status> for the <sync>.
+}

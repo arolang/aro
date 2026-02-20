@@ -685,6 +685,17 @@ public struct WriteAction: ActionImplementation {
     ) async throws -> any Sendable {
         try validatePreposition(object.preposition)
 
+        // Handle <url: ...> pattern for HTTP POST (ARO-0052)
+        if object.base == "url", let specifier = object.specifiers.first {
+            let urlString: String
+            if let resolvedURL: String = context.resolve(specifier) {
+                urlString = resolvedURL
+            } else {
+                urlString = specifier
+            }
+            return try await writeToURL(urlString, result: result, context: context)
+        }
+
         // Get file path - handle <file: path-variable> pattern
         let path: String
         if object.base == "file", let specifier = object.specifiers.first {
@@ -747,6 +758,129 @@ public struct WriteAction: ActionImplementation {
         }
 
         throw ActionError.missingService("FileSystemService")
+    }
+
+    // MARK: - URL Support (ARO-0052)
+
+    /// Write content to a URL via HTTP POST
+    private func writeToURL(
+        _ urlString: String,
+        result: ResultDescriptor,
+        context: ExecutionContext
+    ) async throws -> any Sendable {
+        #if !os(Windows)
+        // Get or create HTTP client
+        let httpClient: URLSessionHTTPClient
+        if let existingClient = context.service(URLSessionHTTPClient.self) {
+            httpClient = existingClient
+        } else {
+            let newClient = URLSessionHTTPClient()
+            context.register(newClient)
+            httpClient = newClient
+        }
+
+        // Extract options from with { ... } clause
+        var headers: [String: String] = [:]
+        var timeout: TimeInterval? = nil
+        var contentType: String? = nil
+
+        if let config = context.resolveAny("_literal_") as? [String: any Sendable] {
+            // Extract headers
+            if let headersValue = config["headers"] {
+                if let headersDict = headersValue as? [String: String] {
+                    headers = headersDict
+                } else if let headersDict = headersValue as? [String: any Sendable] {
+                    for (key, value) in headersDict {
+                        headers[key] = String(describing: value)
+                    }
+                }
+            }
+
+            // Extract timeout
+            if let t = config["timeout"] as? Int {
+                timeout = TimeInterval(t)
+            } else if let t = config["timeout"] as? Double {
+                timeout = t
+            }
+
+            // Extract content-type override
+            if let ct = config["content-type"] as? String {
+                contentType = ct
+            }
+        }
+
+        // Validate URL
+        guard urlString.hasPrefix("http://") || urlString.hasPrefix("https://") else {
+            throw ActionError.runtimeError("Invalid URL: \(urlString). URL must start with http:// or https://")
+        }
+
+        // Get data to write
+        guard let value = context.resolveAny(result.base) else {
+            throw ActionError.undefinedVariable(result.base)
+        }
+
+        // Serialize data to JSON for POST body (default for dictionaries/arrays)
+        let bodyData: Data
+        let effectiveContentType: String
+
+        if let data = value as? Data {
+            bodyData = data
+            effectiveContentType = contentType ?? "application/octet-stream"
+        } else if let string = value as? String {
+            bodyData = string.data(using: .utf8) ?? Data()
+            effectiveContentType = contentType ?? "text/plain"
+        } else if let dict = value as? [String: any Sendable] {
+            // Convert Sendable dict to Any for JSON serialization
+            var anyDict: [String: Any] = [:]
+            for (key, val) in dict {
+                anyDict[key] = val
+            }
+            bodyData = (try? JSONSerialization.data(withJSONObject: anyDict)) ?? Data()
+            effectiveContentType = contentType ?? "application/json"
+        } else if let array = value as? [any Sendable] {
+            // Convert Sendable array to Any for JSON serialization
+            let anyArray = array.map { $0 as Any }
+            bodyData = (try? JSONSerialization.data(withJSONObject: anyArray)) ?? Data()
+            effectiveContentType = contentType ?? "application/json"
+        } else {
+            // Try to serialize any other value
+            bodyData = String(describing: value).data(using: .utf8) ?? Data()
+            effectiveContentType = contentType ?? "text/plain"
+        }
+
+        // Set Content-Type header if not already set
+        if headers["Content-Type"] == nil {
+            headers["Content-Type"] = effectiveContentType
+        }
+
+        // Perform POST request
+        let response = try await httpClient.post(url: urlString, headers: headers, body: bodyData, timeout: timeout)
+
+        // Return response information
+        return URLWriteResult(
+            url: urlString,
+            statusCode: response.statusCode,
+            success: response.statusCode >= 200 && response.statusCode < 300,
+            body: response.bodyString
+        )
+        #else
+        throw ActionError.runtimeError("HTTP client not available on Windows")
+        #endif
+    }
+}
+
+/// Result of writing to a URL
+public struct URLWriteResult: Sendable {
+    public let url: String
+    public let statusCode: Int
+    public let success: Bool
+    public let body: String?
+
+    public init(url: String, statusCode: Int, success: Bool, body: String?) {
+        self.url = url
+        self.statusCode = statusCode
+        self.success = success
+        self.body = body
     }
 }
 
