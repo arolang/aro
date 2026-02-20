@@ -315,6 +315,10 @@ public final class REPLSession: @unchecked Sendable {
             outputContext: .human,
             eventBus: eventBus
         )
+
+        // Re-register services after context reset
+        let fileService = AROFileSystemService(eventBus: eventBus)
+        context.register(fileService as FileSystemService)
     }
 
     /// Get all variable names
