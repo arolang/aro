@@ -480,7 +480,17 @@ public final class Parser {
         if case .identifier = peek().kind {
             return true
         }
-        // Case 3: <...> without article = expression (not object)
+        // Case 3: <identifier: ...> = system object (e.g., <file: "path">, <url: "...">)
+        // This allows optional article before system objects
+        if check(.leftAngle) {
+            // Look ahead: < identifier : ... > means system object
+            if current + 2 < tokens.count,
+               case .identifier = tokens[current + 1].kind,
+               case .colon = tokens[current + 2].kind {
+                return true
+            }
+        }
+        // Case 4: <...> without article and no colon = expression (not object)
         return false
     }
 
