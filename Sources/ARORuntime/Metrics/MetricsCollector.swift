@@ -5,6 +5,12 @@
 
 import Foundation
 
+#if canImport(Darwin)
+import Darwin
+#elseif canImport(Glibc)
+import Glibc
+#endif
+
 /// Metrics for a single feature set
 public struct FeatureSetMetrics: Sendable, Equatable {
     /// Feature set name
@@ -60,10 +66,223 @@ public struct FeatureSetMetrics: Sendable, Equatable {
     }
 }
 
+/// System-level process metrics from Swift System Metrics
+public struct ProcessMetrics: Sendable {
+    /// CPU user time in seconds
+    public let cpuUserTime: Double
+
+    /// CPU system time in seconds
+    public let cpuSystemTime: Double
+
+    /// Total CPU time (user + system) in seconds
+    public var cpuTotalTime: Double {
+        cpuUserTime + cpuSystemTime
+    }
+
+    /// Virtual memory size in bytes
+    public let virtualMemoryBytes: Int
+
+    /// Resident memory size in bytes
+    public let residentMemoryBytes: Int
+
+    /// Virtual memory in megabytes
+    public var virtualMemoryMB: Double {
+        Double(virtualMemoryBytes) / 1_048_576.0
+    }
+
+    /// Resident memory in megabytes
+    public var residentMemoryMB: Double {
+        Double(residentMemoryBytes) / 1_048_576.0
+    }
+
+    /// Number of open file descriptors
+    public let openFileDescriptors: Int
+
+    /// Maximum available file descriptors
+    public let maxFileDescriptors: Int
+
+    /// Process start time (Unix timestamp)
+    public let processStartTime: Double
+
+    /// Process start time as Date
+    public var startDate: Date {
+        Date(timeIntervalSince1970: processStartTime)
+    }
+
+    public init(
+        cpuUserTime: Double,
+        cpuSystemTime: Double,
+        virtualMemoryBytes: Int,
+        residentMemoryBytes: Int,
+        openFileDescriptors: Int,
+        maxFileDescriptors: Int,
+        processStartTime: Double
+    ) {
+        self.cpuUserTime = cpuUserTime
+        self.cpuSystemTime = cpuSystemTime
+        self.virtualMemoryBytes = virtualMemoryBytes
+        self.residentMemoryBytes = residentMemoryBytes
+        self.openFileDescriptors = openFileDescriptors
+        self.maxFileDescriptors = maxFileDescriptors
+        self.processStartTime = processStartTime
+    }
+
+    /// Collect current process metrics using system APIs
+    public static func collect() -> ProcessMetrics {
+        #if os(macOS)
+        return collectDarwin()
+        #elseif os(Linux)
+        return collectLinux()
+        #else
+        return ProcessMetrics(
+            cpuUserTime: 0,
+            cpuSystemTime: 0,
+            virtualMemoryBytes: 0,
+            residentMemoryBytes: 0,
+            openFileDescriptors: 0,
+            maxFileDescriptors: 0,
+            processStartTime: Date().timeIntervalSince1970
+        )
+        #endif
+    }
+
+    #if os(macOS)
+    private static func collectDarwin() -> ProcessMetrics {
+        // Get CPU time using getrusage
+        var rusage = rusage()
+        getrusage(RUSAGE_SELF, &rusage)
+        let cpuUserTime = Double(rusage.ru_utime.tv_sec) + Double(rusage.ru_utime.tv_usec) / 1_000_000.0
+        let cpuSystemTime = Double(rusage.ru_stime.tv_sec) + Double(rusage.ru_stime.tv_usec) / 1_000_000.0
+
+        // Get memory info using task_info
+        var taskInfo = task_vm_info_data_t()
+        var count = mach_msg_type_number_t(MemoryLayout<task_vm_info_data_t>.size / MemoryLayout<natural_t>.size)
+        let result = withUnsafeMutablePointer(to: &taskInfo) { ptr in
+            ptr.withMemoryRebound(to: integer_t.self, capacity: Int(count)) { intPtr in
+                task_info(mach_task_self_, task_flavor_t(TASK_VM_INFO), intPtr, &count)
+            }
+        }
+
+        let virtualMemoryBytes: Int
+        let residentMemoryBytes: Int
+        if result == KERN_SUCCESS {
+            virtualMemoryBytes = Int(taskInfo.virtual_size)
+            residentMemoryBytes = Int(taskInfo.resident_size)
+        } else {
+            virtualMemoryBytes = 0
+            residentMemoryBytes = 0
+        }
+
+        // Get file descriptor counts
+        let openFds = getOpenFileDescriptorCount()
+        var rlimit = rlimit()
+        getrlimit(RLIMIT_NOFILE, &rlimit)
+        let maxFds = Int(rlimit.rlim_cur)
+
+        // Get process start time
+        var kinfo = kinfo_proc()
+        var size = MemoryLayout<kinfo_proc>.size
+        var mib: [Int32] = [CTL_KERN, KERN_PROC, KERN_PROC_PID, getpid()]
+        sysctl(&mib, 4, &kinfo, &size, nil, 0)
+        let startTimeSec = Double(kinfo.kp_proc.p_starttime.tv_sec) +
+                          Double(kinfo.kp_proc.p_starttime.tv_usec) / 1_000_000.0
+
+        return ProcessMetrics(
+            cpuUserTime: cpuUserTime,
+            cpuSystemTime: cpuSystemTime,
+            virtualMemoryBytes: virtualMemoryBytes,
+            residentMemoryBytes: residentMemoryBytes,
+            openFileDescriptors: openFds,
+            maxFileDescriptors: maxFds,
+            processStartTime: startTimeSec
+        )
+    }
+
+    private static func getOpenFileDescriptorCount() -> Int {
+        // Count open file descriptors by iterating through possible FDs
+        var count = 0
+        var rlimit = rlimit()
+        getrlimit(RLIMIT_NOFILE, &rlimit)
+        let maxCheck = min(Int(rlimit.rlim_cur), 4096) // Cap at 4096 for performance
+
+        for fd in 0..<maxCheck {
+            var statbuf = stat()
+            if fstat(Int32(fd), &statbuf) == 0 {
+                count += 1
+            }
+        }
+        return count
+    }
+    #endif
+
+    #if os(Linux)
+    private static func collectLinux() -> ProcessMetrics {
+        // Get CPU time using getrusage
+        var rusage = rusage()
+        getrusage(RUSAGE_SELF, &rusage)
+        let cpuUserTime = Double(rusage.ru_utime.tv_sec) + Double(rusage.ru_utime.tv_usec) / 1_000_000.0
+        let cpuSystemTime = Double(rusage.ru_stime.tv_sec) + Double(rusage.ru_stime.tv_usec) / 1_000_000.0
+
+        // Get memory info from /proc/self/statm
+        var virtualMemoryBytes = 0
+        var residentMemoryBytes = 0
+        if let statm = try? String(contentsOfFile: "/proc/self/statm", encoding: .utf8) {
+            let parts = statm.split(separator: " ")
+            if parts.count >= 2 {
+                let pageSize = sysconf(_SC_PAGESIZE)
+                virtualMemoryBytes = (Int(parts[0]) ?? 0) * pageSize
+                residentMemoryBytes = (Int(parts[1]) ?? 0) * pageSize
+            }
+        }
+
+        // Get file descriptor counts from /proc/self/fd
+        var openFds = 0
+        if let fdDir = try? FileManager.default.contentsOfDirectory(atPath: "/proc/self/fd") {
+            openFds = fdDir.count
+        }
+
+        var rlimit = rlimit()
+        getrlimit(Int32(RLIMIT_NOFILE), &rlimit)
+        let maxFds = Int(rlimit.rlim_cur)
+
+        // Get process start time from /proc/self/stat
+        var startTimeSec: Double = Date().timeIntervalSince1970
+        if let stat = try? String(contentsOfFile: "/proc/self/stat", encoding: .utf8) {
+            // Field 22 is starttime (in clock ticks since boot)
+            let parts = stat.split(separator: " ")
+            if parts.count >= 22, let startTicks = UInt64(parts[21]) {
+                // Get system boot time and clock ticks per second
+                let ticksPerSecond = Double(sysconf(_SC_CLK_TCK))
+                if let uptime = try? String(contentsOfFile: "/proc/uptime", encoding: .utf8) {
+                    let uptimeParts = uptime.split(separator: " ")
+                    if let uptimeSec = Double(uptimeParts[0]) {
+                        let bootTime = Date().timeIntervalSince1970 - uptimeSec
+                        startTimeSec = bootTime + Double(startTicks) / ticksPerSecond
+                    }
+                }
+            }
+        }
+
+        return ProcessMetrics(
+            cpuUserTime: cpuUserTime,
+            cpuSystemTime: cpuSystemTime,
+            virtualMemoryBytes: virtualMemoryBytes,
+            residentMemoryBytes: residentMemoryBytes,
+            openFileDescriptors: openFds,
+            maxFileDescriptors: maxFds,
+            processStartTime: startTimeSec
+        )
+    }
+    #endif
+}
+
 /// Snapshot of all metrics at a point in time
 public struct MetricsSnapshot: Sendable {
     /// Metrics for all feature sets
     public let featureSets: [FeatureSetMetrics]
+
+    /// System-level process metrics
+    public let processMetrics: ProcessMetrics
 
     /// When this snapshot was taken
     public let collectedAt: Date
@@ -105,10 +324,12 @@ public struct MetricsSnapshot: Sendable {
 
     public init(
         featureSets: [FeatureSetMetrics],
+        processMetrics: ProcessMetrics,
         collectedAt: Date,
         applicationStartTime: Date
     ) {
         self.featureSets = featureSets
+        self.processMetrics = processMetrics
         self.collectedAt = collectedAt
         self.applicationStartTime = applicationStartTime
     }
@@ -199,6 +420,7 @@ public final class MetricsCollector: @unchecked Sendable {
 
             return MetricsSnapshot(
                 featureSets: sortedMetrics,
+                processMetrics: ProcessMetrics.collect(),
                 collectedAt: Date(),
                 applicationStartTime: startTime
             )
