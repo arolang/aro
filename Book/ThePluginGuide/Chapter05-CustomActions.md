@@ -787,6 +787,307 @@ Test with ARO code:
 }
 ```
 
+## 5.8 Providing Custom Qualifiers
+
+Beyond custom actions, plugins can provide **custom qualifiers**—transformations that apply to values using the specifier syntax `<variable: qualifier>`. While actions are verbs, qualifiers are transformations that can be applied anywhere a value is used.
+
+### What Are Qualifiers?
+
+Qualifiers transform values in place:
+
+```aro
+(* Built-in qualifiers *)
+Log <user: name> to the <console>.           (* Property access *)
+Compute the <len: length> from the <text>.   (* Length qualifier *)
+
+(* Plugin-provided qualifiers *)
+Compute the <item: pick-random> from the <list>.  (* Random selection *)
+Log <numbers: reverse> to the <console>.          (* Reversed list *)
+Compute the <total: sum> from the <values>.       (* Sum of numbers *)
+```
+
+### Declaring Qualifiers
+
+Qualifiers are declared in `aro_plugin_info()` alongside actions:
+
+```json
+{
+  "name": "plugin-collection",
+  "version": "1.0.0",
+  "actions": [],
+  "qualifiers": [
+    {
+      "name": "pick-random",
+      "inputTypes": ["List"],
+      "description": "Picks a random element from a list"
+    },
+    {
+      "name": "shuffle",
+      "inputTypes": ["List", "String"],
+      "description": "Shuffles elements or characters"
+    },
+    {
+      "name": "reverse",
+      "inputTypes": ["List", "String"],
+      "description": "Reverses elements or characters"
+    },
+    {
+      "name": "sum",
+      "inputTypes": ["List"],
+      "description": "Sums numeric list elements"
+    }
+  ]
+}
+```
+
+**Input Types:**
+- `String` - String values
+- `Int` - Integer values
+- `Double` - Floating-point values
+- `Bool` - Boolean values
+- `List` - Arrays/lists
+- `Object` - Dictionaries/objects
+
+### Implementing the Qualifier Function
+
+Plugins provide a `aro_plugin_qualifier` function for executing qualifier transformations:
+
+**C ABI Interface:**
+```c
+// Execute qualifier transformation
+// Returns JSON: {"result": <value>} or {"error": "message"}
+char* aro_plugin_qualifier(const char* qualifier, const char* input_json);
+```
+
+**Input JSON Format:**
+```json
+{
+  "value": [1, 2, 3, 4, 5],
+  "type": "List"
+}
+```
+
+**Output JSON Format:**
+```json
+{"result": 3}          // Success: transformed value
+{"error": "message"}   // Failure: error message
+```
+
+### Example: Swift Implementation
+
+```swift
+@_cdecl("aro_plugin_qualifier")
+public func aroPluginQualifier(
+    qualifier: UnsafePointer<CChar>?,
+    inputJson: UnsafePointer<CChar>?
+) -> UnsafeMutablePointer<CChar>? {
+    guard let qualifier = qualifier.map({ String(cString: $0) }),
+          let inputJson = inputJson.map({ String(cString: $0) }) else {
+        return strdup("{\"error\":\"Invalid input\"}")
+    }
+
+    guard let jsonData = inputJson.data(using: .utf8),
+          let input = try? JSONSerialization.jsonObject(with: jsonData) as? [String: Any] else {
+        return strdup("{\"error\":\"Invalid JSON\"}")
+    }
+
+    let value = input["value"]
+    let result: [String: Any]
+
+    switch qualifier {
+    case "pick-random":
+        guard let array = value as? [Any], !array.isEmpty else {
+            return strdup("{\"error\":\"pick-random requires a non-empty list\"}")
+        }
+        let randomIndex = Int.random(in: 0..<array.count)
+        result = ["result": array[randomIndex]]
+
+    case "reverse":
+        if let array = value as? [Any] {
+            result = ["result": Array(array.reversed())]
+        } else if let string = value as? String {
+            result = ["result": String(string.reversed())]
+        } else {
+            return strdup("{\"error\":\"reverse requires List or String\"}")
+        }
+
+    default:
+        return strdup("{\"error\":\"Unknown qualifier: \(qualifier)\"}")
+    }
+
+    guard let resultData = try? JSONSerialization.data(withJSONObject: result),
+          let resultString = String(data: resultData, encoding: .utf8) else {
+        return strdup("{\"error\":\"Failed to serialize result\"}")
+    }
+
+    return strdup(resultString)
+}
+```
+
+### Example: C Implementation
+
+```c
+char* aro_plugin_qualifier(const char* qualifier, const char* input_json) {
+    char* result = malloc(4096);
+
+    // Parse input JSON to get value and type
+    // ... JSON parsing logic ...
+
+    if (strcmp(qualifier, "first") == 0) {
+        // Extract first element from array
+        // Return: {"result": <first_element>}
+    }
+    else if (strcmp(qualifier, "size") == 0) {
+        // Return count of array or string length
+        // Return: {"result": <count>}
+    }
+    else {
+        snprintf(result, 4096, "{\"error\":\"Unknown qualifier: %s\"}", qualifier);
+    }
+
+    return result;
+}
+```
+
+### Example: Python Implementation
+
+```python
+def aro_plugin_qualifier(qualifier: str, input_json: str) -> str:
+    import json
+    params = json.loads(input_json)
+    value = params.get("value")
+    value_type = params.get("type", "Unknown")
+
+    if qualifier == "sort":
+        if not isinstance(value, list):
+            return json.dumps({"error": "sort requires a list"})
+        return json.dumps({"result": sorted(value)})
+
+    elif qualifier == "unique":
+        if not isinstance(value, list):
+            return json.dumps({"error": "unique requires a list"})
+        seen = set()
+        unique = []
+        for item in value:
+            key = tuple(item) if isinstance(item, list) else item
+            if key not in seen:
+                seen.add(key)
+                unique.append(item)
+        return json.dumps({"result": unique})
+
+    elif qualifier == "sum":
+        if not isinstance(value, list):
+            return json.dumps({"error": "sum requires a list"})
+        return json.dumps({"result": sum(v for v in value if isinstance(v, (int, float)))})
+
+    else:
+        return json.dumps({"error": f"Unknown qualifier: {qualifier}"})
+```
+
+### Using Plugin Qualifiers
+
+Once registered, qualifiers work in two contexts:
+
+**1. In Compute Action (Result Specifier):**
+```aro
+Compute the <random-item: pick-random> from the <list>.
+Compute the <sorted-list: sort> from the <numbers>.
+Compute the <total: sum> from the <values>.
+```
+
+**2. In Expressions (Variable Specifier):**
+```aro
+Log <list: reverse> to the <console>.
+When <numbers: min> < 0:
+    Log "Has negative numbers" to the <console>.
+```
+
+### Qualifier vs Action: When to Use Each
+
+| Use Case | Recommendation |
+|----------|----------------|
+| Transform a value inline | Qualifier |
+| Operation with side effects | Action |
+| Multiple input parameters | Action |
+| Single value transformation | Qualifier |
+| Returns same type | Qualifier |
+| Returns different structure | Action |
+
+### Type Safety
+
+The runtime validates input types before calling your qualifier:
+
+```json
+{
+  "name": "sum",
+  "inputTypes": ["List"]  // Only accepts List
+}
+```
+
+If called with wrong type:
+```
+Error: Qualifier 'sum' expects [List] but received String
+```
+
+### Complete Example: Collection Plugin
+
+**plugin.yaml:**
+```yaml
+name: plugin-collection
+version: 1.0.0
+description: Collection qualifiers for ARO
+
+provides:
+  - type: swift-plugin
+    path: Sources/
+```
+
+**Sources/CollectionPlugin.swift:**
+```swift
+@_cdecl("aro_plugin_info")
+public func aroPluginInfo() -> UnsafeMutablePointer<CChar>? {
+    let info: NSDictionary = [
+        "name": "plugin-collection",
+        "version": "1.0.0",
+        "actions": [] as NSArray,
+        "qualifiers": [
+            ["name": "pick-random", "inputTypes": ["List"]],
+            ["name": "shuffle", "inputTypes": ["List", "String"]],
+            ["name": "reverse", "inputTypes": ["List", "String"]]
+        ] as NSArray
+    ]
+    // ... serialize and return
+}
+
+@_cdecl("aro_plugin_qualifier")
+public func aroPluginQualifier(
+    qualifier: UnsafePointer<CChar>?,
+    inputJson: UnsafePointer<CChar>?
+) -> UnsafeMutablePointer<CChar>? {
+    // ... implementation
+}
+```
+
+**main.aro:**
+```aro
+(Application-Start: Collection Demo) {
+    Create the <numbers> with [1, 2, 3, 4, 5].
+
+    (* Pick a random element *)
+    Compute the <lucky: pick-random> from the <numbers>.
+    Log "Lucky number: " ++ <lucky> to the <console>.
+
+    (* Shuffle the list *)
+    Compute the <shuffled: shuffle> from the <numbers>.
+    Log "Shuffled: " ++ <shuffled> to the <console>.
+
+    (* Reverse inline in expression *)
+    Log "Reversed: " ++ <numbers: reverse> to the <console>.
+
+    Return an <OK: status> for the <demo>.
+}
+```
+
 ## Summary
 
 Custom actions are the most powerful form of ARO extension. They let you add new verbs that feel native to the language:

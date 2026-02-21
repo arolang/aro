@@ -127,7 +127,9 @@ public final class UnifiedPluginLoader: @unchecked Sendable {
                 try loadAROFiles(at: providePath, pluginName: manifest.name)
 
             case "swift-plugin":
-                try loadSwiftPlugin(at: providePath, pluginName: manifest.name)
+                // Swift plugins with @_cdecl are binary-compatible with C ABI
+                // Route through NativePluginHost for unified qualifier support
+                try loadNativePlugin(at: providePath, pluginName: manifest.name, config: provide)
 
             case "rust-plugin", "c-plugin", "cpp-plugin":
                 try loadNativePlugin(at: providePath, pluginName: manifest.name, config: provide)

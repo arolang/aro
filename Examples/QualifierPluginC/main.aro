@@ -1,0 +1,34 @@
+(* QualifierPluginC Example
+   Demonstrates plugin qualifiers implemented in C.
+   The plugin-c-collection provides: first, last, size
+*)
+
+(Application-Start: QualifierPluginC Demo) {
+    (* Create a sample list *)
+    Create the <numbers> with [10, 20, 30, 40, 50].
+    Log "List:" to the <console>.
+    Log <numbers> to the <console>.
+
+    (* Use the first qualifier *)
+    Compute the <first-element: first> from the <numbers>.
+    Log "First element:" to the <console>.
+    Log <first-element> to the <console>.
+
+    (* Use the last qualifier *)
+    Compute the <last-element: last> from the <numbers>.
+    Log "Last element:" to the <console>.
+    Log <last-element> to the <console>.
+
+    (* Use the size qualifier on list *)
+    Compute the <list-size: size> from the <numbers>.
+    Log "List size:" to the <console>.
+    Log <list-size> to the <console>.
+
+    (* Use the size qualifier on string *)
+    Create the <message> with "Hello ARO".
+    Compute the <string-size: size> from the <message>.
+    Log "String size:" to the <console>.
+    Log <string-size> to the <console>.
+
+    Return an <OK: status> for the <demo>.
+}

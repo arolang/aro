@@ -1,0 +1,14 @@
+--- /var/folders/vn/3pg7yt9157qbqb72y_b_tv_w0000gn/T/m69dJh7muN.expected.txt	2026-02-22 00:04:33.818759003 +0100
++++ /var/folders/vn/3pg7yt9157qbqb72y_b_tv_w0000gn/T/IVbJtQkFXM.actual.txt	2026-02-22 00:04:33.818786881 +0100
+@@ -9,6 +9,7 @@
+ Sum of [10, 20, 30, 40, 50]:
+ 150
+ Average:
+-30.0
++30
+ Unique of [1, 2, 2, 3, 3, 3, 4]:
+-[1, 2, 3, 4]
+\ No newline at end of file
++[1, 2, 3, 4]
++demo
+\ No newline at end of file

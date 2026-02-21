@@ -1,0 +1,12 @@
+Original list:
+[1, 2, 3, 4, 5]
+Random element:
+Shuffled list:
+Reversed list:
+[5, 4, 3, 2, 1]
+Original string:
+Hello World
+Reversed string:
+dlroW olleH
+Using qualifier in expression:
+[5, 4, 3, 2, 1]

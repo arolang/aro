@@ -44,9 +44,16 @@ public struct ExpressionEvaluator: Sendable {
             guard var value = context.resolveAny(varRef.noun.base) else {
                 throw ExpressionError.undefinedVariable(varRef.noun.base)
             }
-            // Handle specifiers as property access (e.g., <user: name> -> user.name)
+            // Handle specifiers as qualifiers or property access
+            // Plugin qualifiers are checked first, then property access as fallback
             for specifier in varRef.noun.specifiers {
-                value = try accessProperty(specifier, on: value)
+                // Try plugin qualifier first (e.g., <list: pick-random>)
+                if let transformed = try QualifierRegistry.shared.resolve(specifier, value: value) {
+                    value = transformed
+                } else {
+                    // Fall back to property access (e.g., <user: name> -> user.name)
+                    value = try accessProperty(specifier, on: value)
+                }
             }
             return value
 

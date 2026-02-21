@@ -1,0 +1,12 @@
+--- /var/folders/vn/3pg7yt9157qbqb72y_b_tv_w0000gn/T/YFqlPjqd_v.expected.txt	2026-02-22 00:04:33.805060628 +0100
++++ /var/folders/vn/3pg7yt9157qbqb72y_b_tv_w0000gn/T/Nmftr7QiSm.actual.txt	2026-02-22 00:04:33.805093624 +0100
+@@ -7,4 +7,6 @@
+ List size:
+ 5
+ String size:
+-9
+\ No newline at end of file
++9
++demo
++value: Hello ARO
+\ No newline at end of file

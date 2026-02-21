@@ -1,0 +1,45 @@
+(* QualifierPlugin Example
+   Demonstrates plugin-provided qualifiers for type transformations.
+   The plugin-swift-collection provides: pick-random, shuffle, reverse
+
+   Qualifier syntax uses <result: qualifier> to specify the operation:
+   - Compute the <result: pick-random> from the <list>.
+   - Log <list: reverse> to the <console>.
+*)
+
+(Application-Start: QualifierPlugin Demo) {
+    (* Create a sample list *)
+    Create the <numbers> with [1, 2, 3, 4, 5].
+    Log "Original list:" to the <console>.
+    Log <numbers> to the <console>.
+
+    (* Use the pick-random qualifier on result specifier *)
+    Compute the <random-element: pick-random> from the <numbers>.
+    Log "Random element:" to the <console>.
+    Log <random-element> to the <console>.
+
+    (* Use the shuffle qualifier *)
+    Compute the <shuffled: shuffle> from the <numbers>.
+    Log "Shuffled list:" to the <console>.
+    Log <shuffled> to the <console>.
+
+    (* Use the reverse qualifier *)
+    Compute the <reversed: reverse> from the <numbers>.
+    Log "Reversed list:" to the <console>.
+    Log <reversed> to the <console>.
+
+    (* Qualifiers also work on strings *)
+    Create the <greeting> with "Hello World".
+    Log "Original string:" to the <console>.
+    Log <greeting> to the <console>.
+
+    Compute the <reversed-greeting: reverse> from the <greeting>.
+    Log "Reversed string:" to the <console>.
+    Log <reversed-greeting> to the <console>.
+
+    (* Qualifiers work in expressions via ExpressionEvaluator *)
+    Log "Using qualifier in expression:" to the <console>.
+    Log <numbers: reverse> to the <console>.
+
+    Return an <OK: status> for the <demo>.
+}

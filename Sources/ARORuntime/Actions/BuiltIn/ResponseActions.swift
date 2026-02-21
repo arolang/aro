@@ -424,12 +424,19 @@ public struct LogAction: ActionImplementation {
         } else if let expr = context.resolveAny("_expression_") {
             // Message from "with" clause (expression)
             message = ResponseFormatter.formatValue(expr, for: context.outputContext)
-        } else if let value: String = context.resolve(result.base) {
-            // Message from variable
-            message = value
-        } else if let value = context.resolveAny(result.base) {
+        } else if var value = context.resolveAny(result.base) {
+            // Apply specifiers (qualifiers) to the value
+            // e.g., Log <numbers: reverse> applies the "reverse" qualifier
+            for specifier in result.specifiers {
+                if let transformed = try? QualifierRegistry.shared.resolve(specifier, value: value) {
+                    value = transformed
+                }
+            }
             // Message from any variable type
             message = ResponseFormatter.formatValue(value, for: context.outputContext)
+        } else if let value: String = context.resolve(result.base) {
+            // Message from string variable (no specifiers)
+            message = value
         } else {
             // Fallback to result name
             message = result.fullName

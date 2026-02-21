@@ -1,0 +1,41 @@
+(* QualifierPluginPython Example
+   Demonstrates plugin qualifiers implemented in Python.
+   The plugin-python-collection provides: sort, unique, sum, avg, min, max
+*)
+
+(Application-Start: QualifierPluginPython Demo) {
+    (* Create sample lists *)
+    Create the <numbers> with [5, 2, 8, 1, 9, 3].
+    Log "Original list:" to the <console>.
+    Log <numbers> to the <console>.
+
+    (* Use the sort qualifier *)
+    Compute the <sorted-numbers: sort> from the <numbers>.
+    Log "Sorted:" to the <console>.
+    Log <sorted-numbers> to the <console>.
+
+    (* Use the min and max qualifiers *)
+    Compute the <minimum: min> from the <numbers>.
+    Compute the <maximum: max> from the <numbers>.
+    Log "Min:" to the <console>.
+    Log <minimum> to the <console>.
+    Log "Max:" to the <console>.
+    Log <maximum> to the <console>.
+
+    (* Use sum and avg on a different list *)
+    Create the <values> with [10, 20, 30, 40, 50].
+    Compute the <total: sum> from the <values>.
+    Compute the <average: avg> from the <values>.
+    Log "Sum of [10, 20, 30, 40, 50]:" to the <console>.
+    Log <total> to the <console>.
+    Log "Average:" to the <console>.
+    Log <average> to the <console>.
+
+    (* Use unique on a list with duplicates *)
+    Create the <duplicates> with [1, 2, 2, 3, 3, 3, 4].
+    Compute the <unique-values: unique> from the <duplicates>.
+    Log "Unique of [1, 2, 2, 3, 3, 3, 4]:" to the <console>.
+    Log <unique-values> to the <console>.
+
+    Return an <OK: status> for the <demo>.
+}

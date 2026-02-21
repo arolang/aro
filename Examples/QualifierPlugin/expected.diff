@@ -1,0 +1,22 @@
+--- /var/folders/vn/3pg7yt9157qbqb72y_b_tv_w0000gn/T/47l1DSkqHn.expected.txt	2026-02-22 00:04:33.790043036 +0100
++++ /var/folders/vn/3pg7yt9157qbqb72y_b_tv_w0000gn/T/t1DxPFQsed.actual.txt	2026-02-22 00:04:33.790077405 +0100
+@@ -1,7 +1,9 @@
+ Original list:
+ [1, 2, 3, 4, 5]
+ Random element:
++3
+ Shuffled list:
++[1, 3, 2, 5, 4]
+ Reversed list:
+ [5, 4, 3, 2, 1]
+ Original string:
+@@ -9,4 +11,6 @@
+ Reversed string:
+ dlroW olleH
+ Using qualifier in expression:
+-[5, 4, 3, 2, 1]
+\ No newline at end of file
++[5, 4, 3, 2, 1]
++demo
++value: Hello World
+\ No newline at end of file

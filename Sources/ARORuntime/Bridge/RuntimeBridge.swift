@@ -1183,13 +1183,16 @@ private func evaluateExpressionJSON(_ expr: [String: Any], context: RuntimeConte
 
         var value = context.resolveAny(varName) ?? ""
 
-        // Handle specifiers for expressions like <user: active>
+        // Handle specifiers - try plugin qualifier first, then dictionary property access
         for spec in specs {
-            if let dict = value as? [String: any Sendable], let propVal = dict[spec] {
+            // First, try plugin qualifier (e.g., <list: pick-random>)
+            if let transformed = try? QualifierRegistry.shared.resolve(spec, value: value) {
+                value = transformed
+            } else if let dict = value as? [String: any Sendable], let propVal = dict[spec] {
+                // Fall back to dictionary property access (e.g., <user: name>)
                 value = propVal
-            } else {
-                return "" // Property not found
             }
+            // If neither works, just continue - the value stays as-is
         }
         return value
     }
@@ -2130,23 +2133,30 @@ public func aro_variable_unbind(
     contextHandle.context.unbind(nameStr)
 }
 
-/// Get a property from a dictionary value
+/// Apply a specifier to a value (qualifier or property access)
 /// - Parameters:
-///   - valuePtr: Value handle (must be a dictionary)
-///   - property: Property name (C string)
-/// - Returns: Value handle for the property (must be freed with aro_value_free), or NULL if not found
+///   - valuePtr: Value handle
+///   - specifier: Specifier name (C string) - either a qualifier or property name
+/// - Returns: Value handle for the result (must be freed with aro_value_free), or NULL if not found
 @_cdecl("aro_dict_get")
 public func aro_dict_get(
     _ valuePtr: UnsafeMutableRawPointer?,
-    _ property: UnsafePointer<CChar>?
+    _ specifier: UnsafePointer<CChar>?
 ) -> UnsafeMutableRawPointer? {
     guard let ptr = valuePtr,
-          let propStr = property.map({ String(cString: $0) }) else { return nil }
+          let specStr = specifier.map({ String(cString: $0) }) else { return nil }
 
     let boxed = Unmanaged<AROCValue>.fromOpaque(ptr).takeUnretainedValue()
 
+    // First, try plugin qualifier (e.g., <list: pick-random>)
+    if let transformed = try? QualifierRegistry.shared.resolve(specStr, value: boxed.value) {
+        let boxedValue = AROCValue(value: transformed)
+        return UnsafeMutableRawPointer(Unmanaged.passRetained(boxedValue).toOpaque())
+    }
+
+    // Fall back to dictionary property access (e.g., <user: name>)
     if let dict = boxed.value as? [String: any Sendable],
-       let value = dict[propStr] {
+       let value = dict[specStr] {
         let boxedValue = AROCValue(value: value)
         return UnsafeMutableRawPointer(Unmanaged.passRetained(boxedValue).toOpaque())
     }

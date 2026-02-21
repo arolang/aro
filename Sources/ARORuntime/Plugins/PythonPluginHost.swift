@@ -55,6 +55,9 @@ public final class PythonPluginHost: @unchecked Sendable {
     /// Registered actions
     private var actions: Set<String> = []
 
+    /// Qualifier registrations from this plugin
+    private var qualifierRegistrations: [QualifierRegistration] = []
+
     // MARK: - Initialization
 
     /// Initialize with a plugin path and configuration
@@ -113,13 +116,57 @@ public final class PythonPluginHost: @unchecked Sendable {
             throw PythonPluginError.loadFailed(pluginName, message: error)
         }
 
+        // Parse qualifiers array
+        var qualifierDescriptors: [PythonQualifierDescriptor] = []
+        if let qualifierObjects = json["qualifiers"] as? [[String: Any]] {
+            for qualifierObj in qualifierObjects {
+                if let qualifierName = qualifierObj["name"] as? String {
+                    // Parse input types
+                    var inputTypes: Set<QualifierInputType> = []
+                    if let typeStrings = qualifierObj["inputTypes"] as? [String] {
+                        for typeStr in typeStrings {
+                            if let inputType = QualifierInputType(rawValue: typeStr) {
+                                inputTypes.insert(inputType)
+                            }
+                        }
+                    }
+                    // Default to all types if none specified
+                    if inputTypes.isEmpty {
+                        inputTypes = Set(QualifierInputType.allCases)
+                    }
+
+                    let description = qualifierObj["description"] as? String
+
+                    qualifierDescriptors.append(PythonQualifierDescriptor(
+                        name: qualifierName,
+                        inputTypes: inputTypes,
+                        description: description
+                    ))
+                }
+            }
+        }
+
         pluginInfo = PythonPluginInfo(
             name: json["name"] as? String ?? pluginName,
             version: json["version"] as? String ?? "1.0.0",
-            actions: json["actions"] as? [String] ?? []
+            actions: json["actions"] as? [String] ?? [],
+            qualifiers: qualifierDescriptors
         )
 
         actions = Set(pluginInfo?.actions ?? [])
+
+        // Register qualifiers with QualifierRegistry
+        for descriptor in qualifierDescriptors {
+            let registration = QualifierRegistration(
+                qualifier: descriptor.name,
+                inputTypes: descriptor.inputTypes,
+                pluginName: pluginName,
+                description: descriptor.description,
+                pluginHost: self
+            )
+            qualifierRegistrations.append(registration)
+            QualifierRegistry.shared.register(registration)
+        }
     }
 
     // MARK: - Execution
@@ -207,6 +254,10 @@ public final class PythonPluginHost: @unchecked Sendable {
 
     /// Unload the plugin
     public func unload() {
+        // Unregister qualifiers
+        QualifierRegistry.shared.unregisterPlugin(pluginName)
+        qualifierRegistrations.removeAll()
+
         actions.removeAll()
         pluginInfo = nil
     }
@@ -306,12 +357,93 @@ public final class PythonPluginHost: @unchecked Sendable {
     }
 }
 
+// MARK: - PluginQualifierHost Conformance
+
+extension PythonPluginHost: PluginQualifierHost {
+    /// Execute a qualifier transformation via the Python plugin
+    ///
+    /// - Parameters:
+    ///   - qualifier: The qualifier name (e.g., "pick-random")
+    ///   - input: The input value to transform
+    /// - Returns: The transformed value
+    /// - Throws: QualifierError on failure
+    public func executeQualifier(_ qualifier: String, input: any Sendable) throws -> any Sendable {
+        // Create input JSON using QualifierInput
+        let qualifierInput = QualifierInput(value: input)
+        let encoder = JSONEncoder()
+        let inputData = try encoder.encode(qualifierInput)
+        let base64Input = inputData.base64EncodedString()
+
+        // Convert qualifier name to snake_case for Python function
+        let pythonQualifierName = toSnakeCase(qualifier)
+
+        // Create execution script that calls aro_plugin_qualifier
+        let script = """
+        import sys
+        import json
+        import base64
+        sys.path.insert(0, '\(pluginPath.path.replacingOccurrences(of: "'", with: "\\'"))')
+        try:
+            from \(moduleName) import aro_plugin_qualifier
+            input_json = base64.b64decode('\(base64Input)').decode('utf-8')
+            result = aro_plugin_qualifier('\(pythonQualifierName)', input_json)
+            print(result)
+        except ImportError:
+            print(json.dumps({"error": "Plugin does not provide aro_plugin_qualifier function"}))
+        except Exception as e:
+            import traceback
+            print(json.dumps({"error": str(e), "traceback": traceback.format_exc()}))
+        """
+
+        let result = try runPython(script: script)
+
+        // Parse result as QualifierOutput
+        guard let resultData = result.data(using: .utf8) else {
+            throw QualifierError.executionFailed(
+                qualifier: qualifier,
+                message: "Invalid UTF-8 in plugin response"
+            )
+        }
+
+        let decoder = JSONDecoder()
+        let output = try decoder.decode(QualifierOutput.self, from: resultData)
+
+        if let error = output.error {
+            throw QualifierError.executionFailed(qualifier: qualifier, message: error)
+        }
+
+        guard let resultValue = output.result else {
+            throw QualifierError.executionFailed(
+                qualifier: qualifier,
+                message: "Plugin returned neither result nor error"
+            )
+        }
+
+        return resultValue.value
+    }
+}
+
 // MARK: - Python Plugin Info
 
 struct PythonPluginInfo: Sendable {
     let name: String
     let version: String
     let actions: [String]
+    let qualifiers: [PythonQualifierDescriptor]
+
+    init(name: String, version: String, actions: [String], qualifiers: [PythonQualifierDescriptor] = []) {
+        self.name = name
+        self.version = version
+        self.actions = actions
+        self.qualifiers = qualifiers
+    }
+}
+
+/// Descriptor for a plugin-provided qualifier
+struct PythonQualifierDescriptor: Sendable {
+    let name: String
+    let inputTypes: Set<QualifierInputType>
+    let description: String?
 }
 
 // MARK: - Python Plugin Action Wrapper

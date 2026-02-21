@@ -78,6 +78,11 @@ public struct ComputeAction: ActionImplementation {
         ]
         let computationName = resolveOperationName(from: result, knownOperations: knownComputations, fallback: "identity")
 
+        // Check plugin qualifier first (e.g., pick-random from a plugin)
+        if let pluginResult = try QualifierRegistry.shared.resolve(computationName, value: input) {
+            return pluginResult
+        }
+
         // Check for date offset pattern (e.g., +1h, -3d)
         if DateOffset.isOffsetPattern(computationName) {
             return try computeDateOffset(input: input, offsetPattern: computationName, context: context)

@@ -58,9 +58,14 @@ public final class NativePluginHost: @unchecked Sendable {
     typealias PluginInfoFunc = @convention(c) () -> UnsafeMutablePointer<CChar>?
     typealias ExecuteFunc = @convention(c) (UnsafePointer<CChar>, UnsafePointer<CChar>) -> UnsafeMutablePointer<CChar>?
     typealias FreeFunc = @convention(c) (UnsafeMutablePointer<CChar>?) -> Void
+    typealias QualifierFunc = @convention(c) (UnsafePointer<CChar>, UnsafePointer<CChar>) -> UnsafeMutablePointer<CChar>?
 
     private var executeFunc: ExecuteFunc?
     private var freeFunc: FreeFunc?
+    private var qualifierFunc: QualifierFunc?
+
+    /// Qualifier registrations from this plugin
+    private var qualifierRegistrations: [QualifierRegistration] = []
 
     // MARK: - Initialization
 
@@ -160,8 +165,67 @@ public final class NativePluginHost: @unchecked Sendable {
             return outputPath
         }
 
+        // Check for Swift source files
+        let swiftFiles = findSourceFiles(withExtension: "swift")
+        if !swiftFiles.isEmpty {
+            debugPrint("[NativePluginHost] Found Swift files: \(swiftFiles.map { $0.lastPathComponent })")
+            let outputPath = pluginPath.appendingPathComponent("lib\(pluginName).\(ext)")
+            try compileSwiftPlugin(sources: swiftFiles, output: outputPath)
+            return outputPath
+        }
+
         debugPrint("[NativePluginHost] No compilable sources found for plugin: \(pluginName)")
         return nil
+    }
+
+    /// Compile Swift source files to a dynamic library
+    private func compileSwiftPlugin(sources: [URL], output: URL) throws {
+        // Find swiftc
+        let swiftcPaths = [
+            "/usr/bin/swiftc",
+            "/opt/homebrew/bin/swiftc",
+            "/usr/local/bin/swiftc",
+        ]
+
+        guard let swiftcPath = swiftcPaths.first(where: { FileManager.default.isExecutableFile(atPath: $0) }) else {
+            throw NativePluginError.compilationFailed(pluginName, message: "swiftc not found")
+        }
+
+        debugPrint("[NativePluginHost] Compiling Swift plugin with \(swiftcPath)")
+
+        var args: [String] = []
+        args.append(contentsOf: sources.map { $0.path })
+        args.append("-emit-library")
+        args.append("-o")
+        args.append(output.path)
+
+        // Add optimization for release, debug info for debug
+        #if DEBUG
+        args.append("-g")
+        #else
+        args.append("-O")
+        #endif
+
+        let process = Process()
+        process.executableURL = URL(fileURLWithPath: swiftcPath)
+        process.arguments = args
+
+        let outputPipe = Pipe()
+        let errorPipe = Pipe()
+        process.standardOutput = outputPipe
+        process.standardError = errorPipe
+
+        try process.run()
+        process.waitUntilExit()
+
+        if process.terminationStatus != 0 {
+            let errorData = errorPipe.fileHandleForReading.readDataToEndOfFile()
+            let errorMessage = String(data: errorData, encoding: .utf8) ?? "Unknown error"
+            debugPrint("[NativePluginHost] Swift compilation failed: \(errorMessage)")
+            throw NativePluginError.compilationFailed(pluginName, message: "swiftc failed: \(errorMessage)")
+        }
+
+        debugPrint("[NativePluginHost] Swift plugin compiled to: \(output.path)")
     }
 
     /// Compile Rust plugin using cargo
@@ -303,6 +367,20 @@ public final class NativePluginHost: @unchecked Sendable {
             freeFunc = unsafeBitCast(freeSymbol, to: FreeFunc.self)
         }
 
+        // Get qualifier function (optional - for plugins providing qualifiers)
+        #if os(Windows)
+        let qualifierSymbol = GetProcAddress(hmodule, "aro_plugin_qualifier")
+        #else
+        let qualifierSymbol = dlsym(handle, "aro_plugin_qualifier")
+        #endif
+
+        if let qualifierSymbol = qualifierSymbol {
+            qualifierFunc = unsafeBitCast(qualifierSymbol, to: QualifierFunc.self)
+            debugPrint("[NativePluginHost] Found aro_plugin_qualifier function in \(pluginName)")
+        } else {
+            debugPrint("[NativePluginHost] No aro_plugin_qualifier function in \(pluginName)")
+        }
+
         // Get plugin info function (optional)
         #if os(Windows)
         let infoSymbol = GetProcAddress(hmodule, "aro_plugin_info")
@@ -360,12 +438,43 @@ public final class NativePluginHost: @unchecked Sendable {
             }
         }
 
+        // Parse qualifiers array
+        var qualifierDescriptors: [NativeQualifierDescriptor] = []
+        if let qualifierObjects = dict["qualifiers"] as? [[String: Any]] {
+            for qualifierObj in qualifierObjects {
+                if let qualifierName = qualifierObj["name"] as? String {
+                    // Parse input types
+                    var inputTypes: Set<QualifierInputType> = []
+                    if let typeStrings = qualifierObj["inputTypes"] as? [String] {
+                        for typeStr in typeStrings {
+                            if let inputType = QualifierInputType(rawValue: typeStr) {
+                                inputTypes.insert(inputType)
+                            }
+                        }
+                    }
+                    // Default to all types if none specified
+                    if inputTypes.isEmpty {
+                        inputTypes = Set(QualifierInputType.allCases)
+                    }
+
+                    let description = qualifierObj["description"] as? String
+
+                    qualifierDescriptors.append(NativeQualifierDescriptor(
+                        name: qualifierName,
+                        inputTypes: inputTypes,
+                        description: description
+                    ))
+                }
+            }
+        }
+
         pluginInfo = NativePluginInfo(
             name: name,
             version: version,
             language: language,
             actions: actionNames,
-            verbsMap: verbsMap
+            verbsMap: verbsMap,
+            qualifiers: qualifierDescriptors
         )
 
         // Create action descriptors
@@ -375,6 +484,23 @@ public final class NativePluginHost: @unchecked Sendable {
                 inputSchema: nil,
                 outputSchema: nil
             )
+        }
+
+        // Register qualifiers with QualifierRegistry if plugin provides aro_plugin_qualifier
+        debugPrint("[NativePluginHost] Plugin \(pluginName) has \(qualifierDescriptors.count) qualifiers declared, qualifierFunc=\(qualifierFunc != nil)")
+        if qualifierFunc != nil {
+            for descriptor in qualifierDescriptors {
+                debugPrint("[NativePluginHost] Registering qualifier: \(descriptor.name)")
+                let registration = QualifierRegistration(
+                    qualifier: descriptor.name,
+                    inputTypes: descriptor.inputTypes,
+                    pluginName: pluginName,
+                    description: descriptor.description,
+                    pluginHost: self
+                )
+                qualifierRegistrations.append(registration)
+                QualifierRegistry.shared.register(registration)
+            }
         }
     }
 
@@ -469,6 +595,10 @@ public final class NativePluginHost: @unchecked Sendable {
     public func unload() {
         guard let handle = libraryHandle else { return }
 
+        // Unregister qualifiers
+        QualifierRegistry.shared.unregisterPlugin(pluginName)
+        qualifierRegistrations.removeAll()
+
         #if os(Windows)
         let hmodule = unsafeBitCast(handle, to: HMODULE.self)
         FreeLibrary(hmodule)
@@ -479,6 +609,7 @@ public final class NativePluginHost: @unchecked Sendable {
         libraryHandle = nil
         executeFunc = nil
         freeFunc = nil
+        qualifierFunc = nil
         actions.removeAll()
     }
 
@@ -509,6 +640,78 @@ public final class NativePluginHost: @unchecked Sendable {
     }
 }
 
+// MARK: - PluginQualifierHost Conformance
+
+extension NativePluginHost: PluginQualifierHost {
+    /// Execute a qualifier transformation via the native plugin
+    ///
+    /// - Parameters:
+    ///   - qualifier: The qualifier name (e.g., "pick-random")
+    ///   - input: The input value to transform
+    /// - Returns: The transformed value
+    /// - Throws: QualifierError on failure
+    public func executeQualifier(_ qualifier: String, input: any Sendable) throws -> any Sendable {
+        guard let qualifierFunc = qualifierFunc else {
+            throw QualifierError.executionFailed(
+                qualifier: qualifier,
+                message: "Plugin '\(pluginName)' does not provide aro_plugin_qualifier function"
+            )
+        }
+
+        // Create input JSON using QualifierInput
+        let qualifierInput = QualifierInput(value: input)
+        let encoder = JSONEncoder()
+        let inputData = try encoder.encode(qualifierInput)
+        let inputJSON = String(data: inputData, encoding: .utf8) ?? "{}"
+
+        // Call the plugin
+        let resultPtr = qualifier.withCString { qualifierCStr in
+            inputJSON.withCString { inputCStr in
+                qualifierFunc(qualifierCStr, inputCStr)
+            }
+        }
+
+        defer {
+            if let ptr = resultPtr {
+                freeFunc?(ptr)
+            }
+        }
+
+        guard let resultPtr = resultPtr else {
+            throw QualifierError.executionFailed(
+                qualifier: qualifier,
+                message: "Plugin returned null"
+            )
+        }
+
+        let resultJSON = String(cString: resultPtr)
+
+        // Parse result as QualifierOutput
+        guard let resultData = resultJSON.data(using: .utf8) else {
+            throw QualifierError.executionFailed(
+                qualifier: qualifier,
+                message: "Invalid UTF-8 in plugin response"
+            )
+        }
+
+        let decoder = JSONDecoder()
+        let output = try decoder.decode(QualifierOutput.self, from: resultData)
+
+        if let error = output.error {
+            throw QualifierError.executionFailed(qualifier: qualifier, message: error)
+        }
+
+        guard let result = output.result else {
+            throw QualifierError.executionFailed(
+                qualifier: qualifier,
+                message: "Plugin returned neither result nor error"
+            )
+        }
+
+        return result.value
+    }
+}
+
 // MARK: - Swift Types
 
 /// Plugin info
@@ -519,14 +722,24 @@ struct NativePluginInfo: Sendable {
     let actions: [String]
     /// Maps action names to their verbs (e.g., "ParseCSV" -> ["parsecsv", "readcsv"])
     let verbsMap: [String: [String]]
+    /// Qualifiers provided by this plugin
+    let qualifiers: [NativeQualifierDescriptor]
 
-    init(name: String, version: String, language: String, actions: [String], verbsMap: [String: [String]] = [:]) {
+    init(name: String, version: String, language: String, actions: [String], verbsMap: [String: [String]] = [:], qualifiers: [NativeQualifierDescriptor] = []) {
         self.name = name
         self.version = version
         self.language = language
         self.actions = actions
         self.verbsMap = verbsMap
+        self.qualifiers = qualifiers
     }
+}
+
+/// Descriptor for a plugin-provided qualifier
+struct NativeQualifierDescriptor: Sendable {
+    let name: String
+    let inputTypes: Set<QualifierInputType>
+    let description: String?
 }
 
 /// Action descriptor

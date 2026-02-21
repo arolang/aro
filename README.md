@@ -102,6 +102,18 @@ HTTP server and client, file system operations with directory watching, and TCP 
 
 When the 50+ built-in actions are not enough, write custom actions in Swift or distribute them as plugins through Swift Package Manager.
 
+### Plugin Qualifiers
+
+Extend the language with custom value transformations. Plugins can register qualifiers that work on Lists, Strings, and other types.
+
+```aro
+Compute the <random-item: pick-random> from the <items>.
+Compute the <sorted: sort> from the <numbers>.
+Log <list: reverse> to the <console>.
+```
+
+Write plugins in Swift, Rust, C, or Python. Qualifiers work in both interpreter and compiled binary modes.
+
 ### Happy Path Philosophy
 
 Write only the success case. Errors are reported automatically in business terms. When a user cannot be retrieved, the message says exactly that.
@@ -339,6 +351,7 @@ The `Examples/` directory contains 50+ working applications demonstrating variou
 | **Networking** | EchoSocket, SocketClient, SimpleChat |
 | **Date & Time** | DateTimeDemo, DateRangeDemo |
 | **Advanced** | CustomPlugin, ModulesExample, ContextAware, ConfigurableTimeout, SinkSyntax, AssertDemo, ParallelForEach |
+| **Plugin Qualifiers** | QualifierPlugin (Swift), QualifierPluginC (C), QualifierPluginPython (Python) |
 | **Full Applications** | SystemMonitor, ZipService, SQLiteExample, ReceiveData |
 
 Run any example with:
