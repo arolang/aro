@@ -256,6 +256,70 @@
     <span class="code-keyword">Return</span> an <span class="code-result">&lt;OK: status&gt;</span> with &lt;body&gt;.
 }</code></pre>
 
+        <h2>Unified URL I/O</h2>
+        <p>
+            ARO provides unified I/O for both local files and remote URLs. The same <code>Read</code> and
+            <code>Write</code> actions work with both file paths and HTTP URLs.
+        </p>
+
+        <h3>Reading from URLs (GET)</h3>
+        <p>Use the <code>url:</code> system object to fetch data via HTTP GET:</p>
+        <pre><code><span class="code-comment">(* Simple GET request *)</span>
+<span class="code-keyword">Read</span> the <span class="code-result">&lt;data&gt;</span> from the &lt;url: <span class="code-string">"https://api.example.com/users"</span>&gt;.
+
+<span class="code-comment">(* Response is auto-parsed based on Content-Type *)</span>
+<span class="code-keyword">Extract</span> the <span class="code-result">&lt;username&gt;</span> from the &lt;data: name&gt;.
+<span class="code-keyword">Log</span> <span class="code-string">"User: ${username}"</span> to the &lt;console&gt;.</code></pre>
+
+        <h3>Writing to URLs (POST)</h3>
+        <p>Use <code>Write</code> with a URL to send data via HTTP POST:</p>
+        <pre><code><span class="code-comment">(* Create payload *)</span>
+<span class="code-keyword">Create</span> the <span class="code-result">&lt;payload&gt;</span> with {
+    title: <span class="code-string">"Hello"</span>,
+    body: <span class="code-string">"World"</span>,
+    userId: 1
+}.
+
+<span class="code-comment">(* POST to API *)</span>
+<span class="code-keyword">Write</span> the &lt;payload&gt; to the &lt;url: <span class="code-string">"https://api.example.com/posts"</span>&gt;.</code></pre>
+
+        <h3>Custom Headers and Options</h3>
+        <p>Use the <code>with</code> clause for headers, timeout, and other options:</p>
+        <pre><code><span class="code-comment">(* GET with authentication *)</span>
+<span class="code-keyword">Read</span> the <span class="code-result">&lt;data&gt;</span> from the &lt;url: <span class="code-string">"https://api.example.com/protected"</span>&gt; with {
+    headers: {
+        Authorization: <span class="code-string">"Bearer ${token}"</span>,
+        Accept: <span class="code-string">"application/json"</span>
+    },
+    timeout: 30
+}.
+
+<span class="code-comment">(* POST with custom headers *)</span>
+<span class="code-keyword">Write</span> the &lt;payload&gt; to the &lt;url: <span class="code-string">"https://api.example.com/data"</span>&gt; with {
+    headers: {
+        Authorization: <span class="code-string">"Bearer ${token}"</span>,
+        X-Request-ID: <span class="code-string">"${request-id}"</span>
+    }
+}.</code></pre>
+
+        <h3>Data Pipeline Pattern</h3>
+        <p>Seamlessly sync data between remote APIs and local files:</p>
+        <pre><code><span class="code-feature">(Sync Data: Data Pipeline)</span> {
+    <span class="code-comment">(* Fetch from remote API *)</span>
+    <span class="code-keyword">Read</span> the <span class="code-result">&lt;remotedata&gt;</span> from the &lt;url: <span class="code-string">"https://api.example.com/export"</span>&gt;.
+
+    <span class="code-comment">(* Cache locally *)</span>
+    <span class="code-keyword">Write</span> the &lt;remotedata&gt; to the &lt;file: <span class="code-string">"./data/snapshot.json"</span>&gt;.
+
+    <span class="code-comment">(* Read local report *)</span>
+    <span class="code-keyword">Read</span> the <span class="code-result">&lt;report&gt;</span> from the &lt;file: <span class="code-string">"./reports/daily.json"</span>&gt;.
+
+    <span class="code-comment">(* Upload to remote *)</span>
+    <span class="code-keyword">Write</span> the &lt;report&gt; to the &lt;url: <span class="code-string">"https://api.example.com/upload"</span>&gt;.
+
+    <span class="code-keyword">Return</span> an <span class="code-result">&lt;OK: status&gt;</span> for the &lt;sync&gt;.
+}</code></pre>
+
         <h2>Authentication</h2>
 
         <h3>API Key</h3>

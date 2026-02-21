@@ -770,6 +770,10 @@ public struct QualifiedNoun: Sendable, Equatable, CustomStringConvertible {
         if type.hasPrefix("/") || type.hasPrefix("./") || type.hasPrefix("../") || type.hasPrefix("~") {
             return [type]
         }
+        // If it looks like a URL, don't split by dots (ARO-0052)
+        if type.hasPrefix("http://") || type.hasPrefix("https://") {
+            return [type]
+        }
         // Split by dots for property path syntax (e.g., "customer.address.city")
         return type.split(separator: ".").map(String.init)
     }

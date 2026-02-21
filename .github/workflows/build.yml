@@ -1180,6 +1180,12 @@ jobs:
           chmod +x build-pdf.sh
           ./build-pdf.sh
 
+      - name: Build Plugin Guide PDF
+        run: |
+          cd Book/ThePluginGuide
+          chmod +x build-pdf.sh
+          ./build-pdf.sh
+
       - name: Upload Language Guide PDF
         uses: actions/upload-artifact@v4
         with:
@@ -1199,6 +1205,13 @@ jobs:
         with:
           name: aro-by-example
           path: Book/AROByExample/output/ARO-By-Example.pdf
+          retention-days: 30
+
+      - name: Upload Plugin Guide PDF
+        uses: actions/upload-artifact@v4
+        with:
+          name: aro-plugin-guide
+          path: Book/ThePluginGuide/output/ARO-Plugin-Guide.pdf
           retention-days: 30
 
   # ===========================================================================
@@ -1260,6 +1273,7 @@ jobs:
             artifacts/aro-macos-arm64.tar.gz \
             artifacts/aro-windows-amd64.zip \
             artifacts/aro-language-guide/ARO-Language-Guide.pdf \
+            artifacts/aro-plugin-guide/ARO-Plugin-Guide.pdf \
             artifacts/aro-construction-studies/ARO-Construction-Studies.pdf \
             artifacts/aro-by-example/ARO-By-Example.pdf; do
             if [ -f "$f" ]; then
@@ -1298,6 +1312,7 @@ jobs:
             artifacts/aro-macos-arm64.tar.gz
             artifacts/aro-windows-amd64.zip
             artifacts/aro-language-guide/ARO-Language-Guide.pdf
+            artifacts/aro-plugin-guide/ARO-Plugin-Guide.pdf
             artifacts/aro-construction-studies/ARO-Construction-Studies.pdf
             artifacts/aro-by-example/ARO-By-Example.pdf
           fail_on_unmatched_files: false
@@ -1313,21 +1328,28 @@ jobs:
             | Document | Download |
             |----------|----------|
             | ARO Language Guide | [ARO-Language-Guide.pdf](https://github.com/${{ github.repository }}/releases/download/${{ github.ref_name }}/ARO-Language-Guide.pdf) |
+            | ARO Plugin Guide | [ARO-Plugin-Guide.pdf](https://github.com/${{ github.repository }}/releases/download/${{ github.ref_name }}/ARO-Plugin-Guide.pdf) |
             | ARO Construction Studies | [ARO-Construction-Studies.pdf](https://github.com/${{ github.repository }}/releases/download/${{ github.ref_name }}/ARO-Construction-Studies.pdf) |
             | ARO By Example | [ARO-By-Example.pdf](https://github.com/${{ github.repository }}/releases/download/${{ github.ref_name }}/ARO-By-Example.pdf) |
 
             ### Installation
 
-            **Linux**
+            **macOS (Homebrew)** — Recommended
             ```bash
-            curl -L https://github.com/${{ github.repository }}/releases/download/${{ github.ref_name }}/aro-linux-amd64.tar.gz | tar xz
+            brew tap arolang/aro
+            brew install aro
+            ```
+
+            **macOS (Manual)**
+            ```bash
+            curl -L https://github.com/${{ github.repository }}/releases/download/${{ github.ref_name }}/aro-macos-arm64.tar.gz | tar xz
             sudo mv aro /usr/local/bin/
             sudo mv libARORuntime.a /usr/local/lib/
             ```
 
-            **macOS**
+            **Linux**
             ```bash
-            curl -L https://github.com/${{ github.repository }}/releases/download/${{ github.ref_name }}/aro-macos-arm64.tar.gz | tar xz
+            curl -L https://github.com/${{ github.repository }}/releases/download/${{ github.ref_name }}/aro-linux-amd64.tar.gz | tar xz
             sudo mv aro /usr/local/bin/
             sudo mv libARORuntime.a /usr/local/lib/
             ```

@@ -54,6 +54,45 @@ public struct FormatDeserializer: Sendable {
         }
     }
 
+    // MARK: - Content-Type Detection (ARO-0052)
+
+    /// Map HTTP Content-Type header to FileFormat
+    /// - Parameter contentType: The Content-Type header value (e.g., "application/json; charset=utf-8")
+    /// - Returns: The corresponding FileFormat
+    public static func formatFromContentType(_ contentType: String) -> FileFormat {
+        // Extract MIME type (before semicolon for charset, etc.)
+        let mimeType = contentType.lowercased()
+            .split(separator: ";")
+            .first
+            .map { String($0).trimmingCharacters(in: .whitespaces) } ?? contentType.lowercased()
+
+        switch mimeType {
+        case "application/json":
+            return .json
+        case "application/x-ndjson", "application/jsonl":
+            return .jsonl
+        case "application/xml", "text/xml":
+            return .xml
+        case "text/csv", "application/csv":
+            return .csv
+        case "text/tab-separated-values":
+            return .tsv
+        case "text/yaml", "application/x-yaml", "application/yaml":
+            return .yaml
+        case "application/toml", "text/toml":
+            return .toml
+        case "text/plain":
+            return .text
+        case "text/html":
+            return .html
+        case "text/markdown":
+            return .markdown
+        default:
+            // Default to text for unknown types
+            return .text
+        }
+    }
+
     // MARK: - JSON Deserialization
 
     private static func deserializeJSON(_ content: String) -> any Sendable {

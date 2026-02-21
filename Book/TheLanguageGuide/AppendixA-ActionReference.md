@@ -9,7 +9,7 @@ Complete reference for all built-in actions in ARO.
 | **Extract** | REQUEST | Pull data from structured source | `Extract the <id> from the <request: params>.` |
 | **Retrieve** | REQUEST | Fetch from repository | `Retrieve the <user> from the <users> where id = <id>.` |
 | **Request** | REQUEST | Make HTTP request | `Request the <data> from the <api-url>.` |
-| **Read** | REQUEST | Read from file | `Read the <config> from the <file: "./config.json">.` |
+| **Read** | REQUEST | Read from file or URL | `Read the <config> from the <file: "./config.json">.` |
 | **List** | REQUEST | List directory contents | `List the <files> from the <directory: src-path>.` |
 | **Stat** | REQUEST | Get file metadata | `Stat the <info> for the <file: "./doc.pdf">.` |
 | **Exists** | REQUEST | Check file existence | `Exists the <found> for the <file: "./config.json">.` |
@@ -34,7 +34,7 @@ Complete reference for all built-in actions in ARO.
 | **Throw** | RESPONSE | Throw error | `Throw a <NotFound: error> for the <user>.` |
 | **Log** | EXPORT | Write to logs | `Log "Done" to the <console>.` |
 | **Store** | EXPORT | Save to repository | `Store the <user> into the <users>.` |
-| **Write** | EXPORT | Write to file | `Write the <data> to the <file: "./out.txt">.` |
+| **Write** | EXPORT | Write to file or URL | `Write the <data> to the <file: "./out.txt">.` |
 | **Append** | EXPORT | Append to file | `Append the <line> to the <file: "./log.txt">.` |
 | **Send** | EXPORT | Send to destination | `Send the <email> to the <recipient>.` |
 | **Emit** | EXPORT | Emit domain event | `Emit a <UserCreated: event> with <user>.` |
@@ -183,20 +183,35 @@ After a request, these variables are available:
 
 ### Read
 
-Reads from files.
+Reads from files or URLs. When reading from URLs, performs an HTTP GET request.
 
 **Syntax:**
 ```aro
+(* Read from file *)
 Read the <result> from the <file: path>.
 Read the <result: type> from the <file: path>.
+
+(* Read from URL - HTTP GET (ARO-0052) *)
+Read the <result> from the <url: "https://...">.
+Read the <result> from the <url: "https://..."> with { headers: {...}, timeout: 30 }.
 ```
 
 **Examples:**
 ```aro
+(* File I/O *)
 Read the <content> from the <file: "./data.txt">.
 Read the <config: JSON> from the <file: "./config.json">.
 Read the <image: bytes> from the <file: "./logo.png">.
+
+(* URL I/O - HTTP GET *)
+Read the <users> from the <url: "https://api.example.com/users">.
+Read the <data> from the <url: "https://api.example.com/protected"> with {
+    headers: { Authorization: "Bearer ${token}" }
+}.
 ```
+
+**URL Format Detection:**
+Response is automatically parsed based on `Content-Type` header (JSON, XML, CSV, YAML, etc.).
 
 **Valid Prepositions:** `from`
 
@@ -703,18 +718,33 @@ Feature sets can subscribe to notification events:
 
 ### Write
 
-Writes to files.
+Writes to files or URLs. When writing to URLs, performs an HTTP POST request.
 
 **Syntax:**
 ```aro
+(* Write to file *)
 Write the <data> to the <file: path>.
+
+(* Write to URL - HTTP POST (ARO-0052) *)
+Write the <data> to the <url: "https://...">.
+Write the <data> to the <url: "https://..."> with { headers: {...}, timeout: 30 }.
 ```
 
 **Examples:**
 ```aro
+(* File I/O *)
 Write the <content> to the <file: "./output.txt">.
 Write the <data: JSON> to the <file: "./data.json">.
+
+(* URL I/O - HTTP POST *)
+Write the <user> to the <url: "https://api.example.com/users">.
+Write the <payload> to the <url: "https://api.example.com/submit"> with {
+    headers: { Authorization: "Bearer ${token}" }
+}.
 ```
+
+**URL Serialization:**
+Data is automatically serialized to JSON for dictionaries/arrays, or sent as plain text for strings.
 
 **Valid Prepositions:** `to`
 
