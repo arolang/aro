@@ -12,6 +12,18 @@ import Testing
 @Suite("MetricsFormatter Tests")
 struct MetricsFormatterTests {
 
+    func createTestProcessMetrics() -> ProcessMetrics {
+        ProcessMetrics(
+            cpuUserTime: 0.1,
+            cpuSystemTime: 0.05,
+            virtualMemoryBytes: 100_000_000,
+            residentMemoryBytes: 50_000_000,
+            openFileDescriptors: 10,
+            maxFileDescriptors: 1024,
+            processStartTime: Date().timeIntervalSince1970 - 5.0
+        )
+    }
+
     func createTestSnapshot() -> MetricsSnapshot {
         var fs1 = FeatureSetMetrics(name: "Application-Start", businessActivity: "Entry Point")
         fs1.recordExecution(success: true, durationMs: 12.5)
@@ -23,6 +35,7 @@ struct MetricsFormatterTests {
         let startTime = Date().addingTimeInterval(-5.2)
         return MetricsSnapshot(
             featureSets: [fs1, fs2],
+            processMetrics: createTestProcessMetrics(),
             collectedAt: Date(),
             applicationStartTime: startTime
         )
@@ -75,6 +88,7 @@ struct MetricsFormatterTests {
     func testShortFormatEmpty() {
         let snapshot = MetricsSnapshot(
             featureSets: [],
+            processMetrics: createTestProcessMetrics(),
             collectedAt: Date(),
             applicationStartTime: Date()
         )
@@ -120,6 +134,7 @@ struct MetricsFormatterTests {
     func testTableFormatEmpty() {
         let snapshot = MetricsSnapshot(
             featureSets: [],
+            processMetrics: createTestProcessMetrics(),
             collectedAt: Date(),
             applicationStartTime: Date()
         )
@@ -166,6 +181,7 @@ struct MetricsFormatterTests {
     func testPlainFormatEmpty() {
         let snapshot = MetricsSnapshot(
             featureSets: [],
+            processMetrics: createTestProcessMetrics(),
             collectedAt: Date(),
             applicationStartTime: Date()
         )
@@ -217,6 +233,7 @@ struct MetricsFormatterTests {
     func testPrometheusFormatEmpty() {
         let snapshot = MetricsSnapshot(
             featureSets: [],
+            processMetrics: createTestProcessMetrics(),
             collectedAt: Date(),
             applicationStartTime: Date()
         )
@@ -233,6 +250,7 @@ struct MetricsFormatterTests {
 
         let snapshot = MetricsSnapshot(
             featureSets: [fs],
+            processMetrics: createTestProcessMetrics(),
             collectedAt: Date(),
             applicationStartTime: Date()
         )

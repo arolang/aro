@@ -140,10 +140,23 @@ struct FeatureSetMetricsTests {
 @Suite("MetricsSnapshot Tests")
 struct MetricsSnapshotTests {
 
+    func createTestProcessMetrics() -> ProcessMetrics {
+        ProcessMetrics(
+            cpuUserTime: 0.1,
+            cpuSystemTime: 0.05,
+            virtualMemoryBytes: 100_000_000,
+            residentMemoryBytes: 50_000_000,
+            openFileDescriptors: 10,
+            maxFileDescriptors: 1024,
+            processStartTime: Date().timeIntervalSince1970 - 5.0
+        )
+    }
+
     @Test("Empty snapshot totals")
     func testEmptySnapshot() {
         let snapshot = MetricsSnapshot(
             featureSets: [],
+            processMetrics: createTestProcessMetrics(),
             collectedAt: Date(),
             applicationStartTime: Date()
         )
@@ -166,6 +179,7 @@ struct MetricsSnapshotTests {
 
         let snapshot = MetricsSnapshot(
             featureSets: [fs1, fs2],
+            processMetrics: createTestProcessMetrics(),
             collectedAt: Date(),
             applicationStartTime: Date()
         )
@@ -184,6 +198,7 @@ struct MetricsSnapshotTests {
 
         let snapshot = MetricsSnapshot(
             featureSets: [],
+            processMetrics: createTestProcessMetrics(),
             collectedAt: collectedAt,
             applicationStartTime: startTime
         )

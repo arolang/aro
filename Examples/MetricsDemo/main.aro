@@ -1,14 +1,49 @@
 (* MetricsDemo - Demonstrates runtime metrics tracking (ARO-0044) *)
+(* Now includes system metrics: CPU, memory, file descriptors, process start time *)
 
 (Application-Start: Metrics Demo) {
     Log "=== Metrics Demo ===" to the <console>.
+    Log "Emitting events in parallel..." to the <console>.
 
-    (* Log metrics in short format *)
-    (* Note: Application-Start is still running so it's not counted yet *)
-    Log the <metrics: short> to the <console>.
+    (* Emit events in parallel for each item *)
+    Create the <items> with [1, 2, 3].
+    parallel for each <item> in <items> {
+        Emit a <ProcessItem: event> with <item>.
+    }
 
-    (* Log metrics in table format *)
-    Log the <metrics: table> to the <console>.
-
+    Log "Events emitted. Metrics will be shown at shutdown." to the <console>.
     Return an <OK: status> for the <demo>.
+}
+
+(Process Item: ProcessItem Handler) {
+    Extract the <value> from the <event: data>.
+    Log "Processing item: ${value}" to the <console>.
+    Return an <OK: status> for the <processing>.
+}
+
+(Application-End: Success) {
+    Log "" to the <console>.
+    Log "=== Application Shutdown - Final Metrics ===" to the <console>.
+    Log "" to the <console>.
+
+    (* Short format - single line summary *)
+    Log "--- Short Format ---" to the <console>.
+    Log the <metrics: short> to the <console>.
+    Log "" to the <console>.
+
+    (* Table format - ASCII table with system metrics *)
+    Log "--- Table Format ---" to the <console>.
+    Log the <metrics: table> to the <console>.
+    Log "" to the <console>.
+
+    (* Plain format - detailed human-readable *)
+    Log "--- Plain Format ---" to the <console>.
+    Log the <metrics: plain> to the <console>.
+    Log "" to the <console>.
+
+    (* Prometheus format - for monitoring systems *)
+    Log "--- Prometheus Format ---" to the <console>.
+    Log the <metrics: prometheus> to the <console>.
+
+    Return an <OK: status> for the <shutdown>.
 }
