@@ -218,8 +218,9 @@ public struct ProcessMetrics: Sendable {
     #if os(Linux)
     private static func collectLinux() -> ProcessMetrics {
         // Get CPU time using getrusage
+        // RUSAGE_SELF = 0 on Linux
         var rusage = rusage()
-        getrusage(RUSAGE_SELF, &rusage)
+        getrusage(Int32(0), &rusage)  // 0 = RUSAGE_SELF
         let cpuUserTime = Double(rusage.ru_utime.tv_sec) + Double(rusage.ru_utime.tv_usec) / 1_000_000.0
         let cpuSystemTime = Double(rusage.ru_stime.tv_sec) + Double(rusage.ru_stime.tv_usec) / 1_000_000.0
 
@@ -229,7 +230,7 @@ public struct ProcessMetrics: Sendable {
         if let statm = try? String(contentsOfFile: "/proc/self/statm", encoding: .utf8) {
             let parts = statm.split(separator: " ")
             if parts.count >= 2 {
-                let pageSize = sysconf(_SC_PAGESIZE)
+                let pageSize = Int(sysconf(Int32(_SC_PAGESIZE)))
                 virtualMemoryBytes = (Int(parts[0]) ?? 0) * pageSize
                 residentMemoryBytes = (Int(parts[1]) ?? 0) * pageSize
             }
@@ -241,8 +242,9 @@ public struct ProcessMetrics: Sendable {
             openFds = fdDir.count
         }
 
+        // RLIMIT_NOFILE = 7 on Linux
         var rlimit = rlimit()
-        getrlimit(Int32(RLIMIT_NOFILE), &rlimit)
+        getrlimit(Int32(7), &rlimit)  // 7 = RLIMIT_NOFILE
         let maxFds = Int(rlimit.rlim_cur)
 
         // Get process start time from /proc/self/stat
@@ -252,7 +254,7 @@ public struct ProcessMetrics: Sendable {
             let parts = stat.split(separator: " ")
             if parts.count >= 22, let startTicks = UInt64(parts[21]) {
                 // Get system boot time and clock ticks per second
-                let ticksPerSecond = Double(sysconf(_SC_CLK_TCK))
+                let ticksPerSecond = Double(sysconf(Int32(_SC_CLK_TCK)))
                 if let uptime = try? String(contentsOfFile: "/proc/uptime", encoding: .utf8) {
                     let uptimeParts = uptime.split(separator: " ")
                     if let uptimeSec = Double(uptimeParts[0]) {
