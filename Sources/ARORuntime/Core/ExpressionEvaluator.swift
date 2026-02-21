@@ -33,6 +33,14 @@ public struct ExpressionEvaluator: Sendable {
                 )
             }
 
+            // ARO-0044: Special handling for metrics format qualifiers
+            // <metrics: plain/short/table/prometheus>
+            if varRef.noun.base == "metrics", !varRef.noun.specifiers.isEmpty,
+               let metricsSnapshot = context.resolveAny("metrics") as? MetricsSnapshot {
+                let format = varRef.noun.specifiers[0]
+                return MetricsFormatter.format(metricsSnapshot, as: format, context: context.outputContext)
+            }
+
             guard var value = context.resolveAny(varRef.noun.base) else {
                 throw ExpressionError.undefinedVariable(varRef.noun.base)
             }

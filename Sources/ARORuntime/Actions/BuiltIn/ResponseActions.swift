@@ -85,7 +85,14 @@ public struct ReturnAction: ActionImplementation {
 
         // Include object.base value if resolvable (skip internal names already handled above)
         let internalNames: Set<String> = ["_expression_", "_literal_", "status", "response"]
-        if !internalNames.contains(object.base), let value = context.resolveAny(object.base) {
+        // ARO-0044: Special handling for metrics magic variable with format qualifier
+        // Return an <OK: status> with <metrics: prometheus/plain/short/table>
+        if object.base == "metrics",
+           let metricsSnapshot = context.resolveAny("metrics") as? MetricsSnapshot {
+            let format = object.specifiers.first ?? "plain"
+            let formatted = MetricsFormatter.format(metricsSnapshot, as: format, context: context.outputContext)
+            data["value"] = AnySendable(formatted)
+        } else if !internalNames.contains(object.base), let value = context.resolveAny(object.base) {
             flattenValue(value, into: &data, prefix: object.base, context: context)
         }
 

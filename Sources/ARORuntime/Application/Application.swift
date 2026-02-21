@@ -484,6 +484,12 @@ public final class Application: @unchecked Sendable {
                     }
                 }
 
+                // Detect Prometheus text exposition format (ARO-0044)
+                // Prometheus output starts with "# HELP" or "# TYPE" comment lines
+                if trimmed.hasPrefix("# HELP ") || trimmed.hasPrefix("# TYPE ") {
+                    return (str, "text/plain; version=0.0.4; charset=utf-8")
+                }
+
                 // Detect JavaScript patterns
                 if trimmed.hasPrefix("var ") || trimmed.hasPrefix("let ") ||
                    trimmed.hasPrefix("const ") || trimmed.hasPrefix("function ") ||
