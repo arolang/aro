@@ -2476,9 +2476,14 @@ public func aro_native_http_server_start(_ port: Int32, _ contextPtr: UnsafeMuta
                                 return (statusCode, ["Content-Type": "image/svg+xml"], str.data(using: .utf8))
                             }
 
-                            // Priority 2: If OpenAPI says text/html, return as HTML
+                            // Priority 2: If OpenAPI specifies a content type, honor it
                             if expectedContentType == "text/html" {
                                 return (statusCode, ["Content-Type": "text/html; charset=utf-8"], str.data(using: .utf8))
+                            }
+
+                            // ARO-0044: Honor text/plain for metrics endpoint (Prometheus format)
+                            if expectedContentType == "text/plain" {
+                                return (statusCode, ["Content-Type": "text/plain; version=0.0.4; charset=utf-8"], str.data(using: .utf8))
                             }
 
                             // Priority 3: Content-based detection (fallback)
