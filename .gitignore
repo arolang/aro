@@ -126,3 +126,7 @@ testrun.log
 /Examples/WebSocketDemo/WebSocketDemo
 /Examples/StateMachine/StateMachine
 core
+/.claude
+/Examples/SourceStructure/SourceStructure
+/Examples/StreamingDemo/StreamingDemo
+/Examples/StreamingPipeline/StreamingPipeline
