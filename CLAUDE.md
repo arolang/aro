@@ -53,8 +53,22 @@ MyApp/
 └── events.aro         # Event handler feature sets
 ```
 
+For larger applications, use the `sources/` subdirectory convention:
+
+```
+MyApp/
+├── openapi.yaml       # Configuration in root
+├── main.aro           # Entry point (optional location)
+└── sources/           # Source files in subdirectory
+    ├── users/
+    │   └── users.aro
+    └── orders/
+        └── orders.aro
+```
+
 **Key Rules:**
-- All `.aro` files in the directory are automatically discovered and parsed
+- All `.aro` files in the directory **and subdirectories** are automatically discovered and parsed
+- Files can be in root, `sources/`, or any subdirectory to any depth
 - No imports needed - all feature sets are globally visible within the application
 - Exactly ONE `Application-Start` feature set per application (error if 0 or multiple)
 - At most ONE `Application-End: Success` and ONE `Application-End: Error` (both optional)

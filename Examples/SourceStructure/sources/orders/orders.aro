@@ -1,0 +1,20 @@
+(* Order Feature Sets *)
+(* Located in sources/orders/orders.aro - demonstrating subdirectory organization *)
+
+(Handle Order Creation: CreateOrder Handler) {
+    Extract the <userId> from the <event: data.userId>.
+    Extract the <total> from the <event: data.total>.
+
+    Create the <order> with {
+        id: "order-1",
+        userId: <userId>,
+        total: <total>,
+        status: "pending",
+        createdAt: "2024-01-15T10:00:00Z"
+    }.
+
+    Log "Created order:" to the <console>.
+    Log <order> to the <console>.
+
+    Return an <OK: status> for the <order-creation>.
+}
