@@ -1,0 +1,20 @@
+=== Source Structure Demo ===
+This example shows .aro files organized in sources/ subdirectory.
+
+Testing user operations (from sources/users/users.aro):
+Created user:
+createdAt: 2024-01-15T10:00:00Z
+email: alice@example.com
+id: user-1
+name: Alice
+
+Testing order operations (from sources/orders/orders.aro):
+Created order:
+createdAt: 2024-01-15T10:00:00Z
+id: order-1
+status: pending
+total: 99.99
+userId: user-1
+
+All feature sets work together across subdirectories!
+demo

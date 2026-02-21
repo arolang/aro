@@ -1,0 +1,4 @@
+# Test hints for SourceStructure
+# Event handlers execute at different times in interpreter vs compiled mode
+# Use occurrence-check to allow lines to appear in any order
+occurrence-check: true
