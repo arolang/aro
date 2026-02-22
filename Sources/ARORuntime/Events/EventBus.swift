@@ -27,8 +27,11 @@ public final class EventBus: @unchecked Sendable {
     /// Lock for thread-safe access
     private let lock = NSLock()
 
-    /// All subscriptions
-    private var subscriptions: [Subscription] = []
+    /// Subscriptions indexed by event type for O(1) lookup (ARO-0064)
+    private var subscriptionsByType: [String: [Subscription]] = [:]
+
+    /// Wildcard subscribers that receive all events (ARO-0064)
+    private var wildcardSubscriptions: [Subscription] = []
 
     /// Async stream continuations for stream-based subscriptions
     private var continuations: [UUID: AsyncStream<any RuntimeEvent>.Continuation] = [:]
@@ -58,7 +61,9 @@ public final class EventBus: @unchecked Sendable {
 
     private func getMatchingSubscriptions(for eventType: String) -> [Subscription] {
         withLock {
-            subscriptions.filter { $0.eventType == eventType || $0.eventType == "*" }
+            // O(1) dictionary lookup + wildcard subscriptions (ARO-0064)
+            let typeSubscriptions = subscriptionsByType[eventType] ?? []
+            return typeSubscriptions + wildcardSubscriptions
         }
     }
 
@@ -67,7 +72,14 @@ public final class EventBus: @unchecked Sendable {
     }
 
     private func addSubscription(_ subscription: Subscription) {
-        withLock { subscriptions.append(subscription) }
+        withLock {
+            // Index by event type for O(1) lookup (ARO-0064)
+            if subscription.eventType == "*" {
+                wildcardSubscriptions.append(subscription)
+            } else {
+                subscriptionsByType[subscription.eventType, default: []].append(subscription)
+            }
+        }
     }
 
     private func addContinuation(_ id: UUID, continuation: AsyncStream<any RuntimeEvent>.Continuation) {
@@ -308,7 +320,18 @@ public final class EventBus: @unchecked Sendable {
     /// - Parameter id: The subscription ID returned from subscribe
     public func unsubscribe(_ id: UUID) {
         withLock {
-            subscriptions.removeAll { $0.id == id }
+            // Remove from wildcard subscriptions (ARO-0064)
+            wildcardSubscriptions.removeAll { $0.id == id }
+
+            // Remove from type-specific subscriptions (ARO-0064)
+            for key in subscriptionsByType.keys {
+                subscriptionsByType[key]?.removeAll { $0.id == id }
+                // Clean up empty arrays
+                if subscriptionsByType[key]?.isEmpty == true {
+                    subscriptionsByType.removeValue(forKey: key)
+                }
+            }
+
             _ = continuations.removeValue(forKey: id)
         }
     }
@@ -316,7 +339,10 @@ public final class EventBus: @unchecked Sendable {
     /// Remove all subscriptions
     public func unsubscribeAll() {
         withLock {
-            subscriptions.removeAll()
+            // Clear indexed subscriptions (ARO-0064)
+            wildcardSubscriptions.removeAll()
+            subscriptionsByType.removeAll()
+
             for continuation in continuations.values {
                 continuation.finish()
             }
@@ -328,6 +354,10 @@ public final class EventBus: @unchecked Sendable {
 
     /// Number of active subscriptions
     public var subscriptionCount: Int {
-        withLock { subscriptions.count + continuations.count }
+        withLock {
+            // Count indexed subscriptions (ARO-0064)
+            let typeSubscriptionCount = subscriptionsByType.values.reduce(0) { $0 + $1.count }
+            return wildcardSubscriptions.count + typeSubscriptionCount + continuations.count
+        }
     }
 }
