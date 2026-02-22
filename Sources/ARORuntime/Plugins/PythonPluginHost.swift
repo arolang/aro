@@ -39,9 +39,9 @@ public final class PythonPluginHost: @unchecked Sendable {
 
     /// Qualifier namespace (handler name from plugin.yaml)
     ///
-    /// Used as the prefix when registering qualifiers (e.g., "stats.sort").
-    /// Defaults to the plugin name if not specified in plugin.yaml.
-    private let qualifierNamespace: String
+    /// Used as the prefix when registering qualifiers (e.g., "stats.sort")
+    /// and actions (e.g., "markdown.tohtml"). Nil when no explicit handler is set.
+    private let qualifierNamespace: String?
 
     /// Path to the plugin
     public let pluginPath: URL
@@ -74,7 +74,7 @@ public final class PythonPluginHost: @unchecked Sendable {
         qualifierNamespace: String? = nil
     ) throws {
         self.pluginName = pluginName
-        self.qualifierNamespace = qualifierNamespace ?? pluginName
+        self.qualifierNamespace = qualifierNamespace
         self.pluginPath = pluginPath
 
         // Find Python executable
@@ -241,38 +241,28 @@ public final class PythonPluginHost: @unchecked Sendable {
         var registrationCount = 0
 
         for action in actions {
+            // When a handler namespace is set, register only as "handler.verb".
+            // Without a handler, register only the plain verb.
+            let registeredVerb: String
+            if let ns = qualifierNamespace {
+                registeredVerb = "\(ns).\(action)"
+            } else {
+                registeredVerb = action
+            }
+
             let wrapper = PythonPluginActionWrapper(
                 pluginName: pluginName,
                 actionName: action,
                 host: self
             )
 
-            // Register with ActionRegistry using dynamic verb
             registrationCount += 1
             Task {
                 await ActionRegistry.shared.registerDynamic(
-                    verb: action,
+                    verb: registeredVerb,
                     handler: wrapper.handle
                 )
                 semaphore.signal()
-            }
-
-            // ARO-0095: Also register as "handler.verb" for Namespace.Verb syntax
-            let namespacedVerb = "\(qualifierNamespace).\(action)"
-            if namespacedVerb != action {
-                let nsWrapper = PythonPluginActionWrapper(
-                    pluginName: pluginName,
-                    actionName: action,
-                    host: self
-                )
-                registrationCount += 1
-                Task {
-                    await ActionRegistry.shared.registerDynamic(
-                        verb: namespacedVerb,
-                        handler: nsWrapper.handle
-                    )
-                    semaphore.signal()
-                }
             }
         }
 

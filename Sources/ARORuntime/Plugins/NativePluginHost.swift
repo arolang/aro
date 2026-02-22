@@ -43,9 +43,9 @@ public final class NativePluginHost: @unchecked Sendable {
 
     /// Qualifier namespace (handler name from plugin.yaml)
     ///
-    /// Used as the prefix when registering qualifiers (e.g., "collections.reverse").
-    /// Defaults to the plugin name if not specified in plugin.yaml.
-    private let qualifierNamespace: String
+    /// Used as the prefix when registering qualifiers (e.g., "collections.reverse")
+    /// and actions (e.g., "greeting.greet"). Nil when no explicit handler is set.
+    private let qualifierNamespace: String?
 
     /// Path to the plugin
     public let pluginPath: URL
@@ -83,7 +83,7 @@ public final class NativePluginHost: @unchecked Sendable {
         qualifierNamespace: String? = nil
     ) throws {
         self.pluginName = pluginName
-        self.qualifierNamespace = qualifierNamespace ?? pluginName
+        self.qualifierNamespace = qualifierNamespace
         self.pluginPath = pluginPath
 
         // Find and load the library
@@ -532,10 +532,10 @@ public final class NativePluginHost: @unchecked Sendable {
         }
 
         // Register qualifiers with QualifierRegistry if plugin provides aro_plugin_qualifier
-        debugPrint("[NativePluginHost] Plugin \(pluginName) has \(qualifierDescriptors.count) qualifiers declared, qualifierFunc=\(qualifierFunc != nil), namespace=\(qualifierNamespace)")
+        debugPrint("[NativePluginHost] Plugin \(pluginName) has \(qualifierDescriptors.count) qualifiers declared, qualifierFunc=\(qualifierFunc != nil), namespace=\(qualifierNamespace ?? "none")")
         if qualifierFunc != nil {
             for descriptor in qualifierDescriptors {
-                debugPrint("[NativePluginHost] Registering qualifier: \(qualifierNamespace).\(descriptor.name)")
+                debugPrint("[NativePluginHost] Registering qualifier: \(qualifierNamespace ?? pluginName).\(descriptor.name)")
                 let registration = QualifierRegistration(
                     qualifier: descriptor.name,
                     inputTypes: descriptor.inputTypes,
@@ -609,11 +609,19 @@ public final class NativePluginHost: @unchecked Sendable {
 
             // Register with ActionRegistry under all verbs
             for verb in verbs {
-                // Create a wrapper action that calls the native plugin with this verb
+                // When a handler namespace is set, register only as "handler.verb".
+                // Without a handler, register only the plain verb.
+                let registeredVerb: String
+                if let ns = qualifierNamespace {
+                    registeredVerb = "\(ns).\(verb)"
+                } else {
+                    registeredVerb = verb
+                }
+
                 let wrapper = NativePluginActionWrapper(
                     pluginName: pluginName,
                     actionName: name,
-                    verb: verb,
+                    verb: registeredVerb,
                     host: self,
                     descriptor: descriptor
                 )
@@ -621,30 +629,10 @@ public final class NativePluginHost: @unchecked Sendable {
                 registrationCount += 1
                 Task {
                     await ActionRegistry.shared.registerDynamic(
-                        verb: verb,
+                        verb: registeredVerb,
                         handler: wrapper.handle
                     )
                     semaphore.signal()
-                }
-
-                // ARO-0095: Also register as "handler.verb" for Namespace.Verb syntax
-                let namespacedVerb = "\(qualifierNamespace).\(verb)"
-                if namespacedVerb != verb {
-                    let nsWrapper = NativePluginActionWrapper(
-                        pluginName: pluginName,
-                        actionName: name,
-                        verb: namespacedVerb,
-                        host: self,
-                        descriptor: descriptor
-                    )
-                    registrationCount += 1
-                    Task {
-                        await ActionRegistry.shared.registerDynamic(
-                            verb: namespacedVerb,
-                            handler: nsWrapper.handle
-                        )
-                        semaphore.signal()
-                    }
                 }
             }
         }

@@ -370,20 +370,19 @@ public final class PluginLoader: @unchecked Sendable {
                                     return pluginResult
                                 }
 
-                                registrationCount += 1
-                                Task {
-                                    await ActionRegistry.shared.registerDynamic(verb: normalizedVerb, handler: handler)
-                                    semaphore.signal()
+                                // When a handler namespace is set, register only as "namespace.verb".
+                                // Without a handler, register only the plain verb.
+                                let registeredVerb: String
+                                if let ns = namespace {
+                                    registeredVerb = "\(ns).\(normalizedVerb)"
+                                } else {
+                                    registeredVerb = normalizedVerb
                                 }
 
-                                // ARO-0095: Also register as "namespace.verb" for Namespace.Verb syntax
-                                if let ns = namespace {
-                                    let namespacedVerb = "\(ns).\(normalizedVerb)"
-                                    registrationCount += 1
-                                    Task {
-                                        await ActionRegistry.shared.registerDynamic(verb: namespacedVerb, handler: handler)
-                                        semaphore.signal()
-                                    }
+                                registrationCount += 1
+                                Task {
+                                    await ActionRegistry.shared.registerDynamic(verb: registeredVerb, handler: handler)
+                                    semaphore.signal()
                                 }
                             }
                         }
