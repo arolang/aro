@@ -1,0 +1,38 @@
+=== ARO Numeric Separators Demo ===
+
+--- Integer Literals ---
+One thousand: 
+1000
+One million: 
+1000000
+One billion: 
+1000000000
+
+--- Floating-Point Literals ---
+Price: 
+1234.56
+Pi (precise): 
+3.14
+
+--- Scientific Notation ---
+Avogadro's number (approx): 
+602200000000000027262976.00
+Light year in km: 
+9461000000000.00
+
+--- Hex and Binary ---
+White color (hex): 
+16777215
+Byte pattern (binary): 
+170
+
+--- Arithmetic ---
+Budget: 
+1000000
+Expense: 
+250000
+Remaining: 
+750000
+
+=== Demo Complete ===
+[OK] demo

@@ -1024,7 +1024,7 @@ public final class SemanticAnalyzer {
             return
         }
 
-        // Check for unreachable code after Return/Throw
+        // Check for unreachable code after Return/Throw (ARO-0062)
         var foundTerminator = false
         var terminatorLocation: SourceLocation?
 
@@ -1043,7 +1043,10 @@ public final class SemanticAnalyzer {
 
             if let aro = statement as? AROStatement {
                 let verb = aro.action.verb.lowercased()
-                if verb == "return" || verb == "throw" {
+                // Only terminal if unconditional (no when guard) - ARO-0062
+                let isTerminal = (verb == "return" || verb == "throw") &&
+                                 !aro.statementGuard.isPresent
+                if isTerminal {
                     foundTerminator = true
                     terminatorLocation = aro.span.start
                 }
