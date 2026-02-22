@@ -131,6 +131,11 @@ public actor ActionRegistry {
         // Template actions (ARO-0050)
         addAction(IncludeAction.self)
 
+        // Terminal actions (ARO-0052)
+        addAction(PromptAction.self)
+        addAction(SelectAction.self)
+        addAction(ClearAction.self)
+
         return actions
     }
 

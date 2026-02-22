@@ -50,6 +50,22 @@ public final class TemplateExecutor: @unchecked Sendable {
         // Register the template service for nested includes
         templateContext.register(templateService)
 
+        // Inject terminal object (ARO-0052)
+        if let terminalService = context.service(TerminalService.self) {
+            let capabilities = await terminalService.detectCapabilities()
+            let terminalObject: [String: any Sendable] = [
+                "rows": capabilities.rows,
+                "columns": capabilities.columns,
+                "width": capabilities.columns,  // alias
+                "height": capabilities.rows,    // alias
+                "supports_color": capabilities.supportsColor,
+                "supports_true_color": capabilities.supportsTrueColor,
+                "is_tty": capabilities.isTTY,
+                "encoding": capabilities.encoding
+            ]
+            templateContext.bind("terminal", value: terminalObject)
+        }
+
         // Process segments
         var output = ""
 
@@ -64,7 +80,7 @@ public final class TemplateExecutor: @unchecked Sendable {
 
             case .expressionShorthand(let expression):
                 let (value, filters) = try await evaluateExpressionWithFilters(expression, context: templateContext)
-                output += applyFilters(formatValue(value), filters: filters)
+                output += await applyFilters(formatValue(value), filters: filters, context: templateContext)
                 index += 1
 
             case .statements(let statementsSource):
@@ -163,7 +179,7 @@ public final class TemplateExecutor: @unchecked Sendable {
     }
 
     /// Apply filters to a formatted value
-    private func applyFilters(_ value: String, filters: [(name: String, arg: String?)]) -> String {
+    private func applyFilters(_ value: String, filters: [(name: String, arg: String?)], context: ExecutionContext) async -> String {
         var result = value
 
         for filter in filters {
@@ -174,12 +190,55 @@ public final class TemplateExecutor: @unchecked Sendable {
                 result = result.uppercased()
             case "lowercase":
                 result = result.lowercased()
+
+            // Terminal color filters (ARO-0052)
+            case "color":
+                if let colorName = filter.arg {
+                    let caps = await getTerminalCapabilities(from: context)
+                    result = ANSIRenderer.color(colorName, capabilities: caps) + result + ANSIRenderer.reset()
+                }
+            case "bg":
+                if let colorName = filter.arg {
+                    let caps = await getTerminalCapabilities(from: context)
+                    result = ANSIRenderer.backgroundColor(colorName, capabilities: caps) + result + ANSIRenderer.reset()
+                }
+
+            // Terminal style filters (ARO-0052)
+            case "bold":
+                result = ANSIRenderer.bold() + result + ANSIRenderer.reset()
+            case "dim":
+                result = ANSIRenderer.dim() + result + ANSIRenderer.reset()
+            case "italic":
+                result = ANSIRenderer.italic() + result + ANSIRenderer.reset()
+            case "underline":
+                result = ANSIRenderer.underline() + result + ANSIRenderer.reset()
+            case "strikethrough":
+                result = ANSIRenderer.strikethrough() + result + ANSIRenderer.reset()
+
             default:
                 break
             }
         }
 
         return result
+    }
+
+    /// Get terminal capabilities from execution context (ARO-0052)
+    private func getTerminalCapabilities(from context: ExecutionContext) async -> Capabilities {
+        if let terminalService = context.service(TerminalService.self) {
+            return await terminalService.detectCapabilities()
+        }
+
+        // Safe defaults for non-TTY environments
+        return Capabilities(
+            rows: 24,
+            columns: 80,
+            supportsColor: false,
+            supportsTrueColor: false,
+            supportsUnicode: true,
+            isTTY: false,
+            encoding: "UTF-8"
+        )
     }
 
     /// Format an ISO date string to a custom format

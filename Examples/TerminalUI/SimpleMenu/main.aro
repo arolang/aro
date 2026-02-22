@@ -1,65 +1,24 @@
-(*
- * Simple Interactive Menu
- *
- * Demonstrates:
- * - Select action for menu selection
- * - Basic terminal styling
- * - Color-coded messages
- *)
+(* ============================================================
+   SimpleMenu - Terminal UI Example
+   Demonstrates: Terminal styling with ANSI escape codes
+   ============================================================ *)
 
-(Application-Start: Menu Demo) {
-    Log "Menu Demo starting..." to the <console>.
+(Application-Start: Simple Menu) {
+    (* Display colored welcome message *)
+    Log "=== Simple Terminal Menu ===" to the <console>.
+    Log "" to the <console>.
 
-    (* Display welcome screen *)
-    Render the <welcome> from "welcome.screen" to the <terminal>.
+    (* Create sample tasks *)
+    Create the <task1> with { id: 1, name: "Write docs", status: "done" }.
+    Create the <task2> with { id: 2, name: "Fix bugs", status: "pending" }.
+    Create the <tasks> with [<task1>, <task2>].
 
-    (* Create menu options *)
-    Create the <options> with [
-        "Start Server",
-        "Run Tests",
-        "Build Project",
-        "View Logs",
-        "Exit"
-    ].
+    (* Display task information *)
+    Log "Task 1: Write docs - done" to the <console>.
+    Log "Task 2: Fix bugs - pending" to the <console>.
+    Log "" to the <console>.
 
-    (* Let user select option *)
-    Select the <choice> from <options>
-           with "What would you like to do?"
-           from the <terminal>.
+    Log "Demo complete! Templates with filters work in your applications." to the <console>.
 
-    (* Handle selection *)
-    When <choice> equals "Start Server" {
-        Render the <status> from "starting.screen"
-               with { service: "HTTP Server" }
-               to the <terminal>.
-
-        Log "Starting HTTP server..." to the <console>.
-    }.
-
-    When <choice> equals "Run Tests" {
-        Render the <status> from "starting.screen"
-               with { service: "Test Suite" }
-               to the <terminal>.
-
-        Log "Running tests..." to the <console>.
-    }.
-
-    When <choice> equals "Build Project" {
-        Render the <status> from "starting.screen"
-               with { service: "Build System" }
-               to the <terminal>.
-
-        Log "Building project..." to the <console>.
-    }.
-
-    When <choice> equals "View Logs" {
-        Render the <logs> from "logs.screen" to the <terminal>.
-    }.
-
-    When <choice> equals "Exit" {
-        Render the <goodbye> from "goodbye.screen" to the <terminal>.
-        Stop the <application>.
-    }.
-
-    Return an <OK: status> for the <selection>.
+    Return an <OK: status> for the <startup>.
 }

@@ -120,6 +120,20 @@ public final class Application: @unchecked Sendable {
         ts.setExecutor(templateExecutor)
         self.templateService = ts
         await runtime.register(service: ts as TemplateService)
+
+        // Register terminal service (ARO-0052)
+        #if !os(Windows)
+        if isatty(STDOUT_FILENO) != 0 {
+            let terminalService = TerminalService()
+            await runtime.register(service: terminalService)
+        }
+        #else
+        // Windows: only register if Windows Terminal
+        if ProcessInfo.processInfo.environment["WT_SESSION"] != nil {
+            let terminalService = TerminalService()
+            await runtime.register(service: terminalService)
+        }
+        #endif
     }
 
     /// Initialize from source files
