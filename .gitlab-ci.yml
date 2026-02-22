@@ -263,7 +263,11 @@ integration:linux:
     - which clang && clang --version | head -1
     - which llc && llc --version | head -1
     - ls -la /usr/share/swift/usr/lib/swift/linux/ | head -5
-    - ./aro-dist/aro build ./Examples/HelloWorld --verbose 2>&1 || echo "Build failed with exit code $?"
+    - echo "=== About to run aro build ==="
+    - ls -la ./aro-dist/aro || echo "aro binary not found"
+    - file ./aro-dist/aro || echo "file command failed"
+    - timeout 60 ./aro-dist/aro build ./Examples/HelloWorld --verbose 2>&1 || echo "Build failed with exit code $?"
+    - echo "=== aro build completed ==="
 
     - chmod +x test-examples.pl
     - perl test-examples.pl --verbose
