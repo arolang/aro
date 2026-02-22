@@ -1,166 +1,114 @@
 # Terminal UI Examples
 
-Examples demonstrating ARO's Terminal UI capabilities (ARO-0052).
-
-## Overview
-
-ARO provides template-based terminal UI capabilities, allowing you to build beautiful, responsive terminal applications using natural language syntax.
-
-**Key Features:**
-- **Template-First**: Define UIs in `.screen` template files
-- **Responsive**: Automatically adapts to terminal dimensions
-- **Declarative**: Describe appearance, not ANSI codes
-- **Interactive**: Built-in support for keyboard input, menus, and prompts
+These examples demonstrate ARO's Terminal UI system (ARO-0052) with reactive Watch patterns.
 
 ## Examples
 
-### 1. TaskManager
+### SimpleMenu
+**Purpose**: Basic terminal output with ANSI styling
+**Demonstrates**: Template filters for colored/styled output
 
-An interactive task management application with live updates.
-
-**Features:**
-- Live-updating dashboard using `Watch` action
-- Color-coded status indicators
-- Responsive table layout
-- Keyboard shortcuts for adding, completing, and deleting tasks
-
-**Run:**
-```bash
-aro run Examples/TerminalUI/TaskManager
-```
-
-**Commands:**
-- `a` - Add new task
-- `c` - Mark task complete
-- `d` - Delete task
-- `q` - Quit
-
-### 2. SystemMonitor
-
-A real-time system monitoring dashboard.
-
-**Features:**
-- Live metrics updated every second
-- Progress bars for CPU, memory, disk usage
-- Responsive layout (two-column for wide terminals, single column for narrow)
-- Panel-based layout system
-
-**Run:**
-```bash
-aro run Examples/TerminalUI/SystemMonitor
-```
-
-**Controls:**
-- `Ctrl+C` - Exit
-
-### 3. SimpleMenu
-
-An interactive menu selection system.
-
-**Features:**
-- `Select` action for menu navigation
-- Multiple template screens
-- Color-coded status messages
-- Simple navigation with arrow keys
-
-**Run:**
 ```bash
 aro run Examples/TerminalUI/SimpleMenu
 ```
 
-**Controls:**
-- Arrow keys - Navigate menu
-- Enter - Select option
+Shows how to use terminal capabilities in templates and display formatted task lists.
 
-## Template Capabilities
+### TaskManager
+**Purpose**: Reactive UI updates via Repository Observer pattern
+**Demonstrates**: `(Dashboard Watch: task-repository Observer)`
 
-### Terminal System Object
-
-Access terminal properties in templates:
-
-```aro
-{{ terminal.rows }}         (* Terminal height *)
-{{ terminal.columns }}      (* Terminal width *)
-{{ terminal.supports_color }}
+```bash
+aro run Examples/TerminalUI/TaskManager
 ```
 
-### Styling Directives
+The Dashboard Watch handler triggers automatically whenever tasks are stored/updated/deleted in the repository. This creates a reactive terminal UI that updates immediately when data changes.
 
-```aro
-{{ color red }}            (* Foreground color *)
-{{ bg blue }}              (* Background color *)
-{{ bold }}                 (* Bold text *)
-{{ reset }}                (* Reset all styles *)
+**Key Pattern**:
+- Store data in repository
+- Watch handler detects changes
+- UI re-renders automatically
+
+### SystemMonitor
+**Purpose**: Reactive UI updates via Event-based Watch pattern
+**Demonstrates**: `(Dashboard Watch: MetricsUpdated Handler)`
+
+```bash
+aro run Examples/TerminalUI/SystemMonitor
 ```
 
-### Widgets
+The Dashboard Watch handler triggers when MetricsUpdated events are emitted. This demonstrates event-driven terminal UIs that respond to domain events.
 
+**Key Pattern**:
+- Emit domain event
+- Watch handler catches event
+- UI updates reactively
+
+## Watch Pattern
+
+The Watch pattern is a **feature set pattern** (not an action) that combines with Handler/Observer patterns for reactive terminal UIs:
+
+### Event-Based Watch
 ```aro
-{{ box border="rounded" title="Status" }}
-  Content here
-{{ endbox }}
-
-{{ progress value=0.75 width=40 }}
-
-{{ table headers=["Name", "Status"] }}
-  ...
-{{ endtable }}
+(Dashboard Watch: EventType Handler) {
+    (* Triggered when EventType events are emitted *)
+    Clear the <screen> for the <terminal>.
+    Transform the <output> from the <template: dashboard.screen>.
+    Log <output> to the <console>.
+    Return an <OK: status>.
+}
 ```
 
-### Layout
-
+### Repository-Based Watch
 ```aro
-{{ panel orientation="horizontal" }}
-  {{ section width="50%" }}
-    Left panel
-  {{ endsection }}
-  {{ section width="50%" }}
-    Right panel
-  {{ endsection }}
-{{ endpanel }}
+(Dashboard Watch: repository-name Observer) {
+    (* Triggered when repository data changes *)
+    Retrieve the <data> from the <repository-name>.
+    Transform the <output> from the <template: view.screen>.
+    Log <output> to the <console>.
+    Return an <OK: status>.
+}
 ```
 
-## Actions
+## Terminal Features
 
-### Watch - Live Updates
+### Template Filters
+- **Colors**: `{{ <text> | color: "red" }}`, `{{ <text> | bg: "blue" }}`
+- **Styles**: `{{ <text> | bold }}`, `{{ <text> | italic }}`, `{{ <text> | underline }}`
 
-Renders a template repeatedly at specified intervals:
-
+### Terminal Object
+Access terminal capabilities in templates:
 ```aro
-Watch the <dashboard> from "monitor.screen"
-      with <metrics>
-      every 1 second
-      to the <terminal>.
+{{ <terminal: rows> }}
+{{ <terminal: columns> }}
+{{ <terminal: supports_color> }}
 ```
 
-### Render - One-Time Display
+### Terminal Actions
+- **Clear**: `Clear the <screen> for the <terminal>.`
+- **Prompt**: `Prompt the <input: hidden> from the <terminal>.`
+- **Select**: `Select the <choice> from <options> from the <terminal>.`
 
-Renders a template once:
+## Architecture
 
-```aro
-Render the <view> from "welcome.screen"
-       to the <terminal>.
-```
+**Purely Reactive**:
+- No polling or timers
+- Watch handlers trigger only on events/changes
+- Leverages ARO's event-driven architecture (ARO-0007)
 
-### Prompt - User Input
+**Thread-Safe**:
+- TerminalService is a Swift actor
+- All operations are async and isolated
+- Safe concurrent access from multiple feature sets
 
-Gets text input from the user:
-
-```aro
-Prompt the <name> with "Enter name: " from the <terminal>.
-```
-
-### Select - Menu Selection
-
-Interactive menu selection:
-
-```aro
-Select the <choice> from <options>
-       with "Choose an option:"
-       from the <terminal>.
-```
+**Graceful Degradation**:
+- Detects terminal capabilities at runtime
+- Falls back to ASCII when Unicode unavailable
+- RGB → 256-color → 16-color fallback
 
 ## See Also
 
-- [ARO-0052 Proposal](../../Proposals/ARO-0052-terminal-ui.md) - Full specification
-- [ARO-0050 Template Engine](../../Proposals/ARO-0050-template-engine.md) - Template syntax reference
+- **ARO-0052**: Terminal UI Proposal
+- **ARO-0007**: Event-Driven Architecture
+- **ARO-0050**: Template Engine
+- **Chapter 41**: Terminal UI (The Language Guide)

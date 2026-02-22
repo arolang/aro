@@ -1,0 +1,426 @@
+{{TEMPLATE:doc-template.html}}
+{{title:Terminal UI}}
+{{content:
+<h1 class="gradient-text">Terminal UI</h1>
+
+<p>
+    Build beautiful, interactive terminal applications with ARO's Terminal UI system.
+    Create live-updating dashboards, system monitors, and CLI tools that respond instantly
+    to data changes—without polling. The reactive Watch pattern triggers UI re-renders when
+    events occur or data changes, making your terminal applications both efficient and responsive.
+</p>
+
+<h2>Getting Started</h2>
+
+<p>Terminal applications can access terminal capabilities and apply ANSI styling through templates:</p>
+
+<pre><code><span class="comment">(* templates/status.screen *)</span>
+{{ "=== Dashboard ===" | bold | color: "cyan" }}
+
+Terminal: {{ &lt;terminal: columns&gt; }}×{{ &lt;terminal: rows&gt; }}
+
+{{ "Success!" | color: "green" | bold }}
+{{ "Warning" | color: "yellow" }}
+{{ "Error" | color: "red" }}</code></pre>
+
+<h2>The Terminal Object</h2>
+
+<p>Templates automatically have access to a <code>terminal</code> object with capability information:</p>
+
+<pre><code>{{ &lt;terminal: rows&gt; }}           <span class="comment">(* Terminal height *)</span>
+{{ &lt;terminal: columns&gt; }}        <span class="comment">(* Terminal width *)</span>
+{{ &lt;terminal: supports_color&gt; }} <span class="comment">(* Boolean: color support *)</span>
+{{ &lt;terminal: is_tty&gt; }}         <span class="comment">(* Boolean: connected to TTY *)</span></code></pre>
+
+<p><strong>Responsive Design Example:</strong></p>
+
+<pre><code>{{when &lt;terminal: columns&gt; > 120}}
+  <span class="comment">(* Wide layout *)</span>
+  {{ "=== Detailed Dashboard ===" | bold }}
+{{when &lt;terminal: columns&gt; > 80}}
+  <span class="comment">(* Medium layout *)</span>
+  {{ "=== Dashboard ===" | bold }}
+{{else}}
+  <span class="comment">(* Narrow layout *)</span>
+  {{ "Dashboard" }}
+{{end}}</code></pre>
+
+<h2>Template Filters</h2>
+
+<p>Apply ANSI styling with simple filters that can be chained together:</p>
+
+<h3>Color Filters</h3>
+
+<pre><code>{{ "Success!" | color: "green" }}
+{{ "Error!" | color: "red" }}
+{{ "Warning" | color: "yellow" }}
+
+{{ "Highlight" | bg: "blue" }}
+{{ "Alert" | color: "white" | bg: "red" }}
+
+<span class="comment">(* RGB colors (24-bit true color) *)</span>
+{{ "Custom" | color: "rgb(100, 200, 50)" }}</code></pre>
+
+<p><strong>Named Colors:</strong> black, red, green, yellow, blue, magenta, cyan, white,
+   brightRed, brightGreen, brightBlue, success (green), error (red), warning (yellow), info (blue)</p>
+
+<h3>Style Filters</h3>
+
+<pre><code>{{ "Important" | bold }}
+{{ "Subdued" | dim }}
+{{ "Emphasis" | italic }}
+{{ "Link" | underline }}
+{{ "Removed" | strikethrough }}</code></pre>
+
+<h3>Chaining Filters</h3>
+
+<pre><code>{{ "SUCCESS" | color: "green" | bold }}
+{{ "ERROR" | color: "red" | bold | underline }}
+{{ "Debug Info" | color: "cyan" | dim }}</code></pre>
+
+<h2>Reactive Watch Pattern</h2>
+
+<p>
+    The Watch pattern is ARO's approach to live-updating terminal UIs. Unlike traditional polling,
+    Watch is <strong>purely reactive</strong>—handlers trigger only when actual changes occur.
+</p>
+
+<h3>Repository Observer Watch</h3>
+
+<p>UI updates automatically when repository data changes:</p>
+
+<pre><code><span class="feature-name">(Application-Start: Task Manager)</span> {
+    <span class="comment">(* Initialize tasks *)</span>
+    <span class="action">Create</span> the <span class="result">&lt;task1&gt;</span> with { id: 1, title: "Write docs", status: "pending" }.
+    <span class="action">Store</span> the <span class="result">&lt;task1&gt;</span> into the <span class="result">&lt;task-repository&gt;</span>.
+
+    <span class="action">Keepalive</span> the <span class="result">&lt;application&gt;</span> for the <span class="result">&lt;events&gt;</span>.
+    <span class="action">Return</span> an <span class="result">&lt;OK: status&gt;</span> for the <span class="result">&lt;startup&gt;</span>.
+}
+
+<span class="comment">(* Watch handler - triggers on repository changes *)</span>
+<span class="feature-name">(Dashboard Watch: task-repository Observer)</span> {
+    <span class="action">Clear</span> the <span class="result">&lt;screen&gt;</span> for the <span class="result">&lt;terminal&gt;</span>.
+
+    <span class="action">Retrieve</span> the <span class="result">&lt;tasks&gt;</span> from the <span class="result">&lt;task-repository&gt;</span>.
+
+    <span class="action">Transform</span> the <span class="result">&lt;output&gt;</span> from the <span class="result">&lt;template: templates/dashboard.screen&gt;</span>.
+    <span class="action">Log</span> <span class="result">&lt;output&gt;</span> to the <span class="result">&lt;console&gt;</span>.
+
+    <span class="action">Return</span> an <span class="result">&lt;OK: status&gt;</span> for the <span class="result">&lt;render&gt;</span>.
+}</code></pre>
+
+<p><strong>Flow:</strong></p>
+<ol>
+    <li>App stores/updates/deletes data in repository</li>
+    <li>Repository emits <code>RepositoryChangedEvent</code></li>
+    <li>Watch handler detects change for <code>task-repository</code></li>
+    <li>Handler retrieves fresh data and renders template</li>
+    <li>Updated display appears in terminal</li>
+</ol>
+
+<p><strong>Result:</strong> Every time data changes, the dashboard automatically re-renders!</p>
+
+<h3>Event-Based Watch</h3>
+
+<p>Watch handlers can also trigger on custom domain events:</p>
+
+<pre><code><span class="feature-name">(Application-Start: System Monitor)</span> {
+    <span class="action">Create</span> the <span class="result">&lt;metrics&gt;</span> with { cpu: 23, memory: 45, disk: 67 }.
+    <span class="action">Emit</span> a <span class="result">&lt;MetricsUpdated: event&gt;</span> with <span class="result">&lt;metrics&gt;</span>.
+
+    <span class="action">Keepalive</span> the <span class="result">&lt;application&gt;</span> for the <span class="result">&lt;events&gt;</span>.
+    <span class="action">Return</span> an <span class="result">&lt;OK: status&gt;</span> for the <span class="result">&lt;startup&gt;</span>.
+}
+
+<span class="comment">(* Watch handler - triggers on MetricsUpdated events *)</span>
+<span class="feature-name">(Dashboard Watch: MetricsUpdated Handler)</span> {
+    <span class="action">Clear</span> the <span class="result">&lt;screen&gt;</span> for the <span class="result">&lt;terminal&gt;</span>.
+
+    <span class="action">Transform</span> the <span class="result">&lt;output&gt;</span> from the <span class="result">&lt;template: templates/monitor.screen&gt;</span>.
+    <span class="action">Log</span> <span class="result">&lt;output&gt;</span> to the <span class="result">&lt;console&gt;</span>.
+
+    <span class="action">Return</span> an <span class="result">&lt;OK: status&gt;</span> for the <span class="result">&lt;render&gt;</span>.
+}</code></pre>
+
+<h3>Why Watch is Better Than Polling</h3>
+
+<div class="comparison">
+    <div class="comparison-bad">
+        <h4>❌ Traditional Polling (Other Languages)</h4>
+        <pre><code>setInterval(() => {
+    const tasks = getTasks();
+    renderDashboard(tasks);
+}, 1000);  // Check every second - wasteful!</code></pre>
+        <ul>
+            <li>Wastes CPU cycles checking when nothing changed</li>
+            <li>Updates delayed until next poll</li>
+            <li>Must choose between responsiveness and efficiency</li>
+        </ul>
+    </div>
+
+    <div class="comparison-good">
+        <h4>✅ ARO Watch Pattern</h4>
+        <pre><code><span class="feature-name">(Dashboard Watch: task-repository Observer)</span> {
+    <span class="action">Retrieve</span> the <span class="result">&lt;tasks&gt;</span> from the <span class="result">&lt;task-repository&gt;</span>.
+    <span class="action">Transform</span> the <span class="result">&lt;view&gt;</span> from the <span class="result">&lt;template: dashboard.screen&gt;</span>.
+    <span class="action">Log</span> <span class="result">&lt;view&gt;</span> to the <span class="result">&lt;console&gt;</span>.
+    <span class="action">Return</span> an <span class="result">&lt;OK: status&gt;</span>.
+}</code></pre>
+        <ul>
+            <li>Zero CPU usage when idle</li>
+            <li>Instant updates when data changes</li>
+            <li>No timers to manage</li>
+        </ul>
+    </div>
+</div>
+
+<h2>Terminal Actions</h2>
+
+<h3>Clear Action</h3>
+
+<p>Clear the terminal screen or current line:</p>
+
+<pre><code><span class="action">Clear</span> the <span class="result">&lt;screen&gt;</span> for the <span class="result">&lt;terminal&gt;</span>.
+<span class="action">Clear</span> the <span class="result">&lt;line&gt;</span> for the <span class="result">&lt;terminal&gt;</span>.</code></pre>
+
+<p><strong>Common Usage:</strong> Clear before re-rendering in Watch handlers to prevent screen clutter.</p>
+
+<h3>Prompt Action</h3>
+
+<p>Request text input from the user:</p>
+
+<pre><code><span class="comment">(* Basic input *)</span>
+<span class="action">Prompt</span> the <span class="result">&lt;name&gt;</span> from the <span class="result">&lt;terminal&gt;</span>.
+
+<span class="comment">(* Hidden input for passwords *)</span>
+<span class="action">Prompt</span> the <span class="result">&lt;password: hidden&gt;</span> from the <span class="result">&lt;terminal&gt;</span>.</code></pre>
+
+<h3>Select Action</h3>
+
+<p>Display an interactive menu:</p>
+
+<pre><code><span class="action">Create</span> the <span class="result">&lt;options&gt;</span> with ["Red", "Green", "Blue", "Yellow"].
+
+<span class="comment">(* Single selection *)</span>
+<span class="action">Select</span> the <span class="result">&lt;choice&gt;</span> from <span class="result">&lt;options&gt;</span> from the <span class="result">&lt;terminal&gt;</span>.
+
+<span class="comment">(* Multi-selection *)</span>
+<span class="action">Select</span> the <span class="result">&lt;choices: multi-select&gt;</span> from <span class="result">&lt;options&gt;</span> from the <span class="result">&lt;terminal&gt;</span>.</code></pre>
+
+<h2>Complete Example</h2>
+
+<p>A task management dashboard that updates reactively:</p>
+
+<h3>main.aro</h3>
+
+<pre><code><span class="feature-name">(Application-Start: Task Dashboard)</span> {
+    <span class="comment">(* Initialize tasks *)</span>
+    <span class="action">Create</span> the <span class="result">&lt;task1&gt;</span> with {
+        id: 1,
+        title: "Implement feature",
+        status: "in-progress",
+        priority: "high"
+    }.
+    <span class="action">Create</span> the <span class="result">&lt;task2&gt;</span> with {
+        id: 2,
+        title: "Write tests",
+        status: "pending",
+        priority: "medium"
+    }.
+
+    <span class="action">Store</span> the <span class="result">&lt;task1&gt;</span> into the <span class="result">&lt;task-repository&gt;</span>.
+    <span class="action">Store</span> the <span class="result">&lt;task2&gt;</span> into the <span class="result">&lt;task-repository&gt;</span>.
+
+    <span class="action">Keepalive</span> the <span class="result">&lt;application&gt;</span> for the <span class="result">&lt;events&gt;</span>.
+    <span class="action">Return</span> an <span class="result">&lt;OK: status&gt;</span> for the <span class="result">&lt;startup&gt;</span>.
+}
+
+<span class="comment">(* Reactive dashboard *)</span>
+<span class="feature-name">(Dashboard Watch: task-repository Observer)</span> {
+    <span class="action">Clear</span> the <span class="result">&lt;screen&gt;</span> for the <span class="result">&lt;terminal&gt;</span>.
+
+    <span class="action">Retrieve</span> the <span class="result">&lt;all-tasks&gt;</span> from the <span class="result">&lt;task-repository&gt;</span>.
+
+    <span class="comment">(* Filter by status *)</span>
+    <span class="action">Filter</span> the <span class="result">&lt;done&gt;</span> from <span class="result">&lt;all-tasks&gt;</span> where <span class="result">&lt;status&gt;</span> = "done".
+    <span class="action">Filter</span> the <span class="result">&lt;in-progress&gt;</span> from <span class="result">&lt;all-tasks&gt;</span> where <span class="result">&lt;status&gt;</span> = "in-progress".
+
+    <span class="action">Transform</span> the <span class="result">&lt;output&gt;</span> from the <span class="result">&lt;template: templates/dashboard.screen&gt;</span>.
+    <span class="action">Log</span> <span class="result">&lt;output&gt;</span> to the <span class="result">&lt;console&gt;</span>.
+
+    <span class="action">Return</span> an <span class="result">&lt;OK: status&gt;</span> for the <span class="result">&lt;render&gt;</span>.
+}
+
+<span class="comment">(* Update task - triggers Watch handler *)</span>
+<span class="feature-name">(Complete Task: TaskCompleted Handler)</span> {
+    <span class="action">Extract</span> the <span class="result">&lt;task-id&gt;</span> from the <span class="result">&lt;event: taskId&gt;</span>.
+
+    <span class="action">Retrieve</span> the <span class="result">&lt;task&gt;</span> from the <span class="result">&lt;task-repository&gt;</span> where id = <span class="result">&lt;task-id&gt;</span>.
+    <span class="action">Update</span> the <span class="result">&lt;task: status&gt;</span> with "done" into the <span class="result">&lt;task-repository&gt;</span>.
+
+    <span class="action">Return</span> an <span class="result">&lt;OK: status&gt;</span> for the <span class="result">&lt;completion&gt;</span>.
+}</code></pre>
+
+<h3>templates/dashboard.screen</h3>
+
+<pre><code>{{ "╔══════════════════════════════════════════╗" }}
+{{ "║ " }}{{ "TASK DASHBOARD" | bold | color: "cyan" }}{{ "                       ║" }}
+{{ "╚══════════════════════════════════════════╝" }}
+
+{{ "📊 Statistics:" | bold }}
+  {{ "✓ Done:        " }}{{ &lt;done&gt; | length | color: "green" }}
+  {{ "◷ In Progress: " }}{{ &lt;in-progress&gt; | length | color: "yellow" }}
+
+{{ "🔄 In Progress" | bold | color: "yellow" }}
+{{for task in in-progress}}
+  {{ "  [" }}{{ &lt;task: id&gt; }}{{ "] " }}{{ &lt;task: title&gt; | bold }} {{ "(" }}{{ &lt;task: priority&gt; | color: "magenta" }}{{ ")" }}
+{{end}}
+
+{{ "✅ Completed" | bold | color: "green" }}
+{{for task in done}}
+  {{ "  [" }}{{ &lt;task: id&gt; }}{{ "] " }}{{ &lt;task: title&gt; | dim | strikethrough }}
+{{end}}
+
+{{ "Last updated: reactively on data changes" | dim }}</code></pre>
+
+<h2>Platform Support</h2>
+
+<table>
+    <tr>
+        <th>Platform</th>
+        <th>Support</th>
+        <th>Notes</th>
+    </tr>
+    <tr>
+        <td>macOS</td>
+        <td>✅ Full</td>
+        <td>All features supported (iTerm2, Terminal.app)</td>
+    </tr>
+    <tr>
+        <td>Linux</td>
+        <td>✅ Full</td>
+        <td>All features supported (GNOME Terminal, Konsole, etc.)</td>
+    </tr>
+    <tr>
+        <td>Windows Terminal</td>
+        <td>✅ Full</td>
+        <td>Full ANSI support</td>
+    </tr>
+    <tr>
+        <td>CMD/PowerShell</td>
+        <td>⚠️ Partial</td>
+        <td>Limited ANSI support (Windows 10+)</td>
+    </tr>
+</table>
+
+<p><strong>Graceful Degradation:</strong> ARO automatically detects terminal capabilities and falls back:
+    RGB → 256-color → 16-color → no color, Unicode → ASCII, etc.</p>
+
+<h2>Best Practices</h2>
+
+<h3>Check Capabilities</h3>
+
+<pre><code>{{when &lt;terminal: supports_color&gt;}}
+  {{ &lt;error&gt; | color: "red" | bold }}
+{{else}}
+  {{ "ERROR: " }}{{ &lt;error&gt; }}
+{{end}}</code></pre>
+
+<h3>Responsive Layouts</h3>
+
+<pre><code>{{when &lt;terminal: columns&gt; > 120}}
+  <span class="comment">(* Wide: detailed 3-column layout *)</span>
+  <span class="action">Transform</span> the <span class="result">&lt;view&gt;</span> from the <span class="result">&lt;template: templates/wide.screen&gt;</span>.
+{{when &lt;terminal: columns&gt; > 80}}
+  <span class="comment">(* Medium: 2-column layout *)</span>
+  <span class="action">Transform</span> the <span class="result">&lt;view&gt;</span> from the <span class="result">&lt;template: templates/medium.screen&gt;</span>.
+{{else}}
+  <span class="comment">(* Narrow: stacked layout *)</span>
+  <span class="action">Transform</span> the <span class="result">&lt;view&gt;</span> from the <span class="result">&lt;template: templates/narrow.screen&gt;</span>.
+{{end}}</code></pre>
+
+<h3>Efficient Re-Rendering</h3>
+
+<pre><code><span class="feature-name">(Dashboard Watch: data-repository Observer)</span> {
+    <span class="comment">(* Clear before full re-render for clean display *)</span>
+    <span class="action">Clear</span> the <span class="result">&lt;screen&gt;</span> for the <span class="result">&lt;terminal&gt;</span>.
+
+    <span class="action">Retrieve</span> the <span class="result">&lt;data&gt;</span> from the <span class="result">&lt;data-repository&gt;</span>.
+    <span class="action">Transform</span> the <span class="result">&lt;view&gt;</span> from the <span class="result">&lt;template: dashboard.screen&gt;</span>.
+    <span class="action">Log</span> <span class="result">&lt;view&gt;</span> to the <span class="result">&lt;console&gt;</span>.
+
+    <span class="action">Return</span> an <span class="result">&lt;OK: status&gt;</span>.
+}</code></pre>
+
+<h2>Quick Reference</h2>
+
+<table>
+    <tr>
+        <th>Feature</th>
+        <th>Syntax</th>
+    </tr>
+    <tr>
+        <td>Watch (Repository)</td>
+        <td><code>(Name Watch: repository Observer)</code></td>
+    </tr>
+    <tr>
+        <td>Watch (Event)</td>
+        <td><code>(Name Watch: EventType Handler)</code></td>
+    </tr>
+    <tr>
+        <td>Color Filter</td>
+        <td><code>{{ &lt;text&gt; | color: "red" }}</code></td>
+    </tr>
+    <tr>
+        <td>Background Color</td>
+        <td><code>{{ &lt;text&gt; | bg: "blue" }}</code></td>
+    </tr>
+    <tr>
+        <td>Bold</td>
+        <td><code>{{ &lt;text&gt; | bold }}</code></td>
+    </tr>
+    <tr>
+        <td>Dim</td>
+        <td><code>{{ &lt;text&gt; | dim }}</code></td>
+    </tr>
+    <tr>
+        <td>Italic</td>
+        <td><code>{{ &lt;text&gt; | italic }}</code></td>
+    </tr>
+    <tr>
+        <td>Underline</td>
+        <td><code>{{ &lt;text&gt; | underline }}</code></td>
+    </tr>
+    <tr>
+        <td>Strikethrough</td>
+        <td><code>{{ &lt;text&gt; | strikethrough }}</code></td>
+    </tr>
+    <tr>
+        <td>Terminal Rows</td>
+        <td><code>{{ &lt;terminal: rows&gt; }}</code></td>
+    </tr>
+    <tr>
+        <td>Terminal Columns</td>
+        <td><code>{{ &lt;terminal: columns&gt; }}</code></td>
+    </tr>
+    <tr>
+        <td>Clear Screen</td>
+        <td><code>Clear the &lt;screen&gt; for the &lt;terminal&gt;.</code></td>
+    </tr>
+    <tr>
+        <td>Prompt Input</td>
+        <td><code>Prompt the &lt;input&gt; from the &lt;terminal&gt;.</code></td>
+    </tr>
+    <tr>
+        <td>Select Menu</td>
+        <td><code>Select the &lt;choice&gt; from &lt;options&gt; from the &lt;terminal&gt;.</code></td>
+    </tr>
+</table>
+
+<hr>
+
+<p>
+    <a href="templates.html">&larr; Template Engine</a>
+</p>
+}}

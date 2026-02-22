@@ -1,827 +1,826 @@
 # ARO-0052: Terminal UI System
 
-**Status:** Draft
-**Author:** ARO Team
-**Created:** 2026-02-22
+* Proposal: ARO-0052
+* Author: ARO Language Team
+* Status: **Implemented**
+* Requires: ARO-0001, ARO-0002, ARO-0004, ARO-0005, ARO-0007, ARO-0050
 
 ## Abstract
 
-This proposal introduces the `terminal` system object and template-based terminal UI capabilities, enabling developers to build beautiful, responsive terminal applications using ARO's natural language syntax. The system provides direct access to terminal properties, ANSI styling, layout helpers, and interactive widgets—all designed to work seamlessly with ARO's template engine.
+This proposal defines ARO's Terminal UI system for building beautiful, interactive terminal applications. The system provides ANSI escape code rendering, terminal capability detection, template filters for styling, and a reactive **Watch pattern** for live-updating displays. Watch is a **feature set pattern** (not an action) that combines with Handler/Observer patterns to trigger UI re-renders when events occur or data changes. The implementation is purely event-driven with no polling or timers.
 
-## Motivation
+## 1. Introduction
 
-Terminal applications remain essential for developers, system administrators, and CLI tools. Modern terminal UI libraries like [ratatui](https://ratatui.rs), Rich (Python), and Blessed (Node.js) demonstrate the demand for sophisticated terminal interfaces. However, these libraries often require deep understanding of low-level ANSI escape codes or complex widget APIs.
+Terminal user interfaces remain relevant for CLI tools, system monitors, dashboards, and developer utilities. ARO's Terminal UI system integrates seamlessly with the language's template engine and event-driven architecture:
 
-ARO can bring its natural language philosophy to terminal UIs: instead of learning escape sequences or widget hierarchies, developers should simply describe what they want to display using templates.
+1. **Terminal Service**: Actor-based capability detection and ANSI rendering
+2. **Template Filters**: Color and style filters for formatted output
+3. **Terminal Magic Object**: Access terminal properties in templates
+4. **Reactive Watch Pattern**: Event-driven UI updates without polling
+5. **Interactive Actions**: Prompt, Select, Clear for user interaction
+6. **Thread-Safe Operations**: All terminal access is isolated via Swift actors
+7. **Graceful Degradation**: Automatic fallback for limited terminals
 
-**Design Goals:**
-1. **Template-First**: Terminal UIs defined in `.screen` template files
-2. **Responsive**: Automatically adapt to terminal dimensions
-3. **Declarative**: Describe appearance, not ANSI codes
-4. **Zero Boilerplate**: No manual cursor management or buffer handling
-5. **ARO-Native**: Feels like natural ARO code, not a foreign API
+### Architecture Overview
 
-## The `terminal` System Object
-
-The `terminal` object provides runtime access to terminal capabilities and state:
-
-### Properties
-
-| Property | Type | Description |
-|----------|------|-------------|
-| `rows` | Number | Terminal height in character rows |
-| `columns` | Number | Terminal width in character columns |
-| `width` | Number | Alias for `columns` |
-| `height` | Number | Alias for `rows` |
-| `supports_color` | Boolean | True if terminal supports 8/16 colors |
-| `supports_true_color` | Boolean | True if terminal supports 24-bit RGB |
-| `cursor_row` | Number | Current cursor row (1-indexed) |
-| `cursor_column` | Number | Current cursor column (1-indexed) |
-| `is_tty` | Boolean | True if output is a terminal (not piped) |
-| `encoding` | String | Terminal encoding (e.g., "UTF-8") |
-
-### Usage in Templates
-
-```aro
-(* prompt.screen - A responsive terminal prompt *)
-{{ for 0..<terminal.columns }}={{ endfor }}
-{{ terminal.rows }} rows × {{ terminal.columns }} columns
-{{ if terminal.supports_true_color }}
-  {{ color rgb(100, 200, 255) }}✓ True color supported{{ reset }}
-{{ endif }}
+```
++------------------+     +------------------+     +------------------+
+| Feature Set      | --> | Watch Pattern    | --> | Event/Repo      |
+| Watch Handler    |     | Registration     |     | Trigger          |
++------------------+     +------------------+     +------------------+
+        |                        |                        |
+        v                        v                        v
++------------------+     +------------------+     +------------------+
+| Render Template  | --> | Apply Filters    | --> | ANSI Renderer    |
+| with data        |     | (color, bold)    |     | Escape Codes     |
++------------------+     +------------------+     +------------------+
+                                                          |
+                         +------------------+             |
+                         | Terminal Output  | <-----------+
+                         | (stdout)         |
+                         +------------------+
 ```
 
-## Template Styling Syntax
+## 2. Terminal Service
 
-ARO templates gain new directives for terminal styling:
+### 2.1 Architecture
 
-### Color Directives
+The `TerminalService` is a Swift actor providing thread-safe terminal operations:
 
-```aro
-{{ color <name> }}        (* Named colors: red, green, blue, yellow, etc. *)
-{{ color rgb(r, g, b) }}  (* RGB colors (0-255) if terminal supports *)
-{{ bg <name> }}           (* Background color *)
-{{ bg rgb(r, g, b) }}     (* RGB background *)
-{{ reset }}               (* Reset all styling *)
-```
+```swift
+public actor TerminalService: Sendable {
+    private var capabilities: Capabilities?
 
-**Named Colors:**
-- Basic: `black`, `red`, `green`, `yellow`, `blue`, `magenta`, `cyan`, `white`
-- Bright: `bright-red`, `bright-green`, `bright-blue`, etc.
-- Semantic: `success` (green), `error` (red), `warning` (yellow), `info` (blue)
-
-### Text Style Directives
-
-```aro
-{{ bold }}                (* Bold text *)
-{{ dim }}                 (* Dimmed text *)
-{{ italic }}              (* Italic text *)
-{{ underline }}           (* Underlined text *)
-{{ strikethrough }}       (* Strikethrough text *)
-{{ blink }}               (* Blinking text (if supported) *)
-{{ reverse }}             (* Reverse foreground/background *)
-{{ reset }}               (* Reset all styles *)
-```
-
-### Cursor Control
-
-```aro
-{{ cursor.move row col }} (* Move cursor to position *)
-{{ cursor.up n }}         (* Move cursor up n rows *)
-{{ cursor.down n }}       (* Move cursor down n rows *)
-{{ cursor.left n }}       (* Move cursor left n columns *)
-{{ cursor.right n }}      (* Move cursor right n columns *)
-{{ cursor.save }}         (* Save cursor position *)
-{{ cursor.restore }}      (* Restore saved position *)
-{{ cursor.hide }}         (* Hide cursor *)
-{{ cursor.show }}         (* Show cursor *)
-```
-
-### Screen Control
-
-```aro
-{{ screen.clear }}        (* Clear entire screen *)
-{{ screen.clear-line }}   (* Clear current line *)
-{{ screen.clear-up }}     (* Clear from cursor up *)
-{{ screen.clear-down }}   (* Clear from cursor down *)
-{{ screen.alternate }}    (* Switch to alternate buffer *)
-{{ screen.main }}         (* Switch to main buffer *)
-```
-
-## Layout Widgets
-
-ARO provides declarative layout widgets for common UI patterns:
-
-### Box Widget
-
-```aro
-{{ box width=50 height=10 border="rounded" title="Status" }}
-  Content inside the box
-  {{ color green }}✓{{ reset }} Everything is working
-{{ endbox }}
-```
-
-**Box Attributes:**
-- `width`: Fixed width or "100%" for full terminal width
-- `height`: Fixed height or "auto"
-- `border`: "single", "double", "rounded", "thick", "none"
-- `padding`: Space inside border (0-5)
-- `align`: "left", "center", "right"
-- `title`: Optional title text
-- `color`: Border color
-- `bg`: Background color
-
-### Progress Bar Widget
-
-```aro
-{{ progress value=completed total=total width=40 }}
-{{ progress value=0.75 width=30 label="Loading..." }}
-```
-
-**Progress Attributes:**
-- `value`: Current value (0-1 for percentage or absolute count)
-- `total`: Total value (if using absolute)
-- `width`: Bar width in characters
-- `label`: Optional label text
-- `color`: Bar color (defaults to green)
-- `show_percent`: Show percentage (default: true)
-- `style`: "bar", "blocks", "dots", "arrow"
-
-### Table Widget
-
-```aro
-{{ table headers=["Name", "Status", "Count"] widths=[20, 15, 10] }}
-  {{ for row in data }}
-    {{ row }}{{ row.name }}{{ endrow }}
-    {{ row }}{{ row.status }}{{ endrow }}
-    {{ row }}{{ row.count }}{{ endrow }}
-  {{ endfor }}
-{{ endtable }}
-```
-
-**Table Attributes:**
-- `headers`: Array of column headers
-- `widths`: Array of column widths or "auto"
-- `border`: Border style (same as box)
-- `align`: Column alignment array ["left", "center", "right"]
-- `zebra`: Alternate row colors (boolean)
-
-### Spinner Widget
-
-```aro
-{{ spinner style="dots" label="Processing..." }}
-```
-
-**Spinner Styles:**
-- `dots`: ⠋ ⠙ ⠹ ⠸ ⠼ ⠴ ⠦ ⠧ ⠇ ⠏
-- `line`: - \ | /
-- `arrow`: ← ↖ ↑ ↗ → ↘ ↓ ↙
-- `bounce`: ⠁ ⠂ ⠄ ⠂
-- `clock`: 🕐 🕑 🕒 🕓 🕔 🕕
-
-### Panel Layout
-
-```aro
-{{ panel orientation="horizontal" }}
-  {{ section width="50%" }}
-    Left panel content
-  {{ endsection }}
-
-  {{ section width="50%" }}
-    Right panel content
-  {{ endsection }}
-{{ endpanel }}
-```
-
-**Panel Attributes:**
-- `orientation`: "horizontal" or "vertical"
-- `sections`: Auto-sized or fixed width/height
-
-## Responsive Design
-
-Templates automatically adapt to terminal size using the `terminal` object:
-
-```aro
-(* Responsive header that fills terminal width *)
-{{ for 0..<terminal.columns }}={{ endfor }}
-
-(* Conditional layout based on size *)
-{{ if terminal.columns >= 80 }}
-  {{ panel orientation="horizontal" }}
-    (* Two-column layout for wide terminals *)
-  {{ endpanel }}
-{{ else }}
-  (* Single column for narrow terminals *)
-{{ endif }}
-
-(* Center content *)
-{{ for 0..<(terminal.columns - 40) / 2 }} {{ endfor }}
-Welcome to ARO
-```
-
-## Actions for Terminal Control
-
-### Render Action
-
-The `Render` action (from ARO-0050) is extended to support terminal output:
-
-```aro
-(Display Dashboard: Dashboard) {
-    Retrieve the <metrics> from the <metrics-repository>.
-
-    (* Render to terminal with live updates *)
-    Render the <dashboard> from "dashboard.screen"
-           with <metrics>
-           to the <terminal>.
-
-    Return an <OK: status> for the <display>.
+    public func detectCapabilities() -> Capabilities
+    public func render(text: String)
+    public func clear()
+    public func clearLine()
+    public func moveCursor(row: Int, column: Int)
+    public func prompt(message: String, hidden: Bool) async -> String
+    public func select(options: [String], message: String, multiSelect: Bool) async -> [String]
 }
 ```
 
-### Watch Action
+### 2.2 Capability Detection
 
-New action for live-updating terminal displays:
+The system detects terminal capabilities at runtime:
+
+**Unix/Linux/macOS**:
+- Dimensions via `ioctl(STDOUT_FILENO, TIOCGWINSZ)`
+- Fallback to `LINES`/`COLUMNS` environment variables
+- Default: 80×24 if detection fails
+
+**Color Support**:
+- Basic: `TERM` variable (xterm-color, xterm-256color, etc.)
+- True Color: `COLORTERM=truecolor` or `COLORTERM=24bit`
+- Windows Terminal: `WT_SESSION` environment variable
+
+**TTY Detection**:
+- Unix: `isatty(STDOUT_FILENO)`
+- Windows: Check `WT_SESSION` or `PROMPT` variables
+
+### 2.3 Capabilities Structure
+
+```swift
+public struct Capabilities: Sendable {
+    public let rows: Int              // Terminal height
+    public let columns: Int           // Terminal width
+    public let supportsColor: Bool    // 16-color support
+    public let supportsTrueColor: Bool // 24-bit RGB support
+    public let supportsUnicode: Bool  // UTF-8 support
+    public let isTTY: Bool           // Connected to terminal
+    public let encoding: String      // Character encoding (UTF-8)
+}
+```
+
+## 3. Template Extensions
+
+### 3.1 Terminal Filters
+
+Templates can apply ANSI styling using filters:
+
+**Color Filters**:
+```aro
+{{ <text> | color: "red" }}
+{{ <text> | bg: "blue" }}
+{{ <error> | color: "red" | bold }}
+```
+
+**Style Filters**:
+```aro
+{{ <title> | bold }}
+{{ <subtitle> | dim }}
+{{ <link> | underline }}
+{{ <code> | italic }}
+{{ <deleted> | strikethrough }}
+```
+
+**Chaining Filters**:
+```aro
+{{ <message> | color: "green" | bold | underline }}
+```
+
+### 3.2 Supported Colors
+
+**Named Colors (16-color)**:
+- Standard: black, red, green, yellow, blue, magenta, cyan, white
+- Bright: brightRed, brightGreen, brightBlue, brightCyan, etc.
+- Semantic: success (green), error (red), warning (yellow), info (blue)
+
+**RGB Colors (24-bit)**:
+```aro
+{{ <text> | color: "rgb(255, 100, 50)" }}
+{{ <box> | bg: "rgb(30, 30, 30)" }}
+```
+
+**Automatic Fallback**:
+- True color terminals: Use 24-bit RGB
+- 256-color terminals: Convert RGB → closest 256-color
+- 16-color terminals: Convert RGB → closest 16-color
+- No color support: Strip all color codes
+
+### 3.3 Terminal Magic Object
+
+Templates have access to a `terminal` object with capability information:
 
 ```aro
-(Monitor System: System Monitor) {
-    (* Clear screen and hide cursor *)
+{{ <terminal: rows> }}           (* Terminal height *)
+{{ <terminal: columns> }}        (* Terminal width *)
+{{ <terminal: width> }}          (* Alias for columns *)
+{{ <terminal: height> }}         (* Alias for rows *)
+{{ <terminal: supports_color> }} (* Boolean: color support *)
+{{ <terminal: supports_true_color> }} (* Boolean: RGB support *)
+{{ <terminal: is_tty> }}         (* Boolean: connected to TTY *)
+{{ <terminal: encoding> }}       (* String: UTF-8, ASCII, etc. *)
+```
+
+**Example: Responsive Design**:
+```aro
+{{when <terminal: columns> > 120}}
+  {{ "Wide layout" }}
+{{else}}
+  {{ "Narrow layout" }}
+{{end}}
+```
+
+## 4. Reactive Watch Pattern
+
+### 4.1 Watch as Feature Set Pattern
+
+**Watch is NOT an action** - it's a **feature set pattern** that combines with Handler/Observer patterns to create reactive terminal UIs.
+
+**Syntax Patterns**:
+1. **Event-Based**: `(Name Watch: EventType Handler)`
+2. **Repository-Based**: `(Name Watch: repository Observer)`
+
+### 4.2 Event-Based Watch
+
+Watch handlers trigger when specific domain events are emitted:
+
+```aro
+(* Application emits event *)
+(Application-Start: System Monitor) {
+    Create the <metrics> with { cpu: 45, memory: 67, disk: 89 }.
+    Emit a <MetricsUpdated: event> with <metrics>.
+
+    Keepalive the <application> for the <events>.
+    Return an <OK: status> for the <startup>.
+}
+
+(* Watch handler catches event and re-renders *)
+(Dashboard Watch: MetricsUpdated Handler) {
     Clear the <screen> for the <terminal>.
 
-    (* Render template every 1 second *)
-    Watch the <status> from "status.screen"
-          with <system-metrics>
-          every 1 second
-          to the <terminal>.
+    (* Render updated dashboard *)
+    Transform the <output> from the <template: monitor.screen>.
+    Log <output> to the <console>.
 
-    Return an <OK: status> for the <monitoring>.
+    Return an <OK: status> for the <render>.
 }
 ```
 
-**Watch Action Behavior:**
-- Renders template repeatedly at specified interval
-- Automatically clears screen before each render
-- Updates in alternate buffer (preserves terminal history)
-- Stops on SIGINT (Ctrl+C)
+**Flow**:
+1. Feature set emits `MetricsUpdated` event
+2. `ExecutionEngine.registerWatchHandlers()` detects Watch pattern
+3. Watch handler registered to EventBus for MetricsUpdated
+4. When event emitted, handler executes asynchronously
+5. Template rendered with fresh data
+6. Output displayed to terminal
 
-### Prompt Action
+### 4.3 Repository-Based Watch
 
-Interactive user input with styled prompts:
+Watch handlers trigger when repository data changes:
 
 ```aro
-(Get User Input: CLI) {
-    (* Simple text prompt *)
-    Prompt the <name> with "Enter your name: " from the <terminal>.
+(* Store task in repository *)
+(Add Task: Task API) {
+    Create the <task> with { title: "Write docs", status: "pending" }.
+    Store the <task> into the <task-repository>.
 
-    (* Password prompt (hidden input) *)
-    Prompt the <password> with "Password: "
-           hidden
-           from the <terminal>.
-
-    (* Confirm prompt (yes/no) *)
-    Prompt the <confirmed> with "Continue? (y/n): "
-           as a <confirmation>
-           from the <terminal>.
-
-    Return an <OK: status> with <name>.
+    Return an <OK: status> for the <creation>.
 }
-```
 
-**Prompt Qualifiers:**
-- `hidden`: Don't echo input (for passwords)
-- `confirmation`: Accept yes/no/y/n input, return boolean
-- `default`: Default value if user presses Enter
+(* Watch handler detects repository change *)
+(Dashboard Watch: task-repository Observer) {
+    Clear the <screen> for the <terminal>.
 
-### Select Action
-
-Interactive selection menus:
-
-```aro
-(Choose Option: CLI) {
-    Create the <options> with ["Start Server", "Run Tests", "Exit"].
-
-    Select the <choice> from <options>
-           with "What would you like to do?"
-           from the <terminal>.
-
-    When <choice> equals "Start Server" {
-        (* Start server *)
-    }.
-
-    Return an <OK: status> with <choice>.
-}
-```
-
-**Select Action Features:**
-- Arrow key navigation
-- Multi-select mode (space to toggle)
-- Search/filter mode
-- Vim-style keybindings (j/k navigation)
-
-## Example: Interactive Task Manager
-
-```aro
-(* task-list.screen *)
-{{ screen.alternate }}
-{{ cursor.hide }}
-{{ screen.clear }}
-
-{{ box width="100%" border="rounded" title="Task Manager" color=blue }}
-  {{ table headers=["ID", "Task", "Status", "Priority"] widths=[5, 40, 15, 10] }}
-    {{ for task in tasks }}
-      {{ row }}{{ task.id }}{{ endrow }}
-      {{ row }}{{ task.name }}{{ endrow }}
-      {{ row }}
-        {{ if task.status == "completed" }}
-          {{ color green }}✓ Done{{ reset }}
-        {{ else if task.status == "in-progress" }}
-          {{ color yellow }}⟳ In Progress{{ reset }}
-        {{ else }}
-          {{ color dim }}○ Pending{{ reset }}
-        {{ endif }}
-      {{ endrow }}
-      {{ row }}
-        {{ if task.priority == "high" }}
-          {{ color red }}{{ bold }}HIGH{{ reset }}
-        {{ else if task.priority == "medium" }}
-          {{ color yellow }}MEDIUM{{ reset }}
-        {{ else }}
-          {{ color dim }}low{{ reset }}
-        {{ endif }}
-      {{ endrow }}
-    {{ endfor }}
-  {{ endtable }}
-{{ endbox }}
-
-{{ cursor.move (terminal.rows - 2) 1 }}
-{{ color dim }}Press {{ reset }}{{ bold }}a{{ reset }}{{ color dim }} to add task, {{ reset }}{{ bold }}d{{ reset }}{{ color dim }} to delete, {{ reset }}{{ bold }}q{{ reset }}{{ color dim }} to quit{{ reset }}
-
-{{ cursor.show }}
-```
-
-```aro
-(* main.aro *)
-(Application-Start: Task Manager) {
-    Log "Task Manager starting..." to the <console>.
-
+    (* Retrieve updated tasks *)
     Retrieve the <tasks> from the <task-repository>.
 
-    (* Render initial view *)
-    Render the <view> from "task-list.screen"
-           with <tasks>
-           to the <terminal>.
+    (* Render task list *)
+    Transform the <output> from the <template: task-list.screen>.
+    Log <output> to the <console>.
+
+    Return an <OK: status> for the <render>.
+}
+```
+
+**Flow**:
+1. Feature set stores/updates/deletes data in repository
+2. `RepositoryChangedEvent` emitted by repository
+3. Watch handler registered to EventBus for repository-name
+4. When repository changes, handler executes
+5. Fresh data retrieved and rendered
+6. Updated display shown to user
+
+### 4.4 Implementation
+
+**ExecutionEngine Registration**:
+```swift
+private func registerWatchHandlers(for program: AnalyzedProgram, baseContext: RuntimeContext) {
+    let watchHandlers = program.featureSets.filter { analyzedFS in
+        analyzedFS.featureSet.businessActivity.contains(" Watch:")
+    }
+
+    for analyzedFS in watchHandlers {
+        let activity = analyzedFS.featureSet.businessActivity
+
+        if pattern.hasSuffix(" Handler") {
+            // Event-based watch
+            let eventType = extractEventType(from: pattern)
+            eventBus.subscribe(to: DomainEvent.self) { event in
+                guard event.domainEventType == eventType else { return }
+                await self.executeWatchHandler(analyzedFS, event: event)
+            }
+        } else if pattern.hasSuffix(" Observer") {
+            // Repository-based watch
+            let repositoryName = extractRepositoryName(from: pattern)
+            eventBus.subscribe(to: RepositoryChangedEvent.self) { event in
+                guard event.repositoryName == repositoryName else { return }
+                await self.executeWatchHandler(analyzedFS, event: event)
+            }
+        }
+    }
+}
+```
+
+**Key Characteristics**:
+- **Purely Reactive**: No polling, no timers, no intervals
+- **Event-Driven**: Uses ARO's EventBus (ARO-0007)
+- **Asynchronous**: Handlers execute without blocking
+- **Thread-Safe**: Leverages Swift actor isolation
+
+### 4.5 Watch vs Traditional Approaches
+
+**ARO Watch Pattern**:
+```aro
+(* Reactive - triggers on changes *)
+(Dashboard Watch: task-repository Observer) {
+    Retrieve the <tasks> from the <task-repository>.
+    Transform the <view> from the <template: dashboard.screen>.
+    Log <view> to the <console>.
+    Return an <OK: status>.
+}
+```
+
+**Traditional Polling (NOT in ARO)**:
+```javascript
+// Other languages - polling with timers
+setInterval(() => {
+    const tasks = getTasks();
+    renderDashboard(tasks);
+}, 1000);  // Check every second
+```
+
+ARO's approach is superior:
+- ✅ Updates immediately on changes (not after delay)
+- ✅ No wasted CPU cycles polling
+- ✅ No timer management complexity
+- ✅ Integrates with event-driven architecture
+
+## 5. Terminal Actions
+
+### 5.1 Clear Action
+
+Clears the terminal screen or current line.
+
+**Syntax**:
+```aro
+Clear the <screen> for the <terminal>.
+Clear the <line> for the <terminal>.
+```
+
+**Implementation**:
+- Verb: `clear`
+- Role: `.own` (internal operation)
+- Preposition: `.for`
+
+**ANSI Codes**:
+- Screen: `\u{001B}[2J\u{001B}[H` (clear + home)
+- Line: `\u{001B}[2K`
+
+### 5.2 Prompt Action
+
+Prompts the user for text input.
+
+**Syntax**:
+```aro
+Prompt the <name> from the <terminal>.
+Prompt the <password: hidden> from the <terminal>.
+```
+
+**Implementation**:
+- Verbs: `prompt`, `ask`
+- Role: `.request` (external input)
+- Prepositions: `.with`, `.from`
+- Hidden Mode: Check for `hidden` in specifiers
+
+**Hidden Input**:
+- Unix: Uses `termios` to disable echo
+- Restores terminal state after input
+- Prints newline after hidden input
+
+### 5.3 Select Action
+
+Displays an interactive selection menu.
+
+**Syntax**:
+```aro
+Create the <options> with ["Red", "Green", "Blue"].
+Select the <choice> from <options> from the <terminal>.
+
+(* Multi-select *)
+Select the <choices: multi-select> from <options> from the <terminal>.
+```
+
+**Implementation**:
+- Verbs: `select`, `choose`
+- Role: `.request` (external selection)
+- Prepositions: `.from`, `.with`
+- Multi-Select: Check for `multi` in specifiers
+
+**Current Implementation**:
+- Numbered menu display
+- User enters number
+- Returns selected option(s)
+
+**Future Enhancement**:
+- Arrow key navigation
+- Visual cursor
+- Space to toggle (multi-select)
+
+## 6. ANSI Renderer
+
+### 6.1 Color Codes
+
+**Foreground Colors**:
+```swift
+public enum TerminalColor: String {
+    case black = "black"           // 30
+    case red = "red"               // 31
+    case green = "green"           // 32
+    case yellow = "yellow"         // 33
+    case blue = "blue"             // 34
+    case magenta = "magenta"       // 35
+    case cyan = "cyan"             // 36
+    case white = "white"           // 37
+
+    case brightRed = "brightRed"   // 91
+    case brightGreen = "brightGreen" // 92
+    // ...
+
+    public var foregroundCode: Int { /* ... */ }
+    public var backgroundCode: Int { foregroundCode + 10 }
+}
+```
+
+**RGB Colors**:
+```swift
+// 24-bit true color
+public static func colorRGB(r: Int, g: Int, b: Int, capabilities: Capabilities) -> String {
+    if capabilities.supportsTrueColor {
+        return "\u{001B}[38;2;\(r);\(g);\(b)m"
+    } else {
+        // Fallback to 256-color
+        let colorIndex = closestColor256(r: r, g: g, b: b)
+        return "\u{001B}[38;5;\(colorIndex)m"
+    }
+}
+```
+
+### 6.2 Style Codes
+
+| Style | Code | Reset |
+|-------|------|-------|
+| Bold | `\u{001B}[1m` | `\u{001B}[0m` |
+| Dim | `\u{001B}[2m` | `\u{001B}[0m` |
+| Italic | `\u{001B}[3m` | `\u{001B}[0m` |
+| Underline | `\u{001B}[4m` | `\u{001B}[0m` |
+| Blink | `\u{001B}[5m` | `\u{001B}[0m` |
+| Reverse | `\u{001B}[7m` | `\u{001B}[0m` |
+| Strikethrough | `\u{001B}[9m` | `\u{001B}[0m` |
+
+### 6.3 Cursor Control
+
+```swift
+public static func moveCursor(row: Int, column: Int) -> String {
+    return "\u{001B}[\(row);\(column)H"
+}
+
+public static func hideCursor() -> String {
+    return "\u{001B}[?25l"
+}
+
+public static func showCursor() -> String {
+    return "\u{001B}[?25h"
+}
+
+public static func cursorUp(_ n: Int = 1) -> String {
+    return "\u{001B}[\(n)A"
+}
+```
+
+### 6.4 Screen Control
+
+```swift
+public static func clearScreen() -> String {
+    return "\u{001B}[2J\u{001B}[H"  // Clear + move to home
+}
+
+public static func clearLine() -> String {
+    return "\u{001B}[2K"
+}
+
+public static func alternateScreen() -> String {
+    return "\u{001B}[?1049h"  // Switch to alternate buffer
+}
+
+public static func mainScreen() -> String {
+    return "\u{001B}[?1049l"  // Restore main buffer
+}
+```
+
+## 7. Platform Support
+
+### 7.1 Full Support
+
+**macOS**:
+- ✅ Full ANSI support (iTerm2, Terminal.app)
+- ✅ True color support (iTerm2)
+- ✅ `ioctl()` dimension detection
+- ✅ `termios` for hidden input
+
+**Linux**:
+- ✅ Full ANSI support (GNOME Terminal, Konsole, etc.)
+- ✅ True color support (modern terminals)
+- ✅ `ioctl()` dimension detection
+- ✅ `termios` for hidden input
+
+### 7.2 Partial Support
+
+**Windows**:
+- ⚠️ Windows Terminal: Full support
+- ⚠️ CMD/PowerShell: Limited ANSI support (Windows 10+)
+- ⚠️ Dimension detection via environment variables only
+- ⚠️ Hidden input: Falls back to regular input (TODO)
+
+### 7.3 Graceful Degradation
+
+**No Color Support**:
+- All color codes stripped
+- Styles (bold, underline) may still work
+- Text remains readable
+
+**No TTY**:
+- Capability detection returns safe defaults
+- Interactive actions may fail (return empty/default)
+- Templates render without ANSI codes
+
+**ASCII-Only Terminals**:
+- Unicode box-drawing → ASCII equivalents
+- Smart characters (arrows, bullets) → ASCII fallbacks
+
+## 8. Complete Examples
+
+### 8.1 Task Manager (Repository Observer)
+
+**main.aro**:
+```aro
+(Application-Start: Task Manager) {
+    (* Initialize tasks *)
+    Create the <task1> with { id: 1, title: "Write docs", status: "pending" }.
+    Create the <task2> with { id: 2, title: "Fix bugs", status: "in-progress" }.
+
+    Store the <task1> into the <task-repository>.
+    Store the <task2> into the <task-repository>.
+
+    Log "Task Manager started. Tasks tracked reactively." to the <console>.
 
     Keepalive the <application> for the <events>.
-
     Return an <OK: status> for the <startup>.
 }
 
-(Handle Key Press: Keyboard Handler) {
-    Extract the <key> from the <event: key>.
+(* Reactive UI - triggers on repository changes *)
+(Dashboard Watch: task-repository Observer) {
+    Clear the <screen> for the <terminal>.
 
-    When <key> equals "a" {
-        Prompt the <task-name> with "New task: " from the <terminal>.
-        Create the <task> with { name: <task-name>, status: "pending" }.
-        Store the <task> in the <task-repository>.
-        Emit a <TasksUpdated: event>.
-    }.
-
-    When <key> equals "q" {
-        Stop the <application>.
-    }.
-
-    Return an <OK: status> for the <key-press>.
-}
-
-(Refresh Display: TasksUpdated Handler) {
     Retrieve the <tasks> from the <task-repository>.
+    Transform the <output> from the <template: templates/task-list.screen>.
+    Log <output> to the <console>.
 
-    Render the <view> from "task-list.screen"
-           with <tasks>
-           to the <terminal>.
+    Return an <OK: status> for the <render>.
+}
 
-    Return an <OK: status> for the <refresh>.
+(* Add new task - triggers repository change *)
+(Add Task: TaskAdded Handler) {
+    Extract the <title> from the <event: title>.
+
+    Create the <new-task> with { title: <title>, status: "pending" }.
+    Store the <new-task> into the <task-repository>.
+
+    Return an <OK: status> for the <task-creation>.
 }
 ```
 
-## Example: System Monitoring Dashboard
-
+**templates/task-list.screen**:
 ```aro
-(* monitor.screen *)
-{{ screen.clear }}
-{{ cursor.move 1 1 }}
+{{ "=== Task Manager ===" | bold | color: "cyan" }}
 
-{{ color cyan }}{{ bold }}
-╔═══════════════════════════════════════════════════════════════════════════╗
-║                         SYSTEM MONITOR                                    ║
-╚═══════════════════════════════════════════════════════════════════════════╝
-{{ reset }}
+Terminal: {{ <terminal: columns> }} columns × {{ <terminal: rows> }} rows
 
-{{ panel orientation="horizontal" }}
-  {{ section width="50%" }}
-    {{ box border="single" title="CPU Usage" padding=1 }}
-      {{ for core in cpu.cores }}
-        Core {{ core.id }}: {{ progress value=core.usage width=20 }}
-      {{ endfor }}
+{{ "Tasks:" | bold }}
 
-      {{ color dim }}Average:{{ reset }} {{ cpu.average }}%
-    {{ endbox }}
+{{for task in tasks}}
+  [{{ <task: id> }}] {{ <task: title> | color: "white" }} - {{ <task: status> | color: "yellow" }}
+{{end}}
 
-    {{ box border="single" title="Memory" padding=1 }}
-      {{ progress value=memory.used total=memory.total width=30 label="RAM" }}
-
-      {{ color dim }}{{ memory.used }}GB / {{ memory.total }}GB{{ reset }}
-    {{ endbox }}
-  {{ endsection }}
-
-  {{ section width="50%" }}
-    {{ box border="single" title="Network" padding=1 }}
-      {{ color green }}↓{{ reset }} Download: {{ network.download }} MB/s
-      {{ color blue }}↑{{ reset }} Upload:   {{ network.upload }} MB/s
-
-      {{ color dim }}Total: {{ network.total }}GB{{ reset }}
-    {{ endbox }}
-
-    {{ box border="single" title="Disk I/O" padding=1 }}
-      {{ for disk in disks }}
-        {{ disk.name }}: {{ progress value=disk.used total=disk.total width=20 }}
-      {{ endfor }}
-    {{ endbox }}
-  {{ endsection }}
-{{ endpanel }}
-
-{{ cursor.move (terminal.rows - 1) 1 }}
-{{ color dim }}Last updated: {{ timestamp }}{{ reset }}
+{{ "---" }}
+Total: {{ <tasks> | length }} tasks
 ```
 
+### 8.2 System Monitor (Event-Based)
+
+**main.aro**:
 ```aro
 (Application-Start: System Monitor) {
-    Log "Starting system monitor..." to the <console>.
+    Log "System Monitor starting..." to the <console>.
 
-    (* Watch updates dashboard every second *)
-    Watch the <dashboard> from "monitor.screen"
-          with <system-metrics>
-          every 1 second
-          to the <terminal>.
+    (* Emit initial metrics *)
+    Create the <metrics> with { cpu: 23, memory: 45, disk: 67 }.
+    Emit a <MetricsUpdated: event> with <metrics>.
 
     Keepalive the <application> for the <events>.
-
     Return an <OK: status> for the <startup>.
 }
-```
 
-## Example: Installation Wizard
+(* Reactive UI - triggers on metrics events *)
+(Dashboard Watch: MetricsUpdated Handler) {
+    Clear the <screen> for the <terminal>.
 
-```aro
-(Run Installation: Installer) {
-    (* Step 1: Welcome *)
-    Render the <welcome> from "welcome.screen" to the <terminal>.
-    Prompt the <confirmed> with "Continue? (y/n): "
-           as a <confirmation>
-           from the <terminal>.
+    Transform the <output> from the <template: templates/monitor.screen>.
+    Log <output> to the <console>.
 
-    When not <confirmed> {
-        Log "Installation cancelled" to the <console>.
-        Return an <OK: status> for the <cancellation>.
-    }.
-
-    (* Step 2: Choose components *)
-    Create the <components> with [
-        "Core System",
-        "Web Server",
-        "Database",
-        "Monitoring Tools"
-    ].
-
-    Select the <selected> from <components>
-           with "Select components to install (space to toggle):"
-           as <multi-select>
-           from the <terminal>.
-
-    (* Step 3: Install with progress *)
-    Render the <installing> from "install.screen"
-           with { components: <selected> }
-           to the <terminal>.
-
-    For each <component> in <selected> {
-        (* Simulate installation *)
-        Install the <component> with <options>.
-
-        Emit a <ComponentInstalled: event> with <component>.
-    }.
-
-    (* Step 4: Complete *)
-    Render the <complete> from "complete.screen" to the <terminal>.
-
-    Return an <OK: status> for the <installation>.
+    Return an <OK: status> for the <render>.
 }
 
-(Update Progress: ComponentInstalled Handler) {
-    Extract the <component> from the <event: component>.
+(* Collect metrics periodically (could be triggered by timer event) *)
+(Collect Metrics: MetricsTimer Handler) {
+    (* Read actual system metrics here *)
+    Create the <new-metrics> with { cpu: 45, memory: 67, disk: 89 }.
+    Emit a <MetricsUpdated: event> with <new-metrics>.
 
-    Compute the <completed> from count(<installed>) + 1.
-    Compute the <total> from count(<selected>).
-
-    Render the <progress-view> from "install.screen"
-           with { completed: <completed>, total: <total> }
-           to the <terminal>.
-
-    Return an <OK: status> for the <update>.
+    Return an <OK: status> for the <collection>.
 }
 ```
 
+**templates/monitor.screen**:
 ```aro
-(* install.screen *)
-{{ box width=60 border="double" title="Installing ARO" align=center }}
-  {{ for component in components }}
-    {{ if component.installed }}
-      {{ color green }}✓{{ reset }}
-    {{ else }}
-      {{ spinner style="dots" }}
-    {{ endif }}
-    {{ component.name }}
-  {{ endfor }}
+{{ "=== System Monitor ===" | bold | color: "green" }}
 
-  {{ progress value=completed total=total width=50 }}
+{{ "CPU Usage:" | bold }}
+  {{ <cpu> }}% {{ "[" ++ "=" * (<cpu> / 5) ++ " " * (20 - <cpu> / 5) ++ "]" | color: "cyan" }}
 
-  {{ color dim }}{{ completed }} of {{ total }} components installed{{ reset }}
-{{ endbox }}
+{{ "Memory Usage:" | bold }}
+  {{ <memory> }}% {{ "[" ++ "=" * (<memory> / 5) ++ " " * (20 - <memory> / 5) ++ "]" | color: "yellow" }}
+
+{{ "Disk Usage:" | bold }}
+  {{ <disk> }}% {{ "[" ++ "=" * (<disk> / 5) ++ " " * (20 - <disk> / 5) ++ "]" | color: "magenta" }}
+
+{{ "---" }}
+{{ "Press Ctrl+C to exit" | dim }}
 ```
 
-## Terminal Capabilities Detection
+## 9. Best Practices
 
-ARO automatically detects terminal capabilities and gracefully degrades:
+### 9.1 Responsive Design
 
-| Feature | Fallback Behavior |
-|---------|-------------------|
-| True color RGB | Use closest 256-color or 16-color match |
-| Unicode box chars | Use ASCII fallback (+, -, \|) |
-| Cursor positioning | Linear output without cursor control |
-| Alternate buffer | Use main buffer with screen clears |
-| Hidden input | Show warning, accept visible input |
+Check terminal dimensions for layout decisions:
 
-Detection is exposed via `terminal` properties:
 ```aro
-{{ if terminal.supports_true_color }}
-  {{ color rgb(100, 150, 200) }}Gradient text{{ reset }}
-{{ else }}
-  {{ color blue }}Blue text{{ reset }}
-{{ endif }}
+{{when <terminal: columns> > 120}}
+  (* Wide layout - show detailed view *)
+  Transform the <view> from the <template: wide-dashboard.screen>.
+{{when <terminal: columns> > 80}}
+  (* Medium layout - show summary *)
+  Transform the <view> from the <template: medium-dashboard.screen>.
+{{else}}
+  (* Narrow layout - show compact view *)
+  Transform the <view> from the <template: narrow-dashboard.screen>.
+{{end}}
 ```
 
-## Implementation Architecture
+### 9.2 Graceful Degradation
 
-### Component Overview
+Check capabilities before using advanced features:
 
-```
-┌─────────────────────────────────────────────────────────────┐
-│                    ARO Application                          │
-├─────────────────────────────────────────────────────────────┤
-│  Feature Sets                                               │
-│  ├─ Watch action (triggers periodic renders)                │
-│  ├─ Render action (one-time template render)                │
-│  ├─ Prompt action (interactive input)                       │
-│  └─ Select action (menu selection)                          │
-└────────────────┬────────────────────────────────────────────┘
-                 │
-                 ↓
-┌─────────────────────────────────────────────────────────────┐
-│              Terminal Service                               │
-│  ┌──────────────────────────────────────────────────────┐  │
-│  │  Capability Detection                                │  │
-│  │  ├─ Color support (16/256/true color)                │  │
-│  │  ├─ Terminal dimensions (rows × columns)             │  │
-│  │  ├─ Unicode support                                  │  │
-│  │  └─ Interactive features (keyboard input)            │  │
-│  └──────────────────────────────────────────────────────┘  │
-│  ┌──────────────────────────────────────────────────────┐  │
-│  │  ANSI Renderer                                       │  │
-│  │  ├─ Color codes (foreground/background)              │  │
-│  │  ├─ Text styles (bold, italic, underline)            │  │
-│  │  ├─ Cursor control (move, save, restore)             │  │
-│  │  └─ Screen control (clear, alternate buffer)         │  │
-│  └──────────────────────────────────────────────────────┘  │
-│  ┌──────────────────────────────────────────────────────┐  │
-│  │  Layout Engine                                       │  │
-│  │  ├─ Box rendering with borders                       │  │
-│  │  ├─ Progress bar rendering                           │  │
-│  │  ├─ Table layout and column alignment                │  │
-│  │  ├─ Panel/section layout (responsive)                │  │
-│  │  └─ Widget positioning and overflow                  │  │
-│  └──────────────────────────────────────────────────────┘  │
-│  ┌──────────────────────────────────────────────────────┐  │
-│  │  Input Handler                                       │  │
-│  │  ├─ Raw mode (non-canonical input)                   │  │
-│  │  ├─ Keyboard event parsing (arrow keys, etc.)        │  │
-│  │  ├─ Line editing (backspace, history)                │  │
-│  │  └─ Signal handling (SIGINT, SIGWINCH)               │  │
-│  └──────────────────────────────────────────────────────┘  │
-└────────────────┬────────────────────────────────────────────┘
-                 │
-                 ↓
-┌─────────────────────────────────────────────────────────────┐
-│         Template Engine (ARO-0050)                          │
-│  ┌──────────────────────────────────────────────────────┐  │
-│  │  Parser Extensions                                   │  │
-│  │  ├─ {{ color }}, {{ bg }}, {{ bold }}, etc.          │  │
-│  │  ├─ {{ cursor.* }} directives                        │  │
-│  │  ├─ {{ screen.* }} directives                        │  │
-│  │  └─ {{ box }}, {{ progress }}, {{ table }}, etc.     │  │
-│  └──────────────────────────────────────────────────────┘  │
-│  ┌──────────────────────────────────────────────────────┐  │
-│  │  Renderer                                            │  │
-│  │  ├─ Process directives into ANSI codes               │  │
-│  │  ├─ Layout widgets into positioned text              │  │
-│  │  ├─ Inject runtime terminal properties               │  │
-│  │  └─ Output final ANSI-formatted string               │  │
-│  └──────────────────────────────────────────────────────┘  │
-└─────────────────────────────────────────────────────────────┘
+```aro
+{{when <terminal: supports_color>}}
+  {{ <error> | color: "red" | bold }}
+{{else}}
+  ERROR: {{ <error> }}
+{{end}}
 ```
 
-### Core Types
+### 9.3 Efficient Re-Rendering
+
+Only clear and re-render when necessary:
+
+```aro
+(Dashboard Watch: data-repository Observer) {
+    (* Clear before re-render for clean display *)
+    Clear the <screen> for the <terminal>.
+
+    Retrieve the <data> from the <data-repository>.
+    Transform the <view> from the <template: dashboard.screen>.
+    Log <view> to the <console>.
+
+    Return an <OK: status>.
+}
+```
+
+### 9.4 Event Throttling
+
+For high-frequency updates, consider throttling:
+
+```aro
+(* In a real application, you might want to throttle events *)
+(* This prevents overwhelming the terminal with rapid updates *)
+(High Frequency Handler: RapidUpdates Handler) {
+    (* Only re-render if enough time has passed *)
+    (* Implementation would check timestamp *)
+
+    Return an <OK: status>.
+}
+```
+
+## 10. Implementation Notes
+
+### 10.1 Thread Safety
+
+All terminal operations are thread-safe via Swift actors:
 
 ```swift
-// Sources/ARORuntime/Terminal/TerminalService.swift
 public actor TerminalService: Sendable {
-    public struct Capabilities: Sendable {
-        public let rows: Int
-        public let columns: Int
-        public let supportsColor: Bool
-        public let supportsTrueColor: Bool
-        public let supportsUnicode: Bool
-        public let isTTY: Bool
-        public let encoding: String
-    }
-
-    public func detect() async -> Capabilities
-    public func render(_ template: String, context: [String: Any]) async throws
-    public func prompt(_ message: String, hidden: Bool) async throws -> String
-    public func select(_ options: [String], multi: Bool) async throws -> [String]
-    public func clear() async
-    public func moveCursor(row: Int, column: Int) async
-}
-
-// Sources/ARORuntime/Terminal/ANSIRenderer.swift
-public struct ANSIRenderer: Sendable {
-    public func renderColor(_ color: TerminalColor) -> String
-    public func renderStyle(_ style: TextStyle) -> String
-    public func renderCursorMove(row: Int, column: Int) -> String
-    public func renderClear() -> String
-}
-
-// Sources/ARORuntime/Terminal/LayoutEngine.swift
-public struct LayoutEngine: Sendable {
-    public func renderBox(_ config: BoxConfig, content: String) -> String
-    public func renderProgress(_ config: ProgressConfig) -> String
-    public func renderTable(_ config: TableConfig, rows: [[String]]) -> String
-    public func renderPanel(_ config: PanelConfig, sections: [String]) -> String
-}
-
-// Sources/ARORuntime/Actions/WatchAction.swift
-public struct WatchAction: ActionImplementation {
-    public static let verbs: Set<String> = ["Watch"]
-
-    public func execute(
-        result: ResultDescriptor,
-        object: ObjectDescriptor,
-        context: ExecutionContext
-    ) async throws -> any Sendable {
-        let templatePath: String = try context.require(result.identifier)
-        let data: [String: Any] = try context.require(object.identifier)
-        let interval: TimeInterval = try context.require("interval", default: 1.0)
-
-        let terminal = try context.service(TerminalService.self)
-
-        // Render loop
-        while !Task.isCancelled {
-            try await terminal.render(templatePath, context: data)
-            try await Task.sleep(for: .seconds(interval))
-        }
-
-        return ()
-    }
+    // All methods are automatically serialized
+    // Multiple feature sets can call concurrently
+    // Actor ensures sequential execution
 }
 ```
 
-### Template Directive Processing
+### 10.2 Service Registration
 
-Template directives are processed by extending the existing template engine:
+TerminalService is registered in Application.swift:
 
 ```swift
-// Sources/ARORuntime/Template/TerminalDirectives.swift
-extension TemplateEngine {
-    func processTerminalDirective(_ directive: Directive) throws -> String {
-        switch directive.name {
-        case "color":
-            return ANSIRenderer.shared.renderColor(directive.argument)
-        case "bg":
-            return ANSIRenderer.shared.renderBackground(directive.argument)
-        case "bold", "italic", "underline":
-            return ANSIRenderer.shared.renderStyle(directive.name)
-        case "reset":
-            return "\u{001B}[0m"
-        case "cursor.move":
-            let (row, col) = parsePosition(directive.arguments)
-            return ANSIRenderer.shared.renderCursorMove(row: row, column: col)
-        // ... more directives
-        default:
-            throw TemplateError.unknownDirective(directive.name)
-        }
+#if !os(Windows)
+if isatty(STDOUT_FILENO) != 0 {
+    let terminalService = TerminalService()
+    await runtime.register(service: terminalService)
+}
+#else
+if ProcessInfo.processInfo.environment["WT_SESSION"] != nil {
+    let terminalService = TerminalService()
+    await runtime.register(service: terminalService)
+}
+#endif
+```
+
+### 10.3 Template Executor Integration
+
+TemplateExecutor injects terminal object and applies filters:
+
+```swift
+// Inject terminal object
+if let terminalService = context.service(TerminalService.self) {
+    let capabilities = await terminalService.detectCapabilities()
+    let terminalObject: [String: any Sendable] = [
+        "rows": capabilities.rows,
+        "columns": capabilities.columns,
+        "supports_color": capabilities.supportsColor,
+        // ...
+    ]
+    templateContext.bind("terminal", value: terminalObject)
+}
+
+// Apply filters
+case "color":
+    if let colorName = filter.arg {
+        let caps = await getTerminalCapabilities(from: context)
+        result = ANSIRenderer.color(colorName, capabilities: caps) + result + ANSIRenderer.reset()
     }
+```
+
+## 11. Future Enhancements
+
+### 11.1 Advanced Input Handling
+
+- Arrow key navigation for Select action
+- Inline editing with cursor movement
+- Tab completion
+- Input validation
+
+### 11.2 Layout Widgets
+
+Optional widget actions for advanced layouts:
+
+```aro
+(* Box widget with borders *)
+Box the <content> with { width: 50, border: "rounded", title: "Status" }.
+
+(* Progress bar *)
+Progress the <status> with { value: 0.75, width: 40, label: "Loading" }.
+
+(* Table rendering *)
+Table the <data> with { headers: <headers>, columns: <columns> }.
+```
+
+### 11.3 Mouse Events
+
+Support for mouse interactions:
+
+```aro
+(Handle Click: Mouse Event Handler) {
+    Extract the <x> from the <event: x>.
+    Extract the <y> from the <event: y>.
+
+    (* Process click at (x, y) *)
+
+    Return an <OK: status>.
 }
 ```
 
-## File Structure
+### 11.4 Alternative Screen Buffer
 
-New files to be created:
+Proper full-screen TUI applications:
 
-```
-Sources/ARORuntime/
-├── Terminal/
-│   ├── TerminalService.swift          # Main terminal service actor
-│   ├── ANSIRenderer.swift             # ANSI escape code generation
-│   ├── LayoutEngine.swift             # Widget layout and rendering
-│   ├── InputHandler.swift             # Keyboard input and raw mode
-│   ├── CapabilityDetector.swift       # Terminal capability detection
-│   └── TerminalColor.swift            # Color types and RGB conversion
-├── Actions/
-│   ├── WatchAction.swift              # Watch action implementation
-│   ├── PromptAction.swift             # Prompt action implementation
-│   ├── SelectAction.swift             # Select action implementation
-│   └── ClearAction.swift              # Clear action implementation
-└── Template/
-    └── TerminalDirectives.swift       # Template directive extensions
+```aro
+(Application-Start: Full Screen App) {
+    (* Switch to alternate buffer *)
+    Enable the <alternate-screen> for the <terminal>.
 
-Examples/
-└── TerminalUI/
-    ├── main.aro                       # Application-Start with Watch
-    ├── dashboard.screen               # System monitoring dashboard
-    ├── task-manager/
-    │   ├── main.aro                   # Task manager app
-    │   ├── task-list.screen           # Task list view
-    │   └── add-task.screen            # Add task form
-    ├── installer/
-    │   ├── main.aro                   # Installation wizard
-    │   ├── welcome.screen             # Welcome screen
-    │   ├── install.screen             # Progress screen
-    │   └── complete.screen            # Completion screen
-    └── simple-menu/
-        ├── main.aro                   # Interactive menu
-        └── menu.screen                # Menu template
+    Keepalive the <application> for the <events>.
+    Return an <OK: status>.
+}
+
+(Application-End: Success) {
+    (* Restore main buffer *)
+    Disable the <alternate-screen> for the <terminal>.
+    Return an <OK: status>.
+}
 ```
 
-## Platform Support
+## 12. Related Proposals
 
-| Platform | Support | Notes |
-|----------|---------|-------|
-| macOS    | Full    | All features supported |
-| Linux    | Full    | All features supported |
-| Windows  | Partial | ANSI support via Windows Terminal; limited in CMD |
+- **ARO-0001**: Language fundamentals (actions, feature sets)
+- **ARO-0002**: Control flow (when guards, iteration)
+- **ARO-0004**: Action semantics and roles
+- **ARO-0005**: Application architecture and lifecycle
+- **ARO-0007**: Event-driven architecture (EventBus, observers)
+- **ARO-0050**: Template engine (rendering, filters, inclusion)
 
-**Windows Considerations:**
-- Windows 10+ with Windows Terminal: Full support
-- Legacy CMD: Basic color support only, no cursor positioning
-- Recommend detecting `$env:WT_SESSION` for Windows Terminal
+## 13. Revision History
 
-## Security Considerations
+| Version | Date | Changes |
+|---------|------|---------|
+| 1.0 | 2025-02-22 | Initial proposal with reactive Watch pattern |
 
-1. **Input Sanitization**: All user input must be sanitized to prevent ANSI injection attacks
-2. **Template Sandboxing**: Templates cannot execute arbitrary shell commands
-3. **Resource Limits**: Watch action has maximum refresh rate to prevent CPU abuse
-4. **Signal Handling**: Graceful cleanup on SIGINT/SIGTERM
+## 14. Summary
 
-## Future Extensions
+ARO's Terminal UI system provides a complete, reactive solution for building beautiful terminal applications. The Watch pattern eliminates polling by leveraging the event-driven architecture, creating responsive UIs that update immediately when data changes. Integration with the template engine allows declarative styling with automatic capability detection and graceful degradation. All operations are thread-safe via Swift actors, making concurrent terminal access safe and predictable.
 
-### Phase 2: Advanced Widgets
-- Chart rendering (bar charts, line charts, sparklines)
-- Tree view with expand/collapse
-- Form inputs with validation
-- Split panes with resizable dividers
-
-### Phase 3: Mouse Support
-- Click event handling
-- Drag-and-drop
-- Scroll events
-
-### Phase 4: Themes
-- Predefined color schemes
-- Custom theme files
-- Dark/light mode detection
-
-## References
-
-This proposal builds upon:
-- **ARO-0050**: Template Engine (Mustache syntax, Render action)
-- **ARO-0008**: I/O Services (System objects architecture)
-- **ARO-0031**: Context-Aware Formatting (Adaptive output concepts)
-
-**External References:**
-- [Ratatui](https://ratatui.rs) - Rust terminal UI library
-- [Rich](https://github.com/Textualize/rich) - Python terminal formatting
-- [Blessed](https://github.com/chjj/blessed) - Node.js terminal library
-- [ANSI Escape Codes](https://en.wikipedia.org/wiki/ANSI_escape_code) - Terminal control sequences
-
-## Conclusion
-
-The Terminal UI system brings ARO's natural language philosophy to terminal applications. By combining the `terminal` system object with template-based rendering and declarative widgets, developers can build sophisticated terminal UIs without learning ANSI codes or complex APIs.
-
-The design follows ARO's core principle: **describe what you want, not how to do it**. Instead of manually positioning cursors and writing escape sequences, developers write templates that declare the desired appearance—ARO handles the rest.
+**Key Innovations**:
+1. **Reactive Watch Pattern**: Event-driven UI updates without polling
+2. **Template Integration**: Styling via filters, capability-aware rendering
+3. **Thread-Safe Design**: Actor-based isolation for concurrent access
+4. **Platform Adaptability**: Automatic fallback for limited terminals
+5. **Natural Syntax**: Combines seamlessly with ARO's action-based paradigm
