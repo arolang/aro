@@ -72,7 +72,28 @@ public final class Lexer: @unchecked Sendable {
         "true": .true,
         "false": .false
     ]
-    
+
+    /// Articles mapped for O(1) lookup (avoids linear enum rawValue search)
+    private static let articles: [String: Article] = [
+        "a": .a,
+        "an": .an,
+        "the": .the
+    ]
+
+    /// Prepositions mapped for O(1) lookup (avoids linear enum rawValue search)
+    private static let prepositions: [String: Preposition] = [
+        "from": .from,
+        "for": .for,
+        "against": .against,
+        "to": .to,
+        "into": .into,
+        "via": .via,
+        "with": .with,
+        "on": .on,
+        "at": .at,
+        "by": .by
+    ]
+
     // MARK: - Initialization
     
     public init(source: String) {
@@ -584,14 +605,14 @@ public final class Lexer: @unchecked Sendable {
             return
         }
         
-        // Check for articles
-        if let article = Article(rawValue: lowerLexeme) {
+        // Check for articles (O(1) dictionary lookup)
+        if let article = Self.articles[lowerLexeme] {
             addToken(.article(article), lexeme: lexeme, start: start)
             return
         }
-        
-        // Check for prepositions
-        if let preposition = Preposition(rawValue: lowerLexeme) {
+
+        // Check for prepositions (O(1) dictionary lookup)
+        if let preposition = Self.prepositions[lowerLexeme] {
             addToken(.preposition(preposition), lexeme: lexeme, start: start)
             return
         }

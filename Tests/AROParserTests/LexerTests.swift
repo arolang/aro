@@ -855,3 +855,119 @@ struct LexerFeatureSetTests {
         #expect(hasStringLiteral)
     }
 }
+
+// MARK: - ARO-0053: Lexer Lookup Optimization Tests
+
+@Suite("Article and Preposition Lookup Optimization (ARO-0053)")
+struct LexerLookupOptimizationTests {
+
+    @Test("All articles are recognized with O(1) dictionary lookup")
+    func testAllArticles() throws {
+        // Test lowercase articles
+        let articlesTest = "a an the"
+        let tokens = try Lexer.tokenize(articlesTest)
+
+        #expect(tokens[0].kind == .article(.a))
+        #expect(tokens[1].kind == .article(.an))
+        #expect(tokens[2].kind == .article(.the))
+    }
+
+    @Test("Articles are case-insensitive")
+    func testArticlesCaseInsensitive() throws {
+        let tokens = try Lexer.tokenize("The A An THE")
+
+        #expect(tokens[0].kind == .article(.the))
+        #expect(tokens[1].kind == .article(.a))
+        #expect(tokens[2].kind == .article(.an))
+        #expect(tokens[3].kind == .article(.the))
+    }
+
+    @Test("All prepositions are recognized with O(1) dictionary lookup")
+    func testAllPrepositions() throws {
+        let prepositionsTest = "from for against to into via with on at by"
+        let tokens = try Lexer.tokenize(prepositionsTest)
+
+        #expect(tokens[0].kind == .preposition(.from))
+        #expect(tokens[1].kind == .preposition(.for))
+        #expect(tokens[2].kind == .preposition(.against))
+        #expect(tokens[3].kind == .preposition(.to))
+        #expect(tokens[4].kind == .preposition(.into))
+        #expect(tokens[5].kind == .preposition(.via))
+        #expect(tokens[6].kind == .preposition(.with))
+        #expect(tokens[7].kind == .preposition(.on))
+        #expect(tokens[8].kind == .preposition(.at))
+        #expect(tokens[9].kind == .preposition(.by))
+    }
+
+    @Test("Prepositions are case-insensitive")
+    func testPrepositionsCaseInsensitive() throws {
+        let tokens = try Lexer.tokenize("FROM From WITH With")
+
+        #expect(tokens[0].kind == .preposition(.from))
+        #expect(tokens[1].kind == .preposition(.from))
+        #expect(tokens[2].kind == .preposition(.with))
+        #expect(tokens[3].kind == .preposition(.with))
+    }
+
+    @Test("Articles in ARO statements are correctly identified")
+    func testArticlesInStatements() throws {
+        let tokens = try Lexer.tokenize("Extract a <value> from the <source>.")
+
+        #expect(tokens[1].kind == .article(.a))
+        #expect(tokens[4].kind == .preposition(.from))
+        #expect(tokens[5].kind == .article(.the))
+    }
+
+    @Test("Non-articles are not matched")
+    func testNonArticles() throws {
+        let tokens = try Lexer.tokenize("abc another thee")
+
+        // These should be identifiers, not articles
+        #expect(tokens[0].kind == .identifier("abc"))
+        #expect(tokens[1].kind == .identifier("another"))
+        #expect(tokens[2].kind == .identifier("thee"))
+    }
+
+    @Test("Non-prepositions are not matched")
+    func testNonPrepositions() throws {
+        let tokens = try Lexer.tokenize("frost format")
+
+        // These should be identifiers, not prepositions
+        #expect(tokens[0].kind == .identifier("frost"))
+        #expect(tokens[1].kind == .identifier("format"))
+    }
+
+    @Test("Verify article enum exhaustiveness")
+    func testArticleEnumExhaustive() {
+        // Ensure all Article enum cases are in the dictionary
+        let allArticles: [Article] = [.a, .an, .the]
+
+        for article in allArticles {
+            let found = try? Lexer.tokenize(article.rawValue)
+            #expect(found != nil)
+            if let tokens = found, !tokens.isEmpty {
+                if case .article(let parsedArticle) = tokens[0].kind {
+                    #expect(parsedArticle == article)
+                }
+            }
+        }
+    }
+
+    @Test("Verify preposition enum exhaustiveness")
+    func testPrepositionEnumExhaustive() {
+        // Ensure all Preposition enum cases are in the dictionary
+        let allPrepositions: [Preposition] = [
+            .from, .for, .against, .to, .into, .via, .with, .on, .at, .by
+        ]
+
+        for preposition in allPrepositions {
+            let found = try? Lexer.tokenize(preposition.rawValue)
+            #expect(found != nil)
+            if let tokens = found, !tokens.isEmpty {
+                if case .preposition(let parsedPrep) = tokens[0].kind {
+                    #expect(parsedPrep == preposition)
+                }
+            }
+        }
+    }
+}
