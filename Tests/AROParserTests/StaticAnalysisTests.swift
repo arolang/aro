@@ -155,6 +155,38 @@ struct UnreachableCodeTests {
         let unreachableWarnings = diagnostics.warnings.filter { $0.message.contains("Unreachable code") }
         #expect(unreachableWarnings.isEmpty)
     }
+
+    @Test("No warning when Return has when guard (ARO-0062)")
+    func testConditionalReturn() throws {
+        let source = """
+        (Test Feature: API) {
+            Return an <Error: status> when <invalid>.
+            Log <message> to the <console>.
+            Return an <OK: status> for the <result>.
+        }
+        """
+        let diagnostics = DiagnosticCollector()
+        _ = try SemanticAnalyzer.analyze(source, diagnostics: diagnostics)
+
+        let unreachableWarnings = diagnostics.warnings.filter { $0.message.contains("Unreachable code") }
+        #expect(unreachableWarnings.isEmpty)
+    }
+
+    @Test("Warning only for unconditional Return (ARO-0062)")
+    func testUnconditionalReturnCausesWarning() throws {
+        let source = """
+        (Test Feature: API) {
+            Return an <Error: status> when <invalid>.
+            Return an <OK: status> for the <result>.
+            Log <message> to the <console>.
+        }
+        """
+        let diagnostics = DiagnosticCollector()
+        _ = try SemanticAnalyzer.analyze(source, diagnostics: diagnostics)
+
+        let unreachableWarnings = diagnostics.warnings.filter { $0.message.contains("Unreachable code") }
+        #expect(unreachableWarnings.count == 1)
+    }
 }
 
 // MARK: - Missing Return Tests
