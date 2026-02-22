@@ -338,42 +338,52 @@ public final class PluginLoader: @unchecked Sendable {
                             guard let verbs = actionDef["verbs"] as? [String] else { continue }
 
                             for verb in verbs {
-                                registrationCount += 1
                                 let normalizedVerb = verb.lowercased().replacingOccurrences(of: "-", with: "")
                                 // Capture the original verb for plugin calls (may have hyphens)
                                 let originalVerb = verb
+
+                                let handler: @Sendable (ResultDescriptor, ObjectDescriptor, any ExecutionContext) async throws -> any Sendable = { result, object, context in
+                                    // Build input from context
+                                    var input: [String: any Sendable] = [:]
+                                    if let data = context.resolveAny(object.base) {
+                                        // Pass data under multiple keys for compatibility
+                                        input["data"] = data
+                                        input["object"] = data
+                                        // Also pass under the object's base name (e.g., "rows")
+                                        input[object.base] = data
+                                    }
+
+                                    // Add with clause arguments if present
+                                    if let withArgs = context.resolveAny("_with_") as? [String: any Sendable] {
+                                        input.merge(withArgs) { _, new in new }
+                                    }
+                                    if let exprArgs = context.resolveAny("_expression_") as? [String: any Sendable] {
+                                        input.merge(exprArgs) { _, new in new }
+                                    }
+
+                                    // Call the plugin with original verb (may have hyphens)
+                                    let pluginResult = try self.callCPlugin(name, method: originalVerb, args: input)
+
+                                    // Bind result
+                                    context.bind(result.base, value: pluginResult)
+
+                                    return pluginResult
+                                }
+
+                                registrationCount += 1
                                 Task {
-                                    await ActionRegistry.shared.registerDynamic(
-                                        verb: normalizedVerb,
-                                        handler: { result, object, context in
-                                            // Build input from context
-                                            var input: [String: any Sendable] = [:]
-                                            if let data = context.resolveAny(object.base) {
-                                                // Pass data under multiple keys for compatibility
-                                                input["data"] = data
-                                                input["object"] = data
-                                                // Also pass under the object's base name (e.g., "rows")
-                                                input[object.base] = data
-                                            }
-
-                                            // Add with clause arguments if present
-                                            if let withArgs = context.resolveAny("_with_") as? [String: any Sendable] {
-                                                input.merge(withArgs) { _, new in new }
-                                            }
-                                            if let exprArgs = context.resolveAny("_expression_") as? [String: any Sendable] {
-                                                input.merge(exprArgs) { _, new in new }
-                                            }
-
-                                            // Call the plugin with original verb (may have hyphens)
-                                            let pluginResult = try self.callCPlugin(name, method: originalVerb, args: input)
-
-                                            // Bind result
-                                            context.bind(result.base, value: pluginResult)
-
-                                            return pluginResult
-                                        }
-                                    )
+                                    await ActionRegistry.shared.registerDynamic(verb: normalizedVerb, handler: handler)
                                     semaphore.signal()
+                                }
+
+                                // ARO-0095: Also register as "namespace.verb" for Namespace.Verb syntax
+                                if let ns = namespace {
+                                    let namespacedVerb = "\(ns).\(normalizedVerb)"
+                                    registrationCount += 1
+                                    Task {
+                                        await ActionRegistry.shared.registerDynamic(verb: namespacedVerb, handler: handler)
+                                        semaphore.signal()
+                                    }
                                 }
                             }
                         }

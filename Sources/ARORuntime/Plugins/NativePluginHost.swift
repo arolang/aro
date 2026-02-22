@@ -626,6 +626,26 @@ public final class NativePluginHost: @unchecked Sendable {
                     )
                     semaphore.signal()
                 }
+
+                // ARO-0095: Also register as "handler.verb" for Namespace.Verb syntax
+                let namespacedVerb = "\(qualifierNamespace).\(verb)"
+                if namespacedVerb != verb {
+                    let nsWrapper = NativePluginActionWrapper(
+                        pluginName: pluginName,
+                        actionName: name,
+                        verb: namespacedVerb,
+                        host: self,
+                        descriptor: descriptor
+                    )
+                    registrationCount += 1
+                    Task {
+                        await ActionRegistry.shared.registerDynamic(
+                            verb: namespacedVerb,
+                            handler: nsWrapper.handle
+                        )
+                        semaphore.signal()
+                    }
+                }
             }
         }
 

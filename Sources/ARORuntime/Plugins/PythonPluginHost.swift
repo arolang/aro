@@ -238,7 +238,7 @@ public final class PythonPluginHost: @unchecked Sendable {
     public func registerActions() {
         // Use semaphore to ensure all registrations complete before returning
         let semaphore = DispatchSemaphore(value: 0)
-        let registrationCount = actions.count
+        var registrationCount = 0
 
         for action in actions {
             let wrapper = PythonPluginActionWrapper(
@@ -248,12 +248,31 @@ public final class PythonPluginHost: @unchecked Sendable {
             )
 
             // Register with ActionRegistry using dynamic verb
+            registrationCount += 1
             Task {
                 await ActionRegistry.shared.registerDynamic(
                     verb: action,
                     handler: wrapper.handle
                 )
                 semaphore.signal()
+            }
+
+            // ARO-0095: Also register as "handler.verb" for Namespace.Verb syntax
+            let namespacedVerb = "\(qualifierNamespace).\(action)"
+            if namespacedVerb != action {
+                let nsWrapper = PythonPluginActionWrapper(
+                    pluginName: pluginName,
+                    actionName: action,
+                    host: self
+                )
+                registrationCount += 1
+                Task {
+                    await ActionRegistry.shared.registerDynamic(
+                        verb: namespacedVerb,
+                        handler: nsWrapper.handle
+                    )
+                    semaphore.signal()
+                }
             }
         }
 
