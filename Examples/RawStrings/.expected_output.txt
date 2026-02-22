@@ -1,0 +1,22 @@
+=== Raw String Literals Demo ===
+
+1. Regex Patterns:
+  Regular string: \d+\.\d+\.\d+
+  Raw string:     \d+\.\d+\.\d+
+
+2. Windows File Paths:
+  Regular string: C:\Users\Admin\config.json
+  Raw string:     C:\Users\Admin\config.json
+
+3. UNC Network Paths:
+  Raw string: \\server\share\data\file.txt
+
+4. LaTeX Commands:
+  \documentclass{article}
+  \frac{1}{2}
+  \begin{equation}
+
+5. Mixed: Single quotes still work
+  Pattern: \w+
+
+=== Demo Complete ===

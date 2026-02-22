@@ -216,7 +216,11 @@ public final class Lexer: @unchecked Sendable {
             try scanString(quote: char, start: startLocation)
 
         default:
-            if char.isLetter || char == "_" {
+            // Check for raw string prefix (ARO-0060)
+            if char == "r" && (peek() == "\"" || peek() == "'") {
+                let quote = advance()  // consume the quote
+                try scanRawString(quote: quote, start: startLocation)
+            } else if char.isLetter || char == "_" {
                 try scanIdentifierOrKeyword(start: startLocation)
             } else if char.isNumber {
                 try scanNumber(start: startLocation, negative: false)
@@ -295,6 +299,34 @@ public final class Lexer: @unchecked Sendable {
         } else {
             addToken(.stringLiteral(value), start: start)
         }
+    }
+
+    /// Scans a raw string literal (ARO-0060)
+    /// Raw strings use r-prefix and don't process escape sequences except \"
+    private func scanRawString(quote: Character, start: SourceLocation) throws {
+        var value = ""
+
+        while !isAtEnd && peek() != quote {
+            let char = peek()
+            if char == "\n" {
+                throw LexerError.unterminatedString(at: start)
+            }
+            // Only allow \" or \' escape in raw strings
+            if char == "\\" && peekNext() == quote {
+                _ = advance()  // skip backslash
+                value.append(advance())  // add quote
+            } else {
+                value.append(advance())
+            }
+        }
+
+        if isAtEnd {
+            throw LexerError.unterminatedString(at: start)
+        }
+
+        _ = advance()  // Closing quote
+
+        addToken(.stringLiteral(value), start: start)
     }
 
     /// Scans a unicode escape sequence: \u{XXXX}

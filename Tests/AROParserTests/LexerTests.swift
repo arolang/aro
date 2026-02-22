@@ -426,6 +426,51 @@ struct LexerTokenizationTests {
         #expect(tokens[0].kind == .stringLiteral("he said \"hello\""))
     }
 
+    @Test("Tokenizes raw string literals (ARO-0060)")
+    func testRawStringLiterals() throws {
+        // Basic raw string
+        let tokens1 = try Lexer.tokenize(#"r"\d+\.\d+""#)
+        #expect(tokens1[0].kind == .stringLiteral(#"\d+\.\d+"#))
+
+        // Raw string with Windows path
+        let tokens2 = try Lexer.tokenize(#"r"C:\Users\Admin\config.json""#)
+        #expect(tokens2[0].kind == .stringLiteral(#"C:\Users\Admin\config.json"#))
+
+        // Raw string with backslashes
+        let tokens3 = try Lexer.tokenize(#"r"\\server\share\file""#)
+        #expect(tokens3[0].kind == .stringLiteral(#"\\server\share\file"#))
+    }
+
+    @Test("Raw strings allow escaped quotes (ARO-0060)")
+    func testRawStringEscapedQuotes() throws {
+        // Raw string with escaped quote
+        let tokens = try Lexer.tokenize(#"r"Path: \"important\"""#)
+        #expect(tokens[0].kind == .stringLiteral(#"Path: "important""#))
+    }
+
+    @Test("Raw strings vs regular strings (ARO-0060)")
+    func testRawVsRegularStrings() throws {
+        // Regular string with escapes
+        let regular = try Lexer.tokenize(#""\\d+\\n""#)
+        #expect(regular[0].kind == .stringLiteral("\\d+\\n"))
+
+        // Raw string without escape processing
+        let raw = try Lexer.tokenize(#"r"\\d+\\n""#)
+        #expect(raw[0].kind == .stringLiteral(#"\\d+\\n"#))
+    }
+
+    @Test("Raw strings work with single quotes (ARO-0060)")
+    func testRawStringSingleQuotes() throws {
+        let tokens = try Lexer.tokenize(#"r'\d+\.\d+'"#)
+        #expect(tokens[0].kind == .stringLiteral(#"\d+\.\d+"#))
+    }
+
+    @Test("'r' alone is still an identifier (ARO-0060)")
+    func testRIdentifier() throws {
+        let tokens = try Lexer.tokenize("r")
+        #expect(tokens[0].kind == .identifier("r"))
+    }
+
     @Test("Tokenizes integer literals")
     func testIntegerLiterals() throws {
         let tokens = try Lexer.tokenize("42 0 123456")

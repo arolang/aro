@@ -1,0 +1,69 @@
+(* Raw String Literals Example - ARO-0060 *)
+
+(*
+  This example demonstrates the raw string literal feature which
+  prevents escape sequence processing, making it easier to work with:
+  - Regular expressions with backslashes
+  - File paths (especially Windows paths)
+  - LaTeX commands
+  - Other backslash-heavy content
+*)
+
+(Application-Start: Raw String Demo) {
+    Log "=== Raw String Literals Demo ===" to the <console>.
+
+    (* 1. Regex Patterns *)
+    Log "" to the <console>.
+    Log "1. Regex Patterns:" to the <console>.
+
+    (* Regular string requires double escaping *)
+    Compute the <regular-regex> from "\\d+\\.\\d+\\.\\d+".
+    Log "  Regular string: " ++ <regular-regex> to the <console>.
+
+    (* Raw string - no escaping needed! *)
+    Compute the <raw-regex> from r"\d+\.\d+\.\d+".
+    Log "  Raw string:     " ++ <raw-regex> to the <console>.
+
+    (* 2. File Paths *)
+    Log "" to the <console>.
+    Log "2. Windows File Paths:" to the <console>.
+
+    (* Regular string requires escaping *)
+    Compute the <regular-path> from "C:\\Users\\Admin\\config.json".
+    Log "  Regular string: " ++ <regular-path> to the <console>.
+
+    (* Raw string - backslashes work naturally *)
+    Compute the <raw-path> from r"C:\Users\Admin\config.json".
+    Log "  Raw string:     " ++ <raw-path> to the <console>.
+
+    (* 3. Network Paths *)
+    Log "" to the <console>.
+    Log "3. UNC Network Paths:" to the <console>.
+
+    Compute the <network> from r"\\server\share\data\file.txt".
+    Log "  Raw string: " ++ <network> to the <console>.
+
+    (* 4. LaTeX Commands *)
+    Log "" to the <console>.
+    Log "4. LaTeX Commands:" to the <console>.
+
+    Compute the <latex1> from r"\documentclass{article}".
+    Compute the <latex2> from r"\frac{1}{2}".
+    Compute the <latex3> from r"\begin{equation}".
+
+    Log "  " ++ <latex1> to the <console>.
+    Log "  " ++ <latex2> to the <console>.
+    Log "  " ++ <latex3> to the <console>.
+
+    (* 5. Mixed Content *)
+    Log "" to the <console>.
+    Log "5. Mixed: Single quotes still work" to the <console>.
+
+    Compute the <single-quote> from r'Pattern: \w+'.
+    Log "  " ++ <single-quote> to the <console>.
+
+    Log "" to the <console>.
+    Log "=== Demo Complete ===" to the <console>.
+
+    Return an <OK: status> for the <demo>.
+}
