@@ -151,6 +151,15 @@ public final class Lexer: @unchecked Sendable {
         case "%": addToken(.percent, start: startLocation)
         case ".": addToken(.dot, start: startLocation)
 
+        case "|":
+            // ARO-0067: Pipeline operator |>
+            if peek() == ">" {
+                _ = advance()
+                addToken(.pipe, start: startLocation)
+            } else {
+                throw LexerError.unexpectedCharacter("|", at: startLocation)
+            }
+
         case ":":
             if peek() == ":" {
                 _ = advance()

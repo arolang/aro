@@ -172,7 +172,27 @@ public final class FeatureSetExecutor: @unchecked Sendable {
             try await executeRequireStatement(requireStatement, context: context)
         } else if let forEachLoop = statement as? ForEachLoop {
             try await executeForEachLoop(forEachLoop, context: context)
+        } else if let pipelineStatement = statement as? PipelineStatement {
+            try await executePipelineStatement(pipelineStatement, context: context)
         }
+    }
+
+    /// ARO-0067: Execute pipeline statement
+    /// Each stage receives the result from the previous stage
+    private func executePipelineStatement(
+        _ pipeline: PipelineStatement,
+        context: ExecutionContext
+    ) async throws {
+        guard !pipeline.stages.isEmpty else { return }
+
+        // Execute all stages sequentially
+        // Each stage's result becomes available as the next stage's object
+        for stage in pipeline.stages {
+            try await executeAROStatement(stage, context: context)
+        }
+
+        // No special binding needed - each stage explicitly names its object
+        // which should match the previous stage's result variable name
     }
 
     private func executeAROStatement(
