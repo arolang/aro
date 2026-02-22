@@ -199,9 +199,10 @@ public final class PluginLoader: @unchecked Sendable {
             }
 
             do {
-                // Check plugin.yaml exists (we don't parse it yet, just check presence)
-                _ = try String(contentsOf: pluginYaml, encoding: .utf8)
+                // Parse plugin.yaml to get the handler (qualifier namespace)
+                let yamlContent = try String(contentsOf: pluginYaml, encoding: .utf8)
                 let pluginName = item.lastPathComponent
+                let pluginHandler = parseHandlerFromPluginYAML(yamlContent)
 
                 // Search for the compiled library in common locations:
                 // - src/ (C plugins)
@@ -228,7 +229,7 @@ public final class PluginLoader: @unchecked Sendable {
 
                     for libFile in contents {
                         if libFile.pathExtension == libraryExtension {
-                            try loadCPlugin(at: libFile, name: pluginName)
+                            try loadCPlugin(at: libFile, name: pluginName, namespace: pluginHandler)
                             found = true
                             break
                         }
@@ -242,12 +243,28 @@ public final class PluginLoader: @unchecked Sendable {
         }
     }
 
+    /// Extract the handler namespace from a plugin.yaml file.
+    /// Returns the `handler:` value from the first `provides:` entry, or nil if not present.
+    private func parseHandlerFromPluginYAML(_ yaml: String) -> String? {
+        for line in yaml.components(separatedBy: "\n") {
+            let trimmed = line.trimmingCharacters(in: .whitespaces)
+            if trimmed.hasPrefix("handler:") {
+                let value = String(trimmed.dropFirst("handler:".count))
+                    .trimmingCharacters(in: .whitespaces)
+                    .trimmingCharacters(in: CharacterSet(charactersIn: "'\""))
+                return value.isEmpty ? nil : value
+            }
+        }
+        return nil
+    }
+
     /// Load a C plugin dynamic library
     /// C plugins export aro_plugin_info() and aro_plugin_execute() functions
     /// - Parameters:
     ///   - path: Path to the dynamic library
     ///   - name: Plugin name (used for service registration)
-    private func loadCPlugin(at path: URL, name: String) throws {
+    ///   - namespace: Qualifier namespace (handler) from plugin.yaml; defaults to plugin name if nil
+    private func loadCPlugin(at path: URL, name: String, namespace: String? = nil) throws {
         lock.lock()
         defer { lock.unlock() }
 
@@ -397,6 +414,7 @@ public final class PluginLoader: @unchecked Sendable {
                                     qualifier: qualifierName,
                                     inputTypes: inputTypes.isEmpty ? Set(QualifierInputType.allCases) : inputTypes,
                                     pluginName: name,
+                                    namespace: namespace,
                                     pluginHost: host
                                 )
                                 QualifierRegistry.shared.register(registration)
@@ -542,6 +560,14 @@ public final class PluginLoader: @unchecked Sendable {
 
             let pluginName = item.lastPathComponent
 
+            // Read handler (qualifier namespace) from plugin.yaml if present
+            let yamlPath = item.appendingPathComponent("plugin.yaml")
+            let pluginHandler: String? = {
+                guard FileManager.default.fileExists(atPath: yamlPath.path),
+                      let yamlContent = try? String(contentsOf: yamlPath, encoding: .utf8) else { return nil }
+                return parseHandlerFromPluginYAML(yamlContent)
+            }()
+
             // Search for the library in common locations:
             // - src/ (C plugins, Python plugins)
             // - Sources/ (Swift plugins)
@@ -568,7 +594,7 @@ public final class PluginLoader: @unchecked Sendable {
                     // Check for native libraries first
                     for libFile in dirContents {
                         if libFile.pathExtension == libraryExtension {
-                            try loadCPlugin(at: libFile, name: pluginName)
+                            try loadCPlugin(at: libFile, name: pluginName, namespace: pluginHandler)
                             found = true
                             break
                         }

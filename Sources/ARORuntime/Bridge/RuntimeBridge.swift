@@ -1184,6 +1184,14 @@ private func evaluateExpressionJSON(_ expr: [String: Any], context: RuntimeConte
         var value = context.resolveAny(varName) ?? ""
 
         // Handle specifiers - try plugin qualifier first, then dictionary property access
+        // Try namespaced qualifier form first (e.g., <list: collections.reverse>)
+        if specs.count > 1 {
+            let joined = specs.joined(separator: ".")
+            if let transformed = try? QualifierRegistry.shared.resolve(joined, value: value) {
+                return transformed
+            }
+        }
+
         for spec in specs {
             // First, try plugin qualifier (e.g., <list: pick-random>)
             if let transformed = try? QualifierRegistry.shared.resolve(spec, value: value) {

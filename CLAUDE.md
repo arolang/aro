@@ -260,26 +260,27 @@ void aro_plugin_free(char* ptr);
 
 Plugins can register custom qualifiers that transform values. Qualifiers work on types like List, String, Int, etc.
 
+Plugin qualifiers are **namespaced** via the `handler:` field in `plugin.yaml`. Access them as `<value: handler.qualifier>`:
+
 ```aro
-(* Using plugin qualifiers *)
-Compute the <random-item: pick-random> from the <items>.
-Compute the <sorted-list: sort> from the <numbers>.
-Log <numbers: reverse> to the <console>.
+(* Plugin qualifiers use handler namespace *)
+Compute the <random-item: collections.pick-random> from the <items>.
+Compute the <sorted-list: stats.sort> from the <numbers>.
+Log <numbers: collections.reverse> to the <console>.
 ```
 
 **Declaring qualifiers in plugin.yaml:**
 ```yaml
 name: plugin-collection
-type: swift-plugin
 version: 1.0.0
-qualifiers:
-  - name: pick-random
-    inputTypes: [List]
-  - name: shuffle
-    inputTypes: [List, String]
-  - name: reverse
-    inputTypes: [List, String]
+provides:
+  - type: swift-plugin
+    path: Sources/
+    handler: collections   # qualifiers accessed as collections.pick-random, etc.
 ```
+
+Qualifiers are declared in `aro_plugin_info()` JSON with plain names (no namespace prefix).
+The runtime automatically registers them as `handler.qualifier` in `QualifierRegistry`.
 
 **Key Files:**
 - **QualifierRegistry** (`Qualifiers/QualifierRegistry.swift`): Central registry for plugin qualifiers

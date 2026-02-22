@@ -37,6 +37,12 @@ public final class PythonPluginHost: @unchecked Sendable {
     /// Plugin name
     public let pluginName: String
 
+    /// Qualifier namespace (handler name from plugin.yaml)
+    ///
+    /// Used as the prefix when registering qualifiers (e.g., "stats.sort").
+    /// Defaults to the plugin name if not specified in plugin.yaml.
+    private let qualifierNamespace: String
+
     /// Path to the plugin
     public let pluginPath: URL
 
@@ -61,8 +67,14 @@ public final class PythonPluginHost: @unchecked Sendable {
     // MARK: - Initialization
 
     /// Initialize with a plugin path and configuration
-    public init(pluginPath: URL, pluginName: String, config: UnifiedProvideEntry) throws {
+    public init(
+        pluginPath: URL,
+        pluginName: String,
+        config: UnifiedProvideEntry,
+        qualifierNamespace: String? = nil
+    ) throws {
         self.pluginName = pluginName
+        self.qualifierNamespace = qualifierNamespace ?? pluginName
         self.pluginPath = pluginPath
 
         // Find Python executable
@@ -161,6 +173,7 @@ public final class PythonPluginHost: @unchecked Sendable {
                 qualifier: descriptor.name,
                 inputTypes: descriptor.inputTypes,
                 pluginName: pluginName,
+                namespace: qualifierNamespace,
                 description: descriptor.description,
                 pluginHost: self
             )

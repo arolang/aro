@@ -71,13 +71,20 @@ public enum QualifierError: Error, CustomStringConvertible {
 
 /// Registration entry for a plugin-provided qualifier
 public struct QualifierRegistration: Sendable {
-    /// The qualifier name (e.g., "pick-random", "shuffle")
+    /// The plain qualifier name (e.g., "pick-random", "shuffle")
     public let qualifier: String
+
+    /// The handler namespace used to access this qualifier (e.g., "collections")
+    ///
+    /// Qualifiers are accessed as `handler.qualifier` in ARO code:
+    /// `<list: collections.reverse>` where "collections" is the handler.
+    /// Set via the `handler:` field in the `provides:` entry of `plugin.yaml`.
+    public let namespace: String
 
     /// Accepted input types for this qualifier
     public let inputTypes: Set<QualifierInputType>
 
-    /// Name of the plugin providing this qualifier
+    /// Name of the plugin providing this qualifier (used for unregistration)
     public let pluginName: String
 
     /// Description of what the qualifier does (optional)
@@ -90,10 +97,13 @@ public struct QualifierRegistration: Sendable {
         qualifier: String,
         inputTypes: Set<QualifierInputType>,
         pluginName: String,
+        namespace: String? = nil,
         description: String? = nil,
         pluginHost: any PluginQualifierHost
     ) {
         self.qualifier = qualifier.lowercased()
+        // Use provided namespace, fall back to plugin name for backward compatibility
+        self.namespace = (namespace ?? pluginName).lowercased()
         self.inputTypes = inputTypes
         self.pluginName = pluginName
         self.description = description
@@ -124,21 +134,19 @@ public final class QualifierRegistry: @unchecked Sendable {
 
     /// Register a qualifier from a plugin
     ///
-    /// Registers both the plain name (e.g., "pick-random") and the namespaced form
-    /// (e.g., "plugin-swift-collection.pick-random") to allow disambiguation when
-    /// multiple plugins provide the same qualifier name.
+    /// Qualifiers are registered exclusively under the namespaced form
+    /// `handler.qualifier` (e.g., "collections.reverse"). This prevents
+    /// name collisions between plugins and requires ARO code to use
+    /// the explicit `<value: handler.qualifier>` syntax.
     ///
     /// - Parameter registration: The qualifier registration
     public func register(_ registration: QualifierRegistration) {
         lock.lock()
         defer { lock.unlock() }
 
-        let key = registration.qualifier.lowercased()
+        // Register only as namespace.qualifier (e.g., "collections.reverse")
+        let key = "\(registration.namespace).\(registration.qualifier)".lowercased()
         qualifiers[key] = registration
-
-        // Also register namespaced form: pluginName.qualifier
-        let namespacedKey = "\(registration.pluginName).\(registration.qualifier)".lowercased()
-        qualifiers[namespacedKey] = registration
     }
 
     /// Register multiple qualifiers from a plugin
@@ -149,12 +157,9 @@ public final class QualifierRegistry: @unchecked Sendable {
         defer { lock.unlock() }
 
         for registration in registrations {
-            let key = registration.qualifier.lowercased()
+            // Register only as namespace.qualifier (e.g., "collections.reverse")
+            let key = "\(registration.namespace).\(registration.qualifier)".lowercased()
             qualifiers[key] = registration
-
-            // Also register namespaced form: pluginName.qualifier
-            let namespacedKey = "\(registration.pluginName).\(registration.qualifier)".lowercased()
-            qualifiers[namespacedKey] = registration
         }
     }
 
@@ -234,9 +239,10 @@ public final class QualifierRegistry: @unchecked Sendable {
             )
         }
 
-        // Execute via plugin host
+        // Execute via plugin host using the plain qualifier name (not the namespaced key)
+        // The plugin's aro_plugin_qualifier function expects "reverse", not "collections.reverse"
         do {
-            return try registration.pluginHost.executeQualifier(qualifier, input: value)
+            return try registration.pluginHost.executeQualifier(registration.qualifier, input: value)
         } catch let error as QualifierError {
             throw error
         } catch {

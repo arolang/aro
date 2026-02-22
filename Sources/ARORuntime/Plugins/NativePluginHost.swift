@@ -41,6 +41,12 @@ public final class NativePluginHost: @unchecked Sendable {
     /// Plugin name
     public let pluginName: String
 
+    /// Qualifier namespace (handler name from plugin.yaml)
+    ///
+    /// Used as the prefix when registering qualifiers (e.g., "collections.reverse").
+    /// Defaults to the plugin name if not specified in plugin.yaml.
+    private let qualifierNamespace: String
+
     /// Path to the plugin
     public let pluginPath: URL
 
@@ -70,8 +76,14 @@ public final class NativePluginHost: @unchecked Sendable {
     // MARK: - Initialization
 
     /// Initialize with a plugin path and configuration
-    public init(pluginPath: URL, pluginName: String, config: UnifiedProvideEntry) throws {
+    public init(
+        pluginPath: URL,
+        pluginName: String,
+        config: UnifiedProvideEntry,
+        qualifierNamespace: String? = nil
+    ) throws {
         self.pluginName = pluginName
+        self.qualifierNamespace = qualifierNamespace ?? pluginName
         self.pluginPath = pluginPath
 
         // Find and load the library
@@ -520,14 +532,15 @@ public final class NativePluginHost: @unchecked Sendable {
         }
 
         // Register qualifiers with QualifierRegistry if plugin provides aro_plugin_qualifier
-        debugPrint("[NativePluginHost] Plugin \(pluginName) has \(qualifierDescriptors.count) qualifiers declared, qualifierFunc=\(qualifierFunc != nil)")
+        debugPrint("[NativePluginHost] Plugin \(pluginName) has \(qualifierDescriptors.count) qualifiers declared, qualifierFunc=\(qualifierFunc != nil), namespace=\(qualifierNamespace)")
         if qualifierFunc != nil {
             for descriptor in qualifierDescriptors {
-                debugPrint("[NativePluginHost] Registering qualifier: \(descriptor.name)")
+                debugPrint("[NativePluginHost] Registering qualifier: \(qualifierNamespace).\(descriptor.name)")
                 let registration = QualifierRegistration(
                     qualifier: descriptor.name,
                     inputTypes: descriptor.inputTypes,
                     pluginName: pluginName,
+                    namespace: qualifierNamespace,
                     description: descriptor.description,
                     pluginHost: self
                 )

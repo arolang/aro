@@ -7,3 +7,4 @@ aro-version: '>=0.1.0'
 provides:
 - type: python-plugin
   path: src/
+  handler: stats
