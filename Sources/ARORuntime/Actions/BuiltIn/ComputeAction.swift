@@ -25,9 +25,10 @@ private func resolveOperationName(
     knownOperations: Set<String>,
     fallback: String
 ) -> String {
-    // Priority 1: Explicit specifier (new syntax: <var: operation>)
-    if let specifier = result.specifiers.first {
-        return specifier
+    // Priority 1: Explicit specifiers (new syntax: <var: operation> or <var: plugin.qualifier>)
+    // Join all specifiers with '.' to support namespaced qualifier form (e.g., plugin-name.qualifier)
+    if !result.specifiers.isEmpty {
+        return result.specifiers.joined(separator: ".")
     }
 
     // Priority 2: Base name if it's a known operation (legacy syntax: <operation>)

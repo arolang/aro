@@ -230,6 +230,8 @@ sub read_test_hint {
         'allow-error' => undef,
         'skip-build' => undef,
         'normalize-dict' => undef,
+        'strip-prefix' => undef,
+        'random-output' => undef,
     );
 
     # Return empty hints if file doesn't exist (backward compatible)

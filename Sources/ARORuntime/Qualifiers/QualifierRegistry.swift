@@ -124,6 +124,10 @@ public final class QualifierRegistry: @unchecked Sendable {
 
     /// Register a qualifier from a plugin
     ///
+    /// Registers both the plain name (e.g., "pick-random") and the namespaced form
+    /// (e.g., "plugin-swift-collection.pick-random") to allow disambiguation when
+    /// multiple plugins provide the same qualifier name.
+    ///
     /// - Parameter registration: The qualifier registration
     public func register(_ registration: QualifierRegistration) {
         lock.lock()
@@ -131,6 +135,10 @@ public final class QualifierRegistry: @unchecked Sendable {
 
         let key = registration.qualifier.lowercased()
         qualifiers[key] = registration
+
+        // Also register namespaced form: pluginName.qualifier
+        let namespacedKey = "\(registration.pluginName).\(registration.qualifier)".lowercased()
+        qualifiers[namespacedKey] = registration
     }
 
     /// Register multiple qualifiers from a plugin
@@ -143,6 +151,10 @@ public final class QualifierRegistry: @unchecked Sendable {
         for registration in registrations {
             let key = registration.qualifier.lowercased()
             qualifiers[key] = registration
+
+            // Also register namespaced form: pluginName.qualifier
+            let namespacedKey = "\(registration.pluginName).\(registration.qualifier)".lowercased()
+            qualifiers[namespacedKey] = registration
         }
     }
 

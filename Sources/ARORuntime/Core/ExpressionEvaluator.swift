@@ -46,7 +46,18 @@ public struct ExpressionEvaluator: Sendable {
             }
             // Handle specifiers as qualifiers or property access
             // Plugin qualifiers are checked first, then property access as fallback
-            for specifier in varRef.noun.specifiers {
+            let specifiers = varRef.noun.specifiers
+
+            // Try namespaced qualifier form first (e.g., <list: plugin-swift-collection.reverse>)
+            // This allows disambiguation when multiple plugins provide the same qualifier
+            if specifiers.count > 1 {
+                let joined = specifiers.joined(separator: ".")
+                if let transformed = try QualifierRegistry.shared.resolve(joined, value: value) {
+                    return transformed
+                }
+            }
+
+            for specifier in specifiers {
                 // Try plugin qualifier first (e.g., <list: pick-random>)
                 if let transformed = try QualifierRegistry.shared.resolve(specifier, value: value) {
                     value = transformed
