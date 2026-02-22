@@ -799,7 +799,31 @@ Proper full-screen TUI applications:
 }
 ```
 
-## 12. Related Proposals
+## 12. Performance Optimization
+
+For production terminal UIs with frequent updates (dashboards, monitors, progress indicators), ARO provides a **shadow buffer** optimization system detailed in **ARO-0053: Terminal Shadow Buffer Optimization**.
+
+### Key Optimizations
+
+1. **Double Buffering**: Maintains current and previous screen states
+2. **Dirty Region Tracking**: Only renders cells that changed
+3. **Cell-Level Diffing**: Compares buffers before emitting ANSI codes
+4. **Batch Rendering**: Collects updates for optimal cursor movement
+5. **Terminal State Tracking**: Avoids redundant style changes
+
+### Performance Benefits
+
+| Scenario | Without Buffer | With Shadow Buffer | Improvement |
+|----------|----------------|-------------------|-------------|
+| Metrics update (10 cells) | 1920 ops | 10 ops | **192× faster** |
+| Task list (200 cells) | 1920 ops | 200 ops | **9.6× faster** |
+| Progress bar (80 cells) | 1920 ops | 80 ops | **24× faster** |
+
+The shadow buffer is automatically enabled for TTY terminals and integrates transparently with the Watch pattern - no syntax changes required.
+
+**See**: ARO-0053 for complete implementation details and benchmarks.
+
+## 13. Related Proposals
 
 - **ARO-0001**: Language fundamentals (actions, feature sets)
 - **ARO-0002**: Control flow (when guards, iteration)
@@ -807,14 +831,16 @@ Proper full-screen TUI applications:
 - **ARO-0005**: Application architecture and lifecycle
 - **ARO-0007**: Event-driven architecture (EventBus, observers)
 - **ARO-0050**: Template engine (rendering, filters, inclusion)
+- **ARO-0053**: Terminal shadow buffer optimization
 
-## 13. Revision History
+## 14. Revision History
 
 | Version | Date | Changes |
 |---------|------|---------|
 | 1.0 | 2025-02-22 | Initial proposal with reactive Watch pattern |
+| 1.1 | 2026-02-23 | Added ARO-0053 shadow buffer optimization reference |
 
-## 14. Summary
+## 15. Summary
 
 ARO's Terminal UI system provides a complete, reactive solution for building beautiful terminal applications. The Watch pattern eliminates polling by leveraging the event-driven architecture, creating responsive UIs that update immediately when data changes. Integration with the template engine allows declarative styling with automatic capability detection and graceful degradation. All operations are thread-safe via Swift actors, making concurrent terminal access safe and predictable.
 

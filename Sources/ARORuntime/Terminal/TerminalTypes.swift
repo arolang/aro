@@ -131,6 +131,34 @@ public enum TerminalColor: String, Sendable, CaseIterable {
     public var backgroundCode: Int {
         foregroundCode + 10
     }
+
+    /// Get 256-color palette code (for shadow buffer optimization)
+    /// Uses the basic foreground code for simplicity
+    public var code: Int {
+        // Map to 256-color palette (0-15 for basic colors)
+        switch self {
+        case .black: return 0
+        case .red: return 1
+        case .green: return 2
+        case .yellow: return 3
+        case .blue: return 4
+        case .magenta: return 5
+        case .cyan: return 6
+        case .white: return 7
+        case .brightBlack: return 8
+        case .brightRed: return 9
+        case .brightGreen: return 10
+        case .brightYellow: return 11
+        case .brightBlue: return 12
+        case .brightMagenta: return 13
+        case .brightCyan: return 14
+        case .brightWhite: return 15
+        case .success: return TerminalColor.green.code
+        case .error: return TerminalColor.red.code
+        case .warning: return TerminalColor.yellow.code
+        case .info: return TerminalColor.blue.code
+        }
+    }
 }
 
 // MARK: - Text Alignment

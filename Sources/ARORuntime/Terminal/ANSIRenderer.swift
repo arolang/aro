@@ -114,6 +114,23 @@ public struct ANSIRenderer: Sendable {
         return "\(CSI)0m"
     }
 
+    // MARK: - Color Code Generation (for TerminalState optimization)
+
+    /// Generate color code component for building compound ANSI sequences
+    /// Used by TerminalState to build optimized sequences with multiple style changes
+    public static func colorCode(_ color: TerminalColor, foreground: Bool) -> String {
+        if foreground {
+            return "38;5;\(color.code)"
+        } else {
+            return "48;5;\(color.code)"
+        }
+    }
+
+    /// Reset styling (outputs the complete sequence, used by ShadowBuffer)
+    public static func resetStyles() {
+        print("\(CSI)0m", terminator: "")
+    }
+
     // MARK: - Cursor Control
 
     /// Move cursor to specific position (1-indexed)
