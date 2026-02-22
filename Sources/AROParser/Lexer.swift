@@ -12,6 +12,7 @@ public final class Lexer: @unchecked Sendable {
 
     private let source: String
     private var currentIndex: String.Index
+    private var nextIndex: String.Index  // ARO-0057: Cached next index for peekNext() optimization
     private var location: SourceLocation
     private var tokens: [Token] = []
     private var lastTokenKind: TokenKind?
@@ -101,6 +102,12 @@ public final class Lexer: @unchecked Sendable {
     public init(source: String) {
         self.source = source
         self.currentIndex = source.startIndex
+        // ARO-0057: Pre-compute next index for peekNext() optimization
+        if source.isEmpty {
+            self.nextIndex = source.endIndex
+        } else {
+            self.nextIndex = source.index(after: source.startIndex)
+        }
         self.location = SourceLocation()
     }
     
@@ -678,8 +685,8 @@ public final class Lexer: @unchecked Sendable {
         return source[currentIndex]
     }
     
+    // ARO-0057: Use cached nextIndex for O(1) lookahead
     private func peekNext() -> Character {
-        let nextIndex = source.index(after: currentIndex)
         guard nextIndex < source.endIndex else { return "\0" }
         return source[nextIndex]
     }
@@ -687,7 +694,11 @@ public final class Lexer: @unchecked Sendable {
     @discardableResult
     private func advance() -> Character {
         let char = source[currentIndex]
-        currentIndex = source.index(after: currentIndex)
+        // ARO-0057: Use cached nextIndex and update it for next call
+        currentIndex = nextIndex
+        if nextIndex < source.endIndex {
+            nextIndex = source.index(after: nextIndex)
+        }
         location = location.advancing(past: char)
         return char
     }
