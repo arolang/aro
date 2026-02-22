@@ -135,37 +135,47 @@ Document event contracts. The payload of an event is a contract between emitters
 Repository observers are a specialized form of event handlers that react to changes in repository data. When items are stored, updated, or deleted from a repository, observers automatically receive the change details including both old and new values.
 
 <div style="float: right; margin: 0 0 1em 1.5em;">
-<svg width="180" height="200" viewBox="0 0 180 200" xmlns="http://www.w3.org/2000/svg">
+<svg width="230" height="230" viewBox="0 0 230 230" xmlns="http://www.w3.org/2000/svg">
   <!-- Repository -->
-  <rect x="50" y="10" width="80" height="35" rx="4" fill="#e0e7ff" stroke="#6366f1" stroke-width="2"/>
-  <text x="90" y="25" text-anchor="middle" font-family="sans-serif" font-size="8" font-weight="bold" fill="#4338ca">user-repository</text>
-  <text x="90" y="38" text-anchor="middle" font-family="monospace" font-size="7" fill="#6366f1">&lt;Store&gt; | &lt;Delete&gt;</text>
+  <rect x="55" y="10" width="120" height="38" rx="4" fill="#e0e7ff" stroke="#6366f1" stroke-width="2"/>
+  <text x="115" y="27" text-anchor="middle" font-family="sans-serif" font-size="9" font-weight="bold" fill="#4338ca">user-repository</text>
+  <text x="115" y="41" text-anchor="middle" font-family="monospace" font-size="8" fill="#6366f1">&lt;Store&gt; | &lt;Delete&gt;</text>
 
   <!-- Arrow to event -->
-  <line x1="90" y1="45" x2="90" y2="70" stroke="#6b7280" stroke-width="2"/>
-  <polygon points="90,70 85,62 95,62" fill="#6b7280"/>
+  <line x1="115" y1="48" x2="115" y2="70" stroke="#6b7280" stroke-width="2"/>
+  <polygon points="115,75 110,67 120,67" fill="#6b7280"/>
 
-  <!-- Event -->
-  <rect x="35" y="75" width="110" height="25" rx="4" fill="#fef3c7" stroke="#f59e0b" stroke-width="2"/>
-  <text x="90" y="91" text-anchor="middle" font-family="sans-serif" font-size="8" font-weight="bold" fill="#92400e">RepositoryChangedEvent</text>
+  <!-- RepositoryChangedEvent -->
+  <rect x="20" y="76" width="190" height="28" rx="4" fill="#fef3c7" stroke="#f59e0b" stroke-width="2"/>
+  <text x="115" y="94" text-anchor="middle" font-family="sans-serif" font-size="9" font-weight="bold" fill="#92400e">RepositoryChangedEvent</text>
 
   <!-- Fan-out to observers -->
-  <line x1="60" y1="100" x2="40" y2="130" stroke="#a855f7" stroke-width="2"/>
-  <polygon points="40,130 46,122 34,122" fill="#a855f7"/>
-  <line x1="120" y1="100" x2="140" y2="130" stroke="#a855f7" stroke-width="2"/>
-  <polygon points="140,130 134,122 146,122" fill="#a855f7"/>
+  <line x1="60" y1="104" x2="35" y2="138" stroke="#a855f7" stroke-width="2"/>
+  <polygon points="35,143 43,135 28,135" fill="#a855f7"/>
+  <line x1="115" y1="104" x2="115" y2="138" stroke="#a855f7" stroke-width="2"/>
+  <polygon points="115,143 110,135 120,135" fill="#a855f7"/>
+  <line x1="170" y1="104" x2="195" y2="138" stroke="#a855f7" stroke-width="2"/>
+  <polygon points="195,143 183,135 202,135" fill="#a855f7"/>
 
-  <!-- Observer 1 -->
-  <rect x="5" y="135" width="70" height="35" rx="4" fill="#f3e8ff" stroke="#a855f7" stroke-width="2"/>
-  <text x="40" y="150" text-anchor="middle" font-family="sans-serif" font-size="7" font-weight="bold" fill="#7c3aed">Audit Observer</text>
-  <text x="40" y="162" text-anchor="middle" font-family="sans-serif" font-size="6" fill="#a855f7">old + new values</text>
+  <!-- Observer 1: Audit -->
+  <rect x="5" y="148" width="70" height="40" rx="4" fill="#f3e8ff" stroke="#a855f7" stroke-width="2"/>
+  <text x="40" y="165" text-anchor="middle" font-family="sans-serif" font-size="8" font-weight="bold" fill="#7c3aed">Audit</text>
+  <text x="40" y="177" text-anchor="middle" font-family="sans-serif" font-size="7" fill="#7c3aed">Observer</text>
+  <text x="40" y="187" text-anchor="middle" font-family="sans-serif" font-size="6.5" fill="#a855f7">old + new values</text>
 
-  <!-- Observer 2 -->
-  <rect x="105" y="135" width="70" height="35" rx="4" fill="#f3e8ff" stroke="#a855f7" stroke-width="2"/>
-  <text x="140" y="150" text-anchor="middle" font-family="sans-serif" font-size="7" font-weight="bold" fill="#7c3aed">Sync Observer</text>
-  <text x="140" y="162" text-anchor="middle" font-family="sans-serif" font-size="6" fill="#a855f7">changeType</text>
+  <!-- Observer 2: Sync -->
+  <rect x="80" y="148" width="70" height="40" rx="4" fill="#f3e8ff" stroke="#a855f7" stroke-width="2"/>
+  <text x="115" y="165" text-anchor="middle" font-family="sans-serif" font-size="8" font-weight="bold" fill="#7c3aed">Sync</text>
+  <text x="115" y="177" text-anchor="middle" font-family="sans-serif" font-size="7" fill="#7c3aed">Observer</text>
+  <text x="115" y="187" text-anchor="middle" font-family="sans-serif" font-size="6.5" fill="#a855f7">changeType</text>
 
-  <text x="90" y="190" text-anchor="middle" font-family="sans-serif" font-size="7" fill="#6b7280">automatic reactive patterns</text>
+  <!-- Observer 3: Rules -->
+  <rect x="155" y="148" width="70" height="40" rx="4" fill="#f3e8ff" stroke="#a855f7" stroke-width="2"/>
+  <text x="190" y="165" text-anchor="middle" font-family="sans-serif" font-size="8" font-weight="bold" fill="#7c3aed">Rules</text>
+  <text x="190" y="177" text-anchor="middle" font-family="sans-serif" font-size="7" fill="#7c3aed">Observer</text>
+  <text x="190" y="187" text-anchor="middle" font-family="sans-serif" font-size="6.5" fill="#a855f7">entity data</text>
+
+  <text x="115" y="218" text-anchor="middle" font-family="sans-serif" font-size="7.5" fill="#6b7280">automatic reactive patterns</text>
 </svg>
 </div>
 
