@@ -433,9 +433,12 @@ public final class Lexer: @unchecked Sendable {
             numStr.append(previous())
         }
 
-        // Scan integer part
-        while !isAtEnd && peek().isNumber {
-            numStr.append(advance())
+        // Scan integer part (with optional underscore separators)
+        while !isAtEnd && (peek().isNumber || peek() == "_") {
+            let char = advance()
+            if char != "_" {
+                numStr.append(char)
+            }
         }
 
         // Check for decimal point
@@ -443,8 +446,12 @@ public final class Lexer: @unchecked Sendable {
         if !isAtEnd && peek() == "." && peekNext().isNumber {
             isFloat = true
             numStr.append(advance()) // .
-            while !isAtEnd && peek().isNumber {
-                numStr.append(advance())
+            // Scan fractional part (with optional underscore separators)
+            while !isAtEnd && (peek().isNumber || peek() == "_") {
+                let char = advance()
+                if char != "_" {
+                    numStr.append(char)
+                }
             }
         }
 
@@ -455,8 +462,12 @@ public final class Lexer: @unchecked Sendable {
             if !isAtEnd && (peek() == "+" || peek() == "-") {
                 numStr.append(advance())
             }
-            while !isAtEnd && peek().isNumber {
-                numStr.append(advance())
+            // Scan exponent digits (with optional underscore separators)
+            while !isAtEnd && (peek().isNumber || peek() == "_") {
+                let char = advance()
+                if char != "_" {
+                    numStr.append(char)
+                }
             }
         }
 
