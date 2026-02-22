@@ -899,3 +899,76 @@ struct LexerFeatureSetTests {
         #expect(hasStringLiteral)
     }
 }
+
+// MARK: - Numeric Separator Tests (ARO-0052)
+
+@Suite("Numeric Separator Tests")
+struct NumericSeparatorTests {
+
+    @Test("Tokenizes integer with underscore separators")
+    func testIntegerWithUnderscores() throws {
+        let tokens = try Lexer.tokenize("1_000_000")
+        #expect(tokens[0].kind == .intLiteral(1_000_000))
+    }
+
+    @Test("Tokenizes large integer with underscore separators")
+    func testLargeIntegerWithUnderscores() throws {
+        let tokens = try Lexer.tokenize("1_000_000_000")
+        #expect(tokens[0].kind == .intLiteral(1_000_000_000))
+    }
+
+    @Test("Tokenizes float with underscore separators")
+    func testFloatWithUnderscores() throws {
+        let tokens = try Lexer.tokenize("1_234.567_890")
+        #expect(tokens[0].kind == .floatLiteral(1_234.567_890))
+    }
+
+    @Test("Tokenizes exponent with underscore separators")
+    func testExponentWithUnderscores() throws {
+        let tokens = try Lexer.tokenize("1e1_0")
+        #expect(tokens[0].kind == .floatLiteral(1e10))
+    }
+
+    @Test("Tokenizes complex float with underscores")
+    func testComplexFloatWithUnderscores() throws {
+        let tokens = try Lexer.tokenize("1_234.567_890e1_2")
+        #expect(tokens[0].kind == .floatLiteral(1_234.567_890e12))
+    }
+
+    @Test("Tokenizes hex with underscore separators")
+    func testHexWithUnderscores() throws {
+        let tokens = try Lexer.tokenize("0xFF_FF")
+        #expect(tokens[0].kind == .intLiteral(0xFFFF))
+    }
+
+    @Test("Tokenizes binary with underscore separators")
+    func testBinaryWithUnderscores() throws {
+        let tokens = try Lexer.tokenize("0b1010_1010")
+        #expect(tokens[0].kind == .intLiteral(0b10101010))
+    }
+
+    @Test("Underscores at arbitrary positions")
+    func testArbitraryUnderscorePositions() throws {
+        // Underscores can be between any digits
+        let tokens = try Lexer.tokenize("12_34_56")
+        #expect(tokens[0].kind == .intLiteral(123456))
+    }
+
+    @Test("Single underscore in integer")
+    func testSingleUnderscore() throws {
+        let tokens = try Lexer.tokenize("1_0")
+        #expect(tokens[0].kind == .intLiteral(10))
+    }
+
+    @Test("Negative integer with underscores")
+    func testNegativeIntegerWithUnderscores() throws {
+        let tokens = try Lexer.tokenize("-1_000_000")
+        #expect(tokens[0].kind == .intLiteral(-1_000_000))
+    }
+
+    @Test("Negative float with underscores")
+    func testNegativeFloatWithUnderscores() throws {
+        let tokens = try Lexer.tokenize("-1_234.567_890")
+        #expect(tokens[0].kind == .floatLiteral(-1_234.567_890))
+    }
+}
