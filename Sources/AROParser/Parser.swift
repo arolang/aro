@@ -177,7 +177,8 @@ public final class Parser {
         }
 
         // Check for for-each loop (ARO-0005) - starts with 'for' or 'parallel for'
-        if check(.for) {
+        // Note: 'for' can be tokenized as either .for keyword or .preposition(.for)
+        if check(.for) || check(.preposition(.for)) {
             return try parseForEachLoop(isParallel: false)
         }
         if check(.parallel) {
@@ -938,7 +939,15 @@ public final class Parser {
 
     /// Parses: "for" "each" "<" item ">" ["at" "<" index ">"] "in" "<" collection ">" ["with" "<" "concurrency" ":" N ">"] ["where" condition] "{" statements "}"
     private func parseForEachLoop(isParallel: Bool) throws -> ForEachLoop {
-        let startToken = try expect(.for, message: "'for'")
+        // Accept either .for keyword or .preposition(.for)
+        let startToken: Token
+        if check(.for) {
+            startToken = try expect(.for, message: "'for'")
+        } else if check(.preposition(.for)) {
+            startToken = try expect(.preposition(.for), message: "'for'")
+        } else {
+            throw ParserError.unexpectedToken(expected: "'for'", got: peek())
+        }
         try expect(.each, message: "'each'")
 
         // Parse item variable: <item>
@@ -947,8 +956,9 @@ public final class Parser {
         try expect(.rightAngle, message: "'>'")
 
         // Parse optional index: at <index>
+        // Note: 'at' can be tokenized as either .atKeyword or .preposition(.at)
         var indexVariable: String? = nil
-        if check(.atKeyword) {
+        if check(.atKeyword) || check(.preposition(.at)) {
             advance()
             try expect(.leftAngle, message: "'<'")
             indexVariable = try parseCompoundIdentifier()

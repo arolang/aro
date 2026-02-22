@@ -598,25 +598,28 @@ public final class Lexer: @unchecked Sendable {
         
         let lexeme = String(source[source.index(source.startIndex, offsetBy: start.offset)..<currentIndex])
         let lowerLexeme = lexeme.lowercased()
-        
-        // Check for keywords first
-        if let keyword = Self.keywords[lowerLexeme] {
-            addToken(keyword, lexeme: lexeme, start: start)
-            return
-        }
-        
-        // Check for articles (O(1) dictionary lookup)
+
+        // Check for articles first (O(1) dictionary lookup)
         if let article = Self.articles[lowerLexeme] {
             addToken(.article(article), lexeme: lexeme, start: start)
             return
         }
 
-        // Check for prepositions (O(1) dictionary lookup)
+        // Check for prepositions second (O(1) dictionary lookup)
+        // This comes before keywords because "for" and "at" are both prepositions AND keywords,
+        // but they're used more frequently as prepositions in action statements.
+        // The parser handles the keyword cases in specific contexts (e.g., "for each").
         if let preposition = Self.prepositions[lowerLexeme] {
             addToken(.preposition(preposition), lexeme: lexeme, start: start)
             return
         }
-        
+
+        // Check for keywords
+        if let keyword = Self.keywords[lowerLexeme] {
+            addToken(keyword, lexeme: lexeme, start: start)
+            return
+        }
+
         // Regular identifier
         addToken(.identifier(lexeme), lexeme: lexeme, start: start)
     }

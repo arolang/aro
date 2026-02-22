@@ -497,12 +497,13 @@ struct LexerTokenizationTests {
         #expect(tokens[5].kind == .preposition(.via))
     }
 
-    @Test("Tokenizes 'for' as keyword not preposition")
-    func testForKeyword() throws {
+    @Test("Tokenizes 'for' as preposition")
+    func testForPreposition() throws {
         let tokens = try Lexer.tokenize("for")
 
-        // "for" is tokenized as a keyword, not preposition
-        #expect(tokens[0].kind == .for)
+        // "for" is tokenized as a preposition (prioritized over keyword)
+        // The parser handles "for each" by accepting preposition(.for)
+        #expect(tokens[0].kind == .preposition(.for))
     }
 
     @Test("Tokenizes control flow keywords")
@@ -523,10 +524,11 @@ struct LexerTokenizationTests {
     func testIterationKeywords() throws {
         let tokens = try Lexer.tokenize("for each in at parallel concurrency")
 
-        #expect(tokens[0].kind == .for)
+        // "for" and "at" are prepositions (prioritized over keywords)
+        #expect(tokens[0].kind == .preposition(.for))
         #expect(tokens[1].kind == .each)
         #expect(tokens[2].kind == .in)
-        #expect(tokens[3].kind == .atKeyword)
+        #expect(tokens[3].kind == .preposition(.at))
         #expect(tokens[4].kind == .parallel)
         #expect(tokens[5].kind == .concurrency)
     }
@@ -914,8 +916,8 @@ struct LexerLookupOptimizationTests {
         let tokens = try Lexer.tokenize("Extract a <value> from the <source>.")
 
         #expect(tokens[1].kind == .article(.a))
-        #expect(tokens[4].kind == .preposition(.from))
-        #expect(tokens[5].kind == .article(.the))
+        #expect(tokens[5].kind == .preposition(.from))
+        #expect(tokens[6].kind == .article(.the))
     }
 
     @Test("Non-articles are not matched")
