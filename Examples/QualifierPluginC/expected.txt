@@ -8,3 +8,5 @@ List size:
 5
 String size:
 9
+demo
+value: Hello ARO

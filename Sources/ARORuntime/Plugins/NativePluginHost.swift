@@ -181,13 +181,46 @@ public final class NativePluginHost: @unchecked Sendable {
     /// Compile Swift source files to a dynamic library
     private func compileSwiftPlugin(sources: [URL], output: URL) throws {
         // Find swiftc
-        let swiftcPaths = [
-            "/usr/bin/swiftc",
-            "/opt/homebrew/bin/swiftc",
-            "/usr/local/bin/swiftc",
-        ]
+        // Check SWIFTC environment variable first
+        var swiftcPath: String? = nil
+        if let swiftcEnv = ProcessInfo.processInfo.environment["SWIFTC"],
+           !swiftcEnv.isEmpty,
+           FileManager.default.isExecutableFile(atPath: swiftcEnv) {
+            swiftcPath = swiftcEnv
+        }
 
-        guard let swiftcPath = swiftcPaths.first(where: { FileManager.default.isExecutableFile(atPath: $0) }) else {
+        // Try 'which swiftc' to find swiftc in PATH
+        if swiftcPath == nil {
+            let whichProcess = Process()
+            whichProcess.executableURL = URL(fileURLWithPath: "/usr/bin/which")
+            whichProcess.arguments = ["swiftc"]
+            let pipe = Pipe()
+            whichProcess.standardOutput = pipe
+            whichProcess.standardError = FileHandle.nullDevice
+            if let _ = try? whichProcess.run() {
+                whichProcess.waitUntilExit()
+                if whichProcess.terminationStatus == 0,
+                   let path = String(data: pipe.fileHandleForReading.readDataToEndOfFile(), encoding: .utf8)?
+                       .trimmingCharacters(in: .whitespacesAndNewlines),
+                   !path.isEmpty {
+                    swiftcPath = path
+                }
+            }
+        }
+
+        // Fall back to common installation paths
+        if swiftcPath == nil {
+            let commonPaths = [
+                "/usr/bin/swiftc",
+                "/usr/share/swift/usr/bin/swiftc",  // CI Docker image path
+                "/opt/swift/usr/bin/swiftc",
+                "/opt/homebrew/bin/swiftc",
+                "/usr/local/bin/swiftc",
+            ]
+            swiftcPath = commonPaths.first(where: { FileManager.default.isExecutableFile(atPath: $0) })
+        }
+
+        guard let swiftcPath = swiftcPath else {
             throw NativePluginError.compilationFailed(pluginName, message: "swiftc not found")
         }
 
