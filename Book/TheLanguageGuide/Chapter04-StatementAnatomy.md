@@ -87,13 +87,43 @@ The important thing is to be consistent within your codebase. Whether you prefer
 
 Some statements include literal values—strings, numbers, booleans, arrays, or objects. Literal values provide concrete data within the statement rather than referencing previously bound variables.
 
-String literals are enclosed in double quotes. You can include special characters using escape sequences: backslash-n for newline, backslash-t for tab, backslash followed by a quote for a literal quote character. Strings can contain any text and are commonly used for messages, paths, and configuration values.
+### String Literals
+
+ARO provides two types of string literals:
+
+**Regular strings** are enclosed in double quotes and support full escape sequence processing:
+- `\n` for newline
+- `\t` for tab
+- `\\` for literal backslash
+- `\"` for literal quote
+- Other standard escape sequences
+
+**Raw strings** are enclosed in single quotes and treat backslashes literally, with only `\'` requiring escaping. Raw strings are ideal for regex patterns, file paths, LaTeX commands, and other backslash-heavy content.
+
+```aro
+(* Regular string with escape sequences *)
+Log "Hello\nWorld" to the <console>.
+
+(* Raw string - backslashes are literal *)
+Transform the <versions> from the <text> with regex '\d+\.\d+\.\d+'.
+Read the <config> from 'C:\Program Files\MyApp\config.json'.
+```
+
+Use single quotes when backslashes should be preserved literally. Use double quotes when you need escape sequence processing.
+
+### Number Literals
 
 Number literals can be integers or floating-point values. Integers are written as sequences of digits, optionally preceded by a minus sign for negative numbers. Floating-point numbers include a decimal point between digits. There is no distinction in syntax between integers and floats; the runtime handles numeric types appropriately.
 
+### Boolean Literals
+
 Boolean literals are written as "true" or "false" without any enclosing symbols. They represent the two truth values and are commonly used for flags and conditions.
 
+### Array Literals
+
 Array literals are enclosed in square brackets with elements separated by commas. The elements can be any valid expression, including other literals, variable references, or nested arrays. Array literals provide a convenient way to create collections inline.
+
+### Object Literals
 
 Object literals are enclosed in curly braces with fields written as key-colon-value pairs separated by commas. The keys are identifiers; the values can be any valid expression. Object literals allow you to construct structured data inline, which is particularly useful for return values and event payloads.
 
