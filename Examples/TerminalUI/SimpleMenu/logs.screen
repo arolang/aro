@@ -1,0 +1,13 @@
+{{ screen.clear }}
+
+{{ color cyan }}{{ bold }}Recent Logs{{ reset }}
+{{ for 0..<terminal.columns }}-{{ endfor }}
+
+{{ color dim }}[2026-02-22 10:30:15]{{ reset }} {{ color green }}INFO{{ reset }}  Application started
+{{ color dim }}[2026-02-22 10:30:16]{{ reset }} {{ color green }}INFO{{ reset }}  HTTP server listening on port 8080
+{{ color dim }}[2026-02-22 10:30:20]{{ reset }} {{ color yellow }}WARN{{ reset }}  High memory usage detected
+{{ color dim }}[2026-02-22 10:30:25]{{ reset }} {{ color green }}INFO{{ reset }}  Request processed successfully
+{{ color dim }}[2026-02-22 10:30:30]{{ reset }} {{ color red }}ERROR{{ reset }} Failed to connect to database
+
+{{ for 0..<terminal.columns }}-{{ endfor }}
+{{ color dim }}Press any key to continue...{{ reset }}

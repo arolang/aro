@@ -1,0 +1,121 @@
+(*
+ * Terminal UI Task Manager
+ *
+ * Demonstrates:
+ * - Watch action for live updates
+ * - terminal system object for responsive layout
+ * - Template-based UI with colors and widgets
+ * - Interactive keyboard input
+ * - Event-driven updates
+ *)
+
+(Application-Start: Task Manager) {
+    Log "Task Manager starting..." to the <console>.
+
+    (* Initialize with sample tasks *)
+    Create the <tasks> with [
+        { id: 1, name: "Write ARO proposal", status: "completed", priority: "high" },
+        { id: 2, name: "Review pull requests", status: "in-progress", priority: "medium" },
+        { id: 3, name: "Update documentation", status: "pending", priority: "low" },
+        { id: 4, name: "Fix bug #123", status: "in-progress", priority: "high" }
+    ].
+
+    Store the <tasks> in the <task-repository>.
+
+    (* Watch renders the template and updates on events *)
+    Watch the <dashboard> from "task-list.screen"
+          with { tasks: <tasks> }
+          every 1 second
+          to the <terminal>.
+
+    Keepalive the <application> for the <events>.
+
+    Return an <OK: status> for the <startup>.
+}
+
+(Handle Add Task: Keyboard Handler) {
+    Extract the <key> from the <event: key>.
+
+    When <key> equals "a" {
+        (* Prompt for new task details *)
+        Prompt the <task-name> with "Task name: " from the <terminal>.
+        Prompt the <priority> with "Priority (high/medium/low): " from the <terminal>.
+
+        (* Get next ID *)
+        Retrieve the <tasks> from the <task-repository>.
+        Compute the <next-id> from count(<tasks>) + 1.
+
+        (* Create and store new task *)
+        Create the <task> with {
+            id: <next-id>,
+            name: <task-name>,
+            status: "pending",
+            priority: <priority>
+        }.
+
+        Store the <task> in the <task-repository>.
+
+        (* Emit event to trigger refresh *)
+        Emit a <TasksUpdated: event>.
+
+        Log "Task added: " + <task-name> to the <console>.
+    }.
+
+    Return an <OK: status> for the <key-press>.
+}
+
+(Handle Mark Complete: Keyboard Handler) {
+    Extract the <key> from the <event: key>.
+
+    When <key> equals "c" {
+        (* Prompt for task ID *)
+        Prompt the <task-id> with "Enter task ID to complete: " from the <terminal>.
+
+        (* Update task status *)
+        Retrieve the <task> from the <task-repository> where id = <task-id>.
+
+        Create the <updated> with { ...<task>, status: "completed" }.
+        Store the <updated> in the <task-repository>.
+
+        Emit a <TasksUpdated: event>.
+
+        Log "Task #" + <task-id> + " marked complete" to the <console>.
+    }.
+
+    Return an <OK: status> for the <key-press>.
+}
+
+(Handle Delete Task: Keyboard Handler) {
+    Extract the <key> from the <event: key>.
+
+    When <key> equals "d" {
+        (* Prompt for task ID *)
+        Prompt the <task-id> with "Enter task ID to delete: " from the <terminal>.
+
+        (* Delete task *)
+        Delete the <task> from the <task-repository> where id = <task-id>.
+
+        Emit a <TasksUpdated: event>.
+
+        Log "Task #" + <task-id> + " deleted" to the <console>.
+    }.
+
+    Return an <OK: status> for the <key-press>.
+}
+
+(Handle Quit: Keyboard Handler) {
+    Extract the <key> from the <event: key>.
+
+    When <key> equals "q" {
+        Log "Shutting down..." to the <console>.
+        Stop the <application>.
+    }.
+
+    Return an <OK: status> for the <quit>.
+}
+
+(Refresh Display: TasksUpdated Handler) {
+    (* This handler automatically triggers when tasks are updated *)
+    Log "Refreshing display..." to the <console>.
+    Return an <OK: status> for the <refresh>.
+}

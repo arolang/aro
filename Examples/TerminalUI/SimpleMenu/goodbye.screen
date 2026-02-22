@@ -1,0 +1,7 @@
+{{ screen.clear }}
+
+{{ box width=60 border="rounded" title="Goodbye" align=center }}
+  {{ color green }}{{ bold }}✓{{ reset }} Thank you for using ARO!
+
+  {{ color dim }}Have a great day!{{ reset }}
+{{ endbox }}

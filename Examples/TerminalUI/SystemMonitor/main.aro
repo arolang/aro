@@ -1,0 +1,67 @@
+(*
+ * System Monitor Dashboard
+ *
+ * Demonstrates:
+ * - Live-updating dashboard with Watch action
+ * - Progress bars for metrics
+ * - Panel layouts (horizontal split)
+ * - Responsive design based on terminal size
+ * - Color-coded status indicators
+ *)
+
+(Application-Start: System Monitor) {
+    Log "System Monitor starting..." to the <console>.
+
+    (* Watch updates dashboard every second *)
+    Watch the <dashboard> from "monitor.screen"
+          with <system-metrics>
+          every 1 second
+          to the <terminal>.
+
+    Keepalive the <application> for the <events>.
+
+    Return an <OK: status> for the <startup>.
+}
+
+(Collect Metrics: System Metrics) {
+    (* This would integrate with actual system metrics in real implementation *)
+
+    Create the <cpu> with {
+        cores: [
+            { id: 0, usage: 0.45 },
+            { id: 1, usage: 0.72 },
+            { id: 2, usage: 0.31 },
+            { id: 3, usage: 0.58 }
+        ],
+        average: 0.51
+    }.
+
+    Create the <memory> with {
+        used: 12.4,
+        total: 16.0,
+        percent: 0.775
+    }.
+
+    Create the <network> with {
+        download: 2.5,
+        upload: 0.8,
+        total: 45.3
+    }.
+
+    Create the <disks> with [
+        { name: "System", used: 0.68, total: 256 },
+        { name: "Data", used: 0.42, total: 512 }
+    ].
+
+    Compute the <timestamp> from now().
+
+    Create the <system-metrics> with {
+        cpu: <cpu>,
+        memory: <memory>,
+        network: <network>,
+        disks: <disks>,
+        timestamp: <timestamp>
+    }.
+
+    Return an <OK: status> with <system-metrics>.
+}
