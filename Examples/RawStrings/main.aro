@@ -1,12 +1,16 @@
 (* Raw String Literals Example - ARO-0060 *)
 
 (*
-  This example demonstrates the raw string literal feature which
-  prevents escape sequence processing, making it easier to work with:
+  This example demonstrates raw string literals using single quotes.
+  Single quotes prevent escape sequence processing, making it easier to work with:
   - Regular expressions with backslashes
   - File paths (especially Windows paths)
   - LaTeX commands
   - Other backslash-heavy content
+
+  Syntax:
+  - 'raw string'  = no escape processing (except \')
+  - "regular"     = full escape processing (\n, \t, \\, etc.)
 *)
 
 (Application-Start: Raw String Demo) {
@@ -16,13 +20,13 @@
     Log "" to the <console>.
     Log "1. Regex Patterns:" to the <console>.
 
-    (* Regular string requires double escaping *)
+    (* Regular string (double quotes) requires double escaping *)
     Compute the <regular-regex> from "\\d+\\.\\d+\\.\\d+".
-    Log "  Regular string: " ++ <regular-regex> to the <console>.
+    Log "  Double quotes: " ++ <regular-regex> to the <console>.
 
-    (* Raw string - no escaping needed! *)
-    Compute the <raw-regex> from r"\d+\.\d+\.\d+".
-    Log "  Raw string:     " ++ <raw-regex> to the <console>.
+    (* Raw string (single quotes) - no escaping needed! *)
+    Compute the <raw-regex> from '\d+\.\d+\.\d+'.
+    Log "  Single quotes: " ++ <raw-regex> to the <console>.
 
     (* 2. File Paths *)
     Log "" to the <console>.
@@ -30,37 +34,41 @@
 
     (* Regular string requires escaping *)
     Compute the <regular-path> from "C:\\Users\\Admin\\config.json".
-    Log "  Regular string: " ++ <regular-path> to the <console>.
+    Log "  Double quotes: " ++ <regular-path> to the <console>.
 
     (* Raw string - backslashes work naturally *)
-    Compute the <raw-path> from r"C:\Users\Admin\config.json".
-    Log "  Raw string:     " ++ <raw-path> to the <console>.
+    Compute the <raw-path> from 'C:\Users\Admin\config.json'.
+    Log "  Single quotes: " ++ <raw-path> to the <console>.
 
     (* 3. Network Paths *)
     Log "" to the <console>.
     Log "3. UNC Network Paths:" to the <console>.
 
-    Compute the <network> from r"\\server\share\data\file.txt".
-    Log "  Raw string: " ++ <network> to the <console>.
+    Compute the <network> from '\\server\share\data\file.txt'.
+    Log "  Single quotes: " ++ <network> to the <console>.
 
     (* 4. LaTeX Commands *)
     Log "" to the <console>.
     Log "4. LaTeX Commands:" to the <console>.
 
-    Compute the <latex1> from r"\documentclass{article}".
-    Compute the <latex2> from r"\frac{1}{2}".
-    Compute the <latex3> from r"\begin{equation}".
+    Compute the <latex1> from '\documentclass{article}'.
+    Compute the <latex2> from '\frac{1}{2}'.
+    Compute the <latex3> from '\begin{equation}'.
 
     Log "  " ++ <latex1> to the <console>.
     Log "  " ++ <latex2> to the <console>.
     Log "  " ++ <latex3> to the <console>.
 
-    (* 5. Mixed Content *)
+    (* 5. Escape Processing Comparison *)
     Log "" to the <console>.
-    Log "5. Mixed: Single quotes still work" to the <console>.
+    Log "5. Escape Processing:" to the <console>.
 
-    Compute the <single-quote> from r'Pattern: \w+'.
-    Log "  " ++ <single-quote> to the <console>.
+    (* Double quotes process \n as newline *)
+    Log "  Double quotes with \\n: Hello\nWorld" to the <console>.
+
+    (* Single quotes keep \n literal *)
+    Compute the <literal-escape> from 'Hello\nWorld'.
+    Log "  Single quotes with \\n: " ++ <literal-escape> to the <console>.
 
     Log "" to the <console>.
     Log "=== Demo Complete ===" to the <console>.

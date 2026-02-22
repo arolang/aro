@@ -7,11 +7,11 @@
 
 ## Abstract
 
-Add raw string literals with r-prefix to prevent escape sequence processing, making regex patterns, file paths, and other backslash-heavy content more readable.
+Use single quotes for raw string literals that prevent escape sequence processing, making regex patterns, file paths, and other backslash-heavy content more readable. Double quotes continue to process escape sequences.
 
 ## Problem
 
-Current string literals require escaping special characters like backslashes, which makes certain content difficult to read:
+String literals with many backslashes require excessive escaping, making certain content difficult to read:
 
 ```aro
 (* Writing a regex with many escapes *)
@@ -20,55 +20,61 @@ Transform the <result> from the <text> with regex "\\d+\\.\\d+".
 (* Windows file path *)
 Read the <config> from "C:\\Users\\Admin\\config.json".
 
-(* JSON with quotes *)
-Log "The user said: \"Hello\"" to <console>.
+(* LaTeX commands *)
+Compute the <header> from "\\documentclass{article}".
 ```
 
 ## Solution
 
-Introduce raw string literals with r-prefix (Python/Rust style):
+Introduce a simple, clean distinction between quote types:
+
+- **Single quotes** `'...'` = raw strings (no escape processing except `\'`)
+- **Double quotes** `"..."` = regular strings (full escape processing: `\n`, `\t`, `\\`, etc.)
 
 ```aro
-(* Regex without escapes *)
-Transform the <result> from the <text> with regex r"\d+\.\d+".
+(* Raw strings - no escaping needed *)
+Transform the <result> from the <text> with regex '\d+\.\d+'.
+Read the <config> from 'C:\Users\Admin\config.json'.
+Compute the <header> from '\documentclass{article}'.
 
-(* Windows file path without escapes *)
-Read the <config> from r"C:\Users\Admin\config.json".
-
-(* Still need to escape quotes inside raw strings *)
-Log r"Path: C:\Users\Admin" to <console>.
+(* Regular strings - escapes work *)
+Log "Hello\nWorld" to the <console>.
+Log "Path: C:\\Users" to the <console>.
 ```
 
 ### Syntax
 
-- **Raw string**: `r"content"`
-- **No escape processing**: Backslashes are literal characters
-- **Quote escaping**: Still need `\"` to include quotes in the string
-- **Error**: `r"unclosed` produces lexer error
+- **Raw string**: `'content'` - backslashes are literal, only `\'` needs escaping
+- **Regular string**: `"content"` - full escape processing (`\n`, `\t`, `\\`, `\"`, etc.)
+- **Error**: Unterminated strings produce lexer errors
 
 ### Lexer Changes
 
 ```swift
-// Detect r-prefix before string
-case "r" where peek() == "\"":
-    advance() // consume 'r'
-    advance() // consume '"'
-    return scanRawString()
+case "\"":
+    // Double quotes: regular string with full escape processing
+    try scanString(quote: char, start: startLocation)
 
-private func scanRawString() -> Token {
+case "'":
+    // Single quotes: raw string (no escape processing except \')
+    try scanRawString(quote: char, start: startLocation)
+
+private func scanRawString(quote: Character, start: SourceLocation) throws {
     var value = ""
-    while !isAtEnd && peek() != "\"" {
-        if peek() == "\\" && peekNext() == "\"" {
-            // Only allow \" escape in raw strings
-            advance() // skip backslash
-            value.append(advance()) // add quote
+    while !isAtEnd && peek() != quote {
+        if peek() == "\\" && peekNext() == quote {
+            // Only allow \' escape in raw strings
+            advance()  // skip backslash
+            value.append(advance())  // add quote
         } else {
             value.append(advance())
         }
     }
-    // consume closing quote
-    advance()
-    return Token(.string, lexeme: "r\"...", literal: .string(value))
+    if isAtEnd {
+        throw LexerError.unterminatedString(at: start)
+    }
+    advance()  // Closing quote
+    addToken(.stringLiteral(value), start: start)
 }
 ```
 
@@ -78,7 +84,8 @@ private func scanRawString() -> Token {
 ```aro
 (Extract Versions: Version Extractor) {
     Extract the <text> from the <input>.
-    Transform the <versions> from the <text> with regex r"\d+\.\d+\.\d+".
+    (* Single quotes = raw string, no escaping needed *)
+    Transform the <versions> from the <text> with regex '\d+\.\d+\.\d+'.
     Return an <OK: status> with <versions>.
 }
 ```
@@ -86,18 +93,42 @@ private func scanRawString() -> Token {
 ### File Paths
 ```aro
 (Read Windows Config: Config Loader) {
-    Read the <config> from r"C:\Program Files\MyApp\config.json".
+    (* Windows path with backslashes - no escaping needed *)
+    Read the <config> from 'C:\Program Files\MyApp\config.json'.
     Return an <OK: status> with <config>.
+}
+
+(UNC Path: Network File) {
+    (* UNC path with raw string *)
+    Read the <data> from '\\server\share\document.txt'.
+    Return an <OK: status> with <data>.
 }
 ```
 
-### Mixed Content
+### LaTeX and Special Content
 ```aro
 (Generate LaTeX: Report Generator) {
-    (* Raw string for LaTeX commands *)
-    Compute the <header> from r"\documentclass{article}".
-    Compute the <formula> from r"\frac{1}{2}".
+    (* Raw strings for LaTeX commands *)
+    Compute the <header> from '\documentclass{article}'.
+    Compute the <formula> from '\frac{1}{2}'.
+    Compute the <package> from '\usepackage{amsmath}'.
     Return an <OK: status> with <header>.
+}
+```
+
+### Mixed Usage
+```aro
+(Process Data: Data Handler) {
+    (* Raw string for regex pattern *)
+    Transform the <emails> from the <text> with regex '[a-z]+@[a-z]+\.[a-z]+'.
+
+    (* Regular string with newline escape *)
+    Log "Found emails:\n" to the <console>.
+
+    (* Raw string for SQL *)
+    Execute the <query> with sql 'SELECT * FROM users WHERE name LIKE "%\%%"'.
+
+    Return an <OK: status> with <emails>.
 }
 ```
 

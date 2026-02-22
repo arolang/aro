@@ -212,15 +212,16 @@ public final class Lexer: @unchecked Sendable {
                 throw LexerError.unexpectedCharacter(char, at: startLocation)
             }
 
-        case "\"", "'":
+        case "\"":
+            // Double quotes: regular string with full escape processing
             try scanString(quote: char, start: startLocation)
 
+        case "'":
+            // Single quotes: raw string (no escape processing except \')
+            try scanRawString(quote: char, start: startLocation)
+
         default:
-            // Check for raw string prefix (ARO-0060)
-            if char == "r" && (peek() == "\"" || peek() == "'") {
-                let quote = advance()  // consume the quote
-                try scanRawString(quote: quote, start: startLocation)
-            } else if char.isLetter || char == "_" {
+            if char.isLetter || char == "_" {
                 try scanIdentifierOrKeyword(start: startLocation)
             } else if char.isNumber {
                 try scanNumber(start: startLocation, negative: false)
