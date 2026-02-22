@@ -1023,7 +1023,7 @@ public final class Runtime: @unchecked Sendable {
                 try await Task.sleep(nanoseconds: 100_000_000) // 100ms
 
                 // Check if event bus is idle (no in-flight handlers)
-                let pendingCount = eventBus.getPendingHandlerCount()
+                let pendingCount = await eventBus.getPendingHandlerCount()
                 if pendingCount == 0 {
                     consecutiveIdleChecks += 1
                     if consecutiveIdleChecks >= idleThreshold {
