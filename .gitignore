@@ -144,3 +144,4 @@ core
 /Examples/PipelineDemo/events.jsonl
 /Examples/PipelineDemo/demo-output
 /Examples/PipelineDemo/output
+/Examples/FormatAwareIO/output
