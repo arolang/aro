@@ -622,6 +622,7 @@ public final class NativePluginHost: @unchecked Sendable {
                     pluginName: pluginName,
                     actionName: name,
                     verb: registeredVerb,
+                    pluginVerb: verb,
                     host: self,
                     descriptor: descriptor
                 )
@@ -811,13 +812,18 @@ final class NativePluginActionWrapper: @unchecked Sendable {
     let actionName: String
     /// The verb used to invoke this action (may differ from actionName)
     let verb: String
+    /// The plain verb passed to the plugin's aro_plugin_execute (no namespace prefix, lowercase).
+    /// Plugins declare verbs like "greet" / "hash" and handle them in aro_plugin_execute.
+    /// The registered verb (verb) may carry a namespace prefix (e.g., "greeting.greet").
+    let pluginVerb: String
     let host: NativePluginHost
     let descriptor: NativeActionDescriptor
 
-    init(pluginName: String, actionName: String, verb: String, host: NativePluginHost, descriptor: NativeActionDescriptor) {
+    init(pluginName: String, actionName: String, verb: String, pluginVerb: String, host: NativePluginHost, descriptor: NativeActionDescriptor) {
         self.pluginName = pluginName
         self.actionName = actionName
         self.verb = verb
+        self.pluginVerb = pluginVerb
         self.host = host
         self.descriptor = descriptor
     }
@@ -850,8 +856,10 @@ final class NativePluginActionWrapper: @unchecked Sendable {
             input.merge(exprArgs) { _, new in new }
         }
 
-        // Execute native action using the verb (plugins expect lowercase verb, not action name)
-        let output = try host.execute(action: verb, input: input)
+        // Execute native action using the plain verb (without namespace prefix).
+        // The plugin's aro_plugin_execute receives the unqualified verb (e.g., "greet"),
+        // not the registered verb which may include a namespace (e.g., "greeting.greet").
+        let output = try host.execute(action: pluginVerb, input: input)
 
         // Bind result
         context.bind(result.base, value: output)

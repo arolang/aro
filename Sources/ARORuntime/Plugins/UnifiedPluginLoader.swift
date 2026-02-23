@@ -133,7 +133,7 @@ public final class UnifiedPluginLoader: @unchecked Sendable {
                     at: providePath,
                     pluginName: manifest.name,
                     config: provide,
-                    qualifierNamespace: provide.handler ?? manifest.name
+                    qualifierNamespace: provide.handler
                 )
 
             case "rust-plugin", "c-plugin", "cpp-plugin":
@@ -141,7 +141,7 @@ public final class UnifiedPluginLoader: @unchecked Sendable {
                     at: providePath,
                     pluginName: manifest.name,
                     config: provide,
-                    qualifierNamespace: provide.handler ?? manifest.name
+                    qualifierNamespace: provide.handler
                 )
 
             case "python-plugin":
@@ -149,7 +149,7 @@ public final class UnifiedPluginLoader: @unchecked Sendable {
                     at: providePath,
                     pluginName: manifest.name,
                     config: provide,
-                    qualifierNamespace: provide.handler ?? manifest.name
+                    qualifierNamespace: provide.handler
                 )
 
             default:
@@ -238,7 +238,7 @@ public final class UnifiedPluginLoader: @unchecked Sendable {
         at path: URL,
         pluginName: String,
         config: UnifiedProvideEntry,
-        qualifierNamespace: String
+        qualifierNamespace: String?
     ) throws {
         let host = try NativePluginHost(
             pluginPath: path,
@@ -266,7 +266,7 @@ public final class UnifiedPluginLoader: @unchecked Sendable {
         at path: URL,
         pluginName: String,
         config: UnifiedProvideEntry,
-        qualifierNamespace: String
+        qualifierNamespace: String?
     ) throws {
         let host = try PythonPluginHost(
             pluginPath: path,
