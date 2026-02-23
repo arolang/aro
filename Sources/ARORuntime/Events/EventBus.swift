@@ -320,8 +320,9 @@ public actor EventBus {
 
     // MARK: - Subscribing
 
-    /// Subscribe to events of a specific type (returns immediately with subscription ID)
-    /// This is nonisolated for compatibility with existing synchronous code
+    /// Subscribe to events of a specific type (blocks until subscription is registered)
+    /// Uses semaphore to ensure subscription is added before returning, preventing
+    /// race conditions where publish is called before the subscription is stored.
     /// - Parameters:
     ///   - eventType: The event type to subscribe to (or "*" for all events)
     ///   - handler: The handler to call when events occur
@@ -334,9 +335,12 @@ public actor EventBus {
             handler: handler
         )
 
+        let semaphore = DispatchSemaphore(value: 0)
         Task {
             await self.addSubscription(subscription)
+            semaphore.signal()
         }
+        semaphore.wait()
 
         return subscription.id
     }
