@@ -33,13 +33,61 @@ struct RunCommand: AsyncParsableCommand {
     @Flag(name: .long, help: "Enable developer/debug output formatting")
     var debug: Bool = false
 
+    /// Extract run command flags from captured application arguments
+    /// This handles cases where flags are placed after the path argument
+    mutating func extractRunCommandFlags() {
+        var remainingArgs: [String] = []
+        var i = 0
+
+        while i < applicationArguments.count {
+            let arg = applicationArguments[i]
+
+            switch arg {
+            case "--debug":
+                debug = true
+                i += 1
+            case "--verbose", "-v":
+                verbose = true
+                i += 1
+            case "--keep-alive":
+                keepAlive = true
+                i += 1
+            case "--entry-point", "-e":
+                // Check if there's a value following
+                if i + 1 < applicationArguments.count {
+                    entryPoint = applicationArguments[i + 1]
+                    i += 2
+                } else {
+                    // Invalid usage, but pass it through to avoid silent failure
+                    remainingArgs.append(arg)
+                    i += 1
+                }
+            default:
+                // Not a run command flag, keep it for the application
+                remainingArgs.append(arg)
+                i += 1
+            }
+        }
+
+        applicationArguments = remainingArgs
+    }
+
     func run() async throws {
-        let resolvedPath = URL(fileURLWithPath: path)
+        var mutableSelf = self
+        mutableSelf.extractRunCommandFlags()
+
+        let resolvedPath = URL(fileURLWithPath: mutableSelf.path)
 
         // ARO-0047: Parse application arguments into ParameterStorage
-        if !applicationArguments.isEmpty {
-            ParameterStorage.shared.parseArguments(applicationArguments)
+        if !mutableSelf.applicationArguments.isEmpty {
+            ParameterStorage.shared.parseArguments(mutableSelf.applicationArguments)
         }
+
+        let verbose = mutableSelf.verbose
+        let debug = mutableSelf.debug
+        let keepAlive = mutableSelf.keepAlive
+        let entryPoint = mutableSelf.entryPoint
+        let applicationArguments = mutableSelf.applicationArguments
 
         if verbose {
             print("ARO Runtime v\(AROVersion.shortVersion)")
