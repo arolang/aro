@@ -195,14 +195,51 @@ public final class Parser {
         }
 
         // Parse ARO statement (action without angle brackets)
-        return try parseAROStatement()
+        // ARO-0067: Don't expect dot yet - check for pipeline first
+        let statement = try parseAROStatement(expectDot: false)
+
+        // ARO-0067: Check for pipeline operator |>
+        if check(.pipe) {
+            return try parsePipelineStatement(initial: statement)
+        }
+
+        // Not a pipeline, expect the terminating dot
+        _ = try expect(.dot, message: "'.'")
+
+        return statement
+    }
+
+    /// Parses pipeline statement: statement |> statement |> statement .
+    /// ARO-0067: Each stage after the first operates on the result from the previous stage
+    private func parsePipelineStatement(initial: AROStatement) throws -> PipelineStatement {
+        let startSpan = initial.span
+        var stages: [AROStatement] = [initial]
+
+        // Parse pipeline stages (all without expecting dots)
+        while check(.pipe) {
+            advance() // consume |>
+
+            // Parse next stage - it operates on the previous stage's result
+            // Don't expect dot because pipeline continues
+            let nextStage = try parseAROStatement(expectDot: false)
+            stages.append(nextStage)
+        }
+
+        // Expect dot after all pipeline stages
+        let endToken = try expect(.dot, message: "'.'")
+
+        return PipelineStatement(
+            stages: stages,
+            span: startSpan.merged(with: endToken.span)
+        )
     }
     
     /// Parses: Action [article] "<" result ">" preposition [article] "<" object ">" ["when" condition] "."
     /// ARO-0002: Also supports expressions after prepositions like `from <x> * <y>` or `to 30`
     /// ARO-0004: Also supports guarded statements with `when` clause
     /// ARO-0043: Also supports sink syntax like `Log "message" to the <console>.`
-    private func parseAROStatement() throws -> AROStatement {
+    /// ARO-0067: When expectDot is false, doesn't consume the terminating dot (for pipeline stages)
+    private func parseAROStatement(expectDot: Bool = true) throws -> AROStatement {
         // Parse action verb (capitalized identifier or testing keyword)
         let startToken = peek()
         let actionToken: Token
@@ -376,7 +413,13 @@ public final class Parser {
             whenCondition = try parseExpression()
         }
 
-        let endToken = try expect(.dot, message: "'.'")
+        // ARO-0067: Only expect dot if not part of a pipeline
+        let endToken: Token
+        if expectDot {
+            endToken = try expect(.dot, message: "'.'")
+        } else {
+            endToken = previous()
+        }
 
         // Build grouped types from parsed fields
         let valueSource: ValueSource

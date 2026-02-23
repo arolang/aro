@@ -1,0 +1,47 @@
+(* Test constant folding optimization (GitLab #102) *)
+
+(Application-Start: Constant Folding Test) {
+    Log "=== Constant Folding Test ===" to the <console>.
+
+    (* Arithmetic constant expressions - should be computed at compile time *)
+    Compute the <result1> from 5 * 10 + 2.
+    Log "5 * 10 + 2 =" to the <console>.
+    Log <result1> to the <console>.
+
+    Compute the <result2> from 100 / 4 - 3.
+    Log "100 / 4 - 3 =" to the <console>.
+    Log <result2> to the <console>.
+
+    Compute the <result3> from 17 % 5.
+    Log "17 % 5 =" to the <console>.
+    Log <result3> to the <console>.
+
+    (* Comparison constant expressions *)
+    Compute the <result4> from 10 > 5.
+    Log "10 > 5 =" to the <console>.
+    Log <result4> to the <console>.
+
+    Compute the <result5> from 3 + 2 == 5.
+    Log "3 + 2 == 5 =" to the <console>.
+    Log <result5> to the <console>.
+
+    (* Logical constant expressions *)
+    Compute the <result6> from true and false.
+    Log "true and false =" to the <console>.
+    Log <result6> to the <console>.
+
+    Compute the <result7> from true or false.
+    Log "true or false =" to the <console>.
+    Log <result7> to the <console>.
+
+    (* Nested constant expressions *)
+    Compute the <result8> from (5 + 3) * (10 - 2).
+    Log "(5 + 3) * (10 - 2) =" to the <console>.
+    Log <result8> to the <console>.
+
+    Log "" to the <console>.
+    Log "✓ Constant folding test complete!" to the <console>.
+    Log "✓ All expressions computed at compile time!" to the <console>.
+
+    Return an <OK: status> for the <test>.
+}

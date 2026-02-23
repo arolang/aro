@@ -615,7 +615,7 @@ public func aro_action_keepalive(
     // Emit event
     ctxHandle.context.emit(WaitStateEnteredEvent())
 
-    if EventBus.shared.hasActiveEventSources {
+    if EventBus.shared.hasActiveEventSourcesSync() {
         // Long-running service mode (HTTP server, file monitor, socket):
         // wait for explicit shutdown signal only (SIGINT/SIGTERM)
         ShutdownCoordinator.shared.waitForShutdownSync()
@@ -631,7 +631,7 @@ public func aro_action_keepalive(
             // Process events via RunLoop
             _ = RunLoop.current.run(mode: .default, before: Date(timeIntervalSinceNow: 0.1))
 
-            let pendingCount = EventBus.shared.getPendingHandlerCount()
+            let pendingCount = EventBus.shared.getPendingHandlerCountSync()
             if pendingCount == 0 {
                 consecutiveIdleChecks += 1
                 if consecutiveIdleChecks >= idleThreshold {
