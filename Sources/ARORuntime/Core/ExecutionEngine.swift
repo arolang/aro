@@ -498,17 +498,11 @@ public actor ExecutionEngine {
         )
 
         do {
-            if ProcessInfo.processInfo.environment["ARO_DEBUG"] != nil {
-                FileHandle.standardError.write(Data("[ExecutionEngine] About to execute handler: \(analyzedFS.featureSet.name)\n".utf8))
-            }
+            AROLogger.debug("About to execute handler: \(analyzedFS.featureSet.name)")
             _ = try await executor.execute(analyzedFS, context: handlerContext)
-            if ProcessInfo.processInfo.environment["ARO_DEBUG"] != nil {
-                FileHandle.standardError.write(Data("[ExecutionEngine] Handler executed successfully: \(analyzedFS.featureSet.name)\n".utf8))
-            }
+            AROLogger.debug("Handler executed successfully: \(analyzedFS.featureSet.name)")
         } catch {
-            if ProcessInfo.processInfo.environment["ARO_DEBUG"] != nil {
-                FileHandle.standardError.write(Data("[ExecutionEngine] Handler error: \(error)\n".utf8))
-            }
+            AROLogger.error("Handler error: \(error)")
             eventBus.publish(ErrorOccurredEvent(
                 error: String(describing: error),
                 context: analyzedFS.featureSet.name,
