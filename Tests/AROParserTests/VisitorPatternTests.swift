@@ -70,6 +70,14 @@ struct NodeCounterVisitor: ASTVisitor {
         return count
     }
 
+    func visit(_ node: PipelineStatement) throws -> Int {
+        var count = 1
+        for stmt in node.stages {
+            count += try stmt.accept(self)
+        }
+        return count
+    }
+
     func visit(_ node: LiteralExpression) throws -> Int {
         1
     }
@@ -184,6 +192,14 @@ struct VariableCollectorVisitor: ASTVisitor {
             vars.insert(index)
         }
         for stmt in node.body {
+            vars.formUnion(try stmt.accept(self))
+        }
+        return vars
+    }
+
+    func visit(_ node: PipelineStatement) throws -> Set<String> {
+        var vars: Set<String> = []
+        for stmt in node.stages {
             vars.formUnion(try stmt.accept(self))
         }
         return vars
