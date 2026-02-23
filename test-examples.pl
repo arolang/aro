@@ -283,8 +283,8 @@ sub read_test_hint {
         $hints{timeout} = undef;
     }
 
-    if (defined $hints{type} && $hints{type} !~ /^(console|http|socket|file)$/) {
-        warn "Warning: Invalid type '$hints{type}' (must be console|http|socket|file), ignoring\n";
+    if (defined $hints{type} && $hints{type} !~ /^(console|http|socket|file|multi-context)$/) {
+        warn "Warning: Invalid type '$hints{type}' (must be console|http|socket|file|multi-context), ignoring\n";
         $hints{type} = undef;
     }
 
@@ -852,6 +852,79 @@ sub run_console_example_internal {
             return (undef, "TIMEOUT after ${timeout}s");
         }
         return (undef, "ERROR: $@") unless $allow_error;
+    }
+
+    # Combine stdout and stderr
+    my $combined = $out;
+    $combined .= $err if $err;
+    return ($combined, undef);
+}
+
+# Run debug example (internal with timeout parameter)
+# Runs example with --debug flag for developer context output
+sub run_debug_example {
+    my ($example_name, $timeout, $mode, $binary_name, $hints) = @_;
+    $mode //= 'interpreter';  # Default to interpreter mode
+
+    my $keep_alive = $hints && $hints->{'keep-alive'};
+
+    # Handle '.' or absolute paths directly, otherwise prepend examples_dir
+    my $dir;
+    if ($example_name eq '.' || File::Spec->file_name_is_absolute($example_name)) {
+        $dir = $example_name;
+    } else {
+        $dir = File::Spec->catdir($examples_dir, $example_name);
+    }
+
+    # Determine command based on mode
+    my @cmd;
+    if ($mode eq 'compiled') {
+        # Execute compiled binary with --debug
+        my $basename = defined $binary_name ? $binary_name : basename($dir);
+        my $binary_path = get_binary_path($dir, $basename);
+
+        unless (is_executable($binary_path)) {
+            return (undef, "ERROR: Compiled binary not found at $binary_path");
+        }
+
+        @cmd = ($binary_path, '--debug');
+    } else {
+        # Interpreter mode with --debug flag
+        my $aro_bin = find_aro_binary();
+        @cmd = ($aro_bin, 'run', '--debug', $dir);
+        # Add --keep-alive flag for long-running apps that need SIGINT shutdown
+        push @cmd, '--keep-alive' if $keep_alive;
+    }
+
+    # Use IPC::Run for better control
+    my ($in, $out, $err) = ('', '', '');
+    my $handle = eval {
+        start(\@cmd, \$in, \$out, \$err, timeout($timeout));
+    };
+
+    if ($@) {
+        return (undef, "Failed to start: $@");
+    }
+
+    if ($keep_alive) {
+        # Wait for the application to start, then send SIGINT for graceful shutdown
+        sleep 1;
+        say "  Sending SIGINT for graceful shutdown" if $options{verbose};
+        eval { $handle->signal('INT'); };
+        # Allow time for Application-End handler to execute and flush output
+        sleep 1;
+    }
+
+    eval {
+        finish($handle);
+    };
+
+    if ($@) {
+        if ($@ =~ /timeout/) {
+            kill_kill($handle);
+            return (undef, "TIMEOUT after ${timeout}s");
+        }
+        return (undef, "ERROR: $@");
     }
 
     # Combine stdout and stderr
@@ -1465,6 +1538,177 @@ sub run_file_watcher_example_internal {
     return ($combined, undef);
 }
 
+# Test multi-context example (console, HTTP, debug outputs)
+sub test_multi_context_example {
+    my ($example_name, $hints, $timeout) = @_;
+
+    my $start_time = time;
+
+    say "Testing $example_name (multi-context)..." if $options{verbose};
+
+    my %context_results;
+    my $any_failures = 0;
+
+    # Test 1: Console context (human)
+    my $exp_console = File::Spec->catfile($examples_dir, $example_name, 'expected-console.txt');
+    if (-f $exp_console) {
+        say "  Testing console context..." if $options{verbose};
+        my ($output, $error) = run_console_example_internal($example_name, $timeout, 'interpreter', undef, $hints);
+
+        if ($error) {
+            $context_results{console} = {
+                status => $error =~ /^SKIP/ ? 'SKIP' : 'ERROR',
+                message => $error,
+            };
+            $any_failures = 1 unless $error =~ /^SKIP/;
+        } else {
+            # Read expected output
+            open my $fh, '<', $exp_console or die "Cannot read $exp_console: $!";
+            my $expected = do { local $/; <$fh> };
+            close $fh;
+
+            # Strip metadata header
+            $expected =~ s/^#.*?\n---\n//s;
+
+            # Normalize both
+            my $output_normalized = normalize_output($output, 'console');
+            my $expected_normalized = normalize_output($expected, 'console');
+
+            # Trim whitespace
+            $output_normalized =~ s/^\s+|\s+$//g;
+            $expected_normalized =~ s/^\s+|\s+$//g;
+
+            if (matches_pattern($output_normalized, $expected_normalized)) {
+                $context_results{console} = { status => 'PASS', message => '' };
+            } else {
+                $context_results{console} = {
+                    status => 'FAIL',
+                    message => 'Console output mismatch',
+                    expected => $expected_normalized,
+                    actual => $output_normalized,
+                };
+                $any_failures = 1;
+            }
+        }
+    }
+
+    # Test 2: HTTP context (machine)
+    my $exp_http = File::Spec->catfile($examples_dir, $example_name, 'expected-http.txt');
+    if (-f $exp_http) {
+        say "  Testing HTTP context..." if $options{verbose};
+        my ($output, $error) = run_http_example_internal($example_name, $timeout, 'interpreter', undef);
+
+        if ($error) {
+            $context_results{http} = {
+                status => $error =~ /^SKIP/ ? 'SKIP' : 'ERROR',
+                message => $error,
+            };
+            $any_failures = 1 unless $error =~ /^SKIP/;
+        } else {
+            # Read expected output
+            open my $fh, '<', $exp_http or die "Cannot read $exp_http: $!";
+            my $expected = do { local $/; <$fh> };
+            close $fh;
+
+            # Strip metadata header
+            $expected =~ s/^#.*?\n---\n//s;
+
+            # Normalize both
+            my $output_normalized = normalize_output($output, 'http');
+            my $expected_normalized = normalize_output($expected, 'http');
+
+            # Trim whitespace
+            $output_normalized =~ s/^\s+|\s+$//g;
+            $expected_normalized =~ s/^\s+|\s+$//g;
+
+            if (matches_pattern($output_normalized, $expected_normalized)) {
+                $context_results{http} = { status => 'PASS', message => '' };
+            } else {
+                $context_results{http} = {
+                    status => 'FAIL',
+                    message => 'HTTP output mismatch',
+                    expected => $expected_normalized,
+                    actual => $output_normalized,
+                };
+                $any_failures = 1;
+            }
+        }
+    }
+
+    # Test 3: Debug context (developer)
+    my $exp_debug = File::Spec->catfile($examples_dir, $example_name, 'expected-debug.txt');
+    if (-f $exp_debug) {
+        say "  Testing debug context..." if $options{verbose};
+        my ($output, $error) = run_debug_example($example_name, $timeout, 'interpreter', undef, $hints);
+
+        if ($error) {
+            $context_results{debug} = {
+                status => $error =~ /^SKIP/ ? 'SKIP' : 'ERROR',
+                message => $error,
+            };
+            $any_failures = 1 unless $error =~ /^SKIP/;
+        } else {
+            # Read expected output
+            open my $fh, '<', $exp_debug or die "Cannot read $exp_debug: $!";
+            my $expected = do { local $/; <$fh> };
+            close $fh;
+
+            # Strip metadata header
+            $expected =~ s/^#.*?\n---\n//s;
+
+            # Normalize both
+            my $output_normalized = normalize_output($output, 'debug');
+            my $expected_normalized = normalize_output($expected, 'debug');
+
+            # Trim whitespace
+            $output_normalized =~ s/^\s+|\s+$//g;
+            $expected_normalized =~ s/^\s+|\s+$//g;
+
+            if (matches_pattern($output_normalized, $expected_normalized)) {
+                $context_results{debug} = { status => 'PASS', message => '' };
+            } else {
+                $context_results{debug} = {
+                    status => 'FAIL',
+                    message => 'Debug output mismatch',
+                    expected => $expected_normalized,
+                    actual => $output_normalized,
+                };
+                $any_failures = 1;
+            }
+        }
+    }
+
+    my $duration = time - $start_time;
+
+    # Return aggregated result
+    my $overall_status = $any_failures ? 'FAIL' : 'PASS';
+
+    # Check if all contexts were skipped
+    my $all_skipped = 1;
+    for my $ctx (values %context_results) {
+        if ($ctx->{status} ne 'SKIP') {
+            $all_skipped = 0;
+            last;
+        }
+    }
+    $overall_status = 'SKIP' if $all_skipped;
+
+    return {
+        name => $example_name,
+        type => 'multi-context',
+        status => $overall_status,
+        duration => $duration,
+        contexts => \%context_results,
+        # For compatibility with existing reporting
+        interpreter_status => $overall_status,
+        compiled_status => 'N/A',
+        interpreter_duration => $duration,
+        compiled_duration => 0,
+        build_duration => 0,
+        avg_duration => $duration,
+    };
+}
+
 # Run test for a single example in a specific mode
 sub run_single_mode_test {
     my ($example_name, $hints, $type, $timeout, $mode) = @_;
@@ -1784,6 +2028,11 @@ sub run_test {
     my $type = $hints->{type} || detect_example_type($example_name);
     my $timeout = $hints->{timeout} // $options{timeout};
 
+    # Handle multi-context testing separately
+    if ($type eq 'multi-context') {
+        return test_multi_context_example($example_name, $hints, $timeout);
+    }
+
     say "Testing $example_name ($type) in $mode mode..." if $options{verbose};
 
     # Initialize result
@@ -1919,9 +2168,72 @@ sub generate_expected {
     # Use timeout from hints or default
     my $timeout = $hints->{timeout} // $options{timeout};
 
-    my $expected_file = File::Spec->catfile($examples_dir, $example_name, 'expected.txt');
-
     say "Generating expected output for $example_name ($type)...";
+
+    # Handle multi-context generation
+    if ($type eq 'multi-context') {
+        # Generate console output
+        my $exp_console = File::Spec->catfile($examples_dir, $example_name, 'expected-console.txt');
+        say "  Generating console context...";
+        my ($console_out, $console_err) = run_console_example_internal($example_name, $timeout, 'interpreter', undef, $hints);
+        if ($console_err) {
+            warn colored("  ✗ Failed (console): $console_err\n", 'red');
+        } else {
+            my $output = normalize_output($console_out, 'console');
+            $output = auto_placeholderize($output, 'console');
+            open my $fh, '>', $exp_console or die "Cannot write $exp_console: $!";
+            print $fh "# Generated: " . localtime() . "\n";
+            print $fh "# Type: console\n";
+            print $fh "# Command: aro run ./Examples/$example_name\n";
+            print $fh "---\n";
+            print $fh $output;
+            close $fh;
+            say colored("  ✓ Generated $exp_console", 'green');
+        }
+
+        # Generate HTTP output
+        my $exp_http = File::Spec->catfile($examples_dir, $example_name, 'expected-http.txt');
+        say "  Generating HTTP context...";
+        my ($http_out, $http_err) = run_http_example_internal($example_name, $timeout, 'interpreter', undef);
+        if ($http_err) {
+            warn colored("  ✗ Failed (HTTP): $http_err\n", 'red');
+        } else {
+            my $output = normalize_output($http_out, 'http');
+            $output = auto_placeholderize($output, 'http');
+            open my $fh, '>', $exp_http or die "Cannot write $exp_http: $!";
+            print $fh "# Generated: " . localtime() . "\n";
+            print $fh "# Type: http\n";
+            print $fh "# Command: HTTP GET /demo\n";
+            print $fh "---\n";
+            print $fh $output;
+            close $fh;
+            say colored("  ✓ Generated $exp_http", 'green');
+        }
+
+        # Generate debug output
+        my $exp_debug = File::Spec->catfile($examples_dir, $example_name, 'expected-debug.txt');
+        say "  Generating debug context...";
+        my ($debug_out, $debug_err) = run_debug_example($example_name, $timeout, 'interpreter', undef, $hints);
+        if ($debug_err) {
+            warn colored("  ✗ Failed (debug): $debug_err\n", 'red');
+        } else {
+            my $output = normalize_output($debug_out, 'debug');
+            $output = auto_placeholderize($output, 'debug');
+            open my $fh, '>', $exp_debug or die "Cannot write $exp_debug: $!";
+            print $fh "# Generated: " . localtime() . "\n";
+            print $fh "# Type: debug\n";
+            print $fh "# Command: aro run ./Examples/$example_name --debug\n";
+            print $fh "---\n";
+            print $fh $output;
+            close $fh;
+            say colored("  ✓ Generated $exp_debug\n", 'green');
+        }
+
+        return;
+    }
+
+    # Regular single-context generation
+    my $expected_file = File::Spec->catfile($examples_dir, $example_name, 'expected.txt');
 
     # Execute with workdir and pre-script support
     my ($output, $error) = run_test_in_workdir(

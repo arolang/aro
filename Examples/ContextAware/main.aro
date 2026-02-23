@@ -44,9 +44,13 @@
     Log "Order data:" to the <console>.
     Log <order> to the <console>.
 
-    (* Start HTTP server and keep running *)
+    (* Start HTTP server and keep running for HTTP context testing *)
     Start the <http-server> for the <contract>.
     Keepalive the <application> for the <events>.
+
+    (* Note: Return statement below is not reached due to Keepalive.
+       For HTTP context, responses come from the getDemo handler.
+       For console/debug contexts, output comes from Log statements above. *)
 
     (* Return response with structured data *)
     (* Output format depends on execution context:
