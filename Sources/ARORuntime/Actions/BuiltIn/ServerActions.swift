@@ -819,7 +819,7 @@ public struct WaitForEventsAction: ActionImplementation {
         // If there are active event sources (HTTP server, file monitor, socket server),
         // only exit on explicit shutdown signal (SIGINT/SIGTERM).
         // Otherwise, also monitor for idle state to auto-exit batch processors.
-        if EventBus.shared.hasActiveEventSources {
+        if await EventBus.shared.hasActiveEventSources {
             // Long-running service mode: wait for explicit shutdown only
             await ShutdownCoordinator.shared.waitForShutdown()
         } else {
@@ -841,7 +841,7 @@ public struct WaitForEventsAction: ActionImplementation {
 
                     while !Task.isCancelled {
                         try? await Task.sleep(nanoseconds: 100_000_000) // 100ms
-                        let pendingCount = eventBus.getPendingHandlerCount()
+                        let pendingCount = await eventBus.getPendingHandlerCount()
                         if pendingCount == 0 {
                             consecutiveIdleChecks += 1
                             if consecutiveIdleChecks >= idleThreshold {

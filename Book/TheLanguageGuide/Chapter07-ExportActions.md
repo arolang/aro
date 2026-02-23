@@ -8,19 +8,32 @@
 
 When data leaves your feature set, it takes one of three paths. Each path serves a distinct purpose in the ARO architecture. Understanding which path to choose is essential for building well-structured applications.
 
-```
-                       ┌─────────────────┐
-                       │  Feature Set    │
-                       └────────┬────────┘
-                                │
-            ┌───────────────────┼───────────────────┐
-            │                   │                   │
-            ▼                   ▼                   ▼
-   ┌─────────────────┐ ┌─────────────────┐ ┌─────────────────┐
-   │   Repository    │ │    Event Bus    │ │ Global Registry │
-   │     <Store>     │ │     <Emit>      │ │    <Publish>    │
-   └─────────────────┘ └─────────────────┘ └─────────────────┘
-```
+<div style="text-align: center; margin: 2em 0;">
+<svg width="500" height="200" viewBox="0 0 500 200" xmlns="http://www.w3.org/2000/svg">
+  <!-- Central feature set box -->
+  <rect x="175" y="20" width="150" height="50" rx="5" fill="#e0e7ff" stroke="#6366f1" stroke-width="2"/>
+  <text x="250" y="50" text-anchor="middle" font-family="sans-serif" font-size="12" font-weight="bold" fill="#4338ca">Feature Set</text>
+  <!-- Three diverging arrows -->
+  <!-- Store path (left) -->
+  <line x1="200" y1="70" x2="100" y2="130" stroke="#22c55e" stroke-width="2"/>
+  <polygon points="100,130 94,122 106,122" fill="#22c55e"/>
+  <rect x="50" y="140" width="100" height="40" rx="5" fill="#dcfce7" stroke="#22c55e" stroke-width="2"/>
+  <text x="100" y="158" text-anchor="middle" font-family="sans-serif" font-size="10" fill="#166534">Repository</text>
+  <text x="100" y="172" text-anchor="middle" font-family="sans-serif" font-size="9" fill="#16a34a">&lt;Store&gt;</text>
+  <!-- Emit path (center) -->
+  <line x1="250" y1="70" x2="250" y2="130" stroke="#f59e0b" stroke-width="2"/>
+  <polygon points="250,130 244,120 256,120" fill="#f59e0b"/>
+  <rect x="200" y="140" width="100" height="40" rx="5" fill="#fef3c7" stroke="#f59e0b" stroke-width="2"/>
+  <text x="250" y="158" text-anchor="middle" font-family="sans-serif" font-size="10" fill="#92400e">Event Bus</text>
+  <text x="250" y="172" text-anchor="middle" font-family="sans-serif" font-size="9" fill="#d97706">&lt;Emit&gt;</text>
+  <!-- Publish path (right) -->
+  <line x1="300" y1="70" x2="400" y2="130" stroke="#8b5cf6" stroke-width="2"/>
+  <polygon points="400,130 394,122 406,122" fill="#8b5cf6"/>
+  <rect x="350" y="140" width="100" height="40" rx="5" fill="#f3e8ff" stroke="#8b5cf6" stroke-width="2"/>
+  <text x="400" y="158" text-anchor="middle" font-family="sans-serif" font-size="10" fill="#6b21a8">Global Registry</text>
+  <text x="400" y="172" text-anchor="middle" font-family="sans-serif" font-size="9" fill="#7c3aed">&lt;Publish&gt;</text>
+</svg>
+</div>
 
 **Store** sends data to a repository. The data persists for the application's lifetime and can be retrieved later by any feature set. Use Store when you need to save data for future access.
 
@@ -270,22 +283,44 @@ Published values are scoped to the business activity. Feature sets in different 
 
 Choosing between Store, Emit, and Publish becomes straightforward when you ask the right question.
 
-```
-                       What do you need?
-                              │
-          ┌───────────────────┼───────────────────┐
-          │                   │                   │
-          ▼                   ▼                   ▼
-   ┌─────────────┐     ┌─────────────┐     ┌─────────────┐
-   │ Persist for │     │   Trigger   │     │ Share value │
-   │   later?    │     │  handlers?  │     │  silently?  │
-   └──────┬──────┘     └──────┬──────┘     └──────┬──────┘
-          │                   │                   │
-          ▼                   ▼                   ▼
-     ┌─────────┐         ┌─────────┐         ┌─────────┐
-     │ <Store> │         │  <Emit> │         │<Publish>│
-     └─────────┘         └─────────┘         └─────────┘
-```
+<div style="text-align: center; margin: 2em 0;">
+<svg width="450" height="220" viewBox="0 0 450 220" xmlns="http://www.w3.org/2000/svg">
+  <!-- Question boxes and decision flow -->
+  <rect x="125" y="10" width="200" height="35" rx="5" fill="#f3f4f6" stroke="#6b7280" stroke-width="1.5"/>
+  <text x="225" y="32" text-anchor="middle" font-family="sans-serif" font-size="11" fill="#374151">What do you need?</text>
+  <!-- Three branches -->
+  <line x1="175" y1="45" x2="80" y2="80" stroke="#6b7280" stroke-width="1.5"/>
+  <polygon points="80,80 88,74 84,82" fill="#6b7280"/>
+  <line x1="225" y1="45" x2="225" y2="80" stroke="#6b7280" stroke-width="1.5"/>
+  <polygon points="225,80 220,72 230,72" fill="#6b7280"/>
+  <line x1="275" y1="45" x2="370" y2="80" stroke="#6b7280" stroke-width="1.5"/>
+  <polygon points="370,80 362,74 366,82" fill="#6b7280"/>
+  <!-- Store branch -->
+  <rect x="20" y="80" width="120" height="45" rx="5" fill="#dcfce7" stroke="#22c55e" stroke-width="1.5"/>
+  <text x="80" y="98" text-anchor="middle" font-family="sans-serif" font-size="9" fill="#166534">Persist data for</text>
+  <text x="80" y="112" text-anchor="middle" font-family="sans-serif" font-size="9" fill="#166534">later retrieval?</text>
+  <line x1="80" y1="125" x2="80" y2="155" stroke="#22c55e" stroke-width="1.5"/>
+  <polygon points="80,155 75,148 85,148" fill="#22c55e"/>
+  <rect x="30" y="160" width="100" height="30" rx="5" fill="#22c55e"/>
+  <text x="80" y="180" text-anchor="middle" font-family="sans-serif" font-size="11" font-weight="bold" fill="white">&lt;Store&gt;</text>
+  <!-- Emit branch -->
+  <rect x="165" y="80" width="120" height="45" rx="5" fill="#fef3c7" stroke="#f59e0b" stroke-width="1.5"/>
+  <text x="225" y="98" text-anchor="middle" font-family="sans-serif" font-size="9" fill="#92400e">Trigger handlers</text>
+  <text x="225" y="112" text-anchor="middle" font-family="sans-serif" font-size="9" fill="#92400e">reactively?</text>
+  <line x1="225" y1="125" x2="225" y2="155" stroke="#f59e0b" stroke-width="1.5"/>
+  <polygon points="225,155 220,148 230,148" fill="#f59e0b"/>
+  <rect x="175" y="160" width="100" height="30" rx="5" fill="#f59e0b"/>
+  <text x="225" y="180" text-anchor="middle" font-family="sans-serif" font-size="11" font-weight="bold" fill="white">&lt;Emit&gt;</text>
+  <!-- Publish branch -->
+  <rect x="310" y="80" width="120" height="45" rx="5" fill="#f3e8ff" stroke="#8b5cf6" stroke-width="1.5"/>
+  <text x="370" y="98" text-anchor="middle" font-family="sans-serif" font-size="9" fill="#6b21a8">Share value without</text>
+  <text x="370" y="112" text-anchor="middle" font-family="sans-serif" font-size="9" fill="#6b21a8">triggering logic?</text>
+  <line x1="370" y1="125" x2="370" y2="155" stroke="#8b5cf6" stroke-width="1.5"/>
+  <polygon points="370,155 365,148 375,148" fill="#8b5cf6"/>
+  <rect x="320" y="160" width="100" height="30" rx="5" fill="#8b5cf6"/>
+  <text x="370" y="180" text-anchor="middle" font-family="sans-serif" font-size="11" font-weight="bold" fill="white">&lt;Publish&gt;</text>
+</svg>
+</div>
 
 ### Comparison Table
 

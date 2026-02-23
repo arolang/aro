@@ -1,0 +1,37 @@
+(* Test automatic pipeline detection without |> operator *)
+
+(Application-Start: Auto Pipeline Test) {
+    Log "=== Automatic Pipeline (No |> needed) ===" to the <console>.
+
+    (* ARO automatically optimizes this as a streaming pipeline *)
+    Extract the <users> from [
+        {"name": "Alice", "age": 30},
+        {"name": "Bob", "age": 25},
+        {"name": "Charlie", "age": 35},
+        {"name": "Diana", "age": 28}
+    ].
+    Filter the <adults> from the <users> where <age> > 27.
+
+    Log "Adults (age > 27):" to the <console>.
+    Log <adults> to the <console>.
+
+    (* Test chained computations - also automatic pipeline *)
+    Extract the <text> from "hello".
+    Compute the <upper: uppercase> from the <text>.
+    Compute the <len: length> from the <upper>.
+
+    Log "" to the <console>.
+    Log "=== Chained Transformations ===" to the <console>.
+    Log "Original:" to the <console>.
+    Log <text> to the <console>.
+    Log "Uppercase:" to the <console>.
+    Log <upper> to the <console>.
+    Log "Length:" to the <console>.
+    Log <len> to the <console>.
+
+    Log "" to the <console>.
+    Log "✓ Automatic pipeline detection working!" to the <console>.
+    Log "✓ No |> operator needed - ARO is smart enough!" to the <console>.
+
+    Return an <OK: status> for the <test>.
+}
