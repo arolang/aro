@@ -255,7 +255,23 @@ public final class Parser {
             action = Action(verb: capitalizedVerb, span: actionToken.span)
         case .identifier(let verb) where verb.first?.isUppercase == true:
             actionToken = advance()
-            action = Action(verb: actionToken.lexeme, span: actionToken.span)
+            var fullVerb = actionToken.lexeme
+            var endSpan = actionToken.span
+            // ARO-0095: Handle Namespace.Verb dotted syntax (e.g., Markdown.ToHTML)
+            while case .dot = peek().kind {
+                let savedPosition = current
+                advance() // consume dot
+                if case .identifier(let part) = peek().kind, part.first?.isUppercase == true {
+                    let partToken = advance()
+                    fullVerb += "." + partToken.lexeme
+                    endSpan = partToken.span
+                } else {
+                    // Not a capitalized identifier after dot — backtrack
+                    current = savedPosition
+                    break
+                }
+            }
+            action = Action(verb: fullVerb, span: actionToken.span.merged(with: endSpan))
         default:
             throw ParserError.unexpectedToken(expected: "action verb (e.g., Extract, Filter, Return)", got: peek())
         }

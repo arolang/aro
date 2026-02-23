@@ -11,6 +11,7 @@ source:
 provides:
 - type: python-plugin
   path: src/
+  handler: markdown
   python:
     min-version: '3.9'
     requirements: requirements.txt

@@ -120,6 +120,7 @@ testrun.log
 **/Plugins/**/*.dylib
 **/Plugins/**/*.so
 **/Plugins/**/*.dll
+**/*.dSYM/
 **/Cargo.lock
 /Examples/MultiService/MultiService
 /Examples/AuditLogDemo/AuditLogDemo
@@ -130,3 +131,8 @@ core
 /Examples/SourceStructure/SourceStructure
 /Examples/StreamingDemo/StreamingDemo
 /Examples/StreamingPipeline/StreamingPipeline
+/Examples/QualifierPlugin/QualifierPlugin
+/Examples/QualifierPluginC/QualifierPluginC
+/Examples/QualifierPluginPython/QualifierPluginPython
+/Examples/DataSync/DataSync
+/Examples/URLClient/URLClient

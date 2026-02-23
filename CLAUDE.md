@@ -249,9 +249,42 @@ char* aro_plugin_info(void);
 // Execute an action, return JSON result
 char* aro_plugin_execute(const char* action, const char* input_json);
 
+// Execute a qualifier transformation (optional)
+char* aro_plugin_qualifier(const char* qualifier, const char* input_json);
+
 // Free memory allocated by plugin
 void aro_plugin_free(char* ptr);
 ```
+
+### Plugin Qualifiers
+
+Plugins can register custom qualifiers that transform values. Qualifiers work on types like List, String, Int, etc.
+
+Plugin qualifiers are **namespaced** via the `handler:` field in `plugin.yaml`. Access them as `<value: handler.qualifier>`:
+
+```aro
+(* Plugin qualifiers use handler namespace *)
+Compute the <random-item: collections.pick-random> from the <items>.
+Compute the <sorted-list: stats.sort> from the <numbers>.
+Log <numbers: collections.reverse> to the <console>.
+```
+
+**Declaring qualifiers in plugin.yaml:**
+```yaml
+name: plugin-collection
+version: 1.0.0
+provides:
+  - type: swift-plugin
+    path: Sources/
+    handler: collections   # qualifiers accessed as collections.pick-random, etc.
+```
+
+Qualifiers are declared in `aro_plugin_info()` JSON with plain names (no namespace prefix).
+The runtime automatically registers them as `handler.qualifier` in `QualifierRegistry`.
+
+**Key Files:**
+- **QualifierRegistry** (`Qualifiers/QualifierRegistry.swift`): Central registry for plugin qualifiers
+- **PluginQualifierHost** (`Plugins/PluginQualifierHost.swift`): Protocol for executing qualifiers
 
 ### Binary Mode Support
 
@@ -472,7 +505,12 @@ Examples/               # 65 examples organized by category (run `ls Examples/` 
 ├── HashPluginDemo/     # C plugin example
 ├── CSVProcessor/       # Rust plugin example
 ├── MarkdownRenderer/   # Python plugin example
-└── ZipService/         # Plugin with external dependencies
+├── ZipService/         # Plugin with external dependencies
+│
+│   # Plugin Qualifiers
+├── QualifierPlugin/    # Swift plugin with qualifiers (pick-random, shuffle, reverse)
+├── QualifierPluginC/   # C plugin with qualifiers (first, last, size)
+└── QualifierPluginPython/ # Python plugin with qualifiers (sort, unique, sum, avg, min, max)
 
 Proposals/              # Language specifications
 ├── ARO-0001-language-fundamentals.md

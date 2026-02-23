@@ -11,6 +11,7 @@ source:
 provides:
 - type: c-plugin
   path: src/
+  handler: hash
   build:
     compiler: clang
     flags:

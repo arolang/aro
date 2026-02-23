@@ -2,14 +2,14 @@
  *
  * This example shows how to:
  * 1. Define a plugin in aro.yaml
- * 2. Use custom actions provided by the plugin: Greet and <Farewell>
+ * 2. Use custom actions provided by the plugin: Greeting.Greet and Greeting.Farewell
  *)
 
 (Application-Start: Greeting Plugin Demo) {
     Log "=== Greeting Plugin Demo ===" to the <console>.
 
     (* Use the Greet custom action from plugin-swift-hello *)
-    Greet the <greeting> with {
+    Greeting.Greet the <greeting> with {
         name: "ARO Developer"
     }.
 
@@ -17,7 +17,7 @@
     Log <message> to the <console>.
 
     (* Use the Farewell custom action *)
-    Farewell the <goodbye> with {
+    Greeting.Farewell the <goodbye> with {
         name: "ARO Developer"
     }.
 

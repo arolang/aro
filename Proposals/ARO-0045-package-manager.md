@@ -156,6 +156,7 @@ provides:
     path: features/
   - type: swift-plugin        # Swift Plugin Sources
     path: Sources/
+    handler: tools            # Qualifier namespace: <value: tools.qualifier>
   - type: aro-templates       # Templates
     path: templates/
 
@@ -307,6 +308,9 @@ Plugins/
    b. Read provides entries and load accordingly:
       - type: aro-files → Parse and register feature sets
       - type: swift-plugin → Compile and load as native plugins
+      - type: c-plugin / rust-plugin → Load via FFI with handler namespace
+      - type: python-plugin → Load as subprocess with handler namespace
+      - handler field → Register qualifiers as handler.qualifier in QualifierRegistry
    c. Link ARO actions with Swift implementations
 4. Make all plugins available in the global ActionRegistry
 ```
@@ -327,6 +331,38 @@ After a package is installed, its feature sets can be used in your own `.aro` fi
     Return a <Created: status> with <validated-report>.
 }
 ```
+
+#### Plugin Qualifier Namespacing
+
+Plugins that provide qualifiers must declare a `handler:` field in their `provides:` entry. The handler name becomes the **namespace prefix** for all qualifiers from that plugin in ARO code:
+
+```yaml
+# plugin.yaml
+provides:
+  - type: c-plugin
+    path: src/
+    handler: list          # qualifiers: list.first, list.last, list.size
+```
+
+```aro
+(* Usage in ARO code *)
+Compute the <first-element: list.first> from the <numbers>.
+Log <numbers: list.last> to the <console>.
+```
+
+Qualifier registration in the plugin's C/Swift/Python code uses **plain names** (without namespace):
+
+```c
+// aro_plugin_info() returns qualifiers with plain names
+{"qualifiers": [{"name": "first"}, {"name": "last"}, {"name": "size"}]}
+
+// aro_plugin_qualifier() receives plain name
+char* aro_plugin_qualifier(const char* qualifier_name, const char* input_json) {
+    // qualifier_name = "first" (not "list.first")
+}
+```
+
+The `handler:` prefix serves as a disambiguation mechanism when multiple plugins provide qualifiers with identical names (e.g., two plugins both providing `sort`).
 
 ---
 

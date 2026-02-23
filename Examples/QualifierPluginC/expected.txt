@@ -1,0 +1,12 @@
+List:
+[10, 20, 30, 40, 50]
+First element:
+10
+Last element:
+50
+List size:
+5
+String size:
+9
+demo
+value: Hello ARO

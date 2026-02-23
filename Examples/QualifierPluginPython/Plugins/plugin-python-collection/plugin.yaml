@@ -1,0 +1,10 @@
+name: plugin-python-collection
+version: 1.0.0
+description: A Python plugin that provides list qualifiers (sort, unique, sum, avg, min, max)
+author: ARO Team
+license: MIT
+aro-version: '>=0.1.0'
+provides:
+- type: python-plugin
+  path: src/
+  handler: stats

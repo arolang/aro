@@ -84,8 +84,10 @@ echo "=== Cleaning Rust plugin artifacts ==="
 find Examples -type d -name target -path "*/Plugins/*" -print0 2>/dev/null | xargs -0 rm -rf 2>/dev/null || true
 
 # Fix git ownership issues in Docker (mounted volume has different owner)
-git config --global --add safe.directory /workspace
-git config --global --add safe.directory "*"
+# Use || true since git may fail in git worktree environments where the parent repo path
+# is not accessible inside the container
+git config --global --add safe.directory /workspace || true
+git config --global --add safe.directory "*" || true
 
 echo ""
 echo "=== Building ARO (release) ==="
