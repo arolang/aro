@@ -1,0 +1,8 @@
+# Example: TerminalSystemMonitor
+# Type: console
+---
+System Monitor starting...
+=== System Monitor ===
+Metrics updated via event!
+Event-based Watch pattern is working!
+[OK] startup

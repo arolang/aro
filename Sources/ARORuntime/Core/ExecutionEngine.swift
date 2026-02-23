@@ -117,6 +117,9 @@ public actor ExecutionEngine {
         // Wire up repository observers (e.g., "user-repository Observer")
         registerRepositoryObservers(for: program, baseContext: context)
 
+        // Wire up watch handlers (e.g., "Dashboard Watch: TasksUpdated Handler" or "Dashboard Watch: task-repository Observer")
+        registerWatchHandlers(for: program, baseContext: context)
+
         // Wire up state transition observers (e.g., "Audit Changes: status StateObserver")
         registerStateObservers(for: program, baseContext: context)
 
@@ -919,6 +922,149 @@ public actor ExecutionEngine {
                     services: capturedServices
                 )
             }
+        }
+    }
+
+    /// Register watch handlers for feature sets with " Watch:" business activity pattern (ARO-0052)
+    /// Supports two patterns:
+    /// - Event-based: "{Name} Watch: {EventType} Handler" - triggered by domain events
+    /// - Repository-based: "{Name} Watch: {repository} Observer" - triggered by repository changes
+    /// Examples: "Dashboard Watch: TasksUpdated Handler", "Dashboard Watch: task-repository Observer"
+    private func registerWatchHandlers(for program: AnalyzedProgram, baseContext: RuntimeContext) {
+        // Find all feature sets with " Watch:" in business activity
+        let watchHandlers = program.featureSets.filter { analyzedFS in
+            analyzedFS.featureSet.businessActivity.contains(" Watch:")
+        }
+
+        for analyzedFS in watchHandlers {
+            let activity = analyzedFS.featureSet.businessActivity
+
+            // Extract pattern after " Watch:"
+            guard let watchRange = activity.range(of: " Watch:") else { continue }
+            let pattern = String(activity[watchRange.upperBound...]).trimmingCharacters(in: .whitespaces)
+
+            // Determine if Handler or Observer pattern
+            if pattern.hasSuffix(" Handler") {
+                // Event-based watch: "{Name} Watch: {EventType} Handler"
+                let eventType = pattern.replacingOccurrences(of: " Handler", with: "")
+                    .trimmingCharacters(in: .whitespaces)
+
+                // CRITICAL: Capture values to avoid actor reentrancy deadlock
+                let capturedActionRegistry = actionRegistry
+                let capturedEventBus = eventBus
+                let capturedGlobalSymbols = globalSymbols
+                let capturedServices = services
+
+                eventBus.subscribe(to: DomainEvent.self) { event in
+                    // Only handle events that match this watch handler's event type
+                    guard event.domainEventType == eventType else { return }
+
+                    // Execute watch handler WITHOUT actor isolation to avoid deadlock
+                    await ExecutionEngine.executeWatchHandlerStatic(
+                        analyzedFS,
+                        baseContext: baseContext,
+                        event: event,
+                        actionRegistry: capturedActionRegistry,
+                        eventBus: capturedEventBus,
+                        globalSymbols: capturedGlobalSymbols,
+                        services: capturedServices
+                    )
+                }
+
+            } else if pattern.hasSuffix(" Observer") {
+                // Repository-based watch: "{Name} Watch: {repository} Observer"
+                let repositoryName = pattern.replacingOccurrences(of: " Observer", with: "")
+                    .trimmingCharacters(in: .whitespaces)
+
+                // CRITICAL: Capture values to avoid actor reentrancy deadlock
+                let capturedActionRegistry = actionRegistry
+                let capturedEventBus = eventBus
+                let capturedGlobalSymbols = globalSymbols
+                let capturedServices = services
+
+                eventBus.subscribe(to: RepositoryChangedEvent.self) { event in
+                    // Only handle events that match this watch handler's repository
+                    guard event.repositoryName == repositoryName else { return }
+
+                    // Execute watch handler WITHOUT actor isolation to avoid deadlock
+                    await ExecutionEngine.executeWatchHandlerStatic(
+                        analyzedFS,
+                        baseContext: baseContext,
+                        event: event,
+                        actionRegistry: capturedActionRegistry,
+                        eventBus: capturedEventBus,
+                        globalSymbols: capturedGlobalSymbols,
+                        services: capturedServices
+                    )
+                }
+            }
+        }
+    }
+
+    /// Execute a watch handler in a static context to avoid actor reentrancy (ARO-0052)
+    private static func executeWatchHandlerStatic(
+        _ analyzedFS: AnalyzedFeatureSet,
+        baseContext: RuntimeContext,
+        event: any RuntimeEvent,
+        actionRegistry: ActionRegistry,
+        eventBus: EventBus,
+        globalSymbols: GlobalSymbolStorage,
+        services: ServiceRegistry
+    ) async {
+        // Create child context for this watch handler with its own business activity
+        let watchContext = RuntimeContext(
+            featureSetName: analyzedFS.featureSet.name,
+            businessActivity: analyzedFS.featureSet.businessActivity,
+            eventBus: eventBus,
+            parent: baseContext
+        )
+
+        // Build event payload for the watch handler
+        var eventPayload: [String: any Sendable] = [
+            "timestamp": event.timestamp
+        ]
+
+        // Add event-specific fields
+        if let domainEvent = event as? DomainEvent {
+            eventPayload["domainEventType"] = domainEvent.domainEventType
+            eventPayload["payload"] = domainEvent.payload
+        } else if let repoEvent = event as? RepositoryChangedEvent {
+            eventPayload["repositoryName"] = repoEvent.repositoryName
+            eventPayload["changeType"] = repoEvent.changeType.rawValue
+            if let entityId = repoEvent.entityId {
+                eventPayload["entityId"] = entityId
+            }
+            if let newValue = repoEvent.newValue {
+                eventPayload["newValue"] = newValue
+            }
+            if let oldValue = repoEvent.oldValue {
+                eventPayload["oldValue"] = oldValue
+            }
+        }
+
+        // Bind event payload to context as "event" with nested access
+        watchContext.bind("event", value: eventPayload)
+
+        // Also bind event keys directly for convenience
+        for (key, value) in eventPayload {
+            watchContext.bind("event:\(key)", value: value)
+        }
+
+        // Copy services from base context
+        await services.registerAll(in: watchContext)
+
+        // Execute the watch handler
+        let executor = FeatureSetExecutor(
+            actionRegistry: actionRegistry,
+            eventBus: eventBus,
+            globalSymbols: globalSymbols
+        )
+
+        do {
+            _ = try await executor.execute(analyzedFS, context: watchContext)
+        } catch {
+            // Log watch handler execution errors but don't propagate
+            // (Watch handlers run asynchronously and shouldn't break the main flow)
         }
     }
 

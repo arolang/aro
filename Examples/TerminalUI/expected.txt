@@ -1,0 +1,23 @@
+# Example: TerminalUI
+# Type: console
+---
+ARO Terminal UI System (ARO-0052 + ARO-0053)
+================================================
+
+Available Examples:
+  - TerminalSimpleMenu:     Basic terminal output with ANSI styling
+  - TerminalTaskManager:    Repository Observer Watch pattern (reactive)
+  - TerminalSystemMonitor:  Event-based Watch pattern (reactive)
+
+Features Implemented:
+  - Shadow buffer optimization (10-192x faster screen updates)
+  - Reactive Watch pattern (event-driven, no polling)
+  - Template filters for colors and styles
+  - Interactive actions (Prompt, Select, Clear)
+  - Thread-safe terminal service (Swift actor)
+
+Run individual examples:
+  aro run Examples/TerminalSimpleMenu
+  aro run Examples/TerminalTaskManager
+  aro run Examples/TerminalSystemMonitor
+[OK] startup
