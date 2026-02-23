@@ -90,14 +90,12 @@ public struct InputHandler: Sendable {
     }
 
     /// Flush stdout
-    /// Note: stdout is a C global that's thread-safe, but Swift 6 requires explicit marking
     private func flushStdout() {
+        // fflush(nil) flushes all open output streams; avoids referencing the C global 'stdout'
         #if canImport(Darwin)
-        nonisolated(unsafe) let stdoutPtr = Darwin.stdout
-        Darwin.fflush(stdoutPtr)
+        Darwin.fflush(nil)
         #elseif canImport(Glibc)
-        nonisolated(unsafe) let stdoutPtr = Glibc.stdout
-        Glibc.fflush(stdoutPtr)
+        Glibc.fflush(nil)
         #endif
     }
 }
