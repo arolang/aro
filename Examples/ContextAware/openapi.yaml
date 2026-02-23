@@ -1,0 +1,63 @@
+openapi: 3.0.3
+info:
+  title: Context-Aware Demo API
+  description: Demonstrates ARO's context-aware response formatting
+  version: 1.0.0
+
+servers:
+  - url: http://localhost:8080
+    description: Local development server
+
+paths:
+  /demo:
+    get:
+      operationId: getDemo
+      summary: Get demo data
+      description: Returns sample user, order, and tags data formatted as JSON
+      responses:
+        '200':
+          description: Demo data with context-aware formatting
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DemoResponse'
+
+components:
+  schemas:
+    DemoResponse:
+      type: object
+      properties:
+        user:
+          type: object
+          properties:
+            id:
+              type: integer
+            name:
+              type: string
+            email:
+              type: string
+            role:
+              type: string
+            active:
+              type: boolean
+            score:
+              type: number
+        order:
+          type: object
+          properties:
+            order-id:
+              type: string
+            customer:
+              type: string
+            items:
+              type: integer
+            total:
+              type: number
+            status:
+              type: string
+        tags:
+          type: array
+          items:
+            type: string
+        summary:
+          type: string

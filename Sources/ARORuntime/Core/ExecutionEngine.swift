@@ -25,6 +25,13 @@ public actor ExecutionEngine {
     /// Global symbol registry for published variables
     private let globalSymbols: GlobalSymbolStorage
 
+    /// Public accessor for global symbols (needed for HTTP handlers)
+    public var sharedGlobalSymbols: GlobalSymbolStorage {
+        get async {
+            return globalSymbols
+        }
+    }
+
     /// Service registry for dependency injection
     private let services: ServiceRegistry
 
@@ -1422,6 +1429,11 @@ public actor GlobalSymbolStorage {
         return !entry.businessActivity.isEmpty &&
                !forBusinessActivity.isEmpty &&
                entry.businessActivity != forBusinessActivity
+    }
+
+    /// Get all published symbols (for eager binding in feature sets)
+    public func allSymbols() -> [String: (value: any Sendable, featureSet: String, businessActivity: String)] {
+        return symbols
     }
 }
 

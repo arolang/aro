@@ -90,6 +90,20 @@ public final class FeatureSetExecutor: @unchecked Sendable {
             }
         }
 
+        // Also eagerly bind all other published variables for this business activity
+        // This handles cases where semantic analyzer misses dependencies in map literals
+        for (name, entry) in await globalSymbols.allSymbols() {
+            // Skip if already bound
+            if context.resolveAny(name) != nil {
+                continue
+            }
+            // Only bind if business activity matches
+            if !entry.businessActivity.isEmpty && !context.businessActivity.isEmpty &&
+               entry.businessActivity == context.businessActivity {
+                context.bind(name, value: entry.value)
+            }
+        }
+
         // Execute statements
         do {
             if enableParallelIO {
@@ -850,6 +864,12 @@ public final class Runtime: @unchecked Sendable {
     private let engine: ExecutionEngine
     /// Event bus for event emission (public for C bridge access in compiled binaries)
     public let eventBus: EventBus
+    /// Global symbols for sharing between feature sets (public for HTTP handlers)
+    public var globalSymbols: GlobalSymbolStorage {
+        get async {
+            return await engine.sharedGlobalSymbols
+        }
+    }
     private var _isRunning: Bool = false
     private var _currentProgram: AnalyzedProgram?
     private var _shutdownError: Error?

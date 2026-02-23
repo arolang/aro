@@ -1,3 +1,6 @@
 # Test hints for ContextAware
 # Fixed: Binary boolean representation now consistent across platforms
+# Multi-context testing: console (human), HTTP (machine), debug (developer)
 mode: both
+type: multi-context
+skip-on-windows: HTTP server tests not supported on Windows CI

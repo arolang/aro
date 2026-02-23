@@ -1,0 +1,5 @@
+# Generated: Mon Feb 24 01:00:00 2026
+# Type: http
+# Command: HTTP GET /demo
+---
+GET /demo => {"order.customer":"Alice Smith","order.items":3,"order.order-id":"ORD-2024-001","order.status":"completed","order.total":249.99,"summary":"Demo of context-aware formatting","tags":["featured","premium","verified"],"user.active":true,"user.email":"alice@example.com","user.id":42,"user.name":"Alice Smith","user.role":"admin","user.score":98.5}

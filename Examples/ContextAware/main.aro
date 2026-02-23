@@ -32,12 +32,21 @@
     (* Create a list of tags *)
     Create the <tags> with ["featured", "premium", "verified"].
 
+    (* Publish for HTTP handler access *)
+    Publish as <demo-user> <user>.
+    Publish as <demo-order> <order>.
+    Publish as <demo-tags> <tags>.
+
     (* Log information - format varies by context *)
     Log "=== Context-Aware Response Demo ===" to the <console>.
     Log "User data:" to the <console>.
     Log <user> to the <console>.
     Log "Order data:" to the <console>.
     Log <order> to the <console>.
+
+    (* Start HTTP server and keep running *)
+    Start the <http-server> for the <contract>.
+    Keepalive the <application> for the <events>.
 
     (* Return response with structured data *)
     (* Output format depends on execution context:
@@ -69,4 +78,18 @@
         tags: <tags>,
         summary: "Demo of context-aware formatting"
     }.
+}
+
+(* HTTP handler - retrieves published data and returns as JSON *)
+(getDemo: Context-Aware Demo) {
+    (* Access published data from same business activity *)
+    Create the <response> with {
+        user: <demo-user>,
+        order: <demo-order>,
+        tags: <demo-tags>,
+        summary: "Demo of context-aware formatting"
+    }.
+
+    (* Return for HTTP - machine context (JSON) *)
+    Return an <OK: status> for the <context-demo> with <response>.
 }

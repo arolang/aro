@@ -345,11 +345,11 @@ public final class Application: @unchecked Sendable {
             context.bind("body", value: parsedBody)
         }
 
-        // Create executor and run
+        // Create executor and run with shared global symbols
         let executor = FeatureSetExecutor(
             actionRegistry: .shared,
             eventBus: .shared,
-            globalSymbols: GlobalSymbolStorage()
+            globalSymbols: await runtime.globalSymbols
         )
 
         return try await executor.execute(analyzedFeatureSet, context: context)

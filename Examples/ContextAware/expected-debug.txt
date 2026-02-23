@@ -1,0 +1,36 @@
+# Generated: Mon Feb 24 01:00:00 2026
+# Type: debug
+# Command: aro run ./Examples/ContextAware --debug
+---
+=== Context-Aware Response Demo ===
+User data:
+active: true
+email: alice@example.com
+id: 42
+name: Alice Smith
+role: admin
+score: 98.50
+Order data:
+customer: Alice Smith
+items: 3
+order-id: ORD-2024-001
+status: completed
+total: 249.99
+┌────────────────────────────────────────────────────────────┐
+│ Response<OK>                                                 │
+├────────────────┬─────────────────────────────────────────────┤
+│ reason         │ String("context-demo")                      │
+│ order.customer │ String("Alice Smith")                       │
+│ order.items    │ Int(3)                                      │
+│ order.order-id │ String("ORD-2024-001")                      │
+│ order.status   │ String("completed")                         │
+│ order.total    │ Double(249.99)                              │
+│ summary        │ String("Demo of context-aware formatting")  │
+│ tags           │ String("["featured","premium","verified"]") │
+│ user.active    │ Bool(true)                                  │
+│ user.email     │ String("alice@example.com")                 │
+│ user.id        │ Int(42)                                     │
+│ user.name      │ String("Alice Smith")                       │
+│ user.role      │ String("admin")                             │
+│ user.score     │ Double(98.5)                                │
+└────────────────┴─────────────────────────────────────────────┘
