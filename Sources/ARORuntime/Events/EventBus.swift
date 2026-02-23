@@ -33,8 +33,18 @@ public actor EventBus {
         let handler: EventHandler
     }
 
-    /// All subscriptions
-    private var subscriptions: [Subscription] = []
+    /// Lock for thread-safe access to subscription collections.
+    /// Marked nonisolated(unsafe) so nonisolated methods can use it directly;
+    /// NSLock provides the actual thread safety guarantee.
+    private nonisolated(unsafe) let lock = NSLock()
+
+    /// Subscriptions indexed by event type for O(1) lookup (ARO-0064)
+    /// Marked nonisolated(unsafe) because access is protected by `lock`.
+    private nonisolated(unsafe) var subscriptionsByType: [String: [Subscription]] = [:]
+
+    /// Wildcard subscribers that receive all events (ARO-0064)
+    /// Marked nonisolated(unsafe) because access is protected by `lock`.
+    private nonisolated(unsafe) var wildcardSubscriptions: [Subscription] = []
 
     /// Async stream continuations for stream-based subscriptions
     private var continuations: [UUID: AsyncStream<any RuntimeEvent>.Continuation] = [:]
@@ -57,7 +67,11 @@ public actor EventBus {
     // MARK: - Actor-isolated helpers
 
     private func getMatchingSubscriptions(for eventType: String) -> [Subscription] {
-        subscriptions.filter { $0.eventType == eventType || $0.eventType == "*" }
+        lock.withLock {
+            // O(1) dictionary lookup + wildcard subscriptions (ARO-0064)
+            let typeSubscriptions = subscriptionsByType[eventType] ?? []
+            return typeSubscriptions + wildcardSubscriptions
+        }
     }
 
     private func getAllContinuations() -> [AsyncStream<any RuntimeEvent>.Continuation] {
@@ -65,7 +79,14 @@ public actor EventBus {
     }
 
     private func addSubscription(_ subscription: Subscription) {
-        subscriptions.append(subscription)
+        lock.withLock {
+            // Index by event type for O(1) lookup (ARO-0064)
+            if subscription.eventType == "*" {
+                wildcardSubscriptions.append(subscription)
+            } else {
+                subscriptionsByType[subscription.eventType, default: []].append(subscription)
+            }
+        }
     }
 
     private func addContinuation(_ id: UUID, continuation: AsyncStream<any RuntimeEvent>.Continuation) {
@@ -303,8 +324,10 @@ public actor EventBus {
 
     // MARK: - Subscribing
 
-    /// Subscribe to events of a specific type (returns immediately with subscription ID)
-    /// This is nonisolated for compatibility with existing synchronous code
+    /// Subscribe to events of a specific type (synchronous, lock-based)
+    /// Uses NSLock directly (via nonisolated(unsafe) properties) to register
+    /// the subscription immediately without a Task, preventing race conditions
+    /// where publish is called before the subscription is stored.
     /// - Parameters:
     ///   - eventType: The event type to subscribe to (or "*" for all events)
     ///   - handler: The handler to call when events occur
@@ -317,8 +340,12 @@ public actor EventBus {
             handler: handler
         )
 
-        Task {
-            await self.addSubscription(subscription)
+        lock.withLock {
+            if subscription.eventType == "*" {
+                wildcardSubscriptions.append(subscription)
+            } else {
+                subscriptionsByType[subscription.eventType, default: []].append(subscription)
+            }
         }
 
         return subscription.id
@@ -383,37 +410,53 @@ public actor EventBus {
     /// Unsubscribe from events (runs asynchronously via Task)
     /// - Parameter id: The subscription ID returned from subscribe
     nonisolated public func unsubscribe(_ id: UUID) {
-        Task {
-            await self.unsubscribeInternal(id)
+        Task { await self.removeSubscription(id) }
+    }
+
+    private func removeSubscription(_ id: UUID) {
+        lock.withLock {
+            // Remove from wildcard subscriptions (ARO-0064)
+            wildcardSubscriptions.removeAll { $0.id == id }
+
+            // Remove from type-specific subscriptions (ARO-0064)
+            for key in subscriptionsByType.keys {
+                subscriptionsByType[key]?.removeAll { $0.id == id }
+                // Clean up empty arrays
+                if subscriptionsByType[key]?.isEmpty == true {
+                    subscriptionsByType.removeValue(forKey: key)
+                }
+            }
+
+            _ = continuations.removeValue(forKey: id)
         }
     }
 
-    private func unsubscribeInternal(_ id: UUID) {
-        subscriptions.removeAll { $0.id == id }
-        _ = continuations.removeValue(forKey: id)
-    }
-
-    /// Remove all subscriptions (runs asynchronously via Task)
+    /// Remove all subscriptions (nonisolated, runs asynchronously via Task)
     nonisolated public func unsubscribeAll() {
-        Task {
-            await self.unsubscribeAllInternal()
-        }
+        Task { await self.removeAllSubscriptions() }
     }
 
-    private func unsubscribeAllInternal() {
-        subscriptions.removeAll()
-        for continuation in continuations.values {
-            continuation.finish()
+    private func removeAllSubscriptions() {
+        lock.withLock {
+            // Clear indexed subscriptions (ARO-0064)
+            wildcardSubscriptions.removeAll()
+            subscriptionsByType.removeAll()
+
+            for continuation in continuations.values {
+                continuation.finish()
+            }
+            continuations.removeAll()
         }
-        continuations.removeAll()
     }
 
     // MARK: - Inspection
 
     /// Number of active subscriptions
     public var subscriptionCount: Int {
-        get async {
-            subscriptions.count + continuations.count
+        lock.withLock {
+            // Count indexed subscriptions (ARO-0064)
+            let typeSubscriptionCount = subscriptionsByType.values.reduce(0) { $0 + $1.count }
+            return wildcardSubscriptions.count + typeSubscriptionCount + continuations.count
         }
     }
 }
