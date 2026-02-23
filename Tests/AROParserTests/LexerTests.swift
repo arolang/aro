@@ -426,6 +426,50 @@ struct LexerTokenizationTests {
         #expect(tokens[0].kind == .stringLiteral("he said \"hello\""))
     }
 
+    @Test("Single quotes create raw string literals (ARO-0060)")
+    func testRawStringLiterals() throws {
+        // Basic raw string with single quotes
+        let tokens1 = try Lexer.tokenize(#"'\d+\.\d+'"#)
+        #expect(tokens1[0].kind == .stringLiteral(#"\d+\.\d+"#))
+
+        // Raw string with Windows path
+        let tokens2 = try Lexer.tokenize(#"'C:\Users\Admin\config.json'"#)
+        #expect(tokens2[0].kind == .stringLiteral(#"C:\Users\Admin\config.json"#))
+
+        // Raw string with backslashes
+        let tokens3 = try Lexer.tokenize(#"'\\server\share\file'"#)
+        #expect(tokens3[0].kind == .stringLiteral(#"\\server\share\file"#))
+    }
+
+    @Test("Raw strings allow escaped quotes (ARO-0060)")
+    func testRawStringEscapedQuotes() throws {
+        // Raw string with escaped single quote
+        let tokens = try Lexer.tokenize(#"'Path: \'important\''"#)
+        #expect(tokens[0].kind == .stringLiteral(#"Path: 'important'"#))
+    }
+
+    @Test("Single quotes (raw) vs double quotes (regular) (ARO-0060)")
+    func testRawVsRegularStrings() throws {
+        // Double quotes: regular string with escape processing
+        let regular = try Lexer.tokenize(#""\\d+\\n""#)
+        #expect(regular[0].kind == .stringLiteral("\\d+\\n"))
+
+        // Single quotes: raw string without escape processing
+        let raw = try Lexer.tokenize(#"'\\d+\\n'"#)
+        #expect(raw[0].kind == .stringLiteral(#"\\d+\\n"#))
+    }
+
+    @Test("Double quotes process escape sequences (ARO-0060)")
+    func testDoubleQuotesProcessEscapes() throws {
+        // Double quotes process \n as newline
+        let tokens = try Lexer.tokenize(#""Hello\nWorld""#)
+        #expect(tokens[0].kind == .stringLiteral("Hello\nWorld"))
+
+        // Single quotes keep \n literal
+        let raw = try Lexer.tokenize(#"'Hello\nWorld'"#)
+        #expect(raw[0].kind == .stringLiteral(#"Hello\nWorld"#))
+    }
+
     @Test("Tokenizes integer literals")
     func testIntegerLiterals() throws {
         let tokens = try Lexer.tokenize("42 0 123456")
