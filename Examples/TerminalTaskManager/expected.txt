@@ -1,0 +1,12 @@
+# Example: TerminalTaskManager
+# Type: console
+---
+=== Task Dashboard ===
+Tasks updated reactively!
+=== Task Dashboard ===
+Tasks updated reactively!
+=== Task Dashboard ===
+Tasks updated reactively!
+Task Manager started. Tasks are tracked reactively.
+Press Ctrl+C to exit.
+[OK] startup

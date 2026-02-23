@@ -1,8 +1,0 @@
-{{ "Tasks:" | bold }}
-
-{{for task in tasks}}
-  [{{ <task: id> }}] {{ <task: name> | bold }} - {{ <task: status> | color: "yellow" }}
-{{end}}
-
-{{ "---" }}
-Total: {{ <tasks> | length }} tasks

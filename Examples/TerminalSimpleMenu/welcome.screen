@@ -1,0 +1,14 @@
+{{ screen.clear }}
+
+{{ color cyan }}{{ bold }}
+╔═══════════════════════════════════════════════════════════════════════════╗
+║                           WELCOME TO ARO                                  ║
+║                      Interactive Menu Demo                                ║
+╚═══════════════════════════════════════════════════════════════════════════╝
+{{ reset }}
+
+{{ color dim }}
+This demo shows how to build interactive terminal applications with ARO.
+
+Use arrow keys to navigate the menu, Enter to select.
+{{ reset }}

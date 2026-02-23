@@ -1,12 +1,13 @@
-(* ARO-0067: Pipeline Operator Demo *)
+(* ARO-0067: Automatic Pipeline Detection Demo *)
+(* No |> operator needed - ARO automatically detects pipelines! *)
 
 (Application-Start: Pipeline Demo) {
-    (* Test 1: Computation pipeline *)
+    (* Test 1: Computation pipeline - automatic detection *)
     Log "=== Computation Pipeline ===" to the <console>.
 
-    Extract the <text> from "hello"
-      |> Compute the <upper: uppercase> from the <text>
-      |> Compute the <len: length> from the <upper>.
+    Extract the <text> from "hello".
+    Compute the <upper: uppercase> from the <text>.
+    Compute the <len: length> from the <upper>.
 
     Log "text:" to the <console>.
     Log <text> to the <console>.
@@ -15,12 +16,12 @@
     Log "len (should be 5):" to the <console>.
     Log <len> to the <console>.
 
-    (* Test 2: Multi-stage extraction pipeline *)
+    (* Test 2: Multi-stage extraction pipeline - automatic detection *)
     Log "=== Extraction Pipeline ===" to the <console>.
 
-    Extract the <data> from {"name": "Alice", "age": 30}
-      |> Extract the <name> from the <data: name>
-      |> Compute the <name-len: length> from the <name>.
+    Extract the <data> from {"name": "Alice", "age": 30}.
+    Extract the <name> from the <data: name>.
+    Compute the <name-len: length> from the <name>.
 
     Log "data:" to the <console>.
     Log <data> to the <console>.

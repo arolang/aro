@@ -1,8 +1,0 @@
-# TerminalUI is a collection of examples, not a single runnable example
-# Run sub-examples individually:
-#   aro run Examples/TerminalUI/SimpleMenu
-#   aro run Examples/TerminalUI/TaskManager
-#   aro run Examples/TerminalUI/SystemMonitor
-
-skip: true
-reason: Collection directory with multiple sub-examples

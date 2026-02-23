@@ -1,0 +1,10 @@
+# Example: TerminalSimpleMenu
+# Type: console
+---
+=== Simple Terminal Menu ===
+
+Task 1: Write docs - done
+Task 2: Fix bugs - pending
+
+Demo complete! Templates with filters work in your applications.
+[OK] startup

@@ -1,0 +1,8 @@
+# Example: EventReplay
+# Type: console
+---
+=== Event Recording and Replay Test ===
+
+✓ Events emitted
+✓ Event recording implemented in EventRecorder.swift
+[OK] test
