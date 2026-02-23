@@ -481,6 +481,7 @@ public final class LLVMCodeGenerator {
             bindLiteral(literal)
 
         case .expression(let expr):
+            // Serialize expression (with constant folding if applicable)
             let exprJSON = ctx.stringConstant(serializeExpression(expr))
             _ = ctx.module.insertCall(
                 externals.evaluateExpression,
@@ -490,6 +491,7 @@ public final class LLVMCodeGenerator {
 
         case .sinkExpression(let expr):
             // Sink expression: evaluate and bind to _result_expression_ for LogAction/response actions
+            // Constant folding happens in serializeExpression (GitLab #102)
             let resultExprName = ctx.stringConstant("_result_expression_")
             let exprJSON = ctx.stringConstant(serializeExpression(expr))
             _ = ctx.module.insertCall(
@@ -678,6 +680,12 @@ public final class LLVMCodeGenerator {
     // MARK: - Expression Serialization
 
     private func serializeExpression(_ expr: any AROParser.Expression) -> String {
+        // GitLab #102: Constant folding optimization
+        // If the expression is entirely constant, evaluate it at compile time
+        if ConstantFolder.isConstant(expr), let value = ConstantFolder.evaluate(expr) {
+            return serializeLiteralValue(value)
+        }
+
         if let literal = expr as? LiteralExpression {
             return serializeLiteralValue(literal.value)
         } else if let ref = expr as? VariableRefExpression {
