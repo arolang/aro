@@ -44,10 +44,11 @@ public final class Lexer: @unchecked Sendable {
         "where": .keyword(.where),
 
         // Keywords - Iteration
-        "for": .keyword(.for),
+        // "for" and "at" are prepositions (also used as iteration keywords - parser accepts both)
+        "for": .preposition(.for),
         "each": .keyword(.each),
         "in": .keyword(.in),
-        "at": .keyword(.atKeyword),
+        "at": .preposition(.at),
         "parallel": .keyword(.parallel),
         "concurrency": .keyword(.concurrency),
 
@@ -86,7 +87,7 @@ public final class Lexer: @unchecked Sendable {
         "an": .article(.an),
         "the": .article(.the),
 
-        // Prepositions (note: "for" and "at" are keywords, not prepositions)
+        // Prepositions
         "from": .preposition(.from),
         "against": .preposition(.against),
         "to": .preposition(.to),
@@ -96,7 +97,7 @@ public final class Lexer: @unchecked Sendable {
         "on": .preposition(.on),
         "by": .preposition(.by)
     ]
-    
+
     // MARK: - Initialization
     
     public init(source: String) {
@@ -660,7 +661,7 @@ public final class Lexer: @unchecked Sendable {
         
         let lexeme = String(source[source.index(source.startIndex, offsetBy: start.offset)..<currentIndex])
         let lowerLexeme = lexeme.lowercased()
-        
+
         // Unified reserved word lookup (ARO-0055: single lookup instead of 3)
         if let reserved = Self.reservedWords[lowerLexeme] {
             switch reserved {
