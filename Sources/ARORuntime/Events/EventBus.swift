@@ -33,14 +33,18 @@ public actor EventBus {
         let handler: EventHandler
     }
 
-    /// Lock for thread-safe access
-    private let lock = NSLock()
+    /// Lock for thread-safe access to subscription collections.
+    /// Marked nonisolated(unsafe) so nonisolated methods can use it directly;
+    /// NSLock provides the actual thread safety guarantee.
+    private nonisolated(unsafe) let lock = NSLock()
 
     /// Subscriptions indexed by event type for O(1) lookup (ARO-0064)
-    private var subscriptionsByType: [String: [Subscription]] = [:]
+    /// Marked nonisolated(unsafe) because access is protected by `lock`.
+    private nonisolated(unsafe) var subscriptionsByType: [String: [Subscription]] = [:]
 
     /// Wildcard subscribers that receive all events (ARO-0064)
-    private var wildcardSubscriptions: [Subscription] = []
+    /// Marked nonisolated(unsafe) because access is protected by `lock`.
+    private nonisolated(unsafe) var wildcardSubscriptions: [Subscription] = []
 
     /// Async stream continuations for stream-based subscriptions
     private var continuations: [UUID: AsyncStream<any RuntimeEvent>.Continuation] = [:]
@@ -320,9 +324,10 @@ public actor EventBus {
 
     // MARK: - Subscribing
 
-    /// Subscribe to events of a specific type (blocks until subscription is registered)
-    /// Uses semaphore to ensure subscription is added before returning, preventing
-    /// race conditions where publish is called before the subscription is stored.
+    /// Subscribe to events of a specific type (synchronous, lock-based)
+    /// Uses NSLock directly (via nonisolated(unsafe) properties) to register
+    /// the subscription immediately without a Task, preventing race conditions
+    /// where publish is called before the subscription is stored.
     /// - Parameters:
     ///   - eventType: The event type to subscribe to (or "*" for all events)
     ///   - handler: The handler to call when events occur
@@ -335,12 +340,13 @@ public actor EventBus {
             handler: handler
         )
 
-        let semaphore = DispatchSemaphore(value: 0)
-        Task {
-            await self.addSubscription(subscription)
-            semaphore.signal()
+        lock.withLock {
+            if subscription.eventType == "*" {
+                wildcardSubscriptions.append(subscription)
+            } else {
+                subscriptionsByType[subscription.eventType, default: []].append(subscription)
+            }
         }
-        semaphore.wait()
 
         return subscription.id
     }
