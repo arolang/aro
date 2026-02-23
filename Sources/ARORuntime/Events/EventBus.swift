@@ -63,7 +63,7 @@ public actor EventBus {
     // MARK: - Actor-isolated helpers
 
     private func getMatchingSubscriptions(for eventType: String) -> [Subscription] {
-        withLock {
+        lock.withLock {
             // O(1) dictionary lookup + wildcard subscriptions (ARO-0064)
             let typeSubscriptions = subscriptionsByType[eventType] ?? []
             return typeSubscriptions + wildcardSubscriptions
@@ -75,7 +75,7 @@ public actor EventBus {
     }
 
     private func addSubscription(_ subscription: Subscription) {
-        withLock {
+        lock.withLock {
             // Index by event type for O(1) lookup (ARO-0064)
             if subscription.eventType == "*" {
                 wildcardSubscriptions.append(subscription)
@@ -399,8 +399,12 @@ public actor EventBus {
 
     /// Unsubscribe from events (runs asynchronously via Task)
     /// - Parameter id: The subscription ID returned from subscribe
-    public func unsubscribe(_ id: UUID) {
-        withLock {
+    nonisolated public func unsubscribe(_ id: UUID) {
+        Task { await self.removeSubscription(id) }
+    }
+
+    private func removeSubscription(_ id: UUID) {
+        lock.withLock {
             // Remove from wildcard subscriptions (ARO-0064)
             wildcardSubscriptions.removeAll { $0.id == id }
 
@@ -417,9 +421,13 @@ public actor EventBus {
         }
     }
 
-    /// Remove all subscriptions
-    public func unsubscribeAll() {
-        withLock {
+    /// Remove all subscriptions (nonisolated, runs asynchronously via Task)
+    nonisolated public func unsubscribeAll() {
+        Task { await self.removeAllSubscriptions() }
+    }
+
+    private func removeAllSubscriptions() {
+        lock.withLock {
             // Clear indexed subscriptions (ARO-0064)
             wildcardSubscriptions.removeAll()
             subscriptionsByType.removeAll()
@@ -435,7 +443,7 @@ public actor EventBus {
 
     /// Number of active subscriptions
     public var subscriptionCount: Int {
-        withLock {
+        lock.withLock {
             // Count indexed subscriptions (ARO-0064)
             let typeSubscriptionCount = subscriptionsByType.values.reduce(0) { $0 + $1.count }
             return wildcardSubscriptions.count + typeSubscriptionCount + continuations.count
