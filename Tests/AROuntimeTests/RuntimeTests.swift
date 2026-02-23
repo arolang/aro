@@ -245,41 +245,51 @@ private final class TestService: Sendable {}
 struct EventBusTests {
 
     @Test("Shared event bus exists")
-    func testSharedEventBus() {
+    func testSharedEventBus() async {
         let bus = EventBus.shared
-        #expect(bus.subscriptionCount >= 0)
+        #expect(await bus.subscriptionCount >= 0)
     }
 
     @Test("Event bus subscription count")
-    func testSubscriptionCount() {
+    func testSubscriptionCount() async {
         let bus = EventBus()
-        #expect(bus.subscriptionCount == 0)
+        #expect(await bus.subscriptionCount == 0)
 
         bus.subscribe(to: "test") { _ in }
-        #expect(bus.subscriptionCount == 1)
+        // Give the Task time to register the subscription
+        try? await Task.sleep(nanoseconds: 10_000_000) // 10ms
+        #expect(await bus.subscriptionCount == 1)
     }
 
     @Test("Unsubscribe removes subscription")
-    func testUnsubscribe() {
+    func testUnsubscribe() async {
         let bus = EventBus()
 
         let id = bus.subscribe(to: "test") { _ in }
-        #expect(bus.subscriptionCount == 1)
+        // Give the Task time to register the subscription
+        try? await Task.sleep(nanoseconds: 10_000_000) // 10ms
+        #expect(await bus.subscriptionCount == 1)
 
         bus.unsubscribe(id)
-        #expect(bus.subscriptionCount == 0)
+        // Give the Task time to unregister the subscription
+        try? await Task.sleep(nanoseconds: 10_000_000) // 10ms
+        #expect(await bus.subscriptionCount == 0)
     }
 
     @Test("Unsubscribe all")
-    func testUnsubscribeAll() {
+    func testUnsubscribeAll() async {
         let bus = EventBus()
 
         bus.subscribe(to: "test1") { _ in }
         bus.subscribe(to: "test2") { _ in }
-        #expect(bus.subscriptionCount == 2)
+        // Give the Tasks time to register the subscriptions
+        try? await Task.sleep(nanoseconds: 10_000_000) // 10ms
+        #expect(await bus.subscriptionCount == 2)
 
         bus.unsubscribeAll()
-        #expect(bus.subscriptionCount == 0)
+        // Give the Task time to unregister all subscriptions
+        try? await Task.sleep(nanoseconds: 10_000_000) // 10ms
+        #expect(await bus.subscriptionCount == 0)
     }
 }
 
