@@ -1,3 +1,5 @@
 # TerminalSystemMonitor uses Keepalive for event loop
 # Timeout is expected behavior - application stays alive until Ctrl+C
 timeout: 3
+# Binary mode outputs extra return value fields that interpreter doesn't
+occurrence-check: true

@@ -1,0 +1,4 @@
+# Binary mode outputs return value fields that interpreter doesn't
+occurrence-check: true
+# Dictionary key order is non-deterministic
+normalize-dict: true

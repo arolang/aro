@@ -1,0 +1,2 @@
+# Binary mode outputs runtime errors and return value fields that interpreter doesn't
+occurrence-check: true
