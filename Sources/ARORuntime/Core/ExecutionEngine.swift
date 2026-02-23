@@ -134,7 +134,7 @@ public actor ExecutionEngine {
             // This ensures events emitted during Application-Start finish executing
             let completed = await eventBus.awaitPendingEvents(timeout: AROEventHandlerDefaultTimeout)
             if !completed {
-                let pending = eventBus.getPendingHandlerCount()
+                let pending = await eventBus.getPendingHandlerCount()
                 print("[WARNING] \(pending) event handler(s) did not complete within \(AROEventHandlerDefaultTimeout)s timeout")
             }
 

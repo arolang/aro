@@ -97,6 +97,25 @@ public struct FeatureSet: ASTNode {
 /// Protocol for all statement types
 public protocol Statement: ASTNode {}
 
+/// A pipeline statement chains actions with |> operator (ARO-0067)
+public struct PipelineStatement: Statement {
+    public let stages: [AROStatement]
+    public let span: SourceSpan
+
+    public init(stages: [AROStatement], span: SourceSpan) {
+        self.stages = stages
+        self.span = span
+    }
+
+    public var description: String {
+        "Pipeline(\(stages.count) stages)"
+    }
+
+    public func accept<V: ASTVisitor>(_ visitor: V) throws -> V.Result {
+        try visitor.visit(self)
+    }
+}
+
 /// An ARO (Action-Result-Object) statement
 ///
 /// Refactored to use grouped clause types for better semantic organization:
@@ -1228,6 +1247,7 @@ public protocol ASTVisitor {
     func visit(_ node: RequireStatement) throws -> Result
     func visit(_ node: MatchStatement) throws -> Result
     func visit(_ node: ForEachLoop) throws -> Result
+    func visit(_ node: PipelineStatement) throws -> Result
 
     // Expression visitors (ARO-0002)
     func visit(_ node: LiteralExpression) throws -> Result
@@ -1282,6 +1302,12 @@ public extension ASTVisitor where Result == Void {
     func visit(_ node: ForEachLoop) throws {
         for statement in node.body {
             try statement.accept(self)
+        }
+    }
+
+    func visit(_ node: PipelineStatement) throws {
+        for stage in node.stages {
+            try stage.accept(self)
         }
     }
 
@@ -1442,6 +1468,22 @@ public struct ASTPrinter: ASTVisitor {
         for statement in node.body {
             result += try! statement.accept(printer)
         }
+        return result
+    }
+
+    public func visit(_ node: PipelineStatement) -> String {
+        var result = "\(indentation())PipelineStatement\n"
+        result += "\(indentation())  Stages: \(node.stages.count)\n"
+
+        var printer = self
+        printer.indent += 1
+        for (index, stage) in node.stages.enumerated() {
+            result += "\(printer.indentation())Stage \(index + 1):\n"
+            var stagePrinter = printer
+            stagePrinter.indent += 1
+            result += try! stage.accept(stagePrinter)
+        }
+
         return result
     }
 
