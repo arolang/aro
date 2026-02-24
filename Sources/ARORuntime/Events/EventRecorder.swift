@@ -78,7 +78,7 @@ public actor EventRecorder {
     }
 
     /// Save recorded events to file
-    public func saveToFile(_ path: String, applicationName: String = "ARO Application") throws {
+    public func saveToFile(_ path: String, applicationName: String = "ARO Application") async throws {
         let recordedEvents = events.map { RecordedEvent(timestamp: $0.timestamp, eventType: $0.eventType, payload: $0.payload) }
         let recording = EventRecording(application: applicationName, events: recordedEvents)
 
