@@ -1543,17 +1543,36 @@ sub test_multi_context_example {
     my ($example_name, $hints, $timeout) = @_;
 
     my $start_time = time;
+    my $mode = $hints->{mode} || 'both';
 
-    say "Testing $example_name (multi-context)..." if $options{verbose};
+    say "Testing $example_name (multi-context) in $mode mode..." if $options{verbose};
 
-    my %context_results;
-    my $any_failures = 0;
+    my %interpreter_results;
+    my %compiled_results;
+    my $interpreter_failures = 0;
+    my $compiled_failures = 0;
 
-    # Test 1: Console context (human)
-    my $exp_console = File::Spec->catfile($examples_dir, $example_name, 'expected-console.txt');
-    if (-f $exp_console) {
-        say "  Testing console context..." if $options{verbose};
-        my ($output, $error) = run_console_example_internal($example_name, $timeout, 'interpreter', undef, $hints);
+    # Determine which modes to test
+    my @modes_to_test;
+    if ($mode eq 'both') {
+        @modes_to_test = ('interpreter', 'compiled');
+    } elsif ($mode eq 'interpreter' || $mode eq 'compiled') {
+        @modes_to_test = ($mode);
+    } else {
+        @modes_to_test = ('interpreter');  # Default
+    }
+
+    for my $test_mode (@modes_to_test) {
+        my %context_results;
+        my $any_failures = 0;
+
+        say "  Testing in $test_mode mode..." if $options{verbose};
+
+        # Test 1: Console context (human)
+        my $exp_console = File::Spec->catfile($examples_dir, $example_name, 'expected-console.txt');
+        if (-f $exp_console) {
+            say "    Testing console context..." if $options{verbose};
+            my ($output, $error) = run_console_example_internal($example_name, $timeout, $test_mode, undef, $hints);
 
         if ($error) {
             $context_results{console} = {
@@ -1590,13 +1609,13 @@ sub test_multi_context_example {
                 $any_failures = 1;
             }
         }
-    }
+        }
 
-    # Test 2: HTTP context (machine)
-    my $exp_http = File::Spec->catfile($examples_dir, $example_name, 'expected-http.txt');
-    if (-f $exp_http) {
-        say "  Testing HTTP context..." if $options{verbose};
-        my ($output, $error) = run_http_example_internal($example_name, $timeout, 'interpreter', undef);
+        # Test 2: HTTP context (machine)
+        my $exp_http = File::Spec->catfile($examples_dir, $example_name, 'expected-http.txt');
+        if (-f $exp_http) {
+            say "    Testing HTTP context..." if $options{verbose};
+            my ($output, $error) = run_http_example_internal($example_name, $timeout, $test_mode, undef);
 
         if ($error) {
             $context_results{http} = {
@@ -1635,11 +1654,11 @@ sub test_multi_context_example {
         }
     }
 
-    # Test 3: Debug context (developer)
-    my $exp_debug = File::Spec->catfile($examples_dir, $example_name, 'expected-debug.txt');
-    if (-f $exp_debug) {
-        say "  Testing debug context..." if $options{verbose};
-        my ($output, $error) = run_debug_example($example_name, $timeout, 'interpreter', undef, $hints);
+        # Test 3: Debug context (developer)
+        my $exp_debug = File::Spec->catfile($examples_dir, $example_name, 'expected-debug.txt');
+        if (-f $exp_debug) {
+            say "    Testing debug context..." if $options{verbose};
+            my ($output, $error) = run_debug_example($example_name, $timeout, $test_mode, undef, $hints);
 
         if ($error) {
             $context_results{debug} = {
@@ -1676,36 +1695,74 @@ sub test_multi_context_example {
                 $any_failures = 1;
             }
         }
+        }
+
+        # Store results for this mode
+        if ($test_mode eq 'interpreter') {
+            %interpreter_results = %context_results;
+            $interpreter_failures = $any_failures;
+        } else {
+            %compiled_results = %context_results;
+            $compiled_failures = $any_failures;
+        }
     }
 
     my $duration = time - $start_time;
 
-    # Return aggregated result
-    my $overall_status = $any_failures ? 'FAIL' : 'PASS';
+    # Determine overall status for each mode
+    my $interpreter_status = 'N/A';
+    my $compiled_status = 'N/A';
 
-    # Check if all contexts were skipped
-    my $all_skipped = 1;
-    for my $ctx (values %context_results) {
-        if ($ctx->{status} ne 'SKIP') {
-            $all_skipped = 0;
-            last;
+    if (grep { $_ eq 'interpreter' } @modes_to_test) {
+        $interpreter_status = $interpreter_failures ? 'FAIL' : 'PASS';
+        # Check if all contexts were skipped
+        my $all_skipped = 1;
+        for my $ctx (values %interpreter_results) {
+            if ($ctx->{status} ne 'SKIP') {
+                $all_skipped = 0;
+                last;
+            }
         }
+        $interpreter_status = 'SKIP' if $all_skipped;
     }
-    $overall_status = 'SKIP' if $all_skipped;
+
+    if (grep { $_ eq 'compiled' } @modes_to_test) {
+        $compiled_status = $compiled_failures ? 'FAIL' : 'PASS';
+        # Check if all contexts were skipped
+        my $all_skipped = 1;
+        for my $ctx (values %compiled_results) {
+            if ($ctx->{status} ne 'SKIP') {
+                $all_skipped = 0;
+                last;
+            }
+        }
+        $compiled_status = 'SKIP' if $all_skipped;
+    }
+
+    # Overall status
+    my $overall_status = 'PASS';
+    if ($interpreter_status eq 'FAIL' || $compiled_status eq 'FAIL') {
+        $overall_status = 'FAIL';
+    } elsif ($interpreter_status eq 'SKIP' && $compiled_status eq 'SKIP') {
+        $overall_status = 'SKIP';
+    } elsif ($interpreter_status eq 'ERROR' || $compiled_status eq 'ERROR') {
+        $overall_status = 'ERROR';
+    }
 
     return {
         name => $example_name,
         type => 'multi-context',
         status => $overall_status,
         duration => $duration,
-        contexts => \%context_results,
+        contexts => \%interpreter_results,  # For backwards compatibility, show interpreter results
+        compiled_contexts => \%compiled_results,
         # For compatibility with existing reporting
-        interpreter_status => $overall_status,
-        compiled_status => 'N/A',
-        interpreter_duration => $duration,
-        compiled_duration => 0,
+        interpreter_status => $interpreter_status,
+        compiled_status => $compiled_status,
+        interpreter_duration => $duration / scalar(@modes_to_test),
+        compiled_duration => $duration / scalar(@modes_to_test),
         build_duration => 0,
-        avg_duration => $duration,
+        avg_duration => $duration / scalar(@modes_to_test),
     };
 }
 
