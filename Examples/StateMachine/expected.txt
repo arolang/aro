@@ -1,7 +1,7 @@
-# Generated: Sun Feb 16 12:00:00 2026
+# Generated: Tue Feb 24 12:53:20 2026
 # Type: console
 # Command: aro run ./Examples/StateMachine
-# Workdir: Examples/StateMachine
+# Timeout: 30s
 ---
 === ARO State Machine Demo ===
 
@@ -55,4 +55,3 @@ status: cancelled
 title: Meeting Notes
 
 === State Machine Demo Complete ===
-application

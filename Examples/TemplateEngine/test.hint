@@ -2,3 +2,4 @@
 # Demonstrates template rendering with variable interpolation
 mode: both
 timeout: 30
+workdir: Examples/TemplateEngine
