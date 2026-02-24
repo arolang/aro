@@ -1,2 +1,4 @@
 # Binary mode outputs runtime errors and return value fields that interpreter doesn't
 occurrence-check: true
+# Note: Event recording and replay (--record and --replay flags) are tested manually
+# See Examples/EventReplay/README.md for usage instructions
