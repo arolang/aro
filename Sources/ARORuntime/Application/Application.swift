@@ -41,6 +41,15 @@ public final class Application: @unchecked Sendable {
     /// Template service for HTML template rendering (ARO-0050)
     private var templateService: AROTemplateService?
 
+    /// Event recorder for debugging (ARO-0007, GitLab #124)
+    private let eventRecorder: EventRecorder
+
+    /// Path to record events to (optional)
+    private let recordPath: String?
+
+    /// Path to replay events from (optional)
+    private let replayPath: String?
+
     /// Whether HTTP server is enabled (requires OpenAPI contract)
     public var isHTTPEnabled: Bool {
         return openAPISpec != nil
@@ -53,7 +62,9 @@ public final class Application: @unchecked Sendable {
         programs: [AnalyzedProgram],
         entryPoint: String = "Application-Start",
         config: ApplicationConfig = .default,
-        openAPISpec: OpenAPISpec? = nil
+        openAPISpec: OpenAPISpec? = nil,
+        recordPath: String? = nil,
+        replayPath: String? = nil
     ) {
         self.programs = programs
         self.entryPoint = entryPoint
@@ -61,6 +72,9 @@ public final class Application: @unchecked Sendable {
         self.openAPISpec = openAPISpec
         self.routeRegistry = openAPISpec.map { OpenAPIRouteRegistry(spec: $0) }
         self.runtime = Runtime()
+        self.eventRecorder = EventRecorder(eventBus: .shared)
+        self.recordPath = recordPath
+        self.replayPath = replayPath
         // Services are registered when run() is called (async context)
     }
 
@@ -193,7 +207,34 @@ public final class Application: @unchecked Sendable {
         // Set up HTTP request handler if OpenAPI contract exists
         setupHTTPRequestHandler(for: mainProgram)
 
-        return try await runtime.run(mainProgram, entryPoint: entryPoint)
+        // Handle event replay before running application
+        if let replayPath {
+            try await replayEvents(from: replayPath)
+        }
+
+        // Start event recording if requested
+        if recordPath != nil {
+            await eventRecorder.startRecording()
+        }
+
+        // Run the application
+        let response: Response
+        do {
+            response = try await runtime.run(mainProgram, entryPoint: entryPoint)
+        } catch {
+            // Stop recording and save even if execution fails
+            if let recordPath {
+                try await saveRecording(to: recordPath)
+            }
+            throw error
+        }
+
+        // Stop recording and save if requested
+        if let recordPath {
+            try await saveRecording(to: recordPath)
+        }
+
+        return response
     }
 
     /// Run and keep the application alive (for servers)
@@ -208,7 +249,31 @@ public final class Application: @unchecked Sendable {
         // Set up HTTP request handler if OpenAPI contract exists
         setupHTTPRequestHandler(for: mainProgram)
 
-        try await runtime.runAndKeepAlive(mainProgram, entryPoint: entryPoint)
+        // Handle event replay before running application
+        if let replayPath {
+            try await replayEvents(from: replayPath)
+        }
+
+        // Start event recording if requested
+        if recordPath != nil {
+            await eventRecorder.startRecording()
+        }
+
+        // Run the application with keepalive
+        do {
+            try await runtime.runAndKeepAlive(mainProgram, entryPoint: entryPoint)
+        } catch {
+            // Stop recording and save even if execution fails
+            if let recordPath {
+                try await saveRecording(to: recordPath)
+            }
+            throw error
+        }
+
+        // Stop recording and save if requested
+        if let recordPath {
+            try await saveRecording(to: recordPath)
+        }
     }
 
     /// Stop the application
@@ -650,6 +715,45 @@ public final class Application: @unchecked Sendable {
             featureSets: allFeatureSets,
             globalRegistry: globalRegistry
         )
+    }
+
+    // MARK: - Event Recording and Replay
+
+    /// Replay events from a JSON file
+    private func replayEvents(from path: String) async throws {
+        let replayer = EventReplayer(eventBus: .shared)
+        let recording = try await replayer.loadFromFile(path)
+
+        if config.verbose {
+            print("Replaying \(recording.events.count) events from \(path)")
+            print("Recording: \(recording.application)")
+            print("Recorded at: \(recording.recorded)")
+            print()
+        }
+
+        // Replay events without timing delays (fast replay)
+        await replayer.replayFast(recording)
+
+        if config.verbose {
+            print("Event replay completed")
+            print()
+        }
+    }
+
+    /// Save recorded events to a JSON file
+    private func saveRecording(to path: String) async throws {
+        let events = await eventRecorder.stopRecording()
+
+        if config.verbose {
+            print("\nRecorded \(events.count) events")
+            print("Saving to: \(path)")
+        }
+
+        try await eventRecorder.saveToFile(path, applicationName: "ARO Application")
+
+        if config.verbose {
+            print("Events saved successfully")
+        }
     }
 }
 

@@ -33,6 +33,12 @@ struct RunCommand: AsyncParsableCommand {
     @Flag(name: .long, help: "Enable developer/debug output formatting")
     var debug: Bool = false
 
+    @Option(name: .long, help: "Record events to JSON file")
+    var record: String?
+
+    @Option(name: .long, help: "Replay events from JSON file")
+    var replay: String?
+
     /// Extract run command flags from captured application arguments
     /// This handles cases where flags are placed after the path argument
     mutating func extractRunCommandFlags() {
@@ -62,6 +68,24 @@ struct RunCommand: AsyncParsableCommand {
                     remainingArgs.append(arg)
                     i += 1
                 }
+            case "--record":
+                // Check if there's a value following
+                if i + 1 < applicationArguments.count {
+                    record = applicationArguments[i + 1]
+                    i += 2
+                } else {
+                    remainingArgs.append(arg)
+                    i += 1
+                }
+            case "--replay":
+                // Check if there's a value following
+                if i + 1 < applicationArguments.count {
+                    replay = applicationArguments[i + 1]
+                    i += 2
+                } else {
+                    remainingArgs.append(arg)
+                    i += 1
+                }
             default:
                 // Not a run command flag, keep it for the application
                 remainingArgs.append(arg)
@@ -88,6 +112,8 @@ struct RunCommand: AsyncParsableCommand {
         let keepAlive = mutableSelf.keepAlive
         let entryPoint = mutableSelf.entryPoint
         let applicationArguments = mutableSelf.applicationArguments
+        let recordPath = mutableSelf.record
+        let replayPath = mutableSelf.replay
 
         if verbose {
             print("ARO Runtime v\(AROVersion.shortVersion)")
@@ -97,6 +123,12 @@ struct RunCommand: AsyncParsableCommand {
             print("Entry point: \(entryPoint)")
             if !applicationArguments.isEmpty {
                 print("Application arguments: \(applicationArguments.joined(separator: " "))")
+            }
+            if let recordPath {
+                print("Recording events to: \(recordPath)")
+            }
+            if let replayPath {
+                print("Replaying events from: \(replayPath)")
             }
             print()
         }
@@ -214,7 +246,9 @@ struct RunCommand: AsyncParsableCommand {
             programs: compiledPrograms,
             entryPoint: entryPoint,
             config: ApplicationConfig(verbose: verbose, workingDirectory: appConfig.rootPath.path),
-            openAPISpec: appConfig.openAPISpec
+            openAPISpec: appConfig.openAPISpec,
+            recordPath: recordPath,
+            replayPath: replayPath
         )
 
         if verbose {
