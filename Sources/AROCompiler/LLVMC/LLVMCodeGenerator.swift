@@ -1361,6 +1361,13 @@ public final class LLVMCodeGenerator {
         // Load precompiled plugins
         _ = ctx.module.insertCall(externals.loadPrecompiledPlugins, on: [], at: ip)
 
+        // Register feature set metadata (name -> business activity) for HTTP routing
+        for analyzed in program.featureSets {
+            let fsName = ctx.stringConstant(analyzed.featureSet.name)
+            let businessActivity = ctx.stringConstant(analyzed.featureSet.businessActivity)
+            _ = ctx.module.insertCall(externals.registerFeatureSetMetadata, on: [fsName, businessActivity], at: ip)
+        }
+
         // Register event handlers
         registerEventHandlers(program: program, runtime: runtime)
 

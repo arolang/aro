@@ -2584,6 +2584,15 @@ public func aro_native_http_server_start(_ port: Int32, _ contextPtr: UnsafeMuta
                     requestContext = aro_context_create(globalRuntimePtr)
                 }
 
+                // Lookup business activity for this feature set and bind published variables
+                if let activity = aro_lookup_business_activity(opId) {
+                    aro_context_bind_published_variables(requestContext, activity)
+                    free(activity)  // Free the C string returned by lookup
+                } else {
+                    // No business activity found, bind with empty string
+                    aro_context_bind_published_variables(requestContext, nil)
+                }
+
                 // Bind request data to context before invoking handler
                 bindRequestToContext(requestContext, body: body, headers: headers, path: pathWithoutQuery, queryParams: queryParams, pathParams: pathParams)
 

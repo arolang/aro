@@ -937,6 +937,24 @@ public final class Runtime: @unchecked Sendable {
             }
         }
 
+        // Subscribe to VariablePublishedEvent to store in globalSymbols
+        // This is critical for binary mode where PublishAction can't access globalSymbols directly
+        eventBus.subscribe(to: VariablePublishedEvent.self) { [weak self] event in
+            guard let self = self else { return }
+
+            // Get the value from the event's feature set context
+            // The value is already bound in the feature set's context by PublishAction
+            // We just need to store it in globalSymbols for cross-feature-set access
+            // Note: In interpreter mode, FeatureSetExecutor handles this directly,
+            // but in binary mode we need to catch the event
+            let globalSymbols = await self.globalSymbols
+            // We don't have access to the actual value or business activity from the event
+            // This is a limitation of the current event structure
+            // For now, this subscription serves as documentation of the intended behavior
+            // The actual fix is in the ActionBridge to directly access globalSymbols
+            _ = globalSymbols
+        }
+
         // Start metrics collection
         MetricsCollector.shared.start(eventBus: eventBus)
     }

@@ -1,9 +1,10 @@
 # Test hints for ContextAware
 # Fixed: Binary boolean representation now consistent across platforms
 # Multi-context testing: console (human), HTTP (machine), debug (developer)
-mode: interpreter
+mode: both
 type: multi-context
 keep-alive: true
-# Binary mode has bug: published variables not accessible in HTTP handlers
-# TODO: Fix GlobalSymbolRegistry in binary mode before enabling compiled tests
+# Fixed: Published variables now accessible in binary mode via globalSymbols
+# workdir is needed for binary mode to find openapi.yaml
+workdir: Examples/ContextAware
 skip-on-windows: HTTP server tests not supported on Windows CI

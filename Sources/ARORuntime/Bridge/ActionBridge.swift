@@ -191,6 +191,29 @@ private func executeAction(
         ctxHandle.context.setExecutionError(ActionError.runtimeError(errorMsg))
     }
 
+    // Special handling for Publish action in binary mode:
+    // Store published variable in globalSymbols so it's accessible across feature sets
+    if verb == "publish", actionResult.succeeded {
+        let externalName = resultDesc.base
+        let internalName = objectDesc.base
+        if let value = ctxHandle.context.resolveAny(internalName) {
+            let runtime = ctxHandle.runtime.runtime
+            let businessActivity = ctxHandle.context.businessActivity
+            let featureSetName = ctxHandle.context.featureSetName
+
+            // Store in globalSymbols asynchronously
+            Task { @Sendable in
+                let globalSymbols = await runtime.globalSymbols
+                await globalSymbols.publish(
+                    name: externalName,
+                    value: value,
+                    fromFeatureSet: featureSetName,
+                    businessActivity: businessActivity
+                )
+            }
+        }
+    }
+
     // Check semantic role - response/export actions don't bind their results
     let semanticRole = ActionSemanticRole.classify(verb: verb)
     let shouldBindResult = semanticRole != .response && semanticRole != .export
