@@ -1434,15 +1434,31 @@ public final class LLVMCodeGenerator {
             }
         }
 
-        // Print response
-        _ = ctx.module.insertCall(externals.contextPrintResponse, on: [mainCtx], at: ip)
+        // Print response (unless --keep-alive flag is set)
+        let keepAliveFlag = ctx.module.insertCall(externals.hasKeepAlive, on: [], at: ip)
+        let isNotKeepAlive = ctx.module.insertIntegerComparison(.eq, keepAliveFlag, ctx.i32Type.zero, at: ip)
+
+        let printBlock = ctx.module.appendBlock(named: "print_response", to: mainFunc)
+        let cleanupBlock = ctx.module.appendBlock(named: "cleanup", to: mainFunc)
+
+        ctx.module.insertCondBr(if: isNotKeepAlive, then: printBlock, else: cleanupBlock, at: ip)
+
+        // Print block
+        ctx.setInsertionPoint(atEndOf: printBlock)
+        var printIP = ctx.insertionPoint
+        _ = ctx.module.insertCall(externals.contextPrintResponse, on: [mainCtx], at: printIP)
+        ctx.module.insertBr(to: cleanupBlock, at: printIP)
+
+        // Cleanup block
+        ctx.setInsertionPoint(atEndOf: cleanupBlock)
+        let cleanupIP = ctx.insertionPoint
 
         // Cleanup
-        _ = ctx.module.insertCall(externals.contextDestroy, on: [mainCtx], at: ip)
-        _ = ctx.module.insertCall(externals.runtimeShutdown, on: [runtime], at: ip)
+        _ = ctx.module.insertCall(externals.contextDestroy, on: [mainCtx], at: cleanupIP)
+        _ = ctx.module.insertCall(externals.runtimeShutdown, on: [runtime], at: cleanupIP)
 
         // Return success
-        ctx.module.insertReturn(ctx.i32Type.zero, at: ip)
+        ctx.module.insertReturn(ctx.i32Type.zero, at: cleanupIP)
     }
 
     private func registerEventHandlers(program: AnalyzedProgram, runtime: IRValue) {

@@ -83,6 +83,10 @@ rm -rf .build
 echo "=== Cleaning Rust plugin artifacts ==="
 find Examples -type d -name target -path "*/Plugins/*" -print0 2>/dev/null | xargs -0 rm -rf 2>/dev/null || true
 
+# Clean macOS compiled binaries from Examples directories (Mach-O will not run on Linux)
+echo "=== Cleaning macOS example binaries ==="
+find Examples -maxdepth 2 -type f -executable ! -name "*.sh" ! -name "*.pl" ! -name "*.py" ! -name "*.aro" -print0 2>/dev/null | xargs -0 rm -f 2>/dev/null || true
+
 # Fix git ownership issues in Docker (mounted volume has different owner)
 # Use || true since git may fail in git worktree environments where the parent repo path
 # is not accessible inside the container

@@ -39,6 +39,14 @@ public actor ExecutionEngine {
     /// This prevents multiple parallel handlers from processing the same URL
     private var processingUrls: Set<String> = []
 
+    /// Track if the application entered wait state (Keepalive action)
+    private var _enteredWaitState: Bool = false
+
+    /// Check if the application entered wait state (Keepalive action)
+    public var enteredWaitState: Bool {
+        get { _enteredWaitState }
+    }
+
     // MARK: - Initialization
 
     /// Initialize the execution engine
@@ -139,6 +147,9 @@ public actor ExecutionEngine {
 
         do {
             let response = try await executor.execute(entryFeatureSet, context: context)
+
+            // Check if application entered wait state (for response printing suppression)
+            _enteredWaitState = context.isWaiting
 
             // CRITICAL: Wait for all in-flight event handlers to complete
             // This ensures events emitted during Application-Start finish executing

@@ -4,6 +4,8 @@
 mode: both
 type: multi-context
 keep-alive: true
+# Binary mode outputs Return statement after shutdown, interpreter may not
+occurrence-check: true
 # Fixed: Published variables now accessible in binary mode via globalSymbols
 # workdir is needed for binary mode to find openapi.yaml
 workdir: Examples/ContextAware

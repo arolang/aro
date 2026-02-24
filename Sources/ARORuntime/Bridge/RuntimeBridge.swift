@@ -315,6 +315,13 @@ public func aro_parse_arguments(_ argc: Int32, _ argv: UnsafeMutablePointer<Unsa
     ParameterStorage.shared.parseArguments(args)
 }
 
+/// Check if --keep-alive flag was passed
+/// - Returns: 1 if keep-alive flag is set, 0 otherwise
+@_cdecl("aro_has_keep_alive")
+public func aro_has_keep_alive() -> Int32 {
+    return ParameterStorage.shared.has("keep-alive") ? 1 : 0
+}
+
 /// Wait for all in-flight event handlers to complete
 /// - Parameters:
 ///   - runtimePtr: Runtime handle from aro_runtime_init

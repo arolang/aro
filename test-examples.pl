@@ -650,6 +650,12 @@ sub normalize_output {
     # Normalize hash values (for HashTest example)
     $output =~ s/\b[a-f0-9]{32,64}\b/__HASH__/g if $type && $type eq 'hash';
 
+    # Normalize floating point numbers with excessive precision in JSON (for HTTP tests)
+    # E.g., 249.99000000000001 -> 249.99
+    if ($type && $type eq 'http') {
+        $output =~ s/(\d+\.\d{1,2})0{6,}\d+/$1/g;
+    }
+
     return $output;
 }
 
@@ -704,6 +710,10 @@ sub auto_placeholderize {
     if ($type && $type eq 'http') {
         # Replace hex IDs (15-20 chars) in JSON id fields
         $output =~ s/"id":"[a-f0-9]{15,20}"/"id":"__ID__"/g;
+
+        # Normalize floating point numbers with excessive precision (e.g., 249.99000000000001 -> 249.99)
+        # Match numbers like: 123.45000000000001
+        $output =~ s/(\d+\.\d{1,2})0{6,}\d+/$1/g;
     }
 
     # Replace ISO timestamps (with or without seconds, timezone)
@@ -811,6 +821,8 @@ sub run_console_example_internal {
         }
 
         @cmd = ($binary_path);
+        # Add --keep-alive flag for long-running apps that need SIGINT shutdown
+        push @cmd, '--keep-alive' if $keep_alive;
     } elsif ($mode eq 'test') {
         # Use 'aro test' command
         my $aro_bin = find_aro_binary();
@@ -888,6 +900,8 @@ sub run_debug_example {
         }
 
         @cmd = ($binary_path, '--debug');
+        # Add --keep-alive flag for long-running apps that need SIGINT shutdown
+        push @cmd, '--keep-alive' if $keep_alive;
     } else {
         # Interpreter mode with --debug flag
         my $aro_bin = find_aro_binary();
@@ -1562,6 +1576,23 @@ sub test_multi_context_example {
         @modes_to_test = ('interpreter');  # Default
     }
 
+    # Build binary if compiled mode is being tested
+    if (grep { $_ eq 'compiled' } @modes_to_test) {
+        my $build_result = build_example($example_name, $timeout, $hints->{workdir});
+
+        if (!$build_result->{success}) {
+            # Build failed - skip compiled mode tests
+            say "  Binary build failed: $build_result->{error}" if $options{verbose};
+            @modes_to_test = grep { $_ ne 'compiled' } @modes_to_test;
+
+            # Mark compiled contexts as ERROR
+            $compiled_results{console} = { status => 'ERROR', message => $build_result->{error} };
+            $compiled_results{http} = { status => 'ERROR', message => $build_result->{error} };
+            $compiled_results{debug} = { status => 'ERROR', message => $build_result->{error} };
+            $compiled_failures = 1;
+        }
+    }
+
     for my $test_mode (@modes_to_test) {
         my %context_results;
         my $any_failures = 0;
@@ -1607,6 +1638,15 @@ sub test_multi_context_example {
                     actual => $output_normalized,
                 };
                 $any_failures = 1;
+
+                # Debug output for console context mismatch
+                if ($options{verbose} || $ENV{DEBUG_TEST_FAILURES}) {
+                    say "  [CONSOLE MISMATCH]";
+                    say "  Expected:";
+                    say "  " . join("\n  ", split /\n/, substr($expected_normalized, 0, 500));
+                    say "  Actual:";
+                    say "  " . join("\n  ", split /\n/, substr($output_normalized, 0, 500));
+                }
             }
         }
         }
@@ -1650,6 +1690,15 @@ sub test_multi_context_example {
                     actual => $output_normalized,
                 };
                 $any_failures = 1;
+
+                # Debug output for HTTP context mismatch
+                if ($options{verbose} || $ENV{DEBUG_TEST_FAILURES}) {
+                    say "  [HTTP MISMATCH]";
+                    say "  Expected:";
+                    say "  " . substr($expected_normalized, 0, 500);
+                    say "  Actual:";
+                    say "  " . substr($output_normalized, 0, 500);
+                }
             }
         }
     }
@@ -1693,6 +1742,15 @@ sub test_multi_context_example {
                     actual => $output_normalized,
                 };
                 $any_failures = 1;
+
+                # Debug output for debug context mismatch
+                if ($options{verbose} || $ENV{DEBUG_TEST_FAILURES}) {
+                    say "  [DEBUG MISMATCH]";
+                    say "  Expected:";
+                    say "  " . join("\n  ", split /\n/, substr($expected_normalized, 0, 500));
+                    say "  Actual:";
+                    say "  " . join("\n  ", split /\n/, substr($output_normalized, 0, 500));
+                }
             }
         }
         }

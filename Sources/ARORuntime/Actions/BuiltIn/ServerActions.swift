@@ -126,7 +126,7 @@ public struct StartAction: ActionImplementation {
                 try await httpServerService.configureWebSocket(path: wsPath)
             }
             try await httpServerService.start(port: port)
-            EventBus.shared.registerEventSource()
+            await EventBus.shared.registerEventSource()
             return ServerStartResult(serverType: "http-server", success: true, port: port)
         }
 
@@ -138,7 +138,7 @@ public struct StartAction: ActionImplementation {
         let nativePort = (port == 8080) ? 0 : port
         let result = aro_native_http_server_start_with_openapi(Int32(nativePort), nil)
         if result == 0 {
-            EventBus.shared.registerEventSource()
+            await EventBus.shared.registerEventSource()
             return ServerStartResult(serverType: "http-server", success: true, port: port)
         } else {
             throw ActionError.runtimeError("Failed to start HTTP server on port \(port)")
@@ -193,7 +193,7 @@ public struct StartAction: ActionImplementation {
         // Try using the SocketServerService (interpreter mode with NIO)
         if let socketService = context.service(SocketServerService.self) {
             try await socketService.start(port: port)
-            EventBus.shared.registerEventSource()
+            await EventBus.shared.registerEventSource()
             return ServerStartResult(serverType: "socket-server", success: true, port: port)
         }
 
@@ -201,7 +201,7 @@ public struct StartAction: ActionImplementation {
         #if !os(Windows)
         let result = aro_native_socket_server_start(Int32(port))
         if result == 0 {
-            EventBus.shared.registerEventSource()
+            await EventBus.shared.registerEventSource()
             return ServerStartResult(serverType: "socket-server", success: true, port: port)
         } else {
             throw ActionError.runtimeError("Failed to start socket server on port \(port)")
@@ -262,7 +262,7 @@ public struct StartAction: ActionImplementation {
 
         if let fileMonitorService = context.service(FileMonitorService.self) {
             try await fileMonitorService.watch(path: path)
-            EventBus.shared.registerEventSource()
+            await EventBus.shared.registerEventSource()
             return ServerStartResult(serverType: "file-monitor", success: true, path: path)
         }
 
@@ -270,7 +270,7 @@ public struct StartAction: ActionImplementation {
         #if !os(Windows)
         let started = NativeFileWatcher.shared.startWatching(path: path)
         if started {
-            EventBus.shared.registerEventSource()
+            await EventBus.shared.registerEventSource()
             return ServerStartResult(serverType: "file-monitor", success: true, path: path)
         }
         #endif
@@ -314,7 +314,7 @@ public struct StopAction: ActionImplementation {
             return try await stopSocketServer(context: context)
 
         case "file-monitor", "filemonitor", "watcher":
-            return stopFileMonitor()
+            return await stopFileMonitor()
 
         default:
             // Generic service stop
@@ -326,13 +326,13 @@ public struct StopAction: ActionImplementation {
     private func stopHTTPServer(context: ExecutionContext) async throws -> any Sendable {
         if let httpServerService = context.service(HTTPServerService.self) {
             try await httpServerService.stop()
-            EventBus.shared.unregisterEventSource()
+            await EventBus.shared.unregisterEventSource()
             return ServerStopResult(serverType: "http-server", success: true)
         }
 
         #if !os(Windows)
         aro_native_http_server_stop()
-        EventBus.shared.unregisterEventSource()
+        await EventBus.shared.unregisterEventSource()
         #endif
 
         return ServerStopResult(serverType: "http-server", success: true)
@@ -341,22 +341,22 @@ public struct StopAction: ActionImplementation {
     private func stopSocketServer(context: ExecutionContext) async throws -> any Sendable {
         if let socketService = context.service(SocketServerService.self) {
             try await socketService.stop()
-            EventBus.shared.unregisterEventSource()
+            await EventBus.shared.unregisterEventSource()
             return ServerStopResult(serverType: "socket-server", success: true)
         }
 
         #if !os(Windows)
         aro_native_socket_server_stop()
-        EventBus.shared.unregisterEventSource()
+        await EventBus.shared.unregisterEventSource()
         #endif
 
         return ServerStopResult(serverType: "socket-server", success: true)
     }
 
-    private func stopFileMonitor() -> any Sendable {
+    private func stopFileMonitor() async -> any Sendable {
         #if !os(Windows)
         NativeFileWatcher.shared.stopWatching()
-        EventBus.shared.unregisterEventSource()
+        await EventBus.shared.unregisterEventSource()
         #endif
 
         return ServerStopResult(serverType: "file-monitor", success: true)

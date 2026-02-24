@@ -20,6 +20,7 @@ public final class LLVMExternalDeclEmitter {
     private var _runtimeAwaitPendingEvents: Function?
     private var _runtimeRegisterHandler: Function?
     private var _parseArguments: Function?
+    private var _hasKeepAlive: Function?
     private var _registerRepositoryObserver: Function?
     private var _registerRepositoryObserverWithGuard: Function?
     private var _registerFeatureSetMetadata: Function?
@@ -128,6 +129,12 @@ public final class LLVMExternalDeclEmitter {
         _parseArguments = ctx.module.declareFunction(
             "aro_parse_arguments",
             types.voidFunctionType(parameters: [i32, ptr])
+        )
+
+        // i32 @aro_has_keep_alive() - Check for --keep-alive flag
+        _hasKeepAlive = ctx.module.declareFunction(
+            "aro_has_keep_alive",
+            types.functionType(parameters: [], returning: i32)
         )
 
         // void @aro_register_repository_observer(ptr, ptr, ptr)
@@ -467,6 +474,7 @@ public final class LLVMExternalDeclEmitter {
     public var runtimeAwaitPendingEvents: Function { _runtimeAwaitPendingEvents! }
     public var runtimeRegisterHandler: Function { _runtimeRegisterHandler! }
     public var parseArguments: Function { _parseArguments! }
+    public var hasKeepAlive: Function { _hasKeepAlive! }
     public var registerRepositoryObserver: Function { _registerRepositoryObserver! }
     public var registerRepositoryObserverWithGuard: Function { _registerRepositoryObserverWithGuard! }
     public var registerFeatureSetMetadata: Function { _registerFeatureSetMetadata! }

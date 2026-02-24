@@ -55,6 +55,11 @@ public final class Application: @unchecked Sendable {
         return openAPISpec != nil
     }
 
+    /// Whether the application entered wait state (Keepalive action)
+    public var enteredWaitState: Bool {
+        return runtime.enteredWaitState
+    }
+
     // MARK: - Initialization
 
     /// Initialize with pre-compiled programs

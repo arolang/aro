@@ -873,6 +873,7 @@ public final class Runtime: @unchecked Sendable {
     private var _isRunning: Bool = false
     private var _currentProgram: AnalyzedProgram?
     private var _shutdownError: Error?
+    private var _enteredWaitState: Bool = false
     private let lock = NSLock()
 
     /// Registry for compiled event handlers: eventType -> [(handlerName, callback)]
@@ -889,6 +890,12 @@ public final class Runtime: @unchecked Sendable {
     private var isRunning: Bool {
         get { withLock { _isRunning } }
         set { withLock { _isRunning = newValue } }
+    }
+
+    /// Check if the application entered wait state (Keepalive action)
+    public var enteredWaitState: Bool {
+        get { withLock { _enteredWaitState } }
+        set { withLock { _enteredWaitState = newValue } }
     }
 
     private var currentProgram: AnalyzedProgram? {
@@ -1010,6 +1017,8 @@ public final class Runtime: @unchecked Sendable {
 
         do {
             let response = try await engine.execute(program, entryPoint: entryPoint)
+            // Track if application entered wait state (for response printing suppression)
+            enteredWaitState = await engine.enteredWaitState
             // Execute Application-End: Success handler
             await executeApplicationEnd(isError: false)
             return response

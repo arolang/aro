@@ -1,5 +1,5 @@
-# Generated: Tue Feb 24 00:49:36 2026
+# Generated: Tue Feb 24 15:40:34 2026
 # Type: http
 # Command: HTTP GET /demo
 ---
-GET /demo => {"order.customer":"Alice Smith","order.items":3,"order.order-id":"ORD-2024-001","order.status":"completed","order.total":249.99000000000001,"summary":"Demo of context-aware formatting","tags":["featured","premium","verified"],"user.active":true,"user.email":"alice@example.com","user.id":42,"user.name":"Alice Smith","user.role":"admin","user.score":98.5}
+GET /demo => {"order.customer":"Alice Smith","order.items":3,"order.order-id":"ORD-2024-001","order.status":"completed","order.total":249.99,"summary":"Demo of context-aware formatting","tags":["featured","premium","verified"],"user.active":true,"user.email":"alice@example.com","user.id":42,"user.name":"Alice Smith","user.role":"admin","user.score":98.5}

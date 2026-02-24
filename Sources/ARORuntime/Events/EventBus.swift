@@ -266,24 +266,12 @@ public actor EventBus {
 
     /// Register an active event source (e.g., HTTP server, file monitor, socket server)
     /// Active event sources are long-lived services that can generate events asynchronously
-    nonisolated public func registerEventSource() {
-        Task {
-            await self.registerEventSourceInternal()
-        }
-    }
-
-    private func registerEventSourceInternal() {
+    public func registerEventSource() {
         activeEventSources += 1
     }
 
     /// Unregister an active event source
-    nonisolated public func unregisterEventSource() {
-        Task {
-            await self.unregisterEventSourceInternal()
-        }
-    }
-
-    private func unregisterEventSourceInternal() {
+    public func unregisterEventSource() {
         activeEventSources = max(0, activeEventSources - 1)
     }
 
