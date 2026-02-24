@@ -210,5 +210,36 @@ This check examines all Emit statements, including those inside Match statements
 - Introduce a new event type that represents a terminal state
 - Move the repeated logic into a single handler rather than chaining
 The goal is to ensure that every event chain has a clear end point where no further events are emitted.
+
+---
+
+## 13.10 Debugging with Event Recording
+
+When developing and debugging custom events, ARO provides event recording and replay capabilities. These features allow you to capture all events during execution and replay them later for investigation.
+
+**Recording Events**: Use the `--record` flag to capture all events to a JSON file:
+
+```bash
+aro run ./MyApp --record events.json
+```
+
+This captures every event emitted during execution including custom domain events, system events, and error events. Each event is saved with a timestamp and full payload data.
+
+**Replaying Events**: Use the `--replay` flag to re-run a captured event sequence:
+
+```bash
+aro run ./MyApp --replay events.json
+```
+
+The replayer publishes each recorded event to the event bus in order, triggering handlers just as they would during normal execution. This allows you to reproduce bugs, test handler changes against real event data, and verify saga workflows.
+
+**Use Cases**:
+- **Debugging**: Capture events during a production bug, replay in development to investigate
+- **Testing**: Record expected event sequences as regression tests
+- **Saga Analysis**: Visualize event chains by examining the recorded sequence
+- **Handler Development**: Test new handlers against production event patterns
+
+See Chapter 11.12 for detailed information about event recording and replay.
+
 ---
 *Next: Chapter 14 — OpenAPI Integration*
