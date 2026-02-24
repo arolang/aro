@@ -119,8 +119,8 @@ public final class RuntimeContext: ExecutionContext, @unchecked Sendable {
             return dateService.now(timezone: nil)
         }
 
-        // Magic variable: <Contract> returns OpenAPI contract metadata
-        if name == "Contract" {
+        // Magic variable: <Contract> or <contract> returns OpenAPI contract metadata
+        if name == "contract" || name == "Contract" {
             return buildContractObject()
         }
 
@@ -133,6 +133,11 @@ public final class RuntimeContext: ExecutionContext, @unchecked Sendable {
         // Magic variable: <metrics> returns current execution metrics
         if name == "metrics" {
             return MetricsCollector.shared.snapshot()
+        }
+
+        // Magic variable: <application> provides application context (used in Stop/Close actions)
+        if name == "application" {
+            return ["type": "application"] as [String: any Sendable]
         }
 
         if let typedValue = variables[name] {

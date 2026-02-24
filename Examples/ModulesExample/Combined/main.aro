@@ -6,7 +6,7 @@ import ../ModuleB
 
 (Application-Start: Combined) {
     Log "Combined application starting..." to the <console>.
-    Start the <http-server> for the <contract>.
+    Start the <http-server> with <contract>.
     Keepalive the <application> for the <events>.
     Return an <OK: status> for the <startup>.
 }

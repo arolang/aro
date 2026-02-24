@@ -45,7 +45,7 @@
     Log <order> to the <console>.
 
     (* Start HTTP server and keep running for HTTP context testing *)
-    Start the <http-server> for the <contract>.
+    Start the <http-server> with <contract>.
     Keepalive the <application> for the <events>.
 
     (* Note: Return statement below is not reached due to Keepalive.
