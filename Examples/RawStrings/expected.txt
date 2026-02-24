@@ -1,0 +1,30 @@
+# Generated: Tue Feb 24 13:51:03 2026
+# Type: console
+# Command: aro run ./Examples/RawStrings
+# Timeout: 30s
+---
+=== Raw String Literals Demo ===
+
+1. Regex Patterns:
+Double quotes: \d+\.\d+\.\d+
+Single quotes: \d+\.\d+\.\d+
+
+2. Windows File Paths:
+Double quotes: C:\Users\Admin\config.json
+Single quotes: C:\Users\Admin\config.json
+
+3. UNC Network Paths:
+Single quotes: \\server\share\data\file.txt
+
+4. LaTeX Commands:
+\documentclass{article}
+\frac{1}{2}
+\begin{equation}
+
+5. Escape Processing:
+Double quotes with \n: Hello
+World
+Single quotes with \n: Hello\nWorld
+
+=== Demo Complete ===
+demo

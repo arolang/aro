@@ -4,4 +4,5 @@
 mode: both
 type: multi-context
 keep-alive: true
+workdir: Examples/ContextAware
 skip-on-windows: HTTP server tests not supported on Windows CI
