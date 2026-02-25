@@ -141,12 +141,7 @@ public struct ReturnAction: ActionImplementation {
     ) {
         switch value {
         case let str as String:
-            // Check if it's a variable reference
-            if let resolved = context.resolveAny(str) {
-                flattenValue(resolved, into: &data, prefix: prefix, context: context)
-            } else {
-                data[prefix] = AnySendable(str)
-            }
+            data[prefix] = AnySendable(str)
         case let int as Int:
             data[prefix] = AnySendable(int)
         case let double as Double:
