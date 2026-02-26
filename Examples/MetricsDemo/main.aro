@@ -16,7 +16,7 @@
 }
 
 (Process Item: ProcessItem Handler) {
-    Extract the <value> from the <event: data>.
+    Extract the <value> from the <event: item>.
     Log "Processing item: ${value}" to the <console>.
     Return an <OK: status> for the <processing>.
 }
