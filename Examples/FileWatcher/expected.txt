@@ -4,7 +4,8 @@
 ---
 Starting file watcher
 Watching for file changes... Press Ctrl+C to stop.
-startup
 File created
 File modified
 File deleted
+File watcher stopped.
+startup

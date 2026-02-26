@@ -111,6 +111,7 @@ sub _execute_keep_alive {
     IPC::Run::signal($handle, 'INT');
 
     eval { IPC::Run::finish($handle); };
+    my $exit_code = $? >> 8;
 
     # Combine stdout and stderr
     my $output = $out;
@@ -119,6 +120,11 @@ sub _execute_keep_alive {
     if ($@ && $@ =~ /timeout/) {
         IPC::Run::kill_kill($handle);
         return (undef, "TIMEOUT after ${timeout}s");
+    }
+
+    # Non-zero exit code from exit() (not from a signal) means the app crashed
+    if ($exit_code != 0) {
+        return (undef, "Exit code: $exit_code\n$output");
     }
 
     return ($output, undef);

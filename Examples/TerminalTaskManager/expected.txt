@@ -9,4 +9,3 @@ Tasks updated reactively!
 Tasks updated reactively!
 Task Manager started. Tasks are tracked reactively.
 Press Ctrl+C to exit.
-[OK] startup

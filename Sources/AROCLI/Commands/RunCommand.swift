@@ -267,7 +267,10 @@ struct RunCommand: AsyncParsableCommand {
                 }
                 // Use context-aware formatting for response output
                 let outputContext: OutputContext = debug ? .developer : .human
-                print(response.format(for: outputContext))
+                // Don't print lifecycle exit response (e.g., "Return ... for the <application>")
+                if response.reason != "application" {
+                    print(response.format(for: outputContext))
+                }
             }
         } catch let error as ActionError {
             if TTYDetector.stderrIsTTY {

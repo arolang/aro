@@ -51,7 +51,10 @@ sub execute {
         return (undef, "SKIP: Missing required module (IPC::Run)");
     }
 
-    my $test_file = "/tmp/aro_test_$$.txt";
+    # Create a temp subdirectory under cwd so the file monitor (watching ".") sees the events
+    my $test_dir = File::Spec->catdir('.', "aro_fw_test_$$");
+    mkdir $test_dir;
+    my $test_file = File::Spec->catfile($test_dir, "test.txt");
 
     say "  Starting file watcher" if $self->verbose;
 
@@ -63,6 +66,7 @@ sub execute {
     };
 
     if ($@) {
+        rmdir $test_dir;
         return (undef, "Failed to start file watcher: $@");
     }
 
@@ -73,6 +77,7 @@ sub execute {
             sleep 0.5;
             IPC::Run::kill_kill($handle) if $handle->pumpable;
             unlink $test_file if -f $test_file;
+            rmdir $test_dir if -d $test_dir;
         };
     };
     $self->config->add_cleanup_handler($cleanup);

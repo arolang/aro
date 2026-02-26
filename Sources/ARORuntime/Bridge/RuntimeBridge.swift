@@ -814,8 +814,11 @@ public func aro_context_print_response(_ contextPtr: UnsafeMutableRawPointer?) {
     let contextHandle = Unmanaged<AROCContextHandle>.fromOpaque(ptr).takeUnretainedValue()
 
     if let response = contextHandle.context.getResponse() {
-        // Use human-readable format for CLI output
-        print(response.format(for: .human))
+        // Don't print lifecycle exit response (e.g., "Return ... for the <application>")
+        if response.reason != "application" {
+            // Use human-readable format for CLI output
+            print(response.format(for: .human))
+        }
     }
 }
 

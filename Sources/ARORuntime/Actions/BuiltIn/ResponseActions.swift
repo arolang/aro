@@ -84,7 +84,7 @@ public struct ReturnAction: ActionImplementation {
         }
 
         // Include object.base value if resolvable (skip internal names already handled above)
-        let internalNames: Set<String> = ["_expression_", "_literal_", "status", "response"]
+        let internalNames: Set<String> = ["_expression_", "_literal_", "status", "response", "application"]
         // ARO-0044: Special handling for metrics magic variable with format qualifier
         // Return an <OK: status> with <metrics: prometheus/plain/short/table>
         if object.base == "metrics",

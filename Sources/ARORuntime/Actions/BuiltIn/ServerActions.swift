@@ -125,7 +125,16 @@ public struct StartAction: ActionImplementation {
             if let wsPath = websocketPath {
                 try await httpServerService.configureWebSocket(path: wsPath)
             }
-            try await httpServerService.start(port: port)
+            do {
+                try await httpServerService.start(port: port)
+            } catch {
+                throw AROError(
+                    message: "Cannot start the http-server on port \(port): \(error.localizedDescription)",
+                    featureSet: context.featureSetName,
+                    businessActivity: context.businessActivity,
+                    statement: "Start the <http-server> with the <object>."
+                )
+            }
             await EventBus.shared.registerEventSource()
             return ServerStartResult(serverType: "http-server", success: true, port: port)
         }

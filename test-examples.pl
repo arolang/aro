@@ -861,6 +861,12 @@ sub run_console_example_internal {
     if ($@) {
         if ($@ =~ /timeout/) {
             kill_kill($handle);
+            # If allow-error is set, return captured output even on timeout
+            if ($allow_error) {
+                my $combined = $out;
+                $combined .= $err if $err;
+                return ($combined, undef);
+            }
             return (undef, "TIMEOUT after ${timeout}s");
         }
         return (undef, "ERROR: $@") unless $allow_error;
@@ -1495,7 +1501,9 @@ sub run_file_watcher_example_internal {
         @cmd = ($aro_bin, 'run', $dir);
     }
 
-    my $test_file = "/tmp/aro_test_$$.txt";
+    # Create test file directly in cwd (project root) so the FileMonitor library
+    # (which only lists direct children of the watched directory) sees it as added/removed.
+    my $test_file = File::Spec->catfile('.', "aro_fw_test_$$.txt");
 
     # Start watcher in background (use timeout parameter)
     my ($in, $out, $err) = ('', '', '');

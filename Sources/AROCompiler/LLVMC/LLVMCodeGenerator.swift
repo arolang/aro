@@ -1473,10 +1473,34 @@ public final class LLVMCodeGenerator {
                     let eventType = String(activity[..<handlerRange.lowerBound])
                         .trimmingCharacters(in: .whitespaces)
 
-                    // Skip special handlers
+                    // Skip special handlers (Socket events handled separately; Application-End not an event handler)
                     guard !activity.contains("Socket Event") &&
-                          !activity.contains("File Event") &&
                           !activity.contains("Application-End") else {
+                        continue
+                    }
+
+                    // File Event Handlers: determine event type from feature set name
+                    if activity.contains("File Event") {
+                        let featureName = analyzed.featureSet.name.lowercased()
+                        let fileEventType: String
+                        if featureName.contains("created") {
+                            fileEventType = "file.created"
+                        } else if featureName.contains("modified") {
+                            fileEventType = "file.modified"
+                        } else if featureName.contains("deleted") {
+                            fileEventType = "file.deleted"
+                        } else {
+                            continue
+                        }
+                        let funcName = featureSetFunctionName(analyzed.featureSet.name)
+                        if let handlerFunc = ctx.module.function(named: funcName) {
+                            let eventTypeStr = ctx.stringConstant(fileEventType)
+                            _ = ctx.module.insertCall(
+                                externals.runtimeRegisterHandler,
+                                on: [runtime, eventTypeStr, handlerFunc],
+                                at: ip
+                            )
+                        }
                         continue
                     }
 
