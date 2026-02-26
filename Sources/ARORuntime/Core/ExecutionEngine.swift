@@ -182,25 +182,28 @@ public actor ExecutionEngine {
         for analyzedFS in socketHandlers {
             let featureSetName = analyzedFS.featureSet.name
             let lowercaseName = featureSetName.lowercased()
-            // Determine which event type this handler should respond to
-            if lowercaseName.contains("data received") || lowercaseName.contains("data") {
-                // Subscribe to DataReceivedEvent
-                eventBus.subscribe(to: DataReceivedEvent.self) { [weak self] event in
+            // Determine which event type this handler should respond to.
+            // Check "disconnect" before "connect" since "disconnect" contains "connect".
+            if lowercaseName.contains("disconnect") {
+                // Subscribe to ClientDisconnectedEvent
+                // Matches: "Handle Client Disconnected", "Handle Socket Disconnect", etc.
+                eventBus.subscribe(to: ClientDisconnectedEvent.self) { [weak self] event in
                     guard let self = self else { return }
                     await self.executeSocketHandler(
                         analyzedFS,
                         program: program,
                         baseContext: baseContext,
                         eventData: [
-                            "packet": SocketPacket(
+                            "event": SocketDisconnectInfo(
                                 connectionId: event.connectionId,
-                                data: event.data
+                                reason: event.reason
                             )
                         ]
                     )
                 }
-            } else if lowercaseName.contains("connected") {
+            } else if lowercaseName.contains("connect") {
                 // Subscribe to ClientConnectedEvent
+                // Matches: "Handle Client Connected", "Handle Socket Connect", etc.
                 eventBus.subscribe(to: ClientConnectedEvent.self) { [weak self] event in
                     guard let self = self else { return }
                     await self.executeSocketHandler(
@@ -215,18 +218,19 @@ public actor ExecutionEngine {
                         ]
                     )
                 }
-            } else if lowercaseName.contains("disconnected") {
-                // Subscribe to ClientDisconnectedEvent
-                eventBus.subscribe(to: ClientDisconnectedEvent.self) { [weak self] event in
+            } else if lowercaseName.contains("data") || lowercaseName.contains("message") || lowercaseName.contains("received") {
+                // Subscribe to DataReceivedEvent
+                // Matches: "Handle Data Received", "Handle Socket Message", etc.
+                eventBus.subscribe(to: DataReceivedEvent.self) { [weak self] event in
                     guard let self = self else { return }
                     await self.executeSocketHandler(
                         analyzedFS,
                         program: program,
                         baseContext: baseContext,
                         eventData: [
-                            "event": SocketDisconnectInfo(
+                            "packet": SocketPacket(
                                 connectionId: event.connectionId,
-                                reason: event.reason
+                                data: event.data
                             )
                         ]
                     )

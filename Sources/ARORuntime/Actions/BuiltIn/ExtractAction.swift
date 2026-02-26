@@ -371,6 +371,8 @@ public struct ExtractAction: ActionImplementation {
                 return packet.buffer
             case "connection", "connectionId":
                 return packet.connection
+            case "message", "text":
+                return String(data: packet.data, encoding: .utf8) ?? ""
             default:
                 // Try to parse the packet data as string and extract from it
                 if let stringData = String(data: packet.data, encoding: .utf8),
