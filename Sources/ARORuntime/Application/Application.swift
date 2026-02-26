@@ -882,6 +882,21 @@ public struct ApplicationDiscovery {
         return spec
     }
 
+    /// Count feature sets with the given name across a set of source files.
+    /// Used to detect multiple entry points (e.g., multiple Application-Start) in a directory.
+    private func countEntryPoints(in sourceFiles: [URL], named entryPoint: String) -> Int {
+        let compiler = Compiler()
+        var count = 0
+        for file in sourceFiles {
+            guard let source = try? String(contentsOf: file, encoding: .utf8) else { continue }
+            let result = compiler.compile(source)
+            for fs in result.analyzedProgram.featureSets where fs.featureSet.name == entryPoint {
+                count += 1
+            }
+        }
+        return count
+    }
+
     private func findSourceFiles(in directory: URL, includePlugins: Bool = false) throws -> [URL] {
         let fileManager = FileManager.default
 
@@ -1013,6 +1028,29 @@ extension ApplicationDiscovery {
         } else {
             sourceFiles = [path]
             rootPath = path.deletingLastPathComponent()
+        }
+
+        // Validate: when this is a top-level directory scan (visited is empty, not a recursive import),
+        // detect if the directory contains multiple separate applications. This happens when a user
+        // runs `aro run` on a parent directory that contains subdirectories each with their own
+        // Application-Start (e.g., `aro run Examples/ModulesExample` instead of
+        // `aro run Examples/ModulesExample/Combined`).
+        if visited.isEmpty && isDirectory.boolValue {
+            let entryPointCount = countEntryPoints(in: sourceFiles, named: entryPoint)
+            if entryPointCount > 1 {
+                let subDirs = Set(sourceFiles.compactMap { file -> String? in
+                    let fileDir = file.deletingLastPathComponent()
+                    guard fileDir.standardized != path.standardized else { return nil }
+                    let relPath = fileDir.path.replacingOccurrences(of: path.path + "/", with: "")
+                    return String(relPath.split(separator: "/").first ?? "")
+                }).sorted()
+                let hint = subDirs.first.map { " Try: aro run \(path.path)/\($0)" } ?? ""
+                throw ApplicationError.invalidConfiguration(
+                    "'\(path.lastPathComponent)' contains \(entryPointCount) '\(entryPoint)' feature sets " +
+                    "across \(subDirs.joined(separator: ", ")). " +
+                    "This directory contains separate applications, not a single app.\(hint)"
+                )
+            }
         }
 
         // Prevent cycles
