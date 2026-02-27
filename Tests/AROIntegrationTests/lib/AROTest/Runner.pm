@@ -13,6 +13,7 @@ use AROTest::Executor::Console;
 use AROTest::Executor::HTTP;
 use AROTest::Executor::Socket;
 use AROTest::Executor::FileWatcher;
+use AROTest::Executor::MultiService;
 use AROTest::Binary::Execution qw(build_binary execute_binary);
 use AROTest::Comparison::Normalization qw(normalize_feature_prefix);
 use AROTest::Comparison::Matching qw(matches_pattern);
@@ -56,10 +57,11 @@ sub new {
     my $self = bless {
         config => $config,
         executors => {
-            console => AROTest::Executor::Console->new($config),
-            http => AROTest::Executor::HTTP->new($config),
-            socket => AROTest::Executor::Socket->new($config),
-            file => AROTest::Executor::FileWatcher->new($config),
+            console      => AROTest::Executor::Console->new($config),
+            http         => AROTest::Executor::HTTP->new($config),
+            socket       => AROTest::Executor::Socket->new($config),
+            file         => AROTest::Executor::FileWatcher->new($config),
+            multiservice => AROTest::Executor::MultiService->new($config),
         },
     }, $class;
 

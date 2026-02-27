@@ -38,6 +38,9 @@ public final class Application: @unchecked Sendable {
     private var httpServer: AROHTTPServer?
     #endif
 
+    /// Socket server instance for broadcast support in HTTP handlers
+    private var socketServer: (any SocketServerService)?
+
     /// Template service for HTML template rendering (ARO-0050)
     private var templateService: AROTemplateService?
 
@@ -100,6 +103,7 @@ public final class Application: @unchecked Sendable {
 
         // Register Windows socket server (FlyingSocks-based)
         let socketServer = WindowsSocketServer(eventBus: .shared)
+        self.socketServer = socketServer
         await runtime.register(service: socketServer as SocketServerService)
 
         // Register Windows HTTP server (FlyingFox-based)
@@ -114,6 +118,7 @@ public final class Application: @unchecked Sendable {
 
         // Register socket server service for TCP socket operations
         let socketServer = AROSocketServer(eventBus: .shared)
+        self.socketServer = socketServer
         await runtime.register(service: socketServer as SocketServerService)
 
         // Register HTTP server service for web APIs
@@ -367,6 +372,11 @@ public final class Application: @unchecked Sendable {
 
         // Register repository storage service for persistent in-memory storage
         context.register(InMemoryRepositoryStorage.shared as RepositoryStorageService)
+
+        // Register socket server service for TCP broadcast support
+        if let ss = self.socketServer {
+            context.register(ss as any SocketServerService)
+        }
 
         // Register WebSocket server service for broadcast support (if configured)
         #if !os(Windows)

@@ -135,7 +135,7 @@ public final class Parser {
         
         try expect(.rightParen, message: "')'")
 
-        // Parse optional when clause for feature set guards (e.g., Observer when condition)
+        // Parse optional when clause for feature set guards (e.g., Handler when condition)
         var whenCondition: (any Expression)? = nil
         if check(.when) {
             advance() // consume 'when'
@@ -635,6 +635,9 @@ public final class Parser {
             } else {
                 op = .lessThan
             }
+        case .lessEqual:
+            advance()
+            op = .lessEqual
         case .greaterThan, .rightAngle:
             advance()
             if check(.equals) {
@@ -643,6 +646,9 @@ public final class Parser {
             } else {
                 op = .greaterThan
             }
+        case .greaterEqual:
+            advance()
+            op = .greaterEqual
         case .equalEqual, .equals:
             advance()
             op = .equal

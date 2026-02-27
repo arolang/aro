@@ -1028,18 +1028,20 @@ public struct NotifyAction: ActionImplementation {
     ) async throws -> any Sendable {
         try validatePreposition(object.preposition)
 
-        // Get notification message
+        // result = the notification target recipient (e.g., <user>, <admin>)
+        // May be a plain identifier or a resolved object (dict with name, age, etc.)
+        let target = result.base
+        let targetValue = context.resolveAny(result.base)
+
+        // object = the notification message content (via "with"/"to" preposition)
         let message: String
-        if let value: String = context.resolve(result.base) {
+        if let value: String = context.resolve(object.base) {
             message = value
-        } else if let value = context.resolveAny(result.base) {
+        } else if let value = context.resolveAny(object.base) {
             message = String(describing: value)
         } else {
-            message = result.fullName
+            message = object.base
         }
-
-        // Get notification target (e.g., user, system, channel)
-        let target = object.base
 
         // Try notification service
         if let notificationService = context.service(NotificationService.self) {
@@ -1047,8 +1049,30 @@ public struct NotifyAction: ActionImplementation {
             return NotifyResult(message: message, target: target, success: true)
         }
 
-        // Emit notification event
-        context.emit(NotificationSentEvent(message: message, target: target))
+        // Emit notification event(s), carrying the resolved target value so handlers
+        // can access object fields (e.g., Extract the <user> from the <event: user>.)
+        // Use publishAndTrack so awaitPendingEvents() waits for all handlers to finish.
+        // When the target is a collection, emit one event per item so the runtime
+        // distributes the notification — `Notify the <adults> with "Hello!".` works
+        // the same as iterating and notifying each adult individually.
+        let items: [any Sendable]
+        if let array = targetValue as? [any Sendable] {
+            items = array
+        } else if let item = targetValue {
+            items = [item]
+        } else {
+            items = []
+        }
+
+        if let eventBus = context.eventBus {
+            for item in items {
+                await eventBus.publishAndTrack(NotificationSentEvent(message: message, target: target, targetValue: item))
+            }
+        } else {
+            for item in items {
+                context.emit(NotificationSentEvent(message: message, target: target, targetValue: item))
+            }
+        }
 
         return NotifyResult(message: message, target: target, success: true)
     }
@@ -1072,11 +1096,15 @@ public struct NotificationSentEvent: RuntimeEvent {
     public let timestamp: Date
     public let message: String
     public let target: String
+    /// The resolved value of the target variable (e.g., a user dict with name/age/email/sex).
+    /// Bound in the handler context as "event:<target>" so handlers can extract fields.
+    public let targetValue: (any Sendable)?
 
-    public init(message: String, target: String) {
+    public init(message: String, target: String, targetValue: (any Sendable)? = nil) {
         self.timestamp = Date()
         self.message = message
         self.target = target
+        self.targetValue = targetValue
     }
 }
 

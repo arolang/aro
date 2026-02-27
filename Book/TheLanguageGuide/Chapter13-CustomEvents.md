@@ -44,7 +44,87 @@ Handlers should be focused on single responsibilities. A handler that sends emai
 
 ---
 
-## 13.4 Event Patterns
+## 13.4 Handler Guards
+
+A handler can declare a `when` guard on its feature set header to act as a pre-condition. The guard appears between the closing parenthesis of the header and the opening brace of the body:
+
+```aro
+(Handler Name: EventType Handler) when <condition> {
+    ...
+}
+```
+
+The runtime evaluates the condition before entering the handler. If the condition is false, the handler silently skips that particular event. There is no error, no log entry, and no return value — the handler simply does not run for that delivery.
+
+This is different from a statement-level `when` clause, which skips one statement while execution of the handler continues. A declaration-level guard skips the *entire handler body*. Use a declaration guard when the handler should not run at all for certain events, and use statement-level `when` for fine-grained skipping of individual actions within a handler that always applies.
+
+### Accessing Event Fields in Guards
+
+When the event carries a target object (for example, with the `Notify` action), the fields of that object are available directly in the guard condition without an Extract step. The runtime binds the target's properties into the guard evaluation context automatically.
+
+```aro
+(* age is a field on the notified user object — available directly *)
+(Greet User: NotificationSent Handler) when <age> >= 16 {
+    Extract the <user> from the <event: user>.
+    Extract the <name> from the <user: name>.
+    Log "hello " ++ <name> to the <console>.
+    Return an <OK: status> for the <notification>.
+}
+```
+
+### Notify and Collection Dispatch
+
+The built-in `Notify` action sends a notification to a single object or to every item in a list. When the target is a list, the runtime emits one `NotificationSentEvent` per item. The handler guard is re-evaluated for every item, so filtering at the declaration level works naturally across collections:
+
+```aro
+(Application-Start: Notification Demo) {
+
+    (* Single notification — dispatches one event *)
+    Create the <alice> with { name: "Alice", age: 30, email: "alice@example.com" }.
+    Notify the <alice> with "Welcome to ARO!".
+
+    (* Collection notification — dispatches one event per item *)
+    Create the <group> with [
+        { name: "Bob",   age: 14, email: "bob@example.com"   },
+        { name: "Carol", age: 25, email: "carol@example.com" },
+        { name: "Dave",  age: 15, email: "dave@example.com"  },
+        { name: "Eve",   age: 20, email: "eve@example.com"   }
+    ].
+    Notify the <group> with "Hello everyone!".
+
+    Return an <OK: status> for the <startup>.
+}
+
+(*
+ * Handler guard: only fires when the notified user is 16 or older.
+ * Bob (14) and Dave (15) are silently skipped — no conditional inside the body.
+ *)
+(Greet User: NotificationSent Handler) when <age> >= 16 {
+    Extract the <user> from the <event: user>.
+    Extract the <name> from the <user: name>.
+    Log "hello " ++ <name> to the <console>.
+    Return an <OK: status> for the <notification>.
+}
+```
+
+The handler fires for Alice (30), Carol (25), and Eve (20). Bob (14) and Dave (15) are silently skipped by the guard. The handler body contains no conditional logic—the filtering is entirely declarative on the header.
+
+### Supported Operators
+
+Handler guards support the same comparison operators available in `Filter` clauses and statement-level `when` expressions:
+
+| Operator | Meaning |
+|----------|---------|
+| `=` | Equal (numbers and strings) |
+| `!=` | Not equal |
+| `<` | Less than |
+| `<=` | Less than or equal |
+| `>` | Greater than |
+| `>=` | Greater than or equal |
+
+---
+
+## 13.5 Event Patterns
 
 Several patterns emerge in how events are used to structure applications.
 
@@ -118,7 +198,7 @@ This saga demonstrates:
 - **Fan-out**: Multiple handlers can listen to the same event (e.g., OrderShipped triggers both shipping and notifications)
 Fan-out occurs when multiple handlers react to the same event. An OrderPlaced event might trigger handlers for inventory, payment, notifications, analytics, and fraud checking. All these handlers run when the event is emitted. Each handler focuses on its specific concern, and together they implement the complete response to a new order.
 ---
-## 13.5 Event Design Guidelines
+## 13.6 Event Design Guidelines
 Good event design requires thinking about both producers and consumers.
 Include sufficient context in event payloads. Handlers should have what they need without additional queries. If a UserUpdated event only contains the user identifier, every handler must retrieve the user to learn what changed. If the event includes the changes, previous values, who made the change, and when, handlers can react immediately.
 Use past tense consistently. Events record what happened, not what should happen. "UserCreated" states a fact. "CreateUser" requests an action. The distinction matters because it clarifies the nature of the communication—events are announcements, not requests.
@@ -126,21 +206,21 @@ Be specific rather than generic. "UserUpdated" could mean many things. "UserEmai
 Treat event payloads as immutable. The payload is a snapshot of state at the moment the event was emitted. Handlers should not expect to modify the payload or to have modifications affect other handlers. Each handler receives an independent view of the event.
 Design for evolution. Events are contracts between producers and consumers. Changing an event's structure can break consumers. When you add fields, make them optional so existing consumers continue to work. When you remove fields, ensure no consumers still depend on them. Version events if incompatible changes are necessary.
 ---
-## 13.6 Error Handling in Events
+## 13.7 Error Handling in Events
 Event handlers run in isolation. If one handler fails, other handlers for the same event still run. The emitting feature set is not affected by handler failures—it continues with its own execution regardless of what handlers do.
 This isolation reflects the fire-and-forget nature of event emission. The emitter announces what happened and moves on. It does not wait for handlers to complete, does not receive their results, and does not fail if they fail. This makes event emission a non-blocking operation and prevents cascading failures.
 For scenarios where handler success is important, additional patterns help. Compensation events can trigger recovery when things fail. A PaymentFailed event can trigger handlers that cancel the order and notify the customer. The failure handler runs as a reaction to the failure event, providing a mechanism for recovery without coupling the original operation to error handling.
 The runtime logs all handler failures with full context. Operators can monitor these logs to detect failing handlers. Alerts can trigger when failure rates exceed thresholds. The information in the logs—event type, handler name, error message, timestamp, correlation identifier—supports diagnosis and debugging.
 Designing handlers for idempotency provides resilience. If a handler can safely process the same event multiple times without incorrect behavior, temporary failures can be recovered by reprocessing the event. This is particularly valuable in distributed systems where exactly-once delivery is difficult to guarantee.
 ---
-## 13.7 Best Practices
+## 13.8 Best Practices
 Name events from the perspective of the domain, not the infrastructure. "CustomerJoinedLoyaltyProgram" is a domain event. "DatabaseRowInserted" is an infrastructure event. Domain events communicate business meaning; infrastructure events communicate implementation details. Prefer domain events because they remain stable as implementations change.
 Document the contract between event producers and consumers. The payload structure is an implicit contract—producers must provide what consumers expect. Documenting this contract makes the expectation explicit. Include what fields are present, their types, and their semantics. When the contract changes, communicate the change to all affected parties.
 Use events for cross-cutting concerns. Audit logging, analytics, notifications, and other concerns that touch many parts of the application are natural fits for events. The code that creates a user does not need to know about audit logging—it just emits UserCreated, and an audit handler captures it.
 Test handlers in isolation. Because handlers are independent feature sets with well-defined inputs (the event), they are straightforward to test. Construct a mock event with the expected payload, invoke the handler, and verify the behavior. This unit testing approach scales to complex systems.
 Avoid circular event chains. If event A triggers a handler that emits event B, and event B triggers a handler that emits event A, you have an infinite loop. The ARO compiler detects these cycles at compile time and reports them as errors, so you will catch this problem before your code runs. Map your event flows to ensure they form directed acyclic graphs with clear start and end points.
 ---
-## 13.8 Typed Event Extraction (ARO-0046)
+## 13.9 Typed Event Extraction (ARO-0046)
 When your application has an OpenAPI specification, you can define event schemas in `components.schemas` and use them to validate event data during extraction.
 ### Schema Definition
 Define event schemas in your `openapi.yaml`:
@@ -195,7 +275,7 @@ Cannot Extract the <event-data: UserCreatedEvent> from the <event: data>.
   Required properties: userId, email
 ```
 ---
-## 13.9 Compiler Validation
+## 13.10 Compiler Validation
 The ARO compiler performs static analysis on your event handlers to detect potential issues before runtime.
 **Circular Event Chain Detection**: The compiler builds a graph of event flows by analyzing which handlers emit which events. If a cycle is detected (for example, `Alpha Handler` emits `Beta` and `Beta Handler` emits `Alpha`), the compiler reports an error:
 ```
@@ -213,7 +293,7 @@ The goal is to ensure that every event chain has a clear end point where no furt
 
 ---
 
-## 13.10 Debugging with Event Recording
+## 13.11 Debugging with Event Recording
 
 When developing and debugging custom events, ARO provides event recording and replay capabilities. These features allow you to capture all events during execution and replay them later for investigation.
 

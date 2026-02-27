@@ -720,12 +720,54 @@ public actor ExecutionEngine {
 
         // Bind event properties to context
         // e.g., <Extract> the <message> from the <event: message>
-        handlerContext.bind("event", value: [
+        // Include the target value in the event dict so handlers can use:
+        //   Extract the <user> from the <event: user>.
+        // This mirrors how domain event handlers access payload via Extract.
+        var eventDict: [String: any Sendable] = [
             "message": event.message,
             "target": event.target
-        ] as [String: any Sendable])
+        ]
+        if let targetValue = event.targetValue {
+            eventDict[event.target] = targetValue
+            if event.target != "user" {
+                eventDict["user"] = targetValue
+            }
+        }
+        handlerContext.bind("event", value: eventDict as [String: any Sendable])
         handlerContext.bind("event:message", value: event.message)
         handlerContext.bind("event:target", value: event.target)
+
+        // Also bind colon-keyed variants for backward compatibility:
+        //   Extract the <user> from the <event: user>.  (via event["user"] in dict above)
+        //   context.resolveAny("event:user")            (via explicit colon-key below)
+        if let targetValue = event.targetValue {
+            handlerContext.bind("event:\(event.target)", value: targetValue)
+            if event.target != "user" {
+                handlerContext.bind("event:user", value: targetValue)
+            }
+        }
+
+        // Evaluate feature-set-level when/where condition if present.
+        // Bind the target object's fields directly so `where <age> >= 16` works
+        // without requiring a fully qualified `<event: user: age>` expression.
+        if let condition = analyzedFS.featureSet.whenCondition {
+            if let targetValue = event.targetValue as? [String: any Sendable] {
+                for (key, value) in targetValue {
+                    handlerContext.bind(key, value: value)
+                }
+            }
+            let evaluator = ExpressionEvaluator()
+            do {
+                let result = try await evaluator.evaluate(condition, context: handlerContext)
+                let passes: Bool
+                if let b = result as? Bool { passes = b }
+                else if let i = result as? Int { passes = i != 0 }
+                else { passes = false }
+                guard passes else { return }
+            } catch {
+                return // Skip handler silently if condition evaluation fails
+            }
+        }
 
         // Copy services from base context
         await services.registerAll(in: handlerContext)

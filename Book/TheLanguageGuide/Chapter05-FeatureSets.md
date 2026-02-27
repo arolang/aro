@@ -53,41 +53,87 @@ Feature sets execute in response to events. The runtime maintains an event bus t
 > **See Chapter 12** for application lifecycle details (startup, shutdown, Keepalive).
 > **See Chapter 11** for event bus mechanics and handler patterns.
 ---
-## 5.4 Structure and Execution
+## 5.4 Handler Guards
+
+Event handler feature sets can declare a `when` guard directly on the header. The `when` keyword appears between the closing parenthesis and the opening brace, followed by a condition expression. The runtime evaluates this condition each time the event is delivered. If the condition is false, the handler is silently skipped—no statements execute and no error is reported.
+
+```aro
+(* Only executes when the notified user is 16 or older *)
+(Greet User: NotificationSent Handler) when <age> >= 16 {
+    Extract the <user> from the <event: user>.
+    Extract the <name> from the <user: name>.
+    Log "hello " ++ <name> to the <console>.
+    Return an <OK: status> for the <notification>.
+}
+```
+
+The condition has direct access to the fields of the event's target object. In the example above, `<age>` resolves to the `age` field of the notified user. You do not need to extract the field first—the runtime binds the target's properties into the evaluation context before checking the guard.
+
+Handler guards differ in scope from statement-level `when` clauses. A statement-level `when` clause skips that one statement while execution continues normally. A handler guard skips the entire handler body when the condition is not met. Every handler gets a fresh evaluation—if a `NotificationSent` event is delivered five times (for example, when notifying a collection), each delivery evaluates the guard independently against the specific object being notified.
+
+This pattern is particularly useful when the Notify action targets a collection. The runtime emits one `NotificationSentEvent` per item, and the handler guard acts as an item-level filter without requiring any conditional logic inside the handler body:
+
+```aro
+(Application-Start: Notification Demo) {
+    Create the <group> with [
+        { name: "Bob",   age: 14 },
+        { name: "Carol", age: 25 },
+        { name: "Eve",   age: 20 }
+    ].
+    (* Runtime emits one NotificationSentEvent per item in the list *)
+    Notify the <group> with "Hello everyone!".
+    Return an <OK: status> for the <startup>.
+}
+
+(* Guard filters at delivery time — Bob (14) is silently skipped *)
+(Greet Adults: NotificationSent Handler) when <age> >= 16 {
+    Extract the <user> from the <event: user>.
+    Extract the <name> from the <user: name>.
+    Log "hello " ++ <name> to the <console>.
+    Return an <OK: status> for the <notification>.
+}
+```
+
+The guard is evaluated with the same comparison operators available in `Filter` and statement-level `when` clauses: `=`, `!=`, `<`, `<=`, `>`, `>=`. String equality (`=`) and inequality (`!=`) work on text values as well.
+
+> **Note:** Handler guards currently work with `{EventType} Handler` feature sets. HTTP handler feature sets use the OpenAPI routing mechanism for filtering and do not support `when` guards on their declarations.
+
+---
+## 5.5 Structure and Execution
 Within a feature set, statements execute in order from top to bottom. There is no branching, no looping, no early return. Execution begins with the first statement and proceeds through each subsequent statement until reaching the end or encountering an error.
 This linearity might seem limiting, but it actually simplifies reasoning about code. When you look at a feature set, you know exactly what order things happen. There are no hidden control flows, no callbacks that might execute at unexpected times, no conditional branches that might skip important steps. What you see is what executes.
-The `when` clause provides conditional execution without branching. A statement with a when clause executes only if the condition is true; otherwise, the statement is skipped and execution continues with the next statement. This is not a branch—there is no else path, no alternative action. Either the statement happens or it does not.
+The `when` clause provides conditional execution without branching. A statement with a when clause executes only if the condition is true; otherwise, the statement is skipped and execution continues with the next statement. This is not a branch—there is no else path, no alternative action. Either the statement happens or it does not. (For filtering an entire handler based on event data, use the declaration-level `when` guard described in section 5.4.)
 Each statement can bind a result to a name. That binding becomes available to all subsequent statements in the same feature set. If you create a value named `user` in the first statement, you can reference `user` in the second, third, and all following statements. This accumulation of bindings creates the context in which later statements operate.
 Bindings are immutable within a feature set. Once you bind a name to a value, you cannot rebind it to a different value. If you try, the compiler reports an error. This constraint prevents a common class of bugs where a variable changes unexpectedly. It also pushes you toward descriptive names because you cannot reuse generic names like `temp` or `result`.
 ---
-## 5.5 Scope and Visibility
+## 5.6 Scope and Visibility
 Variables bound within a feature set are visible only within that feature set. A binding in one feature set does not affect bindings in another. Each feature set has its own isolated symbol table that begins empty and accumulates bindings as statements execute.
 This isolation has important implications. If you create a value in one feature set and need to use it in another, you cannot simply reference it by name. The second feature set has no knowledge of what the first feature set bound. This prevents accidental coupling between feature sets that happen to use the same variable names.
 When you need to share data between feature sets, you have two options. The first is through events: emit an event carrying the data, and have the receiving feature set extract what it needs from the event payload. This maintains loose coupling because the emitting feature set does not need to know which handlers will receive the event.
 The second option is the Publish action, which makes a binding available to other feature sets within the same business activity. When you publish a value under an alias, that alias becomes accessible from any feature set with the same business activity that executes afterward. This scoping enforces modularity—different business domains cannot accidentally depend on each other's published variables. Use publishing for configuration data loaded at startup or for values that need to be shared within a domain, but use it sparingly because shared state complicates reasoning about program behavior.
 The execution context provides access to information that is always available. For HTTP handlers, this includes request data: path parameters extracted from the URL, query parameters, headers, and the request body. For event handlers, this includes the event payload containing whatever data was emitted with the event. These context values are not bound to names in advance; you extract them using the Extract action, which binds them to names you choose.
 ---
-## 5.6 Naming Conventions
+## 5.7 Naming Conventions
 Good naming makes code readable. In ARO, feature set names serve double duty as identifiers and documentation, so choosing appropriate names is particularly important.
 For HTTP handlers, names should match the operation identifiers in your OpenAPI specification exactly. This is not a convention but a requirement—the routing mechanism uses name matching to connect requests to handlers. Operation identifiers typically follow camelCase conventions: `listUsers`, `createOrder`, `getProductById`. Your feature set names should match.
 For event handlers, names should be descriptive of the action being performed. The convention is a verb phrase describing the handler's purpose: `Send Welcome Email`, `Update Search Index`, `Notify Administrator`. The business activity specifies the triggering event by ending with "Handler" preceded by the event name: `UserCreated Handler`, `OrderPlaced Handler`.
 For lifecycle handlers, use the reserved names exactly as specified. `Application-Start` with a business activity of your choice. `Application-End` with business activity `Success` for graceful shutdown. `Application-End` with business activity `Error` for error handling.
 For internal feature sets that handle domain logic but are not directly triggered by external events, use names that describe the business operation. `Calculate Shipping`, `Validate Payment`, `Check Inventory`. These feature sets might be triggered by custom events emitted from other feature sets or might be called through other mechanisms.
 ---
-## 5.7 File Organization
+## 5.8 File Organization
 ARO applications are directories, and the runtime automatically discovers all files with the `.aro` extension in that directory. You do not need import statements or explicit file references. When you create a new file and add feature sets to it, those feature sets become part of the application immediately.
 This automatic discovery encourages organizing feature sets into files by domain or purpose. A typical pattern separates lifecycle concerns from business logic: one file for application start and shutdown, other files for different domains of functionality. A user service might have a main file for lifecycle, a users file for user-related HTTP handlers, an orders file for order-related handlers, and an events file for event handlers.
 The specific organization you choose matters less than consistency. Some teams prefer fine-grained files with only a few feature sets each. Others prefer coarser files that group all related functionality together. What matters is that team members can find what they are looking for and understand where new code should be added.
 Because there are no imports, all feature sets are visible throughout the application. An event emitted in one file triggers handlers defined in any file. A variable published in one file is accessible from any feature set with the same business activity, regardless of which file it is defined in. This visibility is powerful but requires discipline. Establish conventions for how feature sets in different files should interact, and document those conventions so team members can follow them.
 ---
-## 5.8 The Context Object
+## 5.9 The Context Object
 When a feature set executes, it has access to contextual information appropriate to how it was triggered. This information is available through special identifiers that you access using the Extract action.
 HTTP handlers have access to request data. The `pathParameters` object contains values extracted from the URL path based on path templates in the OpenAPI specification. If the path template is `/users/{id}`, the `id` path parameter contains whatever value appeared in that position of the actual URL. The `queryParameters` object contains query string parameters. The `headers` object contains HTTP headers. The `request` object contains the full request, including the body.
 Event handlers have access to the event that triggered them through the `event` identifier. The event object contains whatever data was included when the event was emitted. If a feature set emits a `UserCreated` event with user data, the handler can extract that user data from the event.
 File event handlers have access to file system event details: the path of the file that changed, the type of change that occurred (created, modified, deleted), and other relevant metadata depending on the file system implementation.
 You access context data using the Extract action with qualifiers. The expression `<pathParameters: id>` means "the id property of the pathParameters object." The expression `<event: user.email>` means "the email property of the user property of the event object." Qualifiers chain to allow navigation into nested structures.
 ---
-## 5.9 From Here
+## 5.10 From Here
 Feature sets are the building blocks of ARO applications. They respond to events, execute statements, and either complete successfully or encounter errors. The runtime orchestrates their execution based on matching patterns between events and feature set headers.
 The next chapter explores how data flows through feature sets and between them. Understanding data flow is essential for building applications that share information appropriately while maintaining the loose coupling that makes event-driven architectures powerful.
 ---

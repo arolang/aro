@@ -26,7 +26,7 @@
 
     (* Echo back *)
     Create the <echo-prefix> with "Echo: ".
-    Compute the <echo> from <echo-prefix> + <message>.
+    Compute the <echo> from <echo-prefix> ++ <message>.
     Send the <echo> to the <client-id>.
 
     Return an <OK: status> for the <message>.

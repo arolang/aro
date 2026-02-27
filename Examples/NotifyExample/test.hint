@@ -1,3 +1,4 @@
 # Test hints for NotifyExample
-# Demonstrates the Notify action (notify, alert, signal verbs)
-mode: both
+# Demonstrates the Notify action with event-driven notification handlers.
+# Binary mode does not register notification event handlers, so interpreter only.
+mode: interpreter

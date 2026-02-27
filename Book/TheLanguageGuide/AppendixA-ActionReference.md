@@ -671,48 +671,78 @@ Emit a <PaymentProcessed: event> with <payment>.
 
 ### Notify
 
-Sends notifications to users, administrators, or systems. The action automatically emits a `NotificationSentEvent` that can be handled by feature sets with `NotificationSent Handler` business activity.
+Sends notifications to a user, an object, or every item in a collection. The action automatically emits a `NotificationSentEvent` for each notified target, and these events can be handled by feature sets with `NotificationSent Handler` business activity.
 
 **Verbs:** `notify`, `alert`, `signal`
 
 **Syntax:**
+
+Two forms are supported depending on how you structure the arguments:
+
 ```aro
+(* Form 1: target is the result, message is the "with" payload *)
+Notify the <target> with <message>.
+
+(* Form 2: message is the result, recipient is the "to" object *)
 Notify the <message> to the <recipient>.
-Alert the <message> to the <recipient>.
-Signal the <message> to the <recipient>.
 ```
+
+Form 1 (`with`) treats the result variable as the entity being notified. This is the preferred form when you want handlers to access the notified object's fields (for example, to use a `when` guard). Form 2 (`to`) is equivalent but places the notification message in the result position.
+
+**Collection Dispatch:**
+When the target (or recipient) resolves to a list, the runtime emits one `NotificationSentEvent` per item. Each event carries the item as the target value, allowing handlers to inspect the item's fields independently.
 
 **Examples:**
 ```aro
-(* User notification *)
+(* Notify a single user object *)
+Create the <alice> with { name: "Alice", age: 30, email: "alice@example.com" }.
+Notify the <alice> with "Welcome to ARO!".
+
+(* Notify every item in a collection — one event per item *)
+Create the <group> with [
+    { name: "Bob",   age: 14 },
+    { name: "Carol", age: 25 },
+    { name: "Eve",   age: 20 }
+].
+Notify the <group> with "Hello everyone!".
+
+(* Legacy to-form *)
 Notify the <welcome-message> to the <user>.
-
-(* Admin alert *)
 Alert the <system-warning> to the <admin>.
-
-(* System signal *)
 Signal the <shutdown-notice> to the <processes>.
 ```
 
 **NotificationSent Handler:**
-Feature sets can subscribe to notification events:
+Feature sets subscribe to notification events by using `NotificationSent Handler` as their business activity. A `when` guard on the handler declaration acts as a per-delivery filter — the guard is evaluated before the handler body runs, and the target object's fields are available directly in the condition:
 
 ```aro
+(* Unconditional handler — fires for every notification *)
 (Log All Notifications: NotificationSent Handler) {
     Extract the <message> from the <event: message>.
-    Extract the <type> from the <event: type>.
-    Log "Notification [${type}]: ${message}" to the <console>.
+    Log "Notification: " ++ <message> to the <console>.
     Return an <OK: status> for the <logging>.
+}
+
+(* Conditional handler — fires only when age >= 16 *)
+(Greet User: NotificationSent Handler) when <age> >= 16 {
+    Extract the <user> from the <event: user>.
+    Extract the <name> from the <user: name>.
+    Log "hello " ++ <name> to the <console>.
+    Return an <OK: status> for the <notification>.
 }
 ```
 
+In the second handler, `<age>` is resolved from the notified object's fields before the body executes. If the condition is false, the handler is silently skipped for that delivery.
+
 **Event Payload:**
 - `message` - The notification content
-- `recipient` - Target of the notification
+- `user` - The notified target object (when using the `with` form)
+- `recipient` - Target name (when using the `to` form)
 - `type` - One of: "notify", "alert", or "signal"
-- `timestamp` - When the notification was sent
 
 **Valid Prepositions:** `to`, `for`, `with`
+
+> **See Also:** Section 5.4 (Handler Guards), Chapter 13.4 (Handler Guards) for a full explanation of the `when` guard on handler declarations.
 
 ---
 
