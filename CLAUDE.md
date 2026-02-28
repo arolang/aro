@@ -464,6 +464,7 @@ Examples/               # 65 examples organized by category (run `ls Examples/` 
 │   # HTTP & WebSocket
 ├── HTTPServer/         # HTTP server with Keepalive
 ├── HTTPClient/         # HTTP client requests
+├── WeatherClient/      # Request action fetching live external API data
 ├── UserService/        # Multi-file REST API application
 ├── SimpleChat/         # WebSocket real-time messaging
 ├── WebSocketDemo/      # WebSocket server patterns
