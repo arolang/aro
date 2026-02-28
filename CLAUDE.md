@@ -450,7 +450,8 @@ Examples/               # 65 examples organized by category (run `ls Examples/` 
 ├── Expressions/        # Arithmetic, comparison, and logical operators
 ├── Conditionals/       # When guards and conditional execution
 ├── Iteration/          # For-each loops and collection iteration
-├── Scoping/            # Variable scoping and immutability
+├── Scoping/            # Publish as, business activity scope, framework vars, pipeline, loop isolation
+├── Immutability/       # Immutable bindings, new-name pattern, qualifier-as-name
 ├── ErrorHandling/      # Error philosophy demonstration
 │
 │   # Events & Lifecycle

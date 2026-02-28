@@ -4,8 +4,8 @@
 (createUser: User API) {
     Extract the <user-data> from the <request: body>.
     Create the <user> with <user-data>.
-    Store the <user> into the <user-repository>.
-    Return a <Created: status> with <user>.
+    Store the <stored-user: user> into the <user-repository>.
+    Return a <Created: status> with <stored-user>.
 }
 
 (* GET /users - List all users *)
@@ -25,11 +25,8 @@
 (updateUser: User API) {
     Extract the <id> from the <pathParameters: id>.
     Extract the <update-data> from the <request: body>.
-    Create the <user> with {
-        id: <id>,
-        name: <update-data: name>,
-        email: <update-data: email>
-    }.
+    Retrieve the <user> from the <user-repository> where <id> is <id>.
+    Update the <user> with <update-data>.
     Store the <user> into the <user-repository>.
     Return an <OK: status> with <user>.
 }

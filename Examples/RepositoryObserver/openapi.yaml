@@ -4,6 +4,9 @@ info:
   description: Demonstrates repository observers that react to data changes
   version: 1.0.0
 
+servers:
+  - url: http://localhost:8082
+
 paths:
   /users:
     get:

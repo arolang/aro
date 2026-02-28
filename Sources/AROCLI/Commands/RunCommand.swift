@@ -97,6 +97,11 @@ struct RunCommand: AsyncParsableCommand {
     }
 
     func run() async throws {
+        // Force unbuffered stdout so every print() reaches the pipe immediately.
+        // Without this, Swift fully-buffers stdout when piped (e.g. during tests),
+        // causing observer/event output to be lost until the process exits.
+        setvbuf(stdout, nil, _IONBF, 0)
+
         var mutableSelf = self
         mutableSelf.extractRunCommandFlags()
 

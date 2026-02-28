@@ -297,7 +297,7 @@ public final class FeatureSetExecutor: @unchecked Sendable {
                     queryVerbs.contains(verb.lowercased()) ||
                     serverVerbs.contains(verb.lowercased()) ||
                     hasDynamicHandler ||  // Dynamic plugin actions always need execution
-                    (updateVerbs.contains(verb.lowercased()) && !resultDescriptor.specifiers.isEmpty) ||
+                    updateVerbs.contains(verb.lowercased()) ||  // Update always needs execution (handles rebind internally)
                     (createVerbs.contains(verb.lowercased()) && !resultDescriptor.specifiers.isEmpty) ||
                     (computeVerbs.contains(verb.lowercased()) && !resultDescriptor.specifiers.isEmpty) ||
                     (extractVerbs.contains(verb.lowercased()) && !resultDescriptor.specifiers.isEmpty)

@@ -235,6 +235,7 @@ sub read_test_hint {
         'normalize-dict' => undef,
         'strip-prefix' => undef,
         'random-output' => undef,
+        'include-server-output' => undef,
     );
 
     # Return empty hints if file doesn't exist (backward compatible)
@@ -483,7 +484,7 @@ sub run_test_in_workdir {
     if ($type eq 'console') {
         ($output, $error) = run_console_example_internal($run_dir, $timeout, $mode, $binary_name, $hints);
     } elsif ($type eq 'http') {
-        ($output, $error) = run_http_example_internal($run_dir, $timeout, $mode, $binary_name);
+        ($output, $error) = run_http_example_internal($run_dir, $timeout, $mode, $binary_name, $hints);
     } elsif ($type eq 'socket') {
         ($output, $error) = run_socket_example_internal($run_dir, $timeout, $mode, $binary_name);
     } elsif ($type eq 'file') {
@@ -715,6 +716,9 @@ sub auto_placeholderize {
     if ($type && $type eq 'http') {
         # Replace hex IDs (15-20 chars) in JSON id fields
         $output =~ s/"id":"[a-f0-9]{15,20}"/"id":"__ID__"/g;
+
+        # Replace UUIDs (e.g. in observer output after ---server--- separator)
+        $output =~ s/[A-Fa-f0-9]{8}-[A-Fa-f0-9]{4}-[A-Fa-f0-9]{4}-[A-Fa-f0-9]{4}-[A-Fa-f0-9]{12}/__UUID__/g;
 
         # Normalize floating point numbers with excessive precision (e.g., 249.99000000000001 -> 249.99)
         # Match numbers like: 123.45000000000001
@@ -1031,7 +1035,8 @@ sub run_http_example {
 
 # Run HTTP server example (internal with timeout parameter)
 sub run_http_example_internal {
-    my ($example_name, $timeout, $mode, $binary_name) = @_;
+    my ($example_name, $timeout, $mode, $binary_name, $hints) = @_;
+    $hints //= {};
     $mode //= 'interpreter';  # Default to interpreter mode
 
     unless ($has_yaml && $has_http_tiny && $has_net_emptyport) {
@@ -1300,6 +1305,34 @@ sub run_http_example_internal {
                 } else {
                     push @output, sprintf("%s %s => ERROR: No response", uc($method), $path);
                 }
+        }
+    }
+
+    # Optionally collect server console output (for observer/event tests)
+    if ($hints->{'include-server-output'}) {
+        # Wait briefly for async handlers (observers, event handlers) to complete
+        select(undef, undef, undef, 0.5);
+        eval { $handle->pump_nb(); };  # Flush any remaining stdout
+
+        # Parse accumulated server stdout — keep only observer/handler output lines,
+        # strip startup/HTTP infrastructure lines, strip [FeatureName] prefix,
+        # then sort for deterministic comparison.
+        my @server_lines;
+        for my $line (split /\n/, $out) {
+            # Skip empty lines and infrastructure lines
+            next unless $line =~ /\S/;
+            next if $line =~ /^\[Application-Start\]/;
+            next if $line =~ /^HTTP Server started/;
+            next if $line =~ /^\[ERROR\]/;   # runtime errors already visible
+
+            # Strip leading [FeatureName] prefix so output is independent of feature set name
+            $line =~ s/^\[[^\]]+\]\s+//;
+            push @server_lines, $line;
+        }
+        if (@server_lines) {
+            my @sorted = sort @server_lines;
+            push @output, "---server---";
+            push @output, @sorted;
         }
     }
 
@@ -2580,7 +2613,9 @@ sub generate_expected {
         $hints->{workdir},
         $timeout,
         $type,
-        $hints->{'pre-script'}
+        $hints->{'pre-script'},
+        'interpreter',
+        $hints
     );
 
     if ($error) {

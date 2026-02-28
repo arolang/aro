@@ -1,0 +1,100 @@
+(*
+ * ARO Immutability Demo
+ *
+ * In ARO, every variable binding is immutable — once a result variable
+ * is created by a statement, it cannot be rebound to a different value.
+ * This makes data flow explicit: each transformation step produces a
+ * new, distinctly named variable rather than overwriting an old one.
+ *
+ * The idiomatic approach is to choose descriptive names that reflect
+ * the state of the value at that stage of the pipeline.
+ *
+ * Topics covered:
+ *
+ *   1. New-name pattern   — transform values by creating new bindings
+ *   2. Qualifier-as-name  — use a qualifier to name a result when multiple
+ *                           results of the same operation are needed
+ *   3. Multi-step pipeline — chain of immutable steps with descriptive names
+ *   4. Loop body bindings  — each iteration produces its own isolated bindings
+ *)
+
+(Application-Start: Immutability Demo) {
+
+    (* ── 1. NEW-NAME PATTERN ─────────────────────────────────────────────
+       Each transformation produces a fresh binding.
+       Attempting to reuse a name would be a compile-time error:
+         Compute the <price> from <price> * 0.8.  ← ERROR *)
+
+    Log "=== 1. New-Name Pattern ===" to the <console>.
+
+    Create the <price> with 100.
+    Compute the <discounted-price> from <price> * 0.8.
+    Compute the <final-price> from <discounted-price> * 1.1.
+
+    Log "original:" to the <console>.
+    Log <price> to the <console>.
+    Log "after 20% discount:" to the <console>.
+    Log <discounted-price> to the <console>.
+    Log "after 10% tax:" to the <console>.
+    Log <final-price> to the <console>.
+
+
+    (* ── 2. QUALIFIER-AS-NAME ────────────────────────────────────────────
+       When the same operation is applied multiple times, use the qualifier
+       to name the result and distinguish between the variables.
+       Without this pattern, two uses of "length" would clash:
+         Compute the <length> from <first>.
+         Compute the <length> from <second>.  ← ERROR: already bound *)
+
+    Log "=== 2. Qualifier-as-Name ===" to the <console>.
+
+    Create the <first-word> with "hello".
+    Create the <second-word> with "world".
+
+    Compute the <first-len: length> from <first-word>.
+    Compute the <second-len: length> from <second-word>.
+
+    Log "first-word length:" to the <console>.
+    Log <first-len> to the <console>.
+    Log "second-word length:" to the <console>.
+    Log <second-len> to the <console>.
+
+
+    (* ── 3. MULTI-STEP PIPELINE ──────────────────────────────────────────
+       A sequence of named steps traces the full transformation history.
+       Every intermediate value is accessible by its stage name. *)
+
+    Log "=== 3. Multi-Step Pipeline ===" to the <console>.
+
+    Create the <raw-message> with "hello, aro!".
+    Compute the <upper-message: uppercase> from <raw-message>.
+    Compute the <message-length: length> from <upper-message>.
+    Compute the <double-length> from <message-length> * 2.
+
+    Log "raw:" to the <console>.
+    Log <raw-message> to the <console>.
+    Log "uppercase:" to the <console>.
+    Log <upper-message> to the <console>.
+    Log "length:" to the <console>.
+    Log <message-length> to the <console>.
+    Log "double length:" to the <console>.
+    Log <double-length> to the <console>.
+
+
+    (* ── 4. LOOP BODY BINDINGS ───────────────────────────────────────────
+       Variables created inside a loop body are isolated to that iteration.
+       Each iteration produces its own fresh, immutable bindings. *)
+
+    Log "=== 4. Loop Body Bindings ===" to the <console>.
+
+    Create the <prices> with [10, 25, 50].
+    for each <item-price> in <prices> {
+        Compute the <taxed-price> from <item-price> * 1.2.
+        Log "price:" to the <console>.
+        Log <item-price> to the <console>.
+        Log "after tax:" to the <console>.
+        Log <taxed-price> to the <console>.
+    }
+
+    Return an <OK: status> for the <startup>.
+}
