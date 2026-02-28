@@ -1222,6 +1222,60 @@ section {
 }
 
 /* ============================================================
+   AI Path Diagram (Why AI Needs a New Language)
+   ============================================================ */
+
+.ai-path-diagram {
+    width: 100%;
+}
+
+/* Chaos path: slow forward dash flow */
+.chaos-line {
+    animation: chaos-flow 2.2s linear infinite;
+}
+
+/* Translate-to-result line: same slow flow */
+.translate-result-line {
+    animation: chaos-flow 2.2s linear infinite;
+}
+
+@keyframes chaos-flow {
+    from { stroke-dashoffset: 16; }
+    to   { stroke-dashoffset: 0; }
+}
+
+/* ARO lines: fast forward dash flow (reuse stream-flow-out direction) */
+.aro-line {
+    animation: stream-flow-out 0.9s linear infinite;
+}
+
+/* Translate node: subtle red pulse */
+.translate-node {
+    animation: translate-pulse 1.8s ease-in-out infinite;
+}
+
+@keyframes translate-pulse {
+    0%, 100% { opacity: 0.55; }
+    50%       { opacity: 1; }
+}
+
+/* ARO node: green glow beat */
+.aro-ai-node rect {
+    animation: ai-aro-beat 2.5s ease-in-out infinite;
+}
+
+@keyframes ai-aro-beat {
+    0%, 100% { filter: drop-shadow(0 0 4px rgba(0, 255, 136, 0.25)); }
+    50%       { filter: drop-shadow(0 0 14px rgba(0, 255, 136, 0.65)); }
+}
+
+/* Result node: green glow (offset from ARO beat) */
+.result-node rect {
+    filter: drop-shadow(0 0 8px rgba(0, 255, 136, 0.3));
+    animation: ai-aro-beat 2.5s ease-in-out infinite 0.8s;
+}
+
+/* ============================================================
    Examples Section
    ============================================================ */
 
