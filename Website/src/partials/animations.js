@@ -180,6 +180,12 @@
             ['Your feature.', 'Your language.']
         ];
 
+        // Shuffle slogans (Fisher-Yates) for random order on each page load
+        for (let i = slogans.length - 1; i > 0; i--) {
+            const j = Math.floor(Math.random() * (i + 1));
+            [slogans[i], slogans[j]] = [slogans[j], slogans[i]];
+        }
+
         let sloganIndex = 0;
         let charIndex = 0;
         let currentLine = 0;
