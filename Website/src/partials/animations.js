@@ -177,7 +177,17 @@
             ['Native binaries.', 'Zero config.'],
             ['Domain events.', 'First class.'],
             ['Repositories', 'built in.'],
-            ['Your feature.', 'Your language.']
+            ['Your feature.', 'Your language.'],
+            ['The spec', 'is the code.'],
+            ['Features, not', 'functions.'],
+            ['LLMs write it', 'perfectly.'],
+            ['Stream gigabytes.', 'Use kilobytes.'],
+            ['Business language.', 'Machine speed.'],
+            ['One app.', 'All languages.'],
+            ['Intent.', 'Execution.'],
+            ['The runtime', 'handles the rest.'],
+            ['Compile to', 'a single file.'],
+            ['Describe it.', 'Done.']
         ];
 
         let sloganIndex = 0;
