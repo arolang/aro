@@ -21,22 +21,5 @@ numbersections: false
 colorlinks: true
 linkcolor: NavyBlue
 urlcolor: NavyBlue
-header-includes:
-  - |
-    \usepackage{fancyhdr}
-    \usepackage{titlesec}
-    \usepackage{xcolor}
-    \definecolor{chaptercolor}{RGB}{40, 40, 40}
-    \definecolor{codebackground}{RGB}{248, 248, 248}
-    \pagestyle{fancy}
-    \fancyhf{}
-    \fancyhead[L]{\small\leftmark}
-    \fancyhead[R]{\small\thepage}
-    \fancyfoot[C]{\small ARO Construction Studies}
-    \renewcommand{\headrulewidth}{0.4pt}
-    \renewcommand{\footrulewidth}{0.4pt}
-    \titleformat{\chapter}[display]
-      {\normalfont\Large\bfseries\color{chaptercolor}}
-      {\chaptertitlename\ \thechapter}{20pt}{\Huge}
-    \titlespacing*{\chapter}{0pt}{-20pt}{40pt}
+include-in-header: header.tex
 ---
