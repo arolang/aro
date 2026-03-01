@@ -336,7 +336,7 @@ body.menu-open {
     display: grid;
     grid-template-columns: 1fr 1fr;
     gap: var(--space-xl);
-    align-items: center;
+    align-items: start;
     position: relative;
     z-index: 1;
 }
@@ -456,6 +456,7 @@ body.menu-open {
     display: flex;
     flex-direction: column;
     align-items: center;
+    padding-top: 68px; /* align top of diagram with typewriter title */
 }
 
 .plugin-diagram {
@@ -1543,6 +1544,10 @@ section {
         gap: var(--space-xl);
     }
 
+    .hero-diagram {
+        padding-top: 0;
+    }
+
     .hero-code {
         max-width: 600px;
     }
@@ -1624,6 +1629,7 @@ section {
 
     .hero-diagram {
         margin-top: var(--space-lg);
+        padding-top: 0;
     }
 
     .plugin-diagram {
