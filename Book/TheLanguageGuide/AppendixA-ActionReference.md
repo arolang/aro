@@ -15,6 +15,9 @@ Complete reference for all built-in actions in ARO.
 | **Exists** | REQUEST | Check file existence | `Exists the <found> for the <file: "./config.json">.` |
 | **Receive** | REQUEST | Receive event data | `Receive the <message> from the <event>.` |
 | **Execute** | REQUEST | Execute shell command | `Execute the <result> for the <command: "ls"> with "-la".` |
+| **Prompt** | TERMINAL | Prompt for text input | `Prompt the <name> with "Enter name: " from the <terminal>.` |
+| **Select** | TERMINAL | Present a selection menu | `Select the <env> from the <options> with "Choose: ".` |
+| **Clear** | TERMINAL | Clear the terminal screen | `Clear the <screen> for the <terminal>.` |
 | **Create** | OWN | Create new data | `Create the <user> with { name: "Alice" }.` |
 | **Compute** | OWN | Perform calculations | `Compute the <total> for the <items>.` |
 | **Transform** | OWN | Convert/map data | `Transform the <dto> from the <entity>.` |
@@ -64,6 +67,7 @@ Complete reference for all built-in actions in ARO.
 | RESPONSE | Send results | Internal -> External |
 | EXPORT | Publish/persist | Internal -> External |
 | SERVICE | Control services | System operations |
+| TERMINAL | User interaction | Terminal I/O |
 | STATE | State transitions | Internal state changes |
 | TEST | Testing | Verification actions |
 
@@ -952,6 +956,65 @@ Delete the <sessions> from the <repository> where expired = true.
 
 ---
 
+## TERMINAL Actions
+
+### Prompt
+
+Prompts the user for text input via the terminal. Use the `hidden` qualifier to mask sensitive input such as passwords.
+
+**Syntax:**
+```aro
+Prompt the <result> with "message" from the <terminal>.
+Prompt the <result: hidden> with "message" from the <terminal>.
+```
+
+**Examples:**
+```aro
+Prompt the <username> with "Enter username: " from the <terminal>.
+Prompt the <password: hidden> with "Password: " from the <terminal>.
+```
+
+**Valid Prepositions:** `with`, `from` | **Aliases:** `ask`
+
+---
+
+### Select
+
+Presents a numbered selection menu to the user and captures their choice.
+
+**Syntax:**
+```aro
+Select the <result> from the <options> with "prompt message".
+```
+
+**Examples:**
+```aro
+Select the <environment> from the <environments> with "Select environment: ".
+Select the <action> from the <available-actions> with "What do you want to do? ".
+```
+
+**Valid Prepositions:** `from`, `with` | **Aliases:** `choose`
+
+---
+
+### Clear
+
+Clears the terminal screen.
+
+**Syntax:**
+```aro
+Clear the <screen> for the <terminal>.
+```
+
+**Examples:**
+```aro
+Clear the <screen> for the <terminal>.
+```
+
+**Valid Prepositions:** `for`
+
+---
+
 ## SERVICE Actions
 
 ### Start
@@ -1177,6 +1240,9 @@ The `Keepalive` action blocks execution until a shutdown signal is received (SIG
 | Broadcast | SERVICE | to, with |
 | Keepalive | SERVICE | for |
 | Accept | STATE | - |
+| Prompt | TERMINAL | with, from |
+| Select | TERMINAL | from, with |
+| Clear | TERMINAL | for |
 | Given | TEST | with |
 | When | TEST | - |
 | Then | TEST | - |

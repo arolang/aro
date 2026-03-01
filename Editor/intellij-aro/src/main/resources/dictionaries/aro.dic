@@ -17,29 +17,43 @@ Parse
 Retrieve
 Fetch
 Read
+Receive
+Request
 Accept
 List
 Stat
 Exists
 Parameters
+Prompt
+Select
 
 Compute
 Validate
 Compare
 Create
 Transform
+Update
+Sort
 Filter
 Match
 Split
+Map
+Reduce
 Set
 Merge
+Delete
 Copy
 Move
 Append
+Execute
+Call
+ParseHtml
+Clear
 Render
 
 Return
 Throw
+Broadcast
 
 Publish
 Store
@@ -47,17 +61,19 @@ Log
 Send
 Emit
 Write
+Notify
 CreateDirectory
 
 Start
 Stop
 Keepalive
+Listen
+Connect
+Close
+Disconnect
+Make
 Watch
 Configure
-Request
-Connect
-Disconnect
-Broadcast
 
 Given
 When
