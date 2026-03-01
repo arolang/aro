@@ -128,14 +128,14 @@ else
         --toc-depth=2 \
         --css="$CSS_FILE" \
         --metadata title="" \
-        --from markdown+raw_html \
+        -f markdown+raw_html-yaml_metadata_block \
         -o "$TEMP_HTML" \
         $CONTENT_FILES
 
     # Generate cover HTML to temp file
     COVER_TEMP="$OUTPUT_DIR/temp-cover.html"
     if [[ -f "$SCRIPT_DIR/Cover.md" ]]; then
-        pandoc --from markdown+raw_html --to html "$SCRIPT_DIR/Cover.md" > "$COVER_TEMP"
+        pandoc -f markdown+raw_html-yaml_metadata_block --to html "$SCRIPT_DIR/Cover.md" > "$COVER_TEMP"
     else
         echo "" > "$COVER_TEMP"
     fi
@@ -196,7 +196,7 @@ pandoc \
     --toc-depth=2 \
     --css="unix-style.css" \
     --metadata title="ARO: Business Logic as Language" \
-    --from markdown+raw_html \
+    -f markdown+raw_html-yaml_metadata_block \
     --embed-resources \
     --self-contained \
     -o "$TEMP_HTML" \
@@ -207,14 +207,14 @@ pandoc \
     --toc-depth=2 \
     --css="unix-style.css" \
     --metadata title="ARO: Business Logic as Language" \
-    --from markdown+raw_html \
+    -f markdown+raw_html-yaml_metadata_block \
     -o "$TEMP_HTML" \
     $CONTENT_FILES
 
 # Generate cover HTML to temp file
 COVER_TEMP="$OUTPUT_DIR/temp-cover.html"
 if [[ -f "$SCRIPT_DIR/Cover.md" ]]; then
-    pandoc --from markdown+raw_html --to html "$SCRIPT_DIR/Cover.md" > "$COVER_TEMP"
+    pandoc -f markdown+raw_html-yaml_metadata_block --to html "$SCRIPT_DIR/Cover.md" > "$COVER_TEMP"
 else
     echo "" > "$COVER_TEMP"
 fi

@@ -144,7 +144,7 @@ else
         --toc-depth=2 \
         --css="$CSS_FILE" \
         --metadata title="" \
-        --from markdown+raw_html \
+        -f markdown+raw_html-yaml_metadata_block \
         -o "$TEMP_HTML" \
         $CONTENT_FILES
     cd "$SCRIPT_DIR"
@@ -152,7 +152,7 @@ else
     # Generate cover HTML to temp file
     COVER_TEMP="$OUTPUT_DIR/temp-cover.html"
     if [[ -f "$PROCESSED_DIR/Cover.md" ]]; then
-        pandoc --from markdown+raw_html --to html "$PROCESSED_DIR/Cover.md" > "$COVER_TEMP"
+        pandoc -f markdown+raw_html-yaml_metadata_block --to html "$PROCESSED_DIR/Cover.md" > "$COVER_TEMP"
     else
         echo "" > "$COVER_TEMP"
     fi
@@ -218,7 +218,7 @@ pandoc \
     --toc-depth=2 \
     --css="unix-style.css" \
     --metadata title="ARO: The Construction Studies" \
-    --from markdown+raw_html \
+    -f markdown+raw_html-yaml_metadata_block \
     -o "$TEMP_HTML" \
     $CONTENT_FILES
 cd "$SCRIPT_DIR"
@@ -226,7 +226,7 @@ cd "$SCRIPT_DIR"
 # Generate cover HTML to temp file
 COVER_TEMP="$OUTPUT_DIR/temp-cover.html"
 if [[ -f "$PROCESSED_DIR/Cover.md" ]]; then
-    pandoc --from markdown+raw_html --to html "$PROCESSED_DIR/Cover.md" > "$COVER_TEMP"
+    pandoc -f markdown+raw_html-yaml_metadata_block --to html "$PROCESSED_DIR/Cover.md" > "$COVER_TEMP"
 else
     echo "" > "$COVER_TEMP"
 fi
