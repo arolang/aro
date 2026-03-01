@@ -1,4 +1,4 @@
-# Generated: Tue Feb 24 12:53:20 2026
+# Generated: Sun Mar  1 22:44:32 2026
 # Type: console
 # Command: aro run ./Examples/StateMachine
 # Timeout: 30s
@@ -12,6 +12,8 @@ status: draft
 title: Project Proposal
 
 --- Valid Transition: draft -> submitted ---
+>>> Notification: Document submitted for review
+DOC-001
 Transition successful. New status:
 author: Alice
 id: DOC-001
@@ -19,6 +21,8 @@ status: submitted
 title: Project Proposal
 
 --- Valid Transition: submitted -> approved ---
+>>> Notification: Document approved!
+DOC-001
 Transition successful. New status:
 author: Alice
 id: DOC-001
@@ -35,7 +39,11 @@ title: Budget Report
 
 --- Attempting Invalid: draft -> approved ---
 This should fail because documents must be submitted first.
+>>> Notification: Document submitted for review
+DOC-002
 Submitted for review.
+>>> Notification: Document rejected
+DOC-002
 Document rejected. Final status:
 author: Bob
 id: DOC-002
@@ -48,6 +56,8 @@ author: Charlie
 id: DOC-003
 status: draft
 title: Meeting Notes
+>>> Notification: Document cancelled
+DOC-003
 Document cancelled. Final status:
 author: Charlie
 id: DOC-003

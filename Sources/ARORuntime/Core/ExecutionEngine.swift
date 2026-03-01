@@ -1132,79 +1132,160 @@ public actor ExecutionEngine {
         }
     }
 
-    /// Register state transition observers for feature sets with "StateObserver" business activity
-    /// Supports optional transition filter: "status StateObserver<draft_to_placed>"
-    /// For example: "Audit Changes: status StateObserver", "Notify Placed: status StateObserver<draft_to_placed>"
+    /// Register state transition observers for feature sets with "StateObserver" or "StateTransition Handler" business activity
+    /// Supports:
+    ///   - "status StateObserver<draft_to_placed>"  (legacy syntax, binds as "transition")
+    ///   - "StateTransition Handler<toState:approved>"  (new syntax, binds as "event")
     private func registerStateObservers(for program: AnalyzedProgram, baseContext: RuntimeContext) {
-        // Find all feature sets with "StateObserver" business activity
+        // Find all feature sets with state-transition business activity
         let stateObservers = program.featureSets.filter { analyzedFS in
-            analyzedFS.featureSet.businessActivity.contains("StateObserver")
+            let activity = analyzedFS.featureSet.businessActivity
+            return activity.contains("StateObserver") || activity.contains("StateTransition Handler")
         }
 
         for analyzedFS in stateObservers {
             let activity = analyzedFS.featureSet.businessActivity
+            let isHandlerStyle = activity.contains("StateTransition Handler")
 
-            // Parse: "status StateObserver" or "status StateObserver<draft_to_placed>"
-            var fieldName = ""
-            var transitionFilter: String? = nil
-
-            if let angleStart = activity.firstIndex(of: "<"),
-               let angleEnd = activity.firstIndex(of: ">") {
-                // Has transition filter: "status StateObserver<draft_to_placed>"
-                transitionFilter = String(activity[activity.index(after: angleStart)..<angleEnd])
-                let beforeAngle = String(activity[..<angleStart])
-                fieldName = beforeAngle
-                    .replacingOccurrences(of: " StateObserver", with: "")
-                    .replacingOccurrences(of: "StateObserver", with: "")
-                    .trimmingCharacters(in: .whitespaces)
-                    .lowercased()
-            } else {
-                // No filter: "status StateObserver"
-                fieldName = activity
-                    .replacingOccurrences(of: " StateObserver", with: "")
-                    .replacingOccurrences(of: "StateObserver", with: "")
-                    .trimmingCharacters(in: .whitespaces)
-                    .lowercased()
-            }
-
-            // Capture as constants for Sendable closure
-            let capturedFieldName = fieldName
-            let capturedTransitionFilter = transitionFilter
             // CRITICAL: Capture values to avoid actor reentrancy deadlock
             let capturedActionRegistry = actionRegistry
             let capturedEventBus = eventBus
             let capturedGlobalSymbols = globalSymbols
             let capturedServices = services
 
-            // Subscribe to StateTransitionEvent and filter by field name and optional transition
-            eventBus.subscribe(to: StateTransitionEvent.self) { event in
-                // Match field name (empty = match all fields)
-                let fieldMatches = capturedFieldName.isEmpty || event.fieldName.lowercased() == capturedFieldName
+            if isHandlerStyle {
+                // New syntax: "StateTransition Handler<toState:approved>"
+                // Parse <key:value> guard, e.g. toState:approved
+                var guardKey: String? = nil
+                var guardValue: String? = nil
 
-                // Match transition filter if specified
-                let transitionMatches: Bool
-                if let filter = capturedTransitionFilter {
-                    let expectedTransition = "\(event.fromState)_to_\(event.toState)"
-                    transitionMatches = expectedTransition.lowercased() == filter.lowercased()
-                } else {
-                    transitionMatches = true  // No filter = match all transitions
+                if let angleStart = activity.firstIndex(of: "<"),
+                   let angleEnd = activity.firstIndex(of: ">") {
+                    let guardExpr = String(activity[activity.index(after: angleStart)..<angleEnd])
+                    let parts = guardExpr.split(separator: ":", maxSplits: 1).map(String.init)
+                    if parts.count == 2 {
+                        guardKey = parts[0].trimmingCharacters(in: .whitespaces)
+                        guardValue = parts[1].trimmingCharacters(in: .whitespaces)
+                    }
                 }
 
-                let shouldHandle = fieldMatches && transitionMatches
+                let capturedGuardKey = guardKey
+                let capturedGuardValue = guardValue
 
-                if shouldHandle {
-                    // Execute observer WITHOUT actor isolation to avoid deadlock
-                    await ExecutionEngine.executeStateObserverStatic(
-                        analyzedFS,
-                        baseContext: baseContext,
-                        event: event,
-                        actionRegistry: capturedActionRegistry,
-                        eventBus: capturedEventBus,
-                        globalSymbols: capturedGlobalSymbols,
-                        services: capturedServices
-                    )
+                eventBus.subscribe(to: StateTransitionEvent.self) { event in
+                    // Apply guard filter if specified
+                    let shouldHandle: Bool
+                    if let key = capturedGuardKey, let value = capturedGuardValue {
+                        switch key {
+                        case "toState":   shouldHandle = event.toState.lowercased() == value.lowercased()
+                        case "fromState": shouldHandle = event.fromState.lowercased() == value.lowercased()
+                        case "fieldName": shouldHandle = event.fieldName.lowercased() == value.lowercased()
+                        case "objectName": shouldHandle = event.objectName.lowercased() == value.lowercased()
+                        default:          shouldHandle = true
+                        }
+                    } else {
+                        shouldHandle = true
+                    }
+
+                    if shouldHandle {
+                        await ExecutionEngine.executeStateTransitionHandlerStatic(
+                            analyzedFS,
+                            baseContext: baseContext,
+                            event: event,
+                            actionRegistry: capturedActionRegistry,
+                            eventBus: capturedEventBus,
+                            globalSymbols: capturedGlobalSymbols,
+                            services: capturedServices
+                        )
+                    }
+                }
+            } else {
+                // Legacy syntax: "status StateObserver" or "status StateObserver<draft_to_placed>"
+                var fieldName = ""
+                var transitionFilter: String? = nil
+
+                if let angleStart = activity.firstIndex(of: "<"),
+                   let angleEnd = activity.firstIndex(of: ">") {
+                    transitionFilter = String(activity[activity.index(after: angleStart)..<angleEnd])
+                    let beforeAngle = String(activity[..<angleStart])
+                    fieldName = beforeAngle
+                        .replacingOccurrences(of: " StateObserver", with: "")
+                        .replacingOccurrences(of: "StateObserver", with: "")
+                        .trimmingCharacters(in: .whitespaces)
+                        .lowercased()
+                } else {
+                    fieldName = activity
+                        .replacingOccurrences(of: " StateObserver", with: "")
+                        .replacingOccurrences(of: "StateObserver", with: "")
+                        .trimmingCharacters(in: .whitespaces)
+                        .lowercased()
+                }
+
+                let capturedFieldName = fieldName
+                let capturedTransitionFilter = transitionFilter
+
+                eventBus.subscribe(to: StateTransitionEvent.self) { event in
+                    let fieldMatches = capturedFieldName.isEmpty || event.fieldName.lowercased() == capturedFieldName
+
+                    let transitionMatches: Bool
+                    if let filter = capturedTransitionFilter {
+                        let expectedTransition = "\(event.fromState)_to_\(event.toState)"
+                        transitionMatches = expectedTransition.lowercased() == filter.lowercased()
+                    } else {
+                        transitionMatches = true
+                    }
+
+                    if fieldMatches && transitionMatches {
+                        await ExecutionEngine.executeStateObserverStatic(
+                            analyzedFS,
+                            baseContext: baseContext,
+                            event: event,
+                            actionRegistry: capturedActionRegistry,
+                            eventBus: capturedEventBus,
+                            globalSymbols: capturedGlobalSymbols,
+                            services: capturedServices
+                        )
+                    }
                 }
             }
+        }
+    }
+
+    /// Execute a StateTransition Handler feature set — binds event data as "event" (consistent with other handlers)
+    private static func executeStateTransitionHandlerStatic(
+        _ analyzedFS: AnalyzedFeatureSet,
+        baseContext: RuntimeContext,
+        event: StateTransitionEvent,
+        actionRegistry: ActionRegistry,
+        eventBus: EventBus,
+        globalSymbols: GlobalSymbolStorage,
+        services: ServiceRegistry
+    ) async {
+        await executeHandler(
+            analyzedFS,
+            baseContext: baseContext,
+            event: event,
+            actionRegistry: actionRegistry,
+            eventBus: eventBus,
+            globalSymbols: globalSymbols,
+            services: services
+        ) { context, event in
+            var eventData: [String: any Sendable] = [
+                "fieldName": event.fieldName,
+                "objectName": event.objectName,
+                "fromState": event.fromState,
+                "toState": event.toState
+            ]
+            if let entityId = event.entityId { eventData["entityId"] = entityId }
+            if let entity = event.entity { eventData["entity"] = entity }
+
+            context.bind("event", value: eventData)
+            context.bind("event:fieldName", value: event.fieldName)
+            context.bind("event:objectName", value: event.objectName)
+            context.bind("event:fromState", value: event.fromState)
+            context.bind("event:toState", value: event.toState)
+            if let entityId = event.entityId { context.bind("event:entityId", value: entityId) }
+            if let entity = event.entity { context.bind("event:entity", value: entity) }
         }
     }
 
