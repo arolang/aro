@@ -324,13 +324,21 @@ body.menu-open {
 
 .hero {
     min-height: 100vh;
+    position: relative;
+    overflow: hidden;
+    padding: 140px var(--space-xl) 100px;
+}
+
+.hero-inner {
+    max-width: 1200px;
+    margin: 0 auto;
+    width: 100%;
     display: grid;
     grid-template-columns: 1fr 1fr;
     gap: var(--space-xl);
     align-items: center;
-    padding: 140px var(--space-xl) 100px;
     position: relative;
-    overflow: hidden;
+    z-index: 1;
 }
 
 /* Animated gradient background */
@@ -1527,9 +1535,12 @@ section {
     }
 
     .hero {
+        padding: 120px var(--space-lg) 80px;
+    }
+
+    .hero-inner {
         grid-template-columns: 1fr;
         gap: var(--space-xl);
-        padding: 120px var(--space-lg) 80px;
     }
 
     .hero-code {
