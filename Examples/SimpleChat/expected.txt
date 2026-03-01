@@ -1,6 +1,6 @@
-# Generated: Sun Jan  4 23:42:37 2026
+# Generated: Sun Mar  1 17:48:43 2026
 # Type: http
 # Command: aro run ./Examples/SimpleChat
 ---
-GET /status => {"message":""}
-POST /status => ERROR: 500 Internal Server Error
+POST /status => {"message":"Test message"}
+GET /status => {"message":"Test message"}

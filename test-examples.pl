@@ -1013,6 +1013,9 @@ sub generate_test_payload {
         'createUser' => '{"name":"Test User","email":"test@example.com"}',
         'updateUser' => '{"name":"Updated User","email":"updated@example.com"}',
 
+        # Chat / status
+        'postStatus' => '{"message":"Test message"}',
+
         # Multi-service
         'broadcastMessage' => '{"message":"test"}',
 
