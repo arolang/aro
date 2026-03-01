@@ -857,10 +857,14 @@ sub run_console_example_internal {
     if ($keep_alive) {
         # Wait for the application to start, then send SIGINT for graceful shutdown
         sleep 1;
+        # Drain stdout/stderr pipe before sending SIGINT
+        eval { pump $handle while $handle->pumpable && length($out) == 0 };
         say "  Sending SIGINT for graceful shutdown" if $options{verbose};
         eval { $handle->signal('INT'); };
         # Allow time for Application-End handler to execute and flush output
         sleep 1;
+        # Drain remaining output after SIGINT
+        eval { pump $handle while $handle->pumpable };
     }
 
     eval {
@@ -938,10 +942,14 @@ sub run_debug_example {
     if ($keep_alive) {
         # Wait for the application to start, then send SIGINT for graceful shutdown
         sleep 1;
+        # Drain stdout/stderr pipe before sending SIGINT
+        eval { pump $handle while $handle->pumpable && length($out) == 0 };
         say "  Sending SIGINT for graceful shutdown" if $options{verbose};
         eval { $handle->signal('INT'); };
         # Allow time for Application-End handler to execute and flush output
         sleep 1;
+        # Drain remaining output after SIGINT
+        eval { pump $handle while $handle->pumpable };
     }
 
     eval {

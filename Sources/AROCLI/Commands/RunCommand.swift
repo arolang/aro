@@ -100,7 +100,12 @@ struct RunCommand: AsyncParsableCommand {
         // Force unbuffered stdout so every print() reaches the pipe immediately.
         // Without this, Swift fully-buffers stdout when piped (e.g. during tests),
         // causing observer/event output to be lost until the process exits.
+        // On Linux, stdout is a mutable C global (not a macro) which Swift 6's concurrency
+        // checker flags as unsafe. FileHandle.standardOutput.write() bypasses C stdio
+        // buffering on Linux anyway, so we only need setvbuf on Darwin.
+        #if canImport(Darwin)
         setvbuf(stdout, nil, _IONBF, 0)
+        #endif
 
         var mutableSelf = self
         mutableSelf.extractRunCommandFlags()
