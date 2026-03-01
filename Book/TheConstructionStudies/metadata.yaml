@@ -12,7 +12,6 @@ geometry:
   - margin=1in
   - paperwidth=7in
   - paperheight=10in
-fontfamily: tgpagella
 monofont: "TeX Gyre Cursor"
 mainfont: "TeX Gyre Pagella"
 linestretch: 1.15
