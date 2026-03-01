@@ -1160,7 +1160,8 @@ jobs:
       - name: Install dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y pandoc weasyprint fonts-ibm-plex
+          sudo apt-get install -y pandoc weasyprint fonts-ibm-plex \
+            texlive-xetex texlive-latex-extra texlive-fonts-recommended texlive-fonts-extra
 
       - name: Build Language Guide PDF
         run: |
