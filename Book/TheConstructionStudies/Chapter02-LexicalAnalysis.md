@@ -53,7 +53,7 @@ The scanner processes characters one at a time, advancing through the source str
   <rect x="160" y="90" width="100" height="40" rx="5" class="state"/>
   <text x="210" y="115" class="label" text-anchor="middle">Peek Next</text>
   <path d="M 105 190 Q 125 150 160 110" class="arrow"/>
-  <text x="115" y="165" class="condition">: < > - + = !</text>
+  <text x="115" y="165" class="condition">&lt; &gt; - + = !</text>
 
   <rect x="300" y="90" width="100" height="40" rx="5" class="state terminal"/>
   <text x="350" y="115" class="label" text-anchor="middle">Operator</text>
