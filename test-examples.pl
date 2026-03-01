@@ -287,8 +287,8 @@ sub read_test_hint {
         $hints{timeout} = undef;
     }
 
-    if (defined $hints{type} && $hints{type} !~ /^(console|http|socket|file|multi-context|multiservice)$/) {
-        warn "Warning: Invalid type '$hints{type}' (must be console|http|socket|file|multi-context|multiservice), ignoring\n";
+    if (defined $hints{type} && $hints{type} !~ /^(console|http|socket|socket-client|file|multi-context|multiservice)$/) {
+        warn "Warning: Invalid type '$hints{type}' (must be console|http|socket|socket-client|file|multi-context|multiservice), ignoring\n";
         $hints{type} = undef;
     }
 
@@ -487,6 +487,8 @@ sub run_test_in_workdir {
         ($output, $error) = run_http_example_internal($run_dir, $timeout, $mode, $binary_name, $hints);
     } elsif ($type eq 'socket') {
         ($output, $error) = run_socket_example_internal($run_dir, $timeout, $mode, $binary_name);
+    } elsif ($type eq 'socket-client') {
+        ($output, $error) = run_socket_client_example_internal($run_dir, $timeout, $mode, $binary_name);
     } elsif ($type eq 'file') {
         ($output, $error) = run_file_watcher_example_internal($run_dir, $timeout, $mode, $binary_name);
     } elsif ($type eq 'multiservice') {
@@ -1211,10 +1213,13 @@ sub run_http_example_internal {
         }
 
         # Sort operations by execution order
+        # Method priority: write operations (POST/PUT/PATCH) before reads (GET) on same path
+        my %method_priority = (POST => 1, PUT => 2, PATCH => 3, GET => 4, DELETE => 5);
         @operations = sort {
             ($a->{order} // 50) <=> ($b->{order} // 50) ||
             (!$a->{has_params}) <=> (!$b->{has_params}) ||
-            $a->{path} cmp $b->{path}
+            $a->{path} cmp $b->{path} ||
+            ($method_priority{uc($a->{method})} // 3) <=> ($method_priority{uc($b->{method})} // 3)
         } @operations;
 
         for my $op (@operations) {
@@ -1506,6 +1511,145 @@ sub run_socket_example_internal {
     @cleanup_handlers = grep { $_ != $cleanup } @cleanup_handlers;
 
     return (join("\n", @output), undef);
+}
+
+# Run socket CLIENT example (internal)
+# Starts a Perl echo server, then runs the ARO app as the client.
+# The ARO app Connects, Sends a message, and logs the echoed response.
+sub run_socket_client_example_internal {
+    my ($example_name, $timeout, $mode, $binary_name) = @_;
+    $mode //= 'interpreter';
+
+    unless ($has_net_emptyport) {
+        return (undef, "SKIP: Missing required module (Net::EmptyPort)");
+    }
+
+    my $dir;
+    if ($example_name eq '.' || File::Spec->file_name_is_absolute($example_name)) {
+        $dir = $example_name;
+    } else {
+        $dir = File::Spec->catdir($examples_dir, $example_name);
+    }
+
+    my $port = 9001;  # Echo server port for socket-client test
+
+    # Start a Perl echo server in a child process
+    require POSIX;
+    my $server_pid = fork();
+    if (!defined $server_pid) {
+        return (undef, "Failed to fork echo server: $!");
+    }
+    if ($server_pid == 0) {
+        # Child: run a simple single-connection echo server
+        use IO::Socket::INET;
+        my $server = IO::Socket::INET->new(
+            LocalPort => $port,
+            Type      => SOCK_STREAM,
+            Reuse     => 1,
+            Listen    => 5,
+        ) or POSIX::_exit(1);
+        if (my $client = $server->accept()) {
+            $client->autoflush(1);
+            my $buf = '';
+            while (1) {
+                my $n = sysread($client, $buf, 4096);
+                last unless defined $n && $n > 0;
+                syswrite($client, $buf, $n);  # Echo back
+            }
+            close $client;
+        }
+        close $server;
+        POSIX::_exit(0);
+    }
+
+    my $server_cleanup = sub {
+        return unless $server_pid;
+        eval {
+            kill('TERM', $server_pid);
+            select(undef, undef, undef, 0.2);
+            kill('KILL', $server_pid);
+            waitpid($server_pid, 0);
+        };
+        $server_pid = 0;
+    };
+
+    # Wait for echo server to be ready
+    my $server_ready = 0;
+    for (1..20) {
+        if (Net::EmptyPort::wait_port($port, 0.5)) {
+            $server_ready = 1;
+            last;
+        }
+    }
+    unless ($server_ready) {
+        $server_cleanup->();
+        return (undef, "ERROR: Echo server did not start on port $port");
+    }
+
+    say "  Echo server ready on port $port" if $options{verbose};
+
+    # Determine ARO command
+    my @cmd;
+    if ($mode eq 'compiled') {
+        my $basename = defined $binary_name ? $binary_name : basename($dir);
+        my $binary_path = get_binary_path($dir, $basename);
+        unless (is_executable($binary_path)) {
+            $server_cleanup->();
+            return (undef, "ERROR: Compiled binary not found at $binary_path");
+        }
+        @cmd = ($binary_path);
+    } else {
+        my $aro_bin = find_aro_binary();
+        @cmd = ($aro_bin, 'run', $dir);
+    }
+
+    # Start ARO client app with IPC::Run to capture its output
+    my ($in, $out, $err) = ('', '', '');
+    my $handle = eval {
+        start(\@cmd, \$in, \$out, \$err, timeout($timeout));
+    };
+    if ($@) {
+        $server_cleanup->();
+        return (undef, "Failed to start socket client app: $@");
+    }
+
+    my $aro_cleanup = sub {
+        eval {
+            return unless $handle->pumpable();
+            $handle->signal('TERM');
+            my $waited = 0;
+            while ($waited < 3.0 && $handle->pumpable()) {
+                select(undef, undef, undef, 0.1);
+                $waited += 0.1;
+                eval { $handle->pump_nb(); };
+            }
+            eval { $handle->kill_kill() } if $handle->pumpable();
+        };
+    };
+    push @cleanup_handlers, $aro_cleanup;
+    push @cleanup_handlers, $server_cleanup;
+
+    # Wait for ARO app to log a received response
+    my $deadline = time() + $timeout;
+    while (time() < $deadline) {
+        eval { $handle->pump_nb() };
+        if ($out =~ /Received/s) {
+            # Give it a moment to flush any remaining output
+            select(undef, undef, undef, 0.3);
+            eval { $handle->pump_nb() };
+            last;
+        }
+        last unless $handle->pumpable();
+        select(undef, undef, undef, 0.1);
+    }
+
+    # Cleanup
+    $aro_cleanup->();
+    @cleanup_handlers = grep { $_ != $aro_cleanup } @cleanup_handlers;
+    $server_cleanup->();
+    @cleanup_handlers = grep { $_ != $server_cleanup } @cleanup_handlers;
+
+    return ($out, undef);
 }
 
 # Run file watcher example (public interface)
