@@ -299,7 +299,7 @@ public struct SendAction: ActionImplementation {
             destination = object.base
         }
 
-        // Try socket server service first (for socket connections)
+        // Try socket server service first (for server-side connection IDs)
         #if !os(Windows)
         if let socketServer = context.service(SocketServerService.self) {
             // Try to send to socket connection
@@ -314,7 +314,25 @@ public struct SendAction: ActionImplementation {
                 }
                 return SendResult(destination: destination, success: true)
             } catch {
-                // Connection not found - fall through to other services
+                // Connection not found in server - fall through to client
+            }
+        }
+
+        // Try socket client (for client-side connection IDs from Connect action)
+        if let socketClient: AROSocketClient = context.service(AROSocketClient.self),
+           socketClient.connectionId == destination,
+           socketClient.isConnected {
+            do {
+                if let dataValue = data as? Data {
+                    try await socketClient.send(data: dataValue)
+                } else if let stringValue = data as? String {
+                    try await socketClient.send(string: stringValue)
+                } else {
+                    try await socketClient.send(string: String(describing: data))
+                }
+                return SendResult(destination: destination, success: true)
+            } catch {
+                // Fall through to other services
             }
         }
         #endif

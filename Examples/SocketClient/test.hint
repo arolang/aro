@@ -1,4 +1,5 @@
 # Test hints for SocketClient
-# Demonstrates the Connect action syntax for TCP client connections
+# Demonstrates the Connect action for TCP client connections
+type: socket-client
 mode: both
-occurrence-check: true
+skip-on-windows: Socket client tests not supported on Windows CI

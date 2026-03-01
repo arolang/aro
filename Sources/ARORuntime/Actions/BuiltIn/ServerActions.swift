@@ -1011,8 +1011,12 @@ public struct ConnectAction: ActionImplementation {
         let connectionId = client.connectionId
         context.bind(result.base, value: connectionId)
 
-        // Register the client for later use
+        // Register the client for later use (enables Send to work with this connection)
         context.register(client)
+
+        // Register as active event source so Keepalive waits for events
+        // (instead of exiting after the idle timeout)
+        await EventBus.shared.registerEventSource()
 
         return ConnectResult(connectionId: connectionId, host: host, port: port, success: true)
         #else
