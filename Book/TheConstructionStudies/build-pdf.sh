@@ -103,6 +103,7 @@ if command -v pdflatex &> /dev/null || command -v xelatex &> /dev/null; then
     pandoc \
         --metadata-file="$METADATA_FILE" \
         --pdf-engine=xelatex \
+        -f markdown-yaml_metadata_block \
         --highlight-style=kate \
         --toc \
         --toc-depth=2 \
