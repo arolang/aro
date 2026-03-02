@@ -350,8 +350,18 @@ public final class Parser {
         if shouldParseExpression && !isObjectPattern() {
             // Parse expression (ARO-0002)
             expression = try parseExpression()
-            // Create a placeholder object noun for the expression
-            objectNoun = QualifiedNoun(base: "_expression_", specifiers: [], span: previous().span)
+
+            // Time-unit suffix for duration literals: "with 2 seconds." / "with 5 minutes." / "with 1 hour."
+            // When a time-unit identifier follows a numeric literal, consume it and set objectNoun.base
+            // to the unit string so actions can apply the correct multiplier.
+            let timeUnits: Set<String> = ["second", "seconds", "minute", "minutes", "hour", "hours"]
+            if prep == .with, case .identifier(let unit) = peek().kind, timeUnits.contains(unit) {
+                advance()  // consume the time-unit identifier
+                objectNoun = QualifiedNoun(base: unit, specifiers: [], span: previous().span)
+            } else {
+                // Create a placeholder object noun for the expression
+                objectNoun = QualifiedNoun(base: "_expression_", specifiers: [], span: previous().span)
+            }
         } else {
             // Standard syntax: [article] <object> or [article] bare-identifier
             // Skip optional article before object

@@ -1,16 +1,13 @@
-{{ "=== System Monitor ===" | bold | color: "green" }}
 
-Terminal: {{ <terminal: width> }}x{{ <terminal: height> }}
-Color Support: {{ <terminal: supports_color> }}
+╔═══════════════════════════════════════════╗
+║         S Y S T E M   M O N I T O R      ║
+╚═══════════════════════════════════════════╝
 
-{{ "CPU Usage:" | bold }}
-  {{ <cpu> }}% {{ "[" ++ "=" * (<cpu> / 5) ++ " " * (20 - <cpu> / 5) ++ "]" | color: "cyan" }}
+  CPU:     {{ <cpu> }}%
 
-{{ "Memory Usage:" | bold }}
-  {{ <memory> }}% {{ "[" ++ "=" * (<memory> / 5) ++ " " * (20 - <memory> / 5) ++ "]" | color: "yellow" }}
+  Memory:  {{ <memory: used> }} GB / {{ <memory: total> }} GB  ({{ <memory: percent> }}%)
 
-{{ "Disk Usage:" | bold }}
-  {{ <disk> }}% {{ "[" ++ "=" * (<disk> / 5) ++ " " * (20 - <disk> / 5) ++ "]" | color: "magenta" }}
+  Disk:    {{ <disk: used> }} GB / {{ <disk: total> }} GB  ({{ <disk: percent> }}%)
 
-{{ "---" }}
-{{ "Press Ctrl+C to exit" | dim }}
+  Press Ctrl+C to quit.
+
