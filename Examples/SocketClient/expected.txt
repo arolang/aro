@@ -6,3 +6,5 @@ Connecting to echo server...
 Connected!
 Sent: Hello from ARO!
 Received: Hello from ARO!
+startup
+value: Hello from ARO!

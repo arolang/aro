@@ -990,9 +990,11 @@ public struct ConnectAction: ActionImplementation {
             host = object.base
         }
 
-        // Get port from various sources (matching StartAction pattern)
-        // Priority 1: Check _with_ binding (ARO-0042: with clause)
-        if let withValue = context.resolveAny("_with_") {
+        // Get port from various sources
+        // Priority 1: Check _with_ binding (when with clause is in rangeModifiers)
+        // Priority 2: Check _expression_ binding (when with clause is secondary, e.g. Connect ... to <host> with { port: N })
+        let configValue: (any Sendable)? = context.resolveAny("_with_") ?? context.resolveAny("_expression_")
+        if let withValue = configValue {
             if let withPort = withValue as? Int {
                 port = withPort
             } else if let withConfig = withValue as? [String: any Sendable],
@@ -1002,13 +1004,13 @@ public struct ConnectAction: ActionImplementation {
                 port = 8080 // default if with clause doesn't contain port
             }
         }
-        // Priority 2: Check _literal_
+        // Priority 3: Check _literal_
         else if let portValue = context.resolveAny("_literal_") as? Int {
             port = portValue
         } else if let portStr = context.resolveAny("_literal_") as? String, let p = Int(portStr) {
             port = p
         }
-        // Priority 3: Try to find port in specifiers
+        // Priority 4: Try to find port in specifiers
         else if let portSpec = object.specifiers.dropFirst().first, let p = Int(portSpec) {
             port = p
         }

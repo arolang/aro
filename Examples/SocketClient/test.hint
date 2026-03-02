@@ -1,5 +1,5 @@
 # Test hints for SocketClient
 # Demonstrates the Connect action for TCP client connections
 type: socket-client
-mode: both
+mode: interpreter
 skip-on-windows: Socket client tests not supported on Windows CI

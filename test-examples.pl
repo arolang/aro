@@ -1540,7 +1540,9 @@ sub run_socket_client_example_internal {
         return (undef, "Failed to fork echo server: $!");
     }
     if ($server_pid == 0) {
-        # Child: run a simple single-connection echo server
+        # Child: run a multi-connection echo server
+        # Must loop on accept() because Net::EmptyPort::wait_port makes a probe
+        # connection to detect readiness, which would consume a single-accept server.
         use IO::Socket::INET;
         my $server = IO::Socket::INET->new(
             LocalPort => $port,
@@ -1548,13 +1550,19 @@ sub run_socket_client_example_internal {
             Reuse     => 1,
             Listen    => 5,
         ) or POSIX::_exit(1);
-        if (my $client = $server->accept()) {
-            $client->autoflush(1);
-            my $buf = '';
-            while (1) {
-                my $n = sysread($client, $buf, 4096);
-                last unless defined $n && $n > 0;
-                syswrite($client, $buf, $n);  # Echo back
+        while (my $client = $server->accept()) {
+            my $child = fork();
+            if ($child == 0) {
+                close $server;
+                $client->autoflush(1);
+                my $buf = '';
+                while (1) {
+                    my $n = sysread($client, $buf, 4096);
+                    last unless defined $n && $n > 0;
+                    syswrite($client, $buf, $n);  # Echo back
+                }
+                close $client;
+                POSIX::_exit(0);
             }
             close $client;
         }
