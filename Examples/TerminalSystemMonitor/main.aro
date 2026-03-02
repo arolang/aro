@@ -5,6 +5,7 @@
    ============================================================ *)
 
 (Application-Start: System Monitor) {
+    Clear the <screen> for the <terminal>.
     Log "System Monitor starting..." to the <console>.
 
     (* Schedule periodic metrics collection every 2 seconds *)
@@ -31,7 +32,7 @@
     Extract the <cpu>    from the <stats: cpu>.
     Extract the <memory> from the <stats: memory>.
     Extract the <disk>   from the <stats: disk>.
-    Transform the <screen> from the <template: monitor.screen>.
-    Render the <screen> to the <console>.
+    Transform the <display> from the <template: monitor.screen>.
+    Render the <display> to the <console>.
     Return an <OK: status> for the <render>.
 }
