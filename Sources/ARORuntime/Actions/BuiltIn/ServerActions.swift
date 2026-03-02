@@ -325,6 +325,14 @@ public struct StopAction: ActionImplementation {
         case "file-monitor", "filemonitor", "watcher":
             return await stopFileMonitor()
 
+        case "keyboard", "stdin", "input", "keys":
+            if let keyboardService = context.service(KeyboardService.self) {
+                await keyboardService.stop()
+            }
+            // Signal clean shutdown so Keepalive's waitForShutdown() returns with exit code 0
+            ShutdownCoordinator.shared.signalShutdown()
+            return ServerStopResult(serverType: "keyboard", success: true)
+
         default:
             // Generic service stop
             context.emit(ServiceStoppedEvent(serviceName: serviceType))
@@ -436,6 +444,13 @@ public struct ListenAction: ActionImplementation {
             let path = object.specifiers.first ?? "."
             context.emit(ListenStartedEvent(type: "file", target: path))
             return ListenResult(type: "file", target: path)
+
+        case "stdin", "keyboard", "input", "keys":
+            if let keyboardService = context.service(KeyboardService.self) {
+                await keyboardService.startListening()
+            }
+            context.bind(result.base, value: "keyboard")
+            return ListenResult(type: "keyboard", target: "stdin")
 
         default:
             context.emit(ListenStartedEvent(type: "generic", target: object.base))

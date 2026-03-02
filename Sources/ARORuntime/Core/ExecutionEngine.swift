@@ -138,6 +138,9 @@ public actor ExecutionEngine {
         // Wire up state transition observers (e.g., "Audit Changes: status StateObserver")
         registerStateObservers(for: program, baseContext: context)
 
+        // Wire up key press handlers (e.g., "Navigate Menu: KeyPress Handler" or "Select Item: KeyPress Handler<key:enter>")
+        registerKeyPressHandlers(for: program, baseContext: context)
+
         // Execute entry point
         let executor = FeatureSetExecutor(
             actionRegistry: actionRegistry,
@@ -1248,6 +1251,77 @@ public actor ExecutionEngine {
                     }
                 }
             }
+        }
+    }
+
+    /// Register key press handlers for feature sets with "KeyPress Handler" business activity
+    /// Supports optional key guard: "Select Item: KeyPress Handler<key:enter>"
+    private func registerKeyPressHandlers(for program: AnalyzedProgram, baseContext: RuntimeContext) {
+        let keyPressHandlers = program.featureSets.filter { analyzedFS in
+            analyzedFS.featureSet.businessActivity.contains("KeyPress Handler")
+        }
+
+        for analyzedFS in keyPressHandlers {
+            let activity = analyzedFS.featureSet.businessActivity
+
+            // Parse optional key guard: <key:enter> from activity string
+            var keyGuard: String? = nil
+            if let angleStart = activity.firstIndex(of: "<"),
+               let angleEnd = activity.firstIndex(of: ">") {
+                let guardExpr = String(activity[activity.index(after: angleStart)..<angleEnd])
+                let parts = guardExpr.split(separator: ":", maxSplits: 1).map(String.init)
+                if parts.count == 2 && parts[0].trimmingCharacters(in: .whitespaces) == "key" {
+                    keyGuard = parts[1].trimmingCharacters(in: .whitespaces)
+                }
+            }
+
+            let capturedKeyGuard = keyGuard
+            let capturedActionRegistry = actionRegistry
+            let capturedEventBus = eventBus
+            let capturedGlobalSymbols = globalSymbols
+            let capturedServices = services
+
+            eventBus.subscribe(to: KeyPressEvent.self) { event in
+                // Apply key guard filter if specified
+                if let keyFilter = capturedKeyGuard {
+                    guard event.key.lowercased() == keyFilter.lowercased() else { return }
+                }
+
+                await ExecutionEngine.executeKeyPressHandlerStatic(
+                    analyzedFS,
+                    baseContext: baseContext,
+                    event: event,
+                    actionRegistry: capturedActionRegistry,
+                    eventBus: capturedEventBus,
+                    globalSymbols: capturedGlobalSymbols,
+                    services: capturedServices
+                )
+            }
+        }
+    }
+
+    /// Execute a KeyPress Handler feature set — binds event key as "event"
+    private static func executeKeyPressHandlerStatic(
+        _ analyzedFS: AnalyzedFeatureSet,
+        baseContext: RuntimeContext,
+        event: KeyPressEvent,
+        actionRegistry: ActionRegistry,
+        eventBus: EventBus,
+        globalSymbols: GlobalSymbolStorage,
+        services: ServiceRegistry
+    ) async {
+        await executeHandler(
+            analyzedFS,
+            baseContext: baseContext,
+            event: event,
+            actionRegistry: actionRegistry,
+            eventBus: eventBus,
+            globalSymbols: globalSymbols,
+            services: services
+        ) { context, event in
+            let eventData: [String: any Sendable] = ["key": event.key]
+            context.bind("event", value: eventData)
+            context.bind("event:key", value: event.key)
         }
     }
 

@@ -63,7 +63,7 @@ public final class TemplateExecutor: @unchecked Sendable {
                 "is_tty": capabilities.isTTY,
                 "encoding": capabilities.encoding
             ]
-            templateContext.bind("terminal", value: terminalObject)
+            templateContext.bind("terminal", value: terminalObject, allowRebind: true)
         }
 
         // Process segments
@@ -192,28 +192,48 @@ public final class TemplateExecutor: @unchecked Sendable {
                 result = result.lowercased()
 
             // Terminal color filters (ARO-0052)
+            // Only apply styling in TTY mode to avoid ANSI codes in piped/test output
             case "color":
                 if let colorName = filter.arg {
                     let caps = await getTerminalCapabilities(from: context)
-                    result = ANSIRenderer.color(colorName, capabilities: caps) + result + ANSIRenderer.reset()
+                    if caps.isTTY {
+                        result = ANSIRenderer.color(colorName, capabilities: caps) + result + ANSIRenderer.reset()
+                    }
                 }
             case "bg":
                 if let colorName = filter.arg {
                     let caps = await getTerminalCapabilities(from: context)
-                    result = ANSIRenderer.backgroundColor(colorName, capabilities: caps) + result + ANSIRenderer.reset()
+                    if caps.isTTY {
+                        result = ANSIRenderer.backgroundColor(colorName, capabilities: caps) + result + ANSIRenderer.reset()
+                    }
                 }
 
             // Terminal style filters (ARO-0052)
             case "bold":
-                result = ANSIRenderer.bold() + result + ANSIRenderer.reset()
+                let boldCaps = await getTerminalCapabilities(from: context)
+                if boldCaps.isTTY {
+                    result = ANSIRenderer.bold() + result + ANSIRenderer.reset()
+                }
             case "dim":
-                result = ANSIRenderer.dim() + result + ANSIRenderer.reset()
+                let dimCaps = await getTerminalCapabilities(from: context)
+                if dimCaps.isTTY {
+                    result = ANSIRenderer.dim() + result + ANSIRenderer.reset()
+                }
             case "italic":
-                result = ANSIRenderer.italic() + result + ANSIRenderer.reset()
+                let italicCaps = await getTerminalCapabilities(from: context)
+                if italicCaps.isTTY {
+                    result = ANSIRenderer.italic() + result + ANSIRenderer.reset()
+                }
             case "underline":
-                result = ANSIRenderer.underline() + result + ANSIRenderer.reset()
+                let underlineCaps = await getTerminalCapabilities(from: context)
+                if underlineCaps.isTTY {
+                    result = ANSIRenderer.underline() + result + ANSIRenderer.reset()
+                }
             case "strikethrough":
-                result = ANSIRenderer.strikethrough() + result + ANSIRenderer.reset()
+                let strikethroughCaps = await getTerminalCapabilities(from: context)
+                if strikethroughCaps.isTTY {
+                    result = ANSIRenderer.strikethrough() + result + ANSIRenderer.reset()
+                }
 
             default:
                 break

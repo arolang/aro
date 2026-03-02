@@ -1,8 +1,8 @@
-{{ "Tasks:" | bold }}
+  Task List
+  ─────────────────────────────────────
 
-{{for task in tasks}}
-  [{{ <task: id> }}] {{ <task: name> | bold }} - {{ <task: status> | color: "yellow" }}
-{{end}}
+{{ for each <task> in <tasks> { }}  [{{ <task: id> }}] {{ <task: name> }}  ({{ <task: status> }})
+{{ } }}
+  ─────────────────────────────────────
+  Press Backspace to return to menu
 
-{{ "---" }}
-Total: {{ <tasks> | length }} tasks

@@ -135,6 +135,7 @@ public actor ActionRegistry {
         addAction(PromptAction.self)
         addAction(SelectAction.self)
         addAction(ClearAction.self)
+        addAction(RenderAction.self)
 
         return actions
     }

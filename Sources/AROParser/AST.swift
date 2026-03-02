@@ -751,7 +751,7 @@ public enum ActionSemanticRole: String, Sendable, CaseIterable {
         let lower = verb.lowercased()
 
         let requestVerbs = ["extract", "parse", "retrieve", "fetch", "read", "receive", "get", "load"]
-        let responseVerbs = ["return", "throw", "send", "emit", "respond", "output", "write", "store", "save", "persist", "log", "print", "debug", "notify", "alert", "signal", "broadcast"]
+        let responseVerbs = ["return", "throw", "send", "emit", "respond", "output", "write", "store", "save", "persist", "log", "print", "debug", "notify", "alert", "signal", "broadcast", "render"]
         let exportVerbs = ["publish", "export", "expose", "share"]
         let serverVerbs = ["start", "stop", "listen", "await", "connect", "close", "disconnect", "terminate", "wait", "keepalive", "block", "make", "touch", "mkdir", "createdirectory", "copy", "move", "rename"]
 

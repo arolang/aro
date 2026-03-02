@@ -158,6 +158,13 @@ public final class Application: @unchecked Sendable {
             await runtime.register(service: terminalService)
         }
         #endif
+
+        // Register keyboard service for key press events (ARO-0052)
+        // The service internally checks isatty(STDIN_FILENO) before starting
+        #if !os(Windows)
+        let keyboardService = KeyboardService(eventBus: .shared)
+        await runtime.register(service: keyboardService)
+        #endif
     }
 
     /// Initialize from source files

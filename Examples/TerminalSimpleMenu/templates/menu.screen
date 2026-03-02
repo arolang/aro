@@ -1,0 +1,9 @@
+
+  MAIN MENU
+  ─────────────────────────────────────
+
+{{ for each <item> in <menu-items> { }}  {{ <item: marker> | bold | color: "cyan" }} {{ <item: label> }}
+{{ } }}
+  ─────────────────────────────────────
+  ↑↓ navigate · Enter select · q quit
+

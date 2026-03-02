@@ -1,0 +1,94 @@
+(* ============================================================
+   handlers.aro - Keyboard event handlers for SimpleMenu
+   All handlers update the selection-repository state.
+   The selection-repository Observer renders the correct view.
+   ============================================================ *)
+
+(* Navigate: up/down only work when in menu view *)
+(Navigate Menu: KeyPress Handler) {
+    Extract the <pressed-key> from the <event: key>.
+    Create the <menu-key> with "menu".
+    Retrieve the <state> from the <selection-repository> where <key> is <menu-key>.
+    Extract the <view> from the <state: view>.
+
+    match <view> {
+        case "menu" {
+            Extract the <cur> from the <state: selection>.
+
+            match <pressed-key> {
+                case "up" {
+                    match <cur> {
+                        case 0 { Create the <new-val> with 2. }
+                        case 1 { Create the <new-val> with 0. }
+                        case 2 { Create the <new-val> with 1. }
+                    }
+                    Update the <state: selection> with <new-val>.
+                    Store the <state> into the <selection-repository>.
+                }
+                case "down" {
+                    match <cur> {
+                        case 0 { Create the <new-val> with 1. }
+                        case 1 { Create the <new-val> with 2. }
+                        case 2 { Create the <new-val> with 0. }
+                    }
+                    Update the <state: selection> with <new-val>.
+                    Store the <state> into the <selection-repository>.
+                }
+            }
+        }
+    }
+
+    Return an <OK: status> for the <navigation>.
+}
+
+(* Select: Enter activates the highlighted item, but only from menu view *)
+(Select Item: KeyPress Handler<key:enter>) {
+    Create the <menu-key> with "menu".
+    Retrieve the <state> from the <selection-repository> where <key> is <menu-key>.
+    Extract the <view> from the <state: view>.
+
+    match <view> {
+        case "menu" {
+            Extract the <cur> from the <state: selection>.
+
+            match <cur> {
+                case 0 {
+                    Create the <new-view> with "tasks".
+                    Update the <state: view> with <new-view>.
+                    Store the <state> into the <selection-repository>.
+                }
+                case 1 {
+                    Create the <new-view> with "logs".
+                    Update the <state: view> with <new-view>.
+                    Store the <state> into the <selection-repository>.
+                }
+                case 2 {
+                    (* Exit: render farewell into the menu section, then stop *)
+                    Transform the <menu> from the <template: goodbye.screen>.
+                    Render the <menu> to the <console>.
+                    Stop the <keyboard> with <application>.
+                }
+            }
+        }
+    }
+
+    Return an <OK: status> for the <selection>.
+}
+
+(* Back: Backspace returns from any sub-view to the menu *)
+(Go Back: KeyPress Handler<key:backspace>) {
+    Create the <menu-key> with "menu".
+    Retrieve the <state> from the <selection-repository> where <key> is <menu-key>.
+    Create the <back-view> with "menu".
+    Update the <state: view> with <back-view>.
+    Store the <state> into the <selection-repository>.
+    Return an <OK: status> for the <back>.
+}
+
+(* Quit: q exits from anywhere *)
+(Quit App: KeyPress Handler<key:q>) {
+    Transform the <menu> from the <template: goodbye.screen>.
+    Render the <menu> to the <console>.
+    Stop the <keyboard> with <application>.
+    Return an <OK: status> for the <quit>.
+}

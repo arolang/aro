@@ -160,22 +160,20 @@ public struct ClearAction: ActionImplementation {
     ) async throws -> any Sendable {
         try validatePreposition(object.preposition)
 
-        // Get terminal service from context
-        guard let terminalService = context.service(TerminalService.self) else {
-            throw ActionError.runtimeError("Terminal service not available")
-        }
-
-        // Determine what to clear based on result base
         let target = result.base.lowercased()
 
-        switch target {
-        case "screen":
-            await terminalService.clear()
-        case "line":
-            await terminalService.clearLine()
-        default:
-            throw ActionError.invalidInput("Clear action supports 'screen' or 'line'", received: result.base)
+        // Get terminal service from context (only available in TTY mode)
+        if let terminalService = context.service(TerminalService.self) {
+            switch target {
+            case "screen":
+                await terminalService.clear()
+            case "line":
+                await terminalService.clearLine()
+            default:
+                throw ActionError.invalidInput("Clear action supports 'screen' or 'line'", received: result.base)
+            }
         }
+        // Non-TTY: no-op (can't clear a pipe/redirect)
 
         // Bind result to context
         context.bind(result.base, value: target)
@@ -184,3 +182,58 @@ public struct ClearAction: ActionImplementation {
         return ClearResult(targetCleared: target)
     }
 }
+
+// MARK: - Render Action
+
+/// Reactively renders content to the terminal for interactive UIs
+///
+/// The Render action is designed for interactive terminal applications.
+/// In TTY mode: clears the screen and renders fresh content (reactive update).
+/// In non-TTY mode (pipes, tests): outputs content like Log.
+///
+/// ## Examples
+/// ```aro
+/// Render the <menu> to the <console>.
+/// Render the <task-list> to the <console>.
+/// ```
+public struct RenderAction: ActionImplementation {
+    public static let role: ActionRole = .response
+    public static let verbs: Set<String> = ["render"]
+    public static let validPrepositions: Set<Preposition> = [.to]
+
+    public init() {}
+
+    public func execute(
+        result: ResultDescriptor,
+        object: ObjectDescriptor,
+        context: ExecutionContext
+    ) async throws -> any Sendable {
+        // Get the content to render
+        let content: String
+        if let value = context.resolveAny(result.base) as? String {
+            content = value
+        } else if let value = context.resolveAny(result.base) {
+            content = String(describing: value)
+        } else {
+            content = ""
+        }
+
+        // Section-based compositor: each named render owns its rows on screen.
+        // Static sections stay put; reactive sections update only their own rows.
+        if let terminalService = context.service(TerminalService.self) {
+            await terminalService.renderSection(name: result.base, content: content)
+        } else {
+            // Non-TTY fallback (tests, pipes): output like Log
+            print(content)
+        }
+
+        return RenderResult(content: content)
+    }
+}
+
+/// Result of a render operation
+public struct RenderResult: Sendable, Equatable {
+    public let content: String
+}
+
+

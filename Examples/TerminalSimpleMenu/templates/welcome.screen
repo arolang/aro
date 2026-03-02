@@ -1,6 +1,4 @@
-{{ "===" ++ " " ++ <title> ++ " " ++ "===" | bold | color: "cyan" }}
+=== {{ <title> }} ===
 
-Terminal: {{ <terminal: columns> }}x{{ <terminal: rows> }}
-{{ "Color support: " }}{{ <terminal: supports_color> | color: "green" }}
+Navigate the menu below using the arrow keys.
 
-{{ "---" }}

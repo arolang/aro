@@ -367,7 +367,486 @@ Log "You selected: <choices>" to the <console>.
 **Current implementation**: Numbered menu with user input.
 **Future**: Arrow key navigation, visual cursor, space to toggle.
 
-## 41.6 Complete Example: Live Task Dashboard
+## 41.6 The Render Action and Section Compositor
+
+`Log` appends text to the terminal and moves on. `Render` is different: it manages **named screen sections** and keeps track of where every region lives so re-renders update only what changed—without ever clearing the screen.
+
+```aro
+Render the <menu> to the <console>.
+Render the <status-bar> to the <console>.
+```
+
+The variable name (`menu`, `status-bar`, …) is the **section ID**. The compositor uses it to decide whether this is a new section or an update to an existing one.
+
+### 41.6.1 How the Section Compositor Works
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│                  Section Compositor Model                    │
+├─────────────────────────────────────────────────────────────┤
+│                                                              │
+│  First render of <name>   →  Appended below previous rows   │
+│  Re-render of same <name> →  Only changed lines rewritten   │
+│  Height grows / shrinks   →  Sections below shift and       │
+│                               re-render at new positions     │
+│                                                              │
+└─────────────────────────────────────────────────────────────┘
+```
+
+Given a typical interactive application:
+
+```aro
+Render <loading> to the <console>.   (* row  0..2  – static *)
+Render <splash>  to the <console>.   (* row  3..6  – static *)
+Render <welcome> to the <console>.   (* row  7..9  – static *)
+Render <menu>    to the <console>.   (* row 10..21 – reactive *)
+```
+
+When the menu is re-rendered after the user presses a key, **only the marker character** on the selected row changes. The compositor moves the cursor to that single line, overwrites it, and leaves every other row—including splash and welcome—completely untouched. No flicker, no full-screen clear.
+
+When a reactive section changes height (e.g. switching from a 12-line menu to a 9-line task list):
+
+1. Orphaned rows of the old content are erased
+2. The new content is written starting from the section's original top row
+3. Every section below is shifted by the height delta and re-rendered at its new position
+
+### 41.6.2 Starting Fresh with Clear
+
+The compositor state is reset whenever the screen is explicitly cleared. Use `Clear` exactly once at the very beginning of the application—never inside event handlers or observers:
+
+```aro
+(Application-Start: My App) {
+    (* Clear once: compositor starts from row 0 *)
+    Clear the <screen> for the <terminal>.
+
+    (* Every Render after this appends or updates in-place *)
+    Transform the <splash> from the <template: splash.screen>.
+    Render the <splash> to the <console>.
+    ...
+}
+```
+
+In non-TTY mode (pipes, tests) `Clear` is a silent no-op, so the application always produces clean output when run non-interactively.
+
+### 41.6.3 The Content-Area Pattern
+
+Many applications have a fixed chrome (header, status bar) and a single **content area** that swaps between different views. The key is to always render all views into the **same variable name**—the compositor treats the variable name as the section identity.
+
+```aro
+(* Both menu and task-list render into <content>, replacing each other *)
+Transform the <content> from the <template: menu.screen>.
+Render the <content> to the <console>.
+
+...
+
+Transform the <content> from the <template: tasks.screen>.
+Render the <content> to the <console>.   (* replaces menu in-place *)
+```
+
+The header section above `<content>` is never touched.
+
+---
+
+## 41.7 Keyboard-Driven Interactive UIs
+
+ARO provides first-class support for keyboard-driven applications—menus, editors, dashboards with hotkeys—through the `Listen` action and `KeyPress Handler` feature sets.
+
+### 41.7.1 Starting Keyboard Input
+
+```aro
+Listen the <keyboard> to the <stdin>.
+```
+
+This puts the terminal in **raw mode**: each key press is delivered immediately, without waiting for Enter. Arrow keys, function keys, and control sequences are all parsed and made available as named keys.
+
+In non-TTY mode (pipes, tests, CI) `Listen` is a silent no-op so applications work identically in both environments.
+
+### 41.7.2 KeyPress Handlers
+
+A `KeyPress Handler` feature set fires whenever a key is pressed. There are two forms:
+
+**Universal handler** — fires on every key press:
+```aro
+(Navigate Menu: KeyPress Handler) {
+    Extract the <key> from the <event: key>.
+    ...
+}
+```
+
+**Filtered handler** — fires only when a specific key is pressed:
+```aro
+(Select Item: KeyPress Handler<key:enter>) { ... }
+(Go Back:     KeyPress Handler<key:backspace>) { ... }
+(Quit App:    KeyPress Handler<key:q>) { ... }
+```
+
+The filter is declared in angle brackets as `<key:name>` inside the business activity. Named keys include:
+
+| Key name | Physical key |
+|---|---|
+| `enter` | Return / Enter |
+| `backspace` | Backspace / Delete |
+| `up` | ↑ arrow |
+| `down` | ↓ arrow |
+| `left` | ← arrow |
+| `right` | → arrow |
+| `q`, `a`, … | Any character |
+
+### 41.7.3 Reading the Pressed Key
+
+Inside a universal handler, extract the key name from the event:
+
+```aro
+(Navigate Menu: KeyPress Handler) {
+    Extract the <pressed-key> from the <event: key>.
+
+    match <pressed-key> {
+        case "up"   { ... }
+        case "down" { ... }
+    }
+
+    Return an <OK: status> for the <navigation>.
+}
+```
+
+### 41.7.4 View State Pattern
+
+The cleanest architecture for interactive menus separates **state** from **rendering**:
+
+- **Handlers** only update the repository state (`selection`, `view`, …)
+- **One observer** watches the repository and renders the correct template
+
+This means handlers contain no template logic at all:
+
+```aro
+(Select Item: KeyPress Handler<key:enter>) {
+    Retrieve the <state> from the <app-repository> where <key> is "app".
+    Extract the <cur> from the <state: selection>.
+
+    match <cur> {
+        case 0 {
+            Create the <new-view> with "tasks".
+            Update the <state: view> with <new-view>.
+            Store the <state> into the <app-repository>.
+        }
+        case 1 {
+            Create the <new-view> with "logs".
+            Update the <state: view> with <new-view>.
+            Store the <state> into the <app-repository>.
+        }
+    }
+
+    Return an <OK: status> for the <selection>.
+}
+```
+
+The observer handles the rendering:
+
+```aro
+(Refresh View: app-repository Observer) {
+    Extract the <state> from the <event: newValue>.
+    Extract the <view> from the <state: view>.
+
+    match <view> {
+        case "menu"  { (* build menu items *) Transform the <content> from the <template: menu.screen>.  }
+        case "tasks" { (* build task list *) Transform the <content> from the <template: tasks.screen>. }
+        case "logs"  { Transform the <content> from the <template: logs.screen>. }
+    }
+
+    Render the <content> to the <console>.
+    Return an <OK: status> for the <refresh>.
+}
+```
+
+Because all views render into the same `<content>` section, the compositor replaces the previous view in-place. If the new template is taller or shorter, sections below shift automatically.
+
+### 41.7.5 Stopping the Application Cleanly
+
+```aro
+Stop the <keyboard> with <application>.
+```
+
+This does two things in one statement:
+
+1. Restores the terminal from raw mode to normal mode
+2. Signals a clean shutdown—`Keepalive` unblocks and Application-Start returns normally
+
+The process exits with **code 0**. Without this explicit signal, `Keepalive` would remain in long-running service mode and the process would hang.
+
+A typical exit sequence:
+
+```aro
+(Quit App: KeyPress Handler<key:q>) {
+    Transform the <content> from the <template: goodbye.screen>.
+    Render the <content> to the <console>.
+    Stop the <keyboard> with <application>.
+    Return an <OK: status> for the <quit>.
+}
+```
+
+---
+
+## 41.8 Complete Example: Interactive Menu
+
+`Examples/TerminalSimpleMenu` demonstrates all the concepts above in a working application: keyboard navigation, in-place reactive rendering, the content-area pattern, view state management, and clean exit.
+
+**Directory Structure**:
+```
+TerminalSimpleMenu/
+├── main.aro
+├── handlers.aro
+├── observer.aro
+└── templates/
+    ├── starting.screen
+    ├── splash.screen
+    ├── welcome.screen
+    ├── menu.screen
+    ├── tasks.screen
+    ├── logs.screen
+    └── goodbye.screen
+```
+
+### Screen Layout
+
+The application composes four sections on one screen. Three are static chrome; one is the interactive content area:
+
+```
+┌─────────────────────────────────────────┐  ← section "loading"  (static)
+│ Starting Simple Menu App...             │
+│ Please wait...                          │
+├─────────────────────────────────────────┤  ← section "splash"   (static)
+│ ╔═══════════════════════════════════╗   │
+│ ║       Welcome to ARO             ║   │
+│ ╚═══════════════════════════════════╝   │
+├─────────────────────────────────────────┤  ← section "welcome"  (static)
+│ === Simple Terminal Menu ===            │
+│ Navigate the menu below...             │
+├─────────────────────────────────────────┤  ← section "menu"     (reactive)
+│   MAIN MENU                            │
+│   ───────────────────────────────────  │
+│   ▶ View Tasks                         │  ← only this line changes on ↑↓
+│     View Logs                          │
+│     Exit                               │
+│   ───────────────────────────────────  │
+│   ↑↓ navigate · Enter select · q quit  │
+└─────────────────────────────────────────┘
+```
+
+When the user navigates, only the marker line is rewritten. When a menu item is selected, the entire `menu` section is replaced with the chosen view (tasks, logs, or goodbye) with automatic height adjustment.
+
+### main.aro
+
+```aro
+(Application-Start: Simple Menu) {
+    (* Clear the terminal once — compositor starts from row 0 *)
+    Clear the <screen> for the <terminal>.
+
+    (* Static chrome — rendered once, never touched again *)
+    Create the <service> with "Simple Menu App".
+    Transform the <loading> from the <template: starting.screen>.
+    Render <loading> to the <console>.
+
+    Transform the <splash> from the <template: splash.screen>.
+    Render <splash> to the <console>.
+
+    Create the <title> with "Simple Terminal Menu".
+    Transform the <welcome> from the <template: welcome.screen>.
+    Render <welcome> to the <console>.
+
+    (* Store initial state — the observer renders the menu section *)
+    Create the <init-state> with { key: "menu", selection: 0, view: "menu" }.
+    Store the <init-state> into the <selection-repository>.
+
+    (* Start keyboard input *)
+    Listen the <keyboard> to the <stdin>.
+
+    (* Block until Stop the <keyboard> is called *)
+    Keepalive the <application> for the <events>.
+
+    Return an <OK: status> for the <startup>.
+}
+```
+
+`Store` triggers the `selection-repository Observer`, which renders the initial menu into the `menu` section.
+
+### observer.aro
+
+The observer is the **single source of rendering truth**. It reads the `view` field and renders the appropriate template—always into the same `<menu>` section.
+
+```aro
+(Refresh View: selection-repository Observer) {
+    Extract the <new-state> from the <event: newValue>.
+    Extract the <selection> from the <new-state: selection>.
+    Extract the <view> from the <new-state: view>.
+
+    match <view> {
+        case "menu" {
+            match <selection> {
+                case 0 {
+                    Create the <d1> with { label: "View Tasks", marker: "▶" }.
+                    Create the <d2> with { label: "View Logs",  marker: " " }.
+                    Create the <d3> with { label: "Exit",       marker: " " }.
+                }
+                case 1 {
+                    Create the <d1> with { label: "View Tasks", marker: " " }.
+                    Create the <d2> with { label: "View Logs",  marker: "▶" }.
+                    Create the <d3> with { label: "Exit",       marker: " " }.
+                }
+                case 2 {
+                    Create the <d1> with { label: "View Tasks", marker: " " }.
+                    Create the <d2> with { label: "View Logs",  marker: " " }.
+                    Create the <d3> with { label: "Exit",       marker: "▶" }.
+                }
+            }
+            Create the <menu-items> with [<d1>, <d2>, <d3>].
+            Transform the <menu> from the <template: menu.screen>.
+            Render the <menu> to the <console>.
+        }
+        case "tasks" {
+            Create the <task1> with { id: 1, name: "Write docs",   status: "done"    }.
+            Create the <task2> with { id: 2, name: "Fix bugs",     status: "pending" }.
+            Create the <task3> with { id: 3, name: "Write tests",  status: "pending" }.
+            Create the <tasks> with [<task1>, <task2>, <task3>].
+            Transform the <menu> from the <template: tasks.screen>.
+            Render the <menu> to the <console>.
+        }
+        case "logs" {
+            Transform the <menu> from the <template: logs.screen>.
+            Render the <menu> to the <console>.
+        }
+    }
+
+    Return an <OK: status> for the <refresh>.
+}
+```
+
+All three cases end with `Render the <menu>`. The variable name `menu` is the section ID — the compositor re-renders that region in-place regardless of which template was used.
+
+### handlers.aro
+
+Handlers contain **no template or rendering code**. They only update repository state and let the observer do the rest.
+
+```aro
+(* Up/down navigation — only active in menu view *)
+(Navigate Menu: KeyPress Handler) {
+    Extract the <pressed-key> from the <event: key>.
+    Retrieve the <state> from the <selection-repository> where <key> is "menu".
+    Extract the <view> from the <state: view>.
+
+    match <view> {
+        case "menu" {
+            Extract the <cur> from the <state: selection>.
+            match <pressed-key> {
+                case "up" {
+                    match <cur> {
+                        case 0 { Create the <new-val> with 2. }
+                        case 1 { Create the <new-val> with 0. }
+                        case 2 { Create the <new-val> with 1. }
+                    }
+                    Update the <state: selection> with <new-val>.
+                    Store the <state> into the <selection-repository>.
+                }
+                case "down" {
+                    match <cur> {
+                        case 0 { Create the <new-val> with 1. }
+                        case 1 { Create the <new-val> with 2. }
+                        case 2 { Create the <new-val> with 0. }
+                    }
+                    Update the <state: selection> with <new-val>.
+                    Store the <state> into the <selection-repository>.
+                }
+            }
+        }
+    }
+    Return an <OK: status> for the <navigation>.
+}
+
+(* Enter activates the highlighted item — only in menu view *)
+(Select Item: KeyPress Handler<key:enter>) {
+    Retrieve the <state> from the <selection-repository> where <key> is "menu".
+    Extract the <view> from the <state: view>.
+
+    match <view> {
+        case "menu" {
+            Extract the <cur> from the <state: selection>.
+            match <cur> {
+                case 0 {
+                    Create the <new-view> with "tasks".
+                    Update the <state: view> with <new-view>.
+                    Store the <state> into the <selection-repository>.
+                }
+                case 1 {
+                    Create the <new-view> with "logs".
+                    Update the <state: view> with <new-view>.
+                    Store the <state> into the <selection-repository>.
+                }
+                case 2 {
+                    Transform the <menu> from the <template: goodbye.screen>.
+                    Render the <menu> to the <console>.
+                    Stop the <keyboard> with <application>.
+                }
+            }
+        }
+    }
+    Return an <OK: status> for the <selection>.
+}
+
+(* Backspace returns from any sub-view to the menu *)
+(Go Back: KeyPress Handler<key:backspace>) {
+    Retrieve the <state> from the <selection-repository> where <key> is "menu".
+    Create the <back-view> with "menu".
+    Update the <state: view> with <back-view>.
+    Store the <state> into the <selection-repository>.
+    Return an <OK: status> for the <back>.
+}
+
+(* q exits from anywhere *)
+(Quit App: KeyPress Handler<key:q>) {
+    Transform the <menu> from the <template: goodbye.screen>.
+    Render the <menu> to the <console>.
+    Stop the <keyboard> with <application>.
+    Return an <OK: status> for the <quit>.
+}
+```
+
+### Interaction Flow
+
+```
+User presses ↓
+  → Navigate Menu fires
+  → Retrieves state {selection:0, view:"menu"}
+  → view == "menu": increments selection to 1
+  → Stores {selection:1, view:"menu"}
+  → Observer fires (Refresh View)
+  → view == "menu", selection == 1: builds items with d2 marked
+  → Render the <menu>  →  compositor diffs section "menu"
+  → Only the two changed marker lines are rewritten on screen
+
+User presses Enter (selection == 1)
+  → Select Item fires
+  → view == "menu", cur == 1: sets view to "logs"
+  → Stores {selection:1, view:"logs"}
+  → Observer fires
+  → view == "logs": renders logs.screen into <menu>
+  → Compositor replaces section "menu" with new content
+  → If height differs, sections below shift automatically
+
+User presses Backspace
+  → Go Back fires
+  → Sets view to "menu"
+  → Observer fires, re-renders navigation menu
+
+User presses q
+  → Quit App fires
+  → Renders goodbye.screen into <menu>
+  → Stop the <keyboard> with <application>
+  → Terminal restored to normal mode
+  → Keepalive unblocks, process exits with code 0
+```
+
+---
+
+## 41.9 Complete Example: Live Task Dashboard
 
 Let's build a complete task management dashboard that updates reactively.
 
@@ -517,9 +996,9 @@ aro run TaskDashboard
    - Dashboard re-renders automatically with fresh data
 5. User sees live updates without any polling!
 
-## 41.7 Best Practices
+## 41.10 Best Practices
 
-### 41.7.1 Responsive Design
+### 41.10.1 Responsive Design
 
 Adapt layouts to terminal size:
 
@@ -536,7 +1015,7 @@ Adapt layouts to terminal size:
 {{end}}
 ```
 
-### 41.7.2 Graceful Degradation
+### 41.10.2 Graceful Degradation
 
 Check capabilities before using advanced features:
 
@@ -556,7 +1035,7 @@ Check capabilities before using advanced features:
 {{end}}
 ```
 
-### 41.7.3 Efficient Re-Rendering
+### 41.10.3 Efficient Re-Rendering
 
 Only clear and re-render when necessary:
 
@@ -579,7 +1058,7 @@ Only clear and re-render when necessary:
 }
 ```
 
-### 41.7.4 Testing Terminal UIs
+### 41.10.4 Testing Terminal UIs
 
 Test with different terminal configurations:
 
@@ -597,7 +1076,7 @@ TERM=xterm aro run MyApp
 TERM=xterm-256color aro run MyApp
 ```
 
-## 41.8 Platform Support
+## 41.11 Platform Support
 
 ARO's Terminal UI system works across platforms with automatic adaptation:
 
@@ -618,7 +1097,7 @@ ARO's Terminal UI system works across platforms with automatic adaptation:
 - No TTY → Safe defaults, interactive actions may fail
 - ASCII-only → Unicode symbols replaced with ASCII equivalents
 
-## 41.9 Summary
+## 41.12 Summary
 
 ARO's Terminal UI system brings together several powerful features:
 

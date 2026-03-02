@@ -1,7 +1,0 @@
-{{ screen.clear }}
-
-{{ box width=60 border="double" title="Status" align=center }}
-  {{ spinner style="dots" }} {{ color yellow }}{{ bold }}Starting {{ service }}...{{ reset }}
-
-  {{ color dim }}Please wait...{{ reset }}
-{{ endbox }}
