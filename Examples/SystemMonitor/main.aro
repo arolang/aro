@@ -6,7 +6,7 @@
 
 (Application-Start: System Monitor) {
     Log "System Monitor API starting..." to the <console>.
-    Start the <http-server> for the <contract>.
+    Start the <http-server> with <contract>.
     Log "Server running at http://localhost:8080" to the <console>.
     Log "Endpoints:" to the <console>.
     Log "  GET /exec?cmd=<command>  - Execute any command" to the <console>.

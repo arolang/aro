@@ -97,6 +97,7 @@ const docsSubPages = [
     'sockets.html',
     'websockets.html',
     'templates.html',
+    'terminal-ui.html',
     'repositories.html',
     'services.html',
     'file-operations.html',

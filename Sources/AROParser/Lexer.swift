@@ -12,72 +12,103 @@ public final class Lexer: @unchecked Sendable {
 
     private let source: String
     private var currentIndex: String.Index
+    private var nextIndex: String.Index  // ARO-0057: Cached next index for peekNext() optimization
     private var location: SourceLocation
     private var tokens: [Token] = []
     private var lastTokenKind: TokenKind?
     
-    /// Keywords mapped to their token kinds
-    private static let keywords: [String: TokenKind] = [
-        // Core
-        "publish": .publish,
-        "require": .require,
-        "import": .import,
-        "as": .as,
+    /// Reserved word classification for unified lookup
+    private enum ReservedWord {
+        case keyword(TokenKind)
+        case article(Article)
+        case preposition(Preposition)
+    }
 
-        // Control Flow (ARO-0004)
-        "if": .if,
-        "then": .then,
-        "else": .else,
-        "when": .when,
-        "match": .match,
-        "case": .case,
-        "otherwise": .otherwise,
-        "where": .where,
+    /// All reserved words (keywords, articles, prepositions) in a single lookup table
+    /// This optimizes identifier scanning from 3 lookups to 1 lookup (ARO-0055)
+    private static let reservedWords: [String: ReservedWord] = [
+        // Keywords - Core
+        "publish": .keyword(.publish),
+        "require": .keyword(.require),
+        "import": .keyword(.import),
+        "as": .keyword(.as),
 
-        // Iteration (ARO-0005)
-        "for": .for,
-        "each": .each,
-        "in": .in,
-        "at": .atKeyword,
-        "parallel": .parallel,
-        "concurrency": .concurrency,
+        // Keywords - Control Flow
+        "if": .keyword(.if),
+        "then": .keyword(.then),
+        "else": .keyword(.else),
+        "when": .keyword(.when),
+        "match": .keyword(.match),
+        "case": .keyword(.case),
+        "otherwise": .keyword(.otherwise),
+        "where": .keyword(.where),
 
-        // Types (ARO-0006)
-        "type": .type,
-        "enum": .enum,
-        "protocol": .protocol,
+        // Keywords - Iteration
+        // "for" and "at" are prepositions (also used as iteration keywords - parser accepts both)
+        "for": .preposition(.for),
+        "each": .keyword(.each),
+        "in": .keyword(.in),
+        "at": .preposition(.at),
+        "parallel": .keyword(.parallel),
+        "concurrency": .keyword(.concurrency),
 
-        // Error Handling (ARO-0008) - No try/catch, errors are auto-generated
-        "error": .error,
-        "guard": .guard,
-        "defer": .defer,
-        "assert": .assert,
-        "precondition": .precondition,
+        // Keywords - Types
+        "type": .keyword(.type),
+        "enum": .keyword(.enum),
+        "protocol": .keyword(.protocol),
 
-        // Logical Operators
-        "and": .and,
-        "or": .or,
-        "not": .not,
-        "is": .is,
-        "exists": .exists,
-        "defined": .defined,
-        "null": .nil,
-        "nil": .nil,
-        "none": .nil,
-        "empty": .empty,
-        "contains": .contains,
-        "matches": .matches,
+        // Keywords - Error Handling
+        "error": .keyword(.error),
+        "guard": .keyword(.guard),
+        "defer": .keyword(.defer),
+        "assert": .keyword(.assert),
+        "precondition": .keyword(.precondition),
+
+        // Keywords - Logical Operators
+        "and": .keyword(.and),
+        "or": .keyword(.or),
+        "not": .keyword(.not),
+        "is": .keyword(.is),
+        "exists": .keyword(.exists),
+        "defined": .keyword(.defined),
+        "null": .keyword(.nil),
+        "nil": .keyword(.nil),
+        "none": .keyword(.nil),
+        "empty": .keyword(.empty),
+        "contains": .keyword(.contains),
+        "matches": .keyword(.matches),
 
         // Boolean literals
-        "true": .true,
-        "false": .false
+        "true": .keyword(.true),
+        "false": .keyword(.false),
+
+        // Articles
+        "a": .article(.a),
+        "an": .article(.an),
+        "the": .article(.the),
+
+        // Prepositions
+        "from": .preposition(.from),
+        "against": .preposition(.against),
+        "to": .preposition(.to),
+        "into": .preposition(.into),
+        "via": .preposition(.via),
+        "with": .preposition(.with),
+        "on": .preposition(.on),
+        "by": .preposition(.by)
     ]
-    
+
     // MARK: - Initialization
     
     public init(source: String) {
         self.source = source
         self.currentIndex = source.startIndex
+        // ARO-0057: Pre-compute next index for peekNext() optimization
+        if source.isEmpty {
+            self.nextIndex = source.endIndex
+        } else {
+            self.nextIndex = source.index(after: source.startIndex)
+        }
         self.location = SourceLocation()
     }
     
@@ -151,6 +182,15 @@ public final class Lexer: @unchecked Sendable {
         case "%": addToken(.percent, start: startLocation)
         case ".": addToken(.dot, start: startLocation)
 
+        case "|":
+            // ARO-0067: Pipeline operator |>
+            if peek() == ">" {
+                _ = advance()
+                addToken(.pipe, start: startLocation)
+            } else {
+                throw LexerError.unexpectedCharacter("|", at: startLocation)
+            }
+
         case ":":
             if peek() == ":" {
                 _ = advance()
@@ -212,8 +252,13 @@ public final class Lexer: @unchecked Sendable {
                 throw LexerError.unexpectedCharacter(char, at: startLocation)
             }
 
-        case "\"", "'":
+        case "\"":
+            // Double quotes: regular string with full escape processing
             try scanString(quote: char, start: startLocation)
+
+        case "'":
+            // Single quotes: raw string (no escape processing except \')
+            try scanRawString(quote: char, start: startLocation)
 
         default:
             if char.isLetter || char == "_" {
@@ -295,6 +340,34 @@ public final class Lexer: @unchecked Sendable {
         } else {
             addToken(.stringLiteral(value), start: start)
         }
+    }
+
+    /// Scans a raw string literal (ARO-0060)
+    /// Raw strings use r-prefix and don't process escape sequences except \"
+    private func scanRawString(quote: Character, start: SourceLocation) throws {
+        var value = ""
+
+        while !isAtEnd && peek() != quote {
+            let char = peek()
+            if char == "\n" {
+                throw LexerError.unterminatedString(at: start)
+            }
+            // Only allow \" or \' escape in raw strings
+            if char == "\\" && peekNext() == quote {
+                _ = advance()  // skip backslash
+                value.append(advance())  // add quote
+            } else {
+                value.append(advance())
+            }
+        }
+
+        if isAtEnd {
+            throw LexerError.unterminatedString(at: start)
+        }
+
+        _ = advance()  // Closing quote
+
+        addToken(.stringLiteral(value), start: start)
     }
 
     /// Scans a unicode escape sequence: \u{XXXX}
@@ -433,9 +506,12 @@ public final class Lexer: @unchecked Sendable {
             numStr.append(previous())
         }
 
-        // Scan integer part
-        while !isAtEnd && peek().isNumber {
-            numStr.append(advance())
+        // Scan integer part (ARO-0056: support underscores)
+        while !isAtEnd && (peek().isNumber || peek() == "_") {
+            let char = advance()
+            if char != "_" {
+                numStr.append(char)
+            }
         }
 
         // Check for decimal point
@@ -443,8 +519,12 @@ public final class Lexer: @unchecked Sendable {
         if !isAtEnd && peek() == "." && peekNext().isNumber {
             isFloat = true
             numStr.append(advance()) // .
-            while !isAtEnd && peek().isNumber {
-                numStr.append(advance())
+            // Scan fractional part (ARO-0056: support underscores)
+            while !isAtEnd && (peek().isNumber || peek() == "_") {
+                let char = advance()
+                if char != "_" {
+                    numStr.append(char)
+                }
             }
         }
 
@@ -455,8 +535,12 @@ public final class Lexer: @unchecked Sendable {
             if !isAtEnd && (peek() == "+" || peek() == "-") {
                 numStr.append(advance())
             }
-            while !isAtEnd && peek().isNumber {
-                numStr.append(advance())
+            // Scan exponent (ARO-0056: support underscores)
+            while !isAtEnd && (peek().isNumber || peek() == "_") {
+                let char = advance()
+                if char != "_" {
+                    numStr.append(char)
+                }
             }
         }
 
@@ -577,27 +661,21 @@ public final class Lexer: @unchecked Sendable {
         
         let lexeme = String(source[source.index(source.startIndex, offsetBy: start.offset)..<currentIndex])
         let lowerLexeme = lexeme.lowercased()
-        
-        // Check for keywords first
-        if let keyword = Self.keywords[lowerLexeme] {
-            addToken(keyword, lexeme: lexeme, start: start)
-            return
+
+        // Unified reserved word lookup (ARO-0055: single lookup instead of 3)
+        if let reserved = Self.reservedWords[lowerLexeme] {
+            switch reserved {
+            case .keyword(let kind):
+                addToken(kind, lexeme: lexeme, start: start)
+            case .article(let article):
+                addToken(.article(article), lexeme: lexeme, start: start)
+            case .preposition(let preposition):
+                addToken(.preposition(preposition), lexeme: lexeme, start: start)
+            }
+        } else {
+            // Regular identifier
+            addToken(.identifier(lexeme), lexeme: lexeme, start: start)
         }
-        
-        // Check for articles
-        if let article = Article(rawValue: lowerLexeme) {
-            addToken(.article(article), lexeme: lexeme, start: start)
-            return
-        }
-        
-        // Check for prepositions
-        if let preposition = Preposition(rawValue: lowerLexeme) {
-            addToken(.preposition(preposition), lexeme: lexeme, start: start)
-            return
-        }
-        
-        // Regular identifier
-        addToken(.identifier(lexeme), lexeme: lexeme, start: start)
     }
     
     // MARK: - Whitespace and Comments
@@ -650,8 +728,8 @@ public final class Lexer: @unchecked Sendable {
         return source[currentIndex]
     }
     
+    // ARO-0057: Use cached nextIndex for O(1) lookahead
     private func peekNext() -> Character {
-        let nextIndex = source.index(after: currentIndex)
         guard nextIndex < source.endIndex else { return "\0" }
         return source[nextIndex]
     }
@@ -659,7 +737,11 @@ public final class Lexer: @unchecked Sendable {
     @discardableResult
     private func advance() -> Character {
         let char = source[currentIndex]
-        currentIndex = source.index(after: currentIndex)
+        // ARO-0057: Use cached nextIndex and update it for next call
+        currentIndex = nextIndex
+        if nextIndex < source.endIndex {
+            nextIndex = source.index(after: nextIndex)
+        }
         location = location.advancing(past: char)
         return char
     }

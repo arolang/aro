@@ -10,7 +10,7 @@
     Log "Hello World API starting..." to the <console>.
 
     (* Start the HTTP server - port is read from openapi.yaml (contract is source of truth) *)
-    Start the <http-server> for the <contract>.
+    Start the <http-server> with <contract>.
 
     (* Log that we're ready to receive requests *)
     Log "Server ready - waiting for requests..." to the <console>.
@@ -25,6 +25,6 @@
 (* Optional: Handle graceful shutdown *)
 (Application-End: Success) {
     Log "Shutting down Hello World API..." to the <console>.
-    Stop the <http-server> for the <application>.
+    Stop the <http-server> with <application>.
     Return an <OK: status> for the <shutdown>.
 }

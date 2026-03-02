@@ -73,40 +73,31 @@ This creates a clear contract: orders have a status field that must be one of th
 <svg width="180" height="200" viewBox="0 0 180 200" xmlns="http://www.w3.org/2000/svg">
   <!-- Title -->
   <text x="90" y="15" text-anchor="middle" font-family="sans-serif" font-size="10" font-weight="bold" fill="#374151">Accept Action Flow</text>
-
   <!-- Current State -->
   <rect x="55" y="30" width="70" height="28" rx="4" fill="#dbeafe" stroke="#3b82f6" stroke-width="1.5"/>
   <text x="90" y="48" text-anchor="middle" font-family="sans-serif" font-size="9" fill="#1e40af">Current State</text>
-
   <!-- Arrow down -->
   <line x1="90" y1="58" x2="90" y2="72" stroke="#6b7280" stroke-width="1.5"/>
   <polygon points="90,72 86,66 94,66" fill="#6b7280"/>
-
   <!-- Check box -->
   <rect x="40" y="75" width="100" height="28" rx="4" fill="#fef3c7" stroke="#f59e0b" stroke-width="1.5"/>
   <text x="90" y="93" text-anchor="middle" font-family="sans-serif" font-size="9" fill="#92400e">Validate: from?</text>
-
   <!-- Branch -->
   <line x1="90" y1="103" x2="90" y2="115" stroke="#6b7280" stroke-width="1"/>
-
   <!-- Yes branch -->
   <line x1="90" y1="115" x2="50" y2="130" stroke="#22c55e" stroke-width="1.5"/>
   <polygon points="50,130 56,124 52,132" fill="#22c55e"/>
   <text x="55" y="125" font-family="sans-serif" font-size="7" fill="#22c55e">match</text>
-
   <!-- No branch -->
   <line x1="90" y1="115" x2="130" y2="130" stroke="#ef4444" stroke-width="1.5"/>
   <polygon points="130,130 124,124 128,132" fill="#ef4444"/>
   <text x="120" y="125" font-family="sans-serif" font-size="7" fill="#ef4444">no match</text>
-
   <!-- Success: Update -->
   <rect x="15" y="135" width="70" height="28" rx="4" fill="#dcfce7" stroke="#22c55e" stroke-width="1.5"/>
   <text x="50" y="153" text-anchor="middle" font-family="sans-serif" font-size="9" fill="#166534">Update to: to</text>
-
   <!-- Failure: Error -->
   <rect x="95" y="135" width="70" height="28" rx="4" fill="#fee2e2" stroke="#ef4444" stroke-width="1.5"/>
   <text x="130" y="153" text-anchor="middle" font-family="sans-serif" font-size="9" fill="#991b1b">Throw Error</text>
-
   <!-- Continue -->
   <line x1="50" y1="163" x2="50" y2="180" stroke="#22c55e" stroke-width="1.5"/>
   <polygon points="50,180 46,174 54,174" fill="#22c55e"/>
@@ -162,53 +153,41 @@ Consider what this means for debugging. When a user reports "I can't place my or
 <svg width="140" height="280" viewBox="0 0 140 280" xmlns="http://www.w3.org/2000/svg">
   <!-- Title -->
   <text x="70" y="15" text-anchor="middle" font-family="sans-serif" font-size="10" font-weight="bold" fill="#374151">Order Lifecycle</text>
-
   <!-- Draft -->
   <rect x="35" y="28" width="70" height="24" rx="12" fill="#e0e7ff" stroke="#6366f1" stroke-width="1.5"/>
   <text x="70" y="44" text-anchor="middle" font-family="sans-serif" font-size="9" fill="#4338ca">draft</text>
-
   <!-- Arrow to placed -->
   <line x1="70" y1="52" x2="70" y2="68" stroke="#22c55e" stroke-width="1.5"/>
   <polygon points="70,68 66,62 74,62" fill="#22c55e"/>
-
   <!-- Placed -->
   <rect x="35" y="72" width="70" height="24" rx="12" fill="#dbeafe" stroke="#3b82f6" stroke-width="1.5"/>
   <text x="70" y="88" text-anchor="middle" font-family="sans-serif" font-size="9" fill="#1e40af">placed</text>
-
   <!-- Arrow to paid -->
   <line x1="70" y1="96" x2="70" y2="112" stroke="#22c55e" stroke-width="1.5"/>
   <polygon points="70,112 66,106 74,106" fill="#22c55e"/>
-
   <!-- Paid -->
   <rect x="35" y="116" width="70" height="24" rx="12" fill="#dcfce7" stroke="#22c55e" stroke-width="1.5"/>
   <text x="70" y="132" text-anchor="middle" font-family="sans-serif" font-size="9" fill="#166534">paid</text>
-
   <!-- Arrow to shipped -->
   <line x1="70" y1="140" x2="70" y2="156" stroke="#22c55e" stroke-width="1.5"/>
   <polygon points="70,156 66,150 74,150" fill="#22c55e"/>
-
   <!-- Shipped -->
   <rect x="35" y="160" width="70" height="24" rx="12" fill="#fef3c7" stroke="#f59e0b" stroke-width="1.5"/>
   <text x="70" y="176" text-anchor="middle" font-family="sans-serif" font-size="9" fill="#92400e">shipped</text>
-
   <!-- Arrow to delivered -->
   <line x1="70" y1="184" x2="70" y2="200" stroke="#22c55e" stroke-width="1.5"/>
   <polygon points="70,200 66,194 74,194" fill="#22c55e"/>
-
   <!-- Delivered -->
   <rect x="35" y="204" width="70" height="24" rx="12" fill="#d1fae5" stroke="#10b981" stroke-width="2"/>
   <text x="70" y="220" text-anchor="middle" font-family="sans-serif" font-size="9" font-weight="bold" fill="#065f46">delivered</text>
-
   <!-- Cancel branch from draft -->
   <line x1="35" y1="40" x2="15" y2="40" stroke="#ef4444" stroke-width="1" stroke-dasharray="3,2"/>
   <line x1="15" y1="40" x2="15" y2="248" stroke="#ef4444" stroke-width="1" stroke-dasharray="3,2"/>
   <line x1="15" y1="248" x2="35" y2="248" stroke="#ef4444" stroke-width="1" stroke-dasharray="3,2"/>
   <polygon points="35,248 30,245 30,251" fill="#ef4444"/>
-
   <!-- Cancelled -->
   <rect x="35" y="236" width="70" height="24" rx="12" fill="#fee2e2" stroke="#ef4444" stroke-width="1.5"/>
   <text x="70" y="252" text-anchor="middle" font-family="sans-serif" font-size="9" fill="#991b1b">cancelled</text>
-
   <!-- Cancel label -->
   <text x="8" y="145" font-family="sans-serif" font-size="7" fill="#ef4444" transform="rotate(-90, 8, 145)">cancel</text>
 </svg>

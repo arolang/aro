@@ -212,7 +212,7 @@ private func parsePrecedence(_ minPrecedence: Precedence) throws -> any Expressi
   <text x="40" y="70" class="title">Step 1: parsePrecedence(.none)</text>
   <text x="40" y="90" class="label">parsePrefix() → &lt;a&gt;</text>
   <text x="40" y="105" class="label">infixPrecedence(+) = .term (5)</text>
-  <text x="40" y="115" class="label">5 > 0, continue</text>
+  <text x="40" y="115" class="label">5 &gt; 0, continue</text>
 
   <!-- Step 2 -->
   <rect x="250" y="50" width="200" height="70" rx="5" class="box"/>
@@ -226,7 +226,7 @@ private func parsePrecedence(_ minPrecedence: Precedence) throws -> any Expressi
   <text x="480" y="70" class="title">Step 3: parsePrecedence(.term)</text>
   <text x="480" y="90" class="label">parsePrefix() → &lt;b&gt;</text>
   <text x="480" y="105" class="label">infixPrecedence(*) = .factor (6)</text>
-  <text x="480" y="115" class="label">6 > 5, continue</text>
+  <text x="480" y="115" class="label">6 &gt; 5, continue</text>
 
   <!-- Step 4 -->
   <rect x="470" y="140" width="200" height="70" rx="5" class="box"/>

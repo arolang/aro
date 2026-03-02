@@ -25,12 +25,27 @@ public actor ExecutionEngine {
     /// Global symbol registry for published variables
     private let globalSymbols: GlobalSymbolStorage
 
+    /// Public accessor for global symbols (needed for HTTP handlers)
+    public var sharedGlobalSymbols: GlobalSymbolStorage {
+        get async {
+            return globalSymbols
+        }
+    }
+
     /// Service registry for dependency injection
     private let services: ServiceRegistry
 
     /// URLs currently being processed (for deduplication of CrawlPage events)
     /// This prevents multiple parallel handlers from processing the same URL
     private var processingUrls: Set<String> = []
+
+    /// Track if the application entered wait state (Keepalive action)
+    private var _enteredWaitState: Bool = false
+
+    /// Check if the application entered wait state (Keepalive action)
+    public var enteredWaitState: Bool {
+        get { _enteredWaitState }
+    }
 
     // MARK: - Initialization
 
@@ -117,8 +132,14 @@ public actor ExecutionEngine {
         // Wire up repository observers (e.g., "user-repository Observer")
         registerRepositoryObservers(for: program, baseContext: context)
 
+        // Wire up watch handlers (e.g., "Dashboard Watch: TasksUpdated Handler" or "Dashboard Watch: task-repository Observer")
+        registerWatchHandlers(for: program, baseContext: context)
+
         // Wire up state transition observers (e.g., "Audit Changes: status StateObserver")
         registerStateObservers(for: program, baseContext: context)
+
+        // Wire up key press handlers (e.g., "Navigate Menu: KeyPress Handler" or "Select Item: KeyPress Handler<key:enter>")
+        registerKeyPressHandlers(for: program, baseContext: context)
 
         // Execute entry point
         let executor = FeatureSetExecutor(
@@ -130,11 +151,14 @@ public actor ExecutionEngine {
         do {
             let response = try await executor.execute(entryFeatureSet, context: context)
 
+            // Check if application entered wait state (for response printing suppression)
+            _enteredWaitState = context.isWaiting
+
             // CRITICAL: Wait for all in-flight event handlers to complete
             // This ensures events emitted during Application-Start finish executing
             let completed = await eventBus.awaitPendingEvents(timeout: AROEventHandlerDefaultTimeout)
             if !completed {
-                let pending = eventBus.getPendingHandlerCount()
+                let pending = await eventBus.getPendingHandlerCount()
                 print("[WARNING] \(pending) event handler(s) did not complete within \(AROEventHandlerDefaultTimeout)s timeout")
             }
 
@@ -161,25 +185,28 @@ public actor ExecutionEngine {
         for analyzedFS in socketHandlers {
             let featureSetName = analyzedFS.featureSet.name
             let lowercaseName = featureSetName.lowercased()
-            // Determine which event type this handler should respond to
-            if lowercaseName.contains("data received") || lowercaseName.contains("data") {
-                // Subscribe to DataReceivedEvent
-                eventBus.subscribe(to: DataReceivedEvent.self) { [weak self] event in
+            // Determine which event type this handler should respond to.
+            // Check "disconnect" before "connect" since "disconnect" contains "connect".
+            if lowercaseName.contains("disconnect") {
+                // Subscribe to ClientDisconnectedEvent
+                // Matches: "Handle Client Disconnected", "Handle Socket Disconnect", etc.
+                eventBus.subscribe(to: ClientDisconnectedEvent.self) { [weak self] event in
                     guard let self = self else { return }
                     await self.executeSocketHandler(
                         analyzedFS,
                         program: program,
                         baseContext: baseContext,
                         eventData: [
-                            "packet": SocketPacket(
+                            "event": SocketDisconnectInfo(
                                 connectionId: event.connectionId,
-                                data: event.data
+                                reason: event.reason
                             )
                         ]
                     )
                 }
-            } else if lowercaseName.contains("connected") {
+            } else if lowercaseName.contains("connect") {
                 // Subscribe to ClientConnectedEvent
+                // Matches: "Handle Client Connected", "Handle Socket Connect", etc.
                 eventBus.subscribe(to: ClientConnectedEvent.self) { [weak self] event in
                     guard let self = self else { return }
                     await self.executeSocketHandler(
@@ -194,18 +221,19 @@ public actor ExecutionEngine {
                         ]
                     )
                 }
-            } else if lowercaseName.contains("disconnected") {
-                // Subscribe to ClientDisconnectedEvent
-                eventBus.subscribe(to: ClientDisconnectedEvent.self) { [weak self] event in
+            } else if lowercaseName.contains("data") || lowercaseName.contains("message") || lowercaseName.contains("received") {
+                // Subscribe to DataReceivedEvent
+                // Matches: "Handle Data Received", "Handle Socket Message", etc.
+                eventBus.subscribe(to: DataReceivedEvent.self) { [weak self] event in
                     guard let self = self else { return }
                     await self.executeSocketHandler(
                         analyzedFS,
                         program: program,
                         baseContext: baseContext,
                         eventData: [
-                            "event": SocketDisconnectInfo(
+                            "packet": SocketPacket(
                                 connectionId: event.connectionId,
-                                reason: event.reason
+                                data: event.data
                             )
                         ]
                     )
@@ -463,17 +491,18 @@ public actor ExecutionEngine {
         }
     }
 
-    /// Execute a domain event handler feature set (static version to avoid actor deadlock)
+    /// Generic event handler executor (static version to avoid actor deadlock) - ARO-0054
     /// This is called from event subscriptions and must NOT require actor isolation
     /// to prevent deadlock when the actor is blocked waiting for handlers.
-    private static func executeDomainEventHandlerStatic(
+    private static func executeHandler<E: RuntimeEvent>(
         _ analyzedFS: AnalyzedFeatureSet,
         baseContext: RuntimeContext,
-        event: DomainEvent,
+        event: E,
         actionRegistry: ActionRegistry,
         eventBus: EventBus,
         globalSymbols: GlobalSymbolStorage,
-        services: ServiceRegistry
+        services: ServiceRegistry,
+        bindEventData: @Sendable (RuntimeContext, E) -> Void
     ) async {
         // Create child context for this event handler with its business activity
         let handlerContext = RuntimeContext(
@@ -483,14 +512,8 @@ public actor ExecutionEngine {
             parent: baseContext
         )
 
-        // Bind event payload to context as "event" with nested access
-        // e.g., <Extract> the <user> from the <event: user>
-        handlerContext.bind("event", value: event.payload)
-
-        // Also bind payload keys directly for convenience
-        for (key, value) in event.payload {
-            handlerContext.bind("event:\(key)", value: value)
-        }
+        // Bind event-specific data using the provided closure
+        bindEventData(handlerContext, event)
 
         // Copy services from base context
         await services.registerAll(in: handlerContext)
@@ -503,22 +526,45 @@ public actor ExecutionEngine {
         )
 
         do {
-            if ProcessInfo.processInfo.environment["ARO_DEBUG"] != nil {
-                FileHandle.standardError.write(Data("[ExecutionEngine] About to execute handler: \(analyzedFS.featureSet.name)\n".utf8))
-            }
+            AROLogger.debug("About to execute handler: \(analyzedFS.featureSet.name)")
             _ = try await executor.execute(analyzedFS, context: handlerContext)
-            if ProcessInfo.processInfo.environment["ARO_DEBUG"] != nil {
-                FileHandle.standardError.write(Data("[ExecutionEngine] Handler executed successfully: \(analyzedFS.featureSet.name)\n".utf8))
-            }
+            AROLogger.debug("Handler executed successfully: \(analyzedFS.featureSet.name)")
         } catch {
-            if ProcessInfo.processInfo.environment["ARO_DEBUG"] != nil {
-                FileHandle.standardError.write(Data("[ExecutionEngine] Handler error: \(error)\n".utf8))
-            }
+            AROLogger.error("Handler error: \(error)")
             eventBus.publish(ErrorOccurredEvent(
                 error: String(describing: error),
                 context: analyzedFS.featureSet.name,
                 recoverable: true
             ))
+        }
+    }
+
+    /// Execute a domain event handler feature set (static version to avoid actor deadlock)
+    private static func executeDomainEventHandlerStatic(
+        _ analyzedFS: AnalyzedFeatureSet,
+        baseContext: RuntimeContext,
+        event: DomainEvent,
+        actionRegistry: ActionRegistry,
+        eventBus: EventBus,
+        globalSymbols: GlobalSymbolStorage,
+        services: ServiceRegistry
+    ) async {
+        await executeHandler(
+            analyzedFS,
+            baseContext: baseContext,
+            event: event,
+            actionRegistry: actionRegistry,
+            eventBus: eventBus,
+            globalSymbols: globalSymbols,
+            services: services
+        ) { context, event in
+            // Bind event payload to context as "event" with nested access
+            context.bind("event", value: event.payload)
+
+            // Also bind payload keys directly for convenience
+            for (key, value) in event.payload {
+                context.bind("event:\(key)", value: value)
+            }
         }
     }
 
@@ -532,59 +578,41 @@ public actor ExecutionEngine {
         globalSymbols: GlobalSymbolStorage,
         services: ServiceRegistry
     ) async {
-        // Create child context for this observer with its own business activity
-        let observerContext = RuntimeContext(
-            featureSetName: analyzedFS.featureSet.name,
-            businessActivity: analyzedFS.featureSet.businessActivity,
-            eventBus: eventBus,
-            parent: baseContext
-        )
-
-        // Build event payload for the observer
-        var eventPayload: [String: any Sendable] = [
-            "repositoryName": event.repositoryName,
-            "changeType": event.changeType.rawValue,
-            "timestamp": event.timestamp
-        ]
-
-        if let entityId = event.entityId {
-            eventPayload["entityId"] = entityId
-        }
-
-        if let newValue = event.newValue {
-            eventPayload["newValue"] = newValue
-        }
-
-        if let oldValue = event.oldValue {
-            eventPayload["oldValue"] = oldValue
-        }
-
-        // Bind event payload to context as "event" with nested access
-        observerContext.bind("event", value: eventPayload)
-
-        // Also bind event keys directly for convenience
-        for (key, value) in eventPayload {
-            observerContext.bind("event:\(key)", value: value)
-        }
-
-        // Copy services from base context
-        await services.registerAll(in: observerContext)
-
-        // Execute the observer
-        let executor = FeatureSetExecutor(
+        await executeHandler(
+            analyzedFS,
+            baseContext: baseContext,
+            event: event,
             actionRegistry: actionRegistry,
             eventBus: eventBus,
-            globalSymbols: globalSymbols
-        )
+            globalSymbols: globalSymbols,
+            services: services
+        ) { context, event in
+            // Build event payload for the observer
+            var eventPayload: [String: any Sendable] = [
+                "repositoryName": event.repositoryName,
+                "changeType": event.changeType.rawValue,
+                "timestamp": event.timestamp
+            ]
 
-        do {
-            _ = try await executor.execute(analyzedFS, context: observerContext)
-        } catch {
-            eventBus.publish(ErrorOccurredEvent(
-                error: String(describing: error),
-                context: analyzedFS.featureSet.name,
-                recoverable: true
-            ))
+            if let entityId = event.entityId {
+                eventPayload["entityId"] = entityId
+            }
+
+            if let newValue = event.newValue {
+                eventPayload["newValue"] = newValue
+            }
+
+            if let oldValue = event.oldValue {
+                eventPayload["oldValue"] = oldValue
+            }
+
+            // Bind event payload to context as "event" with nested access
+            context.bind("event", value: eventPayload)
+
+            // Also bind event keys directly for convenience
+            for (key, value) in eventPayload {
+                context.bind("event:\(key)", value: value)
+            }
         }
     }
 
@@ -695,12 +723,54 @@ public actor ExecutionEngine {
 
         // Bind event properties to context
         // e.g., <Extract> the <message> from the <event: message>
-        handlerContext.bind("event", value: [
+        // Include the target value in the event dict so handlers can use:
+        //   Extract the <user> from the <event: user>.
+        // This mirrors how domain event handlers access payload via Extract.
+        var eventDict: [String: any Sendable] = [
             "message": event.message,
             "target": event.target
-        ] as [String: any Sendable])
+        ]
+        if let targetValue = event.targetValue {
+            eventDict[event.target] = targetValue
+            if event.target != "user" {
+                eventDict["user"] = targetValue
+            }
+        }
+        handlerContext.bind("event", value: eventDict as [String: any Sendable])
         handlerContext.bind("event:message", value: event.message)
         handlerContext.bind("event:target", value: event.target)
+
+        // Also bind colon-keyed variants for backward compatibility:
+        //   Extract the <user> from the <event: user>.  (via event["user"] in dict above)
+        //   context.resolveAny("event:user")            (via explicit colon-key below)
+        if let targetValue = event.targetValue {
+            handlerContext.bind("event:\(event.target)", value: targetValue)
+            if event.target != "user" {
+                handlerContext.bind("event:user", value: targetValue)
+            }
+        }
+
+        // Evaluate feature-set-level when/where condition if present.
+        // Bind the target object's fields directly so `where <age> >= 16` works
+        // without requiring a fully qualified `<event: user: age>` expression.
+        if let condition = analyzedFS.featureSet.whenCondition {
+            if let targetValue = event.targetValue as? [String: any Sendable] {
+                for (key, value) in targetValue {
+                    handlerContext.bind(key, value: value)
+                }
+            }
+            let evaluator = ExpressionEvaluator()
+            do {
+                let result = try await evaluator.evaluate(condition, context: handlerContext)
+                let passes: Bool
+                if let b = result as? Bool { passes = b }
+                else if let i = result as? Int { passes = i != 0 }
+                else { passes = false }
+                guard passes else { return }
+            } catch {
+                return // Skip handler silently if condition evaluation fails
+            }
+        }
 
         // Copy services from base context
         await services.registerAll(in: handlerContext)
@@ -922,69 +992,69 @@ public actor ExecutionEngine {
         }
     }
 
-    /// Register state transition observers for feature sets with "StateObserver" business activity
-    /// Supports optional transition filter: "status StateObserver<draft_to_placed>"
-    /// For example: "Audit Changes: status StateObserver", "Notify Placed: status StateObserver<draft_to_placed>"
-    private func registerStateObservers(for program: AnalyzedProgram, baseContext: RuntimeContext) {
-        // Find all feature sets with "StateObserver" business activity
-        let stateObservers = program.featureSets.filter { analyzedFS in
-            analyzedFS.featureSet.businessActivity.contains("StateObserver")
+    /// Register watch handlers for feature sets with " Watch:" business activity pattern (ARO-0052)
+    /// Supports two patterns:
+    /// - Event-based: "{Name} Watch: {EventType} Handler" - triggered by domain events
+    /// - Repository-based: "{Name} Watch: {repository} Observer" - triggered by repository changes
+    /// Examples: "Dashboard Watch: TasksUpdated Handler", "Dashboard Watch: task-repository Observer"
+    private func registerWatchHandlers(for program: AnalyzedProgram, baseContext: RuntimeContext) {
+        // Find all feature sets with " Watch:" in business activity
+        let watchHandlers = program.featureSets.filter { analyzedFS in
+            analyzedFS.featureSet.businessActivity.contains(" Watch:")
         }
 
-        for analyzedFS in stateObservers {
+        for analyzedFS in watchHandlers {
             let activity = analyzedFS.featureSet.businessActivity
 
-            // Parse: "status StateObserver" or "status StateObserver<draft_to_placed>"
-            var fieldName = ""
-            var transitionFilter: String? = nil
+            // Extract pattern after " Watch:"
+            guard let watchRange = activity.range(of: " Watch:") else { continue }
+            let pattern = String(activity[watchRange.upperBound...]).trimmingCharacters(in: .whitespaces)
 
-            if let angleStart = activity.firstIndex(of: "<"),
-               let angleEnd = activity.firstIndex(of: ">") {
-                // Has transition filter: "status StateObserver<draft_to_placed>"
-                transitionFilter = String(activity[activity.index(after: angleStart)..<angleEnd])
-                let beforeAngle = String(activity[..<angleStart])
-                fieldName = beforeAngle
-                    .replacingOccurrences(of: " StateObserver", with: "")
-                    .replacingOccurrences(of: "StateObserver", with: "")
+            // Determine if Handler or Observer pattern
+            if pattern.hasSuffix(" Handler") {
+                // Event-based watch: "{Name} Watch: {EventType} Handler"
+                let eventType = pattern.replacingOccurrences(of: " Handler", with: "")
                     .trimmingCharacters(in: .whitespaces)
-                    .lowercased()
-            } else {
-                // No filter: "status StateObserver"
-                fieldName = activity
-                    .replacingOccurrences(of: " StateObserver", with: "")
-                    .replacingOccurrences(of: "StateObserver", with: "")
-                    .trimmingCharacters(in: .whitespaces)
-                    .lowercased()
-            }
 
-            // Capture as constants for Sendable closure
-            let capturedFieldName = fieldName
-            let capturedTransitionFilter = transitionFilter
-            // CRITICAL: Capture values to avoid actor reentrancy deadlock
-            let capturedActionRegistry = actionRegistry
-            let capturedEventBus = eventBus
-            let capturedGlobalSymbols = globalSymbols
-            let capturedServices = services
+                // CRITICAL: Capture values to avoid actor reentrancy deadlock
+                let capturedActionRegistry = actionRegistry
+                let capturedEventBus = eventBus
+                let capturedGlobalSymbols = globalSymbols
+                let capturedServices = services
 
-            // Subscribe to StateTransitionEvent and filter by field name and optional transition
-            eventBus.subscribe(to: StateTransitionEvent.self) { event in
-                // Match field name (empty = match all fields)
-                let fieldMatches = capturedFieldName.isEmpty || event.fieldName.lowercased() == capturedFieldName
+                eventBus.subscribe(to: DomainEvent.self) { event in
+                    // Only handle events that match this watch handler's event type
+                    guard event.domainEventType == eventType else { return }
 
-                // Match transition filter if specified
-                let transitionMatches: Bool
-                if let filter = capturedTransitionFilter {
-                    let expectedTransition = "\(event.fromState)_to_\(event.toState)"
-                    transitionMatches = expectedTransition.lowercased() == filter.lowercased()
-                } else {
-                    transitionMatches = true  // No filter = match all transitions
+                    // Execute watch handler WITHOUT actor isolation to avoid deadlock
+                    await ExecutionEngine.executeWatchHandlerStatic(
+                        analyzedFS,
+                        baseContext: baseContext,
+                        event: event,
+                        actionRegistry: capturedActionRegistry,
+                        eventBus: capturedEventBus,
+                        globalSymbols: capturedGlobalSymbols,
+                        services: capturedServices
+                    )
                 }
 
-                let shouldHandle = fieldMatches && transitionMatches
+            } else if pattern.hasSuffix(" Observer") {
+                // Repository-based watch: "{Name} Watch: {repository} Observer"
+                let repositoryName = pattern.replacingOccurrences(of: " Observer", with: "")
+                    .trimmingCharacters(in: .whitespaces)
 
-                if shouldHandle {
-                    // Execute observer WITHOUT actor isolation to avoid deadlock
-                    await ExecutionEngine.executeStateObserverStatic(
+                // CRITICAL: Capture values to avoid actor reentrancy deadlock
+                let capturedActionRegistry = actionRegistry
+                let capturedEventBus = eventBus
+                let capturedGlobalSymbols = globalSymbols
+                let capturedServices = services
+
+                eventBus.subscribe(to: RepositoryChangedEvent.self) { event in
+                    // Only handle events that match this watch handler's repository
+                    guard event.repositoryName == repositoryName else { return }
+
+                    // Execute watch handler WITHOUT actor isolation to avoid deadlock
+                    await ExecutionEngine.executeWatchHandlerStatic(
                         analyzedFS,
                         baseContext: baseContext,
                         event: event,
@@ -995,6 +1065,301 @@ public actor ExecutionEngine {
                     )
                 }
             }
+        }
+    }
+
+    /// Execute a watch handler in a static context to avoid actor reentrancy (ARO-0052)
+    private static func executeWatchHandlerStatic(
+        _ analyzedFS: AnalyzedFeatureSet,
+        baseContext: RuntimeContext,
+        event: any RuntimeEvent,
+        actionRegistry: ActionRegistry,
+        eventBus: EventBus,
+        globalSymbols: GlobalSymbolStorage,
+        services: ServiceRegistry
+    ) async {
+        // Create child context for this watch handler with its own business activity
+        let watchContext = RuntimeContext(
+            featureSetName: analyzedFS.featureSet.name,
+            businessActivity: analyzedFS.featureSet.businessActivity,
+            eventBus: eventBus,
+            parent: baseContext
+        )
+
+        // Build event payload for the watch handler
+        var eventPayload: [String: any Sendable] = [
+            "timestamp": event.timestamp
+        ]
+
+        // Add event-specific fields
+        if let domainEvent = event as? DomainEvent {
+            eventPayload["domainEventType"] = domainEvent.domainEventType
+            eventPayload["payload"] = domainEvent.payload
+        } else if let repoEvent = event as? RepositoryChangedEvent {
+            eventPayload["repositoryName"] = repoEvent.repositoryName
+            eventPayload["changeType"] = repoEvent.changeType.rawValue
+            if let entityId = repoEvent.entityId {
+                eventPayload["entityId"] = entityId
+            }
+            if let newValue = repoEvent.newValue {
+                eventPayload["newValue"] = newValue
+            }
+            if let oldValue = repoEvent.oldValue {
+                eventPayload["oldValue"] = oldValue
+            }
+        }
+
+        // Bind event payload to context as "event" with nested access
+        watchContext.bind("event", value: eventPayload)
+
+        // Also bind event keys directly for convenience
+        for (key, value) in eventPayload {
+            watchContext.bind("event:\(key)", value: value)
+        }
+
+        // Copy services from base context
+        await services.registerAll(in: watchContext)
+
+        // Execute the watch handler
+        let executor = FeatureSetExecutor(
+            actionRegistry: actionRegistry,
+            eventBus: eventBus,
+            globalSymbols: globalSymbols
+        )
+
+        do {
+            _ = try await executor.execute(analyzedFS, context: watchContext)
+        } catch {
+            // Log watch handler execution errors but don't propagate
+            // (Watch handlers run asynchronously and shouldn't break the main flow)
+        }
+    }
+
+    /// Register state transition observers for feature sets with "StateObserver" or "StateTransition Handler" business activity
+    /// Supports:
+    ///   - "status StateObserver<draft_to_placed>"  (legacy syntax, binds as "transition")
+    ///   - "StateTransition Handler<toState:approved>"  (new syntax, binds as "event")
+    private func registerStateObservers(for program: AnalyzedProgram, baseContext: RuntimeContext) {
+        // Find all feature sets with state-transition business activity
+        let stateObservers = program.featureSets.filter { analyzedFS in
+            let activity = analyzedFS.featureSet.businessActivity
+            return activity.contains("StateObserver") || activity.contains("StateTransition Handler")
+        }
+
+        for analyzedFS in stateObservers {
+            let activity = analyzedFS.featureSet.businessActivity
+            let isHandlerStyle = activity.contains("StateTransition Handler")
+
+            // CRITICAL: Capture values to avoid actor reentrancy deadlock
+            let capturedActionRegistry = actionRegistry
+            let capturedEventBus = eventBus
+            let capturedGlobalSymbols = globalSymbols
+            let capturedServices = services
+
+            if isHandlerStyle {
+                // New syntax: "StateTransition Handler<toState:approved>"
+                // Parse <key:value> guard, e.g. toState:approved
+                var guardKey: String? = nil
+                var guardValue: String? = nil
+
+                if let angleStart = activity.firstIndex(of: "<"),
+                   let angleEnd = activity.firstIndex(of: ">") {
+                    let guardExpr = String(activity[activity.index(after: angleStart)..<angleEnd])
+                    let parts = guardExpr.split(separator: ":", maxSplits: 1).map(String.init)
+                    if parts.count == 2 {
+                        guardKey = parts[0].trimmingCharacters(in: .whitespaces)
+                        guardValue = parts[1].trimmingCharacters(in: .whitespaces)
+                    }
+                }
+
+                let capturedGuardKey = guardKey
+                let capturedGuardValue = guardValue
+
+                eventBus.subscribe(to: StateTransitionEvent.self) { event in
+                    // Apply guard filter if specified
+                    let shouldHandle: Bool
+                    if let key = capturedGuardKey, let value = capturedGuardValue {
+                        switch key {
+                        case "toState":   shouldHandle = event.toState.lowercased() == value.lowercased()
+                        case "fromState": shouldHandle = event.fromState.lowercased() == value.lowercased()
+                        case "fieldName": shouldHandle = event.fieldName.lowercased() == value.lowercased()
+                        case "objectName": shouldHandle = event.objectName.lowercased() == value.lowercased()
+                        default:          shouldHandle = true
+                        }
+                    } else {
+                        shouldHandle = true
+                    }
+
+                    if shouldHandle {
+                        await ExecutionEngine.executeStateTransitionHandlerStatic(
+                            analyzedFS,
+                            baseContext: baseContext,
+                            event: event,
+                            actionRegistry: capturedActionRegistry,
+                            eventBus: capturedEventBus,
+                            globalSymbols: capturedGlobalSymbols,
+                            services: capturedServices
+                        )
+                    }
+                }
+            } else {
+                // Legacy syntax: "status StateObserver" or "status StateObserver<draft_to_placed>"
+                var fieldName = ""
+                var transitionFilter: String? = nil
+
+                if let angleStart = activity.firstIndex(of: "<"),
+                   let angleEnd = activity.firstIndex(of: ">") {
+                    transitionFilter = String(activity[activity.index(after: angleStart)..<angleEnd])
+                    let beforeAngle = String(activity[..<angleStart])
+                    fieldName = beforeAngle
+                        .replacingOccurrences(of: " StateObserver", with: "")
+                        .replacingOccurrences(of: "StateObserver", with: "")
+                        .trimmingCharacters(in: .whitespaces)
+                        .lowercased()
+                } else {
+                    fieldName = activity
+                        .replacingOccurrences(of: " StateObserver", with: "")
+                        .replacingOccurrences(of: "StateObserver", with: "")
+                        .trimmingCharacters(in: .whitespaces)
+                        .lowercased()
+                }
+
+                let capturedFieldName = fieldName
+                let capturedTransitionFilter = transitionFilter
+
+                eventBus.subscribe(to: StateTransitionEvent.self) { event in
+                    let fieldMatches = capturedFieldName.isEmpty || event.fieldName.lowercased() == capturedFieldName
+
+                    let transitionMatches: Bool
+                    if let filter = capturedTransitionFilter {
+                        let expectedTransition = "\(event.fromState)_to_\(event.toState)"
+                        transitionMatches = expectedTransition.lowercased() == filter.lowercased()
+                    } else {
+                        transitionMatches = true
+                    }
+
+                    if fieldMatches && transitionMatches {
+                        await ExecutionEngine.executeStateObserverStatic(
+                            analyzedFS,
+                            baseContext: baseContext,
+                            event: event,
+                            actionRegistry: capturedActionRegistry,
+                            eventBus: capturedEventBus,
+                            globalSymbols: capturedGlobalSymbols,
+                            services: capturedServices
+                        )
+                    }
+                }
+            }
+        }
+    }
+
+    /// Register key press handlers for feature sets with "KeyPress Handler" business activity
+    /// Supports optional key guard: "Select Item: KeyPress Handler<key:enter>"
+    private func registerKeyPressHandlers(for program: AnalyzedProgram, baseContext: RuntimeContext) {
+        let keyPressHandlers = program.featureSets.filter { analyzedFS in
+            analyzedFS.featureSet.businessActivity.contains("KeyPress Handler")
+        }
+
+        for analyzedFS in keyPressHandlers {
+            let activity = analyzedFS.featureSet.businessActivity
+
+            // Parse optional key guard: <key:enter> from activity string
+            var keyGuard: String? = nil
+            if let angleStart = activity.firstIndex(of: "<"),
+               let angleEnd = activity.firstIndex(of: ">") {
+                let guardExpr = String(activity[activity.index(after: angleStart)..<angleEnd])
+                let parts = guardExpr.split(separator: ":", maxSplits: 1).map(String.init)
+                if parts.count == 2 && parts[0].trimmingCharacters(in: .whitespaces) == "key" {
+                    keyGuard = parts[1].trimmingCharacters(in: .whitespaces)
+                }
+            }
+
+            let capturedKeyGuard = keyGuard
+            let capturedActionRegistry = actionRegistry
+            let capturedEventBus = eventBus
+            let capturedGlobalSymbols = globalSymbols
+            let capturedServices = services
+
+            eventBus.subscribe(to: KeyPressEvent.self) { event in
+                // Apply key guard filter if specified
+                if let keyFilter = capturedKeyGuard {
+                    guard event.key.lowercased() == keyFilter.lowercased() else { return }
+                }
+
+                await ExecutionEngine.executeKeyPressHandlerStatic(
+                    analyzedFS,
+                    baseContext: baseContext,
+                    event: event,
+                    actionRegistry: capturedActionRegistry,
+                    eventBus: capturedEventBus,
+                    globalSymbols: capturedGlobalSymbols,
+                    services: capturedServices
+                )
+            }
+        }
+    }
+
+    /// Execute a KeyPress Handler feature set — binds event key as "event"
+    private static func executeKeyPressHandlerStatic(
+        _ analyzedFS: AnalyzedFeatureSet,
+        baseContext: RuntimeContext,
+        event: KeyPressEvent,
+        actionRegistry: ActionRegistry,
+        eventBus: EventBus,
+        globalSymbols: GlobalSymbolStorage,
+        services: ServiceRegistry
+    ) async {
+        await executeHandler(
+            analyzedFS,
+            baseContext: baseContext,
+            event: event,
+            actionRegistry: actionRegistry,
+            eventBus: eventBus,
+            globalSymbols: globalSymbols,
+            services: services
+        ) { context, event in
+            let eventData: [String: any Sendable] = ["key": event.key]
+            context.bind("event", value: eventData)
+            context.bind("event:key", value: event.key)
+        }
+    }
+
+    /// Execute a StateTransition Handler feature set — binds event data as "event" (consistent with other handlers)
+    private static func executeStateTransitionHandlerStatic(
+        _ analyzedFS: AnalyzedFeatureSet,
+        baseContext: RuntimeContext,
+        event: StateTransitionEvent,
+        actionRegistry: ActionRegistry,
+        eventBus: EventBus,
+        globalSymbols: GlobalSymbolStorage,
+        services: ServiceRegistry
+    ) async {
+        await executeHandler(
+            analyzedFS,
+            baseContext: baseContext,
+            event: event,
+            actionRegistry: actionRegistry,
+            eventBus: eventBus,
+            globalSymbols: globalSymbols,
+            services: services
+        ) { context, event in
+            var eventData: [String: any Sendable] = [
+                "fieldName": event.fieldName,
+                "objectName": event.objectName,
+                "fromState": event.fromState,
+                "toState": event.toState
+            ]
+            if let entityId = event.entityId { eventData["entityId"] = entityId }
+            if let entity = event.entity { eventData["entity"] = entity }
+
+            context.bind("event", value: eventData)
+            context.bind("event:fieldName", value: event.fieldName)
+            context.bind("event:objectName", value: event.objectName)
+            context.bind("event:fromState", value: event.fromState)
+            context.bind("event:toState", value: event.toState)
+            if let entityId = event.entityId { context.bind("event:entityId", value: entityId) }
+            if let entity = event.entity { context.bind("event:entity", value: entity) }
         }
     }
 
@@ -1072,59 +1437,41 @@ public actor ExecutionEngine {
         globalSymbols: GlobalSymbolStorage,
         services: ServiceRegistry
     ) async {
-        // Create child context for this observer with its own business activity
-        let handlerContext = RuntimeContext(
-            featureSetName: analyzedFS.featureSet.name,
-            businessActivity: analyzedFS.featureSet.businessActivity,
-            eventBus: eventBus,
-            parent: baseContext
-        )
-
-        // Bind transition data to context as "transition" with nested access
-        var transitionData: [String: any Sendable] = [
-            "fieldName": event.fieldName,
-            "objectName": event.objectName,
-            "fromState": event.fromState,
-            "toState": event.toState
-        ]
-        if let entityId = event.entityId {
-            transitionData["entityId"] = entityId
-        }
-        if let entity = event.entity {
-            transitionData["entity"] = entity
-        }
-        handlerContext.bind("transition", value: transitionData)
-
-        // Also bind transition keys directly for convenience
-        handlerContext.bind("transition:fieldName", value: event.fieldName)
-        handlerContext.bind("transition:objectName", value: event.objectName)
-        handlerContext.bind("transition:fromState", value: event.fromState)
-        handlerContext.bind("transition:toState", value: event.toState)
-        if let entityId = event.entityId {
-            handlerContext.bind("transition:entityId", value: entityId)
-        }
-        if let entity = event.entity {
-            handlerContext.bind("transition:entity", value: entity)
-        }
-
-        // Copy services from base context
-        await services.registerAll(in: handlerContext)
-
-        // Execute the observer
-        let executor = FeatureSetExecutor(
+        await executeHandler(
+            analyzedFS,
+            baseContext: baseContext,
+            event: event,
             actionRegistry: actionRegistry,
             eventBus: eventBus,
-            globalSymbols: globalSymbols
-        )
+            globalSymbols: globalSymbols,
+            services: services
+        ) { context, event in
+            // Bind transition data to context as "transition" with nested access
+            var transitionData: [String: any Sendable] = [
+                "fieldName": event.fieldName,
+                "objectName": event.objectName,
+                "fromState": event.fromState,
+                "toState": event.toState
+            ]
+            if let entityId = event.entityId {
+                transitionData["entityId"] = entityId
+            }
+            if let entity = event.entity {
+                transitionData["entity"] = entity
+            }
+            context.bind("transition", value: transitionData)
 
-        do {
-            _ = try await executor.execute(analyzedFS, context: handlerContext)
-        } catch {
-            eventBus.publish(ErrorOccurredEvent(
-                error: String(describing: error),
-                context: analyzedFS.featureSet.name,
-                recoverable: true
-            ))
+            // Also bind transition keys directly for convenience
+            context.bind("transition:fieldName", value: event.fieldName)
+            context.bind("transition:objectName", value: event.objectName)
+            context.bind("transition:fromState", value: event.fromState)
+            context.bind("transition:toState", value: event.toState)
+            if let entityId = event.entityId {
+                context.bind("transition:entityId", value: entityId)
+            }
+            if let entity = event.entity {
+                context.bind("transition:entity", value: entity)
+            }
         }
     }
 
@@ -1294,6 +1641,11 @@ public actor GlobalSymbolStorage {
         return !entry.businessActivity.isEmpty &&
                !forBusinessActivity.isEmpty &&
                entry.businessActivity != forBusinessActivity
+    }
+
+    /// Get all published symbols (for eager binding in feature sets)
+    public func allSymbols() -> [String: (value: any Sendable, featureSet: String, businessActivity: String)] {
+        return symbols
     }
 }
 

@@ -1,0 +1,63 @@
+(* ============================================================
+   URLClient - ARO-0052: Unified URL I/O Example
+   ============================================================
+   Demonstrates using Read/Write with URLs for HTTP operations.
+
+   Read from URL performs HTTP GET:
+     Read the <data> from the <url: "https://...">.
+
+   Write to URL performs HTTP POST:
+     Write the <data> to the <url: "https://...">.
+
+   Both support the `with` clause for headers, timeout, etc.
+   ============================================================ *)
+
+(Application-Start: URL Client Demo) {
+    Log "=== ARO URL I/O Demo ===" to the <console>.
+    Log "" to the <console>.
+
+    (* Simple GET request - fetch JSON data *)
+    Log "1. Fetching TODO from JSONPlaceholder API..." to the <console>.
+    Read the <todo> from the <url: "https://jsonplaceholder.typicode.com/todos/1">.
+
+    (* Response is automatically parsed as JSON *)
+    Extract the <title> from the <todo: title>.
+    Extract the <completed> from the <todo: completed>.
+    Log "   Title: ${title}" to the <console>.
+    Log "   Completed: ${completed}" to the <console>.
+    Log "" to the <console>.
+
+    (* GET request with custom headers *)
+    Log "2. Fetching with custom headers..." to the <console>.
+    Read the <headers-test> from the <url: "https://httpbin.org/headers"> with {
+        headers: {
+            X-Custom-Header: "ARO-URL-Client",
+            Accept: "application/json"
+        }
+    }.
+    Extract the <received-headers> from the <headers-test: headers>.
+    Log "   Server received our custom header" to the <console>.
+    Log "" to the <console>.
+
+    (* POST request - submit data *)
+    Log "3. Creating a new post via POST..." to the <console>.
+    Create the <new-post> with {
+        title: "Hello from ARO",
+        body: "This post was created using ARO's unified URL I/O!",
+        userId: 1
+    }.
+    Write the <new-post> to the <url: "https://jsonplaceholder.typicode.com/posts">.
+    Log "   Post created successfully!" to the <console>.
+    Log "" to the <console>.
+
+    (* Fetch single user *)
+    Log "4. Fetching a user..." to the <console>.
+    Read the <userdata> from the <url: "https://jsonplaceholder.typicode.com/users/1">.
+    Extract the <username> from the <userdata: name>.
+    Extract the <useremail> from the <userdata: email>.
+    Log "   User: ${username} (${useremail})" to the <console>.
+    Log "" to the <console>.
+
+    Log "=== Demo Complete ===" to the <console>.
+    Return an <OK: status> for the <demo>.
+}

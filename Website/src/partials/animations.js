@@ -177,8 +177,24 @@
             ['Native binaries.', 'Zero config.'],
             ['Domain events.', 'First class.'],
             ['Repositories', 'built in.'],
-            ['Your feature.', 'Your language.']
+            ['Your feature.', 'Your language.'],
+            ['The spec', 'is the code.'],
+            ['Features, not', 'functions.'],
+            ['LLMs write it', 'perfectly.'],
+            ['Stream gigabytes.', 'Use kilobytes.'],
+            ['Business language.', 'Machine speed.'],
+            ['One app.', 'All languages.'],
+            ['Intent.', 'Execution.'],
+            ['The runtime', 'handles the rest.'],
+            ['Compile to', 'a single file.'],
+            ['Describe it.', 'Done.']
         ];
+
+        // Shuffle slogans (Fisher-Yates) for random order on each page load
+        for (let i = slogans.length - 1; i > 0; i--) {
+            const j = Math.floor(Math.random() * (i + 1));
+            [slogans[i], slogans[j]] = [slogans[j], slogans[i]];
+        }
 
         let sloganIndex = 0;
         let charIndex = 0;

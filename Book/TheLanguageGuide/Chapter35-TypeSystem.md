@@ -8,10 +8,28 @@ ARO has four built-in primitive types:
 
 | Type | Description | Literal Examples |
 |------|-------------|-----------------|
-| `String` | Text | `"hello"`, `'world'` |
+| `String` | Text | `"hello"` (regular), `'world'` (raw) |
 | `Integer` | Whole numbers | `42`, `-17`, `0xFF` |
 | `Float` | Decimal numbers | `3.14`, `2.5e10` |
 | `Boolean` | True/False | `true`, `false` |
+
+### String Literals
+
+ARO supports two types of string literals:
+
+- **Double quotes** `"..."` create regular strings with full escape processing (`\n`, `\t`, `\\`, `\"`, etc.)
+- **Single quotes** `'...'` create raw strings where backslashes are literal (only `\'` needs escaping)
+
+```aro
+(* Regular string with escape sequences *)
+Log "Hello\nWorld" to the <console>.          (* Prints on two lines *)
+
+(* Raw string - backslashes are literal *)
+Transform <versions> from <text> with regex '\d+\.\d+\.\d+'.
+Read <config> from 'C:\Users\Admin\config.json'.
+```
+
+Use single quotes when working with regex patterns, file paths, LaTeX commands, or any content with many backslashes. Use double quotes for normal text with escape sequences.
 
 ## Collection Types
 

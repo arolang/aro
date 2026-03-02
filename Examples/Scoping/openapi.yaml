@@ -1,0 +1,32 @@
+openapi: 3.0.3
+info:
+  title: Scoping Demo API
+  version: 1.0.0
+
+servers:
+  - url: http://localhost:8083
+
+paths:
+  /config:
+    get:
+      operationId: getConfig
+      summary: Return the published shared config
+      responses:
+        '200':
+          description: Shared configuration
+          content:
+            application/json:
+              schema:
+                type: object
+
+  /status:
+    get:
+      operationId: getStatus
+      summary: Return app status using published version
+      responses:
+        '200':
+          description: App status
+          content:
+            application/json:
+              schema:
+                type: object

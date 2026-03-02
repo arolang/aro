@@ -1,25 +1,34 @@
-(* SocketClient Example - Demonstrating TCP client connections *)
-(* Uses the Connect action to establish outbound socket connections *)
-(* NOTE: Run with an echo server: nc -l 9999 *)
+(* SocketClient Example - TCP client connections *)
+(* Demonstrates the Connect action for outbound TCP connections.   *)
+(*                                                                  *)
+(* Syntax:                                                          *)
+(*   Connect the <conn> to the <host> with { port: N }.            *)
+(*   Send the <message> to the <conn>.                             *)
+(*   (Responses arrive via Socket Event Handler)                   *)
 
 (Application-Start: Socket Client Demo) {
-    Log "=== Socket Client Demo ===" to the <console>.
-    Log "Demonstrating Connect action for TCP client" to the <console>.
+    Log "Connecting to echo server..." to the <console>.
 
-    (* The Connect action establishes outbound TCP connections *)
-    (* Syntax: Connect the <result> to the <host-variable> with { port: N }. *)
+    Create the <host> with "localhost".
+    Connect the <conn> to the <host> with { port: 9001 }.
 
-    (* Example - connecting to a server: *)
-    (* Create the <host> with "localhost". *)
-    (* Connect the <conn> to the <host> with { port: 9999 }. *)
-    (* Send the <message> to the <conn>. *)
-    (* Close the <status> from the <conn>. *)
+    Log "Connected!" to the <console>.
 
-    Log "Connect action features:" to the <console>.
-    Log "- Verb: connect" to the <console>.
-    Log "- Prepositions: to, with" to the <console>.
-    Log "- Returns connection ID for Send/Close" to the <console>.
+    Create the <message> with "Hello from ARO!".
+    Send the <message> to the <conn>.
 
-    Log "Demo complete" to the <console>.
-    Return an <OK: status> for the <demo>.
+    Log "Sent: Hello from ARO!" to the <console>.
+
+    (* Keep running to receive the server's echo response *)
+    Keepalive the <application> for the <events>.
+
+    Return an <OK: status> for the <startup>.
+}
+
+(Handle Data Received: Socket Event Handler) {
+    Extract the <response> from the <packet: message>.
+    Create the <prefix> with "Received: ".
+    Compute the <reply-line> from <prefix> ++ <response>.
+    Log <reply-line> to the <console>.
+    Return an <OK: status> for the <packet>.
 }

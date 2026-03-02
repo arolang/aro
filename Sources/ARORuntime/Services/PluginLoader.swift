@@ -199,9 +199,10 @@ public final class PluginLoader: @unchecked Sendable {
             }
 
             do {
-                // Check plugin.yaml exists (we don't parse it yet, just check presence)
-                _ = try String(contentsOf: pluginYaml, encoding: .utf8)
+                // Parse plugin.yaml to get the handler (qualifier namespace)
+                let yamlContent = try String(contentsOf: pluginYaml, encoding: .utf8)
                 let pluginName = item.lastPathComponent
+                let pluginHandler = parseHandlerFromPluginYAML(yamlContent)
 
                 // Search for the compiled library in common locations:
                 // - src/ (C plugins)
@@ -228,7 +229,7 @@ public final class PluginLoader: @unchecked Sendable {
 
                     for libFile in contents {
                         if libFile.pathExtension == libraryExtension {
-                            try loadCPlugin(at: libFile, name: pluginName)
+                            try loadCPlugin(at: libFile, name: pluginName, namespace: pluginHandler)
                             found = true
                             break
                         }
@@ -242,12 +243,28 @@ public final class PluginLoader: @unchecked Sendable {
         }
     }
 
+    /// Extract the handler namespace from a plugin.yaml file.
+    /// Returns the `handler:` value from the first `provides:` entry, or nil if not present.
+    private func parseHandlerFromPluginYAML(_ yaml: String) -> String? {
+        for line in yaml.components(separatedBy: "\n") {
+            let trimmed = line.trimmingCharacters(in: .whitespaces)
+            if trimmed.hasPrefix("handler:") {
+                let value = String(trimmed.dropFirst("handler:".count))
+                    .trimmingCharacters(in: .whitespaces)
+                    .trimmingCharacters(in: CharacterSet(charactersIn: "'\""))
+                return value.isEmpty ? nil : value
+            }
+        }
+        return nil
+    }
+
     /// Load a C plugin dynamic library
     /// C plugins export aro_plugin_info() and aro_plugin_execute() functions
     /// - Parameters:
     ///   - path: Path to the dynamic library
     ///   - name: Plugin name (used for service registration)
-    private func loadCPlugin(at path: URL, name: String) throws {
+    ///   - namespace: Qualifier namespace (handler) from plugin.yaml; defaults to plugin name if nil
+    private func loadCPlugin(at path: URL, name: String, namespace: String? = nil) throws {
         lock.lock()
         defer { lock.unlock() }
 
@@ -299,70 +316,119 @@ public final class PluginLoader: @unchecked Sendable {
         let wrapper = CPluginServiceWrapper(name: name, loader: self)
         try ExternalServiceRegistry.shared.register(wrapper, withName: name)
 
-        // Parse plugin info to get custom action definitions and register them
+        // Parse plugin info to get custom action definitions and qualifiers
         if let infoSymbol = infoSymbol {
             let infoFunc = unsafeBitCast(infoSymbol, to: CPluginInfoFunction.self)
             if let infoPtr = infoFunc() {
                 let infoJSON = String(cString: infoPtr)
                 freeFunc?(infoPtr)
 
-                // Parse JSON to get actions
+                // Parse JSON to get actions and qualifiers
                 if let data = infoJSON.data(using: .utf8),
-                   let info = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
-                   let actions = info["actions"] as? [[String: Any]] {
+                   let info = try? JSONSerialization.jsonObject(with: data) as? [String: Any] {
 
-                    // Register each action verb as a dynamic handler
-                    // Use semaphore to ensure registration completes synchronously
-                    let semaphore = DispatchSemaphore(value: 0)
-                    var registrationCount = 0
+                    // Register actions
+                    if let actions = info["actions"] as? [[String: Any]] {
+                        // Register each action verb as a dynamic handler
+                        // Use semaphore to ensure registration completes synchronously
+                        let semaphore = DispatchSemaphore(value: 0)
+                        var registrationCount = 0
 
-                    for actionDef in actions {
-                        guard let verbs = actionDef["verbs"] as? [String] else { continue }
+                        for actionDef in actions {
+                            guard let verbs = actionDef["verbs"] as? [String] else { continue }
 
-                        for verb in verbs {
-                            registrationCount += 1
-                            let normalizedVerb = verb.lowercased().replacingOccurrences(of: "-", with: "")
-                            // Capture the original verb for plugin calls (may have hyphens)
-                            let originalVerb = verb
-                            Task {
-                                await ActionRegistry.shared.registerDynamic(
-                                    verb: normalizedVerb,
-                                    handler: { result, object, context in
-                                        // Build input from context
-                                        var input: [String: any Sendable] = [:]
-                                        if let data = context.resolveAny(object.base) {
-                                            // Pass data under multiple keys for compatibility
-                                            input["data"] = data
-                                            input["object"] = data
-                                            // Also pass under the object's base name (e.g., "rows")
-                                            input[object.base] = data
-                                        }
+                            for verb in verbs {
+                                let normalizedVerb = verb.lowercased().replacingOccurrences(of: "-", with: "")
+                                // Capture the original verb for plugin calls (may have hyphens)
+                                let originalVerb = verb
 
-                                        // Add with clause arguments if present
-                                        if let withArgs = context.resolveAny("_with_") as? [String: any Sendable] {
-                                            input.merge(withArgs) { _, new in new }
-                                        }
-                                        if let exprArgs = context.resolveAny("_expression_") as? [String: any Sendable] {
-                                            input.merge(exprArgs) { _, new in new }
-                                        }
-
-                                        // Call the plugin with original verb (may have hyphens)
-                                        let pluginResult = try self.callCPlugin(name, method: originalVerb, args: input)
-
-                                        // Bind result
-                                        context.bind(result.base, value: pluginResult)
-
-                                        return pluginResult
+                                let handler: @Sendable (ResultDescriptor, ObjectDescriptor, any ExecutionContext) async throws -> any Sendable = { result, object, context in
+                                    // Build input from context
+                                    var input: [String: any Sendable] = [:]
+                                    if let data = context.resolveAny(object.base) {
+                                        // Pass data under multiple keys for compatibility
+                                        input["data"] = data
+                                        input["object"] = data
+                                        // Also pass under the object's base name (e.g., "rows")
+                                        input[object.base] = data
                                     }
-                                )
-                                semaphore.signal()
+
+                                    // Add with clause arguments if present
+                                    if let withArgs = context.resolveAny("_with_") as? [String: any Sendable] {
+                                        input.merge(withArgs) { _, new in new }
+                                    }
+                                    if let exprArgs = context.resolveAny("_expression_") as? [String: any Sendable] {
+                                        input.merge(exprArgs) { _, new in new }
+                                    }
+
+                                    // Call the plugin with original verb (may have hyphens)
+                                    let pluginResult = try self.callCPlugin(name, method: originalVerb, args: input)
+
+                                    // Bind result
+                                    context.bind(result.base, value: pluginResult)
+
+                                    return pluginResult
+                                }
+
+                                // When a handler namespace is set, register only as "namespace.verb".
+                                // Without a handler, register only the plain verb.
+                                let registeredVerb: String
+                                if let ns = namespace {
+                                    registeredVerb = "\(ns).\(normalizedVerb)"
+                                } else {
+                                    registeredVerb = normalizedVerb
+                                }
+
+                                registrationCount += 1
+                                Task {
+                                    await ActionRegistry.shared.registerDynamic(verb: registeredVerb, handler: handler)
+                                    semaphore.signal()
+                                }
                             }
+                        }
+
+                        // Wait for all registrations to complete
+                        for _ in 0..<registrationCount {
+                            semaphore.wait()
                         }
                     }
 
-                    // Wait for all registrations to complete
-                    for _ in 0..<registrationCount {
-                        semaphore.wait()
+                    // Register qualifiers (plugin-provided value transformations)
+                    if let qualifiers = info["qualifiers"] as? [[String: Any]] {
+                        // Load aro_plugin_qualifier symbol
+                        #if os(Windows)
+                        let qualifierSymbol = GetProcAddress(handle, "aro_plugin_qualifier")
+                        #else
+                        let qualifierSymbol = dlsym(handle, "aro_plugin_qualifier")
+                        #endif
+
+                        if let qualifierSymbol = qualifierSymbol {
+                            typealias QualifierFunc = @convention(c) (UnsafePointer<CChar>?, UnsafePointer<CChar>?) -> UnsafeMutablePointer<CChar>?
+                            let qualifierFunc = unsafeBitCast(qualifierSymbol, to: QualifierFunc.self)
+
+                            // Create a host wrapper for the plugin
+                            let host = CPluginQualifierHost(
+                                pluginName: name,
+                                qualifierFunc: qualifierFunc,
+                                freeFunc: freeFunc
+                            )
+
+                            // Register each qualifier
+                            for qualifierDef in qualifiers {
+                                guard let qualifierName = qualifierDef["name"] as? String else { continue }
+                                let inputTypesRaw = qualifierDef["inputTypes"] as? [String] ?? []
+                                let inputTypes = Set(inputTypesRaw.compactMap { QualifierInputType(rawValue: $0) })
+
+                                let registration = QualifierRegistration(
+                                    qualifier: qualifierName,
+                                    inputTypes: inputTypes.isEmpty ? Set(QualifierInputType.allCases) : inputTypes,
+                                    pluginName: name,
+                                    namespace: namespace,
+                                    pluginHost: host
+                                )
+                                QualifierRegistry.shared.register(registration)
+                            }
+                        }
                     }
                 }
             }
@@ -503,6 +569,14 @@ public final class PluginLoader: @unchecked Sendable {
 
             let pluginName = item.lastPathComponent
 
+            // Read handler (qualifier namespace) from plugin.yaml if present
+            let yamlPath = item.appendingPathComponent("plugin.yaml")
+            let pluginHandler: String? = {
+                guard FileManager.default.fileExists(atPath: yamlPath.path),
+                      let yamlContent = try? String(contentsOf: yamlPath, encoding: .utf8) else { return nil }
+                return parseHandlerFromPluginYAML(yamlContent)
+            }()
+
             // Search for the library in common locations:
             // - src/ (C plugins, Python plugins)
             // - Sources/ (Swift plugins)
@@ -529,7 +603,7 @@ public final class PluginLoader: @unchecked Sendable {
                     // Check for native libraries first
                     for libFile in dirContents {
                         if libFile.pathExtension == libraryExtension {
-                            try loadCPlugin(at: libFile, name: pluginName)
+                            try loadCPlugin(at: libFile, name: pluginName, namespace: pluginHandler)
                             found = true
                             break
                         }
@@ -1417,49 +1491,88 @@ public final class PluginLoader: @unchecked Sendable {
                 let infoJSON = String(cString: infoPtr)
                 freeFunc?(infoPtr)
 
-                // Parse JSON to get actions and register them
+                // Parse JSON to get actions and qualifiers
                 if let data = infoJSON.data(using: .utf8),
-                   let info = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
-                   let actions = info["actions"] as? [[String: Any]] {
+                   let info = try? JSONSerialization.jsonObject(with: data) as? [String: Any] {
 
-                    let semaphore = DispatchSemaphore(value: 0)
-                    var registrationCount = 0
+                    // Register actions
+                    if let actions = info["actions"] as? [[String: Any]] {
+                        let semaphore = DispatchSemaphore(value: 0)
+                        var registrationCount = 0
 
-                    for actionDef in actions {
-                        guard let verbs = actionDef["verbs"] as? [String] else { continue }
+                        for actionDef in actions {
+                            guard let verbs = actionDef["verbs"] as? [String] else { continue }
 
-                        for verb in verbs {
-                            registrationCount += 1
-                            let normalizedVerb = verb.lowercased().replacingOccurrences(of: "-", with: "")
-                            let originalVerb = verb
-                            Task {
-                                await ActionRegistry.shared.registerDynamic(
-                                    verb: normalizedVerb,
-                                    handler: { result, object, context in
-                                        var input: [String: any Sendable] = [:]
-                                        if let data = context.resolveAny(object.base) {
-                                            input["data"] = data
-                                            input["object"] = data
-                                            input[object.base] = data
+                            for verb in verbs {
+                                registrationCount += 1
+                                let normalizedVerb = verb.lowercased().replacingOccurrences(of: "-", with: "")
+                                let originalVerb = verb
+                                Task {
+                                    await ActionRegistry.shared.registerDynamic(
+                                        verb: normalizedVerb,
+                                        handler: { result, object, context in
+                                            var input: [String: any Sendable] = [:]
+                                            if let data = context.resolveAny(object.base) {
+                                                input["data"] = data
+                                                input["object"] = data
+                                                input[object.base] = data
+                                            }
+                                            if let withArgs = context.resolveAny("_with_") as? [String: any Sendable] {
+                                                input.merge(withArgs) { _, new in new }
+                                            }
+                                            if let exprArgs = context.resolveAny("_expression_") as? [String: any Sendable] {
+                                                input.merge(exprArgs) { _, new in new }
+                                            }
+                                            let pluginResult = try self.callCPlugin(name, method: originalVerb, args: input)
+                                            context.bind(result.base, value: pluginResult)
+                                            return pluginResult
                                         }
-                                        if let withArgs = context.resolveAny("_with_") as? [String: any Sendable] {
-                                            input.merge(withArgs) { _, new in new }
-                                        }
-                                        if let exprArgs = context.resolveAny("_expression_") as? [String: any Sendable] {
-                                            input.merge(exprArgs) { _, new in new }
-                                        }
-                                        let pluginResult = try self.callCPlugin(name, method: originalVerb, args: input)
-                                        context.bind(result.base, value: pluginResult)
-                                        return pluginResult
-                                    }
-                                )
-                                semaphore.signal()
+                                    )
+                                    semaphore.signal()
+                                }
                             }
+                        }
+
+                        for _ in 0..<registrationCount {
+                            semaphore.wait()
                         }
                     }
 
-                    for _ in 0..<registrationCount {
-                        semaphore.wait()
+                    // Register qualifiers (plugin-provided value transformations)
+                    if let qualifiers = info["qualifiers"] as? [[String: Any]] {
+                        // Load aro_plugin_qualifier symbol
+                        #if os(Windows)
+                        let qualifierSymbol = GetProcAddress(handle, "aro_plugin_qualifier")
+                        #else
+                        let qualifierSymbol = dlsym(handle, "aro_plugin_qualifier")
+                        #endif
+
+                        if let qualifierSymbol = qualifierSymbol {
+                            typealias QualifierFunc = @convention(c) (UnsafePointer<CChar>?, UnsafePointer<CChar>?) -> UnsafeMutablePointer<CChar>?
+                            let qualifierFunc = unsafeBitCast(qualifierSymbol, to: QualifierFunc.self)
+
+                            // Create a host wrapper for the plugin
+                            let host = CPluginQualifierHost(
+                                pluginName: name,
+                                qualifierFunc: qualifierFunc,
+                                freeFunc: freeFunc
+                            )
+
+                            // Register each qualifier
+                            for qualifierDef in qualifiers {
+                                guard let qualifierName = qualifierDef["name"] as? String else { continue }
+                                let inputTypesRaw = qualifierDef["inputTypes"] as? [String] ?? []
+                                let inputTypes = Set(inputTypesRaw.compactMap { QualifierInputType(rawValue: $0) })
+
+                                let registration = QualifierRegistration(
+                                    qualifier: qualifierName,
+                                    inputTypes: inputTypes.isEmpty ? Set(QualifierInputType.allCases) : inputTypes,
+                                    pluginName: name,
+                                    pluginHost: host
+                                )
+                                QualifierRegistry.shared.register(registration)
+                            }
+                        }
                     }
                 }
             }
@@ -2176,5 +2289,76 @@ public struct PluginSystemObjectWrapper: SystemObject {
         default:
             return "\(value)"
         }
+    }
+}
+
+// MARK: - C Plugin Qualifier Host
+
+/// Wrapper for C ABI plugin qualifier function
+/// Used by loadDylib for precompiled plugins in binary mode
+final class CPluginQualifierHost: PluginQualifierHost, @unchecked Sendable {
+    let pluginName: String
+    private let qualifierFunc: @convention(c) (UnsafePointer<CChar>?, UnsafePointer<CChar>?) -> UnsafeMutablePointer<CChar>?
+    private let freeFunc: PluginLoader.CPluginFreeFunction?
+
+    init(
+        pluginName: String,
+        qualifierFunc: @convention(c) (UnsafePointer<CChar>?, UnsafePointer<CChar>?) -> UnsafeMutablePointer<CChar>?,
+        freeFunc: PluginLoader.CPluginFreeFunction?
+    ) {
+        self.pluginName = pluginName
+        self.qualifierFunc = qualifierFunc
+        self.freeFunc = freeFunc
+    }
+
+    func executeQualifier(_ qualifier: String, input: any Sendable) throws -> any Sendable {
+        // Create input JSON
+        let qualifierInput = QualifierInput(value: input)
+
+        let encoder = JSONEncoder()
+        let inputData = try encoder.encode(qualifierInput)
+        let inputJSON = String(data: inputData, encoding: .utf8) ?? "{}"
+
+        // Call the plugin's qualifier function
+        var resultPtr: UnsafeMutablePointer<CChar>?
+        qualifier.withCString { qualifierPtr in
+            inputJSON.withCString { inputPtr in
+                resultPtr = qualifierFunc(qualifierPtr, inputPtr)
+            }
+        }
+
+        guard let resultPtr = resultPtr else {
+            throw QualifierError.executionFailed(
+                qualifier: qualifier,
+                message: "Plugin \(pluginName) returned nil for qualifier '\(qualifier)'"
+            )
+        }
+
+        let resultJSON = String(cString: resultPtr)
+        freeFunc?(resultPtr)
+
+        // Parse output
+        guard let resultData = resultJSON.data(using: .utf8) else {
+            throw QualifierError.executionFailed(
+                qualifier: qualifier,
+                message: "Invalid result encoding from plugin \(pluginName)"
+            )
+        }
+
+        let decoder = JSONDecoder()
+        let output = try decoder.decode(QualifierOutput.self, from: resultData)
+
+        if let error = output.error, !error.isEmpty {
+            throw QualifierError.executionFailed(qualifier: qualifier, message: error)
+        }
+
+        guard let result = output.result else {
+            throw QualifierError.executionFailed(
+                qualifier: qualifier,
+                message: "No result from plugin \(pluginName)"
+            )
+        }
+
+        return result.value
     }
 }

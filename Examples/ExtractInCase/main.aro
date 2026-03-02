@@ -1,0 +1,30 @@
+(* Test extract-within-case syntax *)
+
+(Application-Start: Extract Test) {
+    Extract the <response> from {
+        "status": 200,
+        "body": {"message": "Success", "data": [1, 2, 3]}
+    }.
+
+    Extract the <status> from the <response: status>.
+    Log "Status value:" to the <console>.
+    Log <status> to the <console>.
+
+    match <status> {
+        case 200 {
+            (* Extract within case block *)
+            Extract the <body> from the <response: body>.
+            Extract the <message> from the <body: message>.
+            Log "Success:" to the <console>.
+            Log <message> to the <console>.
+        }
+        case 404 {
+            Log "Not found" to the <console>.
+        }
+        otherwise {
+            Log "Other status" to the <console>.
+        }
+    }
+
+    Return an <OK: status> for the <test>.
+}

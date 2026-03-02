@@ -1,1 +1,4 @@
-# Skip due to TTY detection changes
+mode: interpreter
+type: http
+include-server-output: true
+skip-on-windows: HTTP server tests not supported on Windows CI

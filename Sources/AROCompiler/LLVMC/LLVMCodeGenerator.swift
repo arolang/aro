@@ -481,6 +481,7 @@ public final class LLVMCodeGenerator {
             bindLiteral(literal)
 
         case .expression(let expr):
+            // Serialize expression (with constant folding if applicable)
             let exprJSON = ctx.stringConstant(serializeExpression(expr))
             _ = ctx.module.insertCall(
                 externals.evaluateExpression,
@@ -490,6 +491,7 @@ public final class LLVMCodeGenerator {
 
         case .sinkExpression(let expr):
             // Sink expression: evaluate and bind to _result_expression_ for LogAction/response actions
+            // Constant folding happens in serializeExpression (GitLab #102)
             let resultExprName = ctx.stringConstant("_result_expression_")
             let exprJSON = ctx.stringConstant(serializeExpression(expr))
             _ = ctx.module.insertCall(
@@ -678,6 +680,12 @@ public final class LLVMCodeGenerator {
     // MARK: - Expression Serialization
 
     private func serializeExpression(_ expr: any AROParser.Expression) -> String {
+        // GitLab #102: Constant folding optimization
+        // If the expression is entirely constant, evaluate it at compile time
+        if ConstantFolder.isConstant(expr), let value = ConstantFolder.evaluate(expr) {
+            return serializeLiteralValue(value)
+        }
+
         if let literal = expr as? LiteralExpression {
             return serializeLiteralValue(literal.value)
         } else if let ref = expr as? VariableRefExpression {
@@ -1353,6 +1361,13 @@ public final class LLVMCodeGenerator {
         // Load precompiled plugins
         _ = ctx.module.insertCall(externals.loadPrecompiledPlugins, on: [], at: ip)
 
+        // Register feature set metadata (name -> business activity) for HTTP routing
+        for analyzed in program.featureSets {
+            let fsName = ctx.stringConstant(analyzed.featureSet.name)
+            let businessActivity = ctx.stringConstant(analyzed.featureSet.businessActivity)
+            _ = ctx.module.insertCall(externals.registerFeatureSetMetadata, on: [fsName, businessActivity], at: ip)
+        }
+
         // Register event handlers
         registerEventHandlers(program: program, runtime: runtime)
 
@@ -1419,15 +1434,31 @@ public final class LLVMCodeGenerator {
             }
         }
 
-        // Print response
-        _ = ctx.module.insertCall(externals.contextPrintResponse, on: [mainCtx], at: ip)
+        // Print response (unless --keep-alive flag is set)
+        let keepAliveFlag = ctx.module.insertCall(externals.hasKeepAlive, on: [], at: ip)
+        let isNotKeepAlive = ctx.module.insertIntegerComparison(.eq, keepAliveFlag, ctx.i32Type.zero, at: ip)
+
+        let printBlock = ctx.module.appendBlock(named: "print_response", to: mainFunc)
+        let cleanupBlock = ctx.module.appendBlock(named: "cleanup", to: mainFunc)
+
+        ctx.module.insertCondBr(if: isNotKeepAlive, then: printBlock, else: cleanupBlock, at: ip)
+
+        // Print block
+        ctx.setInsertionPoint(atEndOf: printBlock)
+        var printIP = ctx.insertionPoint
+        _ = ctx.module.insertCall(externals.contextPrintResponse, on: [mainCtx], at: printIP)
+        ctx.module.insertBr(to: cleanupBlock, at: printIP)
+
+        // Cleanup block
+        ctx.setInsertionPoint(atEndOf: cleanupBlock)
+        let cleanupIP = ctx.insertionPoint
 
         // Cleanup
-        _ = ctx.module.insertCall(externals.contextDestroy, on: [mainCtx], at: ip)
-        _ = ctx.module.insertCall(externals.runtimeShutdown, on: [runtime], at: ip)
+        _ = ctx.module.insertCall(externals.contextDestroy, on: [mainCtx], at: cleanupIP)
+        _ = ctx.module.insertCall(externals.runtimeShutdown, on: [runtime], at: cleanupIP)
 
         // Return success
-        ctx.module.insertReturn(ctx.i32Type.zero, at: ip)
+        ctx.module.insertReturn(ctx.i32Type.zero, at: cleanupIP)
     }
 
     private func registerEventHandlers(program: AnalyzedProgram, runtime: IRValue) {
@@ -1442,10 +1473,34 @@ public final class LLVMCodeGenerator {
                     let eventType = String(activity[..<handlerRange.lowerBound])
                         .trimmingCharacters(in: .whitespaces)
 
-                    // Skip special handlers
+                    // Skip special handlers (Socket events handled separately; Application-End not an event handler)
                     guard !activity.contains("Socket Event") &&
-                          !activity.contains("File Event") &&
                           !activity.contains("Application-End") else {
+                        continue
+                    }
+
+                    // File Event Handlers: determine event type from feature set name
+                    if activity.contains("File Event") {
+                        let featureName = analyzed.featureSet.name.lowercased()
+                        let fileEventType: String
+                        if featureName.contains("created") {
+                            fileEventType = "file.created"
+                        } else if featureName.contains("modified") {
+                            fileEventType = "file.modified"
+                        } else if featureName.contains("deleted") {
+                            fileEventType = "file.deleted"
+                        } else {
+                            continue
+                        }
+                        let funcName = featureSetFunctionName(analyzed.featureSet.name)
+                        if let handlerFunc = ctx.module.function(named: funcName) {
+                            let eventTypeStr = ctx.stringConstant(fileEventType)
+                            _ = ctx.module.insertCall(
+                                externals.runtimeRegisterHandler,
+                                on: [runtime, eventTypeStr, handlerFunc],
+                                at: ip
+                            )
+                        }
                         continue
                     }
 

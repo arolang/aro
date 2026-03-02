@@ -1,34 +1,146 @@
 (*
- * ARO-0003 Variable Scoping Example
- * Demonstrates variable visibility, publishing, and dependencies
+ * ARO Scoping Demo
+ *
+ * Demonstrates all scoping mechanisms in ARO:
+ *
+ *   1. Local scope          — variables are private to the feature set that
+ *                             creates them; no other feature set can see them.
+ *
+ *   2. Published variables  — Publish as <alias> <var> makes a value available
+ *                             to every feature set with the SAME business
+ *                             activity.  Feature sets in a different business
+ *                             activity cannot access the published variable.
+ *
+ *   3. Business activity    — The second part of the feature set header
+ *                             "(Name: Business Activity)" determines WHEN the
+ *                             feature set runs (HTTP route, event type, etc.)
+ *                             and WHICH published variables are visible.
+ *
+ *   4. Framework-injected   — Variables like <event> are bound by the runtime
+ *                             before execution starts; they are not created by
+ *                             any statement in the feature set body.
+ *
+ *   5. Transformation pipeline — Variables are immutable.  Each computation
+ *                             step must produce a new named variable instead
+ *                             of reusing an existing one.
+ *
+ *   6. Loop variable isolation — The loop variable and any variable created
+ *                             inside a loop body exist only for that iteration;
+ *                             they are invisible outside the loop.
  *)
 
+(* ═══════════════════════════════════════════════════════════════════════════
+   Application entry point
+   Business activity: "Scoping Demo"
+   ═══════════════════════════════════════════════════════════════════════════ *)
+
 (Application-Start: Scoping Demo) {
-    (* Explicit external dependency declaration *)
-    Require the <console> from the <framework>.
 
-    (* Create internal variables *)
+    Log "=== 1. Local Scope ===" to the <console>.
+
+    (* <app-name> and <version> live only in this feature set.
+       The HTTP handlers and the event handler below cannot see them. *)
     Create the <app-name> with "Scoping Demo".
-    Create the <version> with "1.0".
-
-    (* Log startup using variables *)
-    Log "Starting application..." to the <console>.
+    Create the <version> with "2.0".
+    Log "app-name:" to the <console>.
     Log <app-name> to the <console>.
+    Log "version:" to the <console>.
     Log <version> to the <console>.
 
-    (* Demonstrate nested object scoping *)
-    Create the <config> with {
-        name: "Scoping Demo",
-        version: "1.0",
-        settings: {
-            debug: true,
-            timeout: 30
-        }
-    }.
 
-    Log "Configuration:" to the <console>.
-    Log <config: name> to the <console>.
-    Log <config: version> to the <console>.
+    Log "=== 2. Published Variables ===" to the <console>.
+
+    (* Publish makes <shared-config> visible to any feature set whose
+       business activity is also "Scoping Demo". *)
+    Create the <config> with { name: <app-name>, version: <version>, threshold: 5 }.
+    Publish as <shared-config> <config>.
+    Log "shared-config published" to the <console>.
+
+
+    Log "=== 5. Transformation Pipeline ===" to the <console>.
+
+    (* Variables are immutable — each step produces a new binding.
+       There is no way to reassign <raw-text>; instead use a new name. *)
+    Create the <raw-text> with "hello world".
+    Compute the <upper-text: uppercase> from <raw-text>.
+    Compute the <text-length: length> from <raw-text>.
+    Log <raw-text> to the <console>.
+    Log <upper-text> to the <console>.
+    Log <text-length> to the <console>.
+
+
+    Log "=== 6. Loop Variable Isolation ===" to the <console>.
+
+    (* <tag> and <tag-length> are created fresh for each iteration.
+       They do not exist before the loop starts or after it ends. *)
+    Create the <tags> with ["alpha", "beta", "gamma"].
+    for each <tag> in <tags> {
+        Compute the <tag-length: length> from <tag>.
+        Log <tag> to the <console>.
+        Log <tag-length> to the <console>.
+    }
+
+
+    (* Emit an event: triggers the AppReady Handler in a different scope *)
+    Emit a <AppReady: event> with <config>.
+
+    Start the <http-server> with <contract>.
+    Keepalive the <application> for the <events>.
 
     Return an <OK: status> for the <startup>.
+}
+
+
+(* ═══════════════════════════════════════════════════════════════════════════
+   HTTP handlers — same business activity as Application-Start
+   ═══════════════════════════════════════════════════════════════════════════ *)
+
+(*
+ * 2. Cross-feature-set access via published variable
+ *
+ * Business activity "Scoping Demo" matches Application-Start, so
+ * <shared-config> is accessible here.
+ *
+ * <app-name> and <version> are NOT accessible — they were local to
+ * Application-Start and were never published.
+ *)
+(getConfig: Scoping Demo) {
+    Extract the <name> from the <shared-config: name>.
+    Extract the <thresh> from the <shared-config: threshold>.
+    Return an <OK: status> with { name: <name>, threshold: <thresh> }.
+}
+
+(getStatus: Scoping Demo) {
+    Extract the <ver> from the <shared-config: version>.
+    Return an <OK: status> with { status: "running", version: <ver> }.
+}
+
+
+(* ═══════════════════════════════════════════════════════════════════════════
+   Event handler — different business activity
+   ═══════════════════════════════════════════════════════════════════════════ *)
+
+(*
+ * 3. Business activity as scope boundary
+ *
+ * This feature set runs only when an AppReady event is emitted.
+ * Its business activity "AppReady Handler" is different from "Scoping Demo",
+ * so <shared-config> is NOT accessible here.  Data arrives instead via the
+ * framework-injected <event> variable.
+ *
+ * 4. Framework-injected variable
+ *
+ * <event> is bound by the runtime before this feature set body executes.
+ * It is not created by any Extract, Create, or Compute statement here.
+ *)
+(Log App Ready: AppReady Handler) {
+    (* <event> payload = { "config": { name, version, threshold } }
+       because we emitted "with <config>" — the variable name becomes the key. *)
+    Extract the <payload> from the <event: config>.
+    Extract the <event-name> from the <payload: name>.
+    Log "=== 3+4. Event Handler Scope ===" to the <console>.
+    Log "Business activity: AppReady Handler" to the <console>.
+    Log "event.config.name (framework-injected):" to the <console>.
+    Log <event-name> to the <console>.
+    Return an <OK: status> for the <handler>.
 }

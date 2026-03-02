@@ -9,7 +9,7 @@ use IO::Select;
 use Term::ANSIColor qw(:constants);
 
 # Configuration
-my $aro_bin = $ENV{ARO_BIN} // ".build/debug/aro";
+my $aro_bin = $ENV{ARO_BIN} // ".build/release/aro";
 my $ARO_CMD = "$aro_bin repl --no-color";
 my $TIMEOUT = 5;  # seconds
 
@@ -499,7 +499,196 @@ test('Set the <nested> to { user: { name: "Test", settings: { theme: "dark" } } 
 });
 
 # ============================================================
-# SECTION 20: Error Handling
+# SECTION 20: For-Each Loop
+# ============================================================
+section("For-Each Loop");
+
+test('Set the <loop-items> to ["alpha", "beta", "gamma"].', "Set items for loop", sub { shift =~ /OK/ });
+
+send_line('for each <item> in <loop-items> {');
+my $loop_open = read_until_prompt();
+print_test_line('for each <item> in <loop-items> {', $loop_open,
+    $loop_open !~ /Error/i ? 1 : 0, "Open for-each block (no error)");
+
+send_line('    Log <item> to the <console>.');
+my $loop_stmt = read_until_prompt();
+print_test_line('    Log <item> to the <console>.', $loop_stmt,
+    $loop_stmt !~ /Error/i ? 1 : 0, "Add loop body (no error)");
+
+send_line('}');
+my $loop_result = read_until_prompt();
+print_test_line('}', $loop_result,
+    $loop_result =~ /alpha/ && $loop_result =~ /beta/ && $loop_result =~ /gamma/ ? 1 : 0,
+    "Loop outputs all three items");
+
+# ============================================================
+# SECTION 21: When Guard (Conditional)
+# ============================================================
+section("When Guard - Conditional Execution");
+
+test('Set the <score> to 85.', "Set score=85", sub { shift =~ /OK/ });
+test('Set the <grade> to "pending".', "Set initial grade", sub { shift =~ /OK/ });
+test('Set the <grade> to "pass" when <score> >= 60.', "Guard true: grade becomes pass", sub {
+    my $output = shift;
+    return $output =~ /OK/;
+});
+test('Log <grade> to the <console>.', "Log grade = pass", sub {
+    my $output = shift;
+    return $output =~ /pass/i;
+});
+
+test('Set the <low> to 40.', "Set low=40", sub { shift =~ /OK/ });
+test('Set the <result> to "fail" when <low> >= 60.', "Guard false: result stays unset", sub {
+    my $output = shift;
+    # Statement is skipped; REPL should still return OK
+    return $output =~ /OK/;
+});
+
+# ============================================================
+# SECTION 22: Extract - List Element Access
+# ============================================================
+section("Extract - List Element Access (ARO-0038)");
+
+test('Set the <colors> to ["red", "green", "blue"].', "Set colors list", sub { shift =~ /OK/ });
+
+test('Extract the <first-color: first> from the <colors>.', "Extract first element", sub { shift =~ /OK/ });
+test('Log <first-color> to the <console>.', "Log first = red", sub {
+    my $output = shift;
+    return $output =~ /red/;
+});
+
+test('Extract the <last-color: last> from the <colors>.', "Extract last element", sub { shift =~ /OK/ });
+test('Log <last-color> to the <console>.', "Log last = blue", sub {
+    my $output = shift;
+    return $output =~ /blue/;
+});
+
+test('Extract the <mid-color: 1> from the <colors>.', "Extract reverse index 1 (second-to-last)", sub { shift =~ /OK/ });
+test('Log <mid-color> to the <console>.', "Log index 1 = green", sub {
+    my $output = shift;
+    return $output =~ /green/;
+});
+
+# ============================================================
+# SECTION 23: String Concatenation
+# ============================================================
+section("String Concatenation");
+
+test('Set the <part-a> to "Hello".', "Set part-a", sub { shift =~ /OK/ });
+test('Set the <part-b> to "ARO".', "Set part-b", sub { shift =~ /OK/ });
+test('Compute the <greeting> from <part-a> ++ ", " ++ <part-b> ++ "!".', "Concatenate strings with ++", sub { shift =~ /OK/ });
+test('Log <greeting> to the <console>.', 'Log "Hello, ARO!"', sub {
+    my $output = shift;
+    return $output =~ /Hello.*ARO/;
+});
+
+# ============================================================
+# SECTION 24: Hash Computation
+# ============================================================
+section("Hash Computation");
+
+test('Set the <secret> to "password123".', "Set secret", sub { shift =~ /OK/ });
+test('Compute the <hashed: hash> from <secret>.', "Compute hash", sub { shift =~ /OK/ });
+test('Log <hashed> to the <console>.', "Log hash (non-empty, differs from input)", sub {
+    my $output = shift;
+    return $output =~ /\S/ && $output !~ /password123/;
+});
+
+# ============================================================
+# SECTION 25: Reduce Action
+# ============================================================
+section("Reduce Action");
+
+test('Set the <nums> to [10, 20, 30].', "Set nums=[10,20,30]", sub { shift =~ /OK/ });
+test('Reduce the <total> from <nums> with sum(<value>).', "Reduce sum", sub { shift =~ /OK/ });
+test('Log <total> to the <console>.', "Log total = 60", sub {
+    my $output = shift;
+    return $output =~ /60/;
+});
+
+# ============================================================
+# SECTION 26: Type Checks - Additional Types
+# ============================================================
+section("Type Checks - Additional Types");
+
+test('Set the <flag> to true.', "Set boolean", sub { shift =~ /OK/ });
+test(':type flag', "Type of boolean", sub {
+    my $output = shift;
+    return $output =~ /Bool/i;
+});
+
+test('Set the <ratio> to 3.14.', "Set float", sub { shift =~ /OK/ });
+test(':type ratio', "Type of float", sub {
+    my $output = shift;
+    return $output =~ /Float|Double|Decimal/i;
+});
+
+test('Set the <list-val> to [1, 2, 3].', "Set list", sub { shift =~ /OK/ });
+test(':type list-val', "Type of list", sub {
+    my $output = shift;
+    return $output =~ /List|Array/i;
+});
+
+test('Create the <map-val> with { key: "value" }.', "Create map", sub { shift =~ /OK/ });
+test(':type map-val', "Type of map/object", sub {
+    my $output = shift;
+    return $output =~ /Map|Object|Dict/i;
+});
+
+# ============================================================
+# SECTION 27: Feature Set with Return
+# ============================================================
+section("Feature Set with Return");
+
+send_line('(Compute Square: Math) {');
+my $sq_open = read_until_prompt();
+print_test_line('(Compute Square: Math) {', $sq_open,
+    $sq_open =~ /Defining/i ? 1 : 0, "Open feature set");
+
+send_line('    Set the <n> to 7.');
+my $sq_s1 = read_until_prompt();
+print_test_line('    Set the <n> to 7.', $sq_s1, $sq_s1 =~ /\+|\.\.\./ ? 1 : 0, "Add Set n=7");
+
+send_line('    Compute the <squared> from <n> * <n>.');
+my $sq_s2 = read_until_prompt();
+print_test_line('    Compute the <squared> from <n> * <n>.', $sq_s2, $sq_s2 =~ /\+|\.\.\./ ? 1 : 0, "Add Compute");
+
+send_line('    Log <squared> to the <console>.');
+my $sq_s3 = read_until_prompt();
+print_test_line('    Log <squared> to the <console>.', $sq_s3, $sq_s3 =~ /\+|\.\.\./ ? 1 : 0, "Add Log");
+
+send_line('    Return an <OK: status> with <squared>.');
+my $sq_s4 = read_until_prompt();
+print_test_line('    Return an <OK: status> with <squared>.', $sq_s4, $sq_s4 =~ /\+|\.\.\./ ? 1 : 0, "Add Return");
+
+send_line('}');
+my $sq_close = read_until_prompt();
+print_test_line('}', $sq_close, $sq_close =~ /defined/i ? 1 : 0, "Close feature set");
+
+test(':invoke Compute Square', "Invoke - should log 49 and return OK", sub {
+    my $output = shift;
+    return $output =~ /49/;
+});
+
+# ============================================================
+# SECTION 28: Nested Field Access in Filter + Map Chain
+# ============================================================
+section("Filter + Map Chain");
+
+test('Set the <records> to [{ name: "Alice", score: 90 }, { name: "Bob", score: 45 }, { name: "Carol", score: 72 }].', "Set records", sub { shift =~ /OK/ });
+test('Filter the <passing> from the <records> where <score> > 60.', "Filter score > 60", sub { shift =~ /OK/ });
+test('Log <passing> to the <console>.', "Log passing (Alice and Carol, not Bob)", sub {
+    my $output = shift;
+    return $output =~ /Alice/ && $output =~ /Carol/ && $output !~ /Bob/;
+});
+test('Map the <passing-names: name> from the <passing>.', "Map names from filtered result", sub { shift =~ /OK/ });
+test('Log <passing-names> to the <console>.', "Log [Alice, Carol]", sub {
+    my $output = shift;
+    return $output =~ /Alice/ && $output =~ /Carol/;
+});
+
+# ============================================================
+# SECTION 29: Error Handling
 # ============================================================
 section("Error Handling");
 

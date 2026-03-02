@@ -1,7 +1,5 @@
-# Generated: Mon Jan  5 18:51:19 2026
+# Generated: Tue Feb 24 12:53:19 2026
 # Type: console
 # Command: aro run ./Examples/HelloWorld
 ---
 Hello, ARO World!
-application
-  value: Hello, ARO World!

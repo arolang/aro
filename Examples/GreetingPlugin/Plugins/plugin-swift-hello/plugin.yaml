@@ -11,6 +11,7 @@ source:
 provides:
 - type: swift-plugin
   path: Sources/
+  handler: greeting
 - type: aro-files
   path: features/
 build:

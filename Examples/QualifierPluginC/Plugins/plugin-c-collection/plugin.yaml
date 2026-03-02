@@ -1,0 +1,10 @@
+name: plugin-c-collection
+version: 1.0.0
+description: A C plugin that provides list qualifiers (first, last, size)
+author: ARO Team
+license: MIT
+aro-version: '>=0.1.0'
+provides:
+- type: c-plugin
+  path: src/
+  handler: list

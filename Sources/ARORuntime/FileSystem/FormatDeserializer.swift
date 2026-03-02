@@ -29,7 +29,13 @@ public struct FormatDeserializer: Sendable {
         case .toml:
             return deserializeTOML(content)
         case .csv:
-            let delimiter = (options["delimiter"] as? String) ?? ","
+            // Auto-detect delimiter if not explicitly provided
+            let delimiter: String
+            if let explicitDelimiter = options["delimiter"] as? String {
+                delimiter = explicitDelimiter
+            } else {
+                delimiter = detectCSVDelimiter(content)
+            }
             let hasHeader = (options["header"] as? Bool) ?? true
             let quoteChar = (options["quote"] as? String) ?? "\""
             return deserializeCSV(content, delimiter: delimiter, hasHeader: hasHeader, quoteChar: quoteChar)
@@ -45,6 +51,45 @@ public struct FormatDeserializer: Sendable {
         case .markdown, .html, .sql, .log, .binary:
             // These formats don't support deserialization - return raw string
             return content
+        }
+    }
+
+    // MARK: - Content-Type Detection (ARO-0052)
+
+    /// Map HTTP Content-Type header to FileFormat
+    /// - Parameter contentType: The Content-Type header value (e.g., "application/json; charset=utf-8")
+    /// - Returns: The corresponding FileFormat
+    public static func formatFromContentType(_ contentType: String) -> FileFormat {
+        // Extract MIME type (before semicolon for charset, etc.)
+        let mimeType = contentType.lowercased()
+            .split(separator: ";")
+            .first
+            .map { String($0).trimmingCharacters(in: .whitespaces) } ?? contentType.lowercased()
+
+        switch mimeType {
+        case "application/json":
+            return .json
+        case "application/x-ndjson", "application/jsonl":
+            return .jsonl
+        case "application/xml", "text/xml":
+            return .xml
+        case "text/csv", "application/csv":
+            return .csv
+        case "text/tab-separated-values":
+            return .tsv
+        case "text/yaml", "application/x-yaml", "application/yaml":
+            return .yaml
+        case "application/toml", "text/toml":
+            return .toml
+        case "text/plain":
+            return .text
+        case "text/html":
+            return .html
+        case "text/markdown":
+            return .markdown
+        default:
+            // Default to text for unknown types
+            return .text
         }
     }
 
@@ -709,6 +754,32 @@ public struct FormatDeserializer: Sendable {
     /// Converts dots to hyphens since ARO doesn't support dots in identifiers
     private static func normalizeFieldName(_ name: String) -> String {
         name.replacingOccurrences(of: ".", with: "-")
+    }
+
+    /// Auto-detect CSV delimiter by analyzing the first line
+    /// Checks common delimiters (semicolon, comma, tab) and returns the one
+    /// that produces the most columns. European CSVs often use semicolons
+    /// because commas are used as decimal separators.
+    private static func detectCSVDelimiter(_ content: String) -> String {
+        guard let firstLine = content.split(separator: "\n", maxSplits: 1).first else {
+            return ","
+        }
+
+        let line = String(firstLine)
+        let candidates = [";", ",", "\t"]
+
+        var bestDelimiter = ","
+        var maxColumns = 0
+
+        for delimiter in candidates {
+            let columns = line.components(separatedBy: delimiter).count
+            if columns > maxColumns {
+                maxColumns = columns
+                bestDelimiter = delimiter
+            }
+        }
+
+        return bestDelimiter
     }
 
     // MARK: - Plain Text Deserialization

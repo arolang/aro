@@ -9,12 +9,15 @@ Complete reference for all built-in actions in ARO.
 | **Extract** | REQUEST | Pull data from structured source | `Extract the <id> from the <request: params>.` |
 | **Retrieve** | REQUEST | Fetch from repository | `Retrieve the <user> from the <users> where id = <id>.` |
 | **Request** | REQUEST | Make HTTP request | `Request the <data> from the <api-url>.` |
-| **Read** | REQUEST | Read from file | `Read the <config> from the <file: "./config.json">.` |
+| **Read** | REQUEST | Read from file or URL | `Read the <config> from the <file: "./config.json">.` |
 | **List** | REQUEST | List directory contents | `List the <files> from the <directory: src-path>.` |
 | **Stat** | REQUEST | Get file metadata | `Stat the <info> for the <file: "./doc.pdf">.` |
 | **Exists** | REQUEST | Check file existence | `Exists the <found> for the <file: "./config.json">.` |
 | **Receive** | REQUEST | Receive event data | `Receive the <message> from the <event>.` |
 | **Execute** | REQUEST | Execute shell command | `Execute the <result> for the <command: "ls"> with "-la".` |
+| **Prompt** | TERMINAL | Prompt for text input | `Prompt the <name> with "Enter name: " from the <terminal>.` |
+| **Select** | TERMINAL | Present a selection menu | `Select the <env> from the <options> with "Choose: ".` |
+| **Clear** | TERMINAL | Clear the terminal screen | `Clear the <screen> for the <terminal>.` |
 | **Create** | OWN | Create new data | `Create the <user> with { name: "Alice" }.` |
 | **Compute** | OWN | Perform calculations | `Compute the <total> for the <items>.` |
 | **Transform** | OWN | Convert/map data | `Transform the <dto> from the <entity>.` |
@@ -34,7 +37,7 @@ Complete reference for all built-in actions in ARO.
 | **Throw** | RESPONSE | Throw error | `Throw a <NotFound: error> for the <user>.` |
 | **Log** | EXPORT | Write to logs | `Log "Done" to the <console>.` |
 | **Store** | EXPORT | Save to repository | `Store the <user> into the <users>.` |
-| **Write** | EXPORT | Write to file | `Write the <data> to the <file: "./out.txt">.` |
+| **Write** | EXPORT | Write to file or URL | `Write the <data> to the <file: "./out.txt">.` |
 | **Append** | EXPORT | Append to file | `Append the <line> to the <file: "./log.txt">.` |
 | **Send** | EXPORT | Send to destination | `Send the <email> to the <recipient>.` |
 | **Emit** | EXPORT | Emit domain event | `Emit a <UserCreated: event> with <user>.` |
@@ -64,6 +67,7 @@ Complete reference for all built-in actions in ARO.
 | RESPONSE | Send results | Internal -> External |
 | EXPORT | Publish/persist | Internal -> External |
 | SERVICE | Control services | System operations |
+| TERMINAL | User interaction | Terminal I/O |
 | STATE | State transitions | Internal state changes |
 | TEST | Testing | Verification actions |
 
@@ -183,20 +187,35 @@ After a request, these variables are available:
 
 ### Read
 
-Reads from files.
+Reads from files or URLs. When reading from URLs, performs an HTTP GET request.
 
 **Syntax:**
 ```aro
+(* Read from file *)
 Read the <result> from the <file: path>.
 Read the <result: type> from the <file: path>.
+
+(* Read from URL - HTTP GET (ARO-0052) *)
+Read the <result> from the <url: "https://...">.
+Read the <result> from the <url: "https://..."> with { headers: {...}, timeout: 30 }.
 ```
 
 **Examples:**
 ```aro
+(* File I/O *)
 Read the <content> from the <file: "./data.txt">.
 Read the <config: JSON> from the <file: "./config.json">.
 Read the <image: bytes> from the <file: "./logo.png">.
+
+(* URL I/O - HTTP GET *)
+Read the <users> from the <url: "https://api.example.com/users">.
+Read the <data> from the <url: "https://api.example.com/protected"> with {
+    headers: { Authorization: "Bearer ${token}" }
+}.
 ```
+
+**URL Format Detection:**
+Response is automatically parsed based on `Content-Type` header (JSON, XML, CSV, YAML, etc.).
 
 **Valid Prepositions:** `from`
 
@@ -656,65 +675,110 @@ Emit a <PaymentProcessed: event> with <payment>.
 
 ### Notify
 
-Sends notifications to users, administrators, or systems. The action automatically emits a `NotificationSentEvent` that can be handled by feature sets with `NotificationSent Handler` business activity.
+Sends notifications to a user, an object, or every item in a collection. The action automatically emits a `NotificationSentEvent` for each notified target, and these events can be handled by feature sets with `NotificationSent Handler` business activity.
 
 **Verbs:** `notify`, `alert`, `signal`
 
 **Syntax:**
+
+Two forms are supported depending on how you structure the arguments:
+
 ```aro
+(* Form 1: target is the result, message is the "with" payload *)
+Notify the <target> with <message>.
+
+(* Form 2: message is the result, recipient is the "to" object *)
 Notify the <message> to the <recipient>.
-Alert the <message> to the <recipient>.
-Signal the <message> to the <recipient>.
 ```
+
+Form 1 (`with`) treats the result variable as the entity being notified. This is the preferred form when you want handlers to access the notified object's fields (for example, to use a `when` guard). Form 2 (`to`) is equivalent but places the notification message in the result position.
+
+**Collection Dispatch:**
+When the target (or recipient) resolves to a list, the runtime emits one `NotificationSentEvent` per item. Each event carries the item as the target value, allowing handlers to inspect the item's fields independently.
 
 **Examples:**
 ```aro
-(* User notification *)
+(* Notify a single user object *)
+Create the <alice> with { name: "Alice", age: 30, email: "alice@example.com" }.
+Notify the <alice> with "Welcome to ARO!".
+
+(* Notify every item in a collection — one event per item *)
+Create the <group> with [
+    { name: "Bob",   age: 14 },
+    { name: "Carol", age: 25 },
+    { name: "Eve",   age: 20 }
+].
+Notify the <group> with "Hello everyone!".
+
+(* Legacy to-form *)
 Notify the <welcome-message> to the <user>.
-
-(* Admin alert *)
 Alert the <system-warning> to the <admin>.
-
-(* System signal *)
 Signal the <shutdown-notice> to the <processes>.
 ```
 
 **NotificationSent Handler:**
-Feature sets can subscribe to notification events:
+Feature sets subscribe to notification events by using `NotificationSent Handler` as their business activity. A `when` guard on the handler declaration acts as a per-delivery filter — the guard is evaluated before the handler body runs, and the target object's fields are available directly in the condition:
 
 ```aro
+(* Unconditional handler — fires for every notification *)
 (Log All Notifications: NotificationSent Handler) {
     Extract the <message> from the <event: message>.
-    Extract the <type> from the <event: type>.
-    Log "Notification [${type}]: ${message}" to the <console>.
+    Log "Notification: " ++ <message> to the <console>.
     Return an <OK: status> for the <logging>.
+}
+
+(* Conditional handler — fires only when age >= 16 *)
+(Greet User: NotificationSent Handler) when <age> >= 16 {
+    Extract the <user> from the <event: user>.
+    Extract the <name> from the <user: name>.
+    Log "hello " ++ <name> to the <console>.
+    Return an <OK: status> for the <notification>.
 }
 ```
 
+In the second handler, `<age>` is resolved from the notified object's fields before the body executes. If the condition is false, the handler is silently skipped for that delivery.
+
 **Event Payload:**
 - `message` - The notification content
-- `recipient` - Target of the notification
+- `user` - The notified target object (when using the `with` form)
+- `recipient` - Target name (when using the `to` form)
 - `type` - One of: "notify", "alert", or "signal"
-- `timestamp` - When the notification was sent
 
 **Valid Prepositions:** `to`, `for`, `with`
+
+> **See Also:** Section 5.4 (Handler Guards), Chapter 13.4 (Handler Guards) for a full explanation of the `when` guard on handler declarations.
 
 ---
 
 ### Write
 
-Writes to files.
+Writes to files or URLs. When writing to URLs, performs an HTTP POST request.
 
 **Syntax:**
 ```aro
+(* Write to file *)
 Write the <data> to the <file: path>.
+
+(* Write to URL - HTTP POST (ARO-0052) *)
+Write the <data> to the <url: "https://...">.
+Write the <data> to the <url: "https://..."> with { headers: {...}, timeout: 30 }.
 ```
 
 **Examples:**
 ```aro
+(* File I/O *)
 Write the <content> to the <file: "./output.txt">.
 Write the <data: JSON> to the <file: "./data.json">.
+
+(* URL I/O - HTTP POST *)
+Write the <user> to the <url: "https://api.example.com/users">.
+Write the <payload> to the <url: "https://api.example.com/submit"> with {
+    headers: { Authorization: "Bearer ${token}" }
+}.
 ```
+
+**URL Serialization:**
+Data is automatically serialized to JSON for dictionaries/arrays, or sent as plain text for strings.
 
 **Valid Prepositions:** `to`
 
@@ -889,6 +953,65 @@ Delete the <sessions> from the <repository> where expired = true.
 ```
 
 **Valid Prepositions:** `from`
+
+---
+
+## TERMINAL Actions
+
+### Prompt
+
+Prompts the user for text input via the terminal. Use the `hidden` qualifier to mask sensitive input such as passwords.
+
+**Syntax:**
+```aro
+Prompt the <result> with "message" from the <terminal>.
+Prompt the <result: hidden> with "message" from the <terminal>.
+```
+
+**Examples:**
+```aro
+Prompt the <username> with "Enter username: " from the <terminal>.
+Prompt the <password: hidden> with "Password: " from the <terminal>.
+```
+
+**Valid Prepositions:** `with`, `from` | **Aliases:** `ask`
+
+---
+
+### Select
+
+Presents a numbered selection menu to the user and captures their choice.
+
+**Syntax:**
+```aro
+Select the <result> from the <options> with "prompt message".
+```
+
+**Examples:**
+```aro
+Select the <environment> from the <environments> with "Select environment: ".
+Select the <action> from the <available-actions> with "What do you want to do? ".
+```
+
+**Valid Prepositions:** `from`, `with` | **Aliases:** `choose`
+
+---
+
+### Clear
+
+Clears the terminal screen.
+
+**Syntax:**
+```aro
+Clear the <screen> for the <terminal>.
+```
+
+**Examples:**
+```aro
+Clear the <screen> for the <terminal>.
+```
+
+**Valid Prepositions:** `for`
 
 ---
 
@@ -1117,6 +1240,9 @@ The `Keepalive` action blocks execution until a shutdown signal is received (SIG
 | Broadcast | SERVICE | to, with |
 | Keepalive | SERVICE | for |
 | Accept | STATE | - |
+| Prompt | TERMINAL | with, from |
+| Select | TERMINAL | from, with |
+| Clear | TERMINAL | for |
 | Given | TEST | with |
 | When | TEST | - |
 | Then | TEST | - |

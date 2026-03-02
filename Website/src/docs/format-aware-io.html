@@ -469,6 +469,64 @@
             </tbody>
         </table>
 
+        <h2>URL Format Detection</h2>
+
+        <p>
+            When reading from URLs (see <a href="http-services.html">HTTP Services</a>), the format is
+            detected from the HTTP <code>Content-Type</code> header instead of the file extension.
+        </p>
+
+        <table>
+            <thead>
+                <tr>
+                    <th>Content-Type</th>
+                    <th>Detected Format</th>
+                </tr>
+            </thead>
+            <tbody>
+                <tr>
+                    <td><code>application/json</code></td>
+                    <td>JSON</td>
+                </tr>
+                <tr>
+                    <td><code>application/x-ndjson</code></td>
+                    <td>JSON Lines</td>
+                </tr>
+                <tr>
+                    <td><code>text/csv</code>, <code>application/csv</code></td>
+                    <td>CSV</td>
+                </tr>
+                <tr>
+                    <td><code>text/tab-separated-values</code></td>
+                    <td>TSV</td>
+                </tr>
+                <tr>
+                    <td><code>text/yaml</code>, <code>application/x-yaml</code></td>
+                    <td>YAML</td>
+                </tr>
+                <tr>
+                    <td><code>application/xml</code>, <code>text/xml</code></td>
+                    <td>XML</td>
+                </tr>
+                <tr>
+                    <td><code>text/html</code></td>
+                    <td>HTML</td>
+                </tr>
+                <tr>
+                    <td><code>text/plain</code></td>
+                    <td>Plain Text</td>
+                </tr>
+            </tbody>
+        </table>
+
+        <pre><code><span class="code-comment">(* JSON API - auto-parsed based on Content-Type header *)</span>
+<span class="code-keyword">Read</span> the <span class="code-result">&lt;users&gt;</span> from the &lt;url: <span class="code-string">"https://api.example.com/users"</span>&gt;.
+<span class="code-comment">(* users is now a structured object *)</span>
+<span class="code-keyword">Extract</span> the <span class="code-result">&lt;name&gt;</span> from the &lt;users: 0.name&gt;.
+
+<span class="code-comment">(* Bypass parsing with as String *)</span>
+<span class="code-keyword">Read</span> the <span class="code-result">&lt;raw: String&gt;</span> from the &lt;url: <span class="code-string">"https://api.example.com/users"</span>&gt;.</code></pre>
+
         <h2>CSV/TSV Options</h2>
 
         <p>

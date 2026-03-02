@@ -1,8 +1,87 @@
-# Generated: Mon Jan 26 07:51:36 2026
+# Generated: Fri Feb 21 11:38:00 2026
 # Type: console
 # Command: aro run ./Examples/MetricsDemo
 ---
 === Metrics Demo ===
-metrics: 0 executions, 0 featuresets, avg=0.0ms, uptime=0.0s
-No metrics collected yet.
+Emitting events in parallel...
+Events emitted. Metrics will be shown at shutdown.
+
+=== Application Shutdown - Final Metrics ===
+
+--- Short Format ---
+metrics:
+
+--- Table Format ---
+| Feature Set
+| TOTAL
+
+| System Metrics
+| CPU User Time
+| CPU System Time
+| CPU Total Time
+| Virtual Memory
+| Resident Memory
+| File Descriptors
+| Process Start Time
+| Uptime
+
+--- Plain Format ---
+Feature Set Metrics
+Executions:
+Duration:
+
+System Metrics:
+CPU:
+Memory:
+File Descriptors:
+Process Start:
+
+--- Prometheus Format ---
+# HELP aro_featureset_executions_total Total number of feature set executions
+# TYPE aro_featureset_executions_total counter
+aro_featureset_executions_total{featureset=
+
+# HELP aro_featureset_success_total Total successful executions
+# TYPE aro_featureset_success_total counter
+aro_featureset_success_total{featureset=
+
+# HELP aro_featureset_failures_total Total failed executions
+# TYPE aro_featureset_failures_total counter
+aro_featureset_failures_total{featureset=
+
+# HELP aro_featureset_duration_ms_avg Average execution duration in milliseconds
+# TYPE aro_featureset_duration_ms_avg gauge
+aro_featureset_duration_ms_avg{featureset=
+
+# HELP aro_application_uptime_seconds Application uptime in seconds
+# TYPE aro_application_uptime_seconds gauge
+aro_application_uptime_seconds
+
+# HELP aro_process_cpu_user_seconds CPU time spent in user mode
+# TYPE aro_process_cpu_user_seconds counter
+aro_process_cpu_user_seconds
+
+# HELP aro_process_cpu_system_seconds CPU time spent in system mode
+# TYPE aro_process_cpu_system_seconds counter
+aro_process_cpu_system_seconds
+
+# HELP aro_process_virtual_memory_bytes Virtual memory size in bytes
+# TYPE aro_process_virtual_memory_bytes gauge
+aro_process_virtual_memory_bytes
+
+# HELP aro_process_resident_memory_bytes Resident memory size in bytes
+# TYPE aro_process_resident_memory_bytes gauge
+aro_process_resident_memory_bytes
+
+# HELP aro_process_open_fds Number of open file descriptors
+# TYPE aro_process_open_fds gauge
+aro_process_open_fds
+
+# HELP aro_process_max_fds Maximum number of file descriptors
+# TYPE aro_process_max_fds gauge
+aro_process_max_fds
+
+# HELP aro_process_start_time_seconds Process start time in Unix epoch seconds
+# TYPE aro_process_start_time_seconds gauge
+aro_process_start_time_seconds
 demo

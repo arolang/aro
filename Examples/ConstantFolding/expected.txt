@@ -1,0 +1,24 @@
+# Example: ConstantFolding
+# Type: console
+---
+=== Constant Folding Test ===
+5 * 10 + 2 =
+52
+100 / 4 - 3 =
+22
+17 % 5 =
+2
+10 > 5 =
+true
+3 + 2 == 5 =
+true
+true and false =
+false
+true or false =
+true
+(5 + 3) * (10 - 2) =
+64
+
+✓ Constant folding test complete!
+✓ All expressions computed at compile time!
+[OK] test

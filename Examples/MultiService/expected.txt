@@ -1,6 +1,13 @@
-# Generated: Sun Feb 16 15:55:00 2026
-# Type: http
+# Generated: Thu Feb 27 09:27:00 2026
+# Type: multiservice
 # Command: aro run ./Examples/MultiService
 ---
-POST /broadcast => {"message":"Message broadcast to all socket clients","success":true}
+Socket: Welcome to Multi-Service Demo!
+Socket: You will receive notifications about:
+Socket: - HTTP requests
+Socket: - File changes
 GET /status => {"fileMonitor":"watching","httpServer":"running","socketServer":"running","watchedDirectory":"watched-dir"}
+Socket: FILE CREATED: ms_testfile.txt
+POST /broadcast => {"message":"Message broadcast to all socket clients","success":true}
+Socket: Hello from HTTP!
+Socket: FILE DELETED: ms_testfile.txt

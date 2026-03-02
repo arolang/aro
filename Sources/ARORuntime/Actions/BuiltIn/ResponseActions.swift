@@ -84,8 +84,15 @@ public struct ReturnAction: ActionImplementation {
         }
 
         // Include object.base value if resolvable (skip internal names already handled above)
-        let internalNames: Set<String> = ["_expression_", "_literal_", "status", "response"]
-        if !internalNames.contains(object.base), let value = context.resolveAny(object.base) {
+        let internalNames: Set<String> = ["_expression_", "_literal_", "status", "response", "application"]
+        // ARO-0044: Special handling for metrics magic variable with format qualifier
+        // Return an <OK: status> with <metrics: prometheus/plain/short/table>
+        if object.base == "metrics",
+           let metricsSnapshot = context.resolveAny("metrics") as? MetricsSnapshot {
+            let format = object.specifiers.first ?? "plain"
+            let formatted = MetricsFormatter.format(metricsSnapshot, as: format, context: context.outputContext)
+            data["value"] = AnySendable(formatted)
+        } else if !internalNames.contains(object.base), let value = context.resolveAny(object.base) {
             flattenValue(value, into: &data, prefix: object.base, context: context)
         }
 
@@ -134,12 +141,7 @@ public struct ReturnAction: ActionImplementation {
     ) {
         switch value {
         case let str as String:
-            // Check if it's a variable reference
-            if let resolved = context.resolveAny(str) {
-                flattenValue(resolved, into: &data, prefix: prefix, context: context)
-            } else {
-                data[prefix] = AnySendable(str)
-            }
+            data[prefix] = AnySendable(str)
         case let int as Int:
             data[prefix] = AnySendable(int)
         case let double as Double:
@@ -297,7 +299,7 @@ public struct SendAction: ActionImplementation {
             destination = object.base
         }
 
-        // Try socket server service first (for socket connections)
+        // Try socket server service first (for server-side connection IDs)
         #if !os(Windows)
         if let socketServer = context.service(SocketServerService.self) {
             // Try to send to socket connection
@@ -312,7 +314,25 @@ public struct SendAction: ActionImplementation {
                 }
                 return SendResult(destination: destination, success: true)
             } catch {
-                // Connection not found - fall through to other services
+                // Connection not found in server - fall through to client
+            }
+        }
+
+        // Try socket client (for client-side connection IDs from Connect action)
+        if let socketClient: AROSocketClient = context.service(AROSocketClient.self),
+           socketClient.connectionId == destination,
+           socketClient.isConnected {
+            do {
+                if let dataValue = data as? Data {
+                    try await socketClient.send(data: dataValue)
+                } else if let stringValue = data as? String {
+                    try await socketClient.send(string: stringValue)
+                } else {
+                    try await socketClient.send(string: String(describing: data))
+                }
+                return SendResult(destination: destination, success: true)
+            } catch {
+                // Fall through to other services
             }
         }
         #endif
@@ -417,12 +437,19 @@ public struct LogAction: ActionImplementation {
         } else if let expr = context.resolveAny("_expression_") {
             // Message from "with" clause (expression)
             message = ResponseFormatter.formatValue(expr, for: context.outputContext)
-        } else if let value: String = context.resolve(result.base) {
-            // Message from variable
-            message = value
-        } else if let value = context.resolveAny(result.base) {
+        } else if var value = context.resolveAny(result.base) {
+            // Apply specifiers (qualifiers) to the value
+            // e.g., Log <numbers: reverse> applies the "reverse" qualifier
+            for specifier in result.specifiers {
+                if let transformed = try? QualifierRegistry.shared.resolve(specifier, value: value) {
+                    value = transformed
+                }
+            }
             // Message from any variable type
             message = ResponseFormatter.formatValue(value, for: context.outputContext)
+        } else if let value: String = context.resolve(result.base) {
+            // Message from string variable (no specifiers)
+            message = value
         } else {
             // Fallback to result name
             message = result.fullName
@@ -685,6 +712,17 @@ public struct WriteAction: ActionImplementation {
     ) async throws -> any Sendable {
         try validatePreposition(object.preposition)
 
+        // Handle <url: ...> pattern for HTTP POST (ARO-0052)
+        if object.base == "url", let specifier = object.specifiers.first {
+            let urlString: String
+            if let resolvedURL: String = context.resolve(specifier) {
+                urlString = resolvedURL
+            } else {
+                urlString = specifier
+            }
+            return try await writeToURL(urlString, result: result, context: context)
+        }
+
         // Get file path - handle <file: path-variable> pattern
         let path: String
         if object.base == "file", let specifier = object.specifiers.first {
@@ -747,6 +785,129 @@ public struct WriteAction: ActionImplementation {
         }
 
         throw ActionError.missingService("FileSystemService")
+    }
+
+    // MARK: - URL Support (ARO-0052)
+
+    /// Write content to a URL via HTTP POST
+    private func writeToURL(
+        _ urlString: String,
+        result: ResultDescriptor,
+        context: ExecutionContext
+    ) async throws -> any Sendable {
+        #if !os(Windows)
+        // Get or create HTTP client
+        let httpClient: URLSessionHTTPClient
+        if let existingClient = context.service(URLSessionHTTPClient.self) {
+            httpClient = existingClient
+        } else {
+            let newClient = URLSessionHTTPClient()
+            context.register(newClient)
+            httpClient = newClient
+        }
+
+        // Extract options from with { ... } clause
+        var headers: [String: String] = [:]
+        var timeout: TimeInterval? = nil
+        var contentType: String? = nil
+
+        if let config = context.resolveAny("_literal_") as? [String: any Sendable] {
+            // Extract headers
+            if let headersValue = config["headers"] {
+                if let headersDict = headersValue as? [String: String] {
+                    headers = headersDict
+                } else if let headersDict = headersValue as? [String: any Sendable] {
+                    for (key, value) in headersDict {
+                        headers[key] = String(describing: value)
+                    }
+                }
+            }
+
+            // Extract timeout
+            if let t = config["timeout"] as? Int {
+                timeout = TimeInterval(t)
+            } else if let t = config["timeout"] as? Double {
+                timeout = t
+            }
+
+            // Extract content-type override
+            if let ct = config["content-type"] as? String {
+                contentType = ct
+            }
+        }
+
+        // Validate URL
+        guard urlString.hasPrefix("http://") || urlString.hasPrefix("https://") else {
+            throw ActionError.runtimeError("Invalid URL: \(urlString). URL must start with http:// or https://")
+        }
+
+        // Get data to write
+        guard let value = context.resolveAny(result.base) else {
+            throw ActionError.undefinedVariable(result.base)
+        }
+
+        // Serialize data to JSON for POST body (default for dictionaries/arrays)
+        let bodyData: Data
+        let effectiveContentType: String
+
+        if let data = value as? Data {
+            bodyData = data
+            effectiveContentType = contentType ?? "application/octet-stream"
+        } else if let string = value as? String {
+            bodyData = string.data(using: .utf8) ?? Data()
+            effectiveContentType = contentType ?? "text/plain"
+        } else if let dict = value as? [String: any Sendable] {
+            // Convert Sendable dict to Any for JSON serialization
+            var anyDict: [String: Any] = [:]
+            for (key, val) in dict {
+                anyDict[key] = val
+            }
+            bodyData = (try? JSONSerialization.data(withJSONObject: anyDict)) ?? Data()
+            effectiveContentType = contentType ?? "application/json"
+        } else if let array = value as? [any Sendable] {
+            // Convert Sendable array to Any for JSON serialization
+            let anyArray = array.map { $0 as Any }
+            bodyData = (try? JSONSerialization.data(withJSONObject: anyArray)) ?? Data()
+            effectiveContentType = contentType ?? "application/json"
+        } else {
+            // Try to serialize any other value
+            bodyData = String(describing: value).data(using: .utf8) ?? Data()
+            effectiveContentType = contentType ?? "text/plain"
+        }
+
+        // Set Content-Type header if not already set
+        if headers["Content-Type"] == nil {
+            headers["Content-Type"] = effectiveContentType
+        }
+
+        // Perform POST request
+        let response = try await httpClient.post(url: urlString, headers: headers, body: bodyData, timeout: timeout)
+
+        // Return response information
+        return URLWriteResult(
+            url: urlString,
+            statusCode: response.statusCode,
+            success: response.statusCode >= 200 && response.statusCode < 300,
+            body: response.bodyString
+        )
+        #else
+        throw ActionError.runtimeError("HTTP client not available on Windows")
+        #endif
+    }
+}
+
+/// Result of writing to a URL
+public struct URLWriteResult: Sendable {
+    public let url: String
+    public let statusCode: Int
+    public let success: Bool
+    public let body: String?
+
+    public init(url: String, statusCode: Int, success: Bool, body: String?) {
+        self.url = url
+        self.statusCode = statusCode
+        self.success = success
+        self.body = body
     }
 }
 
@@ -885,18 +1046,20 @@ public struct NotifyAction: ActionImplementation {
     ) async throws -> any Sendable {
         try validatePreposition(object.preposition)
 
-        // Get notification message
+        // result = the notification target recipient (e.g., <user>, <admin>)
+        // May be a plain identifier or a resolved object (dict with name, age, etc.)
+        let target = result.base
+        let targetValue = context.resolveAny(result.base)
+
+        // object = the notification message content (via "with"/"to" preposition)
         let message: String
-        if let value: String = context.resolve(result.base) {
+        if let value: String = context.resolve(object.base) {
             message = value
-        } else if let value = context.resolveAny(result.base) {
+        } else if let value = context.resolveAny(object.base) {
             message = String(describing: value)
         } else {
-            message = result.fullName
+            message = object.base
         }
-
-        // Get notification target (e.g., user, system, channel)
-        let target = object.base
 
         // Try notification service
         if let notificationService = context.service(NotificationService.self) {
@@ -904,8 +1067,30 @@ public struct NotifyAction: ActionImplementation {
             return NotifyResult(message: message, target: target, success: true)
         }
 
-        // Emit notification event
-        context.emit(NotificationSentEvent(message: message, target: target))
+        // Emit notification event(s), carrying the resolved target value so handlers
+        // can access object fields (e.g., Extract the <user> from the <event: user>.)
+        // Use publishAndTrack so awaitPendingEvents() waits for all handlers to finish.
+        // When the target is a collection, emit one event per item so the runtime
+        // distributes the notification — `Notify the <adults> with "Hello!".` works
+        // the same as iterating and notifying each adult individually.
+        let items: [any Sendable]
+        if let array = targetValue as? [any Sendable] {
+            items = array
+        } else if let item = targetValue {
+            items = [item]
+        } else {
+            items = []
+        }
+
+        if let eventBus = context.eventBus {
+            for item in items {
+                await eventBus.publishAndTrack(NotificationSentEvent(message: message, target: target, targetValue: item))
+            }
+        } else {
+            for item in items {
+                context.emit(NotificationSentEvent(message: message, target: target, targetValue: item))
+            }
+        }
 
         return NotifyResult(message: message, target: target, success: true)
     }
@@ -929,11 +1114,15 @@ public struct NotificationSentEvent: RuntimeEvent {
     public let timestamp: Date
     public let message: String
     public let target: String
+    /// The resolved value of the target variable (e.g., a user dict with name/age/email/sex).
+    /// Bound in the handler context as "event:<target>" so handlers can extract fields.
+    public let targetValue: (any Sendable)?
 
-    public init(message: String, target: String) {
+    public init(message: String, target: String, targetValue: (any Sendable)? = nil) {
         self.timestamp = Date()
         self.message = message
         self.target = target
+        self.targetValue = targetValue
     }
 }
 

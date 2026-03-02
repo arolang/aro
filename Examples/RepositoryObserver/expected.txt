@@ -1,9 +1,19 @@
-# Generated: Mon Jan 19 13:48:39 2026
+# Generated: Sat Feb 28 00:46:22 2026
 # Type: http
 # Command: aro run ./Examples/RepositoryObserver
 ---
 GET /users => {"users":[]}
 GET /users/{id} => {"data":[]}
-POST /users => {"email":"test@example.com","name":"Test User"}
-PUT /users/{id} => {"email":"updated@example.com","id":"123","name":"Updated User"}
-DELETE /users/{id} => {"deleted":"123"}
+POST /users => {"email":"test@example.com","id":"__UUID__","name":"Test User"}
+PUT /users/{id} => {"email":"updated@example.com","id":"__UUID__","name":"Updated User"}
+DELETE /users/{id} => {"deleted":"__UUID__"}
+---server---
+user-repository: created (id: __UUID__)
+user-repository: deleted (id: __UUID__)
+user-repository: updated (id: __UUID__)
+User __UUID__ changed: created
+User __UUID__ changed: deleted
+User __UUID__ changed: updated
+Entity __UUID__ - operation: created
+Entity __UUID__ - operation: deleted
+Entity __UUID__ - operation: updated

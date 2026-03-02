@@ -846,6 +846,11 @@ private func fsEventsCallback(
 
         // Print to console (matching interpreter behavior)
         print("[FileMonitor] \(eventType): \(path)")
+
+        // Publish domain event to EventBus so compiled binary file event handlers are triggered.
+        // Uses DomainEvent with "file.created" / "file.modified" / "file.deleted" event types.
+        let domainEventType = "file.\(eventType.lowercased())"
+        EventBus.shared.publish(DomainEvent(eventType: domainEventType, payload: ["path": path]))
     }
 }
 
@@ -2476,9 +2481,14 @@ public func aro_native_http_server_start(_ port: Int32, _ contextPtr: UnsafeMuta
                                 return (statusCode, ["Content-Type": "image/svg+xml"], str.data(using: .utf8))
                             }
 
-                            // Priority 2: If OpenAPI says text/html, return as HTML
+                            // Priority 2: If OpenAPI specifies a content type, honor it
                             if expectedContentType == "text/html" {
                                 return (statusCode, ["Content-Type": "text/html; charset=utf-8"], str.data(using: .utf8))
+                            }
+
+                            // ARO-0044: Honor text/plain for metrics endpoint (Prometheus format)
+                            if expectedContentType == "text/plain" {
+                                return (statusCode, ["Content-Type": "text/plain; version=0.0.4; charset=utf-8"], str.data(using: .utf8))
                             }
 
                             // Priority 3: Content-based detection (fallback)
@@ -2577,6 +2587,15 @@ public func aro_native_http_server_start(_ port: Int32, _ contextPtr: UnsafeMuta
                 } else {
                     // Create new context via aro_context_create using global runtime
                     requestContext = aro_context_create(globalRuntimePtr)
+                }
+
+                // Lookup business activity for this feature set and bind published variables
+                if let activity = aro_lookup_business_activity(opId) {
+                    aro_context_bind_published_variables(requestContext, activity)
+                    free(activity)  // Free the C string returned by lookup
+                } else {
+                    // No business activity found, bind with empty string
+                    aro_context_bind_published_variables(requestContext, nil)
                 }
 
                 // Bind request data to context before invoking handler

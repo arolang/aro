@@ -4,7 +4,7 @@
  *)
 
 (* Handle new socket connections *)
-(Handle Socket Connect: Socket Event Handler) {
+(Handle Client Connected: Socket Event Handler) {
     Extract the <client-id> from the <connection: id>.
     Log ">>> Socket client connected" to the <console>.
     Log <client-id> to the <console>.
@@ -17,23 +17,23 @@
 }
 
 (* Handle socket messages *)
-(Handle Socket Message: Socket Event Handler) {
-    Extract the <message> from the <event: message>.
-    Extract the <client-id> from the <event: connectionId>.
+(Handle Data Received: Socket Event Handler) {
+    Extract the <message> from the <packet: message>.
+    Extract the <client-id> from the <packet: connection>.
 
     Log ">>> Socket message received" to the <console>.
     Log <message> to the <console>.
 
     (* Echo back *)
     Create the <echo-prefix> with "Echo: ".
-    Compute the <echo> from <echo-prefix> + <message>.
+    Compute the <echo> from <echo-prefix> ++ <message>.
     Send the <echo> to the <client-id>.
 
     Return an <OK: status> for the <message>.
 }
 
 (* Handle socket disconnections *)
-(Handle Socket Disconnect: Socket Event Handler) {
+(Handle Client Disconnected: Socket Event Handler) {
     Extract the <client-id> from the <event: connectionId>.
     Log ">>> Socket client disconnected" to the <console>.
     Log <client-id> to the <console>.

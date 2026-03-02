@@ -1,24 +1,42 @@
-(* ARO-0043: Sink Syntax Test *)
-(* Tests the new sink verb syntax: Log "message" to the <console>. *)
+(* ARO-0043: Sink Syntax *)
 
-(Application-Start: Sink Syntax Test) {
-    (* New sink syntax - direct string literal to system object *)
-    Log "Hello from new sink syntax!" to the <console>.
+(* Sink syntax places an expression directly in the result position,   *)
+(* consuming a value without creating a variable binding.              *)
+(*                                                                      *)
+(* Standard:  Log the <message> to the <console>.  -- "the" + name     *)
+(* Sink:      Log "Hello!" to the <console>.        -- literal direct   *)
+(* Sink:      Log <message> to the <console>.       -- var, no "the"   *)
 
-    (* Variables work with sink syntax too *)
-    Compute the <greeting> from "ARO is great!".
-    Log <greeting> to the <console>.
+(Application-Start: Sink Syntax) {
 
-    (* Numbers work too *)
-    Compute the <count> from 42.
-    Log <count> to the <console>.
+    (* ── Standard syntax ────────────────────────────────────────────── *)
+    (* Creates a binding that can be reused *)
+    Create the <message> with "Hello, World!".
+    Log the <message> to the <console>.
+    Log the <message> to the <console>.     (* reusable because it is bound *)
 
-    (* Objects can be logged directly *)
-    Compute the <user> from { name: "Alice", age: 30 }.
-    Log <user> to the <console>.
+    (* ── Sink syntax: string literal ────────────────────────────────── *)
+    Log "Starting up..." to the <console>.
 
-    (* Standard syntax still works for backwards compatibility *)
-    Log "Standard syntax still works" to the <console>.
+    (* ── Sink syntax: variable reference without "the" ──────────────── *)
+    Log <message> to the <console>.
+
+    (* ── Sink syntax: qualified variable (property access) ──────────── *)
+    Create the <user> with { name: "Alice", age: 30 }.
+    Log <user: name> to the <console>.
+
+    (* ── Sink syntax: number literal ────────────────────────────────── *)
+    Log 42 to the <console>.
+
+    (* ── Sink syntax: boolean (via variable) ────────────────────────── *)
+    Create the <flag> with true.
+    Log <flag> to the <console>.
+
+    (* ── Sink syntax: array literal ─────────────────────────────────── *)
+    Log [10, 20, 30] to the <console>.
+
+    (* ── Sink syntax: object literal ────────────────────────────────── *)
+    Log { status: "ok", version: 1 } to the <console>.
 
     Return an <OK: status> for the <startup>.
 }

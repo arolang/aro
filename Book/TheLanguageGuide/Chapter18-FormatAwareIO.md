@@ -14,33 +14,26 @@ When you write data to a file, ARO examines the file extension and automatically
   <rect x="20" y="35" width="80" height="50" rx="5" fill="#e0e7ff" stroke="#6366f1" stroke-width="2"/>
   <text x="60" y="55" text-anchor="middle" font-family="sans-serif" font-size="10" fill="#4338ca">Structured</text>
   <text x="60" y="70" text-anchor="middle" font-family="sans-serif" font-size="10" fill="#4338ca">Data</text>
-
   <!-- Arrow to detector -->
   <line x1="100" y1="60" x2="150" y2="60" stroke="#6b7280" stroke-width="2"/>
   <polygon points="150,60 144,56 144,64" fill="#6b7280"/>
-
   <!-- Format detector -->
   <rect x="150" y="30" width="100" height="60" rx="5" fill="#fef3c7" stroke="#f59e0b" stroke-width="2"/>
   <text x="200" y="55" text-anchor="middle" font-family="sans-serif" font-size="10" fill="#92400e">Format</text>
   <text x="200" y="70" text-anchor="middle" font-family="sans-serif" font-size="10" fill="#92400e">Detector</text>
-
   <!-- Arrow to serializer -->
   <line x1="250" y1="60" x2="300" y2="60" stroke="#6b7280" stroke-width="2"/>
   <polygon points="300,60 294,56 294,64" fill="#6b7280"/>
-
   <!-- Serializer -->
   <rect x="300" y="30" width="80" height="60" rx="5" fill="#dcfce7" stroke="#22c55e" stroke-width="2"/>
   <text x="340" y="55" text-anchor="middle" font-family="sans-serif" font-size="10" fill="#166534">Format</text>
   <text x="340" y="70" text-anchor="middle" font-family="sans-serif" font-size="10" fill="#166534">Serializer</text>
-
   <!-- Arrow to file -->
   <line x1="380" y1="60" x2="430" y2="60" stroke="#6b7280" stroke-width="2"/>
   <polygon points="430,60 424,56 424,64" fill="#6b7280"/>
-
   <!-- File icon -->
   <rect x="430" y="35" width="50" height="50" rx="3" fill="#f3e8ff" stroke="#8b5cf6" stroke-width="2"/>
   <text x="455" y="65" text-anchor="middle" font-family="sans-serif" font-size="10" fill="#6b21a8">.json</text>
-
   <!-- Extension label -->
   <text x="200" y="110" text-anchor="middle" font-family="sans-serif" font-size="9" fill="#6b7280">Extension determines format</text>
 </svg>
@@ -324,34 +317,27 @@ Reading files reverses the process. ARO examines the file extension and parses t
   <!-- File icon -->
   <rect x="20" y="35" width="50" height="50" rx="3" fill="#f3e8ff" stroke="#8b5cf6" stroke-width="2"/>
   <text x="45" y="65" text-anchor="middle" font-family="sans-serif" font-size="10" fill="#6b21a8">.csv</text>
-
   <!-- Arrow to detector -->
   <line x1="70" y1="60" x2="120" y2="60" stroke="#6b7280" stroke-width="2"/>
   <polygon points="120,60 114,56 114,64" fill="#6b7280"/>
-
   <!-- Format detector -->
   <rect x="120" y="30" width="100" height="60" rx="5" fill="#fef3c7" stroke="#f59e0b" stroke-width="2"/>
   <text x="170" y="55" text-anchor="middle" font-family="sans-serif" font-size="10" fill="#92400e">Format</text>
   <text x="170" y="70" text-anchor="middle" font-family="sans-serif" font-size="10" fill="#92400e">Detector</text>
-
   <!-- Arrow to parser -->
   <line x1="220" y1="60" x2="270" y2="60" stroke="#6b7280" stroke-width="2"/>
   <polygon points="270,60 264,56 264,64" fill="#6b7280"/>
-
   <!-- Parser -->
   <rect x="270" y="30" width="80" height="60" rx="5" fill="#dcfce7" stroke="#22c55e" stroke-width="2"/>
   <text x="310" y="55" text-anchor="middle" font-family="sans-serif" font-size="10" fill="#166534">Format</text>
   <text x="310" y="70" text-anchor="middle" font-family="sans-serif" font-size="10" fill="#166534">Parser</text>
-
   <!-- Arrow to object -->
   <line x1="350" y1="60" x2="400" y2="60" stroke="#6b7280" stroke-width="2"/>
   <polygon points="400,60 394,56 394,64" fill="#6b7280"/>
-
   <!-- Object box -->
   <rect x="400" y="35" width="80" height="50" rx="5" fill="#e0e7ff" stroke="#6366f1" stroke-width="2"/>
   <text x="440" y="55" text-anchor="middle" font-family="sans-serif" font-size="10" fill="#4338ca">Structured</text>
   <text x="440" y="70" text-anchor="middle" font-family="sans-serif" font-size="10" fill="#4338ca">Data</text>
-
   <!-- Extension label -->
   <text x="170" y="110" text-anchor="middle" font-family="sans-serif" font-size="9" fill="#6b7280">Extension determines parser</text>
 </svg>
@@ -496,25 +482,20 @@ While format-aware I/O handles file serialization, web applications often need t
   <rect x="20" y="35" width="80" height="50" rx="5" fill="#fef3c7" stroke="#f59e0b" stroke-width="2"/>
   <text x="60" y="55" text-anchor="middle" font-family="sans-serif" font-size="10" fill="#92400e">HTML</text>
   <text x="60" y="70" text-anchor="middle" font-family="sans-serif" font-size="10" fill="#92400e">String</text>
-
   <!-- Arrow to ParseHtml -->
   <line x1="100" y1="60" x2="150" y2="60" stroke="#6b7280" stroke-width="2"/>
   <polygon points="150,60 144,56 144,64" fill="#6b7280"/>
-
   <!-- ParseHtml -->
   <rect x="150" y="30" width="100" height="60" rx="5" fill="#dcfce7" stroke="#22c55e" stroke-width="2"/>
   <text x="200" y="55" text-anchor="middle" font-family="sans-serif" font-size="10" fill="#166534">ParseHtml</text>
   <text x="200" y="70" text-anchor="middle" font-family="sans-serif" font-size="10" fill="#166534">Action</text>
-
   <!-- Arrow to output -->
   <line x1="250" y1="60" x2="300" y2="60" stroke="#6b7280" stroke-width="2"/>
   <polygon points="300,60 294,56 294,64" fill="#6b7280"/>
-
   <!-- Output box -->
   <rect x="300" y="35" width="80" height="50" rx="5" fill="#e0e7ff" stroke="#6366f1" stroke-width="2"/>
   <text x="340" y="55" text-anchor="middle" font-family="sans-serif" font-size="10" fill="#4338ca">Structured</text>
   <text x="340" y="70" text-anchor="middle" font-family="sans-serif" font-size="10" fill="#4338ca">Data</text>
-
   <!-- Specifier label -->
   <text x="200" y="110" text-anchor="middle" font-family="sans-serif" font-size="9" fill="#6b7280">Specifier determines extraction type</text>
 </svg>

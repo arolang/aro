@@ -172,8 +172,8 @@ sub read_test_hint {
         $hints{timeout} = undef;
     }
 
-    if (defined $hints{type} && $hints{type} !~ /^(console|http|socket|file)$/) {
-        warn "Warning: Invalid type '$hints{type}' (must be console|http|socket|file), ignoring\n";
+    if (defined $hints{type} && $hints{type} !~ /^(console|http|socket|file|multiservice)$/) {
+        warn "Warning: Invalid type '$hints{type}' (must be console|http|socket|file|multiservice), ignoring\n";
         $hints{type} = undef;
     }
 

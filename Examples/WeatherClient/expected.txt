@@ -1,0 +1,12 @@
+# Type: console
+# Command: aro run ./Examples/WeatherClient
+# NOTE: occurrence-check — verifies response structure, not exact values
+---
+Fetching weather...
+current_weather.temperature:
+current_weather.windspeed:
+current_weather.winddirection:
+current_weather.weathercode:
+latitude:
+longitude:
+startup

@@ -1,7 +1,10 @@
-=== Socket Client Demo ===
-Demonstrating Connect action for TCP client
-Connect action features:
-- Verb: connect
-- Prepositions: to, with
-- Returns connection ID for Send/Close
-Demo complete
+# Generated: manually
+# Type: socket-client
+# Command: aro run ./Examples/SocketClient
+---
+Connecting to echo server...
+Connected!
+Sent: Hello from ARO!
+Received: Hello from ARO!
+startup
+value: Hello from ARO!

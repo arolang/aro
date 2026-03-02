@@ -1,0 +1,12 @@
+  Recent Logs
+  ─────────────────────────────────────
+
+  [10:30:15] INFO  Application started
+  [10:30:16] INFO  HTTP server listening on port 8080
+  [10:30:20] WARN  High memory usage detected
+  [10:30:25] INFO  Request processed successfully
+  [10:30:30] ERROR Failed to connect to database
+
+  ─────────────────────────────────────
+  Press Backspace to return to menu
+

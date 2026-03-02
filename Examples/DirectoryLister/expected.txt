@@ -1,14 +1,11 @@
-# Generated: Sat Jan 11 2026
+# Generated: Tue Feb 24 08:11:52 2026
 # Type: console
 # Command: aro run ./Examples/DirectoryLister
-# Note: Uses occurrence-check - only key lines need to match
 ---
 Directory Lister - Cross-Platform Example
 Using native List action (works on Windows, macOS, Linux)
 ----------------------------------------
-entries
-"name":"alpha.txt"
-"name":"beta.txt"
-"name":"gamma.txt"
-"isFile":true
-"isDirectory":false
+alpha.txt
+beta.txt
+gamma.txt
+listing

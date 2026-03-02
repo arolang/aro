@@ -1,0 +1,25 @@
+# Example: AutoPipeline
+# Type: console
+---
+=== Automatic Pipeline (No |> needed) ===
+Adults (age > 27):
+age: 30
+name: Alice
+
+age: 35
+name: Charlie
+
+age: 28
+name: Diana
+
+=== Chained Transformations ===
+Original:
+hello
+Uppercase:
+HELLO
+Length:
+5
+
+✓ Automatic pipeline detection working!
+✓ No |> operator needed - ARO is smart enough!
+[OK] test

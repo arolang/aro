@@ -13,6 +13,11 @@
     (* Use native List action - cross-platform, no shell dependency *)
     List the <entries> from the <directory: path>.
 
-    (* Return structured file information *)
-    Return an <OK: status> for the <entries>.
+    (* Print each file using a for loop *)
+    for each <entry> in <entries> {
+        Log <entry: name> to the <console>.
+    }
+
+    (* Return success status *)
+    Return an <OK: status> for the <listing>.
 }

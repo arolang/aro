@@ -1,0 +1,90 @@
+(* ============================================================
+   Numeric Separators Example
+   Demonstrates underscore separators in numeric literals
+   for improved readability of large numbers (ARO-0052)
+   ============================================================ *)
+
+(Application-Start: Numeric Separators Demo) {
+    Log "=== ARO Numeric Separators Demo ===" to the <console>.
+
+    (* --------------------------------------------------------
+       Integer Literals with Separators
+       -------------------------------------------------------- *)
+    Log "" to the <console>.
+    Log "--- Integer Literals ---" to the <console>.
+
+    Create the <thousand> with 1_000.
+    Create the <million> with 1_000_000.
+    Create the <billion> with 1_000_000_000.
+
+    Log "One thousand: " to the <console>.
+    Log <thousand> to the <console>.
+    Log "One million: " to the <console>.
+    Log <million> to the <console>.
+    Log "One billion: " to the <console>.
+    Log <billion> to the <console>.
+
+    (* --------------------------------------------------------
+       Floating-Point Literals with Separators
+       -------------------------------------------------------- *)
+    Log "" to the <console>.
+    Log "--- Floating-Point Literals ---" to the <console>.
+
+    Create the <price> with 1_234.56.
+    Create the <pi-precise> with 3.141_592_653.
+
+    Log "Price: " to the <console>.
+    Log <price> to the <console>.
+    Log "Pi (precise): " to the <console>.
+    Log <pi-precise> to the <console>.
+
+    (* --------------------------------------------------------
+       Scientific Notation with Separators
+       -------------------------------------------------------- *)
+    Log "" to the <console>.
+    Log "--- Scientific Notation ---" to the <console>.
+
+    Create the <avogadro> with 6.022e2_3.
+    Create the <light-year-km> with 9.461e1_2.
+
+    Log "Avogadro's number (approx): " to the <console>.
+    Log <avogadro> to the <console>.
+    Log "Light year in km: " to the <console>.
+    Log <light-year-km> to the <console>.
+
+    (* --------------------------------------------------------
+       Hex and Binary (already supported)
+       -------------------------------------------------------- *)
+    Log "" to the <console>.
+    Log "--- Hex and Binary ---" to the <console>.
+
+    Create the <color-white> with 0xFF_FF_FF.
+    Create the <byte-pattern> with 0b1010_1010.
+
+    Log "White color (hex): " to the <console>.
+    Log <color-white> to the <console>.
+    Log "Byte pattern (binary): " to the <console>.
+    Log <byte-pattern> to the <console>.
+
+    (* --------------------------------------------------------
+       Arithmetic with Large Numbers
+       -------------------------------------------------------- *)
+    Log "" to the <console>.
+    Log "--- Arithmetic ---" to the <console>.
+
+    Create the <budget> with 1_000_000.
+    Create the <expense> with 250_000.
+    Compute the <remaining> from <budget> - <expense>.
+
+    Log "Budget: " to the <console>.
+    Log <budget> to the <console>.
+    Log "Expense: " to the <console>.
+    Log <expense> to the <console>.
+    Log "Remaining: " to the <console>.
+    Log <remaining> to the <console>.
+
+    Log "" to the <console>.
+    Log "=== Demo Complete ===" to the <console>.
+
+    Return an <OK: status> for the <demo>.
+}

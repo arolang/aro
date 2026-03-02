@@ -241,6 +241,90 @@ Chain operations to build complex data transformations:
 
 ---
 
+## Automatic Pipeline Detection
+
+ARO automatically detects pipeline patterns **without requiring explicit operators** like `|>`. The runtime recognizes data flow chains through immutable variable dependencies, providing all the benefits of pipeline operators without new syntax.
+
+### How It Works
+
+Because ARO variables are immutable, each statement creates a new binding that later statements can reference. This creates an explicit data flow graph:
+
+```aro
+(* ARO automatically detects this as a 4-stage pipeline *)
+Filter the <current-year> from <transactions> where <year> = "2024".
+Filter the <high-value> from <current-year> where <amount> > 500.
+Filter the <completed> from <high-value> where <status> = "completed".
+Filter the <electronics> from <completed> where <category> = "electronics".
+```
+
+The runtime automatically recognizes the dependency chain:
+```
+transactions → current-year → high-value → completed → electronics
+```
+
+### Why Not Use `|>` Operator?
+
+Many languages provide explicit pipeline operators. ARO takes a different approach:
+
+| Aspect | Explicit `|>` Operator | ARO Automatic Detection |
+|--------|----------------------|-------------------------|
+| **Syntax** | New operator to learn | Natural language (no change) |
+| **Debugging** | Hard (no variable names) | Easy (named variables) |
+| **Error messages** | "Pipeline failed at step 3" | "Cannot filter <completed> from <high-value>" |
+| **Backward compat** | Breaking change | Transparent |
+| **Intermediate inspection** | Requires special syntax | `Log <current-year> to <console>.` |
+
+### Benefits of Named Pipelines
+
+With named intermediate values, you can:
+
+1. **Inspect each stage** during debugging:
+```aro
+Filter the <current-year> from <transactions> where <year> = "2024".
+Log <current-year> to the <console>.  (* Debug: see year-filtered data *)
+
+Filter the <high-value> from <current-year> where <amount> > 500.
+Log <high-value> to the <console>.  (* Debug: see high-value data *)
+```
+
+2. **Get clear error messages** that reference specific variables:
+```
+Error: Cannot filter the completed from the high-value where status = "completed"
+  Variable: <high-value>
+  Location: analytics.aro:15
+```
+
+3. **Reuse intermediate results** for multiple operations:
+```aro
+Filter the <active-orders> from <orders> where <status> = "active".
+
+(* Reuse active-orders for multiple aggregations *)
+Reduce the <total> from <active-orders> with sum(<amount>).
+Reduce the <count> from <active-orders> with count().
+Reduce the <average> from <active-orders> with avg(<amount>).
+```
+
+### Optimization Strategies
+
+The runtime applies several optimizations based on detected patterns:
+
+| Pattern | Optimization | Memory |
+|---------|--------------|--------|
+| **Linear chain** | Streaming pipeline | O(1) |
+| **Multiple aggregations** | Aggregation fusion (single pass) | O(k accumulators) |
+| **Fan-out** | Stream tee with bounded buffer | O(buffer size) |
+
+See **Chapter 40: Streaming Execution** for complete details on how ARO optimizes pipelines.
+
+### Complete Specification
+
+For the complete design and implementation of automatic pipeline detection, see:
+- **Proposal**: `Proposals/ARO-0067-automatic-pipeline-detection.md`
+- **Related**: ARO-0051 (Streaming Execution)
+- **Examples**: `Examples/DataPipeline/`, `Examples/StreamingPipeline/`
+
+---
+
 ## Sorting
 
 Sort results by one or more fields:

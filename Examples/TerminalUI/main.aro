@@ -1,0 +1,33 @@
+(* Terminal UI Examples Collection
+ *
+ * This is an informational example showcasing ARO's Terminal UI system.
+ * See the individual examples for full demonstrations:
+ *
+ *   aro run Examples/TerminalSimpleMenu
+ *   aro run Examples/TerminalTaskManager
+ *   aro run Examples/TerminalSystemMonitor
+ *)
+
+(Application-Start: Terminal UI Collection) {
+    Log "ARO Terminal UI System (ARO-0052 + ARO-0053)" to the <console>.
+    Log "================================================" to the <console>.
+    Log "" to the <console>.
+    Log "Available Examples:" to the <console>.
+    Log "  - TerminalSimpleMenu:     Basic terminal output with ANSI styling" to the <console>.
+    Log "  - TerminalTaskManager:    Repository Observer Watch pattern (reactive)" to the <console>.
+    Log "  - TerminalSystemMonitor:  Event-based Watch pattern (reactive)" to the <console>.
+    Log "" to the <console>.
+    Log "Features Implemented:" to the <console>.
+    Log "  - Shadow buffer optimization (10-192x faster screen updates)" to the <console>.
+    Log "  - Reactive Watch pattern (event-driven, no polling)" to the <console>.
+    Log "  - Template filters for colors and styles" to the <console>.
+    Log "  - Interactive actions (Prompt, Select, Clear)" to the <console>.
+    Log "  - Thread-safe terminal service (Swift actor)" to the <console>.
+    Log "" to the <console>.
+    Log "Run individual examples:" to the <console>.
+    Log "  aro run Examples/TerminalSimpleMenu" to the <console>.
+    Log "  aro run Examples/TerminalTaskManager" to the <console>.
+    Log "  aro run Examples/TerminalSystemMonitor" to the <console>.
+
+    Return an <OK: status> for the <startup>.
+}

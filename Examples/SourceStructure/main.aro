@@ -1,0 +1,24 @@
+(* Source Structure Example *)
+(* Demonstrates organizing .aro files in a sources/ subdirectory *)
+
+(Application-Start: Source Structure Demo) {
+    Log "=== Source Structure Demo ===" to the <console>.
+    Log "This example shows .aro files organized in sources/ subdirectory." to the <console>.
+    Log "" to the <console>.
+
+    (* The runtime automatically discovers all .aro files in subdirectories *)
+    (* Feature sets from sources/users/users.aro and sources/orders/orders.aro *)
+    (* are globally visible without any imports *)
+
+    Log "Testing user operations (from sources/users/users.aro):" to the <console>.
+    Emit a <CreateUser: event> with { name: "Alice", email: "alice@example.com" }.
+
+    Log "" to the <console>.
+    Log "Testing order operations (from sources/orders/orders.aro):" to the <console>.
+    Emit a <CreateOrder: event> with { userId: "user-1", total: 99.99 }.
+
+    Log "" to the <console>.
+    Log "All feature sets work together across subdirectories!" to the <console>.
+
+    Return an <OK: status> for the <demo>.
+}

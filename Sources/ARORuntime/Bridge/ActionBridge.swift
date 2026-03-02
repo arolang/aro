@@ -191,6 +191,29 @@ private func executeAction(
         ctxHandle.context.setExecutionError(ActionError.runtimeError(errorMsg))
     }
 
+    // Special handling for Publish action in binary mode:
+    // Store published variable in globalSymbols so it's accessible across feature sets
+    if verb == "publish", actionResult.succeeded {
+        let externalName = resultDesc.base
+        let internalName = objectDesc.base
+        if let value = ctxHandle.context.resolveAny(internalName) {
+            let runtime = ctxHandle.runtime.runtime
+            let businessActivity = ctxHandle.context.businessActivity
+            let featureSetName = ctxHandle.context.featureSetName
+
+            // Store in globalSymbols asynchronously
+            Task { @Sendable in
+                let globalSymbols = await runtime.globalSymbols
+                await globalSymbols.publish(
+                    name: externalName,
+                    value: value,
+                    fromFeatureSet: featureSetName,
+                    businessActivity: businessActivity
+                )
+            }
+        }
+    }
+
     // Check semantic role - response/export actions don't bind their results
     let semanticRole = ActionSemanticRole.classify(verb: verb)
     let shouldBindResult = semanticRole != .response && semanticRole != .export
@@ -615,7 +638,7 @@ public func aro_action_keepalive(
     // Emit event
     ctxHandle.context.emit(WaitStateEnteredEvent())
 
-    if EventBus.shared.hasActiveEventSources {
+    if EventBus.shared.hasActiveEventSourcesSync() {
         // Long-running service mode (HTTP server, file monitor, socket):
         // wait for explicit shutdown signal only (SIGINT/SIGTERM)
         ShutdownCoordinator.shared.waitForShutdownSync()
@@ -631,7 +654,7 @@ public func aro_action_keepalive(
             // Process events via RunLoop
             _ = RunLoop.current.run(mode: .default, before: Date(timeIntervalSinceNow: 0.1))
 
-            let pendingCount = EventBus.shared.getPendingHandlerCount()
+            let pendingCount = EventBus.shared.getPendingHandlerCountSync()
             if pendingCount == 0 {
                 consecutiveIdleChecks += 1
                 if consecutiveIdleChecks >= idleThreshold {

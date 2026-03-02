@@ -1,12 +1,16 @@
-# Generated: Sat Jan 10 11:07:28 2026
+# Generated: Sun Mar  1 17:54:10 2026
 # Type: console
 # Command: aro run ./Examples/SinkSyntax
 ---
-Hello from new sink syntax!
-ARO is great!
+Hello, World!
+Hello, World!
+Starting up...
+Hello, World!
+Alice
 42
-age: 30
-name: Alice
-Standard syntax still works
+true
+[10, 20, 30]
+status: ok
+version: 1
 startup
-  value: ARO is great!
+value: Hello, World!

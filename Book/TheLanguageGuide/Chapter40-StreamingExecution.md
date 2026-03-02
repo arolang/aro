@@ -2,6 +2,8 @@
 
 ARO's streaming execution engine enables processing of arbitrarily large datasets with constant memory usage. Inspired by Apache Spark's lazy evaluation model, ARO automatically optimizes data pipelines to process data incrementally rather than loading entire files into memory.
 
+Combined with **automatic pipeline detection** (ARO-0067), ARO transparently recognizes data flow chains and applies streaming optimizations without requiring explicit pipeline operators or syntax changes. The same natural-language code that works for small datasets automatically streams for large datasets.
+
 ## The Problem with Eager Loading
 
 Consider this simple pipeline processing a 10GB CSV file:
@@ -458,6 +460,38 @@ ARO's streaming execution follows these principles:
 5. **Aggregation Fusion**: Single-pass multi-aggregation
 
 For datasets that truly need random access or multiple iterations, use the `eager` qualifier explicitly.
+
+---
+
+## Pipeline Detection
+
+The streaming engine works seamlessly with ARO's automatic pipeline detection (ARO-0067). When you write chained operations using immutable variables, ARO automatically:
+
+1. **Detects the data flow graph** through variable dependencies
+2. **Builds a lazy pipeline** that defers execution until a drain operation
+3. **Applies streaming optimizations** transparently
+4. **Fuses multiple aggregations** into single-pass operations
+
+This means the same code works for both small and large datasets without modification:
+
+```aro
+(* This code works identically for 1KB or 10GB files *)
+Read the <data> from the <file: "data.csv">.
+Filter the <active> from <data> where <status> = "active".
+Reduce the <total> from <active> with sum(<amount>).
+```
+
+For small files (< 10MB), ARO may use eager loading for better performance. For large files, it automatically streams with O(1) memory usage.
+
+See **Chapter 29: Data Pipelines** for more details on automatic pipeline detection and composition patterns.
+
+---
+
+## Related Proposals
+
+- **ARO-0051**: Streaming Execution Engine (this chapter)
+- **ARO-0067**: Automatic Pipeline Detection
+- **ARO-0018**: Data Pipeline Operations
 
 ---
 

@@ -1,0 +1,12 @@
+{{ "=== Task Manager ===" | bold | color: "cyan" }}
+
+Terminal: {{ <terminal: columns> }} columns × {{ <terminal: rows> }} rows
+
+{{ "Tasks:" | bold }}
+
+{{for task in tasks}}
+  [{{ <task: id> }}] {{ <task: title> | color: "white" }} - {{ <task: status> | color: "yellow" }}
+{{end}}
+
+{{ "---" }}
+Total: {{ <tasks> | length }} tasks

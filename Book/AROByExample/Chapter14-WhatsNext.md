@@ -89,6 +89,35 @@ ARO can serve HTTP APIs using OpenAPI contracts:
 
 Feature sets are named after OpenAPI `operationId` values. The server handles routing automatically.
 
+**Real-Time WebSocket Application**
+
+Build applications with live updates using WebSocket. Messages posted via HTTP are broadcast to all connected clients:
+
+```aro
+(Application-Start: StatusPost) {
+    Start the <http-server> with { websocket: "/ws" }.
+    Keepalive the <application> for the <events>.
+    Return an <OK: status> for the <startup>.
+}
+
+(postMessage: StatusPost API) {
+    Extract the <body> from the <request: body>.
+    Extract the <message-text: message> from the <body>.
+    Create the <message: Message> with {
+        message: <message-text>,
+        createdAt: <now>
+    }.
+    Store the <message> into the <message-repository>.
+    Broadcast the <message> to the <websocket>.
+    Return a <Created: status> with <message>.
+}
+
+(Handle WebSocket Connect: WebSocket Event Handler) {
+    Log "Client connected" to the <console>.
+    Return an <OK: status> for the <connection>.
+}
+```
+
 **File Processor**
 
 Watch a directory for new files and process them:
@@ -105,6 +134,32 @@ Watch a directory for new files and process them:
     (* Process the file *)
 }
 ```
+
+**Metrics and Monitoring**
+
+Expose Prometheus metrics for monitoring your application. ARO automatically tracks execution counts and timing for all feature sets:
+
+```aro
+(getMetrics: Monitoring API) {
+    Return an <OK: status> with <metrics: prometheus>.
+}
+```
+
+With the OpenAPI contract specifying `text/plain`:
+
+```yaml
+/metrics:
+  get:
+    operationId: getMetrics
+    responses:
+      '200':
+        content:
+          text/plain:
+            schema:
+              type: string
+```
+
+This outputs standard Prometheus format that can be scraped by monitoring systems.
 
 **Event-Sourced System**
 

@@ -97,6 +97,25 @@ public struct FeatureSet: ASTNode {
 /// Protocol for all statement types
 public protocol Statement: ASTNode {}
 
+/// A pipeline statement chains actions with |> operator (ARO-0067)
+public struct PipelineStatement: Statement {
+    public let stages: [AROStatement]
+    public let span: SourceSpan
+
+    public init(stages: [AROStatement], span: SourceSpan) {
+        self.stages = stages
+        self.span = span
+    }
+
+    public var description: String {
+        "Pipeline(\(stages.count) stages)"
+    }
+
+    public func accept<V: ASTVisitor>(_ visitor: V) throws -> V.Result {
+        try visitor.visit(self)
+    }
+}
+
 /// An ARO (Action-Result-Object) statement
 ///
 /// Refactored to use grouped clause types for better semantic organization:
@@ -732,7 +751,7 @@ public enum ActionSemanticRole: String, Sendable, CaseIterable {
         let lower = verb.lowercased()
 
         let requestVerbs = ["extract", "parse", "retrieve", "fetch", "read", "receive", "get", "load"]
-        let responseVerbs = ["return", "throw", "send", "emit", "respond", "output", "write", "store", "save", "persist", "log", "print", "debug", "notify", "alert", "signal", "broadcast"]
+        let responseVerbs = ["return", "throw", "send", "emit", "respond", "output", "write", "store", "save", "persist", "log", "print", "debug", "notify", "alert", "signal", "broadcast", "render"]
         let exportVerbs = ["publish", "export", "expose", "share"]
         let serverVerbs = ["start", "stop", "listen", "await", "connect", "close", "disconnect", "terminate", "wait", "keepalive", "block", "make", "touch", "mkdir", "createdirectory", "copy", "move", "rename"]
 
@@ -768,6 +787,10 @@ public struct QualifiedNoun: Sendable, Equatable, CustomStringConvertible {
         // If it looks like a file path, don't split by dots (preserve extensions)
         // File paths start with /, ./, ../, or ~ (home directory)
         if type.hasPrefix("/") || type.hasPrefix("./") || type.hasPrefix("../") || type.hasPrefix("~") {
+            return [type]
+        }
+        // If it looks like a URL, don't split by dots (ARO-0052)
+        if type.hasPrefix("http://") || type.hasPrefix("https://") {
             return [type]
         }
         // Split by dots for property path syntax (e.g., "customer.address.city")
@@ -1224,6 +1247,7 @@ public protocol ASTVisitor {
     func visit(_ node: RequireStatement) throws -> Result
     func visit(_ node: MatchStatement) throws -> Result
     func visit(_ node: ForEachLoop) throws -> Result
+    func visit(_ node: PipelineStatement) throws -> Result
 
     // Expression visitors (ARO-0002)
     func visit(_ node: LiteralExpression) throws -> Result
@@ -1278,6 +1302,12 @@ public extension ASTVisitor where Result == Void {
     func visit(_ node: ForEachLoop) throws {
         for statement in node.body {
             try statement.accept(self)
+        }
+    }
+
+    func visit(_ node: PipelineStatement) throws {
+        for stage in node.stages {
+            try stage.accept(self)
         }
     }
 
@@ -1438,6 +1468,22 @@ public struct ASTPrinter: ASTVisitor {
         for statement in node.body {
             result += try! statement.accept(printer)
         }
+        return result
+    }
+
+    public func visit(_ node: PipelineStatement) -> String {
+        var result = "\(indentation())PipelineStatement\n"
+        result += "\(indentation())  Stages: \(node.stages.count)\n"
+
+        var printer = self
+        printer.indent += 1
+        for (index, stage) in node.stages.enumerated() {
+            result += "\(printer.indentation())Stage \(index + 1):\n"
+            var stagePrinter = printer
+            stagePrinter.indent += 1
+            result += try! stage.accept(stagePrinter)
+        }
+
         return result
     }
 

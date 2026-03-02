@@ -63,11 +63,15 @@ public struct CompletionHandler: Sendable {
             ("Parse", "REQUEST", "Parse structured data"),
             ("Retrieve", "REQUEST", "Retrieve from data store"),
             ("Fetch", "REQUEST", "Fetch from remote source"),
+            ("Receive", "REQUEST", "Receive data from socket or event stream"),
             ("Accept", "REQUEST", "Accept input"),
             ("Read", "REQUEST", "Read file contents"),
+            ("Request", "REQUEST", "Make an HTTP request"),
             ("List", "REQUEST", "List directory contents"),
             ("Stat", "REQUEST", "Get file metadata"),
             ("Exists", "REQUEST", "Check if file exists"),
+            ("Prompt", "REQUEST", "Prompt user for terminal input"),
+            ("Select", "REQUEST", "Present a terminal selection menu"),
 
             // OWN actions
             ("Create", "OWN", "Create new data"),
@@ -75,35 +79,49 @@ public struct CompletionHandler: Sendable {
             ("Validate", "OWN", "Validate data"),
             ("Compare", "OWN", "Compare values"),
             ("Transform", "OWN", "Transform data structure"),
+            ("Update", "OWN", "Update or modify a value"),
+            ("Sort", "OWN", "Sort a collection"),
             ("Set", "OWN", "Set a value"),
             ("Merge", "OWN", "Merge data"),
+            ("Delete", "OWN", "Delete or remove data"),
             ("Filter", "OWN", "Filter collection"),
             ("Match", "OWN", "Match pattern"),
             ("Split", "OWN", "Split string"),
+            ("Map", "OWN", "Transform each element of a collection"),
+            ("Reduce", "OWN", "Reduce a collection to a single value"),
             ("Copy", "OWN", "Copy file"),
             ("Move", "OWN", "Move file"),
-            ("Append", "OWN", "Append to collection"),
+            ("Append", "OWN", "Append to file or collection"),
+            ("Execute", "OWN", "Execute a shell command"),
+            ("Call", "OWN", "Call an external service or plugin action"),
+            ("ParseHtml", "OWN", "Parse HTML into structured data"),
+            ("Accept", "OWN", "Accept a state transition"),
+            ("Clear", "OWN", "Clear the terminal screen"),
 
             // RESPONSE actions
             ("Return", "RESPONSE", "Return result"),
             ("Throw", "RESPONSE", "Throw error"),
+            ("Broadcast", "RESPONSE", "Broadcast to all socket clients"),
 
             // EXPORT actions
             ("Send", "EXPORT", "Send to external system"),
             ("Log", "EXPORT", "Log message"),
             ("Store", "EXPORT", "Store to data store"),
-            ("Write", "EXPORT", "Write to output"),
+            ("Write", "EXPORT", "Write to file"),
             ("Emit", "EXPORT", "Emit event"),
             ("Publish", "EXPORT", "Publish symbol globally"),
-            ("CreateDirectory", "EXPORT", "Create directory"),
+            ("Notify", "EXPORT", "Notify a recipient with a message"),
 
-            // LIFECYCLE actions
-            ("Start", "LIFECYCLE", "Start a service"),
-            ("Stop", "LIFECYCLE", "Stop a service"),
-            ("Keepalive", "LIFECYCLE", "Keep application running"),
-            ("Watch", "LIFECYCLE", "Watch for changes"),
-            ("Configure", "LIFECYCLE", "Configure service"),
-            ("Request", "LIFECYCLE", "Make HTTP request"),
+            // SERVER actions
+            ("Start", "SERVER", "Start a service"),
+            ("Stop", "SERVER", "Stop a service"),
+            ("Keepalive", "SERVER", "Keep application running"),
+            ("Listen", "SERVER", "Listen on a socket port"),
+            ("Connect", "SERVER", "Connect to a socket server"),
+            ("Close", "SERVER", "Close a connection"),
+            ("Make", "SERVER", "Create a directory"),
+            ("Watch", "SERVER", "Watch for file system changes"),
+            ("Configure", "SERVER", "Configure a service"),
 
             // TEST actions
             ("Given", "TEST", "Test setup"),
@@ -163,6 +181,18 @@ public struct CompletionHandler: Sendable {
             ("0", "Last element (reverse index)"),
             ("1", "Second-to-last element"),
             ("2", "Third-to-last element"),
+            // Compute built-in operations (qualifier-as-name)
+            ("length", "String or collection length"),
+            ("count", "Element count"),
+            ("uppercase", "Convert to uppercase"),
+            ("lowercase", "Convert to lowercase"),
+            ("hash", "Hash value"),
+            // Terminal input
+            ("hidden", "Mask input (password entry)"),
+            // ParseHtml specifiers
+            ("markdown", "Convert HTML to Markdown"),
+            ("links", "Extract all hyperlinks"),
+            ("title", "Extract page title"),
         ]
 
         return qualifiers.map { qualifier in

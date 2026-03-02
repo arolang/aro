@@ -127,13 +127,30 @@ public final class UnifiedPluginLoader: @unchecked Sendable {
                 try loadAROFiles(at: providePath, pluginName: manifest.name)
 
             case "swift-plugin":
-                try loadSwiftPlugin(at: providePath, pluginName: manifest.name)
+                // Swift plugins with @_cdecl are binary-compatible with C ABI
+                // Route through NativePluginHost for unified qualifier support
+                try loadNativePlugin(
+                    at: providePath,
+                    pluginName: manifest.name,
+                    config: provide,
+                    qualifierNamespace: provide.handler
+                )
 
             case "rust-plugin", "c-plugin", "cpp-plugin":
-                try loadNativePlugin(at: providePath, pluginName: manifest.name, config: provide)
+                try loadNativePlugin(
+                    at: providePath,
+                    pluginName: manifest.name,
+                    config: provide,
+                    qualifierNamespace: provide.handler
+                )
 
             case "python-plugin":
-                try loadPythonPlugin(at: providePath, pluginName: manifest.name, config: provide)
+                try loadPythonPlugin(
+                    at: providePath,
+                    pluginName: manifest.name,
+                    config: provide,
+                    qualifierNamespace: provide.handler
+                )
 
             default:
                 print("[UnifiedPluginLoader] Warning: Unknown provide type '\(provide.type)'")
@@ -217,11 +234,17 @@ public final class UnifiedPluginLoader: @unchecked Sendable {
     // MARK: - Native Plugin Loading
 
     /// Load native (C/C++/Rust) plugins
-    private func loadNativePlugin(at path: URL, pluginName: String, config: UnifiedProvideEntry) throws {
+    private func loadNativePlugin(
+        at path: URL,
+        pluginName: String,
+        config: UnifiedProvideEntry,
+        qualifierNamespace: String?
+    ) throws {
         let host = try NativePluginHost(
             pluginPath: path,
             pluginName: pluginName,
-            config: config
+            config: config,
+            qualifierNamespace: qualifierNamespace
         )
 
         lock.lock()
@@ -239,11 +262,17 @@ public final class UnifiedPluginLoader: @unchecked Sendable {
     // MARK: - Python Plugin Loading
 
     /// Load Python plugins
-    private func loadPythonPlugin(at path: URL, pluginName: String, config: UnifiedProvideEntry) throws {
+    private func loadPythonPlugin(
+        at path: URL,
+        pluginName: String,
+        config: UnifiedProvideEntry,
+        qualifierNamespace: String?
+    ) throws {
         let host = try PythonPluginHost(
             pluginPath: path,
             pluginName: pluginName,
-            config: config
+            config: config,
+            qualifierNamespace: qualifierNamespace
         )
 
         lock.lock()
@@ -328,6 +357,12 @@ public struct UnifiedSourceInfo: Codable, Sendable {
 public struct UnifiedProvideEntry: Codable, Sendable {
     let type: String
     let path: String
+    /// The qualifier namespace (handler) for this plugin component.
+    ///
+    /// When set, qualifiers from this plugin are accessed as `handler.qualifier`
+    /// in ARO code (e.g., `<list: collections.reverse>` where `handler: collections`).
+    /// Falls back to the plugin name if not specified.
+    let handler: String?
     let build: UnifiedBuildConfig?
     let python: UnifiedPythonConfig?
 }

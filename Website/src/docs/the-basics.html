@@ -79,6 +79,19 @@
 
         <p>All files in the directory are automatically compiled together. No import statements needed.</p>
 
+        <p>For larger projects, you can organize files in subdirectories. The <code>sources/</code> convention provides clean separation:</p>
+
+        <pre><code>MyApp/
+&#x251C;&#x2500;&#x2500; openapi.yaml    <span class="code-comment"># Configuration in root</span>
+&#x251C;&#x2500;&#x2500; main.aro        <span class="code-comment"># Entry point</span>
+&#x2514;&#x2500;&#x2500; sources/        <span class="code-comment"># Source files subdirectory</span>
+    &#x251C;&#x2500;&#x2500; users/
+    &#x2502;   &#x2514;&#x2500;&#x2500; users.aro
+    &#x2514;&#x2500;&#x2500; orders/
+        &#x2514;&#x2500;&#x2500; orders.aro</code></pre>
+
+        <p>Files can be nested to any depth. The runtime discovers all <code>.aro</code> files recursively.</p>
+
         <h2>Comments</h2>
         <p>ARO uses Pascal-style block comments:</p>
 

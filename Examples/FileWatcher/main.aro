@@ -16,19 +16,19 @@
 
 (Handle File Created: File Event Handler) {
     Extract the <path> from the <event: path>.
-    Log <file-created: message> to the <console>.
+    Log "File created" to the <console>.
     Return an <OK: status> for the <event>.
 }
 
 (Handle File Modified: File Event Handler) {
     Extract the <path> from the <event: path>.
-    Log <file-modified: message> to the <console>.
+    Log "File modified" to the <console>.
     Return an <OK: status> for the <event>.
 }
 
 (Handle File Deleted: File Event Handler) {
     Extract the <path> from the <event: path>.
-    Log <file-deleted: message> to the <console>.
+    Log "File deleted" to the <console>.
     Return an <OK: status> for the <event>.
 }
 

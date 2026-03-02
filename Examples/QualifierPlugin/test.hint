@@ -1,0 +1,3 @@
+timeout: 30
+strip-prefix: true
+random-output: true

@@ -1,5 +1,6 @@
 # Test hints for RepositoryObserver
-# Fixed: Binary mode works for HTTP server
-mode: both
+mode: interpreter
+# Include server console output (observer messages) in test comparison
+include-server-output: true
 # HTTP servers hang on Windows CI
 skip-on-windows: HTTP server tests not supported on Windows CI

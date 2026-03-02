@@ -1,11 +1,11 @@
-# Generated: Sat Jan 10 10:44:41 2026
-# Type: console
+# Generated: Sat Feb 28 01:13:35 2026
+# Type: http
 # Command: aro run ./Examples/Scoping
 ---
-Starting application...
+GET /config => {"name":"Scoping Demo","threshold":5}
+GET /status => {"status":"running","version":"2.0"}
+---server---
+=== 3+4. Event Handler Scope ===
+Business activity: AppReady Handler
 Scoping Demo
-1.0
-Configuration:
-Scoping Demo
-1.0
-startup
+event.config.name (framework-injected):

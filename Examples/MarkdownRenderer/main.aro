@@ -1,9 +1,9 @@
 (* MarkdownRenderer - Demonstrates using custom actions from a Python plugin
  *
  * This example shows how to:
- * 1. Convert Markdown to HTML using <ToHTML>
- * 2. Extract headings from Markdown using <ExtractHeadings>
- * 3. Count words in Markdown using <WordCount>
+ * 1. Convert Markdown to HTML using <Markdown.ToHTML>
+ * 2. Extract headings from Markdown using <Markdown.ExtractHeadings>
+ * 3. Count words in Markdown using <Markdown.WordCount>
  *)
 
 (Application-Start: Markdown Renderer Demo) {
@@ -14,14 +14,14 @@
 
     (* Convert Markdown to HTML using custom action *)
     Log "1. Converting to HTML..." to the <console>.
-    ToHTML the <html-result> from the <markdown>.
+    Markdown.ToHTML the <html-result> from the <markdown>.
 
     Extract the <html> from the <html-result: html>.
     Log <html> to the <console>.
 
     (* Extract headings using custom action *)
     Log "2. Extracting headings..." to the <console>.
-    ExtractHeadings the <headings-result> from the <markdown>.
+    Markdown.ExtractHeadings the <headings-result> from the <markdown>.
 
     Extract the <heading-count> from the <headings-result: count>.
     Log "Headings found:" to the <console>.
@@ -29,7 +29,7 @@
 
     (* Word count using custom action *)
     Log "3. Word count..." to the <console>.
-    WordCount the <stats> from the <markdown>.
+    Markdown.WordCount the <stats> from the <markdown>.
 
     Extract the <words> from the <stats: words>.
     Log "Words:" to the <console>.

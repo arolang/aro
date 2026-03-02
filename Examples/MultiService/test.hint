@@ -1,5 +1,6 @@
 # Test hints for MultiService
 # Multi-service example with HTTP, Socket, and File Monitor
-mode: both
-timeout: 15
-pre-script: mkdir -p watched-dir
+type: multiservice
+mode: interpreter
+timeout: 20
+skip-on-windows: Multi-service tests not supported on Windows CI

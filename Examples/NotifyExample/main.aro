@@ -1,35 +1,43 @@
-(* NotifyExample - Demonstrating user notifications *)
+(* NotifyExample - Demonstrating user notifications with event handlers *)
+(*
+ * Part 1: Notify a single user object {name, age, email, sex}.
+ *         The handler prints "hello <name>".
+ *
+ * Part 2: Notify a list of users with varying ages.
+ *         The runtime distributes the notification to each item in the collection.
+ *         The handler only fires for users aged 16 or above via a where guard on
+ *         the feature set declaration — no when/where inside the handler body.
+ *)
 
 (Application-Start: Notification Demo) {
-    Log "=== Notification Demo ===" to the <console>.
 
-    (* Notify action demonstrates user-facing notifications *)
-    (* Supports verbs: Notify, Alert, Signal *)
-    (* Supports prepositions: to, for, with *)
+    (* --- Part 1: Single user --- *)
+    Log "=== Single User ===" to the <console>.
+    Create the <alice> with { name: "Alice", age: 30, email: "alice@example.com", sex: "female" }.
+    Notify the <alice> with "Welcome to ARO!".
 
-    Notify the <user> with "Welcome to ARO!".
-    Log "Sent welcome notification to user" to the <console>.
-
-    Alert the <admin> with "System started successfully".
-    Log "Sent alert to admin" to the <console>.
-
-    Signal the <system> with "Ready for operations".
-    Log "Sent signal to system" to the <console>.
-
-    Log "All notifications sent!" to the <console>.
+    (* --- Part 2: Notify all group members; the handler filters by age --- *)
+    Log "=== Users Age >= 16 ===" to the <console>.
+    Create the <group> with [
+        { name: "Bob",   age: 14, email: "bob@example.com",   sex: "male"   },
+        { name: "Carol", age: 25, email: "carol@example.com", sex: "female" },
+        { name: "Dave",  age: 15, email: "dave@example.com",  sex: "male"   },
+        { name: "Eve",   age: 20, email: "eve@example.com",   sex: "female" }
+    ].
+    Notify the <group> with "Hello everyone!".
 
     Return an <OK: status> for the <startup>.
 }
 
-(* Note: Notify/Alert/Signal emit NotificationSentEvent events.
-   To handle these events, add a handler feature set like:
-
-   (My Handler: NotificationSent Handler) {
-       Extract the <message> from the <event: message>.
-       Extract the <target> from the <event: target>.
-       Log <message> to the <console>.
-       Return an <OK: status> for the <handling>.
-   }
-
-   The handler will be triggered for each notification sent.
-*)
+(*
+ * Notification event handler.
+ * The where guard on the declaration acts as a pre-condition: the handler only
+ * executes when the notified user's age is 16 or above. Users under 16 are
+ * silently skipped without any conditional logic inside the handler body.
+ *)
+(Greet User: NotificationSent Handler) when <age> >= 16 {
+    Extract the <user> from the <event: user>.
+    Extract the <name> from the <user: name>.
+    Log "hello " ++ <name> to the <console>.
+    Return an <OK: status> for the <notification>.
+}

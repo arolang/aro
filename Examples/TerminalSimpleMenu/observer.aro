@@ -1,0 +1,52 @@
+(* ============================================================
+   observer.aro - Repository observer for SimpleMenu
+   Watches selection-repository for any state change and renders
+   the correct content into the <menu> section of the compositor.
+   All views (menu, tasks, logs) own the same screen region.
+   ============================================================ *)
+
+(Refresh View: selection-repository Observer) {
+    Extract the <new-state> from the <event: newValue>.
+    Extract the <selection> from the <new-state: selection>.
+    Extract the <view> from the <new-state: view>.
+
+    match <view> {
+        case "menu" {
+            (* Build menu items with the correct marker for the selected index *)
+            match <selection> {
+                case 0 {
+                    Create the <d1> with { label: "View Tasks", marker: "▶" }.
+                    Create the <d2> with { label: "View Logs", marker: " " }.
+                    Create the <d3> with { label: "Exit", marker: " " }.
+                }
+                case 1 {
+                    Create the <d1> with { label: "View Tasks", marker: " " }.
+                    Create the <d2> with { label: "View Logs", marker: "▶" }.
+                    Create the <d3> with { label: "Exit", marker: " " }.
+                }
+                case 2 {
+                    Create the <d1> with { label: "View Tasks", marker: " " }.
+                    Create the <d2> with { label: "View Logs", marker: " " }.
+                    Create the <d3> with { label: "Exit", marker: "▶" }.
+                }
+            }
+            Create the <menu-items> with [<d1>, <d2>, <d3>].
+            Transform the <menu> from the <template: menu.screen>.
+            Render the <menu> to the <console>.
+        }
+        case "tasks" {
+            Create the <task1> with { id: 1, name: "Write docs", status: "done" }.
+            Create the <task2> with { id: 2, name: "Fix bugs", status: "pending" }.
+            Create the <task3> with { id: 3, name: "Write tests", status: "pending" }.
+            Create the <tasks> with [<task1>, <task2>, <task3>].
+            Transform the <menu> from the <template: tasks.screen>.
+            Render the <menu> to the <console>.
+        }
+        case "logs" {
+            Transform the <menu> from the <template: logs.screen>.
+            Render the <menu> to the <console>.
+        }
+    }
+
+    Return an <OK: status> for the <refresh>.
+}

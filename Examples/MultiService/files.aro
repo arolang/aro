@@ -12,7 +12,7 @@
 
     (* Notify socket clients about the new file *)
     Create the <prefix> with "FILE CREATED: ".
-    Compute the <notification> from <prefix> + <path>.
+    Compute the <notification> from <prefix> ++ <path>.
     Broadcast the <notification> to the <socket>.
 
     Return an <OK: status> for the <event>.
@@ -26,7 +26,7 @@
 
     (* Notify socket clients about the modification *)
     Create the <prefix> with "FILE MODIFIED: ".
-    Compute the <notification> from <prefix> + <path>.
+    Compute the <notification> from <prefix> ++ <path>.
     Broadcast the <notification> to the <socket>.
 
     Return an <OK: status> for the <event>.
@@ -40,7 +40,7 @@
 
     (* Notify socket clients about the deletion *)
     Create the <prefix> with "FILE DELETED: ".
-    Compute the <notification> from <prefix> + <path>.
+    Compute the <notification> from <prefix> ++ <path>.
     Broadcast the <notification> to the <socket>.
 
     Return an <OK: status> for the <event>.

@@ -49,7 +49,7 @@ jobs:
 
     steps:
     - name: Checkout repository
-      uses: actions/checkout@v6
+      uses: actions/checkout@v4
 
     # Install Swift 6.2.1 for Swift language analysis
     - name: Setup Swift 6.2.1

@@ -133,6 +133,7 @@ sub _execute_console {
         }
 
         eval { IPC::Run::finish($handle); };
+        my $exit_code = $? >> 8;
 
         if ($@) {
             if ($@ =~ /timeout/) {
@@ -140,6 +141,12 @@ sub _execute_console {
                 return (undef, "TIMEOUT after ${timeout}s");
             }
             return (undef, "ERROR: $@");
+        }
+
+        if ($exit_code != 0) {
+            my $output = $out;
+            $output .= $err if $err;
+            return (undef, "Exit code: $exit_code\n$output");
         }
 
         return ($out, undef);
@@ -309,7 +316,10 @@ sub _execute_file {
         return (undef, "SKIP: Missing required module (IPC::Run)");
     }
 
-    my $test_file = "/tmp/aro_test_$$.txt";
+    # Create a temp subdirectory under cwd so the file monitor (watching ".") sees the events
+    my $test_dir = File::Spec->catdir('.', "aro_fw_test_$$");
+    mkdir $test_dir;
+    my $test_file = File::Spec->catfile($test_dir, "test.txt");
 
     # Start watcher
     my ($in, $out, $err) = ('', '', '');
@@ -318,6 +328,7 @@ sub _execute_file {
     };
 
     if ($@) {
+        rmdir $test_dir;
         return (undef, "Failed to start binary: $@");
     }
 
@@ -333,6 +344,9 @@ sub _execute_file {
 
     # Capture output
     eval { IPC::Run::finish($handle, IPC::Run::timeout(2)) };
+
+    unlink $test_file if -f $test_file;
+    rmdir $test_dir if -d $test_dir;
 
     return ($out, undef);
 }

@@ -1,4 +1,5 @@
 # Test hints for StateMachine example
-# Demonstrates Accept action for state transitions
-mode: both
+# Demonstrates Accept action for state transitions with StateTransition Handler observers
+# Binary mode does not invoke StateTransition Handler observers (same limitation as NotifyExample)
+mode: interpreter
 timeout: 30

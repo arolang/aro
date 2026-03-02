@@ -1,0 +1,9 @@
+# Example: ExtractInCase
+# Type: console
+---
+Status value:
+200
+Success:
+Success
+[OK] test
+  value: Success

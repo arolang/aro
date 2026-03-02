@@ -116,6 +116,109 @@ Extract the <first-user> from the <response: 0>.
 }
 ```
 
+## Unified URL I/O (ARO-0052)
+
+ARO provides a unified syntax for reading from and writing to URLs, using the same `Read` and `Write` actions used for files. This creates a seamless I/O model where data sources can be local files or remote endpoints.
+
+### Reading from URLs
+
+Use the `<url: "...">` system object with the `Read` action to perform HTTP GET requests:
+
+```aro
+(* Simple GET request *)
+Read the <users> from the <url: "https://api.example.com/users">.
+
+(* The response is automatically parsed based on Content-Type *)
+Extract the <first-user> from the <users: 0>.
+Log <first-user: name> to the <console>.
+```
+
+### Writing to URLs
+
+Use the `<url: "...">` system object with the `Write` action to perform HTTP POST requests:
+
+```aro
+(* POST request - data is automatically serialized to JSON *)
+Create the <user> with { name: "Alice", email: "alice@example.com" }.
+Write the <user> to the <url: "https://api.example.com/users">.
+```
+
+### Request Options
+
+Both `Read` and `Write` support the `with { ... }` clause for headers, timeout, and other options:
+
+```aro
+(* GET with custom headers *)
+Read the <data> from the <url: "https://api.example.com/protected"> with {
+    headers: {
+        Authorization: "Bearer ${token}",
+        Accept: "application/json"
+    },
+    timeout: 60
+}.
+
+(* POST with custom headers *)
+Write the <payload> to the <url: "https://api.example.com/submit"> with {
+    headers: {
+        Authorization: "Bearer ${token}",
+        X-Request-ID: "${request-id}"
+    },
+    timeout: 120
+}.
+```
+
+**Options Reference:**
+
+| Option | Type | Default | Description |
+|--------|------|---------|-------------|
+| `headers` | Map | `{}` | HTTP request headers |
+| `timeout` | Integer | `30` | Request timeout in seconds |
+| `encoding` | String | `"utf-8"` | Response/request body encoding |
+
+### Automatic Format Detection
+
+When reading from URLs, ARO automatically parses the response based on the `Content-Type` header:
+
+| Content-Type | Parsed As |
+|--------------|-----------|
+| `application/json` | Dictionary/Array |
+| `application/xml`, `text/xml` | Dictionary |
+| `text/csv` | Array of rows |
+| `text/yaml`, `application/x-yaml` | Dictionary |
+| `text/plain` | String |
+| `text/html` | String |
+
+### Data Pipeline Example
+
+The unified I/O syntax makes data pipelines simple and readable:
+
+```aro
+(Sync Remote Data: Data Pipeline) {
+    (* Fetch from remote API *)
+    Read the <remote-data> from the <url: "https://api.example.com/export">.
+
+    (* Save to local file *)
+    Write the <remote-data> to the <file: "./data/snapshot.json">.
+
+    (* Read local, transform, upload *)
+    Read the <local-report> from the <file: "./reports/daily.json">.
+    Write the <local-report> to the <url: "https://api.example.com/upload">.
+
+    Return an <OK: status> for the <sync>.
+}
+```
+
+### When to Use URL I/O vs Request
+
+| Use Case | Action |
+|----------|--------|
+| Simple GET (data retrieval) | `Read ... from <url: "...">` |
+| Simple POST (data submission) | `Write ... to <url: "...">` |
+| Full HTTP control (PUT, DELETE, PATCH) | `Request ... via METHOD` |
+| Complex request configuration | `Request ... with { method: "...", ... }` |
+
+---
+
 ## Implementation Notes
 
 - Uses Foundation's URLSession for HTTP requests
@@ -127,4 +230,4 @@ Extract the <first-user> from the <response: 0>.
 
 ---
 
-*Next: Chapter 32 — Concurrency*
+*Next: Chapter 33 — Concurrency*

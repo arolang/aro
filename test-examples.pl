@@ -5,6 +5,9 @@ use v5.30;
 use FindBin qw($RealBin);
 use Cwd qw(abs_path cwd);
 
+# Force STDOUT flush on every write (needed when output is piped/redirected)
+$| = 1;
+
 # Core modules
 use File::Spec;
 use File::Basename;
@@ -230,6 +233,9 @@ sub read_test_hint {
         'allow-error' => undef,
         'skip-build' => undef,
         'normalize-dict' => undef,
+        'strip-prefix' => undef,
+        'random-output' => undef,
+        'include-server-output' => undef,
     );
 
     # Return empty hints if file doesn't exist (backward compatible)
@@ -281,8 +287,8 @@ sub read_test_hint {
         $hints{timeout} = undef;
     }
 
-    if (defined $hints{type} && $hints{type} !~ /^(console|http|socket|file)$/) {
-        warn "Warning: Invalid type '$hints{type}' (must be console|http|socket|file), ignoring\n";
+    if (defined $hints{type} && $hints{type} !~ /^(console|http|socket|socket-client|file|multi-context|multiservice)$/) {
+        warn "Warning: Invalid type '$hints{type}' (must be console|http|socket|socket-client|file|multi-context|multiservice), ignoring\n";
         $hints{type} = undef;
     }
 
@@ -478,11 +484,15 @@ sub run_test_in_workdir {
     if ($type eq 'console') {
         ($output, $error) = run_console_example_internal($run_dir, $timeout, $mode, $binary_name, $hints);
     } elsif ($type eq 'http') {
-        ($output, $error) = run_http_example_internal($run_dir, $timeout, $mode, $binary_name);
+        ($output, $error) = run_http_example_internal($run_dir, $timeout, $mode, $binary_name, $hints);
     } elsif ($type eq 'socket') {
         ($output, $error) = run_socket_example_internal($run_dir, $timeout, $mode, $binary_name);
+    } elsif ($type eq 'socket-client') {
+        ($output, $error) = run_socket_client_example_internal($run_dir, $timeout, $mode, $binary_name);
     } elsif ($type eq 'file') {
         ($output, $error) = run_file_watcher_example_internal($run_dir, $timeout, $mode, $binary_name);
+    } elsif ($type eq 'multiservice') {
+        ($output, $error) = run_multiservice_example_internal($run_dir, $timeout, $mode, $binary_name);
     }
 
     # Restore original directory
@@ -648,6 +658,12 @@ sub normalize_output {
     # Normalize hash values (for HashTest example)
     $output =~ s/\b[a-f0-9]{32,64}\b/__HASH__/g if $type && $type eq 'hash';
 
+    # Normalize floating point numbers with excessive precision in JSON (for HTTP tests)
+    # E.g., 249.99000000000001 -> 249.99
+    if ($type && $type eq 'http') {
+        $output =~ s/(\d+\.\d{1,2})0{6,}\d+/$1/g;
+    }
+
     return $output;
 }
 
@@ -702,6 +718,13 @@ sub auto_placeholderize {
     if ($type && $type eq 'http') {
         # Replace hex IDs (15-20 chars) in JSON id fields
         $output =~ s/"id":"[a-f0-9]{15,20}"/"id":"__ID__"/g;
+
+        # Replace UUIDs (e.g. in observer output after ---server--- separator)
+        $output =~ s/[A-Fa-f0-9]{8}-[A-Fa-f0-9]{4}-[A-Fa-f0-9]{4}-[A-Fa-f0-9]{4}-[A-Fa-f0-9]{12}/__UUID__/g;
+
+        # Normalize floating point numbers with excessive precision (e.g., 249.99000000000001 -> 249.99)
+        # Match numbers like: 123.45000000000001
+        $output =~ s/(\d+\.\d{1,2})0{6,}\d+/$1/g;
     }
 
     # Replace ISO timestamps (with or without seconds, timezone)
@@ -809,6 +832,8 @@ sub run_console_example_internal {
         }
 
         @cmd = ($binary_path);
+        # Add --keep-alive flag for long-running apps that need SIGINT shutdown
+        push @cmd, '--keep-alive' if $keep_alive;
     } elsif ($mode eq 'test') {
         # Use 'aro test' command
         my $aro_bin = find_aro_binary();
@@ -834,10 +859,99 @@ sub run_console_example_internal {
     if ($keep_alive) {
         # Wait for the application to start, then send SIGINT for graceful shutdown
         sleep 1;
+        # Drain stdout/stderr pipe before sending SIGINT
+        eval { pump $handle while $handle->pumpable && length($out) == 0 };
         say "  Sending SIGINT for graceful shutdown" if $options{verbose};
         eval { $handle->signal('INT'); };
         # Allow time for Application-End handler to execute and flush output
         sleep 1;
+        # Drain remaining output after SIGINT
+        eval { pump $handle while $handle->pumpable };
+    }
+
+    eval {
+        finish($handle);
+    };
+
+    if ($@) {
+        if ($@ =~ /timeout/) {
+            kill_kill($handle);
+            # If allow-error is set, return captured output even on timeout
+            if ($allow_error) {
+                my $combined = $out;
+                $combined .= $err if $err;
+                return ($combined, undef);
+            }
+            return (undef, "TIMEOUT after ${timeout}s");
+        }
+        return (undef, "ERROR: $@") unless $allow_error;
+    }
+
+    # Combine stdout and stderr
+    my $combined = $out;
+    $combined .= $err if $err;
+    return ($combined, undef);
+}
+
+# Run debug example (internal with timeout parameter)
+# Runs example with --debug flag for developer context output
+sub run_debug_example {
+    my ($example_name, $timeout, $mode, $binary_name, $hints) = @_;
+    $mode //= 'interpreter';  # Default to interpreter mode
+
+    my $keep_alive = $hints && $hints->{'keep-alive'};
+
+    # Handle '.' or absolute paths directly, otherwise prepend examples_dir
+    my $dir;
+    if ($example_name eq '.' || File::Spec->file_name_is_absolute($example_name)) {
+        $dir = $example_name;
+    } else {
+        $dir = File::Spec->catdir($examples_dir, $example_name);
+    }
+
+    # Determine command based on mode
+    my @cmd;
+    if ($mode eq 'compiled') {
+        # Execute compiled binary with --debug
+        my $basename = defined $binary_name ? $binary_name : basename($dir);
+        my $binary_path = get_binary_path($dir, $basename);
+
+        unless (is_executable($binary_path)) {
+            return (undef, "ERROR: Compiled binary not found at $binary_path");
+        }
+
+        @cmd = ($binary_path, '--debug');
+        # Add --keep-alive flag for long-running apps that need SIGINT shutdown
+        push @cmd, '--keep-alive' if $keep_alive;
+    } else {
+        # Interpreter mode with --debug flag
+        my $aro_bin = find_aro_binary();
+        @cmd = ($aro_bin, 'run', '--debug', $dir);
+        # Add --keep-alive flag for long-running apps that need SIGINT shutdown
+        push @cmd, '--keep-alive' if $keep_alive;
+    }
+
+    # Use IPC::Run for better control
+    my ($in, $out, $err) = ('', '', '');
+    my $handle = eval {
+        start(\@cmd, \$in, \$out, \$err, timeout($timeout));
+    };
+
+    if ($@) {
+        return (undef, "Failed to start: $@");
+    }
+
+    if ($keep_alive) {
+        # Wait for the application to start, then send SIGINT for graceful shutdown
+        sleep 1;
+        # Drain stdout/stderr pipe before sending SIGINT
+        eval { pump $handle while $handle->pumpable && length($out) == 0 };
+        say "  Sending SIGINT for graceful shutdown" if $options{verbose};
+        eval { $handle->signal('INT'); };
+        # Allow time for Application-End handler to execute and flush output
+        sleep 1;
+        # Drain remaining output after SIGINT
+        eval { pump $handle while $handle->pumpable };
     }
 
     eval {
@@ -849,7 +963,7 @@ sub run_console_example_internal {
             kill_kill($handle);
             return (undef, "TIMEOUT after ${timeout}s");
         }
-        return (undef, "ERROR: $@") unless $allow_error;
+        return (undef, "ERROR: $@");
     }
 
     # Combine stdout and stderr
@@ -901,6 +1015,9 @@ sub generate_test_payload {
         'createUser' => '{"name":"Test User","email":"test@example.com"}',
         'updateUser' => '{"name":"Updated User","email":"updated@example.com"}',
 
+        # Chat / status
+        'postStatus' => '{"message":"Test message"}',
+
         # Multi-service
         'broadcastMessage' => '{"message":"test"}',
 
@@ -931,7 +1048,8 @@ sub run_http_example {
 
 # Run HTTP server example (internal with timeout parameter)
 sub run_http_example_internal {
-    my ($example_name, $timeout, $mode, $binary_name) = @_;
+    my ($example_name, $timeout, $mode, $binary_name, $hints) = @_;
+    $hints //= {};
     $mode //= 'interpreter';  # Default to interpreter mode
 
     unless ($has_yaml && $has_http_tiny && $has_net_emptyport) {
@@ -1095,10 +1213,13 @@ sub run_http_example_internal {
         }
 
         # Sort operations by execution order
+        # Method priority: write operations (POST/PUT/PATCH) before reads (GET) on same path
+        my %method_priority = (POST => 1, PUT => 2, PATCH => 3, GET => 4, DELETE => 5);
         @operations = sort {
             ($a->{order} // 50) <=> ($b->{order} // 50) ||
             (!$a->{has_params}) <=> (!$b->{has_params}) ||
-            $a->{path} cmp $b->{path}
+            $a->{path} cmp $b->{path} ||
+            ($method_priority{uc($a->{method})} // 3) <=> ($method_priority{uc($b->{method})} // 3)
         } @operations;
 
         for my $op (@operations) {
@@ -1200,6 +1321,34 @@ sub run_http_example_internal {
                 } else {
                     push @output, sprintf("%s %s => ERROR: No response", uc($method), $path);
                 }
+        }
+    }
+
+    # Optionally collect server console output (for observer/event tests)
+    if ($hints->{'include-server-output'}) {
+        # Wait briefly for async handlers (observers, event handlers) to complete
+        select(undef, undef, undef, 0.5);
+        eval { $handle->pump_nb(); };  # Flush any remaining stdout
+
+        # Parse accumulated server stdout — keep only observer/handler output lines,
+        # strip startup/HTTP infrastructure lines, strip [FeatureName] prefix,
+        # then sort for deterministic comparison.
+        my @server_lines;
+        for my $line (split /\n/, $out) {
+            # Skip empty lines and infrastructure lines
+            next unless $line =~ /\S/;
+            next if $line =~ /^\[Application-Start\]/;
+            next if $line =~ /^HTTP Server started/;
+            next if $line =~ /^\[ERROR\]/;   # runtime errors already visible
+
+            # Strip leading [FeatureName] prefix so output is independent of feature set name
+            $line =~ s/^\[[^\]]+\]\s+//;
+            push @server_lines, $line;
+        }
+        if (@server_lines) {
+            my @sorted = sort @server_lines;
+            push @output, "---server---";
+            push @output, @sorted;
         }
     }
 
@@ -1364,6 +1513,153 @@ sub run_socket_example_internal {
     return (join("\n", @output), undef);
 }
 
+# Run socket CLIENT example (internal)
+# Starts a Perl echo server, then runs the ARO app as the client.
+# The ARO app Connects, Sends a message, and logs the echoed response.
+sub run_socket_client_example_internal {
+    my ($example_name, $timeout, $mode, $binary_name) = @_;
+    $mode //= 'interpreter';
+
+    unless ($has_net_emptyport) {
+        return (undef, "SKIP: Missing required module (Net::EmptyPort)");
+    }
+
+    my $dir;
+    if ($example_name eq '.' || File::Spec->file_name_is_absolute($example_name)) {
+        $dir = $example_name;
+    } else {
+        $dir = File::Spec->catdir($examples_dir, $example_name);
+    }
+
+    my $port = 9001;  # Echo server port for socket-client test
+
+    # Start a Perl echo server in a child process
+    require POSIX;
+    my $server_pid = fork();
+    if (!defined $server_pid) {
+        return (undef, "Failed to fork echo server: $!");
+    }
+    if ($server_pid == 0) {
+        # Child: run a multi-connection echo server
+        # Must loop on accept() because Net::EmptyPort::wait_port makes a probe
+        # connection to detect readiness, which would consume a single-accept server.
+        use IO::Socket::INET;
+        my $server = IO::Socket::INET->new(
+            LocalPort => $port,
+            Type      => SOCK_STREAM,
+            Reuse     => 1,
+            Listen    => 5,
+        ) or POSIX::_exit(1);
+        while (my $client = $server->accept()) {
+            my $child = fork();
+            if ($child == 0) {
+                close $server;
+                $client->autoflush(1);
+                my $buf = '';
+                while (1) {
+                    my $n = sysread($client, $buf, 4096);
+                    last unless defined $n && $n > 0;
+                    syswrite($client, $buf, $n);  # Echo back
+                }
+                close $client;
+                POSIX::_exit(0);
+            }
+            close $client;
+        }
+        close $server;
+        POSIX::_exit(0);
+    }
+
+    my $server_cleanup = sub {
+        return unless $server_pid;
+        eval {
+            kill('TERM', $server_pid);
+            select(undef, undef, undef, 0.2);
+            kill('KILL', $server_pid);
+            waitpid($server_pid, 0);
+        };
+        $server_pid = 0;
+    };
+
+    # Wait for echo server to be ready
+    my $server_ready = 0;
+    for (1..20) {
+        if (Net::EmptyPort::wait_port($port, 0.5)) {
+            $server_ready = 1;
+            last;
+        }
+    }
+    unless ($server_ready) {
+        $server_cleanup->();
+        return (undef, "ERROR: Echo server did not start on port $port");
+    }
+
+    say "  Echo server ready on port $port" if $options{verbose};
+
+    # Determine ARO command
+    my @cmd;
+    if ($mode eq 'compiled') {
+        my $basename = defined $binary_name ? $binary_name : basename($dir);
+        my $binary_path = get_binary_path($dir, $basename);
+        unless (is_executable($binary_path)) {
+            $server_cleanup->();
+            return (undef, "ERROR: Compiled binary not found at $binary_path");
+        }
+        @cmd = ($binary_path);
+    } else {
+        my $aro_bin = find_aro_binary();
+        @cmd = ($aro_bin, 'run', $dir);
+    }
+
+    # Start ARO client app with IPC::Run to capture its output
+    my ($in, $out, $err) = ('', '', '');
+    my $handle = eval {
+        start(\@cmd, \$in, \$out, \$err, timeout($timeout));
+    };
+    if ($@) {
+        $server_cleanup->();
+        return (undef, "Failed to start socket client app: $@");
+    }
+
+    my $aro_cleanup = sub {
+        eval {
+            return unless $handle->pumpable();
+            $handle->signal('TERM');
+            my $waited = 0;
+            while ($waited < 3.0 && $handle->pumpable()) {
+                select(undef, undef, undef, 0.1);
+                $waited += 0.1;
+                eval { $handle->pump_nb(); };
+            }
+            eval { $handle->kill_kill() } if $handle->pumpable();
+        };
+    };
+    push @cleanup_handlers, $aro_cleanup;
+    push @cleanup_handlers, $server_cleanup;
+
+    # Wait for ARO app to log a received response
+    my $deadline = time() + $timeout;
+    while (time() < $deadline) {
+        eval { $handle->pump_nb() };
+        if ($out =~ /Received/s) {
+            # Give it a moment to flush any remaining output
+            select(undef, undef, undef, 0.3);
+            eval { $handle->pump_nb() };
+            last;
+        }
+        last unless $handle->pumpable();
+        select(undef, undef, undef, 0.1);
+    }
+
+    # Cleanup
+    $aro_cleanup->();
+    @cleanup_handlers = grep { $_ != $aro_cleanup } @cleanup_handlers;
+    $server_cleanup->();
+    @cleanup_handlers = grep { $_ != $server_cleanup } @cleanup_handlers;
+
+    return ($out, undef);
+}
+
 # Run file watcher example (public interface)
 sub run_file_watcher_example {
     my ($example_name) = @_;
@@ -1406,7 +1702,9 @@ sub run_file_watcher_example_internal {
         @cmd = ($aro_bin, 'run', $dir);
     }
 
-    my $test_file = "/tmp/aro_test_$$.txt";
+    # Create test file directly in cwd (project root) so the FileMonitor library
+    # (which only lists direct children of the watched directory) sees it as added/removed.
+    my $test_file = File::Spec->catfile('.', "aro_fw_test_$$.txt");
 
     # Start watcher in background (use timeout parameter)
     my ($in, $out, $err) = ('', '', '');
@@ -1461,6 +1759,489 @@ sub run_file_watcher_example_internal {
     my $combined = $out;
     $combined .= $err if $err;
     return ($combined, undef);
+}
+
+# Multi-service test: HTTP + TCP socket + file events combined
+sub run_multiservice_example_internal {
+    my ($example_name, $timeout, $mode, $binary_name) = @_;
+    $mode //= 'interpreter';
+
+    unless ($has_http_tiny && $has_net_emptyport) {
+        return (undef, "SKIP: Missing required modules (HTTP::Tiny, Net::EmptyPort)");
+    }
+
+    my $dir;
+    if ($example_name eq '.' || File::Spec->file_name_is_absolute($example_name)) {
+        $dir = $example_name;
+    } else {
+        $dir = File::Spec->catdir($examples_dir, $example_name);
+    }
+
+    my $http_port   = 8080;
+    my $socket_port = 9000;
+    my $watch_dir   = File::Spec->catdir(cwd(), 'watched-dir');
+
+    mkdir $watch_dir unless -d $watch_dir;
+
+    # Build command
+    my @cmd;
+    if ($mode eq 'compiled') {
+        my $basename = defined $binary_name ? $binary_name : basename($dir);
+        my $binary_path = get_binary_path($dir, $basename);
+        unless (is_executable($binary_path)) {
+            return (undef, "ERROR: Compiled binary not found at $binary_path");
+        }
+        @cmd = ($binary_path);
+    } else {
+        my $aro_bin = find_aro_binary();
+        @cmd = ($aro_bin, 'run', $dir);
+    }
+
+    say "  Starting multi-service app: @cmd" if $options{verbose};
+
+    # Use fork/exec to avoid IPC::Run pipe deadlock issues.
+    # Redirect child stdout/stderr to /dev/null so the child never blocks on writes.
+    require POSIX;
+    my $child_pid = fork();
+    if (!defined $child_pid) {
+        return (undef, "Failed to fork multi-service app: $!");
+    }
+    if ($child_pid == 0) {
+        # Child: redirect stdout/stderr and exec
+        open(STDOUT, '>', '/dev/null') or POSIX::_exit(1);
+        open(STDERR, '>', '/dev/null') or POSIX::_exit(1);
+        exec(@cmd) or POSIX::_exit(1);
+    }
+
+    say "  App started, pid=$child_pid" if $options{verbose};
+
+    my $cleanup = sub {
+        return unless $child_pid;
+        eval {
+            kill('TERM', $child_pid);
+            my $waited = 0;
+            while ($waited < 3.0) {
+                my $res = waitpid($child_pid, POSIX::WNOHANG());
+                last if $res != 0;
+                select(undef, undef, undef, 0.1);
+                $waited += 0.1;
+            }
+            kill('KILL', $child_pid);
+            waitpid($child_pid, 0);
+        };
+        $child_pid = 0;
+    };
+    push @cleanup_handlers, $cleanup;
+
+    say "  Waiting for HTTP port $http_port" if $options{verbose};
+    my $http_ready = 0;
+    for (1..20) {
+        if (Net::EmptyPort::wait_port($http_port, 0.5)) { $http_ready = 1; last; }
+    }
+    say "  HTTP ready=$http_ready" if $options{verbose};
+    unless ($http_ready) {
+        $cleanup->();
+        @cleanup_handlers = grep { $_ != $cleanup } @cleanup_handlers;
+        return (undef, "ERROR: HTTP server did not start on port $http_port");
+    }
+
+    # Wait for socket port
+    my $socket_ready = 0;
+    for (1..10) {
+        if (Net::EmptyPort::wait_port($socket_port, 0.5)) { $socket_ready = 1; last; }
+    }
+    unless ($socket_ready) {
+        $cleanup->();
+        @cleanup_handlers = grep { $_ != $cleanup } @cleanup_handlers;
+        return (undef, "ERROR: Socket server did not start on port $socket_port");
+    }
+
+    say "  Connecting socket client" if $options{verbose};
+
+    # Connect persistent socket client
+    my $sock;
+    for (1..5) {
+        $sock = IO::Socket::INET->new(
+            PeerAddr => 'localhost',
+            PeerPort => $socket_port,
+            Proto    => 'tcp',
+            Timeout  => 3,
+        );
+        last if $sock;
+        select(undef, undef, undef, 0.5);
+    }
+    unless ($sock) {
+        $cleanup->();
+        @cleanup_handlers = grep { $_ != $cleanup } @cleanup_handlers;
+        return (undef, "ERROR: Could not connect to socket server: $!");
+    }
+    $sock->autoflush(1);
+
+    require IO::Select;
+    my $sel = IO::Select->new($sock);
+
+    # Read available socket data within $wait seconds.
+    # Uses sysread (not readline) because ARO broadcasts raw bytes without newline terminators.
+    my $read_socket = sub {
+        my ($wait) = @_;
+        my $buf = '';
+        my $deadline = time() + $wait;
+        while (time() < $deadline) {
+            my $remaining = $deadline - time();
+            last if $remaining <= 0;
+            my $poll = $remaining > 0.2 ? 0.2 : $remaining;
+            next unless $sel->can_read($poll);
+            my $chunk = '';
+            my $bytes = sysread($sock, $chunk, 4096);
+            last unless defined $bytes && $bytes > 0;
+            $buf .= $chunk;
+        }
+        # Split on any line ending or NUL, discard empty fragments
+        return grep { length $_ } split /[\r\n\0]+/, $buf;
+    };
+
+    my @output;
+    my $http = HTTP::Tiny->new(timeout => 5);
+
+    # 1. Welcome message on connect
+    say "  Waiting for socket welcome" if $options{verbose};
+    for my $line ($read_socket->(2)) {
+        push @output, "Socket: $line";
+    }
+
+    # 2. HTTP GET /status
+    say "  HTTP GET /status" if $options{verbose};
+    my $status_resp = $http->get("http://localhost:$http_port/status");
+    if ($status_resp->{success}) {
+        my $body = _normalize_json_output($status_resp->{content});
+        push @output, "GET /status => $body";
+    } else {
+        push @output, "GET /status => ERROR: " . $status_resp->{status};
+    }
+
+    # 3. Create file -> socket notification
+    my $test_file = File::Spec->catfile($watch_dir, "ms_testfile.txt");
+    unlink $test_file if -f $test_file;  # clean up any previous run
+    say "  Creating test file" if $options{verbose};
+    { open(my $fh, '>', $test_file) or die "Cannot create $test_file: $!"; close $fh; }
+    for my $line ($read_socket->(3)) {
+        $line =~ s{FILE CREATED: .*/([^/]+)$}{FILE CREATED: $1};
+        push @output, "Socket: $line";
+    }
+
+    # 4. HTTP POST /broadcast
+    say "  HTTP POST /broadcast" if $options{verbose};
+    my $broadcast_resp = $http->post(
+        "http://localhost:$http_port/broadcast",
+        { headers => { 'Content-Type' => 'application/json' },
+          content => '{"message":"Hello from HTTP!"}' }
+    );
+    if ($broadcast_resp->{success}) {
+        my $body = _normalize_json_output($broadcast_resp->{content});
+        push @output, "POST /broadcast => $body";
+    } else {
+        push @output, "POST /broadcast => ERROR: " . $broadcast_resp->{status};
+    }
+    for my $line ($read_socket->(2)) {
+        push @output, "Socket: $line";
+    }
+
+    # 5. Delete file -> socket notification
+    say "  Deleting test file" if $options{verbose};
+    unlink $test_file if -f $test_file;
+    for my $line ($read_socket->(3)) {
+        $line =~ s{FILE DELETED: .*/([^/]+)$}{FILE DELETED: $1};
+        push @output, "Socket: $line";
+    }
+
+    close $sock;
+    $cleanup->();
+    @cleanup_handlers = grep { $_ != $cleanup } @cleanup_handlers;
+
+    return (join("\n", @output), undef);
+}
+
+# Normalize JSON string with sorted keys for deterministic comparison
+sub _normalize_json_output {
+    my ($json_str) = @_;
+    eval { require JSON::PP };
+    return $json_str if $@;
+    my $data = eval { JSON::PP::decode_json($json_str) };
+    return $json_str unless defined $data && ref($data) eq 'HASH';
+    my $encoder = JSON::PP->new->canonical(1);
+    return $encoder->encode($data);
+}
+
+# Test multi-context example (console, HTTP, debug outputs)
+sub test_multi_context_example {
+    my ($example_name, $hints, $timeout) = @_;
+
+    my $start_time = time;
+    my $mode = $hints->{mode} || 'both';
+
+    say "Testing $example_name (multi-context) in $mode mode..." if $options{verbose};
+
+    my %interpreter_results;
+    my %compiled_results;
+    my $interpreter_failures = 0;
+    my $compiled_failures = 0;
+
+    # Determine which modes to test
+    my @modes_to_test;
+    if ($mode eq 'both') {
+        @modes_to_test = ('interpreter', 'compiled');
+    } elsif ($mode eq 'interpreter' || $mode eq 'compiled') {
+        @modes_to_test = ($mode);
+    } else {
+        @modes_to_test = ('interpreter');  # Default
+    }
+
+    # Build binary if compiled mode is being tested
+    if (grep { $_ eq 'compiled' } @modes_to_test) {
+        my $build_result = build_example($example_name, $timeout, $hints->{workdir});
+
+        if (!$build_result->{success}) {
+            # Build failed - skip compiled mode tests
+            say "  Binary build failed: $build_result->{error}" if $options{verbose};
+            @modes_to_test = grep { $_ ne 'compiled' } @modes_to_test;
+
+            # Mark compiled contexts as ERROR
+            $compiled_results{console} = { status => 'ERROR', message => $build_result->{error} };
+            $compiled_results{http} = { status => 'ERROR', message => $build_result->{error} };
+            $compiled_results{debug} = { status => 'ERROR', message => $build_result->{error} };
+            $compiled_failures = 1;
+        }
+    }
+
+    for my $test_mode (@modes_to_test) {
+        my %context_results;
+        my $any_failures = 0;
+
+        say "  Testing in $test_mode mode..." if $options{verbose};
+
+        # Test 1: Console context (human)
+        my $exp_console = File::Spec->catfile($examples_dir, $example_name, 'expected-console.txt');
+        if (-f $exp_console) {
+            say "    Testing console context..." if $options{verbose};
+            my ($output, $error) = run_console_example_internal($example_name, $timeout, $test_mode, undef, $hints);
+
+        if ($error) {
+            $context_results{console} = {
+                status => $error =~ /^SKIP/ ? 'SKIP' : 'ERROR',
+                message => $error,
+            };
+            $any_failures = 1 unless $error =~ /^SKIP/;
+        } else {
+            # Read expected output
+            open my $fh, '<', $exp_console or die "Cannot read $exp_console: $!";
+            my $expected = do { local $/; <$fh> };
+            close $fh;
+
+            # Strip metadata header
+            $expected =~ s/^#.*?\n---\n//s;
+
+            # Normalize both
+            my $output_normalized = normalize_output($output, 'console');
+            my $expected_normalized = normalize_output($expected, 'console');
+
+            # Trim whitespace
+            $output_normalized =~ s/^\s+|\s+$//g;
+            $expected_normalized =~ s/^\s+|\s+$//g;
+
+            if (matches_pattern($output_normalized, $expected_normalized)) {
+                $context_results{console} = { status => 'PASS', message => '' };
+            } else {
+                $context_results{console} = {
+                    status => 'FAIL',
+                    message => 'Console output mismatch',
+                    expected => $expected_normalized,
+                    actual => $output_normalized,
+                };
+                $any_failures = 1;
+
+                # Debug output for console context mismatch
+                if ($options{verbose} || $ENV{DEBUG_TEST_FAILURES}) {
+                    say "  [CONSOLE MISMATCH]";
+                    say "  Expected:";
+                    say "  " . join("\n  ", split /\n/, substr($expected_normalized, 0, 500));
+                    say "  Actual:";
+                    say "  " . join("\n  ", split /\n/, substr($output_normalized, 0, 500));
+                }
+            }
+        }
+        }
+
+        # Test 2: HTTP context (machine)
+        my $exp_http = File::Spec->catfile($examples_dir, $example_name, 'expected-http.txt');
+        if (-f $exp_http) {
+            say "    Testing HTTP context..." if $options{verbose};
+            my ($output, $error) = run_http_example_internal($example_name, $timeout, $test_mode, undef);
+
+        if ($error) {
+            $context_results{http} = {
+                status => $error =~ /^SKIP/ ? 'SKIP' : 'ERROR',
+                message => $error,
+            };
+            $any_failures = 1 unless $error =~ /^SKIP/;
+        } else {
+            # Read expected output
+            open my $fh, '<', $exp_http or die "Cannot read $exp_http: $!";
+            my $expected = do { local $/; <$fh> };
+            close $fh;
+
+            # Strip metadata header
+            $expected =~ s/^#.*?\n---\n//s;
+
+            # Normalize both
+            my $output_normalized = normalize_output($output, 'http');
+            my $expected_normalized = normalize_output($expected, 'http');
+
+            # Trim whitespace
+            $output_normalized =~ s/^\s+|\s+$//g;
+            $expected_normalized =~ s/^\s+|\s+$//g;
+
+            if (matches_pattern($output_normalized, $expected_normalized)) {
+                $context_results{http} = { status => 'PASS', message => '' };
+            } else {
+                $context_results{http} = {
+                    status => 'FAIL',
+                    message => 'HTTP output mismatch',
+                    expected => $expected_normalized,
+                    actual => $output_normalized,
+                };
+                $any_failures = 1;
+
+                # Debug output for HTTP context mismatch
+                if ($options{verbose} || $ENV{DEBUG_TEST_FAILURES}) {
+                    say "  [HTTP MISMATCH]";
+                    say "  Expected:";
+                    say "  " . substr($expected_normalized, 0, 500);
+                    say "  Actual:";
+                    say "  " . substr($output_normalized, 0, 500);
+                }
+            }
+        }
+    }
+
+        # Test 3: Debug context (developer)
+        my $exp_debug = File::Spec->catfile($examples_dir, $example_name, 'expected-debug.txt');
+        if (-f $exp_debug) {
+            say "    Testing debug context..." if $options{verbose};
+            my ($output, $error) = run_debug_example($example_name, $timeout, $test_mode, undef, $hints);
+
+        if ($error) {
+            $context_results{debug} = {
+                status => $error =~ /^SKIP/ ? 'SKIP' : 'ERROR',
+                message => $error,
+            };
+            $any_failures = 1 unless $error =~ /^SKIP/;
+        } else {
+            # Read expected output
+            open my $fh, '<', $exp_debug or die "Cannot read $exp_debug: $!";
+            my $expected = do { local $/; <$fh> };
+            close $fh;
+
+            # Strip metadata header
+            $expected =~ s/^#.*?\n---\n//s;
+
+            # Normalize both
+            my $output_normalized = normalize_output($output, 'debug');
+            my $expected_normalized = normalize_output($expected, 'debug');
+
+            # Trim whitespace
+            $output_normalized =~ s/^\s+|\s+$//g;
+            $expected_normalized =~ s/^\s+|\s+$//g;
+
+            if (matches_pattern($output_normalized, $expected_normalized)) {
+                $context_results{debug} = { status => 'PASS', message => '' };
+            } else {
+                $context_results{debug} = {
+                    status => 'FAIL',
+                    message => 'Debug output mismatch',
+                    expected => $expected_normalized,
+                    actual => $output_normalized,
+                };
+                $any_failures = 1;
+
+                # Debug output for debug context mismatch
+                if ($options{verbose} || $ENV{DEBUG_TEST_FAILURES}) {
+                    say "  [DEBUG MISMATCH]";
+                    say "  Expected:";
+                    say "  " . join("\n  ", split /\n/, substr($expected_normalized, 0, 500));
+                    say "  Actual:";
+                    say "  " . join("\n  ", split /\n/, substr($output_normalized, 0, 500));
+                }
+            }
+        }
+        }
+
+        # Store results for this mode
+        if ($test_mode eq 'interpreter') {
+            %interpreter_results = %context_results;
+            $interpreter_failures = $any_failures;
+        } else {
+            %compiled_results = %context_results;
+            $compiled_failures = $any_failures;
+        }
+    }
+
+    my $duration = time - $start_time;
+
+    # Determine overall status for each mode
+    my $interpreter_status = 'N/A';
+    my $compiled_status = 'N/A';
+
+    if (grep { $_ eq 'interpreter' } @modes_to_test) {
+        $interpreter_status = $interpreter_failures ? 'FAIL' : 'PASS';
+        # Check if all contexts were skipped
+        my $all_skipped = 1;
+        for my $ctx (values %interpreter_results) {
+            if ($ctx->{status} ne 'SKIP') {
+                $all_skipped = 0;
+                last;
+            }
+        }
+        $interpreter_status = 'SKIP' if $all_skipped;
+    }
+
+    if (grep { $_ eq 'compiled' } @modes_to_test) {
+        $compiled_status = $compiled_failures ? 'FAIL' : 'PASS';
+        # Check if all contexts were skipped
+        my $all_skipped = 1;
+        for my $ctx (values %compiled_results) {
+            if ($ctx->{status} ne 'SKIP') {
+                $all_skipped = 0;
+                last;
+            }
+        }
+        $compiled_status = 'SKIP' if $all_skipped;
+    }
+
+    # Overall status
+    my $overall_status = 'PASS';
+    if ($interpreter_status eq 'FAIL' || $compiled_status eq 'FAIL') {
+        $overall_status = 'FAIL';
+    } elsif ($interpreter_status eq 'SKIP' && $compiled_status eq 'SKIP') {
+        $overall_status = 'SKIP';
+    } elsif ($interpreter_status eq 'ERROR' || $compiled_status eq 'ERROR') {
+        $overall_status = 'ERROR';
+    }
+
+    return {
+        name => $example_name,
+        type => 'multi-context',
+        status => $overall_status,
+        duration => $duration,
+        contexts => \%interpreter_results,  # For backwards compatibility, show interpreter results
+        compiled_contexts => \%compiled_results,
+        # For compatibility with existing reporting
+        interpreter_status => $interpreter_status,
+        compiled_status => $compiled_status,
+        interpreter_duration => $duration / scalar(@modes_to_test),
+        compiled_duration => $duration / scalar(@modes_to_test),
+        build_duration => 0,
+        avg_duration => $duration / scalar(@modes_to_test),
+    };
 }
 
 # Run test for a single example in a specific mode
@@ -1782,6 +2563,11 @@ sub run_test {
     my $type = $hints->{type} || detect_example_type($example_name);
     my $timeout = $hints->{timeout} // $options{timeout};
 
+    # Handle multi-context testing separately
+    if ($type eq 'multi-context') {
+        return test_multi_context_example($example_name, $hints, $timeout);
+    }
+
     say "Testing $example_name ($type) in $mode mode..." if $options{verbose};
 
     # Initialize result
@@ -1917,9 +2703,72 @@ sub generate_expected {
     # Use timeout from hints or default
     my $timeout = $hints->{timeout} // $options{timeout};
 
-    my $expected_file = File::Spec->catfile($examples_dir, $example_name, 'expected.txt');
-
     say "Generating expected output for $example_name ($type)...";
+
+    # Handle multi-context generation
+    if ($type eq 'multi-context') {
+        # Generate console output
+        my $exp_console = File::Spec->catfile($examples_dir, $example_name, 'expected-console.txt');
+        say "  Generating console context...";
+        my ($console_out, $console_err) = run_console_example_internal($example_name, $timeout, 'interpreter', undef, $hints);
+        if ($console_err) {
+            warn colored("  ✗ Failed (console): $console_err\n", 'red');
+        } else {
+            my $output = normalize_output($console_out, 'console');
+            $output = auto_placeholderize($output, 'console');
+            open my $fh, '>', $exp_console or die "Cannot write $exp_console: $!";
+            print $fh "# Generated: " . localtime() . "\n";
+            print $fh "# Type: console\n";
+            print $fh "# Command: aro run ./Examples/$example_name\n";
+            print $fh "---\n";
+            print $fh $output;
+            close $fh;
+            say colored("  ✓ Generated $exp_console", 'green');
+        }
+
+        # Generate HTTP output
+        my $exp_http = File::Spec->catfile($examples_dir, $example_name, 'expected-http.txt');
+        say "  Generating HTTP context...";
+        my ($http_out, $http_err) = run_http_example_internal($example_name, $timeout, 'interpreter', undef);
+        if ($http_err) {
+            warn colored("  ✗ Failed (HTTP): $http_err\n", 'red');
+        } else {
+            my $output = normalize_output($http_out, 'http');
+            $output = auto_placeholderize($output, 'http');
+            open my $fh, '>', $exp_http or die "Cannot write $exp_http: $!";
+            print $fh "# Generated: " . localtime() . "\n";
+            print $fh "# Type: http\n";
+            print $fh "# Command: HTTP GET /demo\n";
+            print $fh "---\n";
+            print $fh $output;
+            close $fh;
+            say colored("  ✓ Generated $exp_http", 'green');
+        }
+
+        # Generate debug output
+        my $exp_debug = File::Spec->catfile($examples_dir, $example_name, 'expected-debug.txt');
+        say "  Generating debug context...";
+        my ($debug_out, $debug_err) = run_debug_example($example_name, $timeout, 'interpreter', undef, $hints);
+        if ($debug_err) {
+            warn colored("  ✗ Failed (debug): $debug_err\n", 'red');
+        } else {
+            my $output = normalize_output($debug_out, 'debug');
+            $output = auto_placeholderize($output, 'debug');
+            open my $fh, '>', $exp_debug or die "Cannot write $exp_debug: $!";
+            print $fh "# Generated: " . localtime() . "\n";
+            print $fh "# Type: debug\n";
+            print $fh "# Command: aro run ./Examples/$example_name --debug\n";
+            print $fh "---\n";
+            print $fh $output;
+            close $fh;
+            say colored("  ✓ Generated $exp_debug\n", 'green');
+        }
+
+        return;
+    }
+
+    # Regular single-context generation
+    my $expected_file = File::Spec->catfile($examples_dir, $example_name, 'expected.txt');
 
     # Execute with workdir and pre-script support
     my ($output, $error) = run_test_in_workdir(
@@ -1927,7 +2776,9 @@ sub generate_expected {
         $hints->{workdir},
         $timeout,
         $type,
-        $hints->{'pre-script'}
+        $hints->{'pre-script'},
+        'interpreter',
+        $hints
     );
 
     if ($error) {

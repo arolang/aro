@@ -140,6 +140,31 @@ dependencies:
 | `c-plugin` | C/C++ library (FFI) |
 | `python-plugin` | Python module |
 
+### Provide Entry Fields
+
+Each entry in `provides:` can have these fields:
+
+| Field | Required | Description |
+|-------|----------|-------------|
+| `type` | Yes | Plugin type (see table above) |
+| `path` | Yes | Path to source files or library |
+| `handler` | No | Qualifier namespace prefix |
+| `build` | No | Build configuration (for compiled plugins) |
+| `python` | No | Python configuration (for python-plugin) |
+
+The `handler` field defines the **qualifier namespace** for plugin-provided qualifiers. When set, qualifiers from this plugin are accessed as `handler.qualifier` in ARO code. If omitted, the plugin name is used as the namespace.
+
+**Example:**
+
+```yaml
+provides:
+  - type: swift-plugin
+    path: Sources/
+    handler: math      # Qualifiers accessed as <value: math.round>, <value: math.abs>
+```
+
+See section 22.5 for complete documentation on plugin qualifiers.
+
 ---
 
 ## 22.4 ARO File Plugins
@@ -194,7 +219,185 @@ Feature sets from plugins are automatically available in your application with a
 
 ---
 
-## 22.5 Swift Plugins
+## 22.5 Plugin Qualifiers
+
+Plugins can provide **qualifiers** — named transformations that can be applied to values in ARO expressions using the `<value: handler.qualifier>` syntax.
+
+### What Are Plugin Qualifiers?
+
+Qualifiers extend the built-in qualifier operations (like `length`, `uppercase`, `hash`) with plugin-defined transformations. They are ideal for domain-specific operations that don't belong in the standard library.
+
+```aro
+(* Built-in qualifiers *)
+Compute the <len: length> from the <text>.
+Compute the <upper: uppercase> from the <greeting>.
+
+(* Plugin qualifiers with handler namespace *)
+Compute the <sorted: stats.sort> from the <numbers>.
+Log <numbers: collections.reverse> to the <console>.
+```
+
+### The Handler Namespace
+
+Each plugin that provides qualifiers must declare a `handler:` field in its `provides:` entry. This becomes the **namespace prefix** for all qualifiers from that plugin.
+
+```yaml
+# plugin.yaml
+name: plugin-swift-collection
+version: 1.0.0
+provides:
+  - type: swift-plugin
+    path: Sources/
+    handler: collections    # Namespace for all qualifiers from this plugin
+```
+
+In ARO code, qualifiers are accessed as `handler.qualifier`:
+
+```aro
+(* handler = collections, qualifier = reverse *)
+Compute the <reversed: collections.reverse> from the <list>.
+
+(* Works in expressions too *)
+Log <list: collections.reverse> to the <console>.
+```
+
+### Registering Qualifiers in C/Swift
+
+Native plugins register qualifiers by including them in `aro_plugin_info()` and providing an `aro_plugin_qualifier()` function:
+
+```c
+char* aro_plugin_info(void) {
+    return strdup("{\"name\":\"plugin-c-list\",\"qualifiers\":[{"
+        "\"name\":\"first\",\"inputTypes\":[\"array\"]},"
+        "{\"name\":\"last\",\"inputTypes\":[\"array\"]},"
+        "{\"name\":\"size\",\"inputTypes\":[\"array\",\"string\"]}"
+    "]}");
+}
+
+char* aro_plugin_qualifier(const char* qualifier_name, const char* input_json) {
+    // input_json = {"value": <the_input_value>}
+    cJSON* input = cJSON_Parse(input_json);
+    cJSON* value = cJSON_GetObjectItem(input, "value");
+
+    if (strcmp(qualifier_name, "first") == 0) {
+        // Return first element
+        cJSON* result = cJSON_CreateObject();
+        cJSON_AddItemToObject(result, "result", cJSON_Duplicate(
+            cJSON_GetArrayItem(value, 0), 1));
+        char* out = cJSON_Print(result);
+        cJSON_Delete(input); cJSON_Delete(result);
+        return out;
+    }
+    // ...
+}
+```
+
+**plugin.yaml:**
+
+```yaml
+name: plugin-c-list
+version: 1.0.0
+provides:
+  - type: c-plugin
+    path: src/
+    handler: list     # qualifiers accessed as list.first, list.last, list.size
+```
+
+**Usage:**
+
+```aro
+Create the <numbers> with [10, 20, 30, 40, 50].
+Compute the <first-element: list.first> from the <numbers>.
+Compute the <last-element: list.last> from the <numbers>.
+Compute the <count: list.size> from the <numbers>.
+```
+
+### Registering Qualifiers in Python
+
+Python plugins include a `qualifiers` list in `aro_plugin_info()` and an `aro_plugin_qualifier()` function:
+
+```python
+def aro_plugin_info():
+    return {
+        "name": "plugin-python-stats",
+        "version": "1.0.0",
+        "qualifiers": [
+            {"name": "sort",   "inputTypes": ["array"]},
+            {"name": "min",    "inputTypes": ["array"]},
+            {"name": "max",    "inputTypes": ["array"]},
+            {"name": "sum",    "inputTypes": ["array"]},
+            {"name": "avg",    "inputTypes": ["array"]},
+            {"name": "unique", "inputTypes": ["array"]},
+        ]
+    }
+
+def aro_plugin_qualifier(qualifier_name, input_json):
+    import json
+    data = json.loads(input_json)
+    value = data["value"]
+    if qualifier_name == "sort":
+        return json.dumps({"result": sorted(value)})
+    elif qualifier_name == "min":
+        return json.dumps({"result": min(value)})
+    # ...
+```
+
+**plugin.yaml:**
+
+```yaml
+name: plugin-python-stats
+version: 1.0.0
+provides:
+  - type: python-plugin
+    path: src/
+    handler: stats    # qualifiers accessed as stats.sort, stats.min, etc.
+```
+
+**Usage:**
+
+```aro
+Create the <numbers> with [5, 2, 8, 1, 9, 3].
+Compute the <sorted-numbers: stats.sort> from the <numbers>.
+Compute the <minimum: stats.min> from the <numbers>.
+Compute the <total: stats.sum> from the <numbers>.
+```
+
+### Input and Output Format
+
+Plugin qualifiers receive input as JSON:
+
+```json
+{"value": <the_input_value>}
+```
+
+And return output as JSON:
+
+```json
+{"result": <the_output_value>}
+```
+
+Or on error:
+
+```json
+{"error": "description of what went wrong"}
+```
+
+### Qualifier Input Types
+
+The `inputTypes` field restricts which value types a qualifier accepts:
+
+| Type | Values |
+|------|--------|
+| `array` | Lists |
+| `string` | Text values |
+| `number` | Integers and floats |
+| `object` | Dictionaries |
+
+If `inputTypes` is omitted, the qualifier accepts all types.
+
+---
+
+## 22.6 Swift Plugins
 
 Swift plugins provide the deepest integration with ARO, allowing custom actions and services.
 
@@ -274,7 +477,7 @@ Geocode the <coordinates> from the <address>.
 
 ---
 
-## 22.6 Native Plugins (Rust/C)
+## 22.7 Native Plugins (Rust/C)
 
 Native plugins use a C ABI interface for high-performance operations.
 
@@ -379,7 +582,7 @@ void aro_plugin_free(char* ptr) {
 
 ---
 
-## 22.7 Python Plugins
+## 22.8 Python Plugins
 
 Python plugins run as subprocesses, enabling access to Python's ecosystem.
 
@@ -451,7 +654,7 @@ def markdown_to_html(md):
 
 ---
 
-## 22.8 Plugin Dependencies
+## 22.9 Plugin Dependencies
 
 Plugins can depend on other plugins:
 
@@ -473,7 +676,7 @@ When installing a plugin, ARO automatically resolves and installs dependencies i
 
 ---
 
-## 22.9 Choosing a Plugin Type
+## 22.10 Choosing a Plugin Type
 
 | If you need... | Choose |
 |----------------|--------|
@@ -494,7 +697,7 @@ When installing a plugin, ARO automatically resolves and installs dependencies i
 
 ---
 
-## 22.10 Publishing Plugins
+## 22.11 Publishing Plugins
 
 1. Create a Git repository with `plugin.yaml`
 2. Tag releases following semantic versioning
@@ -518,7 +721,7 @@ aro add git@github.com:yourname/my-plugin.git
 
 ---
 
-## 22.11 Example Plugins
+## 22.12 Example Plugins
 
 The ARO team maintains several example plugins:
 

@@ -38,12 +38,29 @@ public final class Application: @unchecked Sendable {
     private var httpServer: AROHTTPServer?
     #endif
 
+    /// Socket server instance for broadcast support in HTTP handlers
+    private var socketServer: (any SocketServerService)?
+
     /// Template service for HTML template rendering (ARO-0050)
     private var templateService: AROTemplateService?
+
+    /// Event recorder for debugging (ARO-0007, GitLab #124)
+    private let eventRecorder: EventRecorder
+
+    /// Path to record events to (optional)
+    private let recordPath: String?
+
+    /// Path to replay events from (optional)
+    private let replayPath: String?
 
     /// Whether HTTP server is enabled (requires OpenAPI contract)
     public var isHTTPEnabled: Bool {
         return openAPISpec != nil
+    }
+
+    /// Whether the application entered wait state (Keepalive action)
+    public var enteredWaitState: Bool {
+        return runtime.enteredWaitState
     }
 
     // MARK: - Initialization
@@ -53,7 +70,9 @@ public final class Application: @unchecked Sendable {
         programs: [AnalyzedProgram],
         entryPoint: String = "Application-Start",
         config: ApplicationConfig = .default,
-        openAPISpec: OpenAPISpec? = nil
+        openAPISpec: OpenAPISpec? = nil,
+        recordPath: String? = nil,
+        replayPath: String? = nil
     ) {
         self.programs = programs
         self.entryPoint = entryPoint
@@ -61,6 +80,9 @@ public final class Application: @unchecked Sendable {
         self.openAPISpec = openAPISpec
         self.routeRegistry = openAPISpec.map { OpenAPIRouteRegistry(spec: $0) }
         self.runtime = Runtime()
+        self.eventRecorder = EventRecorder(eventBus: .shared)
+        self.recordPath = recordPath
+        self.replayPath = replayPath
         // Services are registered when run() is called (async context)
     }
 
@@ -81,6 +103,7 @@ public final class Application: @unchecked Sendable {
 
         // Register Windows socket server (FlyingSocks-based)
         let socketServer = WindowsSocketServer(eventBus: .shared)
+        self.socketServer = socketServer
         await runtime.register(service: socketServer as SocketServerService)
 
         // Register Windows HTTP server (FlyingFox-based)
@@ -95,6 +118,7 @@ public final class Application: @unchecked Sendable {
 
         // Register socket server service for TCP socket operations
         let socketServer = AROSocketServer(eventBus: .shared)
+        self.socketServer = socketServer
         await runtime.register(service: socketServer as SocketServerService)
 
         // Register HTTP server service for web APIs
@@ -120,6 +144,27 @@ public final class Application: @unchecked Sendable {
         ts.setExecutor(templateExecutor)
         self.templateService = ts
         await runtime.register(service: ts as TemplateService)
+
+        // Register terminal service (ARO-0052)
+        #if !os(Windows)
+        if isatty(STDOUT_FILENO) != 0 {
+            let terminalService = TerminalService()
+            await runtime.register(service: terminalService)
+        }
+        #else
+        // Windows: only register if Windows Terminal
+        if ProcessInfo.processInfo.environment["WT_SESSION"] != nil {
+            let terminalService = TerminalService()
+            await runtime.register(service: terminalService)
+        }
+        #endif
+
+        // Register keyboard service for key press events (ARO-0052)
+        // The service internally checks isatty(STDIN_FILENO) before starting
+        #if !os(Windows)
+        let keyboardService = KeyboardService(eventBus: .shared)
+        await runtime.register(service: keyboardService)
+        #endif
     }
 
     /// Initialize from source files
@@ -179,7 +224,34 @@ public final class Application: @unchecked Sendable {
         // Set up HTTP request handler if OpenAPI contract exists
         setupHTTPRequestHandler(for: mainProgram)
 
-        return try await runtime.run(mainProgram, entryPoint: entryPoint)
+        // Handle event replay before running application
+        if let replayPath {
+            try await replayEvents(from: replayPath)
+        }
+
+        // Start event recording if requested
+        if recordPath != nil {
+            await eventRecorder.startRecording()
+        }
+
+        // Run the application
+        let response: Response
+        do {
+            response = try await runtime.run(mainProgram, entryPoint: entryPoint)
+        } catch {
+            // Stop recording and save even if execution fails
+            if let recordPath {
+                try await saveRecording(to: recordPath)
+            }
+            throw error
+        }
+
+        // Stop recording and save if requested
+        if let recordPath {
+            try await saveRecording(to: recordPath)
+        }
+
+        return response
     }
 
     /// Run and keep the application alive (for servers)
@@ -194,7 +266,31 @@ public final class Application: @unchecked Sendable {
         // Set up HTTP request handler if OpenAPI contract exists
         setupHTTPRequestHandler(for: mainProgram)
 
-        try await runtime.runAndKeepAlive(mainProgram, entryPoint: entryPoint)
+        // Handle event replay before running application
+        if let replayPath {
+            try await replayEvents(from: replayPath)
+        }
+
+        // Start event recording if requested
+        if recordPath != nil {
+            await eventRecorder.startRecording()
+        }
+
+        // Run the application with keepalive
+        do {
+            try await runtime.runAndKeepAlive(mainProgram, entryPoint: entryPoint)
+        } catch {
+            // Stop recording and save even if execution fails
+            if let recordPath {
+                try await saveRecording(to: recordPath)
+            }
+            throw error
+        }
+
+        // Stop recording and save if requested
+        if let recordPath {
+            try await saveRecording(to: recordPath)
+        }
     }
 
     /// Stop the application
@@ -284,6 +380,11 @@ public final class Application: @unchecked Sendable {
         // Register repository storage service for persistent in-memory storage
         context.register(InMemoryRepositoryStorage.shared as RepositoryStorageService)
 
+        // Register socket server service for TCP broadcast support
+        if let ss = self.socketServer {
+            context.register(ss as any SocketServerService)
+        }
+
         // Register WebSocket server service for broadcast support (if configured)
         #if !os(Windows)
         if let wsServer = self.httpServer?.getWebSocketServer() {
@@ -331,11 +432,11 @@ public final class Application: @unchecked Sendable {
             context.bind("body", value: parsedBody)
         }
 
-        // Create executor and run
+        // Create executor and run with shared global symbols
         let executor = FeatureSetExecutor(
             actionRegistry: .shared,
             eventBus: .shared,
-            globalSymbols: GlobalSymbolStorage()
+            globalSymbols: await runtime.globalSymbols
         )
 
         return try await executor.execute(analyzedFeatureSet, context: context)
@@ -482,6 +583,12 @@ public final class Application: @unchecked Sendable {
                        match.range.location != NSNotFound {
                         return (str, "text/css; charset=utf-8")
                     }
+                }
+
+                // Detect Prometheus text exposition format (ARO-0044)
+                // Prometheus output starts with "# HELP" or "# TYPE" comment lines
+                if trimmed.hasPrefix("# HELP ") || trimmed.hasPrefix("# TYPE ") {
+                    return (str, "text/plain; version=0.0.4; charset=utf-8")
                 }
 
                 // Detect JavaScript patterns
@@ -631,6 +738,45 @@ public final class Application: @unchecked Sendable {
             globalRegistry: globalRegistry
         )
     }
+
+    // MARK: - Event Recording and Replay
+
+    /// Replay events from a JSON file
+    private func replayEvents(from path: String) async throws {
+        let replayer = EventReplayer(eventBus: .shared)
+        let recording = try await replayer.loadFromFile(path)
+
+        if config.verbose {
+            print("Replaying \(recording.events.count) events from \(path)")
+            print("Recording: \(recording.application)")
+            print("Recorded at: \(recording.recorded)")
+            print()
+        }
+
+        // Replay events without timing delays (fast replay)
+        await replayer.replayFast(recording)
+
+        if config.verbose {
+            print("Event replay completed")
+            print()
+        }
+    }
+
+    /// Save recorded events to a JSON file
+    private func saveRecording(to path: String) async throws {
+        let events = await eventRecorder.stopRecording()
+
+        if config.verbose {
+            print("\nRecorded \(events.count) events")
+            print("Saving to: \(path)")
+        }
+
+        try await eventRecorder.saveToFile(path, applicationName: "ARO Application")
+
+        if config.verbose {
+            print("Events saved successfully")
+        }
+    }
 }
 
 // MARK: - Application Configuration
@@ -751,6 +897,21 @@ public struct ApplicationDiscovery {
         try ContractValidator.validateSpec(spec)
 
         return spec
+    }
+
+    /// Count feature sets with the given name across a set of source files.
+    /// Used to detect multiple entry points (e.g., multiple Application-Start) in a directory.
+    private func countEntryPoints(in sourceFiles: [URL], named entryPoint: String) -> Int {
+        let compiler = Compiler()
+        var count = 0
+        for file in sourceFiles {
+            guard let source = try? String(contentsOf: file, encoding: .utf8) else { continue }
+            let result = compiler.compile(source)
+            for fs in result.analyzedProgram.featureSets where fs.featureSet.name == entryPoint {
+                count += 1
+            }
+        }
+        return count
     }
 
     private func findSourceFiles(in directory: URL, includePlugins: Bool = false) throws -> [URL] {
@@ -884,6 +1045,29 @@ extension ApplicationDiscovery {
         } else {
             sourceFiles = [path]
             rootPath = path.deletingLastPathComponent()
+        }
+
+        // Validate: when this is a top-level directory scan (visited is empty, not a recursive import),
+        // detect if the directory contains multiple separate applications. This happens when a user
+        // runs `aro run` on a parent directory that contains subdirectories each with their own
+        // Application-Start (e.g., `aro run Examples/ModulesExample` instead of
+        // `aro run Examples/ModulesExample/Combined`).
+        if visited.isEmpty && isDirectory.boolValue {
+            let entryPointCount = countEntryPoints(in: sourceFiles, named: entryPoint)
+            if entryPointCount > 1 {
+                let subDirs = Set(sourceFiles.compactMap { file -> String? in
+                    let fileDir = file.deletingLastPathComponent()
+                    guard fileDir.standardized != path.standardized else { return nil }
+                    let relPath = fileDir.path.replacingOccurrences(of: path.path + "/", with: "")
+                    return String(relPath.split(separator: "/").first ?? "")
+                }).sorted()
+                let hint = subDirs.first.map { " Try: aro run \(path.path)/\($0)" } ?? ""
+                throw ApplicationError.invalidConfiguration(
+                    "'\(path.lastPathComponent)' contains \(entryPointCount) '\(entryPoint)' feature sets " +
+                    "across \(subDirs.joined(separator: ", ")). " +
+                    "This directory contains separate applications, not a single app.\(hint)"
+                )
+            }
         }
 
         // Prevent cycles

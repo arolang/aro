@@ -91,15 +91,21 @@ public struct AcceptAction: ActionImplementation {
         // Extract entity ID for the event
         let entityId = extractEntityId(from: updatedObject)
 
-        // Emit StateTransitionEvent for observers
-        context.emit(StateTransitionEvent(
+        // Publish StateTransitionEvent and wait for all handlers to complete
+        // (publishAndTrack ensures awaitPendingEvents() in FeatureSetExecutor waits for handlers)
+        let transitionEvent = StateTransitionEvent(
             fieldName: fieldName,
             objectName: objectName,
             fromState: fromState,
             toState: toState,
             entityId: entityId,
             entity: updatedObject
-        ))
+        )
+        if let eventBus = context.eventBus {
+            await eventBus.publishAndTrack(transitionEvent)
+        } else {
+            context.emit(transitionEvent)
+        }
 
         return updatedObject
     }

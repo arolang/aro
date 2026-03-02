@@ -1,0 +1,19 @@
+(* User Feature Sets *)
+(* Located in sources/users/users.aro - demonstrating subdirectory organization *)
+
+(Handle User Creation: CreateUser Handler) {
+    Extract the <name> from the <event: data.name>.
+    Extract the <email> from the <event: data.email>.
+
+    Create the <user> with {
+        id: "user-1",
+        name: <name>,
+        email: <email>,
+        createdAt: "2024-01-15T10:00:00Z"
+    }.
+
+    Log "Created user:" to the <console>.
+    Log <user> to the <console>.
+
+    Return an <OK: status> for the <user-creation>.
+}

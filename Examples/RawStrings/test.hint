@@ -1,0 +1,4 @@
+# Test hints for RawStrings
+# Demonstrates raw string literals with ''' syntax
+mode: both
+timeout: 30

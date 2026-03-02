@@ -1,0 +1,33 @@
+# Generated: Mon Mar  2 09:51:23 2026
+# Type: console
+# Command: aro run ./Examples/TerminalSimpleMenu
+# Timeout: 10s
+---
+Starting Simple Menu App...
+Please wait...
+
+
+╔═══════════════════════════════════════╗
+║           Welcome to ARO              ║
+║        Interactive Menu Demo          ║
+╚═══════════════════════════════════════╝
+
+
+=== Simple Terminal Menu ===
+
+Navigate the menu below using the arrow keys.
+
+
+
+MAIN MENU
+─────────────────────────────────────
+
+▶ View Tasks
+View Logs
+Exit
+
+─────────────────────────────────────
+↑↓ navigate · Enter select · q quit
+
+
+startup

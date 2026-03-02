@@ -205,4 +205,34 @@ Test files can follow the same organization as production code. Test files for u
 
 ---
 
+## 24.9 The Sources Directory Convention
+
+For larger applications, you may want to separate configuration files from source code. The `sources/` directory convention provides a clean way to organize your project:
+
+```
+my-app/
+├── openapi.yaml              # Configuration in root
+├── main.aro                  # Entry point in root (optional)
+├── sources/                  # All source files in subdirectory
+│   ├── users/
+│   │   └── users.aro
+│   ├── orders/
+│   │   └── orders.aro
+│   └── notifications/
+│       └── notifications.aro
+└── README.md
+```
+
+The runtime discovers all `.aro` files regardless of their location in the directory tree. You can place source files in the root directory, in `sources/`, or use a combination. The `sources/` convention is particularly useful when:
+
+- Your project has many configuration files (OpenAPI specs, environment configs)
+- You want a clear separation between code and configuration
+- You are following conventions from other languages that use `src/` directories
+
+Files can be nested to any depth within `sources/`. The runtime flattens the hierarchy during discovery—all feature sets end up in the same namespace.
+
+> **See also:** `Examples/SourceStructure` demonstrates this organization pattern.
+
+---
+
 *Next: Chapter 24 — Patterns & Practices*

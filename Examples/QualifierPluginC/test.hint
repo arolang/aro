@@ -1,0 +1,2 @@
+timeout: 30
+strip-prefix: true

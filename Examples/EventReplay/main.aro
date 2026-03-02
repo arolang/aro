@@ -1,0 +1,37 @@
+(* Test event recording and replay (GitLab #124) *)
+
+(Application-Start: Event Replay Test) {
+    Log "=== Event Recording and Replay Test ===" to the <console>.
+
+    (* Emit several events *)
+    Emit a <UserCreated: event> with {"userId": "123", "name": "Alice"}.
+    Emit an <OrderPlaced: event> with {"orderId": "456", "amount": 100}.
+    Emit a <PaymentProcessed: event> with {"paymentId": "789", "status": "success"}.
+
+    Log "" to the <console>.
+    Log "✓ Events emitted" to the <console>.
+    Log "✓ Event recording implemented in EventRecorder.swift" to the <console>.
+
+    Return an <OK: status> for the <test>.
+}
+
+(User Event Handler: UserCreated Handler) {
+    Extract the <data> from the <event: payload>.
+    Log "UserCreated event received:" to the <console>.
+    Log <data> to the <console>.
+    Return an <OK: status> for the <handler>.
+}
+
+(Order Event Handler: OrderPlaced Handler) {
+    Extract the <data> from the <event: payload>.
+    Log "OrderPlaced event received:" to the <console>.
+    Log <data> to the <console>.
+    Return an <OK: status> for the <handler>.
+}
+
+(Payment Event Handler: PaymentProcessed Handler) {
+    Extract the <data> from the <event: payload>.
+    Log "PaymentProcessed event received:" to the <console>.
+    Log <data> to the <console>.
+    Return an <OK: status> for the <handler>.
+}

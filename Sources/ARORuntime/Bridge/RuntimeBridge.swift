@@ -29,6 +29,14 @@ enum RuntimeError: Error {
     }
 }
 
+// MARK: - Feature Set Metadata Registry
+
+/// Global registry for feature set metadata (name -> business activity mapping)
+/// Used in compiled binaries to determine business activity for HTTP handlers
+/// NSLock provides thread safety, so we can mark as nonisolated(unsafe)
+private nonisolated(unsafe) var featureSetMetadataLock = NSLock()
+private nonisolated(unsafe) var featureSetBusinessActivities: [String: String] = [:]
+
 // MARK: - Runtime Handle
 
 /// Opaque runtime handle for C interop
@@ -305,6 +313,13 @@ public func aro_parse_arguments(_ argc: Int32, _ argv: UnsafeMutablePointer<Unsa
         }
     }
     ParameterStorage.shared.parseArguments(args)
+}
+
+/// Check if --keep-alive flag was passed
+/// - Returns: 1 if keep-alive flag is set, 0 otherwise
+@_cdecl("aro_has_keep_alive")
+public func aro_has_keep_alive() -> Int32 {
+    return ParameterStorage.shared.has("keep-alive") ? 1 : 0
 }
 
 /// Wait for all in-flight event handlers to complete
@@ -703,6 +718,93 @@ public func aro_context_destroy(_ contextPtr: UnsafeMutableRawPointer?) {
     Unmanaged<AROCContextHandle>.fromOpaque(ptr).release()
 }
 
+/// Register feature set metadata (name -> business activity mapping)
+/// Called from generated main() to populate the registry for HTTP routing
+/// - Parameters:
+///   - featureSetNamePtr: Feature set name C string
+///   - businessActivityPtr: Business activity C string (NULL for empty)
+@_cdecl("aro_register_feature_set_metadata")
+public func aro_register_feature_set_metadata(
+    _ featureSetNamePtr: UnsafePointer<CChar>?,
+    _ businessActivityPtr: UnsafePointer<CChar>?
+) {
+    guard let namePtr = featureSetNamePtr else { return }
+
+    let name = String(cString: namePtr)
+    let businessActivity = businessActivityPtr.map { String(cString: $0) } ?? ""
+
+    featureSetMetadataLock.lock()
+    featureSetBusinessActivities[name] = businessActivity
+    featureSetMetadataLock.unlock()
+}
+
+/// Lookup business activity for a feature set
+/// - Parameter featureSetNamePtr: Feature set name C string
+/// - Returns: Business activity C string (caller must free) or NULL if not found
+@_cdecl("aro_lookup_business_activity")
+public func aro_lookup_business_activity(_ featureSetNamePtr: UnsafePointer<CChar>?) -> UnsafeMutablePointer<CChar>? {
+    guard let namePtr = featureSetNamePtr else { return nil }
+
+    let name = String(cString: namePtr)
+
+    featureSetMetadataLock.lock()
+    let businessActivity = featureSetBusinessActivities[name]
+    featureSetMetadataLock.unlock()
+
+    guard let activity = businessActivity else { return nil }
+
+    // Allocate C string and return
+    return strdup(activity)
+}
+
+/// Bind published variables to a context for a given business activity
+/// This eagerly binds all published variables that match the business activity,
+/// enabling HTTP handlers in compiled binaries to access variables published by Application-Start
+/// - Parameters:
+///   - contextPtr: Context handle
+///   - businessActivityPtr: Business activity C string (NULL for empty)
+@_cdecl("aro_context_bind_published_variables")
+public func aro_context_bind_published_variables(
+    _ contextPtr: UnsafeMutableRawPointer?,
+    _ businessActivityPtr: UnsafePointer<CChar>?
+) {
+    guard let ptr = contextPtr else { return }
+
+    let contextHandle = Unmanaged<AROCContextHandle>.fromOpaque(ptr).takeUnretainedValue()
+    let businessActivity = businessActivityPtr.map { String(cString: $0) } ?? ""
+    let runtime = contextHandle.runtime.runtime
+
+    // This must be async, so we need to run it synchronously using a semaphore
+    let semaphore = DispatchSemaphore(value: 0)
+
+    // Explicitly capture values to avoid data race warnings
+    let context = contextHandle.context
+
+    Task { @Sendable in
+        let globalSymbols = await runtime.globalSymbols
+        let allSymbols = await globalSymbols.allSymbols()
+
+        for (name, entry) in allSymbols {
+            // Skip if already bound
+            if context.resolveAny(name) != nil {
+                continue
+            }
+
+            // Only bind if business activity matches (or both are empty)
+            if !entry.businessActivity.isEmpty && !businessActivity.isEmpty &&
+               entry.businessActivity == businessActivity {
+                context.bind(name, value: entry.value)
+            } else if entry.businessActivity.isEmpty || businessActivity.isEmpty {
+                // If either is empty, bind it (framework/external variables)
+                context.bind(name, value: entry.value)
+            }
+        }
+
+        semaphore.signal()
+    }
+    semaphore.wait()
+}
+
 /// Print the response from the context (for compiled binaries)
 /// - Parameter contextPtr: Context handle
 @_cdecl("aro_context_print_response")
@@ -712,8 +814,11 @@ public func aro_context_print_response(_ contextPtr: UnsafeMutableRawPointer?) {
     let contextHandle = Unmanaged<AROCContextHandle>.fromOpaque(ptr).takeUnretainedValue()
 
     if let response = contextHandle.context.getResponse() {
-        // Use human-readable format for CLI output
-        print(response.format(for: .human))
+        // Don't print lifecycle exit response (e.g., "Return ... for the <application>")
+        if response.reason != "application" {
+            // Use human-readable format for CLI output
+            print(response.format(for: .human))
+        }
     }
 }
 
@@ -1183,13 +1288,24 @@ private func evaluateExpressionJSON(_ expr: [String: Any], context: RuntimeConte
 
         var value = context.resolveAny(varName) ?? ""
 
-        // Handle specifiers for expressions like <user: active>
-        for spec in specs {
-            if let dict = value as? [String: any Sendable], let propVal = dict[spec] {
-                value = propVal
-            } else {
-                return "" // Property not found
+        // Handle specifiers - try plugin qualifier first, then dictionary property access
+        // Try namespaced qualifier form first (e.g., <list: collections.reverse>)
+        if specs.count > 1 {
+            let joined = specs.joined(separator: ".")
+            if let transformed = try? QualifierRegistry.shared.resolve(joined, value: value) {
+                return transformed
             }
+        }
+
+        for spec in specs {
+            // First, try plugin qualifier (e.g., <list: pick-random>)
+            if let transformed = try? QualifierRegistry.shared.resolve(spec, value: value) {
+                value = transformed
+            } else if let dict = value as? [String: any Sendable], let propVal = dict[spec] {
+                // Fall back to dictionary property access (e.g., <user: name>)
+                value = propVal
+            }
+            // If neither works, just continue - the value stays as-is
         }
         return value
     }
@@ -2130,23 +2246,30 @@ public func aro_variable_unbind(
     contextHandle.context.unbind(nameStr)
 }
 
-/// Get a property from a dictionary value
+/// Apply a specifier to a value (qualifier or property access)
 /// - Parameters:
-///   - valuePtr: Value handle (must be a dictionary)
-///   - property: Property name (C string)
-/// - Returns: Value handle for the property (must be freed with aro_value_free), or NULL if not found
+///   - valuePtr: Value handle
+///   - specifier: Specifier name (C string) - either a qualifier or property name
+/// - Returns: Value handle for the result (must be freed with aro_value_free), or NULL if not found
 @_cdecl("aro_dict_get")
 public func aro_dict_get(
     _ valuePtr: UnsafeMutableRawPointer?,
-    _ property: UnsafePointer<CChar>?
+    _ specifier: UnsafePointer<CChar>?
 ) -> UnsafeMutableRawPointer? {
     guard let ptr = valuePtr,
-          let propStr = property.map({ String(cString: $0) }) else { return nil }
+          let specStr = specifier.map({ String(cString: $0) }) else { return nil }
 
     let boxed = Unmanaged<AROCValue>.fromOpaque(ptr).takeUnretainedValue()
 
+    // First, try plugin qualifier (e.g., <list: pick-random>)
+    if let transformed = try? QualifierRegistry.shared.resolve(specStr, value: boxed.value) {
+        let boxedValue = AROCValue(value: transformed)
+        return UnsafeMutableRawPointer(Unmanaged.passRetained(boxedValue).toOpaque())
+    }
+
+    // Fall back to dictionary property access (e.g., <user: name>)
     if let dict = boxed.value as? [String: any Sendable],
-       let value = dict[propStr] {
+       let value = dict[specStr] {
         let boxedValue = AROCValue(value: value)
         return UnsafeMutableRawPointer(Unmanaged.passRetained(boxedValue).toOpaque())
     }

@@ -125,8 +125,17 @@ public struct StartAction: ActionImplementation {
             if let wsPath = websocketPath {
                 try await httpServerService.configureWebSocket(path: wsPath)
             }
-            try await httpServerService.start(port: port)
-            EventBus.shared.registerEventSource()
+            do {
+                try await httpServerService.start(port: port)
+            } catch {
+                throw AROError(
+                    message: "Cannot start the http-server on port \(port): \(error.localizedDescription)",
+                    featureSet: context.featureSetName,
+                    businessActivity: context.businessActivity,
+                    statement: "Start the <http-server> with the <object>."
+                )
+            }
+            await EventBus.shared.registerEventSource()
             return ServerStartResult(serverType: "http-server", success: true, port: port)
         }
 
@@ -138,7 +147,7 @@ public struct StartAction: ActionImplementation {
         let nativePort = (port == 8080) ? 0 : port
         let result = aro_native_http_server_start_with_openapi(Int32(nativePort), nil)
         if result == 0 {
-            EventBus.shared.registerEventSource()
+            await EventBus.shared.registerEventSource()
             return ServerStartResult(serverType: "http-server", success: true, port: port)
         } else {
             throw ActionError.runtimeError("Failed to start HTTP server on port \(port)")
@@ -193,7 +202,7 @@ public struct StartAction: ActionImplementation {
         // Try using the SocketServerService (interpreter mode with NIO)
         if let socketService = context.service(SocketServerService.self) {
             try await socketService.start(port: port)
-            EventBus.shared.registerEventSource()
+            await EventBus.shared.registerEventSource()
             return ServerStartResult(serverType: "socket-server", success: true, port: port)
         }
 
@@ -201,7 +210,7 @@ public struct StartAction: ActionImplementation {
         #if !os(Windows)
         let result = aro_native_socket_server_start(Int32(port))
         if result == 0 {
-            EventBus.shared.registerEventSource()
+            await EventBus.shared.registerEventSource()
             return ServerStartResult(serverType: "socket-server", success: true, port: port)
         } else {
             throw ActionError.runtimeError("Failed to start socket server on port \(port)")
@@ -262,7 +271,7 @@ public struct StartAction: ActionImplementation {
 
         if let fileMonitorService = context.service(FileMonitorService.self) {
             try await fileMonitorService.watch(path: path)
-            EventBus.shared.registerEventSource()
+            await EventBus.shared.registerEventSource()
             return ServerStartResult(serverType: "file-monitor", success: true, path: path)
         }
 
@@ -270,7 +279,7 @@ public struct StartAction: ActionImplementation {
         #if !os(Windows)
         let started = NativeFileWatcher.shared.startWatching(path: path)
         if started {
-            EventBus.shared.registerEventSource()
+            await EventBus.shared.registerEventSource()
             return ServerStartResult(serverType: "file-monitor", success: true, path: path)
         }
         #endif
@@ -314,7 +323,15 @@ public struct StopAction: ActionImplementation {
             return try await stopSocketServer(context: context)
 
         case "file-monitor", "filemonitor", "watcher":
-            return stopFileMonitor()
+            return await stopFileMonitor()
+
+        case "keyboard", "stdin", "input", "keys":
+            if let keyboardService = context.service(KeyboardService.self) {
+                await keyboardService.stop()
+            }
+            // Signal clean shutdown so Keepalive's waitForShutdown() returns with exit code 0
+            ShutdownCoordinator.shared.signalShutdown()
+            return ServerStopResult(serverType: "keyboard", success: true)
 
         default:
             // Generic service stop
@@ -326,13 +343,13 @@ public struct StopAction: ActionImplementation {
     private func stopHTTPServer(context: ExecutionContext) async throws -> any Sendable {
         if let httpServerService = context.service(HTTPServerService.self) {
             try await httpServerService.stop()
-            EventBus.shared.unregisterEventSource()
+            await EventBus.shared.unregisterEventSource()
             return ServerStopResult(serverType: "http-server", success: true)
         }
 
         #if !os(Windows)
         aro_native_http_server_stop()
-        EventBus.shared.unregisterEventSource()
+        await EventBus.shared.unregisterEventSource()
         #endif
 
         return ServerStopResult(serverType: "http-server", success: true)
@@ -341,22 +358,22 @@ public struct StopAction: ActionImplementation {
     private func stopSocketServer(context: ExecutionContext) async throws -> any Sendable {
         if let socketService = context.service(SocketServerService.self) {
             try await socketService.stop()
-            EventBus.shared.unregisterEventSource()
+            await EventBus.shared.unregisterEventSource()
             return ServerStopResult(serverType: "socket-server", success: true)
         }
 
         #if !os(Windows)
         aro_native_socket_server_stop()
-        EventBus.shared.unregisterEventSource()
+        await EventBus.shared.unregisterEventSource()
         #endif
 
         return ServerStopResult(serverType: "socket-server", success: true)
     }
 
-    private func stopFileMonitor() -> any Sendable {
+    private func stopFileMonitor() async -> any Sendable {
         #if !os(Windows)
         NativeFileWatcher.shared.stopWatching()
-        EventBus.shared.unregisterEventSource()
+        await EventBus.shared.unregisterEventSource()
         #endif
 
         return ServerStopResult(serverType: "file-monitor", success: true)
@@ -427,6 +444,13 @@ public struct ListenAction: ActionImplementation {
             let path = object.specifiers.first ?? "."
             context.emit(ListenStartedEvent(type: "file", target: path))
             return ListenResult(type: "file", target: path)
+
+        case "stdin", "keyboard", "input", "keys":
+            if let keyboardService = context.service(KeyboardService.self) {
+                await keyboardService.startListening()
+            }
+            context.bind(result.base, value: "keyboard")
+            return ListenResult(type: "keyboard", target: "stdin")
 
         default:
             context.emit(ListenStartedEvent(type: "generic", target: object.base))
@@ -819,7 +843,7 @@ public struct WaitForEventsAction: ActionImplementation {
         // If there are active event sources (HTTP server, file monitor, socket server),
         // only exit on explicit shutdown signal (SIGINT/SIGTERM).
         // Otherwise, also monitor for idle state to auto-exit batch processors.
-        if EventBus.shared.hasActiveEventSources {
+        if await EventBus.shared.hasActiveEventSources {
             // Long-running service mode: wait for explicit shutdown only
             await ShutdownCoordinator.shared.waitForShutdown()
         } else {
@@ -841,7 +865,7 @@ public struct WaitForEventsAction: ActionImplementation {
 
                     while !Task.isCancelled {
                         try? await Task.sleep(nanoseconds: 100_000_000) // 100ms
-                        let pendingCount = eventBus.getPendingHandlerCount()
+                        let pendingCount = await eventBus.getPendingHandlerCount()
                         if pendingCount == 0 {
                             consecutiveIdleChecks += 1
                             if consecutiveIdleChecks >= idleThreshold {
@@ -966,9 +990,11 @@ public struct ConnectAction: ActionImplementation {
             host = object.base
         }
 
-        // Get port from various sources (matching StartAction pattern)
-        // Priority 1: Check _with_ binding (ARO-0042: with clause)
-        if let withValue = context.resolveAny("_with_") {
+        // Get port from various sources
+        // Priority 1: Check _with_ binding (when with clause is in rangeModifiers)
+        // Priority 2: Check _expression_ binding (when with clause is secondary, e.g. Connect ... to <host> with { port: N })
+        let configValue: (any Sendable)? = context.resolveAny("_with_") ?? context.resolveAny("_expression_")
+        if let withValue = configValue {
             if let withPort = withValue as? Int {
                 port = withPort
             } else if let withConfig = withValue as? [String: any Sendable],
@@ -978,13 +1004,13 @@ public struct ConnectAction: ActionImplementation {
                 port = 8080 // default if with clause doesn't contain port
             }
         }
-        // Priority 2: Check _literal_
+        // Priority 3: Check _literal_
         else if let portValue = context.resolveAny("_literal_") as? Int {
             port = portValue
         } else if let portStr = context.resolveAny("_literal_") as? String, let p = Int(portStr) {
             port = p
         }
-        // Priority 3: Try to find port in specifiers
+        // Priority 4: Try to find port in specifiers
         else if let portSpec = object.specifiers.dropFirst().first, let p = Int(portSpec) {
             port = p
         }
@@ -1002,8 +1028,12 @@ public struct ConnectAction: ActionImplementation {
         let connectionId = client.connectionId
         context.bind(result.base, value: connectionId)
 
-        // Register the client for later use
+        // Register the client for later use (enables Send to work with this connection)
         context.register(client)
+
+        // Register as active event source so Keepalive waits for events
+        // (instead of exiting after the idle timeout)
+        await EventBus.shared.registerEventSource()
 
         return ConnectResult(connectionId: connectionId, host: host, port: port, success: true)
         #else

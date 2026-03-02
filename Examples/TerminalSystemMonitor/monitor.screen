@@ -1,0 +1,86 @@
+{{!
+  System Monitor Dashboard Template
+
+  Responsive layout that adapts to terminal size
+}}
+
+{{ screen.clear }}
+{{ cursor.move 1 1 }}
+
+{{! Title }}
+{{ color cyan }}{{ bold }}
+╔{{ for 0..<(terminal.columns - 2) }}═{{ endfor }}╗
+║{{ for 0..<((terminal.columns - 28) / 2) }} {{ endfor }}SYSTEM MONITOR{{ for 0..<((terminal.columns - 28) / 2) }} {{ endfor }}║
+╚{{ for 0..<(terminal.columns - 2) }}═{{ endfor }}╝
+{{ reset }}
+
+{{! Two-column layout for wide terminals, single column for narrow }}
+{{ if terminal.columns >= 80 }}
+  {{! Wide terminal: side-by-side panels }}
+  {{ panel orientation="horizontal" }}
+    {{ section width="50%" }}
+      {{! CPU Usage Box }}
+      {{ box border="single" title="CPU Usage" padding=1 }}
+        {{ for core in cpu.cores }}
+          Core {{ core.id }}: {{ progress value=core.usage width=20 }}
+        {{ endfor }}
+
+        {{ for 0..<40 }}-{{ endfor }}
+        {{ color dim }}Average:{{ reset }} {{ cpu.average * 100 }}%
+      {{ endbox }}
+
+      {{! Memory Box }}
+      {{ box border="single" title="Memory" padding=1 }}
+        {{ progress value=memory.percent width=30 label="RAM" }}
+
+        {{ color dim }}{{ memory.used }}GB / {{ memory.total }}GB used{{ reset }}
+
+        {{ if memory.percent > 0.9 }}
+          {{ color red }}{{ bold }}⚠ High memory usage!{{ reset }}
+        {{ endif }}
+      {{ endbox }}
+    {{ endsection }}
+
+    {{ section width="50%" }}
+      {{! Network Box }}
+      {{ box border="single" title="Network" padding=1 }}
+        {{ color green }}↓{{ reset }} Download: {{ bold }}{{ network.download }}{{ reset }} MB/s
+        {{ color blue }}↑{{ reset }} Upload:   {{ bold }}{{ network.upload }}{{ reset }} MB/s
+
+        {{ for 0..<40 }}-{{ endfor }}
+        {{ color dim }}Total transferred: {{ network.total }}GB{{ reset }}
+      {{ endbox }}
+
+      {{! Disk I/O Box }}
+      {{ box border="single" title="Disk Usage" padding=1 }}
+        {{ for disk in disks }}
+          {{ disk.name }}:
+          {{ progress value=disk.used width=25 }}
+        {{ endfor }}
+      {{ endbox }}
+    {{ endsection }}
+  {{ endpanel }}
+{{ else }}
+  {{! Narrow terminal: stack panels vertically }}
+  {{ box border="single" title="CPU" padding=1 }}
+    {{ for core in cpu.cores }}
+      Core {{ core.id }}: {{ progress value=core.usage width=(terminal.columns - 20) }}
+    {{ endfor }}
+  {{ endbox }}
+
+  {{ box border="single" title="Memory" padding=1 }}
+    {{ progress value=memory.percent width=(terminal.columns - 10) }}
+    {{ memory.used }}GB / {{ memory.total }}GB
+  {{ endbox }}
+
+  {{ box border="single" title="Network" padding=1 }}
+    ↓ {{ network.download }} MB/s
+    ↑ {{ network.upload }} MB/s
+  {{ endbox }}
+{{ endif }}
+
+{{! Footer }}
+{{ cursor.move (terminal.rows - 1) 1 }}
+{{ color dim }}Last updated: {{ timestamp }}{{ reset }}
+{{ cursor.move (terminal.rows - 1) (terminal.columns - 20) }}
+{{ color dim }}Press Ctrl+C to exit{{ reset }}

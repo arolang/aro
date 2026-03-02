@@ -78,12 +78,12 @@
       "patterns": [
         {
           "name": "keyword.action.request.aro",
-          "match": "\\b(Extract|Parse|Retrieve|Fetch|Read|Accept|List|Stat|Exists|Parameters)\\b",
+          "match": "\\b(Extract|Parse|Retrieve|Fetch|Read|Receive|Request|Accept|List|Stat|Exists|Parameters|Prompt|Select)\\b",
           "comment": "REQUEST actions - data coming IN"
         },
         {
           "name": "keyword.action.own.aro",
-          "match": "\\b(Compute|Validate|Compare|Create|Transform|Filter|Match|Split|Set|Merge|Copy|Move|Append|Render)\\b",
+          "match": "\\b(Compute|Validate|Compare|Create|Transform|Update|Sort|Filter|Match|Split|Map|Reduce|Set|Merge|Delete|Copy|Move|Append|Execute|Call|ParseHtml|Accept|Clear|Render)\\b",
           "comment": "OWN actions - internal processing"
         },
         {
@@ -93,12 +93,12 @@
         },
         {
           "name": "keyword.action.export.aro",
-          "match": "\\b(Publish|Store|Log|Send|Emit|Write|CreateDirectory)\\b",
+          "match": "\\b(Publish|Store|Log|Send|Emit|Write|Notify|CreateDirectory)\\b",
           "comment": "EXPORT actions - persistence/external"
         },
         {
           "name": "keyword.action.lifecycle.aro",
-          "match": "\\b(Start|Stop|Keepalive|Watch|Configure|Request|Connect|Disconnect|Broadcast)\\b",
+          "match": "\\b(Start|Stop|Keepalive|Listen|Connect|Close|Disconnect|Make|Watch|Configure|Broadcast)\\b",
           "comment": "LIFECYCLE actions - system management"
         },
         {

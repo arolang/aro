@@ -1,0 +1,19 @@
+# Generated: Tue Feb 24 15:40:34 2026
+# Type: console
+# Command: aro run ./Examples/ContextAware
+---
+=== Context-Aware Response Demo ===
+User data:
+active: true
+email: alice@example.com
+id: 42
+name: Alice Smith
+role: admin
+score: 98.50
+Order data:
+customer: Alice Smith
+items: 3
+order-id: ORD-2024-001
+status: completed
+total: 249.99
+HTTP Server started on port 8080

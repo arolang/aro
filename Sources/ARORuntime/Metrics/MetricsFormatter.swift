@@ -74,6 +74,16 @@ public struct MetricsFormatter: Sendable {
             }
         }
 
+        // System metrics
+        let pm = snapshot.processMetrics
+        lines.append("System Metrics:")
+        lines.append("  CPU: user=\(String(format: "%.3fs", pm.cpuUserTime)), system=\(String(format: "%.3fs", pm.cpuSystemTime)), total=\(String(format: "%.3fs", pm.cpuTotalTime))")
+        lines.append("  Memory: virtual=\(String(format: "%.2fMB", pm.virtualMemoryMB)), resident=\(String(format: "%.2fMB", pm.residentMemoryMB))")
+        lines.append("  File Descriptors: \(pm.openFileDescriptors) / \(pm.maxFileDescriptors)")
+        let dateFormatter = DateFormatter()
+        dateFormatter.dateFormat = "yyyy-MM-dd HH:mm:ss"
+        lines.append("  Process Start: \(dateFormatter.string(from: pm.startDate))")
+
         return lines.joined(separator: "\n")
     }
 
@@ -101,6 +111,21 @@ public struct MetricsFormatter: Sendable {
         }
         dict["featureSets"] = featureSetsArray
 
+        // System metrics
+        let pm = snapshot.processMetrics
+        dict["processMetrics"] = [
+            "cpuUserTime": pm.cpuUserTime,
+            "cpuSystemTime": pm.cpuSystemTime,
+            "cpuTotalTime": pm.cpuTotalTime,
+            "virtualMemoryBytes": pm.virtualMemoryBytes,
+            "residentMemoryBytes": pm.residentMemoryBytes,
+            "virtualMemoryMB": pm.virtualMemoryMB,
+            "residentMemoryMB": pm.residentMemoryMB,
+            "openFileDescriptors": pm.openFileDescriptors,
+            "maxFileDescriptors": pm.maxFileDescriptors,
+            "processStartTime": pm.processStartTime
+        ]
+
         if let jsonData = try? JSONSerialization.data(withJSONObject: dict, options: [.sortedKeys]),
            let jsonString = String(data: jsonData, encoding: .utf8) {
             return jsonString
@@ -117,7 +142,13 @@ public struct MetricsFormatter: Sendable {
         let avgMs = String(format: "%.1fms", snapshot.averageDurationMs)
         let uptime = String(format: "%.1fs", snapshot.uptimeSeconds)
 
-        return "metrics: \(executions) executions, \(featuresets) featuresets, avg=\(avgMs), uptime=\(uptime)"
+        // Process metrics
+        let pm = snapshot.processMetrics
+        let cpuTime = String(format: "%.2fs", pm.cpuTotalTime)
+        let memory = String(format: "%.1fMB", pm.residentMemoryMB)
+        let fds = "\(pm.openFileDescriptors)/\(pm.maxFileDescriptors)"
+
+        return "metrics: \(executions) executions, \(featuresets) featuresets, avg=\(avgMs), uptime=\(uptime), cpu=\(cpuTime), mem=\(memory), fds=\(fds)"
     }
 
     // MARK: - Table Format
@@ -181,6 +212,66 @@ public struct MetricsFormatter: Sendable {
         let totalMax = String(format: "%.\(2)f", snapshot.maxDurationMs).leftPadded(toLength: maxWidth)
 
         lines.append("| \(totalName) | \(totalCount) | \(totalSuccess) | \(totalFailed) | \(totalAvg) | \(totalMax) |")
+        lines.append(separator)
+
+        // System metrics section
+        lines.append("")
+        lines.append(formatSystemMetricsTable(snapshot.processMetrics, snapshot.uptimeSeconds))
+
+        return lines.joined(separator: "\n")
+    }
+
+    /// Format system metrics as an ASCII table
+    private static func formatSystemMetricsTable(_ pm: ProcessMetrics, _ uptimeSeconds: Double) -> String {
+        var lines: [String] = []
+
+        let labelWidth = 24
+        let valueWidth = 20
+
+        let separator = "+" + String(repeating: "-", count: labelWidth + 2) +
+                       "+" + String(repeating: "-", count: valueWidth + 2) + "+"
+
+        lines.append(separator)
+        lines.append("| " + "System Metrics".padding(toLength: labelWidth, withPad: " ", startingAt: 0) +
+                    " | " + "Value".padding(toLength: valueWidth, withPad: " ", startingAt: 0) + " |")
+        lines.append(separator)
+
+        // CPU time
+        let cpuUser = String(format: "%.3fs", pm.cpuUserTime)
+        let cpuSystem = String(format: "%.3fs", pm.cpuSystemTime)
+        let cpuTotal = String(format: "%.3fs", pm.cpuTotalTime)
+        lines.append("| " + "CPU User Time".padding(toLength: labelWidth, withPad: " ", startingAt: 0) +
+                    " | " + cpuUser.leftPadded(toLength: valueWidth) + " |")
+        lines.append("| " + "CPU System Time".padding(toLength: labelWidth, withPad: " ", startingAt: 0) +
+                    " | " + cpuSystem.leftPadded(toLength: valueWidth) + " |")
+        lines.append("| " + "CPU Total Time".padding(toLength: labelWidth, withPad: " ", startingAt: 0) +
+                    " | " + cpuTotal.leftPadded(toLength: valueWidth) + " |")
+
+        // Memory
+        let virtualMem = String(format: "%.2f MB", pm.virtualMemoryMB)
+        let residentMem = String(format: "%.2f MB", pm.residentMemoryMB)
+        lines.append("| " + "Virtual Memory".padding(toLength: labelWidth, withPad: " ", startingAt: 0) +
+                    " | " + virtualMem.leftPadded(toLength: valueWidth) + " |")
+        lines.append("| " + "Resident Memory".padding(toLength: labelWidth, withPad: " ", startingAt: 0) +
+                    " | " + residentMem.leftPadded(toLength: valueWidth) + " |")
+
+        // File descriptors
+        let fds = "\(pm.openFileDescriptors) / \(pm.maxFileDescriptors)"
+        lines.append("| " + "File Descriptors".padding(toLength: labelWidth, withPad: " ", startingAt: 0) +
+                    " | " + fds.leftPadded(toLength: valueWidth) + " |")
+
+        // Process start time
+        let dateFormatter = DateFormatter()
+        dateFormatter.dateFormat = "yyyy-MM-dd HH:mm:ss"
+        let startTimeStr = dateFormatter.string(from: pm.startDate)
+        lines.append("| " + "Process Start Time".padding(toLength: labelWidth, withPad: " ", startingAt: 0) +
+                    " | " + startTimeStr.leftPadded(toLength: valueWidth) + " |")
+
+        // Uptime
+        let uptimeStr = String(format: "%.2fs", uptimeSeconds)
+        lines.append("| " + "Uptime".padding(toLength: labelWidth, withPad: " ", startingAt: 0) +
+                    " | " + uptimeStr.leftPadded(toLength: valueWidth) + " |")
+
         lines.append(separator)
 
         return lines.joined(separator: "\n")
@@ -251,6 +342,44 @@ public struct MetricsFormatter: Sendable {
         lines.append("# HELP aro_application_uptime_seconds Application uptime in seconds")
         lines.append("# TYPE aro_application_uptime_seconds gauge")
         lines.append("aro_application_uptime_seconds \(String(format: "%.2f", snapshot.uptimeSeconds))")
+        lines.append("")
+
+        // Process/System metrics
+        let pm = snapshot.processMetrics
+
+        lines.append("# HELP aro_process_cpu_user_seconds CPU time spent in user mode")
+        lines.append("# TYPE aro_process_cpu_user_seconds counter")
+        lines.append("aro_process_cpu_user_seconds \(String(format: "%.4f", pm.cpuUserTime))")
+        lines.append("")
+
+        lines.append("# HELP aro_process_cpu_system_seconds CPU time spent in system mode")
+        lines.append("# TYPE aro_process_cpu_system_seconds counter")
+        lines.append("aro_process_cpu_system_seconds \(String(format: "%.4f", pm.cpuSystemTime))")
+        lines.append("")
+
+        lines.append("# HELP aro_process_virtual_memory_bytes Virtual memory size in bytes")
+        lines.append("# TYPE aro_process_virtual_memory_bytes gauge")
+        lines.append("aro_process_virtual_memory_bytes \(pm.virtualMemoryBytes)")
+        lines.append("")
+
+        lines.append("# HELP aro_process_resident_memory_bytes Resident memory size in bytes")
+        lines.append("# TYPE aro_process_resident_memory_bytes gauge")
+        lines.append("aro_process_resident_memory_bytes \(pm.residentMemoryBytes)")
+        lines.append("")
+
+        lines.append("# HELP aro_process_open_fds Number of open file descriptors")
+        lines.append("# TYPE aro_process_open_fds gauge")
+        lines.append("aro_process_open_fds \(pm.openFileDescriptors)")
+        lines.append("")
+
+        lines.append("# HELP aro_process_max_fds Maximum number of file descriptors")
+        lines.append("# TYPE aro_process_max_fds gauge")
+        lines.append("aro_process_max_fds \(pm.maxFileDescriptors)")
+        lines.append("")
+
+        lines.append("# HELP aro_process_start_time_seconds Process start time in Unix epoch seconds")
+        lines.append("# TYPE aro_process_start_time_seconds gauge")
+        lines.append("aro_process_start_time_seconds \(String(format: "%.2f", pm.processStartTime))")
 
         return lines.joined(separator: "\n")
     }

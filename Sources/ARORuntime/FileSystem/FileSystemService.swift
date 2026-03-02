@@ -769,12 +769,15 @@ public final class AROFileSystemService: FileSystemService, FileMonitorService, 
         switch event {
         case .added(let url):
             eventBus.publish(FileCreatedEvent(path: url.path))
+            eventBus.publish(DomainEvent(eventType: "file.created", payload: ["path": url.path]))
 
         case .changed(let url):
             eventBus.publish(FileModifiedEvent(path: url.path))
+            eventBus.publish(DomainEvent(eventType: "file.modified", payload: ["path": url.path]))
 
         case .deleted(let url):
             eventBus.publish(FileDeletedEvent(path: url.path))
+            eventBus.publish(DomainEvent(eventType: "file.deleted", payload: ["path": url.path]))
         }
     }
 }

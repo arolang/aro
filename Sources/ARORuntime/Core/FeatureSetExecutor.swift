@@ -90,6 +90,20 @@ public final class FeatureSetExecutor: @unchecked Sendable {
             }
         }
 
+        // Also eagerly bind all other published variables for this business activity
+        // This handles cases where semantic analyzer misses dependencies in map literals
+        for (name, entry) in await globalSymbols.allSymbols() {
+            // Skip if already bound
+            if context.resolveAny(name) != nil {
+                continue
+            }
+            // Only bind if business activity matches
+            if !entry.businessActivity.isEmpty && !context.businessActivity.isEmpty &&
+               entry.businessActivity == context.businessActivity {
+                context.bind(name, value: entry.value)
+            }
+        }
+
         // Execute statements
         do {
             if enableParallelIO {
@@ -172,7 +186,27 @@ public final class FeatureSetExecutor: @unchecked Sendable {
             try await executeRequireStatement(requireStatement, context: context)
         } else if let forEachLoop = statement as? ForEachLoop {
             try await executeForEachLoop(forEachLoop, context: context)
+        } else if let pipelineStatement = statement as? PipelineStatement {
+            try await executePipelineStatement(pipelineStatement, context: context)
         }
+    }
+
+    /// ARO-0067: Execute pipeline statement
+    /// Each stage receives the result from the previous stage
+    private func executePipelineStatement(
+        _ pipeline: PipelineStatement,
+        context: ExecutionContext
+    ) async throws {
+        guard !pipeline.stages.isEmpty else { return }
+
+        // Execute all stages sequentially
+        // Each stage's result becomes available as the next stage's object
+        for stage in pipeline.stages {
+            try await executeAROStatement(stage, context: context)
+        }
+
+        // No special binding needed - each stage explicitly names its object
+        // which should match the previous stage's result variable name
     }
 
     private func executeAROStatement(
@@ -251,7 +285,7 @@ public final class FeatureSetExecutor: @unchecked Sendable {
                 // "split" needs execution for regex splitting via by clause
                 let queryVerbs: Set<String> = ["filter", "map", "reduce", "aggregate", "split"]
                 // Response actions like write/read/store should NOT have their result bound to expression value
-                let responseVerbs: Set<String> = ["write", "read", "store", "save", "persist", "log", "print", "send", "emit"]
+                let responseVerbs: Set<String> = ["write", "read", "store", "save", "persist", "log", "print", "send", "emit", "notify", "alert", "signal", "broadcast"]
                 // Server lifecycle actions always need execution for side effects
                 let serverVerbs: Set<String> = ["start", "stop", "restart", "keepalive"]
                 // Check if there's a dynamic handler registered for this verb (plugin-provided action)
@@ -263,7 +297,7 @@ public final class FeatureSetExecutor: @unchecked Sendable {
                     queryVerbs.contains(verb.lowercased()) ||
                     serverVerbs.contains(verb.lowercased()) ||
                     hasDynamicHandler ||  // Dynamic plugin actions always need execution
-                    (updateVerbs.contains(verb.lowercased()) && !resultDescriptor.specifiers.isEmpty) ||
+                    updateVerbs.contains(verb.lowercased()) ||  // Update always needs execution (handles rebind internally)
                     (createVerbs.contains(verb.lowercased()) && !resultDescriptor.specifiers.isEmpty) ||
                     (computeVerbs.contains(verb.lowercased()) && !resultDescriptor.specifiers.isEmpty) ||
                     (extractVerbs.contains(verb.lowercased()) && !resultDescriptor.specifiers.isEmpty)
@@ -830,9 +864,16 @@ public final class Runtime: @unchecked Sendable {
     private let engine: ExecutionEngine
     /// Event bus for event emission (public for C bridge access in compiled binaries)
     public let eventBus: EventBus
+    /// Global symbols for sharing between feature sets (public for HTTP handlers)
+    public var globalSymbols: GlobalSymbolStorage {
+        get async {
+            return await engine.sharedGlobalSymbols
+        }
+    }
     private var _isRunning: Bool = false
     private var _currentProgram: AnalyzedProgram?
     private var _shutdownError: Error?
+    private var _enteredWaitState: Bool = false
     private let lock = NSLock()
 
     /// Registry for compiled event handlers: eventType -> [(handlerName, callback)]
@@ -849,6 +890,12 @@ public final class Runtime: @unchecked Sendable {
     private var isRunning: Bool {
         get { withLock { _isRunning } }
         set { withLock { _isRunning = newValue } }
+    }
+
+    /// Check if the application entered wait state (Keepalive action)
+    public var enteredWaitState: Bool {
+        get { withLock { _enteredWaitState } }
+        set { withLock { _enteredWaitState = newValue } }
     }
 
     private var currentProgram: AnalyzedProgram? {
@@ -895,6 +942,24 @@ public final class Runtime: @unchecked Sendable {
                     }
                 }
             }
+        }
+
+        // Subscribe to VariablePublishedEvent to store in globalSymbols
+        // This is critical for binary mode where PublishAction can't access globalSymbols directly
+        eventBus.subscribe(to: VariablePublishedEvent.self) { [weak self] event in
+            guard let self = self else { return }
+
+            // Get the value from the event's feature set context
+            // The value is already bound in the feature set's context by PublishAction
+            // We just need to store it in globalSymbols for cross-feature-set access
+            // Note: In interpreter mode, FeatureSetExecutor handles this directly,
+            // but in binary mode we need to catch the event
+            let globalSymbols = await self.globalSymbols
+            // We don't have access to the actual value or business activity from the event
+            // This is a limitation of the current event structure
+            // For now, this subscription serves as documentation of the intended behavior
+            // The actual fix is in the ActionBridge to directly access globalSymbols
+            _ = globalSymbols
         }
 
         // Start metrics collection
@@ -952,6 +1017,8 @@ public final class Runtime: @unchecked Sendable {
 
         do {
             let response = try await engine.execute(program, entryPoint: entryPoint)
+            // Track if application entered wait state (for response printing suppression)
+            enteredWaitState = await engine.enteredWaitState
             // Execute Application-End: Success handler
             await executeApplicationEnd(isError: false)
             return response
@@ -1003,7 +1070,7 @@ public final class Runtime: @unchecked Sendable {
                 try await Task.sleep(nanoseconds: 100_000_000) // 100ms
 
                 // Check if event bus is idle (no in-flight handlers)
-                let pendingCount = eventBus.getPendingHandlerCount()
+                let pendingCount = await eventBus.getPendingHandlerCount()
                 if pendingCount == 0 {
                     consecutiveIdleChecks += 1
                     if consecutiveIdleChecks >= idleThreshold {

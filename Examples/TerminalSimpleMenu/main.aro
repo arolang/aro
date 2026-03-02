@@ -1,0 +1,36 @@
+(* ============================================================
+   SimpleMenu - Interactive Terminal Menu
+   Demonstrates: Keyboard event handlers, reactive menu rendering,
+                 repository observer, shadow buffer diffing
+   ============================================================ *)
+
+(Application-Start: Simple Menu) {
+    (* Clear the terminal once at the very beginning *)
+    Clear the <screen> for the <terminal>.
+
+    (* Loading screen *)
+    Create the <service> with "Simple Menu App".
+    Transform the <loading> from the <template: starting.screen>.
+    Render <loading> to the <console>.
+
+    (* Branding splash *)
+    Transform the <splash> from the <template: splash.screen>.
+    Render <splash> to the <console>.
+
+    (* Welcome with app title *)
+    Create the <title> with "Simple Terminal Menu".
+    Transform the <welcome> from the <template: welcome.screen>.
+    Render <welcome> to the <console>.
+
+    (* Store initial selection state - the selection-repository Observer will render the menu *)
+    Create the <init-state> with { key: "menu", selection: 0, view: "menu" }.
+    Store the <init-state> into the <selection-repository>.
+
+    (* Start keyboard input listening *)
+    Listen the <keyboard> to the <stdin>.
+
+    (* Keep application running for keyboard interactions *)
+    Keepalive the <application> for the <events>.
+
+    Return an <OK: status> for the <startup>.
+}

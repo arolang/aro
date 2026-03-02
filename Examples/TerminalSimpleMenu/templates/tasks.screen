@@ -1,0 +1,8 @@
+  Task List
+  ─────────────────────────────────────
+
+{{ for each <task> in <tasks> { }}  [{{ <task: id> }}] {{ <task: name> }}  ({{ <task: status> }})
+{{ } }}
+  ─────────────────────────────────────
+  Press Backspace to return to menu
+

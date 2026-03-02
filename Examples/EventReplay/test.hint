@@ -1,0 +1,4 @@
+# Test event recording and replay
+mode: interpreter
+# Note: test-script runs from the project root; events.json is created in current directory
+test-script: $ARO_BIN run ./Examples/EventReplay --record events.json >/dev/null 2>&1 && test -f events.json && $ARO_BIN run ./Examples/EventReplay --replay events.json >/dev/null 2>&1 && rm -f events.json

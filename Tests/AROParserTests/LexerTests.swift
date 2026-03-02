@@ -426,6 +426,50 @@ struct LexerTokenizationTests {
         #expect(tokens[0].kind == .stringLiteral("he said \"hello\""))
     }
 
+    @Test("Single quotes create raw string literals (ARO-0060)")
+    func testRawStringLiterals() throws {
+        // Basic raw string with single quotes
+        let tokens1 = try Lexer.tokenize(#"'\d+\.\d+'"#)
+        #expect(tokens1[0].kind == .stringLiteral(#"\d+\.\d+"#))
+
+        // Raw string with Windows path
+        let tokens2 = try Lexer.tokenize(#"'C:\Users\Admin\config.json'"#)
+        #expect(tokens2[0].kind == .stringLiteral(#"C:\Users\Admin\config.json"#))
+
+        // Raw string with backslashes
+        let tokens3 = try Lexer.tokenize(#"'\\server\share\file'"#)
+        #expect(tokens3[0].kind == .stringLiteral(#"\\server\share\file"#))
+    }
+
+    @Test("Raw strings allow escaped quotes (ARO-0060)")
+    func testRawStringEscapedQuotes() throws {
+        // Raw string with escaped single quote
+        let tokens = try Lexer.tokenize(#"'Path: \'important\''"#)
+        #expect(tokens[0].kind == .stringLiteral(#"Path: 'important'"#))
+    }
+
+    @Test("Single quotes (raw) vs double quotes (regular) (ARO-0060)")
+    func testRawVsRegularStrings() throws {
+        // Double quotes: regular string with escape processing
+        let regular = try Lexer.tokenize(#""\\d+\\n""#)
+        #expect(regular[0].kind == .stringLiteral("\\d+\\n"))
+
+        // Single quotes: raw string without escape processing
+        let raw = try Lexer.tokenize(#"'\\d+\\n'"#)
+        #expect(raw[0].kind == .stringLiteral(#"\\d+\\n"#))
+    }
+
+    @Test("Double quotes process escape sequences (ARO-0060)")
+    func testDoubleQuotesProcessEscapes() throws {
+        // Double quotes process \n as newline
+        let tokens = try Lexer.tokenize(#""Hello\nWorld""#)
+        #expect(tokens[0].kind == .stringLiteral("Hello\nWorld"))
+
+        // Single quotes keep \n literal
+        let raw = try Lexer.tokenize(#"'Hello\nWorld'"#)
+        #expect(raw[0].kind == .stringLiteral(#"Hello\nWorld"#))
+    }
+
     @Test("Tokenizes integer literals")
     func testIntegerLiterals() throws {
         let tokens = try Lexer.tokenize("42 0 123456")
@@ -497,12 +541,13 @@ struct LexerTokenizationTests {
         #expect(tokens[5].kind == .preposition(.via))
     }
 
-    @Test("Tokenizes 'for' as keyword not preposition")
-    func testForKeyword() throws {
+    @Test("Tokenizes 'for' as preposition")
+    func testForPreposition() throws {
         let tokens = try Lexer.tokenize("for")
 
-        // "for" is tokenized as a keyword, not preposition
-        #expect(tokens[0].kind == .for)
+        // "for" is tokenized as a preposition (prioritized over keyword)
+        // The parser handles "for each" by accepting preposition(.for)
+        #expect(tokens[0].kind == .preposition(.for))
     }
 
     @Test("Tokenizes control flow keywords")
@@ -523,10 +568,11 @@ struct LexerTokenizationTests {
     func testIterationKeywords() throws {
         let tokens = try Lexer.tokenize("for each in at parallel concurrency")
 
-        #expect(tokens[0].kind == .for)
+        // "for" and "at" are prepositions (prioritized over keywords)
+        #expect(tokens[0].kind == .preposition(.for))
         #expect(tokens[1].kind == .each)
         #expect(tokens[2].kind == .in)
-        #expect(tokens[3].kind == .atKeyword)
+        #expect(tokens[3].kind == .preposition(.at))
         #expect(tokens[4].kind == .parallel)
         #expect(tokens[5].kind == .concurrency)
     }
@@ -853,5 +899,194 @@ struct LexerFeatureSetTests {
             return false
         }
         #expect(hasStringLiteral)
+    }
+}
+
+// MARK: - ARO-0053: Lexer Lookup Optimization Tests
+
+@Suite("Article and Preposition Lookup Optimization (ARO-0053)")
+struct LexerLookupOptimizationTests {
+
+    @Test("All articles are recognized with O(1) dictionary lookup")
+    func testAllArticles() throws {
+        // Test lowercase articles
+        let articlesTest = "a an the"
+        let tokens = try Lexer.tokenize(articlesTest)
+
+        #expect(tokens[0].kind == .article(.a))
+        #expect(tokens[1].kind == .article(.an))
+        #expect(tokens[2].kind == .article(.the))
+    }
+
+    @Test("Articles are case-insensitive")
+    func testArticlesCaseInsensitive() throws {
+        let tokens = try Lexer.tokenize("The A An THE")
+
+        #expect(tokens[0].kind == .article(.the))
+        #expect(tokens[1].kind == .article(.a))
+        #expect(tokens[2].kind == .article(.an))
+        #expect(tokens[3].kind == .article(.the))
+    }
+
+    @Test("All prepositions are recognized with O(1) dictionary lookup")
+    func testAllPrepositions() throws {
+        let prepositionsTest = "from for against to into via with on at by"
+        let tokens = try Lexer.tokenize(prepositionsTest)
+
+        #expect(tokens[0].kind == .preposition(.from))
+        #expect(tokens[1].kind == .preposition(.for))
+        #expect(tokens[2].kind == .preposition(.against))
+        #expect(tokens[3].kind == .preposition(.to))
+        #expect(tokens[4].kind == .preposition(.into))
+        #expect(tokens[5].kind == .preposition(.via))
+        #expect(tokens[6].kind == .preposition(.with))
+        #expect(tokens[7].kind == .preposition(.on))
+        #expect(tokens[8].kind == .preposition(.at))
+        #expect(tokens[9].kind == .preposition(.by))
+    }
+
+    @Test("Prepositions are case-insensitive")
+    func testPrepositionsCaseInsensitive() throws {
+        let tokens = try Lexer.tokenize("FROM From WITH With")
+
+        #expect(tokens[0].kind == .preposition(.from))
+        #expect(tokens[1].kind == .preposition(.from))
+        #expect(tokens[2].kind == .preposition(.with))
+        #expect(tokens[3].kind == .preposition(.with))
+    }
+
+    @Test("Articles in ARO statements are correctly identified")
+    func testArticlesInStatements() throws {
+        let tokens = try Lexer.tokenize("Extract a <value> from the <source>.")
+
+        #expect(tokens[1].kind == .article(.a))
+        #expect(tokens[5].kind == .preposition(.from))
+        #expect(tokens[6].kind == .article(.the))
+    }
+
+    @Test("Non-articles are not matched")
+    func testNonArticles() throws {
+        let tokens = try Lexer.tokenize("abc another thee")
+
+        // These should be identifiers, not articles
+        #expect(tokens[0].kind == .identifier("abc"))
+        #expect(tokens[1].kind == .identifier("another"))
+        #expect(tokens[2].kind == .identifier("thee"))
+    }
+
+    @Test("Non-prepositions are not matched")
+    func testNonPrepositions() throws {
+        let tokens = try Lexer.tokenize("frost format")
+
+        // These should be identifiers, not prepositions
+        #expect(tokens[0].kind == .identifier("frost"))
+        #expect(tokens[1].kind == .identifier("format"))
+    }
+
+    @Test("Verify article enum exhaustiveness")
+    func testArticleEnumExhaustive() {
+        // Ensure all Article enum cases are in the dictionary
+        let allArticles: [Article] = [.a, .an, .the]
+
+        for article in allArticles {
+            let found = try? Lexer.tokenize(article.rawValue)
+            #expect(found != nil)
+            if let tokens = found, !tokens.isEmpty {
+                if case .article(let parsedArticle) = tokens[0].kind {
+                    #expect(parsedArticle == article)
+                }
+            }
+        }
+    }
+
+    @Test("Verify preposition enum exhaustiveness")
+    func testPrepositionEnumExhaustive() {
+        // Ensure all Preposition enum cases are in the dictionary
+        let allPrepositions: [Preposition] = [
+            .from, .for, .against, .to, .into, .via, .with, .on, .at, .by
+        ]
+
+        for preposition in allPrepositions {
+            let found = try? Lexer.tokenize(preposition.rawValue)
+            #expect(found != nil)
+            if let tokens = found, !tokens.isEmpty {
+                if case .preposition(let parsedPrep) = tokens[0].kind {
+                    #expect(parsedPrep == preposition)
+                }
+            }
+        }
+    }
+}
+
+// MARK: - Numeric Separator Tests (ARO-0052)
+
+@Suite("Numeric Separator Tests")
+struct NumericSeparatorTests {
+
+    @Test("Tokenizes integer with underscore separators")
+    func testIntegerWithUnderscores() throws {
+        let tokens = try Lexer.tokenize("1_000_000")
+        #expect(tokens[0].kind == .intLiteral(1_000_000))
+    }
+
+    @Test("Tokenizes large integer with underscore separators")
+    func testLargeIntegerWithUnderscores() throws {
+        let tokens = try Lexer.tokenize("1_000_000_000")
+        #expect(tokens[0].kind == .intLiteral(1_000_000_000))
+    }
+
+    @Test("Tokenizes float with underscore separators")
+    func testFloatWithUnderscores() throws {
+        let tokens = try Lexer.tokenize("1_234.567_890")
+        #expect(tokens[0].kind == .floatLiteral(1_234.567_890))
+    }
+
+    @Test("Tokenizes exponent with underscore separators")
+    func testExponentWithUnderscores() throws {
+        let tokens = try Lexer.tokenize("1e1_0")
+        #expect(tokens[0].kind == .floatLiteral(1e10))
+    }
+
+    @Test("Tokenizes complex float with underscores")
+    func testComplexFloatWithUnderscores() throws {
+        let tokens = try Lexer.tokenize("1_234.567_890e1_2")
+        #expect(tokens[0].kind == .floatLiteral(1_234.567_890e12))
+    }
+
+    @Test("Tokenizes hex with underscore separators")
+    func testHexWithUnderscores() throws {
+        let tokens = try Lexer.tokenize("0xFF_FF")
+        #expect(tokens[0].kind == .intLiteral(0xFFFF))
+    }
+
+    @Test("Tokenizes binary with underscore separators")
+    func testBinaryWithUnderscores() throws {
+        let tokens = try Lexer.tokenize("0b1010_1010")
+        #expect(tokens[0].kind == .intLiteral(0b10101010))
+    }
+
+    @Test("Underscores at arbitrary positions")
+    func testArbitraryUnderscorePositions() throws {
+        // Underscores can be between any digits
+        let tokens = try Lexer.tokenize("12_34_56")
+        #expect(tokens[0].kind == .intLiteral(123456))
+    }
+
+    @Test("Single underscore in integer")
+    func testSingleUnderscore() throws {
+        let tokens = try Lexer.tokenize("1_0")
+        #expect(tokens[0].kind == .intLiteral(10))
+    }
+
+    @Test("Negative integer with underscores")
+    func testNegativeIntegerWithUnderscores() throws {
+        let tokens = try Lexer.tokenize("-1_000_000")
+        #expect(tokens[0].kind == .intLiteral(-1_000_000))
+    }
+
+    @Test("Negative float with underscores")
+    func testNegativeFloatWithUnderscores() throws {
+        let tokens = try Lexer.tokenize("-1_234.567_890")
+        #expect(tokens[0].kind == .floatLiteral(-1_234.567_890))
     }
 }

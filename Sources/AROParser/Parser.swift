@@ -135,7 +135,7 @@ public final class Parser {
         
         try expect(.rightParen, message: "')'")
 
-        // Parse optional when clause for feature set guards (e.g., Observer when condition)
+        // Parse optional when clause for feature set guards (e.g., Handler when condition)
         var whenCondition: (any Expression)? = nil
         if check(.when) {
             advance() // consume 'when'
@@ -177,7 +177,8 @@ public final class Parser {
         }
 
         // Check for for-each loop (ARO-0005) - starts with 'for' or 'parallel for'
-        if check(.for) {
+        // Note: 'for' can be tokenized as either .for keyword or .preposition(.for)
+        if check(.for) || check(.preposition(.for)) {
             return try parseForEachLoop(isParallel: false)
         }
         if check(.parallel) {
@@ -195,14 +196,51 @@ public final class Parser {
         }
 
         // Parse ARO statement (action without angle brackets)
-        return try parseAROStatement()
+        // ARO-0067: Don't expect dot yet - check for pipeline first
+        let statement = try parseAROStatement(expectDot: false)
+
+        // ARO-0067: Check for pipeline operator |>
+        if check(.pipe) {
+            return try parsePipelineStatement(initial: statement)
+        }
+
+        // Not a pipeline, expect the terminating dot
+        _ = try expect(.dot, message: "'.'")
+
+        return statement
+    }
+
+    /// Parses pipeline statement: statement |> statement |> statement .
+    /// ARO-0067: Each stage after the first operates on the result from the previous stage
+    private func parsePipelineStatement(initial: AROStatement) throws -> PipelineStatement {
+        let startSpan = initial.span
+        var stages: [AROStatement] = [initial]
+
+        // Parse pipeline stages (all without expecting dots)
+        while check(.pipe) {
+            advance() // consume |>
+
+            // Parse next stage - it operates on the previous stage's result
+            // Don't expect dot because pipeline continues
+            let nextStage = try parseAROStatement(expectDot: false)
+            stages.append(nextStage)
+        }
+
+        // Expect dot after all pipeline stages
+        let endToken = try expect(.dot, message: "'.'")
+
+        return PipelineStatement(
+            stages: stages,
+            span: startSpan.merged(with: endToken.span)
+        )
     }
     
     /// Parses: Action [article] "<" result ">" preposition [article] "<" object ">" ["when" condition] "."
     /// ARO-0002: Also supports expressions after prepositions like `from <x> * <y>` or `to 30`
     /// ARO-0004: Also supports guarded statements with `when` clause
     /// ARO-0043: Also supports sink syntax like `Log "message" to the <console>.`
-    private func parseAROStatement() throws -> AROStatement {
+    /// ARO-0067: When expectDot is false, doesn't consume the terminating dot (for pipeline stages)
+    private func parseAROStatement(expectDot: Bool = true) throws -> AROStatement {
         // Parse action verb (capitalized identifier or testing keyword)
         let startToken = peek()
         let actionToken: Token
@@ -218,7 +256,23 @@ public final class Parser {
             action = Action(verb: capitalizedVerb, span: actionToken.span)
         case .identifier(let verb) where verb.first?.isUppercase == true:
             actionToken = advance()
-            action = Action(verb: actionToken.lexeme, span: actionToken.span)
+            var fullVerb = actionToken.lexeme
+            var endSpan = actionToken.span
+            // ARO-0095: Handle Namespace.Verb dotted syntax (e.g., Markdown.ToHTML)
+            while case .dot = peek().kind {
+                let savedPosition = current
+                advance() // consume dot
+                if case .identifier(let part) = peek().kind, part.first?.isUppercase == true {
+                    let partToken = advance()
+                    fullVerb += "." + partToken.lexeme
+                    endSpan = partToken.span
+                } else {
+                    // Not a capitalized identifier after dot — backtrack
+                    current = savedPosition
+                    break
+                }
+            }
+            action = Action(verb: fullVerb, span: actionToken.span.merged(with: endSpan))
         default:
             throw ParserError.unexpectedToken(expected: "action verb (e.g., Extract, Filter, Return)", got: peek())
         }
@@ -376,7 +430,13 @@ public final class Parser {
             whenCondition = try parseExpression()
         }
 
-        let endToken = try expect(.dot, message: "'.'")
+        // ARO-0067: Only expect dot if not part of a pipeline
+        let endToken: Token
+        if expectDot {
+            endToken = try expect(.dot, message: "'.'")
+        } else {
+            endToken = previous()
+        }
 
         // Build grouped types from parsed fields
         let valueSource: ValueSource
@@ -480,7 +540,17 @@ public final class Parser {
         if case .identifier = peek().kind {
             return true
         }
-        // Case 3: <...> without article = expression (not object)
+        // Case 3: <identifier: ...> = system object (e.g., <file: "path">, <url: "...">)
+        // This allows optional article before system objects
+        if check(.leftAngle) {
+            // Look ahead: < identifier : ... > means system object
+            if current + 2 < tokens.count,
+               case .identifier = tokens[current + 1].kind,
+               case .colon = tokens[current + 2].kind {
+                return true
+            }
+        }
+        // Case 4: <...> without article and no colon = expression (not object)
         return false
     }
 
@@ -565,6 +635,9 @@ public final class Parser {
             } else {
                 op = .lessThan
             }
+        case .lessEqual:
+            advance()
+            op = .lessEqual
         case .greaterThan, .rightAngle:
             advance()
             if check(.equals) {
@@ -573,6 +646,9 @@ public final class Parser {
             } else {
                 op = .greaterThan
             }
+        case .greaterEqual:
+            advance()
+            op = .greaterEqual
         case .equalEqual, .equals:
             advance()
             op = .equal
@@ -928,7 +1004,15 @@ public final class Parser {
 
     /// Parses: "for" "each" "<" item ">" ["at" "<" index ">"] "in" "<" collection ">" ["with" "<" "concurrency" ":" N ">"] ["where" condition] "{" statements "}"
     private func parseForEachLoop(isParallel: Bool) throws -> ForEachLoop {
-        let startToken = try expect(.for, message: "'for'")
+        // Accept either .for keyword or .preposition(.for)
+        let startToken: Token
+        if check(.for) {
+            startToken = try expect(.for, message: "'for'")
+        } else if check(.preposition(.for)) {
+            startToken = try expect(.preposition(.for), message: "'for'")
+        } else {
+            throw ParserError.unexpectedToken(expected: "'for'", got: peek())
+        }
         try expect(.each, message: "'each'")
 
         // Parse item variable: <item>
@@ -937,8 +1021,9 @@ public final class Parser {
         try expect(.rightAngle, message: "'>'")
 
         // Parse optional index: at <index>
+        // Note: 'at' can be tokenized as either .atKeyword or .preposition(.at)
         var indexVariable: String? = nil
-        if check(.atKeyword) {
+        if check(.atKeyword) || check(.preposition(.at)) {
             advance()
             try expect(.leftAngle, message: "'<'")
             indexVariable = try parseCompoundIdentifier()
