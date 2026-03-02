@@ -145,3 +145,9 @@ core
 /Examples/PipelineDemo/demo-output
 /Examples/PipelineDemo/output
 /Examples/FormatAwareIO/output
+/Examples/AutoPipeline/AutoPipeline
+/Examples/ConstantFolding/ConstantFolding
+/Examples/Immutability/Immutability
+/Examples/RawStrings/RawStrings
+/Examples/TerminalSimpleMenu/TerminalSimpleMenu
+/Examples/TerminalTaskManager/TerminalTaskManager
