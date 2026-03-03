@@ -48,11 +48,18 @@ public struct ScheduleAction: ActionImplementation {
         object: ObjectDescriptor,
         context: ExecutionContext
     ) async throws -> any Sendable {
-        // Resolve the numeric interval value
+        // Resolve the numeric interval value.
+        // When a time-unit suffix is present ("with 2 seconds."), the parser sets
+        // object.base = "seconds" instead of "_expression_", which means the
+        // FeatureSetExecutor skips the _with_ binding. Fall back to _expression_.
         let rawValue: Double
         if let v = context.resolveAny("_with_") as? Int {
             rawValue = Double(v)
         } else if let v = context.resolveAny("_with_") as? Double {
+            rawValue = v
+        } else if let v = context.resolveAny("_expression_") as? Int {
+            rawValue = Double(v)
+        } else if let v = context.resolveAny("_expression_") as? Double {
             rawValue = v
         } else if let v = context.resolveAny("_literal_") as? Int {
             rawValue = Double(v)

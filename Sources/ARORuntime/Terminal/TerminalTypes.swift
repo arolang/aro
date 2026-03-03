@@ -1,5 +1,25 @@
 import Foundation
 
+// MARK: - Template Variable Position
+
+/// Position of a template variable within a rendered terminal section.
+/// Used for reactive variable updates: write directly at this position without
+/// re-rendering the full template.
+public struct TerminalVarPosition: Sendable {
+    /// Row offset within the section (0-indexed)
+    public let row: Int
+    /// Column offset within the row (0-indexed, visible characters only)
+    public let col: Int
+    /// Visible width of the originally rendered value (for overwriting shorter updates)
+    public var visibleWidth: Int
+
+    public init(row: Int, col: Int, visibleWidth: Int) {
+        self.row = row
+        self.col = col
+        self.visibleWidth = visibleWidth
+    }
+}
+
 // MARK: - Terminal Capabilities
 
 /// Terminal capability information detected at runtime

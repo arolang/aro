@@ -1,13 +1,15 @@
 
 ╔═══════════════════════════════════════════╗
-║         S Y S T E M   M O N I T O R      ║
+║         S Y S T E M   M O N I T O R       ║
 ╚═══════════════════════════════════════════╝
 
-  CPU:     {{ <cpu> }}%
+  CPU:    {{ <stats: cpu> }}%
+          {{ Transform the <cpu-bar> from the <template: cpu-bar.screen>. }}{{ <cpu-bar> }}
 
-  Memory:  {{ <memory: used> }} GB / {{ <memory: total> }} GB  ({{ <memory: percent> }}%)
+  Memory: {{ <stats: memory: used> }} GB / {{ <stats: memory: total> }} GB  ({{ <stats: memory: percent> }}%)
 
-  Disk:    {{ <disk: used> }} GB / {{ <disk: total> }} GB  ({{ <disk: percent> }}%)
+  Disk:   {{ <stats: disk: used> }} GB / {{ <stats: disk: total> }} GB  ({{ <stats: disk: percent> }}%)
 
+  Updated: {{ Extract the <upd-h> from the <now: hour>. Extract the <upd-m> from the <now: minute>. Extract the <upd-s> from the <now: second>. }}{{ <upd-h> }}:{{ <upd-m> }}:{{ <upd-s> }}
   Press Ctrl+C to quit.
 

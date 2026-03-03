@@ -29,6 +29,190 @@ public final class TemplateExecutor: @unchecked Sendable {
 
     // MARK: - Rendering
 
+    /// Strip ANSI escape sequences to compute visible character count
+    private func stripANSI(_ text: String) -> String {
+        var result = ""
+        var i = text.startIndex
+        while i < text.endIndex {
+            if text[i] == "\u{001B}" {
+                let next = text.index(after: i)
+                if next < text.endIndex && text[next] == "[" {
+                    // Skip CSI sequence: ESC [ <params> <final-byte>
+                    var j = text.index(after: next)
+                    while j < text.endIndex && !text[j].isLetter {
+                        j = text.index(after: j)
+                    }
+                    i = j < text.endIndex ? text.index(after: j) : j
+                } else {
+                    i = next
+                }
+            } else {
+                result.append(text[i])
+                i = text.index(after: i)
+            }
+        }
+        return result
+    }
+
+    /// Extract the base variable key from a template expression for position tracking
+    /// e.g., "<cpu>" → "cpu", "<cpu-bar>" → "cpu-bar", "<memory: used>" → "memory: used"
+    private func expressionBaseKey(_ expression: String) -> String {
+        var trimmed = expression.trimmingCharacters(in: .whitespaces)
+        if trimmed.hasPrefix("<") && trimmed.hasSuffix(">") {
+            trimmed = String(trimmed.dropFirst().dropLast())
+        }
+        return trimmed.trimmingCharacters(in: .whitespaces)
+    }
+
+    /// Render a parsed template and track the terminal position of each variable.
+    /// Returns the rendered string and a map of variable name → position within the output.
+    /// Positions are (row, col) 0-indexed relative to the start of the rendered content.
+    public func renderAndTrack(
+        template: ParsedTemplate,
+        context: ExecutionContext,
+        templateService: TemplateService
+    ) async throws -> (String, [String: TerminalVarPosition]) {
+        guard let runtimeContext = context as? RuntimeContext else {
+            // Fall back to plain render with no position tracking
+            let rendered = try await render(template: template, context: context, templateService: templateService)
+            return (rendered, [:])
+        }
+
+        let templateContext = runtimeContext.createTemplateContext()
+        templateContext.register(templateService)
+
+        // Inject terminal object (mirrors render()) — always bind with defaults for non-TTY contexts
+        let terminalObject: [String: any Sendable]
+        if let terminalService = context.service(TerminalService.self) {
+            let capabilities = await terminalService.detectCapabilities()
+            terminalObject = [
+                "rows": capabilities.rows,
+                "columns": capabilities.columns,
+                "width": capabilities.columns,
+                "height": capabilities.rows,
+                "supports_color": capabilities.supportsColor,
+                "supports_true_color": capabilities.supportsTrueColor,
+                "is_tty": capabilities.isTTY,
+                "encoding": capabilities.encoding
+            ]
+        } else {
+            terminalObject = [
+                "rows": 24,
+                "columns": 80,
+                "width": 80,
+                "height": 24,
+                "supports_color": false,
+                "supports_true_color": false,
+                "is_tty": false,
+                "encoding": "UTF-8"
+            ]
+        }
+        templateContext.bind("terminal", value: terminalObject, allowRebind: true)
+
+        var output = ""
+        var currentRow = 0
+        var currentCol = 0
+        var positions: [String: TerminalVarPosition] = [:]
+
+        var index = 0
+        while index < template.segments.count {
+            let segment = template.segments[index]
+
+            switch segment {
+            case .staticText(let text):
+                for char in text {
+                    if char == "\n" {
+                        currentRow += 1
+                        currentCol = 0
+                    } else {
+                        currentCol += 1
+                    }
+                }
+                output += text
+                index += 1
+
+            case .expressionShorthand(let expression):
+                let key = expressionBaseKey(expression)
+
+                // Record position before rendering
+                let startRow = currentRow
+                let startCol = currentCol
+
+                let (value, filters) = try await evaluateExpressionWithFilters(expression, context: templateContext)
+                let rendered = await applyFilters(formatValue(value), filters: filters, context: templateContext)
+
+                // Compute visible width (strip ANSI codes)
+                let visibleLen = stripANSI(rendered).count
+
+                // First occurrence wins for position tracking
+                if positions[key] == nil {
+                    positions[key] = TerminalVarPosition(row: startRow, col: startCol, visibleWidth: visibleLen)
+                }
+
+                // Advance position tracker by visible characters
+                for char in stripANSI(rendered) {
+                    if char == "\n" {
+                        currentRow += 1
+                        currentCol = 0
+                    } else {
+                        currentCol += 1
+                    }
+                }
+
+                output += rendered
+                index += 1
+
+            case .statements(let statementsSource):
+                // Execute directly against templateContext so bindings are visible
+                // to subsequent expression blocks in the same template rendering pass.
+                try await executeStatements(statementsSource, context: templateContext, templatePath: template.path)
+                let stmtOutput = templateContext.flushTemplateBuffer()
+                for char in stmtOutput {
+                    if char == "\n" { currentRow += 1; currentCol = 0 }
+                    else { currentCol += 1 }
+                }
+                output += stmtOutput
+                index += 1
+
+            case .forEachOpen(let config):
+                // Collect all for-each segments (open + body + close) — mirrors render()
+                let (loopBody, closeIndex) = try extractForEachBody(
+                    segments: template.segments,
+                    startIndex: index + 1
+                )
+                let loopOutput = try await executeForEachLoop(
+                    config: config,
+                    body: loopBody,
+                    context: templateContext,
+                    templateService: templateService,
+                    templatePath: template.path
+                )
+                for char in loopOutput {
+                    if char == "\n" { currentRow += 1; currentCol = 0 }
+                    else { currentCol += 1 }
+                }
+                output += loopOutput
+                index = closeIndex + 1
+
+            case .forEachClose:
+                throw TemplateError.renderError(path: template.path, message: "Unexpected for-each close")
+
+            default:
+                // Fallback: render single segment via render() (should not be reached for known types)
+                let subTemplate = ParsedTemplate(path: template.path, segments: [template.segments[index]])
+                let subOutput = try await render(template: subTemplate, context: templateContext, templateService: templateService)
+                for char in subOutput {
+                    if char == "\n" { currentRow += 1; currentCol = 0 }
+                    else { currentCol += 1 }
+                }
+                output += subOutput
+                index += 1
+            }
+        }
+
+        return (output, positions)
+    }
+
     /// Render a parsed template with the given context
     /// - Parameters:
     ///   - template: The parsed template
@@ -50,21 +234,33 @@ public final class TemplateExecutor: @unchecked Sendable {
         // Register the template service for nested includes
         templateContext.register(templateService)
 
-        // Inject terminal object (ARO-0052)
+        // Inject terminal object (ARO-0052) — always bind with defaults for non-TTY contexts
+        let terminalObject: [String: any Sendable]
         if let terminalService = context.service(TerminalService.self) {
             let capabilities = await terminalService.detectCapabilities()
-            let terminalObject: [String: any Sendable] = [
+            terminalObject = [
                 "rows": capabilities.rows,
                 "columns": capabilities.columns,
-                "width": capabilities.columns,  // alias
-                "height": capabilities.rows,    // alias
+                "width": capabilities.columns,
+                "height": capabilities.rows,
                 "supports_color": capabilities.supportsColor,
                 "supports_true_color": capabilities.supportsTrueColor,
                 "is_tty": capabilities.isTTY,
                 "encoding": capabilities.encoding
             ]
-            templateContext.bind("terminal", value: terminalObject, allowRebind: true)
+        } else {
+            terminalObject = [
+                "rows": 24,
+                "columns": 80,
+                "width": 80,
+                "height": 24,
+                "supports_color": false,
+                "supports_true_color": false,
+                "is_tty": false,
+                "encoding": "UTF-8"
+            ]
         }
+        templateContext.bind("terminal", value: terminalObject, allowRebind: true)
 
         // Process segments
         var output = ""
@@ -242,6 +438,7 @@ public final class TemplateExecutor: @unchecked Sendable {
 
         return result
     }
+
 
     /// Get terminal capabilities from execution context (ARO-0052)
     private func getTerminalCapabilities(from context: ExecutionContext) async -> Capabilities {

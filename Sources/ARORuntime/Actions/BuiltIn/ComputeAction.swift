@@ -693,7 +693,7 @@ public struct TransformAction: ActionImplementation {
         // ARO-0050: Check for template rendering
         // Syntax: <Transform> the <result> from the <template: path>.
         if object.base.lowercased() == "template" {
-            return try await renderTemplate(object: object, context: context)
+            return try await renderTemplate(object: object, result: result, context: context)
         }
 
         // Get value to transform
@@ -744,9 +744,10 @@ public struct TransformAction: ActionImplementation {
         }
     }
 
-    /// Render a template (ARO-0050)
+    /// Render a template (ARO-0050) and track variable positions for reactive updates
     private func renderTemplate(
         object: ObjectDescriptor,
+        result: ResultDescriptor,
         context: ExecutionContext
     ) async throws -> String {
         // Get template path from specifiers
@@ -773,8 +774,15 @@ public struct TransformAction: ActionImplementation {
             throw ActionError.missingService("TemplateService not registered. Templates require the template service to be configured.")
         }
 
-        // Render the template
-        return try await templateService.render(path: templatePath, context: context)
+        // Render with position tracking for reactive Repaint action
+        let (rendered, positions) = try await templateService.renderAndTrack(path: templatePath, context: context)
+
+        // Store positions under "_positions_<resultName>_" for RenderAction to pick up
+        if !positions.isEmpty {
+            context.bind("_positions_\(result.base)_", value: positions, allowRebind: true)
+        }
+
+        return rendered
     }
 }
 

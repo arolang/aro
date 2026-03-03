@@ -1586,7 +1586,7 @@ extension Parser {
         switch token.kind {
         case .or: return .or
         case .and: return .and
-        case .equalEqual, .bangEqual, .is, .contains, .matches: return .equality
+        case .equalEqual, .equals, .bangEqual, .is, .contains, .matches: return .equality
         case .lessThan, .greaterThan, .lessEqual, .greaterEqual: return .comparison
         // Handle < and > as comparison operators in expression context
         // They will only reach here if not part of a <variable> reference
@@ -1708,7 +1708,7 @@ extension Parser {
         case .slash: return .divide
         case .percent: return .modulo
         case .plusPlus: return .concat
-        case .equalEqual: return .equal
+        case .equalEqual, .equals: return .equal
         case .bangEqual: return .notEqual
         case .lessThan, .leftAngle: return .lessThan
         case .greaterThan, .rightAngle: return .greaterThan

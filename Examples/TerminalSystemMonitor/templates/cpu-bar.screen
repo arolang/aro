@@ -1,0 +1,1 @@
+{{ Compute the <bar-width> from (<terminal: columns>) - 14. Compute the <filled-count> from (<stats: cpu>) * <bar-width> / 100. Transform the <filled-n: int> from the <filled-count>. Compute the <blank-count> from <bar-width> - <filled-n>. Compute the <filled-bar> from "●" * <filled-n>. Compute the <blank-bar> from "○" * <blank-count>. }}{{ <filled-bar> }}{{ <blank-bar> }}

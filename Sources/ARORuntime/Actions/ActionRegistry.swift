@@ -138,7 +138,9 @@ public actor ActionRegistry {
         addAction(PromptAction.self)
         addAction(SelectAction.self)
         addAction(ClearAction.self)
+        addAction(ShowAction.self)
         addAction(RenderAction.self)
+        addAction(RepaintAction.self)
 
         return actions
     }

@@ -691,7 +691,7 @@ public struct RetrieveAction: ActionImplementation {
         // Retrieve the <stats> from the <system>.
         // Retrieve the <cpu> from the <system: cpu>.
         if repoName == "system" {
-            let metrics = SystemMetricsService.collect()
+            let metrics = await SystemMetricsService.collect()
             if let specifier = object.specifiers.first {
                 let value: any Sendable = metrics[specifier] ?? 0
                 context.bind(result.base, value: value)

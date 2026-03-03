@@ -282,7 +282,7 @@ public actor EventBus {
         }
     }
 
-    /// Synchronous wrapper for C bridge compatibility
+/// Synchronous wrapper for C bridge compatibility
     /// WARNING: Blocks the calling thread - use only from C bridge layer
     nonisolated public func hasActiveEventSourcesSync() -> Bool {
         let semaphore = DispatchSemaphore(value: 0)

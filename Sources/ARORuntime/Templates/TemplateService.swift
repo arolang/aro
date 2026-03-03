@@ -25,6 +25,19 @@ public protocol TemplateService: Sendable {
     /// - Returns: The rendered template content
     /// - Throws: TemplateError if rendering fails
     func render(path: String, context: ExecutionContext) async throws -> String
+
+    /// Render a template and return the rendered string alongside a map of
+    /// variable positions within the output.  Used by the reactive Repaint action.
+    /// - Returns: (rendered string, [variableKey: TerminalVarPosition])
+    func renderAndTrack(path: String, context: ExecutionContext) async throws -> (String, [String: TerminalVarPosition])
+}
+
+extension TemplateService {
+    /// Default implementation: render without position tracking
+    public func renderAndTrack(path: String, context: ExecutionContext) async throws -> (String, [String: TerminalVarPosition]) {
+        let rendered = try await render(path: path, context: context)
+        return (rendered, [:])
+    }
 }
 
 /// Errors that can occur during template operations
@@ -177,6 +190,29 @@ public final class AROTemplateService: TemplateService, @unchecked Sendable {
         // Render with executor
         do {
             return try await templateExecutor.render(template: parsed, context: context, templateService: self)
+        } catch let error as TemplateError {
+            throw error
+        } catch {
+            throw TemplateError.renderError(path: path, message: error.localizedDescription)
+        }
+    }
+
+    public func renderAndTrack(path: String, context: ExecutionContext) async throws -> (String, [String: TerminalVarPosition]) {
+        let content = try await load(path: path)
+
+        let parsed: ParsedTemplate
+        do {
+            parsed = try parser.parse(content, path: path)
+        } catch let error as TemplateParseError {
+            throw TemplateError.parseError(path: path, message: error.localizedDescription)
+        }
+
+        guard let templateExecutor = executor else {
+            throw TemplateError.renderError(path: path, message: "Template executor not configured")
+        }
+
+        do {
+            return try await templateExecutor.renderAndTrack(template: parsed, context: context, templateService: self)
         } catch let error as TemplateError {
             throw error
         } catch {

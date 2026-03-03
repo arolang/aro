@@ -1,38 +1,40 @@
 (* ============================================================
    SystemMonitor - Terminal UI Example
-   Demonstrates: Schedule action (timed events), real system
-   metrics via Retrieve from <system>, and template rendering.
+   Demonstrates: Schedule action (timed events), real system metrics
+   via Retrieve from <system>, and sub-template composition.
+   The section compositor diffs against the shadow buffer and only
+   redraws changed lines on each update.
    ============================================================ *)
 
 (Application-Start: System Monitor) {
     Clear the <screen> for the <terminal>.
+    Clear the <cursor> for the <terminal>.
     Log "System Monitor starting..." to the <console>.
+
+    (* Collect initial metrics and render the display once *)
+    Retrieve the <stats: SystemMetrics> from the <system>.
+    Transform the <display> from the <template: monitor.screen>.
+    Render the <display> to the <console>.
 
     (* Schedule periodic metrics collection every 2 seconds *)
     Schedule the <metrics-tick> with 2 seconds.
 
-    (* Trigger the first render immediately *)
-    Emit a <MetricsUpdated: event> with { trigger: "startup" }.
-
-    (* Keep application alive to receive timed events *)
     Keepalive the <application> for the <events>.
 
     Return an <OK: status> for the <startup>.
 }
 
-(* Timing handler — triggered by Schedule every 2 seconds *)
-(Collect Metrics: metrics-tick Handler) {
-    Emit a <MetricsUpdated: event> with { trigger: "tick" }.
-    Return an <OK: status> for the <collection>.
+(Application-End: Success) {
+    Show the <cursor> for the <terminal>.
+    Return an <OK: status> for the <shutdown>.
 }
 
-(* Watch handler — retrieves real metrics and renders the dashboard *)
-(Dashboard Watch: MetricsUpdated Handler) {
-    Retrieve the <stats>  from the <system>.
-    Extract the <cpu>    from the <stats: cpu>.
-    Extract the <memory> from the <stats: memory>.
-    Extract the <disk>   from the <stats: disk>.
+(* Timing handler — retrieves fresh metrics and re-renders the display.
+   The section compositor diffs the new content against the shadow buffer
+   and only redraws lines that have changed. *)
+(Collect Metrics: metrics-tick Handler) {
+    Retrieve the <stats: SystemMetrics> from the <system>.
     Transform the <display> from the <template: monitor.screen>.
     Render the <display> to the <console>.
-    Return an <OK: status> for the <render>.
+    Return an <OK: status> for the <collection>.
 }

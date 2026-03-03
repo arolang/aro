@@ -361,7 +361,8 @@ public final class SemanticAnalyzer {
         let rebindingVerbs: Set<String> = [
             "accept", "update", "modify", "change", "set",
             "merge", "combine", "join", "concat",
-            "then", "assert"  // Test actions: read variable in result position
+            "then", "assert",  // Test actions: read variable in result position
+            "clear", "show"    // Terminal control: result is a target name, not a new binding
         ]
         return rebindingVerbs.contains(verb.lowercased())
     }

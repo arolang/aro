@@ -39,33 +39,32 @@ import Glibc
 /// ```
 public struct SystemMetricsService {
 
-    // Previous CPU tick counts for delta-based usage calculation.
-    // nonisolated(unsafe) is safe here: the worst case from a race at
-    // a 2-second polling interval is a slightly inaccurate reading.
-    private nonisolated(unsafe) static var previousCPUTicks: (active: UInt64, total: UInt64)? = nil
-
     /// Collect current system metrics and return as a sendable dictionary.
-    public static func collect() -> [String: any Sendable] {
-        let cpu    = collectCPU()
+    public static func collect() async -> [String: any Sendable] {
+        let cpu    = await collectCPU()
         let memory = collectMemory()
         let disk   = collectDisk()
         return ["cpu": cpu, "memory": memory, "disk": disk]
     }
 
     // MARK: - CPU
+    //
+    // Sample twice with a short interval so each call is self-contained.
+    // Avoids cross-task shared state: Swift's concurrency scheduler gives no
+    // visibility guarantees for plain static vars across task boundaries.
 
-    private static func collectCPU() -> Int {
+    private static func collectCPU() async -> Int {
         #if os(macOS)
-        return collectCPUDarwin()
+        return await collectCPUDarwin()
         #elseif os(Linux)
-        return collectCPULinux()
+        return await collectCPULinux()
         #else
         return 0
         #endif
     }
 
     #if os(macOS)
-    private static func collectCPUDarwin() -> Int {
+    private static func cpuTicksDarwin() -> (active: UInt64, total: UInt64)? {
         var cpuLoad = host_cpu_load_info()
         var infoCount = mach_msg_type_number_t(
             MemoryLayout<host_cpu_load_info_data_t>.size / MemoryLayout<natural_t>.size
@@ -75,38 +74,40 @@ public struct SystemMetricsService {
                 host_statistics(mach_host_self(), HOST_CPU_LOAD_INFO, intPtr, &infoCount)
             }
         }
-        guard kr == KERN_SUCCESS else { return 0 }
-
+        guard kr == KERN_SUCCESS else { return nil }
         // cpu_ticks tuple: (USER=0, SYSTEM=1, IDLE=2, NICE=3)
         let user   = UInt64(cpuLoad.cpu_ticks.0)
         let system = UInt64(cpuLoad.cpu_ticks.1)
         let idle   = UInt64(cpuLoad.cpu_ticks.2)
         let nice   = UInt64(cpuLoad.cpu_ticks.3)
-        let total  = user + system + idle + nice
-        let active = user + system + nice
+        return (active: user + system + nice, total: user + system + idle + nice)
+    }
 
-        if let prev = previousCPUTicks {
-            let deltaTotal  = total  - prev.total
-            let deltaActive = active - prev.active
-            previousCPUTicks = (active: active, total: total)
-            guard deltaTotal > 0 else { return 0 }
-            return Int(min(100, deltaActive * 100 / deltaTotal))
+    private static func collectCPUDarwin() async -> Int {
+        guard let s1 = cpuTicksDarwin() else { return 0 }
+        // Use GCD asyncAfter for the sampling delay — not cancelled when the
+        // calling Swift task is in a cancellation state (unlike Task.sleep).
+        await withCheckedContinuation { (continuation: CheckedContinuation<Void, Never>) in
+            DispatchQueue.global(qos: .userInitiated).asyncAfter(deadline: .now() + 0.15) {
+                continuation.resume()
+            }
         }
-        previousCPUTicks = (active: active, total: total)
-        return 0  // First call: no delta available yet
+        guard let s2 = cpuTicksDarwin() else { return 0 }
+        let deltaTotal  = s2.total  - s1.total
+        let deltaActive = s2.active - s1.active
+        guard deltaTotal > 0 else { return 0 }
+        return Int((Double(deltaActive) / Double(deltaTotal) * 100.0).rounded())
     }
     #endif
 
     #if os(Linux)
-    private static func collectCPULinux() -> Int {
+    private static func cpuTicksLinux() -> (active: UInt64, total: UInt64)? {
         guard let stat = try? String(contentsOfFile: "/proc/stat", encoding: .utf8),
               let firstLine = stat.components(separatedBy: "\n").first,
-              firstLine.hasPrefix("cpu ") else { return 0 }
-
+              firstLine.hasPrefix("cpu ") else { return nil }
         let parts = firstLine.split(separator: " ").dropFirst()
         let values = parts.compactMap { UInt64($0) }
-        guard values.count >= 4 else { return 0 }
-
+        guard values.count >= 4 else { return nil }
         // /proc/stat cpu fields: user nice system idle iowait irq softirq ...
         let user   = values[0]
         let nice   = values[1]
@@ -114,16 +115,23 @@ public struct SystemMetricsService {
         let idle   = values[3]
         let active = user + nice + system
         let total  = active + idle + (values.count > 4 ? values[4...].reduce(0, +) : 0)
+        return (active: active, total: total)
+    }
 
-        if let prev = previousCPUTicks {
-            let deltaTotal  = total  - prev.total
-            let deltaActive = active - prev.active
-            previousCPUTicks = (active: active, total: total)
-            guard deltaTotal > 0 else { return 0 }
-            return Int(min(100, deltaActive * 100 / deltaTotal))
+    private static func collectCPULinux() async -> Int {
+        guard let s1 = cpuTicksLinux() else { return 0 }
+        // Use GCD asyncAfter for the sampling delay — not cancelled when the
+        // calling Swift task is in a cancellation state (unlike Task.sleep).
+        await withCheckedContinuation { (continuation: CheckedContinuation<Void, Never>) in
+            DispatchQueue.global(qos: .userInitiated).asyncAfter(deadline: .now() + 0.15) {
+                continuation.resume()
+            }
         }
-        previousCPUTicks = (active: active, total: total)
-        return 0
+        guard let s2 = cpuTicksLinux() else { return 0 }
+        let deltaTotal  = s2.total  - s1.total
+        let deltaActive = s2.active - s1.active
+        guard deltaTotal > 0 else { return 0 }
+        return Int((Double(deltaActive) / Double(deltaTotal) * 100.0).rounded())
     }
     #endif
 

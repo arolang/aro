@@ -75,6 +75,7 @@ class AROCContextHandle {
     let socketServer: AROSocketServer?
     let httpServer: AROHTTPServer?
     let templateService: AROTemplateService?
+    let terminalService: TerminalService?
     #endif
 
     init(runtime: AROCRuntimeHandle, featureSetName: String) {
@@ -127,6 +128,16 @@ class AROCContextHandle {
         self.context.register(ts as TemplateService)
         self.templateService = ts
 
+        // Register terminal service for TTY output (ARO-0052)
+        // ClearAction, RenderAction, ShowAction all require this service
+        if isatty(STDOUT_FILENO) != 0 {
+            let terminal = TerminalService()
+            self.context.register(terminal)
+            self.terminalService = terminal
+        } else {
+            self.terminalService = nil
+        }
+
         // Set up schema registry for typed event extraction (ARO-0046)
         // Load openapi.yaml from the binary's directory if present
         Self.setupSchemaRegistry(for: self.context)
@@ -142,6 +153,7 @@ class AROCContextHandle {
         self.socketServer = nil
         self.httpServer = nil
         self.templateService = nil
+        self.terminalService = nil
         #endif
     }
 

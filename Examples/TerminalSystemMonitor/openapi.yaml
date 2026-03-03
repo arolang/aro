@@ -1,0 +1,60 @@
+openapi: 3.0.3
+info:
+  title: System Monitor
+  description: Terminal system monitor - CPU, memory, and disk metrics
+  version: 1.0.0
+
+paths: {}
+
+components:
+  schemas:
+    SystemMetrics:
+      type: object
+      description: Real-time system-wide metrics collected by SystemMetricsService
+      required:
+        - cpu
+        - memory
+        - disk
+      properties:
+        cpu:
+          type: integer
+          description: CPU usage percentage (0-100)
+          example: 42
+        memory:
+          $ref: '#/components/schemas/MemoryMetrics'
+        disk:
+          $ref: '#/components/schemas/DiskMetrics'
+
+    MemoryMetrics:
+      type: object
+      required:
+        - used
+        - total
+        - percent
+      properties:
+        used:
+          type: integer
+          description: Used memory in GB
+        total:
+          type: integer
+          description: Total memory in GB
+        percent:
+          type: integer
+          description: Memory usage percentage (0-100)
+
+    DiskMetrics:
+      type: object
+      required:
+        - used
+        - total
+        - percent
+      properties:
+        used:
+          type: integer
+          description: Used disk space in GB
+        total:
+          type: integer
+          description: Total disk space in GB
+        percent:
+          type: integer
+          description: Disk usage percentage (0-100)
