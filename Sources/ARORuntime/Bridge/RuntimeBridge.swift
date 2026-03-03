@@ -117,8 +117,18 @@ class AROCContextHandle {
         self.httpServer = nil
 
         // Register template service (ARO-0050)
-        let cwd = FileManager.default.currentDirectoryPath
-        let templatesDirectory = (cwd as NSString).appendingPathComponent("templates")
+        // Resolve templates/ relative to the binary's own directory so the binary
+        // works regardless of which directory it is invoked from.
+        let executablePath = CommandLine.arguments[0]
+        let binaryDir: String
+        if executablePath.hasPrefix("/") {
+            binaryDir = (executablePath as NSString).deletingLastPathComponent
+        } else {
+            let cwd = FileManager.default.currentDirectoryPath
+            let abs = (cwd as NSString).appendingPathComponent(executablePath)
+            binaryDir = ((abs as NSString).resolvingSymlinksInPath as NSString).deletingLastPathComponent
+        }
+        let templatesDirectory = (binaryDir as NSString).appendingPathComponent("templates")
         let ts = AROTemplateService(templatesDirectory: templatesDirectory)
         let templateExecutor = TemplateExecutor(
             actionRegistry: ActionRegistry.shared,
