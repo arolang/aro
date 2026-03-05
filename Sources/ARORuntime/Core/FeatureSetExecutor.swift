@@ -287,7 +287,7 @@ public final class FeatureSetExecutor: @unchecked Sendable {
                 // Response actions like write/read/store should NOT have their result bound to expression value
                 let responseVerbs: Set<String> = ["write", "read", "store", "save", "persist", "log", "print", "send", "emit", "notify", "alert", "signal", "broadcast"]
                 // Server lifecycle actions always need execution for side effects
-                let serverVerbs: Set<String> = ["start", "stop", "restart", "keepalive"]
+                let serverVerbs: Set<String> = ["start", "stop", "restart", "keepalive", "schedule"]
                 // Check if there's a dynamic handler registered for this verb (plugin-provided action)
                 let hasDynamicHandler = await actionRegistry.dynamicHandler(for: verb) != nil
                 let needsExecution = testVerbs.contains(verb.lowercased()) ||
@@ -413,7 +413,7 @@ public final class FeatureSetExecutor: @unchecked Sendable {
                 // and should override parent context values (fixes event handler variable shadowing)
                 let rebindingVerbs: Set<String> = [
                     "accept", "update", "modify", "change", "set", "configure",
-                    "delete", "remove", "destroy", "clear",
+                    "delete", "remove", "destroy", "clear", "show",
                     "merge", "combine", "join", "concat"
                 ]
                 let requestVerbs: Set<String> = [
@@ -423,8 +423,13 @@ public final class FeatureSetExecutor: @unchecked Sendable {
                 let allowRebind = rebindingVerbs.contains(verb.lowercased()) ||
                                   requestVerbs.contains(verb.lowercased())
 
-                // Only bind if variable doesn't exist OR if this is a rebinding/request action
-                if allowRebind || !context.exists(resultDescriptor.base) {
+                // Only bind if variable doesn't exist LOCALLY or if this is a rebinding/request action.
+                // We check existsLocally (not exists) so event handlers can create local shadow
+                // bindings even when a parent context has already bound the same variable name.
+                // Without this, e.g. Transform/Compute in a handler would silently skip the bind
+                // if Application-Start already bound the same variable in the root context.
+                let existsLocally = (context as? RuntimeContext)?.existsLocally(resultDescriptor.base) ?? context.exists(resultDescriptor.base)
+                if allowRebind || !existsLocally {
                     context.bind(resultDescriptor.base, value: result, allowRebind: allowRebind)
                 }
             }
@@ -1107,6 +1112,10 @@ public final class Runtime: @unchecked Sendable {
             featureSetName: "Application-End",
             eventBus: eventBus
         )
+
+        // Inject registered services (e.g. TerminalService) so actions like
+        // "Show the <cursor>" work correctly in Application-End handlers
+        await engine.registerServicesInContext(context)
 
         // Bind shutdown context variables
         if isError, let error = shutdownError {

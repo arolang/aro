@@ -169,6 +169,15 @@ public struct ExpressionEvaluator: Sendable {
         case .subtract:
             return try numericOperation(left, right) { $0 - $1 }
         case .multiply:
+            // String repetition: "●" * 7 → "●●●●●●●" (like Python)
+            if let str = left as? String {
+                if let count = right as? Int    { return String(repeating: str, count: max(0, count)) }
+                if let count = right as? Double { return String(repeating: str, count: max(0, Int(count))) }
+            }
+            if let str = right as? String {
+                if let count = left as? Int    { return String(repeating: str, count: max(0, count)) }
+                if let count = left as? Double { return String(repeating: str, count: max(0, Int(count))) }
+            }
             return try numericOperation(left, right) { $0 * $1 }
         case .divide:
             return try numericOperation(left, right) { $0 / $1 }

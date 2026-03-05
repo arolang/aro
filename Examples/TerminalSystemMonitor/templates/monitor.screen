@@ -1,16 +1,15 @@
-{{ "=== System Monitor ===" | bold | color: "green" }}
 
-Terminal: {{ <terminal: width> }}x{{ <terminal: height> }}
-Color Support: {{ <terminal: supports_color> }}
+╔═══════════════════════════════════════════╗
+║         S Y S T E M   M O N I T O R       ║
+╚═══════════════════════════════════════════╝
 
-{{ "CPU Usage:" | bold }}
-  {{ <cpu> }}% {{ "[" ++ "=" * (<cpu> / 5) ++ " " * (20 - <cpu> / 5) ++ "]" | color: "cyan" }}
+  CPU:    {{ <stats: cpu> }}%
+          {{ Transform the <cpu-bar> from the <template: cpu-bar.screen>. }}{{ <cpu-bar> }}
 
-{{ "Memory Usage:" | bold }}
-  {{ <memory> }}% {{ "[" ++ "=" * (<memory> / 5) ++ " " * (20 - <memory> / 5) ++ "]" | color: "yellow" }}
+  Memory: {{ <stats: memory: used> }} GB / {{ <stats: memory: total> }} GB  ({{ <stats: memory: percent> }}%)
 
-{{ "Disk Usage:" | bold }}
-  {{ <disk> }}% {{ "[" ++ "=" * (<disk> / 5) ++ " " * (20 - <disk> / 5) ++ "]" | color: "magenta" }}
+  Disk:   {{ <stats: disk: used> }} GB / {{ <stats: disk: total> }} GB  ({{ <stats: disk: percent> }}%)
 
-{{ "---" }}
-{{ "Press Ctrl+C to exit" | dim }}
+  Updated: {{ Extract the <upd-h> from the <now: hour>. Extract the <upd-m> from the <now: minute>. Extract the <upd-s> from the <now: second>. }}{{ <upd-h> }}:{{ <upd-m> }}:{{ <upd-s> }}
+  Press Ctrl+C to quit.
+

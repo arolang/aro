@@ -1,8 +1,7 @@
 # TerminalSystemMonitor uses Keepalive for event loop
-# Timeout is expected behavior - application stays alive until Ctrl+C
-timeout: 3
+# keep-alive sends SIGINT and uses pump loop to capture output before timeout
+timeout: 5
 mode: both
-# Binary mode outputs extra return value fields that interpreter doesn't
+keep-alive: true
 occurrence-check: true
-# Allow process exit/signal errors - output is checked via occurrence-check
 allow-error: true

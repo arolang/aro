@@ -687,6 +687,20 @@ public struct RetrieveAction: ActionImplementation {
         // Get repository name
         let repoName = object.base
 
+        // Special case: "system" object returns real system-wide metrics
+        // Retrieve the <stats> from the <system>.
+        // Retrieve the <cpu> from the <system: cpu>.
+        if repoName == "system" {
+            let metrics = await SystemMetricsService.collect()
+            if let specifier = object.specifiers.first {
+                let value: any Sendable = metrics[specifier] ?? 0
+                context.bind(result.base, value: value)
+                return value
+            }
+            context.bind(result.base, value: metrics)
+            return metrics
+        }
+
         // Check if this is a repository (ends with -repository)
         if InMemoryRepositoryStorage.isRepositoryName(repoName) {
             // Check for where clause (bound by FeatureSetExecutor)

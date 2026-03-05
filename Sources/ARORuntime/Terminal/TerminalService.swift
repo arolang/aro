@@ -21,6 +21,7 @@ public actor TerminalService: Sendable {
         let name: String       // variable name from `Render the <name>`
         var startRow: Int      // 0-indexed row where this section begins
         var lines: [String]    // last rendered lines (may include ANSI codes)
+        var variablePositions: [String: TerminalVarPosition]  // positions for reactive Repaint
     }
 
     /// Ordered list of sections as rendered top-to-bottom
@@ -110,12 +111,14 @@ public actor TerminalService: Sendable {
     ///
     /// - First call for a given name: appends the section below all previous sections.
     /// - Subsequent calls for the same name: diffs only its own rows (same height)
-    ///   or reflowes sections below (different height). Other sections are untouched.
+    ///   or reflows sections below (different height). Other sections are untouched.
     ///
     /// This lets static sections (splash, welcome) coexist with reactive sections (menu)
     /// on the same screen. When a section grows or shrinks, everything below shifts
     /// accordingly — no full-screen clears ever.
-    public func renderSection(name: String, content: String) {
+    ///
+    /// - Parameter variablePositions: Template variable positions for reactive Repaint updates.
+    public func renderSection(name: String, content: String, variablePositions: [String: TerminalVarPosition] = [:]) {
         let newLines = content.components(separatedBy: "\n")
         let caps = detectCapabilities()
 
@@ -177,11 +180,20 @@ public actor TerminalService: Sendable {
                 nextRow = sections.last.map { $0.startRow + $0.lines.count } ?? 0
                 flushOutput()
             }
+            // Update positions if provided (e.g. after a full re-render with new tracking info)
+            if !variablePositions.isEmpty {
+                sections[idx].variablePositions = variablePositions
+            }
         } else {
             // New section: append at nextRow, below all previous sections
             render(text: ANSIRenderer.moveCursor(row: nextRow + 1, column: 1))
             render(text: content)
-            sections.append(ScreenSection(name: name, startRow: nextRow, lines: newLines))
+            sections.append(ScreenSection(
+                name: name,
+                startRow: nextRow,
+                lines: newLines,
+                variablePositions: variablePositions
+            ))
             nextRow += newLines.count
             // Ensure cursor moves to the next line after the section
             if !content.hasSuffix("\n") {
@@ -189,6 +201,68 @@ public actor TerminalService: Sendable {
             }
             flushOutput()
         }
+    }
+
+    /// Reactively update a single named variable within a section without re-rendering the template.
+    ///
+    /// Moves the cursor to the tracked position and writes the new value, padding with spaces
+    /// to overwrite any longer previous value. Flushes immediately so the change appears at once.
+    ///
+    /// - Parameters:
+    ///   - name: Variable key matching the one stored in variablePositions (e.g., "cpu", "cpu-bar")
+    ///   - value: New string value to write (may contain ANSI color codes)
+    ///   - sectionName: Name of the section that owns this variable
+    public func updateVariable(name: String, value: String, inSection sectionName: String) {
+        guard let idx = sections.firstIndex(where: { $0.name == sectionName }) else { return }
+        guard sections[idx].variablePositions[name] != nil else { return }
+
+        let caps = detectCapabilities()
+        guard caps.isTTY else { return }
+
+        let pos = sections[idx].variablePositions[name]!
+        let absoluteRow = sections[idx].startRow + pos.row + 1  // 1-indexed for ANSI
+        let absoluteCol = pos.col + 1                           // 1-indexed for ANSI
+
+        // Strip ANSI codes to compute visible width of new value
+        let visibleNew = stripANSIVisible(value)
+        let clearCount = max(0, pos.visibleWidth - visibleNew)
+
+        render(text: ANSIRenderer.moveCursor(row: absoluteRow, column: absoluteCol))
+        render(text: value)
+        if clearCount > 0 {
+            render(text: String(repeating: " ", count: clearCount))
+        }
+        flushOutput()
+
+        // Update stored width so future overwrites are correctly sized
+        let newWidth = max(pos.visibleWidth, visibleNew)
+        sections[idx].variablePositions[name] = TerminalVarPosition(
+            row: pos.row, col: pos.col, visibleWidth: newWidth
+        )
+    }
+
+    /// Count visible characters after stripping ANSI escape sequences
+    private func stripANSIVisible(_ text: String) -> Int {
+        var count = 0
+        var i = text.startIndex
+        while i < text.endIndex {
+            if text[i] == "\u{001B}" {
+                let next = text.index(after: i)
+                if next < text.endIndex && text[next] == "[" {
+                    var j = text.index(after: next)
+                    while j < text.endIndex && !text[j].isLetter {
+                        j = text.index(after: j)
+                    }
+                    i = j < text.endIndex ? text.index(after: j) : j
+                } else {
+                    i = next
+                }
+            } else {
+                if text[i] != "\n" { count += 1 }
+                i = text.index(after: i)
+            }
+        }
+        return count
     }
 
     // MARK: - Shadow Buffer Operations (ARO-0053)

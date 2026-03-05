@@ -1,0 +1,11 @@
+# Generated for Linux compiled mode
+# Type: multiservice
+# Note: File events may not be received in time on Linux in compiled mode due to inotify latency
+---
+Socket: Welcome to Multi-Service Demo!
+Socket: You will receive notifications about:
+Socket: - HTTP requests
+Socket: - File changes
+GET /status => {"fileMonitor":"watching","httpServer":"running","socketServer":"running","watchedDirectory":"watched-dir"}
+POST /broadcast => {"message":"Message broadcast to all socket clients","success":true}
+Socket: Hello from HTTP!

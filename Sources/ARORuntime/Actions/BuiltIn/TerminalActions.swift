@@ -169,17 +169,58 @@ public struct ClearAction: ActionImplementation {
                 await terminalService.clear()
             case "line":
                 await terminalService.clearLine()
+            case "cursor":
+                await terminalService.hideCursor()
             default:
-                throw ActionError.invalidInput("Clear action supports 'screen' or 'line'", received: result.base)
+                throw ActionError.invalidInput("Clear action supports 'screen', 'line', or 'cursor'", received: result.base)
             }
         }
         // Non-TTY: no-op (can't clear a pipe/redirect)
 
-        // Bind result to context
-        context.bind(result.base, value: target)
+        // Bind result to context (allowRebind: cursor can be hidden then shown in same feature set)
+        context.bind(result.base, value: target, allowRebind: true)
 
         // Return result
         return ClearResult(targetCleared: target)
+    }
+}
+
+// MARK: - Show Action
+
+/// Shows a terminal element (e.g. the cursor)
+///
+/// ## Examples
+/// ```
+/// Show the <cursor> for the <terminal>.
+/// ```
+public struct ShowAction: ActionImplementation {
+    public static let role: ActionRole = .own
+    public static let verbs: Set<String> = ["show"]
+    public static let validPrepositions: Set<Preposition> = [.for]
+
+    public init() {}
+
+    public func execute(
+        result: ResultDescriptor,
+        object: ObjectDescriptor,
+        context: ExecutionContext
+    ) async throws -> any Sendable {
+        try validatePreposition(object.preposition)
+
+        let target = result.base.lowercased()
+
+        if let terminalService = context.service(TerminalService.self) {
+            switch target {
+            case "cursor":
+                await terminalService.showCursor()
+            default:
+                throw ActionError.invalidInput("Show action supports 'cursor'", received: result.base)
+            }
+        }
+        // Non-TTY: no-op
+
+        context.bind(result.base, value: target, allowRebind: true)
+        return target
     }
 }
 
@@ -221,7 +262,10 @@ public struct RenderAction: ActionImplementation {
         // Section-based compositor: each named render owns its rows on screen.
         // Static sections stay put; reactive sections update only their own rows.
         if let terminalService = context.service(TerminalService.self) {
-            await terminalService.renderSection(name: result.base, content: content)
+            // Pass any tracked template-variable positions for reactive Repaint updates
+            let positionsKey = "_positions_\(result.base)_"
+            let positions = context.resolveAny(positionsKey) as? [String: TerminalVarPosition] ?? [:]
+            await terminalService.renderSection(name: result.base, content: content, variablePositions: positions)
         } else {
             // Non-TTY fallback (tests, pipes): output like Log
             print(content)
@@ -229,6 +273,63 @@ public struct RenderAction: ActionImplementation {
 
         return RenderResult(content: content)
     }
+}
+
+// MARK: - Repaint Action
+
+/// Reactively updates a single variable's value in a rendered section without re-rendering the template.
+///
+/// Uses the position tracked by the last Transform+Render call to write the new value
+/// directly to the terminal at the correct row and column.
+///
+/// ## Example
+/// ```aro
+/// Compute the <cpu-bar: progress-bar> from the <cpu>.
+/// Repaint the <cpu>     at the <display>.
+/// Repaint the <cpu-bar> at the <display>.
+/// ```
+public struct RepaintAction: ActionImplementation {
+    public static let role: ActionRole = .response
+    public static let verbs: Set<String> = ["repaint", "patch"]
+    public static let validPrepositions: Set<Preposition> = [.at, .to]
+
+    public init() {}
+
+    public func execute(
+        result: ResultDescriptor,
+        object: ObjectDescriptor,
+        context: ExecutionContext
+    ) async throws -> any Sendable {
+        try validatePreposition(object.preposition)
+
+        guard let terminalService = context.service(TerminalService.self) else {
+            // Non-TTY: no-op (no section compositor available)
+            return RepaintResult(variable: result.base, sectionName: object.base)
+        }
+
+        // Get the new value to write
+        guard let rawValue = context.resolveAny(result.base) else {
+            return RepaintResult(variable: result.base, sectionName: object.base)
+        }
+
+        // Format the value as a displayable string
+        let formatted: String
+        if let s = rawValue as? String { formatted = s }
+        else if let i = rawValue as? Int { formatted = String(i) }
+        else if let d = rawValue as? Double { formatted = String(d) }
+        else { formatted = String(describing: rawValue) }
+
+        // Write directly to the tracked position in the section
+        await terminalService.updateVariable(name: result.base, value: formatted, inSection: object.base)
+
+        return RepaintResult(variable: result.base, sectionName: object.base)
+    }
+}
+
+/// Result of a repaint operation
+public struct RepaintResult: Sendable {
+    public let variable: String
+    public let sectionName: String
 }
 
 /// Result of a render operation

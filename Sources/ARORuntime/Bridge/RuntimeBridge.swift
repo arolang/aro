@@ -75,6 +75,7 @@ class AROCContextHandle {
     let socketServer: AROSocketServer?
     let httpServer: AROHTTPServer?
     let templateService: AROTemplateService?
+    let terminalService: TerminalService?
     #endif
 
     init(runtime: AROCRuntimeHandle, featureSetName: String) {
@@ -116,8 +117,18 @@ class AROCContextHandle {
         self.httpServer = nil
 
         // Register template service (ARO-0050)
-        let cwd = FileManager.default.currentDirectoryPath
-        let templatesDirectory = (cwd as NSString).appendingPathComponent("templates")
+        // Resolve templates/ relative to the binary's own directory so the binary
+        // works regardless of which directory it is invoked from.
+        let executablePath = CommandLine.arguments[0]
+        let binaryDir: String
+        if executablePath.hasPrefix("/") {
+            binaryDir = (executablePath as NSString).deletingLastPathComponent
+        } else {
+            let cwd = FileManager.default.currentDirectoryPath
+            let abs = (cwd as NSString).appendingPathComponent(executablePath)
+            binaryDir = ((abs as NSString).resolvingSymlinksInPath as NSString).deletingLastPathComponent
+        }
+        let templatesDirectory = (binaryDir as NSString).appendingPathComponent("templates")
         let ts = AROTemplateService(templatesDirectory: templatesDirectory)
         let templateExecutor = TemplateExecutor(
             actionRegistry: ActionRegistry.shared,
@@ -126,6 +137,16 @@ class AROCContextHandle {
         ts.setExecutor(templateExecutor)
         self.context.register(ts as TemplateService)
         self.templateService = ts
+
+        // Register terminal service for TTY output (ARO-0052)
+        // ClearAction, RenderAction, ShowAction all require this service
+        if isatty(STDOUT_FILENO) != 0 {
+            let terminal = TerminalService()
+            self.context.register(terminal)
+            self.terminalService = terminal
+        } else {
+            self.terminalService = nil
+        }
 
         // Set up schema registry for typed event extraction (ARO-0046)
         // Load openapi.yaml from the binary's directory if present
@@ -142,6 +163,7 @@ class AROCContextHandle {
         self.socketServer = nil
         self.httpServer = nil
         self.templateService = nil
+        self.terminalService = nil
         #endif
     }
 

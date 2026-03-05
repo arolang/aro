@@ -350,8 +350,18 @@ public final class Parser {
         if shouldParseExpression && !isObjectPattern() {
             // Parse expression (ARO-0002)
             expression = try parseExpression()
-            // Create a placeholder object noun for the expression
-            objectNoun = QualifiedNoun(base: "_expression_", specifiers: [], span: previous().span)
+
+            // Time-unit suffix for duration literals: "with 2 seconds." / "with 5 minutes." / "with 1 hour."
+            // When a time-unit identifier follows a numeric literal, consume it and set objectNoun.base
+            // to the unit string so actions can apply the correct multiplier.
+            let timeUnits: Set<String> = ["second", "seconds", "minute", "minutes", "hour", "hours"]
+            if prep == .with, case .identifier(let unit) = peek().kind, timeUnits.contains(unit) {
+                advance()  // consume the time-unit identifier
+                objectNoun = QualifiedNoun(base: unit, specifiers: [], span: previous().span)
+            } else {
+                // Create a placeholder object noun for the expression
+                objectNoun = QualifiedNoun(base: "_expression_", specifiers: [], span: previous().span)
+            }
         } else {
             // Standard syntax: [article] <object> or [article] bare-identifier
             // Skip optional article before object
@@ -1576,7 +1586,7 @@ extension Parser {
         switch token.kind {
         case .or: return .or
         case .and: return .and
-        case .equalEqual, .bangEqual, .is, .contains, .matches: return .equality
+        case .equalEqual, .equals, .bangEqual, .is, .contains, .matches: return .equality
         case .lessThan, .greaterThan, .lessEqual, .greaterEqual: return .comparison
         // Handle < and > as comparison operators in expression context
         // They will only reach here if not part of a <variable> reference
@@ -1698,7 +1708,7 @@ extension Parser {
         case .slash: return .divide
         case .percent: return .modulo
         case .plusPlus: return .concat
-        case .equalEqual: return .equal
+        case .equalEqual, .equals: return .equal
         case .bangEqual: return .notEqual
         case .lessThan, .leftAngle: return .lessThan
         case .greaterThan, .rightAngle: return .greaterThan

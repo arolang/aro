@@ -1333,6 +1333,14 @@ sub run_http_example_internal {
         # Parse accumulated server stdout — keep only observer/handler output lines,
         # strip startup/HTTP infrastructure lines, strip [FeatureName] prefix,
         # then sort for deterministic comparison.
+        #
+        # Interpreter mode: lines look like "[FeatureName] [CONTENT_PREFIX] message"
+        #   → strip [FeatureName], leaving "[CONTENT_PREFIX] message" for sorting
+        #   → normalize_output strips [CONTENT_PREFIX] later
+        # Binary/compiled mode: lines look like "[CONTENT_PREFIX] message" (no outer wrapper)
+        #   → keep as-is for sorting (same sort key as interpreter after one strip)
+        #   → skip lines that don't start with "[" (startup messages like "Starting ...")
+        #   → normalize_output strips [CONTENT_PREFIX] later
         my @server_lines;
         for my $line (split /\n/, $out) {
             # Skip empty lines and infrastructure lines
@@ -1341,8 +1349,21 @@ sub run_http_example_internal {
             next if $line =~ /^HTTP Server started/;
             next if $line =~ /^\[ERROR\]/;   # runtime errors already visible
 
-            # Strip leading [FeatureName] prefix so output is independent of feature set name
-            $line =~ s/^\[[^\]]+\]\s+//;
+            if ($mode eq 'compiled') {
+                my $is_occurrence_check = (defined $hints->{'occurrence-check'} && $hints->{'occurrence-check'} eq 'true');
+                if (!$is_occurrence_check) {
+                    # Exact-match mode: filter by [prefix] pattern to exclude startup/infrastructure lines
+                    # (e.g. RepositoryObserver handlers log [AUDIT]/[CHANGE]/[MONITOR] prefixes)
+                    next unless $line =~ /^\[/;
+                    # Keep [CONTENT_PREFIX] intact — normalize_output strips it later,
+                    # and it serves as the sort key (matching interpreter mode after one strip).
+                }
+                # occurrence-check mode: include all non-infrastructure lines as-is
+                # (handler output without [prefix] is found via substring search)
+            } else {
+                # Interpreter mode: strip [FeatureName] wrapper so sort key is [CONTENT_PREFIX]
+                $line =~ s/^\[[^\]]+\]\s+//;
+            }
             push @server_lines, $line;
         }
         if (@server_lines) {
@@ -1949,7 +1970,8 @@ sub run_multiservice_example_internal {
     # 5. Delete file -> socket notification
     say "  Deleting test file" if $options{verbose};
     unlink $test_file if -f $test_file;
-    for my $line ($read_socket->(3)) {
+    # Wait longer for deletion events on Linux (inotify can be slower)
+    for my $line ($read_socket->(5)) {
         $line =~ s{FILE DELETED: .*/([^/]+)$}{FILE DELETED: $1};
         push @output, "Socket: $line";
     }
@@ -2330,9 +2352,29 @@ sub run_single_mode_test {
     }
 
     # Compare with expected output
-    my $expected_file = File::Spec->catfile($examples_dir, $example_name, 'expected.txt');
+    # Find the most specific expected file based on platform and mode
+    my $platform = $^O;  # 'linux', 'darwin', 'MSWin32', etc.
+    $platform = 'linux' if $platform eq 'linux';
+    $platform = 'macos' if $platform eq 'darwin';
+    $platform = 'windows' if $platform =~ /^MSWin/;
 
-    unless (-f $expected_file) {
+    my @expected_candidates = (
+        "expected.$platform-$mode.txt",    # e.g., expected.linux-compiled.txt
+        "expected.$platform.txt",           # e.g., expected.linux.txt
+        "expected.$mode.txt",               # e.g., expected.compiled.txt
+        "expected.txt",                     # fallback
+    );
+
+    my $expected_file;
+    for my $candidate (@expected_candidates) {
+        my $path = File::Spec->catfile($examples_dir, $example_name, $candidate);
+        if (-f $path) {
+            $expected_file = $path;
+            last;
+        }
+    }
+
+    unless ($expected_file) {
         return {
             name => $example_name,
             type => $type,

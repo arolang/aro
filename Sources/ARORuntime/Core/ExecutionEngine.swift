@@ -71,6 +71,12 @@ public actor ExecutionEngine {
         await services.register(service)
     }
 
+    /// Inject all registered services into an existing context
+    /// Used by Runtime.executeApplicationEnd so Application-End handlers can access services
+    public func registerServicesInContext(_ context: ExecutionContext) async {
+        await services.registerAll(in: context)
+    }
+
     // MARK: - Program Execution
 
     /// Execute an analyzed program
@@ -518,6 +524,23 @@ public actor ExecutionEngine {
         // Copy services from base context
         await services.registerAll(in: handlerContext)
 
+        // Evaluate optional when-guard on the feature set declaration
+        // e.g., `(Handler Name: Event Handler) when <trigger> = "startup" { ... }`
+        if let whenCondition = analyzedFS.featureSet.whenCondition {
+            let evaluator = ExpressionEvaluator()
+            do {
+                let condResult = try await evaluator.evaluate(whenCondition, context: handlerContext)
+                let passes: Bool
+                if let b = condResult as? Bool { passes = b }
+                else if let i = condResult as? Int { passes = i != 0 }
+                else { passes = !String(describing: condResult).isEmpty }
+                guard passes else { return }
+            } catch {
+                // Guard evaluation error: skip this handler (don't crash)
+                return
+            }
+        }
+
         // Execute the handler
         let executor = FeatureSetExecutor(
             actionRegistry: actionRegistry,
@@ -659,9 +682,11 @@ public actor ExecutionEngine {
         // e.g., <Extract> the <user> from the <event: user>
         handlerContext.bind("event", value: event.payload)
 
-        // Also bind payload keys directly for convenience
+        // Also bind payload keys directly for convenience and when-guard access
+        // e.g., `when <trigger> = "startup"` resolves "trigger" from the payload
         for (key, value) in event.payload {
             handlerContext.bind("event:\(key)", value: value)
+            handlerContext.bind(key, value: value)
         }
 
         // Copy services from base context

@@ -267,6 +267,14 @@ public final class RuntimeContext: ExecutionContext, @unchecked Sendable {
         return variables[name] != nil || (parent?.exists(name) ?? false)
     }
 
+    /// Check if a variable is bound in THIS context only (ignoring parent contexts).
+    /// Used by FeatureSetExecutor to decide whether to create a local shadow binding.
+    public func existsLocally(_ name: String) -> Bool {
+        lock.lock()
+        defer { lock.unlock() }
+        return variables[name] != nil
+    }
+
     public var variableNames: Set<String> {
         lock.lock()
         defer { lock.unlock() }

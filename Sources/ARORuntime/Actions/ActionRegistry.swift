@@ -108,6 +108,9 @@ public actor ActionRegistry {
         // Wait action for long-running applications
         addAction(WaitForEventsAction.self)
 
+        // Schedule action for periodic event emission
+        addAction(ScheduleAction.self)
+
         // State transition action
         addAction(AcceptAction.self)
 
@@ -135,7 +138,9 @@ public actor ActionRegistry {
         addAction(PromptAction.self)
         addAction(SelectAction.self)
         addAction(ClearAction.self)
+        addAction(ShowAction.self)
         addAction(RenderAction.self)
+        addAction(RepaintAction.self)
 
         return actions
     }
