@@ -5,6 +5,7 @@
 //
 // This file provides C-callable functions for compiled ARO binaries.
 // It exposes the Swift runtime functionality through @_cdecl exports.
+// Force rebuild: 2026-03-06
 
 import Foundation
 import AROParser
