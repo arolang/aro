@@ -236,6 +236,7 @@ sub read_test_hint {
         'strip-prefix' => undef,
         'random-output' => undef,
         'include-server-output' => undef,
+        'request-delay' => undef,
     );
 
     # Return empty hints if file doesn't exist (backward compatible)
@@ -1320,6 +1321,12 @@ sub run_http_example_internal {
                     push @output, sprintf("%s %s => ERROR: %s %s", uc($method), $path, $response->{status}, $response->{reason});
                 } else {
                     push @output, sprintf("%s %s => ERROR: No response", uc($method), $path);
+                }
+
+                # Apply request delay if specified (allows async handlers to complete)
+                if ($hints->{'request-delay'}) {
+                    my $delay = $hints->{'request-delay'};
+                    select(undef, undef, undef, $delay);
                 }
         }
     }

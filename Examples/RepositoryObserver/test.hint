@@ -4,3 +4,5 @@ mode: interpreter
 include-server-output: true
 # HTTP servers hang on Windows CI
 skip-on-windows: HTTP server tests not supported on Windows CI
+# Delay between HTTP requests to allow observer events to complete
+request-delay: 0.2
