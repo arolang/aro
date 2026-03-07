@@ -13,7 +13,9 @@ ARO applications are directories containing `.aro` files. When an application gr
 The import mechanism is radically simple. You import another application directory, and all its feature sets become accessible. No visibility modifiers, no selective imports, no namespacing. If you import an application, you trust it and want all of it.
 This design reflects how project managers think about systems. Applications are black boxes that do things. If you need what another application provides, you import it. There are no access control decisions to make, no visibility declarations to configure.
 ---
+
 ## 27.2 Import Syntax
+
 The import statement appears at the top of an ARO file, before any feature sets:
 ```aro
 import ../auth-service
@@ -29,7 +31,9 @@ When the compiler encounters an import:
 5. Types become available
 There is no need to specify what you want from the imported application. Everything becomes accessible.
 ---
+
 ## 27.3 No Visibility Modifiers
+
 ARO explicitly rejects visibility modifiers. There is no `public`, `private`, or `internal`.
 | Traditional | ARO Approach |
 |-------------|--------------|
@@ -41,7 +45,9 @@ This might seem dangerous. What about encapsulation? What about hiding implement
 ARO takes a different position. Within a feature set, variables are scoped naturally. They exist only within that feature set unless explicitly published. If you want to share data between feature sets, you use the Publish action or emit events. These are explicit sharing mechanisms.
 When you import an application, you are saying: I want this application's capabilities. You trust the imported code. If you need to restrict what is accessible, the answer is not visibility modifiers. The answer is to factor the code into appropriate applications.
 ---
+
 ## 27.4 The ModulesExample
+
 The `Examples/ModulesExample` directory demonstrates application composition with three directories:
 ```
 ModulesExample/
@@ -56,7 +62,9 @@ ModulesExample/
     └── openapi.yaml
 ```
 Each module can run standalone or be imported into a larger application.
+
 ### Module A
+
 Module A provides a single endpoint at `/module-a`:
 ```aro
 (* Module A - Standalone Application *)
@@ -77,7 +85,9 @@ Run it standalone:
 aro build ./Examples/ModulesExample/ModuleA
 ./Examples/ModulesExample/ModuleA/ModuleA
 ```
+
 ### Module B
+
 Module B provides a single endpoint at `/module-b`:
 ```aro
 (* Module B - Standalone Application *)
@@ -93,7 +103,9 @@ Module B provides a single endpoint at `/module-b`:
 }
 ```
 *Source: [Examples/ModulesExample/ModuleB/main.aro](../Examples/ModulesExample/ModuleB/main.aro)*
+
 ### Combined Application
+
 The Combined application imports both modules and provides both endpoints:
 ```aro
 (* Combined Application *)
@@ -109,7 +121,9 @@ import ../ModuleB
 *Source: [Examples/ModulesExample/Combined/main.aro](../Examples/ModulesExample/Combined/main.aro)*
 The `getModuleA` and `getModuleB` feature sets come from the imported applications. They do not need to be redefined. The Combined application's OpenAPI contract defines both routes, and the imported feature sets handle them.
 ---
+
 ## 27.5 Building Standalone Binaries
+
 Each module produces its own standalone binary:
 ```bash
 # Build Module A
@@ -124,7 +138,9 @@ aro build ./Examples/ModulesExample/Combined
 ```
 The Combined binary includes all code from both imported modules. The resulting binary is self-contained and requires no runtime dependencies.
 ---
+
 ## 27.6 Distributed Services Pattern
+
 <div style="float: right; margin: 0 0 1em 1.5em;">
 <svg width="160" height="200" viewBox="0 0 160 200" xmlns="http://www.w3.org/2000/svg">  <!-- Auth -->  <rect x="10" y="10" width="60" height="35" rx="4" fill="#dbeafe" stroke="#3b82f6" stroke-width="1.5"/>  <text x="40" y="28" text-anchor="middle" font-family="sans-serif" font-size="8" font-weight="bold" fill="#1e40af">Auth</text>  <text x="40" y="40" text-anchor="middle" font-family="monospace" font-size="6" fill="#3b82f6">:8081</text>  <!-- Users -->  <rect x="90" y="10" width="60" height="35" rx="4" fill="#dcfce7" stroke="#22c55e" stroke-width="1.5"/>  <text x="120" y="28" text-anchor="middle" font-family="sans-serif" font-size="8" font-weight="bold" fill="#166534">Users</text>  <text x="120" y="40" text-anchor="middle" font-family="monospace" font-size="6" fill="#22c55e">:8082</text>  <!-- Orders -->  <rect x="10" y="60" width="60" height="35" rx="4" fill="#fef3c7" stroke="#f59e0b" stroke-width="1.5"/>  <text x="40" y="78" text-anchor="middle" font-family="sans-serif" font-size="8" font-weight="bold" fill="#92400e">Orders</text>  <text x="40" y="90" text-anchor="middle" font-family="monospace" font-size="6" fill="#f59e0b">:8083</text>  <!-- Payments -->  <rect x="90" y="60" width="60" height="35" rx="4" fill="#f3e8ff" stroke="#a855f7" stroke-width="1.5"/>  <text x="120" y="78" text-anchor="middle" font-family="sans-serif" font-size="8" font-weight="bold" fill="#7c3aed">Payments</text>  <text x="120" y="90" text-anchor="middle" font-family="monospace" font-size="6" fill="#a855f7">:8084</text>  <!-- Arrows to gateway -->  <line x1="40" y1="45" x2="70" y2="130" stroke="#6b7280" stroke-width="1"/>  <line x1="120" y1="45" x2="90" y2="130" stroke="#6b7280" stroke-width="1"/>  <line x1="40" y1="95" x2="70" y2="130" stroke="#6b7280" stroke-width="1"/>  <line x1="120" y1="95" x2="90" y2="130" stroke="#6b7280" stroke-width="1"/>  <!-- Gateway -->  <rect x="35" y="130" width="90" height="40" rx="4" fill="#e0e7ff" stroke="#6366f1" stroke-width="2"/>  <text x="80" y="150" text-anchor="middle" font-family="sans-serif" font-size="9" font-weight="bold" fill="#4338ca">Gateway</text>  <text x="80" y="163" text-anchor="middle" font-family="monospace" font-size="7" fill="#6366f1">:8080</text>  <!-- Label -->  <text x="80" y="190" text-anchor="middle" font-family="sans-serif" font-size="7" fill="#9ca3af">imports all services</text></svg>
 </div>
@@ -147,7 +163,9 @@ services/
 Each service has its own Application-Start and can run on its own port. The gateway imports all services and provides a unified API.
 For development, you might run the gateway monolith. For production, you might run each service independently and use a real API gateway.
 ---
+
 ## 27.7 Sharing Data Between Applications
+
 When you import an application, you get access to its published variables within the same business activity. The Publish action (see ARO-0003) makes values available to feature sets sharing that business activity:
 ```aro
 (* In auth-service/auth.aro *)
@@ -169,12 +187,16 @@ import ../auth-service
 }
 ```
 ---
+
 ## 27.8 What Is Not Imported
+
 When you import an application, its Application-Start feature set is not executed. Only the importing application's Application-Start runs. The imported feature sets become available, but lifecycle management remains with the importing application.
 This prevents conflicts when composing applications. Each composed application might have its own startup logic, but only the top-level application controls the actual startup sequence.
 Similarly, Application-End handlers from imported applications are not triggered during shutdown. The importing application manages its own lifecycle.
 ---
+
 ## 27.9 Circular Imports
+
 Circular imports are technically allowed:
 ```aro
 (* service-a/main.aro *)
@@ -188,7 +210,9 @@ However, circular dependencies usually indicate poor architecture. If two applic
 2. Using events instead of direct access
 3. Reorganizing the application boundaries
 ---
+
 ## 27.10 What Is Not Provided
+
 ARO deliberately omits many features found in other module systems:
 - **Module declarations** - No `module com.example.foo`
 - **Namespace qualifiers** - No `com.example.foo.MyType`
@@ -199,7 +223,9 @@ ARO deliberately omits many features found in other module systems:
 - **Remote package repositories** - No central registry
 These are implementation concerns that add complexity without matching how ARO applications are designed to work. If you need versioning, use git. If you need remote packages, use git submodules or symbolic links.
 ---
+
 ## 27.11 Summary
+
 The import system embodies ARO's philosophy of simplicity:
 1. `import ../path` imports another application
 2. Everything becomes accessible after import

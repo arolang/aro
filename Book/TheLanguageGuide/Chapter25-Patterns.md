@@ -50,14 +50,18 @@ When a step fails, compensation handlers clean up the effects of previous steps.
 The saga pattern trades atomicity for availability. Unlike a transaction that succeeds or fails completely, a saga can be partially complete while some steps succeed and others fail. The compensation handlers bring the system to a consistent state, but intermediate states are visible.
 Use sagas when you need to coordinate actions across multiple services or when steps take significant time. For quick operations that can complete atomically, simpler patterns are appropriate.
 ---
+
 ## 25.4 The Gateway Pattern
+
 API gateways aggregate data from multiple backend services into unified responses. Rather than having clients make multiple calls and combine results, the gateway handles this coordination.
 A gateway handler extracts request parameters, makes parallel or sequential calls to backend services, combines the results into a unified response, and returns it. The client sees a single endpoint that provides rich, aggregated data.
 The pattern is valuable when clients need data from multiple sources. A product details page might need product information from the catalog service, stock levels from the inventory service, reviews from the review service, and pricing from the pricing service. A gateway endpoint fetches all of this and returns a complete product details object.
 Gateway handlers should be designed for resilience. Backend services might be slow or unavailable. Consider timeout handling, fallback data for unavailable services, and partial responses when some data cannot be retrieved.
 The gateway pattern can also handle cross-cutting concerns like authentication, rate limiting, and logging that apply across all backend calls. The gateway becomes a single enforcement point for these concerns.
 ---
+
 ## 25.5 Command Query Responsibility Segregation
+
 <div style="float: right; margin: 0 0 1em 1.5em;">
 <svg width="180" height="160" viewBox="0 0 180 160" xmlns="http://www.w3.org/2000/svg">  <!-- Title -->  <text x="90" y="15" text-anchor="middle" font-family="sans-serif" font-size="10" font-weight="bold" fill="#374151">CQRS</text>  <!-- Command side -->  <rect x="10" y="30" width="70" height="25" rx="3" fill="#fee2e2" stroke="#ef4444" stroke-width="1.5"/>  <text x="45" y="46" text-anchor="middle" font-family="sans-serif" font-size="8" font-weight="bold" fill="#991b1b">Commands</text>  <line x1="45" y1="55" x2="45" y2="75" stroke="#ef4444" stroke-width="1.5"/>  <polygon points="45,75 40,68 50,68" fill="#ef4444"/>  <rect x="10" y="80" width="70" height="25" rx="3" fill="#fef3c7" stroke="#f59e0b" stroke-width="1.5"/>  <text x="45" y="96" text-anchor="middle" font-family="sans-serif" font-size="8" fill="#92400e">Write Store</text>  <!-- Query side -->  <rect x="100" y="30" width="70" height="25" rx="3" fill="#dbeafe" stroke="#3b82f6" stroke-width="1.5"/>  <text x="135" y="46" text-anchor="middle" font-family="sans-serif" font-size="8" font-weight="bold" fill="#1e40af">Queries</text>  <line x1="135" y1="55" x2="135" y2="75" stroke="#3b82f6" stroke-width="1.5"/>  <polygon points="135,75 130,68 140,68" fill="#3b82f6"/>  <rect x="100" y="80" width="70" height="25" rx="3" fill="#dcfce7" stroke="#22c55e" stroke-width="1.5"/>  <text x="135" y="96" text-anchor="middle" font-family="sans-serif" font-size="8" fill="#166534">Read Model</text>  <!-- Sync arrow -->  <line x1="80" y1="92" x2="100" y2="92" stroke="#9ca3af" stroke-width="1" stroke-dasharray="3,2"/>  <polygon points="100,92 95,89 95,95" fill="#9ca3af"/>  <text x="90" y="118" text-anchor="middle" font-family="sans-serif" font-size="7" fill="#9ca3af">events sync</text>  <!-- Labels -->  <text x="45" y="140" text-anchor="middle" font-family="sans-serif" font-size="7" fill="#ef4444">consistency</text>  <text x="135" y="140" text-anchor="middle" font-family="sans-serif" font-size="7" fill="#3b82f6">optimized</text></svg>
 </div>
@@ -67,28 +71,36 @@ The read side maintains projections optimized for query patterns. When events oc
 This separation allows independent optimization. The write side can use a normalized relational database that enforces consistency. The read side can use denormalized document stores, search indices, or caching layers that optimize for specific query patterns.
 CQRS adds complexity because you maintain multiple representations of data that must stay synchronized. It is most valuable when read and write patterns differ significantly—when you need rich queries that do not match your write model, or when read load vastly exceeds write load and you need to scale them independently.
 ---
+
 ## 25.6 Error Handling Patterns
+
 ARO's happy path philosophy means you do not write explicit error handling, but you can still respond to errors through event-driven patterns.
 Error events can be emitted by custom actions when failures occur. A PaymentFailed event carries information about what went wrong. Handlers for error events can log details, notify administrators, trigger compensating actions, or update status to reflect the failure.
 Retry patterns can be implemented in custom actions that wrap unreliable operations. The action attempts the operation, retries on transient failures with backoff, and eventually either succeeds or emits a failure event. The ARO code sees only success or a well-defined failure event.
 Dead letter handling captures messages that fail repeatedly. After a configured number of retries, the message goes to a dead letter queue where it can be examined, corrected, and replayed. This prevents poison messages from blocking processing while preserving them for investigation.
 Circuit breaker patterns can protect against cascading failures when backend services are unavailable. A custom action tracks failure rates and stops making calls when failures exceed a threshold, returning a fallback response instead. This prevents overwhelming already struggling services.
 ---
+
 ## 25.7 Security Patterns
+
 Authentication verifies caller identity. Security-sensitive endpoints extract authentication tokens, validate them against an authentication service, and extract identity claims. Subsequent operations use the validated identity.
 Authorization verifies caller permissions. After authentication establishes who the caller is, authorization checks what they can do. This might involve checking role membership, querying a permissions service, or evaluating policy rules.
 Rate limiting prevents abuse by limiting request rates per client. A rate limiting action checks whether the current request exceeds limits and fails if so. This protects against denial of service and ensures fair resource allocation.
 Input validation prevents injection and other attacks. Validating request data against schemas catches malformed input before it can cause harm. Custom validation actions can implement domain-specific security rules.
 These patterns compose together. A secured endpoint might extract and validate a token, check rate limits, validate input, and only then proceed with business logic. Each layer provides defense in depth.
 ---
+
 ## 25.8 Performance Patterns
+
 Caching reduces load on backend services by storing frequently accessed data. A cache-aware handler first checks the cache. On cache hit, it returns immediately. On cache miss, it fetches from the source, stores in the cache, and returns. Time-to-live settings control cache freshness.
 Batch processing handles multiple items efficiently. Rather than processing items one at a time, a batch handler receives a collection and processes them together. This can reduce round trips to backend services and enable bulk operations that are more efficient than individual operations.
 Parallel processing handles independent operations concurrently. When multiple pieces of data are needed and they do not depend on each other, fetching them in parallel reduces total latency compared to sequential fetching.
 Connection pooling maintains reusable connections to backend services. Rather than establishing a new connection for each request, handlers borrow connections from a pool and return them when done. This amortizes connection setup cost across many requests.
 Pagination prevents unbounded result sets. List operations return limited pages of results with metadata indicating total count and how to fetch additional pages. This prevents memory exhaustion from large result sets and provides consistent response times.
 ---
+
 ## 25.9 Best Practices Summary
+
 These practices have emerged from experience building ARO applications and reflect lessons learned about what works well.
 Keep feature sets focused on single responsibilities. A feature set that does one thing well is easier to understand, test, and maintain than one that does many things.
 Use events for side effects and communication. Rather than calling between feature sets, emit events and let handlers react. This decoupling makes the system more flexible and easier to evolve.

@@ -134,7 +134,9 @@ Several patterns emerge in how events are used to structure applications.
 The command-event pattern separates the action that causes a change from the event that records it. An HTTP handler receives a command (create a user), performs the work (validate data, store user), and emits an event (UserCreated). The command is imperative—it asks for something to happen. The event is declarative—it states what happened. This separation clarifies responsibilities and enables loose coupling.
 Event chains occur when handlers emit additional events. An OrderPlaced event might trigger an inventory handler that emits InventoryReserved, which triggers a payment handler that emits PaymentProcessed, which triggers a fulfillment handler. Each step in the chain is a separate handler with its own isolation, error handling, and potential for independent evolution.
 The saga pattern uses event chains to implement long-running processes that span multiple steps. A refund saga might involve reversing a payment, restoring inventory, updating the order status, and notifying the customer. Each step emits an event that triggers the next step. If a step fails, compensation events can trigger rollback of previous steps.
+
 ### Complete Saga Example: Order Processing
+
 Here is a complete order processing saga showing event-driven choreography:
 ```aro
 (* Step 1: HTTP handler creates order and starts the saga *)
@@ -198,7 +200,9 @@ This saga demonstrates:
 - **Fan-out**: Multiple handlers can listen to the same event (e.g., OrderShipped triggers both shipping and notifications)
 Fan-out occurs when multiple handlers react to the same event. An OrderPlaced event might trigger handlers for inventory, payment, notifications, analytics, and fraud checking. All these handlers run when the event is emitted. Each handler focuses on its specific concern, and together they implement the complete response to a new order.
 ---
+
 ## 13.6 Event Design Guidelines
+
 Good event design requires thinking about both producers and consumers.
 Include sufficient context in event payloads. Handlers should have what they need without additional queries. If a UserUpdated event only contains the user identifier, every handler must retrieve the user to learn what changed. If the event includes the changes, previous values, who made the change, and when, handlers can react immediately.
 Use past tense consistently. Events record what happened, not what should happen. "UserCreated" states a fact. "CreateUser" requests an action. The distinction matters because it clarifies the nature of the communication—events are announcements, not requests.
@@ -206,23 +210,31 @@ Be specific rather than generic. "UserUpdated" could mean many things. "UserEmai
 Treat event payloads as immutable. The payload is a snapshot of state at the moment the event was emitted. Handlers should not expect to modify the payload or to have modifications affect other handlers. Each handler receives an independent view of the event.
 Design for evolution. Events are contracts between producers and consumers. Changing an event's structure can break consumers. When you add fields, make them optional so existing consumers continue to work. When you remove fields, ensure no consumers still depend on them. Version events if incompatible changes are necessary.
 ---
+
 ## 13.7 Error Handling in Events
+
 Event handlers run in isolation. If one handler fails, other handlers for the same event still run. The emitting feature set is not affected by handler failures—it continues with its own execution regardless of what handlers do.
 This isolation reflects the fire-and-forget nature of event emission. The emitter announces what happened and moves on. It does not wait for handlers to complete, does not receive their results, and does not fail if they fail. This makes event emission a non-blocking operation and prevents cascading failures.
 For scenarios where handler success is important, additional patterns help. Compensation events can trigger recovery when things fail. A PaymentFailed event can trigger handlers that cancel the order and notify the customer. The failure handler runs as a reaction to the failure event, providing a mechanism for recovery without coupling the original operation to error handling.
 The runtime logs all handler failures with full context. Operators can monitor these logs to detect failing handlers. Alerts can trigger when failure rates exceed thresholds. The information in the logs—event type, handler name, error message, timestamp, correlation identifier—supports diagnosis and debugging.
 Designing handlers for idempotency provides resilience. If a handler can safely process the same event multiple times without incorrect behavior, temporary failures can be recovered by reprocessing the event. This is particularly valuable in distributed systems where exactly-once delivery is difficult to guarantee.
 ---
+
 ## 13.8 Best Practices
+
 Name events from the perspective of the domain, not the infrastructure. "CustomerJoinedLoyaltyProgram" is a domain event. "DatabaseRowInserted" is an infrastructure event. Domain events communicate business meaning; infrastructure events communicate implementation details. Prefer domain events because they remain stable as implementations change.
 Document the contract between event producers and consumers. The payload structure is an implicit contract—producers must provide what consumers expect. Documenting this contract makes the expectation explicit. Include what fields are present, their types, and their semantics. When the contract changes, communicate the change to all affected parties.
 Use events for cross-cutting concerns. Audit logging, analytics, notifications, and other concerns that touch many parts of the application are natural fits for events. The code that creates a user does not need to know about audit logging—it just emits UserCreated, and an audit handler captures it.
 Test handlers in isolation. Because handlers are independent feature sets with well-defined inputs (the event), they are straightforward to test. Construct a mock event with the expected payload, invoke the handler, and verify the behavior. This unit testing approach scales to complex systems.
 Avoid circular event chains. If event A triggers a handler that emits event B, and event B triggers a handler that emits event A, you have an infinite loop. The ARO compiler detects these cycles at compile time and reports them as errors, so you will catch this problem before your code runs. Map your event flows to ensure they form directed acyclic graphs with clear start and end points.
 ---
+
 ## 13.9 Typed Event Extraction (ARO-0046)
+
 When your application has an OpenAPI specification, you can define event schemas in `components.schemas` and use them to validate event data during extraction.
+
 ### Schema Definition
+
 Define event schemas in your `openapi.yaml`:
 ```yaml
 components:
@@ -240,7 +252,9 @@ components:
         name:
           type: string
 ```
+
 ### Typed Extraction Syntax
+
 Use a PascalCase qualifier to reference the schema:
 ```aro
 (Send Welcome Email: UserCreated Handler) {
@@ -252,7 +266,9 @@ Use a PascalCase qualifier to reference the schema:
 }
 ```
 The PascalCase qualifier (`UserCreatedEvent`) triggers schema lookup and validation. If the event data does not match the schema, the handler fails immediately with a descriptive error message.
+
 ### Benefits
+
 **Validation at the boundary**: Instead of discovering missing fields deep in handler logic, schema validation catches problems immediately when the event is extracted.
 **Self-documenting contracts**: Event schemas in `openapi.yaml` document the expected structure. Emitters and handlers share this specification as their contract.
 **Reduced boilerplate**: Instead of extracting each field separately, extract the entire typed object and access its properties:
@@ -266,7 +282,9 @@ Extract the <name> from the <data: name>.
 Extract the <data: UserCreatedEvent> from the <event: data>.
 (* Access properties with <data: email>, <data: name>, etc. *)
 ```
+
 ### Error Messages
+
 Validation errors follow ARO-0006 "Code Is The Error Message":
 ```
 Cannot Extract the <event-data: UserCreatedEvent> from the <event: data>.
@@ -275,7 +293,9 @@ Cannot Extract the <event-data: UserCreatedEvent> from the <event: data>.
   Required properties: userId, email
 ```
 ---
+
 ## 13.10 Compiler Validation
+
 The ARO compiler performs static analysis on your event handlers to detect potential issues before runtime.
 **Circular Event Chain Detection**: The compiler builds a graph of event flows by analyzing which handlers emit which events. If a cycle is detected (for example, `Alpha Handler` emits `Beta` and `Beta Handler` emits `Alpha`), the compiler reports an error:
 ```
