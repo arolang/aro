@@ -1,0 +1,26 @@
+(* SleepAPI — ARO-0054: Sleep in HTTP handlers
+   Shows that concurrent HTTP requests each sleep independently.
+   Two simultaneous requests to /slow (3 s) and /fast (1 s) complete
+   in ~3 s wall-clock time, not 4 s — the sleeps do NOT add up. *)
+
+(Application-Start: Sleep API) {
+    Log "Starting Sleep API on port 8095..." to the <console>.
+    Start the <http-server> with {}.
+    Keepalive the <application> for the <events>.
+    Return an <OK: status> for the <startup>.
+}
+
+(* Fast endpoint: sleeps 1 second *)
+(fastSleep: Sleep API) {
+    Sleep the <pause> for 1 second.
+    Return an <OK: status> with <pause>.
+}
+
+(* Slow endpoint: sleeps 3 seconds.
+   When both /fast and /slow are called concurrently,
+   both handlers run in separate Swift Tasks — their sleeps
+   are independent and do not interfere with each other. *)
+(slowSleep: Sleep API) {
+    Sleep the <pause> for 3 seconds.
+    Return an <OK: status> with <pause>.
+}

@@ -287,7 +287,7 @@ public final class FeatureSetExecutor: @unchecked Sendable {
                 // Response actions like write/read/store should NOT have their result bound to expression value
                 let responseVerbs: Set<String> = ["write", "read", "store", "save", "persist", "log", "print", "send", "emit", "notify", "alert", "signal", "broadcast"]
                 // Server lifecycle actions always need execution for side effects
-                let serverVerbs: Set<String> = ["start", "stop", "restart", "keepalive", "schedule"]
+                let serverVerbs: Set<String> = ["start", "stop", "restart", "keepalive", "schedule", "sleep", "delay", "pause"]
                 // Check if there's a dynamic handler registered for this verb (plugin-provided action)
                 let hasDynamicHandler = await actionRegistry.dynamicHandler(for: verb) != nil
                 let needsExecution = testVerbs.contains(verb.lowercased()) ||

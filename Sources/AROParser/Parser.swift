@@ -351,11 +351,16 @@ public final class Parser {
             // Parse expression (ARO-0002)
             expression = try parseExpression()
 
-            // Time-unit suffix for duration literals: "with 2 seconds." / "with 5 minutes." / "with 1 hour."
+            // Time-unit suffix for duration literals: "with 2 seconds." / "for 30 seconds." / "with 1 hour."
             // When a time-unit identifier follows a numeric literal, consume it and set objectNoun.base
             // to the unit string so actions can apply the correct multiplier.
-            let timeUnits: Set<String> = ["second", "seconds", "minute", "minutes", "hour", "hours"]
-            if prep == .with, case .identifier(let unit) = peek().kind, timeUnits.contains(unit) {
+            let timeUnits: Set<String> = [
+                "second", "seconds", "s",
+                "minute", "minutes", "min",
+                "hour", "hours", "h",
+                "millisecond", "milliseconds", "ms"
+            ]
+            if (prep == .with || prep == .for), case .identifier(let unit) = peek().kind, timeUnits.contains(unit) {
                 advance()  // consume the time-unit identifier
                 objectNoun = QualifiedNoun(base: unit, specifiers: [], span: previous().span)
             } else {

@@ -111,6 +111,9 @@ public actor ActionRegistry {
         // Schedule action for periodic event emission
         addAction(ScheduleAction.self)
 
+        // Sleep action for non-blocking delays (ARO-0054)
+        addAction(SleepAction.self)
+
         // State transition action
         addAction(AcceptAction.self)
 
