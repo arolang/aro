@@ -110,10 +110,8 @@ struct CheckCommand: ParsableCommand {
                 let location = formatLocation(error.location)
                 print("  \(location) error: \(error.message)")
 
-                if verbose, !error.hints.isEmpty {
-                    for hint in error.hints {
-                        print("    hint: \(hint)")
-                    }
+                for hint in error.hints {
+                    print("    hint: \(hint)")
                 }
             }
 
@@ -122,13 +120,17 @@ struct CheckCommand: ParsableCommand {
                     let location = formatLocation(warning.location)
                     print("  \(location) warning: \(warning.message)")
 
-                    if verbose, !warning.hints.isEmpty {
-                        for hint in warning.hints {
-                            print("    hint: \(hint)")
-                        }
+                    for hint in warning.hints {
+                        print("    hint: \(hint)")
                     }
                 }
             }
+
+            // Per-file summary
+            var parts: [String] = []
+            if !errors.isEmpty { parts.append("\(errors.count) error(s)") }
+            if !warningDiags.isEmpty && warnings { parts.append("\(warningDiags.count) warning(s)") }
+            print("  Found \(parts.joined(separator: ", ")) in \(file.lastPathComponent)")
         } else if verbose {
             print("\(file.lastPathComponent): OK")
         }

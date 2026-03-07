@@ -152,7 +152,14 @@ public final class Parser {
                 statements.append(statement)
             } catch let error as ParserError {
                 diagnostics.report(error)
-                synchronizeToNextStatement()
+                let errorStart = peek().span
+                let skipped = synchronizeToNextStatementCollecting()
+                let errorSpan = skipped.isEmpty ? errorStart : errorStart.merged(with: skipped.last!.span)
+                statements.append(ErrorStatement(
+                    message: error.message,
+                    skippedTokens: skipped,
+                    span: errorSpan
+                ))
             }
         }
 
@@ -1420,30 +1427,41 @@ public final class Parser {
     
     /// Synchronizes to the next statement after an error
     private func synchronizeToNextStatement() {
+        _ = synchronizeToNextStatementCollecting()
+    }
+
+    /// Synchronizes to the next statement after an error, returning the skipped tokens.
+    /// Used to populate `ErrorStatement.skippedTokens` for partial AST construction.
+    @discardableResult
+    private func synchronizeToNextStatementCollecting() -> [Token] {
+        var skipped: [Token] = []
+
         // Always advance at least once to make progress and avoid infinite loops
         // when we're already positioned after a statement-ending dot
         if !isAtEnd {
-            advance()
+            skipped.append(advance())
         }
 
         while !isAtEnd {
             // If we just passed a dot, we're at the start of a new statement
             if previous().kind == .dot {
-                return
+                return skipped
             }
 
             // If we see a closing brace, stop
             if check(.rightBrace) {
-                return
+                return skipped
             }
 
             // If we see an opening angle bracket, we might be at a new statement
             if check(.leftAngle) {
-                return
+                return skipped
             }
 
-            advance()
+            skipped.append(advance())
         }
+
+        return skipped
     }
 }
 
