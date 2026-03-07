@@ -1,5 +1,6 @@
 name: plugin-swift-hello
 version: 1.0.0
+handle: Greeting
 description: A simple Swift plugin that provides greeting functionality
 author: ARO Team
 license: MIT

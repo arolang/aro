@@ -1,5 +1,6 @@
 name: plugin-rust-csv
 version: 1.0.0
+handle: CSV
 description: A Rust plugin for CSV parsing and formatting
 author: ARO Team
 license: MIT

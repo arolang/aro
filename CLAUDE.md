@@ -269,18 +269,24 @@ Compute the <sorted-list: stats.sort> from the <numbers>.
 Log <numbers: collections.reverse> to the <console>.
 ```
 
-**Declaring qualifiers in plugin.yaml:**
+**Declaring the namespace handle in plugin.yaml:**
 ```yaml
 name: plugin-collection
 version: 1.0.0
+handle: Collections        # root-level PascalCase handle (canonical, ARO-0095)
 provides:
   - type: swift-plugin
     path: Sources/
-    handler: collections   # qualifiers accessed as collections.pick-random, etc.
+    handler: collections   # legacy fallback — use root-level handle: instead
 ```
 
+The root-level `handle:` field (PascalCase) is the canonical way to declare the namespace.
+- Qualifiers are accessed as `handle.qualifier` (e.g., `Collections.pick-random`)
+- Actions are invoked as `Handle.Verb` (e.g., `Markdown.ToHTML`)
+- The legacy `handler:` inside `provides:` still works but emits a deprecation warning
+
 Qualifiers are declared in `aro_plugin_info()` JSON with plain names (no namespace prefix).
-The runtime automatically registers them as `handler.qualifier` in `QualifierRegistry`.
+The runtime automatically registers them as `handle.qualifier` in `QualifierRegistry`.
 
 **Key Files:**
 - **QualifierRegistry** (`Qualifiers/QualifierRegistry.swift`): Central registry for plugin qualifiers

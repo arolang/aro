@@ -1,5 +1,6 @@
 name: plugin-c-hash
 version: 1.0.0
+handle: Hash
 description: A C plugin for computing various hash functions
 author: ARO Team
 license: MIT
