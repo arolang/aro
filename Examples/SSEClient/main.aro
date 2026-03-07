@@ -1,0 +1,43 @@
+(* SSE Client Example - Streaming events from an SSE endpoint *)
+(*
+   This example demonstrates subscribing to an SSE stream with custom headers.
+   It listens for server-sent events and processes each message.
+
+   Stream action syntax:
+     Stream the <event-name> from <url>.
+     Stream the <event-name> from <url> with { headers: {...}, retry: N }.
+
+   The action reconnects automatically with exponential backoff if the connection drops.
+*)
+
+(Application-Start: SSE Client Demo) {
+    Log "SSE Client Demo" to the <console>.
+    Log "Subscribing to live flight updates..." to the <console>.
+
+    (* Subscribe to an SSE stream with custom authorization header.
+       Replace the URL and token with your actual endpoint. *)
+    Create the <sse-url> with "https://stream.wikimedia.org/v2/stream/recentchange".
+
+    Stream the <wiki-update> from <sse-url> with {
+        retry: 5.0
+    }.
+
+    Log "Stream active. Waiting for events..." to the <console>.
+
+    Keepalive the <application> for the <events>.
+
+    Return an <OK: status> for the <startup>.
+}
+
+(Application-End: Success) {
+    Log "Disconnected from stream." to the <console>.
+}
+
+(Handle Update: wiki-update Handler) {
+    Extract the <title> from the <event: title>.
+    Extract the <wiki> from the <event: wiki>.
+
+    Log "Update: [${wiki}] ${title}" to the <console>.
+
+    Return an <OK: status> for the <update>.
+}

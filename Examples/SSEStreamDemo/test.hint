@@ -1,0 +1,7 @@
+# Test hints for SSEStreamDemo
+# This example connects to a live SSE stream; output is non-deterministic.
+# We only verify that the application starts and connects successfully.
+# The test times out after 8 seconds (SSE streams are persistent).
+type: keepalive
+allow-error: true
+occurrence-check: true

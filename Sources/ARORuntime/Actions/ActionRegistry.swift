@@ -125,6 +125,9 @@ public actor ActionRegistry {
         addAction(ReduceAction.self)
         addAction(FilterAction.self)
 
+        // SSE stream action (ARO-0053)
+        addAction(StreamAction.self)
+
         // External service actions (ARO-0016)
         addAction(CallAction.self)
 
