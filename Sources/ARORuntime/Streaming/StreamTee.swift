@@ -119,7 +119,7 @@ public actor StreamTee<Element: Sendable> {
         // Wait for more data
         return try await withCheckedThrowingContinuation { continuation in
             Task {
-                await self.registerWaiter(consumerId, continuation: continuation)
+                self.registerWaiter(consumerId, continuation: continuation)
             }
         }
     }

@@ -36,7 +36,7 @@ public actor EventBus {
     /// Lock for thread-safe access to subscription collections.
     /// Marked nonisolated(unsafe) so nonisolated methods can use it directly;
     /// NSLock provides the actual thread safety guarantee.
-    private nonisolated(unsafe) let lock = NSLock()
+    private let lock = NSLock()
 
     /// Subscriptions indexed by event type for O(1) lookup (ARO-0064)
     /// Marked nonisolated(unsafe) because access is protected by `lock`.
@@ -361,7 +361,7 @@ public actor EventBus {
 
         return AsyncStream { continuation in
             Task {
-                await self.addContinuation(id, continuation: continuation)
+                self.addContinuation(id, continuation: continuation)
             }
 
             continuation.onTermination = { [weak self] _ in
@@ -379,14 +379,14 @@ public actor EventBus {
     public func stream<E: RuntimeEvent>(for type: E.Type) -> AsyncStream<E> {
         AsyncStream { continuation in
             Task {
-                let id = await self.subscribe(to: type) { event in
+                let id = self.subscribe(to: type) { event in
                     continuation.yield(event)
                 }
 
                 continuation.onTermination = { [weak self] _ in
                     guard let self else { return }
                     Task {
-                        await self.unsubscribe(id)
+                        self.unsubscribe(id)
                     }
                 }
             }

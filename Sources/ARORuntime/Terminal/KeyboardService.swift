@@ -91,7 +91,7 @@ public final class KeyboardService: @unchecked Sendable {
             if n <= 0 || !isRunning { break }
             let key = parseKey(buf, count: n)
             let event = KeyPressEvent(key: key)
-            await eventBus.publish(event)
+            eventBus.publish(event)
         }
 
         restoreTerminal()

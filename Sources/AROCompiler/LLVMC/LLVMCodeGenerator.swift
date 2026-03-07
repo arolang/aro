@@ -1445,7 +1445,7 @@ public final class LLVMCodeGenerator {
 
         // Print block
         ctx.setInsertionPoint(atEndOf: printBlock)
-        var printIP = ctx.insertionPoint
+        let printIP = ctx.insertionPoint
         _ = ctx.module.insertCall(externals.contextPrintResponse, on: [mainCtx], at: printIP)
         ctx.module.insertBr(to: cleanupBlock, at: printIP)
 

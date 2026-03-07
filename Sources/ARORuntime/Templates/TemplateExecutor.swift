@@ -196,17 +196,6 @@ public final class TemplateExecutor: @unchecked Sendable {
 
             case .forEachClose:
                 throw TemplateError.renderError(path: template.path, message: "Unexpected for-each close")
-
-            default:
-                // Fallback: render single segment via render() (should not be reached for known types)
-                let subTemplate = ParsedTemplate(path: template.path, segments: [template.segments[index]])
-                let subOutput = try await render(template: subTemplate, context: templateContext, templateService: templateService)
-                for char in subOutput {
-                    if char == "\n" { currentRow += 1; currentCol = 0 }
-                    else { currentCol += 1 }
-                }
-                output += subOutput
-                index += 1
             }
         }
 

@@ -234,12 +234,8 @@ public final class AROHTTPServer: HTTPServerService, @unchecked Sendable {
                 if let wsServer = wsServer {
                     // Configure with WebSocket upgrader
                     let upgrader = createWebSocketUpgrader(server: wsServer, path: wsServer.path)
-                    let upgradeConfig: NIOHTTPServerUpgradeConfiguration = (
-                        upgraders: [upgrader],
-                        completionHandler: { _ in }
-                    )
                     return channel.pipeline.configureHTTPServerPipeline(
-                        withServerUpgrade: upgradeConfig
+                        withServerUpgrade: (upgraders: [upgrader], completionHandler: { _ in })
                     ).flatMap {
                         // Add HTTP handler with a name so we can remove it on WebSocket upgrade
                         channel.pipeline.addHandler(

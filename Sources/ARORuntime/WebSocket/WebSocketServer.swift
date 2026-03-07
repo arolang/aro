@@ -241,7 +241,7 @@ public final class AROWebSocketServer: WebSocketServerService, @unchecked Sendab
         connectionId: String,
         path: String,
         remoteAddress: String
-    ) -> ChannelHandler {
+    ) -> any ChannelHandler & Sendable {
         WebSocketHandler(
             server: self,
             connectionId: connectionId,
@@ -337,9 +337,8 @@ private final class WebSocketHandler: ChannelInboundHandler, @unchecked Sendable
             var closeData = context.channel.allocator.buffer(capacity: 2)
             closeData.writeInteger(UInt16(1000).bigEndian)
             let close = WebSocketFrame(fin: true, opcode: .connectionClose, data: closeData)
-            context.writeAndFlush(wrapOutboundOut(close)).whenComplete { _ in
-                context.close(promise: nil)
-            }
+            _ = context.writeAndFlush(wrapOutboundOut(close))
+            context.close(promise: nil)
 
         case .continuation:
             // Handle continuation frames (for large messages)
