@@ -287,6 +287,26 @@ public struct ExtractAction: ActionImplementation {
     }
 
     private func extractProperty(from source: any Sendable, key: String) throws -> any Sendable {
+        // Handle AROHTTPResult — body, status, headers keys plus body-fallthrough
+        // for backwards compatibility (existing key access delegated to body).
+        if let httpResult = source as? AROHTTPResult {
+            switch key {
+            case "body":
+                return httpResult.body
+            case "status":
+                return httpResult.status
+            case "headers":
+                var dict: [String: any Sendable] = [:]
+                for (k, v) in httpResult.headers { dict[k] = v }
+                return dict
+            default:
+                // Backwards compat: unknown keys fall through to body so that
+                // existing code like `Extract the <users> from the <response: users>`
+                // continues to work without modification.
+                return try extractProperty(from: httpResult.body, key: key)
+            }
+        }
+
         // Try dictionary access (any Sendable values)
         if let dict = source as? [String: any Sendable], let value = dict[key] {
             return value

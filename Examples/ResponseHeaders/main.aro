@@ -1,0 +1,33 @@
+(* Demonstrates accessing HTTP response headers, status code, and body.
+   ARO-0130: Request now returns a structured { body, status, headers } result. *)
+
+(Application-Start: Response Headers Demo) {
+    Log "Demonstrating HTTP response headers..." to the <console>.
+
+    Create the <url> with "https://api.open-meteo.com/v1/forecast?latitude=52.52&longitude=13.41&current_weather=true".
+    Request the <response> from the <url>.
+
+    (* Access the HTTP status code *)
+    Extract the <status> from the <response: status>.
+    Log "Status:" to the <console>.
+    Log <status> to the <console>.
+
+    (* Access all response headers as a dictionary *)
+    Extract the <headers> from the <response: headers>.
+    Log "Headers received:" to the <console>.
+    Log <headers> to the <console>.
+
+    (* Explicit body extraction, then chain for nested field access *)
+    Extract the <body> from the <response: body>.
+    Extract the <current-weather> from the <body: current_weather>.
+    Extract the <temp> from the <current-weather: temperature>.
+    Log "Temperature:" to the <console>.
+    Log <temp> to the <console>.
+
+    (* Backwards compatibility: body keys still accessible directly on response *)
+    Extract the <latitude> from the <response: latitude>.
+    Log "Latitude:" to the <console>.
+    Log <latitude> to the <console>.
+
+    Return an <OK: status> for the <startup>.
+}

@@ -2,7 +2,8 @@
 (Application-Start: Weather Client) {
     Log "Fetching weather..." to the <console>.
     Create the <api-url> with "https://api.open-meteo.com/v1/forecast?latitude=52.52&longitude=13.41&current_weather=true".
-    Request the <weather> from the <api-url>.
+    Request the <response> from the <api-url>.
+    Extract the <weather> from the <response: body>.
     Log <weather> to the <console>.
     Return an <OK: status> for the <startup>.
 }
