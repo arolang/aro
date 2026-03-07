@@ -71,7 +71,8 @@ public actor ActionRegistry {
         addAction(SplitAction.self)
         addAction(MergeAction.self)
         addAction(DeleteAction.self)
-        addAction(ParseHtmlAction.self)  // Uses SwiftSoup (pure Swift, all platforms)
+        addAction(ParseHtmlAction.self)       // Uses SwiftSoup (pure Swift, all platforms)
+        addAction(ParseLinkHeaderAction.self) // RFC 8288 Link header parsing
 
         // RESPONSE actions (Internal → External)
         addAction(ReturnAction.self)
