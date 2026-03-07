@@ -2662,7 +2662,9 @@ sub run_test {
         $result->{build_duration} = 0;
     } elsif ($mode eq 'compiled' || $mode eq 'both') {
         # Build the example first (use workdir if specified)
-        my $build_result = build_example($example_name, $timeout, $hints->{workdir});
+        # Use global timeout for build (not hints timeout) - hints timeout may be very short
+        # for keep-alive examples (e.g. 3s) which would cause builds to time out on slow CI machines
+        my $build_result = build_example($example_name, $options{timeout}, $hints->{workdir});
         $result->{build_duration} = $build_result->{duration};
 
         if (!$build_result->{success}) {
