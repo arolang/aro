@@ -253,8 +253,13 @@ public final class Lexer: @unchecked Sendable {
             }
 
         case "\"":
-            // Double quotes: regular string with full escape processing
-            try scanString(quote: char, start: startLocation)
+            // Check for triple-quoted multiline string: """
+            if peek() == "\"" && peekNext() == "\"" {
+                try scanTripleQuotedString(start: startLocation)
+            } else {
+                // Double quotes: regular string with full escape processing
+                try scanString(quote: char, start: startLocation)
+            }
 
         case "'":
             // Single quotes: raw string (no escape processing except \')
@@ -368,6 +373,122 @@ public final class Lexer: @unchecked Sendable {
         _ = advance()  // Closing quote
 
         addToken(.stringLiteral(value), start: start)
+    }
+
+    /// Scans a triple-quoted multiline string literal (ARO-0097).
+    ///
+    /// Syntax:
+    /// ```
+    /// """
+    ///     content line 1
+    ///     content line 2
+    ///     """
+    /// ```
+    ///
+    /// Rules:
+    /// - Opening `"""` must be followed by optional whitespace then a newline.
+    /// - Closing `"""` must be on its own line, preceded only by whitespace.
+    /// - The indentation of the closing `"""` is stripped from all content lines.
+    /// - Standard escape sequences (`\n`, `\t`, `\\`, `\"`, `\u{XXXX}`) are supported.
+    /// - The first newline (after opening `"""`) and last newline (before closing `"""`)
+    ///   are not included in the resulting string value.
+    private func scanTripleQuotedString(start: SourceLocation) throws {
+        // Consume the second and third opening quotes (first was consumed in scanToken)
+        _ = advance() // second "
+        _ = advance() // third "
+
+        // Skip optional whitespace on the opening line (but not past newline)
+        while !isAtEnd && peek() != "\n" && peek().isWhitespace {
+            _ = advance()
+        }
+        // Enforce: opening """ must be followed immediately by a newline
+        guard !isAtEnd && peek() == "\n" else {
+            throw LexerError.unterminatedString(at: start)
+        }
+        _ = advance() // consume the opening newline
+
+        // Collect raw lines until the closing """
+        var rawLines: [String] = []
+        var currentLine = ""
+
+        while !isAtEnd {
+            let ch = peek()
+
+            if ch == "\n" {
+                _ = advance()
+                rawLines.append(currentLine)
+                currentLine = ""
+            } else if ch == "\"" {
+                // Possibly the closing """ — save state for backtracking
+                let savedIndex = currentIndex
+                let savedNext = nextIndex
+                let savedLoc = location
+
+                _ = advance() // first "
+                if !isAtEnd && peek() == "\"" {
+                    _ = advance() // second "
+                    if !isAtEnd && peek() == "\"" {
+                        _ = advance() // third " — confirmed closing """
+
+                        // currentLine is the indentation prefix on the closing """ line
+                        let closingIndent = currentLine
+
+                        // Apply dedentation: strip closingIndent from the front of each line
+                        let dedentedLines = rawLines.map { line -> String in
+                            if line.hasPrefix(closingIndent) {
+                                return String(line.dropFirst(closingIndent.count))
+                            }
+                            // Blank / whitespace-only lines are kept as empty
+                            if line.allSatisfy({ $0.isWhitespace }) { return "" }
+                            return line // mismatched indent — leave as-is
+                        }
+
+                        // Drop trailing empty line produced by the newline before closing """
+                        var finalLines = dedentedLines
+                        if finalLines.last == "" {
+                            finalLines.removeLast()
+                        }
+
+                        let value = finalLines.joined(separator: "\n")
+                        addToken(.stringLiteral(value), start: start)
+                        return
+                    }
+                    // Two quotes but not three — put them in the current line
+                    currentLine.append("\"")
+                    currentLine.append("\"")
+                } else {
+                    // Just one quote — restore and add it normally
+                    currentIndex = savedIndex
+                    nextIndex = savedNext
+                    location = savedLoc
+                    currentLine.append(advance())
+                }
+            } else if ch == "\\" {
+                // Escape sequences inside triple-quoted strings
+                _ = advance()
+                guard !isAtEnd else { throw LexerError.unterminatedString(at: start) }
+                let escaped = advance()
+                switch escaped {
+                case "n": currentLine.append("\n")
+                case "r": currentLine.append("\r")
+                case "t": currentLine.append("\t")
+                case "\\": currentLine.append("\\")
+                case "\"": currentLine.append("\"")
+                case "'": currentLine.append("'")
+                case "0": currentLine.append("\0")
+                case "$": currentLine.append("$")
+                case "u":
+                    let unicodeChar = try scanUnicodeEscape(start: start)
+                    currentLine.append(unicodeChar)
+                default:
+                    throw LexerError.invalidEscapeSequence(escaped, at: location)
+                }
+            } else {
+                currentLine.append(advance())
+            }
+        }
+
+        throw LexerError.unterminatedString(at: start)
     }
 
     /// Scans a unicode escape sequence: \u{XXXX}
