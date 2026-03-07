@@ -33,8 +33,13 @@ public final class PluginInstaller: Sendable {
     /// - Parameters:
     ///   - url: Git repository URL
     ///   - ref: Optional reference (branch, tag, commit)
+    ///   - currentAROVersion: Running ARO version to check `aro-version` constraints
     /// - Returns: Installation result
-    public func install(from url: String, ref: String? = nil) throws -> InstallResult {
+    public func install(
+        from url: String,
+        ref: String? = nil,
+        currentAROVersion: String? = nil
+    ) throws -> InstallResult {
         // Parse URL to get plugin name
         let repoName = git.extractRepoName(from: url)
 
@@ -67,6 +72,17 @@ public final class PluginInstaller: Sendable {
         // Parse and validate manifest
         let manifest = try PluginManifest.parse(from: manifestPath)
 
+        // Check ARO version compatibility
+        if let requiredRange = manifest.aroVersion, let currentVersion = currentAROVersion {
+            guard AROVersionChecker.satisfies(version: currentVersion, constraint: requiredRange) else {
+                throw InstallerError.incompatibleAROVersion(
+                    plugin: manifest.name,
+                    required: requiredRange,
+                    current: currentVersion
+                )
+            }
+        }
+
         // Update manifest with source info
         let updatedManifest = PluginManifest(
             name: manifest.name,
@@ -82,6 +98,7 @@ public final class PluginInstaller: Sendable {
             ),
             provides: manifest.provides,
             dependencies: manifest.dependencies,
+            system: manifest.system,
             build: manifest.build
         )
 
@@ -210,6 +227,7 @@ public final class PluginInstaller: Sendable {
             ),
             provides: updatedManifest.provides,
             dependencies: updatedManifest.dependencies,
+            system: updatedManifest.system,
             build: updatedManifest.build
         )
         try finalManifest.write(to: manifestPath)
@@ -472,6 +490,7 @@ public enum InstallerError: Error, CustomStringConvertible {
     case noSourceInfo(String)
     case buildFailed(String)
     case dependencyMissing(String)
+    case incompatibleAROVersion(plugin: String, required: String, current: String)
 
     public var description: String {
         switch self {
@@ -487,6 +506,8 @@ public enum InstallerError: Error, CustomStringConvertible {
             return "Build failed: \(message)"
         case .dependencyMissing(let dep):
             return "Missing dependency: \(dep)"
+        case .incompatibleAROVersion(let plugin, let required, let current):
+            return "Plugin '\(plugin)' requires ARO \(required), but current version is \(current)"
         }
     }
 }
