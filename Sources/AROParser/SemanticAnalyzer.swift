@@ -370,11 +370,12 @@ public final class SemanticAnalyzer {
     private func analyzeStatement(
         _ statement: Statement,
         builder: SymbolTableBuilder,
-        definedSymbols: inout Set<String>
+        definedSymbols: inout Set<String>,
+        inMutableScope: Bool = false
     ) -> (DataFlowInfo, Set<String>) {
-        
+
         if let aro = statement as? AROStatement {
-            return analyzeAROStatement(aro, builder: builder, definedSymbols: &definedSymbols)
+            return analyzeAROStatement(aro, builder: builder, definedSymbols: &definedSymbols, inMutableScope: inMutableScope)
         }
         
         if let publish = statement as? PublishStatement {
@@ -395,13 +396,24 @@ public final class SemanticAnalyzer {
             return analyzeForEachLoop(forEach, builder: builder, definedSymbols: &definedSymbols)
         }
 
+        // ARO-0002 extension: While loop
+        if let whileLoop = statement as? WhileLoop {
+            return analyzeWhileLoop(whileLoop, builder: builder, definedSymbols: &definedSymbols)
+        }
+
+        // ARO-0002 extension: Break statement
+        if statement is BreakStatement {
+            return (DataFlowInfo(), [])
+        }
+
         return (DataFlowInfo(), [])
     }
     
     private func analyzeAROStatement(
         _ statement: AROStatement,
         builder: SymbolTableBuilder,
-        definedSymbols: inout Set<String>
+        definedSymbols: inout Set<String>,
+        inMutableScope: Bool = false
     ) -> (DataFlowInfo, Set<String>) {
 
         var inputs: Set<String> = []
@@ -475,7 +487,7 @@ public final class SemanticAnalyzer {
 
             // Check for duplicate binding (immutability enforcement)
             // Exempt Accept and Update actions which need to rebind for state transitions
-            if definedSymbols.contains(resultName) && !isInternalVariable(resultName) && !isRebindingAllowed(statement.action.verb) {
+            if definedSymbols.contains(resultName) && !isInternalVariable(resultName) && !isRebindingAllowed(statement.action.verb) && !inMutableScope {
                 diagnostics.error(
                     "Cannot rebind variable '\(resultName)' - variables are immutable",
                     at: statement.result.span.start,
@@ -520,7 +532,7 @@ public final class SemanticAnalyzer {
 
             // Check for duplicate binding (immutability enforcement)
             // Exempt Accept and Update actions which need to rebind for state transitions
-            if definedSymbols.contains(resultName) && !isInternalVariable(resultName) && !isRebindingAllowed(statement.action.verb) {
+            if definedSymbols.contains(resultName) && !isInternalVariable(resultName) && !isRebindingAllowed(statement.action.verb) && !inMutableScope {
                 diagnostics.error(
                     "Cannot rebind variable '\(resultName)' - variables are immutable",
                     at: statement.result.span.start,
@@ -587,7 +599,7 @@ public final class SemanticAnalyzer {
             }
 
             // Check for duplicate binding (immutability enforcement)
-            if definedSymbols.contains(resultName) && !isInternalVariable(resultName) && !isRebindingAllowed(statement.action.verb) {
+            if definedSymbols.contains(resultName) && !isInternalVariable(resultName) && !isRebindingAllowed(statement.action.verb) && !inMutableScope {
                 diagnostics.error(
                     "Cannot rebind variable '\(resultName)' - variables are immutable",
                     at: statement.result.span.start,
@@ -861,8 +873,48 @@ public final class SemanticAnalyzer {
         )
     }
 
+    private func analyzeWhileLoop(
+        _ statement: WhileLoop,
+        builder: SymbolTableBuilder,
+        definedSymbols: inout Set<String>
+    ) -> (DataFlowInfo, Set<String>) {
+        var inputs: Set<String> = []
+        var outputs: Set<String> = []
+        var sideEffects: [String] = []
+        var dependencies: Set<String> = []
+
+        // Extract variables from condition
+        let condVars = extractVariables(from: statement.condition)
+        for varName in condVars {
+            if !definedSymbols.contains(varName) && !isKnownExternal(varName) {
+                dependencies.insert(varName)
+            }
+            inputs.insert(varName)
+        }
+
+        // Analyze body statements — while loops share the outer scope (variables persist)
+        // inMutableScope: true suppresses immutability errors for variable rebinding
+        for bodyStatement in statement.body {
+            let (flow, newDeps) = analyzeStatement(
+                bodyStatement,
+                builder: builder,
+                definedSymbols: &definedSymbols,
+                inMutableScope: true
+            )
+            inputs.formUnion(flow.inputs)
+            outputs.formUnion(flow.outputs)
+            sideEffects.append(contentsOf: flow.sideEffects)
+            dependencies.formUnion(newDeps)
+        }
+
+        return (
+            DataFlowInfo(inputs: inputs, outputs: outputs, sideEffects: sideEffects),
+            dependencies
+        )
+    }
+
     // MARK: - Dependency Verification
-    
+
     private func verifyDependencies(_ analyzed: AnalyzedFeatureSet) {
         for dependency in analyzed.dependencies {
             // Check if this dependency is published by another feature set

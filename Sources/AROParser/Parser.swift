@@ -192,6 +192,18 @@ public final class Parser {
             return try parseParallelForEachLoop()
         }
 
+        // Check for while loop (ARO-0002 extension, ARO-0131)
+        if check(.while) {
+            return try parseWhileLoop()
+        }
+
+        // Check for break statement (exits innermost while loop)
+        if check(.break) {
+            let tok = try expect(.break, message: "'break'")
+            try expect(.dot, message: "'.'")
+            return BreakStatement(span: tok.span)
+        }
+
         // Check for Publish/Require special forms (no angle brackets, like other actions)
         if check(.publish) {
             let startToken = advance()
@@ -1092,6 +1104,38 @@ public final class Parser {
             filter: filter,
             isParallel: isParallel,
             concurrency: concurrency,
+            body: body,
+            span: startToken.span.merged(with: endToken.span)
+        )
+    }
+
+    // MARK: - While Loop Parsing (ARO-0002 extension, ARO-0131)
+
+    /// Parses: "while" <condition> "{" statements "}"
+    ///
+    /// ## Syntax
+    /// ```aro
+    /// while <done> == false {
+    ///     Create the <done> with true when <remaining> == 0.
+    ///     break.
+    /// }
+    /// ```
+    private func parseWhileLoop() throws -> WhileLoop {
+        let startToken = try expect(.while, message: "'while'")
+
+        // Parse the boolean condition expression
+        let condition = try parseExpression()
+
+        // Parse body block: { statements }
+        try expect(.leftBrace, message: "'{'")
+        var body: [Statement] = []
+        while !check(.rightBrace) && !isAtEnd {
+            body.append(try parseStatement())
+        }
+        let endToken = try expect(.rightBrace, message: "'}'")
+
+        return WhileLoop(
+            condition: condition,
             body: body,
             span: startToken.span.merged(with: endToken.span)
         )

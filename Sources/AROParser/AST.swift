@@ -744,6 +744,57 @@ public struct ErrorStatement: Statement {
     }
 }
 
+// MARK: - While Loop (ARO-0002 extension, ARO-0131)
+
+/// An unbounded `while <condition> { body }` loop.
+///
+/// Variables bound inside the body are visible on the next iteration and
+/// after the loop exits, because the body executes in the same context
+/// as the enclosing feature set (mutable-scope mode).
+///
+/// ## Syntax
+/// ```aro
+/// while <done> == false {
+///     Request the <response> from <url>.
+///     Create the <done> with true when <status> == "ok".
+/// }
+/// ```
+public struct WhileLoop: Statement {
+    public let condition: any Expression
+    public let body: [Statement]
+    public let span: SourceSpan
+
+    public init(condition: any Expression, body: [Statement], span: SourceSpan) {
+        self.condition = condition
+        self.body = body
+        self.span = span
+    }
+
+    public var description: String {
+        "while (...) { \(body.count) statements }"
+    }
+
+    public func accept<V: ASTVisitor>(_ visitor: V) throws -> V.Result {
+        try visitor.visit(self)
+    }
+}
+
+/// A `break` statement that exits the innermost while loop.
+public struct BreakStatement: Statement {
+    public let span: SourceSpan
+
+    public init(span: SourceSpan) {
+        self.span = span
+    }
+
+    public var description: String { "break" }
+
+    public func accept<V: ASTVisitor>(_ visitor: V) throws -> V.Result {
+        try visitor.visit(self)
+    }
+}
+
+
 // MARK: - Action
 
 /// Represents an action verb with semantic classification
@@ -1275,6 +1326,8 @@ public protocol ASTVisitor {
     func visit(_ node: RequireStatement) throws -> Result
     func visit(_ node: MatchStatement) throws -> Result
     func visit(_ node: ForEachLoop) throws -> Result
+    func visit(_ node: WhileLoop) throws -> Result
+    func visit(_ node: BreakStatement) throws -> Result
     func visit(_ node: PipelineStatement) throws -> Result
     func visit(_ node: ErrorStatement) throws -> Result
 
@@ -1334,6 +1387,14 @@ public extension ASTVisitor where Result == Void {
             try statement.accept(self)
         }
     }
+
+    func visit(_ node: WhileLoop) throws {
+        for statement in node.body {
+            try statement.accept(self)
+        }
+    }
+
+    func visit(_ node: BreakStatement) throws {}
 
     func visit(_ node: PipelineStatement) throws {
         for stage in node.stages {
@@ -1499,6 +1560,22 @@ public struct ASTPrinter: ASTVisitor {
             result += try! statement.accept(printer)
         }
         return result
+    }
+
+    public func visit(_ node: WhileLoop) -> String {
+        var result = "\(indentation())WhileLoop\n"
+        result += "\(indentation())  Condition: \(node.condition)\n"
+        var printer = self
+        printer.indent += 1
+        result += "\(indentation())  Body:\n"
+        for statement in node.body {
+            result += try! statement.accept(printer)
+        }
+        return result
+    }
+
+    public func visit(_ node: BreakStatement) -> String {
+        return "\(indentation())BreakStatement\n"
     }
 
     public func visit(_ node: PipelineStatement) -> String {
