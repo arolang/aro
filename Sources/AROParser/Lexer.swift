@@ -10,9 +10,13 @@ public final class Lexer: @unchecked Sendable {
     
     // MARK: - Properties
 
+    // ARO-0115: UTF-8 byte buffer replaces String.Index arithmetic for O(1) position operations.
+    // All scanning uses integer byte positions into `utf8`; `source` is kept only for the
+    // public initialiser signature and for fallback multi-byte Character decoding.
     private let source: String
-    private var currentIndex: String.Index
-    private var nextIndex: String.Index  // ARO-0057: Cached next index for peekNext() optimization
+    private let utf8: [UInt8]           // Source encoded as UTF-8 bytes
+    private var pos: Int                // Current byte position
+    private var nextPos: Int            // Cached next byte position (O(1) peekNext)
     private var location: SourceLocation
     private var tokens: [Token] = []
     private var lastTokenKind: TokenKind?
@@ -102,13 +106,10 @@ public final class Lexer: @unchecked Sendable {
     
     public init(source: String) {
         self.source = source
-        self.currentIndex = source.startIndex
-        // ARO-0057: Pre-compute next index for peekNext() optimization
-        if source.isEmpty {
-            self.nextIndex = source.endIndex
-        } else {
-            self.nextIndex = source.index(after: source.startIndex)
-        }
+        self.utf8 = Array(source.utf8)
+        self.pos = 0
+        // ARO-0115: Cache the next byte position for O(1) peekNext()
+        self.nextPos = Self.advanceBytePos(0, in: Array(source.utf8))
         self.location = SourceLocation()
     }
     
@@ -420,8 +421,8 @@ public final class Lexer: @unchecked Sendable {
                 currentLine = ""
             } else if ch == "\"" {
                 // Possibly the closing """ — save state for backtracking
-                let savedIndex = currentIndex
-                let savedNext = nextIndex
+                let savedIndex = pos
+                let savedNext = nextPos
                 let savedLoc = location
 
                 _ = advance() // first "
@@ -458,8 +459,8 @@ public final class Lexer: @unchecked Sendable {
                     currentLine.append("\"")
                 } else {
                     // Just one quote — restore and add it normally
-                    currentIndex = savedIndex
-                    nextIndex = savedNext
+                    pos = savedIndex
+                    nextPos = savedNext
                     location = savedLoc
                     currentLine.append(advance())
                 }
@@ -571,7 +572,7 @@ public final class Lexer: @unchecked Sendable {
             let span = SourceSpan(start: loc, end: loc)
 
             if content == "${" {
-                addToken(.interpolationStart, start: loc)
+                addToken(.interpolationStart, lexeme: "${", start: loc)
                 i += 1
                 // Next segment is the expression content
                 if i < segments.count {
@@ -589,7 +590,7 @@ public final class Lexer: @unchecked Sendable {
                 }
                 // Next should be }
                 if i < segments.count && segments[i].0 == "}" {
-                    addToken(.interpolationEnd, start: segments[i].1)
+                    addToken(.interpolationEnd, lexeme: "}", start: segments[i].1)
                     i += 1
                 }
             } else if content != "}" {
@@ -707,8 +708,11 @@ public final class Lexer: @unchecked Sendable {
     }
 
     private func previous() -> Character {
-        let prevIndex = source.index(before: currentIndex)
-        return source[prevIndex]
+        // Walk back past any UTF-8 continuation bytes (0x80–0xBF) to find the start
+        // of the previous character. For ASCII (the common case) pos - 1 is sufficient.
+        var p = pos - 1
+        while p > 0 && (utf8[p] & 0xC0) == 0x80 { p -= 1 }
+        return decodeChar(at: p)
     }
 
     // MARK: - Regex Scanning
@@ -716,8 +720,9 @@ public final class Lexer: @unchecked Sendable {
     /// Attempts to scan a regex literal. Returns pattern and flags if successful, nil otherwise.
     /// This method saves and restores state if the scan fails.
     private func tryScanRegex(start: SourceLocation) -> (pattern: String, flags: String)? {
-        // Save current position for backtracking
-        let savedIndex = currentIndex
+        // Save current position for backtracking (ARO-0115: byte positions)
+        let savedPos = pos
+        let savedNextPos = nextPos
         let savedLocation = location
 
         var pattern = ""
@@ -729,7 +734,8 @@ public final class Lexer: @unchecked Sendable {
 
             // Newline means this isn't a regex literal
             if char == "\n" {
-                currentIndex = savedIndex
+                pos = savedPos
+                nextPos = savedNextPos
                 location = savedLocation
                 return nil
             }
@@ -755,7 +761,8 @@ public final class Lexer: @unchecked Sendable {
 
         // Must have a closing slash and non-empty pattern
         if !foundClosingSlash || pattern.isEmpty {
-            currentIndex = savedIndex
+            pos = savedPos
+            nextPos = savedNextPos
             location = savedLocation
             return nil
         }
@@ -780,7 +787,7 @@ public final class Lexer: @unchecked Sendable {
             _ = advance()
         }
         
-        let lexeme = String(source[source.index(source.startIndex, offsetBy: start.offset)..<currentIndex])
+        let lexeme = String(bytes: utf8[start.byteOffset..<pos], encoding: .utf8) ?? ""
         let lowerLexeme = lexeme.lowercased()
 
         // Unified reserved word lookup (ARO-0055: single lookup instead of 3)
@@ -838,39 +845,67 @@ public final class Lexer: @unchecked Sendable {
         }
     }
     
-    // MARK: - Character Access
-    
+    // MARK: - Character Access (ARO-0115: UTF-8 byte buffer)
+
+    /// Returns the number of UTF-8 bytes in the character starting at byte position `p`.
+    private static func charByteCount(at p: Int, in bytes: [UInt8]) -> Int {
+        guard p < bytes.count else { return 0 }
+        let b = bytes[p]
+        if b < 0x80 { return 1 }      // ASCII
+        if b < 0xE0 { return 2 }      // 2-byte sequence
+        if b < 0xF0 { return 3 }      // 3-byte sequence
+        return 4                        // 4-byte sequence
+    }
+
+    /// Returns the byte position of the character after the one at `p`.
+    private static func advanceBytePos(_ p: Int, in bytes: [UInt8]) -> Int {
+        p + charByteCount(at: p, in: bytes)
+    }
+
+    /// Decodes the Unicode character whose UTF-8 encoding starts at byte position `p`.
+    ///
+    /// Fast path for ASCII (O(1), no allocation). Non-ASCII falls back to String
+    /// initialisation from raw bytes (rare: only string literals and comments).
+    private func decodeChar(at p: Int) -> Character {
+        guard p < utf8.count else { return "\0" }
+        let b0 = utf8[p]
+        if b0 < 0x80 {
+            // ASCII fast path — no allocation
+            return Character(UnicodeScalar(b0))
+        }
+        // Non-ASCII slow path (uncommon in ARO source)
+        let count = Self.charByteCount(at: p, in: utf8)
+        let end = min(p + count, utf8.count)
+        return String(bytes: utf8[p..<end], encoding: .utf8).flatMap { $0.first } ?? "\0"
+    }
+
     private var isAtEnd: Bool {
-        currentIndex >= source.endIndex
+        pos >= utf8.count
     }
-    
+
     private func peek() -> Character {
-        guard !isAtEnd else { return "\0" }
-        return source[currentIndex]
+        decodeChar(at: pos)
     }
-    
-    // ARO-0057: Use cached nextIndex for O(1) lookahead
+
+    /// O(1) lookahead — uses the cached `nextPos` (ARO-0115, supersedes ARO-0057).
     private func peekNext() -> Character {
-        guard nextIndex < source.endIndex else { return "\0" }
-        return source[nextIndex]
+        decodeChar(at: nextPos)
     }
-    
+
     @discardableResult
     private func advance() -> Character {
-        let char = source[currentIndex]
-        // ARO-0057: Use cached nextIndex and update it for next call
-        currentIndex = nextIndex
-        if nextIndex < source.endIndex {
-            nextIndex = source.index(after: nextIndex)
-        }
+        let char = decodeChar(at: pos)
+        pos = nextPos
+        nextPos = Self.advanceBytePos(nextPos, in: utf8)
         location = location.advancing(past: char)
         return char
     }
-    
+
     // MARK: - Token Creation
-    
+
+    /// Extracts the token's lexeme via O(1) byte-range slicing (ARO-0115).
     private func addToken(_ kind: TokenKind, start: SourceLocation) {
-        let lexeme = String(source[source.index(source.startIndex, offsetBy: start.offset)..<currentIndex])
+        let lexeme = String(bytes: utf8[start.byteOffset..<pos], encoding: .utf8) ?? ""
         addToken(kind, lexeme: lexeme, start: start)
     }
     
