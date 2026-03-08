@@ -639,77 +639,6 @@ public actor ExecutionEngine {
         }
     }
 
-    /// Execute a domain event handler feature set (actor method - kept for reference)
-    private func executeDomainEventHandler(
-        _ analyzedFS: AnalyzedFeatureSet,
-        program: AnalyzedProgram,
-        baseContext: RuntimeContext,
-        event: DomainEvent
-    ) async {
-        // For CrawlPage events, deduplicate to prevent parallel processing of the same URL
-        // This is a runtime-level fix for race conditions in parallel event processing
-        var claimedUrl: String? = nil
-        if event.domainEventType == "CrawlPage" {
-            if let data = event.payload["data"] as? [String: any Sendable],
-               let url = data["url"] as? String {
-                // Check if another handler is already processing this URL
-                if processingUrls.contains(url) {
-                    // Skip - another handler is already processing this URL
-                    return
-                }
-                // Claim this URL for processing
-                processingUrls.insert(url)
-                claimedUrl = url
-            }
-        }
-
-        // Ensure we release the claimed URL when done
-        defer {
-            if let url = claimedUrl {
-                processingUrls.remove(url)
-            }
-        }
-
-        // Create child context for this event handler with its business activity
-        let handlerContext = RuntimeContext(
-            featureSetName: analyzedFS.featureSet.name,
-            businessActivity: analyzedFS.featureSet.businessActivity,
-            eventBus: eventBus,
-            parent: baseContext
-        )
-
-        // Bind event payload to context as "event" with nested access
-        // e.g., <Extract> the <user> from the <event: user>
-        handlerContext.bind("event", value: event.payload)
-
-        // Also bind payload keys directly for convenience and when-guard access
-        // e.g., `when <trigger> = "startup"` resolves "trigger" from the payload
-        for (key, value) in event.payload {
-            handlerContext.bind("event:\(key)", value: value)
-            handlerContext.bind(key, value: value)
-        }
-
-        // Copy services from base context
-        await services.registerAll(in: handlerContext)
-
-        // Execute the handler
-        let executor = FeatureSetExecutor(
-            actionRegistry: actionRegistry,
-            eventBus: eventBus,
-            globalSymbols: globalSymbols
-        )
-
-        do {
-            _ = try await executor.execute(analyzedFS, context: handlerContext)
-        } catch {
-            eventBus.publish(ErrorOccurredEvent(
-                error: String(describing: error),
-                context: analyzedFS.featureSet.name,
-                recoverable: true
-            ))
-        }
-    }
-
     /// Register notification event handlers for feature sets with "NotificationSent Handler" business activity
     private func registerNotificationEventHandlers(for program: AnalyzedProgram, baseContext: RuntimeContext) {
         // Find all feature sets with "NotificationSent Handler" business activity
@@ -1051,8 +980,7 @@ public actor ExecutionEngine {
                     // Only handle events that match this watch handler's event type
                     guard event.domainEventType == eventType else { return }
 
-                    // Execute watch handler WITHOUT actor isolation to avoid deadlock
-                    await ExecutionEngine.executeWatchHandlerStatic(
+                    await ExecutionEngine.executeHandler(
                         analyzedFS,
                         baseContext: baseContext,
                         event: event,
@@ -1060,7 +988,17 @@ public actor ExecutionEngine {
                         eventBus: capturedEventBus,
                         globalSymbols: capturedGlobalSymbols,
                         services: capturedServices
-                    )
+                    ) { context, event in
+                        let eventPayload: [String: any Sendable] = [
+                            "timestamp": event.timestamp,
+                            "domainEventType": event.domainEventType,
+                            "payload": event.payload
+                        ]
+                        context.bind("event", value: eventPayload)
+                        for (key, value) in eventPayload {
+                            context.bind("event:\(key)", value: value)
+                        }
+                    }
                 }
 
             } else if pattern.hasSuffix(" Observer") {
@@ -1078,8 +1016,7 @@ public actor ExecutionEngine {
                     // Only handle events that match this watch handler's repository
                     guard event.repositoryName == repositoryName else { return }
 
-                    // Execute watch handler WITHOUT actor isolation to avoid deadlock
-                    await ExecutionEngine.executeWatchHandlerStatic(
+                    await ExecutionEngine.executeHandler(
                         analyzedFS,
                         baseContext: baseContext,
                         event: event,
@@ -1087,76 +1024,22 @@ public actor ExecutionEngine {
                         eventBus: capturedEventBus,
                         globalSymbols: capturedGlobalSymbols,
                         services: capturedServices
-                    )
+                    ) { context, event in
+                        var eventPayload: [String: any Sendable] = [
+                            "timestamp": event.timestamp,
+                            "repositoryName": event.repositoryName,
+                            "changeType": event.changeType.rawValue
+                        ]
+                        if let entityId = event.entityId { eventPayload["entityId"] = entityId }
+                        if let newValue = event.newValue { eventPayload["newValue"] = newValue }
+                        if let oldValue = event.oldValue { eventPayload["oldValue"] = oldValue }
+                        context.bind("event", value: eventPayload)
+                        for (key, value) in eventPayload {
+                            context.bind("event:\(key)", value: value)
+                        }
+                    }
                 }
             }
-        }
-    }
-
-    /// Execute a watch handler in a static context to avoid actor reentrancy (ARO-0052)
-    private static func executeWatchHandlerStatic(
-        _ analyzedFS: AnalyzedFeatureSet,
-        baseContext: RuntimeContext,
-        event: any RuntimeEvent,
-        actionRegistry: ActionRegistry,
-        eventBus: EventBus,
-        globalSymbols: GlobalSymbolStorage,
-        services: ServiceRegistry
-    ) async {
-        // Create child context for this watch handler with its own business activity
-        let watchContext = RuntimeContext(
-            featureSetName: analyzedFS.featureSet.name,
-            businessActivity: analyzedFS.featureSet.businessActivity,
-            eventBus: eventBus,
-            parent: baseContext
-        )
-
-        // Build event payload for the watch handler
-        var eventPayload: [String: any Sendable] = [
-            "timestamp": event.timestamp
-        ]
-
-        // Add event-specific fields
-        if let domainEvent = event as? DomainEvent {
-            eventPayload["domainEventType"] = domainEvent.domainEventType
-            eventPayload["payload"] = domainEvent.payload
-        } else if let repoEvent = event as? RepositoryChangedEvent {
-            eventPayload["repositoryName"] = repoEvent.repositoryName
-            eventPayload["changeType"] = repoEvent.changeType.rawValue
-            if let entityId = repoEvent.entityId {
-                eventPayload["entityId"] = entityId
-            }
-            if let newValue = repoEvent.newValue {
-                eventPayload["newValue"] = newValue
-            }
-            if let oldValue = repoEvent.oldValue {
-                eventPayload["oldValue"] = oldValue
-            }
-        }
-
-        // Bind event payload to context as "event" with nested access
-        watchContext.bind("event", value: eventPayload)
-
-        // Also bind event keys directly for convenience
-        for (key, value) in eventPayload {
-            watchContext.bind("event:\(key)", value: value)
-        }
-
-        // Copy services from base context
-        await services.registerAll(in: watchContext)
-
-        // Execute the watch handler
-        let executor = FeatureSetExecutor(
-            actionRegistry: actionRegistry,
-            eventBus: eventBus,
-            globalSymbols: globalSymbols
-        )
-
-        do {
-            _ = try await executor.execute(analyzedFS, context: watchContext)
-        } catch {
-            // Log watch handler execution errors but don't propagate
-            // (Watch handlers run asynchronously and shouldn't break the main flow)
         }
     }
 
@@ -1388,70 +1271,6 @@ public actor ExecutionEngine {
         }
     }
 
-    /// Execute a repository observer feature set
-    private func executeRepositoryObserver(
-        _ analyzedFS: AnalyzedFeatureSet,
-        program: AnalyzedProgram,
-        baseContext: RuntimeContext,
-        event: RepositoryChangedEvent
-    ) async {
-        // Create child context for this observer with its own business activity
-        let observerContext = RuntimeContext(
-            featureSetName: analyzedFS.featureSet.name,
-            businessActivity: analyzedFS.featureSet.businessActivity,
-            eventBus: eventBus,
-            parent: baseContext
-        )
-
-        // Build event payload for the observer
-        var eventPayload: [String: any Sendable] = [
-            "repositoryName": event.repositoryName,
-            "changeType": event.changeType.rawValue,
-            "timestamp": event.timestamp
-        ]
-
-        if let entityId = event.entityId {
-            eventPayload["entityId"] = entityId
-        }
-
-        if let newValue = event.newValue {
-            eventPayload["newValue"] = newValue
-        }
-
-        if let oldValue = event.oldValue {
-            eventPayload["oldValue"] = oldValue
-        }
-
-        // Bind event payload to context as "event" with nested access
-        // e.g., <Extract> the <changeType> from the <event: changeType>
-        observerContext.bind("event", value: eventPayload)
-
-        // Also bind event keys directly for convenience
-        for (key, value) in eventPayload {
-            observerContext.bind("event:\(key)", value: value)
-        }
-
-        // Copy services from base context
-        await services.registerAll(in: observerContext)
-
-        // Execute the observer
-        let executor = FeatureSetExecutor(
-            actionRegistry: actionRegistry,
-            eventBus: eventBus,
-            globalSymbols: globalSymbols
-        )
-
-        do {
-            _ = try await executor.execute(analyzedFS, context: observerContext)
-        } catch {
-            eventBus.publish(ErrorOccurredEvent(
-                error: String(describing: error),
-                context: analyzedFS.featureSet.name,
-                recoverable: true
-            ))
-        }
-    }
-
     /// Execute a state observer feature set (static version to avoid actor deadlock)
     private static func executeStateObserverStatic(
         _ analyzedFS: AnalyzedFeatureSet,
@@ -1497,70 +1316,6 @@ public actor ExecutionEngine {
             if let entity = event.entity {
                 context.bind("transition:entity", value: entity)
             }
-        }
-    }
-
-    /// Execute a state observer feature set (actor method - kept for reference)
-    private func executeStateObserver(
-        _ analyzedFS: AnalyzedFeatureSet,
-        program: AnalyzedProgram,
-        baseContext: RuntimeContext,
-        event: StateTransitionEvent
-    ) async {
-        // Create child context for this observer with its own business activity
-        let handlerContext = RuntimeContext(
-            featureSetName: analyzedFS.featureSet.name,
-            businessActivity: analyzedFS.featureSet.businessActivity,
-            eventBus: eventBus,
-            parent: baseContext
-        )
-
-        // Bind transition data to context as "transition" with nested access
-        // e.g., <Extract> the <fromState> from the <transition: fromState>
-        var transitionData: [String: any Sendable] = [
-            "fieldName": event.fieldName,
-            "objectName": event.objectName,
-            "fromState": event.fromState,
-            "toState": event.toState
-        ]
-        if let entityId = event.entityId {
-            transitionData["entityId"] = entityId
-        }
-        if let entity = event.entity {
-            transitionData["entity"] = entity
-        }
-        handlerContext.bind("transition", value: transitionData)
-
-        // Also bind transition keys directly for convenience
-        handlerContext.bind("transition:fieldName", value: event.fieldName)
-        handlerContext.bind("transition:objectName", value: event.objectName)
-        handlerContext.bind("transition:fromState", value: event.fromState)
-        handlerContext.bind("transition:toState", value: event.toState)
-        if let entityId = event.entityId {
-            handlerContext.bind("transition:entityId", value: entityId)
-        }
-        if let entity = event.entity {
-            handlerContext.bind("transition:entity", value: entity)
-        }
-
-        // Copy services from base context
-        await services.registerAll(in: handlerContext)
-
-        // Execute the observer
-        let executor = FeatureSetExecutor(
-            actionRegistry: actionRegistry,
-            eventBus: eventBus,
-            globalSymbols: globalSymbols
-        )
-
-        do {
-            _ = try await executor.execute(analyzedFS, context: handlerContext)
-        } catch {
-            eventBus.publish(ErrorOccurredEvent(
-                error: String(describing: error),
-                context: analyzedFS.featureSet.name,
-                recoverable: true
-            ))
         }
     }
 
