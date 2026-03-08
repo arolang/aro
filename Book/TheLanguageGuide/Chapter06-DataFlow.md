@@ -138,7 +138,9 @@ The aggregation pattern collects data from multiple sources and combines it into
 The enrichment pattern starts with a primary piece of data and augments it with related information from other sources. You might retrieve an order, then retrieve the customer associated with that order, then retrieve the items in that order, and finally assemble a detailed response that includes all of this related information. The key characteristic is that each subsequent retrieval depends on information from previous retrievals.
 These patterns can combine in complex feature sets. A realistic API handler might aggregate data from multiple sources, enrich some of that data with additional lookups, fan out to multiple export operations, and finally return a response. Understanding the underlying patterns helps you navigate this complexity.
 ---
+
 ## 6.6 Cross-Feature Set Communication
+
 Because each feature set has its own isolated symbol table, data does not automatically flow between feature sets. If one feature set creates a value and another feature set needs that value, you must explicitly communicate it through one of several mechanisms.
 The Publish action makes a binding available to other feature sets within the same business activity. When you publish a value under an alias, that alias becomes accessible from any feature set with the same business activity that executes afterward. This scoping to business activity enforces modularity—feature sets in different business domains cannot accidentally depend on each other's published variables. Use publishing for configuration data, constants, or values that need to be shared within a domain, but prefer events for communication when the pattern fits.
 Events provide a structured way to pass data between feature sets while maintaining loose coupling. When you emit an event with a payload, all handlers for that event type receive access to the payload. The emitting feature set does not need to know which handlers exist or what they will do with the data. The handlers extract what they need from the event payload and proceed independently. This decoupling allows you to add new behaviors by adding handlers without modifying the emitting code.
@@ -148,14 +150,18 @@ Repositories are scoped to business activities by default. A `user-repository` a
 Repositories store data as ordered lists. Each Store operation appends to the repository. A Retrieve operation returns all stored items unless you specify a filter with a where clause. This list-based storage differs from key-value stores—you can have multiple items that match the same criteria, and you retrieve them all unless you filter.
 The context object provides data that is available to handlers based on how they were triggered. HTTP handlers receive request data. Event handlers receive event payloads. This is not really communication between feature sets but rather communication from the triggering mechanism to the handler. The context is read-only; handlers cannot modify it to communicate back.
 ---
+
 ## 6.7 Qualified Access
+
 When you reference a variable, you can use qualifiers to access nested properties within that variable's value. The qualifier path is written after the variable name, separated by colons. This allows you to navigate into structured data without creating intermediate bindings.
 Accessing a property uses a single qualifier: referencing something like `user: name` accesses the name property of the user object. Accessing a deeply nested property chains qualifiers: referencing something like `order: customer.address.city` navigates three levels deep to get the city from the customer's address on the order.
 Array indexing works similarly. You can access a specific element by index: referencing `items: 0` gets the most recently added element of the items array. Index 1 gets the second most recent, and so on. This reverse indexing matches common use cases where applications typically want to access recent data. You can combine array access with property access: referencing `items: 0: name` gets the name property of the most recent item.
 Qualifiers work on the result of Extract actions, Create actions, and any other action that produces structured data. They also work on context objects like pathParameters, queryParameters, headers, and event payloads. This allows you to extract specific pieces of complex structures without binding the entire structure to an intermediate name.
 The qualifier syntax reads naturally when the values have descriptive names. If you have a user with an address that has a city, then `user: address.city` reads almost like natural language describing what you want. This is another aspect of ARO's design philosophy of making code read like descriptions of intent rather than instructions to a computer.
 ---
+
 ## 6.8 Best Practices
+
 Several practices help maintain clarity in data flow.
 Keep the flow linear when possible. The most readable feature sets are those where data flows straight through from input to output with clear transformations along the way. When you find yourself with complex dependencies or multiple sources feeding into multiple outputs, consider whether the feature set is doing too much and might benefit from being split or from using events to separate concerns.
 Name variables to reflect their state in the transformation pipeline. If you extract raw input, validate it, and then use it to create an entity, names like `raw-input`, `validated-data`, and `user` help readers understand what each value represents at that point in the flow. Names like `data1`, `data2`, and `data3` obscure this progression.

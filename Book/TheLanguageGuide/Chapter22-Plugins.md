@@ -706,18 +706,18 @@ When installing a plugin, ARO automatically resolves and installs dependencies i
 
 **Example README:**
 
-```markdown
+````markdown
 # my-plugin
 
 Install:
-\`\`\`bash
+```bash
 aro add git@github.com:yourname/my-plugin.git
-\`\`\`
+```
 
 ## Actions
 
 - `<MyAction>` — Does something useful
-```
+````
 
 ---
 

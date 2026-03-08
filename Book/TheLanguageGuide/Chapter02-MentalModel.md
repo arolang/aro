@@ -81,13 +81,17 @@ The third role is called **RESPONSE**, which describes actions that send data ou
 The fourth role is called **EXPORT**, which describes actions that make data available beyond the current execution without terminating it. Unlike response actions, export actions allow execution to continue. They persist data to repositories, emit events for other handlers to process, or publish values for access within the same business activity. Verbs like Store, Emit, Publish, and Log carry the export role.
 <div style="clear: both;"></div>
 Understanding these roles helps you reason about your programs. A typical feature set begins with request actions that gather the needed data, follows with own actions that process and transform that data, includes export actions that persist results or notify other parts of the system, and concludes with a response action that sends the final result to the caller. This pattern emerges naturally from the semantic roles.
+
 ## 2.5 Why Uniformity Matters
+
 The uniform structure of ARO statements might seem restrictive at first. Why force every operation into the same grammatical pattern? The answer lies in what uniformity enables.
 When every statement follows the same structure, reading code becomes effortless. You never wonder what syntax you are looking at or what special rules apply. Every line is an action, a result, a preposition, and an object. Your eyes learn to parse this pattern automatically, and soon you can scan ARO code as quickly as you scan prose.
 Uniformity also benefits writing. You never face the question of how to express something. The grammar constrains you to the action-result-object pattern, and within that pattern, you simply choose the verb that matches your intent and the names that describe your data. There are no style debates about whether to use a function or a method, whether to inline an expression or extract it, or whether to use early returns or guard clauses. The grammar makes these decisions for you.
 For tools, uniformity is transformative. Parsers, analyzers, code generators, and formatters all work identically across every statement because there are no special cases. An AI assistant can generate or verify ARO code with high confidence because the constrained grammar limits the space of possible outputs. Refactoring tools can manipulate code safely because the structure is completely predictable.
 Perhaps most importantly, uniformity benefits teams. When five developers write ARO code, the result looks like it was written by one person. There are no personal styles, no preferred idioms, no clever tricks that only the author understands. The code is what it is, expressed in the only way the grammar permits.
+
 ## 2.6 The Declarative Shift
+
 Traditional programming is imperative. You tell the computer how to do something by listing the steps it should follow. Fetch the request body. Parse the JSON. Check if the email field exists. Validate the format. Query the database. Handle the not-found case. Construct the response. Send it back. Each step is a command, and you must get every command right in the right order.
 ARO is declarative. You tell the computer what you want to happen, and the runtime figures out how to make it happen. This shift has profound implications for how you think about programming.
 Consider a typical operation: getting a user by their identifier. In an imperative style, you would write code that explicitly handles each step and each potential failure. In ARO, you write:
@@ -101,25 +105,33 @@ Consider a typical operation: getting a user by their identifier. In an imperati
 This code does not explain how to extract the identifier from the path. It does not specify what happens if the identifier is missing. It does not detail how to query the repository or what to do if the user is not found. It simply states what should happen when everything works correctly.
 The runtime handles everything else. If the extraction fails because the path parameter is missing, the runtime produces an appropriate error message. If the retrieval fails because no user has that identifier, the runtime produces a not-found response. You do not write error handling code because there is nothing to handle. You express the successful case, and the runtime handles the unsuccessful cases.
 This is the "happy path" philosophy. Your code contains only the path through the logic when everything succeeds. The runtime, which is tested and trusted, handles the paths where things fail. This dramatically reduces the amount of code you write and eliminates entire categories of bugs that arise from incorrect error handling.
+
 ## 2.7 Data as Transformation
+
 The ARO mental model encourages you to think about data as a series of transformations rather than as mutable state that you manipulate over time.
 Each statement in a feature set transforms the available data. The first statement might extract a value from the request, making that value available to subsequent statements. The second statement might use that value to retrieve something from a repository, making the retrieved data available. The third statement might combine several values into a new object. The fourth might persist that object.
 At each step, you are not modifying existing data. You are producing new data from existing data. The symbol table grows as execution proceeds, accumulating the results of each transformation. Nothing is overwritten or mutated. If you need a different value, you create a new binding with a new name.
 This immutability has practical benefits. You can always trace where a value came from by following the chain of transformations backward. You never face the confusion of a variable changing unexpectedly because some distant code modified it. Debugging becomes straightforward because the state at any point is simply the accumulation of all previous results.
 Think of a feature set as a pipeline. Data enters at one end, flows through a series of transformations, and exits at the other end. Each transformation is a pure function of its inputs, producing outputs without side effects on the local state. Export actions have external side effects—they persist data or emit events—but they do not change the local symbol table in unexpected ways.
+
 ## 2.8 Variables and Binding
+
 When an action produces a result, that result is bound to a name. The binding is permanent within the scope of the feature set. You cannot rebind a name to a different value.
 This design prevents a common source of bugs: the accidental reuse of a variable name for a different purpose. In many languages, you might write code like this pseudocode: "set x to 1, then later set x to 2, then later use x expecting it to be 1." The bug is subtle and easy to overlook. ARO makes this impossible. If you try to bind a name that is already bound, the compiler rejects your code.
 The practical implication is that you must choose descriptive names for your results. You cannot use generic names like "temp" or "result" for everything because you cannot reuse them. This constraint pushes you toward self-documenting code. Instead of "result," you write "validated-user-data." Instead of "temp," you write "calculated-total."
 Subsequent statements reference bound names using angle brackets. When you write a statement that includes something like `with <user-data>`, you are referencing the value that was bound to the name "user-data" by a previous statement. If no previous statement bound that name, the runtime reports an error.
+
 ## 2.9 Comparing Approaches
+
 To understand the ARO mental model fully, it helps to contrast it with other programming paradigms.
 Imperative programming focuses on how to accomplish something. You write step-by-step instructions: do this, then do that, check this condition, loop over this collection. The computer follows your instructions exactly. The power is that you have complete control. The cost is that you must handle every detail.
 Functional programming focuses on what relationships exist between inputs and outputs. You compose functions that transform data, building complex behaviors from simple, pure functions. The power is that pure functions are easy to test and reason about. The cost is that real-world programs have side effects that pure functions cannot express directly.
 Object-oriented programming focuses on what entities exist and how they interact. You model your domain as objects with state and behavior, passing messages between them. The power is that objects map naturally to real-world concepts. The cost is that complex object graphs become difficult to understand and modify.
 ARO takes a different approach. It focuses on what should happen in business terms. You express operations as sentences that describe business activities. The power is that the code directly reflects the business process, readable by anyone who understands the domain. The cost is that some technical operations do not fit naturally into sentence form and must be pushed into custom actions.
 Each approach has its place. ARO excels at expressing business logic—the rules and processes that define what a system does. It is less suited to algorithmic work, systems programming, or exploratory data analysis. Knowing when to use ARO and when to use other approaches is part of becoming proficient with the language.
+
 ## 2.10 From Understanding to Practice
+
 The mental model described in this chapter is the foundation for everything that follows. Every chapter in this guide builds on the concepts introduced here: actions and their semantic roles, results and their bindings, objects and their prepositions, the uniform structure of statements, and the declarative approach to expressing logic.
 As you continue reading, keep these principles in mind. When you encounter a new feature or pattern, ask yourself how it fits into the mental model. How does this feature express data transformation? What semantic role does this action carry? How does this pattern leverage the uniform structure of statements?
 The goal is not to memorize rules but to internalize a way of thinking. Once the mental model becomes natural, writing ARO code becomes as straightforward as describing a business process in conversation. The language disappears, and only the intent remains.
