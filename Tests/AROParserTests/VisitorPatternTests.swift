@@ -133,6 +133,10 @@ struct NodeCounterVisitor: ASTVisitor {
     func visit(_ node: InterpolatedStringExpression) throws -> Int {
         1
     }
+
+    func visit(_ node: ErrorStatement) throws -> Int {
+        1
+    }
 }
 
 /// Collects all variable base names
@@ -262,6 +266,10 @@ struct VariableCollectorVisitor: ASTVisitor {
     }
 
     func visit(_ node: InterpolatedStringExpression) throws -> Set<String> {
+        []
+    }
+
+    func visit(_ node: ErrorStatement) throws -> Set<String> {
         []
     }
 }

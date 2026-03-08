@@ -100,6 +100,29 @@ public enum ParserError: CompilerError {
             return "Feature set must contain at least one statement"
         }
     }
+
+    /// Context-specific recovery hint for this error, shown after the message
+    public var hint: String? {
+        switch self {
+        case .unexpectedToken(let expected, _):
+            if expected == "'.'" {
+                return "Statements must end with a period (.)"
+            }
+            if expected.contains("object") || expected.contains("'<'") {
+                return "Object identifiers must be wrapped in angle brackets: <identifier>"
+            }
+            if expected.contains("identifier") {
+                return "Expected an identifier (letters, digits, or hyphens)"
+            }
+            return nil
+        case .unexpectedEndOfFile:
+            return "The file ended unexpectedly — check for unclosed braces or missing statements"
+        case .emptyFeatureSet:
+            return "Add at least one statement inside the feature set body"
+        default:
+            return nil
+        }
+    }
 }
 
 // MARK: - Semantic Errors
@@ -239,6 +262,10 @@ public final class DiagnosticCollector: @unchecked Sendable {
     }
     
     public func report(_ error: any CompilerError) {
-        add(.from(error))
+        if let parserError = error as? ParserError, let hint = parserError.hint {
+            add(Diagnostic(severity: .error, message: error.message, location: error.location, hints: [hint]))
+        } else {
+            add(.from(error))
+        }
     }
 }

@@ -716,6 +716,34 @@ public struct ForEachLoop: Statement {
     }
 }
 
+// MARK: - Error Statement
+
+/// Represents a parse error inline in the AST (partial AST construction).
+/// Inserted by the parser when statement-level error recovery skips invalid tokens,
+/// allowing downstream consumers to see where errors occurred without discarding
+/// the surrounding valid AST nodes.
+public struct ErrorStatement: Statement {
+    /// The error message that caused this node to be created
+    public let message: String
+    /// The tokens that were skipped during synchronization
+    public let skippedTokens: [Token]
+    public let span: SourceSpan
+
+    public init(message: String, skippedTokens: [Token], span: SourceSpan) {
+        self.message = message
+        self.skippedTokens = skippedTokens
+        self.span = span
+    }
+
+    public var description: String {
+        "[parse error: \(message)]"
+    }
+
+    public func accept<V: ASTVisitor>(_ visitor: V) throws -> V.Result {
+        try visitor.visit(self)
+    }
+}
+
 // MARK: - Action
 
 /// Represents an action verb with semantic classification
@@ -1248,6 +1276,7 @@ public protocol ASTVisitor {
     func visit(_ node: MatchStatement) throws -> Result
     func visit(_ node: ForEachLoop) throws -> Result
     func visit(_ node: PipelineStatement) throws -> Result
+    func visit(_ node: ErrorStatement) throws -> Result
 
     // Expression visitors (ARO-0002)
     func visit(_ node: LiteralExpression) throws -> Result
@@ -1286,6 +1315,7 @@ public extension ASTVisitor where Result == Void {
     func visit(_ node: AROStatement) throws {}
     func visit(_ node: PublishStatement) throws {}
     func visit(_ node: RequireStatement) throws {}
+    func visit(_ node: ErrorStatement) throws {}
     func visit(_ node: MatchStatement) throws {
         for caseClause in node.cases {
             for statement in caseClause.body {
@@ -1485,6 +1515,10 @@ public struct ASTPrinter: ASTVisitor {
         }
 
         return result
+    }
+
+    public func visit(_ node: ErrorStatement) -> String {
+        "\(indentation())ErrorStatement: \(node.message)\n"
     }
 
     // Expression visitors
