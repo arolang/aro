@@ -421,8 +421,8 @@ public final class Lexer: @unchecked Sendable {
                 currentLine = ""
             } else if ch == "\"" {
                 // Possibly the closing """ — save state for backtracking
-                let savedIndex = currentIndex
-                let savedNext = nextIndex
+                let savedIndex = pos
+                let savedNext = nextPos
                 let savedLoc = location
 
                 _ = advance() // first "
@@ -459,8 +459,8 @@ public final class Lexer: @unchecked Sendable {
                     currentLine.append("\"")
                 } else {
                     // Just one quote — restore and add it normally
-                    currentIndex = savedIndex
-                    nextIndex = savedNext
+                    pos = savedIndex
+                    nextPos = savedNext
                     location = savedLoc
                     currentLine.append(advance())
                 }
