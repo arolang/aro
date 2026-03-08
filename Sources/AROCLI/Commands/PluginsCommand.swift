@@ -7,6 +7,7 @@ import ArgumentParser
 import Foundation
 import AROPackageManager
 import ARORuntime
+import AROVersion
 
 /// Command group for plugin management
 struct PluginsCommand: ParsableCommand {
@@ -25,6 +26,7 @@ struct PluginsCommand: ParsableCommand {
             """,
         subcommands: [
             ListPlugins.self,
+            CheckPlugins.self,
             UpdatePlugins.self,
             ExportPlugins.self,
             RestorePlugins.self,
@@ -321,6 +323,98 @@ struct RestorePlugins: ParsableCommand {
 
         print("")
         print("✅ \(results.count) \(results.count == 1 ? "plugin" : "plugins") restored")
+    }
+}
+
+// MARK: - Check Plugins
+
+/// Check plugin compatibility with the current ARO version and verify the lock file
+struct CheckPlugins: ParsableCommand {
+    static let configuration = CommandConfiguration(
+        commandName: "check",
+        abstract: "Check plugin compatibility and lock file integrity"
+    )
+
+    @Option(name: .shortAndLong, help: "Application directory (default: current directory)")
+    var directory: String?
+
+    @Flag(name: .long, help: "Show detailed information for each plugin")
+    var verbose: Bool = false
+
+    func run() throws {
+        let appDir = directory.map { URL(fileURLWithPath: $0) }
+            ?? URL(fileURLWithPath: FileManager.default.currentDirectoryPath)
+
+        let pm = PackageManager(applicationDirectory: appDir)
+        let currentVersion = AROVersion.version
+
+        print("🔍 Checking plugins against ARO \(currentVersion)...")
+        print("")
+
+        var hasIssues = false
+
+        // 1. ARO version compatibility
+        let incompatible = try pm.checkAROVersionCompatibility(currentAROVersion: currentVersion)
+        if incompatible.isEmpty {
+            print("✅ All plugins are compatible with ARO \(currentVersion)")
+        } else {
+            hasIssues = true
+            print("❌ Incompatible plugins:")
+            for (name, constraint) in incompatible.sorted(by: { $0.key < $1.key }) {
+                print("   • \(name) requires ARO \(constraint)")
+            }
+        }
+
+        // 2. Missing plugin dependencies
+        let missingDeps = try pm.checkDependencies()
+        if !missingDeps.isEmpty {
+            hasIssues = true
+            print("")
+            print("📦 Missing dependencies:")
+            for (plugin, deps) in missingDeps.sorted(by: { $0.key < $1.key }) {
+                print("   • \(plugin) requires: \(deps.joined(separator: ", "))")
+            }
+        }
+
+        // 3. Lock file verification
+        let mismatches = try pm.verifyLockFile()
+        if !mismatches.isEmpty {
+            hasIssues = true
+            print("")
+            print("🔒 Lock file mismatches (run 'aro plugins update' to fix):")
+            for name in mismatches {
+                print("   • \(name)")
+            }
+        } else if pm.lockFile.exists {
+            print("🔒 Lock file verified — all commits match")
+        }
+
+        // 4. Verbose: show each plugin's declared constraint
+        if verbose {
+            let plugins = try pm.list()
+            if !plugins.isEmpty {
+                print("")
+                print("Plugin details:")
+                for plugin in plugins {
+                    let constraint = plugin.manifest.aroVersion ?? "(any)"
+                    let lock = pm.lockFile.load().entry(for: plugin.manifest.name)
+                    let commit = lock?.commit.map { String($0.prefix(7)) } ?? "not locked"
+                    print("   \(plugin.manifest.name) v\(plugin.manifest.version)")
+                    print("     aro-version: \(constraint)")
+                    print("     commit:      \(commit)")
+                    if let system = plugin.manifest.system, !system.isEmpty {
+                        print("     system:      \(system.joined(separator: ", "))")
+                    }
+                }
+            }
+        }
+
+        print("")
+        if hasIssues {
+            throw ExitCode.failure
+        } else {
+            print("✅ All checks passed")
+        }
     }
 }
 
