@@ -607,21 +607,12 @@ public final class NativePluginHost: @unchecked Sendable {
                 verbs = [name]
             }
 
-            // Register with ActionRegistry under all verbs
+            // Register with ActionRegistry under all verbs (always plain; namespace only applies to qualifiers)
             for verb in verbs {
-                // When a handler namespace is set, register only as "handler.verb".
-                // Without a handler, register only the plain verb.
-                let registeredVerb: String
-                if let ns = qualifierNamespace {
-                    registeredVerb = "\(ns).\(verb)"
-                } else {
-                    registeredVerb = verb
-                }
-
                 let wrapper = NativePluginActionWrapper(
                     pluginName: pluginName,
                     actionName: name,
-                    verb: registeredVerb,
+                    verb: verb,
                     pluginVerb: verb,
                     host: self,
                     descriptor: descriptor
@@ -630,7 +621,7 @@ public final class NativePluginHost: @unchecked Sendable {
                 registrationCount += 1
                 Task {
                     await ActionRegistry.shared.registerDynamic(
-                        verb: registeredVerb,
+                        verb: verb,
                         handler: wrapper.handle
                     )
                     semaphore.signal()

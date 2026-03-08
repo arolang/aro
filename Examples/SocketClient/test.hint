@@ -2,4 +2,5 @@
 # Demonstrates the Connect action for TCP client connections
 type: socket-client
 mode: interpreter
+occurrence-check: true
 skip-on-windows: Socket client tests not supported on Windows CI
