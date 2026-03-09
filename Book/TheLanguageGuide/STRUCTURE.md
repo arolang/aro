@@ -59,6 +59,7 @@ Chapter numbers in this file match the file names in `Book/TheLanguageGuide/`.
 ## Part VI: Production
 
 23. **Native Compilation** — `aro build` and the C runtime
+23B. **Code Signing** — Distributing binaries on macOS with Gatekeeper, Developer ID, and notarization
 24. **Multi-file Applications** — Project structure
 25. **Patterns & Practices** — Real-world architectures
 26. **State Machines** — Lifecycle management with the Accept action
