@@ -66,21 +66,15 @@ public struct SplitAction: ActionImplementation {
             guard let matchRange = Range(match.range, in: string) else { continue }
             let matchStart = matchRange.lowerBound
 
-            // Add the part before this match
-            if lastEnd < matchStart {
-                parts.append(String(string[lastEnd..<matchStart]))
-            }
+            // Always include the segment before this match (including empty strings
+            // between adjacent delimiters — standard split behavior)
+            parts.append(String(string[lastEnd..<matchStart]))
 
             lastEnd = matchRange.upperBound
         }
 
-        // Add the final part after the last match
-        if lastEnd < string.endIndex {
-            parts.append(String(string[lastEnd...]))
-        } else if lastEnd == string.endIndex && !matches.isEmpty {
-            // Handle trailing delimiter - add empty string
-            parts.append("")
-        }
+        // Always add the final segment after the last match (empty string if trailing delimiter)
+        parts.append(String(string[lastEnd...]))
 
         return parts
     }
