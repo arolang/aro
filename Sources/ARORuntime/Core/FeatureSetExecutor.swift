@@ -104,6 +104,26 @@ public final class FeatureSetExecutor: @unchecked Sendable {
             }
         }
 
+        // Bind terminal capabilities dict so ARO code can use <terminal: columns> etc.
+        if let terminalService = context.service(TerminalService.self) {
+            let caps = await terminalService.detectCapabilities()
+            let terminalDict: [String: any Sendable] = [
+                "rows": caps.rows, "columns": caps.columns,
+                "width": caps.columns, "height": caps.rows,
+                "supports_color": caps.supportsColor,
+                "supports_true_color": caps.supportsTrueColor,
+                "is_tty": caps.isTTY, "encoding": caps.encoding
+            ]
+            context.bind("terminal", value: terminalDict, allowRebind: true)
+        } else {
+            let terminalDict: [String: any Sendable] = [
+                "rows": 24, "columns": 80, "width": 80, "height": 24,
+                "supports_color": false, "supports_true_color": false,
+                "is_tty": false, "encoding": "UTF-8"
+            ]
+            context.bind("terminal", value: terminalDict, allowRebind: true)
+        }
+
         // Execute statements
         do {
             if enableParallelIO {
