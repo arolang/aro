@@ -121,4 +121,4 @@ Include native binary builds in continuous integration. Automated builds ensure 
 Use release optimizations for production deployments. The strip, optimize, and size options (or the combined release option) produce the smallest and fastest binaries.
 Deploy the OpenAPI specification and other required files alongside the binary. The binary alone is not sufficient for applications that serve HTTP requests.
 ---
-*Next: Chapter 23 — Multi-file Applications*
+*Next: Chapter 23B — Code Signing*
