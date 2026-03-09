@@ -53,10 +53,16 @@ final class AROCRuntimeHandle: @unchecked Sendable {
         EventLoopGroupManager.shared.registerGroup(group)
         return group
     }()
+
+    /// Keyboard service shared across all contexts — must outlive individual handler contexts
+    let keyboardService: KeyboardService
     #endif
 
     init() {
         self.runtime = Runtime()
+        #if !os(Windows)
+        self.keyboardService = KeyboardService(eventBus: .shared)
+        #endif
         // Event loop creation deferred to lazy var - no eager init needed
     }
 
@@ -148,6 +154,10 @@ class AROCContextHandle {
         } else {
             self.terminalService = nil
         }
+
+        // Register keyboard service — shared instance lives on the runtime handle
+        // so it survives individual handler context release cycles
+        self.context.register(runtime.keyboardService)
 
         // Set up schema registry for typed event extraction (ARO-0046)
         // Load openapi.yaml from the binary's directory if present
