@@ -563,7 +563,7 @@ Store the <order> into the <order-repository>.
 
 **Valid Prepositions:** `into`
 
-See Chapter 30 (Repositories) for observer patterns.
+See Chapter 36 (Repositories) for observer patterns.
 
 ---
 
@@ -746,7 +746,7 @@ In the second handler, `<age>` is resolved from the notified object's fields bef
 
 **Valid Prepositions:** `to`, `for`, `with`
 
-> **See Also:** Section 5.4 (Handler Guards), Chapter 13.4 (Handler Guards) for a full explanation of the `when` guard on handler declarations.
+> **See Also:** Section 5.4 (Handler Guards), Chapter 15.4 (Handler Guards) for a full explanation of the `when` guard on handler declarations.
 
 ---
 

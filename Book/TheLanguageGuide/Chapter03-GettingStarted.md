@@ -40,7 +40,56 @@ The runtime automatically discovers all files with the `.aro` extension in the a
 
 The automatic discovery has an important implication: all feature sets are globally visible within an application. A feature set in one file can emit an event that triggers a feature set in another file without any explicit connection between them. This loose coupling is intentional. It allows you to organize code however makes sense for your project without worrying about dependency graphs between files.
 
-There is one constraint on this freedom: exactly one `Application-Start` must exist across all files. The runtime enforces this during startup and reports an error if the constraint is violated. Similarly, you can have at most one `Application-End: Success` for handling graceful shutdown and at most one `Application-End: Error` for handling crash scenarios. See Chapter 10 for complete lifecycle details.
+<div style="text-align: center; margin: 2em 0;">
+<svg width="560" height="200" viewBox="0 0 560 200" xmlns="http://www.w3.org/2000/svg" font-family="sans-serif">
+  <!-- MyApp/ directory box -->
+  <rect x="20" y="20" width="160" height="160" rx="4" fill="#f3f4f6" stroke="#9ca3af" stroke-width="2"/>
+  <text x="100" y="42" text-anchor="middle" font-size="11" font-weight="bold" fill="#374151">MyApp/</text>
+  <!-- openapi.yaml -->
+  <rect x="36" y="52" width="128" height="22" rx="4" fill="#fef3c7" stroke="#f59e0b" stroke-width="2"/>
+  <text x="100" y="67" text-anchor="middle" font-size="9" fill="#92400e">openapi.yaml</text>
+  <!-- main.aro -->
+  <rect x="36" y="82" width="128" height="22" rx="4" fill="#e0e7ff" stroke="#6366f1" stroke-width="2"/>
+  <text x="100" y="97" text-anchor="middle" font-size="9" fill="#4338ca">main.aro</text>
+  <!-- users.aro -->
+  <rect x="36" y="112" width="128" height="22" rx="4" fill="#e0e7ff" stroke="#6366f1" stroke-width="2"/>
+  <text x="100" y="127" text-anchor="middle" font-size="9" fill="#4338ca">users.aro</text>
+  <!-- orders.aro -->
+  <rect x="36" y="142" width="128" height="22" rx="4" fill="#e0e7ff" stroke="#6366f1" stroke-width="2"/>
+  <text x="100" y="157" text-anchor="middle" font-size="9" fill="#4338ca">orders.aro</text>
+  <!-- Plugins/ -->
+  <rect x="36" y="172" width="128" height="0" rx="4" fill="#d1fae5" stroke="#22c55e" stroke-width="0"/>
+  <!-- Plugins/ label inside directory -->
+  <!-- (place Plugins as a sub-entry) -->
+
+  <!-- Arrow: aro run -->
+  <line x1="200" y1="100" x2="320" y2="100" stroke="#9ca3af" stroke-width="2"/>
+  <polygon points="320,95 330,100 320,105" fill="#9ca3af"/>
+  <text x="265" y="92" text-anchor="middle" font-size="10" fill="#374151">aro run</text>
+
+  <!-- Running App box -->
+  <rect x="332" y="72" width="140" height="56" rx="4" fill="#d1fae5" stroke="#22c55e" stroke-width="2"/>
+  <text x="402" y="96" text-anchor="middle" font-size="11" font-weight="bold" fill="#166534">Running App</text>
+  <text x="402" y="112" text-anchor="middle" font-size="9" fill="#166534">HTTP · Events · Sockets</text>
+
+  <!-- Plugins sub-box -->
+  <rect x="36" y="172" width="128" height="0" rx="4"/>
+  <!-- Plugins/ entry below directory -->
+  <rect x="200" y="140" width="110" height="22" rx="4" fill="#d1fae5" stroke="#22c55e" stroke-width="2" stroke-dasharray="4,2"/>
+  <text x="255" y="155" text-anchor="middle" font-size="9" fill="#166534">Plugins/</text>
+  <line x1="180" y1="165" x2="200" y2="151" stroke="#9ca3af" stroke-width="1" stroke-dasharray="4,2"/>
+
+  <!-- Legend -->
+  <rect x="20" y="188" width="10" height="8" rx="1" fill="#fef3c7" stroke="#f59e0b" stroke-width="1"/>
+  <text x="34" y="196" font-size="8" fill="#374151">contract</text>
+  <rect x="80" y="188" width="10" height="8" rx="1" fill="#e0e7ff" stroke="#6366f1" stroke-width="1"/>
+  <text x="94" y="196" font-size="8" fill="#374151">feature sets</text>
+  <rect x="160" y="188" width="10" height="8" rx="1" fill="#d1fae5" stroke="#22c55e" stroke-width="1"/>
+  <text x="174" y="196" font-size="8" fill="#374151">plugins / output</text>
+</svg>
+</div>
+
+There is one constraint on this freedom: exactly one `Application-Start` must exist across all files. The runtime enforces this during startup and reports an error if the constraint is violated. Similarly, you can have at most one `Application-End: Success` for handling graceful shutdown and at most one `Application-End: Error` for handling crash scenarios. See Chapter 12 for complete lifecycle details.
 
 For applications that expose HTTP APIs, you will typically include an `openapi.yaml` file in the application directory. This file defines the API contract using the OpenAPI specification. When present, the runtime uses it to configure HTTP routing, matching incoming requests to feature sets based on operation identifiers defined in the contract. Without this file, no HTTP server starts. This is deliberate: ARO follows a contract-first approach where the API specification drives the implementation rather than the other way around.
 

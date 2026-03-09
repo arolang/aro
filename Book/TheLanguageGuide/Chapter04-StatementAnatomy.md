@@ -170,4 +170,4 @@ Send the <notification> to the <user> when <user: notifications> is true.
 ```
 Each of these statements follows the same fundamental pattern while using optional elements to add precision and expressiveness. The pattern is the constant; the optional elements are the variables. Once you internalize the pattern, you can read and write any ARO statement fluently.
 ---
-*Next: Chapter 5 — Feature Sets*
+*Next: Chapter 5 — String Literals*
