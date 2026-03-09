@@ -192,6 +192,51 @@ public struct FileWatchStoppedEvent: RuntimeEvent {
 import FileMonitor
 import FileMonitorShared
 
+/// Format raw bytes as a hex dump: `offset  hex pairs  |ascii|`
+/// Limited to the first 4 KB to keep the preview fast for large binaries.
+private func hexDump(_ data: Data) -> String {
+    let previewLimit = 4096
+    let preview = data.prefix(previewLimit)
+    let truncated = data.count > previewLimit
+
+    var lines: [String] = [
+        "Binary file  (\(data.count) bytes)\n"
+    ]
+    let bytesPerRow = 16
+    var offset = 0
+    while offset < preview.count {
+        let rowEnd = min(offset + bytesPerRow, preview.count)
+
+        // Offset column
+        let offsetStr = String(format: "%08x", offset)
+
+        // Hex columns (two groups of 8, space-separated)
+        var hexParts: [String] = []
+        for i in 0..<bytesPerRow {
+            if offset + i < preview.count {
+                hexParts.append(String(format: "%02x", preview[preview.startIndex + offset + i]))
+            } else {
+                hexParts.append("  ")
+            }
+            if i == 7 { hexParts.append("") }  // extra gap between groups
+        }
+        let hexStr = hexParts.joined(separator: " ")
+
+        // ASCII column (printable chars or dot)
+        let rowBytes = Array(preview[preview.startIndex + offset ..< preview.startIndex + rowEnd])
+        let asciiStr = rowBytes.map { byte -> String in
+            return (byte >= 0x20 && byte < 0x7f) ? String(UnicodeScalar(byte)) : "."
+        }.joined()
+
+        lines.append("\(offsetStr)  \(hexStr)  |\(asciiStr)|")
+        offset += bytesPerRow
+    }
+    if truncated {
+        lines.append(String(format: "... (%d bytes not shown)", data.count - previewLimit))
+    }
+    return lines.joined(separator: "\n")
+}
+
 /// File System Service implementation with file monitoring
 ///
 /// Provides file I/O operations and file monitoring capabilities
@@ -229,7 +274,13 @@ public final class AROFileSystemService: FileSystemService, FileMonitorService, 
         do {
             return try String(contentsOf: url, encoding: .utf8)
         } catch {
-            throw FileSystemError.readError(path, error.localizedDescription)
+            // Binary file: read as raw bytes and format as hex dump
+            do {
+                let data = try Data(contentsOf: url)
+                return hexDump(data)
+            } catch {
+                throw FileSystemError.readError(path, error.localizedDescription)
+            }
         }
     }
 
@@ -813,7 +864,13 @@ public final class AROFileSystemService: FileSystemService, @unchecked Sendable 
         do {
             return try String(contentsOf: url, encoding: .utf8)
         } catch {
-            throw FileSystemError.readError(path, error.localizedDescription)
+            // Binary file: read as raw bytes and format as hex dump
+            do {
+                let data = try Data(contentsOf: url)
+                return hexDump(data)
+            } catch {
+                throw FileSystemError.readError(path, error.localizedDescription)
+            }
         }
     }
 
