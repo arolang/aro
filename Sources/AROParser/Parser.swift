@@ -453,6 +453,13 @@ public final class Parser {
             }
         }
 
+        // Parse optional default clause (ARO-0072): `default <expr>`
+        var defaultValue: (any Expression)?
+        if case .identifier(let kw) = peek().kind, kw == "default" {
+            advance() // consume 'default'
+            defaultValue = try parseExpression()
+        }
+
         // Parse optional when clause (ARO-0004): `when <condition>`
         var whenCondition: (any Expression)?
         if check(.when) {
@@ -483,7 +490,8 @@ public final class Parser {
         let queryMods = QueryModifiers(
             whereClause: whereClause,
             aggregation: aggregation,
-            byClause: byClause
+            byClause: byClause,
+            defaultValue: defaultValue
         )
 
         let rangeMods = RangeModifiers(
