@@ -467,14 +467,19 @@ public struct QueryModifiers: Sendable, CustomStringConvertible {
     /// Split pattern: `by /delimiter/`
     public let byClause: ByClause?
 
+    /// Default value when retrieve returns no results: `default ""`
+    public let defaultValue: (any Expression)?
+
     public init(
         whereClause: WhereClause? = nil,
         aggregation: AggregationClause? = nil,
-        byClause: ByClause? = nil
+        byClause: ByClause? = nil,
+        defaultValue: (any Expression)? = nil
     ) {
         self.whereClause = whereClause
         self.aggregation = aggregation
         self.byClause = byClause
+        self.defaultValue = defaultValue
     }
 
     /// Empty query modifiers
@@ -482,7 +487,7 @@ public struct QueryModifiers: Sendable, CustomStringConvertible {
 
     /// Check if any query modifier is present
     public var isEmpty: Bool {
-        whereClause == nil && aggregation == nil && byClause == nil
+        whereClause == nil && aggregation == nil && byClause == nil && defaultValue == nil
     }
 
     public var description: String {
@@ -490,6 +495,7 @@ public struct QueryModifiers: Sendable, CustomStringConvertible {
         if let w = whereClause { parts.append("where \(w)") }
         if let a = aggregation { parts.append("with \(a)") }
         if let b = byClause { parts.append("\(b)") }
+        if defaultValue != nil { parts.append("default ...") }
         return parts.isEmpty ? "none" : parts.joined(separator: " ")
     }
 }

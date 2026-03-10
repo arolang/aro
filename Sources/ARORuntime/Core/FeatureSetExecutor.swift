@@ -248,6 +248,7 @@ public final class FeatureSetExecutor: @unchecked Sendable {
         context.unbind("_where_value_")
         context.unbind("_by_pattern_")
         context.unbind("_by_flags_")
+        context.unbind("_default_value_")
         context.unbind("_to_")
         context.unbind("_with_")
 
@@ -388,6 +389,12 @@ public final class FeatureSetExecutor: @unchecked Sendable {
         if let byClause = statement.queryModifiers.byClause {
             context.bind("_by_pattern_", value: byClause.pattern)
             context.bind("_by_flags_", value: byClause.flags)
+        }
+
+        // ARO-0072: Bind default value if present (for optional retrieve)
+        if let defaultExpr = statement.queryModifiers.defaultValue {
+            let defaultVal = try await expressionEvaluator.evaluate(defaultExpr, context: context)
+            context.bind("_default_value_", value: defaultVal)
         }
 
         // ARO-0041: Bind to clause if present (for date ranges)
