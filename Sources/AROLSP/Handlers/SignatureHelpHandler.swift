@@ -31,12 +31,13 @@ public struct SignatureHelpHandler: Sendable {
             ]
         ),
         "Retrieve": ActionSignature(
-            label: "Retrieve the <result> from the <repository> where <field> = <value>.",
-            documentation: "Retrieves data from a repository or data store.",
+            label: "Retrieve the <result> from the <repository> where <field> = <value> default <fallback>.",
+            documentation: "Retrieves data from a repository or data store. The `default` clause provides a fallback value when no record matches the where clause.",
             parameters: [
                 ParameterInfo(label: "result", documentation: "The retrieved record(s)"),
                 ParameterInfo(label: "repository", documentation: "The data repository to query"),
-                ParameterInfo(label: "where clause", documentation: "Optional filter condition")
+                ParameterInfo(label: "where clause", documentation: "Optional filter condition (e.g., where id = <id>)"),
+                ParameterInfo(label: "default", documentation: "Optional fallback value when no match is found")
             ]
         ),
         "Fetch": ActionSignature(
@@ -174,6 +175,73 @@ public struct SignatureHelpHandler: Sendable {
             parameters: [
                 ParameterInfo(label: "application", documentation: "The application context"),
                 ParameterInfo(label: "events", documentation: "The events to wait for")
+            ]
+        ),
+        "Split": ActionSignature(
+            label: "Split the <result> from the <input> by /<pattern>/.",
+            documentation: "Splits a string into a list using a regex delimiter. The `by` clause accepts a regex literal (e.g., `/,/` or `/\\n/`).",
+            parameters: [
+                ParameterInfo(label: "result", documentation: "The resulting list of substrings"),
+                ParameterInfo(label: "input", documentation: "The string to split"),
+                ParameterInfo(label: "pattern", documentation: "Regex delimiter (e.g., by /,/ or by /\\n/)")
+            ]
+        ),
+        "Join": ActionSignature(
+            label: "Join the <result> from <collection> with \"separator\".",
+            documentation: "Joins all elements of a collection into a single string, separated by the given separator.",
+            parameters: [
+                ParameterInfo(label: "result", documentation: "The joined string"),
+                ParameterInfo(label: "collection", documentation: "The list or collection to join"),
+                ParameterInfo(label: "separator", documentation: "The string to place between elements")
+            ]
+        ),
+        "Schedule": ActionSignature(
+            label: "Schedule the <event> with <seconds>.",
+            documentation: "Schedules a recurring timer event every N seconds.",
+            parameters: [
+                ParameterInfo(label: "event", documentation: "The event to emit on each tick"),
+                ParameterInfo(label: "seconds", documentation: "Interval in seconds")
+            ]
+        ),
+        "Sleep": ActionSignature(
+            label: "Sleep the <result> with <seconds>.",
+            documentation: "Pauses execution for the specified number of seconds.",
+            parameters: [
+                ParameterInfo(label: "result", documentation: "The sleep result"),
+                ParameterInfo(label: "seconds", documentation: "Duration to sleep in seconds")
+            ]
+        ),
+        "WaitForEvents": ActionSignature(
+            label: "WaitForEvents the <application> for the <events>.",
+            documentation: "Suspends the feature set until pending events are processed. Lighter alternative to Keepalive.",
+            parameters: [
+                ParameterInfo(label: "application", documentation: "The application context"),
+                ParameterInfo(label: "events", documentation: "The events to wait for")
+            ]
+        ),
+        "Stream": ActionSignature(
+            label: "Stream the <result> from the <source>.",
+            documentation: "Streams data incrementally from a source, emitting chunks as they arrive.",
+            parameters: [
+                ParameterInfo(label: "result", documentation: "Each streamed chunk"),
+                ParameterInfo(label: "source", documentation: "The data source to stream from")
+            ]
+        ),
+        "Notify": ActionSignature(
+            label: "Notify the <recipient> with \"message\".",
+            documentation: "Sends a notification to a recipient or collection of recipients. Emits a NotificationSent event for each recipient.",
+            parameters: [
+                ParameterInfo(label: "recipient", documentation: "The recipient or collection of recipients"),
+                ParameterInfo(label: "message", documentation: "The notification message")
+            ]
+        ),
+        "Render": ActionSignature(
+            label: "Render the <result: template> with <data>.",
+            documentation: "Renders a Mustache-style template with the provided data context.",
+            parameters: [
+                ParameterInfo(label: "result", documentation: "The rendered output"),
+                ParameterInfo(label: "template", documentation: "The template name to render"),
+                ParameterInfo(label: "data", documentation: "The data context for the template")
             ]
         ),
     ]

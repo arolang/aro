@@ -99,6 +99,18 @@ public struct DocumentSymbolHandler: Sendable {
                     ]
 
                     children.append(forSymbol)
+                } else if let rangeLoop = statement as? RangeLoop {
+                    let rangeLoopRange = PositionConverter.toLSP(rangeLoop.span)
+
+                    let rangeLoopSymbol: [String: Any] = [
+                        "name": "for \(rangeLoop.variable)",
+                        "detail": "from \(rangeLoop.from.description) to \(rangeLoop.to.description)",
+                        "kind": 26,  // Struct
+                        "range": rangeToDict(rangeLoopRange),
+                        "selectionRange": rangeToDict(rangeLoopRange)
+                    ]
+
+                    children.append(rangeLoopSymbol)
                 }
             }
 

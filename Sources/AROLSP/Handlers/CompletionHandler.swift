@@ -86,7 +86,8 @@ public struct CompletionHandler: Sendable {
             ("Delete", "OWN", "Delete or remove data"),
             ("Filter", "OWN", "Filter collection"),
             ("Match", "OWN", "Match pattern"),
-            ("Split", "OWN", "Split string"),
+            ("Split", "OWN", "Split string by delimiter or regex"),
+            ("Join", "OWN", "Join collection elements into a string"),
             ("Map", "OWN", "Transform each element of a collection"),
             ("Reduce", "OWN", "Reduce a collection to a single value"),
             ("Copy", "OWN", "Copy file"),
@@ -95,6 +96,7 @@ public struct CompletionHandler: Sendable {
             ("Execute", "OWN", "Execute a shell command"),
             ("Call", "OWN", "Call an external service or plugin action"),
             ("ParseHtml", "OWN", "Parse HTML into structured data"),
+            ("ParseLinkHeader", "OWN", "Parse Link header for pagination"),
             ("Accept", "OWN", "Accept a state transition"),
             ("Clear", "OWN", "Clear the terminal screen"),
 
@@ -112,10 +114,16 @@ public struct CompletionHandler: Sendable {
             ("Publish", "EXPORT", "Publish symbol globally"),
             ("Notify", "EXPORT", "Notify a recipient with a message"),
 
+            // EXPORT actions
+            ("Stream", "EXPORT", "Stream data incrementally"),
+
             // SERVER actions
             ("Start", "SERVER", "Start a service"),
             ("Stop", "SERVER", "Stop a service"),
             ("Keepalive", "SERVER", "Keep application running"),
+            ("WaitForEvents", "SERVER", "Suspend until events are processed"),
+            ("Schedule", "SERVER", "Schedule a recurring action"),
+            ("Sleep", "SERVER", "Pause execution for a duration"),
             ("Listen", "SERVER", "Listen on a socket port"),
             ("Connect", "SERVER", "Connect to a socket server"),
             ("Close", "SERVER", "Close a connection"),
@@ -367,15 +375,17 @@ public struct CompletionHandler: Sendable {
         let keywords = [
             ("match", "Pattern matching"),
             ("when", "Condition branch"),
-            ("for each", "Iteration"),
+            ("for each", "Iterate over a collection"),
+            ("for", "Range loop (for <var> from N to M)"),
+            ("while", "Conditional loop"),
+            ("break", "Exit current loop"),
             ("if", "Conditional"),
             ("else", "Alternative branch"),
-            ("repeat", "Loop"),
             ("the", "Article"),
             ("from", "Source preposition"),
             ("to", "Target preposition"),
             ("with", "Parameter preposition"),
-            ("for", "Purpose preposition"),
+            ("default", "Default value for optional retrieve"),
         ]
 
         return keywords.map { keyword in
@@ -419,6 +429,41 @@ public struct CompletionHandler: Sendable {
                 "kind": 15,
                 "detail": "HTTP operation handler",
                 "insertText": "(${1:operationId}: ${2:API}) {\n\tExtract the <data> from the <request: body>.\n\t$0\n\tReturn an <OK: status> with <result>.\n}",
+                "insertTextFormat": 2
+            ],
+            [
+                "label": "for each loop",
+                "kind": 15,
+                "detail": "Iterate over a collection",
+                "insertText": "for each <${1:item}> in <${2:collection}> {\n\t$0\n}",
+                "insertTextFormat": 2
+            ],
+            [
+                "label": "for range loop",
+                "kind": 15,
+                "detail": "Iterate over a numeric range",
+                "insertText": "for <${1:i}> from ${2:0} to <${3:count}> {\n\t$0\n}",
+                "insertTextFormat": 2
+            ],
+            [
+                "label": "while loop",
+                "kind": 15,
+                "detail": "Loop while condition holds",
+                "insertText": "while <${1:condition}> {\n\t$0\n}",
+                "insertTextFormat": 2
+            ],
+            [
+                "label": "match statement",
+                "kind": 15,
+                "detail": "Pattern match on a value",
+                "insertText": "match <${1:value}> {\n\tcase ${2:pattern} {\n\t\t$0\n\t}\n}",
+                "insertTextFormat": 2
+            ],
+            [
+                "label": "event handler",
+                "kind": 15,
+                "detail": "Custom event handler",
+                "insertText": "(${1:Name}: ${2:EventName} Handler) {\n\tExtract the <${3:data}> from the <event: ${3:data}>.\n\t$0\n}",
                 "insertTextFormat": 2
             ],
         ]
