@@ -254,6 +254,34 @@ This is useful when you only need one item, like the latest message in a chat:
 
 If the repository is empty, an empty string is returned.
 
+### Optional Retrieval with Default
+
+When a filtered retrieve might return no results, use the `default` clause to supply a fallback value instead of checking for an empty result:
+
+```aro
+(* Without default — need a manual match *)
+Retrieve the <results> from the <cache-repository> where <key> = <cache-key>.
+Compute the <found> from <results: length> > 0.
+match <found> {
+    case true  { Extract the <entry> from the <results: 0>. }
+    case false { Create the <entry> with { key: <cache-key>, value: "" }. }
+}
+
+(* With default — one line *)
+Retrieve the <entry> from the <cache-repository> where <key> = <cache-key>
+    default { key: <cache-key>, value: "" }.
+```
+
+The default can be any expression — a string, number, list, or object literal:
+
+```aro
+Retrieve the <val> from the <config-repository> where <name> = "timeout" default 30.
+Retrieve the <row> from the <preview-repository> where <key> = <preview-idx> default { key: -1, line: "" }.
+Retrieve the <label> from the <labels-repository> where <id> = <label-id> default "—".
+```
+
+The default value is only used when the where-filtered result is **empty**. If the where clause matches at least one record, the default is ignored.
+
 ## Business Activity Scoping
 
 Repositories are scoped to their **business activity**. Feature sets with the same business activity share repositories:

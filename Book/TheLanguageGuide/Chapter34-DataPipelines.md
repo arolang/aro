@@ -604,6 +604,52 @@ This approach keeps each feature set focused and allows the event bus to manage 
 
 ---
 
+## Join
+
+The `Join` action concatenates a collection of values into a single string using a separator. It is the complement of `Split`:
+
+```aro
+Split the <words> from <sentence> by /\s+/.
+
+(* ... transform words ... *)
+
+Join the <result> from <words> with " ".
+```
+
+### Syntax
+
+```aro
+Join the <result> from <collection> with "separator".
+```
+
+The separator can be any string — empty string for no separator, `"\n"` for newlines, `", "` for comma-separated values:
+
+```aro
+(* Comma-separated list *)
+Join the <csv-line> from <fields> with ",".
+
+(* Space-joined words *)
+Join the <sentence> from <words> with " ".
+
+(* Newline-joined lines *)
+Join the <document> from <lines> with "\n".
+
+(* No separator *)
+Join the <compact> from <parts> with "".
+```
+
+### Relationship to Split
+
+`Split` and `Join` are inverses:
+
+```aro
+Split the <parts> from <text> by /,/.
+(* ... modify parts ... *)
+Join the <rejoined> from <parts> with ",".
+```
+
+---
+
 ## Design Philosophy
 
 ARO's data pipelines follow these principles:

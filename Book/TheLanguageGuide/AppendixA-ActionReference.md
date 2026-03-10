@@ -32,6 +32,7 @@ Complete reference for all built-in actions in ARO.
 | **Reduce** | OWN | Aggregate collection | `Reduce the <total> from the <items> with sum(<amount>).` |
 | **Sort** | OWN | Order collection | `Sort the <users> by <name>.` |
 | **Split** | OWN | Split string by regex | `Split the <parts> from the <string> by /,/.` |
+| **Join** | OWN | Join collection to string | `Join the <csv> from <parts> with ",".` |
 | **Merge** | OWN | Combine data | `Merge the <existing-user> with <update-data>.` |
 | **Return** | RESPONSE | Return result | `Return an <OK: status> with <data>.` |
 | **Throw** | RESPONSE | Throw error | `Throw a <NotFound: error> for the <user>.` |
@@ -454,6 +455,42 @@ Split the <sections> from the <text> by /SECTION/i.
 - Supports regex flags: `i` (case-insensitive), `s` (dotall), `m` (multiline)
 
 **Valid Prepositions:** `from` (with `by` clause)
+
+---
+
+### Join
+
+Concatenates a collection of values into a single string using a separator. The complement of `Split`.
+
+**Syntax:**
+```aro
+Join the <result> from <collection> with "separator".
+```
+
+**Examples:**
+```aro
+(* Join with comma *)
+Create the <parts> with ["apple", "banana", "cherry"].
+Join the <csv> from <parts> with ",".
+(* csv = "apple,banana,cherry" *)
+
+(* Join with space *)
+Join the <sentence> from <words> with " ".
+
+(* Join without separator *)
+Join the <compact> from <parts> with "".
+
+(* Round-trip with Split *)
+Split the <tokens> from <text> by /,/.
+Join the <restored> from <tokens> with ",".
+```
+
+**Behavior:**
+- Converts each element to a string before joining
+- Empty separator produces concatenation with no delimiter
+- Single-element collection returns that element as a string
+
+**Valid Prepositions:** `from` (with `with` clause)
 
 ---
 
