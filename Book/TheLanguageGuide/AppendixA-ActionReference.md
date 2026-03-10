@@ -32,6 +32,7 @@ Complete reference for all built-in actions in ARO.
 | **Reduce** | OWN | Aggregate collection | `Reduce the <total> from the <items> with sum(<amount>).` |
 | **Sort** | OWN | Order collection | `Sort the <users> by <name>.` |
 | **Split** | OWN | Split string by regex | `Split the <parts> from the <string> by /,/.` |
+| **Join** | OWN | Join collection to string | `Join the <csv> from <parts> with ",".` |
 | **Merge** | OWN | Combine data | `Merge the <existing-user> with <update-data>.` |
 | **Return** | RESPONSE | Return result | `Return an <OK: status> with <data>.` |
 | **Throw** | RESPONSE | Throw error | `Throw a <NotFound: error> for the <user>.` |
@@ -457,6 +458,42 @@ Split the <sections> from the <text> by /SECTION/i.
 
 ---
 
+### Join
+
+Concatenates a collection of values into a single string using a separator. The complement of `Split`.
+
+**Syntax:**
+```aro
+Join the <result> from <collection> with "separator".
+```
+
+**Examples:**
+```aro
+(* Join with comma *)
+Create the <parts> with ["apple", "banana", "cherry"].
+Join the <csv> from <parts> with ",".
+(* csv = "apple,banana,cherry" *)
+
+(* Join with space *)
+Join the <sentence> from <words> with " ".
+
+(* Join without separator *)
+Join the <compact> from <parts> with "".
+
+(* Round-trip with Split *)
+Split the <tokens> from <text> by /,/.
+Join the <restored> from <tokens> with ",".
+```
+
+**Behavior:**
+- Converts each element to a string before joining
+- Empty separator produces concatenation with no delimiter
+- Single-element collection returns that element as a string
+
+**Valid Prepositions:** `from` (with `with` clause)
+
+---
+
 ### Merge
 
 Combines two data structures together. The source values are merged into the target, with source values overwriting target values for matching keys.
@@ -563,7 +600,7 @@ Store the <order> into the <order-repository>.
 
 **Valid Prepositions:** `into`
 
-See Chapter 30 (Repositories) for observer patterns.
+See Chapter 36 (Repositories) for observer patterns.
 
 ---
 
@@ -746,7 +783,7 @@ In the second handler, `<age>` is resolved from the notified object's fields bef
 
 **Valid Prepositions:** `to`, `for`, `with`
 
-> **See Also:** Section 5.4 (Handler Guards), Chapter 13.4 (Handler Guards) for a full explanation of the `when` guard on handler declarations.
+> **See Also:** Section 5.4 (Handler Guards), Chapter 15.4 (Handler Guards) for a full explanation of the `when` guard on handler declarations.
 
 ---
 

@@ -6,6 +6,7 @@
 import ArgumentParser
 import Foundation
 import AROPackageManager
+import AROVersion
 
 /// Command to add a plugin from a Git repository
 struct AddCommand: ParsableCommand {
@@ -54,7 +55,7 @@ struct AddCommand: ParsableCommand {
         print("   Cloning from \(url)...")
 
         do {
-            let result = try pm.add(url: url, ref: gitRef)
+            let result = try pm.add(url: url, ref: gitRef, currentAROVersion: AROVersion.version)
 
             print("   ✓ Cloned (ref: \(result.ref ?? "HEAD"), commit: \(String(result.commit?.prefix(7) ?? "unknown")))")
             print("")
