@@ -20,6 +20,7 @@ public enum OwnActionsModule: ActionModule {
             MergeAction.self,
             DeleteAction.self,
             ParseHtmlAction.self,
+            ParseLinkHeaderAction.self,
         ]
     }
 }
