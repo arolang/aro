@@ -718,6 +718,31 @@ public struct ForEachLoop: Statement {
 
 // MARK: - Error Statement
 
+/// Range-based for loop: for <var> from <low> to <high> { ... }
+public final class RangeLoop: Statement, @unchecked Sendable {
+    public let variable: String
+    public let from: any Expression
+    public let to: any Expression
+    public let body: [Statement]
+    public let span: SourceSpan
+
+    public init(variable: String, from: any Expression, to: any Expression, body: [Statement], span: SourceSpan) {
+        self.variable = variable
+        self.from = from
+        self.to = to
+        self.body = body
+        self.span = span
+    }
+
+    public var description: String {
+        "for <\(variable)> from ... to ... { \(body.count) statements }"
+    }
+
+    public func accept<V: ASTVisitor>(_ visitor: V) throws -> V.Result {
+        try visitor.visit(self)
+    }
+}
+
 /// Represents a parse error inline in the AST (partial AST construction).
 /// Inserted by the parser when statement-level error recovery skips invalid tokens,
 /// allowing downstream consumers to see where errors occurred without discarding
@@ -1275,6 +1300,7 @@ public protocol ASTVisitor {
     func visit(_ node: RequireStatement) throws -> Result
     func visit(_ node: MatchStatement) throws -> Result
     func visit(_ node: ForEachLoop) throws -> Result
+    func visit(_ node: RangeLoop) throws -> Result
     func visit(_ node: PipelineStatement) throws -> Result
     func visit(_ node: ErrorStatement) throws -> Result
 
@@ -1330,6 +1356,12 @@ public extension ASTVisitor where Result == Void {
     }
 
     func visit(_ node: ForEachLoop) throws {
+        for statement in node.body {
+            try statement.accept(self)
+        }
+    }
+
+    func visit(_ node: RangeLoop) throws {
         for statement in node.body {
             try statement.accept(self)
         }
@@ -1492,6 +1524,20 @@ public struct ASTPrinter: ASTVisitor {
         if let filter = node.filter {
             result += "\(indentation())  Filter: \(filter)\n"
         }
+        var printer = self
+        printer.indent += 1
+        result += "\(indentation())  Body:\n"
+        for statement in node.body {
+            result += try! statement.accept(printer)
+        }
+        return result
+    }
+
+    public func visit(_ node: RangeLoop) -> String {
+        var result = "\(indentation())RangeLoop\n"
+        result += "\(indentation())  Variable: <\(node.variable)>\n"
+        result += "\(indentation())  From: \(node.from.description)\n"
+        result += "\(indentation())  To: \(node.to.description)\n"
         var printer = self
         printer.indent += 1
         result += "\(indentation())  Body:\n"

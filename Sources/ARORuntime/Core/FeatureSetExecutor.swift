@@ -206,6 +206,8 @@ public final class FeatureSetExecutor: @unchecked Sendable {
             try await executeRequireStatement(requireStatement, context: context)
         } else if let forEachLoop = statement as? ForEachLoop {
             try await executeForEachLoop(forEachLoop, context: context)
+        } else if let rangeLoop = statement as? RangeLoop {
+            try await executeRangeLoop(rangeLoop, context: context)
         } else if let pipelineStatement = statement as? PipelineStatement {
             try await executePipelineStatement(pipelineStatement, context: context)
         }
@@ -759,6 +761,33 @@ public final class FeatureSetExecutor: @unchecked Sendable {
         }
 
         throw ActionError.runtimeError("Cannot access property '\(property)' on \(type(of: value))")
+    }
+
+    // MARK: - Range Loop Execution (ARO-0072)
+
+    private func executeRangeLoop(_ loop: RangeLoop, context: ExecutionContext) async throws {
+        let fromVal = try await expressionEvaluator.evaluate(loop.from, context: context)
+        let toVal   = try await expressionEvaluator.evaluate(loop.to,   context: context)
+
+        guard let fromInt = toInt(fromVal), let toInt = toInt(toVal) else {
+            throw ActionError.runtimeError("Range loop bounds must be integers, got \(fromVal) to \(toVal)")
+        }
+
+        for i in fromInt..<toInt {
+            let iterationContext = context.createChild(featureSetName: context.featureSetName)
+            iterationContext.bind(loop.variable, value: i)
+            for stmt in loop.body {
+                try await executeStatement(stmt, context: iterationContext)
+                if iterationContext.getResponse() != nil { return }
+            }
+        }
+    }
+
+    private func toInt(_ value: any Sendable) -> Int? {
+        if let i = value as? Int    { return i }
+        if let d = value as? Double { return Int(d) }
+        if let s = value as? String { return Int(s) }
+        return nil
     }
 
     // MARK: - For-Each Loop Execution (ARO-0005)
