@@ -11,6 +11,9 @@ public enum ServerActionsModule: ActionModule {
             StartAction.self,
             StopAction.self,
             ListenAction.self,
+            WaitForEventsAction.self,
+            ScheduleAction.self,
+            SleepAction.self,
         ]
     }
 }

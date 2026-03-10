@@ -389,6 +389,15 @@ public func aro_action_accept(
     return executeAction(verb: "accept", contextPtr: contextPtr, resultPtr: resultPtr, objectPtr: objectPtr)
 }
 
+@_cdecl("aro_action_sleep")
+public func aro_action_sleep(
+    _ contextPtr: UnsafeMutableRawPointer?,
+    _ resultPtr: UnsafeRawPointer?,
+    _ objectPtr: UnsafeRawPointer?
+) -> UnsafeMutableRawPointer? {
+    return executeAction(verb: "sleep", contextPtr: contextPtr, resultPtr: resultPtr, objectPtr: objectPtr)
+}
+
 // MARK: - RESPONSE Actions
 
 @_cdecl("aro_action_return")
