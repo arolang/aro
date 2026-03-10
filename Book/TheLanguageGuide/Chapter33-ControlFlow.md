@@ -1,6 +1,6 @@
 # Chapter 33: Control Flow
 
-ARO provides control flow constructs for conditional execution. This chapter covers how to make decisions in your feature sets using guarded statements and match expressions.
+ARO provides control flow constructs for conditional execution and iteration. This chapter covers how to make decisions in your feature sets using guarded statements and match expressions, and how to iterate over collections and numeric ranges.
 
 ## When Guards
 
@@ -722,6 +722,69 @@ Check error conditions early with guarded returns:
     }
 }
 ```
+
+## Iteration
+
+ARO supports two forms of loops: collection iteration and numeric range iteration.
+
+### Collection Iteration
+
+The `for each` loop processes every element in a collection:
+
+```aro
+for each <item> in <items> {
+    Log <item> to the <console>.
+}
+```
+
+Each iteration runs in an isolated child context. Variables bound inside the loop body do not leak out, and the loop variable (`<item>`) cannot be rebound within an iteration.
+
+### Indexed Iteration
+
+When you need the position of each element, use `at <idx>`:
+
+```aro
+for each <line> at <idx> in <lines> {
+    Compute the <numbered> from <idx> ++ ": " ++ <line>.
+    Log <numbered> to the <console>.
+}
+```
+
+The `<idx>` variable is zero-based and bound automatically by the runtime for each iteration. This eliminates the need for a manual counter repository pattern.
+
+### Numeric Range Iteration
+
+For loops over a range of integers, use the `from ... to` syntax:
+
+```aro
+for <i> from 0 to 10 {
+    Log <i> to the <console>.
+}
+```
+
+The range is **inclusive at the start, exclusive at the end** (like Swift's `0..<10`). The variable `<i>` receives each integer in sequence.
+
+This is especially useful when you need a numeric index but are not iterating over an existing collection — for example, filling a fixed-height display panel:
+
+```aro
+Compute the <panel-height> from <term-rows> - 3.
+
+for <ridx> from 0 to <panel-height> {
+    Compute the <file-row> from <ridx> < <total-files>.
+    match <file-row> {
+        case true  { (* render file entry at <ridx> *) }
+        case false { (* render empty padding row *) }
+    }
+}
+```
+
+This merges what would otherwise be two separate loops (one for file entries, one for padding) into a single unified loop.
+
+### Reserved Words in Variable Names
+
+The following words are reserved and **cannot** appear in variable names: `on`, `in`, `is`, `with`, `at`, `for`, `from`, `to`. A variable like `<is-active>` or `<from-date>` will fail to parse. Use alternatives like `<active>`, `<start-date>`.
+
+---
 
 ## Best Practices
 
