@@ -93,7 +93,7 @@ if command -v pdflatex &> /dev/null || command -v xelatex &> /dev/null; then
         --metadata-file="$METADATA_FILE" \
         --pdf-engine=xelatex \
         --lua-filter="$BOOK_DIR/strip-html-for-pdf.lua" \
-        -f markdown-yaml_metadata_block \
+        -f markdown-yaml_metadata_block-raw_html \
         --highlight-style=kate \
         --toc \
         --toc-depth=2 \
