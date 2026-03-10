@@ -41,106 +41,33 @@ public actor ActionRegistry {
 
     // MARK: - Registration
 
-    /// Create the initial dictionary of built-in actions
+    /// Create the initial dictionary of built-in actions.
     /// This is a static method so it can be called from the nonisolated init.
+    ///
+    /// Actions are organised into `ActionModule` groups. To add a new built-in
+    /// action, add it to the appropriate module (or create a new one) rather
+    /// than extending this method directly.
     private static func createBuiltInActions() -> [String: any ActionImplementation.Type] {
         var actions: [String: any ActionImplementation.Type] = [:]
 
-        func addAction<A: ActionImplementation>(_ action: A.Type) {
-            for verb in A.verbs {
-                actions[verb.lowercased()] = action
+        func register(_ moduleActions: [any ActionImplementation.Type]) {
+            for actionType in moduleActions {
+                for verb in actionType.verbs {
+                    actions[verb.lowercased()] = actionType
+                }
             }
         }
 
-        // REQUEST actions (External → Internal)
-        addAction(ExtractAction.self)
-        addAction(RetrieveAction.self)
-        addAction(ReceiveAction.self)
-        addAction(RequestAction.self)
-        addAction(ReadAction.self)
-
-        // OWN actions (Internal → Internal)
-        addAction(ComputeAction.self)
-        addAction(ValidateAction.self)
-        addAction(CompareAction.self)
-        addAction(TransformAction.self)
-        addAction(CreateAction.self)
-        addAction(UpdateAction.self)
-        // FilterAction is registered below in data pipeline actions
-        addAction(SortAction.self)
-        addAction(SplitAction.self)
-        addAction(MergeAction.self)
-        addAction(DeleteAction.self)
-        addAction(ParseHtmlAction.self)  // Uses SwiftSoup (pure Swift, all platforms)
-
-        // RESPONSE actions (Internal → External)
-        addAction(ReturnAction.self)
-        addAction(ThrowAction.self)
-        addAction(SendAction.self)
-        addAction(LogAction.self)
-        addAction(StoreAction.self)
-        addAction(WriteAction.self)
-        addAction(NotifyAction.self)
-
-        // EXPORT actions
-        addAction(PublishAction.self)
-        addAction(EmitAction.self)
-
-        // Server actions
-        addAction(StartAction.self)
-        addAction(StopAction.self)
-        addAction(ListenAction.self)
-
-        // Socket actions (ARO-0024)
-        addAction(ConnectAction.self)
-        addAction(BroadcastAction.self)
-        addAction(CloseAction.self)
-
-        // File operations (ARO-0036)
-        addAction(ListAction.self)
-        addAction(StatAction.self)
-        addAction(ExistsAction.self)
-        addAction(MakeAction.self)
-        addAction(CopyAction.self)
-        addAction(MoveAction.self)
-        addAction(AppendAction.self)
-
-        // Wait action for long-running applications
-        addAction(WaitForEventsAction.self)
-
-        // Schedule action for periodic event emission
-        addAction(ScheduleAction.self)
-
-        // State transition action
-        addAction(AcceptAction.self)
-
-        // Test actions (Given/When/Then/Assert)
-        addAction(GivenAction.self)
-        addAction(WhenAction.self)
-        addAction(ThenAction.self)
-        addAction(AssertAction.self)
-
-        // Data pipeline actions (ARO-0018)
-        addAction(MapAction.self)
-        addAction(ReduceAction.self)
-        addAction(FilterAction.self)
-
-        // External service actions (ARO-0016)
-        addAction(CallAction.self)
-
-        // System execute action (ARO-0033)
-        addAction(ExecuteAction.self)
-
-        // Template actions (ARO-0050)
-        addAction(IncludeAction.self)
-
-        // Terminal actions (ARO-0052)
-        addAction(PromptAction.self)
-        addAction(SelectAction.self)
-        addAction(ClearAction.self)
-        addAction(ShowAction.self)
-        addAction(RenderAction.self)
-        addAction(RepaintAction.self)
+        register(RequestActionsModule.actions)
+        register(OwnActionsModule.actions)
+        register(ResponseActionsModule.actions)
+        register(ServerActionsModule.actions)
+        register(SocketActionsModule.actions)
+        register(FileActionsModule.actions)
+        register(DataPipelineActionsModule.actions)
+        register(TestActionsModule.actions)
+        register(TerminalActionsModule.actions)
+        register(SystemActionsModule.actions)
 
         return actions
     }

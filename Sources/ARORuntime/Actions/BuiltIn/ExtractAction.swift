@@ -787,6 +787,12 @@ public struct RetrieveAction: ActionImplementation {
                 return values[0]
             }
 
+            // ARO-0072: If no results and a default value was provided, return the default
+            if values.isEmpty, let defaultVal = context.resolveAny("_default_value_") {
+                context.bind(result.base, value: defaultVal)
+                return defaultVal
+            }
+
             // No specifier - return the list of values (empty list if repository is empty)
             return values
         }

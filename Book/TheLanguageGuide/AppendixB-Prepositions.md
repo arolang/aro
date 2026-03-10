@@ -21,11 +21,15 @@ ARO uses eight prepositions, each with specific semantic meaning:
 | `via` | Through/medium | Intermediate channel |
 | `on` | Location/surface | Attachment point |
 ---
+
 ## from
+
 **Meaning:** Source extraction — data flows from an external source inward.
 **Indicates:** The origin of data being pulled into the current context.
 **Common with:** `Extract`, `Retrieve`, `Request`, `Read`, `Receive`
+
 ### Examples
+
 ```aro
 (* Extract from request context *)
 Extract the <user-id> from the <pathParameters: id>.
@@ -41,16 +45,22 @@ Read the <config> from the <file> with "config.json".
 (* Filter from collection *)
 Filter the <active> from the <users> where <status> is "active".
 ```
+
 ### Semantic Notes
+
 - `from` typically indicates an external or persistent source
 - Used when data crosses a boundary into the current scope
 - The preposition signals that the action is "pulling" data
 ---
+
 ## with
+
 **Meaning:** Accompaniment — data provided alongside or used by the action.
 **Indicates:** Additional data, parameters, or configuration.
 **Common with:** `Create`, `Return`, `Emit`, `Merge`, `Log`
+
 ### Examples
+
 ```aro
 (* Create with data *)
 Create the <user> with <user-data>.
@@ -69,16 +79,22 @@ Log "Application started" to the <console>.
 (* Read with path *)
 Read the <content> from the <file> with "data.json".
 ```
+
 ### Semantic Notes
+
 - `with` provides the data or value to use
 - Often specifies literal values, expressions, or object references
 - Indicates "using this" rather than "from this"
 ---
+
 ## for
+
 **Meaning:** Purpose/target — indicates the beneficiary or purpose.
 **Indicates:** What the action is intended for or aimed at.
 **Common with:** `Return`, `Log`, `Compute`, `Validate`
+
 ### Examples
+
 ```aro
 (* Return for a target *)
 Return an <OK: status> for the <request>.
@@ -92,16 +108,22 @@ Compute the <hash> for the <password>.
 (* Validate for a type *)
 Validate the <input> for the <user-type>.
 ```
+
 ### Semantic Notes
+
 - `for` indicates purpose or beneficiary
 - Often used with logging and return statements
 - Specifies "on behalf of" or "intended for"
 ---
+
 ## to
+
 **Meaning:** Destination — data flows outward to a target.
 **Indicates:** The endpoint or recipient of data.
 **Common with:** `Send`, `Write`, `Connect`
+
 ### Examples
+
 ```aro
 (* Send to destination *)
 Send the <email> to the <user: email>.
@@ -113,16 +135,22 @@ Write the <data> to the <file> with "output.json".
 Connect the <database> to "postgres://localhost/mydb".
 Connect the <socket> to "localhost:9000".
 ```
+
 ### Semantic Notes
+
 - `to` indicates outward data flow
 - Used when sending or directing data to an external destination
 - Opposite direction from `from`
 ---
+
 ## into
+
 **Meaning:** Insertion/transformation — data enters or transforms.
 **Indicates:** A container or new form for the data.
 **Common with:** `Store`, `Transform`
+
 ### Examples
+
 ```aro
 (* Store into repository *)
 Store the <user> into the <user-repository>.
@@ -132,16 +160,22 @@ Store the <cache-entry> into the <cache>.
 Transform the <dto> into the <json>.
 Transform the <entity> into the <response-model>.
 ```
+
 ### Semantic Notes
+
 - `into` suggests insertion or transformation
 - Used for persistence and format conversion
 - Implies the data "enters" something
 ---
+
 ## against
+
 **Meaning:** Comparison/validation — data is checked against a reference.
 **Indicates:** The standard or rule for comparison.
 **Common with:** `Validate`, `Compare`
+
 ### Examples
+
 ```aro
 (* Validate against schema *)
 Validate the <input> against the <user: schema>.
@@ -151,16 +185,22 @@ Validate the <token> against the <auth-service>.
 Compare the <old-value> against the <new-value>.
 Compare the <actual> against the <expected>.
 ```
+
 ### Semantic Notes
+
 - `against` implies testing or comparison
 - Used for validation, verification, and comparison
 - The object is the reference standard
 ---
+
 ## via
+
 **Meaning:** Through/medium — indicates an intermediate channel.
 **Indicates:** The pathway or method used.
 **Common with:** `Request`, `Send`
+
 ### Examples
+
 ```aro
 (* Request via proxy *)
 Request the <data> from "https://api.example.com" via the <proxy>.
@@ -168,16 +208,22 @@ Request the <data> from "https://api.example.com" via the <proxy>.
 Send the <message> to the <user> via the <email-service>.
 Send the <notification> to the <subscriber> via the <websocket>.
 ```
+
 ### Semantic Notes
+
 - `via` indicates an intermediate hop or method
 - Less common than other prepositions
 - Used when specifying how data travels
 ---
+
 ## on
+
 **Meaning:** Location/surface — indicates attachment or location.
 **Indicates:** The point of attachment or surface.
 **Common with:** `Start`, `Serve`
+
 ### Examples
+
 ```aro
 (* Start on port *)
 Start the <http-server> on port 8080.
@@ -185,12 +231,16 @@ Start the <socket-server> on port 9000.
 (* Serve on host *)
 Start the <http-server> on "0.0.0.0:8080".
 ```
+
 ### Semantic Notes
+
 - `on` specifies a location or attachment point
 - Primarily used for network configuration
 - Indicates "located at" or "attached to"
 ---
+
 ## Preposition Selection Guide
+
 | Intent | Preposition | Example |
 |--------|-------------|---------|
 | Pull data in | `from` | `Extract the <x> from the <y>` |
@@ -202,7 +252,9 @@ Start the <http-server> on "0.0.0.0:8080".
 | Specify channel | `via` | `Request the <x> via the <y>` |
 | Specify location | `on` | `Start the <x> on <y>` |
 ---
+
 ## External Source Indicators
+
 Some prepositions indicate external sources:
 ```swift
 // From Token.swift

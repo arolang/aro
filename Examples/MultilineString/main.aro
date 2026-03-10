@@ -1,0 +1,30 @@
+(* MultilineString - Demonstrates triple-quoted multiline string literals (ARO-0097) *)
+
+(Application-Start: Multiline String Demo) {
+    (* Basic multiline string *)
+    Log """
+        Hello,
+        ARO World!
+        """ to the <console>.
+
+    (* Multiline string assigned to a variable *)
+    Create the <query> with """
+        SELECT *
+        FROM users
+        WHERE active = true
+        """.
+    Log <query> to the <console>.
+
+    (* Escape sequences work inside triple-quoted strings *)
+    Create the <escaped> with """
+        Line one\twith tab
+        Line two with \"quotes\"
+        """.
+    Log <escaped> to the <console>.
+
+    (* Length of a multiline string *)
+    Compute the <len: length> from the <query>.
+    Log <len> to the <console>.
+
+    Return an <OK: status> for the <demo>.
+}

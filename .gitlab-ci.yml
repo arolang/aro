@@ -260,9 +260,9 @@ integration:linux:
 
     # Debug: test aro build directly to see errors
     - echo "=== Testing aro build directly ==="
-    - which clang && clang --version | head -1
-    - which llc && llc --version | head -1
-    - ls -la /usr/share/swift/usr/lib/swift/linux/ | head -5
+    - which clang && clang --version 2>&1 | head -1 || true
+    - which llc && llc --version 2>&1 | head -1 || true
+    - ls /usr/share/swift/usr/lib/swift/linux/ | head -5 || true
     - echo "=== About to run aro build ==="
     - ls -la ./aro-dist/aro || echo "aro binary not found"
     - file ./aro-dist/aro || echo "file command failed"

@@ -38,6 +38,9 @@ public final class PackageManager: Sendable {
     /// Plugin scanner
     private let scanner: PluginScanner
 
+    /// Lock file manager
+    public let lockFile: LockFileManager
+
     // MARK: - Initialization
 
     /// Initialize with an application directory
@@ -47,6 +50,7 @@ public final class PackageManager: Sendable {
         self.pluginsDirectory = applicationDirectory.appendingPathComponent("Plugins")
         self.installer = PluginInstaller(directory: pluginsDirectory)
         self.scanner = PluginScanner(directory: pluginsDirectory)
+        self.lockFile = LockFileManager(applicationDirectory: applicationDirectory)
     }
 
     /// Initialize with a specific plugins directory
@@ -58,6 +62,7 @@ public final class PackageManager: Sendable {
         self.pluginsDirectory = pluginsDirectory
         self.installer = PluginInstaller(directory: pluginsDirectory)
         self.scanner = PluginScanner(directory: pluginsDirectory)
+        self.lockFile = LockFileManager(applicationDirectory: applicationDirectory)
     }
 
     // MARK: - Add
@@ -66,13 +71,23 @@ public final class PackageManager: Sendable {
     /// - Parameters:
     ///   - url: Git repository URL
     ///   - ref: Optional reference (branch, tag, commit)
+    ///   - currentAROVersion: Running ARO version used to validate `aro-version` constraints
     /// - Returns: Installation result
-    public func add(url: String, ref: String? = nil) throws -> InstallResult {
+    public func add(url: String, ref: String? = nil, currentAROVersion: String? = nil) throws -> InstallResult {
         // Resolve dependencies first
         let resolver = try DependencyResolver(directory: pluginsDirectory)
 
-        // Install the plugin
-        let result = try installer.install(from: url, ref: ref)
+        // Install the plugin (includes ARO version compatibility check)
+        let result = try installer.install(from: url, ref: ref, currentAROVersion: currentAROVersion)
+
+        // Update lock file
+        try lockFile.upsert(LockedPlugin(
+            name: result.name,
+            version: result.version,
+            git: url,
+            ref: result.ref,
+            commit: result.commit
+        ))
 
         // Check and install dependencies
         let depResult = try resolver.resolve(result.toManifest())
@@ -85,7 +100,14 @@ public final class PackageManager: Sendable {
 
         for dep in depResult.toInstall {
             print("[PackageManager] Installing dependency: \(GitClient.shared.extractRepoName(from: dep.git))")
-            _ = try installer.install(from: dep.git, ref: dep.ref)
+            let depResult2 = try installer.install(from: dep.git, ref: dep.ref, currentAROVersion: currentAROVersion)
+            try lockFile.upsert(LockedPlugin(
+                name: depResult2.name,
+                version: depResult2.version,
+                git: dep.git,
+                ref: depResult2.ref,
+                commit: depResult2.commit
+            ))
         }
 
         return result
@@ -112,6 +134,7 @@ public final class PackageManager: Sendable {
         }
 
         try installer.remove(name: name)
+        try lockFile.remove(name: name)
     }
 
     // MARK: - List
@@ -138,7 +161,19 @@ public final class PackageManager: Sendable {
     ///   - ref: Optional new reference
     /// - Returns: Update result
     public func update(name: String, ref: String? = nil) throws -> UpdateResult {
-        try installer.update(name: name, ref: ref)
+        let result = try installer.update(name: name, ref: ref)
+        // Update lock file with the new commit
+        let plugins = try scanner.scan()
+        if let plugin = plugins.first(where: { $0.manifest.name == name }) {
+            try lockFile.upsert(LockedPlugin(
+                name: result.name,
+                version: result.newVersion,
+                git: plugin.manifest.source?.git,
+                ref: plugin.manifest.source?.ref,
+                commit: result.newCommit
+            ))
+        }
+        return result
     }
 
     /// Update all installed plugins
@@ -152,6 +187,13 @@ public final class PackageManager: Sendable {
             if plugin.manifest.source?.git != nil {
                 do {
                     let result = try installer.update(name: plugin.manifest.name)
+                    try lockFile.upsert(LockedPlugin(
+                        name: result.name,
+                        version: result.newVersion,
+                        git: plugin.manifest.source?.git,
+                        ref: plugin.manifest.source?.ref,
+                        commit: result.newCommit
+                    ))
                     results.append(result)
                 } catch {
                     print("[PackageManager] Failed to update \(plugin.manifest.name): \(error)")
@@ -172,7 +214,7 @@ public final class PackageManager: Sendable {
     }
 
     /// Check if all dependencies are satisfied
-    /// - Returns: List of missing dependencies
+    /// - Returns: List of missing dependencies per plugin name
     public func checkDependencies() throws -> [String: [String]] {
         var missing: [String: [String]] = [:]
 
@@ -187,6 +229,29 @@ public final class PackageManager: Sendable {
         }
 
         return missing
+    }
+
+    /// Check which installed plugins are incompatible with the given ARO version.
+    /// - Parameter currentAROVersion: The running ARO version string.
+    /// - Returns: Map of plugin name → required constraint for incompatible plugins.
+    public func checkAROVersionCompatibility(currentAROVersion: String) throws -> [String: String] {
+        var incompatible: [String: String] = [:]
+        let plugins = try scanner.scan()
+
+        for plugin in plugins {
+            guard let constraint = plugin.manifest.aroVersion else { continue }
+            if !AROVersionChecker.satisfies(version: currentAROVersion, constraint: constraint) {
+                incompatible[plugin.manifest.name] = constraint
+            }
+        }
+
+        return incompatible
+    }
+
+    /// Verify the lock file — confirm every locked plugin matches what is installed.
+    /// - Returns: Names of plugins whose installed version/commit differs from the lock file.
+    public func verifyLockFile() throws -> [String] {
+        try lockFile.verify(pluginsDirectory: pluginsDirectory)
     }
 
     // MARK: - Restore

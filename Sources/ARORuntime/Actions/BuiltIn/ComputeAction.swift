@@ -74,8 +74,9 @@ public struct ComputeAction: ActionImplementation {
         // Computation name from result specifiers or base (for backward compatibility)
         let knownComputations: Set<String> = [
             "hash", "length", "count", "uppercase", "lowercase", "identity",
-            "date", "format", "distance",  // Date operations (ARO-0041)
-            "intersect", "difference", "union"  // Set operations (ARO-0042)
+            "clip", "take",                        // String/list limiting
+            "date", "format", "distance",          // Date operations (ARO-0041)
+            "intersect", "difference", "union"     // Set operations (ARO-0042)
         ]
         let computationName = resolveOperationName(from: result, knownOperations: knownComputations, fallback: "identity")
 
@@ -140,6 +141,30 @@ public struct ComputeAction: ActionImplementation {
             return String(describing: input).lowercased()
 
         case "identity":
+            return input
+
+        case "clip":
+            // Clip a string to N visible characters (subview width constraint).
+            // Width comes from the 'with' clause: Compute the <x: clip> from <text> with <width>.
+            let str = input as? String ?? String(describing: input)
+            var width = 80
+            if let w = context.resolveAny("_with_") as? Int { width = w }
+            else if let w = context.resolveAny("_with_") as? Double { width = Int(w) }
+            if str.count <= width { return str }
+            return String(str.prefix(width))
+
+        case "take":
+            // Take the first N elements from a list, or first N characters from a string.
+            // N comes from the 'with' clause: Compute the <x: take> from <list> with <n>.
+            var n = 0
+            if let w = context.resolveAny("_with_") as? Int { n = w }
+            else if let w = context.resolveAny("_with_") as? Double { n = Int(w) }
+            if let arr = input as? [any Sendable] {
+                return Array(arr.prefix(n))
+            }
+            if let str = input as? String {
+                return String(str.prefix(n))
+            }
             return input
 
         // Date operations (ARO-0041)
