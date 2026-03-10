@@ -363,6 +363,30 @@ public final class TemplateExecutor: @unchecked Sendable {
         return filters
     }
 
+    /// Parse a row-count specifier relative to terminal height.
+    ///   "full"      → terminalRows
+    ///   "full-N"    → terminalRows - N
+    ///   "full+N"    → terminalRows + N
+    ///   "1/2"       → terminalRows / 2  (integer fractions: 1/3, 2/3, 1/4, 3/4, …)
+    ///   "N"         → absolute integer
+    private func parseRowSpec(_ spec: String, terminalRows: Int) -> Int {
+        let s = spec.trimmingCharacters(in: .whitespaces)
+        if s == "full" { return terminalRows }
+        if s.hasPrefix("full-"), let n = Int(s.dropFirst(5)) { return max(0, terminalRows - n) }
+        if s.hasPrefix("full+"), let n = Int(s.dropFirst(5)) { return terminalRows + n }
+        if s.contains("/") {
+            let parts = s.split(separator: "/")
+            if parts.count == 2,
+               let num = Int(parts[0].trimmingCharacters(in: .whitespaces)),
+               let den = Int(parts[1].trimmingCharacters(in: .whitespaces)),
+               den > 0 {
+                return (terminalRows * num) / den
+            }
+        }
+        if let n = Int(s) { return n }
+        return terminalRows
+    }
+
     /// Apply filters to a formatted value
     private func applyFilters(_ value: String, filters: [(name: String, arg: String?)], context: ExecutionContext) async -> String {
         var result = value
@@ -375,6 +399,31 @@ public final class TemplateExecutor: @unchecked Sendable {
                 result = result.uppercased()
             case "lowercase":
                 result = result.lowercased()
+
+            // Height constraint: pad or clip content to exactly N rows.
+            // Counts \n characters; pads with empty lines or clips to target.
+            // Spec: "full", "full-N", "full+N", "1/2", "1/3", "2/3", "3/4", N (absolute)
+            case "rows":
+                if let spec = filter.arg {
+                    let caps = await getTerminalCapabilities(from: context)
+                    let targetRows = parseRowSpec(spec, terminalRows: caps.rows)
+                    let currentCount = result.filter { $0 == "\n" }.count
+                    if currentCount < targetRows {
+                        result += String(repeating: "\n", count: targetRows - currentCount)
+                    } else if currentCount > targetRows {
+                        // Clip: keep first targetRows newline-terminated lines
+                        var seen = 0
+                        for i in result.indices {
+                            if result[i] == "\n" {
+                                seen += 1
+                                if seen == targetRows {
+                                    result = String(result[...i])
+                                    break
+                                }
+                            }
+                        }
+                    }
+                }
 
             // Terminal color filters (ARO-0052)
             // Only apply styling in TTY mode to avoid ANSI codes in piped/test output

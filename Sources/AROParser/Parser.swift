@@ -183,10 +183,23 @@ public final class Parser {
             return try parseMatchStatement()
         }
 
-        // Check for for-each loop (ARO-0005) - starts with 'for' or 'parallel for'
+        // Check for for-each loop (ARO-0005) or range loop (ARO-0072)
         // Note: 'for' can be tokenized as either .for keyword or .preposition(.for)
         if check(.for) || check(.preposition(.for)) {
-            return try parseForEachLoop(isParallel: false)
+            // Peek ahead: if next non-'for' token is 'each', it's a for-each loop.
+            // If next is '<', it's a range loop: for <var> from <low> to <high>
+            let savedPos = current
+            advance() // consume 'for'
+            if check(.each) {
+                current = savedPos
+                return try parseForEachLoop(isParallel: false)
+            } else if check(.leftAngle) {
+                current = savedPos
+                return try parseRangeLoop()
+            } else {
+                current = savedPos
+                return try parseForEachLoop(isParallel: false)
+            }
         }
         if check(.parallel) {
             return try parseParallelForEachLoop()
@@ -452,6 +465,13 @@ public final class Parser {
             }
         }
 
+        // Parse optional default clause (ARO-0072): `default <expr>`
+        var defaultValue: (any Expression)?
+        if case .identifier(let kw) = peek().kind, kw == "default" {
+            advance() // consume 'default'
+            defaultValue = try parseExpression()
+        }
+
         // Parse optional when clause (ARO-0004): `when <condition>`
         var whenCondition: (any Expression)?
         if check(.when) {
@@ -482,7 +502,8 @@ public final class Parser {
         let queryMods = QueryModifiers(
             whereClause: whereClause,
             aggregation: aggregation,
-            byClause: byClause
+            byClause: byClause,
+            defaultValue: defaultValue
         )
 
         let rangeMods = RangeModifiers(
@@ -1139,6 +1160,42 @@ public final class Parser {
             body: body,
             span: startToken.span.merged(with: endToken.span)
         )
+    }
+
+    /// Parses: "for" "<" var ">" "from" <expr> "to" <expr> "{" statements "}"
+    private func parseRangeLoop() throws -> RangeLoop {
+        let startToken: Token
+        if check(.for) {
+            startToken = try expect(.for, message: "'for'")
+        } else {
+            startToken = try expect(.preposition(.for), message: "'for'")
+        }
+
+        try expect(.leftAngle, message: "'<'")
+        let variable = try parseCompoundIdentifier()
+        try expect(.rightAngle, message: "'>'")
+
+        // consume 'from' (preposition)
+        if case .preposition(.from) = peek().kind { advance() }
+        else { throw ParserError.unexpectedToken(expected: "'from'", got: peek()) }
+
+        let fromExpr = try parseExpression()
+
+        // consume 'to' (preposition)
+        if case .preposition(.to) = peek().kind { advance() }
+        else { throw ParserError.unexpectedToken(expected: "'to'", got: peek()) }
+
+        let toExpr = try parseExpression()
+
+        try expect(.leftBrace, message: "'{'")
+        var body: [Statement] = []
+        while !check(.rightBrace) && !isAtEnd {
+            body.append(try parseStatement())
+        }
+        let endToken = try expect(.rightBrace, message: "'}'")
+
+        return RangeLoop(variable: variable, from: fromExpr, to: toExpr, body: body,
+                         span: startToken.span.merged(with: endToken.span))
     }
 
     // MARK: - Qualified Noun Parsing

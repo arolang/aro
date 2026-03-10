@@ -47,6 +47,31 @@ This sounds limiting because it is. But limitation is the point. When the 50 bui
 
 ## 1.3 The Honest Trade-offs
 
+<div style="text-align: center; margin: 2em 0;">
+<svg width="560" height="160" viewBox="0 0 560 160" xmlns="http://www.w3.org/2000/svg" font-family="sans-serif">
+  <!-- Readable pillar -->
+  <rect x="20" y="20" width="155" height="80" rx="4" fill="#e0e7ff" stroke="#6366f1" stroke-width="2"/>
+  <text x="97" y="48" text-anchor="middle" font-size="12" font-weight="bold" fill="#4338ca">Readable</text>
+  <text x="97" y="66" text-anchor="middle" font-size="9" fill="#4338ca">Human language verbs</text>
+  <text x="97" y="80" text-anchor="middle" font-size="9" fill="#4338ca">Extract · Compute · Return</text>
+  <text x="97" y="94" text-anchor="middle" font-size="9" fill="#4338ca">reads like a specification</text>
+  <!-- Declarative pillar -->
+  <rect x="200" y="20" width="155" height="80" rx="4" fill="#d1fae5" stroke="#22c55e" stroke-width="2"/>
+  <text x="277" y="48" text-anchor="middle" font-size="12" font-weight="bold" fill="#166534">Declarative</text>
+  <text x="277" y="66" text-anchor="middle" font-size="9" fill="#166534">Say what, not how</text>
+  <text x="277" y="80" text-anchor="middle" font-size="9" fill="#166534">No loops · No control flow</text>
+  <text x="277" y="94" text-anchor="middle" font-size="9" fill="#166534">runtime handles the rest</text>
+  <!-- Event-driven pillar -->
+  <rect x="380" y="20" width="155" height="80" rx="4" fill="#fef3c7" stroke="#f59e0b" stroke-width="2"/>
+  <text x="457" y="48" text-anchor="middle" font-size="12" font-weight="bold" fill="#92400e">Event-Driven</text>
+  <text x="457" y="66" text-anchor="middle" font-size="9" fill="#92400e">Reacts, not polls</text>
+  <text x="457" y="80" text-anchor="middle" font-size="9" fill="#92400e">Feature sets triggered</text>
+  <text x="457" y="94" text-anchor="middle" font-size="9" fill="#92400e">by events, not calls</text>
+  <!-- Bottom label -->
+  <text x="280" y="148" text-anchor="middle" font-size="10" fill="#374151">The three pillars of the ARO philosophy</text>
+</svg>
+</div>
+
 We promised fairness. Here it is.
 
 ### The Pros

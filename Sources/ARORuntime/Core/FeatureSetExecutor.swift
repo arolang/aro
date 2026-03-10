@@ -104,6 +104,26 @@ public final class FeatureSetExecutor: @unchecked Sendable {
             }
         }
 
+        // Bind terminal capabilities dict so ARO code can use <terminal: columns> etc.
+        if let terminalService = context.service(TerminalService.self) {
+            let caps = await terminalService.detectCapabilities()
+            let terminalDict: [String: any Sendable] = [
+                "rows": caps.rows, "columns": caps.columns,
+                "width": caps.columns, "height": caps.rows,
+                "supports_color": caps.supportsColor,
+                "supports_true_color": caps.supportsTrueColor,
+                "is_tty": caps.isTTY, "encoding": caps.encoding
+            ]
+            context.bind("terminal", value: terminalDict, allowRebind: true)
+        } else {
+            let terminalDict: [String: any Sendable] = [
+                "rows": 24, "columns": 80, "width": 80, "height": 24,
+                "supports_color": false, "supports_true_color": false,
+                "is_tty": false, "encoding": "UTF-8"
+            ]
+            context.bind("terminal", value: terminalDict, allowRebind: true)
+        }
+
         // Execute statements
         do {
             if enableParallelIO {
@@ -190,6 +210,8 @@ public final class FeatureSetExecutor: @unchecked Sendable {
             try await executeWhileLoop(whileLoop, context: context)
         } else if statement is BreakStatement {
             throw BreakSignal()
+        } else if let rangeLoop = statement as? RangeLoop {
+            try await executeRangeLoop(rangeLoop, context: context)
         } else if let pipelineStatement = statement as? PipelineStatement {
             try await executePipelineStatement(pipelineStatement, context: context)
         }
@@ -230,6 +252,7 @@ public final class FeatureSetExecutor: @unchecked Sendable {
         context.unbind("_where_value_")
         context.unbind("_by_pattern_")
         context.unbind("_by_flags_")
+        context.unbind("_default_value_")
         context.unbind("_to_")
         context.unbind("_with_")
 
@@ -370,6 +393,12 @@ public final class FeatureSetExecutor: @unchecked Sendable {
         if let byClause = statement.queryModifiers.byClause {
             context.bind("_by_pattern_", value: byClause.pattern)
             context.bind("_by_flags_", value: byClause.flags)
+        }
+
+        // ARO-0072: Bind default value if present (for optional retrieve)
+        if let defaultExpr = statement.queryModifiers.defaultValue {
+            let defaultVal = try await expressionEvaluator.evaluate(defaultExpr, context: context)
+            context.bind("_default_value_", value: defaultVal)
         }
 
         // ARO-0041: Bind to clause if present (for date ranges)
@@ -743,6 +772,33 @@ public final class FeatureSetExecutor: @unchecked Sendable {
         }
 
         throw ActionError.runtimeError("Cannot access property '\(property)' on \(type(of: value))")
+    }
+
+    // MARK: - Range Loop Execution (ARO-0072)
+
+    private func executeRangeLoop(_ loop: RangeLoop, context: ExecutionContext) async throws {
+        let fromVal = try await expressionEvaluator.evaluate(loop.from, context: context)
+        let toVal   = try await expressionEvaluator.evaluate(loop.to,   context: context)
+
+        guard let fromInt = toInt(fromVal), let toInt = toInt(toVal) else {
+            throw ActionError.runtimeError("Range loop bounds must be integers, got \(fromVal) to \(toVal)")
+        }
+
+        for i in fromInt..<toInt {
+            let iterationContext = context.createChild(featureSetName: context.featureSetName)
+            iterationContext.bind(loop.variable, value: i)
+            for stmt in loop.body {
+                try await executeStatement(stmt, context: iterationContext)
+                if iterationContext.getResponse() != nil { return }
+            }
+        }
+    }
+
+    private func toInt(_ value: any Sendable) -> Int? {
+        if let i = value as? Int    { return i }
+        if let d = value as? Double { return Int(d) }
+        if let s = value as? String { return Int(s) }
+        return nil
     }
 
     // MARK: - For-Each Loop Execution (ARO-0005)

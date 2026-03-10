@@ -53,10 +53,16 @@ final class AROCRuntimeHandle: @unchecked Sendable {
         EventLoopGroupManager.shared.registerGroup(group)
         return group
     }()
+
+    /// Keyboard service shared across all contexts — must outlive individual handler contexts
+    let keyboardService: KeyboardService
     #endif
 
     init() {
         self.runtime = Runtime()
+        #if !os(Windows)
+        self.keyboardService = KeyboardService(eventBus: .shared)
+        #endif
         // Event loop creation deferred to lazy var - no eager init needed
     }
 
@@ -148,6 +154,10 @@ class AROCContextHandle {
         } else {
             self.terminalService = nil
         }
+
+        // Register keyboard service — shared instance lives on the runtime handle
+        // so it survives individual handler context release cycles
+        self.context.register(runtime.keyboardService)
 
         // Set up schema registry for typed event extraction (ARO-0046)
         // Load openapi.yaml from the binary's directory if present
@@ -454,6 +464,9 @@ public func aro_runtime_register_handler(
                     contextHandle.context.bind("event:\(key)", value: value)
                 }
 
+                // Bind terminal capabilities so ARO handler code can use <terminal: columns>
+                bindTerminalToContext(contextHandle)
+
                 // Get the context pointer
                 let contextPtr = Unmanaged.passRetained(contextHandle).toOpaque()
 
@@ -598,6 +611,9 @@ public func aro_register_repository_observer_with_guard(
                 }
 
                 contextHandle.context.bind("event", value: eventDict)
+
+                // Bind terminal capabilities so ARO observer code can use <terminal: columns>
+                bindTerminalToContext(contextHandle)
 
                 // Get context pointer
                 let contextPtr = Unmanaged.passRetained(contextHandle).toOpaque()
@@ -780,6 +796,38 @@ public func aro_lookup_business_activity(_ featureSetNamePtr: UnsafePointer<CCha
     return strdup(activity)
 }
 
+/// Synchronously binds terminal capabilities dict to a context handle.
+/// Called before dispatching compiled feature set functions (handlers, observers).
+private func bindTerminalToContext(_ contextHandle: AROCContextHandle) {
+    #if !os(Windows)
+    let semaphore = DispatchSemaphore(value: 0)
+    let context = contextHandle.context
+    let terminalService = contextHandle.terminalService
+    Task { @Sendable in
+        let terminalDict: [String: any Sendable]
+        if let ts = terminalService {
+            let caps = await ts.detectCapabilities()
+            terminalDict = [
+                "rows": caps.rows, "columns": caps.columns,
+                "width": caps.columns, "height": caps.rows,
+                "supports_color": caps.supportsColor,
+                "supports_true_color": caps.supportsTrueColor,
+                "is_tty": caps.isTTY, "encoding": caps.encoding
+            ]
+        } else {
+            terminalDict = [
+                "rows": 24, "columns": 80, "width": 80, "height": 24,
+                "supports_color": false, "supports_true_color": false,
+                "is_tty": false, "encoding": "UTF-8"
+            ]
+        }
+        context.bind("terminal", value: terminalDict, allowRebind: true)
+        semaphore.signal()
+    }
+    semaphore.wait()
+    #endif
+}
+
 /// Bind published variables to a context for a given business activity
 /// This eagerly binds all published variables that match the business activity,
 /// enabling HTTP handlers in compiled binaries to access variables published by Application-Start
@@ -802,6 +850,7 @@ public func aro_context_bind_published_variables(
 
     // Explicitly capture values to avoid data race warnings
     let context = contextHandle.context
+    let terminalService = contextHandle.terminalService
 
     Task { @Sendable in
         let globalSymbols = await runtime.globalSymbols
@@ -822,6 +871,26 @@ public func aro_context_bind_published_variables(
                 context.bind(name, value: entry.value)
             }
         }
+
+        // Bind terminal capabilities dict so ARO code can use <terminal: columns> etc.
+        let terminalDict: [String: any Sendable]
+        if let ts = terminalService {
+            let caps = await ts.detectCapabilities()
+            terminalDict = [
+                "rows": caps.rows, "columns": caps.columns,
+                "width": caps.columns, "height": caps.rows,
+                "supports_color": caps.supportsColor,
+                "supports_true_color": caps.supportsTrueColor,
+                "is_tty": caps.isTTY, "encoding": caps.encoding
+            ]
+        } else {
+            terminalDict = [
+                "rows": 24, "columns": 80, "width": 80, "height": 24,
+                "supports_color": false, "supports_true_color": false,
+                "is_tty": false, "encoding": "UTF-8"
+            ]
+        }
+        context.bind("terminal", value: terminalDict, allowRebind: true)
 
         semaphore.signal()
     }
@@ -1500,6 +1569,13 @@ private func evaluateBinaryOp(op: String, left: any Sendable, right: any Sendabl
         return 0
 
     case "*":
+        // String repetition: "x" * n or n * "x"
+        if let str = left as? String, let count = right as? Int {
+            return String(repeating: str, count: max(0, count))
+        }
+        if let str = right as? String, let count = left as? Int {
+            return String(repeating: str, count: max(0, count))
+        }
         if let l = asDouble(left), let r = asDouble(right) {
             if let li = left as? Int, let ri = right as? Int {
                 return li * ri
@@ -1510,7 +1586,8 @@ private func evaluateBinaryOp(op: String, left: any Sendable, right: any Sendabl
 
     case "/":
         if let l = asDouble(left), let r = asDouble(right), r != 0 {
-            if let li = left as? Int, let ri = right as? Int, li % ri == 0 {
+            // Integer / Integer → integer floor division (e.g. 80/3 = 26)
+            if let li = left as? Int, let ri = right as? Int {
                 return li / ri
             }
             return l / r
