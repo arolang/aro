@@ -60,6 +60,30 @@ public struct MCPPromptProvider: Sendable {
                     MCPPromptArgument(name: "description", description: "What the code should do", required: true),
                     MCPPromptArgument(name: "existing_code", description: "Existing code to convert (optional)", required: false)
                 ]
+            ),
+            MCPPrompt(
+                name: "create_state_machine",
+                description: "Guide to create an event-driven state machine with ARO Accept action",
+                arguments: [
+                    MCPPromptArgument(name: "entity", description: "Name of the entity (e.g., 'order', 'ticket')", required: true),
+                    MCPPromptArgument(name: "states", description: "Comma-separated list of states (e.g., 'pending,paid,shipped,delivered')", required: false)
+                ]
+            ),
+            MCPPrompt(
+                name: "create_data_pipeline",
+                description: "Guide to create a data processing pipeline with ARO collection operations",
+                arguments: [
+                    MCPPromptArgument(name: "source", description: "Data source description (e.g., 'user list from repository')", required: true),
+                    MCPPromptArgument(name: "operations", description: "Processing steps (e.g., 'filter by age, sort by name, compute totals')", required: false)
+                ]
+            ),
+            MCPPrompt(
+                name: "create_repository_observer",
+                description: "Guide to create a repository change observer that reacts to store/update/delete events",
+                arguments: [
+                    MCPPromptArgument(name: "repository", description: "Repository name to observe (e.g., 'user-repository')", required: true),
+                    MCPPromptArgument(name: "action", description: "What should happen when data changes", required: false)
+                ]
             )
         ])
     }
@@ -79,6 +103,12 @@ public struct MCPPromptProvider: Sendable {
             return createPluginPrompt(arguments: arguments)
         case "convert_to_aro":
             return convertToAroPrompt(arguments: arguments)
+        case "create_state_machine":
+            return createStateMachinePrompt(arguments: arguments)
+        case "create_data_pipeline":
+            return createDataPipelinePrompt(arguments: arguments)
+        case "create_repository_observer":
+            return createRepositoryObserverPrompt(arguments: arguments)
         default:
             return nil
         }
@@ -648,6 +678,254 @@ public struct MCPPromptProvider: Sendable {
 
         return MCPPromptGetResult(
             description: "Convert requirements to ARO",
+            messages: [
+                MCPPromptMessage(role: "user", content: .text(content))
+            ]
+        )
+    }
+
+    private func createStateMachinePrompt(arguments: [String: String]?) -> MCPPromptGetResult {
+        let entity = arguments?["entity"] ?? "order"
+        let states = arguments?["states"] ?? "pending,processing,completed,cancelled"
+        let stateList = states.split(separator: ",").map { $0.trimmingCharacters(in: .whitespaces) }
+        let firstState = stateList.first ?? "pending"
+        let secondState = stateList.dropFirst().first ?? "processing"
+
+        let content = """
+        Create an ARO state machine for the '\(entity)' entity.
+
+        **Entity**: \(entity)
+        **States**: \(states)
+
+        ## State Machine Pattern in ARO
+
+        ARO state machines use the `Accept` action to transition entities between states.
+        The `Accept` action:
+        1. Updates the entity's state in its repository
+        2. Emits a `StateTransition` event
+        3. Triggers `StateTransition Handler<toState:X>` feature sets
+
+        ## Repository Setup
+
+        Entities need a `state` field:
+
+        ```aro
+        (* Create a new \(entity) in initial state *)
+        Create the <\(entity)> with <data>.
+        Store the <\(entity)> in the <\(entity)-repository>.
+        Accept the <\(entity): \(firstState)> for the <\(entity)-repository>.
+        ```
+
+        ## State Transition Feature Sets
+
+        ```aro
+        (* Transition to '\(secondState)' state *)
+        (process\(entity.capitalized): \(entity.capitalized) API) {
+            Extract the <id> from the <pathParameters: id>.
+            Retrieve the <\(entity)> from the <\(entity)-repository> where id = <id>.
+            Accept the <\(entity): \(secondState)> for the <\(entity)-repository>.
+            Return an <OK: status> with <\(entity)>.
+        }
+        ```
+
+        ## State Transition Handlers
+
+        ```aro
+        (* React when \(entity) reaches '\(secondState)' state *)
+        (Handle \(entity.capitalized) \(secondState.capitalized): \(entity.capitalized) StateTransition Handler<toState:\(secondState)>) {
+            Extract the <\(entity)-id> from the <event: entityId>.
+            Retrieve the <\(entity)> from the <\(entity)-repository> where id = <\(entity)-id>.
+            (* Add your business logic here *)
+            Log "\(entity.capitalized) transitioned to \(secondState)" to the <console>.
+            Return an <OK: status> for the <transition>.
+        }
+        ```
+
+        ## All States to Implement
+
+        \(stateList.map { "- `\($0)`: Add transition logic and handler" }.joined(separator: "\n"))
+
+        Please implement the complete state machine for the '\(entity)' entity with these states: \(states)
+        """
+
+        return MCPPromptGetResult(
+            description: "Guide to create state machine for '\(entity)'",
+            messages: [
+                MCPPromptMessage(role: "user", content: .text(content))
+            ]
+        )
+    }
+
+    private func createDataPipelinePrompt(arguments: [String: String]?) -> MCPPromptGetResult {
+        let source = arguments?["source"] ?? "items from repository"
+        let operations = arguments?["operations"] ?? "filter, transform, aggregate"
+
+        let content = """
+        Create an ARO data processing pipeline.
+
+        **Source**: \(source)
+        **Operations**: \(operations)
+
+        ## Data Pipeline Patterns in ARO
+
+        ### Collection Operations
+
+        ```aro
+        (* Get data *)
+        Retrieve the <items> from the <item-repository>.
+
+        (* Filter collection *)
+        Filter the <active-items> from <items> where status = "active".
+
+        (* Sort collection *)
+        Sort the <sorted-items> with <active-items> by name.
+
+        (* For-each processing *)
+        for each <item> in <sorted-items> {
+            Compute the <total> from <item: price> * <item: quantity>.
+            Store the <total> in the <totals-repository>.
+        }
+        ```
+
+        ### String Operations
+
+        ```aro
+        (* Split a string *)
+        Split the <parts> from <text> by /,\\s*/.
+
+        (* Join a list *)
+        Join the <result> from <parts> with ", ".
+
+        (* Compute lengths and transforms *)
+        Compute the <upper> from <text: uppercase>.
+        Compute the <len: length> from <text>.
+        ```
+
+        ### Aggregation Pattern
+
+        ```aro
+        (* Initialize accumulator *)
+        Create the <summary> with { total: 0, count: 0 }.
+        Store the <summary> in the <summary-repository>.
+
+        for each <item> in <items> {
+            Retrieve the <current> from the <summary-repository>.
+            Compute the <new-total> from <current: total> + <item: price>.
+            Compute the <new-count> from <current: count> + 1.
+            Update the <current> in the <summary-repository> with { total: <new-total>, count: <new-count> }.
+        }
+
+        Retrieve the <final> from the <summary-repository>.
+        Compute the <average> from <final: total> / <final: count>.
+        ```
+
+        ### Match for Conditional Processing
+
+        ```aro
+        match <item: category> {
+            case "premium" {
+                Compute the <discount> from <item: price> * 0.2.
+            }
+            case "standard" {
+                Compute the <discount> from <item: price> * 0.1.
+            }
+            default {
+                Compute the <discount> from 0.
+            }
+        }
+        ```
+
+        Please implement the data pipeline for: \(source) with operations: \(operations)
+        """
+
+        return MCPPromptGetResult(
+            description: "Guide to create data pipeline from '\(source)'",
+            messages: [
+                MCPPromptMessage(role: "user", content: .text(content))
+            ]
+        )
+    }
+
+    private func createRepositoryObserverPrompt(arguments: [String: String]?) -> MCPPromptGetResult {
+        let repository = arguments?["repository"] ?? "user-repository"
+        let action = arguments?["action"] ?? "log the change and notify stakeholders"
+        let entityName = repository.replacingOccurrences(of: "-repository", with: "")
+
+        let content = """
+        Create an ARO repository observer for '\(repository)'.
+
+        **Repository**: \(repository)
+        **On Change**: \(action)
+
+        ## Repository Observer Pattern
+
+        Repository observers react to Store, Update, and Delete operations.
+        The business activity must contain `\(repository)` and end with `Observer`.
+
+        ## Observer Feature Set
+
+        ```aro
+        (Track \(entityName.capitalized) Changes: \(repository) Observer) {
+            (* Extract change metadata *)
+            Extract the <entity-id> from the <change: entityId>.
+            Extract the <change-type> from the <change: changeType>.
+            Extract the <entity> from the <change: newValue>.
+
+            (* Log the change *)
+            Log "\(entityName.capitalized) changed" to the <console>.
+
+            (* Add your business logic here *)
+            Return an <OK: status> for the <observation>.
+        }
+        ```
+
+        ## Change Event Fields
+
+        The `<change>` variable contains:
+        - `<change: entityId>` — UUID of the changed entity
+        - `<change: changeType>` — "created", "updated", or "deleted"
+        - `<change: repositoryName>` — Name of the repository
+        - `<change: newValue>` — The new entity value (nil for deletions)
+        - `<change: oldValue>` — The previous entity value (nil for creations)
+
+        ## Handling Different Change Types
+
+        ```aro
+        (Handle All Changes: \(repository) Observer) {
+            Extract the <change-type> from the <change: changeType>.
+            Extract the <entity> from the <change: newValue>.
+
+            match <change-type> {
+                case "created" {
+                    Log "\(entityName.capitalized) created" to the <console>.
+                    Emit a <\(entityName.capitalized)Created: event> with <entity>.
+                }
+                case "updated" {
+                    Log "\(entityName.capitalized) updated" to the <console>.
+                    Emit a <\(entityName.capitalized)Updated: event> with <entity>.
+                }
+                case "deleted" {
+                    Log "\(entityName.capitalized) deleted" to the <console>.
+                    Emit a <\(entityName.capitalized)Deleted: event> with <entity>.
+                }
+            }
+
+            Return an <OK: status> for the <observation>.
+        }
+        ```
+
+        ## Important Rules
+
+        1. Business activity MUST contain `\(repository)` (exact repository name)
+        2. Business activity MUST end with `Observer`
+        3. Observers trigger AFTER the store/update/delete completes
+        4. Multiple observers can watch the same repository
+
+        Please implement the observer for '\(repository)' to: \(action)
+        """
+
+        return MCPPromptGetResult(
+            description: "Guide to create repository observer for '\(repository)'",
             messages: [
                 MCPPromptMessage(role: "user", content: .text(content))
             ]
