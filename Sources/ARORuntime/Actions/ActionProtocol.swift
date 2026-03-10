@@ -230,3 +230,24 @@ public extension ActionImplementation {
         return dict
     }
 }
+
+// MARK: - Action Module Protocol
+
+/// Groups related built-in actions into a named category.
+///
+/// Implement this protocol to declare a set of actions that belong together
+/// conceptually. `ActionRegistry.createBuiltInActions()` iterates all modules
+/// so every action in every module is registered automatically.
+///
+/// ## Example
+/// ```swift
+/// enum RequestActionsModule: ActionModule {
+///     static var actions: [any ActionImplementation.Type] {
+///         [ExtractAction.self, RetrieveAction.self, ReadAction.self]
+///     }
+/// }
+/// ```
+public protocol ActionModule {
+    /// All action types provided by this module.
+    static var actions: [any ActionImplementation.Type] { get }
+}

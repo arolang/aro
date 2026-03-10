@@ -152,7 +152,14 @@ public final class Parser {
                 statements.append(statement)
             } catch let error as ParserError {
                 diagnostics.report(error)
-                synchronizeToNextStatement()
+                let errorStart = peek().span
+                let skipped = synchronizeToNextStatementCollecting()
+                let errorSpan = skipped.isEmpty ? errorStart : errorStart.merged(with: skipped.last!.span)
+                statements.append(ErrorStatement(
+                    message: error.message,
+                    skippedTokens: skipped,
+                    span: errorSpan
+                ))
             }
         }
 
@@ -176,10 +183,23 @@ public final class Parser {
             return try parseMatchStatement()
         }
 
-        // Check for for-each loop (ARO-0005) - starts with 'for' or 'parallel for'
+        // Check for for-each loop (ARO-0005) or range loop (ARO-0072)
         // Note: 'for' can be tokenized as either .for keyword or .preposition(.for)
         if check(.for) || check(.preposition(.for)) {
-            return try parseForEachLoop(isParallel: false)
+            // Peek ahead: if next non-'for' token is 'each', it's a for-each loop.
+            // If next is '<', it's a range loop: for <var> from <low> to <high>
+            let savedPos = current
+            advance() // consume 'for'
+            if check(.each) {
+                current = savedPos
+                return try parseForEachLoop(isParallel: false)
+            } else if check(.leftAngle) {
+                current = savedPos
+                return try parseRangeLoop()
+            } else {
+                current = savedPos
+                return try parseForEachLoop(isParallel: false)
+            }
         }
         if check(.parallel) {
             return try parseParallelForEachLoop()
@@ -433,6 +453,13 @@ public final class Parser {
             }
         }
 
+        // Parse optional default clause (ARO-0072): `default <expr>`
+        var defaultValue: (any Expression)?
+        if case .identifier(let kw) = peek().kind, kw == "default" {
+            advance() // consume 'default'
+            defaultValue = try parseExpression()
+        }
+
         // Parse optional when clause (ARO-0004): `when <condition>`
         var whenCondition: (any Expression)?
         if check(.when) {
@@ -463,7 +490,8 @@ public final class Parser {
         let queryMods = QueryModifiers(
             whereClause: whereClause,
             aggregation: aggregation,
-            byClause: byClause
+            byClause: byClause,
+            defaultValue: defaultValue
         )
 
         let rangeMods = RangeModifiers(
@@ -1090,6 +1118,42 @@ public final class Parser {
         )
     }
 
+    /// Parses: "for" "<" var ">" "from" <expr> "to" <expr> "{" statements "}"
+    private func parseRangeLoop() throws -> RangeLoop {
+        let startToken: Token
+        if check(.for) {
+            startToken = try expect(.for, message: "'for'")
+        } else {
+            startToken = try expect(.preposition(.for), message: "'for'")
+        }
+
+        try expect(.leftAngle, message: "'<'")
+        let variable = try parseCompoundIdentifier()
+        try expect(.rightAngle, message: "'>'")
+
+        // consume 'from' (preposition)
+        if case .preposition(.from) = peek().kind { advance() }
+        else { throw ParserError.unexpectedToken(expected: "'from'", got: peek()) }
+
+        let fromExpr = try parseExpression()
+
+        // consume 'to' (preposition)
+        if case .preposition(.to) = peek().kind { advance() }
+        else { throw ParserError.unexpectedToken(expected: "'to'", got: peek()) }
+
+        let toExpr = try parseExpression()
+
+        try expect(.leftBrace, message: "'{'")
+        var body: [Statement] = []
+        while !check(.rightBrace) && !isAtEnd {
+            body.append(try parseStatement())
+        }
+        let endToken = try expect(.rightBrace, message: "'}'")
+
+        return RangeLoop(variable: variable, from: fromExpr, to: toExpr, body: body,
+                         span: startToken.span.merged(with: endToken.span))
+    }
+
     // MARK: - Qualified Noun Parsing
 
     /// Parses: base [ ":" type_annotation ]
@@ -1420,30 +1484,41 @@ public final class Parser {
     
     /// Synchronizes to the next statement after an error
     private func synchronizeToNextStatement() {
+        _ = synchronizeToNextStatementCollecting()
+    }
+
+    /// Synchronizes to the next statement after an error, returning the skipped tokens.
+    /// Used to populate `ErrorStatement.skippedTokens` for partial AST construction.
+    @discardableResult
+    private func synchronizeToNextStatementCollecting() -> [Token] {
+        var skipped: [Token] = []
+
         // Always advance at least once to make progress and avoid infinite loops
         // when we're already positioned after a statement-ending dot
         if !isAtEnd {
-            advance()
+            skipped.append(advance())
         }
 
         while !isAtEnd {
             // If we just passed a dot, we're at the start of a new statement
             if previous().kind == .dot {
-                return
+                return skipped
             }
 
             // If we see a closing brace, stop
             if check(.rightBrace) {
-                return
+                return skipped
             }
 
             // If we see an opening angle bracket, we might be at a new statement
             if check(.leftAngle) {
-                return
+                return skipped
             }
 
-            advance()
+            skipped.append(advance())
         }
+
+        return skipped
     }
 }
 

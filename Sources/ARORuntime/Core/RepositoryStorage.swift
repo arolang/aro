@@ -161,12 +161,18 @@ private actor RepositoryStorageActor {
         var entityId: String? = nil
 
         if var dict = value as? [String: any Sendable] {
-            // First, check if we can find an existing entry by "name" to preserve its "id"
-            if let name = dict["name"], dict["id"] == nil {
+            // Check if we can find an existing entry by "name" or "key" to preserve its "id"
+            // This enables upsert semantics: Create+Store with the same name/key field updates in place.
+            let identityFieldName: String?
+            if dict["name"] != nil { identityFieldName = "name" }
+            else if dict["key"] != nil { identityFieldName = "key" }
+            else { identityFieldName = nil }
+
+            if let identityField = identityFieldName, let identityValue = dict[identityField], dict["id"] == nil {
                 if let existingIndex = storage[key]?.firstIndex(where: { existing in
                     if let existingDict = existing as? [String: any Sendable],
-                       let existingName = existingDict["name"] {
-                        return isEqual(existingName, name)
+                       let existingIdentity = existingDict[identityField] {
+                        return isEqual(existingIdentity, identityValue)
                     }
                     return false
                 }), let existingDict = storage[key]?[existingIndex] as? [String: any Sendable],

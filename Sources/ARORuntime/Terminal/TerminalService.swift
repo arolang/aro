@@ -185,20 +185,21 @@ public actor TerminalService: Sendable {
                 sections[idx].variablePositions = variablePositions
             }
         } else {
-            // New section: append at nextRow, below all previous sections
-            render(text: ANSIRenderer.moveCursor(row: nextRow + 1, column: 1))
-            render(text: content)
+            // New section: append at nextRow, below all previous sections.
+            // Render line-by-line with explicit cursor positioning so that
+            // embedded \n characters in raw TTY mode don't cause column drift.
             sections.append(ScreenSection(
                 name: name,
                 startRow: nextRow,
                 lines: newLines,
                 variablePositions: variablePositions
             ))
-            nextRow += newLines.count
-            // Ensure cursor moves to the next line after the section
-            if !content.hasSuffix("\n") {
-                render(text: "\n")
+            for (i, line) in newLines.enumerated() {
+                render(text: ANSIRenderer.moveCursor(row: nextRow + i + 1, column: 1))
+                render(text: ANSIRenderer.clearToEndOfLine())
+                render(text: line)
             }
+            nextRow += newLines.count
             flushOutput()
         }
     }
