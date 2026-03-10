@@ -45,6 +45,14 @@ struct BuildCommand: AsyncParsableCommand {
     @Flag(name: .long, help: "Emit LLVM IR text instead of binary")
     var emitLLVM: Bool = false
 
+    #if os(macOS)
+    @Option(name: .long, help: "Code signing identity (e.g. 'Apple Development: Name (TEAMID)' or '-' for ad-hoc)")
+    var sign: String?
+
+    @Flag(name: .long, help: "Enable hardened runtime (required for notarization)")
+    var hardenedRuntime: Bool = false
+    #endif
+
 
     func run() async throws {
         let resolvedPath = URL(fileURLWithPath: path)
@@ -424,6 +432,23 @@ struct BuildCommand: AsyncParsableCommand {
             try? runStripCommand(on: binaryPath.path)
         }
 
+        // Code signing (macOS only)
+        #if os(macOS)
+        if let signIdentity = sign {
+            if verbose {
+                print("Signing binary with identity: \(signIdentity)...")
+            }
+            do {
+                try runCodesignCommand(on: binaryPath.path, identity: signIdentity, hardened: hardenedRuntime)
+                if verbose {
+                    print("  Binary signed successfully")
+                }
+            } catch {
+                print("Warning: Code signing failed: \(error)")
+            }
+        }
+        #endif
+
         // Cleanup intermediate files
         if !keepIntermediate {
             try? FileManager.default.removeItem(at: llPath)
@@ -781,6 +806,32 @@ struct BuildCommand: AsyncParsableCommand {
             globalRegistry: globalRegistry
         )
     }
+
+    #if os(macOS)
+    private func runCodesignCommand(on binaryPath: String, identity: String, hardened: Bool) throws {
+        let process = Process()
+        process.executableURL = URL(fileURLWithPath: "/usr/bin/codesign")
+        var args = ["--sign", identity, "--force"]
+        if hardened {
+            args += ["--options", "runtime"]
+        }
+        args.append(binaryPath)
+        process.arguments = args
+        try process.run()
+        process.waitUntilExit()
+        if process.terminationStatus != 0 {
+            throw CodesignError.failed(status: process.terminationStatus)
+        }
+    }
+
+    private enum CodesignError: Error, CustomStringConvertible {
+        case failed(status: Int32)
+        var description: String { "codesign exited with status \(status)" }
+        var status: Int32 {
+            switch self { case .failed(let s): return s }
+        }
+    }
+    #endif
 
     private func runStripCommand(on binaryPath: String) throws {
         let process = Process()

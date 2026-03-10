@@ -57,7 +57,7 @@ public struct PluginManifest: Codable, Sendable, Equatable {
     /// License identifier (e.g., MIT, Apache-2.0)
     public let license: String?
 
-    /// Minimum ARO version required
+    /// Minimum ARO version required (semver constraint, e.g. `">=1.0.0 <2.0.0"`)
     public let aroVersion: String?
 
     /// Source information (populated by `aro add`)
@@ -68,6 +68,9 @@ public struct PluginManifest: Codable, Sendable, Equatable {
 
     /// Dependencies on other plugins
     public let dependencies: [String: DependencySpec]?
+
+    /// Required system libraries (e.g. `["libsqlite3"]`)
+    public let system: [String]?
 
     /// Build configuration
     public let build: BuildConfig?
@@ -84,6 +87,7 @@ public struct PluginManifest: Codable, Sendable, Equatable {
         case source
         case provides
         case dependencies
+        case system
         case build
     }
 
@@ -99,6 +103,7 @@ public struct PluginManifest: Codable, Sendable, Equatable {
         source: SourceInfo? = nil,
         provides: [ProvideEntry] = [],
         dependencies: [String: DependencySpec]? = nil,
+        system: [String]? = nil,
         build: BuildConfig? = nil
     ) {
         self.name = name
@@ -110,6 +115,7 @@ public struct PluginManifest: Codable, Sendable, Equatable {
         self.source = source
         self.provides = provides
         self.dependencies = dependencies
+        self.system = system
         self.build = build
     }
 
