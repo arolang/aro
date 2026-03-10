@@ -4,6 +4,6 @@
 -- but are omitted from the PDF rather than causing xelatex errors.
 function RawBlock(el)
   if el.format:match("html") then
-    return pandoc.Null()
+    return {}
   end
 end
