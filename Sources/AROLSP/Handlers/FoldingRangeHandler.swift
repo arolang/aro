@@ -66,6 +66,17 @@ public struct FoldingRangeHandler: Sendable {
                         ))
                     }
                 }
+
+                // Add folding ranges for range loops (ARO-0072)
+                if let rangeLoop = statement as? RangeLoop {
+                    if rangeLoop.span.start.line < rangeLoop.span.end.line {
+                        ranges.append(createFoldingRange(
+                            startLine: rangeLoop.span.start.line - 1,
+                            endLine: rangeLoop.span.end.line - 1,
+                            kind: "region"
+                        ))
+                    }
+                }
             }
         }
 

@@ -29,32 +29,10 @@ public struct ReferencesHandler: Sendable {
 
         for analyzed in result.analyzedProgram.featureSets {
             let fs = analyzed.featureSet
-
-            for statement in fs.statements {
-                if let aro = statement as? AROStatement {
-                    // Check result
-                    if isPositionInSpan(aroPosition, aro.result.span) {
-                        targetName = aro.result.base
-                        break
-                    }
-
-                    // Check object
-                    if isPositionInSpan(aroPosition, aro.object.noun.span) {
-                        targetName = aro.object.noun.base
-                        break
-                    }
-
-                    // Check expression
-                    if let expr = aro.valueSource.asExpression {
-                        if let name = findSymbolNameInExpression(expr, position: aroPosition) {
-                            targetName = name
-                            break
-                        }
-                    }
-                }
+            if let found = findSymbolNameInStatements(fs.statements, position: aroPosition) {
+                targetName = found
+                break
             }
-
-            if targetName != nil { break }
         }
 
         guard let symbolName = targetName else { return nil }
@@ -64,39 +42,71 @@ public struct ReferencesHandler: Sendable {
 
         for analyzed in result.analyzedProgram.featureSets {
             let fs = analyzed.featureSet
+            references.append(contentsOf: findReferencesInStatements(fs.statements, name: symbolName, uri: uri))
+        }
 
-            for statement in fs.statements {
-                if let aro = statement as? AROStatement {
-                    // Check result
-                    if aro.result.base == symbolName {
-                        references.append(createLocationDict(uri: uri, span: aro.result.span))
-                    }
+        return references.isEmpty ? nil : references
+    }
 
-                    // Check object
-                    if aro.object.noun.base == symbolName {
-                        references.append(createLocationDict(uri: uri, span: aro.object.noun.span))
-                    }
+    private func findReferencesInStatements(
+        _ statements: [Statement],
+        name symbolName: String,
+        uri: String
+    ) -> [[String: Any]] {
+        var references: [[String: Any]] = []
 
-                    // Check expression
-                    if let expr = aro.valueSource.asExpression {
-                        references.append(contentsOf: findReferencesInExpression(expr, name: symbolName, uri: uri))
-                    }
-
-                    // Check where clause
-                    if let whereClause = aro.queryModifiers.whereClause {
-                        references.append(contentsOf: findReferencesInExpression(whereClause.value, name: symbolName, uri: uri))
-                    }
+        for statement in statements {
+            if let aro = statement as? AROStatement {
+                if aro.result.base == symbolName {
+                    references.append(createLocationDict(uri: uri, span: aro.result.span))
                 }
-
-                if let publish = statement as? PublishStatement {
-                    if publish.internalVariable == symbolName {
-                        references.append(createLocationDict(uri: uri, span: publish.span))
-                    }
+                if aro.object.noun.base == symbolName {
+                    references.append(createLocationDict(uri: uri, span: aro.object.noun.span))
+                }
+                if let expr = aro.valueSource.asExpression {
+                    references.append(contentsOf: findReferencesInExpression(expr, name: symbolName, uri: uri))
+                }
+                if let whereClause = aro.queryModifiers.whereClause {
+                    references.append(contentsOf: findReferencesInExpression(whereClause.value, name: symbolName, uri: uri))
+                }
+            } else if let publish = statement as? PublishStatement {
+                if publish.internalVariable == symbolName {
+                    references.append(createLocationDict(uri: uri, span: publish.span))
+                }
+            } else if let forEachLoop = statement as? ForEachLoop {
+                references.append(contentsOf: findReferencesInStatements(forEachLoop.body, name: symbolName, uri: uri))
+            } else if let rangeLoop = statement as? RangeLoop {
+                references.append(contentsOf: findReferencesInStatements(rangeLoop.body, name: symbolName, uri: uri))
+            } else if let matchStmt = statement as? MatchStatement {
+                for caseClause in matchStmt.cases {
+                    references.append(contentsOf: findReferencesInStatements(caseClause.body, name: symbolName, uri: uri))
                 }
             }
         }
 
-        return references.isEmpty ? nil : references
+        return references
+    }
+
+    // MARK: - Statement Traversal
+
+    private func findSymbolNameInStatements(_ statements: [Statement], position: SourceLocation) -> String? {
+        for statement in statements {
+            if let aro = statement as? AROStatement {
+                if isPositionInSpan(position, aro.result.span) { return aro.result.base }
+                if isPositionInSpan(position, aro.object.noun.span) { return aro.object.noun.base }
+                if let expr = aro.valueSource.asExpression,
+                   let name = findSymbolNameInExpression(expr, position: position) { return name }
+            } else if let forEachLoop = statement as? ForEachLoop {
+                if let name = findSymbolNameInStatements(forEachLoop.body, position: position) { return name }
+            } else if let rangeLoop = statement as? RangeLoop {
+                if let name = findSymbolNameInStatements(rangeLoop.body, position: position) { return name }
+            } else if let matchStmt = statement as? MatchStatement {
+                for caseClause in matchStmt.cases {
+                    if let name = findSymbolNameInStatements(caseClause.body, position: position) { return name }
+                }
+            }
+        }
+        return nil
     }
 
     // MARK: - Expression Traversal
