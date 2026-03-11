@@ -1,0 +1,19 @@
+# Type: console
+# Command: aro run ./Examples/LinkHeaderPagination
+# NOTE: occurrence-check — verifies keys present in output, not exact values
+---
+Demonstrating RFC 8288 Link header parsing...
+Pagination links:
+next: https://api.example.com/items?page=2
+prev: https://api.example.com/items?page=1
+last: https://api.example.com/items?page=5
+first: https://api.example.com/items?page=1
+Next page URL:
+https://api.example.com/items?page=2
+Previous page URL:
+https://api.example.com/items?page=1
+Last page URL:
+https://api.example.com/items?page=5
+First page URL:
+https://api.example.com/items?page=1
+startup

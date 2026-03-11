@@ -206,6 +206,10 @@ public final class FeatureSetExecutor: @unchecked Sendable {
             try await executeRequireStatement(requireStatement, context: context)
         } else if let forEachLoop = statement as? ForEachLoop {
             try await executeForEachLoop(forEachLoop, context: context)
+        } else if let whileLoop = statement as? WhileLoop {
+            try await executeWhileLoop(whileLoop, context: context)
+        } else if statement is BreakStatement {
+            throw BreakSignal()
         } else if let rangeLoop = statement as? RangeLoop {
             try await executeRangeLoop(rangeLoop, context: context)
         } else if let pipelineStatement = statement as? PipelineStatement {
@@ -310,7 +314,7 @@ public final class FeatureSetExecutor: @unchecked Sendable {
                 // Response actions like write/read/store should NOT have their result bound to expression value
                 let responseVerbs: Set<String> = ["write", "read", "store", "save", "persist", "log", "print", "send", "emit", "notify", "alert", "signal", "broadcast"]
                 // Server lifecycle actions always need execution for side effects
-                let serverVerbs: Set<String> = ["start", "stop", "restart", "keepalive", "schedule"]
+                let serverVerbs: Set<String> = ["start", "stop", "restart", "keepalive", "schedule", "sleep", "delay", "pause"]
                 // Check if there's a dynamic handler registered for this verb (plugin-provided action)
                 let hasDynamicHandler = await actionRegistry.dynamicHandler(for: verb) != nil
                 let needsExecution = testVerbs.contains(verb.lowercased()) ||
@@ -914,7 +918,37 @@ public final class FeatureSetExecutor: @unchecked Sendable {
         if let array = value as? [any Sendable] { return !array.isEmpty }
         return true  // Non-nil values are truthy
     }
+
+    // MARK: - While Loop Execution (ARO-0131)
+
+    private func executeWhileLoop(
+        _ loop: WhileLoop,
+        context: ExecutionContext
+    ) async throws {
+        context.enterMutableScope()
+        defer { context.exitMutableScope() }
+
+        while true {
+            // Evaluate condition
+            let condValue = try await expressionEvaluator.evaluate(loop.condition, context: context)
+            guard asBool(condValue) else { break }
+
+            // Execute body statements
+            do {
+                for statement in loop.body {
+                    try await executeStatement(statement, context: context)
+                    // Stop body early if a response was set
+                    if context.getResponse() != nil { return }
+                }
+            } catch is BreakSignal {
+                break
+            }
+        }
+    }
 }
+
+/// Thrown by `break` statements to exit the enclosing while loop
+struct BreakSignal: Error {}
 
 // MARK: - Runtime
 

@@ -141,6 +141,8 @@ struct MCPTests {
 
             #expect(toolNames.contains("aro_check"))
             #expect(toolNames.contains("aro_run"))
+            #expect(toolNames.contains("aro_compile"))
+            #expect(toolNames.contains("aro_examples"))
             #expect(toolNames.contains("aro_actions"))
             #expect(toolNames.contains("aro_parse"))
             #expect(toolNames.contains("aro_syntax"))
@@ -184,6 +186,51 @@ struct MCPTests {
             #expect(text.contains("Extract"))
             #expect(text.contains("Return"))
             #expect(text.contains("Log"))
+            #expect(text.contains("Join"))
+            #expect(text.contains("Schedule"))
+            #expect(text.contains("Stream"))
+        }
+
+        @Test("aro_actions with role filter returns filtered results")
+        func aroActionsWithRoleFilter() async {
+            let provider = MCPToolProvider()
+            let result = await provider.callTool(
+                name: "aro_actions",
+                arguments: .object(["role": .string("request")])
+            )
+
+            let text = result.content.first?.text ?? ""
+            #expect(text.contains("Extract"))
+            #expect(text.contains("Retrieve"))
+            // OWN actions should not appear
+            #expect(!text.contains("Compute"))
+        }
+
+        @Test("aro_examples returns example list")
+        func aroExamplesReturnsList() async {
+            let provider = MCPToolProvider()
+            let result = await provider.callTool(name: "aro_examples", arguments: nil)
+
+            let text = result.content.first?.text ?? ""
+            #expect(text.contains("ARO Example Applications"))
+            #expect(text.contains("HelloWorld"))
+            #expect(text.contains("UserService"))
+            #expect(text.contains("aro run"))
+        }
+
+        @Test("aro_examples with category filter")
+        func aroExamplesWithCategoryFilter() async {
+            let provider = MCPToolProvider()
+            let result = await provider.callTool(
+                name: "aro_examples",
+                arguments: .object(["category": .string("http")])
+            )
+
+            let text = result.content.first?.text ?? ""
+            #expect(text.contains("HelloWorldAPI"))
+            #expect(text.contains("UserService"))
+            // Core examples should not appear
+            #expect(!text.contains("Calculator"))
         }
 
         @Test("aro_syntax returns syntax reference")
@@ -210,6 +257,92 @@ struct MCPTests {
             #expect(text.contains("HTTP API"))
             #expect(text.contains("openapi.yaml"))
             #expect(text.contains("operationId"))
+        }
+
+        @Test("aro_syntax control-flow topic")
+        func aroSyntaxControlFlowTopic() async {
+            let provider = MCPToolProvider()
+            let result = await provider.callTool(
+                name: "aro_syntax",
+                arguments: .object(["topic": .string("control-flow")])
+            )
+
+            let text = result.content.first?.text ?? ""
+            #expect(text.contains("For-Each Loop"))
+            #expect(text.contains("Range Loop"))
+            #expect(text.contains("Match Statement"))
+            #expect(text.contains("When Guards"))
+        }
+
+        @Test("aro_syntax plugins topic")
+        func aroSyntaxPluginsTopic() async {
+            let provider = MCPToolProvider()
+            let result = await provider.callTool(
+                name: "aro_syntax",
+                arguments: .object(["topic": .string("plugins")])
+            )
+
+            let text = result.content.first?.text ?? ""
+            #expect(text.contains("plugin.yaml"))
+            #expect(text.contains("aro_plugin_info"))
+        }
+
+        @Test("aro_syntax state-machine topic")
+        func aroSyntaxStateMachineTopic() async {
+            let provider = MCPToolProvider()
+            let result = await provider.callTool(
+                name: "aro_syntax",
+                arguments: .object(["topic": .string("state-machine")])
+            )
+
+            let text = result.content.first?.text ?? ""
+            #expect(text.contains("Accept"))
+            #expect(text.contains("StateTransition"))
+        }
+
+        @Test("aro_parse handles ForEachLoop")
+        func aroParseHandlesForEachLoop() async {
+            let provider = MCPToolProvider()
+            let result = await provider.callTool(
+                name: "aro_parse",
+                arguments: .object([
+                    "code": .string("""
+                    (Test: Demo) {
+                        for each <item> in <items> {
+                            Log <item> to the <console>.
+                        }
+                    }
+                    """)
+                ])
+            )
+
+            let text = result.content.first?.text ?? ""
+            #expect(result.isError != true)
+            #expect(text.contains("ForEachLoop"))
+            #expect(text.contains("item"))
+        }
+
+        @Test("aro_parse handles MatchStatement")
+        func aroParseHandlesMatchStatement() async {
+            let provider = MCPToolProvider()
+            let result = await provider.callTool(
+                name: "aro_parse",
+                arguments: .object([
+                    "code": .string("""
+                    (Test: Demo) {
+                        match <status> {
+                            case "active" {
+                                Log "active" to the <console>.
+                            }
+                        }
+                    }
+                    """)
+                ])
+            )
+
+            let text = result.content.first?.text ?? ""
+            #expect(result.isError != true)
+            #expect(text.contains("MatchStatement"))
         }
 
         @Test("aro_parse returns AST")
@@ -314,6 +447,9 @@ struct MCPTests {
             #expect(names.contains("debug_error"))
             #expect(names.contains("create_plugin"))
             #expect(names.contains("convert_to_aro"))
+            #expect(names.contains("create_state_machine"))
+            #expect(names.contains("create_data_pipeline"))
+            #expect(names.contains("create_repository_observer"))
         }
 
         @Test("Get create_feature_set prompt")
@@ -373,6 +509,52 @@ struct MCPTests {
             let text = result?.messages.first?.content.text ?? ""
             #expect(text.contains("Rust"))
             #expect(text.contains("#[no_mangle]"))
+        }
+
+        @Test("Get create_state_machine prompt")
+        func getCreateStateMachinePrompt() {
+            let provider = MCPPromptProvider()
+            let result = provider.getPrompt(
+                name: "create_state_machine",
+                arguments: ["entity": "ticket", "states": "open,in-progress,resolved,closed"]
+            )
+
+            #expect(result != nil)
+            let text = result?.messages.first?.content.text ?? ""
+            #expect(text.contains("ticket"))
+            #expect(text.contains("Accept"))
+            #expect(text.contains("StateTransition"))
+            #expect(text.contains("open,in-progress,resolved,closed"))
+        }
+
+        @Test("Get create_data_pipeline prompt")
+        func getCreateDataPipelinePrompt() {
+            let provider = MCPPromptProvider()
+            let result = provider.getPrompt(
+                name: "create_data_pipeline",
+                arguments: ["source": "orders from repository", "operations": "filter, aggregate totals"]
+            )
+
+            #expect(result != nil)
+            let text = result?.messages.first?.content.text ?? ""
+            #expect(text.contains("orders from repository"))
+            #expect(text.contains("Filter"))
+            #expect(text.contains("for each"))
+        }
+
+        @Test("Get create_repository_observer prompt")
+        func getCreateRepositoryObserverPrompt() {
+            let provider = MCPPromptProvider()
+            let result = provider.getPrompt(
+                name: "create_repository_observer",
+                arguments: ["repository": "order-repository", "action": "send email notification"]
+            )
+
+            #expect(result != nil)
+            let text = result?.messages.first?.content.text ?? ""
+            #expect(text.contains("order-repository"))
+            #expect(text.contains("Observer"))
+            #expect(text.contains("changeType"))
         }
 
         @Test("Unknown prompt returns nil")

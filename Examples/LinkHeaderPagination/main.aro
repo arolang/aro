@@ -1,0 +1,37 @@
+(* Demonstrates RFC 8288 Link header parsing (ARO-0132).
+   The Parse action with the link-header specifier converts a standard HTTP
+   Link header value into a rel-keyed dictionary for easy navigation. *)
+
+(Application-Start: Link Header Pagination Demo) {
+    Log "Demonstrating RFC 8288 Link header parsing..." to the <console>.
+
+    (* A typical HTTP Link header returned by paginated APIs such as GitHub.
+       Each entry is a URL in angle brackets followed by a rel= parameter.
+       Multiple entries are comma-separated. *)
+    Create the <link-value> with "<https://api.example.com/items?page=2>; rel=\"next\", <https://api.example.com/items?page=1>; rel=\"prev\", <https://api.example.com/items?page=5>; rel=\"last\", <https://api.example.com/items?page=1>; rel=\"first\"".
+
+    (* Parse the Link header string into a rel-keyed dictionary *)
+    Parse the <pagination: link-header> from the <link-value>.
+
+    Log "Pagination links:" to the <console>.
+    Log <pagination> to the <console>.
+
+    (* Extract individual rel links for use in subsequent requests *)
+    Extract the <next-url> from the <pagination: next>.
+    Log "Next page URL:" to the <console>.
+    Log <next-url> to the <console>.
+
+    Extract the <prev-url> from the <pagination: prev>.
+    Log "Previous page URL:" to the <console>.
+    Log <prev-url> to the <console>.
+
+    Extract the <last-url> from the <pagination: last>.
+    Log "Last page URL:" to the <console>.
+    Log <last-url> to the <console>.
+
+    Extract the <first-url> from the <pagination: first>.
+    Log "First page URL:" to the <console>.
+    Log <first-url> to the <console>.
+
+    Return an <OK: status> for the <startup>.
+}

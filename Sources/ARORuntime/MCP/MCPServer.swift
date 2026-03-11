@@ -19,7 +19,7 @@ public actor MCPServer {
     private var verbose: Bool
     private let version: String
 
-    public init(basePath: String? = nil, verbose: Bool = false, version: String = "0.3.0") {
+    public init(basePath: String? = nil, verbose: Bool = false, version: String = "0.4.0") {
         self.transport = StdioTransport()
         self.jsonRpc = JSONRPCHandler()
         self.toolProvider = MCPToolProvider()

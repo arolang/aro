@@ -56,6 +56,10 @@ public final class Lexer: @unchecked Sendable {
         "parallel": .keyword(.parallel),
         "concurrency": .keyword(.concurrency),
 
+        // Keywords - While Loop (ARO-0002 extension, ARO-0131)
+        "while": .keyword(.while),
+        "break": .keyword(.break),
+
         // Keywords - Types
         "type": .keyword(.type),
         "enum": .keyword(.enum),

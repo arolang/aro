@@ -34,6 +34,8 @@ public final class LLVMCodeGenerator {
     // MARK: - State
 
     private var globalRuntime: GlobalVariable?
+    /// Break target block for the innermost while loop (nil when not inside a loop)
+    private var currentBreakBlock: BasicBlock?
 
     // MARK: - Initialization
 
@@ -238,6 +240,10 @@ public final class LLVMCodeGenerator {
             generateMatchStatement(matchStatement, index: index, errorBlock: errorBlock)
         case let forEachLoop as ForEachLoop:
             generateForEachLoop(forEachLoop, index: index, errorBlock: errorBlock)
+        case let whileLoop as WhileLoop:
+            generateWhileLoop(whileLoop, index: index, errorBlock: errorBlock)
+        case is BreakStatement:
+            generateBreakStatement(index: index)
         case let publishStatement as PublishStatement:
             generatePublishStatement(publishStatement, index: index, errorBlock: errorBlock)
         case let requireStatement as RequireStatement:
@@ -989,8 +995,13 @@ public final class LLVMCodeGenerator {
             for stmt in forEachLoop.body {
                 collectBoundVariablesFromStatement(stmt, into: &variables)
             }
+        } else if let whileLoop = statement as? WhileLoop {
+            // While loop variables are in the outer scope — collect them
+            for stmt in whileLoop.body {
+                collectBoundVariablesFromStatement(stmt, into: &variables)
+            }
         }
-        // PublishStatement and RequireStatement don't bind new variables
+        // PublishStatement, RequireStatement, and BreakStatement don't bind new variables
     }
 
     private func generateForEachLoop(_ loop: ForEachLoop, index: Int, errorBlock: BasicBlock) {
@@ -1141,6 +1152,92 @@ public final class LLVMCodeGenerator {
 
         // === End Block ===
         ctx.setInsertionPoint(atEndOf: endBlock)
+    }
+
+    // MARK: - While Loop Generation (ARO-0131)
+
+    private func generateWhileLoop(_ loop: WhileLoop, index: Int, errorBlock: BasicBlock) {
+        let prefix = "while\(index)"
+
+        // Create loop blocks
+        let condBlock = ctx.module.appendBlock(named: "\(prefix)_cond", to: ctx.currentFunction!)
+        let bodyBlock = ctx.module.appendBlock(named: "\(prefix)_body", to: ctx.currentFunction!)
+        let endBlock  = ctx.module.appendBlock(named: "\(prefix)_end",  to: ctx.currentFunction!)
+
+        // Enter mutable scope so variable rebinds are allowed inside the loop
+        _ = ctx.module.insertCall(
+            externals.enterMutableScope,
+            on: [ctx.currentContextVar!],
+            at: ctx.insertionPoint
+        )
+
+        // Jump to condition block
+        ctx.module.insertBr(to: condBlock, at: ctx.insertionPoint)
+
+        // === Condition Block ===
+        ctx.setInsertionPoint(atEndOf: condBlock)
+
+        let condJSON = ctx.stringConstant(serializeExpression(loop.condition))
+        let condResult = ctx.module.insertCall(
+            externals.evaluateWhenGuard,
+            on: [ctx.currentContextVar!, condJSON],
+            at: ctx.insertionPoint
+        )
+        let isTrue = ctx.module.insertIntegerComparison(
+            .ne, condResult, ctx.i32Type.zero, at: ctx.insertionPoint
+        )
+        ctx.module.insertCondBr(if: isTrue, then: bodyBlock, else: endBlock, at: ctx.insertionPoint)
+
+        // === Body Block ===
+        ctx.setInsertionPoint(atEndOf: bodyBlock)
+
+        // Push break target so inner BreakStatement knows where to jump
+        let savedBreakBlock = currentBreakBlock
+        currentBreakBlock = endBlock
+
+        // Generate body statements
+        for (stmtIndex, stmt) in loop.body.enumerated() {
+            generateStatement(stmt, index: index * 100 + stmtIndex, errorBlock: errorBlock)
+        }
+
+        // Restore outer break target
+        currentBreakBlock = savedBreakBlock
+
+        // Loop back to condition (unless we already have a terminator)
+        ctx.module.insertBr(to: condBlock, at: ctx.insertionPoint)
+
+        // === End Block ===
+        ctx.setInsertionPoint(atEndOf: endBlock)
+
+        // Exit mutable scope
+        _ = ctx.module.insertCall(
+            externals.exitMutableScope,
+            on: [ctx.currentContextVar!],
+            at: ctx.insertionPoint
+        )
+    }
+
+    private func generateBreakStatement(index: Int) {
+        guard let breakBlock = currentBreakBlock else {
+            ctx.recordError(.invalidExpression(
+                description: "break used outside of while loop",
+                span: SourceSpan.unknown
+            ))
+            return
+        }
+
+        // Exit mutable scope before jumping out
+        _ = ctx.module.insertCall(
+            externals.exitMutableScope,
+            on: [ctx.currentContextVar!],
+            at: ctx.insertionPoint
+        )
+
+        ctx.module.insertBr(to: breakBlock, at: ctx.insertionPoint)
+
+        // Append an unreachable continuation block so remaining code has a home
+        let contBlock = ctx.module.appendBlock(named: "break_cont\(index)", to: ctx.currentFunction!)
+        ctx.setInsertionPoint(atEndOf: contBlock)
     }
 
     // MARK: - Publish Statement Generation

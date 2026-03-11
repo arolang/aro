@@ -1,11 +1,119 @@
 // ============================================================
 // ParseAction.swift
-// ARO Runtime - HTML Parse Action for Structured Data Extraction
+// ARO Runtime - Parse Actions for Structured Data Extraction
 // ============================================================
 
 import Foundation
 import SwiftSoup
 import AROParser
+
+// MARK: - ParseLinkHeader Action
+
+/// Parse action for RFC 8288 Link header values into a rel-keyed dictionary.
+///
+/// Parses the standard HTTP Link header format where each entry is a URL in angle
+/// brackets followed by semicolon-separated parameters. The `rel` parameter value
+/// becomes the dictionary key, and the URL becomes the value.
+///
+/// ## Syntax
+/// ```aro
+/// Parse the <pagination: link-header> from the <link-header-value>.
+/// ```
+///
+/// ## Input format (RFC 8288)
+/// ```
+/// <https://api.example.com/items?page=2>; rel="next", <https://api.example.com/items?page=1>; rel="prev"
+/// ```
+///
+/// ## Output
+/// ```
+/// { "next": "https://api.example.com/items?page=2", "prev": "https://api.example.com/items?page=1" }
+/// ```
+public struct ParseLinkHeaderAction: ActionImplementation {
+    public static let role: ActionRole = .own
+    public static let verbs: Set<String> = ["parse"]
+    public static let validPrepositions: Set<Preposition> = [.from]
+
+    public init() {}
+
+    public func execute(
+        result: ResultDescriptor,
+        object: ObjectDescriptor,
+        context: ExecutionContext
+    ) async throws -> any Sendable {
+        try validatePreposition(object.preposition)
+
+        let parseType = result.specifiers.first ?? ""
+        guard parseType.lowercased() == "link-header" else {
+            throw ActionError.runtimeError("Unknown parse type: \(parseType). Supported types: link-header")
+        }
+
+        let input: String = try context.resolveWithSpecifiers(object.base, specifiers: object.specifiers)
+        return parseLinkHeader(input)
+    }
+
+    /// Parse RFC 8288 Link header string into a [rel: url] dictionary.
+    private func parseLinkHeader(_ header: String) -> [String: any Sendable] {
+        var result: [String: any Sendable] = [:]
+
+        // Split on commas — careful: URLs can contain commas (percent-encoded), but
+        // RFC 8288 implementations split naively on top-level commas (outside angle brackets).
+        let entries = splitTopLevelCommas(header)
+
+        for entry in entries {
+            let parts = entry.split(separator: ";", omittingEmptySubsequences: false)
+            guard let urlPart = parts.first else { continue }
+
+            // Extract URL from angle brackets
+            let trimmed = urlPart.trimmingCharacters(in: .whitespaces)
+            guard trimmed.hasPrefix("<"), trimmed.hasSuffix(">") else { continue }
+            let url = String(trimmed.dropFirst().dropLast())
+
+            // Extract rel= parameter
+            var rel: String? = nil
+            for param in parts.dropFirst() {
+                let p = param.trimmingCharacters(in: .whitespaces)
+                if p.lowercased().hasPrefix("rel=") {
+                    var value = String(p.dropFirst(4)) // drop "rel="
+                    // Strip surrounding quotes if present
+                    if value.hasPrefix("\"") && value.hasSuffix("\"") {
+                        value = String(value.dropFirst().dropLast())
+                    }
+                    rel = value
+                    break
+                }
+            }
+
+            if let rel = rel, !url.isEmpty {
+                result[rel] = url
+            }
+        }
+
+        return result
+    }
+
+    /// Split a Link header string on commas that are not inside angle brackets.
+    private func splitTopLevelCommas(_ input: String) -> [String] {
+        var entries: [String] = []
+        var current = ""
+        var depth = 0
+        for ch in input {
+            switch ch {
+            case "<": depth += 1; current.append(ch)
+            case ">": depth -= 1; current.append(ch)
+            case "," where depth == 0:
+                entries.append(current)
+                current = ""
+            default:
+                current.append(ch)
+            }
+        }
+        if !current.trimmingCharacters(in: .whitespaces).isEmpty {
+            entries.append(current)
+        }
+        return entries
+    }
+}
 
 // MARK: - ParseHtml Action
 

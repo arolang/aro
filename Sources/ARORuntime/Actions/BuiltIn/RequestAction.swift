@@ -134,24 +134,29 @@ public struct RequestAction: ActionImplementation {
         }
 
         // Parse response body as JSON if possible
-        let resultValue: any Sendable
+        let parsedBody: any Sendable
         if let bodyData = response.body,
            let json = try? JSONSerialization.jsonObject(with: bodyData) {
             if let dict = json as? [String: Any] {
-                resultValue = convertToSendable(dict)
+                parsedBody = convertToSendable(dict)
             } else if let array = json as? [Any] {
-                resultValue = array.map { convertToSendable($0) }
+                parsedBody = array.map { convertToSendable($0) }
             } else {
-                resultValue = response.bodyString ?? ""
+                parsedBody = response.bodyString ?? ""
             }
         } else {
-            resultValue = response.bodyString ?? ""
+            parsedBody = response.bodyString ?? ""
         }
 
-        // Return result - FeatureSetExecutor will bind it
-        // Response metadata (statusCode, headers, isSuccess) could be added
-        // to resultValue if needed, but for now we return the parsed body
-        return resultValue
+        // Return structured envelope: body + status code + response headers.
+        // ExtractAction handles HTTPResponse with body fall-through for backwards
+        // compatibility — existing code like `Extract the <users> from the <response: users>`
+        // continues to work without modification.
+        return AROHTTPResult(
+            body: parsedBody,
+            status: response.statusCode,
+            headers: response.headers
+        )
         #else
         throw ActionError.runtimeError("HTTP client not available on Windows")
         #endif

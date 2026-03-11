@@ -56,6 +56,8 @@ public final class LLVMExternalDeclEmitter {
     private var _interpolateString: Function?
     private var _evaluateWhenGuard: Function?
     private var _evaluateExpression: Function?
+    private var _enterMutableScope: Function?
+    private var _exitMutableScope: Function?
     private var _evaluateAndBind: Function?
     private var _evaluateFilter: Function?
     private var _matchPattern: Function?
@@ -338,6 +340,18 @@ public final class LLVMExternalDeclEmitter {
             types.functionType(parameters: [ptr, ptr], returning: i32)
         )
 
+        // void @aro_runtime_enter_mutable_scope(ptr)
+        _enterMutableScope = ctx.module.declareFunction(
+            "aro_runtime_enter_mutable_scope",
+            types.voidFunctionType(parameters: [ptr])
+        )
+
+        // void @aro_runtime_exit_mutable_scope(ptr)
+        _exitMutableScope = ctx.module.declareFunction(
+            "aro_runtime_exit_mutable_scope",
+            types.voidFunctionType(parameters: [ptr])
+        )
+
         // void @aro_evaluate_expression(ptr, ptr)
         _evaluateExpression = ctx.module.declareFunction(
             "aro_evaluate_expression",
@@ -510,6 +524,8 @@ public final class LLVMExternalDeclEmitter {
     public var interpolateString: Function { _interpolateString! }
     public var evaluateWhenGuard: Function { _evaluateWhenGuard! }
     public var evaluateExpression: Function { _evaluateExpression! }
+    public var enterMutableScope: Function { _enterMutableScope! }
+    public var exitMutableScope: Function { _exitMutableScope! }
     public var evaluateAndBind: Function { _evaluateAndBind! }
     public var evaluateFilter: Function { _evaluateFilter! }
     public var matchPattern: Function { _matchPattern! }

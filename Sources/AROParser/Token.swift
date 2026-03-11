@@ -67,6 +67,10 @@ public enum TokenKind: Sendable, Equatable, CustomStringConvertible {
     case parallel           // parallel (for parallel for-each)
     case concurrency        // concurrency (for concurrency limit)
 
+    // Keywords - While Loop (ARO-0002 extension, ARO-0131)
+    case `while`            // while (unbounded loop)
+    case `break`            // break (exit innermost loop)
+
     // Keywords - Types (ARO-0006)
     case type               // type
     case `enum`             // enum
@@ -166,6 +170,8 @@ public enum TokenKind: Sendable, Equatable, CustomStringConvertible {
         case .atKeyword: return "at"
         case .parallel: return "parallel"
         case .concurrency: return "concurrency"
+        case .while: return "while"
+        case .break: return "break"
         case .type: return "type"
         case .enum: return "enum"
         case .protocol: return "protocol"
