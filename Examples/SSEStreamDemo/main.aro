@@ -1,0 +1,36 @@
+(* SSE Stream Demo - Subscribing to a Server-Sent Events stream *)
+(*
+   This example connects to the Wikimedia RecentChanges SSE stream,
+   which broadcasts live edits to Wikipedia and other Wikimedia projects.
+
+   The Stream action opens a persistent connection and emits a domain event
+   for each SSE message received. The event handler processes each update.
+*)
+
+(Application-Start: SSE Stream Demo) {
+    Log "SSE Stream Demo" to the <console>.
+    Log "Connecting to Wikimedia RecentChanges stream..." to the <console>.
+
+    (* Subscribe to the public Wikimedia recent-changes SSE stream.
+       Each edit emits a <wiki-change> event that triggers the handler below. *)
+    Stream the <wiki-change> from "https://stream.wikimedia.org/v2/stream/recentchange".
+
+    (* Keep the application alive to receive stream events *)
+    Keepalive the <application> for the <events>.
+
+    Return an <OK: status> for the <startup>.
+}
+
+(Application-End: Success) {
+    Log "Stream closed. Goodbye!" to the <console>.
+}
+
+(Process Change: wiki-change Handler) {
+    Extract the <title> from the <event: title>.
+    Extract the <wiki> from the <event: wiki>.
+    Extract the <user> from the <event: user>.
+
+    Log "Edit on ${wiki}: ${title} by ${user}" to the <console>.
+
+    Return an <OK: status> for the <update>.
+}

@@ -13,6 +13,7 @@ public enum RequestActionsModule: ActionModule {
             ReceiveAction.self,
             RequestAction.self,
             ReadAction.self,
+            StreamAction.self,
         ]
     }
 }

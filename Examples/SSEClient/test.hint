@@ -1,0 +1,5 @@
+# Test hints for SSEClient
+# Connects to a live SSE stream; verifies startup output.
+type: keepalive
+allow-error: true
+occurrence-check: true
