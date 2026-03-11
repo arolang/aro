@@ -215,6 +215,29 @@ public struct SourceInfo: Codable, Sendable, Equatable {
     }
 }
 
+// MARK: - Action Declaration
+
+/// Metadata for a single action declared in a plugin's `provides` entry.
+///
+/// The `since` field enables per-action API versioning: the action is only
+/// available when the running ARO version satisfies `>= since`.
+public struct ActionDeclaration: Codable, Sendable, Equatable {
+    /// Action name (e.g. "ParseCSV")
+    public let name: String
+
+    /// Minimum ARO version this action requires (e.g. `"1.1.0"`)
+    public let since: String?
+
+    /// Human-readable description
+    public let description: String?
+
+    public init(name: String, since: String? = nil, description: String? = nil) {
+        self.name = name
+        self.since = since
+        self.description = description
+    }
+}
+
 // MARK: - Provide Entry
 
 /// Describes what a plugin provides
@@ -231,16 +254,21 @@ public struct ProvideEntry: Codable, Sendable, Equatable {
     /// Python-specific configuration (optional)
     public let python: PythonConfig?
 
+    /// Actions declared in this provide entry (used for per-action `since` versioning)
+    public let actions: [ActionDeclaration]?
+
     public init(
         type: ProvideType,
         path: String,
         build: ProvideEntryBuild? = nil,
-        python: PythonConfig? = nil
+        python: PythonConfig? = nil,
+        actions: [ActionDeclaration]? = nil
     ) {
         self.type = type
         self.path = path
         self.build = build
         self.python = python
+        self.actions = actions
     }
 
     /// Validate the provide entry
