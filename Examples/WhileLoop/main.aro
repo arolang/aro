@@ -1,0 +1,35 @@
+(* ARO-0131: While Loop Demo *)
+(* Demonstrates while loops: counter, accumulation, and early exit *)
+
+(Application-Start: Loop Demo) {
+    Require the <console> from the <framework>.
+
+    (* 1. Basic counter loop *)
+    Log "=== Counter ===" to the <console>.
+    Compute the <count> from 1.
+    while <count> <= 3 {
+        Log <count> to the <console>.
+        Compute the <count> from <count> + 1.
+    }
+
+    (* 2. Accumulation loop: sum 1 + 2 + 3 + 4 + 5 = 15 *)
+    Log "=== Sum ===" to the <console>.
+    Compute the <i> from 1.
+    Compute the <total> from 0.
+    while <i> <= 5 {
+        Compute the <total> from <total> + <i>.
+        Compute the <i> from <i> + 1.
+    }
+    Log <total> to the <console>.
+
+    (* 3. Loop with break statement *)
+    Log "=== Break ===" to the <console>.
+    Compute the <step> from 1.
+    while <step> <= 10 {
+        Compute the <step> from <step> + 1.
+        break.
+    }
+    Log <step> to the <console>.
+
+    Return an <OK: status> for the <demo>.
+}

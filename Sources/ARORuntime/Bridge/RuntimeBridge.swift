@@ -2587,3 +2587,21 @@ public func aro_evaluate_filter(
 
     return 0
 }
+
+// MARK: - Mutable Scope (ARO-0131 While Loop)
+
+/// Enter a mutable scope in the given context (called at start of while loop)
+@_cdecl("aro_runtime_enter_mutable_scope")
+public func aro_runtime_enter_mutable_scope(_ contextPtr: UnsafeMutableRawPointer?) {
+    guard let ptr = contextPtr else { return }
+    let contextHandle = Unmanaged<AROCContextHandle>.fromOpaque(ptr).takeUnretainedValue()
+    contextHandle.context.enterMutableScope()
+}
+
+/// Exit a mutable scope in the given context (called at end of while loop)
+@_cdecl("aro_runtime_exit_mutable_scope")
+public func aro_runtime_exit_mutable_scope(_ contextPtr: UnsafeMutableRawPointer?) {
+    guard let ptr = contextPtr else { return }
+    let contextHandle = Unmanaged<AROCContextHandle>.fromOpaque(ptr).takeUnretainedValue()
+    contextHandle.context.exitMutableScope()
+}

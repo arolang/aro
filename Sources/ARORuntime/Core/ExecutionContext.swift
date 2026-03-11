@@ -149,6 +149,12 @@ public protocol ExecutionContext: AnyObject, Sendable {
     /// - Parameter name: The variable name to unbind
     func unbind(_ name: String)
 
+    /// Enter a mutable scope (e.g., while loop body)
+    func enterMutableScope()
+
+    /// Exit a mutable scope
+    func exitMutableScope()
+
     /// Check if a variable exists
     /// - Parameter name: The variable name to check
     /// - Returns: true if the variable is defined
