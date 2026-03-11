@@ -826,6 +826,60 @@ struct StringInterpolationTests {
         // Without interpolation, it's a simple string literal
         #expect(tokens[0].kind == .stringLiteral("Hello World"))
     }
+
+    // MARK: - Single-quote nesting inside interpolation (Issue #126)
+
+    @Test("Interpolation with single-quoted string inside")
+    func testInterpolationWithSingleQuote() throws {
+        // "Result: ${<items> where name = 'test'}"
+        let tokens = try Lexer.tokenize("\"Result: ${<items> where name = 'test'}\"")
+
+        #expect(tokens[0].kind == .stringSegment("Result: "))
+        #expect(tokens[1].kind == .interpolationStart)
+        // The expression content should include the single-quoted literal
+        let hasItems = tokens.contains { $0.kind == .identifier("items") }
+        #expect(hasItems)
+        let ends = tokens.filter { $0.kind == .interpolationEnd }
+        #expect(ends.count == 1)
+    }
+
+    @Test("Interpolation single-quote allows outer quote inside")
+    func testInterpolationSingleQuoteAllowsOuterQuote() throws {
+        // "Query: ${col = 'say \"hi\"'}" — outer " inside single-quoted region is valid
+        let tokens = try Lexer.tokenize(#""Query: ${col = 'say \"hi\"'}""#)
+
+        #expect(tokens[0].kind == .stringSegment("Query: "))
+        #expect(tokens[1].kind == .interpolationStart)
+        let ends = tokens.filter { $0.kind == .interpolationEnd }
+        #expect(ends.count == 1)
+    }
+
+    @Test("Multiple interpolations with single quotes")
+    func testMultipleInterpolationsWithSingleQuotes() throws {
+        let tokens = try Lexer.tokenize("\"${<a> where x = 'foo'} and ${<b> where y = 'bar'}\"")
+
+        let starts = tokens.filter { $0.kind == .interpolationStart }
+        let ends = tokens.filter { $0.kind == .interpolationEnd }
+        #expect(starts.count == 2)
+        #expect(ends.count == 2)
+    }
+
+    @Test("Unterminated interpolation still throws")
+    func testUnterminatedInterpolation() throws {
+        #expect(throws: (any Error).self) {
+            try Lexer.tokenize("\"hello ${<name>\"")
+        }
+    }
+
+    @Test("Interpolation nested braces still work with single quotes")
+    func testInterpolationNestedBracesWithSingleQuotes() throws {
+        // Nested braces inside interpolation + single quote region
+        let tokens = try Lexer.tokenize("\"${format(<t>, 'value')}\"")
+
+        #expect(tokens[0].kind == .interpolationStart)
+        let ends = tokens.filter { $0.kind == .interpolationEnd }
+        #expect(ends.count == 1)
+    }
 }
 
 // MARK: - Lexer Feature Set Tests

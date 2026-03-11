@@ -526,7 +526,14 @@ public final class Lexer: @unchecked Sendable {
         return Character(scalar)
     }
 
-    /// Scans content inside ${...} interpolation, handling nested braces
+    /// Scans content inside ${...} interpolation, handling nested braces and single-quoted strings.
+    ///
+    /// Single quotes inside `${}` open a nested string region where `}` does not close the
+    /// interpolation and the outer quote character is treated as a literal. This enables patterns like:
+    /// ```aro
+    /// "Query: ${SELECT * FROM t WHERE name = 'test'}"
+    /// "Result: ${<items> where category = 'books'}"
+    /// ```
     private func scanInterpolationContent(
         quote: Character,
         start: SourceLocation,
@@ -535,24 +542,35 @@ public final class Lexer: @unchecked Sendable {
         var braceDepth = 1
         var content = ""
         let contentStart = location
+        var insideSingleQuote = false  // Whether we're inside a '...' region
 
         while !isAtEnd && braceDepth > 0 {
             let char = peek()
-            if char == "\n" {
+
+            if char == "'" {
+                // Toggle single-quote region
+                insideSingleQuote.toggle()
+                content.append(advance())
+            } else if char == "\\" && insideSingleQuote {
+                // Handle escape sequences inside single-quoted regions
+                content.append(advance()) // backslash
+                if !isAtEnd {
+                    content.append(advance()) // escaped char
+                }
+            } else if char == "\n" && !insideSingleQuote {
                 throw LexerError.unterminatedString(at: start)
-            }
-            if char == "{" {
+            } else if char == "{" && !insideSingleQuote {
                 braceDepth += 1
                 content.append(advance())
-            } else if char == "}" {
+            } else if char == "}" && !insideSingleQuote {
                 braceDepth -= 1
                 if braceDepth > 0 {
                     content.append(advance())
                 } else {
                     _ = advance() // consume closing }
                 }
-            } else if char == quote {
-                // String ended before interpolation closed
+            } else if char == quote && !insideSingleQuote {
+                // Outer quote encountered outside any nested string — unterminated interpolation
                 throw LexerError.unterminatedString(at: start)
             } else {
                 content.append(advance())
