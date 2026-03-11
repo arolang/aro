@@ -123,7 +123,7 @@ public final class UnifiedPluginLoader: @unchecked Sendable {
         if let constraint = manifest.aroVersion {
             let currentVersion = currentAROVersion()
             if !semverSatisfies(version: currentVersion, constraint: constraint) {
-                print("[Plugin] Warning: '\(manifest.name)' requires ARO \(constraint), current version is \(currentVersion). Plugin may not work correctly.")
+                fputs("[Plugin] Warning: '\(manifest.name)' requires ARO \(constraint), current version is \(currentVersion). Plugin may not work correctly.\n", stderr)
             }
         }
 
