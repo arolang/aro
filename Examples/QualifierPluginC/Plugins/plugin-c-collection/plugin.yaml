@@ -1,5 +1,6 @@
 name: plugin-c-collection
 version: 1.0.0
+handle: List
 description: A C plugin that provides list qualifiers (first, last, size)
 author: ARO Team
 license: MIT

@@ -1,5 +1,6 @@
 name: plugin-python-markdown
 version: 1.0.0
+handle: Markdown
 description: A Python plugin for Markdown processing
 author: ARO Team
 license: MIT

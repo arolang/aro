@@ -244,18 +244,31 @@ public final class PluginLoader: @unchecked Sendable {
     }
 
     /// Extract the handler namespace from a plugin.yaml file.
-    /// Returns the `handler:` value from the first `provides:` entry, or nil if not present.
+    ///
+    /// Priority:
+    /// 1. Root-level `handle:` (canonical PascalCase field, ARO-0095)
+    /// 2. `handler:` inside `provides:` entries (legacy, still supported)
     private func parseHandlerFromPluginYAML(_ yaml: String) -> String? {
+        var insideProvides = false
+        var legacyHandler: String? = nil
         for line in yaml.components(separatedBy: "\n") {
             let trimmed = line.trimmingCharacters(in: .whitespaces)
-            if trimmed.hasPrefix("handler:") {
+            // Root-level handle: (not indented under provides:)
+            if !line.hasPrefix(" ") && !line.hasPrefix("\t") && trimmed.hasPrefix("handle:") {
+                let value = String(trimmed.dropFirst("handle:".count))
+                    .trimmingCharacters(in: .whitespaces)
+                    .trimmingCharacters(in: CharacterSet(charactersIn: "'\""))
+                if !value.isEmpty { return value }
+            }
+            if trimmed.hasPrefix("provides:") { insideProvides = true }
+            if insideProvides && trimmed.hasPrefix("handler:") && legacyHandler == nil {
                 let value = String(trimmed.dropFirst("handler:".count))
                     .trimmingCharacters(in: .whitespaces)
                     .trimmingCharacters(in: CharacterSet(charactersIn: "'\""))
-                return value.isEmpty ? nil : value
+                if !value.isEmpty { legacyHandler = value }
             }
         }
-        return nil
+        return legacyHandler
     }
 
     /// Load a C plugin dynamic library

@@ -53,6 +53,10 @@ public final class UnifiedPluginLoader: @unchecked Sendable {
     /// Plugin manifests
     private var manifests: [String: UnifiedPluginManifest] = [:]
 
+    /// Registered handles: maps handle (lowercased) → plugin name that claimed it.
+    /// Used to enforce handle uniqueness across plugins.
+    private var registeredHandles: [String: String] = [:]
+
     /// Lock for thread safety
     private let lock = NSLock()
 
@@ -127,6 +131,18 @@ public final class UnifiedPluginLoader: @unchecked Sendable {
         manifests[manifest.name] = manifest
         lock.unlock()
 
+        // Resolve and validate the effective namespace handle
+        let effectiveHandle: String?
+        if let handle = resolveEffectiveHandle(manifest: manifest) {
+            if registerHandle(handle, pluginName: manifest.name) {
+                effectiveHandle = handle
+            } else {
+                effectiveHandle = nil
+            }
+        } else {
+            effectiveHandle = nil
+        }
+
         // Load each provided component
         for provide in manifest.provides {
             let providePath = pluginDir.appendingPathComponent(provide.path)
@@ -143,7 +159,7 @@ public final class UnifiedPluginLoader: @unchecked Sendable {
                     at: providePath,
                     pluginName: manifest.name,
                     config: provide,
-                    qualifierNamespace: provide.handler
+                    qualifierNamespace: effectiveHandle
                 )
 
             case "rust-plugin", "c-plugin", "cpp-plugin":
@@ -151,7 +167,7 @@ public final class UnifiedPluginLoader: @unchecked Sendable {
                     at: providePath,
                     pluginName: manifest.name,
                     config: provide,
-                    qualifierNamespace: provide.handler
+                    qualifierNamespace: effectiveHandle
                 )
 
             case "python-plugin":
@@ -159,7 +175,7 @@ public final class UnifiedPluginLoader: @unchecked Sendable {
                     at: providePath,
                     pluginName: manifest.name,
                     config: provide,
-                    qualifierNamespace: provide.handler
+                    qualifierNamespace: effectiveHandle
                 )
 
             default:
@@ -331,9 +347,74 @@ public final class UnifiedPluginLoader: @unchecked Sendable {
         pythonPlugins.values.forEach { $0.unload() }
         pythonPlugins.removeAll()
         manifests.removeAll()
+        registeredHandles.removeAll()
         lock.unlock()
 
         legacyLoader.unloadAll()
+    }
+
+    // MARK: - Handle Resolution
+
+    /// Resolve the effective namespace handle for a plugin.
+    ///
+    /// Priority order:
+    /// 1. Root-level `handle:` from plugin.yaml (canonical, PascalCase)
+    /// 2. `handler:` from the first `provides:` entry (legacy, emits deprecation warning)
+    ///
+    /// Returns nil only for plugins that have no native/Python actions (e.g., pure aro-files plugins).
+    private func resolveEffectiveHandle(manifest: UnifiedPluginManifest) -> String? {
+        // 1. Root-level handle (preferred)
+        if let handle = manifest.handle {
+            validateHandleFormat(handle, pluginName: manifest.name)
+            return handle
+        }
+
+        // 2. Legacy: handler inside provides entries
+        let legacyHandler = manifest.provides.compactMap { $0.handler }.first
+        if let handler = legacyHandler {
+            print("[Plugin] Warning: plugin '\(manifest.name)' uses deprecated 'handler:' inside 'provides:'. " +
+                  "Move it to a root-level 'handle:' field in plugin.yaml (e.g., handle: \(toPascalCase(handler))).")
+            return handler
+        }
+
+        return nil
+    }
+
+    /// Validate that a handle follows PascalCase convention.
+    private func validateHandleFormat(_ handle: String, pluginName: String) {
+        guard !handle.isEmpty else {
+            print("[Plugin] Warning: plugin '\(pluginName)' has an empty handle.")
+            return
+        }
+        guard handle.first?.isUppercase == true else {
+            print("[Plugin] Warning: plugin '\(pluginName)' handle '\(handle)' should be PascalCase " +
+                  "(e.g., '\(toPascalCase(handle))'). Handles must start with an uppercase letter.")
+            return
+        }
+        if handle.contains("-") || handle.contains("_") {
+            print("[Plugin] Warning: plugin '\(pluginName)' handle '\(handle)' should be PascalCase " +
+                  "without hyphens or underscores.")
+        }
+    }
+
+    /// Register a handle and check for uniqueness conflicts.
+    /// - Returns: false if the handle is already claimed by another plugin.
+    private func registerHandle(_ handle: String, pluginName: String) -> Bool {
+        let key = handle.lowercased()
+        if let existing = registeredHandles[key], existing != pluginName {
+            print("[Plugin] Error: plugin '\(pluginName)' handle '\(handle)' conflicts with " +
+                  "already-loaded plugin '\(existing)'. Plugin will be loaded without namespace.")
+            return false
+        }
+        registeredHandles[key] = pluginName
+        return true
+    }
+
+    /// Convert a lowercase/kebab-case string to PascalCase (for suggestions).
+    private func toPascalCase(_ s: String) -> String {
+        s.split(separator: "-")
+            .map { $0.prefix(1).uppercased() + $0.dropFirst() }
+            .joined()
     }
 }
 
@@ -419,8 +500,18 @@ public struct UnifiedPluginManifest: Codable, Sendable {
     let provides: [UnifiedProvideEntry]
     let dependencies: [String: UnifiedDependencySpec]?
 
+    /// Root-level namespace handle (PascalCase, e.g. `Markdown`, `Hash`, `Collections`).
+    ///
+    /// This is the canonical way to declare a plugin namespace. When set, all plugin-provided
+    /// actions and qualifiers are accessed with this prefix in ARO code:
+    /// - Actions:    `Markdown.ToHTML the <result> from the <input>.`
+    /// - Qualifiers: `Compute the <item: Collections.pick-random> from the <list>.`
+    ///
+    /// Takes priority over the legacy `handler:` field inside `provides:` entries.
+    let handle: String?
+
     enum CodingKeys: String, CodingKey {
-        case name, version, description, author, license
+        case name, version, description, author, license, handle
         case aroVersion = "aro-version"
         case source, provides, dependencies
     }

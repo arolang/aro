@@ -607,33 +607,33 @@ public final class NativePluginHost: @unchecked Sendable {
                 verbs = [name]
             }
 
-            // Register with ActionRegistry under all verbs
+            // Register with ActionRegistry under all verbs.
+            // When a qualifier namespace is set (via handle: or handler:), register as both
+            // "namespace.verb" (for Namespace.Verb style ARO code) and the plain verb.
             for verb in verbs {
-                // When a handler namespace is set, register only as "handler.verb".
-                // Without a handler, register only the plain verb.
-                let registeredVerb: String
+                var registeredVerbs: [String] = [verb]
                 if let ns = qualifierNamespace {
-                    registeredVerb = "\(ns).\(verb)"
-                } else {
-                    registeredVerb = verb
+                    registeredVerbs.append("\(ns).\(verb)")
                 }
 
-                let wrapper = NativePluginActionWrapper(
-                    pluginName: pluginName,
-                    actionName: name,
-                    verb: registeredVerb,
-                    pluginVerb: verb,
-                    host: self,
-                    descriptor: descriptor
-                )
-
-                registrationCount += 1
-                Task {
-                    await ActionRegistry.shared.registerDynamic(
+                for registeredVerb in registeredVerbs {
+                    let wrapper = NativePluginActionWrapper(
+                        pluginName: pluginName,
+                        actionName: name,
                         verb: registeredVerb,
-                        handler: wrapper.handle
+                        pluginVerb: verb,
+                        host: self,
+                        descriptor: descriptor
                     )
-                    semaphore.signal()
+
+                    registrationCount += 1
+                    Task {
+                        await ActionRegistry.shared.registerDynamic(
+                            verb: registeredVerb,
+                            handler: wrapper.handle
+                        )
+                        semaphore.signal()
+                    }
                 }
             }
         }

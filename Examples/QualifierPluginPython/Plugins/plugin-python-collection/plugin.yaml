@@ -1,5 +1,6 @@
 name: plugin-python-collection
 version: 1.0.0
+handle: Stats
 description: A Python plugin that provides list qualifiers (sort, unique, sum, avg, min, max)
 author: ARO Team
 license: MIT

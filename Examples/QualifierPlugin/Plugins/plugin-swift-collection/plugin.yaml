@@ -1,5 +1,6 @@
 name: plugin-swift-collection
 version: 1.0.0
+handle: Collections
 description: A Swift plugin that provides collection qualifiers (pick-random, shuffle, reverse)
 author: ARO Team
 license: MIT

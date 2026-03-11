@@ -114,6 +114,8 @@ public final class KeyboardService: @unchecked Sendable {
     /// Map raw byte sequences to key names
     private func parseKey(_ buf: [UInt8], count: Int) -> String {
         switch (count, buf[0]) {
+        case (1, 9):            // HT → Tab
+            return "tab"
         case (1, 13), (1, 10):  // CR / LF → Enter
             return "enter"
         case (1, 27):           // lone ESC
