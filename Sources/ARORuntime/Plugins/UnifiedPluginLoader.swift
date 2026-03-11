@@ -443,6 +443,15 @@ private func currentAROVersion() -> String {
 /// Supports `>=`, `<=`, `>`, `<`, `^`, `~`, space-separated compound constraints,
 /// and exact matches. Mirrors the logic in `AROVersionChecker`.
 private func semverSatisfies(version: String, constraint: String) -> Bool {
+    // Non-semver versions (e.g. git SHAs from `git describe --always`) are
+    // treated as development builds and always satisfy any constraint.
+    func isSemver(_ v: String) -> Bool {
+        let s = v.hasPrefix("v") ? String(v.dropFirst()) : v
+        let base = s.components(separatedBy: CharacterSet(charactersIn: "-+"))[0]
+        return base.split(separator: ".").allSatisfy { Int($0) != nil }
+    }
+    if !isSemver(version) { return true }
+
     func strip(_ v: String) -> String {
         var s = v.hasPrefix("v") ? String(v.dropFirst()) : v
         if let i = s.firstIndex(of: "-") { s = String(s[..<i]) }
