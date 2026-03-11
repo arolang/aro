@@ -353,15 +353,21 @@ struct CheckPlugins: ParsableCommand {
 
         var hasIssues = false
 
-        // 1. ARO version compatibility
-        let incompatible = try pm.checkAROVersionCompatibility(currentAROVersion: currentVersion)
+        // 1. ARO version compatibility (top-level + per-action since)
+        let versionResults = try pm.checkAROVersionCompatibility(currentAROVersion: currentVersion)
+        let incompatible = versionResults.filter { !$0.isCompatible }
         if incompatible.isEmpty {
             print("✅ All plugins are compatible with ARO \(currentVersion)")
         } else {
             hasIssues = true
             print("❌ Incompatible plugins:")
-            for (name, constraint) in incompatible.sorted(by: { $0.key < $1.key }) {
-                print("   • \(name) requires ARO \(constraint)")
+            for result in incompatible.sorted(by: { $0.pluginName < $1.pluginName }) {
+                if let constraint = result.pluginConstraint {
+                    print("   • \(result.pluginName) requires ARO \(constraint)")
+                }
+                for (actionName, since) in result.incompatibleActions {
+                    print("   • \(result.pluginName)/\(actionName) requires ARO >=\(since)")
+                }
             }
         }
 
