@@ -1,0 +1,11 @@
+# Type: console
+# Command: aro run ./Examples/ResponseHeaders
+# NOTE: occurrence-check — verifies keys present in output, not exact values
+---
+Demonstrating HTTP response headers...
+Status:
+200
+Headers received:
+Temperature:
+Latitude:
+startup

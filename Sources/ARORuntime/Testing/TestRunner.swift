@@ -279,6 +279,9 @@ public final class TestContext: ExecutionContext, TestExecutionContext, @uncheck
         variables.removeValue(forKey: name)
     }
 
+    public func enterMutableScope() {}
+    public func exitMutableScope() {}
+
     public func exists(_ name: String) -> Bool {
         lock.lock()
         defer { lock.unlock() }

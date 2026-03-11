@@ -44,9 +44,45 @@ public struct MCPToolProvider: Sendable {
                         "timeout": .object([
                             "type": .string("number"),
                             "description": .string("Timeout in seconds (default: 30)")
+                        ]),
+                        "args": .object([
+                            "type": .string("array"),
+                            "description": .string("Optional command-line arguments to pass to the application"),
+                            "items": .object(["type": .string("string")])
                         ])
                     ]),
                     "required": .array([.string("directory")])
+                ])
+            ),
+            MCPTool(
+                name: "aro_compile",
+                description: "Compile an ARO application to a native binary using aro build. Returns the output path or error.",
+                inputSchema: .object([
+                    "type": .string("object"),
+                    "properties": .object([
+                        "directory": .object([
+                            "type": .string("string"),
+                            "description": .string("Path to directory containing the ARO application to compile")
+                        ]),
+                        "optimize": .object([
+                            "type": .string("boolean"),
+                            "description": .string("Enable compiler optimizations (default: false)")
+                        ])
+                    ]),
+                    "required": .array([.string("directory")])
+                ])
+            ),
+            MCPTool(
+                name: "aro_examples",
+                description: "List available ARO example applications with descriptions.",
+                inputSchema: .object([
+                    "type": .string("object"),
+                    "properties": .object([
+                        "category": .object([
+                            "type": .string("string"),
+                            "description": .string("Filter by category: core, http, events, files, plugins, data, sockets, templates (optional)")
+                        ])
+                    ])
                 ])
             ),
             MCPTool(
@@ -54,7 +90,12 @@ public struct MCPToolProvider: Sendable {
                 description: "List all available ARO actions with their roles, verbs, and valid prepositions.",
                 inputSchema: .object([
                     "type": .string("object"),
-                    "properties": .object([:])
+                    "properties": .object([
+                        "role": .object([
+                            "type": .string("string"),
+                            "description": .string("Filter by action role: request, own, response, export, server (optional)")
+                        ])
+                    ])
                 ])
             ),
             MCPTool(
@@ -79,7 +120,7 @@ public struct MCPToolProvider: Sendable {
                     "properties": .object([
                         "topic": .object([
                             "type": .string("string"),
-                            "description": .string("Specific topic: feature-set, action, statement, http-api, event, repository (optional, returns overview if not specified)")
+                            "description": .string("Specific topic: feature-set, action, statement, http-api, event, repository, control-flow, plugins, state-machine, testing (optional, returns overview if not specified)")
                         ])
                     ])
                 ])
@@ -94,8 +135,12 @@ public struct MCPToolProvider: Sendable {
             return await executeCheck(arguments: arguments)
         case "aro_run":
             return await executeRun(arguments: arguments)
+        case "aro_compile":
+            return await executeCompile(arguments: arguments)
+        case "aro_examples":
+            return executeExamples(arguments: arguments)
         case "aro_actions":
-            return executeActions()
+            return executeActions(arguments: arguments)
         case "aro_parse":
             return executeParse(arguments: arguments)
         case "aro_syntax":
@@ -267,10 +312,16 @@ public struct MCPToolProvider: Sendable {
 
         let timeout = args["timeout"]?.intValue ?? 30
 
+        // Build argument list: aro run <directory> [args...]
+        var processArgs = ["aro", "run", directory]
+        if let extraArgs = args["args"]?.arrayValue {
+            processArgs += extraArgs.compactMap { $0.stringValue }
+        }
+
         // Execute aro run command
         let process = Process()
         process.executableURL = URL(fileURLWithPath: "/usr/bin/env")
-        process.arguments = ["aro", "run", directory]
+        process.arguments = processArgs
 
         let outputPipe = Pipe()
         let errorPipe = Pipe()
@@ -316,104 +367,317 @@ public struct MCPToolProvider: Sendable {
         }
     }
 
+    /// Compile an ARO application to a native binary
+    private func executeCompile(arguments: JSONValue?) async -> MCPToolCallResult {
+        guard let args = arguments?.objectValue,
+              let directory = args["directory"]?.stringValue else {
+            return MCPToolCallResult(
+                content: [.text("Missing required argument: 'directory'")],
+                isError: true
+            )
+        }
+
+        let optimize = args["optimize"]?.boolValue ?? false
+
+        var processArgs = ["aro", "build", directory]
+        if optimize {
+            processArgs.append("--optimize")
+        }
+
+        let process = Process()
+        process.executableURL = URL(fileURLWithPath: "/usr/bin/env")
+        process.arguments = processArgs
+
+        let outputPipe = Pipe()
+        let errorPipe = Pipe()
+        process.standardOutput = outputPipe
+        process.standardError = errorPipe
+
+        do {
+            try process.run()
+
+            let timeoutTask = Task {
+                try await Task.sleep(nanoseconds: 120 * 1_000_000_000)
+                if process.isRunning {
+                    process.terminate()
+                }
+            }
+
+            process.waitUntilExit()
+            timeoutTask.cancel()
+
+            let outputData = outputPipe.fileHandleForReading.readDataToEndOfFile()
+            let errorData = errorPipe.fileHandleForReading.readDataToEndOfFile()
+
+            let output = String(data: outputData, encoding: .utf8) ?? ""
+            let errorOutput = String(data: errorData, encoding: .utf8) ?? ""
+
+            if process.terminationStatus == 0 {
+                let message = output.isEmpty ? "Compilation successful" : output
+                return MCPToolCallResult(content: [.text(message)])
+            } else {
+                let message = errorOutput.isEmpty ? output : errorOutput
+                return MCPToolCallResult(
+                    content: [.text("Compilation failed (exit code \(process.terminationStatus)):\n\(message)")],
+                    isError: true
+                )
+            }
+        } catch {
+            return MCPToolCallResult(
+                content: [.text("Failed to compile: \(error.localizedDescription)")],
+                isError: true
+            )
+        }
+    }
+
+    /// List available example applications
+    private func executeExamples(arguments: JSONValue?) -> MCPToolCallResult {
+        let category = arguments?["category"]?.stringValue
+
+        let allExamples: [(category: String, name: String, description: String)] = [
+            // Core Language
+            ("core", "HelloWorld", "Minimal single-file example"),
+            ("core", "Calculator", "Basic arithmetic operations"),
+            ("core", "Computations", "Compute operations and qualifier-as-name syntax"),
+            ("core", "Expressions", "Arithmetic, comparison, and logical operators"),
+            ("core", "Conditionals", "When guards and conditional execution"),
+            ("core", "Iteration", "For-each loops, range loops, and collection iteration"),
+            ("core", "Scoping", "Publish as, business activity scope, pipeline, loop isolation"),
+            ("core", "Immutability", "Immutable bindings, new-name pattern, qualifier-as-name"),
+            ("core", "ErrorHandling", "Error philosophy demonstration"),
+            ("core", "Parameters", "Command-line argument parsing"),
+            // HTTP & WebSocket
+            ("http", "HelloWorldAPI", "Simple HTTP API"),
+            ("http", "HTTPServer", "HTTP server with Keepalive"),
+            ("http", "HTTPClient", "HTTP client requests"),
+            ("http", "UserService", "Multi-file REST API application"),
+            ("http", "WeatherClient", "Fetch live external API data"),
+            ("http", "SimpleChat", "WebSocket real-time messaging"),
+            ("http", "WebSocketDemo", "WebSocket server patterns"),
+            // Events & Lifecycle
+            ("events", "EventExample", "Custom event emission and handling"),
+            ("events", "EventListener", "Event subscription patterns"),
+            ("events", "ApplicationEnd", "Graceful shutdown handlers"),
+            ("events", "StateMachine", "State transitions with Accept action"),
+            ("events", "OrderService", "Full state machine example"),
+            // File System
+            ("files", "FileWatcher", "File system monitoring"),
+            ("files", "FileOperations", "File I/O (read, write, copy, move)"),
+            ("files", "FileMetadata", "File stats and attributes"),
+            ("files", "FormatAwareIO", "Auto-detect JSON, YAML, CSV"),
+            ("files", "DirectoryReplicator", "Directory operations"),
+            // Data Processing
+            ("data", "DataPipeline", "Filter, transform, aggregate"),
+            ("data", "SetOperations", "Union, intersect, difference"),
+            ("data", "CollectionMerge", "Merging collections and objects"),
+            ("data", "RepositoryObserver", "Repository change observers"),
+            ("data", "DateTimeDemo", "Date/time operations"),
+            ("data", "DateRangeDemo", "Date ranges and recurrence"),
+            // Sockets
+            ("sockets", "EchoSocket", "TCP socket server"),
+            ("sockets", "SocketClient", "TCP client connections"),
+            ("sockets", "MultiService", "Multiple services in one app"),
+            // Templates & Output
+            ("templates", "TemplateEngine", "Mustache-style templates"),
+            ("templates", "ContextAware", "Human/machine/developer formatting"),
+            ("templates", "MetricsDemo", "Prometheus metrics export"),
+            // Plugins
+            ("plugins", "GreetingPlugin", "Swift plugin example"),
+            ("plugins", "HashPluginDemo", "C plugin example"),
+            ("plugins", "CSVProcessor", "Rust plugin example"),
+            ("plugins", "MarkdownRenderer", "Python plugin example"),
+            ("plugins", "QualifierPlugin", "Swift plugin with qualifiers"),
+            ("plugins", "QualifierPluginC", "C plugin with qualifiers"),
+            ("plugins", "QualifierPluginPython", "Python plugin with qualifiers"),
+        ]
+
+        let filtered = category.map { cat in
+            allExamples.filter { $0.category == cat }
+        } ?? allExamples
+
+        if filtered.isEmpty {
+            return MCPToolCallResult(
+                content: [.text("No examples found for category: \(category ?? "").\nAvailable categories: core, http, events, files, data, sockets, templates, plugins")],
+                isError: true
+            )
+        }
+
+        var output = "# ARO Example Applications\n\n"
+
+        let grouped = Dictionary(grouping: filtered, by: { $0.category })
+        let categoryOrder = category.map { [$0] } ?? ["core", "http", "events", "files", "data", "sockets", "templates", "plugins"]
+
+        for cat in categoryOrder {
+            guard let examples = grouped[cat] else { continue }
+            let categoryTitle: String
+            switch cat {
+            case "core": categoryTitle = "Core Language"
+            case "http": categoryTitle = "HTTP & WebSocket"
+            case "events": categoryTitle = "Events & Lifecycle"
+            case "files": categoryTitle = "File System"
+            case "data": categoryTitle = "Data Processing"
+            case "sockets": categoryTitle = "Sockets"
+            case "templates": categoryTitle = "Templates & Output"
+            case "plugins": categoryTitle = "Plugins"
+            default: categoryTitle = cat.capitalized
+            }
+            output += "## \(categoryTitle)\n\n"
+            for example in examples {
+                output += "- **\(example.name)**: \(example.description)\n"
+                output += "  Run with: `aro run ./Examples/\(example.name)`\n"
+            }
+            output += "\n"
+        }
+
+        return MCPToolCallResult(content: [.text(output)])
+    }
+
     /// List all available actions
-    private func executeActions() -> MCPToolCallResult {
-        // Return static documentation of all built-in actions
-        let output = """
-        # ARO Actions
+    private func executeActions(arguments: JSONValue?) -> MCPToolCallResult {
+        let roleFilter = arguments?["role"]?.stringValue?.lowercased()
 
-        ARO has approximately 48 built-in actions organized by role:
+        struct ActionGroup {
+            let role: String
+            let title: String
+            let description: String
+            let actions: [(name: String, description: String, prepositions: String)]
+        }
 
-        ## REQUEST Actions (External -> Internal)
-        Bring data into the feature set:
+        let groups: [ActionGroup] = [
+            ActionGroup(
+                role: "request",
+                title: "REQUEST Actions (External → Internal)",
+                description: "Bring data into the feature set:",
+                actions: [
+                    ("Extract", "Get data from events, requests, parameters, path parameters", "from"),
+                    ("Retrieve", "Get data from repositories; supports `where field = value` and `default` fallback", "from"),
+                    ("Fetch", "Make HTTP GET requests to external services", "from"),
+                    ("Request", "Make HTTP requests (GET, POST, PUT, DELETE)", "from"),
+                    ("Read", "Read content from files", "from"),
+                    ("Receive", "Receive data from socket connections", "from"),
+                    ("Parse", "Parse structured data (JSON, HTML, XML, CSV)", "from"),
+                    ("ParseLinkHeader", "Parse HTTP Link header into pagination info", "from"),
+                ]
+            ),
+            ActionGroup(
+                role: "own",
+                title: "OWN Actions (Internal → Internal)",
+                description: "Transform data within the feature set:",
+                actions: [
+                    ("Compute", "Calculate values; supports arithmetic, length, uppercase, lowercase, hash, string concat (++)", "from, with"),
+                    ("Validate", "Check data against rules or schemas", "against, with"),
+                    ("Compare", "Compare two values; result is a boolean", "against"),
+                    ("Transform", "Convert data between types (int, float, string, bool)", "to, with"),
+                    ("Create", "Create new objects or collections", "with, from"),
+                    ("Update", "Update fields on an existing object", "in, with"),
+                    ("Delete", "Remove data from a collection", "from"),
+                    ("Filter", "Filter collections by predicate", "with, from"),
+                    ("Sort", "Sort collections by field", "with"),
+                    ("Split", "Split strings by delimiter or regex (`by /pattern/`)", "with, by"),
+                    ("Join", "Join list elements into a string with separator", "with"),
+                    ("Merge", "Merge two collections or objects", "with"),
+                ]
+            ),
+            ActionGroup(
+                role: "response",
+                title: "RESPONSE Actions (Internal → External)",
+                description: "Return results from the feature set:",
+                actions: [
+                    ("Return", "Return success with optional data (HTTP 200/201/etc via qualifier)", "for, with"),
+                    ("Throw", "Return an error response", "for"),
+                    ("Render", "Render a template and return the result", "from, with"),
+                ]
+            ),
+            ActionGroup(
+                role: "export",
+                title: "EXPORT Actions (Internal → External)",
+                description: "Send data outside the feature set:",
+                actions: [
+                    ("Log", "Write to console/logs", "to"),
+                    ("Store", "Save to repository (auto-generates `id`)", "in, into"),
+                    ("Write", "Write content to a file", "to"),
+                    ("Append", "Append content to a file", "to"),
+                    ("Send", "Send HTTP request or message to service/socket", "to"),
+                    ("Notify", "Send notification to target(s); dispatches NotificationSent events", "to, with"),
+                    ("Emit", "Emit a domain event to the event bus", "with"),
+                    ("Publish", "Make a variable globally visible across feature sets", "as"),
+                    ("Stream", "Stream data lazily to an output or pipe", "to, with"),
+                ]
+            ),
+            ActionGroup(
+                role: "server",
+                title: "SERVER Actions",
+                description: "Control servers, services, and timing:",
+                actions: [
+                    ("Start", "Start a server or service (http-server, file-monitor, socket-server)", "with"),
+                    ("Stop", "Stop a running service", "with"),
+                    ("Listen", "Listen for incoming connections on a port", "on"),
+                    ("Keepalive", "Keep the application running to process events (blocks until SIGINT/SIGTERM)", "for"),
+                    ("Schedule", "Schedule a repeating timer event every N seconds", "with"),
+                    ("Sleep", "Pause execution for N seconds", "for"),
+                    ("WaitForEvents", "Wait until all pending events are processed", "for"),
+                    ("Configure", "Configure runtime settings (timeout, retry, etc.)", "with"),
+                    ("Accept", "Accept a state transition for an entity (triggers StateTransition events)", "for"),
+                ]
+            ),
+        ]
 
-        - **Extract**: Get data from events, requests, parameters. Prepositions: from
-        - **Retrieve**: Get data from repositories. Prepositions: from
-        - **Receive**: Receive data from connections. Prepositions: from
-        - **Request**: Make HTTP requests. Prepositions: from
-        - **Read**: Read from files. Prepositions: from
+        var output = "# ARO Actions\n\n"
+        output += "ARO has \(groups.flatMap { $0.actions }.count)+ built-in actions organized by role.\n\n"
 
-        ## OWN Actions (Internal -> Internal)
-        Transform data within the feature set:
+        for group in groups {
+            if let filter = roleFilter, group.role != filter { continue }
+            output += "## \(group.title)\n"
+            output += "\(group.description)\n\n"
+            for action in group.actions {
+                output += "- **\(action.name)**: \(action.description). Prepositions: `\(action.prepositions)`\n"
+            }
+            output += "\n"
+        }
 
-        - **Compute**: Calculate values, transform data. Prepositions: from, with
-        - **Validate**: Check data against rules. Prepositions: against, with
-        - **Compare**: Compare values. Prepositions: against
-        - **Transform**: Convert data formats. Prepositions: to, with
-        - **Create**: Create new objects. Prepositions: with, from
-        - **Update**: Update existing data. Prepositions: in, with
-        - **Delete**: Delete data. Prepositions: from
-        - **Filter**: Filter collections. Prepositions: with, from
-        - **Sort**: Sort collections. Prepositions: with
-        - **Split**: Split strings. Prepositions: with, by
-        - **Merge**: Merge collections. Prepositions: with
-        - **Parse**: Parse structured data (HTML, JSON, XML). Prepositions: from
+        if roleFilter != nil && !groups.contains(where: { $0.role == roleFilter }) {
+            return MCPToolCallResult(
+                content: [.text("Unknown role filter. Use: request, own, response, export, server")],
+                isError: true
+            )
+        }
 
-        ## RESPONSE Actions (Internal -> External)
-        Return results from the feature set:
+        // File system actions (always shown unless filtered to a different role)
+        if roleFilter == nil {
+            output += """
+            ## FILE Actions
+            File system operations:
 
-        - **Return**: Return success with optional data. Prepositions: for, with
-        - **Throw**: Return error/exception. Prepositions: for
+            - **List**: List directory contents. Prepositions: `from`
+            - **Stat**: Get file metadata (size, dates, permissions). Prepositions: `from`
+            - **Exists**: Check if a path exists. Prepositions: `for`
+            - **Make**: Create a directory. Prepositions: `for`
+            - **Copy**: Copy file to destination. Prepositions: `to`
+            - **Move**: Move/rename file. Prepositions: `to`
 
-        ## EXPORT Actions (Internal -> External)
-        Send data outside the feature set:
+            ## SOCKET Actions
+            TCP/WebSocket communication:
 
-        - **Log**: Write to console/logs. Prepositions: to
-        - **Store**: Save to repository. Prepositions: in
-        - **Write**: Write to file. Prepositions: to
-        - **Send**: Send HTTP request or message. Prepositions: to
-        - **Notify**: Send notification. Prepositions: to
-        - **Publish**: Make variable globally visible. Prepositions: as
-        - **Emit**: Emit domain event. Prepositions: with
+            - **Connect**: Connect to a TCP server. Prepositions: `to`
+            - **Broadcast**: Broadcast message to all connected clients. Prepositions: `to`
+            - **Close**: Close a connection. Prepositions: `for`
 
-        ## SERVER Actions
-        Control servers and services:
+            ## TEST Actions
+            Testing framework (Given/When/Then):
 
-        - **Start**: Start a server or service. Prepositions: with
-        - **Stop**: Stop a server or service. Prepositions: with
-        - **Listen**: Listen for connections. Prepositions: on
+            - **Given**: Set up test context. Prepositions: `with`
+            - **When**: Execute the action under test. Prepositions: `for`
+            - **Then**: Assert expected outcomes. Prepositions: `for`
+            - **Assert**: Make a specific assertion. Prepositions: `for`
 
-        ## SOCKET Actions
-        TCP/WebSocket communication:
+            ## SPECIAL Actions
 
-        - **Connect**: Connect to a server. Prepositions: to
-        - **Broadcast**: Broadcast message to all connections. Prepositions: to
-        - **Close**: Close a connection. Prepositions: for
+            - **Call**: Call an external plugin action. Prepositions: `with`
+            - **Execute**: Execute a system shell command. Prepositions: `with`
+            - **Include**: Include a template file. Prepositions: `from`
 
-        ## FILE Actions
-        File system operations:
-
-        - **List**: List directory contents. Prepositions: from
-        - **Stat**: Get file information. Prepositions: from
-        - **Exists**: Check if file exists. Prepositions: for
-        - **Make**: Create directory. Prepositions: for
-        - **Copy**: Copy file. Prepositions: to
-        - **Move**: Move file. Prepositions: to
-        - **Append**: Append to file. Prepositions: to
-
-        ## DATA PIPELINE Actions
-        Collection transformations:
-
-        - **Map**: Transform each element. Prepositions: with
-        - **Reduce**: Aggregate elements. Prepositions: with
-        - **Filter**: Filter elements. Prepositions: with
-
-        ## TEST Actions
-        Testing framework:
-
-        - **Given**: Setup test context. Prepositions: with
-        - **When**: Execute action under test. Prepositions: for
-        - **Then**: Assert expectations. Prepositions: for
-        - **Assert**: Make assertions. Prepositions: for
-
-        ## SPECIAL Actions
-
-        - **Keepalive**: Keep application running for events. Prepositions: for
-        - **Call**: Call external service (plugin). Prepositions: with
-        - **Execute**: Execute system command. Prepositions: with
-        - **Include**: Include template. Prepositions: from
-        - **Accept**: Accept state transition. Prepositions: for
-        """
+            """
+        }
 
         return MCPToolCallResult(content: [.text(output)])
     }
@@ -449,22 +713,7 @@ public struct MCPToolProvider: Sendable {
                 "name": featureSet.name,
                 "businessActivity": featureSet.businessActivity,
                 "statements": featureSet.statements.map { stmt -> [String: Any] in
-                    if let aroStmt = stmt as? AROStatement {
-                        return [
-                            "type": "AROStatement",
-                            "action": aroStmt.action.verb,
-                            "result": [
-                                "base": aroStmt.result.base,
-                                "typeAnnotation": aroStmt.result.typeAnnotation as Any
-                            ],
-                            "preposition": aroStmt.object.preposition.rawValue,
-                            "object": [
-                                "base": aroStmt.object.noun.base,
-                                "typeAnnotation": aroStmt.object.noun.typeAnnotation as Any
-                            ]
-                        ]
-                    }
-                    return ["type": "Unknown"]
+                    serializeStatement(stmt)
                 }
             ]
             ast.append(fsDict)
@@ -486,6 +735,66 @@ public struct MCPToolProvider: Sendable {
         return MCPToolCallResult(content: [.text("[]")])
     }
 
+    /// Serialize any Statement to a dictionary for JSON output
+    private func serializeStatement(_ stmt: Statement) -> [String: Any] {
+        if let aro = stmt as? AROStatement {
+            var dict: [String: Any] = [
+                "type": "AROStatement",
+                "action": aro.action.verb,
+                "result": [
+                    "base": aro.result.base,
+                    "typeAnnotation": aro.result.typeAnnotation as Any
+                ],
+                "preposition": aro.object.preposition.rawValue,
+                "object": [
+                    "base": aro.object.noun.base,
+                    "typeAnnotation": aro.object.noun.typeAnnotation as Any
+                ]
+            ]
+            if let whereClause = aro.queryModifiers.whereClause {
+                dict["whereField"] = whereClause.field
+            }
+            return dict
+        } else if let publish = stmt as? PublishStatement {
+            return [
+                "type": "PublishStatement",
+                "externalName": publish.externalName,
+                "internalVariable": publish.internalVariable
+            ]
+        } else if let forEach = stmt as? ForEachLoop {
+            return [
+                "type": "ForEachLoop",
+                "itemVariable": forEach.itemVariable,
+                "collection": forEach.collection.base,
+                "body": forEach.body.map { serializeStatement($0) }
+            ]
+        } else if let range = stmt as? RangeLoop {
+            return [
+                "type": "RangeLoop",
+                "variable": range.variable,
+                "from": range.from.description,
+                "to": range.to.description,
+                "body": range.body.map { serializeStatement($0) }
+            ]
+        } else if let match = stmt as? MatchStatement {
+            var dict: [String: Any] = [
+                "type": "MatchStatement",
+                "subject": match.subject.base,
+                "cases": match.cases.map { caseClause -> [String: Any] in
+                    [
+                        "pattern": caseClause.pattern.description,
+                        "body": caseClause.body.map { serializeStatement($0) }
+                    ]
+                }
+            ]
+            if let otherwise = match.otherwise {
+                dict["otherwise"] = otherwise.map { serializeStatement($0) }
+            }
+            return dict
+        }
+        return ["type": "Unknown"]
+    }
+
     /// Get syntax reference
     private func executeSyntax(arguments: JSONValue?) -> MCPToolCallResult {
         let topic = arguments?["topic"]?.stringValue
@@ -503,6 +812,14 @@ public struct MCPToolProvider: Sendable {
             return MCPToolCallResult(content: [.text(eventSyntax)])
         case "repository":
             return MCPToolCallResult(content: [.text(repositorySyntax)])
+        case "control-flow":
+            return MCPToolCallResult(content: [.text(controlFlowSyntax)])
+        case "plugins":
+            return MCPToolCallResult(content: [.text(pluginsSyntax)])
+        case "state-machine":
+            return MCPToolCallResult(content: [.text(stateMachineSyntax)])
+        case "testing":
+            return MCPToolCallResult(content: [.text(testingSyntax)])
         default:
             return MCPToolCallResult(content: [.text(syntaxOverview)])
         }
@@ -544,12 +861,16 @@ public struct MCPToolProvider: Sendable {
         ## Topics
 
         Use the 'topic' argument for detailed info:
-        - `feature-set` - Feature set syntax
+        - `feature-set` - Feature set syntax and application lifecycle
         - `action` - Action syntax and roles
-        - `statement` - Statement structure
-        - `http-api` - Contract-first HTTP APIs
-        - `event` - Event handlers
-        - `repository` - Repository operations
+        - `statement` - Statement structure and qualifiers
+        - `http-api` - Contract-first HTTP APIs with OpenAPI
+        - `event` - Event handlers and emitting events
+        - `repository` - Repository operations (CRUD, observers)
+        - `control-flow` - Loops (for-each, range), match, when guards
+        - `plugins` - Plugin system (Swift, Rust, C, Python)
+        - `state-machine` - State machines with Accept action
+        - `testing` - Testing framework (Given/When/Then)
         """
     }
 
@@ -828,6 +1149,270 @@ public struct MCPToolProvider: Sendable {
             Log "User changed" to the <console>.
             Return an <OK: status> for the <observation>.
         }
+        ```
+        """
+    }
+
+    private var controlFlowSyntax: String {
+        """
+        # Control Flow Syntax
+
+        ## When Guards (Conditional Execution)
+
+        A `when` clause skips the following statement if the condition is false:
+
+        ```aro
+        when <count> > 0 {
+            Log <count> to the <console>.
+        }
+        ```
+
+        ## For-Each Loop
+
+        Iterate over a collection:
+
+        ```aro
+        for each <item> in <items> {
+            Log <item> to the <console>.
+            Store the <item> in the <processed-repository>.
+        }
+        ```
+
+        - Loop variable `<item>` is bound fresh each iteration
+        - Variables bound inside the loop are NOT visible outside it
+
+        ## Range Loop
+
+        Iterate over a numeric range (inclusive):
+
+        ```aro
+        for <i> from 1 to <count> {
+            Log <i> to the <console>.
+        }
+        ```
+
+        ## Match Statement
+
+        Pattern match on a value:
+
+        ```aro
+        match <status> {
+            case "active" {
+                Log "User is active" to the <console>.
+            }
+            case "inactive" {
+                Log "User is inactive" to the <console>.
+            }
+            default {
+                Log "Unknown status" to the <console>.
+            }
+        }
+        ```
+
+        Matching on booleans:
+
+        ```aro
+        Compute the <is-valid> from <age> > 18.
+        match <is-valid> {
+            case true {
+                Return an <OK: status> with <user>.
+            }
+            case false {
+                Throw an <Unauthorized: error> for the <user>.
+            }
+        }
+        ```
+
+        ## Handler Guards
+
+        Event handlers can have `when` guards to filter events:
+
+        ```aro
+        (Notify Adults: UserCreated Handler) when <age> >= 18 {
+            Extract the <user> from the <event: user>.
+            Notify the <user> with "Welcome, adult user!".
+            Return an <OK: status> for the <notification>.
+        }
+        ```
+        """
+    }
+
+    private var pluginsSyntax: String {
+        """
+        # Plugin System
+
+        ARO supports plugins in Swift, Rust, C, and Python.
+
+        ## Directory Structure
+
+        ```
+        MyApp/
+        ├── main.aro
+        └── Plugins/
+            └── my-plugin/
+                ├── plugin.yaml      # Required manifest
+                └── src/             # Source files
+        ```
+
+        ## plugin.yaml
+
+        ```yaml
+        name: plugin-swift-myaction
+        version: 1.0.0
+        description: Provides MyAction
+        aro-version: '>=0.2.0'
+
+        provides:
+          - type: swift-plugin     # or: rust-plugin, c-plugin, python-plugin
+            path: Sources/
+            handler: myaction      # qualifier namespace
+        ```
+
+        ## C ABI Interface (all native plugins must implement)
+
+        ```c
+        char* aro_plugin_info(void);
+        char* aro_plugin_execute(const char* action, const char* input_json);
+        char* aro_plugin_qualifier(const char* qualifier, const char* input_json);
+        void  aro_plugin_free(char* ptr);
+        ```
+
+        ## Using a Plugin in ARO
+
+        ```aro
+        (Process Data: My Feature) {
+            (* Call a plugin action *)
+            Call the <result> with <input> using <my-plugin>.
+
+            (* Use a plugin qualifier *)
+            Compute the <shuffled: myaction.shuffle> from the <items>.
+
+            Return an <OK: status> with <result>.
+        }
+        ```
+
+        ## Plugin Qualifiers
+
+        Qualifiers are namespaced by `handler:` in plugin.yaml:
+
+        ```aro
+        Compute the <sorted: stats.sort> from the <numbers>.
+        Compute the <picked: collections.pick-random> from the <items>.
+        ```
+
+        ## Installing Plugins
+
+        ```bash
+        aro add plugin-name     # Install from registry
+        aro remove plugin-name  # Remove plugin
+        ```
+        """
+    }
+
+    private var stateMachineSyntax: String {
+        """
+        # State Machine Syntax
+
+        ARO supports event-driven state machines using the `Accept` action.
+
+        ## Basic Pattern
+
+        ```aro
+        (* Transition an entity to a new state *)
+        Accept the <order: placed> for the <order-repository>.
+        ```
+
+        The `Accept` action:
+        1. Updates the entity's state field in the repository
+        2. Emits a `StateTransition` event with the new state
+        3. Triggers any `StateTransition Handler<toState:X>` feature sets
+
+        ## State Transition Handlers
+
+        ```aro
+        (* Triggered when order reaches 'placed' state *)
+        (Notify Fulfillment: OrderPlaced StateTransition Handler<toState:placed>) {
+            Extract the <order-id> from the <event: entityId>.
+            Retrieve the <order> from the <order-repository> where id = <order-id>.
+            Notify the <fulfillment-team> with "New order placed".
+            Return an <OK: status> for the <notification>.
+        }
+        ```
+
+        ## Full State Machine Example
+
+        ```aro
+        (* Initial creation - sets state to 'pending' *)
+        (createOrder: Order API) {
+            Extract the <data> from the <request: body>.
+            Create the <order> with <data>.
+            Store the <order> in the <order-repository>.
+            Accept the <order: pending> for the <order-repository>.
+            Return a <Created: status> with <order>.
+        }
+
+        (* Process payment - transition to 'paid' *)
+        (processPayment: Order API) {
+            Extract the <id> from the <pathParameters: id>.
+            Extract the <payment> from the <request: body>.
+            Retrieve the <order> from the <order-repository> where id = <id>.
+            Validate the <payment> against the <order: total>.
+            Accept the <order: paid> for the <order-repository>.
+            Return an <OK: status> with <order>.
+        }
+
+        (* React to state transition *)
+        (Ship Order: paid StateTransition Handler<toState:paid>) {
+            Extract the <order-id> from the <event: entityId>.
+            Retrieve the <order> from the <order-repository> where id = <order-id>.
+            Emit a <ShipOrder: event> with <order>.
+            Return an <OK: status> for the <shipment>.
+        }
+        ```
+        """
+    }
+
+    private var testingSyntax: String {
+        """
+        # Testing Framework Syntax
+
+        ARO supports colocated tests using Given/When/Then pattern.
+
+        ## Test Feature Set Structure
+
+        Test feature sets are named like their subject, co-located in the same file:
+
+        ```aro
+        (* Production feature set *)
+        (calculateDiscount: Pricing) {
+            Extract the <price> from the <request: body>.
+            Extract the <code> from the <request: code>.
+            Validate the <code> against the <discount-codes>.
+            Compute the <discount> from <price> * 0.1.
+            Return an <OK: status> with <discount>.
+        }
+
+        (* Test for calculateDiscount *)
+        (Test calculateDiscount: Pricing Test) {
+            Given the <price> with 100.
+            Given the <code> with "SAVE10".
+            When calculateDiscount for the <request>.
+            Then the <discount> equals 10.
+        }
+        ```
+
+        ## Given/When/Then Actions
+
+        - **Given**: Set up test data: `Given the <variable> with <value>.`
+        - **When**: Execute feature set under test: `When <feature-name> for the <context>.`
+        - **Then**: Assert outcome: `Then the <variable> equals <expected>.`
+        - **Assert**: Low-level assertion: `Assert the <condition> for the <test>.`
+
+        ## Running Tests
+
+        ```bash
+        aro test ./MyApp      # Run all tests in a directory
+        aro test ./MyApp --verbose  # Show all test output
         ```
         """
     }

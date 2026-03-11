@@ -1,0 +1,6 @@
+# Generated: 2026-03-07
+# Type: http
+# Command: aro run ./Examples/SleepAPI
+---
+GET /fast => {"slept":1}
+GET /slow => {"slept":3}

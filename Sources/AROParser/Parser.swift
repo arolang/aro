@@ -205,6 +205,18 @@ public final class Parser {
             return try parseParallelForEachLoop()
         }
 
+        // Check for while loop (ARO-0002 extension, ARO-0131)
+        if check(.while) {
+            return try parseWhileLoop()
+        }
+
+        // Check for break statement (exits innermost while loop)
+        if check(.break) {
+            let tok = try expect(.break, message: "'break'")
+            try expect(.dot, message: "'.'")
+            return BreakStatement(span: tok.span)
+        }
+
         // Check for Publish/Require special forms (no angle brackets, like other actions)
         if check(.publish) {
             let startToken = advance()
@@ -371,11 +383,16 @@ public final class Parser {
             // Parse expression (ARO-0002)
             expression = try parseExpression()
 
-            // Time-unit suffix for duration literals: "with 2 seconds." / "with 5 minutes." / "with 1 hour."
+            // Time-unit suffix for duration literals: "with 2 seconds." / "for 30 seconds." / "with 1 hour."
             // When a time-unit identifier follows a numeric literal, consume it and set objectNoun.base
             // to the unit string so actions can apply the correct multiplier.
-            let timeUnits: Set<String> = ["second", "seconds", "minute", "minutes", "hour", "hours"]
-            if prep == .with, case .identifier(let unit) = peek().kind, timeUnits.contains(unit) {
+            let timeUnits: Set<String> = [
+                "second", "seconds", "s",
+                "minute", "minutes", "min",
+                "hour", "hours", "h",
+                "millisecond", "milliseconds", "ms"
+            ]
+            if (prep == .with || prep == .for), case .identifier(let unit) = peek().kind, timeUnits.contains(unit) {
                 advance()  // consume the time-unit identifier
                 objectNoun = QualifiedNoun(base: unit, specifiers: [], span: previous().span)
             } else {
@@ -1113,6 +1130,38 @@ public final class Parser {
             filter: filter,
             isParallel: isParallel,
             concurrency: concurrency,
+            body: body,
+            span: startToken.span.merged(with: endToken.span)
+        )
+    }
+
+    // MARK: - While Loop Parsing (ARO-0002 extension, ARO-0131)
+
+    /// Parses: "while" <condition> "{" statements "}"
+    ///
+    /// ## Syntax
+    /// ```aro
+    /// while <done> == false {
+    ///     Create the <done> with true when <remaining> == 0.
+    ///     break.
+    /// }
+    /// ```
+    private func parseWhileLoop() throws -> WhileLoop {
+        let startToken = try expect(.while, message: "'while'")
+
+        // Parse the boolean condition expression
+        let condition = try parseExpression()
+
+        // Parse body block: { statements }
+        try expect(.leftBrace, message: "'{'")
+        var body: [Statement] = []
+        while !check(.rightBrace) && !isAtEnd {
+            body.append(try parseStatement())
+        }
+        let endToken = try expect(.rightBrace, message: "'}'")
+
+        return WhileLoop(
+            condition: condition,
             body: body,
             span: startToken.span.merged(with: endToken.span)
         )

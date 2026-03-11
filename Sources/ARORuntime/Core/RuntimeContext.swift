@@ -59,6 +59,10 @@ public final class RuntimeContext: ExecutionContext, @unchecked Sendable {
     /// Schema registry for typed event extraction (ARO-0046)
     private var _schemaRegistry: SchemaRegistry?
 
+    /// Mutable scope depth for while loops (ARO-0131)
+    /// When > 0, all bind calls automatically allow rebinding
+    private var mutableScopeDepth: Int = 0
+
     // MARK: - Metadata
 
     public let featureSetName: String
@@ -231,7 +235,7 @@ public final class RuntimeContext: ExecutionContext, @unchecked Sendable {
         // Check immutability: framework variables (_prefix) can be rebound
         let isFrameworkVariable = name.hasPrefix("_")
 
-        if !isFrameworkVariable && !allowRebind && immutableVariables.contains(name) {
+        if !isFrameworkVariable && !allowRebind && mutableScopeDepth == 0 && immutableVariables.contains(name) {
             // Don't manually unlock - defer handles cleanup (though fatalError terminates)
             fatalError("""
                 Runtime Error: Cannot rebind immutable variable '\(name)'
@@ -259,6 +263,20 @@ public final class RuntimeContext: ExecutionContext, @unchecked Sendable {
         defer { lock.unlock() }
         variables.removeValue(forKey: name)
         immutableVariables.remove(name)
+    }
+
+    /// Enter a mutable scope (e.g., while loop body). Variables can be rebound within this scope.
+    public func enterMutableScope() {
+        lock.lock()
+        defer { lock.unlock() }
+        mutableScopeDepth += 1
+    }
+
+    /// Exit a mutable scope. Restores immutability enforcement when depth reaches zero.
+    public func exitMutableScope() {
+        lock.lock()
+        defer { lock.unlock() }
+        if mutableScopeDepth > 0 { mutableScopeDepth -= 1 }
     }
 
     public func exists(_ name: String) -> Bool {

@@ -103,6 +103,30 @@ public struct FormattingHandler: Sendable {
                 continue
             }
 
+            // Range loop: for <var> from N to M { ... }
+            if trimmed.hasPrefix("for <") {
+                formattedLines.append(String(repeating: indent, count: currentIndentLevel) + trimmed)
+                if trimmed.contains("{") && !trimmed.contains("}") {
+                    currentIndentLevel += 1
+                }
+                continue
+            }
+
+            // While loop: while <condition> { ... }
+            if trimmed.hasPrefix("while") {
+                formattedLines.append(String(repeating: indent, count: currentIndentLevel) + trimmed)
+                if trimmed.contains("{") && !trimmed.contains("}") {
+                    currentIndentLevel += 1
+                }
+                continue
+            }
+
+            // Break statement
+            if trimmed == "break." || trimmed == "break" {
+                formattedLines.append(String(repeating: indent, count: currentIndentLevel) + "break.")
+                continue
+            }
+
             // Closing brace for nested blocks
             if trimmed.hasPrefix("}") && currentIndentLevel > 1 {
                 currentIndentLevel -= 1

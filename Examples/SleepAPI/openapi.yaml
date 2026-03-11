@@ -1,0 +1,48 @@
+openapi: 3.0.3
+servers:
+  - url: http://localhost:8095
+info:
+  title: Sleep API
+  description: |
+    Demonstrates non-blocking Sleep in HTTP handlers.
+
+    Two handlers — fastSleep (1 s) and slowSleep (3 s) — each use
+    `Sleep the <pause> for N seconds.` inside their feature sets.
+    Because Task.sleep is cooperative, two concurrent requests run in
+    parallel: wall-clock time is max(1, 3) ≈ 3 s, not 1 + 3 = 4 s.
+
+    Manual parallel test:
+      curl http://localhost:8095/slow &
+      curl http://localhost:8095/fast
+      wait
+      # Both responses arrive within ~3 seconds total.
+  version: 1.0.0
+paths:
+  /fast:
+    get:
+      operationId: fastSleep
+      summary: Sleep 1 second then return
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  slept:
+                    type: integer
+  /slow:
+    get:
+      operationId: slowSleep
+      summary: Sleep 3 seconds then return
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  slept:
+                    type: integer

@@ -94,7 +94,11 @@ public final class ActionRunner: @unchecked Sendable {
 
         // watch synonyms
         "monitor": "watch",
-        "observe": "watch"
+        "observe": "watch",
+
+        // sleep synonyms (ARO-0054)
+        "delay": "sleep",
+        "pause": "sleep"
     ]
 
     /// Canonicalize a verb to its primary form

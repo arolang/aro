@@ -1,0 +1,29 @@
+(* SleepDemo — ARO-0054: Sleep / Delay built-in action
+   Demonstrates non-blocking pause inside a feature set.
+   Other concurrent tasks continue running while this feature set sleeps. *)
+
+(Application-Start: Sleep Demo) {
+    Log "Starting sleep demonstration..." to the <console>.
+
+    (* 1. Literal duration — "seconds" is the time-unit keyword *)
+    Log "Sleeping 1 second..." to the <console>.
+    Sleep the <short-pause> for 1 second.
+    Log "Awoke after 1 second." to the <console>.
+    Log <short-pause: slept> to the <console>.
+
+    (* 2. Variable duration — resolve from context *)
+    Create the <wait-time> with 2.
+    Log "Sleeping 2 seconds (variable)..." to the <console>.
+    Sleep the <long-pause> for <wait-time> seconds.
+    Log "Awoke after 2 seconds." to the <console>.
+    Log <long-pause: slept> to the <console>.
+
+    (* 3. Milliseconds *)
+    Log "Sleeping 500 milliseconds..." to the <console>.
+    Sleep the <brief> for 500 milliseconds.
+    Log "Awoke after 500 ms." to the <console>.
+    Log <brief: slept> to the <console>.
+
+    Log "Sleep demonstration complete." to the <console>.
+    Return an <OK: status> for the <demo>.
+}

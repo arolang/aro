@@ -32,6 +32,7 @@ public final class AROLanguageServer: Sendable {
     private let semanticTokensHandler: SemanticTokensHandler
     private let signatureHelpHandler: SignatureHelpHandler
     private let codeActionHandler: CodeActionHandler
+    private let inlayHintHandler: InlayHintHandler
 
     private let debugMode: Bool
 
@@ -53,6 +54,7 @@ public final class AROLanguageServer: Sendable {
         self.semanticTokensHandler = SemanticTokensHandler()
         self.signatureHelpHandler = SignatureHelpHandler()
         self.codeActionHandler = CodeActionHandler()
+        self.inlayHintHandler = InlayHintHandler()
     }
 
     // MARK: - Server Capabilities
@@ -93,6 +95,9 @@ public final class AROLanguageServer: Sendable {
             ],
             "codeActionProvider": [
                 "codeActionKinds": ["quickfix", "refactor"]
+            ],
+            "inlayHintProvider": [
+                "resolveProvider": false
             ]
         ]
     }
@@ -253,6 +258,9 @@ public final class AROLanguageServer: Sendable {
         case "textDocument/codeAction":
             result = handleCodeActionSync(params: params)
 
+        case "textDocument/inlayHint":
+            result = handleInlayHintSync(params: params)
+
         default:
             log("Unknown method: \(method)")
             if id != nil {
@@ -276,7 +284,7 @@ public final class AROLanguageServer: Sendable {
             "capabilities": capabilitiesDict,
             "serverInfo": [
                 "name": "aro-lsp",
-                "version": "1.1.0"
+                "version": "1.2.0"
             ]
         ]
     }
@@ -370,51 +378,119 @@ public final class AROLanguageServer: Sendable {
 
         guard let result = state.compilationResult else { return nil }
 
-        // Find what's at this position and return highlight for it
+        // Find the symbol name at the cursor position
+        var targetName: String?
+        var isActionVerb = false
+
         for analyzed in result.analyzedProgram.featureSets {
-            let fs = analyzed.featureSet
-            for statement in fs.statements {
-                if let aro = statement as? AROStatement {
-                    // Check if position is on the action
-                    if isPositionInSpan(aroPosition, aro.action.span) {
-                        let lspRange = PositionConverter.toLSP(aro.action.span)
-                        return [[
-                            "range": [
-                                "start": ["line": lspRange.start.line, "character": lspRange.start.character],
-                                "end": ["line": lspRange.end.line, "character": lspRange.end.character]
-                            ],
-                            "kind": 1  // Text
-                        ]]
-                    }
+            if let found = findHighlightTargetInStatements(
+                analyzed.featureSet.statements,
+                position: aroPosition,
+                isActionVerb: &isActionVerb
+            ) {
+                targetName = found
+                break
+            }
+        }
 
-                    // Check if position is on the result
-                    if isPositionInSpan(aroPosition, aro.result.span) {
-                        let lspRange = PositionConverter.toLSP(aro.result.span)
-                        return [[
-                            "range": [
-                                "start": ["line": lspRange.start.line, "character": lspRange.start.character],
-                                "end": ["line": lspRange.end.line, "character": lspRange.end.character]
-                            ],
-                            "kind": 1
-                        ]]
-                    }
+        guard let symbolName = targetName else { return nil }
 
-                    // Check if position is on the object
-                    if isPositionInSpan(aroPosition, aro.object.noun.span) {
-                        let lspRange = PositionConverter.toLSP(aro.object.noun.span)
-                        return [[
-                            "range": [
-                                "start": ["line": lspRange.start.line, "character": lspRange.start.character],
-                                "end": ["line": lspRange.end.line, "character": lspRange.end.character]
-                            ],
-                            "kind": 1
-                        ]]
+        // Highlight all occurrences of this symbol/verb in the document
+        var highlights: [[String: Any]] = []
+
+        for analyzed in result.analyzedProgram.featureSets {
+            highlights.append(contentsOf: collectHighlightsInStatements(
+                analyzed.featureSet.statements,
+                name: symbolName,
+                isActionVerb: isActionVerb
+            ))
+        }
+
+        return highlights.isEmpty ? nil : highlights
+    }
+
+    /// Find what identifier is at the given position. Returns the name and sets isActionVerb.
+    private func findHighlightTargetInStatements(
+        _ statements: [Statement],
+        position: SourceLocation,
+        isActionVerb: inout Bool
+    ) -> String? {
+        for statement in statements {
+            if let aro = statement as? AROStatement {
+                if isPositionInSpan(position, aro.action.span) {
+                    isActionVerb = true
+                    return aro.action.verb
+                }
+                if isPositionInSpan(position, aro.result.span) {
+                    return aro.result.base
+                }
+                if isPositionInSpan(position, aro.object.noun.span) {
+                    return aro.object.noun.base
+                }
+            } else if let forEachLoop = statement as? ForEachLoop {
+                if let found = findHighlightTargetInStatements(forEachLoop.body, position: position, isActionVerb: &isActionVerb) {
+                    return found
+                }
+            } else if let rangeLoop = statement as? RangeLoop {
+                if let found = findHighlightTargetInStatements(rangeLoop.body, position: position, isActionVerb: &isActionVerb) {
+                    return found
+                }
+            } else if let matchStmt = statement as? MatchStatement {
+                for caseClause in matchStmt.cases {
+                    if let found = findHighlightTargetInStatements(caseClause.body, position: position, isActionVerb: &isActionVerb) {
+                        return found
                     }
                 }
             }
         }
-
         return nil
+    }
+
+    /// Collect all highlight ranges for the given symbol/verb name.
+    private func collectHighlightsInStatements(
+        _ statements: [Statement],
+        name: String,
+        isActionVerb: Bool
+    ) -> [[String: Any]] {
+        var highlights: [[String: Any]] = []
+
+        for statement in statements {
+            if let aro = statement as? AROStatement {
+                if isActionVerb {
+                    if aro.action.verb.lowercased() == name.lowercased() {
+                        highlights.append(makeHighlight(span: aro.action.span, kind: 1))
+                    }
+                } else {
+                    if aro.result.base == name {
+                        highlights.append(makeHighlight(span: aro.result.span, kind: 2))  // Write
+                    }
+                    if aro.object.noun.base == name {
+                        highlights.append(makeHighlight(span: aro.object.noun.span, kind: 3))  // Read
+                    }
+                }
+            } else if let forEachLoop = statement as? ForEachLoop {
+                highlights.append(contentsOf: collectHighlightsInStatements(forEachLoop.body, name: name, isActionVerb: isActionVerb))
+            } else if let rangeLoop = statement as? RangeLoop {
+                highlights.append(contentsOf: collectHighlightsInStatements(rangeLoop.body, name: name, isActionVerb: isActionVerb))
+            } else if let matchStmt = statement as? MatchStatement {
+                for caseClause in matchStmt.cases {
+                    highlights.append(contentsOf: collectHighlightsInStatements(caseClause.body, name: name, isActionVerb: isActionVerb))
+                }
+            }
+        }
+
+        return highlights
+    }
+
+    private func makeHighlight(span: SourceSpan, kind: Int) -> [String: Any] {
+        let lspRange = PositionConverter.toLSP(span)
+        return [
+            "range": [
+                "start": ["line": lspRange.start.line, "character": lspRange.start.character],
+                "end": ["line": lspRange.end.line, "character": lspRange.end.character]
+            ],
+            "kind": kind  // 1=Text, 2=Write, 3=Read
+        ]
     }
 
     private func isPositionInSpan(_ position: SourceLocation, _ span: SourceSpan) -> Bool {
@@ -552,6 +628,23 @@ public final class AROLanguageServer: Sendable {
         let startPos = Position(line: startLine, character: startChar)
         let endPos = Position(line: endLine, character: endChar)
         return codeActionHandler.handle(uri: uri, range: (start: startPos, end: endPos), diagnostics: diagnostics, content: state.content, compilationResult: state.compilationResult)
+    }
+
+    private func handleInlayHintSync(params: Any?) -> [[String: Any]]? {
+        guard let dict = params as? [String: Any],
+              let textDocument = dict["textDocument"] as? [String: Any],
+              let uri = textDocument["uri"] as? String,
+              let range = dict["range"] as? [String: Any],
+              let start = range["start"] as? [String: Any],
+              let end = range["end"] as? [String: Any],
+              let startLine = start["line"] as? Int,
+              let endLine = end["line"] as? Int,
+              let state = documentManager.getSync(uri: uri) else { return nil }
+        return inlayHintHandler.handle(
+            compilationResult: state.compilationResult,
+            startLine: startLine,
+            endLine: endLine
+        )
     }
 
     // MARK: - Message Handling
@@ -720,7 +813,7 @@ public final class AROLanguageServer: Sendable {
             "capabilities": capabilitiesDict,
             "serverInfo": [
                 "name": "aro-lsp",
-                "version": "1.1.0"
+                "version": "1.2.0"
             ]
         ]
     }
