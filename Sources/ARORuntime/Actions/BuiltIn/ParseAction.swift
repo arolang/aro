@@ -143,8 +143,17 @@ public struct ParseHtmlAction: ActionImplementation {
     ) async throws -> any Sendable {
         try validatePreposition(object.preposition)
 
-        // Resolve input - support property access via specifiers (e.g., <event-data: html>)
-        let input: String = try context.resolveWithSpecifiers(object.base, specifiers: object.specifiers)
+        // Resolve input - support AROHTTPResult, property access via specifiers (e.g., <event-data: html>)
+        let input: String
+        let rawResolved = try context.resolveWithSpecifiers(object.base, specifiers: object.specifiers)
+        if let httpResult = rawResolved as? AROHTTPResult {
+            // Request action returned structured result — extract body string
+            input = httpResult.body as? String ?? String(describing: httpResult.body)
+        } else if let str = rawResolved as? String {
+            input = str
+        } else {
+            input = String(describing: rawResolved)
+        }
 
         // Get parse type from specifier
         let parseType = result.specifiers.first ?? "text"
