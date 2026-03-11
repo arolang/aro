@@ -4,6 +4,9 @@
 // ============================================================
 
 import Foundation
+#if canImport(FoundationNetworking)
+import FoundationNetworking
+#endif
 import AROParser
 
 /// Subscribes to a Server-Sent Events (SSE) stream and emits domain events for each message.
