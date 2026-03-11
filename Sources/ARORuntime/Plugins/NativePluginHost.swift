@@ -607,24 +607,33 @@ public final class NativePluginHost: @unchecked Sendable {
                 verbs = [name]
             }
 
-            // Register with ActionRegistry under all verbs (always plain; namespace only applies to qualifiers)
+            // Register with ActionRegistry under all verbs.
+            // When a qualifier namespace is set (via handle: or handler:), register as both
+            // "namespace.verb" (for Namespace.Verb style ARO code) and the plain verb.
             for verb in verbs {
-                let wrapper = NativePluginActionWrapper(
-                    pluginName: pluginName,
-                    actionName: name,
-                    verb: verb,
-                    pluginVerb: verb,
-                    host: self,
-                    descriptor: descriptor
-                )
+                var registeredVerbs: [String] = [verb]
+                if let ns = qualifierNamespace {
+                    registeredVerbs.append("\(ns).\(verb)")
+                }
 
-                registrationCount += 1
-                Task {
-                    await ActionRegistry.shared.registerDynamic(
-                        verb: verb,
-                        handler: wrapper.handle
+                for registeredVerb in registeredVerbs {
+                    let wrapper = NativePluginActionWrapper(
+                        pluginName: pluginName,
+                        actionName: name,
+                        verb: registeredVerb,
+                        pluginVerb: verb,
+                        host: self,
+                        descriptor: descriptor
                     )
-                    semaphore.signal()
+
+                    registrationCount += 1
+                    Task {
+                        await ActionRegistry.shared.registerDynamic(
+                            verb: registeredVerb,
+                            handler: wrapper.handle
+                        )
+                        semaphore.signal()
+                    }
                 }
             }
         }
