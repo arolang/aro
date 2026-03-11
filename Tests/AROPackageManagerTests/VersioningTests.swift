@@ -215,3 +215,177 @@ struct PluginManifestSystemTests {
         #expect(manifest.system == nil)
     }
 }
+
+// MARK: - ActionDeclaration / since field Tests
+
+@Suite("ActionDeclaration since field")
+struct ActionDeclarationTests {
+
+    @Test("Parses since field from YAML actions list")
+    func parsesSinceField() throws {
+        let yaml = """
+        name: my-plugin
+        version: 1.0.0
+        provides:
+          - type: c-plugin
+            path: src/
+            actions:
+              - name: ParseCSV
+                since: "1.0.0"
+                description: Parse CSV
+              - name: FormatCSV
+                since: "1.1.0"
+              - name: CSVToJSON
+        """
+        let manifest = try PluginManifest.parse(yaml: yaml)
+        let actions = manifest.provides[0].actions ?? []
+        #expect(actions.count == 3)
+        #expect(actions[0].name == "ParseCSV")
+        #expect(actions[0].since == "1.0.0")
+        #expect(actions[1].name == "FormatCSV")
+        #expect(actions[1].since == "1.1.0")
+        #expect(actions[2].name == "CSVToJSON")
+        #expect(actions[2].since == nil)
+    }
+
+    @Test("Provides entry without actions has nil actions")
+    func noActionsField() throws {
+        let yaml = """
+        name: my-plugin
+        version: 1.0.0
+        provides:
+          - type: aro-files
+            path: features/
+        """
+        let manifest = try PluginManifest.parse(yaml: yaml)
+        #expect(manifest.provides[0].actions == nil)
+    }
+
+    @Test("Action without since is always compatible")
+    func noSinceAlwaysCompatible() throws {
+        let yaml = """
+        name: my-plugin
+        version: 1.0.0
+        provides:
+          - type: c-plugin
+            path: src/
+            actions:
+              - name: MyAction
+        """
+        let manifest = try PluginManifest.parse(yaml: yaml)
+        let action = manifest.provides[0].actions![0]
+        #expect(action.since == nil)
+    }
+}
+
+// MARK: - VersionCheckResult / checkAROVersionCompatibility Tests
+
+@Suite("VersionCheckResult — action-level since checking")
+struct VersionCheckResultTests {
+
+    private func makePluginsDir(yaml: String) throws -> (URL, URL) {
+        let tmp = FileManager.default.temporaryDirectory
+            .appendingPathComponent("aro-version-test-\(UUID().uuidString)")
+        let pluginDir = tmp.appendingPathComponent("Plugins/my-plugin")
+        try FileManager.default.createDirectory(at: pluginDir, withIntermediateDirectories: true)
+        let manifestURL = pluginDir.appendingPathComponent("plugin.yaml")
+        try yaml.write(to: manifestURL, atomically: true, encoding: .utf8)
+        return (tmp, pluginDir)
+    }
+
+    @Test("Plugin with compatible since is not reported")
+    func compatibleSince() throws {
+        let yaml = """
+        name: my-plugin
+        version: 1.0.0
+        provides:
+          - type: c-plugin
+            path: src/
+            actions:
+              - name: MyAction
+                since: "0.1.0"
+        """
+        let (appDir, pluginDir) = try makePluginsDir(yaml: yaml)
+        defer { try? FileManager.default.removeItem(at: appDir) }
+        // Create a dummy src/ so PluginScanner doesn't warn
+        try FileManager.default.createDirectory(at: pluginDir.appendingPathComponent("src"), withIntermediateDirectories: true)
+
+        let pm = PackageManager(applicationDirectory: appDir)
+        let results = try pm.checkAROVersionCompatibility(currentAROVersion: "1.0.0")
+        #expect(results.filter { !$0.isCompatible }.isEmpty)
+    }
+
+    @Test("Action with since > current ARO version is flagged")
+    func incompatibleSince() throws {
+        let yaml = """
+        name: my-plugin
+        version: 1.0.0
+        provides:
+          - type: c-plugin
+            path: src/
+            actions:
+              - name: FutureAction
+                since: "2.0.0"
+        """
+        let (appDir, pluginDir) = try makePluginsDir(yaml: yaml)
+        defer { try? FileManager.default.removeItem(at: appDir) }
+        try FileManager.default.createDirectory(at: pluginDir.appendingPathComponent("src"), withIntermediateDirectories: true)
+
+        let pm = PackageManager(applicationDirectory: appDir)
+        let results = try pm.checkAROVersionCompatibility(currentAROVersion: "1.0.0")
+        let bad = results.filter { !$0.isCompatible }
+        #expect(bad.count == 1)
+        #expect(bad[0].pluginName == "my-plugin")
+        #expect(bad[0].incompatibleActions.count == 1)
+        #expect(bad[0].incompatibleActions[0].actionName == "FutureAction")
+        #expect(bad[0].incompatibleActions[0].since == "2.0.0")
+        #expect(bad[0].pluginConstraint == nil)
+    }
+
+    @Test("Top-level aro-version mismatch also captured in result")
+    func topLevelAndActionMismatch() throws {
+        let yaml = """
+        name: my-plugin
+        version: 1.0.0
+        aro-version: ">=3.0.0"
+        provides:
+          - type: c-plugin
+            path: src/
+            actions:
+              - name: MyAction
+                since: "3.0.0"
+        """
+        let (appDir, pluginDir) = try makePluginsDir(yaml: yaml)
+        defer { try? FileManager.default.removeItem(at: appDir) }
+        try FileManager.default.createDirectory(at: pluginDir.appendingPathComponent("src"), withIntermediateDirectories: true)
+
+        let pm = PackageManager(applicationDirectory: appDir)
+        let results = try pm.checkAROVersionCompatibility(currentAROVersion: "1.0.0")
+        let bad = results.filter { !$0.isCompatible }
+        #expect(bad.count == 1)
+        #expect(bad[0].pluginConstraint == ">=3.0.0")
+        #expect(bad[0].incompatibleActions.count == 1)
+    }
+
+    @Test("isCompatible is true when no constraints violated")
+    func isCompatibleTrue() throws {
+        let yaml = """
+        name: my-plugin
+        version: 1.0.0
+        aro-version: ">=0.1.0"
+        provides:
+          - type: c-plugin
+            path: src/
+            actions:
+              - name: MyAction
+                since: "0.1.0"
+        """
+        let (appDir, pluginDir) = try makePluginsDir(yaml: yaml)
+        defer { try? FileManager.default.removeItem(at: appDir) }
+        try FileManager.default.createDirectory(at: pluginDir.appendingPathComponent("src"), withIntermediateDirectories: true)
+
+        let pm = PackageManager(applicationDirectory: appDir)
+        let results = try pm.checkAROVersionCompatibility(currentAROVersion: "1.0.0")
+        #expect(results.allSatisfy { $0.isCompatible })
+    }
+}

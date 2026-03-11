@@ -117,6 +117,16 @@ public final class UnifiedPluginLoader: @unchecked Sendable {
         let manifestYAML = try String(contentsOf: manifestPath, encoding: .utf8)
         let manifest = try parseManifest(yaml: manifestYAML)
 
+        // Warn (don't fail) if the plugin declares an aro-version constraint that
+        // isn't satisfied by the running binary. The plugin is still loaded so that
+        // development and testing of newer plugins against older runtimes works.
+        if let constraint = manifest.aroVersion {
+            let currentVersion = currentAROVersion()
+            if !semverSatisfies(version: currentVersion, constraint: constraint) {
+                print("[Plugin] Warning: '\(manifest.name)' requires ARO \(constraint), current version is \(currentVersion). Plugin may not work correctly.")
+            }
+        }
+
         lock.lock()
         manifests[manifest.name] = manifest
         lock.unlock()
@@ -406,6 +416,74 @@ public final class UnifiedPluginLoader: @unchecked Sendable {
             .map { $0.prefix(1).uppercased() + $0.dropFirst() }
             .joined()
     }
+}
+
+// MARK: - Version Helpers (inline; AROPackageManager not imported here)
+
+/// Returns the running ARO version via `git describe`, or `"0.0.0"` as fallback.
+private func currentAROVersion() -> String {
+    let task = Process()
+    task.executableURL = URL(fileURLWithPath: "/bin/sh")
+    task.arguments = ["-c", "git describe --tags --always --dirty 2>/dev/null || echo '0.0.0'"]
+    let pipe = Pipe()
+    task.standardOutput = pipe
+    task.standardError = Pipe()
+    do {
+        try task.run()
+        task.waitUntilExit()
+        if let data = try? pipe.fileHandleForReading.readToEnd(),
+           let output = String(data: data, encoding: .utf8) {
+            return output.trimmingCharacters(in: .whitespacesAndNewlines)
+        }
+    } catch {}
+    return "0.0.0"
+}
+
+/// Minimal semver constraint checker for aro-version warnings.
+/// Supports `>=`, `<=`, `>`, `<`, `^`, `~`, space-separated compound constraints,
+/// and exact matches. Mirrors the logic in `AROVersionChecker`.
+private func semverSatisfies(version: String, constraint: String) -> Bool {
+    func strip(_ v: String) -> String {
+        var s = v.hasPrefix("v") ? String(v.dropFirst()) : v
+        if let i = s.firstIndex(of: "-") { s = String(s[..<i]) }
+        if let i = s.firstIndex(of: "+") { s = String(s[..<i]) }
+        return s
+    }
+    func parts(_ v: String) -> [Int] {
+        strip(v).split(separator: ".").prefix(3).compactMap { Int($0) }
+    }
+    func cmp(_ a: String, _ b: String) -> Int {
+        let pa = parts(a), pb = parts(b)
+        for i in 0..<max(pa.count, pb.count) {
+            let x = i < pa.count ? pa[i] : 0
+            let y = i < pb.count ? pb[i] : 0
+            if x != y { return x - y }
+        }
+        return 0
+    }
+    func satisfiesClause(_ v: String, _ clause: String) -> Bool {
+        let clean = strip(v)
+        if clause.hasPrefix(">=") { return cmp(clean, String(clause.dropFirst(2))) >= 0 }
+        if clause.hasPrefix("<=") { return cmp(clean, String(clause.dropFirst(2))) <= 0 }
+        if clause.hasPrefix(">")  { return cmp(clean, String(clause.dropFirst(1))) > 0 }
+        if clause.hasPrefix("<")  { return cmp(clean, String(clause.dropFirst(1))) < 0 }
+        if clause.hasPrefix("^") {
+            let req = parts(String(clause.dropFirst()))
+            let ins = parts(clean)
+            guard !ins.isEmpty, !req.isEmpty else { return false }
+            return ins[0] == req[0] && cmp(clean, String(clause.dropFirst())) >= 0
+        }
+        if clause.hasPrefix("~") {
+            let req = parts(String(clause.dropFirst()))
+            let ins = parts(clean)
+            guard ins.count >= 2, req.count >= 2 else { return false }
+            return ins[0] == req[0] && ins[1] == req[1] && cmp(clean, String(clause.dropFirst())) >= 0
+        }
+        let norm = clause.hasPrefix("v") ? String(clause.dropFirst()) : clause
+        return clean == norm
+    }
+    let clauses = constraint.split(separator: " ").map { String($0).trimmingCharacters(in: .whitespaces) }
+    return clauses.allSatisfy { satisfiesClause(version, $0) }
 }
 
 // MARK: - Unified Plugin Manifest (Simplified)

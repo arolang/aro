@@ -232,20 +232,46 @@ public final class PackageManager: Sendable {
     }
 
     /// Check which installed plugins are incompatible with the given ARO version.
+    ///
+    /// Checks both the top-level `aro-version` constraint and any per-action `since`
+    /// fields declared in `provides[].actions[]`.
+    ///
     /// - Parameter currentAROVersion: The running ARO version string.
-    /// - Returns: Map of plugin name → required constraint for incompatible plugins.
-    public func checkAROVersionCompatibility(currentAROVersion: String) throws -> [String: String] {
-        var incompatible: [String: String] = [:]
+    /// - Returns: One `VersionCheckResult` per plugin that has any incompatibility.
+    public func checkAROVersionCompatibility(currentAROVersion: String) throws -> [VersionCheckResult] {
+        var results: [VersionCheckResult] = []
         let plugins = try scanner.scan()
 
         for plugin in plugins {
-            guard let constraint = plugin.manifest.aroVersion else { continue }
-            if !AROVersionChecker.satisfies(version: currentAROVersion, constraint: constraint) {
-                incompatible[plugin.manifest.name] = constraint
+            let pluginConstraint: String?
+            if let constraint = plugin.manifest.aroVersion,
+               !AROVersionChecker.satisfies(version: currentAROVersion, constraint: constraint) {
+                pluginConstraint = constraint
+            } else {
+                pluginConstraint = nil
+            }
+
+            // Collect per-action since mismatches
+            var incompatibleActions: [(actionName: String, since: String)] = []
+            for entry in plugin.manifest.provides {
+                for action in entry.actions ?? [] {
+                    if let since = action.since,
+                       !AROVersionChecker.satisfies(version: currentAROVersion, constraint: ">=\(since)") {
+                        incompatibleActions.append((actionName: action.name, since: since))
+                    }
+                }
+            }
+
+            if pluginConstraint != nil || !incompatibleActions.isEmpty {
+                results.append(VersionCheckResult(
+                    pluginName: plugin.manifest.name,
+                    pluginConstraint: pluginConstraint,
+                    incompatibleActions: incompatibleActions
+                ))
             }
         }
 
-        return incompatible
+        return results
     }
 
     /// Verify the lock file — confirm every locked plugin matches what is installed.
@@ -322,6 +348,24 @@ extension InstallResult {
             source: SourceInfo(git: nil, ref: ref, commit: commit),
             provides: provides
         )
+    }
+}
+
+// MARK: - Version Check Result
+
+/// Result of an ARO version compatibility check for a single plugin.
+public struct VersionCheckResult: Sendable {
+    /// Plugin name
+    public let pluginName: String
+
+    /// Top-level `aro-version` constraint that is not satisfied, or `nil` if compatible.
+    public let pluginConstraint: String?
+
+    /// Actions whose `since` version exceeds the running ARO version.
+    public let incompatibleActions: [(actionName: String, since: String)]
+
+    public var isCompatible: Bool {
+        pluginConstraint == nil && incompatibleActions.isEmpty
     }
 }
 
