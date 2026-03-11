@@ -203,6 +203,9 @@ enum SSEStreamRunner {
 
     /// Opens the SSE connection, reads frames, returns the updated retry interval.
     /// Throws on connection error; returns normally on server close.
+    ///
+    /// Uses `URLSessionDataDelegate` + `AsyncStream` for cross-platform compatibility.
+    /// (`URLSession.bytes(for:)` is Darwin-only and not available in swift-corelibs-foundation.)
     private static func openAndParse(
         url: String,
         eventName: String,
@@ -224,24 +227,21 @@ enum SSEStreamRunner {
             request.timeoutInterval = t
         }
 
-        let session = URLSession(configuration: .default)
+        // Bridge URLSessionDataDelegate callbacks to AsyncStream<String> lines.
+        // This pattern works on all platforms (Darwin + Linux / swift-corelibs-foundation).
+        let (lineStream, continuation) = AsyncStream<String>.makeStream()
+        let delegate = SSEDataDelegate(continuation: continuation)
+        let session = URLSession(configuration: .default, delegate: delegate, delegateQueue: nil)
         defer { session.invalidateAndCancel() }
 
-        let (bytes, response) = try await session.bytes(for: request)
-
-        if let httpResponse = response as? HTTPURLResponse,
-           !(200...299).contains(httpResponse.statusCode) {
-            throw ActionError.runtimeError(
-                "Stream: server returned HTTP \(httpResponse.statusCode) for \(url)"
-            )
-        }
+        let task = session.dataTask(with: request)
+        task.resume()
 
         // SSE frame accumulator
         var currentEventType: String? = nil
         var currentData: [String] = []
         var retryInterval = currentRetryInterval
 
-        /// Dispatch accumulated message and reset frame state.
         func dispatch() {
             guard !currentData.isEmpty else { return }
             let dataString = currentData.joined(separator: "\n")
@@ -254,36 +254,35 @@ enum SSEStreamRunner {
             currentData = []
         }
 
-        for try await line in bytes.lines {
+        for await line in lineStream {
             guard !Task.isCancelled else { break }
 
             if line.isEmpty {
-                // Standard SSE: blank line marks end of message
                 dispatch()
             } else if line.hasPrefix(":") {
-                // Heartbeat / comment — ignore
                 continue
             } else if line.hasPrefix("event:") {
-                // Some servers omit blank lines; dispatch when new event: arrives
-                // while data is already accumulated (non-compliant but common).
                 if !currentData.isEmpty { dispatch() }
-                currentEventType = line.dropFirst("event:".count)
+                currentEventType = String(line.dropFirst("event:".count))
                     .trimmingCharacters(in: .whitespaces)
             } else if line.hasPrefix("data:") {
-                let value = line.dropFirst("data:".count)
-                    .trimmingCharacters(in: .init(charactersIn: " "))
+                let value = String(line.dropFirst("data:".count))
+                    .trimmingCharacters(in: .whitespaces)
                 currentData.append(value)
             } else if line.hasPrefix("retry:") {
-                let retryStr = line.dropFirst("retry:".count)
+                let retryStr = String(line.dropFirst("retry:".count))
                     .trimmingCharacters(in: .whitespaces)
                 if let ms = Double(retryStr) {
                     retryInterval = ms / 1000.0
                 }
             }
-            // id: lines are accepted but not used (no Last-Event-ID reconnect header yet)
         }
-        // Dispatch any remaining data (server closed without trailing blank line)
         dispatch()
+
+        // Propagate any connection error the delegate captured
+        if let error = delegate.connectionError {
+            throw error
+        }
 
         return retryInterval
     }
@@ -316,5 +315,33 @@ enum SSEStreamRunner {
         if let array = value as? [Any] { return array.map { convertValue($0) } }
         if let dict = value as? [String: Any] { return convertToSendable(dict) }
         return String(describing: value)
+    }
+}
+
+// MARK: - SSE Data Delegate
+
+/// URLSessionDataDelegate that bridges streaming response bytes into an AsyncStream of lines.
+/// Works on all platforms (Darwin + Linux / swift-corelibs-foundation).
+private final class SSEDataDelegate: NSObject, URLSessionDataDelegate, @unchecked Sendable {
+    private let continuation: AsyncStream<String>.Continuation
+    private var buffer = ""
+    var connectionError: Error? = nil
+
+    init(continuation: AsyncStream<String>.Continuation) {
+        self.continuation = continuation
+    }
+
+    func urlSession(_ session: URLSession, dataTask: URLSessionDataTask, didReceive data: Data) {
+        buffer += String(data: data, encoding: .utf8) ?? ""
+        while let range = buffer.range(of: "\n") {
+            let line = String(buffer[buffer.startIndex..<range.lowerBound])
+            buffer = String(buffer[range.upperBound...])
+            continuation.yield(line)
+        }
+    }
+
+    func urlSession(_ session: URLSession, task: URLSessionTask, didCompleteWithError error: Error?) {
+        connectionError = error
+        continuation.finish()
     }
 }
