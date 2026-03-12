@@ -94,8 +94,10 @@ public struct AcceptAction: ActionImplementation {
         // Publish StateTransitionEvent and wait for all handlers to complete.
         // (publishAndTrack ensures awaitPendingEvents() in FeatureSetExecutor waits for handlers)
         // Typed event: StateTransitionEvent { fieldName, objectName, fromState, toState, entityId, entity }
-        // DomainEvent co-publish added in Step 4b (see plan) for binary mode support:
-        //   eventType: "StateTransition"  payload: { "entityId", "fromState", "toState", "fieldName", "objectName" }
+        // DomainEvent co-publish for binary mode support (subscribed via aro_runtime_register_state_transition_handler).
+        // DomainEvent eventType: "StateTransition"
+        // DomainEvent payload:   { "entityId": String, "fromState": String, "toState": String,
+        //                          "fieldName": String, "objectName": String }
         let transitionEvent = StateTransitionEvent(
             fieldName: fieldName,
             objectName: objectName,
@@ -109,6 +111,16 @@ public struct AcceptAction: ActionImplementation {
         } else {
             context.emit(transitionEvent)
         }
+
+        // Co-publish DomainEvent for binary mode compiled handlers
+        var stPayload: [String: any Sendable] = [
+            "fromState": fromState,
+            "toState": toState,
+            "fieldName": fieldName,
+            "objectName": objectName
+        ]
+        if let eid = entityId { stPayload["entityId"] = eid }
+        EventBus.shared.publish(DomainEvent(eventType: "StateTransition", payload: stPayload))
 
         return updatedObject
     }

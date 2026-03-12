@@ -1679,6 +1679,32 @@ public final class LLVMCodeGenerator {
         for analyzed in program.featureSets {
             let activity = analyzed.featureSet.businessActivity
 
+            // StateTransition Handler<guardKey:guardValue> — activity ends with ">" not " Handler"
+            // Must be checked BEFORE the hasSuffix(" Handler") block.
+            if activity.contains("StateTransition Handler<") {
+                // Parse the guard: e.g. "StateTransition Handler<toState:submitted>"
+                if let openBracket = activity.firstIndex(of: "<"),
+                   let closeBracket = activity.firstIndex(of: ">") {
+                    let guardContent = String(activity[activity.index(after: openBracket)..<closeBracket])
+                    let parts = guardContent.split(separator: ":", maxSplits: 1)
+                    if parts.count == 2 {
+                        let guardKey = String(parts[0])
+                        let guardValue = String(parts[1])
+                        let funcName = featureSetFunctionName(analyzed.featureSet.name)
+                        if let handlerFunc = ctx.module.function(named: funcName) {
+                            let guardKeyStr = ctx.stringConstant(guardKey)
+                            let guardValueStr = ctx.stringConstant(guardValue)
+                            _ = ctx.module.insertCall(
+                                externals.registerStateTransitionHandler,
+                                on: [runtime, guardKeyStr, guardValueStr, handlerFunc],
+                                at: ip
+                            )
+                        }
+                    }
+                }
+                continue
+            }
+
             // Check for event handlers
             if activity.hasSuffix(" Handler") {
                 if let handlerRange = activity.range(of: " Handler") {

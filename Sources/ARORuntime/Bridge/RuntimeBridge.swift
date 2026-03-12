@@ -673,6 +673,98 @@ public func aro_register_repository_observer(
     aro_register_repository_observer_with_guard(runtimePtr, repositoryNamePtr, observerFuncPtr, nil)
 }
 
+// MARK: - State Transition Handler Registration
+
+/// Register a StateTransition handler for compiled binaries.
+///
+/// Subscribes to DomainEvent("StateTransition") co-published by AcceptAction,
+/// filters by `payload["toState"] == guardValue`, then invokes the compiled handler.
+///
+/// - Parameters:
+///   - runtimePtr: Runtime handle
+///   - guardKeyPtr: The field to filter on (typically "toState")
+///   - guardValuePtr: The required value for that field (e.g. "submitted")
+///   - handlerFuncPtr: Compiled LLVM handler function pointer
+@_cdecl("aro_runtime_register_state_transition_handler")
+public func aro_runtime_register_state_transition_handler(
+    _ runtimePtr: UnsafeMutableRawPointer?,
+    _ guardKeyPtr: UnsafePointer<CChar>?,
+    _ guardValuePtr: UnsafePointer<CChar>?,
+    _ handlerFuncPtr: UnsafeMutableRawPointer?
+) {
+    guard let runtimePtr = runtimePtr,
+          let guardKeyPtr = guardKeyPtr,
+          let guardValuePtr = guardValuePtr,
+          let handlerFuncPtr = handlerFuncPtr else {
+        print("[RuntimeBridge] ERROR: Invalid parameters to aro_runtime_register_state_transition_handler")
+        return
+    }
+
+    let runtimeHandle = Unmanaged<AROCRuntimeHandle>.fromOpaque(runtimePtr).takeUnretainedValue()
+    let guardKey = String(cString: guardKeyPtr)
+    let guardValue = String(cString: guardValuePtr)
+    let handlerAddress = Int(bitPattern: handlerFuncPtr)
+
+    // Subscribe to DomainEvent("StateTransition") co-published by AcceptAction
+    runtimeHandle.runtime.registerCompiledHandler(
+        eventType: "StateTransition",
+        handlerName: "StateTransition Handler<\(guardKey):\(guardValue)>"
+    ) { @Sendable event in
+        // Apply guard: only fire if payload[guardKey] == guardValue
+        guard let fieldValue = event.payload[guardKey] as? String,
+              fieldValue == guardValue else { return }
+
+        await withCheckedContinuation { (continuation: CheckedContinuation<Void, Never>) in
+            let pool = CompiledExecutionPool.shared
+            Thread {
+                pool.gate.wait()
+                pool.threadHoldsSlot = true
+                defer {
+                    pool.threadHoldsSlot = false
+                    pool.gate.signal()
+                }
+
+                let handlerName = "StateTransition Handler<\(guardKey):\(guardValue)>"
+                let contextHandle = AROCContextHandle(runtime: runtimeHandle, featureSetName: handlerName)
+
+                // Bind event payload — handlers extract with: Extract the <x> from the <event: x>
+                contextHandle.context.bind("event", value: event.payload)
+                for (k, v) in event.payload {
+                    contextHandle.context.bind("event:\(k)", value: v)
+                }
+
+                bindTerminalToContext(contextHandle)
+
+                let contextPtr = Unmanaged.passRetained(contextHandle).toOpaque()
+
+                guard let handlerPtrReconstructed = UnsafeMutableRawPointer(bitPattern: handlerAddress) else {
+                    print("[RuntimeBridge] ERROR: Invalid handler pointer for StateTransition handler")
+                    Unmanaged<AROCContextHandle>.fromOpaque(contextPtr).release()
+                    continuation.resume()
+                    return
+                }
+
+                typealias HandlerFunc = @convention(c) (UnsafeMutableRawPointer?) -> UnsafeMutableRawPointer?
+                let handlerFunc = unsafeBitCast(handlerPtrReconstructed, to: HandlerFunc.self)
+                let result = handlerFunc(contextPtr)
+
+                let duration = Date().timeIntervalSince(Date()) * 1000
+                runtimeHandle.runtime.eventBus.publish(FeatureSetCompletedEvent(
+                    featureSetName: handlerName,
+                    businessActivity: "StateTransition Handler",
+                    executionId: contextHandle.context.executionId,
+                    success: true,
+                    durationMs: duration
+                ))
+
+                if let resultPtr = result { aro_value_free(resultPtr) }
+                Unmanaged<AROCContextHandle>.fromOpaque(contextPtr).release()
+                continuation.resume()
+            }.start()
+        }
+    }
+}
+
 // MARK: - Context Management
 
 /// Create an execution context

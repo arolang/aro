@@ -1,5 +1,6 @@
 # Test hints for StateMachine example
 # Demonstrates Accept action for state transitions with StateTransition Handler observers
-# Binary mode does not invoke StateTransition Handler observers (same limitation as NotifyExample)
-mode: interpreter
+# Binary mode: handlers fire asynchronously (occurrence-check handles ordering)
+mode: both
+occurrence-check: true
 timeout: 30
