@@ -153,3 +153,11 @@ core
 /Examples/TerminalTaskManager/TerminalTaskManager
 /watched-dir
 /Examples/WeatherClient/WeatherClient
+/Examples/WhileLoop/WhileLoop
+/Examples/SSEStreamDemo/SSEStreamDemo
+/Examples/SSEClient/SSEClient
+/Examples/SleepDemo/SleepDemo
+/Examples/SleepAPI/SleepAPI
+/Examples/ResponseHeaders/ResponseHeaders
+/Examples/MultilineString/MultilineString
+/Examples/LinkHeaderPagination/LinkHeaderPagination
