@@ -41,6 +41,9 @@ Swift-C-LLVM interoperability. @_cdecl functions. Handle management. Descriptor 
 ### [Chapter 10: Critical Assessment](Chapter10-CriticalAssessment.md)
 What works well. What doesn't work. Design decisions we'd reconsider. Lessons for language implementers.
 
+### [Chapter 11: Dual-Mode Execution Parity](Chapter11-DualModeExecutionParity.md)
+Sources of interpreter/binary divergence. VerbSets shared module. Integer division parity. DomainEvent co-publishing pattern. Handler registration template. Payload schema contracts. The `mode: both` test directive.
+
 ## Appendices
 
 ### [Appendix A: Source Map](Appendix-SourceMap.md)
