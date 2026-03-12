@@ -56,12 +56,15 @@ final class AROCRuntimeHandle: @unchecked Sendable {
 
     /// Keyboard service shared across all contexts — must outlive individual handler contexts
     let keyboardService: KeyboardService
+    /// Terminal service shared across all contexts — section state must persist between renders
+    let terminalService: TerminalService?
     #endif
 
     init() {
         self.runtime = Runtime()
         #if !os(Windows)
         self.keyboardService = KeyboardService(eventBus: .shared)
+        self.terminalService = isatty(STDOUT_FILENO) != 0 ? TerminalService() : nil
         #endif
         // Event loop creation deferred to lazy var - no eager init needed
     }
@@ -146,11 +149,12 @@ class AROCContextHandle {
         self.templateService = ts
 
         // Register terminal service for TTY output (ARO-0052)
-        // ClearAction, RenderAction, ShowAction all require this service
-        if isatty(STDOUT_FILENO) != 0 {
-            let terminal = TerminalService()
-            self.context.register(terminal)
-            self.terminalService = terminal
+        // ClearAction, RenderAction, ShowAction all require this service.
+        // Use the shared instance from AROCRuntimeHandle so section state
+        // persists across observer invocations (each gets a fresh context handle).
+        if let sharedTerminal = runtime.terminalService {
+            self.context.register(sharedTerminal)
+            self.terminalService = sharedTerminal
         } else {
             self.terminalService = nil
         }

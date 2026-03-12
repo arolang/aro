@@ -240,6 +240,8 @@ public final class LLVMCodeGenerator {
             generateMatchStatement(matchStatement, index: index, errorBlock: errorBlock)
         case let forEachLoop as ForEachLoop:
             generateForEachLoop(forEachLoop, index: index, errorBlock: errorBlock)
+        case let rangeLoop as RangeLoop:
+            generateRangeLoop(rangeLoop, index: index, errorBlock: errorBlock)
         case let whileLoop as WhileLoop:
             generateWhileLoop(whileLoop, index: index, errorBlock: errorBlock)
         case is BreakStatement:
@@ -300,6 +302,10 @@ public final class LLVMCodeGenerator {
 
         // Build object descriptor
         let objectDesc = buildObjectDescriptor(statement.object, prefix: prefix)
+
+        // Clear _default_value_ before binding modifiers (mirrors FeatureSetExecutor line 255)
+        let defaultValueName = ctx.stringConstant("_default_value_")
+        _ = ctx.module.insertCall(externals.variableUnbind, on: [ctx.currentContextVar!, defaultValueName], at: ctx.insertionPoint)
 
         // Bind query modifiers if present
         bindQueryModifiers(statement.queryModifiers)
@@ -585,6 +591,17 @@ public final class LLVMCodeGenerator {
                 at: ip
             )
         }
+
+        // Bind default value if present (for optional retrieve with fallback)
+        if let defaultExpr = modifiers.defaultValue {
+            let defaultName = ctx.stringConstant("_default_value_")
+            let defaultJSON = ctx.stringConstant(serializeExpression(defaultExpr))
+            _ = ctx.module.insertCall(
+                externals.evaluateAndBind,
+                on: [ctx.currentContextVar!, defaultName, defaultJSON],
+                at: ip
+            )
+        }
     }
 
     private func bindRangeModifiers(_ modifiers: RangeModifiers) {
@@ -846,11 +863,21 @@ public final class LLVMCodeGenerator {
     }
 
     private func escapeJSON(_ s: String) -> String {
-        s.replacingOccurrences(of: "\\", with: "\\\\")
-         .replacingOccurrences(of: "\"", with: "\\\"")
-         .replacingOccurrences(of: "\n", with: "\\n")
-         .replacingOccurrences(of: "\r", with: "\\r")
-         .replacingOccurrences(of: "\t", with: "\\t")
+        var result = ""
+        for scalar in s.unicodeScalars {
+            switch scalar.value {
+            case 0x5C: result += "\\\\"          // backslash
+            case 0x22: result += "\\\""          // double quote
+            case 0x0A: result += "\\n"           // newline
+            case 0x0D: result += "\\r"           // carriage return
+            case 0x09: result += "\\t"           // tab
+            case 0x00..<0x20:                    // other control characters (incl. ESC 0x1B)
+                result += String(format: "\\u%04x", scalar.value)
+            default:
+                result += String(scalar)
+            }
+        }
+        return result
     }
 
     // MARK: - Control Flow (Stubs)
@@ -993,6 +1020,12 @@ public final class LLVMCodeGenerator {
             // The item and index variables are managed by the nested loop
             // But we still need to collect variables from the nested body
             for stmt in forEachLoop.body {
+                collectBoundVariablesFromStatement(stmt, into: &variables)
+            }
+        } else if let rangeLoop = statement as? RangeLoop {
+            // Range loop variable and body variables
+            variables.insert(rangeLoop.variable)
+            for stmt in rangeLoop.body {
                 collectBoundVariablesFromStatement(stmt, into: &variables)
             }
         } else if let whileLoop = statement as? WhileLoop {
@@ -1148,6 +1181,88 @@ public final class LLVMCodeGenerator {
 
         let nextIndex = ctx.module.insertAdd(curIndex, ctx.i64Type.constant(1), at: ctx.insertionPoint)
         ctx.module.insertStore(nextIndex, to: indexPtr, at: ctx.insertionPoint)
+        ctx.module.insertBr(to: condBlock, at: ctx.insertionPoint)
+
+        // === End Block ===
+        ctx.setInsertionPoint(atEndOf: endBlock)
+    }
+
+    // MARK: - Range Loop Generation (for <var> from <low> to <high>)
+
+    private func generateRangeLoop(_ loop: RangeLoop, index: Int, errorBlock: BasicBlock) {
+        let prefix = "range\(index)"
+
+        // Create loop blocks
+        let condBlock = ctx.module.appendBlock(named: "\(prefix)_cond", to: ctx.currentFunction!)
+        let bodyBlock = ctx.module.appendBlock(named: "\(prefix)_body", to: ctx.currentFunction!)
+        let incrBlock = ctx.module.appendBlock(named: "\(prefix)_incr", to: ctx.currentFunction!)
+        let endBlock  = ctx.module.appendBlock(named: "\(prefix)_end",  to: ctx.currentFunction!)
+
+        // Evaluate `from` and `to` expressions into temp variables
+        let fromTempName = ctx.stringConstant("_rng_from_\(index)_")
+        let toTempName   = ctx.stringConstant("_rng_to_\(index)_")
+
+        let fromJSON = ctx.stringConstant(serializeExpression(loop.from))
+        _ = ctx.module.insertCall(externals.evaluateAndBind, on: [ctx.currentContextVar!, fromTempName, fromJSON], at: ctx.insertionPoint)
+
+        let toJSON = ctx.stringConstant(serializeExpression(loop.to))
+        _ = ctx.module.insertCall(externals.evaluateAndBind, on: [ctx.currentContextVar!, toTempName, toJSON], at: ctx.insertionPoint)
+
+        // Extract integer values into stack-allocated i64 storage
+        let fromIntPtr = ctx.module.insertAlloca(ctx.i64Type, at: ctx.insertionPoint)
+        let toIntPtr   = ctx.module.insertAlloca(ctx.i64Type, at: ctx.insertionPoint)
+        ctx.module.insertStore(ctx.i64Type.zero, to: fromIntPtr, at: ctx.insertionPoint)
+        ctx.module.insertStore(ctx.i64Type.zero, to: toIntPtr,   at: ctx.insertionPoint)
+        _ = ctx.module.insertCall(externals.variableResolveInt, on: [ctx.currentContextVar!, fromTempName, fromIntPtr], at: ctx.insertionPoint)
+        _ = ctx.module.insertCall(externals.variableResolveInt, on: [ctx.currentContextVar!, toTempName,   toIntPtr],   at: ctx.insertionPoint)
+
+        let toInt   = ctx.module.insertLoad(ctx.i64Type, from: toIntPtr,   at: ctx.insertionPoint)
+        let fromInt = ctx.module.insertLoad(ctx.i64Type, from: fromIntPtr, at: ctx.insertionPoint)
+
+        // Allocate loop counter starting at fromInt
+        let counterPtr = ctx.module.insertAlloca(ctx.i64Type, at: ctx.insertionPoint)
+        ctx.module.insertStore(fromInt, to: counterPtr, at: ctx.insertionPoint)
+
+        // Jump to condition check
+        ctx.module.insertBr(to: condBlock, at: ctx.insertionPoint)
+
+        // === Condition Block: loop while counter < toInt ===
+        ctx.setInsertionPoint(atEndOf: condBlock)
+        let curCount = ctx.module.insertLoad(ctx.i64Type, from: counterPtr, at: ctx.insertionPoint)
+        let done = ctx.module.insertIntegerComparison(.sge, curCount, toInt, at: ctx.insertionPoint)
+        ctx.module.insertCondBr(if: done, then: endBlock, else: bodyBlock, at: ctx.insertionPoint)
+
+        // === Body Block ===
+        ctx.setInsertionPoint(atEndOf: bodyBlock)
+
+        let bodyCount = ctx.module.insertLoad(ctx.i64Type, from: counterPtr, at: ctx.insertionPoint)
+
+        // Bind loop variable as boxed integer (unbind first to allow rebinding)
+        let varNameStr = ctx.stringConstant(loop.variable)
+        _ = ctx.module.insertCall(externals.variableUnbind, on: [ctx.currentContextVar!, varNameStr], at: ctx.insertionPoint)
+        let varValue = ctx.module.insertCall(externals.valueCreateInt, on: [bodyCount], at: ctx.insertionPoint)
+        _ = ctx.module.insertCall(externals.variableBindValue, on: [ctx.currentContextVar!, varNameStr, varValue], at: ctx.insertionPoint)
+
+        // Unbind all body-bound variables to allow rebinding on each iteration
+        let bodyVars = collectBoundVariables(from: loop.body)
+        for varName in bodyVars where varName != loop.variable {
+            let bodyVarName = ctx.stringConstant(varName)
+            _ = ctx.module.insertCall(externals.variableUnbind, on: [ctx.currentContextVar!, bodyVarName], at: ctx.insertionPoint)
+        }
+
+        // Generate body statements
+        for (stmtIndex, stmt) in loop.body.enumerated() {
+            generateStatement(stmt, index: index * 100 + stmtIndex, errorBlock: incrBlock)
+        }
+
+        // Branch to increment
+        ctx.module.insertBr(to: incrBlock, at: ctx.insertionPoint)
+
+        // === Increment Block ===
+        ctx.setInsertionPoint(atEndOf: incrBlock)
+        let nextCount = ctx.module.insertLoad(ctx.i64Type, from: counterPtr, at: ctx.insertionPoint)
+        let incremented = ctx.module.insertAdd(nextCount, ctx.i64Type.constant(1), at: ctx.insertionPoint)
+        ctx.module.insertStore(incremented, to: counterPtr, at: ctx.insertionPoint)
         ctx.module.insertBr(to: condBlock, at: ctx.insertionPoint)
 
         // === End Block ===
