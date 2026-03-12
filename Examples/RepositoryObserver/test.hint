@@ -1,5 +1,6 @@
 # Test hints for RepositoryObserver
-mode: interpreter
+mode: both
+occurrence-check: true
 # Include server console output (observer messages) in test comparison
 include-server-output: true
 # HTTP servers hang on Windows CI

@@ -1,2 +1,2 @@
-mode: interpreter
+mode: both
 occurrence-check: true
