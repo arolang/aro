@@ -1,4 +1,6 @@
 # Test hints for NotifyExample
 # Demonstrates the Notify action with event-driven notification handlers.
-# Binary mode does not register notification event handlers, so interpreter only.
-mode: interpreter
+# Binary mode: handlers fire asynchronously (occurrence-check handles ordering)
+mode: both
+occurrence-check: true
+timeout: 30

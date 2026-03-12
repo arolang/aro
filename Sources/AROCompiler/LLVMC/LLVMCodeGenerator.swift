@@ -1679,6 +1679,28 @@ public final class LLVMCodeGenerator {
         for analyzed in program.featureSets {
             let activity = analyzed.featureSet.businessActivity
 
+            // NotificationSent Handler — must be checked BEFORE generic hasSuffix(" Handler").
+            // Serializes the feature set's `whenCondition` expression as JSON for runtime evaluation.
+            if activity.contains("NotificationSent Handler") {
+                let funcName = featureSetFunctionName(analyzed.featureSet.name)
+                if let handlerFunc = ctx.module.function(named: funcName) {
+                    // Serialize whenCondition as JSON, or pass "" (empty = no condition guard)
+                    let conditionJSON: String
+                    if let whenCondition = analyzed.featureSet.whenCondition {
+                        conditionJSON = serializeExpression(whenCondition)
+                    } else {
+                        conditionJSON = ""
+                    }
+                    let whenConditionStr = ctx.stringConstant(conditionJSON)
+                    _ = ctx.module.insertCall(
+                        externals.registerNotificationHandler,
+                        on: [runtime, handlerFunc, whenConditionStr],
+                        at: ip
+                    )
+                }
+                continue
+            }
+
             // StateTransition Handler<guardKey:guardValue> — activity ends with ">" not " Handler"
             // Must be checked BEFORE the hasSuffix(" Handler") block.
             if activity.contains("StateTransition Handler<") {

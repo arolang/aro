@@ -765,6 +765,114 @@ public func aro_runtime_register_state_transition_handler(
     }
 }
 
+// MARK: - Notification Handler Registration
+
+/// Register a NotificationSent handler for compiled binaries.
+///
+/// Subscribes to DomainEvent("NotificationSent") co-published by NotifyAction,
+/// evaluates the `whenCondition` expression (if provided) against the payload fields,
+/// then invokes the compiled handler.
+///
+/// - Parameters:
+///   - runtimePtr: Runtime handle
+///   - handlerFuncPtr: Compiled LLVM handler function pointer
+///   - whenConditionPtr: Serialized JSON of the `when` expression (nullable — nil means always fire)
+@_cdecl("aro_runtime_register_notification_handler")
+public func aro_runtime_register_notification_handler(
+    _ runtimePtr: UnsafeMutableRawPointer?,
+    _ handlerFuncPtr: UnsafeMutableRawPointer?,
+    _ whenConditionPtr: UnsafePointer<CChar>?
+) {
+    guard let runtimePtr = runtimePtr,
+          let handlerFuncPtr = handlerFuncPtr else {
+        print("[RuntimeBridge] ERROR: Invalid parameters to aro_runtime_register_notification_handler")
+        return
+    }
+
+    let runtimeHandle = Unmanaged<AROCRuntimeHandle>.fromOpaque(runtimePtr).takeUnretainedValue()
+    let whenCondition: String? = whenConditionPtr.map { String(cString: $0) }
+    let handlerAddress = Int(bitPattern: handlerFuncPtr)
+
+    runtimeHandle.runtime.registerCompiledHandler(
+        eventType: "NotificationSent",
+        handlerName: "NotificationSent Handler"
+    ) { @Sendable event in
+        // Evaluate when condition if present
+        if let condition = whenCondition, !condition.isEmpty {
+            guard let conditionData = condition.data(using: .utf8),
+                  let parsed = try? JSONSerialization.jsonObject(with: conditionData, options: []) as? [String: Any] else {
+                return // Skip if condition can't be parsed
+            }
+
+            // Bind payload fields directly so `when <age> >= 16` resolves `age` from the target object
+            let tempContext = RuntimeContext(
+                featureSetName: "NotificationSent Handler",
+                businessActivity: "NotificationSent Handler",
+                eventBus: runtimeHandle.runtime.eventBus
+            )
+            for (k, v) in event.payload {
+                tempContext.bind(k, value: v)
+            }
+
+            let conditionResult = evaluateExpressionJSON(parsed, context: tempContext)
+            let passes: Bool
+            if let b = conditionResult as? Bool { passes = b }
+            else if let i = conditionResult as? Int { passes = i != 0 }
+            else { passes = false }
+            guard passes else { return }
+        }
+
+        await withCheckedContinuation { (continuation: CheckedContinuation<Void, Never>) in
+            let pool = CompiledExecutionPool.shared
+            Thread {
+                pool.gate.wait()
+                pool.threadHoldsSlot = true
+                defer {
+                    pool.threadHoldsSlot = false
+                    pool.gate.signal()
+                }
+
+                let handlerName = "NotificationSent Handler"
+                let contextHandle = AROCContextHandle(runtime: runtimeHandle, featureSetName: handlerName)
+
+                // Bind event payload — handler extracts with: Extract the <user> from the <event: user>
+                contextHandle.context.bind("event", value: event.payload)
+                for (k, v) in event.payload {
+                    contextHandle.context.bind("event:\(k)", value: v)
+                }
+
+                bindTerminalToContext(contextHandle)
+
+                let contextPtr = Unmanaged.passRetained(contextHandle).toOpaque()
+
+                guard let handlerPtrReconstructed = UnsafeMutableRawPointer(bitPattern: handlerAddress) else {
+                    print("[RuntimeBridge] ERROR: Invalid handler pointer for NotificationSent handler")
+                    Unmanaged<AROCContextHandle>.fromOpaque(contextPtr).release()
+                    continuation.resume()
+                    return
+                }
+
+                typealias HandlerFunc = @convention(c) (UnsafeMutableRawPointer?) -> UnsafeMutableRawPointer?
+                let handlerFunc = unsafeBitCast(handlerPtrReconstructed, to: HandlerFunc.self)
+                let result = handlerFunc(contextPtr)
+
+                let duration = Date().timeIntervalSince(Date()) * 1000
+                runtimeHandle.runtime.eventBus.publish(FeatureSetCompletedEvent(
+                    featureSetName: handlerName,
+                    businessActivity: "NotificationSent Handler",
+                    executionId: contextHandle.context.executionId,
+                    success: true,
+                    durationMs: duration
+                ))
+
+                if let resultPtr = result { aro_value_free(resultPtr) }
+                Unmanaged<AROCContextHandle>.fromOpaque(contextPtr).release()
+                continuation.resume()
+            }.start()
+        }
+    }
+}
+
 // MARK: - Context Management
 
 /// Create an execution context

@@ -1084,11 +1084,24 @@ public struct NotifyAction: ActionImplementation {
 
         // Typed event: NotificationSentEvent { message, target, targetValue }
         //   One event per item in the collection; handler 'when' guards filter by target field values.
-        // DomainEvent co-publish added in Step 4c for binary mode support:
-        //   eventType: "NotificationSent"  payload: target object fields + { "message": String, "target": String }
+        // DomainEvent co-publish for binary mode support:
+        //   eventType: "NotificationSent"
+        //   payload: { "message": String, "target": String, "user": targetObj, "[target]": targetObj,
+        //              ...targetObj fields spread at top level (for `when` guard evaluation) }
         if let eventBus = context.eventBus {
             for item in items {
                 await eventBus.publishAndTrack(NotificationSentEvent(message: message, target: target, targetValue: item))
+                // Co-publish DomainEvent for binary mode compiled handlers
+                var payload: [String: any Sendable] = ["message": message, "target": target]
+                if let itemDict = item as? [String: any Sendable] {
+                    for (k, v) in itemDict { payload[k] = v }   // spread fields for when guard
+                    payload["user"] = itemDict
+                    payload[target] = itemDict
+                } else {
+                    payload["user"] = item
+                    payload[target] = item
+                }
+                EventBus.shared.publish(DomainEvent(eventType: "NotificationSent", payload: payload))
             }
         } else {
             for item in items {
