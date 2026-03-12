@@ -292,29 +292,17 @@ public final class FeatureSetExecutor: @unchecked Sendable {
             // NOTE: We only do early return for simple assignment actions, NOT for
             // comparison/assertion actions like Then/Assert that need to run.
             if statement.object.noun.base == "_expression_" {
-                // Check if the action needs to be executed
-                // These actions need to run even with expression shortcut:
-                // - "then", "assert" for testing
-                // - "call", "invoke" for external service calls (they bind their own results)
-                // - "update", "modify", "change", "set" when they have specifiers (field-level updates)
-                // - "create", "make", "build" when they have specifiers (typed entities need ID generation)
-                // - "merge", "combine", "join", "concat" always need execution (they transform and bind result)
-                // - "compute", "calculate", "derive" when they have specifiers (operations like +7d, hash, format)
-                // - "extract", "parse", "get" when they have specifiers (property extraction like :days, :next)
-                let testVerbs: Set<String> = ["then", "assert"]
-                let requestVerbs: Set<String> = ["call", "invoke"]
-                let updateVerbs: Set<String> = ["update", "modify", "change", "set"]
-                let createVerbs: Set<String> = ["create", "make", "build", "construct"]
-                let mergeVerbs: Set<String> = ["merge", "combine", "join", "concat"]
-                let computeVerbs: Set<String> = ["compute", "calculate", "derive"]
-                let extractVerbs: Set<String> = ["extract", "parse", "get"]
-                // Query actions always need execution for where clause processing
-                // "split" needs execution for regex splitting via by clause
-                let queryVerbs: Set<String> = ["filter", "map", "reduce", "aggregate", "split"]
-                // Response actions like write/read/store should NOT have their result bound to expression value
-                let responseVerbs: Set<String> = ["write", "read", "store", "save", "persist", "log", "print", "send", "emit", "notify", "alert", "signal", "broadcast"]
-                // Server lifecycle actions always need execution for side effects
-                let serverVerbs: Set<String> = ["start", "stop", "restart", "keepalive", "schedule", "stream", "subscribe", "sleep", "delay", "pause"]
+                // Check if the action needs to be executed (see VerbSets.swift for rationale per category)
+                let testVerbs = VerbSets.testVerbs
+                let requestVerbs = VerbSets.requestVerbs
+                let updateVerbs = VerbSets.updateVerbs
+                let createVerbs = VerbSets.createVerbs
+                let mergeVerbs = VerbSets.mergeVerbs
+                let computeVerbs = VerbSets.computeVerbs
+                let extractVerbs = VerbSets.extractVerbs
+                let queryVerbs = VerbSets.queryVerbs
+                let responseVerbs = VerbSets.responseVerbs
+                let serverVerbs = VerbSets.serverVerbs
                 // Check if there's a dynamic handler registered for this verb (plugin-provided action)
                 let hasDynamicHandler = await actionRegistry.dynamicHandler(for: verb) != nil
                 let needsExecution = testVerbs.contains(verb.lowercased()) ||
