@@ -180,6 +180,11 @@ public struct ExpressionEvaluator: Sendable {
             }
             return try numericOperation(left, right) { $0 * $1 }
         case .divide:
+            // Int/Int → integer floor division (matches binary mode evaluateBinaryOp behavior)
+            if let li = left as? Int, let ri = right as? Int {
+                guard ri != 0 else { return 0 }
+                return li / ri
+            }
             return try numericOperation(left, right) { $0 / $1 }
         case .modulo:
             return try intOperation(left, right) { $0 % $1 }
