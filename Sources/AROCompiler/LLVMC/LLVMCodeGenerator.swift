@@ -1686,8 +1686,40 @@ public final class LLVMCodeGenerator {
                         .trimmingCharacters(in: .whitespaces)
 
                     // Skip special handlers (Socket events handled separately; Application-End not an event handler)
-                    guard !activity.contains("Socket Event") &&
-                          !activity.contains("Application-End") else {
+                    // Note: WebSocket Event MUST be checked before Socket Event because
+                    // "WebSocket Event Handler" contains "Socket Event" as a substring.
+                    guard !activity.contains("Application-End") else {
+                        continue
+                    }
+
+                    // WebSocket Event Handlers: determine event type from feature set name.
+                    // Must be checked before "Socket Event" guard since "WebSocket" contains "Socket".
+                    if activity.contains("WebSocket Event") {
+                        let featureName = analyzed.featureSet.name.lowercased()
+                        let wsEventType: String
+                        if featureName.contains("message") || featureName.contains("data") {
+                            wsEventType = "websocket.message"
+                        } else if featureName.contains("disconnect") {
+                            wsEventType = "websocket.disconnected"
+                        } else if featureName.contains("connect") {
+                            wsEventType = "websocket.connected"
+                        } else {
+                            continue
+                        }
+                        let funcName = featureSetFunctionName(analyzed.featureSet.name)
+                        if let handlerFunc = ctx.module.function(named: funcName) {
+                            let eventTypeStr = ctx.stringConstant(wsEventType)
+                            _ = ctx.module.insertCall(
+                                externals.runtimeRegisterHandler,
+                                on: [runtime, eventTypeStr, handlerFunc],
+                                at: ip
+                            )
+                        }
+                        continue
+                    }
+
+                    // Skip Socket Event handlers (handled separately by native socket server)
+                    guard !activity.contains("Socket Event") else {
                         continue
                     }
 

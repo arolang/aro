@@ -327,7 +327,7 @@ public actor ExecutionEngine {
                         baseContext: baseContext,
                         eventData: [
                             "event": [
-                                "id": event.connectionId,
+                                "connectionId": event.connectionId,
                                 "path": event.path,
                                 "remoteAddress": event.remoteAddress
                             ] as [String: any Sendable]

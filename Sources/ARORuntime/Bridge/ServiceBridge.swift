@@ -2047,6 +2047,14 @@ public final class NativeHTTPServer: @unchecked Sendable {
             path: wsPath,
             remoteAddress: "unknown"
         ))
+        // DomainEvent co-publish for binary mode compiled handlers.
+        // DomainEvent eventType: "websocket.connected"
+        // DomainEvent payload:   { "connectionId": String, "path": String, "remoteAddress": String }
+        EventBus.shared.publish(DomainEvent(eventType: "websocket.connected", payload: [
+            "connectionId": connectionId,
+            "path": wsPath,
+            "remoteAddress": "unknown"
+        ]))
 
         defer {
             // Cleanup on disconnect
@@ -2059,6 +2067,13 @@ public final class NativeHTTPServer: @unchecked Sendable {
                 connectionId: connectionId,
                 reason: "connection closed"
             ))
+            // DomainEvent co-publish for binary mode compiled handlers.
+            // DomainEvent eventType: "websocket.disconnected"
+            // DomainEvent payload:   { "connectionId": String, "reason": String }
+            EventBus.shared.publish(DomainEvent(eventType: "websocket.disconnected", payload: [
+                "connectionId": connectionId,
+                "reason": "connection closed"
+            ]))
 
             _ = systemClose(fd)
         }
@@ -2089,6 +2104,13 @@ public final class NativeHTTPServer: @unchecked Sendable {
                         connectionId: connectionId,
                         message: text
                     ))
+                    // DomainEvent co-publish for binary mode compiled handlers.
+                    // DomainEvent eventType: "websocket.message"
+                    // DomainEvent payload:   { "connectionId": String, "message": String }
+                    EventBus.shared.publish(DomainEvent(eventType: "websocket.message", payload: [
+                        "connectionId": connectionId,
+                        "message": text
+                    ]))
                 }
 
             case 0x8: // Close frame

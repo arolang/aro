@@ -211,6 +211,15 @@ public final class AROWebSocketServer: WebSocketServerService, @unchecked Sendab
             path: path,
             remoteAddress: remoteAddress
         ))
+        // DomainEvent co-publish for binary mode compiled handlers.
+        // DomainEvent eventType: "websocket.connected"
+        // DomainEvent payload:   { "connectionId": String, "path": String, "remoteAddress": String }
+        // Handlers extract with: Extract the <id> from the <event: connectionId>
+        eventBus.publish(DomainEvent(eventType: "websocket.connected", payload: [
+            "connectionId": id,
+            "path": path,
+            "remoteAddress": remoteAddress
+        ]))
     }
 
     /// Remove a WebSocket connection
@@ -222,6 +231,14 @@ public final class AROWebSocketServer: WebSocketServerService, @unchecked Sendab
                 connectionId: id,
                 reason: reason
             ))
+            // DomainEvent co-publish for binary mode compiled handlers.
+            // DomainEvent eventType: "websocket.disconnected"
+            // DomainEvent payload:   { "connectionId": String, "reason": String }
+            // Handlers extract with: Extract the <reason> from the <event: reason>
+            eventBus.publish(DomainEvent(eventType: "websocket.disconnected", payload: [
+                "connectionId": id,
+                "reason": reason
+            ]))
         }
     }
 
@@ -231,6 +248,14 @@ public final class AROWebSocketServer: WebSocketServerService, @unchecked Sendab
             connectionId: connectionId,
             message: message
         ))
+        // DomainEvent co-publish for binary mode compiled handlers.
+        // DomainEvent eventType: "websocket.message"
+        // DomainEvent payload:   { "connectionId": String, "message": String }
+        // Handlers extract with: Extract the <message> from the <event: message>
+        eventBus.publish(DomainEvent(eventType: "websocket.message", payload: [
+            "connectionId": connectionId,
+            "message": message
+        ]))
     }
 
     // MARK: - Upgrade Handler Factory
