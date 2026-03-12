@@ -848,7 +848,8 @@ private func fsEventsCallback(
         print("[FileMonitor] \(eventType): \(path)")
 
         // Publish domain event to EventBus so compiled binary file event handlers are triggered.
-        // Uses DomainEvent with "file.created" / "file.modified" / "file.deleted" event types.
+        // DomainEvent eventType: "file.created" | "file.modified" | "file.deleted"
+        // DomainEvent payload:   { "path": String }
         let domainEventType = "file.\(eventType.lowercased())"
         EventBus.shared.publish(DomainEvent(eventType: domainEventType, payload: ["path": path]))
     }

@@ -92,8 +92,9 @@ public final class KeyboardService: @unchecked Sendable {
             let key = parseKey(buf, count: n)
             let event = KeyPressEvent(key: key)
             eventBus.publish(event)
-            // Also publish DomainEvent for binary mode compiled handlers
-            // (compiled handlers are registered as "KeyPress" and dispatched via DomainEvent)
+            // Also publish DomainEvent for binary mode compiled handlers.
+            // DomainEvent eventType: "KeyPress"  payload: { "key": String }
+            // Binary handlers declared as: (Name: KeyPress Handler) or (Name: KeyPress Handler<key:X>)
             eventBus.publish(DomainEvent(eventType: "KeyPress", payload: ["key": key]))
         }
 

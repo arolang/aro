@@ -91,8 +91,11 @@ public struct AcceptAction: ActionImplementation {
         // Extract entity ID for the event
         let entityId = extractEntityId(from: updatedObject)
 
-        // Publish StateTransitionEvent and wait for all handlers to complete
+        // Publish StateTransitionEvent and wait for all handlers to complete.
         // (publishAndTrack ensures awaitPendingEvents() in FeatureSetExecutor waits for handlers)
+        // Typed event: StateTransitionEvent { fieldName, objectName, fromState, toState, entityId, entity }
+        // DomainEvent co-publish added in Step 4b (see plan) for binary mode support:
+        //   eventType: "StateTransition"  payload: { "entityId", "fromState", "toState", "fieldName", "objectName" }
         let transitionEvent = StateTransitionEvent(
             fieldName: fieldName,
             objectName: objectName,

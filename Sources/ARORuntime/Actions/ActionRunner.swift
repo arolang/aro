@@ -437,7 +437,9 @@ extension ActionRunner {
                 payload[payloadKey] = literal
             }
 
-            // Create and emit the domain event
+            // Create and emit the domain event (binary mode fire-and-forget path).
+            // DomainEvent eventType: user-defined (result.base, e.g. "UserCreated")
+            // DomainEvent payload:   { payloadKey: value } — same schema as interpreter EmitAction
             let event = DomainEvent(eventType: eventType, payload: payload)
 
             // Publish and wait for handlers

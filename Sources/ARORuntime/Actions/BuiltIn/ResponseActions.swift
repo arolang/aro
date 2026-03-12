@@ -1082,6 +1082,10 @@ public struct NotifyAction: ActionImplementation {
             items = []
         }
 
+        // Typed event: NotificationSentEvent { message, target, targetValue }
+        //   One event per item in the collection; handler 'when' guards filter by target field values.
+        // DomainEvent co-publish added in Step 4c for binary mode support:
+        //   eventType: "NotificationSent"  payload: target object fields + { "message": String, "target": String }
         if let eventBus = context.eventBus {
             for item in items {
                 await eventBus.publishAndTrack(NotificationSentEvent(message: message, target: target, targetValue: item))
@@ -1203,7 +1207,10 @@ public struct EmitAction: ActionImplementation {
             payload[payloadKey] = payloadValue
         }
 
-        // Create and emit the domain event
+        // Create and emit the domain event.
+        // DomainEvent eventType: user-defined (result.base, e.g. "UserCreated")
+        // DomainEvent payload:   { payloadKey: value } where payloadKey = object variable name
+        //   Handlers extract with: Extract the <user> from the <event: user>
         let event = DomainEvent(eventType: eventType, payload: payload)
 
         // Emit to event bus and wait for handlers to complete

@@ -89,6 +89,7 @@ public struct ScheduleAction: ActionImplementation {
             while !Task.isCancelled {
                 try? await Task.sleep(nanoseconds: UInt64(intervalSeconds * 1_000_000_000))
                 guard !Task.isCancelled else { break }
+                // DomainEvent payload: {} (empty — the event name itself is the trigger signal)
                 EventBus.shared.publish(DomainEvent(eventType: eventName, payload: [:]))
             }
         }

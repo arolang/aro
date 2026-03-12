@@ -249,6 +249,9 @@ enum SSEStreamRunner {
             if let sseType = currentEventType {
                 payload["type"] = sseType
             }
+            // DomainEvent payload: parsed JSON from SSE data: field, or { "data": String } if not JSON.
+            //   Optional "type": String added when SSE event: field is present.
+            //   eventType: the SSE event: field value, or result.base name if absent.
             EventBus.shared.publish(DomainEvent(eventType: eventName, payload: payload))
             currentEventType = nil
             currentData = []
