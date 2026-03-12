@@ -1101,7 +1101,7 @@ public struct NotifyAction: ActionImplementation {
                     payload["user"] = item
                     payload[target] = item
                 }
-                EventBus.shared.publish(DomainEvent(eventType: "NotificationSent", payload: payload))
+                await EventBus.shared.publishAndTrack(DomainEvent(eventType: "NotificationSent", payload: payload))
             }
         } else {
             for item in items {
