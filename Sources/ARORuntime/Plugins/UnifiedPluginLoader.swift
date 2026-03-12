@@ -421,11 +421,13 @@ public final class UnifiedPluginLoader: @unchecked Sendable {
 
 // MARK: - Version Helpers (inline; AROPackageManager not imported here)
 
-/// Returns the running ARO version via `git describe`, or `"0.0.0"` as fallback.
+/// Returns the running ARO version via `git describe`, or `"dev"` as fallback.
+/// Uses `"dev"` (non-semver) so that unversioned/CI builds satisfy all plugin
+/// version constraints rather than triggering spurious warnings.
 private func currentAROVersion() -> String {
     let task = Process()
     task.executableURL = URL(fileURLWithPath: "/bin/sh")
-    task.arguments = ["-c", "git describe --tags --always --dirty 2>/dev/null || echo '0.0.0'"]
+    task.arguments = ["-c", "git describe --tags --always --dirty 2>/dev/null || echo 'dev'"]
     let pipe = Pipe()
     task.standardOutput = pipe
     task.standardError = Pipe()
@@ -437,7 +439,7 @@ private func currentAROVersion() -> String {
             return output.trimmingCharacters(in: .whitespacesAndNewlines)
         }
     } catch {}
-    return "0.0.0"
+    return "dev"
 }
 
 /// Minimal semver constraint checker for aro-version warnings.
