@@ -2,7 +2,7 @@
 
 ## Hybrid Parser Design
 
-ARO's parser (`Parser.swift`, 1700+ lines) uses a hybrid approach: **recursive descent** for statements and program structure, **Pratt parsing** for expressions. This combination leverages the strengths of each technique.
+ARO's parser (`Parser.swift`, ~2000 lines) uses a hybrid approach: **recursive descent** for statements and program structure, **Pratt parsing** for expressions. This combination leverages the strengths of each technique.
 
 ```swift
 public final class Parser {
@@ -660,7 +660,7 @@ ARO's parser demonstrates several techniques:
 
 4. **Compound identifiers in parser**: Hyphenated names are assembled from separate tokens.
 
-The parser is 1700+ lines—larger than the lexer but still manageable. The constrained grammar (five statement types, fixed expression operators) keeps complexity bounded.
+The parser is ~2000 lines—larger than the lexer but still manageable. The constrained grammar (eight statement types, fixed expression operators) keeps complexity bounded.
 
 Implementation reference: `Sources/AROParser/Parser.swift`
 

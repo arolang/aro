@@ -37,4 +37,5 @@ Chapters are designed to be read sequentially, following the compilation pipelin
 ---
 
 *ARO Language Project*
-*January 2026*
+*March 2026*
+*ARO Version: 0.7.1*

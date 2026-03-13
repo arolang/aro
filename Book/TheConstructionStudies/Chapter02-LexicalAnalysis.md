@@ -2,7 +2,7 @@
 
 ## The Lexer Architecture
 
-ARO's lexer (`Lexer.swift`, 703 lines) is a hand-written scanner that produces tokens for the parser. It maintains source location tracking, handles string interpolation, and disambiguates between regex literals and division.
+ARO's lexer (`Lexer.swift`, 962 lines) is a hand-written scanner that produces tokens for the parser. It maintains source location tracking, handles string interpolation, and disambiguates between regex literals and division.
 
 ```swift
 public final class Lexer: @unchecked Sendable {
@@ -570,6 +570,44 @@ Error: Unterminated string literal
 
 ---
 
+## Extended Literal Support
+
+ARO 0.7 added several lexer-level literal forms that were not present in earlier versions.
+
+### Triple-Quoted Strings
+
+Multi-line string literals use triple-quote delimiters:
+
+```aro
+Log """
+Hello,
+World!
+""" to the <console>.
+```
+
+The lexer's `scanTripleQuotedString()` handles the `"""..."""` form, allowing embedded newlines and quotes without escaping.
+
+### Raw Strings
+
+Raw string literals disable escape processing:
+
+```aro
+Compute the <pattern: regex> with r"\.aro$".
+```
+
+`scanRawString()` emits the content verbatim, which is useful for regex patterns where backslashes are common.
+
+### Hexadecimal and Binary Number Literals
+
+```aro
+Compute the <mask> with 0xFF.
+Compute the <flags> with 0b1010.
+```
+
+The `scanHexNumber()` and `scanBinaryNumber()` methods handle the `0x` and `0b` prefixes, producing `intLiteral` tokens with the converted integer value.
+
+---
+
 ## Chapter Summary
 
 ARO's lexer demonstrates several design choices:
@@ -582,7 +620,9 @@ ARO's lexer demonstrates several design choices:
 
 4. **Source location on every token**: Enables precise error messages throughout the compilation pipeline.
 
-The lexer is 703 lines—small for a language implementation. The constrained syntax (no user-defined operators, fixed token types) keeps it manageable.
+5. **Extended literal forms**: Triple-quoted strings, raw strings, and hex/binary integer literals added in ARO 0.7 without changing the overall scanner architecture.
+
+The lexer is 962 lines. The constrained syntax (no user-defined operators, fixed token types) keeps it manageable despite growing literal support.
 
 Implementation reference: `Sources/AROParser/Lexer.swift`
 

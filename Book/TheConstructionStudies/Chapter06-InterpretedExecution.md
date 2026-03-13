@@ -283,7 +283,7 @@ public actor ActionRegistry {
 }
 ```
 
-ARO has 48 built-in actions. Each is registered at startup:
+ARO has 61 built-in actions. Each is registered at startup:
 
 ```swift
 // ActionRegistry initialization
@@ -322,7 +322,7 @@ ActionRegistry.shared.register(ReturnAction.self)
   <text x="180" y="135" class="label">"extract" → ExtractAction</text>
   <text x="180" y="150" class="label">"compute" → ComputeAction</text>
   <text x="180" y="165" class="label">"return" → ReturnAction</text>
-  <text x="180" y="180" class="label">... (48 total)</text>
+  <text x="180" y="180" class="label">... (61 total)</text>
 
   <!-- Action instance -->
   <rect x="400" y="90" width="160" height="70" rx="5" class="box"/>

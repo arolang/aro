@@ -75,18 +75,21 @@ This is not a universal truth—it is a design bet. The bet is that for certain 
 
 In a general-purpose language, the AST node types proliferate. Python's AST has over 40 statement types and 20+ expression types. JavaScript's has similar complexity. Each new construct adds parsing rules, semantic analysis passes, and code generation cases.
 
-ARO has five statement types:
+ARO has eight statement types:
 1. `AROStatement` (the action-result-object form)
 2. `PublishStatement` (variable export)
-3. `ForEachLoop` (iteration)
+3. `ForEachLoop` (collection iteration)
 4. `RequireStatement` (dependency declaration)
 5. `MatchStatement` (pattern matching)
+6. `RangeLoop` (numeric range iteration)
+7. `WhileLoop` (condition-based iteration)
+8. `BreakStatement` (loop exit)
 
 **Lifecycle feature sets** (`Application-Start`, `Application-End: Success`, `Application-End: Error`) are not special statement types—they are regular feature sets distinguished by naming convention. The runtime treats them specially based on their business activity names.
 
 This constraint propagates through the entire implementation:
-- The parser is simpler (fewer production rules)
-- Semantic analysis has fewer cases
+- The parser is more focused (bounded set of production rules)
+- Semantic analysis has defined cases
 - Code generation is more uniform
 - Tooling can make stronger assumptions
 
@@ -349,8 +352,9 @@ Implementation reference: `Sources/ARORuntime/Core/ErrorReconstructor.swift`
 
   <!-- Escape Hatches -->
   <rect x="50" y="200" width="150" height="60" rx="5" class="box" fill="#eef"/>
-  <text x="125" y="225" class="title" text-anchor="middle">ESCAPE HATCH</text>
-  <text x="125" y="245" class="label" text-anchor="middle">Custom actions (Swift)</text>
+  <text x="125" y="220" class="title" text-anchor="middle">ESCAPE HATCH</text>
+  <text x="125" y="238" class="label" text-anchor="middle">Plugins (Swift/Rust/C/Python)</text>
+  <text x="125" y="253" class="label" text-anchor="middle">Custom actions (Swift)</text>
 
   <!-- Arrow from escape to constraint -->
   <path d="M 125 200 L 125 180" class="arrow" style="marker-end: url(#arrowhead2);"/>
@@ -358,13 +362,20 @@ Implementation reference: `Sources/ARORuntime/Core/ErrorReconstructor.swift`
 
   <!-- Cost box -->
   <rect x="290" y="200" width="150" height="60" rx="5" class="box" fill="#ffe"/>
-  <text x="365" y="225" class="title" text-anchor="middle">COST</text>
-  <text x="365" y="245" class="label" text-anchor="middle">Escape requires Swift</text>
+  <text x="365" y="220" class="title" text-anchor="middle">COST</text>
+  <text x="365" y="238" class="label" text-anchor="middle">Swift actions need recompile</text>
+  <text x="365" y="253" class="label" text-anchor="middle">Plugins need build step</text>
 </svg>
 
 **Figure 1.3**: The constraint-uniformity trade-off with escape hatch.
 
-The escape hatch (custom actions written in Swift) is essential. Without it, ARO would be too limited for real use. With it, the constraint becomes a default rather than a prison—you stay within ARO's vocabulary unless you genuinely need to escape.
+The escape hatch is essential. Without it, ARO would be too limited for real use. There are two levels of escape:
+
+1. **Plugins** (Swift, Rust, C, Python) — loaded as dynamic libraries or subprocesses. Plugins can add new actions and qualifiers without modifying the ARO runtime itself. They are namespaced via a `handle:` field in `plugin.yaml` (e.g., `handle: Collections`). Qualifiers are accessed as `handle.qualifier` (e.g., `<list: Collections.pick-random>`). The plugin system is the preferred escape mechanism.
+
+2. **Custom actions in Swift** — compiled into the runtime. More tightly integrated but requires recompiling the ARO binary.
+
+With these escape hatches, the constraint becomes a default rather than a prison—you stay within ARO's vocabulary unless you genuinely need to escape.
 
 ---
 

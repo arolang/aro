@@ -2,7 +2,7 @@
 
 ## AST Node Hierarchy
 
-ARO's AST (`AST.swift`, 1315 lines) defines the tree structure produced by parsing. Every node conforms to `ASTNode`, which requires `Sendable` (Swift concurrency safety), source location tracking, and visitor pattern support.
+ARO's AST (`AST.swift`, ~1600 lines) defines the tree structure produced by parsing. Every node conforms to `ASTNode`, which requires `Sendable` (Swift concurrency safety), source location tracking, and visitor pattern support.
 
 ```swift
 public protocol ASTNode: Sendable, Locatable, CustomStringConvertible {
@@ -53,28 +53,41 @@ public protocol ASTNode: Sendable, Locatable, CustomStringConvertible {
   <text x="350" y="265" class="title" text-anchor="middle">Statement</text>
   <path d="M 350 210 L 350 240" class="arrow"/>
 
-  <!-- Statement types -->
-  <rect x="30" y="310" width="100" height="35" rx="3" class="box statement"/>
-  <text x="80" y="332" class="label" text-anchor="middle">AROStatement</text>
+  <!-- Statement types row 1 -->
+  <rect x="30" y="310" width="90" height="35" rx="3" class="box statement"/>
+  <text x="75" y="332" class="label" text-anchor="middle">AROStatement</text>
 
-  <rect x="140" y="310" width="100" height="35" rx="3" class="box statement"/>
-  <text x="190" y="332" class="label" text-anchor="middle">PublishStatement</text>
+  <rect x="130" y="310" width="90" height="35" rx="3" class="box statement"/>
+  <text x="175" y="332" class="label" text-anchor="middle">PublishStatement</text>
 
-  <rect x="250" y="310" width="100" height="35" rx="3" class="box statement"/>
-  <text x="300" y="332" class="label" text-anchor="middle">RequireStatement</text>
+  <rect x="230" y="310" width="90" height="35" rx="3" class="box statement"/>
+  <text x="275" y="332" class="label" text-anchor="middle">RequireStatement</text>
 
-  <rect x="360" y="310" width="100" height="35" rx="3" class="box statement"/>
-  <text x="410" y="332" class="label" text-anchor="middle">MatchStatement</text>
+  <rect x="330" y="310" width="90" height="35" rx="3" class="box statement"/>
+  <text x="375" y="332" class="label" text-anchor="middle">MatchStatement</text>
 
-  <rect x="470" y="310" width="100" height="35" rx="3" class="box statement"/>
-  <text x="520" y="332" class="label" text-anchor="middle">ForEachLoop</text>
+  <!-- Statement types row 2 -->
+  <rect x="30" y="355" width="90" height="35" rx="3" class="box statement"/>
+  <text x="75" y="377" class="label" text-anchor="middle">ForEachLoop</text>
+
+  <rect x="130" y="355" width="90" height="35" rx="3" class="box statement"/>
+  <text x="175" y="377" class="label" text-anchor="middle">RangeLoop</text>
+
+  <rect x="230" y="355" width="90" height="35" rx="3" class="box statement"/>
+  <text x="275" y="377" class="label" text-anchor="middle">WhileLoop</text>
+
+  <rect x="330" y="355" width="90" height="35" rx="3" class="box statement"/>
+  <text x="375" y="377" class="label" text-anchor="middle">BreakStatement</text>
 
   <!-- Lines from Statement to subtypes -->
-  <path d="M 280 280 L 80 310" class="inherit"/>
-  <path d="M 310 280 L 190 310" class="inherit"/>
-  <path d="M 350 280 L 300 310" class="inherit"/>
-  <path d="M 390 280 L 410 310" class="inherit"/>
-  <path d="M 420 280 L 520 310" class="inherit"/>
+  <path d="M 280 280 L 75 310" class="inherit"/>
+  <path d="M 305 280 L 175 310" class="inherit"/>
+  <path d="M 350 280 L 275 310" class="inherit"/>
+  <path d="M 390 280 L 375 310" class="inherit"/>
+  <path d="M 280 280 L 75 355" class="inherit"/>
+  <path d="M 305 280 L 175 355" class="inherit"/>
+  <path d="M 350 280 L 275 355" class="inherit"/>
+  <path d="M 390 280 L 375 355" class="inherit"/>
 
   <!-- Expression protocol -->
   <rect x="480" y="240" width="140" height="40" rx="5" class="protocol expression"/>
@@ -122,7 +135,7 @@ Statements perform actions and produce side effects:
 public protocol Statement: ASTNode {}
 ```
 
-The five statement types:
+The eight statement types:
 
 | Statement | Purpose | Example |
 |-----------|---------|---------|
@@ -130,7 +143,10 @@ The five statement types:
 | `PublishStatement` | Variable export | `Publish as <alias> <variable>.` |
 | `RequireStatement` | Dependency declaration | `Require the <config> from the <environment>.` |
 | `MatchStatement` | Pattern matching | `match <status> { case "active" { ... } }` |
-| `ForEachLoop` | Iteration | `for each <item> in <items> { ... }` |
+| `ForEachLoop` | Collection iteration | `for each <item> in <items> { ... }` |
+| `RangeLoop` | Numeric range iteration | `for <i> from 1 to <count> { ... }` |
+| `WhileLoop` | Condition-based iteration | `while <condition> { ... }` |
+| `BreakStatement` | Exit innermost loop | `Break.` |
 
 ### Expressions
 
@@ -613,7 +629,7 @@ This classification is used by:
 
 ARO's AST design reflects the language's constraints:
 
-1. **Five statement types**: The uniform structure enables simple tooling.
+1. **Eight statement types**: The uniform structure enables simple tooling. The addition of `RangeLoop`, `WhileLoop`, and `BreakStatement` in ARO 0.7 expanded iteration without breaking the uniform design.
 
 2. **Grouped clause types**: `ValueSource`, `QueryModifiers`, `RangeModifiers`, and `StatementGuard` organize optional clauses into semantic groups. This prevents invalid combinations and simplifies pattern matching.
 

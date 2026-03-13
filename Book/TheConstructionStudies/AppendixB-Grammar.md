@@ -46,7 +46,11 @@ block = "{" , { statement } , "}" ;
 statement = aro_statement
           | guarded_statement
           | publish_statement
-          | match_statement ;
+          | match_statement
+          | for_each_loop
+          | range_loop
+          | while_loop
+          | break_statement ;
 
 (* Core ARO statement: Action-Result-Object *)
 aro_statement = action , [ article ] , result , preposition , [ article ] , object , [ modifiers ] , "." ;
@@ -63,6 +67,18 @@ match_statement = "match" , variable , "{" , { match_case } , [ default_case ] ,
 match_case = "case" , pattern , block ;
 pattern = literal | regex_literal | variable ;
 default_case = "default" , block | "otherwise" , block ;
+
+(* For-each loop — collection iteration *)
+for_each_loop = "for" , "each" , variable , "in" , variable , block ;
+
+(* Range loop — numeric iteration (ARO 0.7) *)
+range_loop = "for" , variable , "from" , expression , "to" , expression , block ;
+
+(* While loop — condition-based iteration (ARO 0.7) *)
+while_loop = "while" , condition , block ;
+
+(* Break statement — exit innermost loop (ARO 0.7) *)
+break_statement = "Break" , "." ;
 ```
 
 ## Actions and Objects

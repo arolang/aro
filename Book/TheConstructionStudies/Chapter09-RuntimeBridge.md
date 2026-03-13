@@ -9,7 +9,7 @@ The bridge code lives in `Sources/ARORuntime/Bridge/`:
 | File | Purpose |
 |------|---------|
 | `RuntimeBridge.swift` | Lifecycle: init, shutdown, context management |
-| `ActionBridge.swift` | All 48 actions exposed via @_cdecl |
+| `ActionBridge.swift` | All 61 actions exposed via @_cdecl |
 | `ServiceBridge.swift` | HTTP server, file system, socket services |
 
 ```
@@ -247,7 +247,7 @@ public func aro_action_extract(
 }
 ```
 
-All 50 actions have thin wrappers that delegate to `ActionRunner`:
+All 61 actions have thin wrappers that delegate to `ActionRunner`:
 
 ```swift
 private func executeAction(
@@ -530,7 +530,7 @@ The bridge is the most fragile part of native compilation. Memory layout assumpt
 
 Implementation references:
 - `Sources/ARORuntime/Bridge/RuntimeBridge.swift` — Core lifecycle and context management
-- `Sources/ARORuntime/Bridge/ActionBridge.swift` — All 48 action @_cdecl exports
+- `Sources/ARORuntime/Bridge/ActionBridge.swift` — All 61 action @_cdecl exports
 - `Sources/ARORuntime/Bridge/ServiceBridge.swift` — HTTP/File/Socket service bridges
 
 ---

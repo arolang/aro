@@ -515,6 +515,37 @@ Error: Circular event chain detected: UserCreated → NotificationSent → UserC
 
 ---
 
+## Verb Classification: VerbSets
+
+A subtle but important semantic analysis concern is verb classification. The analyzer must determine whether a statement's verb is a mutation (allow rebinding), a response (short-circuit), or a server operation (force execution even with literal values).
+
+In ARO 0.7, these classifications were extracted from `FeatureSetExecutor` into `Sources/ARORuntime/Core/VerbSets.swift`—a single shared module referenced by both the interpreter and the compiler:
+
+```swift
+public enum VerbSets {
+    public static let updateVerbs:   Set<String> = ["update", "modify", "change", "set"]
+    public static let createVerbs:   Set<String> = ["create", "make", "build", "construct"]
+    public static let responseVerbs: Set<String> = ["log", "print", "send", "emit", "notify", ...]
+    public static let serverVerbs:   Set<String> = ["start", "stop", "keepalive", "schedule", ...]
+    // ... 10 sets total
+}
+```
+
+**Why a shared module matters**: Before extraction, verb classification was duplicated between the interpreter (`FeatureSetExecutor`) and binary mode (`LLVMCodeGenerator`). When a new verb was added to one, the other diverged silently. `VerbSets.swift` is the canonical vocabulary reference for both modes.
+
+### Plugin Compatibility Checking
+
+The `aro check plugins` subcommand (added in ARO 0.7) validates that installed plugins are compatible with the current ARO version:
+
+```
+aro check plugins
+aro check plugins --directory ./MyApp
+```
+
+Each plugin declares an `aro-version` constraint in `plugin.yaml` (e.g., `aro-version: ">=0.6.0"`). The checker uses semantic version comparison to detect incompatible plugins before they cause runtime errors.
+
+---
+
 ## Chapter Summary
 
 ARO's semantic analysis enforces the language's design principles:
@@ -529,9 +560,13 @@ ARO's semantic analysis enforces the language's design principles:
 
 5. **Event chain validation**: Circular event chains and orphaned events are detected.
 
+6. **Shared verb classification**: `VerbSets.swift` provides a single authoritative source for verb categories, keeping interpreter and compiler behavior synchronized.
+
 The analyzer is designed for reporting, not aborting. Multiple errors can be collected and shown to the user at once.
 
-Implementation reference: `Sources/AROParser/SemanticAnalyzer.swift`
+Implementation references:
+- `Sources/AROParser/SemanticAnalyzer.swift`
+- `Sources/ARORuntime/Core/VerbSets.swift`
 
 ---
 

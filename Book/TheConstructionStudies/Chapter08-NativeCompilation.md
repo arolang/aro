@@ -295,28 +295,72 @@ Each unique string gets a global constant:
 
 ## Feature Set Generation
 
-Each feature set becomes an LLVM function:
+Each feature set becomes an LLVM function. The generator uses the Swifty-LLVM API to construct IR objects rather than emitting text strings:
 
 ```swift
-private func generateFeatureSet(_ featureSet: AnalyzedFeatureSet) throws {
-    let funcName = mangleFeatureSetName(featureSet.featureSet.name)
+private func generateFeatureSet(_ analyzed: AnalyzedFeatureSet) {
+    let funcName = featureSetFunctionName(analyzed.featureSet.name)
 
-    emit("define ptr @\(funcName)(ptr %ctx) {")
-    emit("entry:")
-    emit("  %__result = alloca ptr")
-    emit("  store ptr null, ptr %__result")
+    // Create function via API — type-safe, not string
+    let funcType = types.featureSetFunctionType
+    let function = ctx.module.declareFunction(funcName, funcType)
+    ctx.currentFunction = function
 
-    for (index, statement) in featureSet.featureSet.statements.enumerated() {
-        try generateStatement(statement, index: index)
+    // Create entry block
+    let entryBlock = ctx.module.appendBlock(named: "entry", to: function)
+    ctx.setInsertionPoint(atEndOf: entryBlock)
+
+    // Get context parameter
+    let ctxParam = function.parameters[0]
+    ctx.currentContextVar = ctxParam
+
+    // Allocate result storage
+    let resultPtr = ctx.module.insertAlloca(ctx.ptrType, at: ctx.insertionPoint)
+    ctx.module.insertStore(ctx.ptrType.null, to: resultPtr, at: ctx.insertionPoint)
+
+    // Create error exit block (new in 0.7)
+    let normalReturnBlock = ctx.module.appendBlock(named: "normal_return", to: function)
+    let errorExitBlock = ctx.module.appendBlock(named: "error_exit", to: function)
+
+    // Generate statements
+    for (index, statement) in analyzed.featureSet.statements.enumerated() {
+        generateStatement(statement, index: index, errorBlock: errorExitBlock)
     }
 
-    emit("  %final_result = load ptr, ptr %__result")
-    emit("  ret ptr %final_result")
-    emit("}")
+    // Normal return: branch, load result, return
+    ctx.module.insertBr(to: normalReturnBlock, at: ctx.insertionPoint)
+    ctx.setInsertionPoint(atEndOf: normalReturnBlock)
+    let finalResult = ctx.module.insertLoad(ctx.ptrType, from: resultPtr, at: ctx.insertionPoint)
+    ctx.module.insertReturn(finalResult, at: ctx.insertionPoint)
+
+    // Error exit: print error and return null
+    ctx.setInsertionPoint(atEndOf: errorExitBlock)
+    _ = ctx.module.insertCall(externals.contextPrintError, on: [ctxParam], at: ctx.insertionPoint)
+    ctx.module.insertReturn(ctx.ptrType.null, at: ctx.insertionPoint)
 }
 ```
 
-The function takes a context pointer and returns a result pointer. Name mangling converts `"Application-Start"` to `aro_fs_application_start`.
+The function takes a context pointer and returns a result pointer. Name mangling converts `"Application-Start"` to `aro_fs_application_start`. Every feature set function now has a dedicated `error_exit` block: actions that fail call into it to print the error message before returning null.
+
+The resulting LLVM IR (inspectable via `ctx.module.description`) looks like:
+
+```llvm
+define ptr @aro_fs_application_start(ptr %0) {
+entry:
+  %1 = alloca ptr
+  store ptr null, ptr %1
+  ...
+  br label %normal_return
+
+normal_return:
+  %2 = load ptr, ptr %1
+  ret ptr %2
+
+error_exit:
+  call void @aro_context_print_error(ptr %0)
+  ret ptr null
+}
+```
 
 ---
 
@@ -325,30 +369,32 @@ The function takes a context pointer and returns a result pointer. Name mangling
 For each ARO statement, the generator:
 
 1. **Binds literal values** to special variables
-2. **Allocates descriptors** on the stack
+2. **Allocates descriptors** on the stack via the Swifty-LLVM API
 3. **Fills descriptor fields** with string pointers and counts
-4. **Calls the action function**
+4. **Calls the action function**, storing the result
+
+The generated LLVM IR for a statement like `Log "Hello, World!" to the <console>.` looks like:
 
 ```llvm
-; Log "Hello, World!" to the <console>.
-s0:
   ; Bind literal to _literal_
   call void @aro_variable_bind_string(ptr %ctx, ptr @.str._literal_, ptr @.str.hello)
 
-  ; Allocate result descriptor
-  %s0_result_desc = alloca %AROResultDescriptor
-  %s0_rd_base_ptr = getelementptr inbounds %AROResultDescriptor, ptr %s0_result_desc, i32 0, i32 0
-  store ptr @.str.message, ptr %s0_rd_base_ptr
-  ; ... fill specifiers and count
+  ; Allocate and fill result descriptor
+  %s0_rd = alloca %AROResultDescriptor
+  %s0_rd_base = getelementptr inbounds %AROResultDescriptor, ptr %s0_rd, i32 0, i32 0
+  store ptr @.str.message, ptr %s0_rd_base
+  ; ... fill specifiers ptr and count
 
-  ; Allocate object descriptor
-  %s0_object_desc = alloca %AROObjectDescriptor
-  ; ... fill base, preposition, specifiers, count
+  ; Allocate and fill object descriptor
+  %s0_od = alloca %AROObjectDescriptor
+  ; ... fill base ("console"), preposition (4=to), specifiers, count
 
   ; Call action
-  %s0_action_result = call ptr @aro_action_log(ptr %ctx, ptr %s0_result_desc, ptr %s0_object_desc)
-  store ptr %s0_action_result, ptr %__result
+  %s0_result = call ptr @aro_action_log(ptr %ctx, ptr %s0_rd, ptr %s0_od)
+  store ptr %s0_result, ptr %result_ptr
 ```
+
+The descriptor structs are allocated on the stack within each feature set function call frame, so there is no heap allocation overhead per statement.
 
 <svg viewBox="0 0 600 280" xmlns="http://www.w3.org/2000/svg">
   <style>
@@ -467,6 +513,60 @@ fe0_continue:
   %fe0_next_i = add i64 %fe0_i, 1
   %fe0_done = icmp sge i64 %fe0_next_i, %fe0_count
   br i1 %fe0_done, label %fe0_end, label %fe0_header
+```
+
+---
+
+## Control Flow: Range Loops and While Loops
+
+ARO 0.7 added `RangeLoop` and `WhileLoop` statements. Both follow the same Swifty-LLVM API pattern as `ForEachLoop`.
+
+### Range Loop
+
+```aro
+for <i> from 1 to <count> { ... }
+```
+
+Generates a phi-node based integer loop with bounds from the `from`/`to` expressions:
+
+```llvm
+rl0_init:
+  %rl0_start = ... ; evaluate from-expression
+  %rl0_end   = ... ; evaluate to-expression
+  br label %rl0_header
+
+rl0_header:
+  %rl0_i = phi i64 [ %rl0_start, %rl0_init ], [ %rl0_next, %rl0_continue ]
+  call void @aro_variable_bind_int(ptr %iter_ctx, ptr @.str.i, i64 %rl0_i)
+  ; ... body statements ...
+  br label %rl0_continue
+
+rl0_continue:
+  %rl0_next = add i64 %rl0_i, 1
+  %rl0_done = icmp sgt i64 %rl0_next, %rl0_end
+  br i1 %rl0_done, label %rl0_end, label %rl0_header
+```
+
+### While Loop
+
+```aro
+while <condition> { ... }
+```
+
+Evaluates the condition JSON expression on each iteration. `BreakStatement` branches to the `while_end` block:
+
+```llvm
+wl0_header:
+  %wl0_cond = call i32 @aro_evaluate_when_guard(ptr %ctx, ptr @.str.while_cond)
+  %wl0_pass = icmp ne i32 %wl0_cond, 0
+  br i1 %wl0_pass, label %wl0_body, label %wl0_end
+
+wl0_body:
+  ; ... body statements ...
+  ; BreakStatement → br label %wl0_end
+  br label %wl0_header
+
+wl0_end:
 ```
 
 ---
@@ -676,15 +776,16 @@ if options.strip {
 
 Native compilation transforms ARO programs into standalone executables:
 
-1. **LLVMCodeGenerator** traverses the AST using the Swifty-LLVM C API for type-safe IR generation
+1. **LLVMCodeGenerator** (2057 lines) traverses the AST using the Swifty-LLVM C API for type-safe IR generation
 2. **String constants** are collected first, then referenced by pointer
-3. **Feature sets** become functions; **statements** become descriptor allocations and action calls
-4. **Control flow** (when, match, for-each) uses LLVM branches and phi nodes
-5. **Parallel loops** extract the body into a separate function
-6. **Main function** initializes runtime, registers handlers, executes entry point
-7. **Linking** combines object code with Swift runtime and ARO library
+3. **Feature sets** become functions with dedicated `normal_return` and `error_exit` blocks
+4. **Statements** become descriptor allocations and action calls, with descriptors on the stack
+5. **Control flow** (when, match, for-each, range-loop, while-loop, break) uses LLVM branches and phi nodes
+6. **Parallel loops** extract the body into a separate function
+7. **Main function** initializes runtime, registers handlers, executes entry point
+8. **Linking** combines object code with Swift runtime and ARO library
 
-The Swifty-LLVM C API approach provides compile-time type safety and better performance compared to the original text-based generator, at the cost of requiring LLVM 20 as a build dependency.
+The Swifty-LLVM C API approach provides compile-time type safety and module verification via `verifyModule()`, replacing the earlier text-based generator. The cost is requiring LLVM 20 as a build dependency and a more complex build setup.
 
 Implementation references:
 - `Sources/AROCompiler/LLVMC/LLVMCodeGenerator.swift` — Main code generator
