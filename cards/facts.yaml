@@ -1021,8 +1021,8 @@ facts:
     week: 47
     day: 5
     category: "DevOps"
-    headline: "security find-identity -v -p codesigning"
-    explanation: "Lists all valid signing identities in your Keychain with their SHA-1 hashes. If two certs share a name (e.g. after renewal), pass the hash instead of the name string to --sign. Delete expired duplicates from Keychain Access to keep it unambiguous."
+    headline: "aro build . --optimize --strip --sign \"<identity>\""
+    explanation: "--optimize enables LLVM optimizations for speed. --size optimizes for binary size. --strip removes debug symbols. --sign applies a code signing identity. --release combines all three. Combine for a production-ready, signed, minimal binary."
 
 
 
