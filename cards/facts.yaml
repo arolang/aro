@@ -305,6 +305,20 @@ facts:
     headline: "a <new: user> | an <error> | the <result>"
     explanation: "Articles are optional but improve readability. 'a' for new items, 'an' before vowels, 'the' for existing. Use what reads best."
 
+  - id: "14-3"
+    week: 14
+    day: 3
+    category: "Syntax"
+    headline: "\"Hello ${'world'}\""
+    explanation: "Single-quoted strings work inside ${} interpolation blocks. Useful when the embedded value contains double quotes. Mix quoted literals and variable references freely inside templates."
+
+  - id: "14-4"
+    week: 14
+    day: 4
+    category: "Syntax"
+    headline: "\"\"\"SELECT *\nFROM users\"\"\""
+    explanation: "Triple-quoted strings span multiple lines without escape sequences. Embed SQL, JSON templates, Markdown, HTML directly in code. No escaping needed. Source reads exactly as the content looks."
+
   # ===== WEEK 15: Lifecycle =====
   - id: "15-1"
     week: 15
@@ -415,6 +429,27 @@ facts:
     category: "HTTP"
     headline: "Request the <response> from <api> with { method: \"POST\", body: <data> }."
     explanation: "Config object for method, headers, body, timeout. from for GET, to for POST. Response includes status, headers, body."
+
+  - id: "20-3"
+    week: 20
+    day: 3
+    category: "HTTP"
+    headline: "Stream the <events> from <sse-url>."
+    explanation: "Consume Server-Sent Events without HTTP libraries. Events arrive in real time and trigger handlers. AI chat streams, live dashboards, real-time price feeds. SSE-to-handler wiring is automatic."
+
+  - id: "20-4"
+    week: 20
+    day: 4
+    category: "HTTP"
+    headline: "Extract the <type> from the <response: headers: content-type>."
+    explanation: "Full response header map is available after any Request. Inspect Content-Type, rate-limit counters, ETag values, or any header. Colon chains navigate to any header name."
+
+  - id: "20-5"
+    week: 20
+    day: 5
+    category: "HTTP"
+    headline: "Parse the <links> from the <response: link-header>."
+    explanation: "RFC 8288 Link header parsed automatically. Extracts rel=next/prev/first/last URLs for pagination. Loop through GitHub, GitLab, or Jira APIs page by page. No string splitting needed."
 
   # ===== WEEK 21: Pattern Matching =====
   - id: "21-1"
@@ -549,6 +584,27 @@ facts:
     headline: "for each <user> at <index> in <users> { }"
     explanation: "at binds the current index (0-based). parallel for each runs iterations concurrently. Both optional. Use what you need."
 
+  - id: "27-3"
+    week: 27
+    day: 3
+    category: "Syntax"
+    headline: "While <condition> { ... }"
+    explanation: "Execute while a condition is true. Update state inside the loop to advance. All comparison and boolean operators work. Combine with Break for early exit. Works in both aro run and aro build."
+
+  - id: "27-4"
+    week: 27
+    day: 4
+    category: "Syntax"
+    headline: "Break"
+    explanation: "Exit a for-each or while loop immediately. Search patterns, early termination, first-match scenarios. The runtime skips all remaining iterations. No side effects on loop variables."
+
+  - id: "27-5"
+    week: 27
+    day: 5
+    category: "Syntax"
+    headline: "For <i> from <low> to <high> { }"
+    explanation: "Iterate over an integer range without a list. Generate sequences, build indexed structures, repeat operations N times. Boundaries are inclusive. Full codegen support in compiled binaries."
+
   # ===== WEEK 28: Guards =====
   - id: "28-1"
     week: 28
@@ -601,6 +657,13 @@ facts:
     headline: "Reduce the <total> from the <orders: amount> with sum."
     explanation: "Reduce aggregates to single value. sum, avg, min, max, count built in. with specifies the aggregation function."
 
+  - id: "30-4"
+    week: 30
+    day: 4
+    category: "Data"
+    headline: "Join the <csv> from <items> with \", \"."
+    explanation: "Concatenate a collection into a single string. Optional separator inserted between items. Build CSV lines, comma-separated display lists, joined summaries. Inverse of Split."
+
   # ===== WEEK 31: Regex =====
   - id: "31-1"
     week: 31
@@ -637,6 +700,13 @@ facts:
     category: "Data"
     headline: "Extract the <third> from the <items: 2>."
     explanation: "Numeric qualifier is 0-based index. Ranges: 2-5 (inclusive). Picks: 0,3,7 (specific indices). Negative from end: -1 is last."
+
+  - id: "32-3"
+    week: 32
+    day: 3
+    category: "Data"
+    headline: "Retrieve the <x> from <repo> where id = <id> default <val>."
+    explanation: "Return a fallback value when no record matches the query. No halt, no error message. Safe lookups for optional data. Default can be a literal value, object, or variable."
 
   # ===== WEEK 33: Testing =====
   - id: "33-1"
@@ -785,6 +855,20 @@ facts:
     headline: "No runtime, no dependencies, just ./MyApp"
     explanation: "Compiled binary includes everything. No aro installation on target. Copy executable and run. Docker images shrink to megabytes."
 
+  - id: "39-4"
+    week: 39
+    day: 4
+    category: "Actions"
+    headline: "Sleep the <application> for <n> seconds."
+    explanation: "Pause execution for N seconds. Rate limiting, retry delays, polling intervals. Works identically in interpreter and compiled binary. Cross-platform, no shell commands."
+
+  - id: "39-5"
+    week: 39
+    day: 5
+    category: "Actions"
+    headline: "Schedule the <tick> with 2."
+    explanation: "Fire a recurring timer event every N seconds. Each tick triggers the handler. Build dashboards, heartbeats, periodic jobs — no cron, no external scheduler. Runs inside Keepalive."
+
   # ===== WEEK 40: File Operations =====
   - id: "40-1"
     week: 40
@@ -851,6 +935,13 @@ facts:
     category: "IDE"
     headline: "Hover | Completion | Diagnostics"
     explanation: "Hover shows types. Completion suggests actions, variables. Diagnostics publish on document change. One server, all editors."
+
+  - id: "43-3"
+    week: 43
+    day: 3
+    category: "IDE"
+    headline: "aro mcp — AI-assisted ARO development"
+    explanation: "ARO MCP Server exposes aro_run, aro_check, aro_compile as tools for Claude and other AI assistants. Prompts for code generation included. Describe a feature; ship working ARO code."
 
   # ===== WEEK 44: Happy Path =====
   - id: "44-1"
@@ -919,6 +1010,14 @@ facts:
     headline: "Homebrew formula auto-updates on release"
     explanation: "Tag a release, formula updates automatically. SHA256 verification included. Users get new versions via brew upgrade. Zero-touch distribution."
 
+  - id: "47-4"
+    week: 47
+    day: 4
+    category: "DevOps"
+    headline: "aro build --sign --hardened-runtime"
+    explanation: "Sign compiled binaries for macOS notarization workflows. --sign applies a code signing identity. --hardened-runtime enables the required entitlement. One flag from development binary to App Store ready."
+
+
   # ===== WEEK 48: Request Headers =====
   - id: "48-1"
     week: 48
@@ -978,6 +1077,14 @@ facts:
     category: "Syntax"
     headline: "(* Calculate the user's total spending *)"
     explanation: "Comments between statements. Explain business rules. Comments stripped from compiled output. Zero runtime overhead."
+
+  - id: "51-3"
+    week: 51
+    day: 3
+    category: "Syntax"
+    headline: "rows: \"1/3\" — fractional height in layout templates"
+    explanation: "Declare terminal row heights as fractions inside layout template files. rows: \"1/3\" allocates one-third of the terminal height to a section. Compose full-screen TUI layouts without pixel arithmetic."
+
 
   # ===== WEEK 52: Log =====
   - id: "52-1"
@@ -1202,8 +1309,8 @@ facts:
     week: 52
     day: 6
     category: "Plugins"
-    headline: "aro.yaml: declare dependencies"
-    explanation: "List plugins in aro.yaml. aro add installs all dependencies. Lock file ensures reproducibility. CI/CD friendly."
+    headline: "plugin.yaml: aro-version: \">=0.6.0\""
+    explanation: "plugin.yaml supports version constraints and dependency blocks. aro-version pins the minimum ARO version required. dependencies: lists required packages. aro add resolves and installs them automatically."
 
   - id: "52-7"
     week: 52
