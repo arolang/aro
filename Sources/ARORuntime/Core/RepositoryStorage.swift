@@ -143,53 +143,116 @@ private struct StorageKey: Hashable, Sendable {
     let repository: String
 }
 
-/// Actor-based storage backend for thread-safe access
+/// Actor-based storage backend with O(1) indexed access
+///
+/// Storage model per repository key:
+///   rows[key]:       rowId → value          (O(1) by rowId)
+///   order[key]:      [rowId] in insert order (O(n) full scan, O(1) append)
+///   nextRowId[key]:  monotonic row counter
+///   idIndex[key]:    entity "id" → rowId    (O(1) by entity id)
+///   fieldIndex[key]: field → canonValue → Set<rowId>  (O(1) filtered lookup)
 private actor RepositoryStorageActor {
-    /// Repository data storage: [StorageKey: [any Sendable]]
-    private var storage: [StorageKey: [any Sendable]] = [:]
+    private var rows:       [StorageKey: [Int: any Sendable]]               = [:]
+    private var order:      [StorageKey: [Int]]                             = [:]
+    private var nextRowId:  [StorageKey: Int]                               = [:]
+    private var idIndex:    [StorageKey: [String: Int]]                     = [:]
+    private var fieldIndex: [StorageKey: [String: [String: Set<Int>]]]      = [:]
 
     /// Application-scope exported repositories
     private var applicationScope: [String: StorageKey] = [:]
 
-    func store(value: any Sendable, key: StorageKey) -> RepositoryStoreResult {
-        if storage[key] == nil {
-            storage[key] = []
-        }
+    // MARK: - Initialise per-key structures
 
-        // Handle dictionary values - ensure id exists and handle updates
+    private func ensureKey(_ key: StorageKey) {
+        if rows[key] == nil {
+            rows[key]      = [:]
+            order[key]     = []
+            nextRowId[key] = 0
+            idIndex[key]   = [:]
+            fieldIndex[key] = [:]
+        }
+    }
+
+    // MARK: - Index helpers
+
+    /// Type-tagged canonical key for field index lookups
+    private func indexKey(for value: any Sendable) -> String {
+        if let s = value as? String  { return "s:\(s)" }
+        if let i = value as? Int     { return "i:\(i)" }
+        if let d = value as? Double  { return "d:\(d)" }
+        if let b = value as? Bool    { return "b:\(b)" }
+        return "x:\(String(describing: value))"
+    }
+
+    /// Add all field entries for a row to the field index
+    private func addToIndex(rowId: Int, value: any Sendable, key: StorageKey) {
+        if let dict = value as? [String: any Sendable] {
+            for (field, fieldValue) in dict {
+                let ik = indexKey(for: fieldValue)
+                if fieldIndex[key]![field] == nil            { fieldIndex[key]![field] = [:] }
+                if fieldIndex[key]![field]![ik] == nil       { fieldIndex[key]![field]![ik] = [] }
+                fieldIndex[key]![field]![ik]!.insert(rowId)
+            }
+        } else {
+            let ik = indexKey(for: value)
+            if fieldIndex[key]!["_value"] == nil             { fieldIndex[key]!["_value"] = [:] }
+            if fieldIndex[key]!["_value"]![ik] == nil        { fieldIndex[key]!["_value"]![ik] = [] }
+            fieldIndex[key]!["_value"]![ik]!.insert(rowId)
+        }
+    }
+
+    /// Remove all field entries for a row from the field index
+    private func removeFromIndex(rowId: Int, value: any Sendable, key: StorageKey) {
+        if let dict = value as? [String: any Sendable] {
+            for (field, fieldValue) in dict {
+                let ik = indexKey(for: fieldValue)
+                fieldIndex[key]?[field]?[ik]?.remove(rowId)
+            }
+        } else {
+            let ik = indexKey(for: value)
+            fieldIndex[key]?["_value"]?[ik]?.remove(rowId)
+        }
+    }
+
+    // MARK: - Core operations
+
+    func store(value: any Sendable, key: StorageKey) -> RepositoryStoreResult {
+        ensureKey(key)
+
         var valueToStore = value
         var entityId: String? = nil
 
         if var dict = value as? [String: any Sendable] {
-            // Check if we can find an existing entry by "name" or "key" to preserve its "id"
-            // This enables upsert semantics: Create+Store with the same name/key field updates in place.
-            let identityFieldName: String?
-            if dict["name"] != nil { identityFieldName = "name" }
-            else if dict["key"] != nil { identityFieldName = "key" }
-            else { identityFieldName = nil }
 
-            if let identityField = identityFieldName, let identityValue = dict[identityField], dict["id"] == nil {
-                if let existingIndex = storage[key]?.firstIndex(where: { existing in
-                    if let existingDict = existing as? [String: any Sendable],
-                       let existingIdentity = existingDict[identityField] {
-                        return isEqual(existingIdentity, identityValue)
-                    }
-                    return false
-                }), let existingDict = storage[key]?[existingIndex] as? [String: any Sendable],
+            // --- Upsert by identity field (name or key, without id) ---
+            let identityField: String?
+            if dict["name"] != nil      { identityField = "name" }
+            else if dict["key"] != nil  { identityField = "key" }
+            else                        { identityField = nil }
+
+            if let identityField = identityField,
+               let identityValue = dict[identityField],
+               dict["id"] == nil {
+                let ik = indexKey(for: identityValue)
+                if let rowIds = fieldIndex[key]?[identityField]?[ik],
+                   let rowId = rowIds.first,
+                   let existingDict = rows[key]?[rowId] as? [String: any Sendable],
                    let existingId = existingDict["id"] {
-                    // Capture old value before update
-                    let oldValue = storage[key]?[existingIndex]
-                    // Use the existing entry's id
+                    let oldValue = rows[key]![rowId]!
                     dict["id"] = existingId
                     valueToStore = dict
                     entityId = existingId as? String
-                    // Update the existing entry
-                    storage[key]?[existingIndex] = valueToStore
+
+                    removeFromIndex(rowId: rowId, value: oldValue, key: key)
+                    rows[key]![rowId] = valueToStore
+                    addToIndex(rowId: rowId, value: valueToStore, key: key)
+                    if let eid = entityId { idIndex[key]![eid] = rowId }
+
                     return RepositoryStoreResult(storedValue: valueToStore, oldValue: oldValue, isUpdate: true, entityId: entityId)
                 }
             }
 
-            // If no "id" field exists, generate one
+            // --- Ensure id exists ---
             if dict["id"] == nil {
                 let generatedId = UUID().uuidString
                 dict["id"] = generatedId
@@ -198,85 +261,66 @@ private actor RepositoryStorageActor {
             } else {
                 entityId = dict["id"] as? String
             }
-        } else {
-            // Plain value (string, int, bool, etc.) - deduplicate
-            // The Actor serializes all store calls, making this check atomic
-            if let existing = storage[key], existing.contains(where: { isEqual($0, value) }) {
-                return RepositoryStoreResult(storedValue: value, oldValue: value, isUpdate: true, entityId: nil)
-            }
-        }
 
-        // Check if value has an "id" field - if so, try to update existing entry by id
-        if let dict = valueToStore as? [String: any Sendable],
-           let id = dict["id"] {
-            entityId = id as? String
-            if let index = storage[key]?.firstIndex(where: { existing in
-                if let existingDict = existing as? [String: any Sendable],
-                   let existingId = existingDict["id"] {
-                    return isEqual(existingId, id)
-                }
-                return false
-            }) {
-                // Capture old value before update
-                let oldValue = storage[key]?[index]
+            // --- Upsert by id ---
+            if let eid = entityId, let existingRowId = idIndex[key]?[eid] {
+                let oldValue = rows[key]![existingRowId]!
 
-                // Check if the value has actually changed (compare all fields except id)
-                let valueChanged: Bool
-                if let oldDict = oldValue as? [String: any Sendable] {
-                    valueChanged = !dictionariesEqual(dict, oldDict)
-                } else {
-                    valueChanged = true
-                }
-
-                if valueChanged {
-                    // Actual update - store new value and report change
-                    storage[key]?[index] = valueToStore
-                    return RepositoryStoreResult(storedValue: valueToStore, oldValue: oldValue, isUpdate: true, entityId: entityId)
-                } else {
-                    // Duplicate - same value already exists, no change
+                if let newDict = valueToStore as? [String: any Sendable],
+                   let oldDict = oldValue as? [String: any Sendable],
+                   dictionariesEqual(newDict, oldDict) {
+                    // No-op: identical value already stored
                     return RepositoryStoreResult(storedValue: valueToStore, oldValue: nil, isUpdate: true, entityId: entityId)
                 }
+
+                removeFromIndex(rowId: existingRowId, value: oldValue, key: key)
+                rows[key]![existingRowId] = valueToStore
+                addToIndex(rowId: existingRowId, value: valueToStore, key: key)
+                // idIndex[key]![eid] already maps to existingRowId
+
+                return RepositoryStoreResult(storedValue: valueToStore, oldValue: oldValue, isUpdate: true, entityId: entityId)
             }
+
+            // --- New dict row ---
+            let rowId = nextRowId[key]!
+            nextRowId[key]! += 1
+            rows[key]![rowId] = valueToStore
+            order[key]!.append(rowId)
+            addToIndex(rowId: rowId, value: valueToStore, key: key)
+            if let eid = entityId { idIndex[key]![eid] = rowId }
+
+            return RepositoryStoreResult(storedValue: valueToStore, oldValue: nil, isUpdate: false, entityId: entityId)
+
+        } else {
+            // --- Plain value — deduplicate via field index ---
+            let ik = indexKey(for: value)
+            if let existing = fieldIndex[key]?["_value"]?[ik], !existing.isEmpty {
+                return RepositoryStoreResult(storedValue: value, oldValue: value, isUpdate: true, entityId: nil)
+            }
+
+            let rowId = nextRowId[key]!
+            nextRowId[key]! += 1
+            rows[key]![rowId] = value
+            order[key]!.append(rowId)
+            addToIndex(rowId: rowId, value: value, key: key)
+
+            return RepositoryStoreResult(storedValue: value, oldValue: nil, isUpdate: false, entityId: nil)
         }
-
-        // For simple values (strings, numbers), check for duplicates before appending
-        // This prevents the repository from growing with duplicate entries during parallel processing
-        if let stringValue = valueToStore as? String {
-            if storage[key]?.contains(where: { ($0 as? String) == stringValue }) == true {
-                // Already exists - treat as duplicate (isUpdate: true means not a new entry)
-                return RepositoryStoreResult(storedValue: valueToStore, oldValue: valueToStore, isUpdate: true, entityId: nil)
-            }
-        } else if let intValue = valueToStore as? Int {
-            if storage[key]?.contains(where: { ($0 as? Int) == intValue }) == true {
-                return RepositoryStoreResult(storedValue: valueToStore, oldValue: valueToStore, isUpdate: true, entityId: nil)
-            }
-        }
-
-        // No matching entry found - append new value
-        storage[key]?.append(valueToStore)
-
-        return RepositoryStoreResult(storedValue: valueToStore, oldValue: nil, isUpdate: false, entityId: entityId)
     }
 
     func retrieve(key: StorageKey) -> [any Sendable] {
-        let values = storage[key] ?? []
-        return values
+        guard let rowOrder = order[key], let rowMap = rows[key] else { return [] }
+        return rowOrder.compactMap { rowMap[$0] }
     }
 
     func retrieveFiltered(key: StorageKey, field: String, matchValue: any Sendable) -> [any Sendable] {
-        guard let values = storage[key] else {
-            return []
-        }
+        guard let rowOrder = order[key], let rowMap = rows[key] else { return [] }
 
-        // Filter values that have matching field
-        return values.filter { value in
-            // Try to extract the field from the value
-            if let dict = value as? [String: any Sendable],
-               let fieldValue = dict[field] {
-                return isEqual(fieldValue, matchValue)
-            }
-            return false
-        }
+        let ik = indexKey(for: matchValue)
+        guard let rowIds = fieldIndex[key]?[field]?[ik], !rowIds.isEmpty else { return [] }
+
+        // Preserve insertion order
+        return rowOrder.filter { rowIds.contains($0) }.compactMap { rowMap[$0] }
     }
 
     func export(key: StorageKey, as name: String) {
@@ -284,98 +328,80 @@ private actor RepositoryStorageActor {
     }
 
     func exists(key: StorageKey) -> Bool {
-        return storage[key] != nil && !(storage[key]?.isEmpty ?? true)
+        return !(order[key]?.isEmpty ?? true)
     }
 
     func count(key: StorageKey) -> Int {
-        return storage[key]?.count ?? 0
+        return order[key]?.count ?? 0
     }
 
     func clear(key: StorageKey) {
-        storage[key] = nil
-    }
-
-    func resolveKey(repository: String, businessActivity: String) -> StorageKey {
-        // Check if this repository is exported to application scope
-        if let exportedKey = applicationScope[repository] {
-            return exportedKey
-        }
-        // Repositories are now application-scoped (not business-activity-scoped)
-        return StorageKey(repository: repository)
-    }
-
-    func allRepositories() -> [(repository: String, count: Int)] {
-        return storage.map { (key, values) in
-            (repository: key.repository, count: values.count)
-        }
-    }
-
-    func clearAll() {
-        storage.removeAll()
-        applicationScope.removeAll()
+        rows[key]       = nil
+        order[key]      = nil
+        nextRowId[key]  = nil
+        idIndex[key]    = nil
+        fieldIndex[key] = nil
     }
 
     func delete(key: StorageKey, field: String, matchValue: any Sendable) -> RepositoryDeleteResult {
-        guard var values = storage[key] else {
+        let ik = indexKey(for: matchValue)
+        // Capture set before any mutations
+        guard let rowIdsToDelete = fieldIndex[key]?[field]?[ik], !rowIdsToDelete.isEmpty else {
             return RepositoryDeleteResult(deletedItems: [])
         }
 
         var deletedItems: [any Sendable] = []
-
-        // Find and remove matching items
-        values.removeAll { value in
-            if let dict = value as? [String: any Sendable],
-               let fieldValue = dict[field] {
-                if isEqual(fieldValue, matchValue) {
-                    deletedItems.append(value)
-                    return true
-                }
+        for rowId in rowIdsToDelete {
+            guard let val = rows[key]?[rowId] else { continue }
+            deletedItems.append(val)
+            removeFromIndex(rowId: rowId, value: val, key: key)
+            rows[key]!.removeValue(forKey: rowId)
+            if let dict = val as? [String: any Sendable], let eid = dict["id"] as? String {
+                idIndex[key]?.removeValue(forKey: eid)
             }
-            return false
         }
-
-        storage[key] = values
+        order[key] = order[key]?.filter { !rowIdsToDelete.contains($0) }
 
         return RepositoryDeleteResult(deletedItems: deletedItems)
     }
 
     func findById(key: StorageKey, id: String) -> (any Sendable)? {
-        guard let values = storage[key] else {
-            return nil
-        }
+        guard let rowId = idIndex[key]?[id] else { return nil }
+        return rows[key]?[rowId]
+    }
 
-        return values.first { value in
-            if let dict = value as? [String: any Sendable],
-               let valueId = dict["id"] as? String {
-                return valueId == id
-            }
-            return false
+    func resolveKey(repository: String, businessActivity: String) -> StorageKey {
+        if let exportedKey = applicationScope[repository] {
+            return exportedKey
+        }
+        return StorageKey(repository: repository)
+    }
+
+    func allRepositories() -> [(repository: String, count: Int)] {
+        return order.map { (key, rowIds) in
+            (repository: key.repository, count: rowIds.count)
         }
     }
 
-    /// Compare two Sendable values for equality
+    func clearAll() {
+        rows.removeAll()
+        order.removeAll()
+        nextRowId.removeAll()
+        idIndex.removeAll()
+        fieldIndex.removeAll()
+        applicationScope.removeAll()
+    }
+
+    // MARK: - Value comparison helpers
+
     private func isEqual(_ lhs: any Sendable, _ rhs: any Sendable) -> Bool {
-        // Compare strings
-        if let l = lhs as? String, let r = rhs as? String {
-            return l == r
-        }
-        // Compare integers
-        if let l = lhs as? Int, let r = rhs as? Int {
-            return l == r
-        }
-        // Compare doubles
-        if let l = lhs as? Double, let r = rhs as? Double {
-            return l == r
-        }
-        // Compare booleans
-        if let l = lhs as? Bool, let r = rhs as? Bool {
-            return l == r
-        }
-        // String comparison fallback
+        if let l = lhs as? String, let r = rhs as? String { return l == r }
+        if let l = lhs as? Int,    let r = rhs as? Int    { return l == r }
+        if let l = lhs as? Double, let r = rhs as? Double { return l == r }
+        if let l = lhs as? Bool,   let r = rhs as? Bool   { return l == r }
         return String(describing: lhs) == String(describing: rhs)
     }
 
-    /// Compare two dictionaries for equality (all fields must match)
     private func dictionariesEqual(_ lhs: [String: any Sendable], _ rhs: [String: any Sendable]) -> Bool {
         guard lhs.count == rhs.count else { return false }
         for (key, lhsValue) in lhs {
@@ -470,7 +496,6 @@ public final class InMemoryRepositoryStorage: RepositoryStorageService, Sendable
         let result = Box()
         let semaphore = DispatchSemaphore(value: 0)
 
-        // Use DispatchQueue with a background thread to avoid blocking the main actor
         DispatchQueue.global(qos: .userInitiated).async {
             Task {
                 result.value = await self.count(repository: repository, businessActivity: businessActivity)
