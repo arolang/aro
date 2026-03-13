@@ -1017,6 +1017,14 @@ facts:
     headline: "aro build --sign --hardened-runtime"
     explanation: "Sign compiled binaries for macOS notarization workflows. --sign applies a code signing identity. --hardened-runtime enables the required entitlement. One flag from development binary to App Store ready."
 
+  - id: "47-5"
+    week: 47
+    day: 5
+    category: "DevOps"
+    headline: "security find-identity -v -p codesigning"
+    explanation: "Lists all valid signing identities in your Keychain with their SHA-1 hashes. If two certs share a name (e.g. after renewal), pass the hash instead of the name string to --sign. Delete expired duplicates from Keychain Access to keep it unambiguous."
+
+
 
   # ===== WEEK 48: Request Headers =====
   - id: "48-1"
