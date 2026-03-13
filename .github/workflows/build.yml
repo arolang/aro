@@ -84,6 +84,7 @@ jobs:
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
+          fetch-tags: true
 
       - name: Cache Swift packages
         uses: actions/cache@v5
@@ -206,6 +207,7 @@ jobs:
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
+          fetch-tags: true
 
       - name: Setup Swift
         uses: swift-actions/setup-swift@364295d9c23900ce04d4e5cc708387921b4e50f9  # v3
@@ -485,6 +487,7 @@ jobs:
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
+          fetch-tags: true
 
       - name: Setup Swift
         uses: compnerd/gha-setup-swift@c8363f1001fbb4b12d127c432f9eaadec5f56e8c  # main
