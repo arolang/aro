@@ -138,6 +138,9 @@ public actor ExecutionEngine {
         // Wire up repository observers (e.g., "user-repository Observer")
         registerRepositoryObservers(for: program, baseContext: context)
 
+        // Wire up repository eviction handlers (e.g., "cache-repository Evicted Handler")
+        registerEvictionHandlers(for: program, baseContext: context)
+
         // Wire up watch handlers (e.g., "Dashboard Watch: TasksUpdated Handler" or "Dashboard Watch: task-repository Observer")
         registerWatchHandlers(for: program, baseContext: context)
 
@@ -942,6 +945,59 @@ public actor ExecutionEngine {
                     globalSymbols: capturedGlobalSymbols,
                     services: capturedServices
                 )
+            }
+        }
+    }
+
+    /// Register eviction handlers for feature sets with "Evicted Handler" business activity pattern.
+    /// For example: "cache-repository Evicted Handler"
+    private func registerEvictionHandlers(for program: AnalyzedProgram, baseContext: RuntimeContext) {
+        let handlers = program.featureSets.filter { analyzedFS in
+            let activity = analyzedFS.featureSet.businessActivity
+            return activity.hasSuffix(" Evicted Handler") && activity.contains("-repository")
+        }
+
+        for analyzedFS in handlers {
+            let activity = analyzedFS.featureSet.businessActivity
+            guard let range = activity.range(of: " Evicted Handler") else { continue }
+            let repositoryName = String(activity[..<range.lowerBound]).trimmingCharacters(in: .whitespaces)
+
+            let capturedActionRegistry = actionRegistry
+            let capturedEventBus = eventBus
+            let capturedGlobalSymbols = globalSymbols
+            let capturedServices = services
+
+            eventBus.subscribe(to: RepositoryEvictedEvent.self) { event in
+                guard event.repositoryName == repositoryName else { return }
+
+                let context = RuntimeContext(
+                    featureSetName: analyzedFS.featureSet.name,
+                    businessActivity: analyzedFS.featureSet.businessActivity,
+                    eventBus: capturedEventBus,
+                    parent: baseContext
+                )
+
+                // Bind event payload so Extract works
+                let payload: [String: any Sendable] = [
+                    "evictedItem": event.evictedItem,
+                    "repositoryName": event.repositoryName,
+                    "reason": event.reason,
+                    "timestamp": event.timestamp.timeIntervalSince1970
+                ]
+                context.bind("event", value: payload)
+
+                let executor = FeatureSetExecutor(
+                    actionRegistry: capturedActionRegistry,
+                    eventBus: capturedEventBus,
+                    globalSymbols: capturedGlobalSymbols
+                )
+                do {
+                    _ = try await executor.execute(analyzedFS, context: context)
+                } catch {
+                    FileHandle.standardError.write(
+                        Data("[ExecutionEngine] Eviction handler '\(analyzedFS.featureSet.name)' error: \(error)\n".utf8)
+                    )
+                }
             }
         }
     }

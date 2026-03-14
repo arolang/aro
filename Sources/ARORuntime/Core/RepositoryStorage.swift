@@ -21,11 +21,21 @@ public struct RepositoryStoreResult: Sendable {
     /// The entity ID if available
     public let entityId: String?
 
-    public init(storedValue: any Sendable, oldValue: (any Sendable)?, isUpdate: Bool, entityId: String?) {
+    /// Item evicted due to maxSize cap (nil when no eviction occurred)
+    public let evictedItem: (any Sendable)?
+
+    public init(
+        storedValue: any Sendable,
+        oldValue: (any Sendable)?,
+        isUpdate: Bool,
+        entityId: String?,
+        evictedItem: (any Sendable)? = nil
+    ) {
         self.storedValue = storedValue
         self.oldValue = oldValue
         self.isUpdate = isUpdate
         self.entityId = entityId
+        self.evictedItem = evictedItem
     }
 }
 
@@ -151,12 +161,25 @@ private struct StorageKey: Hashable, Sendable {
 ///   nextRowId[key]:  monotonic row counter
 ///   idIndex[key]:    entity "id" → rowId    (O(1) by entity id)
 ///   fieldIndex[key]: field → canonValue → Set<rowId>  (O(1) filtered lookup)
+/// Per-repository memory constraints
+private struct RepositoryConfig: Sendable {
+    /// Maximum number of items. When exceeded the oldest item is evicted (FIFO).
+    var maxSize: Int?
+    /// Time-to-live in seconds. Items older than this are invisible to Retrieve.
+    var ttl: TimeInterval?
+}
+
 private actor RepositoryStorageActor {
     private var rows:       [StorageKey: [Int: any Sendable]]               = [:]
     private var order:      [StorageKey: [Int]]                             = [:]
     private var nextRowId:  [StorageKey: Int]                               = [:]
     private var idIndex:    [StorageKey: [String: Int]]                     = [:]
     private var fieldIndex: [StorageKey: [String: [String: Set<Int>]]]      = [:]
+
+    /// Per-repository configuration (TTL, maxSize)
+    private var configs:    [StorageKey: RepositoryConfig]                  = [:]
+    /// Insertion timestamps for TTL evaluation
+    private var timestamps: [StorageKey: [Int: Date]]                       = [:]
 
     /// Application-scope exported repositories
     private var applicationScope: [String: StorageKey] = [:]
@@ -165,11 +188,12 @@ private actor RepositoryStorageActor {
 
     private func ensureKey(_ key: StorageKey) {
         if rows[key] == nil {
-            rows[key]      = [:]
-            order[key]     = []
-            nextRowId[key] = 0
-            idIndex[key]   = [:]
+            rows[key]       = [:]
+            order[key]      = []
+            nextRowId[key]  = 0
+            idIndex[key]    = [:]
             fieldIndex[key] = [:]
+            timestamps[key] = [:]
         }
     }
 
@@ -286,10 +310,12 @@ private actor RepositoryStorageActor {
             nextRowId[key]! += 1
             rows[key]![rowId] = valueToStore
             order[key]!.append(rowId)
+            timestamps[key]![rowId] = Date()
             addToIndex(rowId: rowId, value: valueToStore, key: key)
             if let eid = entityId { idIndex[key]![eid] = rowId }
 
-            return RepositoryStoreResult(storedValue: valueToStore, oldValue: nil, isUpdate: false, entityId: entityId)
+            let evicted = evictOldestIfNeeded(key: key)
+            return RepositoryStoreResult(storedValue: valueToStore, oldValue: nil, isUpdate: false, entityId: entityId, evictedItem: evicted)
 
         } else {
             // --- Plain value — deduplicate via field index ---
@@ -302,25 +328,54 @@ private actor RepositoryStorageActor {
             nextRowId[key]! += 1
             rows[key]![rowId] = value
             order[key]!.append(rowId)
+            timestamps[key]![rowId] = Date()
             addToIndex(rowId: rowId, value: value, key: key)
 
-            return RepositoryStoreResult(storedValue: value, oldValue: nil, isUpdate: false, entityId: nil)
+            let evicted = evictOldestIfNeeded(key: key)
+            return RepositoryStoreResult(storedValue: value, oldValue: nil, isUpdate: false, entityId: nil, evictedItem: evicted)
         }
+    }
+
+    /// Evict the oldest row if maxSize is set and exceeded. Returns the evicted value.
+    private func evictOldestIfNeeded(key: StorageKey) -> (any Sendable)? {
+        guard let maxSize = configs[key]?.maxSize,
+              let currentOrder = order[key],
+              currentOrder.count > maxSize,
+              let oldestRowId = currentOrder.first,
+              let oldestValue = rows[key]?[oldestRowId] else { return nil }
+
+        removeFromIndex(rowId: oldestRowId, value: oldestValue, key: key)
+        rows[key]!.removeValue(forKey: oldestRowId)
+        timestamps[key]?.removeValue(forKey: oldestRowId)
+        if let dict = oldestValue as? [String: any Sendable], let eid = dict["id"] as? String {
+            idIndex[key]?.removeValue(forKey: eid)
+        }
+        order[key] = Array(currentOrder.dropFirst())
+        return oldestValue
     }
 
     func retrieve(key: StorageKey) -> [any Sendable] {
         guard let rowOrder = order[key], let rowMap = rows[key] else { return [] }
-        return rowOrder.compactMap { rowMap[$0] }
+        let ttl = configs[key]?.ttl
+        return rowOrder.compactMap { rowId -> (any Sendable)? in
+            guard let value = rowMap[rowId] else { return nil }
+            if let ttl, let ts = timestamps[key]?[rowId], Date().timeIntervalSince(ts) > ttl { return nil }
+            return value
+        }
     }
 
     func retrieveFiltered(key: StorageKey, field: String, matchValue: any Sendable) -> [any Sendable] {
         guard let rowOrder = order[key], let rowMap = rows[key] else { return [] }
+        let ttl = configs[key]?.ttl
 
         let ik = indexKey(for: matchValue)
         guard let rowIds = fieldIndex[key]?[field]?[ik], !rowIds.isEmpty else { return [] }
 
-        // Preserve insertion order
-        return rowOrder.filter { rowIds.contains($0) }.compactMap { rowMap[$0] }
+        return rowOrder.filter { rowIds.contains($0) }.compactMap { rowId -> (any Sendable)? in
+            guard let value = rowMap[rowId] else { return nil }
+            if let ttl, let ts = timestamps[key]?[rowId], Date().timeIntervalSince(ts) > ttl { return nil }
+            return value
+        }
     }
 
     func export(key: StorageKey, as name: String) {
@@ -335,12 +390,17 @@ private actor RepositoryStorageActor {
         return order[key]?.count ?? 0
     }
 
+    func configure(key: StorageKey, ttl: TimeInterval?, maxSize: Int?) {
+        configs[key] = RepositoryConfig(maxSize: maxSize, ttl: ttl)
+    }
+
     func clear(key: StorageKey) {
         rows[key]       = nil
         order[key]      = nil
         nextRowId[key]  = nil
         idIndex[key]    = nil
         fieldIndex[key] = nil
+        timestamps[key] = nil
     }
 
     func delete(key: StorageKey, field: String, matchValue: any Sendable) -> RepositoryDeleteResult {
@@ -389,6 +449,8 @@ private actor RepositoryStorageActor {
         nextRowId.removeAll()
         idIndex.removeAll()
         fieldIndex.removeAll()
+        timestamps.removeAll()
+        configs.removeAll()
         applicationScope.removeAll()
     }
 
@@ -436,7 +498,25 @@ public final class InMemoryRepositoryStorage: RepositoryStorageService, Sendable
 
     public func storeWithChangeInfo(value: any Sendable, in repository: String, businessActivity: String) async -> RepositoryStoreResult {
         let key = await actor.resolveKey(repository: repository, businessActivity: businessActivity)
-        return await actor.store(value: value, key: key)
+        let result = await actor.store(value: value, key: key)
+        if let evicted = result.evictedItem {
+            EventBus.shared.publish(RepositoryEvictedEvent(
+                repositoryName: repository,
+                evictedItem: evicted,
+                reason: "maxSize"
+            ))
+        }
+        return result
+    }
+
+    /// Configure TTL and/or maxSize for a repository.
+    /// - Parameters:
+    ///   - repository: Repository name
+    ///   - ttl: Time-to-live in seconds (nil = no expiry)
+    ///   - maxSize: Maximum item count; oldest item evicted when exceeded (nil = unlimited)
+    public func configure(repository: String, ttl: TimeInterval?, maxSize: Int?) async {
+        let key = StorageKey(repository: repository)
+        await actor.configure(key: key, ttl: ttl, maxSize: maxSize)
     }
 
     public func retrieve(from repository: String, businessActivity: String) async -> [any Sendable] {

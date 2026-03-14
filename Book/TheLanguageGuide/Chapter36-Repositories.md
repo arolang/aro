@@ -852,6 +852,115 @@ Repositories are **in-memory only**:
 
 For persistent storage, use a database integration (future ARO feature).
 
+## Memory Limits: TTL and maxSize
+
+For long-running applications, unbounded repositories consume ever-growing memory.
+ARO lets you attach two constraints to any repository via the `Configure` action:
+
+| Setting | Description |
+|---------|-------------|
+| `ttl` | Time-to-live in seconds. Items older than this are invisible to `Retrieve`. |
+| `maxSize` | Maximum item count. When the cap is reached the **oldest** item is evicted (FIFO). |
+
+### Setting a TTL
+
+```aro
+(Application-Start: Cache Service) {
+    (* Keep items for 5 minutes *)
+    Configure the <session-repository: ttl> with 300.
+    Start the <http-server> with <contract>.
+    Keepalive the <application> for the <events>.
+    Return an <OK: status> for the <startup>.
+}
+```
+
+Expired items are filtered out silently — a `Retrieve` that would have returned them
+returns an empty list instead. No error is raised, which is consistent with ARO's
+[Happy Case](Chapter12-HappyPath.md) philosophy.
+
+### Setting a maxSize
+
+```aro
+(Application-Start: Rate Limiter) {
+    (* Keep at most 1000 recent requests *)
+    Configure the <request-log-repository: maxSize> with 1000.
+    Start the <http-server> with <contract>.
+    Keepalive the <application> for the <events>.
+    Return an <OK: status> for the <startup>.
+}
+```
+
+Both constraints can be set together:
+
+```aro
+Configure the <cache-repository: ttl> with 60.
+Configure the <cache-repository: maxSize> with 500.
+```
+
+### What Happens When maxSize Is Full
+
+When a new `Store` pushes the repository past its `maxSize` cap, the **oldest item**
+(the one that was stored first) is removed automatically. This is a **FIFO eviction**
+policy — first in, first out.
+
+The runtime then emits a `RepositoryEvictedEvent` on the event bus. You can catch it
+with an `Evicted Handler` feature set:
+
+```aro
+(Log Evicted Item: cache-repository Evicted Handler) {
+    Extract the <item> from the <event: evictedItem>.
+    Extract the <reason> from the <event: reason>.
+    Log <item> to the <console>.
+}
+```
+
+The event payload contains:
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `evictedItem` | any | The value that was removed |
+| `repositoryName` | String | Name of the repository |
+| `reason` | String | Always `"maxSize"` for cap-based eviction |
+| `timestamp` | Number | Unix epoch when the event fired |
+
+### Eviction Use Cases
+
+**Cache invalidation** — remove the oldest cached response when the cache is full:
+
+```aro
+(Invalidate Cache: response-cache-repository Evicted Handler) {
+    Extract the <response> from the <event: evictedItem>.
+    Extract the <url> from the <response: url>.
+    Log <url> to the <console>.
+}
+```
+
+**Audit trail** — keep only the N most recent audit entries:
+
+```aro
+(Application-Start: Audit Service) {
+    Configure the <audit-repository: maxSize> with 10000.
+    ...
+}
+
+(Purge Old Audit: audit-repository Evicted Handler) {
+    Extract the <entry> from the <event: evictedItem>.
+    (* Archive or discard the evicted entry *)
+    Log <entry> to the <console>.
+}
+```
+
+**Rate limiter** — sliding window using TTL:
+
+```aro
+(Application-Start: API Gateway) {
+    (* Drop requests older than 1 minute from the window *)
+    Configure the <rate-window-repository: ttl> with 60.
+    Configure the <rate-window-repository: maxSize> with 100.
+    ...
+}
+```
+
 ## Best Practices
 
 ### Use Descriptive Repository Names

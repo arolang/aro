@@ -56,8 +56,14 @@ public actor EventBus {
     /// These are long-lived services that can generate events asynchronously
     private var activeEventSources: Int = 0
 
-    /// Continuations waiting for all handlers to complete
-    private var flushContinuations: [CheckedContinuation<Void, Never>] = []
+    /// Configurable staleness timeout for flush continuations (default: 30 s).
+    /// Stale continuations are resumed and removed after this interval even if
+    /// handlers are still in flight, preventing unbounded growth of the list.
+    private var flushContinuationStaleness: TimeInterval = 30
+
+    /// Flush continuations indexed by call-site UUID for targeted removal on timeout.
+    /// Each entry carries a deadline so background cleanup can sweep expired ones.
+    private var flushContinuations: [UUID: (deadline: Date, continuation: CheckedContinuation<Void, Never>)] = [:]
 
     /// Shared instance
     public static let shared = EventBus()
@@ -168,12 +174,9 @@ public actor EventBus {
     private func handlerCompleted() {
         inFlightHandlers -= 1
         if inFlightHandlers == 0 {
-            let continuations = flushContinuations
+            let pending = flushContinuations
             flushContinuations.removeAll()
-            // Resume any waiting flush operations
-            for continuation in continuations {
-                continuation.resume()
-            }
+            for (_, entry) in pending { entry.continuation.resume() }
         }
     }
 
@@ -182,21 +185,22 @@ public actor EventBus {
     /// - Returns: true if all handlers completed, false if timeout occurred
     @discardableResult
     public func awaitPendingEvents(timeout: TimeInterval = AROEventHandlerDefaultTimeout) async -> Bool {
-        // Wait with timeout
+        let id = UUID()
         return await withTaskGroup(of: Bool.self) { group in
             // Task 1: Wait for handlers to complete
             group.addTask {
                 await withCheckedContinuation { (continuation: CheckedContinuation<Void, Never>) in
                     Task {
-                        await self.registerFlushContinuation(continuation)
+                        await self.registerFlushContinuation(continuation, id: id)
                     }
                 }
                 return true
             }
 
-            // Task 2: Timeout
+            // Task 2: Timeout — remove the specific continuation so the list never leaks
             group.addTask {
                 try? await Task.sleep(nanoseconds: UInt64(timeout * 1_000_000_000))
+                await self.removeFlushContinuation(id: id)
                 return false
             }
 
@@ -210,13 +214,39 @@ public actor EventBus {
     }
 
     /// Register a continuation waiting for handlers to complete
-    private func registerFlushContinuation(_ continuation: CheckedContinuation<Void, Never>) {
-        // Actor isolation ensures TOCTOU-free check and append
+    private func registerFlushContinuation(_ continuation: CheckedContinuation<Void, Never>, id: UUID) {
         if inFlightHandlers == 0 {
             continuation.resume()
         } else {
-            flushContinuations.append(continuation)
+            let deadline = Date().addingTimeInterval(flushContinuationStaleness)
+            flushContinuations[id] = (deadline: deadline, continuation: continuation)
         }
+    }
+
+    /// Remove and resume a specific flush continuation (called on per-call timeout)
+    private func removeFlushContinuation(id: UUID) {
+        if let entry = flushContinuations.removeValue(forKey: id) {
+            entry.continuation.resume()
+        }
+    }
+
+    /// Resume and remove all flush continuations whose deadline has passed.
+    /// Called automatically from awaitPendingEvents but can also be triggered manually.
+    public func cleanupStaleContinuations() {
+        let now = Date()
+        let stale = flushContinuations.filter { $0.value.deadline < now }
+        for (id, entry) in stale {
+            flushContinuations.removeValue(forKey: id)
+            entry.continuation.resume()
+        }
+    }
+
+    /// Configure the staleness timeout for flush continuations.
+    /// After this duration a waiting awaitPendingEvents call is released even if
+    /// handlers are still in flight. Expose via the Configure action.
+    /// - Parameter timeout: Staleness duration in seconds (default: 30)
+    public func configure(flushContinuationStaleness timeout: TimeInterval) {
+        flushContinuationStaleness = timeout
     }
 
     /// Get the count of pending event handlers currently in flight
@@ -259,12 +289,9 @@ public actor EventBus {
         }
         inFlightHandlers -= 1
         if inFlightHandlers == 0 {
-            let continuations = flushContinuations
+            let pending = flushContinuations
             flushContinuations.removeAll()
-            // Resume any waiting continuations
-            for continuation in continuations {
-                continuation.resume()
-            }
+            for (_, entry) in pending { entry.continuation.resume() }
         }
     }
 
