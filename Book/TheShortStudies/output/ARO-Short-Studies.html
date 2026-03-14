@@ -1,0 +1,728 @@
+<!DOCTYPE html>
+<html xmlns="http://www.w3.org/1999/xhtml" lang="en" xml:lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="generator" content="pandoc" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes" />
+  <meta name="author" content="ARO Language Project" />
+  <title>ARO: The Short Studies</title>
+  <style>
+    /* Default styles provided by pandoc.
+    ** See https://pandoc.org/MANUAL.html#variables-for-html for config info.
+    */
+    code{white-space: pre-wrap;}
+    span.smallcaps{font-variant: small-caps;}
+    div.columns{display: flex; gap: min(4vw, 1.5em);}
+    div.column{flex: auto; overflow-x: auto;}
+    div.hanging-indent{margin-left: 1.5em; text-indent: -1.5em;}
+    /* The extra [class] is a hack that increases specificity enough to
+       override a similar rule in reveal.js */
+    ul.task-list[class]{list-style: none;}
+    ul.task-list li input[type="checkbox"] {
+      font-size: inherit;
+      width: 0.8em;
+      margin: 0 0.8em 0.2em -1.6em;
+      vertical-align: middle;
+    }
+    .display.math{display: block; text-align: center; margin: 0.5rem auto;}
+  </style>
+  <link rel="stylesheet" href="unix-style.css" />
+</head>
+<body>
+<header id="title-block-header">
+<h1 class="title">ARO: The Short Studies</h1>
+<p class="subtitle">How a Language Gets Built in Ten Pages</p>
+<p class="author">ARO Language Project</p>
+<p class="date">March 2026</p>
+</header>
+<nav id="TOC" role="doc-toc">
+<ul>
+<li><a href="#aro-the-short-studies" id="toc-aro-the-short-studies">ARO:
+The Short Studies</a>
+<ul>
+<li><a href="#how-a-language-gets-built-in-ten-pages"
+id="toc-how-a-language-gets-built-in-ten-pages">How a Language Gets
+Built in Ten Pages</a></li>
+<li><a href="#the-core-bet" id="toc-the-core-bet">1. The Core
+Bet</a></li>
+<li><a href="#lexical-analysis" id="toc-lexical-analysis">2. Lexical
+Analysis</a></li>
+<li><a href="#syntactic-analysis" id="toc-syntactic-analysis">3.
+Syntactic Analysis</a></li>
+<li><a href="#semantic-analysis" id="toc-semantic-analysis">4. Semantic
+Analysis</a></li>
+<li><a href="#interpreted-execution" id="toc-interpreted-execution">5.
+Interpreted Execution</a></li>
+<li><a href="#event-architecture" id="toc-event-architecture">6. Event
+Architecture</a></li>
+<li><a href="#native-compilation" id="toc-native-compilation">7. Native
+Compilation</a></li>
+<li><a href="#the-runtime-bridge" id="toc-the-runtime-bridge">8. The
+Runtime Bridge</a></li>
+<li><a href="#dual-mode-parity" id="toc-dual-mode-parity">9. Dual-Mode
+Parity</a></li>
+<li><a href="#what-we-learned" id="toc-what-we-learned">10. What We
+Learned</a></li>
+</ul></li>
+</ul>
+</nav>
+<h1 id="aro-the-short-studies">ARO: The Short Studies</h1>
+<h2 id="how-a-language-gets-built-in-ten-pages">How a Language Gets
+Built in Ten Pages</h2>
+<p><em>ARO Language Project · March 2026 · ARO 0.7.1</em></p>
+<hr />
+<p>This is the condensed version of <em>The Construction Studies</em>.
+Every major architectural decision, every important data structure,
+every hard-won lesson — compressed to what you actually need to
+understand how ARO works. Read the full book for depth. Read this for
+the map.</p>
+<hr />
+<h2 id="the-core-bet">1. The Core Bet</h2>
+<p>ARO is built on one hypothesis: <strong>expressiveness and
+predictability are inversely correlated</strong>, and for
+business-feature code, predictability wins.</p>
+<p>The consequence is radical constraint. ARO has exactly <strong>eight
+statement types</strong>:</p>
+<table>
+<thead>
+<tr>
+<th>#</th>
+<th>Statement</th>
+<th>What it does</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>1</td>
+<td><code>AROStatement</code></td>
+<td>The core action-result-object form</td>
+</tr>
+<tr>
+<td>2</td>
+<td><code>PublishStatement</code></td>
+<td>Exports a variable across feature sets</td>
+</tr>
+<tr>
+<td>3</td>
+<td><code>ForEachLoop</code></td>
+<td>Iterates a collection</td>
+</tr>
+<tr>
+<td>4</td>
+<td><code>MatchStatement</code></td>
+<td>Pattern matching</td>
+</tr>
+<tr>
+<td>5</td>
+<td><code>RangeLoop</code></td>
+<td>Numeric range iteration</td>
+</tr>
+<tr>
+<td>6</td>
+<td><code>WhileLoop</code></td>
+<td>Condition-based loop</td>
+</tr>
+<tr>
+<td>7</td>
+<td><code>BreakStatement</code></td>
+<td>Exits a loop</td>
+</tr>
+<tr>
+<td>8</td>
+<td><code>RequireStatement</code></td>
+<td>Declares a dependency</td>
+</tr>
+</tbody>
+</table>
+<p>Eight. That’s it. Python’s AST has over 40 statement types. Every
+statement type you don’t have is a parser case, a semantic pass, a code
+generation branch, and a tool integration you don’t have to write. The
+constraint propagates as simplification through the entire stack.</p>
+<p>Every action is classified by data flow direction — not as
+documentation, but as an enforced type:</p>
+<table>
+<thead>
+<tr>
+<th>Role</th>
+<th>Direction</th>
+<th>Examples</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>request</code></td>
+<td>External → Internal</td>
+<td>Extract, Retrieve, Fetch, Read</td>
+</tr>
+<tr>
+<td><code>own</code></td>
+<td>Internal → Internal</td>
+<td>Compute, Validate, Compare, Create</td>
+</tr>
+<tr>
+<td><code>response</code></td>
+<td>Internal → External</td>
+<td>Return, Throw</td>
+</tr>
+<tr>
+<td><code>export</code></td>
+<td>Internal → Global</td>
+<td>Store, Emit, Log, Send</td>
+</tr>
+</tbody>
+</table>
+<p>The role determines valid prepositions, what bridge functions the
+compiler calls, and what optimizations are legal.</p>
+<p><strong>The error philosophy</strong>: ARO code is the error message.
+When
+<code>Retrieve the &lt;user&gt; from the &lt;user-repository&gt;</code>
+fails, the runtime reports exactly that sentence back. No stack traces
+needed — the statement <em>is</em> the description of what failed.</p>
+<hr />
+<h2 id="lexical-analysis">2. Lexical Analysis</h2>
+<p>The lexer is a single-pass state machine that makes one unusual
+choice: <strong>articles and prepositions are first-class token
+types</strong>, not noise to be filtered.</p>
+<pre><code>&quot;Extract the &lt;user&gt; from the &lt;request: body&gt;.&quot;
+  ↓
+[VERB:&quot;Extract&quot;] [ARTICLE:&quot;the&quot;] [RESULT_START:&quot;&lt;&quot;]
+[IDENT:&quot;user&quot;] [RESULT_END:&quot;&gt;&quot;] [PREP:&quot;from&quot;]
+[ARTICLE:&quot;the&quot;] [OBJECT_START:&quot;&lt;&quot;] [IDENT:&quot;request&quot;]
+[COLON:&quot;:&quot;] [IDENT:&quot;body&quot;] [OBJECT_END:&quot;&gt;&quot;] [DOT:&quot;.&quot;]</code></pre>
+<p>Why keep articles? Because <code>Extract a &lt;user&gt;</code> and
+<code>Extract the &lt;user&gt;</code> carry slightly different semantics
+in English, and stripping them would lose that signal for future
+tooling. The parser filters them for now; the door stays open.</p>
+<p><strong>The hard problems:</strong></p>
+<p><em>String interpolation</em> — <code>"Hello, \(name)!"</code> forces
+the lexer to recursively lex the embedded expression, yielding a token
+sequence of string parts and inner tokens that the parser reassembles.
+It works, but it’s the messiest part of the lexer.</p>
+<p><em>Regex vs. division</em> — <code>/pattern/</code> and
+<code>7 / 2</code> are lexically identical at the <code>/</code>. The
+lexer resolves the ambiguity with context: if the previous token was a
+value (number, identifier, closing bracket), it’s division; otherwise
+it’s a regex. This works for all real-world cases but is technically a
+heuristic.</p>
+<p><em>Source locations</em> — every token carries
+<code>(file, line, column, offset)</code>. This costs memory but pays
+off when error messages need to point at the right character.</p>
+<hr />
+<h2 id="syntactic-analysis">3. Syntactic Analysis</h2>
+<p>The parser is a hybrid: <strong>recursive descent for statements,
+Pratt parsing for expressions</strong>.</p>
+<p>Recursive descent is the right choice for statements — each statement
+type is distinct enough that a top-level <code>switch</code> on the
+first token routes cleanly. The eight statement types map to eight
+parsing functions.</p>
+<p>Pratt parsing handles expressions. The insight is that each token has
+a <em>binding power</em> — how tightly it grabs its neighbors. Addition
+is weaker than multiplication, which is weaker than unary negation,
+which is weaker than function call. Parse at the right power level and
+precedence falls out automatically.</p>
+<table>
+<thead>
+<tr>
+<th>Precedence Level</th>
+<th>Operators</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>1 (lowest)</td>
+<td><code>or</code></td>
+</tr>
+<tr>
+<td>2</td>
+<td><code>and</code></td>
+</tr>
+<tr>
+<td>3</td>
+<td><code>not</code></td>
+</tr>
+<tr>
+<td>4</td>
+<td><code>==</code>, <code>!=</code>, <code>&lt;</code>,
+<code>&gt;</code>, <code>&lt;=</code>, <code>&gt;=</code></td>
+</tr>
+<tr>
+<td>5</td>
+<td><code>+</code>, <code>-</code>, <code>++</code> (concat)</td>
+</tr>
+<tr>
+<td>6</td>
+<td><code>*</code>, <code>/</code>, <code>%</code></td>
+</tr>
+<tr>
+<td>7 (highest)</td>
+<td>unary <code>-</code>, <code>not</code></td>
+</tr>
+</tbody>
+</table>
+<p>The core statement shape that nearly everything reduces to:</p>
+<pre><code>Action [article] &lt;Result[:qualifier]&gt; preposition [article] &lt;Object[:qualifier]&gt;.</code></pre>
+<p><code>&lt;Result:qualifier&gt;</code> is a <code>QualifiedNoun</code>
+— the most important structural unit in ARO. It shows up everywhere:</p>
+<table>
+<thead>
+<tr>
+<th>Field</th>
+<th>Type</th>
+<th>Example</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>base</code></td>
+<td>String</td>
+<td><code>"user"</code></td>
+</tr>
+<tr>
+<td><code>qualifier</code></td>
+<td>String?</td>
+<td><code>"email"</code></td>
+</tr>
+<tr>
+<td><code>specifiers</code></td>
+<td>[String]</td>
+<td><code>["profile", "contact"]</code></td>
+</tr>
+</tbody>
+</table>
+<p><code>&lt;user: profile: contact: email&gt;</code> resolves to base
+<code>user</code>, qualifier <code>email</code>, specifiers
+<code>["profile", "contact"]</code>. At runtime this navigates into
+nested objects.</p>
+<p><strong>Error recovery</strong>: when the parser hits something
+unexpected, it scans forward to the next <code>.</code> (statement
+terminator) and continues. This means a single syntax error doesn’t
+abort the whole file — you get all the errors in one pass.</p>
+<hr />
+<h2 id="semantic-analysis">4. Semantic Analysis</h2>
+<p>The semantic analyzer makes four passes over the AST:</p>
+<ol type="1">
+<li><strong>Symbol collection</strong> — build a symbol table per
+feature set, tracking every variable name and its visibility level</li>
+<li><strong>Data flow analysis</strong> — classify each binding as
+<code>request</code>, <code>own</code>, <code>response</code>, or
+<code>export</code></li>
+<li><strong>Immutability enforcement</strong> — flag any variable bound
+twice in the same scope</li>
+<li><strong>Cross-feature validation</strong> — detect circular event
+loops, orphaned handlers, undefined variables</li>
+</ol>
+<p><strong>VerbSets</strong> are the semantic analyzer’s classification
+tool. Every verb gets assigned to exactly one set, and that set
+determines how the executor treats it:</p>
+<table>
+<colgroup>
+<col style="width: 16%" />
+<col style="width: 56%" />
+<col style="width: 26%" />
+</colgroup>
+<thead>
+<tr>
+<th>Set</th>
+<th>Verbs (examples)</th>
+<th>Effect</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>testVerbs</code></td>
+<td>then, assert</td>
+<td>Only runs in test mode</td>
+</tr>
+<tr>
+<td><code>updateVerbs</code></td>
+<td>update, modify, set</td>
+<td>Allows rebinding an existing variable</td>
+</tr>
+<tr>
+<td><code>createVerbs</code></td>
+<td>create, make, build</td>
+<td>Entity creation path</td>
+</tr>
+<tr>
+<td><code>responseVerbs</code></td>
+<td>log, print, send, emit</td>
+<td>Skip the expression shortcut</td>
+</tr>
+<tr>
+<td><code>serverVerbs</code></td>
+<td>start, stop, keepalive, schedule</td>
+<td>Force execution even with literal object</td>
+</tr>
+<tr>
+<td><code>storeVerbs</code></td>
+<td>store, save, persist</td>
+<td>Trigger repository observers</td>
+</tr>
+</tbody>
+</table>
+<p>These sets live in <code>VerbSets.swift</code>, shared by both the
+interpreter and the compiler. One authoritative source — no duplication,
+no drift.</p>
+<p><strong>Immutability</strong> is the rule with the most impact on
+users: once a variable is bound in a feature set, it can’t be rebound.
+The only escape is renaming — compute a new name. This feels annoying
+until you debug a feature set and realize you always know exactly what a
+variable contains at any point.</p>
+<hr />
+<h2 id="interpreted-execution">5. Interpreted Execution</h2>
+<p>The interpreter is built around three collaborating components:</p>
+<pre><code>ExecutionEngine  →  EventBus  →  FeatureSetExecutor (×N)
+                        ↓
+                   ActionRegistry</code></pre>
+<p><strong>ExecutionEngine</strong> is a Swift actor. It loads the
+program, registers all event handlers with the event bus, and fires
+<code>Application-Start</code>. After that it steps back and lets events
+drive everything.</p>
+<p><strong>FeatureSetExecutor</strong> runs one feature set. For each
+statement it: 1. Builds a <code>ResultDescriptor</code> and
+<code>ObjectDescriptor</code> from the AST node 2. Looks up the verb in
+<code>ActionRegistry</code> 3. Calls
+<code>action.execute(result:object:context:)</code> 4. Checks if the
+action set a response (short-circuit) or threw</p>
+<p><strong>ActionRegistry</strong> maps verb strings to action
+implementations. 61 built-in actions, registered at startup. Adding a
+new action is implementing one protocol method and registering the
+type.</p>
+<p><strong>ExecutionContext</strong> is what actions see. A flat
+protocol that hides whether you’re running in the interpreter, a
+compiled binary, or a test:</p>
+<table>
+<thead>
+<tr>
+<th>Method group</th>
+<th>What it does</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>resolve</code>, <code>require</code>, <code>bind</code></td>
+<td>Variable read/write</td>
+</tr>
+<tr>
+<td><code>service</code></td>
+<td>Access HTTP, file, socket services</td>
+</tr>
+<tr>
+<td><code>repository</code></td>
+<td>CRUD storage</td>
+</tr>
+<tr>
+<td><code>setResponse</code>, <code>getResponse</code></td>
+<td>Track the short-circuit response</td>
+</tr>
+<tr>
+<td><code>emit</code></td>
+<td>Fire events</td>
+</tr>
+</tbody>
+</table>
+<p><strong>The short-circuit pattern</strong>: as soon as a
+<code>Return</code> or <code>Throw</code> action runs, it sets the
+response on the context. The executor checks after every statement and
+stops early. This is how <code>Validate the &lt;user&gt;</code> can
+abort the rest of the feature set — no exceptions, no special control
+flow.</p>
+<hr />
+<h2 id="event-architecture">6. Event Architecture</h2>
+<p>Everything in ARO is event-driven. HTTP requests arrive as events.
+File changes arrive as events. Domain events travel between feature sets
+as events. The <code>EventBus</code> is the central router.</p>
+<p>Five handler types, registered by naming convention:</p>
+<table>
+<thead>
+<tr>
+<th>Pattern</th>
+<th>Triggered by</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>operationId</code> (e.g., <code>listUsers</code>)</td>
+<td>HTTP route match</td>
+</tr>
+<tr>
+<td><code>{Name} Handler</code></td>
+<td>Custom domain event</td>
+</tr>
+<tr>
+<td><code>{repo-name} Observer</code></td>
+<td>Repository store/update/delete</td>
+</tr>
+<tr>
+<td><code>File Event Handler</code></td>
+<td>File system changes</td>
+</tr>
+<tr>
+<td><code>Socket Event Handler</code></td>
+<td>TCP socket events</td>
+</tr>
+</tbody>
+</table>
+<p><strong>StateGuards</strong> let handlers filter on event payload
+fields:</p>
+<pre class="aro"><code>(Send Welcome: NotificationSent Handler) when &lt;age&gt; &gt;= 18 {
+    (* only fires when the notified user is 18+ *)
+}</code></pre>
+<p>The guard is evaluated before the handler body runs. If it fails, the
+handler is silently skipped.</p>
+<p><strong>publishAndTrack</strong> is how the event bus ensures
+handlers complete before the program moves on. Every <code>emit</code>
+increments an in-flight counter. <code>awaitPendingEvents()</code> spins
+until the counter hits zero. This prevents race conditions between
+<code>Application-Start</code> and its handlers — a real bug we hit
+early.</p>
+<p><strong>DomainEvent co-publishing</strong> is the bridge between
+interpreter and binary mode. Typed Swift events (like
+<code>FileCreatedEvent</code>) work for the interpreter. Compiled
+binaries can’t receive those — they need C-callable registration
+functions. The solution: every action that fires a typed event
+<em>also</em> publishes a <code>DomainEvent</code> (a plain string type
++ <code>[String: Sendable]</code> dictionary) to the same bus. Binary
+handlers register via C functions that subscribe to these
+DomainEvents.</p>
+<hr />
+<h2 id="native-compilation">7. Native Compilation</h2>
+<p>The compiled path takes the same AST and turns it into a native
+binary instead of interpreting it.</p>
+<pre><code>.aro files → Parser → AnalyzedProgram → LLVMCodeGenerator → LLVM IR → llc → .o → Linker → binary</code></pre>
+<p><strong>Swifty-LLVM</strong>: ARO uses the <a
+href="https://github.com/hylo-lang/Swifty-LLVM">Swifty-LLVM</a> wrapper
+around LLVM’s C API. The original implementation used textual LLVM IR —
+strings concatenated together. The problem: type errors were only caught
+when <code>llc</code> tried to compile the output. With Swifty-LLVM, IR
+is built from typed Swift objects (<code>Function</code>,
+<code>BasicBlock</code>, <code>GlobalVariable</code>), and
+<code>verifyModule()</code> catches structural errors before any text is
+emitted. The cost: LLVM 20 as a build dependency.</p>
+<p><strong>What gets generated</strong>: each feature set becomes an
+LLVM function. The function: 1. Allocates a context handle (opaque
+pointer to a <code>RuntimeContext</code>) 2. Allocates descriptor
+structs for each statement’s result and object 3. Calls the appropriate
+<code>aro_action_*</code> C function 4. Checks the return value and
+jumps to <code>error_exit</code> on failure 5. Frees the context and
+returns</p>
+<p>String constants are collected in a first pass and emitted as global
+LLVM constants. The code generator then references them by pointer — no
+string allocation at runtime.</p>
+<p><strong>Control flow</strong> maps directly to LLVM basic blocks: -
+<code>when</code> guard → branch instruction to skip block -
+<code>match</code> → chain of comparisons, each branching to its case
+block - <code>for-each</code> → loop with <code>gep</code> to advance
+through the array - <code>while</code> → back-edge to the condition
+block</p>
+<p><strong>Event handler registration</strong> happens at program
+startup: <code>LLVMCodeGenerator</code> emits calls to C-callable
+registration functions
+(<code>aro_runtime_register_notification_handler</code>,
+<code>aro_runtime_register_state_transition_handler</code>, etc.) that
+subscribe to DomainEvents and call the compiled function pointer when
+the event fires.</p>
+<hr />
+<h2 id="the-runtime-bridge">8. The Runtime Bridge</h2>
+<p>The compiled binary can’t call Swift directly — the C ABI boundary
+forbids it. Everything flows through <code>RuntimeBridge.swift</code>,
+which exposes 61 <code>@_cdecl</code> functions:</p>
+<pre><code>LLVM Binary  →  @_cdecl functions  →  Swift runtime
+(C types)         (C ABI boundary)      (async, actors, closures)</code></pre>
+<p>Three handle types cross the boundary as opaque
+<code>UnsafeMutableRawPointer</code>:</p>
+<table>
+<colgroup>
+<col style="width: 25%" />
+<col style="width: 45%" />
+<col style="width: 29%" />
+</colgroup>
+<thead>
+<tr>
+<th>Handle</th>
+<th>What it wraps</th>
+<th>Used for</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>AROCContextHandle</code></td>
+<td><code>RuntimeContext</code></td>
+<td>Per-execution variable space</td>
+</tr>
+<tr>
+<td><code>AROCRuntimeHandle</code></td>
+<td><code>RuntimeBridge</code> instance</td>
+<td>Shared runtime state</td>
+</tr>
+<tr>
+<td><code>AROCDescriptorHandle</code></td>
+<td><code>ResultDescriptor</code>/<code>ObjectDescriptor</code></td>
+<td>Statement metadata</td>
+</tr>
+</tbody>
+</table>
+<p><strong>The synchronous bridge problem</strong>: <code>@_cdecl</code>
+functions can’t be <code>async</code>. But Swift runtime actions are
+async. The bridge blocks with a <code>DispatchSemaphore</code> until the
+async work completes. This works, but it risks deadlock under load (all
+threads blocked waiting for continuations that need threads to run). The
+mitigation: event handlers run on new pthreads, not GCD’s cooperative
+pool, which has a 64-thread limit.</p>
+<p><strong>Platform types</strong>: <code>Bool</code> is not the same on
+macOS and Linux at the C boundary. macOS passes it as 1 byte; Linux
+sometimes expects 4 bytes. All boolean results cross the bridge as
+<code>Int32</code> and are converted at each side.</p>
+<hr />
+<h2 id="dual-mode-parity">9. Dual-Mode Parity</h2>
+<p>Running <code>aro run</code> and running the compiled binary should
+produce identical results. In practice, two subsystems diverge:</p>
+<p><strong>Expression evaluation</strong> has two implementations —
+<code>ExpressionEvaluator.swift</code> for the interpreter and
+<code>evaluateBinaryOp()</code> in <code>RuntimeBridge.swift</code> for
+the binary. They have to be kept in sync manually. The most common
+drift: integer division.</p>
+<table>
+<thead>
+<tr>
+<th>Expression</th>
+<th>Interpreter (before fix)</th>
+<th>Binary</th>
+<th>After fix</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>7 / 2</code></td>
+<td><code>3.5</code> (promoted to Double)</td>
+<td><code>3</code> (truncated)</td>
+<td><code>3</code> (both)</td>
+</tr>
+<tr>
+<td><code>80 / 3</code></td>
+<td><code>26.666…</code></td>
+<td><code>26</code></td>
+<td><code>26</code> (both)</td>
+</tr>
+<tr>
+<td><code>7.0 / 2</code></td>
+<td><code>3.5</code></td>
+<td><code>3.5</code></td>
+<td><code>3.5</code> (both)</td>
+</tr>
+</tbody>
+</table>
+<p>The fix: interpreter integer division now truncates, matching the
+binary. Visible behavior change, but consistent.</p>
+<p><strong>Event dispatch</strong> is architecturally different between
+modes. The checklist for adding any new event type:</p>
+<ol type="1">
+<li>Add DomainEvent co-publish after the typed event publish</li>
+<li>Document the payload schema in a
+<code>// DomainEvent payload:</code> comment</li>
+<li>Add the <code>@_cdecl</code> registration function in
+<code>RuntimeBridge.swift</code></li>
+<li>Declare the extern in
+<code>LLVMExternalDeclEmitter.swift</code></li>
+<li>Detect the business activity in
+<code>LLVMCodeGenerator.registerEventHandlers</code></li>
+<li>Spread guard fields into the payload if the handler has a
+<code>when</code> condition</li>
+<li>Add an example with <code>mode: both</code> in the test suite</li>
+</ol>
+<p>The <code>mode: both</code> test directive is the defense mechanism.
+Every example runs in both modes and compares output. Any divergence
+becomes a test failure immediately.</p>
+<hr />
+<h2 id="what-we-learned">10. What We Learned</h2>
+<p><strong>The things that worked:</strong></p>
+<ul>
+<li>Uniform syntax makes tooling cheap. One statement shape means one
+parser, one formatter, one AST walker.</li>
+<li>Eight statement types kept every backend small. Every new execution
+target (interpreter, LLVM, future transpiler) starts with eight
+cases.</li>
+<li><code>mode: both</code> testing caught divergence that would
+otherwise be invisible for months.</li>
+<li>VerbSets as a shared module eliminated the drift between interpreter
+and compiler verb classification.</li>
+</ul>
+<p><strong>The things that didn’t:</strong></p>
+<ul>
+<li>HTTP doesn’t work in compiled binaries. SwiftNIO relies on Swift
+type metadata that isn’t properly initialized when the runtime starts
+from LLVM-compiled code. The crash is in
+<code>_swift_allocObject_</code> with a null metadata pointer. The
+workaround is a native BSD socket server — less robust but
+functional.</li>
+<li><code>@_cdecl</code> can’t be <code>async</code>. The semaphore
+bridge works but is fragile under load.</li>
+<li>Business activity scope confused everyone. Variables visible only
+within the same activity string is neither global scope nor lexical
+scope. Users expected one or the other.</li>
+<li>Prepositions carry semantic meaning (<code>from</code> = source,
+<code>into</code> = destination, <code>with</code> = modification) but
+the distinctions are too subtle. Developers guess wrong and get cryptic
+errors.</li>
+</ul>
+<p><strong>The evolution in one table:</strong></p>
+<table>
+<colgroup>
+<col style="width: 40%" />
+<col style="width: 59%" />
+</colgroup>
+<thead>
+<tr>
+<th>Version</th>
+<th>What changed</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>0.1</td>
+<td>5 statement types, text-based LLVM IR, no binary mode</td>
+</tr>
+<tr>
+<td>0.3</td>
+<td>Added RangeLoop, WhileLoop, BreakStatement → 8 types</td>
+</tr>
+<tr>
+<td>0.5</td>
+<td>VerbSets extracted as shared module; dual-mode parity project
+starts</td>
+</tr>
+<tr>
+<td>0.6</td>
+<td>Swifty-LLVM replaces text IR; <code>verifyModule()</code> catches IR
+errors early</td>
+</tr>
+<tr>
+<td>0.7</td>
+<td>DomainEvent co-publishing; 81/85 examples run
+<code>mode: both</code></td>
+</tr>
+<tr>
+<td>0.7.1</td>
+<td>Integer division parity; KeyboardService binary mode; SocketClient
+(#134 open)</td>
+</tr>
+</tbody>
+</table>
+<p><strong>For the next implementer:</strong></p>
+<p>Keep the statement count small. It’s the most impactful architectural
+decision and the hardest to change later. Every statement type you add
+is a permanent tax on every future pass, every future tool, every future
+backend.</p>
+<p>Test both execution paths from day one. Divergence accumulates
+silently. By the time you notice, it’s deep in the codebase.</p>
+<p>Co-publishing is not elegant, but it works. A unified event system
+would be cleaner. In practice, unifying deeply integrated subsystems
+mid-project costs more than bridging them.</p>
+<p>The constraint is the feature. ARO programs are predictable and
+auditable because the language doesn’t let you write anything else.
+That’s not a limitation — it’s the entire point.</p>
+<hr />
+<p><em>For the complete treatment — all diagrams, all implementation
+details, all appendices — see</em> The Construction Studies.</p>
+</body>
+</html>

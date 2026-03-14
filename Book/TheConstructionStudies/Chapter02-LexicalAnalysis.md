@@ -2,25 +2,26 @@
 
 ## The Lexer Architecture
 
-ARO's lexer (`Lexer.swift`, 703 lines) is a hand-written scanner that produces tokens for the parser. It maintains source location tracking, handles string interpolation, and disambiguates between regex literals and division.
+ARO's lexer (`Lexer.swift`, ~962 lines) is hand-written — no lexer generator, no parser combinator library. It processes source characters one at a time and produces a flat list of tokens for the parser to consume.
 
-```swift
-public final class Lexer: @unchecked Sendable {
-    private let source: String
-    private var currentIndex: String.Index
-    private var location: SourceLocation
-    private var tokens: [Token] = []
-    private var lastTokenKind: TokenKind?
-}
-```
+You might wonder why hand-written. The short answer is control. A generated lexer would make the interesting bits — regex disambiguation, recursive string interpolation, article and preposition recognition — harder to customize. The hand-written approach lets us do unusual things where ARO's grammar is unusual.
 
-The `@unchecked Sendable` annotation is necessary because `String.Index` is not `Sendable`, but the lexer is used single-threaded during parsing.
+The lexer maintains four pieces of state as it scans:
+
+| Field | Purpose |
+|-------|---------|
+| `source` | The full source string being scanned |
+| `currentIndex` | Where we are right now |
+| `location` | Current line/column for error messages |
+| `lastTokenKind` | What we just emitted (needed for `/` disambiguation) |
+
+That last field — `lastTokenKind` — is subtle. Most lexers are purely forward-looking. ARO's needs one token of backwards context to resolve whether `/` starts a regex or is a division operator. More on that shortly.
 
 ---
 
 ## Character Classification
 
-The scanner processes characters one at a time, advancing through the source string. Character classification happens in the main `scanToken()` switch statement.
+The main scanning loop calls `scanToken()` on each iteration. That function reads the current character and branches into specialized scanning functions: single-character delimiters go straight to token emission, multi-character operators peek one character ahead, strings and numbers each have their own scanner, and identifiers get post-processed for keyword recognition.
 
 <svg viewBox="0 0 700 450" xmlns="http://www.w3.org/2000/svg">
   <style>
@@ -138,43 +139,40 @@ The scanner processes characters one at a time, advancing through the source str
 
 **Figure 2.1**: Character classification state machine. The lexer advances character by character, branching based on the current character into specialized scanning functions.
 
+Every time the lexer advances past a character, it updates the source location — incrementing the column, or resetting to column 1 and incrementing the line on a newline. This happens on every single character, all the way through the file. It is not exciting work, but it is the reason error messages can underline exactly the right token.
+
 ---
 
 ## First-Class Language Elements
 
-A distinctive feature of ARO's lexer is that articles and prepositions are first-class token types, not just keywords or identifiers.
+The interesting bit here is that articles and prepositions are not keywords in ARO. They are their own token categories.
 
-```swift
-// Token.swift:203-230
-public enum Article: String, Sendable, CaseIterable {
-    case a = "a"
-    case an = "an"
-    case the = "the"
-}
+**Articles** recognized by the lexer:
 
-public enum Preposition: String, Sendable, CaseIterable {
-    case from = "from"
-    case `for` = "for"
-    case against = "against"
-    case to = "to"
-    case into = "into"
-    case via = "via"
-    case with = "with"
-    case on = "on"
-    case at = "at"
-    case by = "by"
-}
-```
+| Token | Value |
+|-------|-------|
+| `article(.a)` | `a` |
+| `article(.an)` | `an` |
+| `article(.the)` | `the` |
 
-### Why This Matters
+**Prepositions** recognized by the lexer:
 
-Most languages would treat `from` as either a keyword or an identifier. In ARO, it is a `TokenKind.preposition(.from)`. This distinction enables:
+| Token | Value |
+|-------|-------|
+| `preposition(.from)` | `from` |
+| `preposition(.for)` | `for` |
+| `preposition(.against)` | `against` |
+| `preposition(.to)` | `to` |
+| `preposition(.into)` | `into` |
+| `preposition(.via)` | `via` |
+| `preposition(.with)` | `with` |
+| `preposition(.on)` | `on` |
+| `preposition(.at)` | `at` |
+| `preposition(.by)` | `by` |
 
-1. **Parser simplification**: The parser can match on `.preposition` directly without string comparisons.
+Most languages would treat `from` as a keyword — just another string to match against. In ARO, it becomes `TokenKind.preposition(.from)`. That is a richer token. The parser can match on `.preposition` directly and ask whether a given preposition indicates an external source. The semantic analyzer can classify data flow direction from the preposition alone.
 
-2. **Semantic information in tokens**: `Preposition.indicatesExternalSource` property allows early classification of data sources.
-
-3. **Error messages**: "Expected preposition, found identifier" is more helpful than "Expected 'from', found 'foo'".
+You might wonder why that distinction matters. It matters because ARO's grammar is built around sentence structure. The preposition is not an afterthought — it is the structural indicator that separates the result from the object. Making it a first-class token type means the parser sees the grammar's intent, not just a bag of strings.
 
 <svg viewBox="0 0 600 300" xmlns="http://www.w3.org/2000/svg">
   <style>
@@ -253,53 +251,21 @@ Most languages would treat `from` as either a keyword or an identifier. In ARO, 
 
 ## String Interpolation Challenge
 
-String interpolation (`"Hello ${<name>}!"`) requires the lexer to emit multiple tokens for a single string literal. This is handled by a state machine within `scanString()`.
+String interpolation (`"Hello ${<name>}!"`) turned out to be trickier than expected. A single string literal in the source becomes a sequence of tokens that the parser weaves together. The naive approach of treating the whole thing as one token loses the embedded expression entirely.
 
-### The Problem
+What we actually want is this token sequence:
 
-A naive approach would produce:
-```
-stringLiteral("Hello ${<name>}!")  // Wrong: expression is lost
-```
-
-ARO needs:
-```
+```text
 stringSegment("Hello ")
 interpolationStart
 leftAngle
 identifier("name")
 rightAngle
 interpolationEnd
+stringSegment("!")
 ```
 
-### Implementation Strategy
-
-```swift
-// Lexer.swift:263-276
-} else if char == "$" && peekNext() == "{" {
-    hasInterpolation = true
-    let segmentStart = location
-    if !value.isEmpty {
-        segments.append((value, segmentStart))
-        value = ""
-    }
-    _ = advance() // $
-    _ = advance() // {
-    segments.append(("${", location))
-    try scanInterpolationContent(quote: quote, start: start, segments: &segments)
-}
-```
-
-The key insight is that interpolation content is **re-lexed**. The scanner extracts the content between `${` and `}`, then creates a fresh lexer to tokenize it:
-
-```swift
-// Lexer.swift:386-393
-if let exprTokens = try? Lexer.tokenize(exprContent) {
-    for token in exprTokens where token.kind != .eof {
-        tokens.append(token)
-    }
-}
-```
+Seven tokens from what looks like one string. The strategy is recursive lexing. When the scanner hits `${`, it extracts the content between the braces and re-runs the full lexer on it, splicing the resulting tokens back into the stream. The same scanner rules, applied again inside the expression. Whatever appears inside `${...}` is treated exactly as it would be in any other context — because it is lexed by the same code.
 
 <svg viewBox="0 0 700 200" xmlns="http://www.w3.org/2000/svg">
   <style>
@@ -363,226 +329,135 @@ if let exprTokens = try? Lexer.tokenize(exprContent) {
 
 **Figure 2.3**: Interpolation token sequence. A single interpolated string produces multiple tokens, with the interpolated expression re-lexed recursively.
 
-### Nested Brace Handling
-
-Interpolations can contain nested braces (e.g., `${<map>["key"]}`). The lexer tracks brace depth:
-
-```swift
-// Lexer.swift:340-360
-while !isAtEnd && braceDepth > 0 {
-    let char = peek()
-    if char == "{" {
-        braceDepth += 1
-        content.append(advance())
-    } else if char == "}" {
-        braceDepth -= 1
-        if braceDepth > 0 {
-            content.append(advance())
-        } else {
-            _ = advance() // closing }
-        }
-    }
-    // ...
-}
-```
+Nested braces inside an interpolation (`${<map>["key"]}`) are handled by tracking brace depth. The scanner counts opens and closes, only stopping when depth returns to zero. This means arbitrarily nested expressions inside `${}` work correctly — the outer scanner just waits patiently for the depth counter to reach zero before handing the extracted content off to the recursive lexer.
 
 ---
 
 ## Regex vs Division Ambiguity
 
-The character `/` is ambiguous: it could start a regex literal (`/pattern/flags`) or be a division operator (`a / b`). This is a classic lexer challenge that ARO solves with context and lookahead.
+The `/` character is genuinely ambiguous. It could be division (`total / count`) or the start of a regex literal (`/\d+/`). This is a classic problem — JavaScript famously struggled with it — and ARO solves it with a simple decision table based on the previous token.
 
-### The Heuristic
+| Previous token | `/` means... |
+|----------------|-------------|
+| Identifier | Division operator |
+| `.` (dot) | Division operator |
+| Followed by whitespace | Division operator |
+| Anything else | Try to scan a regex |
 
-```swift
-// Lexer.swift:131-150
-let isAfterIdentifier: Bool
-if case .identifier = lastTokenKind {
-    isAfterIdentifier = true
-} else {
-    isAfterIdentifier = false
-}
+The interesting bit is what "try to scan a regex" means. The lexer saves its current position, then attempts to consume a regex pattern all the way to the closing `/` and optional flags. If it succeeds and the pattern is non-empty, we emit a `regexLiteral` token. If it fails — no closing `/`, or empty pattern — the lexer resets to the saved position and emits a plain slash instead.
 
-let shouldTryRegex = !isAtEnd &&
-    peek() != " " && peek() != "\n" && peek() != "\t" &&
-    lastTokenKind != .dot &&
-    !isAfterIdentifier
-```
-
-The rules:
-1. If the previous token was an identifier, `/` is division (e.g., `a / b`)
-2. If the previous token was `.`, `/` is division (import paths like `../../shared`)
-3. If followed by whitespace, `/` is division
-4. Otherwise, attempt regex scanning
-
-### Regex Scanning with Backtracking
-
-If the heuristic suggests a regex, the lexer attempts to scan it. If scanning fails (no closing `/`), it backtracks:
-
-```swift
-// Lexer.swift:513-556
-private func tryScanRegex(start: SourceLocation) -> (pattern: String, flags: String)? {
-    let savedIndex = currentIndex
-    let savedLocation = location
-
-    // Attempt to scan pattern...
-
-    if !foundClosingSlash || pattern.isEmpty {
-        currentIndex = savedIndex
-        location = savedLocation
-        return nil
-    }
-
-    return (pattern: pattern, flags: flags)
-}
-```
-
-This is one of the few places in the lexer that requires backtracking. The alternative would be a more complex grammar or forcing regex literals to use different delimiters.
+This is one of the very few places in the lexer that requires backtracking. The alternative would have been forcing regex literals to use different delimiters (like `r/.../`), which would have broken the natural reading of Split statements. Instead, we accepted a small amount of complexity to keep the syntax clean.
 
 ---
 
-## Source Location Tracking
+## Source Location on Every Token
 
-Every token carries a `SourceSpan` indicating where it came from in the source. This is essential for error reporting.
+Every token carries start and end positions: line number, column number, and byte offset into the source. These three numbers flow all the way through the compilation pipeline to error messages, which can underline exactly the right text in the terminal.
 
-```swift
-// SourceLocation.swift
-public struct SourceLocation: Sendable, Equatable {
-    public let line: Int      // 1-based
-    public let column: Int    // 1-based
-    public let offset: Int    // 0-based byte offset
-}
+Line numbers and column numbers are 1-based (humans count from 1). Byte offsets are 0-based (computers count from 0). The `advancing(past:)` method on the location struct handles newlines specially — when the scanner crosses a newline character, it increments the line number and resets the column to 1.
 
-public struct SourceSpan: Sendable, Equatable {
-    public let start: SourceLocation
-    public let end: SourceLocation
-}
-```
-
-The lexer updates location on every `advance()`:
-
-```swift
-// Lexer.swift:660-665
-@discardableResult
-private func advance() -> Character {
-    let char = source[currentIndex]
-    currentIndex = source.index(after: currentIndex)
-    location = location.advancing(past: char)
-    return char
-}
-```
-
-The `advancing(past:)` method handles newlines specially, incrementing the line number and resetting the column.
+This location tracking happens on every single `advance()` call, which is every single character in the source file. It is a little tedious to implement but completely invisible when it works — and very obvious when it is missing.
 
 ---
 
 ## Keyword Recognition
 
-ARO's keywords are recognized after identifier scanning, not during character classification. This avoids the "keyword vs identifier" problem where a language accidentally reserves useful names.
+After scanning an identifier, we do a quick table lookup: is this word a keyword, an article, or a preposition? The lookup order matters:
 
-```swift
-// Lexer.swift:572-601
-private func scanIdentifierOrKeyword(start: SourceLocation) throws {
-    while !isAtEnd && (peek().isLetter || peek().isNumber || peek() == "_") {
-        _ = advance()
-    }
-
-    let lexeme = String(source[...])
-    let lowerLexeme = lexeme.lowercased()
-
-    // Check keywords first
-    if let keyword = Self.keywords[lowerLexeme] {
-        addToken(keyword, lexeme: lexeme, start: start)
-        return
-    }
-
-    // Check articles
-    if let article = Article(rawValue: lowerLexeme) {
-        addToken(.article(article), lexeme: lexeme, start: start)
-        return
-    }
-
-    // Check prepositions
-    if let preposition = Preposition(rawValue: lowerLexeme) {
-        addToken(.preposition(preposition), lexeme: lexeme, start: start)
-        return
-    }
-
-    // Regular identifier
-    addToken(.identifier(lexeme), lexeme: lexeme, start: start)
-}
+```text
+scan word as identifier
+→ check keyword table (lowercased)   → if match, emit keyword token
+→ check article values               → if match, emit article token
+→ check preposition values           → if match, emit preposition token
+→ otherwise, emit identifier token
 ```
 
-Note that keyword matching is case-insensitive (`lowerLexeme`), but the original case is preserved in the lexeme for error messages.
+One important detail: the lookup is case-insensitive. `FROM`, `From`, and `from` all become `preposition(.from)`. But the original case is preserved in the lexeme field — so error messages can show you exactly what you wrote, not what the lexer normalized it to.
+
+This "scan then classify" approach also means that a word like `format` does not accidentally become a keyword just because it starts with `for`. The scanner greedily consumes the whole word before checking any lookup table.
 
 ---
 
-## Comment Handling
+## Comments
 
-ARO supports two comment styles:
-- Block comments: `(* comment *)`
-- Line comments: `// comment`
+Comments are skipped during scanning — they produce no tokens and leave no trace in the AST.
 
-Comments are skipped entirely; they do not produce tokens:
+ARO supports two styles:
 
-```swift
-// Lexer.swift:605-640
-private func skipWhitespaceAndComments() {
-    while !isAtEnd {
-        let char = peek()
-        if char.isWhitespace {
-            _ = advance()
-        } else if char == "(" && peekNext() == "*" {
-            skipBlockComment()
-        } else if char == "/" && peekNext() == "/" {
-            skipLineComment()
-        } else {
-            break
-        }
-    }
-}
-```
+- **Block comments**: `(* this can span multiple lines *)` — uses `(* *)` rather than `/* */` to avoid ambiguity with the `*` multiplication operator in arithmetic expressions.
+- **Line comments**: `// this runs to end of line`
 
-Block comments use `(* *)` rather than `/* */` to avoid ambiguity with the star operator in multiplication expressions.
+The `skipWhitespaceAndComments()` function runs before every token scan. It loops, consuming whitespace and comments, until it hits a character that is neither. Nested block comments are not supported — `(* outer (* inner *) still outer *)` would close at the first `*)`.
 
 ---
 
 ## Error Handling
 
-Lexer errors are thrown as `LexerError`:
+When the lexer encounters something it cannot handle, it throws. The error types are:
 
-```swift
-public enum LexerError: Error {
-    case unexpectedCharacter(Character, at: SourceLocation)
-    case unterminatedString(at: SourceLocation)
-    case invalidEscapeSequence(Character, at: SourceLocation)
-    case invalidUnicodeEscape(String, at: SourceLocation)
-    case invalidNumber(String, at: SourceLocation)
-}
+- **Unexpected character** — a character that does not start any valid token
+- **Unterminated string** — a string literal that reaches end-of-file without a closing quote
+- **Invalid escape sequence** — something like `\q` inside a string
+- **Invalid unicode escape** — a malformed `\u{...}` sequence
+- **Invalid number** — something that looked like a number but was not (e.g., `0x` with no hex digits)
+
+Every error carries the source location where it occurred. The parser catches these and formats them with the line and column for display.
+
+---
+
+## Extended Literal Support
+
+ARO 0.7 added several literal forms without changing the overall scanner architecture. The interesting thing is how cleanly they fit in — each is just a new branch in the existing scanning logic.
+
+### Triple-Quoted Strings
+
+Multi-line string literals use triple-quote delimiters:
+
+```aro
+Log """
+Hello,
+World!
+""" to the <console>.
 ```
 
-Each error carries the source location where it occurred, enabling precise error reporting:
+The scanner's `scanTripleQuotedString()` function handles `"""..."""`, allowing embedded newlines and single quotes without escaping. The only escape needed is if you want three consecutive double-quotes inside the string — which is rare enough not to worry about.
 
+### Raw Strings
+
+Raw string literals disable escape processing entirely:
+
+```aro
+Compute the <pattern: regex> with r"\.aro$".
 ```
-Error: Unterminated string literal
-  at line 5, column 12
+
+The `r` prefix signals `scanRawString()`, which emits the content verbatim. This is especially useful for regex patterns where backslashes are everywhere — without raw strings, `\.aro$` would require `\\.aro$`, which is unpleasant to read.
+
+### Hexadecimal and Binary Integer Literals
+
+```aro
+Compute the <mask> with 0xFF.
+Compute the <flags> with 0b1010.
 ```
+
+The `0x` and `0b` prefixes route to `scanHexNumber()` and `scanBinaryNumber()` respectively. Both produce `intLiteral` tokens containing the converted integer value — the parser never sees the prefix notation, just a regular integer.
 
 ---
 
 ## Chapter Summary
 
-ARO's lexer demonstrates several design choices:
+The lexer is 962 lines for what seems like a simple job. It earns those lines with five interesting choices:
 
-1. **Articles and prepositions as token types**: Enables grammar-level matching rather than string comparison in the parser.
+1. **Articles and prepositions as token types**: Not keywords — their own category. The parser matches grammar structure, not strings.
 
-2. **String interpolation via recursive lexing**: The content of `${...}` is extracted and re-tokenized, producing multiple tokens from a single string.
+2. **Recursive string interpolation**: When the scanner hits `${`, it extracts the content and re-runs the full lexer on it. Same rules, applied recursively inside the expression.
 
-3. **Regex/division disambiguation**: Uses context (previous token) and backtracking to resolve the `/` ambiguity.
+3. **Regex/division disambiguation**: One token of backwards context (`lastTokenKind`) plus a simple decision table. Backtrack on failure.
 
-4. **Source location on every token**: Enables precise error messages throughout the compilation pipeline.
+4. **Source location on every token**: Line, column, and byte offset, tracked on every character advance. These flow all the way to terminal error output.
 
-The lexer is 703 lines—small for a language implementation. The constrained syntax (no user-defined operators, fixed token types) keeps it manageable.
+5. **Extended literal forms**: Triple-quoted strings, raw strings, hex and binary integers — all added in ARO 0.7 as new branches in the existing scanner without restructuring anything.
+
+The constrained syntax actually helps here. No user-defined operators means no new token types to worry about. No metaclass syntax means no special-casing. The scanner is longer than you might expect, but it is not complicated.
 
 Implementation reference: `Sources/AROParser/Lexer.swift`
 

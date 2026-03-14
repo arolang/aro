@@ -2,15 +2,9 @@
 
 ## Hybrid Parser Design
 
-ARO's parser (`Parser.swift`, 1700+ lines) uses a hybrid approach: **recursive descent** for statements and program structure, **Pratt parsing** for expressions. This combination leverages the strengths of each technique.
+ARO's parser (`Parser.swift`, ~2000 lines) uses a hybrid approach: **recursive descent** for statements and program structure, **Pratt parsing** for expressions. Each technique plays to its strengths, and together they cover everything ARO needs.
 
-```swift
-public final class Parser {
-    private let tokens: [Token]
-    private var current: Int = 0
-    private let diagnostics: DiagnosticCollector
-}
-```
+The parser holds three things: the token array from the lexer, a cursor (`current`) pointing to the next unconsumed token, and a diagnostic collector for accumulating errors without aborting. That's the whole data model.
 
 <svg viewBox="0 0 700 350" xmlns="http://www.w3.org/2000/svg">
   <style>
@@ -103,88 +97,67 @@ public final class Parser {
 
 ## Why Recursive Descent for Statements
 
-ARO's statement syntax has a predictable structure that maps naturally to recursive descent:
+ARO's statement syntax is wonderfully predictable. Look at the grammar — every rule maps straight to a function call:
 
-```
+```text
 FeatureSet  ::= "(" name ":" activity ")" "{" Statement* "}"
 Statement   ::= AROStatement | MatchStatement | ForEachLoop
 AROStatement ::= "<" verb ">" [article] "<" result ">" preposition [article] "<" object ">" "."
 ```
 
-Each grammar rule becomes a parsing function:
+Here is what `parseFeatureSet` does, in plain terms:
 
-```swift
-// Parser.swift:119-159
-private func parseFeatureSet() throws -> FeatureSet {
-    let startToken = try expect(.leftParen, message: "'('")
-
-    let name = try parseIdentifierSequence()
-    try expect(.colon, message: "':'")
-    let activity = try parseIdentifierSequence()
-
-    try expect(.rightParen, message: "')'")
-    try expect(.leftBrace, message: "'{'")
-
-    var statements: [Statement] = []
-    while !check(.rightBrace) && !isAtEnd {
-        let statement = try parseStatement()
-        statements.append(statement)
-    }
-
-    let endToken = try expect(.rightBrace, message: "'}'")
-    return FeatureSet(name: name, businessActivity: activity, statements: statements, span: ...)
-}
+```text
+parseFeatureSet:
+  consume (
+  name = parseIdentifierSequence
+  consume :
+  activity = parseIdentifierSequence
+  consume )
+  consume {
+  statements = [ parseStatement() while not } ]
+  consume }
+  → FeatureSet(name, activity, statements)
 ```
 
-The advantages for statements:
-1. **One-to-one mapping**: Each grammar rule is a function
-2. **Natural error handling**: Try-catch at each level
-3. **Easy to extend**: Adding a new statement type is adding a function
+One grammar rule, one function. The advantages are real:
+
+1. **One-to-one mapping**: The code structure mirrors the grammar. Reading one tells you the other.
+2. **Natural error handling**: Each parsing function can catch and report its own problems.
+3. **Easy to extend**: Adding a new statement type means adding a new function — nothing else changes.
 
 ---
 
 ## Why Pratt for Expressions
 
-Expression parsing requires handling operator precedence. Consider: `<a> + <b> * <c>`. This should parse as `<a> + (<b> * <c>)` because multiplication binds tighter than addition.
+Expressions need operator precedence. `<a> + <b> * <c>` should parse as `<a> + (<b> * <c>)` because `*` binds tighter than `+`. With recursive descent, you'd need to encode this by creating a chain of grammar rules — one per precedence level, getting messy fast.
 
-Pratt parsing (also called "top-down operator precedence") handles this elegantly with precedence levels:
+Pratt parsing handles it with a single table of precedence levels:
 
-```swift
-// Parser.swift:1227-1241
-private enum Precedence: Int, Comparable {
-    case none = 0
-    case or = 1           // or
-    case and = 2          // and
-    case equality = 3     // == != is
-    case comparison = 4   // < > <= >=
-    case term = 5         // + - ++
-    case factor = 6       // * / %
-    case unary = 7        // - not
-    case postfix = 8      // . []
-}
-```
+| Precedence | Level | Operators |
+|------------|-------|-----------|
+| or | 1 | `or` |
+| and | 2 | `and` |
+| equality | 3 | `==`, `!=`, `is` |
+| comparison | 4 | `<`, `>`, `<=`, `>=` |
+| term | 5 | `+`, `-`, `++` |
+| factor | 6 | `*`, `/`, `%` |
+| unary | 7 | `-`, `not` |
+| postfix | 8 | `.`, `[]` |
 
-The core loop is remarkably simple:
+The algorithm is simple: parse a prefix (a primary expression or unary op), then keep consuming infix operators as long as they bind tighter than what the caller expects. That is the entire engine for correct precedence — no grammar rewrites needed.
 
-```swift
-// Parser.swift:1252-1269
-private func parsePrecedence(_ minPrecedence: Precedence) throws -> any Expression {
-    // Parse prefix (primary or unary)
-    var left = try parsePrefix()
+In pseudocode:
 
-    // Parse infix operators at or above minPrecedence
-    while let prec = infixPrecedence(peek()), prec > minPrecedence {
-        left = try parseInfix(left: left, precedence: prec)
-    }
-
-    // Handle postfix existence check: <expr> exists
-    if check(.exists) {
-        advance()
-        left = ExistenceExpression(expression: left, span: left.span)
-    }
-
-    return left
-}
+```text
+parsePrecedence(minPrecedence):
+  left = parsePrefix()
+  while infixPrecedence(peek()) > minPrecedence:
+    left = parseInfix(left, infixPrecedence(peek()))
+  if peek() == "exists":
+    advance()
+    left = ExistenceExpression(left)
+  return left
 ```
 
 <svg viewBox="0 0 700 380" xmlns="http://www.w3.org/2000/svg">
@@ -275,43 +248,21 @@ private func parsePrecedence(_ minPrecedence: Precedence) throws -> any Expressi
 
 The core statement form is: `Action [article] <Result> preposition [article] <Object> [clauses] .`
 
-```swift
-// Parser.swift:197-350 (simplified)
-private func parseAROStatement(startToken: Token) throws -> AROStatement {
-    // Parse action verb
-    let actionToken = try expectIdentifier(message: "action verb")
-    let action = Action(verb: actionToken.lexeme, span: actionToken.span)
-    try expect(.rightAngle, message: "'>'")
+Here is what the parser actually does, token by token:
 
-    // Skip optional article before result
-    if case .article = peek().kind { advance() }
-
-    // Parse result
-    try expect(.leftAngle, message: "'<'")
-    let result = try parseQualifiedNoun()
-    try expect(.rightAngle, message: "'>'")
-
-    // Parse preposition
-    guard case .preposition(let prep) = peek().kind else {
-        throw ParserError.unexpectedToken(expected: "preposition", got: peek())
-    }
-    advance()
-
-    // Skip optional article before object
-    if case .article = peek().kind { advance() }
-
-    // Parse object
-    try expect(.leftAngle, message: "'<'")
-    let objectNoun = try parseQualifiedNoun()
-    try expect(.rightAngle, message: "'>'")
-
-    // Parse optional clauses (where, when)
-    // ...
-
-    try expect(.dot, message: "'.'")
-
-    return AROStatement(action: action, result: result, preposition: prep, object: objectNoun, ...)
-}
+```text
+parseAROStatement:
+  consume <
+  action = identifier
+  consume >
+  [skip article: a / an / the]
+  result = parseQualifiedNoun in < >
+  preposition = consume preposition (from, to, for, with, ...)
+  [skip article: a / an / the]
+  object = parseQualifiedNoun in < >
+  [parse optional clauses: where, when, with, to]
+  consume .
+  → AROStatement(action, result, preposition, object, clauses)
 ```
 
 <svg viewBox="0 0 700 250" xmlns="http://www.w3.org/2000/svg">
@@ -413,254 +364,84 @@ private func parseAROStatement(startToken: Token) throws -> AROStatement {
 
 ## Error Recovery Strategy
 
-When parsing fails, the parser needs to recover and continue. ARO uses **synchronization points** to find safe places to resume.
+When a statement fails to parse, we don't want to give up on the whole file. The goal is to report as many errors as possible in one pass. To do that, the parser scans forward to a safe restart point after each failure.
 
-### Feature Set Level Recovery
+When a statement fails, we scan forward until we find a `.` (statement end), `}` (feature set end), or `<` (possible new statement start). At those points, parsing can safely resume. The `.` is the most reliable — it's the statement terminator and rarely appears elsewhere. The `}` catches runaway errors that spill past statement boundaries. The `<` is a last resort that catches fresh statement starts.
 
-```swift
-// Parser.swift:1191-1199
-private func synchronize() {
-    while !isAtEnd {
-        // Look for the start of a new feature set
-        if check(.leftParen) {
-            return
-        }
-        advance()
-    }
-}
-```
+If an entire feature set fails, the recovery point is `(` — the start of the next feature set. That way one badly-formed feature set doesn't poison the rest of the file.
 
-If parsing a feature set fails, skip tokens until we find `(` which starts the next feature set.
-
-### Statement Level Recovery
-
-```swift
-// Parser.swift:1201-1221
-private func synchronizeToNextStatement() {
-    while !isAtEnd {
-        // If we just passed a dot, we're at a new statement
-        if previous().kind == .dot {
-            return
-        }
-
-        // If we see a closing brace, stop
-        if check(.rightBrace) {
-            return
-        }
-
-        // If we see an opening angle bracket, we might be at a new statement
-        if check(.leftAngle) {
-            return
-        }
-
-        advance()
-    }
-}
-```
-
-The synchronization points are:
-1. `.` (statement terminator—most reliable)
-2. `}` (feature set end)
-3. `<` (possible statement start)
-
-### Diagnostic Collection
-
-Errors are collected rather than immediately thrown:
-
-```swift
-// Parser.swift:44-51
-while !isAtEnd {
-    do {
-        let featureSet = try parseFeatureSet()
-        featureSets.append(featureSet)
-    } catch let error as ParserError {
-        diagnostics.report(error)  // Collect, don't abort
-        synchronize()              // Recover
-    }
-}
-```
-
-This enables reporting multiple errors in a single parse pass.
+The outer parse loop wraps each feature set attempt in a try/catch. On failure: record the error, call `synchronize()`, move on. Everything is collected. Nothing aborts. By the time parsing finishes, the diagnostics list has every error we found — all in one pass.
 
 ---
 
-## Single Lookahead Limitation
+## Single Lookahead and Disambiguation
 
-ARO's parser uses single-token lookahead (`peek()` returns the current token, `advance()` moves forward). This creates disambiguation challenges.
+ARO's parser uses single-token lookahead: `peek()` returns the current token, `advance()` moves forward. One token of context is enough for ARO's constrained grammar — but a few characters need a little thought.
 
 ### The `<` Ambiguity
 
-The character `<` can mean:
+The character `<` can mean three different things:
+
 - Start of a variable reference: `<user>`
+- Start of an action verb: `<Extract>`
 - Less-than operator: `<a> < <b>`
-- Start of an action: `<Extract>`
 
-The parser uses context to disambiguate:
-
-```swift
-// Parser.swift:1367-1376
-case .leftAngle, .rightAngle:
-    // Only treat as comparison if not followed by identifier
-    let nextIndex = current + 1
-    if nextIndex < tokens.count {
-        if case .identifier = tokens[nextIndex].kind {
-            // This could be starting a variable ref, don't treat as comparison
-            return nil
-        }
-    }
-    return .comparison
-```
+The parser uses one token of lookahead to disambiguate. If `<` is followed by an identifier, it is starting a variable reference — not a comparison. Context-dependent, single token of lookahead, and it works for ARO's constrained grammar.
 
 ### The `.` Ambiguity
 
-The character `.` can mean:
+`.` can be member access or a statement terminator:
+
 - Member access: `<user>.name`
 - Statement terminator: `... object>.`
 
-```swift
-// Parser.swift:1381-1389
-case .dot:
-    // Only treat . as member access if followed by identifier
-    let nextIndex = current + 1
-    if nextIndex < tokens.count {
-        if case .identifier = tokens[nextIndex].kind {
-            return .postfix
-        }
-    }
-    return nil  // Statement terminator
-```
+The rule is symmetric: `.` is member access only when followed by an identifier. Otherwise it terminates the statement.
 
 ### The `for` Ambiguity
 
-The keyword `for` is both:
-- The preposition `.for` ("for the user")
-- The loop keyword `.for` ("for each")
+The keyword `for` doubles as both a preposition ("for the user") and the loop keyword ("for each"). The parser resolves this based on what follows — if the next token is `each`, it's a loop; otherwise it's the preposition `.for`.
 
-```swift
-// Parser.swift:252-256
-} else if case .for = peek().kind {
-    // Accept "for" keyword as the preposition .for
-    prep = .for
-    advance()
-}
-```
-
-These disambiguations work because ARO's grammar is constrained. A more complex language would need multi-token lookahead or backtracking.
+These disambiguations work because ARO's grammar is constrained. A more complex language would need multi-token lookahead or backtracking. ARO doesn't.
 
 ---
 
 ## Qualified Noun Parsing
 
-The `QualifiedNoun` is a core concept: `base` optionally followed by `: specifier`.
+A qualified noun is an identifier (possibly hyphenated like `user-service`) optionally followed by `:` and a type annotation. Examples: `<user>`, `<user: id>`, `<items: List<Order>>`, `<user: address.city>`.
 
-```swift
-// Parser.swift:950-967
-private func parseQualifiedNoun() throws -> QualifiedNoun {
-    let startToken = peek()
-    let base = try parseCompoundIdentifier()
-    var typeAnnotation: String? = nil
+The base name is parsed first, then if a `:` follows, the type annotation is consumed. The whole thing becomes a `QualifiedNoun` carrying both pieces.
 
-    if check(.colon) {
-        advance()
-        typeAnnotation = try parseTypeAnnotation()
-    }
-
-    return QualifiedNoun(
-        base: base,
-        typeAnnotation: typeAnnotation,
-        span: startToken.span.merged(with: previous().span)
-    )
-}
-```
-
-### Compound Identifiers
-
-ARO allows hyphenated identifiers: `user-service`, `created-at`, `first-name`.
-
-```swift
-// Parser.swift:1069-1079
-private func parseCompoundIdentifier() throws -> String {
-    var result = try expectIdentifier(message: "identifier").lexeme
-
-    while check(.hyphen) {
-        advance()
-        result += "-"
-        result += try expectIdentifier(message: "identifier after '-'").lexeme
-    }
-
-    return result
-}
-```
-
-This is implemented in the parser, not the lexer. The lexer produces separate tokens (`user`, `-`, `service`), and the parser combines them.
+Hyphenated names are assembled in the parser from separate tokens — the lexer emits `user`, `-`, `service` as three tokens. The parser combines them by consuming a hyphen and the next identifier in a loop, building up the compound name piece by piece. The result is `user-service` as a single string.
 
 ---
 
 ## Identifier Sequence Parsing
 
-Feature set names and business activities are space-separated identifiers:
+Feature set names and business activities are space-separated word sequences:
 
-```
+```text
 (User Authentication: Security and Access Control)
  └─────────────────┘  └─────────────────────────┘
       name                  business activity
 ```
 
-```swift
-// Parser.swift:1084-1120
-private func parseIdentifierSequence() throws -> String {
-    var parts: [String] = []
-
-    while peek().kind.isIdentifierLike {
-        var compound = advance().lexeme
-
-        // Handle hyphens within identifiers
-        while check(.hyphen) {
-            advance()
-            compound += "-"
-            if peek().kind.isIdentifierLike {
-                compound += advance().lexeme
-            }
-        }
-
-        parts.append(compound)
-    }
-
-    return parts.joined(separator: " ")
-}
-```
-
-The `isIdentifierLike` property allows certain keywords (like `Error`) to appear in names:
-
-```swift
-// Token.swift:260-270
-public var isIdentifierLike: Bool {
-    switch self {
-    case .identifier:
-        return true
-    case .error, .match, .case, .otherwise, .if, .else:
-        return true
-    default:
-        return false
-    }
-}
-```
+We collect tokens as long as they look identifier-like, including some keywords that can appear in names (like `Error`, `match`, `case`). The `isIdentifierLike` check is permissive here — being too strict would make feature set names fragile. Hyphens within a word are handled too: `Application-Start` becomes a single compound identifier before the sequence collector moves on to the next word.
 
 ---
 
 ## Chapter Summary
 
-ARO's parser demonstrates several techniques:
+ARO's parser demonstrates several clean techniques:
 
 1. **Hybrid design**: Recursive descent for statements (clear structure), Pratt for expressions (elegant precedence).
 
-2. **Single lookahead with context**: Disambiguates `<`, `.`, `for` based on what follows.
+2. **Single lookahead with context**: Disambiguates `<`, `.`, `for` based on what follows — one token is enough.
 
-3. **Error recovery via synchronization**: Finds safe restart points (`.`, `}`, `<`) to continue after errors.
+3. **Error recovery via synchronization**: Finds safe restart points (`.`, `}`, `<`) to continue after errors and report everything in one pass.
 
-4. **Compound identifiers in parser**: Hyphenated names are assembled from separate tokens.
+4. **Compound identifiers in parser**: Hyphenated names are assembled from separate tokens — the lexer keeps things simple, the parser assembles.
 
-The parser is 1700+ lines—larger than the lexer but still manageable. The constrained grammar (five statement types, fixed expression operators) keeps complexity bounded.
+The parser is ~2000 lines — larger than the lexer but still manageable. The constrained grammar (eight statement types, fixed expression operators) keeps complexity bounded. And the hybrid design means each half is as simple as it can be.
 
 Implementation reference: `Sources/AROParser/Parser.swift`
 

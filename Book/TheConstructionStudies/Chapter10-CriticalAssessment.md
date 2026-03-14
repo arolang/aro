@@ -71,20 +71,13 @@ Even non-programmers can follow the logic.
 
 ---
 
-### No LLVM Type Checking
+### ~~No LLVM Type Checking~~ — Resolved in ARO 0.7
 
-**Problem**: Type errors in generated LLVM IR are caught at `llc` time, not generation time.
+**Previous Problem**: The original implementation used textual LLVM IR, where type errors were only caught at `llc` time.
 
-**Technical Cause**: We chose textual LLVM IR over the LLVM C API. Textual IR doesn't provide type checking during generation.
+**Resolution**: ARO 0.7 switched to the [Swifty-LLVM](https://github.com/hylo-lang/Swifty-LLVM) C API wrapper. IR is now constructed programmatically using typed Swift objects (`Function`, `BasicBlock`, `GlobalVariable`, etc.). The `verifyModule()` call at the end of generation catches structural errors before IR is emitted to `llc`.
 
-**Impact**: Malformed IR produces cryptic `llc` errors instead of helpful messages pointing to the source.
-
-**Example**:
-```
-llc: error: program.ll:847:5: use of undefined value '%s0_result_desc'
-```
-
-**Potential Fix**: Use the LLVM C API (adds C++ build dependency) or add a verification pass before emitting IR.
+**Remaining Cost**: Requires LLVM 20 as a build dependency and a more complex build setup (`pkg-config`, library paths). Not all CI environments have LLVM readily available.
 
 ---
 
@@ -112,14 +105,7 @@ llc: error: program.ll:847:5: use of undefined value '%s0_result_desc'
 
 **Problem**: Handler registration passes function pointers through integer casts.
 
-**Technical Cause**: Swift closures aren't Sendable when they capture pointers. We cast to `Int`, then back to pointer in the callback.
-
-```swift
-let handlerAddress = Int(bitPattern: handlerPtr)
-// ... later ...
-let funcPtr = UnsafeMutableRawPointer(bitPattern: handlerAddress)
-let handlerFunc = unsafeBitCast(funcPtr, to: HandlerFunc.self)
-```
+**Technical Cause**: Swift closures aren't Sendable when they capture pointers. The workaround casts function pointers to integers for storage, then reconstructs them at call time — technically undefined behavior if address space assumptions are violated.
 
 **Impact**: Works, but undefined behavior if address space assumptions are violated.
 
@@ -204,8 +190,8 @@ Business activity scope is neither.
 
 | Limitation | Technical Cause | Impact | Difficulty to Fix |
 |------------|-----------------|--------|-------------------|
-| HTTP in binary | SwiftNIO metadata | No compiled HTTP servers | Hard |
-| No IR type checking | Textual LLVM IR | Runtime-only errors | Medium |
+| HTTP in binary | SwiftNIO metadata | Uses native BSD HTTP server instead of NIO | Hard |
+| ~~No IR type checking~~ | ~~Textual LLVM IR~~ | **Resolved in ARO 0.7** (Swifty-LLVM) | Resolved |
 | Sync action execution | @_cdecl constraint | Potential deadlocks | Hard |
 | Function pointer fragility | Sendable constraints | Undefined behavior risk | Medium |
 | Single lookahead | Parser simplicity | Disambiguation heuristics | Medium |
@@ -250,11 +236,12 @@ Every design choice has costs:
 
 | We chose | We got | We lost |
 |----------|--------|---------|
-| Textual LLVM IR | Simpler build, readable output | Type checking, performance |
+| Swifty-LLVM C API | Type-safe IR generation, `verifyModule()` | LLVM 20 build dependency, complex setup |
 | Immutable variables | Predictable data flow | Flexibility |
 | Rigid syntax | Uniform tooling | Expressiveness |
 | Event-driven model | Loose coupling | Explicit flow |
 | @_cdecl bridge | C interop | Async support |
+| Plugin system | Multi-language extension (Swift/Rust/C/Python) | Plugin build/install step required |
 
 There are no free lunches in language design.
 
@@ -276,11 +263,12 @@ For students: ARO is an example of what a constrained DSL looks like in practice
 
 If we were to continue development:
 
-1. **Fix NIO in binary**: Investigate Swift runtime initialization deeply
+1. **Fix NIO in binary**: Investigate Swift runtime initialization deeply; NIO's compiled-mode limitation remains open
 2. **Add optional types**: `<user: User>` syntax for explicit typing
 3. **Improve error messages**: Source-mapped errors from LLVM failures
 4. **Reduce prepositions**: Simplify to 3-4 with clear semantics
 5. **Add debugging support**: Better stack traces in compiled mode
+6. **Plugin versioning**: Stricter semantic version enforcement for `aro-version` constraints
 
 These are not planned—they're lessons for future DSL designers.
 

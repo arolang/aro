@@ -8,10 +8,10 @@ This appendix provides a quick reference to key source files in the ARO implemen
 
 | File | Lines | Description |
 |------|-------|-------------|
-| `Lexer.swift` | ~700 | Tokenization, string interpolation, regex detection |
+| `Lexer.swift` | ~960 | Tokenization, string interpolation, regex detection, hex/binary/raw/triple-quoted literals |
 | `Token.swift` | ~200 | Token types, articles, prepositions |
-| `Parser.swift` | ~1700 | Recursive descent + Pratt parsing |
-| `AST.swift` | ~1300 | AST node definitions, visitor pattern |
+| `Parser.swift` | ~2000 | Recursive descent + Pratt parsing, 8 statement types |
+| `AST.swift` | ~1600 | AST node definitions, visitor pattern |
 | `SemanticAnalyzer.swift` | ~800 | Symbol tables, data flow analysis |
 | `SymbolTable.swift` | ~200 | Symbol storage, visibility levels |
 | `Compiler.swift` | ~150 | Pipeline orchestration |
@@ -45,6 +45,7 @@ let analyzed = try analyzer.analyze(program)
 | `FeatureSetExecutor.swift` | ~600 | Statement execution, control flow |
 | `RuntimeContext.swift` | ~300 | Variable binding, service access |
 | `Runtime.swift` | ~150 | Top-level runtime container |
+| `VerbSets.swift` | ~45 | Canonical verb classification (shared by interpreter and compiler) |
 
 ### Actions (`Actions/`)
 
@@ -58,7 +59,7 @@ let analyzed = try analyzer.analyze(program)
 | `BuiltIn/ReturnAction.swift` | ~100 | Response generation |
 | `BuiltIn/StoreAction.swift` | ~200 | Repository storage |
 | `BuiltIn/EmitAction.swift` | ~100 | Event emission |
-| *(46 more actions)* | | |
+| *(56 more actions)* | | 61 total built-in actions |
 
 ### Events (`Events/`)
 
@@ -125,7 +126,7 @@ The compiler uses Swifty-LLVM for type-safe LLVM IR generation:
 | `main.swift` | ~50 | Entry point |
 | `Commands/RunCommand.swift` | ~150 | `aro run` - interpreter execution |
 | `Commands/BuildCommand.swift` | ~200 | `aro build` - native compilation |
-| `Commands/CheckCommand.swift` | ~80 | `aro check` - syntax validation |
+| `Commands/CheckCommand.swift` | ~300 | `aro check` - syntax validation + `aro check plugins` compatibility |
 | `Commands/CompileCommand.swift` | ~100 | `aro compile` - IR only |
 
 ---
