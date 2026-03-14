@@ -2,7 +2,7 @@
 
 ## The Constraint Hypothesis
 
-ARO operates on a hypothesis that runs counter to mainstream programming language design: **expressiveness and predictability are inversely correlated**. General-purpose languages maximize expressiveness—you can write anything. ARO minimizes it—you can write only certain things in certain ways.
+ARO operates on a hypothesis that runs counter to mainstream language design: **expressiveness and predictability are inversely correlated**. General-purpose languages maximize expressiveness — you can write anything. ARO minimizes it — you can write only certain things in certain ways.
 
 <svg viewBox="0 0 600 400" xmlns="http://www.w3.org/2000/svg">
   <style>
@@ -69,44 +69,39 @@ ARO operates on a hypothesis that runs counter to mainstream programming languag
 
 **Figure 1.1**: The expressiveness-predictability trade-off. Languages cluster along an inverse relationship. ARO occupies the high-predictability, low-expressiveness corner deliberately.
 
-This is not a universal truth—it is a design bet. The bet is that for certain problem domains, the benefits of predictability (uniform tooling, auditable code, consistent execution) outweigh the costs of limited expressiveness.
+This is not a universal truth — it is a design bet. The bet is that for certain problem domains, the benefits of predictability (uniform tooling, auditable code, consistent execution) outweigh the costs of limited expressiveness.
 
 ### What "Constraint" Means Architecturally
 
-In a general-purpose language, the AST node types proliferate. Python's AST has over 40 statement types and 20+ expression types. JavaScript's has similar complexity. Each new construct adds parsing rules, semantic analysis passes, and code generation cases.
+In a general-purpose language, AST node types proliferate. Python's AST has over 40 statement types and 20+ expression types. Each new construct adds parsing rules, semantic analysis passes, and code generation cases.
 
 ARO has eight statement types:
-1. `AROStatement` (the action-result-object form)
-2. `PublishStatement` (variable export)
-3. `ForEachLoop` (collection iteration)
-4. `RequireStatement` (dependency declaration)
-5. `MatchStatement` (pattern matching)
-6. `RangeLoop` (numeric range iteration)
-7. `WhileLoop` (condition-based iteration)
-8. `BreakStatement` (loop exit)
 
-**Lifecycle feature sets** (`Application-Start`, `Application-End: Success`, `Application-End: Error`) are not special statement types—they are regular feature sets distinguished by naming convention. The runtime treats them specially based on their business activity names.
+1. `AROStatement` — the core action-result-object form
+2. `PublishStatement` — variable export across feature sets
+3. `ForEachLoop` — collection iteration
+4. `RequireStatement` — dependency declaration
+5. `MatchStatement` — pattern matching
+6. `RangeLoop` — numeric range iteration
+7. `WhileLoop` — condition-based iteration
+8. `BreakStatement` — loop exit
 
-This constraint propagates through the entire implementation:
-- The parser is more focused (bounded set of production rules)
-- Semantic analysis has defined cases
-- Code generation is more uniform
-- Tooling can make stronger assumptions
+**Lifecycle feature sets** (`Application-Start`, `Application-End: Success`, `Application-End: Error`) are not special statement types. They are regular feature sets distinguished by naming convention. The runtime treats them specially based on their business activity names.
+
+Here's why that's clever: every new statement type would add cases everywhere — in the parser, the semantic analyzer, the code generator, the interpreter, the LLVM backend, and every tool that reads an AST. Eight types means all of those places stay small and focused. The constraint propagates as a simplification through the entire codebase.
 
 ---
 
 ## Data Flow as Organizing Principle
 
-ARO classifies every action by its data flow direction. This is not just documentation—it is enforced at the type level through the `ActionRole` enum.
+We classify every action by its data flow direction. This is not just documentation — it is enforced at the type level. Every action implementation declares its role, and the runtime uses that to decide what bridge functions to call, what prepositions are valid, and what optimizations are safe.
 
-```swift
-public enum ActionRole: String, Sendable, CaseIterable {
-    case request    // External → Internal
-    case own        // Internal → Internal
-    case response   // Internal → External
-    case export     // Internal → Persistent
-}
-```
+| Role | Direction | Examples |
+|------|-----------|---------|
+| `request` | External → Internal | Extract, Retrieve, Fetch, Read |
+| `own` | Internal → Internal | Compute, Validate, Compare, Create, Transform |
+| `response` | Internal → External | Return, Throw |
+| `export` | Internal → Persistent / Global | Publish, Store, Log, Send, Emit |
 
 <svg viewBox="0 0 700 350" xmlns="http://www.w3.org/2000/svg">
   <style>
@@ -189,116 +184,84 @@ public enum ActionRole: String, Sendable, CaseIterable {
 
 **Figure 1.2**: Action role data flow. Every action in ARO belongs to exactly one of four roles, determining where data flows.
 
-### Why Roles Matter for Implementation
+### Why Roles Matter
 
-The role classification enables:
+The role classification pays off in several concrete ways:
 
-1. **Static analysis**: The semantic analyzer can verify that REQUEST actions are sourcing external data and OWN actions are operating on internal state.
-
-2. **Preposition validation**: Each role has valid prepositions. REQUEST actions use `from` (source); RESPONSE actions use `to` (destination).
-
-3. **Code generation**: The LLVM code generator knows which bridge functions to call based on role.
-
-4. **Runtime optimization**: REQUEST actions may be cached; EXPORT actions may be batched.
-
-Implementation reference: `Sources/ARORuntime/Actions/ActionProtocol.swift:12-18`
+- **Preposition validation**: Each role has valid prepositions. REQUEST actions use `from` (pulling data in from somewhere); RESPONSE actions use `to` or `for` (sending data out somewhere). A REQUEST action with `to` is suspicious, and we can flag it.
+- **Static analysis**: The semantic analyzer can verify data flow direction from the role alone, without reading the implementation.
+- **Code generation**: The LLVM backend knows which C bridge functions to call based on role, without inspecting the action further.
+- **Runtime optimization**: REQUEST actions may be cached; EXPORT actions may be batched.
 
 ---
 
 ## Immutability by Default
 
-Variables in ARO cannot be rebound. This is not a convention—it is enforced by both the semantic analyzer and the runtime.
+Variables in ARO cannot be rebound. This is not a convention — it is enforced at two layers.
 
-```swift
-// SemanticAnalyzer.swift - compile-time check
-if symbolTable.contains(name) && !name.hasPrefix("_") {
-    diagnostics.append(Diagnostic(
-        severity: .error,
-        message: "Cannot rebind variable '\(name)' - variables are immutable",
-        span: span
-    ))
-}
+The **semantic analyzer** checks at compile time: if you try to bind a name that already exists in the symbol table, it flags it as an error. The **runtime** has a second safety net that catches anything the analyzer missed. In practice the runtime check should never fire — if it does, we have a compiler bug.
 
-// RuntimeContext.swift - runtime safety check (should never trigger)
-if bindings[name] != nil && !name.hasPrefix("_") {
-    fatalError("Runtime Error: Cannot rebind immutable variable '\(name)'")
-}
+The escape hatch is the `_` prefix, reserved for framework-internal variables like `_expression_` and `_with_`. Those are exempt from immutability checks because the runtime needs to shuttle values between pipeline stages.
+
+Here's why this is worth the pain:
+
+- **No aliasing problems**: If `x` cannot change, you never need to wonder whether `y` also points to the same value that just mutated.
+- **Parallel safety**: Immutable bindings are inherently thread-safe. The `Sendable` conformance of `SymbolTable` relies entirely on this property.
+- **Simpler code generation**: The LLVM backend does not need to track which variables might be modified later. Every binding is a one-time write.
+- **Predictable debugging**: The value of a variable is always the value it was given when first bound. No surprises mid-execution.
+
+The new-name pattern is the idiomatic workaround when you need multiple transformations of the same data:
+
+```aro
+Compute the <name-upper: uppercase> from the <name>.
+Compute the <name-trimmed: trim> from the <name-upper>.
 ```
 
-### Architectural Consequences
-
-Immutability simplifies the execution model:
-
-1. **No aliasing problems**: If `x` cannot change, you never need to track whether `y` also points to the same mutable value.
-
-2. **Parallel safety**: Immutable bindings are inherently thread-safe. The `Sendable` conformance of `SymbolTable` relies on this.
-
-3. **Simpler code generation**: LLVM IR generation does not need to track which variables might be modified.
-
-4. **Predictable debugging**: The value of a variable at any point is the value it was given when bound.
-
-The escape hatch is the `_` prefix for framework-internal variables, which are exempt from immutability checks.
+Each step gets a new name. Verbose, yes — but you can read the entire data flow top to bottom without tracking mutations.
 
 ---
 
 ## The "Code is the Error Message" Philosophy
 
-ARO's error handling is unusual: there is none. Programmers write only the successful case, and the runtime generates error messages from the source code itself.
+ARO's error handling is unusual: there isn't any. Programmers write only the successful case. When something goes wrong, the runtime generates an error message from the source code itself.
 
-```
-Statement:
+```aro
 Retrieve the <user> from the <user-repository> where id = <id>.
-
-On failure, becomes:
-"Cannot retrieve the user from the user-repository where id = 530."
 ```
 
-This is not a debugging convenience—it is a fundamental design principle with implementation consequences.
+If the retrieval fails, the runtime produces:
 
-### Implementation in ErrorReconstructor
-
-```swift
-// ErrorReconstructor.swift
-public func reconstructError(
-    from statement: AROStatement,
-    context: ExecutionContext
-) -> String {
-    var message = "Cannot \(statement.action.text.lowercased()) the \(statement.result.base)"
-
-    if let object = statement.object {
-        message += " \(object.preposition.rawValue) the \(object.base)"
-    }
-
-    // Substitute resolved values
-    for (name, value) in context.bindings {
-        message = message.replacingOccurrences(of: "<\(name)>", with: "\(value)")
-    }
-
-    return message
-}
 ```
+Cannot retrieve the user from the user-repository where id = 530.
+```
+
+The number `530` is not hard-coded anywhere — it is the resolved value of `<id>` at the time of failure, substituted directly into the message. The statement you wrote becomes the error message, with variables replaced by their actual values.
+
+This is not a debugging convenience bolted on afterwards. It is a fundamental design principle that shapes what the language can and cannot express.
+
+The implementation is straightforward: when an action throws, the runtime walks the AST node for that statement, reconstructs the natural-language form using the action verb, result name, preposition, and object name, then substitutes any variable references with their resolved values from the current context. The source code and the error message are the same sentence, one with names and one with values.
 
 ### Trade-offs
 
 **Gained:**
+
 - Zero error-handling code in ARO programs
-- Error messages always match the code
-- Full debugging context in every error
+- Error messages always match the code — they cannot drift
+- Full debugging context in every error, no log-hunting required
 
 **Lost:**
-- No custom error messages (without escape to Throw)
-- Security-sensitive information may leak
-- No programmatic error handling
 
-The security issue is real. Error messages expose variable values, repository names, and internal state. ARO is explicitly not designed for production systems handling sensitive data.
+- No custom error messages (without explicitly using `Throw`)
+- Security-sensitive information may leak in error output
+- No programmatic error recovery
 
-Implementation reference: `Sources/ARORuntime/Core/ErrorReconstructor.swift`
+The security issue is real and worth emphasizing. Error messages expose variable values, repository names, and internal state. ARO is explicitly not designed for production systems handling sensitive data.
 
 ---
 
 ## Trade-off Analysis
 
-### What ARO Gave Up
+### What We Gave Up
 
 | Lost Feature | Why It Was Removed | Consequence |
 |--------------|-------------------|-------------|
@@ -309,13 +272,13 @@ Implementation reference: `Sources/ARORuntime/Core/ErrorReconstructor.swift`
 | Exception handling | Happy path only | Errors terminate execution |
 | Type annotations | OpenAPI schemas only | Limited static typing |
 
-### What ARO Gained
+### What We Gained
 
 | Gained Property | How It Was Achieved | Benefit |
 |-----------------|---------------------|---------|
-| Uniform AST | Five statement types | Simple tooling |
+| Uniform AST | Eight statement types | Simple tooling |
 | Predictable execution | Linear statement flow | Easy debugging |
-| Auditable code | One way to do things | Code review is trivial |
+| Auditable code | One way to do things | Code review is fast |
 | Consistent error messages | Code-derived errors | Debugging by reading |
 | Safe concurrency | Immutable bindings | No race conditions in user code |
 
@@ -369,13 +332,13 @@ Implementation reference: `Sources/ARORuntime/Core/ErrorReconstructor.swift`
 
 **Figure 1.3**: The constraint-uniformity trade-off with escape hatch.
 
-The escape hatch is essential. Without it, ARO would be too limited for real use. There are two levels of escape:
+The escape hatch is essential. Without it, ARO would be too limited for real use. We offer two levels:
 
-1. **Plugins** (Swift, Rust, C, Python) — loaded as dynamic libraries or subprocesses. Plugins can add new actions and qualifiers without modifying the ARO runtime itself. They are namespaced via a `handle:` field in `plugin.yaml` (e.g., `handle: Collections`). Qualifiers are accessed as `handle.qualifier` (e.g., `<list: Collections.pick-random>`). The plugin system is the preferred escape mechanism.
+**Plugins** (Swift, Rust, C, Python) are loaded as dynamic libraries or subprocesses. They can add new actions and qualifiers without touching the ARO runtime itself. They are namespaced via a `handler:` field in `plugin.yaml` — so a `collections` handler exposes qualifiers as `collections.pick-random`, `collections.shuffle`, and so on. This is the preferred escape mechanism: write your plugin, drop it in `Plugins/`, and the runtime finds it automatically.
 
-2. **Custom actions in Swift** — compiled into the runtime. More tightly integrated but requires recompiling the ARO binary.
+**Custom actions in Swift** are compiled directly into the runtime. More tightly integrated, but requires recompiling the ARO binary. Useful for actions that need deep access to the execution engine.
 
-With these escape hatches, the constraint becomes a default rather than a prison—you stay within ARO's vocabulary unless you genuinely need to escape.
+With these escape hatches, the constraint becomes a useful default rather than a prison. You stay within ARO's vocabulary unless you genuinely need to leave — and when you do, the plugin system makes the exit clean.
 
 ---
 
@@ -383,13 +346,13 @@ With these escape hatches, the constraint becomes a default rather than a prison
 
 ARO's design philosophy rests on four pillars:
 
-1. **Constraint over expressiveness**: Fewer constructs means simpler implementation and more predictable behavior.
+1. **Constraint over expressiveness**: Fewer constructs means simpler implementation and more predictable behavior. Eight statement types instead of forty. That constraint saves work in every phase of the compiler.
 
-2. **Data flow classification**: Every action has a role that determines its valid operations and enables static analysis.
+2. **Data flow classification**: Every action has a role — request, own, response, or export. That role determines valid operations and enables static analysis without reading implementation code.
 
-3. **Immutability by default**: Variables cannot change, eliminating whole categories of bugs and enabling safe concurrency.
+3. **Immutability by default**: Variables cannot be rebound, eliminating whole categories of bugs and enabling safe concurrency. The semantic analyzer enforces it; the runtime double-checks.
 
-4. **Code as error message**: The source code itself becomes the debugging tool, at the cost of security.
+4. **Code as error message**: The source code itself becomes the debugging tool. The statement you wrote, with variable values substituted in, is the error message. Simple, always accurate, occasionally revealing things you'd rather not reveal.
 
 These choices have concrete implementation consequences throughout the codebase. The following chapters examine how each compiler phase and runtime component realizes these principles.
 

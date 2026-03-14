@@ -4,12 +4,16 @@
 
 Compiled ARO binaries need to call Swift runtime code. LLVM generates native code that can call C functions. Swift can expose functions to C via `@_cdecl`. This creates a three-layer bridge.
 
+- **Layer 1**: LLVM IR calls C-named functions (`@aro_action_extract`, `@aro_variable_bind_string`, etc.)
+- **Layer 2**: `@_cdecl` wrappers receive C types, convert to Swift, and call Swift actions
+- **Layer 3**: Swift actions execute with full runtime access
+
 The bridge code lives in `Sources/ARORuntime/Bridge/`:
 
 | File | Purpose |
 |------|---------|
 | `RuntimeBridge.swift` | Lifecycle: init, shutdown, context management |
-| `ActionBridge.swift` | All 61 actions exposed via @_cdecl |
+| `ActionBridge.swift` | All 61 actions exposed via `@_cdecl` |
 | `ServiceBridge.swift` | HTTP server, file system, socket services |
 
 ```
@@ -86,60 +90,25 @@ LLVM-Generated Code (native)
 
 ---
 
+## The @_cdecl Attribute
+
+Every action in the runtime is exposed as a `@_cdecl` function — a C-callable Swift function. The name mangling follows a simple pattern: `aro_action_{verbname}`. This is what the generated LLVM IR calls.
+
+All 61 actions have thin wrappers that delegate to a shared `ActionRunner`. The wrapper's job is to receive C pointers, convert them to Swift types, invoke the action, and box the result for return.
+
+---
+
 ## Handle Management
 
-The bridge uses opaque pointers to pass Swift objects to/from C code:
+The bridge uses opaque `UnsafeRawPointer` handles to pass Swift objects to C. There are three kinds:
 
-```swift
-/// Opaque runtime handle for C interop
-final class AROCRuntimeHandle: @unchecked Sendable {
-    let runtime: Runtime
-    var contexts: [UnsafeMutableRawPointer: AROCContextHandle] = [:]
-}
+| Handle | Wraps |
+|--------|-------|
+| Runtime handle | The entire runtime state (event bus, registries, context map) |
+| Context handle | One feature set's execution context |
+| Value handle | A boxed `any Sendable` value |
 
-/// Opaque context handle for C interop
-class AROCContextHandle {
-    let context: RuntimeContext
-    let runtime: AROCRuntimeHandle
-}
-```
-
-Creating a handle:
-```swift
-@_cdecl("aro_runtime_init")
-public func aro_runtime_init() -> UnsafeMutableRawPointer? {
-    let handle = AROCRuntimeHandle()
-
-    // Convert Swift object to opaque pointer
-    let pointer = Unmanaged.passRetained(handle).toOpaque()
-
-    // Store in global registry (prevents deallocation)
-    handleLock.lock()
-    runtimeHandles[pointer] = handle
-    handleLock.unlock()
-
-    return UnsafeMutableRawPointer(pointer)
-}
-```
-
-Retrieving a handle:
-```swift
-@_cdecl("aro_runtime_shutdown")
-public func aro_runtime_shutdown(_ runtimePtr: UnsafeMutableRawPointer?) {
-    guard let ptr = runtimePtr else { return }
-
-    // Convert opaque pointer back to Swift object
-    let handle = Unmanaged<AROCRuntimeHandle>.fromOpaque(ptr).takeUnretainedValue()
-
-    // Clean up
-    handleLock.lock()
-    runtimeHandles.removeValue(forKey: ptr)
-    handleLock.unlock()
-
-    // Release the retained object
-    Unmanaged<AROCRuntimeHandle>.fromOpaque(ptr).release()
-}
-```
+Swift objects cannot be passed to C directly — C doesn't know their size or layout. So we allocate them with `Unmanaged.passRetained()`, which hands us an opaque pointer the C side can store and pass back. A global registry keeps those objects alive (prevents ARC from freeing them). When the C side is done, it calls a cleanup function, which releases the retain.
 
 <svg viewBox="0 0 600 200" xmlns="http://www.w3.org/2000/svg">
   <style>
@@ -190,347 +159,103 @@ public func aro_runtime_shutdown(_ runtimePtr: UnsafeMutableRawPointer?) {
 
 ## Descriptor Conversion
 
-C structs are read with manual offset calculations:
+Incoming C descriptor structs are converted to Swift `ResultDescriptor` and `ObjectDescriptor` values. This is mechanical — copy the string pointers, reconstruct arrays from pointer+count pairs.
 
-```swift
-/// Convert C object descriptor to Swift ObjectDescriptor
-func toObjectDescriptor(_ ptr: UnsafeRawPointer) -> ObjectDescriptor {
-    // C struct layout:
-    // struct AROObjectDescriptor {
-    //     const char* base;        // offset 0, 8 bytes
-    //     int preposition;         // offset 8, 4 bytes
-    //     // 4 bytes padding for pointer alignment
-    //     const char** specifiers; // offset 16, 8 bytes
-    //     int specifier_count;     // offset 24, 4 bytes
-    // };
+The tricky part is alignment. The `AROObjectDescriptor` C struct has this layout:
 
-    let basePtr = ptr.load(as: UnsafePointer<CChar>?.self)
-    let base = basePtr.map { String(cString: $0) } ?? ""
+| Field | Offset | Size |
+|-------|--------|------|
+| `base` (ptr) | 0 | 8 bytes |
+| `preposition` (int) | 8 | 4 bytes |
+| *(padding)* | 12 | 4 bytes |
+| `specifiers` (ptr) | 16 | 8 bytes |
+| `specifier_count` (int) | 24 | 4 bytes |
 
-    let prepInt = ptr.load(fromByteOffset: 8, as: Int32.self)
-    let preposition = intToPreposition(Int(prepInt)) ?? .from
-
-    // Account for padding: specifiers at offset 16, not 12
-    let specsPtr = ptr.load(fromByteOffset: 16, as: UnsafeMutablePointer<UnsafePointer<CChar>?>?.self)
-    let specCount = ptr.load(fromByteOffset: 24, as: Int32.self)
-
-    var specifiers: [String] = []
-    if let specs = specsPtr {
-        for i in 0..<Int(specCount) {
-            if let spec = specs[i] {
-                specifiers.append(String(cString: spec))
-            }
-        }
-    }
-
-    return ObjectDescriptor(preposition: preposition, base: base, specifiers: specifiers, ...)
-}
-```
-
-**Critical insight**: The padding between `preposition` (4 bytes at offset 8) and `specifiers` (pointer at offset 16) must match C struct alignment rules. Getting this wrong causes subtle memory corruption.
+**Critical insight**: The padding between `preposition` and `specifiers` must match C struct alignment rules exactly. Getting this wrong causes silent memory corruption — the sort of bug that only shows up on specific inputs.
 
 ---
 
-## The @_cdecl Attribute
+## Variable Binding
 
-Swift's `@_cdecl` attribute exports a function with C linkage:
+Three binding helpers cover the common cases. Each takes a context handle, a name pointer, and a value, and calls into the context's `bind()` method:
 
-```swift
-@_cdecl("aro_action_extract")
-public func aro_action_extract(
-    _ contextPtr: UnsafeMutableRawPointer?,
-    _ resultPtr: UnsafeRawPointer?,
-    _ objectPtr: UnsafeRawPointer?
-) -> UnsafeMutableRawPointer? {
-    return executeAction(verb: "extract", contextPtr: contextPtr,
-                         resultPtr: resultPtr, objectPtr: objectPtr)
-}
-```
+| Function | Binds |
+|----------|-------|
+| `aro_variable_bind_string` | A UTF-8 C string |
+| `aro_variable_bind_int` | An `i64` integer |
+| `aro_variable_bind_dict` | A JSON string, parsed to a dictionary |
 
-All 61 actions have thin wrappers that delegate to `ActionRunner`:
-
-```swift
-private func executeAction(
-    verb: String,
-    contextPtr: UnsafeMutableRawPointer?,
-    resultPtr: UnsafeRawPointer?,
-    objectPtr: UnsafeRawPointer?
-) -> UnsafeMutableRawPointer? {
-    guard let ctxHandle = getContext(contextPtr),
-          let result = resultPtr,
-          let object = objectPtr else { return nil }
-
-    let resultDesc = toResultDescriptor(result)
-    let objectDesc = toObjectDescriptor(object)
-
-    // Execute through ActionRunner (same code path as interpreter)
-    let actionResult = ActionRunner.shared.executeSync(
-        verb: verb,
-        result: resultDesc,
-        object: objectDesc,
-        context: ctxHandle.context
-    )
-
-    // Box result for return to C
-    if let value = actionResult {
-        return boxResult(value)
-    }
-    return boxResult("")
-}
-```
+Complex types (dictionaries, arrays) cross the boundary as JSON strings. The bridge parses them on the Swift side and binds the resulting dictionary or array.
 
 ---
 
-## Synchronous Execution Challenge
+## Synchronous Execution
 
-Actions in the interpreter are `async`. But `@_cdecl` functions cannot be `async` (C has no concept of Swift concurrency). The solution: block the calling thread:
+`@_cdecl` functions cannot be `async` — C has no concept of Swift concurrency. When an action needs to do async work (network call, file read), it spins up the work on the cooperative executor and blocks the calling thread with a semaphore. This is the fundamental tension of the C bridge — a synchronous wrapper around an async action.
 
-```swift
-/// Synchronous action execution for compiled binaries
-public func executeSync(
-    verb: String,
-    result: ResultDescriptor,
-    object: ObjectDescriptor,
-    context: ExecutionContext
-) -> (any Sendable)? {
-    let semaphore = DispatchSemaphore(value: 0)
-    var resultValue: (any Sendable)?
-
-    // Run async code on a detached task
-    Task.detached {
-        do {
-            resultValue = try await self.execute(
-                verb: verb,
-                result: result,
-                object: object,
-                context: context
-            )
-        } catch {
-            print("[ActionRunner] Error: \(error)")
-        }
-        semaphore.signal()
-    }
-
-    semaphore.wait()  // Block until async completes
-    return resultValue
-}
-```
-
-**Warning**: This can cause deadlocks if the executor pool is exhausted. Event handlers run on GCD threads (not the Swift cooperative executor) to prevent this.
+This works, but it has a real risk: if the executor pool is exhausted, the blocking thread and the async task can deadlock waiting on each other. To prevent this, event handlers run on GCD threads rather than the Swift cooperative executor.
 
 ---
 
 ## Handler Registration
 
-Compiled binaries register event handlers by passing function pointers:
+Compiled binaries register event handlers by passing function pointers to the runtime. The runtime subscribes to the event bus, and when a matching event arrives, it reconstructs the function pointer and calls the compiled handler on a GCD thread. The calling convention for all handlers is the same: receive a context pointer, return a result pointer.
 
-```swift
-@_cdecl("aro_runtime_register_handler")
-public func aro_runtime_register_handler(
-    _ runtimePtr: UnsafeMutableRawPointer?,
-    _ eventType: UnsafePointer<CChar>?,
-    _ handlerFuncPtr: UnsafeMutableRawPointer?
-) {
-    guard let ptr = runtimePtr,
-          let eventTypeStr = eventType.map({ String(cString: $0) }),
-          let handlerPtr = handlerFuncPtr else { return }
-
-    let runtimeHandle = Unmanaged<AROCRuntimeHandle>.fromOpaque(ptr).takeUnretainedValue()
-
-    // Capture handler address as Int (Sendable)
-    let handlerAddress = Int(bitPattern: handlerPtr)
-
-    runtimeHandle.runtime.eventBus.subscribe(to: DomainEvent.self) { event in
-        guard event.domainEventType == eventTypeStr else { return }
-
-        // CRITICAL: Run on GCD, not Swift executor
-        await withCheckedContinuation { continuation in
-            DispatchQueue.global().async {
-                // Create context for handler
-                let contextHandle = AROCContextHandle(runtime: runtimeHandle, ...)
-
-                // Bind event data
-                contextHandle.context.bind("event", value: event.payload)
-
-                // Reconstruct function pointer
-                guard let funcPtr = UnsafeMutableRawPointer(bitPattern: handlerAddress) else {
-                    continuation.resume()
-                    return
-                }
-
-                // Call compiled handler
-                typealias HandlerFunc = @convention(c) (UnsafeMutableRawPointer?) -> UnsafeMutableRawPointer?
-                let handlerFunc = unsafeBitCast(funcPtr, to: HandlerFunc.self)
-                _ = handlerFunc(contextPtr)
-
-                continuation.resume()
-            }
-        }
-    }
-}
-```
+This is the most fragile part of the bridge. Function pointer casting through `unsafeBitCast` is not checked at runtime. A mismatch in calling convention or parameter count will silently corrupt memory or crash.
 
 ---
 
 ## Value Boxing
 
-Values returned to C are boxed in reference-counted containers:
+Values returned from actions to the C side are wrapped in reference-counted containers. The bridge allocates a box, stores the value, and returns the box's opaque pointer. When the generated code no longer needs the value, it calls `aro_value_free`, which releases the retain and lets ARC collect the box.
 
-```swift
-/// Boxed value for C interop
-class AROCValue {
-    let value: any Sendable
-
-    init(value: any Sendable) {
-        self.value = value
-    }
-}
-
-/// Box a value for return to C
-func boxResult(_ value: any Sendable) -> UnsafeMutableRawPointer {
-    let boxed = AROCValue(value: value)
-    return UnsafeMutableRawPointer(Unmanaged.passRetained(boxed).toOpaque())
-}
-
-/// Free a boxed value
-@_cdecl("aro_value_free")
-public func aro_value_free(_ valuePtr: UnsafeMutableRawPointer?) {
-    guard let ptr = valuePtr else { return }
-    Unmanaged<AROCValue>.fromOpaque(ptr).release()
-}
-```
-
----
-
-## Variable Operations
-
-The bridge provides type-specific binding functions:
-
-```swift
-@_cdecl("aro_variable_bind_string")
-public func aro_variable_bind_string(
-    _ contextPtr: UnsafeMutableRawPointer?,
-    _ name: UnsafePointer<CChar>?,
-    _ value: UnsafePointer<CChar>?
-) {
-    guard let ptr = contextPtr,
-          let nameStr = name.map({ String(cString: $0) }),
-          let valueStr = value.map({ String(cString: $0) }) else { return }
-
-    let contextHandle = Unmanaged<AROCContextHandle>.fromOpaque(ptr).takeUnretainedValue()
-    contextHandle.context.bind(nameStr, value: valueStr)
-}
-
-@_cdecl("aro_variable_bind_int")
-public func aro_variable_bind_int(
-    _ contextPtr: UnsafeMutableRawPointer?,
-    _ name: UnsafePointer<CChar>?,
-    _ value: Int64
-) {
-    guard let ptr = contextPtr,
-          let nameStr = name.map({ String(cString: $0) }) else { return }
-
-    let contextHandle = Unmanaged<AROCContextHandle>.fromOpaque(ptr).takeUnretainedValue()
-    contextHandle.context.bind(nameStr, value: Int(value))
-}
-```
-
-Complex types (dictionaries, arrays) are passed as JSON strings:
-
-```swift
-@_cdecl("aro_variable_bind_dict")
-public func aro_variable_bind_dict(
-    _ contextPtr: UnsafeMutableRawPointer?,
-    _ name: UnsafePointer<CChar>?,
-    _ json: UnsafePointer<CChar>?
-) {
-    // ... parameter validation ...
-
-    // Parse JSON to dictionary
-    guard let data = jsonStr.data(using: .utf8),
-          let parsed = try? JSONSerialization.jsonObject(with: data),
-          let dict = parsed as? [String: Any] else {
-        // Fallback: bind as string
-        contextHandle.context.bind(nameStr, value: jsonStr)
-        return
-    }
-
-    // Convert to Sendable and bind
-    let sendableDict = convertToSendable(dict) as? [String: any Sendable] ?? [:]
-    contextHandle.context.bind(nameStr, value: sendableDict)
-}
-```
+This is a manual reference counting layer on top of Swift's automatic reference counting. The generated code must always pair every value-returning call with a corresponding free — a discipline enforced by the code generator, not the type system.
 
 ---
 
 ## Platform-Specific Type Handling
 
-JSON deserialization behaves differently on Darwin vs Linux:
+JSON deserialization behaves differently on Darwin and Linux, and the difference matters for booleans:
 
-```swift
-private func convertToSendable(_ value: Any) -> any Sendable {
-    case let nsNumber as NSNumber:
-        #if canImport(Darwin)
-        // On Darwin, check CFBooleanGetTypeID for JSON booleans
-        if CFGetTypeID(nsNumber) == CFBooleanGetTypeID() {
-            return nsNumber.boolValue
-        }
-        #else
-        // On Linux, use objCType to detect booleans
-        let objCType = String(cString: nsNumber.objCType)
-        if objCType == "c" || objCType == "B" {
-            let intVal = nsNumber.intValue
-            if intVal == 0 || intVal == 1 {
-                return nsNumber.boolValue
-            }
-        }
-        #endif
-        // ...
-}
-```
+| Platform | Boolean representation | Issue |
+|----------|----------------------|-------|
+| Darwin (macOS) | `UInt8` via `CFBooleanGetTypeID()` | Correct — reliable detection |
+| Linux | `Int32` via `objCType` check | Different — must extract as `Int32` |
+
+On Darwin, JSON booleans can be identified by checking their Core Foundation type ID. On Linux, that API is not available, so the bridge checks the Objective-C type encoding string instead. Getting this wrong means booleans silently become integers, which breaks `when` guards and `match` expressions.
 
 ---
 
 ## Service Registration Limitations
 
-A critical limitation: SwiftNIO doesn't work in compiled binaries:
+There is one major limitation that shapes the entire binary mode story: SwiftNIO does not work in compiled binaries.
 
-```swift
-init(runtime: AROCRuntimeHandle, featureSetName: String) {
-    // ...
+SwiftNIO crashes because Swift's type metadata for NIO's internal socket channel types is not available when the Swift runtime is initialized from LLVM-compiled code. The metadata registration that normally happens at program startup does not run correctly in this context.
 
-    // NOTE: Do NOT register AROHTTPServer (NIO-based) in compiled binaries.
-    // SwiftNIO crashes because Swift's type metadata for NIO's internal
-    // socket channel types is not available when the Swift runtime is
-    // initialized from LLVM-compiled code.
-    //
-    // Instead, compiled binaries use native BSD socket HTTP server via
-    // aro_native_http_server_start_with_openapi()
-    self.httpServer = nil
-}
-```
+The consequence: compiled ARO binaries use a native BSD socket HTTP server instead of SwiftNIO. This is why there are two HTTP server implementations — one for the interpreter, one for binaries. The native server is simpler and more limited, but it is stable.
 
-This is why compiled ARO binaries use a native socket-based HTTP server instead of SwiftNIO.
+Similarly, `ManagedAtomic` from `swift-atomics` causes SIGSEGV in compiled binaries (see the note on SocketClient in the memory file). Any library that relies on Swift's concurrency metadata infrastructure may hit similar issues.
 
 ---
 
 ## Chapter Summary
 
-The runtime bridge enables compiled code to call Swift:
+The runtime bridge is the most mechanically complex part of ARO's native compilation story. Here is what it does:
 
-1. **@_cdecl** exports Swift functions with C calling conventions
-2. **Opaque pointers** wrap Swift objects for C code to hold
-3. **Manual offset calculations** convert C structs to Swift types
-4. **Semaphore blocking** makes async actions synchronous
+1. **`@_cdecl`** exports Swift functions with C calling conventions — one per action verb
+2. **Opaque pointer handles** wrap Swift objects so C code can hold and pass them
+3. **Manual offset calculations** convert C structs to Swift `ResultDescriptor`/`ObjectDescriptor` values
+4. **Semaphore blocking** makes async actions synchronous at the boundary
 5. **Function pointer casting** enables compiled handler callbacks
-6. **Value boxing** provides reference-counted return values
-7. **Platform-specific code** handles Darwin/Linux differences
+6. **Value boxing** provides reference-counted return values to the C side
+7. **Platform-specific code** handles Darwin/Linux boolean representation differences
+8. **Native socket HTTP** replaces SwiftNIO, which cannot initialize correctly in this context
 
-The bridge is the most fragile part of native compilation. Memory layout assumptions, pointer casting, and synchronization all create potential failure modes. The interpreter path avoids these issues entirely—use it when stability matters more than startup time.
+The bridge is the most fragile part of native compilation. Memory layout assumptions, pointer casting, and synchronization all create potential failure modes that the interpreter path avoids entirely. If stability matters more than startup time, use the interpreter. If you need a self-contained binary, the bridge is the price of admission.
 
 Implementation references:
 - `Sources/ARORuntime/Bridge/RuntimeBridge.swift` — Core lifecycle and context management
-- `Sources/ARORuntime/Bridge/ActionBridge.swift` — All 61 action @_cdecl exports
+- `Sources/ARORuntime/Bridge/ActionBridge.swift` — All 61 action `@_cdecl` exports
 - `Sources/ARORuntime/Bridge/ServiceBridge.swift` — HTTP/File/Socket service bridges
 
 ---

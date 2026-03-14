@@ -44,6 +44,9 @@ What works well. What doesn't work. Resolved issues (LLVM type checking now fixe
 ### [Chapter 11: Dual-Mode Execution Parity](Chapter11-DualModeExecutionParity.md)
 Sources of interpreter/binary divergence. VerbSets shared module. Integer division parity. DomainEvent co-publishing pattern. Handler registration template. Payload schema contracts. The `mode: both` test directive.
 
+### [Chapter 12: The Evolution of ARO](Chapter12-Evolution.md)
+The back-and-forth that shaped the specification. Statement count growth (5→8), the verb classification problem, dual-mode parity bugs, the Swifty-LLVM migration, plugin naming evolution, HTTP in binary mode, and what we'd design differently.
+
 ## Appendices
 
 ### [Appendix A: Source Map](Appendix-SourceMap.md)
@@ -54,6 +57,5 @@ Complete formal grammar specification for ARO in EBNF notation.
 
 ---
 
-**Total**: ~75 pages
+**Total**: ~90 pages
 **Figures**: 27 SVG diagrams
-**Code References**: Inline with line numbers

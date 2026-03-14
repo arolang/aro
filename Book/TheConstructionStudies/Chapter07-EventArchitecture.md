@@ -4,21 +4,7 @@
 
 ARO uses a centralized publish-subscribe pattern for inter-component communication. The EventBus decouples event producers from consumers, enabling reactive programming without tight coupling.
 
-```swift
-// EventBus.swift
-public final class EventBus: @unchecked Sendable {
-    public typealias EventHandler = @Sendable (any RuntimeEvent) async -> Void
-
-    private struct Subscription: Sendable {
-        let id: UUID
-        let eventType: String
-        let handler: EventHandler
-    }
-
-    private var subscriptions: [Subscription] = []
-    private var continuations: [UUID: AsyncStream<any RuntimeEvent>.Continuation] = [:]
-}
-```
+The bus holds a list of subscriptions (each with an event type string, a unique ID, and a handler closure), a set of AsyncStream continuations for stream-based subscribers, and a counter for in-flight handlers.
 
 <svg viewBox="0 0 700 350" xmlns="http://www.w3.org/2000/svg">
   <style>
@@ -93,16 +79,7 @@ public final class EventBus: @unchecked Sendable {
 
 ## RuntimeEvent Protocol
 
-All events conform to a simple protocol:
-
-```swift
-public protocol RuntimeEvent: Sendable {
-    static var eventType: String { get }
-    var timestamp: Date { get }
-}
-```
-
-The `eventType` is the routing key. Subscribers register for specific types or use `"*"` to receive all events.
+All events share two things: a static `eventType` string (the routing key) and a timestamp. Subscribers match on `eventType` — or use `"*"` to receive everything.
 
 ARO defines several event categories:
 
@@ -123,30 +100,14 @@ ARO defines several event categories:
 
 A critical design decision: **handlers are registered before the entry point executes**.
 
-```swift
-public func execute(_ program: AnalyzedProgram, entryPoint: String) async throws -> Response {
-    // 1. Find entry point feature set
-    guard let entryFeatureSet = program.featureSets.first(where: {
-        $0.featureSet.name == entryPoint
-    }) else {
-        throw ActionError.entryPointNotFound(entryPoint)
-    }
-
-    // 2. Register ALL handlers BEFORE execution
-    registerSocketEventHandlers(for: program, baseContext: context)
-    registerDomainEventHandlers(for: program, baseContext: context)
-    registerFileEventHandlers(for: program, baseContext: context)
-    registerRepositoryObservers(for: program, baseContext: context)
-    registerStateObservers(for: program, baseContext: context)
-
-    // 3. Now execute entry point
-    let response = try await executor.execute(entryFeatureSet, context: context)
-
-    return response
-}
+```text
+execute(program):
+  1. Register all event handlers (domain, repository, file, socket, state)
+  2. Execute Application-Start
+  3. Await pending handlers
 ```
 
-This ordering ensures that events emitted during `Application-Start` have handlers ready to receive them.
+Step 1 before Step 2 is critical. If Application-Start emits an event, the handler must already be subscribed. Get the order wrong and you have a race condition baked in from the start.
 
 <svg viewBox="0 0 600 280" xmlns="http://www.w3.org/2000/svg">
   <style>
@@ -206,7 +167,7 @@ This ordering ensures that events emitted during `Application-Start` have handle
 
 ## Five Handler Types
 
-ARO supports five categories of event handlers, distinguished by business activity patterns:
+ARO supports five categories of event handlers, distinguished by business activity patterns.
 
 ### 1. Domain Event Handlers
 
@@ -220,29 +181,7 @@ Pattern: `{EventName} Handler`
 }
 ```
 
-Registration logic:
-
-```swift
-private func registerDomainEventHandlers(for program: AnalyzedProgram, ...) {
-    let domainHandlers = program.featureSets.filter { analyzedFS in
-        let activity = analyzedFS.featureSet.businessActivity
-        let hasHandler = activity.contains(" Handler")
-        let isSpecialHandler = activity.contains("Socket Event Handler") ||
-                               activity.contains("File Event Handler")
-        return hasHandler && !isSpecialHandler
-    }
-
-    for analyzedFS in domainHandlers {
-        // Extract "UserCreated" from "UserCreated Handler"
-        let eventType = extractEventType(from: activity)
-
-        eventBus.subscribe(to: DomainEvent.self) { event in
-            guard event.domainEventType == eventType else { return }
-            await self.executeDomainEventHandler(analyzedFS, event: event)
-        }
-    }
-}
-```
+For each feature set whose business activity contains `Handler` (but not `Socket Event Handler` or `File Event Handler`), extract the event type name and subscribe. Simple string parsing — no special annotations needed.
 
 ### 2. Repository Observers
 
@@ -256,17 +195,7 @@ Pattern: `{repository-name} Observer`
 }
 ```
 
-Repository observers are triggered by Store, Update, and Delete actions:
-
-```swift
-// Inside StoreAction.execute()
-eventBus.publishAndTrack(RepositoryChangedEvent(
-    repositoryName: repositoryName,
-    changeType: .created,
-    entityId: entityId,
-    newValue: entity
-))
-```
+Repository observers fire on every Store, Update, or Delete. Inside the action, after the CRUD operation, the bus gets a `RepositoryChangedEvent` with the entity ID, change type, and before/after values.
 
 ### 3. File Event Handlers
 
@@ -343,27 +272,12 @@ Handlers can filter events based on entity field values using angle bracket synt
 
 The `StateGuard` and `StateGuardSet` types parse and evaluate these conditions:
 
-```swift
-public struct StateGuard: Sendable {
-    public let fieldPath: String      // e.g., "status" or "entity.status"
-    public let validValues: Set<String>  // OR logic within guard
+| Field | Meaning |
+|-------|---------|
+| `fieldPath` | Which payload field to check (e.g., `status`, `entity.tier`) |
+| `validValues` | Set of acceptable values (OR logic within one guard) |
 
-    public func matches(payload: [String: any Sendable]) -> Bool {
-        guard let fieldValue = resolveFieldPath(fieldPath, in: payload) else {
-            return false
-        }
-        return validValues.contains(fieldValue.lowercased())
-    }
-}
-
-public struct StateGuardSet: Sendable {
-    public let guards: [StateGuard]  // AND logic between guards
-
-    public func allMatch(payload: [String: any Sendable]) -> Bool {
-        guards.allSatisfy { $0.matches(payload: payload) }
-    }
-}
-```
+Multiple guards in a `StateGuardSet` use AND logic between them.
 
 <svg viewBox="0 0 600 250" xmlns="http://www.w3.org/2000/svg">
   <style>
@@ -423,201 +337,57 @@ public struct StateGuardSet: Sendable {
 
 ## In-Flight Tracking
 
-Events can trigger handlers that emit more events. The EventBus tracks in-flight handlers to ensure all cascaded processing completes:
+Events can trigger handlers that emit more events. The EventBus tracks in-flight handlers to ensure all cascaded processing completes before the application shuts down.
 
-```swift
-public func publishAndTrack(_ event: any RuntimeEvent) async {
-    let matchingSubscriptions = getMatchingSubscriptions(for: eventType)
-
-    await withTaskGroup(of: Void.self) { group in
-        for subscription in matchingSubscriptions {
-            // Increment before spawning
-            withLock { inFlightHandlers += 1 }
-
-            group.addTask {
-                await subscription.handler(event)
-
-                // Decrement after completion, notify waiters if zero
-                let continuationsToResume = self.withLock { () -> [...] in
-                    self.inFlightHandlers -= 1
-                    if self.inFlightHandlers == 0 {
-                        let continuations = self.flushContinuations
-                        self.flushContinuations.removeAll()
-                        return continuations
-                    }
-                    return []
-                }
-
-                for continuation in continuationsToResume {
-                    continuation.resume()
-                }
-            }
-        }
-    }
-}
+```text
+publishAndTrack(event):
+  find matching subscriptions
+  for each subscription:
+    increment inFlightHandlers
+    run handler in task group
+    on completion:
+      decrement inFlightHandlers
+      if 0: signal waiters
 ```
 
-After `Application-Start` completes, the engine waits for all handlers:
-
-```swift
-// After entry point execution
-let completed = await eventBus.awaitPendingEvents(timeout: 10.0)
-if !completed {
-    print("[WARNING] Event handlers did not complete within timeout")
-}
-```
-
----
-
-## Concurrency Design
-
-### Why EventBus Is Not an Actor
-
-Unlike `ExecutionEngine` and `ActionRegistry` (which are actors), EventBus is a `final class` with manual `NSLock`:
-
-```swift
-public final class EventBus: @unchecked Sendable {
-    private let lock = NSLock()
-    // ...
-}
-```
-
-Reasons for this design:
-
-1. **Fire-and-forget publishing**: Event publication should not block the caller. Actors require `await` for every method call, adding unwanted latency.
-
-2. **Lock overhead**: For high-frequency event dispatch, NSLock has lower overhead than actor hop overhead.
-
-3. **Callback compatibility**: The `@unchecked Sendable` conformance allows storing closures that capture external state.
-
-### Handler Threading
-
-Event handlers run on **GCD dispatch queues**, not Swift's cooperative executor:
-
-```swift
-DispatchQueue.global().async {
-    // Handler executes here, isolated from main thread
-    await subscription.handler(event)
-}
-```
-
-This design prevents a critical issue on Linux: if handlers ran on the Swift cooperative executor and blocked (e.g., waiting for I/O), the executor pool could be exhausted, causing deadlocks.
+After `Application-Start` completes, the engine waits for all handlers to finish before returning. If they don't finish within the timeout, a warning is logged.
 
 ---
 
 ## Race Condition Prevention
 
-The EventBus uses careful lock ordering to prevent race conditions:
+The check and the continuation append happen inside the same lock. This prevents the classic race where a handler finishes between the zero-check and the append, leaving the continuation waiting forever.
 
-```swift
-public func awaitPendingEvents(timeout: TimeInterval) async -> Bool {
-    return await withTaskGroup(of: Bool.self) { group in
-        // Task 1: Wait for handlers
-        group.addTask {
-            await withCheckedContinuation { continuation in
-                self.withLock {
-                    // CRITICAL: Both check AND append inside same lock
-                    if self.inFlightHandlers == 0 {
-                        continuation.resume()  // Already done
-                    } else {
-                        self.flushContinuations.append(continuation)  // Wait
-                    }
-                }
-            }
-            return true
-        }
+In plain terms: you can't safely check "are we done?" and then decide to wait separately. Both steps must be atomic. The lock makes that happen.
 
-        // Task 2: Timeout
-        group.addTask {
-            try? await Task.sleep(nanoseconds: UInt64(timeout * 1_000_000_000))
-            return false
-        }
+---
 
-        // First to complete wins
-        if let result = await group.next() {
-            group.cancelAll()
-            return result
-        }
-        return false
-    }
-}
-```
+## Concurrency Design
 
-The key insight: checking `inFlightHandlers == 0` and appending to `flushContinuations` must happen atomically. Otherwise, a handler could complete between the check and append, leaving the continuation waiting forever.
+EventBus uses NSLock, not an actor. Actor hops add latency; for high-frequency event publishing, a lock is faster and simpler.
+
+Handlers run on GCD queues, not Swift's cooperative executor. On Linux, a cooperative executor pool can deadlock if handlers block on I/O — GCD avoids this.
 
 ---
 
 ## AsyncStream Integration
 
-The EventBus supports both callback-based and stream-based subscriptions:
-
-```swift
-// Callback-based
-eventBus.subscribe(to: "http.request") { event in
-    await handleRequest(event)
-}
-
-// Stream-based
-let stream = eventBus.stream(for: HTTPRequestReceivedEvent.self)
-for await event in stream {
-    await handleRequest(event)
-}
-```
-
-Stream subscriptions use AsyncStream continuations:
-
-```swift
-public func stream<E: RuntimeEvent>(for type: E.Type) -> AsyncStream<E> {
-    AsyncStream { continuation in
-        let id = subscribe(to: type) { event in
-            continuation.yield(event)
-        }
-
-        continuation.onTermination = { [weak self] _ in
-            self?.unsubscribe(id)
-        }
-    }
-}
-```
+You can subscribe via callback (register a closure) or via AsyncStream (`for await event in bus.stream(for:)`). The stream version is cleaner for long-running handlers. Under the hood, both go through the same subscription mechanism — the stream just wraps the callback in a continuation.
 
 ---
 
 ## Handler Execution Pattern
 
-When an event matches a handler, a child context is created:
+Each handler gets its own fresh context inheriting services from the parent but isolated for variable bindings. The event payload is bound as `event`. If the handler throws, an error event is published — but the application keeps running. Handlers are fault-isolated.
 
-```swift
-private func executeDomainEventHandler(
-    _ analyzedFS: AnalyzedFeatureSet,
-    event: DomainEvent
-) async {
-    // Create isolated context for this handler
-    let handlerContext = RuntimeContext(
-        featureSetName: analyzedFS.featureSet.name,
-        businessActivity: analyzedFS.featureSet.businessActivity,
-        eventBus: eventBus,
-        parent: baseContext  // Inherit services
-    )
-
-    // Bind event payload for extraction
-    handlerContext.bind("event", value: event.payload)
-
-    // Execute the handler's statements
-    let executor = FeatureSetExecutor(...)
-    do {
-        _ = try await executor.execute(analyzedFS, context: handlerContext)
-    } catch {
-        // Publish error event (handlers are fault-isolated)
-        eventBus.publish(ErrorOccurredEvent(
-            error: String(describing: error),
-            context: analyzedFS.featureSet.name,
-            recoverable: true
-        ))
-    }
+```aro
+(Send Welcome Email: UserCreated Handler) {
+    Extract the <user> from the <event: user>.   (* event bound from payload *)
+    Send the <welcome-email> to the <user: email>.
+    Return an <OK: status> for the <notification>.
+    (* if this throws, an error event is emitted — app continues *)
 }
 ```
-
-Note: Handler errors are **isolated**. A failing handler doesn't crash the application; it publishes an error event and continues.
 
 ---
 
@@ -633,7 +403,7 @@ The event architecture enables loosely coupled, reactive programming:
 6. **Race Prevention** uses careful lock ordering for correctness
 7. **AsyncStream** integration supports modern Swift concurrency patterns
 
-The event system is the glue between services. When an HTTP request arrives, the server publishes an event. When a file changes, the monitor publishes an event. Feature sets subscribe to these events and react—without knowing or caring about the source.
+The event system is the glue between services. When an HTTP request arrives, the server publishes an event. When a file changes, the monitor publishes an event. Feature sets subscribe to these events and react — without knowing or caring about the source.
 
 Implementation references:
 - `Sources/ARORuntime/Events/EventBus.swift` (287 lines)

@@ -29,10 +29,11 @@ This is not marketing material. We do not argue that ARO is better than other la
 - LLVM IR generation using the Swifty-LLVM C API wrapper
 - Swift-C interoperability patterns for language runtimes
 - Honest assessment of design decisions that didn't work out
+- The evolution story: the back-and-forth that shaped the specification
 
 ### Reading Order
 
-Chapters are designed to be read sequentially, following the compilation pipeline from source text to executable binary. However, each chapter is self-contained enough for reference use.
+Chapters are designed to be read sequentially, following the compilation pipeline from source text to executable binary. However, each chapter is self-contained enough for reference use. Chapter 12 stands alone as a retrospective — read it last, or first if you want the story before the architecture.
 
 ---
 

@@ -105,14 +105,7 @@ Even non-programmers can follow the logic.
 
 **Problem**: Handler registration passes function pointers through integer casts.
 
-**Technical Cause**: Swift closures aren't Sendable when they capture pointers. We cast to `Int`, then back to pointer in the callback.
-
-```swift
-let handlerAddress = Int(bitPattern: handlerPtr)
-// ... later ...
-let funcPtr = UnsafeMutableRawPointer(bitPattern: handlerAddress)
-let handlerFunc = unsafeBitCast(funcPtr, to: HandlerFunc.self)
-```
+**Technical Cause**: Swift closures aren't Sendable when they capture pointers. The workaround casts function pointers to integers for storage, then reconstructs them at call time — technically undefined behavior if address space assumptions are violated.
 
 **Impact**: Works, but undefined behavior if address space assumptions are violated.
 

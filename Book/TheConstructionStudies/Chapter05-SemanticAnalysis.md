@@ -2,20 +2,11 @@
 
 ## Overview
 
-Semantic analysis (`SemanticAnalyzer.swift`) bridges parsing and execution. It builds symbol tables, tracks data flow, enforces immutability, and detects problems that parsing alone cannot catch.
+The parser gives you a tree of tokens. Semantic analysis gives that tree *meaning*.
 
-```swift
-public final class SemanticAnalyzer {
-    private let diagnostics: DiagnosticCollector
-    private let globalRegistry: GlobalSymbolRegistry
+The `SemanticAnalyzer` takes a parsed `Program` and produces an `AnalyzedProgram` — the same structure enriched with symbol tables, data flow info, and cross-feature-set dependency tracking. It runs four passes. Each pass builds on the last.
 
-    public func analyze(_ program: Program) -> AnalyzedProgram {
-        // Four-pass analysis
-    }
-}
-```
-
-The analyzer performs four passes:
+The four passes:
 1. Build symbol tables and detect duplicates
 2. Verify external dependencies
 3. Detect circular event chains
@@ -25,18 +16,15 @@ The analyzer performs four passes:
 
 ## Symbol Table Design
 
-Each feature set gets its own symbol table, built during the first pass.
+Each feature set gets its own symbol table, built during the first pass. Here's everything the analyzer produces per feature set:
 
-```swift
-// SemanticAnalyzer.swift:29-50
-public struct AnalyzedFeatureSet: Sendable {
-    public let featureSet: FeatureSet
-    public let symbolTable: SymbolTable
-    public let dataFlows: [DataFlowInfo]
-    public let dependencies: Set<String>  // External dependencies
-    public let exports: Set<String>       // Published symbols
-}
-```
+| Field | What it contains |
+|-------|-----------------|
+| `featureSet` | The original parsed feature set |
+| `symbolTable` | All variables defined, their visibility and source |
+| `dataFlows` | Per-statement inputs, outputs, and side effects |
+| `dependencies` | External symbols this feature set needs |
+| `exports` | Symbols published to the global registry |
 
 <svg viewBox="0 0 700 350" xmlns="http://www.w3.org/2000/svg">
   <style>
@@ -130,14 +118,6 @@ public struct AnalyzedFeatureSet: Sendable {
 
 Symbols have three visibility levels:
 
-```swift
-public enum SymbolVisibility: Sendable {
-    case `internal`   // Private to feature set
-    case published    // Exported via Publish
-    case external     // Provided by runtime
-}
-```
-
 | Visibility | Created By | Accessible From |
 |------------|------------|-----------------|
 | `internal` | AROStatement result | Same feature set only |
@@ -146,14 +126,7 @@ public enum SymbolVisibility: Sendable {
 
 ### Business Activity Isolation
 
-Published symbols are scoped by business activity—not globally visible:
-
-```swift
-// SemanticAnalyzer.swift:104-106
-for symbol in analyzed.symbolTable.publishedSymbols.values {
-    globalRegistry.register(symbol: symbol, fromFeatureSet: featureSet.name)
-}
-```
+After analyzing each feature set, published symbols are registered in a global registry keyed by business activity. Same activity = can see each other. Different activity = invisible. The SVG diagram says it better than code does.
 
 <svg viewBox="0 0 600 250" xmlns="http://www.w3.org/2000/svg">
   <style>
@@ -213,16 +186,13 @@ for symbol in analyzed.symbolTable.publishedSymbols.values {
 
 ## Data Flow Classification
 
-The analyzer tracks what each statement consumes and produces:
+The analyzer tracks what each statement consumes and produces. Every statement gets a `DataFlowInfo`:
 
-```swift
-// SemanticAnalyzer.swift:11-25
-public struct DataFlowInfo: Sendable, Equatable {
-    public let inputs: Set<String>      // Variables consumed
-    public let outputs: Set<String>     // Variables produced
-    public let sideEffects: [String]    // External effects
-}
-```
+| Field | Meaning |
+|-------|---------|
+| `inputs` | Variables this statement reads (must already exist) |
+| `outputs` | Variables this statement produces (must not already exist) |
+| `sideEffects` | External effects: HTTP responses, repository writes, event emissions |
 
 <svg viewBox="0 0 650 280" xmlns="http://www.w3.org/2000/svg">
   <style>
@@ -277,63 +247,20 @@ public struct DataFlowInfo: Sendable, Equatable {
 
 ### Action Role Determines Flow
 
-```swift
-// SemanticAnalyzer.swift:292-330
-switch statement.action.semanticRole {
-case .request:
-    // REQUEST: external -> internal
-    inputs.insert(objectName)
-    outputs.insert(resultName)
+The action's semantic role tells the analyzer which direction data moves. This maps cleanly to what goes in `inputs`, `outputs`, and `sideEffects`:
 
-case .own:
-    // OWN: internal -> internal
-    inputs.insert(objectName)
-    outputs.insert(resultName)
-
-case .response:
-    // RESPONSE: internal -> external
-    inputs.insert(resultName)
-    inputs.insert(objectName)
-    sideEffects.append("response")
-
-case .export:
-    // EXPORT: internal -> persistent
-    inputs.insert(resultName)
-    sideEffects.append("export-\(objectName)")
-}
-```
+| Role | Inputs | Outputs | Side Effects |
+|------|--------|---------|--------------|
+| REQUEST | object (external source) | result variable | — |
+| OWN | object (internal) | result variable | — |
+| RESPONSE | result + object | — | `"response"` |
+| EXPORT | result | — | `"export-{objectName}"` |
 
 ---
 
 ## Immutability Enforcement
 
-ARO enforces that variables cannot be rebound. This is checked during analysis:
-
-```swift
-// SemanticAnalyzer.swift:194-204
-private func isInternalVariable(_ name: String) -> Bool {
-    return name.hasPrefix("_")
-}
-
-private func isRebindingAllowed(_ verb: String) -> Bool {
-    let rebindingVerbs: Set<String> = ["accept", "update", "modify", "change", "set"]
-    return rebindingVerbs.contains(verb.lowercased())
-}
-```
-
-When a statement would create a variable that already exists:
-
-```swift
-// Check for immutability violation
-if definedSymbols.contains(resultName) &&
-   !isInternalVariable(resultName) &&
-   !isRebindingAllowed(statement.action.verb) {
-    diagnostics.error(
-        "Cannot rebind variable '\(resultName)' - variables are immutable",
-        at: statement.span.start
-    )
-}
-```
+ARO variables cannot be rebound. When a statement would bind a variable that already exists in the symbol table, the analyzer flags an error — unless the verb is a mutation verb (`Update`, `Accept`, `Modify`) or the variable name starts with `_` (framework-internal).
 
 ### Special Cases
 
@@ -348,36 +275,13 @@ if definedSymbols.contains(resultName) &&
 
 ## Unused Variable Detection
 
-After building the symbol table, the analyzer checks for variables that are defined but never used:
-
-```swift
-// SemanticAnalyzer.swift:157-181
-var usedVariables: Set<String> = []
-for flow in dataFlows {
-    usedVariables.formUnion(flow.inputs)
-}
-
-for (name, symbol) in symbolTable.symbols {
-    if symbol.visibility == .published { continue }  // Used externally
-    if case .alias = symbol.source { continue }       // Original tracked
-    if symbol.visibility == .external { continue }    // Runtime-provided
-
-    if !usedVariables.contains(name) {
-        diagnostics.warning(
-            "Variable '\(name)' is defined but never used",
-            at: symbol.definedAt.start
-        )
-    }
-}
-```
-
-This is a warning, not an error—unused variables don't break execution.
+After building all data flows, the analyzer computes the union of all input sets. Any symbol in the table that never appears as an input (and isn't published or external) gets a warning. This is a warning, not an error — unused variables don't break execution.
 
 ---
 
 ## Circular Event Chain Detection
 
-ARO's event system allows feature sets to emit events that trigger other feature sets. The analyzer detects circular chains:
+ARO's event system lets feature sets emit events that trigger other feature sets. That's great — until a chain loops back to itself:
 
 ```
 FeatureSet A emits EventX
@@ -387,63 +291,19 @@ FeatureSet A emits EventX
         → which emits EventX  // CYCLE!
 ```
 
-```swift
-// SemanticAnalyzer.swift - detectCircularEventChains
-private func detectCircularEventChains(_ analyzedSets: [AnalyzedFeatureSet]) {
-    // Build event emission graph
-    var emissionGraph: [String: Set<String>] = [:]
+The detection algorithm:
 
-    for analyzed in analyzedSets {
-        let emittedEvents = findEmittedEvents(in: analyzed.featureSet)
-        // Map: event -> events it can transitively emit
-    }
-
-    // DFS to detect cycles
-    for eventName in emissionGraph.keys {
-        var visited: Set<String> = []
-        var path: [String] = []
-        if hasCycle(from: eventName, graph: emissionGraph, visited: &visited, path: &path) {
-            diagnostics.error(
-                "Circular event chain detected: \(path.joined(separator: " → "))",
-                at: ...
-            )
-        }
-    }
-}
+```text
+Build graph: event name → set of events it can transitively emit
+DFS each node, tracking the current path
+If we revisit a node already in the path → cycle detected → error
 ```
 
 ---
 
 ## Orphaned Event Detection
 
-Events that are emitted but never handled are flagged as warnings:
-
-```swift
-// SemanticAnalyzer.swift - detectOrphanedEventEmissions
-private func detectOrphanedEventEmissions(_ analyzedSets: [AnalyzedFeatureSet]) {
-    var emittedEvents: Set<String> = []
-    var handledEvents: Set<String> = []
-
-    for analyzed in analyzedSets {
-        emittedEvents.formUnion(findEmittedEvents(in: analyzed.featureSet))
-
-        // Check if this feature set handles events
-        if analyzed.featureSet.businessActivity.contains("Handler") {
-            let eventName = extractEventName(from: analyzed.featureSet.businessActivity)
-            handledEvents.insert(eventName)
-        }
-    }
-
-    for event in emittedEvents {
-        if !handledEvents.contains(event) {
-            diagnostics.warning(
-                "Event '\(event)' is emitted but no handler is registered",
-                at: ...
-            )
-        }
-    }
-}
-```
+Collect all emitted event names. Collect all handled event names (from feature sets with `Handler` in their business activity). Anything emitted but never handled gets a warning. You probably forgot to write the handler.
 
 ---
 
@@ -474,33 +334,15 @@ Pass 4: Detect Orphans
   - Warn about orphans
 ```
 
-Why multiple passes? Some checks require information from all feature sets (circular events, orphan events). Single-pass analysis would miss these.
+Why multiple passes? Some checks require information from all feature sets — circular events and orphan detection can only work once every feature set has been analyzed. A single-pass approach would miss them.
 
 ---
 
 ## Diagnostic Collection
 
-Rather than failing on the first error, the analyzer collects all diagnostics:
+The analyzer never aborts on first error. Errors and warnings accumulate in a `DiagnosticCollector`, and a single compilation run can surface all problems at once. You fix everything, not just the first thing.
 
-```swift
-public final class DiagnosticCollector: @unchecked Sendable {
-    private var diagnostics: [Diagnostic] = []
-
-    public func error(_ message: String, at location: SourceLocation) {
-        diagnostics.append(Diagnostic(severity: .error, message: message, location: location))
-    }
-
-    public func warning(_ message: String, at location: SourceLocation) {
-        diagnostics.append(Diagnostic(severity: .warning, message: message, location: location))
-    }
-
-    public var hasErrors: Bool {
-        diagnostics.contains { $0.severity == .error }
-    }
-}
-```
-
-This enables reporting all problems in a single compilation:
+Sample output from a bad program:
 
 ```
 Warning: Variable 'temp' is defined but never used
@@ -517,25 +359,26 @@ Error: Circular event chain detected: UserCreated → NotificationSent → UserC
 
 ## Verb Classification: VerbSets
 
-A subtle but important semantic analysis concern is verb classification. The analyzer must determine whether a statement's verb is a mutation (allow rebinding), a response (short-circuit), or a server operation (force execution even with literal values).
+The analyzer needs to know what a verb *does* — is it a mutation? A response? A server operation that must run even when its argument is a literal? These classifications live in a shared module: `Sources/ARORuntime/Core/VerbSets.swift`.
 
-In ARO 0.7, these classifications were extracted from `FeatureSetExecutor` into `Sources/ARORuntime/Core/VerbSets.swift`—a single shared module referenced by both the interpreter and the compiler:
+| Category | Representative Verbs | Used For |
+|----------|---------------------|----------|
+| update | update, modify, change, set | Allow rebinding an existing variable |
+| create | create, make, build, construct | New entity creation |
+| response | log, print, send, emit, notify | Skip expression shortcut |
+| server | start, stop, keepalive, schedule | Force execution even with literal arguments |
+| request | extract, retrieve, fetch, parse | Mark as REQUEST role |
+| own | compute, validate, compare, transform | Mark as OWN role |
+| export | publish, store | Mark as EXPORT role |
+| query | filter, sort, group | Collection processing |
+| io | read, write, copy, move | File operations |
+| state | accept | State transition (allow rebind) |
 
-```swift
-public enum VerbSets {
-    public static let updateVerbs:   Set<String> = ["update", "modify", "change", "set"]
-    public static let createVerbs:   Set<String> = ["create", "make", "build", "construct"]
-    public static let responseVerbs: Set<String> = ["log", "print", "send", "emit", "notify", ...]
-    public static let serverVerbs:   Set<String> = ["start", "stop", "keepalive", "schedule", ...]
-    // ... 10 sets total
-}
-```
-
-**Why a shared module matters**: Before extraction, verb classification was duplicated between the interpreter (`FeatureSetExecutor`) and binary mode (`LLVMCodeGenerator`). When a new verb was added to one, the other diverged silently. `VerbSets.swift` is the canonical vocabulary reference for both modes.
+**Why a shared module matters.** Before `VerbSets.swift` existed, verb classification was duplicated between the interpreter (`FeatureSetExecutor`) and the compiler (`LLVMCodeGenerator`). When someone added a new verb to one, the other diverged silently. Now there's one canonical list and both modes reference it.
 
 ### Plugin Compatibility Checking
 
-The `aro check plugins` subcommand (added in ARO 0.7) validates that installed plugins are compatible with the current ARO version:
+The `aro check plugins` subcommand validates that installed plugins are compatible with the current ARO version:
 
 ```
 aro check plugins

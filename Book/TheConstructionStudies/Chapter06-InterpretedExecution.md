@@ -2,16 +2,7 @@
 
 ## Execution Engine Architecture
 
-The runtime engine orchestrates program execution. It manages the event bus, registers feature sets, and dispatches events to handlers.
-
-```swift
-// ExecutionEngine.swift
-public actor ExecutionEngine {
-    private let eventBus: EventBus
-    private let actionRegistry: ActionRegistry
-    private var featureSetExecutors: [String: FeatureSetExecutor]
-}
-```
+The engine is a Swift actor — which means the compiler ensures no two tasks touch its state simultaneously. It holds the event bus, the action registry, and one executor per feature set.
 
 <svg viewBox="0 0 700 400" xmlns="http://www.w3.org/2000/svg">
   <style>
@@ -78,144 +69,50 @@ public actor ExecutionEngine {
 
 ## Actor-Based Concurrency
 
-ARO's runtime uses Swift actors for thread-safe shared state. The core components—`ExecutionEngine` and `ActionRegistry`—are actors, not classes.
+ARO's runtime uses Swift actors for thread-safe shared state. `ExecutionEngine` and `ActionRegistry` are actors, not classes.
 
 ### Why Actors?
 
-Swift 6.2 requires explicit concurrency safety. All code must either be isolated to a single concurrency domain or be marked `Sendable`. ARO chose actors for shared registries because they provide:
-
-- **Automatic isolation**: The Swift compiler ensures no concurrent access to mutable state
-- **No manual locking**: Unlike `NSLock` or `DispatchQueue`, actors handle synchronization implicitly
-- **Data race prevention**: Compile-time errors if unsafe access is attempted
+Swift 6.2 made data races compile errors. Actors are the answer: the compiler enforces that mutable state is only touched by one task at a time. No manual locking, no `DispatchQueue` gymnastics — the type system does it.
 
 ### Actor Isolation in Practice
 
-```swift
-// ExecutionEngine is an actor - all method calls are implicitly async
-public actor ExecutionEngine {
-    private var featureSetExecutors: [String: FeatureSetExecutor]
-
-    // Async method - caller must await
-    public func execute(_ program: AnalyzedProgram) async throws {
-        // Safe to mutate featureSetExecutors - actor isolation guarantees exclusivity
-        for featureSet in program.featureSets {
-            featureSetExecutors[featureSet.name] = FeatureSetExecutor(featureSet)
-        }
-    }
-}
-
-// ActionRegistry is also an actor
-public actor ActionRegistry {
-    private var actions: [String: any ActionImplementation.Type]
-
-    // Registration happens at startup - no contention
-    public func register<A: ActionImplementation>(_ action: A.Type) {
-        for verb in A.verbs {
-            actions[verb.lowercased()] = action
-        }
-    }
-}
-```
-
-### Async Execution Model
-
-Because `ExecutionEngine` and `ActionRegistry` are actors, all calls to their methods must be awaited:
-
-```swift
-// Calling an actor method
-let engine = ExecutionEngine()
-try await engine.execute(program)  // Must use 'await'
-
-// Looking up an action
-let action = await ActionRegistry.shared.action(for: "extract")
-```
-
-This async requirement propagates through the call stack, making the entire execution path asynchronous. Actions are defined with async signatures for this reason:
-
-```swift
-public protocol ActionImplementation {
-    func execute(
-        result: ResultDescriptor,
-        object: ObjectDescriptor,
-        context: ExecutionContext
-    ) async throws -> any Sendable
-}
-```
+All actor method calls must be `await`-ed. This propagates up the call stack, making the entire execution path asynchronous — which is exactly what we want for I/O-heavy work.
 
 ### EventBus Exception
 
-Not all components are actors. `EventBus` uses `NSLock` instead:
-
-```swift
-public final class EventBus: @unchecked Sendable {
-    private let handlersLock = NSLock()
-    private var handlers: [ObjectIdentifier: [AnyHandler]] = [:]
-}
-```
-
-This is intentional: event publication is fire-and-forget, and the lock overhead is lower than actor hop overhead for high-frequency operations.
+EventBus uses a plain lock instead of an actor. The reason: event publishing is fire-and-forget, and actor hops add latency. For high-frequency event dispatch, the lock wins.
 
 ---
 
 ## ExecutionContext Protocol
 
-Actions access runtime services through the context:
+Actions access runtime services through the context. Think of it as the action's window into the world — variables, services, events, metadata.
 
-```swift
-public protocol ExecutionContext: AnyObject, Sendable {
-    // Variable management
-    func resolve<T: Sendable>(_ name: String) -> T?
-    func require<T: Sendable>(_ name: String) throws -> T
-    func bind(_ name: String, value: any Sendable)
-    func exists(_ name: String) -> Bool
-
-    // Service access
-    func service<S>(_ type: S.Type) -> S?
-    func register<S: Sendable>(_ service: S)
-
-    // Repository access
-    func repository<T: Sendable>(named: String) -> (any Repository<T>)?
-
-    // Response management
-    func setResponse(_ response: Response)
-    func getResponse() -> Response?
-
-    // Event emission
-    func emit(_ event: any RuntimeEvent)
-
-    // Metadata
-    var featureSetName: String { get }
-    var businessActivity: String { get }
-    var executionId: String { get }
-}
-```
-
-The context is the action's view of the world—it can read variables, bind new ones, access services, and emit events.
+| Method Group | Methods | Purpose |
+|-------------|---------|---------|
+| Variables | `resolve`, `require`, `bind`, `exists` | Read/write the variable space |
+| Services | `service`, `register` | Access HTTP, file, socket services |
+| Repositories | `repository` | CRUD storage access |
+| Response | `setResponse`, `getResponse` | Track the response for short-circuit |
+| Events | `emit` | Fire events into the bus |
+| Metadata | `featureSetName`, `businessActivity`, `executionId` | Who am I? |
 
 ---
 
 ## FeatureSetExecutor
 
-Each feature set gets an executor that processes statements sequentially:
+Each feature set gets an executor that processes statements sequentially. The loop is simple on purpose:
 
-```swift
-public final class FeatureSetExecutor {
-    private let featureSet: FeatureSet
-    private let actionRegistry: ActionRegistry
-    private var context: RuntimeContext
-
-    public func execute() async throws {
-        for statement in featureSet.statements {
-            try await executeStatement(statement)
-
-            // Check for response short-circuit
-            if context.getResponse() != nil {
-                break
-            }
-        }
-    }
-}
+```text
+execute:
+  for each statement in featureSet:
+    executeStatement(statement)
+    if response has been set:
+      break  ← short-circuit on Return/Throw
 ```
+
+Once a `Return` or `Throw` runs, the response is set and the loop stops. Remaining statements are skipped.
 
 <svg viewBox="0 0 600 300" xmlns="http://www.w3.org/2000/svg">
   <style>
@@ -264,35 +161,11 @@ public final class FeatureSetExecutor {
 
 ## ActionRegistry Design
 
-Actions are registered by their verbs and looked up at execution time:
+The registry maps lowercase verb strings to action types. Registration happens at startup; lookup happens for every statement execution. Both operations are actor-protected.
 
-```swift
-public actor ActionRegistry {
-    private var actions: [String: any ActionImplementation.Type] = [:]
+61 built-in actions are registered at startup. Each registers one or more verbs. Lookup is a dictionary hit on the lowercase verb string. A fresh action instance is created per invocation — actions are stateless.
 
-    public func register<A: ActionImplementation>(_ action: A.Type) {
-        for verb in A.verbs {
-            actions[verb.lowercased()] = action
-        }
-    }
-
-    public func action(for verb: String) -> (any ActionImplementation)? {
-        guard let actionType = actions[verb.lowercased()] else { return nil }
-        return actionType.init()  // Stateless instantiation
-    }
-}
-```
-
-ARO has 61 built-in actions. Each is registered at startup:
-
-```swift
-// ActionRegistry initialization
-ActionRegistry.shared.register(ExtractAction.self)
-ActionRegistry.shared.register(RetrieveAction.self)
-ActionRegistry.shared.register(ComputeAction.self)
-ActionRegistry.shared.register(ReturnAction.self)
-// ... 44 more
-```
+Because the registry and engine are actors, action protocols are defined as `async throws`. Every action can do async I/O — network calls, file reads, database queries — without blocking.
 
 <svg viewBox="0 0 600 250" xmlns="http://www.w3.org/2000/svg">
   <style>
@@ -343,50 +216,24 @@ ActionRegistry.shared.register(ReturnAction.self)
 
 ## Descriptor-Based Invocation
 
-Actions receive structured information via descriptors:
+Actions receive structured information via descriptors. The executor builds these from the AST node and hands them to the action.
 
-```swift
-public struct ResultDescriptor: Sendable {
-    public let base: String         // Variable to bind
-    public let specifiers: [String] // Qualifiers
-    public let span: SourceSpan
-}
-
-public struct ObjectDescriptor: Sendable {
-    public let preposition: Preposition
-    public let base: String
-    public let specifiers: [String]
-    public let keyPath: String      // "request.parameters.userId"
-}
-```
-
-The executor builds these from the AST:
-
-```swift
-let resultDesc = ResultDescriptor(
-    base: statement.result.base,
-    specifiers: statement.result.specifiers,
-    span: statement.result.span
-)
-
-let objectDesc = ObjectDescriptor(
-    preposition: statement.object.preposition,
-    base: statement.object.noun.base,
-    specifiers: statement.object.noun.specifiers,
-    ...
-)
-```
+| Descriptor | Fields |
+|-----------|--------|
+| `ResultDescriptor` | `base` (variable to bind), `specifiers` (qualifiers), `span` |
+| `ObjectDescriptor` | `preposition`, `base`, `specifiers`, `keyPath` |
 
 ---
 
 ## Context Hierarchy
 
-For loops, child contexts are created:
+For loops, child contexts are created per iteration. The loop variable is bound fresh each time. Parent variables are still visible — child contexts inherit from parent but have their own bindings.
 
-```swift
-for each <item> in <items> {
-    // child context created per iteration
-    // item is bound fresh each time
+```aro
+For each <item> in <items> {
+    (* each iteration gets its own child context *)
+    (* <item> is bound fresh *)
+    (* <items> from parent is still visible *)
 }
 ```
 
@@ -439,19 +286,7 @@ for each <item> in <items> {
 
 ARO supports streaming execution for processing large datasets with constant memory (ARO-0051). The key architectural decision is **lazy vs eager evaluation**.
 
-### Lazy Value Detection
-
-The runtime distinguishes between lazy streams and regular arrays using the `isLazy()` check:
-
-```swift
-// RuntimeContext.swift
-public func isLazy(_ name: String) -> Bool {
-    guard let value = resolve(name) else { return false }
-    return value is AnyStreamingValue
-}
-```
-
-This check is critical for actions like Filter, Reduce, and Log. Without it, regular arrays would be incorrectly routed through the streaming pipeline.
+Lazy evaluation kicks in when the object being processed is an `AnyStreamingValue` (detected via `isLazy()`). Filter, Map, and Reduce recognize this and chain lazily. Drain operations like `Log` or `Return` trigger actual computation. Regular arrays always go through the eager path.
 
 ### Streaming Pipeline Architecture
 
@@ -466,29 +301,11 @@ This check is critical for actions like Filter, Reduce, and Log. Without it, reg
   stream              stream              stream
 ```
 
-### Key Implementation Points
-
-1. **File-based sources** (`Read` action with large files) produce lazy streams
-2. **Transformations** (`Filter`, `Map`) are applied lazily, element by element
-3. **Drains** (`Reduce`, `Log`, `Return`) trigger actual execution
-4. **The `isLazy()` check** prevents regular arrays from entering the streaming path
-
-```swift
-// QueryActions.swift - Filter action
-// ARO-0051: Streaming support - only use streaming for lazy values
-if let runtimeContext = context as? RuntimeContext,
-   runtimeContext.isLazy(object.base),
-   let stream = runtimeContext.resolveAsRowStream(object.base) {
-    // Use streaming path
-    let filtered = stream.filter { /* predicate */ }
-    context.bind(result.identifier, value: filtered)
-} else {
-    // Use eager path for regular arrays
-    let array: [Any] = try context.require(object.base)
-    let filtered = array.filter { /* predicate */ }
-    context.bind(result.identifier, value: filtered)
-}
-```
+Key points:
+1. File-based sources (`Read` action with large files) produce lazy streams
+2. Transformations (`Filter`, `Map`) are applied lazily, element by element
+3. Drains (`Reduce`, `Log`, `Return`) trigger actual execution
+4. The `isLazy()` check prevents regular arrays from entering the streaming path
 
 Implementation references:
 - `Sources/ARORuntime/Core/RuntimeContext.swift` (isLazy check)

@@ -24,42 +24,23 @@ This separation is necessary — the compiled binary cannot execute arbitrary Sw
 
 ### The Problem
 
-`FeatureSetExecutor.executeAROStatement()` classifies verbs into sets to decide whether a statement needs execution or can be skipped. These sets were defined inline as local `let` declarations:
-
-```swift
-// Before — local to FeatureSetExecutor (lines 304–317)
-let testVerbs: Set<String> = ["then", "assert"]
-let requestVerbs: Set<String> = ["call", "invoke"]
-let updateVerbs: Set<String> = ["update", "modify", "change", "set"]
-// ... 7 more sets
-```
-
-Because these were local, any code that needed to classify verbs elsewhere had to duplicate the sets or remain inconsistent.
+`FeatureSetExecutor.executeAROStatement()` classifies verbs into named sets to decide whether a statement needs execution or can be skipped. These sets were defined locally inside the executor function. Any other code needing the same classification had to duplicate them or stay inconsistent.
 
 ### The Fix
 
-`Sources/ARORuntime/Core/VerbSets.swift` extracts the sets into a shared public enum:
+`Sources/ARORuntime/Core/VerbSets.swift` extracts the ten sets into a single shared module. Both interpreter and compiler reference them by name:
 
-```swift
-public enum VerbSets {
-    public static let testVerbs:     Set<String> = ["then", "assert"]
-    public static let requestVerbs:  Set<String> = ["call", "invoke"]
-    public static let updateVerbs:   Set<String> = ["update", "modify", "change", "set"]
-    public static let createVerbs:   Set<String> = ["create", "make", "build", "construct"]
-    public static let mergeVerbs:    Set<String> = ["merge", "combine", "join", "concat"]
-    public static let computeVerbs:  Set<String> = ["compute", "calculate", "derive"]
-    public static let extractVerbs:  Set<String> = ["extract", "parse", "get"]
-    public static let queryVerbs:    Set<String> = ["filter", "map", "reduce", "aggregate", "split"]
-    public static let responseVerbs: Set<String> = ["write", "read", "store", "save", "persist",
-                                                     "log", "print", "send", "emit", "notify",
-                                                     "alert", "signal", "broadcast"]
-    public static let serverVerbs:   Set<String> = ["start", "stop", "restart", "keepalive",
-                                                     "schedule", "stream", "subscribe",
-                                                     "sleep", "delay", "pause"]
-}
-```
+| Set | Sample Verbs | Controls |
+|-----|-------------|---------|
+| `testVerbs` | then, assert | Test-mode execution |
+| `updateVerbs` | update, modify, change, set | Allow rebinding |
+| `createVerbs` | create, make, build, construct | Entity creation |
+| `responseVerbs` | log, print, send, emit, notify | Skip expression shortcut |
+| `serverVerbs` | start, stop, keepalive, schedule | Force execution with literals |
+| `storeVerbs` | store, save, persist | Trigger repository observers |
+| … | | |
 
-`FeatureSetExecutor` now references these via `VerbSets.testVerbs` etc. Any future code that classifies verbs has a single authoritative source.
+Any future code that classifies verbs has one authoritative source — no more duplication.
 
 ---
 
@@ -69,42 +50,17 @@ public enum VerbSets {
 
 Integer division produced different results in the two modes.
 
-**Interpreter** (`ExpressionEvaluator.swift`, `.divide` case):
+**Before the fix**: The interpreter's expression evaluator always passed division through a `numericOperation` helper that promoted to `Double`. So `7 / 2 = 3.5`. The binary's evaluator checked for Int/Int first and returned integer floor division. So `7 / 2 = 3`.
 
-```swift
-// Before fix — always returned Double via numericOperation
-case .divide:
-    return try numericOperation(left, right) { $0 / $1 }
-```
+**The fix**: The interpreter now matches binary behavior — when both operands are integers, division returns an integer (truncated toward zero). This is a visible behavioral change: ARO integer division now truncates, consistent with most languages.
 
-This meant `7 / 2` evaluated to `3.5` in interpreter mode.
+Result:
 
-**Binary** (`RuntimeBridge.swift`, `evaluateBinaryOp()`):
-
-```swift
-case "/":
-    if let li = left as? Int, let ri = right as? Int {
-        guard ri != 0 else { return 0 }
-        return li / ri  // Integer floor division → 3
-    }
-    // ... fallback to double
-```
-
-### The Fix
-
-The interpreter now matches the binary behavior: Int/Int returns Int.
-
-```swift
-case .divide:
-    // Int/Int → integer floor division (matches binary mode evaluateBinaryOp behavior)
-    if let li = left as? Int, let ri = right as? Int {
-        guard ri != 0 else { return 0 }
-        return li / ri
-    }
-    return try numericOperation(left, right) { $0 / $1 }
-```
-
-This is a behavioral change: ARO integer division now truncates toward zero, consistent with most languages.
+| Expression | Before | After |
+|-----------|--------|-------|
+| `7 / 2` | `3.5` (interp), `3` (binary) | `3` (both) |
+| `80 / 3` | `26.666…` (interp), `26` (binary) | `26` (both) |
+| `7.0 / 2` | `3.5` (both) | `3.5` (both) |
 
 ---
 
@@ -112,14 +68,7 @@ This is a behavioral change: ARO integer division now truncates toward zero, con
 
 ### The Architecture
 
-The interpreter registers event handlers during program startup by subscribing Swift closures to typed events:
-
-```swift
-// Interpreter — ExecutionEngine.registerNotificationEventHandlers
-eventBus.subscribe(to: NotificationSentEvent.self) { event in
-    // evaluate when condition, then execute feature set
-}
-```
+The interpreter registers event handlers during program startup by subscribing Swift closures to typed events — each handler is a block of code that captures the feature set and runs it when the event fires.
 
 The compiled binary cannot use Swift closures at the C ABI boundary. Instead, `LLVMCodeGenerator` emits calls to C-callable registration functions at program startup, passing a function pointer to the compiled feature set:
 
@@ -138,21 +87,15 @@ For the binary path to receive events, every action that fires a typed event mus
 
 **Pattern** (applies to all event-generating actions):
 
-```swift
-// 1. Publish typed event for interpreter handlers
-if let eventBus = context.eventBus {
-    await eventBus.publishAndTrack(MyTypedEvent(/* ... */))
-} else {
-    context.emit(MyTypedEvent(/* ... */))
-}
+```text
+1. Publish typed Swift event (for interpreter handlers)
+   → eventBus.publishAndTrack(MyTypedEvent(...))
 
-// 2. Co-publish DomainEvent for binary mode handlers
-// DomainEvent eventType: "MyEventType"
-// DomainEvent payload:   { "key1": Value, "key2": Value, ... }
-EventBus.shared.publish(DomainEvent(eventType: "MyEventType", payload: [
-    "key1": value1,
-    "key2": value2
-]))
+2. Co-publish DomainEvent (for binary mode handlers)
+   → EventBus.shared.publish(DomainEvent(
+         eventType: "MyEventType",
+         payload: { "key1": value1, "key2": value2, ... }
+     ))
 ```
 
 ### Payload Schemas
@@ -176,44 +119,20 @@ Each event type has a defined payload schema. These are documented in comments a
 
 ## The Handler Registration Pattern
 
-Every new event type requires a corresponding `aro_runtime_register_*` function. All follow this template in `RuntimeBridge.swift`:
+Every new event type requires a corresponding `aro_runtime_register_*` C-callable function. All follow the same template:
 
-```swift
+```text
 @_cdecl("aro_runtime_register_my_event_handler")
-public func aro_runtime_register_my_event_handler(
-    _ runtimePtr: UnsafeMutableRawPointer?,   // runtime handle
-    _ guardParamPtr: UnsafePointer<CChar>?,   // optional guard (nullable)
-    _ handlerFuncPtr: UnsafeMutableRawPointer? // compiled function pointer
-) {
-    guard let runtimePtr, let handlerFuncPtr else { return }
-    let runtimeHandle = Unmanaged<AROCRuntimeHandle>.fromOpaque(runtimePtr).takeUnretainedValue()
-    let handlerAddress = Int(bitPattern: handlerFuncPtr)
+  params: runtime handle, optional guard JSON, compiled handler function pointer
 
-    runtimeHandle.runtime.registerCompiledHandler(
-        eventType: "MyEventType",
-        handlerName: "My Handler"
-    ) { @Sendable event in
-        // 1. Evaluate guard condition (if any)
-        // 2. Run handler on pthread (NOT GCD — avoids 64-thread limit)
-        await withCheckedContinuation { continuation in
-            Thread {
-                let contextHandle = AROCContextHandle(runtime: runtimeHandle,
-                                                       featureSetName: "My Handler")
-                // Bind event payload to context
-                contextHandle.context.bind("event", value: event.payload)
-                for (k, v) in event.payload {
-                    contextHandle.context.bind("event:\(k)", value: v)
-                }
-                // Execute compiled handler
-                let handlerFunc = unsafeBitCast(/* reconstructed ptr */,
-                                                to: HandlerFunc.self)
-                let result = handlerFunc(contextPtr)
-                // Cleanup
-                continuation.resume()
-            }.start()
-        }
-    }
-}
+Steps inside:
+  1. Unwrap handles
+  2. Subscribe to DomainEvent("MyEventType") on EventBus.shared
+  3. On event received:
+     a. Evaluate guard condition JSON (if present)
+     b. Create a fresh context, bind event payload
+     c. Run compiled handler on a new pthread (not GCD — avoids 64-thread limit)
+     d. Signal completion via continuation
 ```
 
 **Why pthreads, not GCD?** GCD's cooperative thread pool has a 64-thread limit. During intensive event processing (many events firing handlers concurrently), GCD deadlocks when all 64 threads are blocked waiting for continuation resumes. Foundation `Thread` bypasses this limit. The `CompiledExecutionPool.shared` semaphore prevents unbounded thread creation.
@@ -294,3 +213,7 @@ When adding a new action that fires events:
 **Co-publishing is cheaper than unification.** A clean architectural solution would use a single event system for both modes. In practice, the typed event system is deeply integrated with the interpreter (closures, `async/await`, `publishAndTrack`), while the binary needs C-callable, pthread-compatible registration. DomainEvent co-publishing bridges the two worlds with minimal coupling and no breaking changes.
 
 **Payload schemas are contracts.** The `// DomainEvent payload:` comments are not just documentation — they define the interface between the action that fires the event and the `RuntimeBridge` function that receives it. When the payload changes, both sides must be updated atomically.
+
+---
+
+*Next: Chapter 12 — The Evolution of ARO*
