@@ -1214,6 +1214,16 @@ public struct EmitAction: ActionImplementation {
         // Check for literal value first (from "with" clause)
         if let literalValue = context.resolveAny("_literal_") {
             payload[payloadKey] = literalValue
+        } else if object.base == "_expression_", let exprValue = context.resolveAny("_expression_") {
+            let exprName: String = context.resolve("_expression_name_") ?? ""
+            if exprName.isEmpty, let dictValue = exprValue as? [String: any Sendable] {
+                // Object literal expression `with { key: val, ... }` — spread dict directly as payload
+                // so handlers can access top-level keys via <event: key>
+                payload = dictValue
+            } else {
+                // Variable reference expression — wrap with the variable name as key
+                payload[exprName.isEmpty ? "data" : exprName] = exprValue
+            }
         } else if let payloadValue = context.resolveAny(object.base) {
             // Named variable payload - wrap with the payload key
             // This allows handlers to extract with: <Extract> the <user> from the <event: user>
