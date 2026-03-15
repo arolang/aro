@@ -46,6 +46,14 @@ public actor EventRecorder {
     private var subscriptionId: UUID?
     private let eventBus: EventBus
 
+    /// Reused encoder — actor isolation guarantees single-threaded access.
+    private let encoder: JSONEncoder = {
+        let e = JSONEncoder()
+        e.dateEncodingStrategy = .iso8601
+        e.outputFormatting = [.prettyPrinted, .sortedKeys]
+        return e
+    }()
+
     public init(eventBus: EventBus = .shared) {
         self.eventBus = eventBus
     }
@@ -81,10 +89,6 @@ public actor EventRecorder {
     public func saveToFile(_ path: String, applicationName: String = "ARO Application") async throws {
         let recordedEvents = events.map { RecordedEvent(timestamp: $0.timestamp, eventType: $0.eventType, payload: $0.payload) }
         let recording = EventRecording(application: applicationName, events: recordedEvents)
-
-        let encoder = JSONEncoder()
-        encoder.dateEncodingStrategy = .iso8601
-        encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
 
         let data = try encoder.encode(recording)
         let url = URL(fileURLWithPath: path)
@@ -137,6 +141,13 @@ public actor EventRecorder {
 public actor EventReplayer {
     private let eventBus: EventBus
 
+    /// Reused decoder — actor isolation guarantees single-threaded access.
+    private let decoder: JSONDecoder = {
+        let d = JSONDecoder()
+        d.dateDecodingStrategy = .iso8601
+        return d
+    }()
+
     public init(eventBus: EventBus = .shared) {
         self.eventBus = eventBus
     }
@@ -145,9 +156,6 @@ public actor EventReplayer {
     public func loadFromFile(_ path: String) throws -> EventRecording {
         let url = URL(fileURLWithPath: path)
         let data = try Data(contentsOf: url)
-
-        let decoder = JSONDecoder()
-        decoder.dateDecodingStrategy = .iso8601
 
         return try decoder.decode(EventRecording.self, from: data)
     }

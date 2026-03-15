@@ -79,6 +79,9 @@ class AROCContextHandle {
     let context: RuntimeContext
     let runtime: AROCRuntimeHandle
 
+    /// Reused decoder for OpenAPI spec parsing during binary-mode init.
+    private static let openAPIDecoder = JSONDecoder()
+
     #if !os(Windows)
     // Store service references to prevent deallocation
     let fileSystemService: AROFileSystemService?
@@ -191,7 +194,7 @@ class AROCContextHandle {
         // This is set by aro_set_embedded_openapi() called from generated main()
         if let embeddedJSON = embeddedOpenAPISpec {
             if let data = embeddedJSON.data(using: .utf8) {
-                spec = try? JSONDecoder().decode(OpenAPISpec.self, from: data)
+                spec = try? openAPIDecoder.decode(OpenAPISpec.self, from: data)
             }
         }
 
