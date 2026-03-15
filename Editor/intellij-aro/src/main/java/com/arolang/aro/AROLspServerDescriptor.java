@@ -21,6 +21,7 @@ import java.nio.file.Path;
  * LSP server factory for ARO language support.
  * Provides advanced IDE features through the ARO Language Server.
  */
+@SuppressWarnings("UnstableApiUsage")
 public class AROLspServerDescriptor implements LanguageServerFactory {
 
     // Common installation paths for ARO
