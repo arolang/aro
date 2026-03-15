@@ -772,6 +772,44 @@ public final class TemplateExecutor: @unchecked Sendable {
         templateService: TemplateService,
         templatePath: String
     ) async throws -> String {
+        // Direct context lookup bypasses the Any boxing from resolveVariableExpression.
+        // resolveVariableExpression returns Any which wraps any Sendable which wraps [any Sendable],
+        // making cast and Mirror detection fail for collections stored via RetrieveAction.
+        let directLookup = context.resolveAny(config.collection)
+        if let directValue = directLookup {
+            if let items = directValue as? [any Sendable] {
+                return try await executeForEachOverItems(
+                    items: items, config: config, body: body,
+                    context: context, templateService: templateService, templatePath: templatePath
+                )
+            }
+            if let items = directValue as? [Any] {
+                return try await executeForEachOverItems(
+                    items: items, config: config, body: body,
+                    context: context, templateService: templateService, templatePath: templatePath
+                )
+            }
+            // Dictionary fallback: iterate over values sorted by key (handles "retrieve all" in binary mode)
+            if let dict = directValue as? [String: any Sendable] {
+                let sorted = dict.sorted { a, b in
+                    if let ia = Int(a.key), let ib = Int(b.key) { return ia < ib }
+                    return a.key < b.key
+                }.map { $0.value }
+                return try await executeForEachOverItems(
+                    items: sorted, config: config, body: body,
+                    context: context, templateService: templateService, templatePath: templatePath
+                )
+            }
+            let directMirror = Mirror(reflecting: directValue)
+            if directMirror.displayStyle == .collection {
+                let items = directMirror.children.map { $0.value }
+                return try await executeForEachOverItems(
+                    items: items, config: config, body: body,
+                    context: context, templateService: templateService, templatePath: templatePath
+                )
+            }
+        }
+
         // Resolve the collection
         let collection = try resolveVariableExpression("<\(config.collection)>", context: context)
 
@@ -800,6 +838,15 @@ public final class TemplateExecutor: @unchecked Sendable {
                 )
             }
             if let items = wrapper.value as? [any Sendable] {
+                return try await executeForEachOverItems(
+                    items: items, config: config, body: body,
+                    context: context, templateService: templateService, templatePath: templatePath
+                )
+            }
+            // Mirror fallback on the inner value (wrapper itself is a struct, not a collection)
+            let innerMirror = Mirror(reflecting: wrapper.value)
+            if innerMirror.displayStyle == .collection {
+                let items = innerMirror.children.map { $0.value }
                 return try await executeForEachOverItems(
                     items: items, config: config, body: body,
                     context: context, templateService: templateService, templatePath: templatePath

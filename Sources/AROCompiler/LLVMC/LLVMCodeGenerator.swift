@@ -329,9 +329,15 @@ public final class LLVMCodeGenerator {
         // Build object descriptor
         let objectDesc = buildObjectDescriptor(statement.object, prefix: prefix)
 
-        // Clear _default_value_ before binding modifiers (mirrors FeatureSetExecutor line 255)
-        let defaultValueName = ctx.stringConstant("_default_value_")
-        _ = ctx.module.insertCall(externals.variableUnbind, on: [ctx.currentContextVar!, defaultValueName], at: ctx.insertionPoint)
+        // Clear transient query modifiers before binding fresh ones (mirrors FeatureSetExecutor lines 248-256)
+        // Without this, where/by bindings from earlier Retrieve calls persist and contaminate
+        // subsequent Retrieve calls (e.g. "Retrieve all" after "Retrieve where key = X" would
+        // incorrectly still filter by key = X).
+        for transientKey in ["_where_field_", "_where_op_", "_where_value_", "_by_pattern_", "_by_flags_",
+                             "_aggregation_type_", "_aggregation_field_", "_default_value_"] {
+            let keyStr = ctx.stringConstant(transientKey)
+            _ = ctx.module.insertCall(externals.variableUnbind, on: [ctx.currentContextVar!, keyStr], at: ctx.insertionPoint)
+        }
 
         // Bind query modifiers if present
         bindQueryModifiers(statement.queryModifiers)

@@ -2510,6 +2510,10 @@ public func aro_array_count(_ valuePtr: UnsafeMutableRawPointer?) -> Int64 {
     if let array = boxed.value as? [any Sendable] {
         return Int64(array.count)
     }
+    // Handle [String] from SplitAction explicitly
+    if let stringArray = boxed.value as? [String] {
+        return Int64(stringArray.count)
+    }
     return -1
 }
 
@@ -2526,12 +2530,20 @@ public func aro_array_get(
     guard let ptr = valuePtr else { return nil }
     let boxed = Unmanaged<AROCValue>.fromOpaque(ptr).takeUnretainedValue()
 
-    guard let array = boxed.value as? [any Sendable],
-          index >= 0 && index < array.count else { return nil }
-
-    let element = array[Int(index)]
-    let boxedElement = AROCValue(value: element)
-    return UnsafeMutableRawPointer(Unmanaged.passRetained(boxedElement).toOpaque())
+    if let array = boxed.value as? [any Sendable],
+       index >= 0 && index < array.count {
+        let element = array[Int(index)]
+        let boxedElement = AROCValue(value: element)
+        return UnsafeMutableRawPointer(Unmanaged.passRetained(boxedElement).toOpaque())
+    }
+    // Handle [String] from SplitAction explicitly
+    if let stringArray = boxed.value as? [String],
+       index >= 0 && index < stringArray.count {
+        let element = stringArray[Int(index)]
+        let boxedElement = AROCValue(value: element)
+        return UnsafeMutableRawPointer(Unmanaged.passRetained(boxedElement).toOpaque())
+    }
+    return nil
 }
 
 /// Bind a value to a variable name in the context
