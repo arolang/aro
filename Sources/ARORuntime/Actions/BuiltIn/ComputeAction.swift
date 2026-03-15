@@ -102,8 +102,12 @@ public struct ComputeAction: ActionImplementation {
             let stringToHash: String
             if let str = input as? String {
                 stringToHash = str
+            } else if JSONSerialization.isValidJSONObject(input),
+                      let data = try? JSONSerialization.data(withJSONObject: input, options: [.sortedKeys]),
+                      let json = String(data: data, encoding: .utf8) {
+                stringToHash = json
             } else {
-                stringToHash = String(describing: input)
+                stringToHash = "\(input)"
             }
 
             guard let data = stringToHash.data(using: .utf8) else {

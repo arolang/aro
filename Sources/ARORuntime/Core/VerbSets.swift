@@ -9,7 +9,7 @@ public enum VerbSets {
     public static let testVerbs: Set<String> = ["then", "assert"]
 
     /// External service invocation — binds results internally, must always execute
-    public static let requestVerbs: Set<String> = ["call", "invoke"]
+    public static let requestVerbs: Set<String> = ["call", "invoke", "request", "fetch", "retrieve", "listen"]
 
     /// Mutation verbs — always execute so they can handle rebinding internally
     public static let updateVerbs: Set<String> = ["update", "modify", "change", "set"]

@@ -2,8 +2,8 @@
 (* Located in sources/users/users.aro - demonstrating subdirectory organization *)
 
 (Handle User Creation: CreateUser Handler) {
-    Extract the <name> from the <event: data.name>.
-    Extract the <email> from the <event: data.email>.
+    Extract the <name> from the <event: name>.
+    Extract the <email> from the <event: email>.
 
     Create the <user> with {
         id: "user-1",
