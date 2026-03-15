@@ -280,6 +280,10 @@ public func aro_runtime_init() -> UnsafeMutableRawPointer? {
 
     semaphore.wait()
 
+    // Install SIGINT/SIGTERM handlers so Ctrl-C always terminates compiled binaries,
+    // even for apps that don't use the Keepalive action.
+    KeepaliveSignalHandler.shared.setup()
+
     handleLock.lock()
     runtimeHandles[pointer] = handle
     // Set global runtime for services to use
@@ -839,6 +843,9 @@ public func aro_runtime_register_notification_handler(
                 contextHandle.context.bind("event", value: event.payload)
                 for (k, v) in event.payload {
                     contextHandle.context.bind("event:\(k)", value: v)
+                    // Also bind directly so feature-set-level when guards can evaluate payload fields
+                    // e.g. `(Handler: NotificationSent Handler) when <age> >= 16` needs `age` in context
+                    contextHandle.context.bind(k, value: v)
                 }
 
                 bindTerminalToContext(contextHandle)
@@ -1481,6 +1488,16 @@ public func aro_evaluate_expression(
 
     let result = evaluateExpressionJSON(dict, context: contextHandle.context)
     contextHandle.context.bind("_expression_", value: result)
+
+    // For simple variable references ($var), also set _expression_name_ so EmitAction
+    // can use the variable name as the payload key (instead of falling back to "data").
+    // For all other expression types, clear _expression_name_ so EmitAction doesn't
+    // use a stale name from a previous statement.
+    if let varName = dict["$var"] as? String, dict.count <= 2 /* $var + optional $specs */ {
+        contextHandle.context.bind("_expression_name_", value: varName, allowRebind: true)
+    } else {
+        contextHandle.context.bind("_expression_name_", value: "", allowRebind: true)
+    }
 }
 
 /// Evaluate a JSON expression and bind to a specific variable name
@@ -1582,7 +1599,7 @@ private func evaluateExpressionJSON(_ expr: [String: Any], context: RuntimeConte
             )
         }
 
-        var value = context.resolveAny(varName) ?? ""
+        var value: any Sendable = context.resolveAny(varName) ?? ""
 
         // Handle specifiers - try plugin qualifier first, then dictionary property access
         // Try namespaced qualifier form first (e.g., <list: collections.reverse>)
@@ -2270,8 +2287,18 @@ public func aro_match_pattern(
 
     // Get subject value from context
     guard let subjectName = subjectInfo["name"] as? String,
-          let subjectValue = contextHandle.context.resolveAny(subjectName) else {
+          let rawSubjectValue = contextHandle.context.resolveAny(subjectName) else {
         return 0
+    }
+
+    // Apply specifiers for qualified match subjects (e.g. match <state: mode>)
+    var subjectValue: any Sendable = rawSubjectValue
+    if let specifiers = subjectInfo["specifiers"] as? [String] {
+        for specifier in specifiers {
+            guard let dict = subjectValue as? [String: any Sendable],
+                  let next = dict[specifier] else { return 0 }
+            subjectValue = next
+        }
     }
 
     // Match based on pattern type

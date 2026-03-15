@@ -1203,7 +1203,7 @@ public struct EmitAction: ActionImplementation {
         // If we have _expression_name_, use it (for variable references like <user>)
         // Otherwise fall back to object.base
         let payloadKey: String
-        if let expressionName: String = context.resolve("_expression_name_") {
+        if let expressionName: String = context.resolve("_expression_name_"), !expressionName.isEmpty {
             payloadKey = expressionName
         } else if object.base != "_expression_" {
             payloadKey = object.base

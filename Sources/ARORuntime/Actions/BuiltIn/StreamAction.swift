@@ -49,6 +49,8 @@ import AROParser
 /// When a blank line is received, the complete message is emitted as a DomainEvent:
 /// - `eventType`: the `event:` field value, or the `result.base` name if absent
 /// - `payload`: parsed JSON from `data:` field, or `{ "data": rawString }` if not JSON
+///   The SSE `event:` field value is included in payload as `"kind"` (not `"type"`,
+///   which is a reserved keyword in ARO and would be inaccessible).
 ///
 /// ## Reconnection
 /// On connection loss or error, the action waits using exponential backoff
@@ -81,8 +83,9 @@ public struct StreamAction: ActionImplementation {
             url = object.base
         }
 
-        guard url.hasPrefix("http://") || url.hasPrefix("https://") else {
-            throw ActionError.runtimeError("Stream: invalid URL '\(url)'. Must start with http:// or https://")
+        guard url.hasPrefix("http://") || url.hasPrefix("https://")
+           || url.hasPrefix("ws://") || url.hasPrefix("wss://") else {
+            throw ActionError.runtimeError("Stream: invalid URL '\(url)'. Must start with http://, https://, ws://, or wss://")
         }
 
         // Extract optional config from with { ... } clause
@@ -103,14 +106,25 @@ public struct StreamAction: ActionImplementation {
         let capturedRetry = initialRetry
         let capturedEventName = eventName
 
+        let isWebSocket = url.hasPrefix("ws://") || url.hasPrefix("wss://")
+
         let streamTask = Task.detached {
-            await SSEStreamRunner.run(
-                url: capturedURL,
-                eventName: capturedEventName,
-                headers: capturedHeaders,
-                timeout: capturedTimeout,
-                initialRetryInterval: capturedRetry
-            )
+            if isWebSocket {
+                await WebSocketStreamRunner.run(
+                    url: capturedURL,
+                    eventName: capturedEventName,
+                    headers: capturedHeaders,
+                    initialRetryInterval: capturedRetry
+                )
+            } else {
+                await SSEStreamRunner.run(
+                    url: capturedURL,
+                    eventName: capturedEventName,
+                    headers: capturedHeaders,
+                    timeout: capturedTimeout,
+                    initialRetryInterval: capturedRetry
+                )
+            }
         }
 
         // Watch for shutdown and cancel the stream
@@ -131,6 +145,9 @@ public struct StreamAction: ActionImplementation {
 
     private func getConfig(context: ExecutionContext) -> [String: any Sendable] {
         if let config = context.resolveAny("_expression_") as? [String: any Sendable] {
+            return config
+        }
+        if let config = context.resolveAny("_with_") as? [String: any Sendable] {
             return config
         }
         if let config = context.resolveAny("_literal_") as? [String: any Sendable] {
@@ -162,6 +179,106 @@ public struct StreamAction: ActionImplementation {
         if let retry = config["retry"] as? Int { return TimeInterval(retry) }
         if let retry = config["retry"] as? Double { return retry }
         return nil
+    }
+}
+
+// MARK: - WebSocket Stream Runner
+
+/// WebSocket-based stream runner for wss:// and ws:// URLs.
+/// Handles Mastodon-style WebSocket streaming: JSON messages with
+/// {"event":"update","payload":"{...}"} where payload is a JSON-encoded string.
+enum WebSocketStreamRunner {
+    static let maxRetryInterval: TimeInterval = 30.0
+
+    static func run(
+        url: String,
+        eventName: String,
+        headers: [String: String],
+        initialRetryInterval: TimeInterval
+    ) async {
+        var retryInterval = initialRetryInterval
+        while !Task.isCancelled {
+            do {
+                try await connect(url: url, eventName: eventName, headers: headers)
+                retryInterval = initialRetryInterval  // reset on clean close
+            } catch {
+                try? await Task.sleep(nanoseconds: UInt64(retryInterval * 1_000_000_000))
+                retryInterval = min(retryInterval * 2, maxRetryInterval)
+            }
+        }
+    }
+
+    private static func connect(
+        url: String,
+        eventName: String,
+        headers: [String: String]
+    ) async throws {
+        guard let requestURL = URL(string: url) else {
+            throw ActionError.runtimeError("WebSocket: malformed URL '\(url)'")
+        }
+        var request = URLRequest(url: requestURL)
+        for (key, value) in headers {
+            request.setValue(value, forHTTPHeaderField: key)
+        }
+
+        let session = URLSession(configuration: .default)
+        let task = session.webSocketTask(with: request)
+        task.resume()
+        defer { task.cancel(with: .goingAway, reason: nil) }
+
+        while !Task.isCancelled {
+            let message: URLSessionWebSocketTask.Message
+            do {
+                message = try await task.receive()
+            } catch {
+                throw error
+            }
+
+            let text: String
+            switch message {
+            case .string(let s): text = s
+            case .data(let d): text = String(data: d, encoding: .utf8) ?? ""
+            @unknown default: continue
+            }
+
+            guard let data = text.data(using: .utf8),
+                  let outer = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+                  let eventType = outer["event"] as? String else {
+                continue
+            }
+
+            // Build payload: parse inner "payload" JSON string if present,
+            // otherwise use empty dict. Add "kind" = eventType.
+            var payload: [String: any Sendable]
+            if let payloadStr = outer["payload"] as? String,
+               let payloadData = payloadStr.data(using: .utf8),
+               let parsed = try? JSONSerialization.jsonObject(with: payloadData) as? [String: Any] {
+                payload = convertToSendable(parsed)
+            } else {
+                payload = [:]
+            }
+            payload["kind"] = eventType
+
+            EventBus.shared.publish(DomainEvent(eventType: eventName, payload: payload))
+        }
+    }
+
+    private static func convertToSendable(_ dict: [String: Any]) -> [String: any Sendable] {
+        var result: [String: any Sendable] = [:]
+        for (key, val) in dict {
+            result[key] = convertValue(val)
+        }
+        return result
+    }
+
+    private static func convertValue(_ value: Any) -> any Sendable {
+        if let str = value as? String { return str }
+        if let int = value as? Int { return int }
+        if let double = value as? Double { return double }
+        if let bool = value as? Bool { return bool }
+        if let array = value as? [Any] { return array.map { convertValue($0) } }
+        if let dict = value as? [String: Any] { return convertToSendable(dict) }
+        return String(describing: value)
     }
 }
 
@@ -230,7 +347,7 @@ enum SSEStreamRunner {
         // Bridge URLSessionDataDelegate callbacks to AsyncStream<String> lines.
         // This pattern works on all platforms (Darwin + Linux / swift-corelibs-foundation).
         let (lineStream, continuation) = AsyncStream<String>.makeStream()
-        let delegate = SSEDataDelegate(continuation: continuation)
+        let delegate = SSEDataDelegate(continuation: continuation, headers: headers)
         let session = URLSession(configuration: .default, delegate: delegate, delegateQueue: nil)
         defer { session.invalidateAndCancel() }
 
@@ -247,7 +364,7 @@ enum SSEStreamRunner {
             let dataString = currentData.joined(separator: "\n")
             var payload = parseSSEData(dataString)
             if let sseType = currentEventType {
-                payload["type"] = sseType
+                payload["kind"] = sseType
             }
             // DomainEvent payload: parsed JSON from SSE data: field, or { "data": String } if not JSON.
             //   Optional "type": String added when SSE event: field is present.
@@ -327,17 +444,37 @@ enum SSEStreamRunner {
 /// Works on all platforms (Darwin + Linux / swift-corelibs-foundation).
 private final class SSEDataDelegate: NSObject, URLSessionDataDelegate, @unchecked Sendable {
     private let continuation: AsyncStream<String>.Continuation
+    private let originalHeaders: [String: String]
     private var buffer = ""
     var connectionError: Error? = nil
 
-    init(continuation: AsyncStream<String>.Continuation) {
+    init(continuation: AsyncStream<String>.Continuation, headers: [String: String]) {
         self.continuation = continuation
+        self.originalHeaders = headers
+    }
+
+    // Re-attach original headers (e.g. Authorization) when following cross-domain redirects.
+    // URLSession strips sensitive headers on host changes for security, but SSE streaming
+    // requires them on the streaming subdomain (e.g. streaming.mastodon.social).
+    func urlSession(
+        _ session: URLSession,
+        task: URLSessionTask,
+        willPerformHTTPRedirection response: HTTPURLResponse,
+        newRequest request: URLRequest,
+        completionHandler: @escaping (URLRequest?) -> Void
+    ) {
+        var mutableRequest = request
+        for (key, value) in originalHeaders {
+            mutableRequest.setValue(value, forHTTPHeaderField: key)
+        }
+        completionHandler(mutableRequest)
     }
 
     func urlSession(_ session: URLSession, dataTask: URLSessionDataTask, didReceive data: Data) {
         buffer += String(data: data, encoding: .utf8) ?? ""
         while let range = buffer.range(of: "\n") {
             let line = String(buffer[buffer.startIndex..<range.lowerBound])
+                .trimmingCharacters(in: CharacterSet(charactersIn: "\r"))
             buffer = String(buffer[range.upperBound...])
             continuation.yield(line)
         }

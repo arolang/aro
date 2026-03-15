@@ -775,31 +775,51 @@ public final class TemplateExecutor: @unchecked Sendable {
         // Resolve the collection
         let collection = try resolveVariableExpression("<\(config.collection)>", context: context)
 
-        // Convert to array
-        guard let items = collection as? [Any] else {
-            if let sendableItems = collection as? [any Sendable] {
-                return try await executeForEachOverItems(
-                    items: sendableItems,
-                    config: config,
-                    body: body,
-                    context: context,
-                    templateService: templateService,
-                    templatePath: templatePath
-                )
-            }
-            throw TemplateError.renderError(
-                path: templatePath,
-                message: "For-each collection '\(config.collection)' is not iterable"
+        // Try [Any] first (most common path)
+        if let items = collection as? [Any] {
+            return try await executeForEachOverItems(
+                items: items, config: config, body: body,
+                context: context, templateService: templateService, templatePath: templatePath
             )
         }
 
-        return try await executeForEachOverItems(
-            items: items,
-            config: config,
-            body: body,
-            context: context,
-            templateService: templateService,
-            templatePath: templatePath
+        // Try [any Sendable] (returned directly from RetrieveAction)
+        if let items = collection as? [any Sendable] {
+            return try await executeForEachOverItems(
+                items: items, config: config, body: body,
+                context: context, templateService: templateService, templatePath: templatePath
+            )
+        }
+
+        // Unwrap AnySendableWrapper and retry
+        if let wrapper = collection as? AnySendableWrapper {
+            if let items = wrapper.value as? [Any] {
+                return try await executeForEachOverItems(
+                    items: items, config: config, body: body,
+                    context: context, templateService: templateService, templatePath: templatePath
+                )
+            }
+            if let items = wrapper.value as? [any Sendable] {
+                return try await executeForEachOverItems(
+                    items: items, config: config, body: body,
+                    context: context, templateService: templateService, templatePath: templatePath
+                )
+            }
+        }
+
+        // Mirror fallback: handles any collection regardless of how it was existential-boxed
+        let mirror = Mirror(reflecting: collection)
+        if mirror.displayStyle == .collection {
+            let items = mirror.children.map { $0.value }
+            return try await executeForEachOverItems(
+                items: items, config: config, body: body,
+                context: context, templateService: templateService, templatePath: templatePath
+            )
+        }
+
+        throw TemplateError.renderError(
+            path: templatePath,
+            message: "For-each collection '\(config.collection)' is not iterable"
         )
     }
 
