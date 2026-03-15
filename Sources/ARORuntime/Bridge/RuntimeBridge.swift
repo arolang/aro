@@ -280,6 +280,10 @@ public func aro_runtime_init() -> UnsafeMutableRawPointer? {
 
     semaphore.wait()
 
+    // Install SIGINT/SIGTERM handlers so Ctrl-C always terminates compiled binaries,
+    // even for apps that don't use the Keepalive action.
+    KeepaliveSignalHandler.shared.setup()
+
     handleLock.lock()
     runtimeHandles[pointer] = handle
     // Set global runtime for services to use
@@ -839,6 +843,9 @@ public func aro_runtime_register_notification_handler(
                 contextHandle.context.bind("event", value: event.payload)
                 for (k, v) in event.payload {
                     contextHandle.context.bind("event:\(k)", value: v)
+                    // Also bind directly so feature-set-level when guards can evaluate payload fields
+                    // e.g. `(Handler: NotificationSent Handler) when <age> >= 16` needs `age` in context
+                    contextHandle.context.bind(k, value: v)
                 }
 
                 bindTerminalToContext(contextHandle)
@@ -1481,6 +1488,16 @@ public func aro_evaluate_expression(
 
     let result = evaluateExpressionJSON(dict, context: contextHandle.context)
     contextHandle.context.bind("_expression_", value: result)
+
+    // For simple variable references ($var), also set _expression_name_ so EmitAction
+    // can use the variable name as the payload key (instead of falling back to "data").
+    // For all other expression types, clear _expression_name_ so EmitAction doesn't
+    // use a stale name from a previous statement.
+    if let varName = dict["$var"] as? String, dict.count <= 2 /* $var + optional $specs */ {
+        contextHandle.context.bind("_expression_name_", value: varName, allowRebind: true)
+    } else {
+        contextHandle.context.bind("_expression_name_", value: "", allowRebind: true)
+    }
 }
 
 /// Evaluate a JSON expression and bind to a specific variable name
@@ -1582,7 +1599,7 @@ private func evaluateExpressionJSON(_ expr: [String: Any], context: RuntimeConte
             )
         }
 
-        var value = context.resolveAny(varName) ?? ""
+        var value: any Sendable = context.resolveAny(varName) ?? ""
 
         // Handle specifiers - try plugin qualifier first, then dictionary property access
         // Try namespaced qualifier form first (e.g., <list: collections.reverse>)
@@ -1789,7 +1806,8 @@ private func evaluateBinaryOp(op: String, left: any Sendable, right: any Sendabl
         return 0
 
     case "/":
-        if let l = asDouble(left), let r = asDouble(right), r != 0 {
+        if let l = asDouble(left), let r = asDouble(right) {
+            guard r != 0 else { fatalError("Division by zero") }
             // Integer / Integer → integer floor division (e.g. 80/3 = 26)
             if let li = left as? Int, let ri = right as? Int {
                 return li / ri
@@ -2269,8 +2287,18 @@ public func aro_match_pattern(
 
     // Get subject value from context
     guard let subjectName = subjectInfo["name"] as? String,
-          let subjectValue = contextHandle.context.resolveAny(subjectName) else {
+          let rawSubjectValue = contextHandle.context.resolveAny(subjectName) else {
         return 0
+    }
+
+    // Apply specifiers for qualified match subjects (e.g. match <state: mode>)
+    var subjectValue: any Sendable = rawSubjectValue
+    if let specifiers = subjectInfo["specifiers"] as? [String] {
+        for specifier in specifiers {
+            guard let dict = subjectValue as? [String: any Sendable],
+                  let next = dict[specifier] else { return 0 }
+            subjectValue = next
+        }
     }
 
     // Match based on pattern type
@@ -2482,6 +2510,10 @@ public func aro_array_count(_ valuePtr: UnsafeMutableRawPointer?) -> Int64 {
     if let array = boxed.value as? [any Sendable] {
         return Int64(array.count)
     }
+    // Handle [String] from SplitAction explicitly
+    if let stringArray = boxed.value as? [String] {
+        return Int64(stringArray.count)
+    }
     return -1
 }
 
@@ -2498,12 +2530,20 @@ public func aro_array_get(
     guard let ptr = valuePtr else { return nil }
     let boxed = Unmanaged<AROCValue>.fromOpaque(ptr).takeUnretainedValue()
 
-    guard let array = boxed.value as? [any Sendable],
-          index >= 0 && index < array.count else { return nil }
-
-    let element = array[Int(index)]
-    let boxedElement = AROCValue(value: element)
-    return UnsafeMutableRawPointer(Unmanaged.passRetained(boxedElement).toOpaque())
+    if let array = boxed.value as? [any Sendable],
+       index >= 0 && index < array.count {
+        let element = array[Int(index)]
+        let boxedElement = AROCValue(value: element)
+        return UnsafeMutableRawPointer(Unmanaged.passRetained(boxedElement).toOpaque())
+    }
+    // Handle [String] from SplitAction explicitly
+    if let stringArray = boxed.value as? [String],
+       index >= 0 && index < stringArray.count {
+        let element = stringArray[Int(index)]
+        let boxedElement = AROCValue(value: element)
+        return UnsafeMutableRawPointer(Unmanaged.passRetained(boxedElement).toOpaque())
+    }
+    return nil
 }
 
 /// Bind a value to a variable name in the context

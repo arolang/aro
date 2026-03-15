@@ -53,7 +53,7 @@
       "patterns": [
         {
           "name": "storage.type.aro",
-          "match": "\\b(Compute|Validate|Compare|Create|Transform|Update|Sort|Filter|Match|Split|Map|Reduce|Set|Merge|Delete|Copy|Move|Append|Execute|Call|ParseHtml|Accept|Clear|Render)\\b"
+          "match": "\\b(Compute|Validate|Compare|Create|Transform|Update|Sort|Filter|Match|Split|Map|Reduce|Set|Merge|Delete|Copy|Move|Append|Execute|Call|ParseHtml|Accept|Clear|Render|Schedule|Sleep|Repaint|Show)\\b"
         }
       ]
     },
@@ -156,7 +156,11 @@
       "patterns": [
         {
           "name": "keyword.operator.aro",
-          "match": "==|!=|<=|>=|[+\\-*/%]|\\b(?:and|or|not)\\b"
+          "match": "==|!=|<=|>=|\\+\\+|[+\\-*/%]|\\b(?:and|or|not)\\b"
+        },
+        {
+          "name": "keyword.operator.assignment.aro",
+          "match": "(?<![<>])=(?![=])"
         }
       ]
     }

@@ -15,6 +15,50 @@ private final class EventBusResultBox<T>: @unchecked Sendable {
     init(_ value: T) { self.value = value }
 }
 
+// MARK: - Subscription Store
+
+/// Private actor that owns subscription storage.
+/// Swift's actor model provides static data-race safety and fair scheduling,
+/// replacing the previous nonisolated(unsafe) + NSLock pattern.
+private actor SubscriptionStore {
+    var subscriptionsByType: [String: [EventBus.Subscription]] = [:]
+    var wildcardSubscriptions: [EventBus.Subscription] = []
+
+    func add(_ subscription: EventBus.Subscription) {
+        if subscription.eventType == "*" {
+            wildcardSubscriptions.append(subscription)
+        } else {
+            subscriptionsByType[subscription.eventType, default: []].append(subscription)
+        }
+    }
+
+    func remove(_ id: UUID) {
+        wildcardSubscriptions.removeAll { $0.id == id }
+        for key in subscriptionsByType.keys {
+            subscriptionsByType[key]?.removeAll { $0.id == id }
+            if subscriptionsByType[key]?.isEmpty == true {
+                subscriptionsByType.removeValue(forKey: key)
+            }
+        }
+    }
+
+    func removeAll() {
+        wildcardSubscriptions.removeAll()
+        subscriptionsByType.removeAll()
+    }
+
+    func matching(for eventType: String) -> [EventBus.Subscription] {
+        let typeSubscriptions = subscriptionsByType[eventType] ?? []
+        return typeSubscriptions + wildcardSubscriptions
+    }
+
+    var count: Int {
+        wildcardSubscriptions.count + subscriptionsByType.values.reduce(0) { $0 + $1.count }
+    }
+}
+
+// MARK: - Event Bus
+
 /// Central event bus for publishing and subscribing to runtime events
 ///
 /// The EventBus provides a decoupled communication mechanism between
@@ -27,24 +71,14 @@ public actor EventBus {
     public typealias EventHandler = @Sendable (any RuntimeEvent) async -> Void
 
     /// Subscription entry
-    private struct Subscription: Sendable {
+    public struct Subscription: Sendable {
         let id: UUID
         let eventType: String
         let handler: EventHandler
     }
 
-    /// Lock for thread-safe access to subscription collections.
-    /// Marked nonisolated(unsafe) so nonisolated methods can use it directly;
-    /// NSLock provides the actual thread safety guarantee.
-    private let lock = NSLock()
-
-    /// Subscriptions indexed by event type for O(1) lookup (ARO-0064)
-    /// Marked nonisolated(unsafe) because access is protected by `lock`.
-    private nonisolated(unsafe) var subscriptionsByType: [String: [Subscription]] = [:]
-
-    /// Wildcard subscribers that receive all events (ARO-0064)
-    /// Marked nonisolated(unsafe) because access is protected by `lock`.
-    private nonisolated(unsafe) var wildcardSubscriptions: [Subscription] = []
+    /// Actor-isolated subscription storage — replaces nonisolated(unsafe) + NSLock
+    private let store = SubscriptionStore()
 
     /// Async stream continuations for stream-based subscriptions
     private var continuations: [UUID: AsyncStream<any RuntimeEvent>.Continuation] = [:]
@@ -70,39 +104,6 @@ public actor EventBus {
 
     public init() {}
 
-    // MARK: - Actor-isolated helpers
-
-    private func getMatchingSubscriptions(for eventType: String) -> [Subscription] {
-        lock.withLock {
-            // O(1) dictionary lookup + wildcard subscriptions (ARO-0064)
-            let typeSubscriptions = subscriptionsByType[eventType] ?? []
-            return typeSubscriptions + wildcardSubscriptions
-        }
-    }
-
-    private func getAllContinuations() -> [AsyncStream<any RuntimeEvent>.Continuation] {
-        Array(continuations.values)
-    }
-
-    private func addSubscription(_ subscription: Subscription) {
-        lock.withLock {
-            // Index by event type for O(1) lookup (ARO-0064)
-            if subscription.eventType == "*" {
-                wildcardSubscriptions.append(subscription)
-            } else {
-                subscriptionsByType[subscription.eventType, default: []].append(subscription)
-            }
-        }
-    }
-
-    private func addContinuation(_ id: UUID, continuation: AsyncStream<any RuntimeEvent>.Continuation) {
-        continuations[id] = continuation
-    }
-
-    private func removeContinuation(_ id: UUID) {
-        _ = continuations.removeValue(forKey: id)
-    }
-
     // MARK: - Publishing
 
     /// Publish an event to all subscribers (fire-and-forget)
@@ -117,8 +118,8 @@ public actor EventBus {
     /// Internal async publish implementation
     private func publishInternal(_ event: any RuntimeEvent) async {
         let eventType = type(of: event).eventType
-        let matchingSubscriptions = getMatchingSubscriptions(for: eventType)
-        let allContinuations = getAllContinuations()
+        let matchingSubscriptions = await store.matching(for: eventType)
+        let allContinuations = Array(continuations.values)
 
         // Notify async stream subscribers
         for continuation in allContinuations {
@@ -137,7 +138,7 @@ public actor EventBus {
     /// - Parameter event: The event to publish
     public func publishAndWait(_ event: any RuntimeEvent) async {
         let eventType = type(of: event).eventType
-        let matchingSubscriptions = getMatchingSubscriptions(for: eventType)
+        let matchingSubscriptions = await store.matching(for: eventType)
 
         await withTaskGroup(of: Void.self) { group in
             for subscription in matchingSubscriptions {
@@ -152,7 +153,7 @@ public actor EventBus {
     /// This is used by EmitAction to ensure proper event sequencing
     public func publishAndTrack(_ event: any RuntimeEvent) async {
         let eventType = type(of: event).eventType
-        let matchingSubscriptions = getMatchingSubscriptions(for: eventType)
+        let matchingSubscriptions = await store.matching(for: eventType)
 
         // Execute all handlers and wait for completion
         await withTaskGroup(of: Void.self) { group in
@@ -251,7 +252,6 @@ public actor EventBus {
 
     /// Get the count of pending event handlers currently in flight
     /// - Returns: The number of event handlers currently executing
-    /// Note: This reads the value asynchronously but returns the count
     nonisolated public func getPendingHandlerCount() async -> Int {
         await self.inFlightHandlersCount
     }
@@ -315,7 +315,7 @@ public actor EventBus {
         }
     }
 
-/// Synchronous wrapper for C bridge compatibility
+    /// Synchronous wrapper for C bridge compatibility
     /// WARNING: Blocks the calling thread - use only from C bridge layer
     nonisolated public func hasActiveEventSourcesSync() -> Bool {
         let semaphore = DispatchSemaphore(value: 0)
@@ -345,10 +345,10 @@ public actor EventBus {
 
     // MARK: - Subscribing
 
-    /// Subscribe to events of a specific type (synchronous, lock-based)
-    /// Uses NSLock directly (via nonisolated(unsafe) properties) to register
-    /// the subscription immediately without a Task, preventing race conditions
-    /// where publish is called before the subscription is stored.
+    /// Subscribe to events of a specific type.
+    /// The subscription is registered asynchronously via a Task into the
+    /// SubscriptionStore actor. This is nonisolated for compatibility with
+    /// existing synchronous call sites.
     /// - Parameters:
     ///   - eventType: The event type to subscribe to (or "*" for all events)
     ///   - handler: The handler to call when events occur
@@ -360,15 +360,7 @@ public actor EventBus {
             eventType: eventType,
             handler: handler
         )
-
-        lock.withLock {
-            if subscription.eventType == "*" {
-                wildcardSubscriptions.append(subscription)
-            } else {
-                subscriptionsByType[subscription.eventType, default: []].append(subscription)
-            }
-        }
-
+        Task { await store.add(subscription) }
         return subscription.id
     }
 
@@ -394,7 +386,7 @@ public actor EventBus {
 
         return AsyncStream { continuation in
             Task {
-                self.addContinuation(id, continuation: continuation)
+                self.continuations[id] = continuation
             }
 
             continuation.onTermination = { [weak self] _ in
@@ -426,58 +418,42 @@ public actor EventBus {
         }
     }
 
+    private func removeContinuation(_ id: UUID) {
+        _ = continuations.removeValue(forKey: id)
+    }
+
     // MARK: - Unsubscribing
 
-    /// Unsubscribe from events (runs asynchronously via Task)
+    /// Unsubscribe from events
     /// - Parameter id: The subscription ID returned from subscribe
     nonisolated public func unsubscribe(_ id: UUID) {
-        Task { await self.removeSubscription(id) }
-    }
-
-    private func removeSubscription(_ id: UUID) {
-        lock.withLock {
-            // Remove from wildcard subscriptions (ARO-0064)
-            wildcardSubscriptions.removeAll { $0.id == id }
-
-            // Remove from type-specific subscriptions (ARO-0064)
-            for key in subscriptionsByType.keys {
-                subscriptionsByType[key]?.removeAll { $0.id == id }
-                // Clean up empty arrays
-                if subscriptionsByType[key]?.isEmpty == true {
-                    subscriptionsByType.removeValue(forKey: key)
-                }
-            }
-
-            _ = continuations.removeValue(forKey: id)
+        Task {
+            await store.remove(id)
+            await self.removeContinuation(id)
         }
     }
 
-    /// Remove all subscriptions (nonisolated, runs asynchronously via Task)
+    /// Remove all subscriptions
     nonisolated public func unsubscribeAll() {
-        Task { await self.removeAllSubscriptions() }
+        Task {
+            await store.removeAll()
+            await self.finishAndClearContinuations()
+        }
     }
 
-    private func removeAllSubscriptions() {
-        lock.withLock {
-            // Clear indexed subscriptions (ARO-0064)
-            wildcardSubscriptions.removeAll()
-            subscriptionsByType.removeAll()
-
-            for continuation in continuations.values {
-                continuation.finish()
-            }
-            continuations.removeAll()
+    private func finishAndClearContinuations() {
+        for continuation in continuations.values {
+            continuation.finish()
         }
+        continuations.removeAll()
     }
 
     // MARK: - Inspection
 
     /// Number of active subscriptions
     public var subscriptionCount: Int {
-        lock.withLock {
-            // Count indexed subscriptions (ARO-0064)
-            let typeSubscriptionCount = subscriptionsByType.values.reduce(0) { $0 + $1.count }
-            return wildcardSubscriptions.count + typeSubscriptionCount + continuations.count
+        get async {
+            await store.count + continuations.count
         }
     }
 }

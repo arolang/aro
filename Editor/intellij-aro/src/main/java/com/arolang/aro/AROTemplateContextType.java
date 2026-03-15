@@ -11,7 +11,7 @@ import org.jetbrains.annotations.NotNull;
 public class AROTemplateContextType extends TemplateContextType {
 
     protected AROTemplateContextType() {
-        super("ARO", "ARO");
+        super("ARO");
     }
 
     @Override

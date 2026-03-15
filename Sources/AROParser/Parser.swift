@@ -135,10 +135,10 @@ public final class Parser {
         
         try expect(.rightParen, message: "')'")
 
-        // Parse optional when clause for feature set guards (e.g., Handler when condition)
+        // Parse optional when/where clause for feature set guards (e.g., Handler when/where condition)
         var whenCondition: (any Expression)? = nil
-        if check(.when) {
-            advance() // consume 'when'
+        if check(.when) || check(.where) {
+            advance() // consume 'when' or 'where'
             whenCondition = try parseExpression()
         }
 

@@ -369,6 +369,7 @@ public actor ExecutionEngine {
             let isSpecialHandler = activity.contains("Socket Event Handler") ||
                                    activity.contains("WebSocket Event Handler") ||
                                    activity.contains("File Event Handler") ||
+                                   activity.contains("KeyPress Handler") ||
                                    activity.contains("Application-End")
             return hasHandler && !isSpecialHandler
         }

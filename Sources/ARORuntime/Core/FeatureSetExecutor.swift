@@ -550,8 +550,13 @@ public final class FeatureSetExecutor: @unchecked Sendable {
         context: ExecutionContext
     ) async throws {
         // Resolve the subject value
-        guard let subjectValue = context.resolveAny(statement.subject.base) else {
+        guard var subjectValue = context.resolveAny(statement.subject.base) else {
             throw ActionError.undefinedVariable(statement.subject.base)
+        }
+
+        // Apply field access specifiers (e.g. <state: mode> -> state.mode)
+        for specifier in statement.subject.specifiers {
+            subjectValue = try accessCollectionProperty(specifier, on: subjectValue)
         }
 
         // Try each case in order
