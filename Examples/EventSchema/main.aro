@@ -51,7 +51,7 @@
 (* Handler using typed extraction - validates against UserRegisteredEvent schema *)
 (Handle User Registration: UserRegistered Handler) {
     (* Typed extraction: validates event data against UserRegisteredEvent schema *)
-    Create the <user: UserRegisteredEvent> with <event>.
+    Extract the <user: UserRegisteredEvent> from the <event>.
 
     (* Access validated properties directly using specifier syntax *)
     Log "UserRegistered: Received valid event" to the <console>.
@@ -66,7 +66,7 @@
 (* Handler using typed extraction for complex event with nested objects *)
 (Handle Order Placed: OrderPlaced Handler) {
     (* Typed extraction: validates against OrderPlacedEvent schema *)
-    Create the <order: OrderPlacedEvent> with <event>.
+    Extract the <order: OrderPlacedEvent> from the <event>.
 
     Log "OrderPlaced: Received valid event" to the <console>.
     Log "- Order ID: ${<order: orderId>}" to the <console>.
@@ -84,7 +84,7 @@
 (* Handler using typed extraction for simple event *)
 (Handle Notification: Notification Handler) {
     (* Typed extraction: validates against NotificationEvent schema *)
-    Create the <notif: NotificationEvent> with <event>.
+    Extract the <notif: NotificationEvent> from the <event>.
 
     Log "Notification: Received valid event" to the <console>.
     Log "- Message: ${<notif: message>}" to the <console>.
