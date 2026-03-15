@@ -141,7 +141,7 @@ public final class AROHTTPClient: HTTPClientService, @unchecked Sendable {
         request.method = method
 
         for (name, value) in headers {
-            request.headers.add(name: name, value: value)
+            request.headers.add(name: name, value: value.trimmingCharacters(in: .whitespacesAndNewlines))
         }
 
         if let body = body {

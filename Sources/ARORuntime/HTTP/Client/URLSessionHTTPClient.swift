@@ -131,7 +131,8 @@ public final class URLSessionHTTPClient: HTTPClientService, @unchecked Sendable 
         request.setValue("ARO-HTTP-Client/1.0", forHTTPHeaderField: "User-Agent")
 
         for (name, value) in headers {
-            request.setValue(value, forHTTPHeaderField: name)
+            // Trim whitespace/newlines — URLSession silently drops headers with embedded newlines
+            request.setValue(value.trimmingCharacters(in: .whitespacesAndNewlines), forHTTPHeaderField: name)
         }
 
         if let body = body {

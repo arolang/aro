@@ -68,38 +68,108 @@ public final class KeyboardService: @unchecked Sendable {
             }
         }
 
-        // Set raw mode
+        // Set raw mode (keep ISIG so Ctrl-C still generates SIGINT)
         var raw = old
         #if canImport(Darwin)
         cfmakeraw(&raw)
+        raw.c_lflag |= tcflag_t(ISIG)  // re-enable signal generation (Ctrl-C → SIGINT)
         #else
         raw.c_iflag &= ~(tcflag_t(IGNBRK) | tcflag_t(BRKINT) | tcflag_t(PARMRK) |
                          tcflag_t(ISTRIP) | tcflag_t(INLCR)  | tcflag_t(IGNCR)  |
                          tcflag_t(ICRNL)  | tcflag_t(IXON))
         raw.c_oflag &= ~tcflag_t(OPOST)
         raw.c_lflag &= ~(tcflag_t(ECHO) | tcflag_t(ECHONL) | tcflag_t(ICANON) |
-                         tcflag_t(ISIG)  | tcflag_t(IEXTEN))
+                                          tcflag_t(IEXTEN))  // ISIG intentionally kept
         raw.c_cflag &= ~(tcflag_t(CSIZE) | tcflag_t(PARENB))
         raw.c_cflag |= tcflag_t(CS8)
         #endif
         tcsetattr(STDIN_FILENO, TCSAFLUSH, &raw)
 
-        // Read loop
+        // Enable bracketed paste mode: terminal wraps paste with ESC[200~ … ESC[201~
+        // so we can strip the markers and pass through the content cleanly.
+        writeRaw("\u{1B}[?2004h")
+
+        // Byte-level state machine — handles normal keys, arrow keys, and bracketed paste.
+        // emitKey uses publishAndWait so each handler completes before the next key fires;
+        // this prevents paste-burst race conditions where concurrent handlers all read stale state.
+        var inPaste = false
+
         while isRunning {
-            var buf = [UInt8](repeating: 0, count: 6)
-            let n = read(STDIN_FILENO, &buf, 6)
+            var buf = [UInt8](repeating: 0, count: 256)
+            let n = read(STDIN_FILENO, &buf, 256)
             if n <= 0 || !isRunning { break }
-            let key = parseKey(buf, count: n)
-            let event = KeyPressEvent(key: key)
-            eventBus.publish(event)
-            // Also publish DomainEvent for binary mode compiled handlers.
-            // DomainEvent eventType: "KeyPress"  payload: { "key": String }
-            // Binary handlers declared as: (Name: KeyPress Handler) or (Name: KeyPress Handler<key:X>)
-            eventBus.publish(DomainEvent(eventType: "KeyPress", payload: ["key": key]))
+
+            var i = 0
+            while i < n {
+                // Detect ESC[200~ (paste start) or ESC[201~ (paste end) — 6 bytes each
+                if buf[i] == 27 && i + 5 < n && buf[i+1] == 91 && buf[i+2] == 50 && buf[i+3] == 48 {
+                    if buf[i+4] == 48 && buf[i+5] == 126 {   // ESC[200~
+                        inPaste = true; i += 6; continue
+                    }
+                    if buf[i+4] == 49 && buf[i+5] == 126 {   // ESC[201~
+                        inPaste = false; i += 6; continue
+                    }
+                }
+
+                if buf[i] == 27 && !inPaste {
+                    // Arrow keys: ESC [ A/B/C/D (3 bytes)
+                    if i + 2 < n && buf[i+1] == 91 {
+                        switch buf[i+2] {
+                        case 65: await emitKey("up");    i += 3
+                        case 66: await emitKey("down");  i += 3
+                        case 67: await emitKey("right"); i += 3
+                        case 68: await emitKey("left");  i += 3
+                        default: await emitKey("escape"); i += 1
+                        }
+                        continue
+                    }
+                    await emitKey("escape"); i += 1; continue
+                }
+
+                // Printable byte — applies both in normal mode and inside a paste
+                await emitByte(buf[i])
+                i += 1
+            }
         }
 
+        writeRaw("\u{1B}[?2004l")  // Disable bracketed paste mode
         restoreTerminal()
         #endif
+    }
+
+    private func emitByte(_ b: UInt8) async {
+        switch b {
+        case 9:         await emitKey("tab")
+        case 10, 13:    await emitKey("enter")
+        case 127:       await emitKey("backspace")
+        case 32..<127:  await emitKey(String(UnicodeScalar(b)))
+        default:        break   // non-printable control byte — ignore
+        }
+    }
+
+    /// Publish a key event and wait for the handler to finish before returning.
+    /// Using publishAndWait (not fire-and-forget publish) ensures that paste bursts
+    /// are serialised: each character's handler reads the state written by the previous
+    /// character, so rapid paste never overwrites earlier characters.
+    ///
+    /// Two events are published:
+    /// 1. KeyPressEvent — consumed by interpreter-mode KeyPress Handler feature sets
+    ///    (registered via ExecutionEngine.registerKeyPressHandlers)
+    /// 2. DomainEvent("KeyPress") — consumed by binary-mode compiled handlers
+    ///    (registered via aro_runtime_register_handler("KeyPress", ...))
+    /// No double-firing in interpreter mode: KeyPress Handler is excluded from
+    /// registerDomainEventHandlers (ExecutionEngine.swift line ~369), and
+    /// _compiledHandlers["KeyPress"] is empty in interpreter mode.
+    private func emitKey(_ key: String) async {
+        await eventBus.publishAndWait(KeyPressEvent(key: key))
+        // Co-publish DomainEvent("KeyPress") for binary mode compiled handlers.
+        await eventBus.publishAndWait(DomainEvent(eventType: "KeyPress", payload: ["key": key]))
+    }
+
+    private func writeRaw(_ string: String) {
+        if let data = string.data(using: .utf8) {
+            FileHandle.standardOutput.write(data)
+        }
     }
 
     private func restoreTerminal() {
@@ -112,29 +182,4 @@ public final class KeyboardService: @unchecked Sendable {
         #endif
     }
 
-    /// Map raw byte sequences to key names
-    private func parseKey(_ buf: [UInt8], count: Int) -> String {
-        switch (count, buf[0]) {
-        case (1, 9):            // HT → Tab
-            return "tab"
-        case (1, 13), (1, 10):  // CR / LF → Enter
-            return "enter"
-        case (1, 27):           // lone ESC
-            return "escape"
-        case (1, 127):          // DEL → Backspace
-            return "backspace"
-        case (1, let c) where c >= 32 && c < 127:
-            return String(UnicodeScalar(c))
-        case (3, 27) where buf[1] == 91:  // ESC [ X
-            switch buf[2] {
-            case 65: return "up"
-            case 66: return "down"
-            case 67: return "right"
-            case 68: return "left"
-            default: return "escape"
-            }
-        default:
-            return "unknown"
-        }
-    }
 }

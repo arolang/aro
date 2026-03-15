@@ -424,52 +424,12 @@ public func aro_action_emit(
     _ resultPtr: UnsafeRawPointer?,
     _ objectPtr: UnsafeRawPointer?
 ) -> UnsafeMutableRawPointer? {
-    // Fire-and-forget: emit events without blocking
-    // This enables parallel event handling in compiled binaries (matching interpreter behavior)
-    guard let ctxHandle = getContext(contextPtr),
-          let result = resultPtr,
-          let object = objectPtr else { return nil }
-
-    let resultDesc = toResultDescriptor(result)
-    let objectDesc = toObjectDescriptor(object)
-    let context = ctxHandle.context
-
-    // CRITICAL: Capture the value NOW, before it gets overwritten by subsequent statements.
-    // The fire-and-forget Task runs later, and by then the values may have changed.
-    // Check both _literal_ (used by some paths) and _expression_ (used by compiled code).
-    let capturedLiteral = context.resolveAny("_literal_")
-    let capturedExpression = context.resolveAny("_expression_")
-    let capturedExpressionName: String? = context.resolve("_expression_name_")
-
-    // Use _expression_ if _literal_ is not available (compiled code path)
-    let payloadValue = capturedLiteral ?? capturedExpression
-
-
-    // Create a snapshot context with the captured values
-    // This ensures the emit uses the correct literal value even when executed later
-    if let literal = capturedLiteral {
-        context.bind("_emit_literal_\(resultDesc.base)", value: literal)
-    }
-    if let expr = capturedExpression {
-        context.bind("_emit_expression_\(resultDesc.base)", value: expr)
-    }
-    if let exprName = capturedExpressionName {
-        context.bind("_emit_expression_name_\(resultDesc.base)", value: exprName)
-    }
-
-    // Execute emit through ActionRunner but don't block waiting for handlers
-    // Use the same sync-to-async bridge as other actions, but immediately return
-    // so the caller doesn't wait for event handlers to complete
-    ActionRunner.shared.executeFireAndForgetEmit(
-        eventType: resultDesc.base,
-        capturedLiteral: payloadValue,
-        capturedExpressionName: capturedExpressionName,
-        objectBase: objectDesc.base,
-        context: context
-    )
-
-    // Return immediately - handlers run in background
-    return nil
+    // Synchronous emit: wait for all handlers to complete before returning.
+    // This matches interpreter-mode EmitAction which uses publishAndTrack (waits for handlers).
+    // Required for correct sequential semantics: e.g., LoadTimeline emits PostReceived events
+    // and must wait for each Store handler to complete before updating totalPosts in UIState,
+    // so the timeline observer renders with all posts already in the repository.
+    return executeAction(verb: "emit", contextPtr: contextPtr, resultPtr: resultPtr, objectPtr: objectPtr)
 }
 
 @_cdecl("aro_action_send")
