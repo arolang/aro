@@ -42,7 +42,7 @@ public struct ListAction: ActionImplementation {
         } else if let specifier = object.specifiers.first {
             directoryPath = specifier
         } else {
-            throw ActionError.runtimeError("List requires a directory path")
+            throw ActionError.missingRequiredField(field: "a directory path", action: "List")
         }
 
         // Check for pattern in specifiers (e.g., matching "*.aro")
@@ -108,7 +108,7 @@ public struct StatAction: ActionImplementation {
         } else if let specifier = object.specifiers.first {
             path = specifier
         } else {
-            throw ActionError.runtimeError("Stat requires a file or directory path")
+            throw ActionError.missingRequiredField(field: "a file or directory path", action: "Stat")
         }
 
         // Get file service
@@ -163,7 +163,7 @@ public struct ExistsAction: ActionImplementation {
         } else if let specifier = object.specifiers.first {
             path = specifier
         } else {
-            throw ActionError.runtimeError("Exists requires a file or directory path")
+            throw ActionError.missingRequiredField(field: "a file or directory path", action: "Exists")
         }
 
         // Get file service
@@ -240,7 +240,7 @@ public struct MakeAction: ActionImplementation {
         } else if let specifier = object.specifiers.first {
             path = specifier
         } else {
-            throw ActionError.runtimeError("Make requires a path")
+            throw ActionError.missingRequiredField(field: "a path", action: "Make")
         }
 
         // Get file service
@@ -308,7 +308,7 @@ public struct CopyAction: ActionImplementation {
         } else if let specifier = result.specifiers.first {
             sourcePath = specifier
         } else {
-            throw ActionError.runtimeError("Copy requires a source path")
+            throw ActionError.missingRequiredField(field: "a source path", action: "Copy")
         }
 
         // Get destination path from object specifiers
@@ -322,7 +322,7 @@ public struct CopyAction: ActionImplementation {
         } else if let specifier = object.specifiers.first {
             destPath = specifier
         } else {
-            throw ActionError.runtimeError("Copy requires a destination path")
+            throw ActionError.missingRequiredField(field: "a destination path", action: "Copy")
         }
 
         // Get file service
@@ -378,7 +378,7 @@ public struct MoveAction: ActionImplementation {
         } else if let specifier = result.specifiers.first {
             sourcePath = specifier
         } else {
-            throw ActionError.runtimeError("Move requires a source path")
+            throw ActionError.missingRequiredField(field: "a source path", action: "Move")
         }
 
         // Get destination path from object specifiers
@@ -392,7 +392,7 @@ public struct MoveAction: ActionImplementation {
         } else if let specifier = object.specifiers.first {
             destPath = specifier
         } else {
-            throw ActionError.runtimeError("Move requires a destination path")
+            throw ActionError.missingRequiredField(field: "a destination path", action: "Move")
         }
 
         // Get file service
@@ -471,7 +471,7 @@ public struct AppendAction: ActionImplementation {
         } else if let specifier = object.specifiers.first {
             path = specifier
         } else {
-            throw ActionError.runtimeError("Append requires a file path")
+            throw ActionError.missingRequiredField(field: "a file path", action: "Append")
         }
 
         // Get file service

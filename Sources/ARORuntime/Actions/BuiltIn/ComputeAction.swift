@@ -107,7 +107,7 @@ public struct ComputeAction: ActionImplementation {
             }
 
             guard let data = stringToHash.data(using: .utf8) else {
-                throw ActionError.runtimeError("Failed to encode string as UTF-8")
+                throw ActionError.ioError("Failed to encode string as UTF-8")
             }
 
             let hash = SHA256.hash(data: data)
@@ -196,7 +196,7 @@ public struct ComputeAction: ActionImplementation {
             }
             guard let toValue = context.resolveAny("_to_"),
                   let toDate = getARODate(from: toValue) else {
-                throw ActionError.runtimeError("Distance calculation requires a 'to' clause: <Compute> the <distance: distance> from <date1> to <date2>.")
+                throw ActionError.missingRequiredField(field: "a 'to' clause", action: "Compute distance")
             }
             let dateService = context.service(DateService.self) ?? DefaultDateService()
             return dateService.distance(from: fromDate, to: toDate)
@@ -205,21 +205,21 @@ public struct ComputeAction: ActionImplementation {
         case "intersect":
             // Get second operand from 'with' clause (stored in _with_ by FeatureSetExecutor)
             guard let secondOperand = context.resolveAny("_with_") else {
-                throw ActionError.runtimeError("Intersect requires a 'with' clause: <Compute> the <result: intersect> from <a> with <b>.")
+                throw ActionError.missingRequiredField(field: "a 'with' clause", action: "Compute intersect")
             }
             return try computeIntersect(input, with: secondOperand)
 
         case "difference":
             // Get second operand from 'with' clause (stored in _with_ by FeatureSetExecutor)
             guard let secondOperand = context.resolveAny("_with_") else {
-                throw ActionError.runtimeError("Difference requires a 'with' clause: <Compute> the <result: difference> from <a> with <b>.")
+                throw ActionError.missingRequiredField(field: "a 'with' clause", action: "Compute difference")
             }
             return try computeDifference(input, minus: secondOperand)
 
         case "union":
             // Get second operand from 'with' clause (stored in _with_ by FeatureSetExecutor)
             guard let secondOperand = context.resolveAny("_with_") else {
-                throw ActionError.runtimeError("Union requires a 'with' clause: <Compute> the <result: union> from <a> with <b>.")
+                throw ActionError.missingRequiredField(field: "a 'with' clause", action: "Compute union")
             }
             return try computeUnion(input, with: secondOperand)
 
@@ -780,7 +780,7 @@ public struct TransformAction: ActionImplementation {
         // and "emails/welcome.tpl" becomes ["emails/welcome", "tpl"]
         // We join with '.' to reconstruct the original path with extension
         guard !object.specifiers.isEmpty else {
-            throw ActionError.runtimeError("Template path required: <template: path>")
+            throw ActionError.missingRequiredField(field: "a template path", action: "Render")
         }
 
         // Join specifiers with '.' to reconstruct path with extension
@@ -896,7 +896,7 @@ public struct CreateAction: ActionImplementation {
             FileHandle.standardError.write("[CreateAction] DEBUG: _to_ is nil - date range 'to' clause not bound\n".data(using: .utf8)!)
         }
         guard let endValue, let endDate = getARODate(from: endValue) else {
-            throw ActionError.runtimeError("Date range requires a 'to' clause: <Create> the <range: date-range> from <start> to <end>.")
+            throw ActionError.missingRequiredField(field: "a 'to' clause", action: "Create date-range")
         }
 
         let dateService = context.service(DateService.self) ?? DefaultDateService()
@@ -1242,9 +1242,7 @@ public struct MergeAction: ActionImplementation {
                 }
                 return mergeValues(base: existing, source: source, resultName: result.base, context: context)
             }
-            throw ActionError.runtimeError(
-                "Merge requires base value. Use: <Merge> the <result> from <base> with <source>."
-            )
+            throw ActionError.missingRequiredField(field: "a base value", action: "Merge")
         } else {
             // Legacy syntax: <Merge> the <target> with <source>.
             // For backwards compatibility, use result as both base and target
@@ -1402,9 +1400,7 @@ public struct DeleteAction: ActionImplementation {
         }
 
         guard let field = whereField, let matchValue = whereValue else {
-            throw ActionError.runtimeError(
-                "Delete from repository requires a where clause: <Delete> the <item> from the <\(repositoryName)> where field = <value>."
-            )
+            throw ActionError.missingRequiredField(field: "a 'where' clause", action: "Delete from \(repositoryName)")
         }
 
         // Delete from repository storage service

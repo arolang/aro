@@ -838,7 +838,7 @@ public struct WriteAction: ActionImplementation {
 
         // Validate URL
         guard urlString.hasPrefix("http://") || urlString.hasPrefix("https://") else {
-            throw ActionError.runtimeError("Invalid URL: \(urlString). URL must start with http:// or https://")
+            throw ActionError.invalidURL(urlString)
         }
 
         // Get data to write
@@ -891,7 +891,7 @@ public struct WriteAction: ActionImplementation {
             body: response.bodyString
         )
         #else
-        throw ActionError.runtimeError("HTTP client not available on Windows")
+        throw ActionError.unsupportedPlatform("HTTP client")
         #endif
     }
 }

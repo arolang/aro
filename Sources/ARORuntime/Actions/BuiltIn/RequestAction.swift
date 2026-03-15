@@ -89,7 +89,7 @@ public struct RequestAction: ActionImplementation {
 
         // Validate URL
         guard url.hasPrefix("http://") || url.hasPrefix("https://") else {
-            throw ActionError.runtimeError("Invalid URL: \(url). URL must start with http:// or https://")
+            throw ActionError.invalidURL(url)
         }
 
         // Determine HTTP method (config overrides preposition)
@@ -158,7 +158,7 @@ public struct RequestAction: ActionImplementation {
             headers: response.headers
         )
         #else
-        throw ActionError.runtimeError("HTTP client not available on Windows")
+        throw ActionError.unsupportedPlatform("HTTP client")
         #endif
     }
 

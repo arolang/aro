@@ -972,7 +972,7 @@ public struct ReadAction: ActionImplementation {
 
         // Validate URL
         guard urlString.hasPrefix("http://") || urlString.hasPrefix("https://") else {
-            throw ActionError.runtimeError("Invalid URL: \(urlString). URL must start with http:// or https://")
+            throw ActionError.invalidURL(urlString)
         }
 
         // Perform GET request
@@ -999,7 +999,7 @@ public struct ReadAction: ActionImplementation {
         let content = response.bodyString ?? ""
         return FormatDeserializer.deserialize(content, format: format, options: [:])
         #else
-        throw ActionError.runtimeError("HTTP client not available on Windows")
+        throw ActionError.unsupportedPlatform("HTTP client")
         #endif
     }
 }
