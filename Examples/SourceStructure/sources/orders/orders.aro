@@ -2,8 +2,8 @@
 (* Located in sources/orders/orders.aro - demonstrating subdirectory organization *)
 
 (Handle Order Creation: CreateOrder Handler) {
-    Extract the <userId> from the <event: data.userId>.
-    Extract the <total> from the <event: data.total>.
+    Extract the <userId> from the <event: userId>.
+    Extract the <total> from the <event: total>.
 
     Create the <order> with {
         id: "order-1",
