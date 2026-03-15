@@ -772,34 +772,101 @@ public final class TemplateExecutor: @unchecked Sendable {
         templateService: TemplateService,
         templatePath: String
     ) async throws -> String {
+        // Direct context lookup bypasses the Any boxing from resolveVariableExpression.
+        // resolveVariableExpression returns Any which wraps any Sendable which wraps [any Sendable],
+        // making cast and Mirror detection fail for collections stored via RetrieveAction.
+        let directLookup = context.resolveAny(config.collection)
+        if let directValue = directLookup {
+            if let items = directValue as? [any Sendable] {
+                return try await executeForEachOverItems(
+                    items: items, config: config, body: body,
+                    context: context, templateService: templateService, templatePath: templatePath
+                )
+            }
+            if let items = directValue as? [Any] {
+                return try await executeForEachOverItems(
+                    items: items, config: config, body: body,
+                    context: context, templateService: templateService, templatePath: templatePath
+                )
+            }
+            // Dictionary fallback: iterate over values sorted by key (handles "retrieve all" in binary mode)
+            if let dict = directValue as? [String: any Sendable] {
+                let sorted = dict.sorted { a, b in
+                    if let ia = Int(a.key), let ib = Int(b.key) { return ia < ib }
+                    return a.key < b.key
+                }.map { $0.value }
+                return try await executeForEachOverItems(
+                    items: sorted, config: config, body: body,
+                    context: context, templateService: templateService, templatePath: templatePath
+                )
+            }
+            let directMirror = Mirror(reflecting: directValue)
+            if directMirror.displayStyle == .collection {
+                let items = directMirror.children.map { $0.value }
+                return try await executeForEachOverItems(
+                    items: items, config: config, body: body,
+                    context: context, templateService: templateService, templatePath: templatePath
+                )
+            }
+        }
+
         // Resolve the collection
         let collection = try resolveVariableExpression("<\(config.collection)>", context: context)
 
-        // Convert to array
-        guard let items = collection as? [Any] else {
-            if let sendableItems = collection as? [any Sendable] {
-                return try await executeForEachOverItems(
-                    items: sendableItems,
-                    config: config,
-                    body: body,
-                    context: context,
-                    templateService: templateService,
-                    templatePath: templatePath
-                )
-            }
-            throw TemplateError.renderError(
-                path: templatePath,
-                message: "For-each collection '\(config.collection)' is not iterable"
+        // Try [Any] first (most common path)
+        if let items = collection as? [Any] {
+            return try await executeForEachOverItems(
+                items: items, config: config, body: body,
+                context: context, templateService: templateService, templatePath: templatePath
             )
         }
 
-        return try await executeForEachOverItems(
-            items: items,
-            config: config,
-            body: body,
-            context: context,
-            templateService: templateService,
-            templatePath: templatePath
+        // Try [any Sendable] (returned directly from RetrieveAction)
+        if let items = collection as? [any Sendable] {
+            return try await executeForEachOverItems(
+                items: items, config: config, body: body,
+                context: context, templateService: templateService, templatePath: templatePath
+            )
+        }
+
+        // Unwrap AnySendableWrapper and retry
+        if let wrapper = collection as? AnySendableWrapper {
+            if let items = wrapper.value as? [Any] {
+                return try await executeForEachOverItems(
+                    items: items, config: config, body: body,
+                    context: context, templateService: templateService, templatePath: templatePath
+                )
+            }
+            if let items = wrapper.value as? [any Sendable] {
+                return try await executeForEachOverItems(
+                    items: items, config: config, body: body,
+                    context: context, templateService: templateService, templatePath: templatePath
+                )
+            }
+            // Mirror fallback on the inner value (wrapper itself is a struct, not a collection)
+            let innerMirror = Mirror(reflecting: wrapper.value)
+            if innerMirror.displayStyle == .collection {
+                let items = innerMirror.children.map { $0.value }
+                return try await executeForEachOverItems(
+                    items: items, config: config, body: body,
+                    context: context, templateService: templateService, templatePath: templatePath
+                )
+            }
+        }
+
+        // Mirror fallback: handles any collection regardless of how it was existential-boxed
+        let mirror = Mirror(reflecting: collection)
+        if mirror.displayStyle == .collection {
+            let items = mirror.children.map { $0.value }
+            return try await executeForEachOverItems(
+                items: items, config: config, body: body,
+                context: context, templateService: templateService, templatePath: templatePath
+            )
+        }
+
+        throw TemplateError.renderError(
+            path: templatePath,
+            message: "For-each collection '\(config.collection)' is not iterable"
         )
     }
 
