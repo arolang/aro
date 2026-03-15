@@ -1789,7 +1789,8 @@ private func evaluateBinaryOp(op: String, left: any Sendable, right: any Sendabl
         return 0
 
     case "/":
-        if let l = asDouble(left), let r = asDouble(right), r != 0 {
+        if let l = asDouble(left), let r = asDouble(right) {
+            guard r != 0 else { fatalError("Division by zero") }
             // Integer / Integer → integer floor division (e.g. 80/3 = 26)
             if let li = left as? Int, let ri = right as? Int {
                 return li / ri
