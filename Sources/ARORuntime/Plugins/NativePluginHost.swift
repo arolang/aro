@@ -136,7 +136,11 @@ public final class NativePluginHost: @unchecked Sendable {
         // If library not found, try to compile it
         if libraryPath == nil {
             debugPrint("[NativePluginHost] No pre-built library found for \(pluginName), attempting compilation...")
-            libraryPath = try compileNativePlugin(config: config, ext: ext)
+            do {
+                libraryPath = try compileNativePlugin(config: config, ext: ext)
+            } catch let NativePluginError.compilationFailed(name, message) {
+                throw ActionError.runtimeError("Plugin '\(name)' failed to compile: \(message)")
+            }
         }
 
         guard let libraryPath = libraryPath else {
@@ -335,8 +339,9 @@ public final class NativePluginHost: @unchecked Sendable {
             }
         }
 
-        debugPrint("[NativePluginHost] Library not found after cargo build")
-        return nil
+        let errorMessage = "Library not found in '\(targetDir.path)' after successful cargo build"
+        debugPrint("[NativePluginHost] \(errorMessage)")
+        throw NativePluginError.compilationFailed(pluginName, message: errorMessage)
     }
 
     /// Find source files with a given extension in the plugin path
