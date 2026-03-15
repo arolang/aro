@@ -169,6 +169,9 @@ public struct RequestAction: ActionImplementation {
         if let config = context.resolveAny("_expression_") as? [String: any Sendable] {
             return config
         }
+        if let config = context.resolveAny("_with_") as? [String: any Sendable] {
+            return config
+        }
         if let config = context.resolveAny("_literal_") as? [String: any Sendable] {
             return config
         }

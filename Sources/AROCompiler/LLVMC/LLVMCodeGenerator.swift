@@ -180,6 +180,32 @@ public final class LLVMCodeGenerator {
         // Initialize result to null
         ctx.module.insertStore(ctx.ptrType.null, to: resultPtr, at: ctx.insertionPoint)
 
+        // Feature-set-level when/where guard: if present, skip execution when condition is false.
+        // This implements `(Name: Event Handler) where <event: field> == "value" { ... }`.
+        // The guard is evaluated at runtime against the handler's context (which has event bound).
+        if let guardCond = fs.whenCondition {
+            let guardTrueBlock = ctx.module.appendBlock(named: "guard_true", to: function)
+            let guardFalseBlock = ctx.module.appendBlock(named: "guard_false", to: function)
+
+            let condJSON = ctx.stringConstant(serializeExpression(guardCond))
+            let guardResult = ctx.module.insertCall(
+                externals.evaluateWhenGuard,
+                on: [ctxParam, condJSON],
+                at: ctx.insertionPoint
+            )
+            let guardPassed = ctx.module.insertIntegerComparison(
+                .ne, guardResult, ctx.i32Type.zero, at: ctx.insertionPoint
+            )
+            ctx.module.insertCondBr(if: guardPassed, then: guardTrueBlock, else: guardFalseBlock, at: ctx.insertionPoint)
+
+            // Guard false: return null immediately (skip this handler)
+            ctx.setInsertionPoint(atEndOf: guardFalseBlock)
+            ctx.module.insertReturn(ctx.ptrType.null, at: ctx.insertionPoint)
+
+            // Guard true: continue with body
+            ctx.setInsertionPoint(atEndOf: guardTrueBlock)
+        }
+
         // Create control flow blocks
         let normalReturnBlock = ctx.module.appendBlock(named: "normal_return", to: function)
         let errorExitBlock = ctx.module.appendBlock(named: "error_exit", to: function)
@@ -303,9 +329,15 @@ public final class LLVMCodeGenerator {
         // Build object descriptor
         let objectDesc = buildObjectDescriptor(statement.object, prefix: prefix)
 
-        // Clear _default_value_ before binding modifiers (mirrors FeatureSetExecutor line 255)
-        let defaultValueName = ctx.stringConstant("_default_value_")
-        _ = ctx.module.insertCall(externals.variableUnbind, on: [ctx.currentContextVar!, defaultValueName], at: ctx.insertionPoint)
+        // Clear transient query modifiers before binding fresh ones (mirrors FeatureSetExecutor lines 248-256)
+        // Without this, where/by bindings from earlier Retrieve calls persist and contaminate
+        // subsequent Retrieve calls (e.g. "Retrieve all" after "Retrieve where key = X" would
+        // incorrectly still filter by key = X).
+        for transientKey in ["_where_field_", "_where_op_", "_where_value_", "_by_pattern_", "_by_flags_",
+                             "_aggregation_type_", "_aggregation_field_", "_default_value_"] {
+            let keyStr = ctx.stringConstant(transientKey)
+            _ = ctx.module.insertCall(externals.variableUnbind, on: [ctx.currentContextVar!, keyStr], at: ctx.insertionPoint)
+        }
 
         // Bind query modifiers if present
         bindQueryModifiers(statement.queryModifiers)
@@ -946,7 +978,8 @@ public final class LLVMCodeGenerator {
 
     /// Serialize match subject to JSON
     private func serializeMatchSubject(_ subject: QualifiedNoun) -> String {
-        "{\"name\":\"\(escapeJSON(subject.base))\"}"
+        let specsJSON = subject.specifiers.map { "\"\(escapeJSON($0))\"" }.joined(separator: ",")
+        return "{\"name\":\"\(escapeJSON(subject.base))\",\"specifiers\":[\(specsJSON)]}"
     }
 
     /// Serialize a pattern to JSON for match statement

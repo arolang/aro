@@ -107,6 +107,10 @@ struct RunCommand: AsyncParsableCommand {
         setvbuf(stdout, nil, _IONBF, 0)
         #endif
 
+        // Install SIGINT/SIGTERM handlers early so Ctrl-C always terminates the app,
+        // even for apps that don't use the Keepalive action.
+        KeepaliveSignalHandler.shared.setup()
+
         var mutableSelf = self
         mutableSelf.extractRunCommandFlags()
 

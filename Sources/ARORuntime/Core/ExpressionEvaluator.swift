@@ -182,7 +182,7 @@ public struct ExpressionEvaluator: Sendable {
         case .divide:
             // Int/Int → integer floor division (matches binary mode evaluateBinaryOp behavior)
             if let li = left as? Int, let ri = right as? Int {
-                guard ri != 0 else { return 0 }
+                guard ri != 0 else { throw ActionError.runtimeError("Division by zero") }
                 return li / ri
             }
             return try numericOperation(left, right) { $0 / $1 }
