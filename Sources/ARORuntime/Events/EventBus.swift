@@ -251,7 +251,13 @@ public actor EventBus {
     }
 
     private func unregisterPendingHandlerInternal() {
-        inFlightHandlers = max(0, inFlightHandlers - 1)
+        assert(inFlightHandlers > 0, "EventBus: unregisterPendingHandler called with no handlers in flight — mismatched register/unregister pair")
+        guard inFlightHandlers > 0 else {
+            // Release: log and bail rather than underflow
+            FileHandle.standardError.write(Data("EventBus warning: unregisterPendingHandler called with no handlers in flight\n".utf8))
+            return
+        }
+        inFlightHandlers -= 1
         if inFlightHandlers == 0 {
             let continuations = flushContinuations
             flushContinuations.removeAll()
