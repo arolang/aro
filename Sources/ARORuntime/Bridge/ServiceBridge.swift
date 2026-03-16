@@ -2743,10 +2743,14 @@ private func extractPortFromOpenAPIYAML(_ yaml: String) -> Int {
     return 0
 }
 
+/// Reused decoder for OpenAPI JSON parsing — only called during binary-mode startup
+/// (single-threaded), so shared access is safe.
+private let openAPIJSONDecoder = JSONDecoder()
+
 /// Extract port from OpenAPI JSON spec's server URL
 private func extractPortFromOpenAPIJSON(_ json: String) -> Int {
     guard let data = json.data(using: .utf8),
-          let spec = try? JSONDecoder().decode(OpenAPISpec.self, from: data),
+          let spec = try? openAPIJSONDecoder.decode(OpenAPISpec.self, from: data),
           let servers = spec.servers,
           let firstServer = servers.first else {
         return 0
@@ -2815,7 +2819,7 @@ private func parseOpenAPIRoutes(_ content: String) {
 /// Parse routes from OpenAPI JSON spec
 private func parseOpenAPIRoutesJSON(_ json: String) {
     guard let data = json.data(using: .utf8),
-          let spec = try? JSONDecoder().decode(OpenAPISpec.self, from: data) else {
+          let spec = try? openAPIJSONDecoder.decode(OpenAPISpec.self, from: data) else {
         return
     }
 

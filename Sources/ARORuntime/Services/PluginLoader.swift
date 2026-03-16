@@ -2314,6 +2314,11 @@ final class CPluginQualifierHost: PluginQualifierHost, @unchecked Sendable {
     private let qualifierFunc: @convention(c) (UnsafePointer<CChar>?, UnsafePointer<CChar>?) -> UnsafeMutablePointer<CChar>?
     private let freeFunc: PluginLoader.CPluginFreeFunction?
 
+    /// Reused encoder/decoder — safe because CPluginQualifierHost is @unchecked Sendable
+    /// and qualifier calls are serialised through the host.
+    private let encoder = JSONEncoder()
+    private let decoder = JSONDecoder()
+
     init(
         pluginName: String,
         qualifierFunc: @convention(c) (UnsafePointer<CChar>?, UnsafePointer<CChar>?) -> UnsafeMutablePointer<CChar>?,
@@ -2328,7 +2333,6 @@ final class CPluginQualifierHost: PluginQualifierHost, @unchecked Sendable {
         // Create input JSON
         let qualifierInput = QualifierInput(value: input)
 
-        let encoder = JSONEncoder()
         let inputData = try encoder.encode(qualifierInput)
         let inputJSON = String(data: inputData, encoding: .utf8) ?? "{}"
 
@@ -2358,7 +2362,6 @@ final class CPluginQualifierHost: PluginQualifierHost, @unchecked Sendable {
             )
         }
 
-        let decoder = JSONDecoder()
         let output = try decoder.decode(QualifierOutput.self, from: resultData)
 
         if let error = output.error, !error.isEmpty {
