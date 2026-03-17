@@ -27,9 +27,13 @@ ARO_ROOT     = (SCRIPT_DIR / '../../').resolve()
 EXAMPLES_DIR = ARO_ROOT / 'Examples'
 BOOK_ROOT    = ARO_ROOT / 'Book'
 
+# ── Output root (override this to redirect all data to a different location) ──
+
+GLOBAL_OUT_DIR = SCRIPT_DIR
+
 # ── Data directories ──────────────────────────────────────────────────────────
 
-DATA_ROOT    = SCRIPT_DIR / '../data'
+DATA_ROOT    = GLOBAL_OUT_DIR / '../data'
 DATA_IN      = DATA_ROOT / '02_knowledge'   # primary knowledge base
 DATA_DIR     = DATA_IN                       # alias used by some notebooks
 
