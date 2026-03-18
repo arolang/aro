@@ -1001,6 +1001,40 @@ public struct UpdateAction: ActionImplementation {
             updateValue = object.base
         }
 
+        // Check if this is a repository configuration (e.g., Configure the <session-repository: ttl> with 300.)
+        if InMemoryRepositoryStorage.isRepositoryName(result.base), let fieldName = result.specifiers.first {
+            let storage = context.service(RepositoryStorageService.self) ?? InMemoryRepositoryStorage.shared
+
+            // Read current config so setting ttl doesn't wipe maxSize and vice versa
+            var currentTTL: TimeInterval? = nil
+            var currentMaxSize: Int? = nil
+            if let existing = context.resolveAny(result.base) as? [String: any Sendable] {
+                if let t = existing["ttl"] as? TimeInterval { currentTTL = t }
+                else if let t = existing["ttl"] as? Double { currentTTL = t }
+                else if let t = existing["ttl"] as? Int { currentTTL = TimeInterval(t) }
+                if let m = existing["maxSize"] as? Int { currentMaxSize = m }
+                else if let m = existing["maxSize"] as? Double { currentMaxSize = Int(m) }
+            }
+
+            switch fieldName {
+            case "ttl":
+                if let v = updateValue as? Double { currentTTL = v }
+                else if let v = updateValue as? Int { currentTTL = TimeInterval(v) }
+            case "maxSize":
+                if let v = updateValue as? Int { currentMaxSize = v }
+                else if let v = updateValue as? Double { currentMaxSize = Int(v) }
+            default:
+                break
+            }
+
+            await storage.configure(repository: result.base, ttl: currentTTL, maxSize: currentMaxSize)
+
+            var configDict = context.resolveAny(result.base) as? [String: any Sendable] ?? [:]
+            configDict[fieldName] = updateValue
+            context.bind(result.base, value: configDict, allowRebind: true)
+            return configDict
+        }
+
         // Check if we're updating a specific field (e.g., <order: status>)
         if let fieldName = result.specifiers.first {
             // Update specific field in the entity

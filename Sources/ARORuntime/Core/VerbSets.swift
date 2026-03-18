@@ -12,7 +12,7 @@ public enum VerbSets {
     public static let requestVerbs: Set<String> = ["call", "invoke", "request", "fetch", "retrieve", "listen"]
 
     /// Mutation verbs — always execute so they can handle rebinding internally
-    public static let updateVerbs: Set<String> = ["update", "modify", "change", "set"]
+    public static let updateVerbs: Set<String> = ["update", "modify", "change", "set", "configure"]
 
     /// Creation verbs — execute when specifiers present (typed entities need ID generation)
     public static let createVerbs: Set<String> = ["create", "make", "build", "construct"]
