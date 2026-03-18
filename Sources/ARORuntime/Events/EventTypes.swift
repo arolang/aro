@@ -323,6 +323,37 @@ public struct RepositoryChangedEvent: RuntimeEvent {
     }
 }
 
+/// Event emitted when an item is evicted from a repository due to maxSize or TTL.
+///
+/// Programmers can handle this event using the `{repository-name} Evicted Handler`
+/// business activity pattern, e.g.:
+/// ```aro
+/// (Log Eviction: cache-repository Evicted Handler) {
+///     Extract the <item> from the <event: evictedItem>.
+///     Log <item> to the <console>.
+/// }
+/// ```
+public struct RepositoryEvictedEvent: RuntimeEvent {
+    public static var eventType: String { "repository.evicted" }
+    public let timestamp: Date
+
+    /// Repository name (e.g., "cache-repository")
+    public let repositoryName: String
+
+    /// The item that was removed
+    public let evictedItem: any Sendable
+
+    /// Why the item was evicted: "maxSize" or "ttl"
+    public let reason: String
+
+    public init(repositoryName: String, evictedItem: any Sendable, reason: String) {
+        self.timestamp = Date()
+        self.repositoryName = repositoryName
+        self.evictedItem = evictedItem
+        self.reason = reason
+    }
+}
+
 // MARK: - State Transition Events
 
 /// Event emitted when a state transition is accepted via the Accept action

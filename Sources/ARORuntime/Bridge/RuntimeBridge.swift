@@ -1417,6 +1417,13 @@ private func convertToSendable(_ value: Any) -> any Sendable {
         // This case should not be reached on macOS (CFBoolean is NSNumber)
         // But keep it for other platforms
         return bool
+    case let sendableDict as [String: any Sendable]:
+        // Already the correct type — recurse to ensure nested values are also clean
+        var result: [String: any Sendable] = [:]
+        for (k, v) in sendableDict {
+            result[k] = convertToSendable(v)
+        }
+        return result
     case let dict as [String: Any]:
         var result: [String: any Sendable] = [:]
         for (k, v) in dict {
