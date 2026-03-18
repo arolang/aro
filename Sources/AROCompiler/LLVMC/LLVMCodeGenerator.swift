@@ -1190,9 +1190,14 @@ public final class LLVMCodeGenerator {
 
         // Unbind all variables that will be bound in the loop body
         // This simulates the child context behavior of the interpreter,
-        // allowing variables to be rebound on each iteration
+        // allowing variables to be rebound on each iteration.
+        // Exclude the item variable and index variable — they are already
+        // managed by the dedicated unbind+rebind code above, mirroring
+        // the same exclusion in generateRangeLoop (line: varName != loop.variable).
+        var managedByLoop = Set([loop.itemVariable])
+        if let indexVar = loop.indexVariable { managedByLoop.insert(indexVar) }
         let bodyVariables = collectBoundVariables(from: loop.body)
-        for varName in bodyVariables {
+        for varName in bodyVariables where !managedByLoop.contains(varName) {
             let varNameConst = ctx.stringConstant(varName)
             _ = ctx.module.insertCall(
                 externals.variableUnbind,
