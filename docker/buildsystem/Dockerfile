@@ -16,6 +16,16 @@ LABEL org.opencontainers.image.description="Build environment for compiling ARO 
 LABEL org.opencontainers.image.source="https://github.com/arolang/aro"
 LABEL org.opencontainers.image.vendor="ARO Language"
 
+# When cross-compiling for arm64 via QEMU on GitHub Actions, ldconfig segfaults
+# under user-space emulation (exit 139). Replace it with a no-op for the duration
+# of apt-get, then restore the real binary afterwards.
+ARG TARGETARCH
+RUN if [ "$TARGETARCH" = "arm64" ]; then \
+      mv /sbin/ldconfig /sbin/ldconfig.real-bak 2>/dev/null || true; \
+      printf '#!/bin/sh\n' > /sbin/ldconfig; \
+      chmod +x /sbin/ldconfig; \
+    fi
+
 # Install build dependencies including LLVM 20
 RUN apt-get update && apt-get install -y --no-install-recommends \
     libcurl4-openssl-dev \
@@ -33,6 +43,11 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && ln -sf /usr/bin/llc-20 /usr/bin/llc \
     && ln -sf /usr/bin/clang-20 /usr/bin/clang \
     && rm -rf /var/lib/apt/lists/*
+
+# Restore the real ldconfig after apt-get (was replaced for QEMU arm64 compatibility)
+RUN if [ -f /sbin/ldconfig.real-bak ]; then \
+      mv /sbin/ldconfig.real-bak /sbin/ldconfig && ldconfig; \
+    fi
 
 # Create pkg-config file for LLVM
 RUN mkdir -p /usr/lib/pkgconfig && \
