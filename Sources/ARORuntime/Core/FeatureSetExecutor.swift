@@ -1021,7 +1021,6 @@ public final class Runtime: @unchecked Sendable {
             let handlers = self.withLock {
                 self._compiledHandlers[event.domainEventType] ?? []
             }
-
             // Execute all matching handlers concurrently
             await withTaskGroup(of: Void.self) { group in
                 for (_, callback) in handlers {
