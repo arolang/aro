@@ -246,8 +246,18 @@ private actor RepositoryStorageActor {
     }
 
     // MARK: - Core operations
+    //
+    // Each public method resolves the StorageKey internally so that key
+    // resolution and the subsequent mutation happen in a single actor turn.
+    // This eliminates the TOCTOU window that would exist if the caller called
+    // resolveKey() in one await and the operation in a second await — between
+    // those two turns another task could call export() and remap applicationScope.
+    //
+    // ATOMIC: do not split resolveKey + operation across two actor awaits.
 
-    func store(value: any Sendable, key: StorageKey) -> RepositoryStoreResult {
+    func store(value: any Sendable, repository: String, businessActivity: String) -> RepositoryStoreResult {
+        // ATOMIC: key resolution and mutation in one actor turn
+        let key = resolveKey(repository: repository, businessActivity: businessActivity)
         ensureKey(key)
 
         var valueToStore = value
@@ -361,7 +371,9 @@ private actor RepositoryStorageActor {
         return oldestValue
     }
 
-    func retrieve(key: StorageKey) -> [any Sendable] {
+    func retrieve(repository: String, businessActivity: String) -> [any Sendable] {
+        // ATOMIC: key resolution and read in one actor turn
+        let key = resolveKey(repository: repository, businessActivity: businessActivity)
         guard let rowOrder = order[key], let rowMap = rows[key] else { return [] }
         let ttl = configs[key]?.ttl
         return rowOrder.compactMap { rowId -> (any Sendable)? in
@@ -371,7 +383,9 @@ private actor RepositoryStorageActor {
         }
     }
 
-    func retrieveFiltered(key: StorageKey, field: String, matchValue: any Sendable) -> [any Sendable] {
+    func retrieveFiltered(repository: String, businessActivity: String, field: String, matchValue: any Sendable) -> [any Sendable] {
+        // ATOMIC: key resolution and read in one actor turn
+        let key = resolveKey(repository: repository, businessActivity: businessActivity)
         guard let rowOrder = order[key], let rowMap = rows[key] else { return [] }
         let ttl = configs[key]?.ttl
 
@@ -389,11 +403,15 @@ private actor RepositoryStorageActor {
         applicationScope[name] = key
     }
 
-    func exists(key: StorageKey) -> Bool {
+    func exists(repository: String, businessActivity: String) -> Bool {
+        // ATOMIC: key resolution and read in one actor turn
+        let key = resolveKey(repository: repository, businessActivity: businessActivity)
         return !(order[key]?.isEmpty ?? true)
     }
 
-    func count(key: StorageKey) -> Int {
+    func count(repository: String, businessActivity: String) -> Int {
+        // ATOMIC: key resolution and read in one actor turn
+        let key = resolveKey(repository: repository, businessActivity: businessActivity)
         return order[key]?.count ?? 0
     }
 
@@ -401,7 +419,9 @@ private actor RepositoryStorageActor {
         configs[key] = RepositoryConfig(maxSize: maxSize, ttl: ttl)
     }
 
-    func clear(key: StorageKey) {
+    func clear(repository: String, businessActivity: String) {
+        // ATOMIC: key resolution and mutation in one actor turn
+        let key = resolveKey(repository: repository, businessActivity: businessActivity)
         rows[key]       = nil
         order[key]      = nil
         nextRowId[key]  = nil
@@ -410,7 +430,9 @@ private actor RepositoryStorageActor {
         timestamps[key] = nil
     }
 
-    func delete(key: StorageKey, field: String, matchValue: any Sendable) -> RepositoryDeleteResult {
+    func delete(repository: String, businessActivity: String, field: String, matchValue: any Sendable) -> RepositoryDeleteResult {
+        // ATOMIC: key resolution and mutation in one actor turn
+        let key = resolveKey(repository: repository, businessActivity: businessActivity)
         let ik = indexKey(for: matchValue)
         // Capture set before any mutations
         guard let rowIdsToDelete = fieldIndex[key]?[field]?[ik], !rowIdsToDelete.isEmpty else {
@@ -432,12 +454,14 @@ private actor RepositoryStorageActor {
         return RepositoryDeleteResult(deletedItems: deletedItems)
     }
 
-    func findById(key: StorageKey, id: String) -> (any Sendable)? {
+    func findById(repository: String, businessActivity: String, id: String) -> (any Sendable)? {
+        // ATOMIC: key resolution and read in one actor turn
+        let key = resolveKey(repository: repository, businessActivity: businessActivity)
         guard let rowId = idIndex[key]?[id] else { return nil }
         return rows[key]?[rowId]
     }
 
-    func resolveKey(repository: String, businessActivity: String) -> StorageKey {
+    private func resolveKey(repository: String, businessActivity: String) -> StorageKey {
         if let exportedKey = applicationScope[repository] {
             return exportedKey
         }
@@ -498,14 +522,12 @@ public final class InMemoryRepositoryStorage: RepositoryStorageService, Sendable
 
     @discardableResult
     public func store(value: any Sendable, in repository: String, businessActivity: String) async -> any Sendable {
-        let key = await actor.resolveKey(repository: repository, businessActivity: businessActivity)
-        let result = await actor.store(value: value, key: key)
+        let result = await actor.store(value: value, repository: repository, businessActivity: businessActivity)
         return result.storedValue
     }
 
     public func storeWithChangeInfo(value: any Sendable, in repository: String, businessActivity: String) async -> RepositoryStoreResult {
-        let key = await actor.resolveKey(repository: repository, businessActivity: businessActivity)
-        let result = await actor.store(value: value, key: key)
+        let result = await actor.store(value: value, repository: repository, businessActivity: businessActivity)
         if let evicted = result.evictedItem {
             EventBus.shared.publish(RepositoryEvictedEvent(
                 repositoryName: repository,
@@ -527,8 +549,7 @@ public final class InMemoryRepositoryStorage: RepositoryStorageService, Sendable
     }
 
     public func retrieve(from repository: String, businessActivity: String) async -> [any Sendable] {
-        let key = await actor.resolveKey(repository: repository, businessActivity: businessActivity)
-        return await actor.retrieve(key: key)
+        return await actor.retrieve(repository: repository, businessActivity: businessActivity)
     }
 
     public func retrieve(
@@ -537,8 +558,7 @@ public final class InMemoryRepositoryStorage: RepositoryStorageService, Sendable
         where field: String,
         equals matchValue: any Sendable
     ) async -> [any Sendable] {
-        let key = await actor.resolveKey(repository: repository, businessActivity: businessActivity)
-        return await actor.retrieveFiltered(key: key, field: field, matchValue: matchValue)
+        return await actor.retrieveFiltered(repository: repository, businessActivity: businessActivity, field: field, matchValue: matchValue)
     }
 
     public func export(repository: String, from businessActivity: String, as name: String) async {
@@ -547,13 +567,11 @@ public final class InMemoryRepositoryStorage: RepositoryStorageService, Sendable
     }
 
     public func exists(repository: String, businessActivity: String) async -> Bool {
-        let key = await actor.resolveKey(repository: repository, businessActivity: businessActivity)
-        return await actor.exists(key: key)
+        return await actor.exists(repository: repository, businessActivity: businessActivity)
     }
 
     public func clear(repository: String, businessActivity: String) async {
-        let key = await actor.resolveKey(repository: repository, businessActivity: businessActivity)
-        await actor.clear(key: key)
+        await actor.clear(repository: repository, businessActivity: businessActivity)
     }
 
     public func delete(
@@ -562,18 +580,15 @@ public final class InMemoryRepositoryStorage: RepositoryStorageService, Sendable
         where field: String,
         equals value: any Sendable
     ) async -> RepositoryDeleteResult {
-        let key = await actor.resolveKey(repository: repository, businessActivity: businessActivity)
-        return await actor.delete(key: key, field: field, matchValue: value)
+        return await actor.delete(repository: repository, businessActivity: businessActivity, field: field, matchValue: value)
     }
 
     public func findById(in repository: String, businessActivity: String, id: String) async -> (any Sendable)? {
-        let key = await actor.resolveKey(repository: repository, businessActivity: businessActivity)
-        return await actor.findById(key: key, id: id)
+        return await actor.findById(repository: repository, businessActivity: businessActivity, id: id)
     }
 
     public func count(repository: String, businessActivity: String) async -> Int {
-        let key = await actor.resolveKey(repository: repository, businessActivity: businessActivity)
-        return await actor.count(key: key)
+        return await actor.count(repository: repository, businessActivity: businessActivity)
     }
 
     /// Get count synchronously (for compiled binary when guards)
