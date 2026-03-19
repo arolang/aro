@@ -146,6 +146,13 @@ public protocol RepositoryStorageService: Sendable {
     ///   - businessActivity: The business activity scope
     /// - Returns: Number of items in the repository
     func count(repository: String, businessActivity: String) async -> Int
+
+    /// Configure TTL and/or maxSize for a repository
+    /// - Parameters:
+    ///   - repository: Repository name
+    ///   - ttl: Time-to-live in seconds (nil = no expiry)
+    ///   - maxSize: Maximum item count; oldest item evicted when exceeded (nil = unlimited)
+    func configure(repository: String, ttl: TimeInterval?, maxSize: Int?) async
 }
 
 /// Storage key for repository name only (repositories are application-scoped)
