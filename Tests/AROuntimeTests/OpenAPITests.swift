@@ -377,3 +377,126 @@ struct OpenAPIResponseTests {
         #expect(response.content?["application/json"] != nil)
     }
 }
+
+// MARK: - Contract Validation Tests
+
+@Suite("Contract Validation Tests")
+struct ContractValidationTests {
+
+    /// A minimal spec with two operations: listUsers (GET /users) and createUser (POST /users).
+    private static let twoOperationSpecJSON = """
+    {
+        "openapi": "3.0.3",
+        "info": { "title": "User API", "version": "1.0.0" },
+        "paths": {
+            "/users": {
+                "get": {
+                    "operationId": "listUsers",
+                    "responses": { "200": { "description": "OK" } }
+                },
+                "post": {
+                    "operationId": "createUser",
+                    "responses": { "201": { "description": "Created" } }
+                }
+            }
+        }
+    }
+    """
+
+    private var spec: OpenAPISpec {
+        get throws {
+            let data = Self.twoOperationSpecJSON.data(using: .utf8)!
+            return try JSONDecoder().decode(OpenAPISpec.self, from: data)
+        }
+    }
+
+    @Test("validate reports all missing handlers at once")
+    func testMissingHandlersAllReported() throws {
+        let source = """
+        (Application-Start: Test App) {
+            Return an <OK: status> for the <startup>.
+        }
+        """
+        let result = Compiler().compile(source)
+        let featureSets = result.analyzedProgram.featureSets
+
+        do {
+            try ContractValidator.validate(spec: try spec, featureSets: featureSets)
+            Issue.record("Expected ContractValidationError.missingHandlers to be thrown")
+        } catch let error as ContractValidationError {
+            guard case .missingHandlers(let handlers) = error else {
+                Issue.record("Expected .missingHandlers, got \(error)")
+                return
+            }
+            #expect(handlers.count == 2)
+            let ids = Set(handlers.map { $0.operationId })
+            #expect(ids.contains("listUsers"))
+            #expect(ids.contains("createUser"))
+        }
+    }
+
+    @Test("validate passes when all operationIds have matching feature sets")
+    func testAllHandlersPresent() throws {
+        let source = """
+        (listUsers: User API) {
+            Return an <OK: status> for the <users>.
+        }
+        (createUser: User API) {
+            Return a <Created: status> for the <user>.
+        }
+        """
+        let result = Compiler().compile(source)
+        let featureSets = result.analyzedProgram.featureSets
+
+        // Must not throw
+        try ContractValidator.validate(spec: try spec, featureSets: featureSets)
+    }
+
+    @Test("validate passes when feature sets are a superset of operationIds")
+    func testExtraFeatureSetsAreAllowed() throws {
+        let source = """
+        (listUsers: User API) {
+            Return an <OK: status> for the <users>.
+        }
+        (createUser: User API) {
+            Return a <Created: status> for the <user>.
+        }
+        (deleteUser: User API) {
+            Return an <OK: status> for the <result>.
+        }
+        """
+        let result = Compiler().compile(source)
+        let featureSets = result.analyzedProgram.featureSets
+
+        // Extra feature set not in spec is fine
+        try ContractValidator.validate(spec: try spec, featureSets: featureSets)
+    }
+
+    @Test("Application.run() throws ContractValidationError before the server starts")
+    func testEagerValidationOnRun() async throws {
+        // ARO source has Application-Start but no listUsers / createUser handlers
+        let source = """
+        (Application-Start: Test App) {
+            Return an <OK: status> for the <startup>.
+        }
+        """
+        let app = try Application(
+            sources: [("main.aro", source)],
+            openAPISpec: try spec
+        )
+
+        do {
+            _ = try await app.run()
+            Issue.record("Expected Application.run() to throw ContractValidationError.missingHandlers")
+        } catch let error as ContractValidationError {
+            guard case .missingHandlers(let handlers) = error else {
+                Issue.record("Expected .missingHandlers, got \(error)")
+                return
+            }
+            #expect(!handlers.isEmpty)
+            let ids = Set(handlers.map { $0.operationId })
+            #expect(ids.contains("listUsers"))
+            #expect(ids.contains("createUser"))
+        }
+    }
+}
