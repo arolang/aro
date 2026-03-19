@@ -28,8 +28,8 @@ EXAMPLES_DIR = ARO_ROOT / 'Examples'
 BOOK_ROOT    = ARO_ROOT / 'Book'
 
 # ── Output root (override this to redirect all data to a different location) ──
-
-GLOBAL_OUT_DIR = SCRIPT_DIR
+# SCRIPT_DIR
+GLOBAL_OUT_DIR = Path('/Volumes/Models/data').resolve()
 
 # ── Data directories ──────────────────────────────────────────────────────────
 
