@@ -976,6 +976,7 @@ final class FileWatcherHandle: @unchecked Sendable {
     var watchFd: Int32 = -1
     var isWatching: Bool = false
     var monitorThread: Thread?
+    let stopSemaphore = DispatchSemaphore(value: 0)
 
     init(path: String) {
         self.path = path
@@ -995,6 +996,7 @@ final class FileWatcherHandle: @unchecked Sendable {
             close(inotifyFd)
             inotifyFd = -1
         }
+        stopSemaphore.signal()
     }
 }
 
@@ -1099,7 +1101,8 @@ public func aro_file_watcher_start(_ watcherPtr: UnsafeMutableRawPointer?) -> In
                     }
                 }
             } else {
-                usleep(100000) // 100ms
+                // Wait up to 100 ms for a stop signal; break immediately if stop() was called
+                if handle.stopSemaphore.wait(timeout: .now() + 0.1) == .success { break }
             }
         }
     }
@@ -1140,6 +1143,7 @@ final class FileWatcherHandle: @unchecked Sendable {
     var path: String
     var isWatching: Bool = false
     var lastModified: [String: Date] = [:]
+    let stopSemaphore = DispatchSemaphore(value: 0)
 
     init(path: String) {
         self.path = path
@@ -1147,6 +1151,7 @@ final class FileWatcherHandle: @unchecked Sendable {
 
     func stop() {
         isWatching = false
+        stopSemaphore.signal()
     }
 }
 
@@ -1209,8 +1214,10 @@ public func aro_file_watcher_start(_ watcherPtr: UnsafeMutableRawPointer?) -> In
             }
         }
 
-        while handle.isWatching {
-            Thread.sleep(forTimeInterval: 1.0) // Poll every second
+        while true {
+            // Wait up to 1 s; if stop() signals the semaphore, exit immediately
+            if handle.stopSemaphore.wait(timeout: .now() + 1.0) == .success { break }
+            guard handle.isWatching else { break }
 
             guard let contents = try? FileManager.default.contentsOfDirectory(atPath: handle.path) else {
                 continue
@@ -1918,7 +1925,9 @@ public final class NativeHTTPServer: @unchecked Sendable {
         // Graceful socket close: signal end of transmission before closing
         // This prevents "Connection reset by peer" errors for some HTTP clients (like HTTP::Tiny)
         _ = shutdown(fd, Int32(SHUT_WR))
-        Thread.sleep(forTimeInterval: 0.01) // Brief delay for client to read response
+        // Wait up to 10 ms for the client to drain; DispatchSemaphore avoids blocking a Dispatch thread
+        let drainWait = DispatchSemaphore(value: 0)
+        drainWait.wait(timeout: .now() + 0.01)
         _ = systemClose(fd)
     }
 
