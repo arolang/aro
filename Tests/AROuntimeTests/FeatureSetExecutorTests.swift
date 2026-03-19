@@ -36,10 +36,7 @@ struct FeatureSetExecutorTests {
 
     @Test("Enable parallel IO property")
     func testEnableParallelIOProperty() {
-        var executor = createExecutor()
-        #expect(executor.enableParallelIO == false)
-
-        executor.enableParallelIO = true
+        let executor = createExecutor(enableParallelIO: true)
         #expect(executor.enableParallelIO == true)
     }
 
