@@ -16,6 +16,9 @@ import AROParser
 public actor ExecutionEngine {
     // MARK: - Properties
 
+    /// The dependency injection container
+    private let container: RuntimeContainer
+
     /// The action registry for looking up action implementations
     private let actionRegistry: ActionRegistry
 
@@ -55,10 +58,13 @@ public actor ExecutionEngine {
     ///   - eventBus: Event bus (defaults to shared)
     public init(
         actionRegistry: ActionRegistry = .shared,
-        eventBus: EventBus = .shared
+        eventBus: EventBus = .shared,
+        container: RuntimeContainer? = nil
     ) {
-        self.actionRegistry = actionRegistry
-        self.eventBus = eventBus
+        let resolvedContainer = container ?? .default
+        self.container = resolvedContainer
+        self.actionRegistry = resolvedContainer.actionRegistry
+        self.eventBus = resolvedContainer.eventBus
         self.globalSymbols = GlobalSymbolStorage()
         self.services = ServiceRegistry()
     }
@@ -103,7 +109,8 @@ public actor ExecutionEngine {
         let context = RuntimeContext(
             featureSetName: entryPoint,
             businessActivity: entryFeatureSet.featureSet.businessActivity,
-            eventBus: eventBus
+            eventBus: eventBus,
+            container: container
         )
 
         // Register services in context
