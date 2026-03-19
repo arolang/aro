@@ -427,7 +427,12 @@ public final class AROSocketClient: @unchecked Sendable {
     }
 
     private func connectBlocking(host: String, port: Int) throws {
+        // SOCK_STREAM is Int32 on macOS but __socket_type on Linux
+        #if canImport(Darwin)
         let fd = socket(AF_INET, SOCK_STREAM, 0)
+        #else
+        let fd = socket(AF_INET, Int32(SOCK_STREAM.rawValue), 0)
+        #endif
         guard fd >= 0 else {
             throw SocketError.connectionFailed("socket() failed (errno \(errno))")
         }
@@ -435,7 +440,11 @@ public final class AROSocketClient: @unchecked Sendable {
         // Resolve host and port via getaddrinfo — handles both IPs and hostnames
         var hints = addrinfo()
         hints.ai_family = AF_INET
+        #if canImport(Darwin)
         hints.ai_socktype = SOCK_STREAM
+        #else
+        hints.ai_socktype = Int32(SOCK_STREAM.rawValue)
+        #endif
         var res: UnsafeMutablePointer<addrinfo>? = nil
         let gaiStatus = getaddrinfo(host, "\(port)", &hints, &res)
         guard gaiStatus == 0, let addrRes = res else {
