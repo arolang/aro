@@ -115,6 +115,7 @@ testrun.log
 /Examples/DirectoryReplicatorEvents/DirectoryReplicatorEvents
 /Examples/AssertDemo/AssertDemo
 /Book/ThePluginGuide/output
+/Book/TheEssentialPrimer/output
 **/__pycache__/
 **/*.pyc
 **/Plugins/**/*.dylib

@@ -150,7 +150,7 @@ public struct StartAction: ActionImplementation {
             await EventBus.shared.registerEventSource()
             return ServerStartResult(serverType: "http-server", success: true, port: port)
         } else {
-            throw ActionError.runtimeError("Failed to start HTTP server on port \(port)")
+            throw ActionError.serviceStartFailed(service: "HTTP server", port: port)
         }
         #else
         // Emit event for external handling on Windows
@@ -213,7 +213,7 @@ public struct StartAction: ActionImplementation {
             await EventBus.shared.registerEventSource()
             return ServerStartResult(serverType: "socket-server", success: true, port: port)
         } else {
-            throw ActionError.runtimeError("Failed to start socket server on port \(port)")
+            throw ActionError.serviceStartFailed(service: "socket server", port: port)
         }
         #else
         context.emit(SocketServerStartRequestedEvent(port: port))
@@ -1038,7 +1038,7 @@ public struct ConnectAction: ActionImplementation {
         // interpreter mode: FeatureSetExecutor handles it.)
         return connectionId
         #else
-        throw ActionError.runtimeError("Socket client not available on Windows")
+        throw ActionError.unsupportedPlatform("Socket client")
         #endif
     }
 }

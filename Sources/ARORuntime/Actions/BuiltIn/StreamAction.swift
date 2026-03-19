@@ -85,7 +85,7 @@ public struct StreamAction: ActionImplementation {
 
         guard url.hasPrefix("http://") || url.hasPrefix("https://")
            || url.hasPrefix("ws://") || url.hasPrefix("wss://") else {
-            throw ActionError.runtimeError("Stream: invalid URL '\(url)'. Must start with http://, https://, ws://, or wss://")
+            throw ActionError.invalidURL(url)
         }
 
         // Extract optional config from with { ... } clause
@@ -137,7 +137,7 @@ public struct StreamAction: ActionImplementation {
         context.bind(result.base, value: url)
         return url
         #else
-        throw ActionError.runtimeError("Stream action not available on Windows")
+        throw ActionError.unsupportedPlatform("Stream action")
         #endif
     }
 
@@ -331,7 +331,7 @@ enum SSEStreamRunner {
         currentRetryInterval: TimeInterval
     ) async throws -> TimeInterval {
         guard let requestURL = URL(string: url) else {
-            throw ActionError.runtimeError("Stream: malformed URL '\(url)'")
+            throw ActionError.invalidURL(url)
         }
 
         var request = URLRequest(url: requestURL)

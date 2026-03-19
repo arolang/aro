@@ -1,0 +1,51 @@
+(* RepositoryLimits — demonstrates maxSize and TTL constraints on repositories.
+   maxSize: FIFO eviction when the item cap is exceeded.
+   ttl:     Items older than the time-to-live become invisible to Retrieve. *)
+
+(Application-Start: Repository Limits Demo) {
+    (* ── maxSize ──────────────────────────────────────────────────────────── *)
+    (* Keep at most 3 items; storing a 4th evicts the oldest. *)
+    Configure the <log-repository: maxSize> with 3.
+
+    Create the <e1> with {label: "first"}.
+    Create the <e2> with {label: "second"}.
+    Create the <e3> with {label: "third"}.
+    Create the <e4> with {label: "fourth"}.
+
+    Store the <e1> into the <log-repository>.
+    Store the <e2> into the <log-repository>.
+    Store the <e3> into the <log-repository>.
+    (* Storing e4 evicts e1 — oldest item removed first (FIFO). *)
+    Store the <e4> into the <log-repository>.
+
+    Retrieve the <entries> from the <log-repository>.
+    Compute the <entry-count: count> from <entries>.
+    Log <entry-count> to the <console>.
+
+    (* ── TTL ──────────────────────────────────────────────────────────────── *)
+    (* Items expire after 1 second. *)
+    Configure the <cache-repository: ttl> with 1.
+
+    Create the <item> with {key: "greeting", value: "hello"}.
+    Store the <item> into the <cache-repository>.
+
+    Retrieve the <fresh> from the <cache-repository>.
+    Compute the <fresh-count: count> from <fresh>.
+    Log <fresh-count> to the <console>.
+
+    Sleep the <app> for 2.
+
+    Retrieve the <stale> from the <cache-repository>.
+    Compute the <stale-count: count> from <stale>.
+    Log <stale-count> to the <console>.
+
+    Return an <OK: status> for the <demo>.
+}
+
+(* Catch evictions from log-repository when maxSize is exceeded.
+   Fires when a Store pushes the count past the configured cap. *)
+(Track Eviction: log-repository Evicted Handler) {
+    Extract the <evicted> from the <event: evictedItem>.
+    Extract the <label> from the <evicted: label>.
+    Log <label> to the <console>.
+}

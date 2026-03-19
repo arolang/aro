@@ -80,9 +80,7 @@ public struct WhenAction: ActionImplementation {
 
         // Check if this is a test context with feature set lookup
         guard let testContext = context as? TestExecutionContext else {
-            throw ActionError.runtimeError(
-                "When action requires test execution context (got \(type(of: context))). Use 'aro test' command."
-            )
+            throw ActionError.missingService("TestExecutionContext (use 'aro test' command)")
         }
 
         // Parse feature set name from object
@@ -91,9 +89,7 @@ public struct WhenAction: ActionImplementation {
         let featureSetName = object.base
 
         guard let featureSet = testContext.lookupFeatureSet(featureSetName) else {
-            throw ActionError.runtimeError(
-                "Feature set not found: '\(featureSetName)'"
-            )
+            throw ActionError.featureSetNotFound(featureSetName)
         }
 
         // Create child context with current bindings

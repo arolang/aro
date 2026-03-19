@@ -45,7 +45,7 @@ public struct ParseLinkHeaderAction: ActionImplementation {
 
         let parseType = result.specifiers.first ?? ""
         guard parseType.lowercased() == "link-header" else {
-            throw ActionError.runtimeError("Unknown parse type: \(parseType). Supported types: link-header")
+            throw ActionError.invalidArgument(argument: "parse type", value: parseType, validValues: ["link-header"])
         }
 
         let input: String = try context.resolveWithSpecifiers(object.base, specifiers: object.specifiers)
@@ -174,7 +174,7 @@ public struct ParseHtmlAction: ActionImplementation {
             return try parseHtmlToMarkdown(input)
 
         default:
-            throw ActionError.runtimeError("Unknown parse type: \(parseType). Valid types: links, content, text, markdown")
+            throw ActionError.invalidArgument(argument: "parse type", value: parseType, validValues: ["links", "content", "text", "markdown"])
         }
     }
 
