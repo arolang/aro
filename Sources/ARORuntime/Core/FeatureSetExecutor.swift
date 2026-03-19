@@ -78,10 +78,10 @@ public final class FeatureSetExecutor: @unchecked Sendable {
             // Check if access would be denied due to business activity mismatch
             if await globalSymbols.isAccessDenied(dependency, forBusinessActivity: context.businessActivity) {
                 let sourceActivity = await globalSymbols.businessActivity(for: dependency) ?? "unknown"
-                throw ActionError.runtimeError(
-                    "Variable '\(dependency)' is not accessible. " +
-                    "Published variables are only visible within the same business activity. " +
-                    "'\(dependency)' is published in \"\(sourceActivity)\" but accessed from \"\(context.businessActivity)\"."
+                throw ActionError.scopeViolation(
+                    variable: dependency,
+                    sourceActivity: sourceActivity,
+                    accessedFrom: context.businessActivity
                 )
             }
 
@@ -751,7 +751,7 @@ public final class FeatureSetExecutor: @unchecked Sendable {
         // Handle [String: any Sendable] dictionary
         if let dict = value as? [String: any Sendable] {
             guard let propValue = dict[property] else {
-                throw ActionError.runtimeError("Property '\(property)' not found on object")
+                throw ActionError.propertyNotFound(property: property, on: "object")
             }
             return propValue
         }
@@ -759,12 +759,12 @@ public final class FeatureSetExecutor: @unchecked Sendable {
         // Handle [String: AnySendable] dictionary
         if let dict = value as? [String: AnySendable] {
             guard let propValue = dict[property] else {
-                throw ActionError.runtimeError("Property '\(property)' not found on object")
+                throw ActionError.propertyNotFound(property: property, on: "object")
             }
             return propValue
         }
 
-        throw ActionError.runtimeError("Cannot access property '\(property)' on \(type(of: value))")
+        throw ActionError.propertyNotFound(property: property, on: String(describing: type(of: value)))
     }
 
     // MARK: - Range Loop Execution (ARO-0072)
@@ -774,7 +774,7 @@ public final class FeatureSetExecutor: @unchecked Sendable {
         let toVal   = try await expressionEvaluator.evaluate(loop.to,   context: context)
 
         guard let fromInt = toInt(fromVal), let toInt = toInt(toVal) else {
-            throw ActionError.runtimeError("Range loop bounds must be integers, got \(fromVal) to \(toVal)")
+            throw ActionError.typeMismatch(expected: "Int", actual: "\(type(of: fromVal))", variable: "range bounds")
         }
 
         for i in fromInt..<toInt {

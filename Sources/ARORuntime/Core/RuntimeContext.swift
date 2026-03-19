@@ -8,67 +8,67 @@ import AROParser
 
 /// Concrete implementation of ExecutionContext
 ///
-/// RuntimeContext provides thread-safe variable storage and service access
-/// for executing ARO feature sets.
-public final class RuntimeContext: ExecutionContext, @unchecked Sendable {
+/// RuntimeContext is an actor, so its internal serial executor replaces the
+/// old NSLock. All protocol methods are `nonisolated` so they can be called
+/// synchronously from outside the actor context; they access storage marked
+/// `nonisolated(unsafe)` — safe because a single FeatureSetExecutor drives
+/// one RuntimeContext serially, never concurrently.
+public actor RuntimeContext: ExecutionContext {
     // MARK: - Properties
 
-    /// Thread-safe lock for all mutable state
-    private let lock = NSLock()
-
     /// Variable storage (now using TypedValue for type preservation)
-    private var variables: [String: TypedValue] = [:]
+    nonisolated(unsafe) private var variables: [String: TypedValue] = [:]
 
     /// Track which variables are user-defined (immutable) vs framework-internal (mutable)
     /// Only user variables enforce immutability; framework variables can be rebound
-    private var immutableVariables: Set<String> = []
+    nonisolated(unsafe) private var immutableVariables: Set<String> = []
 
     /// Service registry
-    private var services: [ObjectIdentifier: any Sendable] = [:]
+    nonisolated(unsafe) private var services: [ObjectIdentifier: any Sendable] = [:]
 
     /// Repository registry
-    private var repositories: [String: Any] = [:]
+    nonisolated(unsafe) private var repositories: [String: Any] = [:]
 
     /// Current response
-    private var _response: Response?
+    nonisolated(unsafe) private var _response: Response?
 
     /// Error tracking for binary mode
-    private var _executionError: Error?
+    nonisolated(unsafe) private var _executionError: Error?
 
     /// Event bus for event emission
-    public let eventBus: EventBus?
+    public nonisolated let eventBus: EventBus?
 
     /// Wait state flag
-    private var _isWaiting: Bool = false
+    nonisolated(unsafe) private var _isWaiting: Bool = false
 
     /// Continuation for wait/shutdown signaling
-    private var shutdownContinuation: CheckedContinuation<Void, Error>?
+    nonisolated(unsafe) private var shutdownContinuation: CheckedContinuation<Void, Error>?
 
     /// Output context for formatting
-    private let _outputContext: OutputContext
+    private nonisolated let _outputContext: OutputContext
 
     /// Whether this is a compiled binary execution
-    private let _isCompiled: Bool
+    private nonisolated let _isCompiled: Bool
 
     /// Template output buffer (ARO-0050)
-    private var _templateBuffer: String = ""
+    nonisolated(unsafe) private var _templateBuffer: String = ""
 
     /// Whether this is a template rendering context
-    private let _isTemplateContext: Bool
+    private nonisolated let _isTemplateContext: Bool
 
     /// Schema registry for typed event extraction (ARO-0046)
-    private var _schemaRegistry: SchemaRegistry?
+    nonisolated(unsafe) private var _schemaRegistry: SchemaRegistry?
 
     /// Mutable scope depth for while loops (ARO-0131)
     /// When > 0, all bind calls automatically allow rebinding
-    private var mutableScopeDepth: Int = 0
+    nonisolated(unsafe) private var mutableScopeDepth: Int = 0
 
     // MARK: - Metadata
 
-    public let featureSetName: String
-    public let businessActivity: String
-    public let executionId: String
-    public let parent: ExecutionContext?
+    public nonisolated let featureSetName: String
+    public nonisolated let businessActivity: String
+    public nonisolated let executionId: String
+    public nonisolated let parent: ExecutionContext?
 
     // MARK: - Initialization
 
@@ -102,10 +102,7 @@ public final class RuntimeContext: ExecutionContext, @unchecked Sendable {
 
     // MARK: - Variable Management
 
-    public func resolve<T: Sendable>(_ name: String) -> T? {
-        lock.lock()
-        defer { lock.unlock() }
-
+    public nonisolated func resolve<T: Sendable>(_ name: String) -> T? {
         if let typedValue = variables[name], let value = typedValue.value as? T {
             return value
         }
@@ -113,10 +110,7 @@ public final class RuntimeContext: ExecutionContext, @unchecked Sendable {
         return parent?.resolve(name)
     }
 
-    public func resolveAny(_ name: String) -> (any Sendable)? {
-        lock.lock()
-        defer { lock.unlock() }
-
+    public nonisolated func resolveAny(_ name: String) -> (any Sendable)? {
         // Magic variable: <now> returns current date/time
         if name == "now" {
             let dateService = services[ObjectIdentifier(DateService.self)] as? DateService ?? DefaultDateService()
@@ -152,10 +146,7 @@ public final class RuntimeContext: ExecutionContext, @unchecked Sendable {
     }
 
     /// Resolve a variable returning the full TypedValue (type + value)
-    public func resolveTyped(_ name: String) -> TypedValue? {
-        lock.lock()
-        defer { lock.unlock() }
-
+    public nonisolated func resolveTyped(_ name: String) -> TypedValue? {
         if let typedValue = variables[name] {
             return typedValue
         }
@@ -171,10 +162,7 @@ public final class RuntimeContext: ExecutionContext, @unchecked Sendable {
     }
 
     /// Get the type of a variable without retrieving its value
-    public func typeOf(_ name: String) -> DataType? {
-        lock.lock()
-        defer { lock.unlock() }
-
+    public nonisolated func typeOf(_ name: String) -> DataType? {
         if let typedValue = variables[name] {
             return typedValue.type
         }
@@ -186,7 +174,7 @@ public final class RuntimeContext: ExecutionContext, @unchecked Sendable {
     }
 
     /// Build the Contract magic object from OpenAPI spec service
-    private func buildContractObject() -> Contract? {
+    private nonisolated func buildContractObject() -> Contract? {
         guard let specService = services[ObjectIdentifier(OpenAPISpecService.self)] as? OpenAPISpecService else {
             return nil
         }
@@ -207,11 +195,11 @@ public final class RuntimeContext: ExecutionContext, @unchecked Sendable {
         return Contract(httpServer: httpServer)
     }
 
-    public func bind(_ name: String, value: any Sendable) {
+    public nonisolated func bind(_ name: String, value: any Sendable) {
         bind(name, value: value, allowRebind: false)
     }
 
-    public func bind(_ name: String, value: any Sendable, allowRebind: Bool) {
+    public nonisolated func bind(_ name: String, value: any Sendable, allowRebind: Bool) {
         // Auto-wrap with inferred type
         let typedValue: TypedValue
         if let tv = value as? TypedValue {
@@ -223,20 +211,16 @@ public final class RuntimeContext: ExecutionContext, @unchecked Sendable {
     }
 
     /// Bind a variable with explicit type information
-    public func bindTyped(_ name: String, value: TypedValue) {
+    public nonisolated func bindTyped(_ name: String, value: TypedValue) {
         bindTyped(name, value: value, allowRebind: false)
     }
 
     /// Bind a variable with explicit type information and rebind option
-    public func bindTyped(_ name: String, value: TypedValue, allowRebind: Bool) {
-        lock.lock()
-        defer { lock.unlock() }
-
+    public nonisolated func bindTyped(_ name: String, value: TypedValue, allowRebind: Bool) {
         // Check immutability: framework variables (_prefix) can be rebound
         let isFrameworkVariable = name.hasPrefix("_")
 
         if !isFrameworkVariable && !allowRebind && mutableScopeDepth == 0 && immutableVariables.contains(name) {
-            // Don't manually unlock - defer handles cleanup (though fatalError terminates)
             fatalError("""
                 Runtime Error: Cannot rebind immutable variable '\(name)'
                 Feature: \(featureSetName)
@@ -258,45 +242,32 @@ public final class RuntimeContext: ExecutionContext, @unchecked Sendable {
         }
     }
 
-    public func unbind(_ name: String) {
-        lock.lock()
-        defer { lock.unlock() }
+    public nonisolated func unbind(_ name: String) {
         variables.removeValue(forKey: name)
         immutableVariables.remove(name)
     }
 
     /// Enter a mutable scope (e.g., while loop body). Variables can be rebound within this scope.
-    public func enterMutableScope() {
-        lock.lock()
-        defer { lock.unlock() }
+    public nonisolated func enterMutableScope() {
         mutableScopeDepth += 1
     }
 
     /// Exit a mutable scope. Restores immutability enforcement when depth reaches zero.
-    public func exitMutableScope() {
-        lock.lock()
-        defer { lock.unlock() }
+    public nonisolated func exitMutableScope() {
         if mutableScopeDepth > 0 { mutableScopeDepth -= 1 }
     }
 
-    public func exists(_ name: String) -> Bool {
-        lock.lock()
-        defer { lock.unlock() }
+    public nonisolated func exists(_ name: String) -> Bool {
         return variables[name] != nil || (parent?.exists(name) ?? false)
     }
 
     /// Check if a variable is bound in THIS context only (ignoring parent contexts).
     /// Used by FeatureSetExecutor to decide whether to create a local shadow binding.
-    public func existsLocally(_ name: String) -> Bool {
-        lock.lock()
-        defer { lock.unlock() }
+    public nonisolated func existsLocally(_ name: String) -> Bool {
         return variables[name] != nil
     }
 
-    public var variableNames: Set<String> {
-        lock.lock()
-        defer { lock.unlock() }
-
+    public nonisolated var variableNames: Set<String> {
         var names = Set(variables.keys)
         if let parentNames = parent?.variableNames {
             names.formUnion(parentNames)
@@ -306,10 +277,7 @@ public final class RuntimeContext: ExecutionContext, @unchecked Sendable {
 
     // MARK: - Service Access
 
-    public func service<S>(_ type: S.Type) -> S? {
-        lock.lock()
-        defer { lock.unlock() }
-
+    public nonisolated func service<S>(_ type: S.Type) -> S? {
         let id = ObjectIdentifier(type)
         if let service = services[id] as? S {
             return service
@@ -318,25 +286,18 @@ public final class RuntimeContext: ExecutionContext, @unchecked Sendable {
         return parent?.service(type)
     }
 
-    public func register<S: Sendable>(_ service: S) {
-        lock.lock()
-        defer { lock.unlock() }
+    public nonisolated func register<S: Sendable>(_ service: S) {
         services[ObjectIdentifier(S.self)] = service
     }
 
     /// Register a service with an explicit type ID (for preserving type info across type-erased collections)
-    public func registerWithTypeId(_ typeId: ObjectIdentifier, service: any Sendable) {
-        lock.lock()
-        defer { lock.unlock() }
+    public nonisolated func registerWithTypeId(_ typeId: ObjectIdentifier, service: any Sendable) {
         services[typeId] = service
     }
 
     // MARK: - Repository Access
 
-    public func repository<T: Sendable>(named name: String) -> (any Repository<T>)? {
-        lock.lock()
-        defer { lock.unlock() }
-
+    public nonisolated func repository<T: Sendable>(named name: String) -> (any Repository<T>)? {
         if let repo = repositories[name] as? any Repository<T> {
             return repo
         }
@@ -344,60 +305,48 @@ public final class RuntimeContext: ExecutionContext, @unchecked Sendable {
         return parent?.repository(named: name)
     }
 
-    public func registerRepository<T: Sendable>(name: String, repository: any Repository<T>) {
-        lock.lock()
-        defer { lock.unlock() }
+    public nonisolated func registerRepository<T: Sendable>(name: String, repository: any Repository<T>) {
         repositories[name] = repository
     }
 
     // MARK: - Response Management
 
-    public func setResponse(_ response: Response) {
-        lock.lock()
-        defer { lock.unlock() }
+    public nonisolated func setResponse(_ response: Response) {
         _response = response
     }
 
-    public func getResponse() -> Response? {
-        lock.lock()
-        defer { lock.unlock() }
+    public nonisolated func getResponse() -> Response? {
         return _response
     }
 
     // MARK: - Error Management (for binary mode)
 
     /// Set an execution error (e.g., from action failures)
-    public func setExecutionError(_ error: Error) {
-        lock.lock()
-        defer { lock.unlock() }
+    public nonisolated func setExecutionError(_ error: Error) {
         if _executionError == nil {
             _executionError = error
         }
     }
 
     /// Get the execution error if one occurred
-    public func getExecutionError() -> Error? {
-        lock.lock()
-        defer { lock.unlock() }
+    public nonisolated func getExecutionError() -> Error? {
         return _executionError
     }
 
     /// Check if an execution error occurred
-    public func hasExecutionError() -> Bool {
-        lock.lock()
-        defer { lock.unlock() }
+    public nonisolated func hasExecutionError() -> Bool {
         return _executionError != nil
     }
 
     // MARK: - Event Emission
 
-    public func emit(_ event: any RuntimeEvent) {
+    public nonisolated func emit(_ event: any RuntimeEvent) {
         eventBus?.publish(event)
     }
 
     // MARK: - Child Context
 
-    public func createChild(featureSetName: String) -> ExecutionContext {
+    public nonisolated func createChild(featureSetName: String) -> ExecutionContext {
         RuntimeContext(
             featureSetName: featureSetName,
             businessActivity: businessActivity,
@@ -410,7 +359,7 @@ public final class RuntimeContext: ExecutionContext, @unchecked Sendable {
     }
 
     /// Create a child context with a different business activity
-    public func createChild(featureSetName: String, businessActivity: String) -> ExecutionContext {
+    public nonisolated func createChild(featureSetName: String, businessActivity: String) -> ExecutionContext {
         RuntimeContext(
             featureSetName: featureSetName,
             businessActivity: businessActivity,
@@ -424,7 +373,7 @@ public final class RuntimeContext: ExecutionContext, @unchecked Sendable {
 
     /// Create a child context for template rendering (ARO-0050)
     /// This context has an isolated template buffer and copies all parent variables
-    public func createTemplateContext() -> RuntimeContext {
+    public nonisolated func createTemplateContext() -> RuntimeContext {
         let templateContext = RuntimeContext(
             featureSetName: "template:\(featureSetName)",
             businessActivity: businessActivity,
@@ -444,82 +393,67 @@ public final class RuntimeContext: ExecutionContext, @unchecked Sendable {
         }
 
         // Copy services from parent
-        lock.lock()
         for (typeId, service) in services {
             templateContext.registerWithTypeId(typeId, service: service)
         }
-        lock.unlock()
 
         return templateContext
     }
 
     // MARK: - Wait State Management
 
-    public func enterWaitState() {
-        lock.lock()
-        defer { lock.unlock() }
+    public nonisolated func enterWaitState() {
         _isWaiting = true
     }
 
-    public func waitForShutdown() async throws {
+    public nonisolated func waitForShutdown() async throws {
         try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, Error>) in
-            lock.lock()
             shutdownContinuation = continuation
-            lock.unlock()
         }
     }
 
-    public var isWaiting: Bool {
-        lock.lock()
-        defer { lock.unlock() }
+    public nonisolated var isWaiting: Bool {
         return _isWaiting
     }
 
-    public func signalShutdown() {
-        lock.lock()
+    public nonisolated func signalShutdown() {
         let continuation = shutdownContinuation
         shutdownContinuation = nil
         _isWaiting = false
-        lock.unlock()
-
         continuation?.resume(returning: ())
     }
 
     // MARK: - Output Context
 
-    public var outputContext: OutputContext {
+    public nonisolated var outputContext: OutputContext {
         _outputContext
     }
 
-    public var isDebugMode: Bool {
+    public nonisolated var isDebugMode: Bool {
         _outputContext == .developer
     }
 
-    public var isTestMode: Bool {
+    public nonisolated var isTestMode: Bool {
         _outputContext == .developer
     }
 
-    public var isCompiled: Bool {
+    public nonisolated var isCompiled: Bool {
         _isCompiled
     }
 
     // MARK: - Template Buffer (ARO-0050)
 
-    public func appendToTemplateBuffer(_ value: String) {
-        lock.lock()
-        defer { lock.unlock() }
+    public nonisolated func appendToTemplateBuffer(_ value: String) {
         _templateBuffer.append(value)
     }
 
-    public func flushTemplateBuffer() -> String {
-        lock.lock()
-        defer { lock.unlock() }
+    public nonisolated func flushTemplateBuffer() -> String {
         let result = _templateBuffer
         _templateBuffer = ""
         return result
     }
 
-    public var isTemplateContext: Bool {
+    public nonisolated var isTemplateContext: Bool {
         _isTemplateContext
     }
 
@@ -527,10 +461,7 @@ public final class RuntimeContext: ExecutionContext, @unchecked Sendable {
 
     /// Get the schema registry for typed event extraction
     /// Falls back to parent context if not set locally
-    public var schemaRegistry: SchemaRegistry? {
-        lock.lock()
-        defer { lock.unlock() }
-
+    public nonisolated var schemaRegistry: SchemaRegistry? {
         if let registry = _schemaRegistry {
             return registry
         }
@@ -540,9 +471,7 @@ public final class RuntimeContext: ExecutionContext, @unchecked Sendable {
 
     /// Set the schema registry (called during application startup)
     /// - Parameter registry: The schema registry to use
-    public func setSchemaRegistry(_ registry: SchemaRegistry) {
-        lock.lock()
-        defer { lock.unlock() }
+    public nonisolated func setSchemaRegistry(_ registry: SchemaRegistry) {
         _schemaRegistry = registry
     }
 
@@ -556,13 +485,13 @@ public final class RuntimeContext: ExecutionContext, @unchecked Sendable {
     /// - Parameters:
     ///   - name: Variable name
     ///   - stream: The lazy stream to bind
-    public func bindLazy<T: Sendable>(_ name: String, stream: AROStream<T>) {
+    public nonisolated func bindLazy<T: Sendable>(_ name: String, stream: AROStream<T>) {
         let value = AROValue<T>.lazy(stream)
         bindStreamingValue(name, value: value)
     }
 
     /// Bind a streaming value (can be eager or lazy)
-    public func bindStreamingValue<T: Sendable>(_ name: String, value: AROValue<T>) {
+    public nonisolated func bindStreamingValue<T: Sendable>(_ name: String, value: AROValue<T>) {
         // Wrap in AnyStreamingValue for type-erased storage
         let anyValue = AnyStreamingValue(value)
         bind(name, value: anyValue)
@@ -575,7 +504,7 @@ public final class RuntimeContext: ExecutionContext, @unchecked Sendable {
     ///
     /// - Parameter name: Variable name
     /// - Returns: An AROStream, or nil if variable doesn't exist
-    public func resolveAsStream<T: Sendable>(_ name: String, as type: T.Type = T.self) -> AROStream<T>? {
+    public nonisolated func resolveAsStream<T: Sendable>(_ name: String, as type: T.Type = T.self) -> AROStream<T>? {
         guard let value = resolveAny(name) else {
             return nil
         }
@@ -611,7 +540,7 @@ public final class RuntimeContext: ExecutionContext, @unchecked Sendable {
     }
 
     /// Resolve a variable as a stream of dictionaries (common case for CSV/JSON)
-    public func resolveAsRowStream(_ name: String) -> AROStream<[String: any Sendable]>? {
+    public nonisolated func resolveAsRowStream(_ name: String) -> AROStream<[String: any Sendable]>? {
         resolveAsStream(name, as: [String: any Sendable].self)
     }
 
@@ -619,7 +548,7 @@ public final class RuntimeContext: ExecutionContext, @unchecked Sendable {
     ///
     /// - Parameter name: Variable name
     /// - Returns: true if the variable is a lazy stream
-    public func isLazy(_ name: String) -> Bool {
+    public nonisolated func isLazy(_ name: String) -> Bool {
         guard let value = resolveAny(name) else {
             return false
         }
@@ -637,7 +566,7 @@ public final class RuntimeContext: ExecutionContext, @unchecked Sendable {
     /// Otherwise, it consumes the stream and replaces the binding with the array.
     ///
     /// - Parameter name: Variable name
-    public func materialize(_ name: String) async throws {
+    public nonisolated func materialize(_ name: String) async throws {
         guard let value = resolveAny(name) else {
             return
         }
@@ -656,7 +585,7 @@ public final class RuntimeContext: ExecutionContext, @unchecked Sendable {
     ///
     /// - Parameter name: Variable name
     /// - Parameter consumers: Number of consumers
-    public func teeIfNeeded(_ name: String, consumers: Int) async {
+    public nonisolated func teeIfNeeded(_ name: String, consumers: Int) async {
         guard consumers > 1 else { return }
 
         guard let value = resolveAny(name) else {
@@ -677,7 +606,7 @@ public final class RuntimeContext: ExecutionContext, @unchecked Sendable {
 extension RuntimeContext {
     /// Bind multiple values at once (auto-infers types)
     /// - Parameter bindings: Dictionary of name-value pairs
-    public func bindAll(_ bindings: [String: any Sendable]) {
+    public nonisolated func bindAll(_ bindings: [String: any Sendable]) {
         for (name, value) in bindings {
             bind(name, value: value)
         }
@@ -685,7 +614,7 @@ extension RuntimeContext {
 
     /// Bind multiple typed values at once
     /// - Parameter bindings: Dictionary of name-TypedValue pairs
-    public func bindAllTyped(_ bindings: [String: TypedValue]) {
+    public nonisolated func bindAllTyped(_ bindings: [String: TypedValue]) {
         for (name, value) in bindings {
             bindTyped(name, value: value)
         }
