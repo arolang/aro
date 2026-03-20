@@ -488,11 +488,22 @@ private actor RepositoryStorageActor {
     // MARK: - Value comparison helpers
 
     private func isEqual(_ lhs: any Sendable, _ rhs: any Sendable) -> Bool {
-        if let l = lhs as? String, let r = rhs as? String { return l == r }
-        if let l = lhs as? Int,    let r = rhs as? Int    { return l == r }
-        if let l = lhs as? Double, let r = rhs as? Double { return l == r }
-        if let l = lhs as? Bool,   let r = rhs as? Bool   { return l == r }
-        return String(describing: lhs) == String(describing: rhs)
+        if let l = lhs as? String,  let r = rhs as? String  { return l == r }
+        if let l = lhs as? Int,     let r = rhs as? Int     { return l == r }
+        if let l = lhs as? Double,  let r = rhs as? Double  { return l == r }
+        if let l = lhs as? Bool,    let r = rhs as? Bool    { return l == r }
+        if let l = lhs as? UUID,    let r = rhs as? UUID    { return l == r }
+        if let l = lhs as? Date,    let r = rhs as? Date    { return l == r }
+        if let l = lhs as? [String: any Sendable],
+           let r = rhs as? [String: any Sendable]           { return dictionariesEqual(l, r) }
+        if let l = lhs as? [any Sendable],
+           let r = rhs as? [any Sendable] {
+            guard l.count == r.count else { return false }
+            return zip(l, r).allSatisfy { isEqual($0.0, $0.1) }
+        }
+        // Unknown type: String(describing:) risks false positives and is brittle
+        // across Swift versions. Treat unrecognised types as non-equal.
+        return false
     }
 
     private func dictionariesEqual(_ lhs: [String: any Sendable], _ rhs: [String: any Sendable]) -> Bool {

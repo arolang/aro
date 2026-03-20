@@ -1804,8 +1804,29 @@ public final class LLVMCodeGenerator {
                         continue
                     }
 
-                    // Skip Socket Event handlers (handled separately by native socket server)
-                    guard !activity.contains("Socket Event") else {
+                    // TCP Socket Event Handlers: register by event type derived from feature set name.
+                    // DomainEvents are co-published by AROSocketClient's receive/connect/disconnect paths.
+                    if activity.contains("Socket Event") {
+                        let featureName = analyzed.featureSet.name.lowercased()
+                        let socketEventType: String
+                        if featureName.contains("data") || featureName.contains("message") || featureName.contains("received") {
+                            socketEventType = "socket.data"
+                        } else if featureName.contains("disconnect") {
+                            socketEventType = "socket.disconnected"
+                        } else if featureName.contains("connect") {
+                            socketEventType = "socket.connected"
+                        } else {
+                            continue
+                        }
+                        let funcName = featureSetFunctionName(analyzed.featureSet.name)
+                        if let handlerFunc = ctx.module.function(named: funcName) {
+                            let eventTypeStr = ctx.stringConstant(socketEventType)
+                            _ = ctx.module.insertCall(
+                                externals.runtimeRegisterHandler,
+                                on: [runtime, eventTypeStr, handlerFunc],
+                                at: ip
+                            )
+                        }
                         continue
                     }
 

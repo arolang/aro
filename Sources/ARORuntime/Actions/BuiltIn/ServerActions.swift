@@ -1024,9 +1024,7 @@ public struct ConnectAction: ActionImplementation {
         let client = AROSocketClient(eventBus: .shared)
         try await client.connect(host: host, port: port)
 
-        // Store connection in context
         let connectionId = client.connectionId
-        context.bind(result.base, value: connectionId)
 
         // Register the client for later use (enables Send to work with this connection)
         context.register(client)
@@ -1035,7 +1033,10 @@ public struct ConnectAction: ActionImplementation {
         // (instead of exiting after the idle timeout)
         await EventBus.shared.registerEventSource()
 
-        return ConnectResult(connectionId: connectionId, host: host, port: port, success: true)
+        // Return the connection ID string so both interpreter and binary mode bind
+        // result.base = UUID string. (Binary mode: executeAction handles the bind;
+        // interpreter mode: FeatureSetExecutor handles it.)
+        return connectionId
         #else
         throw ActionError.unsupportedPlatform("Socket client")
         #endif
