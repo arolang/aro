@@ -23,7 +23,7 @@ import AROParser
 /// By default, statements execute sequentially. When `enableParallelIO`
 /// is true, I/O operations may run in parallel based on data dependencies
 /// while maintaining sequential semantics (ARO-0011).
-public final class FeatureSetExecutor: @unchecked Sendable {
+public final class FeatureSetExecutor: Sendable {
     // MARK: - Properties
 
     private let actionRegistry: ActionRegistry
@@ -32,10 +32,7 @@ public final class FeatureSetExecutor: @unchecked Sendable {
     private let expressionEvaluator: ExpressionEvaluator
 
     /// Whether to enable parallel I/O optimization (ARO-0011)
-    public var enableParallelIO: Bool = false
-
-    /// The statement scheduler for parallel I/O (lazy initialization)
-    private lazy var scheduler = StatementScheduler()
+    public let enableParallelIO: Bool
 
     // MARK: - Initialization
 
@@ -128,6 +125,7 @@ public final class FeatureSetExecutor: @unchecked Sendable {
         do {
             if enableParallelIO {
                 // ARO-0011: Data-flow driven parallel I/O execution
+                let scheduler = StatementScheduler()
                 _ = try await scheduler.execute(
                     analyzedFeatureSet,
                     context: context
