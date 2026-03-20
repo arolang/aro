@@ -469,10 +469,16 @@ public func aro_runtime_register_handler(
                 // Create a context for the handler
                 let contextHandle = AROCContextHandle(runtime: runtimeHandle, featureSetName: handlerName)
 
-                // Bind event payload to context
+                // Bind event payload to context.
+                // Bind both "event:<key>" (ARO convention) AND plain "<key>" so that
+                // handler code written for interpreter mode (which binds the source
+                // object directly, e.g. "packet", "connection") works unchanged.
+                // Binding the plain key last lets it override "event" if the payload
+                // itself contains an "event" key (e.g. socket.disconnected).
                 contextHandle.context.bind("event", value: event.payload)
                 for (key, value) in event.payload {
                     contextHandle.context.bind("event:\(key)", value: value)
+                    contextHandle.context.bind(key, value: value)
                 }
 
                 // Bind terminal capabilities so ARO handler code can use <terminal: columns>
