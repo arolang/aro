@@ -220,6 +220,7 @@ public final class Schema: Sendable, Codable {
     public let oneOf: [SchemaRef]?
     public let anyOf: [SchemaRef]?
     public let enumValues: [AnyCodableValue]?
+    public let defaultValue: AnyCodableValue?
 
     private enum CodingKeys: String, CodingKey {
         case type, format, title, description, properties, required
@@ -228,6 +229,7 @@ public final class Schema: Sendable, Codable {
         case allOf, oneOf, anyOf
         case ref = "$ref"
         case enumValues = "enum"
+        case defaultValue = "default"
     }
 
     public init(
@@ -250,7 +252,8 @@ public final class Schema: Sendable, Codable {
         allOf: [SchemaRef]? = nil,
         oneOf: [SchemaRef]? = nil,
         anyOf: [SchemaRef]? = nil,
-        enumValues: [AnyCodableValue]? = nil
+        enumValues: [AnyCodableValue]? = nil,
+        defaultValue: AnyCodableValue? = nil
     ) {
         self.type = type
         self.format = format
@@ -272,6 +275,7 @@ public final class Schema: Sendable, Codable {
         self.oneOf = oneOf
         self.anyOf = anyOf
         self.enumValues = enumValues
+        self.defaultValue = defaultValue
     }
 }
 

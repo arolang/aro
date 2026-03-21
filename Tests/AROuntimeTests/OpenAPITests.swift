@@ -1696,4 +1696,317 @@ struct SchemaEnumValidationTests {
     }
 }
 
+// MARK: - Schema Default Value Tests
+
+@Suite("Schema Default Value Tests")
+struct SchemaDefaultValueTests {
+
+    @Test("Schema decodes string default value")
+    func testSchemaDecodesStringDefault() throws {
+        let json = """
+        {
+            "type": "string",
+            "default": "active"
+        }
+        """
+        let data = json.data(using: .utf8)!
+        let schema = try JSONDecoder().decode(Schema.self, from: data)
+
+        #expect(schema.defaultValue == .string("active"))
+    }
+
+    @Test("Schema decodes integer default value")
+    func testSchemaDecodesIntDefault() throws {
+        let json = """
+        {
+            "type": "integer",
+            "default": 1
+        }
+        """
+        let data = json.data(using: .utf8)!
+        let schema = try JSONDecoder().decode(Schema.self, from: data)
+
+        #expect(schema.defaultValue == .int(1))
+    }
+
+    @Test("Schema decodes boolean default value")
+    func testSchemaDecodesBoolDefault() throws {
+        let json = """
+        {
+            "type": "boolean",
+            "default": true
+        }
+        """
+        let data = json.data(using: .utf8)!
+        let schema = try JSONDecoder().decode(Schema.self, from: data)
+
+        #expect(schema.defaultValue == .bool(true))
+    }
+
+    @Test("Schema without default has nil defaultValue")
+    func testSchemaWithoutDefaultIsNil() throws {
+        let json = """
+        {
+            "type": "string"
+        }
+        """
+        let data = json.data(using: .utf8)!
+        let schema = try JSONDecoder().decode(Schema.self, from: data)
+
+        #expect(schema.defaultValue == nil)
+    }
+
+    @Test("Schema init sets defaultValue")
+    func testSchemaInitSetsDefault() {
+        let schema = Schema(type: "string", defaultValue: .string("pending"))
+        #expect(schema.defaultValue == .string("pending"))
+    }
+}
+
+// MARK: - Query Parameter Default Injection Tests
+
+@Suite("Query Parameter Default Injection Tests")
+struct QueryParameterDefaultInjectionTests {
+
+    private func makeSpec(parameters: [[String: Any]]) throws -> OpenAPISpec {
+        let specDict: [String: Any] = [
+            "openapi": "3.0.3",
+            "info": ["title": "Test API", "version": "1.0.0"],
+            "paths": [
+                "/items": [
+                    "get": [
+                        "operationId": "getItems",
+                        "parameters": parameters,
+                        "responses": ["200": ["description": "OK"]]
+                    ]
+                ]
+            ]
+        ]
+        let data = try JSONSerialization.data(withJSONObject: specDict)
+        return try JSONDecoder().decode(OpenAPISpec.self, from: data)
+    }
+
+    private func makeHandlerAndBus(spec: OpenAPISpec) -> (OpenAPIHTTPHandler, EventBus) {
+        let bus = EventBus()
+        let registry = OpenAPIRouteRegistry(spec: spec)
+        let handler = OpenAPIHTTPHandler(routeRegistry: registry, eventBus: bus)
+        return (handler, bus)
+    }
+
+    @Test("Absent query param with string default is injected")
+    func testAbsentQueryParamWithStringDefaultInjected() async throws {
+        let spec = try makeSpec(parameters: [
+            [
+                "name": "status",
+                "in": "query",
+                "required": false,
+                "schema": ["type": "string", "default": "active"]
+            ]
+        ])
+        let (handler, bus) = makeHandlerAndBus(spec: spec)
+
+        let latch = EventLatch()
+        _ = bus.subscribe(to: HTTPOperationEvent.self) { event in
+            await latch.store(event)
+        }
+
+        let request = HTTPRequest(method: "GET", path: "/items")
+        _ = await handler.handleRequest(request)
+        let event = await latch.wait()
+        #expect(event.queryParameters["status"] == "active")
+    }
+
+    @Test("Present query param is not overwritten by default")
+    func testPresentQueryParamNotOverwrittenByDefault() async throws {
+        let spec = try makeSpec(parameters: [
+            [
+                "name": "status",
+                "in": "query",
+                "required": false,
+                "schema": ["type": "string", "default": "active"]
+            ]
+        ])
+        let (handler, bus) = makeHandlerAndBus(spec: spec)
+
+        let latch = EventLatch()
+        _ = bus.subscribe(to: HTTPOperationEvent.self) { event in
+            await latch.store(event)
+        }
+
+        let request = HTTPRequest(method: "GET", path: "/items", queryParameters: ["status": "inactive"])
+        _ = await handler.handleRequest(request)
+        let event = await latch.wait()
+        #expect(event.queryParameters["status"] == "inactive")
+    }
+
+    @Test("Absent required query param with default does not return 400")
+    func testAbsentRequiredQueryParamWithDefaultNotRejected() async throws {
+        let spec = try makeSpec(parameters: [
+            [
+                "name": "status",
+                "in": "query",
+                "required": true,
+                "schema": ["type": "string", "default": "active"]
+            ]
+        ])
+        let (handler, _) = makeHandlerAndBus(spec: spec)
+
+        let request = HTTPRequest(method: "GET", path: "/items")
+        let response = await handler.handleRequest(request)
+
+        #expect(response.statusCode != 400)
+    }
+
+    @Test("Absent query param with integer default is injected as string")
+    func testAbsentQueryParamWithIntDefaultInjected() async throws {
+        let spec = try makeSpec(parameters: [
+            [
+                "name": "page",
+                "in": "query",
+                "required": false,
+                "schema": ["type": "integer", "default": 1]
+            ]
+        ])
+        let (handler, bus) = makeHandlerAndBus(spec: spec)
+
+        let latch = EventLatch()
+        _ = bus.subscribe(to: HTTPOperationEvent.self) { event in
+            await latch.store(event)
+        }
+
+        let request = HTTPRequest(method: "GET", path: "/items")
+        _ = await handler.handleRequest(request)
+        let event = await latch.wait()
+        #expect(event.queryParameters["page"] == "1")
+    }
+
+    @Test("Query param without schema default is not injected")
+    func testQueryParamWithoutSchemaDefaultNotInjected() async throws {
+        let spec = try makeSpec(parameters: [
+            ["name": "q", "in": "query", "required": false]
+        ])
+        let (handler, bus) = makeHandlerAndBus(spec: spec)
+
+        let latch = EventLatch()
+        _ = bus.subscribe(to: HTTPOperationEvent.self) { event in
+            await latch.store(event)
+        }
+
+        let request = HTTPRequest(method: "GET", path: "/items")
+        _ = await handler.handleRequest(request)
+        let event = await latch.wait()
+        #expect(event.queryParameters["q"] == nil)
+    }
+}
+
+// MARK: - Object Property Default Injection Tests
+
+@Suite("Object Property Default Injection Tests")
+struct ObjectPropertyDefaultInjectionTests {
+
+    @Test("Missing optional property gets default string value")
+    func testMissingPropertyGetsStringDefault() throws {
+        let schema = Schema(
+            type: "object",
+            properties: [
+                "name": SchemaRef(Schema(type: "string")),
+                "status": SchemaRef(Schema(type: "string", defaultValue: .string("active")))
+            ]
+        )
+        let json: [String: Any] = ["name": "Alice"]
+        let result = try SchemaBinding.parseValue(json: json, schema: schema, components: nil)
+
+        let dict = try #require(result as? [String: Any])
+        #expect(dict["name"] as? String == "Alice")
+        #expect(dict["status"] as? String == "active")
+    }
+
+    @Test("Missing optional property gets default integer value")
+    func testMissingPropertyGetsIntDefault() throws {
+        let schema = Schema(
+            type: "object",
+            properties: [
+                "name": SchemaRef(Schema(type: "string")),
+                "priority": SchemaRef(Schema(type: "integer", defaultValue: .int(0)))
+            ]
+        )
+        let json: [String: Any] = ["name": "Task"]
+        let result = try SchemaBinding.parseValue(json: json, schema: schema, components: nil)
+
+        let dict = try #require(result as? [String: Any])
+        #expect(dict["priority"] as? Int == 0)
+    }
+
+    @Test("Present optional property is not replaced by default")
+    func testPresentPropertyNotReplacedByDefault() throws {
+        let schema = Schema(
+            type: "object",
+            properties: [
+                "status": SchemaRef(Schema(type: "string", defaultValue: .string("active")))
+            ]
+        )
+        let json: [String: Any] = ["status": "inactive"]
+        let result = try SchemaBinding.parseValue(json: json, schema: schema, components: nil)
+
+        let dict = try #require(result as? [String: Any])
+        #expect(dict["status"] as? String == "inactive")
+    }
+
+    @Test("Missing property without default is not injected")
+    func testMissingPropertyWithoutDefaultNotInjected() throws {
+        let schema = Schema(
+            type: "object",
+            properties: [
+                "name": SchemaRef(Schema(type: "string")),
+                "tag": SchemaRef(Schema(type: "string"))
+            ]
+        )
+        let json: [String: Any] = ["name": "Alice"]
+        let result = try SchemaBinding.parseValue(json: json, schema: schema, components: nil)
+
+        let dict = try #require(result as? [String: Any])
+        #expect(dict["tag"] == nil)
+    }
+
+    @Test("Missing boolean property gets default false value")
+    func testMissingPropertyGetsBoolDefault() throws {
+        let schema = Schema(
+            type: "object",
+            properties: [
+                "active": SchemaRef(Schema(type: "boolean", defaultValue: .bool(false)))
+            ]
+        )
+        let json: [String: Any] = [:]
+        let result = try SchemaBinding.parseValue(json: json, schema: schema, components: nil)
+
+        let dict = try #require(result as? [String: Any])
+        #expect(dict["active"] as? Bool == false)
+    }
+}
+
+/// Minimal async latch for coordinating test event capture.
+private actor EventLatch {
+    private var continuation: CheckedContinuation<HTTPOperationEvent, Never>?
+    private var stored: HTTPOperationEvent?
+
+    func store(_ event: HTTPOperationEvent) {
+        if let cont = continuation {
+            continuation = nil
+            cont.resume(returning: event)
+        } else {
+            stored = event
+        }
+    }
+
+    func wait() async -> HTTPOperationEvent {
+        if let s = stored {
+            stored = nil
+            return s
+        }
+        return await withCheckedContinuation { cont in
+            continuation = cont
+        }
+    }
+}
+
 #endif  // !os(Windows)

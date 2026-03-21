@@ -84,6 +84,15 @@ public final class OpenAPIHTTPHandler: @unchecked Sendable {
             return allowEmpty
         }
 
+        // Inject default values for absent query parameters declared in the spec.
+        var enrichedQueryParams = filteredQueryParameters
+        for param in effectiveParameters where param.in == "query" {
+            guard enrichedQueryParams[param.name] == nil else { continue }
+            if let defaultVal = param.schema?.value.defaultValue {
+                enrichedQueryParams[param.name] = "\(defaultVal.anyValue)"
+            }
+        }
+
         // Parse cookie parameters from Cookie header (case-insensitive lookup)
         let rawCookieHeader = request.headers.first(where: { $0.key.lowercased() == "cookie" })?.value ?? ""
         let allCookies = parseCookieHeader(rawCookieHeader)
@@ -105,7 +114,7 @@ public final class OpenAPIHTTPHandler: @unchecked Sendable {
         for param in effectiveParameters where param.required == true {
             switch param.in {
             case "query":
-                if filteredQueryParameters[param.name] == nil {
+                if enrichedQueryParams[param.name] == nil {
                     return HTTPResponse(
                         statusCode: 400,
                         headers: ["Content-Type": "application/json"],
@@ -141,7 +150,7 @@ public final class OpenAPIHTTPHandler: @unchecked Sendable {
             path: path,
             pathTemplate: match.pathTemplate,
             pathParameters: match.pathParameters,
-            queryParameters: filteredQueryParameters,
+            queryParameters: enrichedQueryParams,
             headers: request.headers,
             cookieParameters: cookieParams,
             body: request.body,

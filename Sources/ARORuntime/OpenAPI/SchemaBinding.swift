@@ -97,6 +97,15 @@ public struct SchemaBinding {
                     result[key] = value
                 }
             }
+
+            // Inject default values for missing optional properties
+            for (key, propSchemaRef) in properties {
+                if result[key] == nil,
+                   let defaultVal = propSchemaRef.value.defaultValue {
+                    result[key] = defaultVal.anyValue
+                }
+            }
+
             parsedValue = result
 
         default:
