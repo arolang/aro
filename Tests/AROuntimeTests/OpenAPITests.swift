@@ -634,6 +634,139 @@ struct ContractValidationTests {
     }
 }
 
+// MARK: - Path-Level Parameter Merging Tests
+
+@Suite("Path-Level Parameter Merging Tests")
+struct PathLevelParameterMergingTests {
+
+    @Test("effectiveParameters includes path-level id param for GET operation without operation-level params")
+    func testPathLevelParamInheritedByGet() throws {
+        let json = """
+        {
+            "openapi": "3.0.3",
+            "info": { "title": "Test API", "version": "1.0.0" },
+            "paths": {
+                "/items/{id}": {
+                    "parameters": [
+                        { "name": "id", "in": "path", "required": true }
+                    ],
+                    "get": {
+                        "operationId": "getItem",
+                        "responses": { "200": { "description": "OK" } }
+                    },
+                    "delete": {
+                        "operationId": "deleteItem",
+                        "responses": { "204": { "description": "No Content" } }
+                    }
+                }
+            }
+        }
+        """
+        let data = json.data(using: .utf8)!
+        let spec = try JSONDecoder().decode(OpenAPISpec.self, from: data)
+        let registry = OpenAPIRouteRegistry(spec: spec)
+
+        let getMatch = try #require(registry.match(method: "GET", path: "/items/42"))
+        #expect(getMatch.effectiveParameters.count == 1)
+        #expect(getMatch.effectiveParameters.first?.name == "id")
+        #expect(getMatch.effectiveParameters.first?.in == "path")
+
+        let deleteMatch = try #require(registry.match(method: "DELETE", path: "/items/42"))
+        #expect(deleteMatch.effectiveParameters.count == 1)
+        #expect(deleteMatch.effectiveParameters.first?.name == "id")
+        #expect(deleteMatch.effectiveParameters.first?.in == "path")
+    }
+
+    @Test("operation-level parameter overrides path-level parameter with same name and in")
+    func testOperationLevelOverridesPathLevel() throws {
+        let json = """
+        {
+            "openapi": "3.0.3",
+            "info": { "title": "Test API", "version": "1.0.0" },
+            "paths": {
+                "/items/{id}": {
+                    "parameters": [
+                        { "name": "id", "in": "path", "required": true, "description": "path-level" }
+                    ],
+                    "get": {
+                        "operationId": "getItem",
+                        "parameters": [
+                            { "name": "id", "in": "path", "required": true, "description": "operation-level" }
+                        ],
+                        "responses": { "200": { "description": "OK" } }
+                    }
+                }
+            }
+        }
+        """
+        let data = json.data(using: .utf8)!
+        let spec = try JSONDecoder().decode(OpenAPISpec.self, from: data)
+        let registry = OpenAPIRouteRegistry(spec: spec)
+
+        let match = try #require(registry.match(method: "GET", path: "/items/99"))
+        // Only one parameter should remain (operation-level wins)
+        #expect(match.effectiveParameters.count == 1)
+        #expect(match.effectiveParameters.first?.description == "operation-level")
+    }
+
+    @Test("effectiveParameters combines path-level and operation-level params with different names")
+    func testPathAndOperationLevelParamsCombined() throws {
+        let json = """
+        {
+            "openapi": "3.0.3",
+            "info": { "title": "Test API", "version": "1.0.0" },
+            "paths": {
+                "/items/{id}": {
+                    "parameters": [
+                        { "name": "id", "in": "path", "required": true }
+                    ],
+                    "get": {
+                        "operationId": "getItem",
+                        "parameters": [
+                            { "name": "expand", "in": "query", "required": false }
+                        ],
+                        "responses": { "200": { "description": "OK" } }
+                    }
+                }
+            }
+        }
+        """
+        let data = json.data(using: .utf8)!
+        let spec = try JSONDecoder().decode(OpenAPISpec.self, from: data)
+        let registry = OpenAPIRouteRegistry(spec: spec)
+
+        let match = try #require(registry.match(method: "GET", path: "/items/7"))
+        #expect(match.effectiveParameters.count == 2)
+        let names = Set(match.effectiveParameters.map { $0.name })
+        #expect(names.contains("id"))
+        #expect(names.contains("expand"))
+    }
+
+    @Test("effectiveParameters is empty when neither path-level nor operation-level params exist")
+    func testNoParamsGivesEmptyEffectiveParameters() throws {
+        let json = """
+        {
+            "openapi": "3.0.3",
+            "info": { "title": "Test API", "version": "1.0.0" },
+            "paths": {
+                "/health": {
+                    "get": {
+                        "operationId": "healthCheck",
+                        "responses": { "200": { "description": "OK" } }
+                    }
+                }
+            }
+        }
+        """
+        let data = json.data(using: .utf8)!
+        let spec = try JSONDecoder().decode(OpenAPISpec.self, from: data)
+        let registry = OpenAPIRouteRegistry(spec: spec)
+
+        let match = try #require(registry.match(method: "GET", path: "/health"))
+        #expect(match.effectiveParameters.isEmpty)
+    }
+}
+
 // MARK: - Deprecation Warning Tests
 
 #if !os(Windows)

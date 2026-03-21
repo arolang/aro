@@ -62,7 +62,8 @@ public struct OpenAPIRouteRegistry: Sendable {
                     operationId: route.operationId,
                     pathParameters: params,
                     operation: route.operation,
-                    pathTemplate: route.pattern.template
+                    pathTemplate: route.pattern.template,
+                    pathLevelParameters: route.pathParameters
                 )
             }
         }
@@ -114,6 +115,28 @@ public struct RouteMatch: Sendable {
 
     /// The path template that matched
     public let pathTemplate: String
+
+    /// Parameters defined at the path item level (apply to all operations on the path)
+    public let pathLevelParameters: [Parameter]?
+
+    /// Effective parameters: path-level parameters merged with operation-level parameters.
+    /// Operation-level parameters override path-level parameters with the same name+in combination.
+    public var effectiveParameters: [Parameter] {
+        mergedParameters(pathLevel: pathLevelParameters, operationLevel: operation.parameters)
+    }
+}
+
+// MARK: - Parameter Merging
+
+/// Merges path-level and operation-level parameters according to the OpenAPI specification.
+/// Operation-level parameters override path-level parameters with the same name+in combination.
+func mergedParameters(pathLevel: [Parameter]?, operationLevel: [Parameter]?) -> [Parameter] {
+    var result = pathLevel ?? []
+    for opParam in operationLevel ?? [] {
+        result.removeAll { $0.name == opParam.name && $0.in == opParam.in }
+        result.append(opParam)
+    }
+    return result
 }
 
 // MARK: - Path Pattern

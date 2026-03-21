@@ -46,9 +46,10 @@ public final class OpenAPIHTTPHandler: @unchecked Sendable {
             responseHeaders["Deprecation"] = "true"
         }
 
-        // Check for deprecated parameters present in the request
-        if let parameters = match.operation.parameters {
-            for param in parameters where param.deprecated == true {
+        // Check for deprecated parameters present in the request (includes path-level parameters)
+        let effectiveParameters = match.effectiveParameters
+        if !effectiveParameters.isEmpty {
+            for param in effectiveParameters where param.deprecated == true {
                 let isPresent: Bool
                 switch param.in {
                 case "query":
