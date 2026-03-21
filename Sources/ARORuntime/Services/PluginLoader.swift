@@ -1070,13 +1070,15 @@ public final class PluginLoader: @unchecked Sendable {
             throw PluginError.compilationFailed(pluginName, message: "Library not found in '\(targetReleaseDir.path)' after successful cargo build")
         }
 
-        // Copy to the output directory
+        // Copy to the output directory (skip if source and dest are the same file)
         try FileManager.default.createDirectory(at: outputDir, withIntermediateDirectories: true)
         let dest = outputDir.appendingPathComponent(lib.lastPathComponent)
-        if FileManager.default.fileExists(atPath: dest.path) {
-            try FileManager.default.removeItem(at: dest)
+        if lib.standardizedFileURL != dest.standardizedFileURL {
+            if FileManager.default.fileExists(atPath: dest.path) {
+                try FileManager.default.removeItem(at: dest)
+            }
+            try FileManager.default.copyItem(at: lib, to: dest)
         }
-        try FileManager.default.copyItem(at: lib, to: dest)
     }
 
     /// Load a single plugin from a Swift file
