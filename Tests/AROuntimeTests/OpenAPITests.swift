@@ -3091,4 +3091,331 @@ struct DeserializeParameterTests {
     }
 }
 
+// MARK: - OpenAPI 3.1 Tests
+
+@Suite("OpenAPI 3.1 Support Tests")
+struct OpenAPI31Tests {
+
+    // MARK: - Schema.types parsing
+
+    @Test("3.1 spec with type array parses as types = [string, null]")
+    func testTypeArrayParsed() throws {
+        let json = """
+        {
+            "type": ["string", "null"]
+        }
+        """
+        let data = json.data(using: .utf8)!
+        let schema = try JSONDecoder().decode(Schema.self, from: data)
+        #expect(schema.types == ["string", "null"])
+        #expect(schema.type == "string")
+        #expect(schema.isNullable == true)
+    }
+
+    @Test("3.0 spec with type string parses as types = [string]")
+    func testTypeStringSingleElement() throws {
+        let json = """
+        {
+            "type": "string"
+        }
+        """
+        let data = json.data(using: .utf8)!
+        let schema = try JSONDecoder().decode(Schema.self, from: data)
+        #expect(schema.types == ["string"])
+        #expect(schema.type == "string")
+        #expect(schema.isNullable == false)
+    }
+
+    @Test("nullable: true (3.0.x) → isNullable == true")
+    func testNullableTrue30() throws {
+        let json = """
+        {
+            "type": "string",
+            "nullable": true
+        }
+        """
+        let data = json.data(using: .utf8)!
+        let schema = try JSONDecoder().decode(Schema.self, from: data)
+        #expect(schema.nullable == true)
+        #expect(schema.isNullable == true)
+    }
+
+    @Test("nullable: false (3.0.x) → isNullable == false")
+    func testNullableFalse30() throws {
+        let json = """
+        {
+            "type": "string",
+            "nullable": false
+        }
+        """
+        let data = json.data(using: .utf8)!
+        let schema = try JSONDecoder().decode(Schema.self, from: data)
+        #expect(schema.nullable == false)
+        #expect(schema.isNullable == false)
+    }
+
+    @Test("No type specified → types is empty, type is nil")
+    func testNoType() throws {
+        let json = """
+        {
+            "description": "no type"
+        }
+        """
+        let data = json.data(using: .utf8)!
+        let schema = try JSONDecoder().decode(Schema.self, from: data)
+        #expect(schema.types.isEmpty)
+        #expect(schema.type == nil)
+        #expect(schema.isNullable == false)
+    }
+
+    // MARK: - exclusiveMinimum / exclusiveMaximum
+
+    @Test("exclusiveMinimum as Bool (3.0.x) parses correctly")
+    func testExclusiveMinimumBool() throws {
+        let json = """
+        {
+            "type": "number",
+            "minimum": 0,
+            "exclusiveMinimum": true
+        }
+        """
+        let data = json.data(using: .utf8)!
+        let schema = try JSONDecoder().decode(Schema.self, from: data)
+        #expect(schema.exclusiveMinimumBool == true)
+        #expect(schema.exclusiveMinimumValue == nil)
+    }
+
+    @Test("exclusiveMinimum as number (3.1) parses correctly")
+    func testExclusiveMinimumValue() throws {
+        let json = """
+        {
+            "type": "number",
+            "exclusiveMinimum": 5.0
+        }
+        """
+        let data = json.data(using: .utf8)!
+        let schema = try JSONDecoder().decode(Schema.self, from: data)
+        #expect(schema.exclusiveMinimumBool == nil)
+        #expect(schema.exclusiveMinimumValue == 5.0)
+    }
+
+    @Test("exclusiveMaximum as Bool (3.0.x) parses correctly")
+    func testExclusiveMaximumBool() throws {
+        let json = """
+        {
+            "type": "number",
+            "maximum": 100,
+            "exclusiveMaximum": true
+        }
+        """
+        let data = json.data(using: .utf8)!
+        let schema = try JSONDecoder().decode(Schema.self, from: data)
+        #expect(schema.exclusiveMaximumBool == true)
+        #expect(schema.exclusiveMaximumValue == nil)
+    }
+
+    @Test("exclusiveMaximum as number (3.1) parses correctly")
+    func testExclusiveMaximumValue() throws {
+        let json = """
+        {
+            "type": "number",
+            "exclusiveMaximum": 100.0
+        }
+        """
+        let data = json.data(using: .utf8)!
+        let schema = try JSONDecoder().decode(Schema.self, from: data)
+        #expect(schema.exclusiveMaximumBool == nil)
+        #expect(schema.exclusiveMaximumValue == 100.0)
+    }
+
+    // MARK: - const constraint
+
+    @Test("const: active — matching value passes")
+    func testConstMatchPasses() throws {
+        let schema = Schema(type: "string", const: .string("active"))
+        #expect(try SchemaBinding.parseValue(json: "active", schema: schema, components: nil) as? String == "active")
+    }
+
+    @Test("const: active — non-matching value throws")
+    func testConstMismatchThrows() throws {
+        let schema = Schema(type: "string", const: .string("active"))
+        #expect(throws: (any Error).self) {
+            try SchemaBinding.parseValue(json: "inactive", schema: schema, components: nil)
+        }
+    }
+
+    @Test("const: 42 — matching integer passes")
+    func testConstIntMatchPasses() throws {
+        let schema = Schema(type: "integer", const: .int(42))
+        // parseValue returns Double for numbers; int 42 decoded via JSONSerialization may come as Int or Double
+        let result = try SchemaBinding.parseValue(json: 42, schema: schema, components: nil)
+        // Allow either Int or Double representation
+        let isMatch = (result as? Int) == 42 || (result as? Double) == 42.0
+        #expect(isMatch)
+    }
+
+    // MARK: - Nullable pass-through in SchemaBinding
+
+    @Test("Nullable schema — NSNull value accepted")
+    func testNullableSchemaAcceptsNSNull() throws {
+        let schema = Schema(type: "string", nullable: true)
+        let result = try SchemaBinding.parseValue(json: NSNull(), schema: schema, components: nil)
+        #expect(result is NSNull)
+    }
+
+    @Test("Nullable schema via type array — NSNull value accepted")
+    func testNullableTypeArrayAcceptsNSNull() throws {
+        let schema = Schema(types: ["string", "null"])
+        let result = try SchemaBinding.parseValue(json: NSNull(), schema: schema, components: nil)
+        #expect(result is NSNull)
+    }
+
+    @Test("Non-nullable schema — NSNull value throws")
+    func testNonNullableSchemaRejectsNSNull() throws {
+        let schema = Schema(type: "string")
+        #expect(throws: (any Error).self) {
+            try SchemaBinding.parseValue(json: NSNull(), schema: schema, components: nil)
+        }
+    }
+
+    // MARK: - OpenAPI 3.1 top-level fields
+
+    @Test("jsonSchemaDialect parses in 3.1 spec")
+    func testJsonSchemaDialectParses() throws {
+        let json = """
+        {
+            "openapi": "3.1.0",
+            "jsonSchemaDialect": "https://json-schema.org/draft/2020-12/schema",
+            "info": {
+                "title": "Test API",
+                "version": "1.0.0"
+            },
+            "paths": {}
+        }
+        """
+        let data = json.data(using: .utf8)!
+        let spec = try JSONDecoder().decode(OpenAPISpec.self, from: data)
+        #expect(spec.jsonSchemaDialect == "https://json-schema.org/draft/2020-12/schema")
+        #expect(spec.is31 == true)
+    }
+
+    @Test("is31 returns false for 3.0.x spec")
+    func testIs31FalseFor30() throws {
+        let json = """
+        {
+            "openapi": "3.0.3",
+            "info": { "title": "T", "version": "1" },
+            "paths": {}
+        }
+        """
+        let data = json.data(using: .utf8)!
+        let spec = try JSONDecoder().decode(OpenAPISpec.self, from: data)
+        #expect(spec.is31 == false)
+    }
+
+    // MARK: - info.summary and license.identifier
+
+    @Test("info.summary parses in 3.1 spec")
+    func testInfoSummaryParses() throws {
+        let json = """
+        {
+            "openapi": "3.1.0",
+            "info": {
+                "title": "Test API",
+                "version": "1.0.0",
+                "summary": "A short summary"
+            },
+            "paths": {}
+        }
+        """
+        let data = json.data(using: .utf8)!
+        let spec = try JSONDecoder().decode(OpenAPISpec.self, from: data)
+        #expect(spec.info.summary == "A short summary")
+    }
+
+    @Test("license.identifier (SPDX) parses in 3.1 spec")
+    func testLicenseIdentifierParses() throws {
+        let json = """
+        {
+            "openapi": "3.1.0",
+            "info": {
+                "title": "Test API",
+                "version": "1.0.0",
+                "license": {
+                    "name": "Apache 2.0",
+                    "identifier": "Apache-2.0"
+                }
+            },
+            "paths": {}
+        }
+        """
+        let data = json.data(using: .utf8)!
+        let spec = try JSONDecoder().decode(OpenAPISpec.self, from: data)
+        #expect(spec.info.license?.name == "Apache 2.0")
+        #expect(spec.info.license?.identifier == "Apache-2.0")
+    }
+
+    // MARK: - webhooks
+
+    @Test("Webhook route registered and matchable")
+    func testWebhookRouteRegistered() throws {
+        let json = """
+        {
+            "openapi": "3.1.0",
+            "info": { "title": "Test API", "version": "1.0.0" },
+            "paths": {},
+            "webhooks": {
+                "newOrder": {
+                    "post": {
+                        "operationId": "handleNewOrder",
+                        "responses": {
+                            "200": { "description": "OK" }
+                        }
+                    }
+                }
+            }
+        }
+        """
+        let data = json.data(using: .utf8)!
+        let spec = try JSONDecoder().decode(OpenAPISpec.self, from: data)
+        #expect(spec.webhooks?["newOrder"] != nil)
+
+        // The route registry should register the webhook
+        let registry = OpenAPIRouteRegistry(spec: spec)
+        let match = registry.match(method: "POST", path: "/newOrder")
+        #expect(match?.operationId == "handleNewOrder")
+    }
+
+    @Test("allOperationIds includes webhook operation IDs")
+    func testAllOperationIdsIncludesWebhooks() throws {
+        let json = """
+        {
+            "openapi": "3.1.0",
+            "info": { "title": "Test API", "version": "1.0.0" },
+            "paths": {
+                "/users": {
+                    "get": {
+                        "operationId": "listUsers",
+                        "responses": { "200": { "description": "OK" } }
+                    }
+                }
+            },
+            "webhooks": {
+                "newOrder": {
+                    "post": {
+                        "operationId": "handleNewOrder",
+                        "responses": { "200": { "description": "OK" } }
+                    }
+                }
+            }
+        }
+        """
+        let data = json.data(using: .utf8)!
+        let spec = try JSONDecoder().decode(OpenAPISpec.self, from: data)
+        let ids = spec.allOperationIds
+        #expect(ids.contains("listUsers"))
+        #expect(ids.contains("handleNewOrder"))
+    }
+}
+
 #endif  // !os(Windows)

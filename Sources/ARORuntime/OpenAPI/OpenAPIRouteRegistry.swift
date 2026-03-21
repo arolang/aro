@@ -23,7 +23,15 @@ public struct OpenAPIRouteRegistry: Sendable {
     private static func buildRoutes(from spec: OpenAPISpec) -> [Route] {
         var routes: [Route] = []
 
-        for (pathTemplate, pathItem) in spec.paths {
+        // Combine paths and webhooks (OpenAPI 3.1) into a single iterable
+        var allPathItems = spec.paths
+        for (name, item) in spec.webhooks ?? [:] {
+            // Use the webhook name as a path template (may not start with "/")
+            let key = name.hasPrefix("/") ? name : "/\(name)"
+            allPathItems[key] = item
+        }
+
+        for (pathTemplate, pathItem) in allPathItems {
             let pattern = PathPattern(template: pathTemplate)
 
             for (method, operation) in pathItem.allOperations {

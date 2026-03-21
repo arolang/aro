@@ -23,8 +23,15 @@ public struct ContractValidator {
         // Track missing handlers
         var missingHandlers: [(operationId: String, path: String, method: String)] = []
 
+        // Combine paths and webhooks (OpenAPI 3.1) for validation
+        var allPathItems = spec.paths
+        for (name, item) in spec.webhooks ?? [:] {
+            let key = name.hasPrefix("/") ? name : "/\(name)"
+            allPathItems[key] = item
+        }
+
         // Check each operation has a matching feature set
-        for (path, pathItem) in spec.paths {
+        for (path, pathItem) in allPathItems {
             for (method, operation) in pathItem.allOperations {
                 guard let operationId = operation.operationId else {
                     throw ContractValidationError.missingOperationId(
@@ -55,7 +62,14 @@ public struct ContractValidator {
         // Check for duplicate operation IDs
         var seenIds: [String: (path: String, method: String)] = [:]
 
-        for (path, pathItem) in spec.paths {
+        // Combine paths and webhooks
+        var allPathItems = spec.paths
+        for (name, item) in spec.webhooks ?? [:] {
+            let key = name.hasPrefix("/") ? name : "/\(name)"
+            allPathItems[key] = item
+        }
+
+        for (path, pathItem) in allPathItems {
             for (method, operation) in pathItem.allOperations {
                 guard let operationId = operation.operationId else {
                     throw ContractValidationError.missingOperationId(
@@ -85,7 +99,14 @@ public struct ContractValidator {
         // Collect all schema refs used
         var usedRefs: Set<String> = []
 
-        for (_, pathItem) in spec.paths {
+        // Combine paths and webhooks for reference validation
+        var allPathItems = spec.paths
+        for (name, item) in spec.webhooks ?? [:] {
+            let key = name.hasPrefix("/") ? name : "/\(name)"
+            allPathItems[key] = item
+        }
+
+        for (_, pathItem) in allPathItems {
             for (_, operation) in pathItem.allOperations {
                 // Check request body schema refs
                 if let requestBody = operation.requestBody {
