@@ -396,7 +396,7 @@ public extension ExecutionContext {
     func resolveWithSpecifiers<T>(_ base: String, specifiers: [String]) throws -> T {
         let value = try resolveWithSpecifiers(base, specifiers: specifiers)
         guard let typed = value as? T else {
-            throw ActionError.runtimeError("Expected \(T.self) but got \(type(of: value))")
+            throw ActionError.typeMismatch(expected: "\(T.self)", actual: "\(type(of: value))")
         }
         return typed
     }

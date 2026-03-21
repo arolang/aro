@@ -41,7 +41,7 @@ public struct IncludeAction: ActionImplementation {
         // Check if object.base is "template" with path in specifiers
         if object.base.lowercased() == "template" {
             guard !object.specifiers.isEmpty else {
-                throw ActionError.runtimeError("Include requires template path: <template: path>")
+                throw ActionError.missingRequiredField(field: "a template path", action: "Include")
             }
 
             // Join specifiers with '.' to reconstruct path with extension
@@ -66,7 +66,7 @@ public struct IncludeAction: ActionImplementation {
 
         // Create a child context for the included template
         guard let runtimeContext = context as? RuntimeContext else {
-            throw ActionError.runtimeError("Invalid context type for template include")
+            throw ActionError.missingService("RuntimeContext (template include requires a full runtime context)")
         }
 
         let includeContext = runtimeContext.createTemplateContext()

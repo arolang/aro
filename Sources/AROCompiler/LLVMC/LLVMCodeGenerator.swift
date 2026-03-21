@@ -48,12 +48,14 @@ public final class LLVMCodeGenerator {
     ///   - program: The analyzed ARO program
     ///   - openAPISpecJSON: Optional OpenAPI specification as JSON string
     ///   - templatesJSON: Optional templates dictionary as JSON string (ARO-0050)
+    ///   - embeddedPlugins: Optional array of plugin libraries to embed in the binary
     /// - Returns: Code generation result with IR text
     /// - Throws: LLVMCodeGenError if generation fails
     public func generate(
         program: AnalyzedProgram,
         openAPISpecJSON: String? = nil,
-        templatesJSON: String? = nil
+        templatesJSON: String? = nil,
+        embeddedPlugins: [(name: String, yaml: String, base64Library: String)]? = nil
     ) throws -> LLVMCodeGenerationResult {
         // Initialize components
         ctx = LLVMCodeGenContext(moduleName: "aro_program")
@@ -74,7 +76,7 @@ public final class LLVMCodeGenerator {
 
         // Collect and emit string constants
         let stringCollector = StringConstantCollector(context: ctx)
-        stringCollector.collect(from: program, openAPISpecJSON: openAPISpecJSON, templatesJSON: templatesJSON)
+        stringCollector.collect(from: program, openAPISpecJSON: openAPISpecJSON, templatesJSON: templatesJSON, embeddedPlugins: embeddedPlugins)
 
         // Generate feature set functions
         for analyzedFS in program.featureSets {
@@ -82,7 +84,7 @@ public final class LLVMCodeGenerator {
         }
 
         // Generate main function
-        generateMainFunction(program: program, openAPISpecJSON: openAPISpecJSON, templatesJSON: templatesJSON)
+        generateMainFunction(program: program, openAPISpecJSON: openAPISpecJSON, templatesJSON: templatesJSON, embeddedPlugins: embeddedPlugins)
 
         // Verify module
         try verifyModule()
@@ -1190,9 +1192,14 @@ public final class LLVMCodeGenerator {
 
         // Unbind all variables that will be bound in the loop body
         // This simulates the child context behavior of the interpreter,
-        // allowing variables to be rebound on each iteration
+        // allowing variables to be rebound on each iteration.
+        // Exclude the item variable and index variable — they are already
+        // managed by the dedicated unbind+rebind code above, mirroring
+        // the same exclusion in generateRangeLoop (line: varName != loop.variable).
+        var managedByLoop = Set([loop.itemVariable])
+        if let indexVar = loop.indexVariable { managedByLoop.insert(indexVar) }
         let bodyVariables = collectBoundVariables(from: loop.body)
-        for varName in bodyVariables {
+        for varName in bodyVariables where !managedByLoop.contains(varName) {
             let varNameConst = ctx.stringConstant(varName)
             _ = ctx.module.insertCall(
                 externals.variableUnbind,
@@ -1573,7 +1580,7 @@ public final class LLVMCodeGenerator {
 
     // MARK: - Main Function Generation
 
-    private func generateMainFunction(program: AnalyzedProgram, openAPISpecJSON: String?, templatesJSON: String? = nil) {
+    private func generateMainFunction(program: AnalyzedProgram, openAPISpecJSON: String?, templatesJSON: String? = nil, embeddedPlugins: [(name: String, yaml: String, base64Library: String)]? = nil) {
         let mainFunc = ctx.module.declareFunction("main", types.mainFunctionType)
 
         let entryBlock = ctx.module.appendBlock(named: "entry", to: mainFunc)
@@ -1601,6 +1608,16 @@ public final class LLVMCodeGenerator {
         if let templates = templatesJSON {
             let templatesStr = ctx.stringConstant(templates)
             _ = ctx.module.insertCall(externals.setEmbeddedTemplates, on: [templatesStr], at: ip)
+        }
+
+        // Register embedded plugins (base64-encoded .so files compiled into the binary)
+        if let plugins = embeddedPlugins {
+            for plugin in plugins {
+                let nameStr = ctx.stringConstant(plugin.name)
+                let yamlStr = ctx.stringConstant(plugin.yaml)
+                let base64Str = ctx.stringConstant(plugin.base64Library)
+                _ = ctx.module.insertCall(externals.registerEmbeddedPlugin, on: [nameStr, yamlStr, base64Str], at: ip)
+            }
         }
 
         // Load precompiled plugins
@@ -1799,8 +1816,29 @@ public final class LLVMCodeGenerator {
                         continue
                     }
 
-                    // Skip Socket Event handlers (handled separately by native socket server)
-                    guard !activity.contains("Socket Event") else {
+                    // TCP Socket Event Handlers: register by event type derived from feature set name.
+                    // DomainEvents are co-published by AROSocketClient's receive/connect/disconnect paths.
+                    if activity.contains("Socket Event") {
+                        let featureName = analyzed.featureSet.name.lowercased()
+                        let socketEventType: String
+                        if featureName.contains("data") || featureName.contains("message") || featureName.contains("received") {
+                            socketEventType = "socket.data"
+                        } else if featureName.contains("disconnect") {
+                            socketEventType = "socket.disconnected"
+                        } else if featureName.contains("connect") {
+                            socketEventType = "socket.connected"
+                        } else {
+                            continue
+                        }
+                        let funcName = featureSetFunctionName(analyzed.featureSet.name)
+                        if let handlerFunc = ctx.module.function(named: funcName) {
+                            let eventTypeStr = ctx.stringConstant(socketEventType)
+                            _ = ctx.module.insertCall(
+                                externals.runtimeRegisterHandler,
+                                on: [runtime, eventTypeStr, handlerFunc],
+                                at: ip
+                            )
+                        }
                         continue
                     }
 
@@ -1886,7 +1924,7 @@ private final class StringConstantCollector {
         self.ctx = context
     }
 
-    func collect(from program: AnalyzedProgram, openAPISpecJSON: String?, templatesJSON: String? = nil) {
+    func collect(from program: AnalyzedProgram, openAPISpecJSON: String?, templatesJSON: String? = nil, embeddedPlugins: [(name: String, yaml: String, base64Library: String)]? = nil) {
         // Register built-in variable names
         let builtins = ["_literal_", "_expression_", "_result_expression_",
                         "_aggregation_type_", "_aggregation_field_",
@@ -1905,6 +1943,15 @@ private final class StringConstantCollector {
         // Register templates JSON if provided (ARO-0050)
         if let templates = templatesJSON {
             _ = ctx.stringConstant(templates)
+        }
+
+        // Pre-register embedded plugin strings
+        if let plugins = embeddedPlugins {
+            for plugin in plugins {
+                _ = ctx.stringConstant(plugin.name)
+                _ = ctx.stringConstant(plugin.yaml)
+                _ = ctx.stringConstant(plugin.base64Library)
+            }
         }
 
         // Collect from feature sets

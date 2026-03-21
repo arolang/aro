@@ -222,7 +222,7 @@ provides:
 (* FormatTitle — Capitalize first letter of each word *)
 (FormatTitle: String Operations) {
     Extract the <text> from the <input: text>.
-    Transform the <title> from <text> using <titlecase>.
+    Transform the <title: titlecase> from <text>.
     Return an <OK: status> with <title>.
 }
 
@@ -231,11 +231,14 @@ provides:
     Extract the <text> from the <input: text>.
     Extract the <max-length> from the <input: maxLength>.
     Compute the <length: length> from <text>.
-    when <length> > <max-length> {
-        Transform the <truncated> from <text> using <substring: 0> to <max-length>.
-        Create the <result> with <truncated> + "...".
-    } else {
-        Create the <result> with <text>.
+    match <length> > <max-length> {
+        case true {
+            Transform the <truncated: substring> from <text>.
+            Create the <result> with <truncated> ++ "...".
+        }
+        case false {
+            Create the <result> with <text>.
+        }
     }
     Return an <OK: status> with <result>.
 }

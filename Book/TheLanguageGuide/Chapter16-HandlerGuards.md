@@ -13,14 +13,12 @@ The naive approach is to put conditionals inside the handler body:
 ```aro
 (Process Payment: OrderUpdated Handler) {
     Extract the <status> from the <event: status>.
-    when <status> = "paid" {
-        (* ... do the work ... *)
-    }
-    Return an <OK: status> for the <processing>.
+    (* ... do the work ... *)
+    Return an <OK: status> for the <processing> when <status> = "paid".
 }
 ```
 
-This works, but it means every `OrderUpdated` event causes the handler to start, extract data, and evaluate a condition — just to decide whether to do anything. The handler body carries conditional logic that is really about routing, not about processing.
+This works, but it means every `OrderUpdated` event causes the handler to start, extract data, and evaluate a condition — just to decide whether to do anything. ARO per-statement guards (appended to a statement with `when`) are valid, but attaching the condition to each statement still enters the handler for every event. The handler body carries routing logic that belongs in the declaration, not in the processing.
 
 ARO provides two mechanisms for moving this filtering to the handler's declaration, so the runtime can skip inappropriate events entirely before any statements run.
 
@@ -313,9 +311,7 @@ ARO has guards in two positions that look similar but serve different purposes:
 **Statement guard**: appears on a single statement inside the body:
 ```aro
 (Handler Name: EventType Handler) {
-    when <age> >= 18 {
-        Log "Adult user" to the <console>.
-    }
+    Log "Adult user" to the <console> when <age> >= 18.
     (* execution continues here regardless *)
 }
 ```

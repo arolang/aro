@@ -33,7 +33,10 @@ public struct ContractValidator {
                     )
                 }
 
-                if !featureSetNames.contains(operationId) {
+                // Skip WebSocket upgrade endpoints (101 Switching Protocols) —
+                // those are handled by the runtime, not user-defined feature sets
+                let isWebSocketUpgrade = operation.responses.keys.contains("101")
+                if !featureSetNames.contains(operationId) && !isWebSocketUpgrade {
                     missingHandlers.append((operationId, path, method))
                 }
             }

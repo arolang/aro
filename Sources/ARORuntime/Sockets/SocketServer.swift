@@ -354,22 +354,26 @@ private final class SocketHandler: ChannelInboundHandler, @unchecked Sendable {
     }
 }
 
-// MARK: - Socket Client
+// MARK: - Socket Client (BSD Sockets)
 
-/// Socket Client for outgoing TCP connections
+/// Socket Client for outgoing TCP connections using BSD sockets.
+///
+/// Uses POSIX BSD sockets directly instead of SwiftNIO so that it works
+/// in both interpreter mode (`aro run`) and compiled binary mode (`aro build`).
+/// SwiftNIO's MultiThreadedEventLoopGroup crashes with SIGSEGV in LLVM binaries.
 public final class AROSocketClient: @unchecked Sendable {
     // MARK: - Properties
 
     private let eventBus: EventBus
-    private var channel: Channel?
-    private let group: MultiThreadedEventLoopGroup
+    private var socketFd: Int32 = -1
     private let lock = NSLock()
+    private var _isConnected = false
 
     public let connectionId: String
 
     /// Whether the client is connected
     public var isConnected: Bool {
-        withLock { channel != nil }
+        withLock { _isConnected }
     }
 
     // MARK: - Thread-safe helpers
@@ -380,119 +384,186 @@ public final class AROSocketClient: @unchecked Sendable {
         return body()
     }
 
-    private func setChannel(_ newChannel: Channel?) {
-        withLock { channel = newChannel }
+    private func getFd() -> Int32 {
+        withLock { socketFd }
     }
 
-    private func getChannel() -> Channel? {
-        withLock { channel }
+    /// Atomically clears socketFd / _isConnected and returns the old fd.
+    private func takeFd() -> Int32 {
+        withLock {
+            let fd = socketFd
+            socketFd = -1
+            _isConnected = false
+            return fd
+        }
     }
 
     // MARK: - Initialization
 
     public init(eventBus: EventBus = .shared) {
         self.eventBus = eventBus
-        self.group = EventLoopGroupManager.shared.getEventLoopGroup()
         self.connectionId = UUID().uuidString
     }
 
     deinit {
-        // Event loop group shutdown is managed by EventLoopGroupManager
-        // Don't shut down here as the group might be shared
+        let fd = takeFd()
+        if fd >= 0 { _ = bsdClose(fd) }
     }
 
     // MARK: - Connection
 
-    /// Connect to a server
+    /// Connect to a server. Resolves hostname, connects, and starts the receive loop.
     public func connect(host: String, port: Int) async throws {
-        let handler = ClientHandler(
-            eventBus: eventBus,
-            connectionId: connectionId,
-            onDisconnect: { [weak self] in
-                self?.setChannel(nil)
+        try await withCheckedThrowingContinuation { (cont: CheckedContinuation<Void, Error>) in
+            DispatchQueue.global(qos: .utility).async { [self] in
+                do {
+                    try self.connectBlocking(host: host, port: port)
+                    cont.resume()
+                } catch {
+                    cont.resume(throwing: error)
+                }
             }
-        )
+        }
+    }
 
-        let bootstrap = ClientBootstrap(group: group)
-            .channelOption(ChannelOptions.socketOption(.so_reuseaddr), value: 1)
-            .channelInitializer { channel in
-                channel.pipeline.addHandler(handler)
-            }
+    private func connectBlocking(host: String, port: Int) throws {
+        // SOCK_STREAM is Int32 on macOS but __socket_type on Linux
+        #if canImport(Darwin)
+        let fd = socket(AF_INET, SOCK_STREAM, 0)
+        #else
+        let fd = socket(AF_INET, Int32(SOCK_STREAM.rawValue), 0)
+        #endif
+        guard fd >= 0 else {
+            throw SocketError.connectionFailed("socket() failed (errno \(errno))")
+        }
 
-        let channel = try await bootstrap.connect(host: host, port: port).get()
+        // Resolve host and port via getaddrinfo — handles both IPs and hostnames
+        var hints = addrinfo()
+        hints.ai_family = AF_INET
+        #if canImport(Darwin)
+        hints.ai_socktype = SOCK_STREAM
+        #else
+        hints.ai_socktype = Int32(SOCK_STREAM.rawValue)
+        #endif
+        var res: UnsafeMutablePointer<addrinfo>? = nil
+        let gaiStatus = getaddrinfo(host, "\(port)", &hints, &res)
+        guard gaiStatus == 0, let addrRes = res else {
+            _ = bsdClose(fd)
+            let msg = gai_strerror(gaiStatus).map { String(cString: $0) } ?? "\(gaiStatus)"
+            throw SocketError.connectionFailed("Cannot resolve \(host): \(msg)")
+        }
+        defer { freeaddrinfo(res) }
 
-        setChannel(channel)
+        let connectResult: Int32
+        #if canImport(Darwin)
+        connectResult = Darwin.connect(fd, addrRes.pointee.ai_addr, addrRes.pointee.ai_addrlen)
+        #else
+        connectResult = Glibc.connect(fd, addrRes.pointee.ai_addr, addrRes.pointee.ai_addrlen)
+        #endif
+
+        guard connectResult == 0 else {
+            _ = bsdClose(fd)
+            throw SocketError.connectionFailed("connect() to \(host):\(port) failed (errno \(errno))")
+        }
+
+        withLock {
+            socketFd = fd
+            _isConnected = true
+        }
 
         eventBus.publish(ClientConnectedEvent(connectionId: connectionId, remoteAddress: "\(host):\(port)"))
+        // Co-publish DomainEvent for binary mode handlers
+        EventBus.shared.publish(DomainEvent(
+            eventType: "socket.connected",
+            payload: ["connection": ["id": connectionId, "remoteAddress": "\(host):\(port)"] as [String: any Sendable]]
+        ))
+
+        // Start receive loop on a background thread
+        DispatchQueue.global(qos: .utility).async { [weak self] in
+            self?.receiveLoop()
+        }
+    }
+
+    private func receiveLoop() {
+        var buffer = [UInt8](repeating: 0, count: 4096)
+
+        while true {
+            let fd = getFd()
+            guard fd >= 0 else { break }
+
+            let n = recv(fd, &buffer, buffer.count, 0)
+            if n <= 0 { break }
+
+            let data = Data(buffer[0..<n])
+            eventBus.publish(DataReceivedEvent(connectionId: connectionId, data: data))
+            // Co-publish DomainEvent for binary mode handlers
+            let msgStr = String(data: data, encoding: .utf8) ?? ""
+            EventBus.shared.publish(DomainEvent(
+                eventType: "socket.data",
+                payload: ["packet": ["message": msgStr, "buffer": msgStr, "data": msgStr, "connection": connectionId] as [String: any Sendable]]
+            ))
+        }
+
+        let fd = takeFd()
+        if fd >= 0 { _ = bsdClose(fd) }
+        eventBus.publish(ClientDisconnectedEvent(connectionId: connectionId, reason: "connection closed"))
+        EventBus.shared.publish(DomainEvent(
+            eventType: "socket.disconnected",
+            payload: ["event": ["connectionId": connectionId, "reason": "connection closed"] as [String: any Sendable]]
+        ))
     }
 
     /// Disconnect from server
     public func disconnect() async throws {
-        let ch = getChannel()
-
-        if let channel = ch {
-            try await channel.close()
-
-            setChannel(nil)
-
-            eventBus.publish(ClientDisconnectedEvent(connectionId: connectionId, reason: "disconnect requested"))
-        }
+        let fd = takeFd()
+        if fd >= 0 { _ = bsdClose(fd) }
+        eventBus.publish(ClientDisconnectedEvent(connectionId: connectionId, reason: "disconnect requested"))
+        EventBus.shared.publish(DomainEvent(
+            eventType: "socket.disconnected",
+            payload: ["event": ["connectionId": connectionId, "reason": "disconnect requested"] as [String: any Sendable]]
+        ))
     }
 
-    /// Send data
+    // MARK: - Send
+
+    /// Send raw data
     public func send(data: Data) async throws {
-        guard let channel = getChannel() else {
-            throw SocketError.notConnected
+        let fd = getFd()
+        guard fd >= 0 else { throw SocketError.notConnected }
+
+        let sent = data.withUnsafeBytes { buf in
+            bsdSend(fd, buf.baseAddress!, data.count, 0)
         }
-
-        var buffer = channel.allocator.buffer(capacity: data.count)
-        buffer.writeBytes(data)
-
-        try await channel.writeAndFlush(buffer)
+        if sent < 0 {
+            throw SocketError.connectionFailed("send() failed (errno \(errno))")
+        }
     }
 
-    /// Send string
+    /// Send a UTF-8 string
     public func send(string: String) async throws {
         guard let data = string.data(using: .utf8) else {
             throw SocketError.encodingError
         }
         try await send(data: data)
     }
-}
 
-// MARK: - Client Handler
+    // MARK: - Platform helpers
 
-private final class ClientHandler: ChannelInboundHandler, @unchecked Sendable {
-    typealias InboundIn = ByteBuffer
-
-    private let eventBus: EventBus
-    private let connectionId: String
-    private let onDisconnect: () -> Void
-
-    init(eventBus: EventBus, connectionId: String, onDisconnect: @escaping () -> Void) {
-        self.eventBus = eventBus
-        self.connectionId = connectionId
-        self.onDisconnect = onDisconnect
+    @discardableResult
+    private func bsdClose(_ fd: Int32) -> Int32 {
+        #if canImport(Darwin)
+        return Darwin.close(fd)
+        #else
+        return Glibc.close(fd)
+        #endif
     }
 
-    func channelInactive(context: ChannelHandlerContext) {
-        onDisconnect()
-        eventBus.publish(ClientDisconnectedEvent(connectionId: connectionId, reason: "connection closed"))
-    }
-
-    func channelRead(context: ChannelHandlerContext, data: NIOAny) {
-        var buffer = unwrapInboundIn(data)
-        guard let bytes = buffer.readBytes(length: buffer.readableBytes) else {
-            return
-        }
-
-        let receivedData = Data(bytes)
-        eventBus.publish(DataReceivedEvent(connectionId: connectionId, data: receivedData))
-    }
-
-    func errorCaught(context: ChannelHandlerContext, error: Error) {
-        eventBus.publish(SocketErrorEvent(connectionId: connectionId, error: error.localizedDescription))
-        context.close(promise: nil)
+    private func bsdSend(_ fd: Int32, _ buf: UnsafeRawPointer!, _ len: Int, _ flags: Int32) -> Int {
+        #if canImport(Darwin)
+        return Darwin.send(fd, buf, len, flags)
+        #else
+        return Glibc.send(fd, buf, len, flags)
+        #endif
     }
 }
 

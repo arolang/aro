@@ -89,10 +89,8 @@ public actor ExecutionEngine {
         entryPoint: String = "Application-Start"
     ) async throws -> Response {
 
-        // Find entry point
-        guard let entryFeatureSet = program.featureSets.first(where: {
-            $0.featureSet.name == entryPoint
-        }) else {
+        // Find entry point — O(1) via byName index
+        guard let entryFeatureSet = program.byName[entryPoint] else {
             throw ActionError.entryPointNotFound(entryPoint)
         }
 
@@ -138,6 +136,9 @@ public actor ExecutionEngine {
         // Wire up repository observers (e.g., "user-repository Observer")
         registerRepositoryObservers(for: program, baseContext: context)
 
+        // Wire up repository eviction handlers (e.g., "cache-repository Evicted Handler")
+        registerEvictionHandlers(for: program, baseContext: context)
+
         // Wire up watch handlers (e.g., "Dashboard Watch: TasksUpdated Handler" or "Dashboard Watch: task-repository Observer")
         registerWatchHandlers(for: program, baseContext: context)
 
@@ -182,10 +183,10 @@ public actor ExecutionEngine {
     /// Register socket event handlers for feature sets with "Socket Event Handler" business activity
     /// Socket events work on all platforms via platform-specific implementations
     private func registerSocketEventHandlers(for program: AnalyzedProgram, baseContext: RuntimeContext) {
-        // Find all feature sets with "Socket Event Handler" business activity
-        let socketHandlers = program.featureSets.filter { analyzedFS in
-            analyzedFS.featureSet.businessActivity.contains("Socket Event Handler")
-        }
+        // Use byActivity index: O(k) key scan instead of O(n) linear filter
+        let socketHandlers = program.byActivity
+            .filter { $0.key.contains("Socket Event Handler") }
+            .flatMap { $0.value }
 
 
         for analyzedFS in socketHandlers {
@@ -291,10 +292,10 @@ public actor ExecutionEngine {
 
     /// Register WebSocket event handlers for feature sets with "WebSocket Event Handler" business activity
     private func registerWebSocketEventHandlers(for program: AnalyzedProgram, baseContext: RuntimeContext) {
-        // Find all feature sets with "WebSocket Event Handler" business activity
-        let wsHandlers = program.featureSets.filter { analyzedFS in
-            analyzedFS.featureSet.businessActivity.contains("WebSocket Event Handler")
-        }
+        // Use byActivity index: O(k) key scan
+        let wsHandlers = program.byActivity
+            .filter { $0.key.contains("WebSocket Event Handler") }
+            .flatMap { $0.value }
 
         for analyzedFS in wsHandlers {
             let featureSetName = analyzedFS.featureSet.name
@@ -358,18 +359,18 @@ public actor ExecutionEngine {
     /// For example: "UserCreated Handler", "OrderPlaced Handler"
     /// Supports state guards: "UserCreated Handler<status:active>"
     private func registerDomainEventHandlers(for program: AnalyzedProgram, baseContext: RuntimeContext) {
-        // Find all feature sets with "*Handler" business activity (but not Socket/File/WebSocket event handlers)
-        // Also match handlers with state guards like "Handler<status:paid>"
-        let domainHandlers = program.featureSets.filter { analyzedFS in
-            let activity = analyzedFS.featureSet.businessActivity
-            let hasHandler = activity.contains(" Handler")
-            let isSpecialHandler = activity.contains("Socket Event Handler") ||
-                                   activity.contains("WebSocket Event Handler") ||
-                                   activity.contains("File Event Handler") ||
-                                   activity.contains("KeyPress Handler") ||
-                                   activity.contains("Application-End")
-            return hasHandler && !isSpecialHandler
-        }
+        // Use byActivity index: iterate keys instead of all feature sets
+        let domainHandlers = program.byActivity
+            .filter { key, _ in
+                let hasHandler = key.contains(" Handler")
+                let isSpecialHandler = key.contains("Socket Event Handler") ||
+                                       key.contains("WebSocket Event Handler") ||
+                                       key.contains("File Event Handler") ||
+                                       key.contains("KeyPress Handler") ||
+                                       key.contains("Application-End")
+                return hasHandler && !isSpecialHandler
+            }
+            .flatMap { $0.value }
 
         for analyzedFS in domainHandlers {
             let activity = analyzedFS.featureSet.businessActivity
@@ -642,10 +643,10 @@ public actor ExecutionEngine {
 
     /// Register notification event handlers for feature sets with "NotificationSent Handler" business activity
     private func registerNotificationEventHandlers(for program: AnalyzedProgram, baseContext: RuntimeContext) {
-        // Find all feature sets with "NotificationSent Handler" business activity
-        let notificationHandlers = program.featureSets.filter { analyzedFS in
-            analyzedFS.featureSet.businessActivity.contains("NotificationSent Handler")
-        }
+        // Use byActivity index for O(1) key lookup
+        let notificationHandlers = program.byActivity
+            .filter { $0.key.contains("NotificationSent Handler") }
+            .flatMap { $0.value }
 
         for analyzedFS in notificationHandlers {
             // Subscribe to NotificationSentEvent
@@ -750,10 +751,10 @@ public actor ExecutionEngine {
 
     /// Register file event handlers for feature sets with "File Event Handler" business activity
     private func registerFileEventHandlers(for program: AnalyzedProgram, baseContext: RuntimeContext) {
-        // Find all feature sets with "File Event Handler" business activity
-        let fileHandlers = program.featureSets.filter { analyzedFS in
-            analyzedFS.featureSet.businessActivity.contains("File Event Handler")
-        }
+        // Use byActivity index: O(k) key scan
+        let fileHandlers = program.byActivity
+            .filter { $0.key.contains("File Event Handler") }
+            .flatMap { $0.value }
 
         for analyzedFS in fileHandlers {
             let featureSetName = analyzedFS.featureSet.name
@@ -848,13 +849,10 @@ public actor ExecutionEngine {
     /// For example: "user-repository Observer", "order-repository Observer"
     /// Supports state guards: "user-repository Observer<status:active>"
     private func registerRepositoryObservers(for program: AnalyzedProgram, baseContext: RuntimeContext) {
-        // Find all feature sets with "*-repository Observer" business activity
-        // Also match observers with state guards like "Observer<status:active>"
-        let observers = program.featureSets.filter { analyzedFS in
-            let activity = analyzedFS.featureSet.businessActivity
-            return activity.contains(" Observer") &&
-                   activity.contains("-repository")
-        }
+        // Use byActivity index: O(k) key scan
+        let observers = program.byActivity
+            .filter { $0.key.contains(" Observer") && $0.key.contains("-repository") }
+            .flatMap { $0.value }
 
         for analyzedFS in observers {
             let activity = analyzedFS.featureSet.businessActivity
@@ -943,6 +941,59 @@ public actor ExecutionEngine {
                     globalSymbols: capturedGlobalSymbols,
                     services: capturedServices
                 )
+            }
+        }
+    }
+
+    /// Register eviction handlers for feature sets with "Evicted Handler" business activity pattern.
+    /// For example: "cache-repository Evicted Handler"
+    private func registerEvictionHandlers(for program: AnalyzedProgram, baseContext: RuntimeContext) {
+        // Use byActivity index: O(k) key scan
+        let handlers = program.byActivity
+            .filter { $0.key.hasSuffix(" Evicted Handler") && $0.key.contains("-repository") }
+            .flatMap { $0.value }
+
+        for analyzedFS in handlers {
+            let activity = analyzedFS.featureSet.businessActivity
+            guard let range = activity.range(of: " Evicted Handler") else { continue }
+            let repositoryName = String(activity[..<range.lowerBound]).trimmingCharacters(in: .whitespaces)
+
+            let capturedActionRegistry = actionRegistry
+            let capturedEventBus = eventBus
+            let capturedGlobalSymbols = globalSymbols
+            let capturedServices = services
+
+            eventBus.subscribe(to: RepositoryEvictedEvent.self) { event in
+                guard event.repositoryName == repositoryName else { return }
+
+                let context = RuntimeContext(
+                    featureSetName: analyzedFS.featureSet.name,
+                    businessActivity: analyzedFS.featureSet.businessActivity,
+                    eventBus: capturedEventBus,
+                    parent: baseContext
+                )
+
+                // Bind event payload so Extract works
+                let payload: [String: any Sendable] = [
+                    "evictedItem": event.evictedItem,
+                    "repositoryName": event.repositoryName,
+                    "reason": event.reason,
+                    "timestamp": event.timestamp.timeIntervalSince1970
+                ]
+                context.bind("event", value: payload)
+
+                let executor = FeatureSetExecutor(
+                    actionRegistry: capturedActionRegistry,
+                    eventBus: capturedEventBus,
+                    globalSymbols: capturedGlobalSymbols
+                )
+                do {
+                    _ = try await executor.execute(analyzedFS, context: context)
+                } catch {
+                    FileHandle.standardError.write(
+                        Data("[ExecutionEngine] Eviction handler '\(analyzedFS.featureSet.name)' error: \(error)\n".utf8)
+                    )
+                }
             }
         }
     }

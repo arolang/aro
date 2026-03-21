@@ -279,7 +279,7 @@ Plugins/
     Extract the <schema> from the <input: schema>.
     Validate the <csv-data> against the <schema>.
     When the <validation: failed> Then {
-        Throw a <ValidationError> with <validation: errors>.
+        Throw a <ValidationError: error> for the <validation: errors>.
     }.
     Return a <Valid: status>.
 }

@@ -976,6 +976,7 @@ final class FileWatcherHandle: @unchecked Sendable {
     var watchFd: Int32 = -1
     var isWatching: Bool = false
     var monitorThread: Thread?
+    let stopSemaphore = DispatchSemaphore(value: 0)
 
     init(path: String) {
         self.path = path
@@ -995,6 +996,7 @@ final class FileWatcherHandle: @unchecked Sendable {
             close(inotifyFd)
             inotifyFd = -1
         }
+        stopSemaphore.signal()
     }
 }
 
@@ -1099,7 +1101,8 @@ public func aro_file_watcher_start(_ watcherPtr: UnsafeMutableRawPointer?) -> In
                     }
                 }
             } else {
-                usleep(100000) // 100ms
+                // Wait up to 100 ms for a stop signal; break immediately if stop() was called
+                if handle.stopSemaphore.wait(timeout: .now() + 0.1) == .success { break }
             }
         }
     }
@@ -1140,6 +1143,7 @@ final class FileWatcherHandle: @unchecked Sendable {
     var path: String
     var isWatching: Bool = false
     var lastModified: [String: Date] = [:]
+    let stopSemaphore = DispatchSemaphore(value: 0)
 
     init(path: String) {
         self.path = path
@@ -1147,6 +1151,7 @@ final class FileWatcherHandle: @unchecked Sendable {
 
     func stop() {
         isWatching = false
+        stopSemaphore.signal()
     }
 }
 
@@ -1209,8 +1214,10 @@ public func aro_file_watcher_start(_ watcherPtr: UnsafeMutableRawPointer?) -> In
             }
         }
 
-        while handle.isWatching {
-            Thread.sleep(forTimeInterval: 1.0) // Poll every second
+        while true {
+            // Wait up to 1 s; if stop() signals the semaphore, exit immediately
+            if handle.stopSemaphore.wait(timeout: .now() + 1.0) == .success { break }
+            guard handle.isWatching else { break }
 
             guard let contents = try? FileManager.default.contentsOfDirectory(atPath: handle.path) else {
                 continue
@@ -1918,7 +1925,9 @@ public final class NativeHTTPServer: @unchecked Sendable {
         // Graceful socket close: signal end of transmission before closing
         // This prevents "Connection reset by peer" errors for some HTTP clients (like HTTP::Tiny)
         _ = shutdown(fd, Int32(SHUT_WR))
-        Thread.sleep(forTimeInterval: 0.01) // Brief delay for client to read response
+        // Wait up to 10 ms for the client to drain; DispatchSemaphore avoids blocking a Dispatch thread
+        let drainWait = DispatchSemaphore(value: 0)
+        drainWait.wait(timeout: .now() + 0.01)
         _ = systemClose(fd)
     }
 
@@ -2335,6 +2344,10 @@ nonisolated(unsafe) public var embeddedOpenAPISpec: String? = nil
 /// Global storage for embedded templates (JSON dictionary: path -> content, set at compile time)
 nonisolated(unsafe) public var embeddedTemplates: [String: String]? = nil
 
+/// Global registry for embedded plugin libraries (base64-encoded .so files compiled into the binary)
+/// Key: plugin name, Value: (yaml: plugin.yaml content, base64So: base64-encoded library bytes)
+nonisolated(unsafe) public var embeddedPluginRegistry: [String: (yaml: String, base64So: String)] = [:]
+
 /// Set the embedded OpenAPI spec (called from generated main)
 @_cdecl("aro_set_embedded_openapi")
 public func aro_set_embedded_openapi(_ specPtr: UnsafePointer<CChar>?) {
@@ -2354,6 +2367,24 @@ public func aro_set_embedded_templates(_ jsonPtr: UnsafePointer<CChar>?) {
         return
     }
     embeddedTemplates = dict
+}
+
+/// Register an embedded plugin library (called from generated main for each compiled plugin)
+/// - Parameters:
+///   - namePtr: Plugin name (e.g., "postgres")
+///   - yamlPtr: Content of plugin.yaml
+///   - base64Ptr: Base64-encoded bytes of the compiled .so/.dylib
+@_cdecl("aro_register_embedded_plugin")
+public func aro_register_embedded_plugin(
+    _ namePtr: UnsafePointer<CChar>?,
+    _ yamlPtr: UnsafePointer<CChar>?,
+    _ base64Ptr: UnsafePointer<CChar>?
+) {
+    guard let namePtr, let yamlPtr, let base64Ptr else { return }
+    let name = String(cString: namePtr)
+    let yaml = String(cString: yamlPtr)
+    let base64 = String(cString: base64Ptr)
+    embeddedPluginRegistry[name] = (yaml: yaml, base64So: base64)
 }
 
 /// Register a feature set handler for HTTP routing
@@ -2743,10 +2774,14 @@ private func extractPortFromOpenAPIYAML(_ yaml: String) -> Int {
     return 0
 }
 
+/// Reused decoder for OpenAPI JSON parsing — only called during binary-mode startup
+/// (single-threaded), so shared access is safe.
+private let openAPIJSONDecoder = JSONDecoder()
+
 /// Extract port from OpenAPI JSON spec's server URL
 private func extractPortFromOpenAPIJSON(_ json: String) -> Int {
     guard let data = json.data(using: .utf8),
-          let spec = try? JSONDecoder().decode(OpenAPISpec.self, from: data),
+          let spec = try? openAPIJSONDecoder.decode(OpenAPISpec.self, from: data),
           let servers = spec.servers,
           let firstServer = servers.first else {
         return 0
@@ -2815,7 +2850,7 @@ private func parseOpenAPIRoutes(_ content: String) {
 /// Parse routes from OpenAPI JSON spec
 private func parseOpenAPIRoutesJSON(_ json: String) {
     guard let data = json.data(using: .utf8),
-          let spec = try? JSONDecoder().decode(OpenAPISpec.self, from: data) else {
+          let spec = try? openAPIJSONDecoder.decode(OpenAPISpec.self, from: data) else {
         return
     }
 
@@ -3128,6 +3163,16 @@ public func aro_set_embedded_openapi(_ specPtr: UnsafePointer<CChar>?) {
 /// Set the embedded templates (Windows stub) - ARO-0050
 @_cdecl("aro_set_embedded_templates")
 public func aro_set_embedded_templates(_ jsonPtr: UnsafePointer<CChar>?) {
+    // No-op on Windows
+}
+
+/// Register an embedded plugin library (Windows stub)
+@_cdecl("aro_register_embedded_plugin")
+public func aro_register_embedded_plugin(
+    _ namePtr: UnsafePointer<CChar>?,
+    _ yamlPtr: UnsafePointer<CChar>?,
+    _ base64Ptr: UnsafePointer<CChar>?
+) {
     // No-op on Windows
 }
 

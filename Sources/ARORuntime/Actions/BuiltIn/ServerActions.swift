@@ -150,7 +150,7 @@ public struct StartAction: ActionImplementation {
             await EventBus.shared.registerEventSource()
             return ServerStartResult(serverType: "http-server", success: true, port: port)
         } else {
-            throw ActionError.runtimeError("Failed to start HTTP server on port \(port)")
+            throw ActionError.serviceStartFailed(service: "HTTP server", port: port)
         }
         #else
         // Emit event for external handling on Windows
@@ -213,7 +213,7 @@ public struct StartAction: ActionImplementation {
             await EventBus.shared.registerEventSource()
             return ServerStartResult(serverType: "socket-server", success: true, port: port)
         } else {
-            throw ActionError.runtimeError("Failed to start socket server on port \(port)")
+            throw ActionError.serviceStartFailed(service: "socket server", port: port)
         }
         #else
         context.emit(SocketServerStartRequestedEvent(port: port))
@@ -1024,9 +1024,7 @@ public struct ConnectAction: ActionImplementation {
         let client = AROSocketClient(eventBus: .shared)
         try await client.connect(host: host, port: port)
 
-        // Store connection in context
         let connectionId = client.connectionId
-        context.bind(result.base, value: connectionId)
 
         // Register the client for later use (enables Send to work with this connection)
         context.register(client)
@@ -1035,9 +1033,12 @@ public struct ConnectAction: ActionImplementation {
         // (instead of exiting after the idle timeout)
         await EventBus.shared.registerEventSource()
 
-        return ConnectResult(connectionId: connectionId, host: host, port: port, success: true)
+        // Return the connection ID string so both interpreter and binary mode bind
+        // result.base = UUID string. (Binary mode: executeAction handles the bind;
+        // interpreter mode: FeatureSetExecutor handles it.)
+        return connectionId
         #else
-        throw ActionError.runtimeError("Socket client not available on Windows")
+        throw ActionError.unsupportedPlatform("Socket client")
         #endif
     }
 }

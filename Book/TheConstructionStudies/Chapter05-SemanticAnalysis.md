@@ -260,7 +260,9 @@ The action's semantic role tells the analyzer which direction data moves. This m
 
 ## Immutability Enforcement
 
-ARO variables cannot be rebound. When a statement would bind a variable that already exists in the symbol table, the analyzer flags an error — unless the verb is a mutation verb (`Update`, `Accept`, `Modify`) or the variable name starts with `_` (framework-internal).
+ARO variables cannot be rebound. When a statement would bind a variable that already exists in the symbol table, the analyzer flags an error — unless the variable name starts with `_` (framework-internal).
+
+Note: `Update` modifies fields on data objects stored in repositories; it does not rebind local symbol table variables. `Accept` transitions an entity to a new state; it also does not rebind local variables.
 
 ### Special Cases
 
@@ -268,8 +270,6 @@ ARO variables cannot be rebound. When a statement would bind a variable that alr
 |----------|-------------|--------|
 | `user` | No | Normal variable |
 | `_internal` | Yes | Framework prefix |
-| With `Update` | Yes | Explicit rebind verb |
-| With `Accept` | Yes | State transition verb |
 
 ---
 
@@ -363,7 +363,7 @@ The analyzer needs to know what a verb *does* — is it a mutation? A response? 
 
 | Category | Representative Verbs | Used For |
 |----------|---------------------|----------|
-| update | update, modify, change, set | Allow rebinding an existing variable |
+| update | update, modify, change | Modify fields on data objects in repositories |
 | create | create, make, build, construct | New entity creation |
 | response | log, print, send, emit, notify | Skip expression shortcut |
 | server | start, stop, keepalive, schedule | Force execution even with literal arguments |
@@ -399,7 +399,7 @@ ARO's semantic analysis enforces the language's design principles:
 
 3. **Data flow tracking**: Inputs, outputs, and side effects are computed for each statement.
 
-4. **Immutability enforcement**: Variables cannot be rebound except with special verbs or `_` prefix.
+4. **Immutability enforcement**: Variables cannot be rebound except with the `_` framework prefix. `Update` modifies repository object fields; `Accept` transitions entity state — neither rebinds local variables.
 
 5. **Event chain validation**: Circular event chains and orphaned events are detected.
 

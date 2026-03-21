@@ -32,7 +32,7 @@ Whole numbers without decimals.
 (Calculate Total: Math Example) {
     Create the <quantity> with 42.
     Create the <price> with 100.
-    Compute the <total> from the <quantity> with <price>.
+    Compute the <total> from <quantity> * <price>.
     Return an <OK: status> with <total>.
 }
 ```
@@ -45,7 +45,7 @@ Decimal numbers for precision calculations.
 (Calculate Tax: Financial Example) {
     Create the <subtotal> with 99.99.
     Create the <tax-rate> with 0.08.
-    Compute the <tax> from the <subtotal> with <tax-rate>.
+    Compute the <tax> from <subtotal> * <tax-rate>.
     Return an <OK: status> with <tax>.
 }
 ```
@@ -58,7 +58,7 @@ Text values enclosed in double quotes.
 (Greet User: String Example) {
     Create the <greeting> with "Hello, World!".
     Create the <name> with "Alice".
-    Log the <message> for the <console> with <greeting>.
+    Log <greeting> to the <console>.
     Return an <OK: status> with <name>.
 }
 ```
@@ -84,7 +84,7 @@ Date and time values for temporal operations.
 (Log Event: DateTime Example) {
     Create the <timestamp> with now.
     Create the <event-name> with "UserLogin".
-    Log the <event: info> for the <console> with <timestamp>.
+    Log <timestamp> to the <console>.
     Return an <OK: status> for the <event>.
 }
 ```
@@ -142,8 +142,8 @@ DateTime operations for temporal logic.
 ```aro
 (Schedule Event: DateTime Operations) {
     Create the <start-time> with now.
-    Compute the <end-time> from the <start-time> with "1 hour".
-    Log the <schedule: info> for the <console> with <start-time>.
+    Compute the <end-time: add> from the <start-time> with "1 hour".
+    Log <start-time> to the <console>.
     Return an <OK: status> for the <schedule>.
 }
 ```

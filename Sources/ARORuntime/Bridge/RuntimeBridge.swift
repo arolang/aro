@@ -79,6 +79,9 @@ class AROCContextHandle {
     let context: RuntimeContext
     let runtime: AROCRuntimeHandle
 
+    /// Reused decoder for OpenAPI spec parsing during binary-mode init.
+    private static let openAPIDecoder = JSONDecoder()
+
     #if !os(Windows)
     // Store service references to prevent deallocation
     let fileSystemService: AROFileSystemService?
@@ -191,7 +194,7 @@ class AROCContextHandle {
         // This is set by aro_set_embedded_openapi() called from generated main()
         if let embeddedJSON = embeddedOpenAPISpec {
             if let data = embeddedJSON.data(using: .utf8) {
-                spec = try? JSONDecoder().decode(OpenAPISpec.self, from: data)
+                spec = try? openAPIDecoder.decode(OpenAPISpec.self, from: data)
             }
         }
 
@@ -466,10 +469,16 @@ public func aro_runtime_register_handler(
                 // Create a context for the handler
                 let contextHandle = AROCContextHandle(runtime: runtimeHandle, featureSetName: handlerName)
 
-                // Bind event payload to context
+                // Bind event payload to context.
+                // Bind both "event:<key>" (ARO convention) AND plain "<key>" so that
+                // handler code written for interpreter mode (which binds the source
+                // object directly, e.g. "packet", "connection") works unchanged.
+                // Binding the plain key last lets it override "event" if the payload
+                // itself contains an "event" key (e.g. socket.disconnected).
                 contextHandle.context.bind("event", value: event.payload)
                 for (key, value) in event.payload {
                     contextHandle.context.bind("event:\(key)", value: value)
+                    contextHandle.context.bind(key, value: value)
                 }
 
                 // Bind terminal capabilities so ARO handler code can use <terminal: columns>
@@ -1414,6 +1423,13 @@ private func convertToSendable(_ value: Any) -> any Sendable {
         // This case should not be reached on macOS (CFBoolean is NSNumber)
         // But keep it for other platforms
         return bool
+    case let sendableDict as [String: any Sendable]:
+        // Already the correct type — recurse to ensure nested values are also clean
+        var result: [String: any Sendable] = [:]
+        for (k, v) in sendableDict {
+            result[k] = convertToSendable(v)
+        }
+        return result
     case let dict as [String: Any]:
         var result: [String: any Sendable] = [:]
         for (k, v) in dict {

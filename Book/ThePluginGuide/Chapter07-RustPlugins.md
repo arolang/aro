@@ -531,8 +531,19 @@ provides:
 
 ### Step 5: Build and Install
 
+`aro build` compiles the Rust plugin automatically — no manual Cargo step required:
+
 ```bash
-# Build the plugin
+# From your application root: aro build discovers and compiles all Rust plugins
+aro build . --optimize
+```
+
+`aro build` calls `cargo build --release` internally, then base64-encodes the compiled `.so`/`.dylib` and embeds it directly into the application binary. No separate plugin file needs to be deployed alongside the binary.
+
+If you want to compile the plugin in isolation (for example, to run Rust unit tests), you can still invoke Cargo directly:
+
+```bash
+# Build the plugin in isolation only (not needed for aro build)
 cd Plugins/plugin-rust-validator
 cargo build --release
 
@@ -920,17 +931,19 @@ provides:
       # Windows: target/release/validator_plugin.dll
 ```
 
-For CI/CD, you might build for multiple targets:
+For CI/CD, `aro build` compiles the plugin for the host platform automatically. Because the compiled library is embedded in the binary, CI only needs to produce one artifact per target platform:
 
 ```bash
-# macOS
-cargo build --release
+# CI pipeline: aro build handles plugin compilation and embedding
+aro build . --optimize
+# → Produces a single self-contained binary with the plugin embedded
+```
 
-# Linux (cross-compile)
+If you need to cross-compile the plugin in isolation (for custom toolchains or pre-built artifact caching), Cargo can still be invoked directly:
+
+```bash
+# Linux (cross-compile, standalone only — not needed for aro build)
 cargo build --release --target x86_64-unknown-linux-gnu
-
-# Windows (cross-compile)
-cargo build --release --target x86_64-pc-windows-gnu
 ```
 
 ## 7.10 Best Practices

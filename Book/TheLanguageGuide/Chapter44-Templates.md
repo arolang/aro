@@ -146,7 +146,7 @@ The shorthand also works with expressions:
 
 ```aro
 {{ <price> * 1.1 }}
-{{ <first-name> + " " + <last-name> }}
+{{ <first-name> ++ " " ++ <last-name> }}
 ```
 
 And with qualified specifiers:

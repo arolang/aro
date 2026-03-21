@@ -247,7 +247,7 @@ public struct MCPPromptProvider: Sendable {
         (create\(resource.capitalized.dropLast()): \(resource.capitalized) API) {
             Extract the <data> from the <request: body>.
             Create the <\(resource.dropLast())> with <data>.
-            Store the <\(resource.dropLast())> in the <\(resource.dropLast())-repository>.
+            Store the <\(resource.dropLast())> into the <\(resource.dropLast())-repository>.
             Return a <Created: status> with <\(resource.dropLast())>.
         }
         ```
@@ -667,7 +667,7 @@ public struct MCPPromptProvider: Sendable {
         ```aro
         (Calculate Total: Order Processing) {
             Extract the <items> from the <request: items>.
-            Compute the <total> from <items> using sum(price * quantity).
+            Reduce the <total> from <items> with sum(price * quantity).
             Log <total> to the <console>.
             Return an <OK: status> with <total>.
         }
@@ -712,8 +712,8 @@ public struct MCPPromptProvider: Sendable {
         ```aro
         (* Create a new \(entity) in initial state *)
         Create the <\(entity)> with <data>.
-        Store the <\(entity)> in the <\(entity)-repository>.
-        Accept the <\(entity): \(firstState)> for the <\(entity)-repository>.
+        Store the <\(entity)> into the <\(entity)-repository>.
+        Accept the <transition: \(entity)_to_\(firstState)> on the <\(entity): status>.
         ```
 
         ## State Transition Feature Sets
@@ -723,7 +723,7 @@ public struct MCPPromptProvider: Sendable {
         (process\(entity.capitalized): \(entity.capitalized) API) {
             Extract the <id> from the <pathParameters: id>.
             Retrieve the <\(entity)> from the <\(entity)-repository> where id = <id>.
-            Accept the <\(entity): \(secondState)> for the <\(entity)-repository>.
+            Accept the <transition: \(entity)_to_\(secondState)> on the <\(entity): status>.
             Return an <OK: status> with <\(entity)>.
         }
         ```
@@ -778,12 +778,12 @@ public struct MCPPromptProvider: Sendable {
         Filter the <active-items> from <items> where status = "active".
 
         (* Sort collection *)
-        Sort the <sorted-items> with <active-items> by name.
+        Sort the <sorted-items> for the <active-items>.
 
         (* For-each processing *)
         for each <item> in <sorted-items> {
             Compute the <total> from <item: price> * <item: quantity>.
-            Store the <total> in the <totals-repository>.
+            Store the <total> into the <totals-repository>.
         }
         ```
 
@@ -806,7 +806,7 @@ public struct MCPPromptProvider: Sendable {
         ```aro
         (* Initialize accumulator *)
         Create the <summary> with { total: 0, count: 0 }.
-        Store the <summary> in the <summary-repository>.
+        Store the <summary> into the <summary-repository>.
 
         for each <item> in <items> {
             Retrieve the <current> from the <summary-repository>.

@@ -221,6 +221,11 @@ public final class Application: @unchecked Sendable {
             throw ApplicationError.noPrograms
         }
 
+        // Validate OpenAPI contract against feature sets before opening port
+        if let spec = openAPISpec {
+            try ContractValidator.validate(spec: spec, featureSets: mainProgram.featureSets)
+        }
+
         // Set up HTTP request handler if OpenAPI contract exists
         setupHTTPRequestHandler(for: mainProgram)
 
@@ -261,6 +266,11 @@ public final class Application: @unchecked Sendable {
 
         guard let mainProgram = mergedProgram() else {
             throw ApplicationError.noPrograms
+        }
+
+        // Validate OpenAPI contract against feature sets before opening port
+        if let spec = openAPISpec {
+            try ContractValidator.validate(spec: spec, featureSets: mainProgram.featureSets)
         }
 
         // Set up HTTP request handler if OpenAPI contract exists
@@ -320,10 +330,8 @@ public final class Application: @unchecked Sendable {
                 )
             }
 
-            // Find the feature set by operationId
-            guard let featureSet = program.featureSets.first(where: {
-                $0.featureSet.name == match.operationId
-            }) else {
+            // Find the feature set by operationId — O(1) via byName index
+            guard let featureSet = program.byName[match.operationId] else {
                 return HTTPResponse(
                     statusCode: 501,
                     headers: ["Content-Type": "application/json"],

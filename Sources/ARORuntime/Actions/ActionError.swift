@@ -163,6 +163,28 @@ public enum ActionError: Error, Sendable {
     /// Execution was cancelled
     case cancelled
 
+    /// Missing required field or clause for an action
+    /// e.g. "Copy requires a destination path"
+    case missingRequiredField(field: String, action: String)
+
+    /// Invalid URL — must start with http:// or https://
+    case invalidURL(String)
+
+    /// Feature not available on the current platform
+    case unsupportedPlatform(String)
+
+    /// A service (HTTP server, socket server) failed to start
+    case serviceStartFailed(service: String, port: Int?)
+
+    /// An argument has an invalid value; validValues lists acceptable ones when known
+    case invalidArgument(argument: String, value: String, validValues: [String]?)
+
+    /// A published variable was accessed outside its declaring business activity
+    case scopeViolation(variable: String, sourceActivity: String, accessedFrom: String)
+
+    /// A plugin threw an error or returned an unexpected result
+    case pluginError(plugin: String, underlying: String)
+
     /// Generic runtime error
     case runtimeError(String)
 }
@@ -210,6 +232,26 @@ extension ActionError: CustomStringConvertible {
             return "Entry point not found: '\(name)'"
         case .cancelled:
             return "Execution was cancelled"
+        case .missingRequiredField(let field, let action):
+            return "'\(action)' requires \(field)"
+        case .invalidURL(let url):
+            return "Invalid URL '\(url)': must start with http:// or https://"
+        case .unsupportedPlatform(let feature):
+            return "\(feature) is not available on this platform"
+        case .serviceStartFailed(let service, let port):
+            if let port {
+                return "Failed to start \(service) on port \(port)"
+            }
+            return "Failed to start \(service)"
+        case .invalidArgument(let argument, let value, let validValues):
+            if let valid = validValues, !valid.isEmpty {
+                return "Invalid value '\(value)' for \(argument). Valid values: \(valid.joined(separator: ", "))"
+            }
+            return "Invalid value '\(value)' for \(argument)"
+        case .scopeViolation(let variable, let sourceActivity, let accessedFrom):
+            return "Variable '\(variable)' is not accessible from '\(accessedFrom)': it was published in '\(sourceActivity)'"
+        case .pluginError(let plugin, let underlying):
+            return "Plugin '\(plugin)' error: \(underlying)"
         case .runtimeError(let msg):
             return "Runtime error: \(msg)"
         }

@@ -156,16 +156,20 @@ public struct AcceptAction: ActionImplementation {
         }
 
         guard let transition = transitionString else {
-            throw ActionError.runtimeError(
-                "Accept action requires state transition in format <transition: from_to_target>, got: \(result.base) with specifiers: \(result.specifiers)"
+            throw ActionError.invalidArgument(
+                argument: "state transition",
+                value: "\(result.base):\(result.specifiers.joined(separator: ","))",
+                validValues: ["<transition: from_to_target>"]
             )
         }
 
         // Parse "from_to_target" format
         let parts = transition.components(separatedBy: "_to_")
         guard parts.count == 2 else {
-            throw ActionError.runtimeError(
-                "Invalid state transition format. Expected 'from_to_target', got: \(transition)"
+            throw ActionError.invalidArgument(
+                argument: "state transition",
+                value: transition,
+                validValues: ["from_to_target"]
             )
         }
 
@@ -173,8 +177,10 @@ public struct AcceptAction: ActionImplementation {
         let toState = parts[1]
 
         guard !fromState.isEmpty && !toState.isEmpty else {
-            throw ActionError.runtimeError(
-                "Invalid state transition: from and to states cannot be empty"
+            throw ActionError.invalidArgument(
+                argument: "state transition",
+                value: transition,
+                validValues: nil
             )
         }
 

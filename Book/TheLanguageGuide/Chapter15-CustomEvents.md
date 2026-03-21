@@ -143,7 +143,7 @@ Here is a complete order processing saga showing event-driven choreography:
 (createOrder: Order API) {
     Extract the <order-data> from the <request: body>.
     Create the <order> with <order-data>.
-    Store the <order> in the <order-repository>.
+    Store the <order> into the <order-repository>.
     (* Emit event to start the saga *)
     Emit an <OrderPlaced: event> with <order>.
     Return a <Created: status> with <order>.
@@ -155,7 +155,7 @@ Here is a complete order processing saga showing event-driven choreography:
     (* Reserve each item in inventory *)
     Retrieve the <inventory> from the <inventory-service> for <items>.
     Update the <inventory> with { reserved: true }.
-    Store the <inventory> in the <inventory-service>.
+    Store the <inventory> into the <inventory-service>.
     (* Continue the saga *)
     Emit an <InventoryReserved: event> with <order>.
 }
@@ -177,7 +177,7 @@ Here is a complete order processing saga showing event-driven choreography:
     Extract the <order> from the <event: order>.
     (* Update order status and create shipment *)
     Update the <order> with { status: "shipped" }.
-    Store the <order> in the <order-repository>.
+    Store the <order> into the <order-repository>.
     Send the <shipment-request> to the <shipping-service> with <order>.
     (* Final event in the happy path *)
     Emit an <OrderShipped: event> with <order>.
