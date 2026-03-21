@@ -34,13 +34,14 @@ We need to track which URLs we have already crawled. Before processing a new URL
 
 ## 11.3 Set Operations in ARO
 
-ARO provides three key set operations through `<Compute>`:
+ARO provides three set operations through `<Compute>`: `intersect`, `union`, and `difference`. Additionally, `count` is a general computation that works on any collection.
 
 | Operation | Syntax | Result |
 |-----------|--------|--------|
+| `intersect` | `Compute the <result: intersect> from <set-a> with <set-b>.` | Items present in both sets |
 | `union` | `Compute the <result: union> from <set-a> with <set-b>.` | All items from both sets |
 | `difference` | `Compute the <result: difference> from <set-a> with <set-b>.` | Items in set-a but not in set-b |
-| `count` | `Compute the <result: count> from <set>.` | Number of items |
+| `count` | `Compute the <result: count> from <set>.` | Number of items (general computation) |
 
 These operations treat lists as sets—duplicate items within a list are considered once.
 
@@ -212,13 +213,13 @@ No double-checking is needed. A single `<Store>` in the queue handler is suffici
 
 **No Persistent Storage.** Repositories are in-memory only. If the crawler crashes, progress is lost. A persistent option would enable resumable crawls.
 
-**Limited Set Operations.** We have union, difference, and count. Operations like intersection, subset checking, or symmetric difference would be useful.
+**Limited Set Operations.** We have intersect, union, and difference. Operations like subset checking or symmetric difference would be useful.
 
 ---
 
 ## Chapter Recap
 
-- Set operations (`union`, `difference`, `count`) provide general-purpose collection manipulation
+- Set operations (`intersect`, `union`, `difference`) provide general-purpose collection manipulation; `count` is a separate general computation
 - Repositories persist data across handler executions
 - The general-purpose deduplication pattern uses Retrieve/difference/union for comparing arbitrary sets
 - The atomic `<Store>` with `new-entry` binding provides a simpler pattern for single-value deduplication

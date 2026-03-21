@@ -458,7 +458,7 @@ parallel for each <item> in <items> with <concurrency: 4> {
 
     parallel for each <image> in <images> {
         <Resize> the <thumbnail> from the <image>.
-        Store the <thumbnail> in the <storage>.
+        Store the <thumbnail> into the <storage>.
     }
 
     Return an <OK: status> for the <processing>.
