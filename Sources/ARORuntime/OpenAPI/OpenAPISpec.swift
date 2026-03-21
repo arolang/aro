@@ -98,10 +98,11 @@ public struct Parameter: Sendable, Codable {
     public let description: String?
     public let schema: SchemaRef?
     public let allowEmptyValue: Bool?
+    public let deprecated: Bool?
     public let ref: String?
 
     private enum CodingKeys: String, CodingKey {
-        case name, `in`, required, description, schema, allowEmptyValue
+        case name, `in`, required, description, schema, allowEmptyValue, deprecated
         case ref = "$ref"
     }
 }

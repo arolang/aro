@@ -633,3 +633,117 @@ struct ContractValidationTests {
         }
     }
 }
+
+// MARK: - Deprecation Warning Tests
+
+#if !os(Windows)
+
+@Suite("Deprecation Warning Tests")
+struct DeprecationWarningTests {
+
+    private func makeSpec(deprecated: Bool, parameters: [[String: Any]] = []) throws -> OpenAPISpec {
+        var operationDict: [String: Any] = [
+            "operationId": "oldOp",
+            "deprecated": deprecated,
+            "responses": ["200": ["description": "OK"]]
+        ]
+        if !parameters.isEmpty {
+            operationDict["parameters"] = parameters
+        }
+        let specDict: [String: Any] = [
+            "openapi": "3.0.3",
+            "info": ["title": "Test API", "version": "1.0.0"],
+            "paths": [
+                "/legacy": [
+                    "get": operationDict
+                ]
+            ]
+        ]
+        let data = try JSONSerialization.data(withJSONObject: specDict)
+        return try JSONDecoder().decode(OpenAPISpec.self, from: data)
+    }
+
+    private func makeHandler(spec: OpenAPISpec) -> OpenAPIHTTPHandler {
+        let registry = OpenAPIRouteRegistry(spec: spec)
+        let bus = EventBus()
+        return OpenAPIHTTPHandler(routeRegistry: registry, eventBus: bus)
+    }
+
+    @Test("Deprecated operation adds Deprecation: true response header")
+    func testDeprecatedOperationAddsHeader() async throws {
+        let spec = try makeSpec(deprecated: true)
+        let handler = makeHandler(spec: spec)
+
+        let request = HTTPRequest(method: "GET", path: "/legacy")
+        let response = await handler.handleRequest(request)
+
+        #expect(response.headers["Deprecation"] == "true")
+    }
+
+    @Test("Non-deprecated operation does not add Deprecation header")
+    func testNonDeprecatedOperationNoHeader() async throws {
+        let spec = try makeSpec(deprecated: false)
+        let handler = makeHandler(spec: spec)
+
+        let request = HTTPRequest(method: "GET", path: "/legacy")
+        let response = await handler.handleRequest(request)
+
+        #expect(response.headers["Deprecation"] == nil)
+    }
+
+    @Test("Deprecated operation preserves standard response headers")
+    func testDeprecatedOperationPreservesStandardHeaders() async throws {
+        let spec = try makeSpec(deprecated: true)
+        let handler = makeHandler(spec: spec)
+
+        let request = HTTPRequest(method: "GET", path: "/legacy")
+        let response = await handler.handleRequest(request)
+
+        #expect(response.headers["Content-Type"] == "application/json")
+        #expect(response.headers["X-Operation-ID"] == "oldOp")
+        #expect(response.headers["Deprecation"] == "true")
+    }
+
+    @Test("Deprecated parameter field is parsed from JSON")
+    func testDeprecatedParameterParsed() throws {
+        let json = """
+        {
+            "name": "legacyParam",
+            "in": "query",
+            "deprecated": true
+        }
+        """
+        let data = json.data(using: .utf8)!
+        let param = try JSONDecoder().decode(Parameter.self, from: data)
+
+        #expect(param.deprecated == true)
+    }
+
+    @Test("Non-deprecated parameter has nil deprecated field")
+    func testNonDeprecatedParameterFieldIsNil() throws {
+        let json = """
+        {
+            "name": "normalParam",
+            "in": "query"
+        }
+        """
+        let data = json.data(using: .utf8)!
+        let param = try JSONDecoder().decode(Parameter.self, from: data)
+
+        #expect(param.deprecated == nil)
+    }
+
+    @Test("Unmatched route returns 404 without Deprecation header")
+    func testUnmatchedRouteNoDeprecationHeader() async throws {
+        let spec = try makeSpec(deprecated: true)
+        let handler = makeHandler(spec: spec)
+
+        let request = HTTPRequest(method: "GET", path: "/nonexistent")
+        let response = await handler.handleRequest(request)
+
+        #expect(response.statusCode == 404)
+        #expect(response.headers["Deprecation"] == nil)
+    }
+}
+
+#endif  // !os(Windows)

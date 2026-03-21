@@ -34,6 +34,39 @@ public final class OpenAPIHTTPHandler: @unchecked Sendable {
             )
         }
 
+        // Check for deprecated operation
+        var responseHeaders: [String: String] = [
+            "Content-Type": "application/json",
+            "X-Request-ID": request.id,
+            "X-Operation-ID": match.operationId
+        ]
+
+        if match.operation.deprecated == true {
+            print("[DEPRECATION WARNING] Operation '\(match.operationId)' is deprecated")
+            responseHeaders["Deprecation"] = "true"
+        }
+
+        // Check for deprecated parameters present in the request
+        if let parameters = match.operation.parameters {
+            for param in parameters where param.deprecated == true {
+                let isPresent: Bool
+                switch param.in {
+                case "query":
+                    isPresent = request.queryParameters[param.name] != nil
+                case "header":
+                    isPresent = request.headers[param.name] != nil
+                case "path":
+                    isPresent = match.pathParameters[param.name] != nil
+                default:
+                    isPresent = false
+                }
+
+                if isPresent {
+                    print("[DEPRECATION WARNING] Parameter '\(param.name)' on operation '\(match.operationId)' is deprecated")
+                }
+            }
+        }
+
         let event = HTTPOperationEvent(
             requestId: request.id,
             operationId: match.operationId,
@@ -60,11 +93,7 @@ public final class OpenAPIHTTPHandler: @unchecked Sendable {
 
         return HTTPResponse(
             statusCode: 200,
-            headers: [
-                "Content-Type": "application/json",
-                "X-Request-ID": request.id,
-                "X-Operation-ID": match.operationId
-            ],
+            headers: responseHeaders,
             body: """
                 {"status":"ok","operationId":"\(match.operationId)","requestId":"\(request.id)"}
                 """.data(using: .utf8)
