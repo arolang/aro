@@ -764,35 +764,193 @@ public func parseCookieHeader(_ cookieHeader: String) -> [String: String] {
     return result
 }
 
+// MARK: - Form Body Parsing
+
+extension SchemaBinding {
+
+    /// Parse an `application/x-www-form-urlencoded` body into a dictionary.
+    ///
+    /// Handles repeated keys by collecting values into an array:
+    /// `a=1&a=2` → `["a": ["1", "2"]]`.
+    /// `+` characters in values are decoded as spaces.
+    public static func parseFormURLEncoded(_ body: Data) -> [String: Any] {
+        guard let str = String(data: body, encoding: .utf8) else { return [:] }
+        var result: [String: Any] = [:]
+        for pair in str.split(separator: "&") {
+            let parts = pair.split(separator: "=", maxSplits: 1).map(String.init)
+            if parts.count == 2 {
+                let key = parts[0].removingPercentEncoding ?? parts[0]
+                let value = (parts[1].removingPercentEncoding ?? parts[1])
+                    .replacingOccurrences(of: "+", with: " ")
+                if let existing = result[key] as? [String] {
+                    result[key] = existing + [value]
+                } else if let existing = result[key] as? String {
+                    result[key] = [existing, value]
+                } else {
+                    result[key] = value
+                }
+            } else if parts.count == 1 {
+                let key = parts[0].removingPercentEncoding ?? parts[0]
+                if !key.isEmpty {
+                    result[key] = ""
+                }
+            }
+        }
+        return result
+    }
+
+    /// Parse a `multipart/form-data` body into a dictionary.
+    ///
+    /// Text parts (no `Content-Type` or `text/*`) are stored as `String`.
+    /// Binary parts are stored as `Data`.
+    public static func parseMultipartFormData(_ body: Data, boundary: String) -> [String: Any] {
+        var result: [String: Any] = [:]
+        guard let boundaryData = "--\(boundary)".data(using: .utf8) else { return result }
+
+        // Split body by boundary marker
+        var parts: [Data] = []
+        var searchRange = body.startIndex..<body.endIndex
+        while let range = body.range(of: boundaryData, in: searchRange) {
+            parts.append(body[searchRange.lowerBound..<range.lowerBound])
+            searchRange = range.upperBound..<body.endIndex
+        }
+        // Append remainder after last boundary
+        if searchRange.lowerBound < body.endIndex {
+            parts.append(body[searchRange])
+        }
+
+        guard let closingMarker = "--".data(using: .utf8),
+              let crlfData = "\r\n\r\n".data(using: .utf8),
+              let crlfTwo = "\r\n".data(using: .utf8) else { return result }
+
+        for part in parts.dropFirst() {  // skip preamble before first boundary
+            // Skip the closing boundary suffix "--"
+            if part.starts(with: closingMarker) { continue }
+            // Strip leading \r\n after boundary line
+            var partBody = part
+            if partBody.starts(with: crlfTwo) {
+                partBody = partBody.dropFirst(2)
+            }
+            // Split headers from content at \r\n\r\n
+            guard let separatorRange = partBody.range(of: crlfData) else { continue }
+            let headerData = partBody[partBody.startIndex..<separatorRange.lowerBound]
+            let contentSlice = partBody[separatorRange.upperBound...]
+            // Remove trailing \r\n from content
+            let content: Data
+            let sliceData = Data(contentSlice)
+            if sliceData.count >= 2 && sliceData.suffix(2) == crlfTwo {
+                content = sliceData.dropLast(2)
+            } else {
+                content = sliceData
+            }
+
+            guard let headerStr = String(data: headerData, encoding: .utf8) else { continue }
+            let headers = parsePartHeaders(headerStr)
+            guard let disposition = headers["content-disposition"],
+                  let name = extractDispositionParam("name", from: disposition) else { continue }
+
+            let contentType = headers["content-type"] ?? "text/plain"
+            if contentType.hasPrefix("text/") || !headers.keys.contains("content-type") {
+                result[name] = String(data: content, encoding: .utf8) ?? ""
+            } else {
+                result[name] = content
+            }
+        }
+        return result
+    }
+
+    // MARK: - Multipart Helpers
+
+    private static func parsePartHeaders(_ headerStr: String) -> [String: String] {
+        var result: [String: String] = [:]
+        for line in headerStr.components(separatedBy: "\r\n") {
+            guard let colonIdx = line.firstIndex(of: ":") else { continue }
+            let key = String(line[..<colonIdx]).trimmingCharacters(in: .whitespaces).lowercased()
+            let value = String(line[line.index(after: colonIdx)...]).trimmingCharacters(in: .whitespaces)
+            result[key] = value
+        }
+        return result
+    }
+
+    private static func extractDispositionParam(_ param: String, from disposition: String) -> String? {
+        let pattern = "\(param)=\"([^\"]*)\""
+        guard let range = disposition.range(of: pattern, options: .regularExpression) else { return nil }
+        let match = String(disposition[range])
+        // match looks like: name="value" — extract the quoted part
+        guard let openQ = match.firstIndex(of: "\""),
+              let closeQ = match.lastIndex(of: "\""),
+              openQ != closeQ else { return nil }
+        return String(match[match.index(after: openQ)..<closeQ])
+    }
+
+    /// Extract the `boundary` parameter from a `multipart/form-data` Content-Type value.
+    public static func extractBoundary(from contentType: String) -> String? {
+        for part in contentType.split(separator: ";").map({ $0.trimmingCharacters(in: .whitespaces) }) {
+            if part.lowercased().hasPrefix("boundary=") {
+                return String(part.dropFirst("boundary=".count))
+                    .trimmingCharacters(in: CharacterSet(charactersIn: "\""))
+            }
+        }
+        return nil
+    }
+}
+
 // MARK: - OpenAPIContextBinder (continued)
 
 extension OpenAPIContextBinder {
 
-    /// Bind request body to context
+    /// Bind request body to context, dispatching on `contentType`.
+    ///
+    /// - `application/x-www-form-urlencoded`: parsed via `SchemaBinding.parseFormURLEncoded`
+    /// - `multipart/form-data`: parsed via `SchemaBinding.parseMultipartFormData`
+    /// - All other types (default JSON): parsed via `SchemaBinding.parseRequestBody` or
+    ///   `JSONSerialization` fallback.
+    ///
+    /// The parsed value is exposed as `request.body` and, when it is a dictionary,
+    /// each key is also exposed as `request.body.<key>`.
     public static func bindRequestBody(
         _ body: Data?,
         schema: Schema?,
-        components: Components?
+        components: Components?,
+        contentType: String? = nil
     ) throws -> [String: Any] {
-        var result: [String: Any] = [:]
+        guard let body = body, !body.isEmpty else { return [:] }
 
-        guard let body = body else {
-            return result
-        }
+        let baseContentType = contentType?
+            .split(separator: ";").first
+            .map(String.init)?
+            .trimmingCharacters(in: .whitespaces)
+            .lowercased()
 
-        if let schema = schema {
-            let parsed = try SchemaBinding.parseRequestBody(body: body, schema: schema, components: components)
-            result["request.body"] = parsed
-
-            if let dict = parsed as? [String: Any] {
-                for (key, value) in dict {
-                    result["request.body.\(key)"] = value
-                }
+        let parsed: Any
+        switch baseContentType {
+        case "application/x-www-form-urlencoded":
+            parsed = SchemaBinding.parseFormURLEncoded(body)
+        case "multipart/form-data":
+            if let ct = contentType, let boundary = SchemaBinding.extractBoundary(from: ct) {
+                parsed = SchemaBinding.parseMultipartFormData(body, boundary: boundary)
+            } else {
+                // No boundary — fall back to form-urlencoded parsing
+                parsed = SchemaBinding.parseFormURLEncoded(body)
             }
-        } else if let json = try? JSONSerialization.jsonObject(with: body) {
-            result["request.body"] = json
+        default:
+            // JSON (or unknown content type)
+            if let schema = schema {
+                parsed = try SchemaBinding.parseRequestBody(body: body, schema: schema, components: components)
+            } else if let json = try? JSONSerialization.jsonObject(with: body) {
+                parsed = json
+            } else {
+                return [:]
+            }
         }
 
+        var result: [String: Any] = [:]
+        result["request.body"] = parsed
+        if let dict = parsed as? [String: Any] {
+            for (key, value) in dict {
+                result["request.body.\(key)"] = value
+            }
+        }
         return result
     }
 }

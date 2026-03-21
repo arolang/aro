@@ -438,18 +438,42 @@ public final class Application: @unchecked Sendable {
             context.register(ts as TemplateService)
         }
 
-        // Parse JSON body if present
+        // Parse request body based on Content-Type
+        let rawContentType = request.headers.first(where: { $0.key.lowercased() == "content-type" })?.value
         var bodyValue: any Sendable = request.bodyString ?? ""
-        if let body = request.body,
-           let contentType = request.headers["Content-Type"],
-           contentType.contains("application/json") {
-            if let json = try? JSONSerialization.jsonObject(with: body) as? [String: Any] {
-                // Convert to Sendable dictionary
+        if let body = request.body, !body.isEmpty {
+            let baseContentType = rawContentType?
+                .split(separator: ";").first
+                .map(String.init)?
+                .trimmingCharacters(in: .whitespaces)
+                .lowercased()
+
+            switch baseContentType {
+            case "application/x-www-form-urlencoded":
+                let formDict = SchemaBinding.parseFormURLEncoded(body)
                 var sendableDict: [String: any Sendable] = [:]
-                for (key, value) in json {
+                for (key, value) in formDict {
                     sendableDict[key] = convertJSONValueToSendable(value)
                 }
                 bodyValue = sendableDict
+            case "multipart/form-data":
+                if let ct = rawContentType, let boundary = SchemaBinding.extractBoundary(from: ct) {
+                    let formDict = SchemaBinding.parseMultipartFormData(body, boundary: boundary)
+                    var sendableDict: [String: any Sendable] = [:]
+                    for (key, value) in formDict {
+                        sendableDict[key] = convertJSONValueToSendable(value)
+                    }
+                    bodyValue = sendableDict
+                }
+            default:
+                // Default: treat as JSON
+                if let json = try? JSONSerialization.jsonObject(with: body) as? [String: Any] {
+                    var sendableDict: [String: any Sendable] = [:]
+                    for (key, value) in json {
+                        sendableDict[key] = convertJSONValueToSendable(value)
+                    }
+                    bodyValue = sendableDict
+                }
             }
         }
 
@@ -769,6 +793,7 @@ public final class Application: @unchecked Sendable {
         if let num = value as? Int { return num }
         if let num = value as? Double { return num }
         if let bool = value as? Bool { return bool }
+        if let data = value as? Data { return data }
         if let array = value as? [Any] {
             return array.map { convertJSONValueToSendable($0) }
         }
