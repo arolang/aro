@@ -57,6 +57,10 @@ public final class UnifiedPluginLoader: @unchecked Sendable {
     /// Used to enforce handle uniqueness across plugins.
     private var registeredHandles: [String: String] = [:]
 
+    /// Source directories for loaded plugins, keyed by plugin name.
+    /// Stored at load time to enable single-plugin reload.
+    private var pluginDirectories: [String: URL] = [:]
+
     /// Lock for thread safety
     private let lock = NSLock()
 
@@ -130,6 +134,7 @@ public final class UnifiedPluginLoader: @unchecked Sendable {
 
         lock.lock()
         manifests[manifest.name] = manifest
+        pluginDirectories[manifest.name] = pluginDir
         lock.unlock()
 
         // Resolve and validate the effective namespace handle
@@ -349,9 +354,63 @@ public final class UnifiedPluginLoader: @unchecked Sendable {
         pythonPlugins.removeAll()
         manifests.removeAll()
         registeredHandles.removeAll()
+        pluginDirectories.removeAll()
         lock.unlock()
 
         legacyLoader.unloadAll()
+    }
+
+    /// Unload a single plugin by name, releasing its library handle and
+    /// deregistering its actions and qualifiers from all registries.
+    ///
+    /// - Parameter pluginName: The name declared in the plugin's `plugin.yaml`
+    /// - Returns: `true` if the plugin was loaded and has been unloaded
+    @discardableResult
+    public func unload(pluginName: String) -> Bool {
+        lock.lock()
+        guard manifests[pluginName] != nil else {
+            lock.unlock()
+            return false
+        }
+
+        // Remove ARO file plugin (no native handle to close)
+        aroPlugins.removeValue(forKey: pluginName)
+
+        // Capture hosts before releasing lock so unload() runs outside it
+        let native = nativePlugins.removeValue(forKey: pluginName)
+        let python = pythonPlugins.removeValue(forKey: pluginName)
+
+        manifests.removeValue(forKey: pluginName)
+        pluginDirectories.removeValue(forKey: pluginName)
+        // Release the handle so another plugin can claim it
+        registeredHandles = registeredHandles.filter { $0.value != pluginName }
+        lock.unlock()
+
+        // Unload after releasing the lock (both call ActionRegistry / dlclose)
+        native?.unload()
+        python?.unload()
+
+        return true
+    }
+
+    /// Reload a single plugin: unload the current version then load the plugin
+    /// fresh from its source directory on disk.
+    ///
+    /// - Parameter pluginName: The name declared in the plugin's `plugin.yaml`
+    /// - Throws: If the plugin was never loaded or the fresh load fails
+    public func reload(pluginName: String) throws {
+        lock.lock()
+        let dir = pluginDirectories[pluginName]
+        lock.unlock()
+
+        guard let pluginDir = dir else {
+            throw UnifiedPluginError.notFound(pluginName)
+        }
+
+        unload(pluginName: pluginName)
+
+        let manifestPath = pluginDir.appendingPathComponent("plugin.yaml")
+        try loadPlugin(at: pluginDir, manifestPath: manifestPath)
     }
 
     // MARK: - Handle Resolution
@@ -416,6 +475,21 @@ public final class UnifiedPluginLoader: @unchecked Sendable {
         s.split(separator: "-")
             .map { $0.prefix(1).uppercased() + $0.dropFirst() }
             .joined()
+    }
+}
+
+// MARK: - Errors
+
+/// Errors thrown by `UnifiedPluginLoader`
+public enum UnifiedPluginError: Error, CustomStringConvertible {
+    /// No plugin with the given name is currently loaded
+    case notFound(String)
+
+    public var description: String {
+        switch self {
+        case .notFound(let name):
+            return "Plugin '\(name)' is not loaded and cannot be reloaded."
+        }
     }
 }
 
