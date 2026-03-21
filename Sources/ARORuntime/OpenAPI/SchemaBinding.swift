@@ -36,35 +36,38 @@ public struct SchemaBinding {
             return json
         }
 
+        let parsedValue: Any
         switch schemaType {
         case "string":
             guard let str = json as? String else {
                 throw SchemaBindingError.typeMismatch(expected: "string")
             }
-            return str
+            parsedValue = str
 
         case "number", "integer":
             if let intVal = json as? Int {
-                return Double(intVal)
+                parsedValue = Double(intVal)
             } else if let doubleVal = json as? Double {
-                return doubleVal
+                parsedValue = doubleVal
+            } else {
+                throw SchemaBindingError.typeMismatch(expected: "number")
             }
-            throw SchemaBindingError.typeMismatch(expected: "number")
 
         case "boolean":
             guard let boolVal = json as? Bool else {
                 throw SchemaBindingError.typeMismatch(expected: "boolean")
             }
-            return boolVal
+            parsedValue = boolVal
 
         case "array":
             guard let arr = json as? [Any] else {
                 throw SchemaBindingError.typeMismatch(expected: "array")
             }
             if let itemSchema = schema.items?.value {
-                return try arr.map { try parseValue(json: $0, schema: itemSchema, components: components) }
+                parsedValue = try arr.map { try parseValue(json: $0, schema: itemSchema, components: components) }
+            } else {
+                parsedValue = arr
             }
-            return arr
 
         case "object":
             guard let dict = json as? [String: Any] else {
@@ -82,7 +85,8 @@ public struct SchemaBinding {
 
             // Parse properties
             guard let properties = schema.properties else {
-                return dict
+                parsedValue = dict
+                break
             }
 
             var result: [String: Any] = [:]
@@ -93,10 +97,34 @@ public struct SchemaBinding {
                     result[key] = value
                 }
             }
-            return result
+            parsedValue = result
 
         default:
-            return json
+            parsedValue = json
+        }
+
+        // Validate enum constraint
+        if let enumValues = schema.enumValues, !enumValues.isEmpty {
+            try validateEnumConstraint(parsedValue, against: enumValues)
+        }
+
+        return parsedValue
+    }
+
+    /// Check that a parsed value matches one of the allowed enum values.
+    private static func validateEnumConstraint(_ parsedValue: Any, against enumValues: [AnyCodableValue]) throws {
+        let matchesEnum = enumValues.contains { enumVal in
+            switch enumVal {
+            case .string(let s): return (parsedValue as? String) == s
+            case .int(let i): return (parsedValue as? Int) == i || (parsedValue as? Double) == Double(i)
+            case .double(let d): return (parsedValue as? Double) == d
+            case .bool(let b): return (parsedValue as? Bool) == b
+            case .null: return parsedValue is NSNull
+            }
+        }
+        if !matchesEnum {
+            let allowed = enumValues.map { "\($0.anyValue)" }.joined(separator: ", ")
+            throw SchemaBindingError.enumViolation(value: "\(parsedValue)", allowed: allowed)
         }
     }
 
@@ -122,6 +150,7 @@ public enum SchemaBindingError: Error, Sendable {
     case missingRequired(String)
     case invalidReference(String)
     case invalidJSON
+    case enumViolation(value: String, allowed: String)
 }
 
 extension SchemaBindingError: CustomStringConvertible {
@@ -135,6 +164,8 @@ extension SchemaBindingError: CustomStringConvertible {
             return "Invalid schema reference: \(ref)"
         case .invalidJSON:
             return "Invalid JSON data"
+        case .enumViolation(let value, let allowed):
+            return "Value '\(value)' is not allowed. Must be one of: \(allowed)"
         }
     }
 }
@@ -234,6 +265,7 @@ extension SchemaBinding {
             return value
         }
 
+        let validated: any Sendable
         switch schemaType {
         case "string":
             guard let strVal = value as? String else {
@@ -243,19 +275,20 @@ extension SchemaBinding {
                     actual: describeType(of: value)
                 )
             }
-            return strVal
+            validated = strVal
 
         case "number", "integer":
             if let intVal = value as? Int {
-                return schemaType == "integer" ? intVal : Double(intVal)
+                validated = schemaType == "integer" ? intVal : Double(intVal)
             } else if let doubleVal = value as? Double {
-                return doubleVal
+                validated = doubleVal
+            } else {
+                throw SchemaValidationError.typeMismatch(
+                    schemaName: schemaName,
+                    expected: schemaType,
+                    actual: describeType(of: value)
+                )
             }
-            throw SchemaValidationError.typeMismatch(
-                schemaName: schemaName,
-                expected: schemaType,
-                actual: describeType(of: value)
-            )
 
         case "boolean":
             guard let boolVal = value as? Bool else {
@@ -265,7 +298,7 @@ extension SchemaBinding {
                     actual: describeType(of: value)
                 )
             }
-            return boolVal
+            validated = boolVal
 
         case "array":
             guard let arr = value as? [any Sendable] else {
@@ -277,11 +310,12 @@ extension SchemaBinding {
             }
             // Validate array items if schema defines items
             if let itemSchema = schema.items?.value {
-                return try arr.map { item in
+                validated = try arr.map { item in
                     try validateAgainstSchema(value: item, schemaName: schemaName, schema: itemSchema, components: components)
                 }
+            } else {
+                validated = arr
             }
-            return arr
 
         case "object":
             guard let dict = value as? [String: any Sendable] else {
@@ -306,7 +340,8 @@ extension SchemaBinding {
 
             // Validate and coerce properties
             guard let properties = schema.properties else {
-                return dict
+                validated = dict
+                break
             }
 
             var result: [String: any Sendable] = [:]
@@ -336,11 +371,18 @@ extension SchemaBinding {
                     result[key] = val
                 }
             }
-            return result
+            validated = result
 
         default:
-            return value
+            validated = value
         }
+
+        // Validate enum constraint
+        if let enumValues = schema.enumValues, !enumValues.isEmpty {
+            try validateEnumConstraint(validated, against: enumValues)
+        }
+
+        return validated
     }
 
     /// Describe the runtime type of a value for error messages

@@ -149,6 +149,54 @@ public struct Header: Sendable, Codable {
     public let schema: SchemaRef?
 }
 
+// MARK: - AnyCodableValue
+
+/// A JSON-typed value used for OpenAPI `enum` constraints.
+///
+/// Supports all JSON scalar types: string, integer, number, boolean, and null.
+public enum AnyCodableValue: Sendable, Codable, Equatable {
+    case string(String)
+    case int(Int)
+    case double(Double)
+    case bool(Bool)
+    case null
+
+    public init(from decoder: Decoder) throws {
+        let container = try decoder.singleValueContainer()
+        if container.decodeNil() { self = .null; return }
+        if let b = try? container.decode(Bool.self) { self = .bool(b); return }
+        if let i = try? container.decode(Int.self) { self = .int(i); return }
+        if let d = try? container.decode(Double.self) { self = .double(d); return }
+        if let s = try? container.decode(String.self) { self = .string(s); return }
+        throw DecodingError.typeMismatch(
+            AnyCodableValue.self,
+            .init(codingPath: decoder.codingPath, debugDescription: "Unsupported JSON type for enum value")
+        )
+    }
+
+    public func encode(to encoder: Encoder) throws {
+        var container = encoder.singleValueContainer()
+        switch self {
+        case .string(let s): try container.encode(s)
+        case .int(let i): try container.encode(i)
+        case .double(let d): try container.encode(d)
+        case .bool(let b): try container.encode(b)
+        case .null: try container.encodeNil()
+        }
+    }
+
+    /// The underlying value as `Any`, suitable for display or comparison.
+    public var anyValue: Any {
+        switch self {
+        case .string(let s): return s
+        case .int(let i): return i
+        case .double(let d): return d
+        case .bool(let b): return b
+        case .null: return NSNull()
+        }
+    }
+}
+
 // MARK: - Schema (using class for reference semantics to handle recursion)
 
 public final class Schema: Sendable, Codable {
@@ -171,6 +219,7 @@ public final class Schema: Sendable, Codable {
     public let allOf: [SchemaRef]?
     public let oneOf: [SchemaRef]?
     public let anyOf: [SchemaRef]?
+    public let enumValues: [AnyCodableValue]?
 
     private enum CodingKeys: String, CodingKey {
         case type, format, title, description, properties, required
@@ -178,6 +227,7 @@ public final class Schema: Sendable, Codable {
         case minLength, maxLength, pattern, minItems, maxItems
         case allOf, oneOf, anyOf
         case ref = "$ref"
+        case enumValues = "enum"
     }
 
     public init(
@@ -199,7 +249,8 @@ public final class Schema: Sendable, Codable {
         maxItems: Int? = nil,
         allOf: [SchemaRef]? = nil,
         oneOf: [SchemaRef]? = nil,
-        anyOf: [SchemaRef]? = nil
+        anyOf: [SchemaRef]? = nil,
+        enumValues: [AnyCodableValue]? = nil
     ) {
         self.type = type
         self.format = format
@@ -220,6 +271,7 @@ public final class Schema: Sendable, Codable {
         self.allOf = allOf
         self.oneOf = oneOf
         self.anyOf = anyOf
+        self.enumValues = enumValues
     }
 }
 

@@ -1455,4 +1455,245 @@ struct RequiredCookieParameterValidationTests {
     }
 }
 
+// MARK: - AnyCodableValue Tests
+
+@Suite("AnyCodableValue Tests")
+struct AnyCodableValueTests {
+
+    @Test("Decode string value")
+    func testDecodeString() throws {
+        let data = #""hello""#.data(using: .utf8)!
+        let value = try JSONDecoder().decode(AnyCodableValue.self, from: data)
+        #expect(value == .string("hello"))
+    }
+
+    @Test("Decode integer value")
+    func testDecodeInt() throws {
+        let data = "42".data(using: .utf8)!
+        let value = try JSONDecoder().decode(AnyCodableValue.self, from: data)
+        #expect(value == .int(42))
+    }
+
+    @Test("Decode double value")
+    func testDecodeDouble() throws {
+        let data = "3.14".data(using: .utf8)!
+        let value = try JSONDecoder().decode(AnyCodableValue.self, from: data)
+        #expect(value == .double(3.14))
+    }
+
+    @Test("Decode boolean value")
+    func testDecodeBool() throws {
+        let data = "true".data(using: .utf8)!
+        let value = try JSONDecoder().decode(AnyCodableValue.self, from: data)
+        #expect(value == .bool(true))
+    }
+
+    @Test("Decode null value")
+    func testDecodeNull() throws {
+        let data = "null".data(using: .utf8)!
+        let value = try JSONDecoder().decode(AnyCodableValue.self, from: data)
+        #expect(value == .null)
+    }
+
+    @Test("Round-trip encode/decode string")
+    func testRoundTripString() throws {
+        let original = AnyCodableValue.string("active")
+        let encoded = try JSONEncoder().encode(original)
+        let decoded = try JSONDecoder().decode(AnyCodableValue.self, from: encoded)
+        #expect(decoded == original)
+    }
+
+    @Test("Round-trip encode/decode integer")
+    func testRoundTripInt() throws {
+        let original = AnyCodableValue.int(7)
+        let encoded = try JSONEncoder().encode(original)
+        let decoded = try JSONDecoder().decode(AnyCodableValue.self, from: encoded)
+        #expect(decoded == original)
+    }
+
+    @Test("Round-trip encode/decode double")
+    func testRoundTripDouble() throws {
+        let original = AnyCodableValue.double(2.718)
+        let encoded = try JSONEncoder().encode(original)
+        let decoded = try JSONDecoder().decode(AnyCodableValue.self, from: encoded)
+        #expect(decoded == original)
+    }
+
+    @Test("Round-trip encode/decode bool")
+    func testRoundTripBool() throws {
+        let original = AnyCodableValue.bool(false)
+        let encoded = try JSONEncoder().encode(original)
+        let decoded = try JSONDecoder().decode(AnyCodableValue.self, from: encoded)
+        #expect(decoded == original)
+    }
+
+    @Test("Round-trip encode/decode null")
+    func testRoundTripNull() throws {
+        let original = AnyCodableValue.null
+        let encoded = try JSONEncoder().encode(original)
+        let decoded = try JSONDecoder().decode(AnyCodableValue.self, from: encoded)
+        #expect(decoded == original)
+    }
+
+    @Test("anyValue returns correct underlying value for string")
+    func testAnyValueString() {
+        let val = AnyCodableValue.string("pending")
+        #expect(val.anyValue as? String == "pending")
+    }
+
+    @Test("anyValue returns correct underlying value for int")
+    func testAnyValueInt() {
+        let val = AnyCodableValue.int(3)
+        #expect(val.anyValue as? Int == 3)
+    }
+
+    @Test("Decode array of mixed enum values from schema")
+    func testDecodeMixedEnumArray() throws {
+        let json = """
+        {
+            "type": "string",
+            "enum": ["active", "inactive", "pending"]
+        }
+        """
+        let data = json.data(using: .utf8)!
+        let schema = try JSONDecoder().decode(Schema.self, from: data)
+        #expect(schema.enumValues?.count == 3)
+        #expect(schema.enumValues?[0] == .string("active"))
+        #expect(schema.enumValues?[1] == .string("inactive"))
+        #expect(schema.enumValues?[2] == .string("pending"))
+    }
+
+    @Test("Decode integer enum values from schema")
+    func testDecodeIntegerEnumArray() throws {
+        let json = """
+        {
+            "type": "integer",
+            "enum": [1, 2, 3]
+        }
+        """
+        let data = json.data(using: .utf8)!
+        let schema = try JSONDecoder().decode(Schema.self, from: data)
+        #expect(schema.enumValues?.count == 3)
+        #expect(schema.enumValues?[0] == .int(1))
+        #expect(schema.enumValues?[1] == .int(2))
+        #expect(schema.enumValues?[2] == .int(3))
+    }
+}
+
+// MARK: - Schema Enum Validation Tests
+
+@Suite("Schema Enum Validation Tests")
+struct SchemaEnumValidationTests {
+
+    // MARK: - parseValue enum validation
+
+    @Test("Valid string enum value passes parseValue")
+    func testValidStringEnumPasses() throws {
+        let schema = Schema(type: "string", enumValues: [.string("active"), .string("inactive"), .string("pending")])
+        let result = try SchemaBinding.parseValue(json: "active", schema: schema, components: nil)
+        #expect(result as? String == "active")
+    }
+
+    @Test("Invalid string enum value throws enumViolation in parseValue")
+    func testInvalidStringEnumThrows() throws {
+        let schema = Schema(type: "string", enumValues: [.string("active"), .string("inactive")])
+        #expect(throws: SchemaBindingError.self) {
+            _ = try SchemaBinding.parseValue(json: "deleted", schema: schema, components: nil)
+        }
+    }
+
+    @Test("Invalid string enum error message contains value and allowed list")
+    func testInvalidStringEnumErrorMessage() {
+        let schema = Schema(type: "string", enumValues: [.string("active"), .string("inactive")])
+        do {
+            _ = try SchemaBinding.parseValue(json: "deleted", schema: schema, components: nil)
+            Issue.record("Expected enumViolation error to be thrown")
+        } catch let error as SchemaBindingError {
+            if case .enumViolation(let value, let allowed) = error {
+                #expect(value == "deleted")
+                #expect(allowed.contains("active"))
+                #expect(allowed.contains("inactive"))
+            } else {
+                Issue.record("Wrong error case: \(error)")
+            }
+        } catch {
+            Issue.record("Unexpected error type: \(error)")
+        }
+    }
+
+    @Test("Valid integer enum value passes parseValue")
+    func testValidIntEnumPasses() throws {
+        let schema = Schema(type: "number", enumValues: [.int(1), .int(2), .int(3)])
+        let result = try SchemaBinding.parseValue(json: 2, schema: schema, components: nil)
+        #expect(result as? Double == 2.0)
+    }
+
+    @Test("Invalid integer enum value throws enumViolation in parseValue")
+    func testInvalidIntEnumThrows() throws {
+        let schema = Schema(type: "number", enumValues: [.int(1), .int(2), .int(3)])
+        #expect(throws: SchemaBindingError.self) {
+            _ = try SchemaBinding.parseValue(json: 4, schema: schema, components: nil)
+        }
+    }
+
+    @Test("Empty enum array skips validation in parseValue")
+    func testEmptyEnumArraySkipsValidation() throws {
+        let schema = Schema(type: "string", enumValues: [])
+        let result = try SchemaBinding.parseValue(json: "anything", schema: schema, components: nil)
+        #expect(result as? String == "anything")
+    }
+
+    @Test("Nil enumValues skips validation in parseValue")
+    func testNilEnumValuesSkipsValidation() throws {
+        let schema = Schema(type: "string", enumValues: nil)
+        let result = try SchemaBinding.parseValue(json: "anything", schema: schema, components: nil)
+        #expect(result as? String == "anything")
+    }
+
+    // MARK: - validateAgainstSchema enum validation
+
+    @Test("Valid string enum passes validateAgainstSchema")
+    func testValidStringEnumPassesValidate() throws {
+        let schema = Schema(type: "string", enumValues: [.string("red"), .string("green"), .string("blue")])
+        let result = try SchemaBinding.validateAgainstSchema(value: "green", schemaName: "Color", schema: schema, components: nil)
+        #expect(result as? String == "green")
+    }
+
+    @Test("Invalid string enum throws enumViolation in validateAgainstSchema")
+    func testInvalidStringEnumThrowsValidate() throws {
+        let schema = Schema(type: "string", enumValues: [.string("red"), .string("green"), .string("blue")])
+        #expect(throws: SchemaBindingError.self) {
+            _ = try SchemaBinding.validateAgainstSchema(value: "yellow", schemaName: "Color", schema: schema, components: nil)
+        }
+    }
+
+    @Test("Valid integer enum passes validateAgainstSchema")
+    func testValidIntEnumPassesValidate() throws {
+        let schema = Schema(type: "integer", enumValues: [.int(10), .int(20), .int(30)])
+        let result = try SchemaBinding.validateAgainstSchema(value: 10, schemaName: "Priority", schema: schema, components: nil)
+        #expect(result as? Int == 10)
+    }
+
+    @Test("Invalid integer enum throws enumViolation in validateAgainstSchema")
+    func testInvalidIntEnumThrowsValidate() throws {
+        let schema = Schema(type: "integer", enumValues: [.int(10), .int(20), .int(30)])
+        #expect(throws: SchemaBindingError.self) {
+            _ = try SchemaBinding.validateAgainstSchema(value: 99, schemaName: "Priority", schema: schema, components: nil)
+        }
+    }
+
+    @Test("Empty enum array skips validation in validateAgainstSchema")
+    func testEmptyEnumArraySkipsValidationValidate() throws {
+        let schema = Schema(type: "string", enumValues: [])
+        let result = try SchemaBinding.validateAgainstSchema(value: "anything", schemaName: "Test", schema: schema, components: nil)
+        #expect(result as? String == "anything")
+    }
+
+    @Test("enumViolation description is human-readable")
+    func testEnumViolationDescription() {
+        let error = SchemaBindingError.enumViolation(value: "yellow", allowed: "red, green, blue")
+        #expect(error.description == "Value 'yellow' is not allowed. Must be one of: red, green, blue")
+    }
+}
+
 #endif  // !os(Windows)
