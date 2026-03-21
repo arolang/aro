@@ -354,9 +354,24 @@ public final class Application: @unchecked Sendable {
                 }
             }
 
+            // Build cookie parameters: only cookies declared as `in: cookie` in the spec
+            let declaredCookieNames = Set(
+                match.effectiveParameters
+                    .filter { $0.in == "cookie" }
+                    .map { $0.name }
+            )
+            let rawCookieHeader = request.headers.first(where: { $0.key.lowercased() == "cookie" })?.value ?? ""
+            let allCookies = parseCookieHeader(rawCookieHeader)
+            var cookieParams: [String: String] = [:]
+            for name in declaredCookieNames {
+                if let value = allCookies[name] {
+                    cookieParams[name] = value
+                }
+            }
+
             // Execute the feature set
             do {
-                let response = try await self.executeFeatureSet(featureSet, request: request, pathParams: match.pathParameters, headerParams: headerParams)
+                let response = try await self.executeFeatureSet(featureSet, request: request, pathParams: match.pathParameters, headerParams: headerParams, cookieParams: cookieParams)
                 return self.convertToHTTPResponse(response, requestPath: request.path)
             } catch let templateError as TemplateError {
                 // Handle template errors with appropriate HTTP status codes
@@ -392,7 +407,8 @@ public final class Application: @unchecked Sendable {
         _ analyzedFeatureSet: AnalyzedFeatureSet,
         request: HTTPRequest,
         pathParams: [String: String],
-        headerParams: [String: String] = [:]
+        headerParams: [String: String] = [:],
+        cookieParams: [String: String] = [:]
     ) async throws -> Response {
         // Create execution context for this request
         let context = RuntimeContext(
@@ -453,6 +469,9 @@ public final class Application: @unchecked Sendable {
 
         // Bind header parameters (declared as in: header in the OpenAPI spec)
         context.bind("headerParameters", value: headerParams)
+
+        // Bind cookie parameters (declared as in: cookie in the OpenAPI spec)
+        context.bind("cookieParameters", value: cookieParams)
 
         // Also bind body directly for convenience
         if let parsedBody = bodyValue as? [String: any Sendable] {

@@ -1249,4 +1249,210 @@ struct HeaderParameterBindingTests {
     }
 }
 
+// MARK: - Cookie Header Parsing Tests
+
+@Suite("Cookie Header Parsing Tests")
+struct CookieHeaderParsingTests {
+
+    @Test("parseCookieHeader parses a single cookie")
+    func testSingleCookie() {
+        let result = parseCookieHeader("session-id=abc123")
+        #expect(result["session-id"] == "abc123")
+        #expect(result.count == 1)
+    }
+
+    @Test("parseCookieHeader parses multiple cookies")
+    func testMultipleCookies() {
+        let result = parseCookieHeader("session-id=abc123; token=xyz789; theme=dark")
+        #expect(result["session-id"] == "abc123")
+        #expect(result["token"] == "xyz789")
+        #expect(result["theme"] == "dark")
+        #expect(result.count == 3)
+    }
+
+    @Test("parseCookieHeader returns empty dict for empty string")
+    func testEmptyString() {
+        let result = parseCookieHeader("")
+        #expect(result.isEmpty)
+    }
+
+    @Test("parseCookieHeader percent-decodes values")
+    func testPercentEncodedValue() {
+        let result = parseCookieHeader("redirect=%2Fdashboard%2Fhome")
+        #expect(result["redirect"] == "/dashboard/home")
+    }
+
+    @Test("parseCookieHeader handles value containing equals sign")
+    func testValueWithEqualsSign() {
+        // Base64-encoded values contain '='; only the first '=' should split name from value
+        let result = parseCookieHeader("token=aGVsbG8=")
+        #expect(result["token"] == "aGVsbG8=")
+    }
+
+    @Test("parseCookieHeader skips malformed pairs with no equals sign")
+    func testMalformedPairSkipped() {
+        let result = parseCookieHeader("badpair; session-id=ok")
+        #expect(result["badpair"] == nil)
+        #expect(result["session-id"] == "ok")
+    }
+
+    @Test("parseCookieHeader trims whitespace around name and value")
+    func testWhitespaceTrimmed() {
+        let result = parseCookieHeader("  name  =  value  ")
+        #expect(result["name"] == "value")
+    }
+}
+
+// MARK: - Cookie Parameter Binding Tests
+
+@Suite("Cookie Parameter Binding Tests")
+struct CookieParameterBindingTests {
+
+    @Test("bindCookieParameters creates cookieParameters dict")
+    func testBindCookieParametersDict() {
+        let cookies = ["session-id": "abc123", "theme": "dark"]
+        let result = OpenAPIContextBinder.bindCookieParameters(cookies)
+
+        let dict = result["cookieParameters"] as? [String: String]
+        #expect(dict != nil)
+        #expect(dict?["session-id"] == "abc123")
+        #expect(dict?["theme"] == "dark")
+    }
+
+    @Test("bindCookieParameters creates individual cookieParameters.{name} keys")
+    func testBindCookieParametersIndividualKeys() {
+        let cookies = ["session-id": "abc123", "token": "xyz789"]
+        let result = OpenAPIContextBinder.bindCookieParameters(cookies)
+
+        #expect(result["cookieParameters.session-id"] as? String == "abc123")
+        #expect(result["cookieParameters.token"] as? String == "xyz789")
+    }
+
+    @Test("bindCookieParameters with empty dict produces empty cookieParameters")
+    func testBindCookieParametersEmpty() {
+        let result = OpenAPIContextBinder.bindCookieParameters([:])
+
+        let dict = result["cookieParameters"] as? [String: String]
+        #expect(dict != nil)
+        #expect(dict?.isEmpty == true)
+    }
+
+    @Test("bindCookieParameters result count equals 1 + number of cookies")
+    func testBindCookieParametersResultCount() {
+        let cookies = ["a": "1", "b": "2"]
+        let result = OpenAPIContextBinder.bindCookieParameters(cookies)
+
+        // cookieParameters dict + 2 individual keys = 3 entries
+        #expect(result.count == 3)
+    }
+}
+
+// MARK: - Required Cookie Parameter Validation Tests
+
+@Suite("Required Cookie Parameter Validation Tests")
+struct RequiredCookieParameterValidationTests {
+
+    private func makeSpec(parameters: [[String: Any]], inPath: String = "/items") throws -> OpenAPISpec {
+        let specDict: [String: Any] = [
+            "openapi": "3.0.3",
+            "info": ["title": "Test API", "version": "1.0.0"],
+            "paths": [
+                inPath: [
+                    "get": [
+                        "operationId": "getItems",
+                        "parameters": parameters,
+                        "responses": ["200": ["description": "OK"]]
+                    ]
+                ]
+            ]
+        ]
+        let data = try JSONSerialization.data(withJSONObject: specDict)
+        return try JSONDecoder().decode(OpenAPISpec.self, from: data)
+    }
+
+    private func makeHandler(spec: OpenAPISpec) -> OpenAPIHTTPHandler {
+        let registry = OpenAPIRouteRegistry(spec: spec)
+        let bus = EventBus()
+        return OpenAPIHTTPHandler(routeRegistry: registry, eventBus: bus)
+    }
+
+    @Test("Missing required cookie returns 400")
+    func testMissingRequiredCookieReturns400() async throws {
+        let spec = try makeSpec(parameters: [
+            ["name": "session-id", "in": "cookie", "required": true]
+        ])
+        let handler = makeHandler(spec: spec)
+
+        let request = HTTPRequest(method: "GET", path: "/items")
+        let response = await handler.handleRequest(request)
+
+        #expect(response.statusCode == 400)
+        if let body = response.body, let text = String(data: body, encoding: .utf8) {
+            #expect(text.contains("Required cookie"))
+            #expect(text.contains("session-id"))
+        }
+    }
+
+    @Test("Present required cookie does not return 400")
+    func testPresentRequiredCookieNotRejected() async throws {
+        let spec = try makeSpec(parameters: [
+            ["name": "session-id", "in": "cookie", "required": true]
+        ])
+        let handler = makeHandler(spec: spec)
+
+        let request = HTTPRequest(
+            method: "GET",
+            path: "/items",
+            headers: ["Cookie": "session-id=abc123"]
+        )
+        let response = await handler.handleRequest(request)
+
+        #expect(response.statusCode != 400)
+    }
+
+    @Test("Optional cookie missing does not return 400")
+    func testMissingOptionalCookieNotRejected() async throws {
+        let spec = try makeSpec(parameters: [
+            ["name": "session-id", "in": "cookie", "required": false]
+        ])
+        let handler = makeHandler(spec: spec)
+
+        let request = HTTPRequest(method: "GET", path: "/items")
+        let response = await handler.handleRequest(request)
+
+        #expect(response.statusCode != 400)
+    }
+
+    @Test("Cookie parameter with no required field missing does not return 400")
+    func testMissingCookieWithoutRequiredFieldNotRejected() async throws {
+        let spec = try makeSpec(parameters: [
+            ["name": "session-id", "in": "cookie"]
+        ])
+        let handler = makeHandler(spec: spec)
+
+        let request = HTTPRequest(method: "GET", path: "/items")
+        let response = await handler.handleRequest(request)
+
+        #expect(response.statusCode != 400)
+    }
+
+    @Test("400 response body for missing cookie contains JSON error and message fields")
+    func testMissingRequiredCookieResponseBodyIsJSON() async throws {
+        let spec = try makeSpec(parameters: [
+            ["name": "session-id", "in": "cookie", "required": true]
+        ])
+        let handler = makeHandler(spec: spec)
+
+        let request = HTTPRequest(method: "GET", path: "/items")
+        let response = await handler.handleRequest(request)
+
+        #expect(response.statusCode == 400)
+        #expect(response.headers["Content-Type"] == "application/json")
+        let body = try #require(response.body)
+        let json = try #require(try JSONSerialization.jsonObject(with: body) as? [String: String])
+        #expect(json["error"] == "Bad Request")
+        #expect(json["message"] != nil)
+    }
+}
+
 #endif  // !os(Windows)

@@ -84,7 +84,24 @@ public final class OpenAPIHTTPHandler: @unchecked Sendable {
             return allowEmpty
         }
 
-        // Validate required parameters (query and header)
+        // Parse cookie parameters from Cookie header (case-insensitive lookup)
+        let rawCookieHeader = request.headers.first(where: { $0.key.lowercased() == "cookie" })?.value ?? ""
+        let allCookies = parseCookieHeader(rawCookieHeader)
+
+        // Filter to only cookies declared as `in: cookie` in the spec
+        let declaredCookieNames = Set(
+            effectiveParameters
+                .filter { $0.in == "cookie" }
+                .map { $0.name }
+        )
+        var cookieParams: [String: String] = [:]
+        for name in declaredCookieNames {
+            if let value = allCookies[name] {
+                cookieParams[name] = value
+            }
+        }
+
+        // Validate required parameters (query, header, and cookie)
         for param in effectiveParameters where param.required == true {
             switch param.in {
             case "query":
@@ -104,6 +121,14 @@ public final class OpenAPIHTTPHandler: @unchecked Sendable {
                         body: "{\"error\":\"Bad Request\",\"message\":\"Required header '\(param.name)' is missing\"}".data(using: .utf8)
                     )
                 }
+            case "cookie":
+                if cookieParams[param.name] == nil {
+                    return HTTPResponse(
+                        statusCode: 400,
+                        headers: ["Content-Type": "application/json"],
+                        body: "{\"error\":\"Bad Request\",\"message\":\"Required cookie '\(param.name)' is missing\"}".data(using: .utf8)
+                    )
+                }
             default:
                 break
             }
@@ -118,6 +143,7 @@ public final class OpenAPIHTTPHandler: @unchecked Sendable {
             pathParameters: match.pathParameters,
             queryParameters: filteredQueryParameters,
             headers: request.headers,
+            cookieParameters: cookieParams,
             body: request.body,
             operation: match.operation
         )
@@ -158,6 +184,7 @@ public struct HTTPOperationEvent: RuntimeEvent {
     public let pathParameters: [String: String]
     public let queryParameters: [String: String]
     public let headers: [String: String]
+    public let cookieParameters: [String: String]
     public let body: Data?
     public let operation: Operation
 
@@ -170,6 +197,7 @@ public struct HTTPOperationEvent: RuntimeEvent {
         pathParameters: [String: String],
         queryParameters: [String: String],
         headers: [String: String],
+        cookieParameters: [String: String] = [:],
         body: Data?,
         operation: Operation
     ) {
@@ -182,6 +210,7 @@ public struct HTTPOperationEvent: RuntimeEvent {
         self.pathParameters = pathParameters
         self.queryParameters = queryParameters
         self.headers = headers
+        self.cookieParameters = cookieParameters
         self.body = body
         self.operation = operation
     }

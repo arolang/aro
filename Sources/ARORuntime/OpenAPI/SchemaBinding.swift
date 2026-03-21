@@ -410,6 +410,55 @@ public struct OpenAPIContextBinder {
         return result
     }
 
+    /// Bind cookie parameters to context
+    ///
+    /// Exposes cookies declared as `in: cookie` in the OpenAPI spec as
+    /// `cookieParameters` in the execution context.
+    ///
+    /// ## ARO Usage
+    /// ```aro
+    /// Extract the <session-id> from the <cookieParameters: session-id>.
+    /// ```
+    public static func bindCookieParameters(_ cookies: [String: String]) -> [String: Any] {
+        var result: [String: Any] = [:]
+        result["cookieParameters"] = cookies
+        for (key, value) in cookies {
+            result["cookieParameters.\(key)"] = value
+        }
+        return result
+    }
+}
+
+// MARK: - Cookie Header Parsing
+
+/// Parse a raw `Cookie` HTTP header into a name→value dictionary.
+///
+/// The Cookie header format is `name1=value1; name2=value2`.
+/// Values are percent-decoded. Malformed pairs (no `=`) are silently skipped.
+///
+/// - Parameter cookieHeader: The raw value of the `Cookie` HTTP header.
+/// - Returns: A dictionary mapping cookie names to their (decoded) values.
+public func parseCookieHeader(_ cookieHeader: String) -> [String: String] {
+    var result: [String: String] = [:]
+    let pairs = cookieHeader.split(separator: ";", omittingEmptySubsequences: true)
+    for pair in pairs {
+        let trimmed = pair.trimmingCharacters(in: .whitespaces)
+        guard let eqRange = trimmed.range(of: "=") else { continue }
+        let name = String(trimmed[trimmed.startIndex..<eqRange.lowerBound])
+            .trimmingCharacters(in: .whitespaces)
+        let rawValue = String(trimmed[eqRange.upperBound...])
+            .trimmingCharacters(in: .whitespaces)
+        let value = rawValue.removingPercentEncoding ?? rawValue
+        guard !name.isEmpty else { continue }
+        result[name] = value
+    }
+    return result
+}
+
+// MARK: - OpenAPIContextBinder (continued)
+
+extension OpenAPIContextBinder {
+
     /// Bind request body to context
     public static func bindRequestBody(
         _ body: Data?,
