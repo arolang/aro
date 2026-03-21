@@ -544,6 +544,46 @@ extension SchemaBinding {
         return validated
     }
 
+    /// Validate a response body against the schema defined in Operation.responses for the given status code.
+    ///
+    /// Looks up the matching response schema by status code string (e.g. "200"), then falls back to "default".
+    /// Returns nil when the body is valid or there is no schema to validate against.
+    /// Returns an error description string when the body does not match the schema.
+    ///
+    /// - Parameters:
+    ///   - body: The response body value to validate (any JSON-compatible type)
+    ///   - statusCode: The HTTP status code of the response
+    ///   - operation: The OpenAPI Operation containing `responses`
+    ///   - components: Components for `$ref` resolution
+    /// - Returns: An error description string, or nil if valid / no schema defined
+    public static func validateResponseBody(
+        _ body: Any,
+        forStatusCode statusCode: Int,
+        operation: Operation,
+        components: Components?
+    ) -> String? {
+        // Find matching response definition by status code, then fall back to "default"
+        let response = operation.responses["\(statusCode)"] ?? operation.responses["default"]
+        guard let response = response,
+              let content = response.content,
+              let mediaType = content["application/json"] ?? content.values.first,
+              let schema = mediaType.schema?.value else {
+            return nil  // No schema to validate against
+        }
+
+        do {
+            _ = try validateAgainstSchema(
+                value: body as AnyObject as! any Sendable,
+                schemaName: "response",
+                schema: schema,
+                components: components
+            )
+            return nil  // Valid
+        } catch {
+            return error.localizedDescription
+        }
+    }
+
     /// Deserialize a query (or path) parameter from its raw string value(s) according
     /// to the OpenAPI `style` and `explode` serialization rules.
     ///
