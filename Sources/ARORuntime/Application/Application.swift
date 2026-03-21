@@ -371,7 +371,7 @@ public final class Application: @unchecked Sendable {
 
             // Execute the feature set
             do {
-                let response = try await self.executeFeatureSet(featureSet, request: request, pathParams: match.pathParameters, headerParams: headerParams, cookieParams: cookieParams)
+                let response = try await self.executeFeatureSet(featureSet, request: request, pathParams: match.pathParameters, headerParams: headerParams, cookieParams: cookieParams, effectiveParameters: match.effectiveParameters)
                 return self.convertToHTTPResponse(response, requestPath: request.path)
             } catch let templateError as TemplateError {
                 // Handle template errors with appropriate HTTP status codes
@@ -408,7 +408,8 @@ public final class Application: @unchecked Sendable {
         request: HTTPRequest,
         pathParams: [String: String],
         headerParams: [String: String] = [:],
-        cookieParams: [String: String] = [:]
+        cookieParams: [String: String] = [:],
+        effectiveParameters: [Parameter] = []
     ) async throws -> Response {
         // Create execution context for this request
         let context = RuntimeContext(
@@ -452,6 +453,36 @@ public final class Application: @unchecked Sendable {
             }
         }
 
+        // Deserialize query parameters using style/explode rules from the OpenAPI spec.
+        // For declared array parameters, the value may be [String] instead of String.
+        var deserializedQueryParams: [String: any Sendable] = [:]
+        if !request.rawQueryString.isEmpty {
+            let multiValueQuery = parseQueryString(request.rawQueryString)
+            // Populate from raw multi-value map first (preserves string passthrough for unknown params)
+            for (key, values) in multiValueQuery {
+                deserializedQueryParams[key] = values.last ?? ""
+            }
+            // Deserialize declared query parameters using their style/explode metadata
+            let components = routeRegistry?.spec.components
+            for param in effectiveParameters where param.in == "query" {
+                guard let rawValues = multiValueQuery[param.name], !rawValues.isEmpty else { continue }
+                let deserialized = SchemaBinding.deserializeParameter(
+                    rawValues: rawValues,
+                    parameter: param,
+                    components: components
+                )
+                if let arr = deserialized as? [String] {
+                    deserializedQueryParams[param.name] = arr
+                } else if let str = deserialized as? String {
+                    deserializedQueryParams[param.name] = str
+                }
+            }
+        } else {
+            for (key, value) in request.queryParameters {
+                deserializedQueryParams[key] = value
+            }
+        }
+
         // Bind request data to context
         context.bind("request", value: [
             "method": request.method,
@@ -464,8 +495,8 @@ public final class Application: @unchecked Sendable {
         // Bind path parameters
         context.bind("pathParameters", value: pathParams)
 
-        // Bind query parameters
-        context.bind("queryParameters", value: request.queryParameters)
+        // Bind query parameters (with style/explode deserialization for declared array params)
+        context.bind("queryParameters", value: deserializedQueryParams)
 
         // Bind header parameters (declared as in: header in the OpenAPI spec)
         context.bind("headerParameters", value: headerParams)

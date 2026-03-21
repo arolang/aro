@@ -2924,4 +2924,171 @@ struct ContentTypeNegotiationTests {
     }
 }
 
+// MARK: - parseQueryString Tests
+
+@Suite("parseQueryString Tests")
+struct ParseQueryStringTests {
+
+    @Test("Empty query string returns empty dict")
+    func testEmptyQueryString() {
+        let result = parseQueryString("")
+        #expect(result.isEmpty)
+    }
+
+    @Test("Single key-value pair")
+    func testSinglePair() {
+        let result = parseQueryString("foo=bar")
+        #expect(result["foo"] == ["bar"])
+    }
+
+    @Test("Multiple distinct keys")
+    func testMultipleDistinctKeys() {
+        let result = parseQueryString("a=1&b=2&c=3")
+        #expect(result["a"] == ["1"])
+        #expect(result["b"] == ["2"])
+        #expect(result["c"] == ["3"])
+    }
+
+    @Test("Repeated key produces multiple values")
+    func testRepeatedKey() {
+        let result = parseQueryString("ids=1&ids=2&ids=3")
+        #expect(result["ids"] == ["1", "2", "3"])
+    }
+
+    @Test("Percent-encoded values are decoded")
+    func testPercentEncoding() {
+        let result = parseQueryString("name=hello%20world")
+        #expect(result["name"] == ["hello world"])
+    }
+
+    @Test("Value with no key is ignored")
+    func testEmptyKey() {
+        let result = parseQueryString("=value")
+        #expect(result.isEmpty)
+    }
+
+    @Test("Key without value gets empty string")
+    func testKeyWithoutValue() {
+        let result = parseQueryString("flag")
+        #expect(result["flag"] == [""])
+    }
+
+    @Test("Mixed repeated and unique keys")
+    func testMixedKeys() {
+        let result = parseQueryString("ids=1&name=alice&ids=2")
+        #expect(result["ids"] == ["1", "2"])
+        #expect(result["name"] == ["alice"])
+    }
+}
+
+// MARK: - deserializeParameter Tests
+
+@Suite("SchemaBinding.deserializeParameter Tests")
+struct DeserializeParameterTests {
+
+    // Helper to build a Parameter with the given schema type, style, and explode
+    private func makeParam(
+        name: String = "ids",
+        schemaType: String,
+        style: String? = nil,
+        explode: Bool? = nil
+    ) -> Parameter {
+        let schemaJSON = """
+        {"type":"\(schemaType)","items":{"type":"string"}}
+        """
+        let schemaRef = try! JSONDecoder().decode(SchemaRef.self, from: schemaJSON.data(using: .utf8)!)
+        let paramJSON = """
+        {"name":"\(name)","in":"query"}
+        """
+        // Build via JSON to get default codable state, then we need explicit fields
+        // Since Parameter doesn't have a memberwise public init, decode from JSON including optional fields
+        var jsonDict: [String: Any] = ["name": name, "in": "query", "schema": ["type": schemaType, "items": ["type": "string"]]]
+        if let s = style { jsonDict["style"] = s }
+        if let e = explode { jsonDict["explode"] = e }
+        let data = try! JSONSerialization.data(withJSONObject: jsonDict)
+        return try! JSONDecoder().decode(Parameter.self, from: data)
+    }
+
+    private func makeScalarParam(name: String = "q", schemaType: String = "string") -> Parameter {
+        var jsonDict: [String: Any] = ["name": name, "in": "query", "schema": ["type": schemaType]]
+        let data = try! JSONSerialization.data(withJSONObject: jsonDict)
+        return try! JSONDecoder().decode(Parameter.self, from: data)
+    }
+
+    @Test("form + explode:true (default) → rawValues as array")
+    func testFormExplodeTrue() {
+        let param = makeParam(schemaType: "array", style: "form", explode: true)
+        let result = SchemaBinding.deserializeParameter(rawValues: ["1", "2", "3"], parameter: param, components: nil)
+        let arr = result as? [String]
+        #expect(arr == ["1", "2", "3"])
+    }
+
+    @Test("form + explode:false → comma-split single value")
+    func testFormExplodeFalse() {
+        let param = makeParam(schemaType: "array", style: "form", explode: false)
+        let result = SchemaBinding.deserializeParameter(rawValues: ["1,2,3"], parameter: param, components: nil)
+        let arr = result as? [String]
+        #expect(arr == ["1", "2", "3"])
+    }
+
+    @Test("form default (no explode specified) → explode:true behaviour")
+    func testFormDefaultExplode() {
+        let param = makeParam(schemaType: "array", style: "form")
+        let result = SchemaBinding.deserializeParameter(rawValues: ["a", "b"], parameter: param, components: nil)
+        let arr = result as? [String]
+        #expect(arr == ["a", "b"])
+    }
+
+    @Test("pipeDelimited + explode:false → pipe-split single value")
+    func testPipeDelimited() {
+        let param = makeParam(schemaType: "array", style: "pipeDelimited", explode: false)
+        let result = SchemaBinding.deserializeParameter(rawValues: ["a|b|c"], parameter: param, components: nil)
+        let arr = result as? [String]
+        #expect(arr == ["a", "b", "c"])
+    }
+
+    @Test("spaceDelimited + explode:false → space-split single value")
+    func testSpaceDelimited() {
+        let param = makeParam(schemaType: "array", style: "spaceDelimited", explode: false)
+        let result = SchemaBinding.deserializeParameter(rawValues: ["a b c"], parameter: param, components: nil)
+        let arr = result as? [String]
+        #expect(arr == ["a", "b", "c"])
+    }
+
+    @Test("spaceDelimited + percent-encoded space")
+    func testSpaceDelimitedPercentEncoded() {
+        let param = makeParam(schemaType: "array", style: "spaceDelimited", explode: false)
+        let result = SchemaBinding.deserializeParameter(rawValues: ["a%20b%20c"], parameter: param, components: nil)
+        let arr = result as? [String]
+        #expect(arr == ["a", "b", "c"])
+    }
+
+    @Test("Scalar param with multiple values → returns first value as String")
+    func testScalarParamReturnsFirst() {
+        let param = makeScalarParam()
+        let result = SchemaBinding.deserializeParameter(rawValues: ["first", "second"], parameter: param, components: nil)
+        let str = result as? String
+        #expect(str == "first")
+    }
+
+    @Test("Param with no schema → treated as scalar, returns first value")
+    func testNoSchema() {
+        let data = """
+        {"name":"x","in":"query"}
+        """.data(using: .utf8)!
+        let param = try! JSONDecoder().decode(Parameter.self, from: data)
+        let result = SchemaBinding.deserializeParameter(rawValues: ["val"], parameter: param, components: nil)
+        let str = result as? String
+        #expect(str == "val")
+    }
+
+    @Test("Empty rawValues for scalar → empty string")
+    func testEmptyRawValuesScalar() {
+        let param = makeScalarParam()
+        let result = SchemaBinding.deserializeParameter(rawValues: [], parameter: param, components: nil)
+        let str = result as? String
+        #expect(str == "")
+    }
+}
+
 #endif  // !os(Windows)

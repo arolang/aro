@@ -101,9 +101,18 @@ public struct Parameter: Sendable, Codable {
     public let allowEmptyValue: Bool?
     public let deprecated: Bool?
     public let ref: String?
+    /// Serialization style for the parameter value (OpenAPI `style` keyword).
+    ///
+    /// Common values: `"form"` (default for query/cookie), `"simple"` (default for path/header),
+    /// `"spaceDelimited"`, `"pipeDelimited"`, `"deepObject"`.
+    public let style: String?
+    /// Whether array/object values are serialized using exploded form (OpenAPI `explode` keyword).
+    ///
+    /// Defaults to `true` when `style == "form"`, `false` otherwise.
+    public let explode: Bool?
 
     private enum CodingKeys: String, CodingKey {
-        case name, `in`, required, description, schema, allowEmptyValue, deprecated
+        case name, `in`, required, description, schema, allowEmptyValue, deprecated, style, explode
         case ref = "$ref"
     }
 }

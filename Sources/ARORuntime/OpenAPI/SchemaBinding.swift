@@ -544,6 +544,81 @@ extension SchemaBinding {
         return validated
     }
 
+    /// Deserialize a query (or path) parameter from its raw string value(s) according
+    /// to the OpenAPI `style` and `explode` serialization rules.
+    ///
+    /// - Parameters:
+    ///   - rawValues: All occurrences of this parameter's key in the query string, in order.
+    ///   - parameter: The OpenAPI `Parameter` declaration (provides `style`, `explode`, and `schema`).
+    ///   - components: Components for `$ref` resolution when inspecting the schema type.
+    /// - Returns: A `String` for scalar parameters, or `[String]` for array parameters.
+    ///   Object parameters (e.g. `deepObject`) are not yet supported and return the first raw value.
+    public static func deserializeParameter(
+        rawValues: [String],
+        parameter: Parameter,
+        components: Components?
+    ) -> Any {
+        // Resolve schema type to decide whether this parameter is an array/object
+        let resolvedSchema: Schema?
+        if let schemaRef = parameter.schema {
+            if let ref = schemaRef.value.ref, let resolved = resolveRef(ref, components: components) {
+                resolvedSchema = resolved
+            } else {
+                resolvedSchema = schemaRef.value
+            }
+        } else {
+            resolvedSchema = nil
+        }
+
+        let schemaType = resolvedSchema?.type ?? ""
+        guard schemaType == "array" || schemaType == "object" else {
+            // Scalar parameter — return first value as a string
+            return rawValues.first ?? ""
+        }
+
+        // Object parameters (deepObject, etc.) are not yet supported
+        if schemaType == "object" {
+            return rawValues.first ?? ""
+        }
+
+        // Array parameter — apply style/explode deserialization
+        let style = parameter.style ?? "form"
+        // Default for explode: true when style == "form", false otherwise
+        let explodeDefault = (style == "form")
+        let explode = parameter.explode ?? explodeDefault
+
+        switch style {
+        case "form":
+            if explode {
+                // Each key occurrence is one element: rawValues already holds all elements
+                return rawValues
+            } else {
+                // Single value, comma-delimited: "1,2,3" → ["1","2","3"]
+                return (rawValues.first ?? "").split(separator: ",", omittingEmptySubsequences: false).map(String.init)
+            }
+        case "spaceDelimited":
+            if explode {
+                return rawValues
+            } else {
+                // Split by space or percent-encoded space (%20)
+                let raw = rawValues.first ?? ""
+                return raw
+                    .replacingOccurrences(of: "%20", with: " ")
+                    .split(separator: " ", omittingEmptySubsequences: false)
+                    .map(String.init)
+            }
+        case "pipeDelimited":
+            if explode {
+                return rawValues
+            } else {
+                return (rawValues.first ?? "").split(separator: "|", omittingEmptySubsequences: false).map(String.init)
+            }
+        default:
+            // Unknown style — fall back to exploded form behaviour
+            return explode ? rawValues : [(rawValues.first ?? "")]
+        }
+    }
+
     /// Describe the runtime type of a value for error messages
     private static func describeType(of value: any Sendable) -> String {
         switch value {
@@ -628,6 +703,39 @@ public struct OpenAPIContextBinder {
         }
         return result
     }
+}
+
+// MARK: - Query String Parsing
+
+/// Parse a raw URL query string into a multi-value dictionary.
+///
+/// Handles repeated keys (`?ids=1&ids=2` → `["ids": ["1", "2"]]`) and
+/// percent-decodes both keys and values. Pairs without `=` are treated as
+/// a key with an empty-string value.
+///
+/// - Parameter query: The raw query string, **without** the leading `?`.
+/// - Returns: A dictionary mapping each key to all its values in order.
+public func parseQueryString(_ query: String) -> [String: [String]] {
+    var result: [String: [String]] = [:]
+    guard !query.isEmpty else { return result }
+    for pair in query.split(separator: "&", omittingEmptySubsequences: false) {
+        let pairStr = String(pair)
+        let eqIdx = pairStr.firstIndex(of: "=")
+        let rawKey: String
+        let rawValue: String
+        if let idx = eqIdx {
+            rawKey = String(pairStr[pairStr.startIndex..<idx])
+            rawValue = String(pairStr[pairStr.index(after: idx)...])
+        } else {
+            rawKey = pairStr
+            rawValue = ""
+        }
+        let key = rawKey.removingPercentEncoding ?? rawKey
+        let value = rawValue.removingPercentEncoding ?? rawValue
+        guard !key.isEmpty else { continue }
+        result[key, default: []].append(value)
+    }
+    return result
 }
 
 // MARK: - Cookie Header Parsing
