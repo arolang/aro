@@ -2009,4 +2009,239 @@ private actor EventLatch {
     }
 }
 
+// MARK: - AdditionalProperties Tests
+
+@Suite("AdditionalProperties Schema Tests")
+struct AdditionalPropertiesTests {
+
+    // MARK: Decoding
+
+    @Test("AdditionalProperties decodes from false")
+    func testDecodeFromFalse() throws {
+        let json = """
+        {
+            "type": "object",
+            "properties": {
+                "name": { "type": "string" }
+            },
+            "additionalProperties": false
+        }
+        """
+        let data = json.data(using: .utf8)!
+        let schema = try JSONDecoder().decode(Schema.self, from: data)
+        if case .allowed(let b) = schema.additionalProperties {
+            #expect(b == false)
+        } else {
+            Issue.record("Expected .allowed(false)")
+        }
+    }
+
+    @Test("AdditionalProperties decodes from true")
+    func testDecodeFromTrue() throws {
+        let json = """
+        {
+            "type": "object",
+            "properties": {
+                "name": { "type": "string" }
+            },
+            "additionalProperties": true
+        }
+        """
+        let data = json.data(using: .utf8)!
+        let schema = try JSONDecoder().decode(Schema.self, from: data)
+        if case .allowed(let b) = schema.additionalProperties {
+            #expect(b == true)
+        } else {
+            Issue.record("Expected .allowed(true)")
+        }
+    }
+
+    @Test("AdditionalProperties decodes from schema object")
+    func testDecodeFromSchemaObject() throws {
+        let json = """
+        {
+            "type": "object",
+            "properties": {
+                "name": { "type": "string" }
+            },
+            "additionalProperties": { "type": "string" }
+        }
+        """
+        let data = json.data(using: .utf8)!
+        let schema = try JSONDecoder().decode(Schema.self, from: data)
+        if case .schema(let ref) = schema.additionalProperties {
+            #expect(ref.value.type == "string")
+        } else {
+            Issue.record("Expected .schema(...)")
+        }
+    }
+
+    @Test("AdditionalProperties is nil when absent")
+    func testDecodeNilWhenAbsent() throws {
+        let json = """
+        {
+            "type": "object",
+            "properties": {
+                "name": { "type": "string" }
+            }
+        }
+        """
+        let data = json.data(using: .utf8)!
+        let schema = try JSONDecoder().decode(Schema.self, from: data)
+        #expect(schema.additionalProperties == nil)
+    }
+
+    // MARK: parseValue enforcement
+
+    private func makeObjectSchema(
+        properties: [String: Schema],
+        additionalProperties: AdditionalProperties? = nil
+    ) -> Schema {
+        let props = properties.mapValues { SchemaRef($0) }
+        return Schema(type: "object", properties: props, additionalProperties: additionalProperties)
+    }
+
+    @Test("parseValue: additionalProperties false rejects extra keys")
+    func testParseValueRejectsExtraKeys() throws {
+        let schema = makeObjectSchema(
+            properties: ["name": Schema(type: "string")],
+            additionalProperties: .allowed(false)
+        )
+        let json: [String: Any] = ["name": "Alice", "extra": "value"]
+        #expect(throws: SchemaBindingError.additionalPropertiesNotAllowed(["extra"])) {
+            try SchemaBinding.parseValue(json: json, schema: schema, components: nil)
+        }
+    }
+
+    @Test("parseValue: additionalProperties false accepts no extra keys")
+    func testParseValueAcceptsNoExtraKeys() throws {
+        let schema = makeObjectSchema(
+            properties: ["name": Schema(type: "string")],
+            additionalProperties: .allowed(false)
+        )
+        let json: [String: Any] = ["name": "Alice"]
+        let result = try SchemaBinding.parseValue(json: json, schema: schema, components: nil)
+        let dict = result as? [String: Any]
+        #expect(dict?["name"] as? String == "Alice")
+    }
+
+    @Test("parseValue: additionalProperties true passes extra keys through")
+    func testParseValueAllowsExtraKeysExplicitTrue() throws {
+        let schema = makeObjectSchema(
+            properties: ["name": Schema(type: "string")],
+            additionalProperties: .allowed(true)
+        )
+        let json: [String: Any] = ["name": "Alice", "extra": "value"]
+        let result = try SchemaBinding.parseValue(json: json, schema: schema, components: nil)
+        let dict = result as? [String: Any]
+        #expect(dict?["extra"] as? String == "value")
+    }
+
+    @Test("parseValue: additionalProperties nil passes extra keys through")
+    func testParseValueAllowsExtraKeysNil() throws {
+        let schema = makeObjectSchema(
+            properties: ["name": Schema(type: "string")],
+            additionalProperties: nil
+        )
+        let json: [String: Any] = ["name": "Alice", "extra": "value"]
+        let result = try SchemaBinding.parseValue(json: json, schema: schema, components: nil)
+        let dict = result as? [String: Any]
+        #expect(dict?["extra"] as? String == "value")
+    }
+
+    @Test("parseValue: additionalProperties schema validates matching extra key")
+    func testParseValueValidatesExtraKeyAgainstSchema() throws {
+        let schema = makeObjectSchema(
+            properties: ["name": Schema(type: "string")],
+            additionalProperties: .schema(SchemaRef(Schema(type: "string")))
+        )
+        let json: [String: Any] = ["name": "Alice", "tag": "admin"]
+        let result = try SchemaBinding.parseValue(json: json, schema: schema, components: nil)
+        let dict = result as? [String: Any]
+        #expect(dict?["tag"] as? String == "admin")
+    }
+
+    @Test("parseValue: additionalProperties schema rejects non-matching extra key")
+    func testParseValueRejectsExtraKeyViolatingSchema() throws {
+        let schema = makeObjectSchema(
+            properties: ["name": Schema(type: "string")],
+            additionalProperties: .schema(SchemaRef(Schema(type: "string")))
+        )
+        let json: [String: Any] = ["name": "Alice", "count": 42]
+        #expect(throws: SchemaBindingError.typeMismatch(expected: "string")) {
+            try SchemaBinding.parseValue(json: json, schema: schema, components: nil)
+        }
+    }
+
+    // MARK: validateAgainstSchema enforcement
+
+    @Test("validateAgainstSchema: additionalProperties false rejects extra keys")
+    func testValidateRejectsExtraKeys() throws {
+        let schema = makeObjectSchema(
+            properties: ["name": Schema(type: "string")],
+            additionalProperties: .allowed(false)
+        )
+        let value: [String: any Sendable] = ["name": "Alice", "extra": "value"]
+        #expect(throws: SchemaBindingError.additionalPropertiesNotAllowed(["extra"])) {
+            try SchemaBinding.validateAgainstSchema(
+                value: value,
+                schemaName: "Test",
+                schema: schema,
+                components: nil
+            )
+        }
+    }
+
+    @Test("validateAgainstSchema: additionalProperties false accepts no extra keys")
+    func testValidateAcceptsNoExtraKeys() throws {
+        let schema = makeObjectSchema(
+            properties: ["name": Schema(type: "string")],
+            additionalProperties: .allowed(false)
+        )
+        let value: [String: any Sendable] = ["name": "Alice"]
+        let result = try SchemaBinding.validateAgainstSchema(
+            value: value,
+            schemaName: "Test",
+            schema: schema,
+            components: nil
+        )
+        let dict = result as? [String: any Sendable]
+        #expect(dict?["name"] as? String == "Alice")
+    }
+
+    @Test("validateAgainstSchema: additionalProperties schema validates matching extra key")
+    func testValidateExtraKeyAgainstSchema() throws {
+        let schema = makeObjectSchema(
+            properties: ["name": Schema(type: "string")],
+            additionalProperties: .schema(SchemaRef(Schema(type: "string")))
+        )
+        let value: [String: any Sendable] = ["name": "Alice", "tag": "admin"]
+        let result = try SchemaBinding.validateAgainstSchema(
+            value: value,
+            schemaName: "Test",
+            schema: schema,
+            components: nil
+        )
+        let dict = result as? [String: any Sendable]
+        #expect(dict?["tag"] as? String == "admin")
+    }
+
+    @Test("validateAgainstSchema: additionalProperties schema rejects non-matching extra key")
+    func testValidateRejectsExtraKeyViolatingSchema() throws {
+        let schema = makeObjectSchema(
+            properties: ["name": Schema(type: "string")],
+            additionalProperties: .schema(SchemaRef(Schema(type: "string")))
+        )
+        let value: [String: any Sendable] = ["name": "Alice", "count": 42]
+        #expect(throws: (any Error).self) {
+            try SchemaBinding.validateAgainstSchema(
+                value: value,
+                schemaName: "Test",
+                schema: schema,
+                components: nil
+            )
+        }
+    }
+}
+
 #endif  // !os(Windows)

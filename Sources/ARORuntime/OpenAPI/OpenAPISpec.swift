@@ -197,6 +197,35 @@ public enum AnyCodableValue: Sendable, Codable, Equatable {
     }
 }
 
+// MARK: - AdditionalProperties
+
+/// Represents the OpenAPI `additionalProperties` keyword.
+///
+/// Can be either a boolean (allow/deny extra properties) or a Schema
+/// that extra properties must conform to.
+public enum AdditionalProperties: Sendable, Codable {
+    case allowed(Bool)
+    case schema(SchemaRef)
+
+    public init(from decoder: Decoder) throws {
+        let container = try decoder.singleValueContainer()
+        if let boolVal = try? container.decode(Bool.self) {
+            self = .allowed(boolVal)
+        } else {
+            let schemaRef = try container.decode(SchemaRef.self)
+            self = .schema(schemaRef)
+        }
+    }
+
+    public func encode(to encoder: Encoder) throws {
+        var container = encoder.singleValueContainer()
+        switch self {
+        case .allowed(let b): try container.encode(b)
+        case .schema(let s): try s.encode(to: encoder)
+        }
+    }
+}
+
 // MARK: - Schema (using class for reference semantics to handle recursion)
 
 public final class Schema: Sendable, Codable {
@@ -221,6 +250,7 @@ public final class Schema: Sendable, Codable {
     public let anyOf: [SchemaRef]?
     public let enumValues: [AnyCodableValue]?
     public let defaultValue: AnyCodableValue?
+    public let additionalProperties: AdditionalProperties?
 
     private enum CodingKeys: String, CodingKey {
         case type, format, title, description, properties, required
@@ -230,6 +260,7 @@ public final class Schema: Sendable, Codable {
         case ref = "$ref"
         case enumValues = "enum"
         case defaultValue = "default"
+        case additionalProperties
     }
 
     public init(
@@ -253,7 +284,8 @@ public final class Schema: Sendable, Codable {
         oneOf: [SchemaRef]? = nil,
         anyOf: [SchemaRef]? = nil,
         enumValues: [AnyCodableValue]? = nil,
-        defaultValue: AnyCodableValue? = nil
+        defaultValue: AnyCodableValue? = nil,
+        additionalProperties: AdditionalProperties? = nil
     ) {
         self.type = type
         self.format = format
@@ -276,6 +308,7 @@ public final class Schema: Sendable, Codable {
         self.anyOf = anyOf
         self.enumValues = enumValues
         self.defaultValue = defaultValue
+        self.additionalProperties = additionalProperties
     }
 }
 
