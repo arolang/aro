@@ -454,7 +454,7 @@ public func aro_runtime_register_handler(
         // concurrent active execution to 4 * CPU count.
         await withCheckedContinuation { (continuation: CheckedContinuation<Void, Never>) in
             let pool = CompiledExecutionPool.shared
-            Thread {
+            let compiledThread = Thread {
                 pool.gate.wait()
                 pool.threadHoldsSlot = true
                 defer {
@@ -521,7 +521,9 @@ public func aro_runtime_register_handler(
 
                 // Resume the async continuation
                 continuation.resume()
-            }.start()
+            }
+            compiledThread.stackSize = 8 * 1024 * 1024
+            compiledThread.start()
         }
     }
 }
@@ -593,7 +595,7 @@ public func aro_register_repository_observer_with_guard(
         // soft limit which is easily exhausted by recursive event chains.
         await withCheckedContinuation { (continuation: CheckedContinuation<Void, Never>) in
             let pool = CompiledExecutionPool.shared
-            Thread {
+            let compiledThread2 = Thread {
                 pool.gate.wait()
                 pool.threadHoldsSlot = true
                 defer {
@@ -668,7 +670,9 @@ public func aro_register_repository_observer_with_guard(
 
                 // Resume the async continuation
                 continuation.resume()
-            }.start()
+            }
+            compiledThread2.stackSize = 8 * 1024 * 1024
+            compiledThread2.start()
         }
     }
 }
@@ -729,7 +733,7 @@ public func aro_runtime_register_state_transition_handler(
 
         await withCheckedContinuation { (continuation: CheckedContinuation<Void, Never>) in
             let pool = CompiledExecutionPool.shared
-            Thread {
+            let compiledThread3 = Thread {
                 pool.gate.wait()
                 pool.threadHoldsSlot = true
                 defer {
@@ -773,7 +777,9 @@ public func aro_runtime_register_state_transition_handler(
                 if let resultPtr = result { aro_value_free(resultPtr) }
                 Unmanaged<AROCContextHandle>.fromOpaque(contextPtr).release()
                 continuation.resume()
-            }.start()
+            }
+            compiledThread3.stackSize = 8 * 1024 * 1024
+            compiledThread3.start()
         }
     }
 }
@@ -837,7 +843,7 @@ public func aro_runtime_register_notification_handler(
 
         await withCheckedContinuation { (continuation: CheckedContinuation<Void, Never>) in
             let pool = CompiledExecutionPool.shared
-            Thread {
+            let compiledThread4 = Thread {
                 pool.gate.wait()
                 pool.threadHoldsSlot = true
                 defer {
@@ -884,7 +890,9 @@ public func aro_runtime_register_notification_handler(
                 if let resultPtr = result { aro_value_free(resultPtr) }
                 Unmanaged<AROCContextHandle>.fromOpaque(contextPtr).release()
                 continuation.resume()
-            }.start()
+            }
+            compiledThread4.stackSize = 8 * 1024 * 1024
+            compiledThread4.start()
         }
     }
 }
@@ -2762,7 +2770,7 @@ public func aro_parallel_for_each_execute(
         // Each iteration may block its thread via semaphore.wait() when calling
         // aro_action_* functions; pthreads don't count against GCD's dispatch limit.
         group.enter()
-        Thread {
+        let compiledThread5 = Thread {
             pool.threadHoldsSlot = true
             defer {
                 pool.threadHoldsSlot = false
@@ -2790,7 +2798,9 @@ public func aro_parallel_for_each_execute(
             }
             Unmanaged<AROCValue>.fromOpaque(itemValue).release()
             aro_context_destroy(childCtx)
-        }.start()
+        }
+        compiledThread5.stackSize = 8 * 1024 * 1024
+        compiledThread5.start()
     }
 
     // Wait for all iterations to complete
