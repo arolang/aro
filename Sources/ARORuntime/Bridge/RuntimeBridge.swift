@@ -75,7 +75,7 @@ final class AROCRuntimeHandle: @unchecked Sendable {
 }
 
 /// Opaque context handle for C interop
-class AROCContextHandle {
+class AROCContextHandle: @unchecked Sendable {
     let context: RuntimeContext
     let runtime: AROCRuntimeHandle
 
@@ -1491,15 +1491,11 @@ private func remainingStackBytes() -> Int {
     let lowest = stackTop - stackSize
     return max(0, sp - lowest)
 #elseif os(Linux)
-    let thread = pthread_self()
-    var attr = pthread_attr_t()
-    guard pthread_getattr_np(thread, &attr) == 0 else { return Int.max }
-    defer { pthread_attr_destroy(&attr) }
-    var base: UnsafeMutableRawPointer?
-    var size = 0
-    pthread_attr_getstack(&attr, &base, &size)
-    let lowest = Int(bitPattern: base)
-    return max(0, sp - lowest)
+    // pthread_getattr_np is a GNU extension not exposed by Swift's Glibc overlay.
+    // Return 0 so withStackGuard always offloads to a fresh 8 MB thread on Linux,
+    // guaranteeing safety at the cost of always spawning a thread.
+    _ = sp
+    return 0
 #else
     return Int.max
 #endif
@@ -1515,7 +1511,7 @@ private let stackGuardThreshold = 512 * 1024   // 512 KB
 /// spawn a fresh 8 MB Thread, execute `body` there, and block until it finishes.
 /// The result is returned synchronously either way, so callers are unaware of the
 /// indirection.
-private func withStackGuard<T>(_ body: @escaping () -> T) -> T {
+private func withStackGuard<T>(_ body: @escaping @Sendable () -> T) -> T {
     guard remainingStackBytes() >= stackGuardThreshold else {
         // Stack is running low — offload to a fresh thread with a full 8 MB stack.
         // The semaphore guarantees the borrow ends before we return, making this safe
