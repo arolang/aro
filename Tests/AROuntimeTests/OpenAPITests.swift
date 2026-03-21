@@ -1187,4 +1187,66 @@ struct RequiredParameterValidationTests {
     }
 }
 
+// MARK: - Header Parameter Binding Tests
+
+@Suite("Header Parameter Binding Tests")
+struct HeaderParameterBindingTests {
+
+    @Test("bindHeaderParameters creates headerParameters dict with lowercase keys")
+    func testBindHeaderParametersDict() {
+        let headers = ["X-Api-Key": "secret", "Authorization": "Bearer token"]
+        let result = OpenAPIContextBinder.bindHeaderParameters(headers)
+
+        let dict = result["headerParameters"] as? [String: String]
+        #expect(dict != nil)
+        #expect(dict?["x-api-key"] == "secret")
+        #expect(dict?["authorization"] == "Bearer token")
+    }
+
+    @Test("bindHeaderParameters creates individual headerParameters.{name} keys")
+    func testBindHeaderParametersIndividualKeys() {
+        let headers = ["X-Api-Key": "my-key", "Content-Type": "application/json"]
+        let result = OpenAPIContextBinder.bindHeaderParameters(headers)
+
+        #expect(result["headerParameters.x-api-key"] as? String == "my-key")
+        #expect(result["headerParameters.content-type"] as? String == "application/json")
+    }
+
+    @Test("bindHeaderParameters with empty headers produces empty dict")
+    func testBindHeaderParametersEmpty() {
+        let result = OpenAPIContextBinder.bindHeaderParameters([:])
+
+        let dict = result["headerParameters"] as? [String: String]
+        #expect(dict != nil)
+        #expect(dict?.isEmpty == true)
+    }
+
+    @Test("bindHeaderParameters normalises mixed-case header names")
+    func testBindHeaderParametersCaseNormalisation() {
+        let headers = [
+            "X-REQUEST-ID": "abc123",
+            "x-correlation-id": "xyz789",
+            "X-Forwarded-For": "192.168.1.1"
+        ]
+        let result = OpenAPIContextBinder.bindHeaderParameters(headers)
+
+        let dict = result["headerParameters"] as? [String: String]
+        #expect(dict?["x-request-id"] == "abc123")
+        #expect(dict?["x-correlation-id"] == "xyz789")
+        #expect(dict?["x-forwarded-for"] == "192.168.1.1")
+    }
+
+    @Test("bindHeaderParameters does not include non-header entries in main dict")
+    func testBindHeaderParametersOnlyContainsHeaderKeys() {
+        let headers = ["X-Api-Key": "key1", "Accept": "application/json"]
+        let result = OpenAPIContextBinder.bindHeaderParameters(headers)
+
+        // The top-level result should have exactly 4 keys: headerParameters + 2 individual entries
+        #expect(result.count == 3)
+        #expect(result["headerParameters"] != nil)
+        #expect(result["headerParameters.x-api-key"] != nil)
+        #expect(result["headerParameters.accept"] != nil)
+    }
+}
+
 #endif  // !os(Windows)

@@ -341,9 +341,22 @@ public final class Application: @unchecked Sendable {
                 )
             }
 
+            // Build header parameters: only headers declared as `in: header` in the spec
+            let declaredHeaderNames = Set(
+                match.effectiveParameters
+                    .filter { $0.in == "header" }
+                    .map { $0.name.lowercased() }
+            )
+            var headerParams: [String: String] = [:]
+            for (key, value) in request.headers {
+                if declaredHeaderNames.contains(key.lowercased()) {
+                    headerParams[key.lowercased()] = value
+                }
+            }
+
             // Execute the feature set
             do {
-                let response = try await self.executeFeatureSet(featureSet, request: request, pathParams: match.pathParameters)
+                let response = try await self.executeFeatureSet(featureSet, request: request, pathParams: match.pathParameters, headerParams: headerParams)
                 return self.convertToHTTPResponse(response, requestPath: request.path)
             } catch let templateError as TemplateError {
                 // Handle template errors with appropriate HTTP status codes
@@ -378,7 +391,8 @@ public final class Application: @unchecked Sendable {
     private func executeFeatureSet(
         _ analyzedFeatureSet: AnalyzedFeatureSet,
         request: HTTPRequest,
-        pathParams: [String: String]
+        pathParams: [String: String],
+        headerParams: [String: String] = [:]
     ) async throws -> Response {
         // Create execution context for this request
         let context = RuntimeContext(
@@ -436,6 +450,9 @@ public final class Application: @unchecked Sendable {
 
         // Bind query parameters
         context.bind("queryParameters", value: request.queryParameters)
+
+        // Bind header parameters (declared as in: header in the OpenAPI spec)
+        context.bind("headerParameters", value: headerParams)
 
         // Also bind body directly for convenience
         if let parsedBody = bodyValue as? [String: any Sendable] {
