@@ -2681,4 +2681,247 @@ struct SecurityEnforcerTests {
     }
 }
 
+// MARK: - Content-Type Negotiation Tests (Issue #179)
+
+@Suite("Content-Type Negotiation Tests")
+struct ContentTypeNegotiationTests {
+
+    // MARK: - findMatchingMediaType unit tests
+
+    @Test("Exact match returns matching media type")
+    func testExactMatch() {
+        let jsonMediaType = MediaType(schema: nil)
+        let content: [String: MediaType] = ["application/json": jsonMediaType]
+        let result = findMatchingMediaType(in: content, for: "application/json")
+        #expect(result != nil)
+    }
+
+    @Test("Parameters are stripped before matching")
+    func testParameterStripping() {
+        let jsonMediaType = MediaType(schema: nil)
+        let content: [String: MediaType] = ["application/json": jsonMediaType]
+        let result = findMatchingMediaType(in: content, for: "application/json; charset=utf-8")
+        #expect(result != nil)
+    }
+
+    @Test("Subtype wildcard matches when exact type absent")
+    func testSubtypeWildcard() {
+        let wildcardMediaType = MediaType(schema: nil)
+        let content: [String: MediaType] = ["application/*": wildcardMediaType]
+        let result = findMatchingMediaType(in: content, for: "application/json")
+        #expect(result != nil)
+    }
+
+    @Test("Catch-all wildcard matches any content type")
+    func testCatchAllWildcard() {
+        let wildcardMediaType = MediaType(schema: nil)
+        let content: [String: MediaType] = ["*/*": wildcardMediaType]
+        let result = findMatchingMediaType(in: content, for: "text/plain")
+        #expect(result != nil)
+    }
+
+    @Test("Exact match takes precedence over subtype wildcard")
+    func testExactMatchPrecedenceOverSubtypeWildcard() {
+        let exactMediaType = MediaType(schema: SchemaRef(Schema(type: "object")))
+        let wildcardMediaType = MediaType(schema: SchemaRef(Schema(type: "string")))
+        let content: [String: MediaType] = [
+            "application/json": exactMediaType,
+            "application/*": wildcardMediaType
+        ]
+        let result = findMatchingMediaType(in: content, for: "application/json")
+        // Must return exact match, not wildcard
+        #expect(result?.schema?.value.type == "object")
+    }
+
+    @Test("Subtype wildcard takes precedence over catch-all wildcard")
+    func testSubtypeWildcardPrecedenceOverCatchAll() {
+        let subtypeMediaType = MediaType(schema: SchemaRef(Schema(type: "object")))
+        let catchAllMediaType = MediaType(schema: SchemaRef(Schema(type: "string")))
+        let content: [String: MediaType] = [
+            "application/*": subtypeMediaType,
+            "*/*": catchAllMediaType
+        ]
+        let result = findMatchingMediaType(in: content, for: "application/json")
+        #expect(result?.schema?.value.type == "object")
+    }
+
+    @Test("Returns nil when content type not in spec")
+    func testNoMatch() {
+        let jsonMediaType = MediaType(schema: nil)
+        let content: [String: MediaType] = ["application/json": jsonMediaType]
+        let result = findMatchingMediaType(in: content, for: "text/xml")
+        #expect(result == nil)
+    }
+
+    @Test("Returns nil for empty content map")
+    func testEmptyContent() {
+        let result = findMatchingMediaType(in: [:], for: "application/json")
+        #expect(result == nil)
+    }
+
+    // MARK: - Integration tests via OpenAPIHTTPHandler.handleRequest
+
+    private func makeSpec() throws -> OpenAPISpec {
+        let json = """
+        {
+            "openapi": "3.0.3",
+            "info": { "title": "Test API", "version": "1.0.0" },
+            "paths": {
+                "/items": {
+                    "post": {
+                        "operationId": "createItem",
+                        "requestBody": {
+                            "required": true,
+                            "content": {
+                                "application/json": {
+                                    "schema": { "type": "object" }
+                                }
+                            }
+                        },
+                        "responses": { "201": { "description": "Created" } }
+                    }
+                },
+                "/wildcard": {
+                    "post": {
+                        "operationId": "createWildcard",
+                        "requestBody": {
+                            "content": {
+                                "*/*": {}
+                            }
+                        },
+                        "responses": { "200": { "description": "OK" } }
+                    }
+                }
+            }
+        }
+        """
+        return try JSONDecoder().decode(OpenAPISpec.self, from: json.data(using: .utf8)!)
+    }
+
+    private func makeHandler(spec: OpenAPISpec) -> OpenAPIHTTPHandler {
+        let registry = OpenAPIRouteRegistry(spec: spec)
+        let bus = EventBus()
+        return OpenAPIHTTPHandler(routeRegistry: registry, eventBus: bus)
+    }
+
+    @Test("application/json matches application/json spec — 200 response")
+    func testExactContentTypeAccepted() async throws {
+        let handler = makeHandler(spec: try makeSpec())
+        let body = #"{"name":"widget"}"#.data(using: .utf8)
+        let request = HTTPRequest(
+            method: "POST",
+            path: "/items",
+            headers: ["Content-Type": "application/json"],
+            body: body
+        )
+        let response = await handler.handleRequest(request)
+        #expect(response.statusCode != 415)
+    }
+
+    @Test("application/json; charset=utf-8 matches application/json spec — no 415")
+    func testContentTypeWithParametersAccepted() async throws {
+        let handler = makeHandler(spec: try makeSpec())
+        let body = #"{"name":"widget"}"#.data(using: .utf8)
+        let request = HTTPRequest(
+            method: "POST",
+            path: "/items",
+            headers: ["Content-Type": "application/json; charset=utf-8"],
+            body: body
+        )
+        let response = await handler.handleRequest(request)
+        #expect(response.statusCode != 415)
+    }
+
+    @Test("Unsupported Content-Type returns 415 with error body")
+    func testUnsupportedContentTypeReturns415() async throws {
+        let handler = makeHandler(spec: try makeSpec())
+        let body = "<item><name>widget</name></item>".data(using: .utf8)
+        let request = HTTPRequest(
+            method: "POST",
+            path: "/items",
+            headers: ["Content-Type": "text/xml"],
+            body: body
+        )
+        let response = await handler.handleRequest(request)
+        #expect(response.statusCode == 415)
+        #expect(response.headers["Content-Type"] == "application/json")
+        if let data = response.body, let text = String(data: data, encoding: .utf8) {
+            #expect(text.contains("Unsupported Media Type"))
+            #expect(text.contains("text/xml"))
+            #expect(text.contains("application/json"))
+        }
+    }
+
+    @Test("415 error message lists supported media types")
+    func test415ErrorListsSupportedTypes() async throws {
+        let handler = makeHandler(spec: try makeSpec())
+        let body = "plain text".data(using: .utf8)
+        let request = HTTPRequest(
+            method: "POST",
+            path: "/items",
+            headers: ["Content-Type": "text/plain"],
+            body: body
+        )
+        let response = await handler.handleRequest(request)
+        #expect(response.statusCode == 415)
+        if let data = response.body, let text = String(data: data, encoding: .utf8) {
+            #expect(text.contains("application/json"))
+        }
+    }
+
+    @Test("*/* in spec accepts any content type — no 415")
+    func testCatchAllWildcardInSpecAcceptsAnyType() async throws {
+        let handler = makeHandler(spec: try makeSpec())
+        let body = "anything".data(using: .utf8)
+        let request = HTTPRequest(
+            method: "POST",
+            path: "/wildcard",
+            headers: ["Content-Type": "text/csv"],
+            body: body
+        )
+        let response = await handler.handleRequest(request)
+        #expect(response.statusCode != 415)
+    }
+
+    @Test("No Content-Type header and body present — backward compatible, no 415")
+    func testMissingContentTypeHeaderIsBackwardCompatible() async throws {
+        let handler = makeHandler(spec: try makeSpec())
+        let body = #"{"name":"widget"}"#.data(using: .utf8)
+        let request = HTTPRequest(
+            method: "POST",
+            path: "/items",
+            headers: [:],
+            body: body
+        )
+        let response = await handler.handleRequest(request)
+        #expect(response.statusCode != 415)
+    }
+
+    @Test("No body — content-type negotiation is skipped, no 415")
+    func testNoBodySkipsContentTypeNegotiation() async throws {
+        let handler = makeHandler(spec: try makeSpec())
+        let request = HTTPRequest(
+            method: "POST",
+            path: "/items",
+            headers: ["Content-Type": "text/xml"],
+            body: nil
+        )
+        let response = await handler.handleRequest(request)
+        #expect(response.statusCode != 415)
+    }
+
+    @Test("Empty body — content-type negotiation is skipped, no 415")
+    func testEmptyBodySkipsContentTypeNegotiation() async throws {
+        let handler = makeHandler(spec: try makeSpec())
+        let request = HTTPRequest(
+            method: "POST",
+            path: "/items",
+            headers: ["Content-Type": "text/xml"],
+            body: Data()
+        )
+        let response = await handler.handleRequest(request)
+        #expect(response.statusCode != 415)
+    }
+}
+
 #endif  // !os(Windows)
