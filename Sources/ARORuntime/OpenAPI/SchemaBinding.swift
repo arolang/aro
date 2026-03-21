@@ -33,6 +33,10 @@ public struct SchemaBinding {
 
         // Handle by type
         guard let schemaType = schema.type else {
+            // No type constraint — still apply composition keywords if present
+            if schema.allOf != nil || schema.anyOf != nil || schema.oneOf != nil || schema.not != nil {
+                return try validateComposition(json: json, schema: schema, components: components)
+            }
             return json
         }
 
@@ -132,7 +136,68 @@ public struct SchemaBinding {
             try validateEnumConstraint(parsedValue, against: enumValues)
         }
 
+        // Apply composition keywords (allOf / anyOf / oneOf / not)
+        if schema.allOf != nil || schema.anyOf != nil || schema.oneOf != nil || schema.not != nil {
+            return try validateComposition(json: parsedValue, schema: schema, components: components)
+        }
+
         return parsedValue
+    }
+
+    /// Validate schema composition keywords: allOf, anyOf, oneOf, not.
+    private static func validateComposition(json: Any, schema: Schema, components: Components?) throws -> Any {
+        // allOf: must be valid against ALL sub-schemas; results are merged for objects
+        if let allOf = schema.allOf, !allOf.isEmpty {
+            if var mergedDict = json as? [String: Any] {
+                for subRef in allOf {
+                    let subResult = try parseValue(json: json, schema: subRef.value, components: components)
+                    if let subDict = subResult as? [String: Any] {
+                        mergedDict.merge(subDict) { _, new in new }
+                    }
+                }
+                return mergedDict
+            } else {
+                var merged = json
+                for subRef in allOf {
+                    merged = try parseValue(json: merged, schema: subRef.value, components: components)
+                }
+                return merged
+            }
+        }
+
+        // anyOf: must match at least one sub-schema
+        if let anyOf = schema.anyOf, !anyOf.isEmpty {
+            for subRef in anyOf {
+                if let result = try? parseValue(json: json, schema: subRef.value, components: components) {
+                    return result
+                }
+            }
+            throw SchemaBindingError.compositionFailed("anyOf: value does not match any of the listed schemas")
+        }
+
+        // oneOf: must match exactly one sub-schema
+        if let oneOf = schema.oneOf, !oneOf.isEmpty {
+            var results: [Any] = []
+            for subRef in oneOf {
+                if let result = try? parseValue(json: json, schema: subRef.value, components: components) {
+                    results.append(result)
+                }
+            }
+            if results.count == 1 { return results[0] }
+            if results.isEmpty {
+                throw SchemaBindingError.compositionFailed("oneOf: value does not match any schema")
+            }
+            throw SchemaBindingError.compositionFailed("oneOf: value matches \(results.count) schemas, expected exactly 1")
+        }
+
+        // not: must NOT be valid against the sub-schema
+        if let notRef = schema.not {
+            if (try? parseValue(json: json, schema: notRef.value, components: components)) != nil {
+                throw SchemaBindingError.compositionFailed("not: value must not match the 'not' schema")
+            }
+        }
+
+        return json
     }
 
     /// Check that a parsed value matches one of the allowed enum values.
@@ -176,6 +241,7 @@ public enum SchemaBindingError: Error, Sendable, Equatable {
     case invalidJSON
     case enumViolation(value: String, allowed: String)
     case additionalPropertiesNotAllowed([String])
+    case compositionFailed(String)
 }
 
 extension SchemaBindingError: CustomStringConvertible {
@@ -193,6 +259,8 @@ extension SchemaBindingError: CustomStringConvertible {
             return "Value '\(value)' is not allowed. Must be one of: \(allowed)"
         case .additionalPropertiesNotAllowed(let keys):
             return "Additional properties not allowed: '\(keys.joined(separator: "', '"))'"
+        case .compositionFailed(let reason):
+            return "Schema composition validation failed: \(reason)"
         }
     }
 }
@@ -288,7 +356,11 @@ extension SchemaBinding {
 
         // Determine expected type
         guard let schemaType = schema.type else {
-            // No type constraint, accept any value
+            // No type constraint — still apply composition keywords if present
+            if schema.allOf != nil || schema.anyOf != nil || schema.oneOf != nil || schema.not != nil {
+                let composed = try validateComposition(json: value, schema: schema, components: components)
+                return composed as! any Sendable  // safe: validateComposition returns JSON-compatible types
+            }
             return value
         }
 
@@ -426,6 +498,15 @@ extension SchemaBinding {
         // Validate enum constraint
         if let enumValues = schema.enumValues, !enumValues.isEmpty {
             try validateEnumConstraint(validated, against: enumValues)
+        }
+
+        // Apply composition keywords (allOf / anyOf / oneOf / not)
+        if schema.allOf != nil || schema.anyOf != nil || schema.oneOf != nil || schema.not != nil {
+            // validateComposition works on Any values; the result is structurally
+            // identical (String, Int, Double, Bool, [Any], [String: Any]) — all
+            // of which satisfy Sendable at runtime. Force-cast is safe here.
+            let composed = try validateComposition(json: validated, schema: schema, components: components)
+            return composed as! any Sendable  // safe: validateComposition returns JSON-compatible types
         }
 
         return validated

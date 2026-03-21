@@ -249,6 +249,7 @@ public final class Schema: Sendable, Codable {
     public let allOf: [SchemaRef]?
     public let oneOf: [SchemaRef]?
     public let anyOf: [SchemaRef]?
+    public let not: SchemaRef?
     public let enumValues: [AnyCodableValue]?
     public let defaultValue: AnyCodableValue?
     public let additionalProperties: AdditionalProperties?
@@ -257,7 +258,7 @@ public final class Schema: Sendable, Codable {
         case type, format, title, description, properties, required
         case items, nullable, minimum, maximum
         case minLength, maxLength, pattern, minItems, maxItems
-        case allOf, oneOf, anyOf
+        case allOf, oneOf, anyOf, not
         case ref = "$ref"
         case enumValues = "enum"
         case defaultValue = "default"
@@ -284,6 +285,7 @@ public final class Schema: Sendable, Codable {
         allOf: [SchemaRef]? = nil,
         oneOf: [SchemaRef]? = nil,
         anyOf: [SchemaRef]? = nil,
+        not: SchemaRef? = nil,
         enumValues: [AnyCodableValue]? = nil,
         defaultValue: AnyCodableValue? = nil,
         additionalProperties: AdditionalProperties? = nil
@@ -307,6 +309,7 @@ public final class Schema: Sendable, Codable {
         self.allOf = allOf
         self.oneOf = oneOf
         self.anyOf = anyOf
+        self.not = not
         self.enumValues = enumValues
         self.defaultValue = defaultValue
         self.additionalProperties = additionalProperties
