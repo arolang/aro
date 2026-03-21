@@ -84,6 +84,31 @@ public final class OpenAPIHTTPHandler: @unchecked Sendable {
             return allowEmpty
         }
 
+        // Validate required parameters (query and header)
+        for param in effectiveParameters where param.required == true {
+            switch param.in {
+            case "query":
+                if filteredQueryParameters[param.name] == nil {
+                    return HTTPResponse(
+                        statusCode: 400,
+                        headers: ["Content-Type": "application/json"],
+                        body: "{\"error\":\"Bad Request\",\"message\":\"Required query parameter '\(param.name)' is missing\"}".data(using: .utf8)
+                    )
+                }
+            case "header":
+                let lower = param.name.lowercased()
+                if !request.headers.keys.contains(where: { $0.lowercased() == lower }) {
+                    return HTTPResponse(
+                        statusCode: 400,
+                        headers: ["Content-Type": "application/json"],
+                        body: "{\"error\":\"Bad Request\",\"message\":\"Required header '\(param.name)' is missing\"}".data(using: .utf8)
+                    )
+                }
+            default:
+                break
+            }
+        }
+
         let event = HTTPOperationEvent(
             requestId: request.id,
             operationId: match.operationId,
