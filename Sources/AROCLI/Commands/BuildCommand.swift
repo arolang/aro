@@ -199,6 +199,72 @@ struct BuildCommand: AsyncParsableCommand {
         // Create build directory
         try? FileManager.default.createDirectory(at: buildDir, withIntermediateDirectories: true)
 
+        // Pre-compile managed plugins so they can be embedded in the binary
+        // This must happen before LLVM IR generation so the plugin data is available for embedding.
+        var embeddedPlugins: [(name: String, yaml: String, base64Library: String)] = []
+        let sourceManagedPluginsDirEarly = appConfig.rootPath.appendingPathComponent("Plugins")
+        let outputManagedPluginsDirEarly = binaryPath.deletingLastPathComponent().appendingPathComponent("Plugins")
+
+        if FileManager.default.fileExists(atPath: sourceManagedPluginsDirEarly.path) {
+            if verbose { print("Compiling managed plugins for embedding...") }
+            do {
+                let sourceResolved = sourceManagedPluginsDirEarly.standardizedFileURL.path
+                let outputResolved = outputManagedPluginsDirEarly.standardizedFileURL.path
+                if sourceResolved != outputResolved,
+                   FileManager.default.fileExists(atPath: outputManagedPluginsDirEarly.path) {
+                    try FileManager.default.removeItem(at: outputManagedPluginsDirEarly)
+                }
+                try PluginLoader.shared.compileManagedPlugins(from: sourceManagedPluginsDirEarly, to: outputManagedPluginsDirEarly)
+
+                #if os(Windows)
+                let libExt = "dll"
+                #elseif os(Linux)
+                let libExt = "so"
+                #else
+                let libExt = "dylib"
+                #endif
+
+                // Collect compiled .so files for embedding
+                let pluginDirs = (try? FileManager.default.contentsOfDirectory(
+                    at: outputManagedPluginsDirEarly,
+                    includingPropertiesForKeys: [.isDirectoryKey]
+                )) ?? []
+                for pluginDir in pluginDirs {
+                    var isDir: ObjCBool = false
+                    guard FileManager.default.fileExists(atPath: pluginDir.path, isDirectory: &isDir),
+                          isDir.boolValue else { continue }
+                    let pluginName = pluginDir.lastPathComponent
+                    let yamlPath = pluginDir.appendingPathComponent("plugin.yaml")
+                    let yamlContent = (try? String(contentsOf: yamlPath, encoding: .utf8)) ?? ""
+                    let searchDirs = [
+                        pluginDir,
+                        pluginDir.appendingPathComponent("src"),
+                        pluginDir.appendingPathComponent("Sources"),
+                        pluginDir.appendingPathComponent("target/release"),
+                    ]
+                    for searchDir in searchDirs {
+                        guard FileManager.default.fileExists(atPath: searchDir.path) else { continue }
+                        let contents = (try? FileManager.default.contentsOfDirectory(at: searchDir, includingPropertiesForKeys: nil)) ?? []
+                        if let soFile = contents.first(where: { $0.pathExtension == libExt }) {
+                            if let soData = try? Data(contentsOf: soFile) {
+                                embeddedPlugins.append((
+                                    name: pluginName,
+                                    yaml: yamlContent,
+                                    base64Library: soData.base64EncodedString()
+                                ))
+                                if verbose {
+                                    print("  Embedded plugin '\(pluginName)' (\(soData.count) bytes → \(soFile.lastPathComponent))")
+                                }
+                            }
+                            break
+                        }
+                    }
+                }
+            } catch {
+                print("Warning: Failed to compile managed plugins for embedding: \(error)")
+            }
+        }
+
         // Generate LLVM IR
         if verbose {
             print("Generating LLVM IR...")
@@ -267,7 +333,12 @@ struct BuildCommand: AsyncParsableCommand {
 
         do {
             let codeGenerator = LLVMCodeGenerator()
-            llvmResult = try codeGenerator.generate(program: mergedProgram, openAPISpecJSON: openAPISpecJSON, templatesJSON: templatesJSON)
+            llvmResult = try codeGenerator.generate(
+                program: mergedProgram,
+                openAPISpecJSON: openAPISpecJSON,
+                templatesJSON: templatesJSON,
+                embeddedPlugins: embeddedPlugins.isEmpty ? nil : embeddedPlugins
+            )
             #if os(Linux)
             FileHandle.standardError.write("[BUILD] LLVM IR generated successfully\n".data(using: .utf8)!)
             #endif
@@ -480,42 +551,10 @@ struct BuildCommand: AsyncParsableCommand {
             }
         }
 
-        // Compile managed plugins if present (installed via aro add)
-        let sourceManagedPluginsDir = appConfig.rootPath.appendingPathComponent("Plugins")
-        let outputManagedPluginsDir = binaryPath.deletingLastPathComponent().appendingPathComponent("Plugins")
-
-        if FileManager.default.fileExists(atPath: sourceManagedPluginsDir.path) {
-            if verbose {
-                print("Compiling managed plugins...")
-            }
-
-            do {
-                // Clean output directory if it exists and is different from source
-                let sourceResolved = sourceManagedPluginsDir.standardizedFileURL.path
-                let outputResolved = outputManagedPluginsDir.standardizedFileURL.path
-
-                if sourceResolved != outputResolved {
-                    if FileManager.default.fileExists(atPath: outputManagedPluginsDir.path) {
-                        try FileManager.default.removeItem(at: outputManagedPluginsDir)
-                    }
-                }
-
-                // Compile managed plugins (Swift, C, etc.) to dynamic libraries
-                try PluginLoader.shared.compileManagedPlugins(from: sourceManagedPluginsDir, to: outputManagedPluginsDir)
-
-                if verbose {
-                    // Count compiled plugins
-                    let pluginDirs = try? FileManager.default.contentsOfDirectory(at: outputManagedPluginsDir, includingPropertiesForKeys: [.isDirectoryKey])
-                    let pluginCount = pluginDirs?.filter {
-                        var isDir: ObjCBool = false
-                        return FileManager.default.fileExists(atPath: $0.path, isDirectory: &isDir) && isDir.boolValue
-                    }.count ?? 0
-                    print("  \(pluginCount) managed plugin(s) compiled to: \(outputManagedPluginsDir.path)")
-                }
-            } catch {
-                print("Warning: Failed to compile managed plugins: \(error)")
-                // Continue - plugins are optional
-            }
+        // Managed plugins were pre-compiled above (before LLVM IR generation) so they
+        // could be embedded in the binary. Report the count if verbose.
+        if verbose && !embeddedPlugins.isEmpty {
+            print("  \(embeddedPlugins.count) managed plugin(s) embedded in binary")
         }
 
         let elapsed = Date().timeIntervalSince(startTime)
