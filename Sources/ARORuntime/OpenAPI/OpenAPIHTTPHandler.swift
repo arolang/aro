@@ -34,6 +34,17 @@ public final class OpenAPIHTTPHandler: @unchecked Sendable {
             )
         }
 
+        // Enforce security requirements declared in the OpenAPI spec.
+        if let unauthorized = SecurityEnforcer.enforce(
+            operation: match.operation,
+            globalSecurity: spec.security,
+            securitySchemes: spec.components?.securitySchemes,
+            headers: request.headers,
+            queryParameters: request.queryParameters
+        ) {
+            return unauthorized
+        }
+
         // Check for deprecated operation
         var responseHeaders: [String: String] = [
             "Content-Type": "application/json",

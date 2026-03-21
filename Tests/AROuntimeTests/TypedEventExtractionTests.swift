@@ -41,7 +41,8 @@ struct TypedEventExtractionTests {
             info: OpenAPIInfo(title: "Test API", version: "1.0.0", description: nil),
             paths: [:],
             components: components,
-            servers: nil
+            servers: nil,
+            security: nil
         )
     }
 

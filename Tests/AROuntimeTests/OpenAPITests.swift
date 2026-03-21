@@ -2244,4 +2244,441 @@ struct AdditionalPropertiesTests {
     }
 }
 
+// MARK: - SecurityEnforcer Tests
+
+@Suite("SecurityEnforcer Tests")
+struct SecurityEnforcerTests {
+
+    // MARK: Helpers
+
+    private func makeOperation(security: [[String: [String]]]? = nil) -> ARORuntime.Operation {
+        ARORuntime.Operation(
+            operationId: "testOp",
+            summary: nil,
+            description: nil,
+            tags: nil,
+            parameters: nil,
+            requestBody: nil,
+            responses: ["200": OpenAPIResponse(description: "OK", headers: nil, content: nil, ref: nil)],
+            deprecated: nil,
+            security: security
+        )
+    }
+
+    private func bearerScheme() -> SecurityScheme {
+        SecurityScheme(type: "http", description: nil, name: nil, in: nil, scheme: "bearer", bearerFormat: nil)
+    }
+
+    private func basicScheme() -> SecurityScheme {
+        SecurityScheme(type: "http", description: nil, name: nil, in: nil, scheme: "basic", bearerFormat: nil)
+    }
+
+    private func apiKeyHeaderScheme(name: String = "X-API-Key") -> SecurityScheme {
+        SecurityScheme(type: "apiKey", description: nil, name: name, in: "header", scheme: nil, bearerFormat: nil)
+    }
+
+    private func apiKeyQueryScheme(name: String = "api_key") -> SecurityScheme {
+        SecurityScheme(type: "apiKey", description: nil, name: name, in: "query", scheme: nil, bearerFormat: nil)
+    }
+
+    private func apiKeyCookieScheme(name: String = "session") -> SecurityScheme {
+        SecurityScheme(type: "apiKey", description: nil, name: name, in: "cookie", scheme: nil, bearerFormat: nil)
+    }
+
+    private func oauth2Scheme() -> SecurityScheme {
+        SecurityScheme(type: "oauth2", description: nil, name: nil, in: nil, scheme: nil, bearerFormat: nil)
+    }
+
+    private func openIdConnectScheme() -> SecurityScheme {
+        SecurityScheme(type: "openIdConnect", description: nil, name: nil, in: nil, scheme: nil, bearerFormat: nil)
+    }
+
+    // MARK: No Security
+
+    @Test("No security field on spec and operation — passes")
+    func testNoSecurityPassesThrough() {
+        let op = makeOperation(security: nil)
+        let result = SecurityEnforcer.enforce(
+            operation: op,
+            globalSecurity: nil,
+            securitySchemes: nil,
+            headers: [:],
+            queryParameters: [:]
+        )
+        #expect(result == nil)
+    }
+
+    @Test("Empty global security array — passes")
+    func testEmptyGlobalSecurityPasses() {
+        let op = makeOperation(security: nil)
+        let result = SecurityEnforcer.enforce(
+            operation: op,
+            globalSecurity: [],
+            securitySchemes: nil,
+            headers: [:],
+            queryParameters: [:]
+        )
+        #expect(result == nil)
+    }
+
+    @Test("Empty operation security array — explicitly public, passes")
+    func testEmptyOperationSecurityMeansPublic() {
+        let op = makeOperation(security: [])
+        let result = SecurityEnforcer.enforce(
+            operation: op,
+            globalSecurity: [["bearerAuth": []]],
+            securitySchemes: ["bearerAuth": bearerScheme()],
+            headers: [:],
+            queryParameters: [:]
+        )
+        #expect(result == nil)
+    }
+
+    // MARK: HTTP Bearer
+
+    @Test("Bearer token present — passes")
+    func testBearerTokenPresent() {
+        let op = makeOperation(security: [["bearerAuth": []]])
+        let result = SecurityEnforcer.enforce(
+            operation: op,
+            globalSecurity: nil,
+            securitySchemes: ["bearerAuth": bearerScheme()],
+            headers: ["Authorization": "Bearer mytoken123"],
+            queryParameters: [:]
+        )
+        #expect(result == nil)
+    }
+
+    @Test("Bearer token missing — 401")
+    func testBearerTokenMissing() {
+        let op = makeOperation(security: [["bearerAuth": []]])
+        let result = SecurityEnforcer.enforce(
+            operation: op,
+            globalSecurity: nil,
+            securitySchemes: ["bearerAuth": bearerScheme()],
+            headers: [:],
+            queryParameters: [:]
+        )
+        #expect(result?.statusCode == 401)
+    }
+
+    @Test("Bearer check is case-insensitive on header name")
+    func testBearerCaseInsensitiveHeaderName() {
+        let op = makeOperation(security: [["bearerAuth": []]])
+        let result = SecurityEnforcer.enforce(
+            operation: op,
+            globalSecurity: nil,
+            securitySchemes: ["bearerAuth": bearerScheme()],
+            headers: ["authorization": "Bearer tok"],
+            queryParameters: [:]
+        )
+        #expect(result == nil)
+    }
+
+    @Test("HTTP basic present — passes")
+    func testBasicAuthPresent() {
+        let op = makeOperation(security: [["basicAuth": []]])
+        let result = SecurityEnforcer.enforce(
+            operation: op,
+            globalSecurity: nil,
+            securitySchemes: ["basicAuth": basicScheme()],
+            headers: ["Authorization": "Basic dXNlcjpwYXNz"],
+            queryParameters: [:]
+        )
+        #expect(result == nil)
+    }
+
+    @Test("HTTP basic missing — 401")
+    func testBasicAuthMissing() {
+        let op = makeOperation(security: [["basicAuth": []]])
+        let result = SecurityEnforcer.enforce(
+            operation: op,
+            globalSecurity: nil,
+            securitySchemes: ["basicAuth": basicScheme()],
+            headers: [:],
+            queryParameters: [:]
+        )
+        #expect(result?.statusCode == 401)
+    }
+
+    // MARK: apiKey — header
+
+    @Test("apiKey header present — passes")
+    func testApiKeyHeaderPresent() {
+        let op = makeOperation(security: [["apiKeyAuth": []]])
+        let result = SecurityEnforcer.enforce(
+            operation: op,
+            globalSecurity: nil,
+            securitySchemes: ["apiKeyAuth": apiKeyHeaderScheme()],
+            headers: ["X-API-Key": "secret"],
+            queryParameters: [:]
+        )
+        #expect(result == nil)
+    }
+
+    @Test("apiKey header missing — 401")
+    func testApiKeyHeaderMissing() {
+        let op = makeOperation(security: [["apiKeyAuth": []]])
+        let result = SecurityEnforcer.enforce(
+            operation: op,
+            globalSecurity: nil,
+            securitySchemes: ["apiKeyAuth": apiKeyHeaderScheme()],
+            headers: [:],
+            queryParameters: [:]
+        )
+        #expect(result?.statusCode == 401)
+    }
+
+    @Test("apiKey header name match is case-insensitive")
+    func testApiKeyHeaderCaseInsensitive() {
+        let op = makeOperation(security: [["apiKeyAuth": []]])
+        let result = SecurityEnforcer.enforce(
+            operation: op,
+            globalSecurity: nil,
+            securitySchemes: ["apiKeyAuth": apiKeyHeaderScheme(name: "X-API-Key")],
+            headers: ["x-api-key": "secret"],
+            queryParameters: [:]
+        )
+        #expect(result == nil)
+    }
+
+    // MARK: apiKey — query
+
+    @Test("apiKey query present — passes")
+    func testApiKeyQueryPresent() {
+        let op = makeOperation(security: [["queryAuth": []]])
+        let result = SecurityEnforcer.enforce(
+            operation: op,
+            globalSecurity: nil,
+            securitySchemes: ["queryAuth": apiKeyQueryScheme()],
+            headers: [:],
+            queryParameters: ["api_key": "mykey"]
+        )
+        #expect(result == nil)
+    }
+
+    @Test("apiKey query missing — 401")
+    func testApiKeyQueryMissing() {
+        let op = makeOperation(security: [["queryAuth": []]])
+        let result = SecurityEnforcer.enforce(
+            operation: op,
+            globalSecurity: nil,
+            securitySchemes: ["queryAuth": apiKeyQueryScheme()],
+            headers: [:],
+            queryParameters: [:]
+        )
+        #expect(result?.statusCode == 401)
+    }
+
+    // MARK: apiKey — cookie
+
+    @Test("apiKey cookie present — passes")
+    func testApiKeyCookiePresent() {
+        let op = makeOperation(security: [["cookieAuth": []]])
+        let result = SecurityEnforcer.enforce(
+            operation: op,
+            globalSecurity: nil,
+            securitySchemes: ["cookieAuth": apiKeyCookieScheme()],
+            headers: ["Cookie": "session=abc123"],
+            queryParameters: [:]
+        )
+        #expect(result == nil)
+    }
+
+    @Test("apiKey cookie missing — 401")
+    func testApiKeyCookieMissing() {
+        let op = makeOperation(security: [["cookieAuth": []]])
+        let result = SecurityEnforcer.enforce(
+            operation: op,
+            globalSecurity: nil,
+            securitySchemes: ["cookieAuth": apiKeyCookieScheme()],
+            headers: [:],
+            queryParameters: [:]
+        )
+        #expect(result?.statusCode == 401)
+    }
+
+    // MARK: oauth2 / openIdConnect
+
+    @Test("oauth2 with Bearer token — passes")
+    func testOAuth2BearerPresent() {
+        let op = makeOperation(security: [["oauth2Auth": ["read"]]])
+        let result = SecurityEnforcer.enforce(
+            operation: op,
+            globalSecurity: nil,
+            securitySchemes: ["oauth2Auth": oauth2Scheme()],
+            headers: ["Authorization": "Bearer access_token"],
+            queryParameters: [:]
+        )
+        #expect(result == nil)
+    }
+
+    @Test("oauth2 without token — 401")
+    func testOAuth2BearerMissing() {
+        let op = makeOperation(security: [["oauth2Auth": ["read"]]])
+        let result = SecurityEnforcer.enforce(
+            operation: op,
+            globalSecurity: nil,
+            securitySchemes: ["oauth2Auth": oauth2Scheme()],
+            headers: [:],
+            queryParameters: [:]
+        )
+        #expect(result?.statusCode == 401)
+    }
+
+    @Test("openIdConnect with Bearer token — passes")
+    func testOpenIdConnectBearerPresent() {
+        let op = makeOperation(security: [["oidcAuth": []]])
+        let result = SecurityEnforcer.enforce(
+            operation: op,
+            globalSecurity: nil,
+            securitySchemes: ["oidcAuth": openIdConnectScheme()],
+            headers: ["Authorization": "Bearer id_token"],
+            queryParameters: [:]
+        )
+        #expect(result == nil)
+    }
+
+    @Test("openIdConnect without token — 401")
+    func testOpenIdConnectBearerMissing() {
+        let op = makeOperation(security: [["oidcAuth": []]])
+        let result = SecurityEnforcer.enforce(
+            operation: op,
+            globalSecurity: nil,
+            securitySchemes: ["oidcAuth": openIdConnectScheme()],
+            headers: [:],
+            queryParameters: [:]
+        )
+        #expect(result?.statusCode == 401)
+    }
+
+    // MARK: OR'd requirements
+
+    @Test("OR'd requirements: second satisfied — passes")
+    func testOrRequirementsSecondSatisfied() {
+        let op = makeOperation(security: [
+            ["bearerAuth": []],
+            ["apiKeyAuth": []]
+        ])
+        // No Bearer header, but API key present — second requirement satisfied
+        let result = SecurityEnforcer.enforce(
+            operation: op,
+            globalSecurity: nil,
+            securitySchemes: [
+                "bearerAuth": bearerScheme(),
+                "apiKeyAuth": apiKeyHeaderScheme()
+            ],
+            headers: ["X-API-Key": "secret"],
+            queryParameters: [:]
+        )
+        #expect(result == nil)
+    }
+
+    @Test("OR'd requirements: neither satisfied — 401")
+    func testOrRequirementsNeitherSatisfied() {
+        let op = makeOperation(security: [
+            ["bearerAuth": []],
+            ["apiKeyAuth": []]
+        ])
+        let result = SecurityEnforcer.enforce(
+            operation: op,
+            globalSecurity: nil,
+            securitySchemes: [
+                "bearerAuth": bearerScheme(),
+                "apiKeyAuth": apiKeyHeaderScheme()
+            ],
+            headers: [:],
+            queryParameters: [:]
+        )
+        #expect(result?.statusCode == 401)
+    }
+
+    // MARK: Global security fallback
+
+    @Test("Operation inherits global security — missing credentials return 401")
+    func testOperationInheritsGlobalSecurity() {
+        let op = makeOperation(security: nil)
+        let result = SecurityEnforcer.enforce(
+            operation: op,
+            globalSecurity: [["bearerAuth": []]],
+            securitySchemes: ["bearerAuth": bearerScheme()],
+            headers: [:],
+            queryParameters: [:]
+        )
+        #expect(result?.statusCode == 401)
+    }
+
+    @Test("Operation inherits global security — valid credentials pass")
+    func testOperationInheritsGlobalSecurityPasses() {
+        let op = makeOperation(security: nil)
+        let result = SecurityEnforcer.enforce(
+            operation: op,
+            globalSecurity: [["bearerAuth": []]],
+            securitySchemes: ["bearerAuth": bearerScheme()],
+            headers: ["Authorization": "Bearer tok"],
+            queryParameters: [:]
+        )
+        #expect(result == nil)
+    }
+
+    // MARK: Unknown scheme name
+
+    @Test("Unknown scheme name in requirement — 401")
+    func testUnknownSchemeNameReturns401() {
+        let op = makeOperation(security: [["unknownScheme": []]])
+        let result = SecurityEnforcer.enforce(
+            operation: op,
+            globalSecurity: nil,
+            securitySchemes: [:],
+            headers: ["Authorization": "Bearer tok"],
+            queryParameters: [:]
+        )
+        #expect(result?.statusCode == 401)
+    }
+
+    // MARK: 401 response shape
+
+    @Test("401 response contains correct status code and WWW-Authenticate header")
+    func test401ResponseShape() {
+        let op = makeOperation(security: [["bearerAuth": []]])
+        let response = SecurityEnforcer.enforce(
+            operation: op,
+            globalSecurity: nil,
+            securitySchemes: ["bearerAuth": bearerScheme()],
+            headers: [:],
+            queryParameters: [:]
+        )
+        #expect(response?.statusCode == 401)
+        #expect(response?.headers["WWW-Authenticate"] == "Bearer")
+        #expect(response?.headers["Content-Type"] == "application/json")
+    }
+
+    // MARK: OpenAPISpec global security parsing
+
+    @Test("Parse OpenAPISpec with global security field")
+    func testParseGlobalSecurity() throws {
+        let json = """
+        {
+            "openapi": "3.0.3",
+            "info": { "title": "Secure API", "version": "1.0.0" },
+            "paths": {},
+            "security": [{"bearerAuth": []}],
+            "components": {
+                "securitySchemes": {
+                    "bearerAuth": {
+                        "type": "http",
+                        "scheme": "bearer"
+                    }
+                }
+            }
+        }
+        """
+        let spec = try JSONDecoder().decode(OpenAPISpec.self, from: json.data(using: .utf8)!)
+        #expect(spec.security?.count == 1)
+        #expect(spec.security?.first?["bearerAuth"] != nil)
+        #expect(spec.components?.securitySchemes?["bearerAuth"]?.type == "http")
+        #expect(spec.components?.securitySchemes?["bearerAuth"]?.scheme == "bearer")
+    }
+}
+
 #endif  // !os(Windows)
