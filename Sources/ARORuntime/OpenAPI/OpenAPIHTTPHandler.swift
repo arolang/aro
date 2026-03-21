@@ -68,6 +68,22 @@ public final class OpenAPIHTTPHandler: @unchecked Sendable {
             }
         }
 
+        // Build allowEmptyValue lookup for query parameters defined in the spec.
+        // Parameters not listed in the spec are not subject to this filter.
+        var allowEmptyValueByName: [String: Bool] = [:]
+        for param in effectiveParameters where param.in == "query" {
+            allowEmptyValueByName[param.name] = param.allowEmptyValue ?? false
+        }
+
+        // Filter query parameters: remove entries where the value is empty string
+        // and allowEmptyValue is not explicitly true for that parameter.
+        let filteredQueryParameters: [String: String] = request.queryParameters.filter { name, value in
+            guard value.isEmpty else { return true }
+            // If the parameter is not in the spec, always pass through.
+            guard let allowEmpty = allowEmptyValueByName[name] else { return true }
+            return allowEmpty
+        }
+
         let event = HTTPOperationEvent(
             requestId: request.id,
             operationId: match.operationId,
@@ -75,7 +91,7 @@ public final class OpenAPIHTTPHandler: @unchecked Sendable {
             path: path,
             pathTemplate: match.pathTemplate,
             pathParameters: match.pathParameters,
-            queryParameters: request.queryParameters,
+            queryParameters: filteredQueryParameters,
             headers: request.headers,
             body: request.body,
             operation: match.operation
