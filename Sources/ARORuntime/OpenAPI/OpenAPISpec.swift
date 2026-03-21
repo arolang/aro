@@ -198,6 +198,29 @@ public enum AnyCodableValue: Sendable, Codable, Equatable {
     }
 }
 
+// MARK: - Discriminator
+
+/// OpenAPI `discriminator` object for polymorphic schemas.
+///
+/// When a `oneOf` or `anyOf` schema includes a discriminator, the runtime
+/// uses the value of `propertyName` in the incoming payload to select the
+/// correct sub-schema directly, avoiding the need to try every alternative.
+///
+/// ```yaml
+/// discriminator:
+///   propertyName: type
+///   mapping:
+///     cat: "#/components/schemas/Cat"
+///     dog: "#/components/schemas/Dog"
+/// ```
+public struct Discriminator: Sendable, Codable {
+    /// The name of the property in the payload whose value identifies the sub-schema.
+    public let propertyName: String
+    /// Optional explicit mapping from discriminator values to `$ref` strings.
+    /// When absent, the convention `#/components/schemas/{value}` is used.
+    public let mapping: [String: String]?
+}
+
 // MARK: - AdditionalProperties
 
 /// Represents the OpenAPI `additionalProperties` keyword.
@@ -253,6 +276,7 @@ public final class Schema: Sendable, Codable {
     public let enumValues: [AnyCodableValue]?
     public let defaultValue: AnyCodableValue?
     public let additionalProperties: AdditionalProperties?
+    public let discriminator: Discriminator?
 
     private enum CodingKeys: String, CodingKey {
         case type, format, title, description, properties, required
@@ -263,6 +287,7 @@ public final class Schema: Sendable, Codable {
         case enumValues = "enum"
         case defaultValue = "default"
         case additionalProperties
+        case discriminator
     }
 
     public init(
@@ -288,7 +313,8 @@ public final class Schema: Sendable, Codable {
         not: SchemaRef? = nil,
         enumValues: [AnyCodableValue]? = nil,
         defaultValue: AnyCodableValue? = nil,
-        additionalProperties: AdditionalProperties? = nil
+        additionalProperties: AdditionalProperties? = nil,
+        discriminator: Discriminator? = nil
     ) {
         self.type = type
         self.format = format
@@ -313,6 +339,7 @@ public final class Schema: Sendable, Codable {
         self.enumValues = enumValues
         self.defaultValue = defaultValue
         self.additionalProperties = additionalProperties
+        self.discriminator = discriminator
     }
 }
 

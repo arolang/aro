@@ -167,6 +167,22 @@ public struct SchemaBinding {
 
         // anyOf: must match at least one sub-schema
         if let anyOf = schema.anyOf, !anyOf.isEmpty {
+            // Fast path: use discriminator to select sub-schema directly
+            if let discriminator = schema.discriminator,
+               let dict = json as? [String: Any],
+               let discriminatorValue = dict[discriminator.propertyName] as? String {
+                let targetRef: String
+                if let mapping = discriminator.mapping, let mapped = mapping[discriminatorValue] {
+                    targetRef = mapped
+                } else {
+                    targetRef = "#/components/schemas/\(discriminatorValue)"
+                }
+                guard let resolved = resolveRef(targetRef, components: components) else {
+                    throw SchemaBindingError.invalidReference(targetRef)
+                }
+                return try parseValue(json: json, schema: resolved, components: components)
+            }
+            // Normal path: try each sub-schema in order
             for subRef in anyOf {
                 if let result = try? parseValue(json: json, schema: subRef.value, components: components) {
                     return result
@@ -177,6 +193,22 @@ public struct SchemaBinding {
 
         // oneOf: must match exactly one sub-schema
         if let oneOf = schema.oneOf, !oneOf.isEmpty {
+            // Fast path: use discriminator to select sub-schema directly
+            if let discriminator = schema.discriminator,
+               let dict = json as? [String: Any],
+               let discriminatorValue = dict[discriminator.propertyName] as? String {
+                let targetRef: String
+                if let mapping = discriminator.mapping, let mapped = mapping[discriminatorValue] {
+                    targetRef = mapped
+                } else {
+                    targetRef = "#/components/schemas/\(discriminatorValue)"
+                }
+                guard let resolved = resolveRef(targetRef, components: components) else {
+                    throw SchemaBindingError.invalidReference(targetRef)
+                }
+                return try parseValue(json: json, schema: resolved, components: components)
+            }
+            // Normal path: try all sub-schemas and expect exactly one match
             var results: [Any] = []
             for subRef in oneOf {
                 if let result = try? parseValue(json: json, schema: subRef.value, components: components) {
