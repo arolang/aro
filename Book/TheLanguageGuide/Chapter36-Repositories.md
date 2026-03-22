@@ -107,7 +107,7 @@ All of these are equivalent:
 
 ```aro
 Store the <user> into the <user-repository>.
-Store the <user> in the <user-repository>.
+Store the <user> into the <user-repository>.
 Store the <user> to the <user-repository>.
 ```
 
@@ -131,7 +131,7 @@ Store the <user3> into the <user-repository>.
 
 ### Automatic Deduplication
 
-When `<Store>` is called, the runtime automatically deduplicates plain values (strings, numbers, booleans). If the value already exists in the repository, it is not stored again and **no observer event fires**. This means repository observers naturally handle deduplication — they only trigger for genuinely new entries.
+When `<Store>` is called, the runtime automatically deduplicates plain values (strings, numbers, booleans). If the value already exists into the repository, it is not stored again and **no observer event fires**. This means repository observers naturally handle deduplication — they only trigger for genuinely new entries.
 
 **Preferred pattern — use observers:**
 
@@ -451,7 +451,7 @@ Observers are triggered for three types of changes:
     Extract the <oldName> from the <event: oldValue: name>.
     Extract the <newName> from the <event: newValue: name>.
 
-    Compute the <message> from "User " + <entityId> + " renamed from " + <oldName> + " to " + <newName>.
+    Compute the <message> from "User " ++ <entityId> ++ " renamed from " ++ <oldName> ++ " to " ++ <newName>.
     Log <message> to the <console>.
 
     Return an <OK: status> for the <tracking>.
