@@ -1,0 +1,3 @@
+mode: both
+skip-on-windows: HTTP server tests not supported on Windows CI
+occurrence-check: true

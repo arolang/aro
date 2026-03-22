@@ -48,13 +48,13 @@ public struct ExtractAction: ActionImplementation {
         if object.base == "parameter" {
             if let paramName = object.specifiers.first {
                 // Extract specific parameter
-                guard let value = ParameterStorage.shared.get(paramName) else {
+                guard let value = context.container.parameterStorage.get(paramName) else {
                     throw ActionError.undefinedVariable("parameter:\(paramName)")
                 }
                 return value
             } else {
                 // Return all parameters as a dictionary
-                return ParameterStorage.shared.getAll()
+                return context.container.parameterStorage.getAll()
             }
         }
 
@@ -746,16 +746,16 @@ public struct RetrieveAction: ActionImplementation {
                     )
                 }
             } else {
-                // Fallback to shared instance if service not registered
+                // Fallback to container storage if service not registered
                 if let field = whereField, let matchValue = whereValue {
-                    values = await InMemoryRepositoryStorage.shared.retrieve(
+                    values = await context.container.repositoryStorage.retrieve(
                         from: repoName,
                         businessActivity: context.businessActivity,
                         where: field,
                         equals: matchValue
                     )
                 } else {
-                    values = await InMemoryRepositoryStorage.shared.retrieve(
+                    values = await context.container.repositoryStorage.retrieve(
                         from: repoName,
                         businessActivity: context.businessActivity
                     )
