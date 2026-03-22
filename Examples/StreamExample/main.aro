@@ -1,0 +1,34 @@
+(* =========================================================
+   StreamExample
+   =========================================================
+   Demonstrates the Stream action: opens a file and yields
+   one line at a time without loading the entire file into
+   memory first.
+
+   Stream works identically for 5 lines or 5 billion lines —
+   only the current line is ever in memory at any time (O(1)).
+
+   Compare with the eager approach that fails on large files:
+       Read the <raw>   from "./sample.txt".    -- loads entire file
+       Split the <lines> from <raw> by /\n/.    -- duplicates in memory
+       for each <line> in <lines> { ... }        -- iterates the copy
+
+   Run:
+       aro run ./Examples/StreamExample
+   ========================================================= *)
+
+(Application-Start: Stream Example) {
+    Log "=== Stream Example ===" to the <console>.
+    Log "Reading sample.txt line by line (O(1) memory):" to the <console>.
+
+    (* Stream opens the file and yields one line at a time.
+       No full-file load; no intermediate [String] array is created. *)
+    Stream the <lines> from "./sample.txt".
+
+    for each <line> in <lines> {
+        Log <line> to the <console>.
+    }
+
+    Log "=== Done ===" to the <console>.
+    Return an <OK: status> for the <example>.
+}

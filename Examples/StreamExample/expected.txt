@@ -1,0 +1,14 @@
+# Generated: 2026-03-22
+# Type: console
+# Command: aro run ./Examples/StreamExample
+# Workdir: Examples/StreamExample
+---
+=== Stream Example ===
+Reading sample.txt line by line (O(1) memory):
+alpha
+bravo
+charlie
+delta
+echo
+=== Done ===
+example

@@ -243,6 +243,120 @@ This keeps memory at O(1) regardless of collection size.
 
 ---
 
+## The `Stream` Action: Explicit File Streaming
+
+The automatic streaming described above applies to `Read` + pipeline operations. For cases where you want to make the lazy semantics explicit at the call site — or where you are iterating a plain-text file line by line and do not need format detection — ARO provides the `Stream` action.
+
+### Syntax
+
+```aro
+Stream the <result> from <file-path>.
+```
+
+`Stream` opens the file and yields one raw line at a time directly to your `for each` loop. No `Split` step is needed.
+
+### Read + Split vs Stream
+
+| | `Read` + `Split` | `Stream` |
+|---|---|---|
+| Peak memory | O(file size) × 3 | O(1) |
+| Format detection | ✅ JSON / CSV / YAML / JSONL | ❌ Raw lines only |
+| Count lines before iterating | ✅ `Compute the <n: count>` | ❌ Materialises stream |
+| Best for | Structured formats, small/medium files | Large plain-text files, log files, data files |
+
+The three-times multiplier for `Read` + `Split` occurs because three copies of the data live in memory simultaneously:
+
+1. The raw file content (`String` from `Read`)
+2. The split array (`[String]` from `Split`)
+3. The boxed iteration copy (`[any Sendable]` inside `for each`)
+
+`Stream` keeps only the current line in memory at any point.
+
+### Example
+
+```aro
+(Application-Start: Sum Numbers) {
+    (* Stream opens the file lazily — no full-file load.
+       The 1 GB file uses ~10 MB peak memory instead of ~15 GB. *)
+    Stream the <lines> from "./numbers.dat".
+
+    Create the <init> with { sum: 0.0, count: 0 }.
+    Store the <seeded: init> into <acc>.
+    Extract the <acc-id> from the <seeded: id>.
+
+    for each <raw-line> in <lines> {
+        Transform the <num: float> from the <raw-line>.
+
+        Retrieve the <cur>       from the <acc> where <id> = <acc-id>.
+        Extract the <prev-sum>   from the <cur: sum>.
+        Extract the <prev-count> from the <cur: count>.
+
+        Compute the <new-sum>   from <prev-sum>   + <num>.
+        Compute the <new-count> from <prev-count> + 1.
+
+        Create the <upd> with { id: <acc-id>, sum: <new-sum>, count: <new-count> }.
+        Update the <upd> into <acc>.
+    }
+
+    Retrieve the <result>     from the <acc> where <id> = <acc-id>.
+    Extract the <total-sum>   from the <result: sum>.
+    Extract the <total-count> from the <result: count>.
+    Compute the <avg>         from <total-sum> / <total-count>.
+
+    Log "Processed:" to the <console>.
+    Log <total-count> to the <console>.
+    Log "Sum:"     to the <console>.
+    Log <total-sum> to the <console>.
+    Log "Average:" to the <console>.
+    Log <avg> to the <console>.
+
+    Return an <OK: status> for the <sumup>.
+}
+```
+
+### Why `count` Does Not Work on Streams
+
+Counting a stream requires reading every element — that defeats the purpose of streaming:
+
+```aro
+Stream the <lines> from "./bigfile.dat".
+
+(* ✗ Runtime error: "Cannot count a stream — streams must be consumed
+      with 'for each'. Remove this count statement, or replace 'Stream'
+      with 'Read' if you need the total count." *)
+Compute the <n: count> from <lines>.
+```
+
+If you need the line count before iterating, use `Read` instead (which loads the file eagerly):
+
+```aro
+Read the <raw> from "./bigfile.dat".
+Split the <lines> from <raw> by /\n/.
+Compute the <n: count> from <lines>.    (* ✓ works — full file is in memory *)
+for each <line> in <lines> { ... }
+```
+
+### SSE and WebSocket Streaming
+
+`Stream` also handles HTTP streaming sources. When the source starts with `http://`, `https://`, `ws://`, or `wss://`, it opens a persistent Server-Sent Events or WebSocket connection and emits domain events for each message (see **Chapter 45: WebSockets**):
+
+```aro
+(* File streaming — lazy line-by-line, iterated with for each *)
+Stream the <lines> from "./access.log".
+
+(* SSE streaming — emits domain events for incoming server messages *)
+Stream the <price-update> from "https://api.example.com/prices/stream".
+Keepalive the <application> for the <events>.
+```
+
+Both uses share the same verb; the runtime distinguishes them by the source prefix.
+
+### How It Fits Into the Runtime
+
+Internally, `Stream` (file mode) creates an `AROStream<String>` backed by `URL.lines` (64 KB kernel reads) and binds it lazily via `RuntimeContext.bindLazy`. The `for each` loop detects the lazy binding and iterates the stream directly — no array is ever allocated. `Task.yield()` is called every 500 iterations so Swift's cooperative scheduler can dispatch other pending tasks, keeping all CPU cores available.
+
+---
+
 ## Choosing the Right Format for Streaming
 
 Different file formats have dramatically different streaming characteristics. Choosing the right format can mean the difference between O(1) and O(n) memory usage.
