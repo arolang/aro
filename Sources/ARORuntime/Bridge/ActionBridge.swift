@@ -222,10 +222,16 @@ private func executeAction(
     // This allows variables to be updated in loop iterations
     if let value = actionResult.value {
         if shouldBindResult {
-            if ctxHandle.context.exists(resultDesc.base) {
-                ctxHandle.context.unbind(resultDesc.base)
+            // Skip rebind if the action already performed a bindLazy (e.g. StreamAction).
+            // In that case the context holds AnyStreamingValue; overwriting with the raw
+            // return value would lose the lazy-stream wrapper and break aro_runtime_is_stream.
+            let alreadyBoundAsStream = ctxHandle.context.resolveAny(resultDesc.base) is AnyStreamingValue
+            if !alreadyBoundAsStream {
+                if ctxHandle.context.exists(resultDesc.base) {
+                    ctxHandle.context.unbind(resultDesc.base)
+                }
+                ctxHandle.context.bind(resultDesc.base, value: value)
             }
-            ctxHandle.context.bind(resultDesc.base, value: value)
         }
         return boxResult(value)
     }

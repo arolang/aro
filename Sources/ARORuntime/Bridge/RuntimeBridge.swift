@@ -2927,6 +2927,92 @@ public func aro_evaluate_filter(
     return 0
 }
 
+// MARK: - Stream For-Each (ARO-0051 Streaming)
+
+/// Returns 1 if the named variable holds a lazy AROStream, 0 otherwise.
+/// Used by compiled binaries to choose the stream iteration path.
+@_cdecl("aro_runtime_is_stream")
+public func aro_runtime_is_stream(
+    _ contextPtr: UnsafeMutableRawPointer?,
+    _ varName: UnsafePointer<CChar>?
+) -> Int32 {
+    guard let ptr = contextPtr,
+          let nameStr = varName.map({ String(cString: $0) }) else { return 0 }
+    let contextHandle = Unmanaged<AROCContextHandle>.fromOpaque(ptr).takeUnretainedValue()
+    if contextHandle.context.resolveAny(nameStr) is AnyStreamingValue { return 1 }
+    return 0
+}
+
+/// Iterates a lazy stream variable in the context, calling the loop body function for each element.
+///
+/// Signature of loopBodyFn: `ptr loopBodyFn(ptr ctx, ptr element, i64 index) -> ptr`
+/// The callback is called synchronously for each element from within a Task.
+/// Iteration stops when the stream is exhausted or the context reports an error.
+///
+/// - Parameters:
+///   - contextPtr: Execution context handle
+///   - varName: Name of the stream variable in the context
+///   - loopBodyFn: Pointer to the loop body function (same signature as parallel for-each bodies)
+@_cdecl("aro_runtime_foreach_stream")
+public func aro_runtime_foreach_stream(
+    _ contextPtr: UnsafeMutableRawPointer?,
+    _ varName: UnsafePointer<CChar>?,
+    _ loopBodyFn: UnsafeMutableRawPointer?
+) {
+    guard let ptr = contextPtr,
+          let nameStr = varName.map({ String(cString: $0) }),
+          let bodyFn = loopBodyFn else { return }
+
+    let contextHandle = Unmanaged<AROCContextHandle>.fromOpaque(ptr).takeUnretainedValue()
+
+    // Resolve the stream value (works for any element type)
+    guard let anyValue = contextHandle.context.resolveAny(nameStr) as? AnyStreamingValue else {
+        return
+    }
+    let stream: AROStream<any Sendable> = anyValue.asStream()
+
+    typealias LoopBodyFunc = @convention(c) (
+        UnsafeMutableRawPointer?,   // context ptr
+        UnsafeMutableRawPointer?,   // element ptr
+        Int64                        // index
+    ) -> UnsafeMutableRawPointer?
+
+    let body = unsafeBitCast(bodyFn, to: LoopBodyFunc.self)
+
+    // Capture everything needed inside the Task in a Sendable box.
+    final class StreamIterState: @unchecked Sendable {
+        let stream: AROStream<any Sendable>
+        let contextPtr: UnsafeMutableRawPointer
+        let contextHandle: AROCContextHandle
+        let body: LoopBodyFunc
+        init(_ s: AROStream<any Sendable>, _ cp: UnsafeMutableRawPointer,
+             _ ch: AROCContextHandle, _ b: LoopBodyFunc) {
+            stream = s; contextPtr = cp; contextHandle = ch; body = b
+        }
+    }
+    let state = StreamIterState(stream, ptr, contextHandle, body)
+
+    // Drain the stream synchronously: run iteration in a detached Task,
+    // block the calling thread with a semaphore until all items are processed.
+    let semaphore = DispatchSemaphore(value: 0)
+    Task.detached { [state] in
+        do {
+            var index: Int64 = 0
+            for try await item in state.stream.stream {
+                let boxed = AROCValue(value: item)
+                let elementPtr = UnsafeMutableRawPointer(Unmanaged.passRetained(boxed).toOpaque())
+                _ = state.body(state.contextPtr, elementPtr, index)
+                Unmanaged<AROCValue>.fromOpaque(elementPtr).release()
+                // Stop if an action in the body set an error on the context
+                if state.contextHandle.context.getExecutionError() != nil { break }
+                index += 1
+            }
+        } catch {}
+        semaphore.signal()
+    }
+    semaphore.wait()
+}
+
 // MARK: - Mutable Scope (ARO-0131 While Loop)
 
 /// Enter a mutable scope in the given context (called at start of while loop)

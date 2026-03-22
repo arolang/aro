@@ -207,6 +207,9 @@ public struct StreamAction: ActionImplementation {
                 .appendingPathComponent(source)
         }
 
+        // Both modes use the lazy O(1) stream — only one line in memory at a time.
+        // Interpreter mode: consumed by executeStreamForEachLoop in FeatureSetExecutor.
+        // Binary mode: consumed by aro_runtime_foreach_stream callback loop in compiled code.
         let capturedURL = fileURL
         let stream = AROStream<any Sendable> {
             AsyncThrowingStream { continuation in
