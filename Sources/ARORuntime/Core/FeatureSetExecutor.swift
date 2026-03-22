@@ -803,6 +803,13 @@ public final class FeatureSetExecutor: Sendable {
             throw ActionError.undefinedVariable(loop.collection.base)
         }
 
+        // Lazy stream path: iterate without materialising the collection into memory (ARO-0051).
+        // Specifiers are not supported on streams — they require an in-memory value.
+        if let anyStream = collectionValue as? AnyStreamingValue, loop.collection.specifiers.isEmpty {
+            try await executeStreamForEachLoop(loop, stream: anyStream.asStream(), context: context)
+            return
+        }
+
         // Handle specifiers as property access (e.g., <team: members> -> team.members)
         for specifier in loop.collection.specifiers {
             collectionValue = try accessCollectionProperty(specifier, on: collectionValue)
@@ -869,6 +876,10 @@ public final class FeatureSetExecutor: Sendable {
         } else {
             // Sequential execution
             for (index, item) in items.enumerated() {
+                // Cooperative scheduling: yield every 500 iterations so other Swift tasks
+                // can run and the process does not pin a single CPU core at 100%.
+                if index % 500 == 0 { await Task.yield() }
+
                 // Create fresh child context for this iteration
                 // This gives us fresh immutable bindings per iteration
                 let iterationContext = context.createChild(featureSetName: context.featureSetName)
@@ -895,6 +906,45 @@ public final class FeatureSetExecutor: Sendable {
                     }
                 }
             }
+        }
+    }
+
+    // MARK: - Streaming For-Each (ARO-0051)
+
+    /// Iterates an `AROStream` without materialising it into an array.
+    ///
+    /// Memory usage stays O(1): only the current item exists in memory at any point.
+    /// `Task.yield()` is called every 500 items so Swift's cooperative scheduler can
+    /// dispatch other pending tasks and all CPU cores remain available.
+    private func executeStreamForEachLoop(
+        _ loop: ForEachLoop,
+        stream: AROStream<any Sendable>,
+        context: ExecutionContext
+    ) async throws {
+        var index = 0
+        for try await item in stream.stream {
+            // Cooperative scheduling to avoid pinning a single CPU core at 100%
+            if index % 500 == 0 { await Task.yield() }
+
+            let iterationContext = context.createChild(featureSetName: context.featureSetName)
+            iterationContext.bind(loop.itemVariable, value: item)
+            if let indexVar = loop.indexVariable {
+                iterationContext.bind(indexVar, value: index)
+            }
+
+            if let filter = loop.filter {
+                let filterResult = try await expressionEvaluator.evaluate(filter, context: iterationContext)
+                guard let passes = filterResult as? Bool, passes else {
+                    index += 1
+                    continue
+                }
+            }
+
+            for bodyStatement in loop.body {
+                try await executeStatement(bodyStatement, context: iterationContext)
+                if iterationContext.getResponse() != nil { return }
+            }
+            index += 1
         }
     }
 

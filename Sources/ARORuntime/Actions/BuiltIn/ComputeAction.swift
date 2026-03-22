@@ -127,6 +127,12 @@ public struct ComputeAction: ActionImplementation {
             if let dict = input as? [String: any Sendable] {
                 return dict.count
             }
+            if input is AnyStreamingValue {
+                throw ActionError.runtimeError(
+                    "Cannot count a stream — streams must be consumed with 'for each'. " +
+                    "Remove this count statement, or replace 'Stream' with 'Read' if you need the total count."
+                )
+            }
             // For types where count/length doesn't apply (Int, Double, etc.),
             // return input unchanged (identity behavior). This allows using
             // "count" as a variable name in sink syntax: <Compute> the <count> from 42.
