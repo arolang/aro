@@ -1407,17 +1407,73 @@ public actor ExecutionEngine {
 
 // MARK: - Global Symbol Storage
 
+/// A single published symbol entry.
+public struct PublishedSymbol: Sendable {
+    public let value: any Sendable
+    public let featureSet: String
+    public let businessActivity: String
+    /// Unique ID of the feature-set invocation that published this symbol.
+    /// Used by `evict(executionId:)` to remove symbols when their execution ends.
+    public let executionId: String
+}
+
 /// Thread-safe storage for published symbols with business activity enforcement.
 /// Converted to actor for Swift 6.2 concurrency safety (Issue #2).
+///
+/// Symbols are scoped to their publishing execution. When `evict(executionId:)`
+/// is called after a feature set completes, its symbols are removed unless a
+/// newer invocation has overwritten them (ownership guard prevents stale eviction).
+/// Application-lifecycle feature sets (Application-Start / Application-End) are
+/// intentionally excluded from eviction so their symbols persist for the entire
+/// process lifetime.
 public actor GlobalSymbolStorage {
-    private var symbols: [String: (value: any Sendable, featureSet: String, businessActivity: String)] = [:]
+    private var symbols: [String: PublishedSymbol] = [:]
+
+    /// Reverse index: executionId → symbol names it owns.
+    /// Enables O(1) bulk eviction without scanning the entire symbol table.
+    private var executionIndex: [String: Set<String>] = [:]
 
     public init() {}
 
-    /// Store a published symbol with its business activity
-    public func publish(name: String, value: any Sendable, fromFeatureSet: String, businessActivity: String) {
-        symbols[name] = (value, fromFeatureSet, businessActivity)
+    // MARK: - Write
+
+    /// Store a published symbol with its business activity and execution owner.
+    public func publish(
+        name: String,
+        value: any Sendable,
+        fromFeatureSet: String,
+        businessActivity: String,
+        executionId: String
+    ) {
+        // If a previous entry exists under the same name, remove it from the
+        // old execution's index to keep the index clean.
+        if let existing = symbols[name], existing.executionId != executionId {
+            executionIndex[existing.executionId]?.remove(name)
+        }
+        symbols[name] = PublishedSymbol(
+            value: value,
+            featureSet: fromFeatureSet,
+            businessActivity: businessActivity,
+            executionId: executionId
+        )
+        executionIndex[executionId, default: []].insert(name)
     }
+
+    /// Remove all symbols published by a specific execution.
+    ///
+    /// The ownership guard ensures that a late-arriving eviction cannot remove
+    /// a symbol that was overwritten by a newer invocation: the stored
+    /// `executionId` is checked before deleting.
+    public func evict(executionId: String) {
+        guard let names = executionIndex.removeValue(forKey: executionId) else { return }
+        for name in names {
+            if symbols[name]?.executionId == executionId {
+                symbols.removeValue(forKey: name)
+            }
+        }
+    }
+
+    // MARK: - Read
 
     /// Resolve a published symbol (validates business activity)
     /// - Parameters:
@@ -1483,9 +1539,12 @@ public actor GlobalSymbolStorage {
     }
 
     /// Get all published symbols (for eager binding in feature sets)
-    public func allSymbols() -> [String: (value: any Sendable, featureSet: String, businessActivity: String)] {
+    public func allSymbols() -> [String: PublishedSymbol] {
         return symbols
     }
+
+    /// Total number of currently stored symbols. Useful for memory monitoring.
+    public var count: Int { symbols.count }
 }
 
 // MARK: - Service Registry
