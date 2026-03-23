@@ -25,15 +25,8 @@ program = { feature_set } ;
 (* Feature set definition *)
 feature_set = "(" , feature_name , ":" , business_activity , ")" , block ;
 
-feature_name = identifier | route_pattern ;
+feature_name = identifier , { identifier } ;
 business_activity = identifier , { identifier } ;
-
-(* Route patterns for HTTP handlers *)
-route_pattern = http_method , route_path ;
-http_method = "GET" | "POST" | "PUT" | "DELETE" | "PATCH" ;
-route_path = "/" , { path_segment , "/" } , [ path_segment ] ;
-path_segment = identifier | path_parameter ;
-path_parameter = "{" , identifier , "}" ;
 
 (* Block of statements *)
 block = "{" , { statement } , "}" ;

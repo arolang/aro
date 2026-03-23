@@ -53,7 +53,7 @@ Complete reference for all built-in actions in ARO.
 | **Broadcast** | SERVICE | Send to all connections | `Broadcast the <msg> to the <server>.` |
 | **Keepalive** | SERVICE | Keep app running | `Keepalive the <app> for the <events>.` |
 | **Call** | SERVICE | Call external API | `Call the <result> via <API: POST /users>.` |
-| **Accept** | STATE | Accept state transition | `Accept the <order: placed>.` |
+| **Accept** | STATE | Accept state transition | `Accept the <transition: draft_to_placed> on <order: status>.` |
 | **Given** | TEST | Test precondition | `Given the <user> with { name: "Test" }.` |
 | **When** | TEST | Test action | `When the <action> is performed.` |
 | **Then** | TEST | Test expectation | `Then the <result> should be <expected>.` |
@@ -625,9 +625,9 @@ Publish as <current-user> <user>.
 
 ### Log
 
-**Role:** RESPONSE
+**Role:** EXPORT
 **Verbs:** log, print, output, debug
-**Prepositions:** for, to, with
+**Prepositions:** to, for, with
 
 Outputs messages to console (stdout or stderr).
 
@@ -1255,7 +1255,7 @@ The `Keepalive` action blocks execution until a shutdown signal is received (SIG
 | Throw | RESPONSE | for |
 | Store | EXPORT | into |
 | Publish | EXPORT | as |
-| Log | EXPORT | for, with |
+| Log | EXPORT | to, for, with |
 | Send | EXPORT | to, with |
 | Emit | EXPORT | with |
 | Write | EXPORT | to |
@@ -1276,7 +1276,7 @@ The `Keepalive` action blocks execution until a shutdown signal is received (SIG
 | Call | SERVICE | via, with |
 | Broadcast | SERVICE | to, with |
 | Keepalive | SERVICE | for |
-| Accept | STATE | - |
+| Accept | STATE | on |
 | Prompt | TERMINAL | with, from |
 | Select | TERMINAL | from, with |
 | Clear | TERMINAL | for |

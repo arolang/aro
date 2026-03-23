@@ -115,7 +115,7 @@ When any step fails, the runtime generates an error message from the statement:
 | `Extract the <id> from the <pathParameters: id>.` | `Cannot extract the id from the pathParameters: id.` |
 | `Retrieve the <user> from the <user-repository> where id = <id>.` | `Cannot retrieve the user from the user-repository where id = 530.` |
 | `Validate the <email> for the <email-format>.` | `Cannot validate the email for the email-format.` |
-| `Store the <order> in the <order-repository>.` | `Cannot store the order in the order-repository.` |
+| `Store the <order> into the <order-repository>.` | `Cannot store the order in the order-repository.` |
 
 ### Conditions Become Part of the Error
 
@@ -342,7 +342,7 @@ ARO is NOT designed for:
     Validate the <data: email> for the <email-format>.
     Validate the <data: password> for the <password-strength>.
     Create the <user> with <data>.
-    Store the <user> in the <user-repository>.
+    Store the <user> into the <user-repository>.
     Return a <Created: status> with <user>.
 }
 ```
