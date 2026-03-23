@@ -174,7 +174,7 @@ ecommerce-api/
 (createOrder: Order API) {
     Extract the <order-data> from the <request: body>.
     Create the <order> with <order-data>.
-    Store the <order> in the <order-repository>.
+    Store the <order> into the <order-repository>.
     Emit an <OrderPlaced: event> with <order>.
     Return a <Created: status> with <order>.
 }

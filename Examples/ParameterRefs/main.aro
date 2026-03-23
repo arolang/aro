@@ -1,0 +1,16 @@
+(Application-Start: Parameter Refs API) {
+    Log "Starting Parameter Refs API on port 8087..." to the <console>.
+    Start the <http-server> with <contract>.
+    Keepalive the <application> for the <events>.
+    Return an <OK: status> for the <startup>.
+}
+
+(greet: Parameter Refs API) {
+    Create the <greeting> with { message: "Hello, World!" }.
+    Return an <OK: status> with <greeting>.
+}
+
+(farewell: Parameter Refs API) {
+    Create the <greeting> with { message: "Goodbye, World!" }.
+    Return an <OK: status> with <greeting>.
+}

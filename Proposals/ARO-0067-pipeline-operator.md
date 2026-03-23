@@ -18,7 +18,7 @@ Extract the <raw-data> from the <request: body>.
 Transform the <cleaned-data> from the <raw-data> with "trim".
 Transform the <parsed-data> from the <cleaned-data> with "parse-json".
 Validate the <valid-data> from the <parsed-data>.
-Store the <valid-data> in the <repository>.
+Store the <valid-data> into the <repository>.
 ```
 
 ## Solution
