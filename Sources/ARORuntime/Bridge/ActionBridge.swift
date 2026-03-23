@@ -200,6 +200,7 @@ private func executeAction(
             let runtime = ctxHandle.runtime.runtime
             let businessActivity = ctxHandle.context.businessActivity
             let featureSetName = ctxHandle.context.featureSetName
+            let executionId = ctxHandle.context.executionId
 
             // Store in globalSymbols asynchronously
             Task { @Sendable in
@@ -208,7 +209,8 @@ private func executeAction(
                     name: externalName,
                     value: value,
                     fromFeatureSet: featureSetName,
-                    businessActivity: businessActivity
+                    businessActivity: businessActivity,
+                    executionId: executionId
                 )
             }
         }
@@ -899,6 +901,55 @@ public func aro_action_signal(
     _ objectPtr: UnsafeRawPointer?
 ) -> UnsafeMutableRawPointer? {
     return executeAction(verb: "signal", contextPtr: contextPtr, resultPtr: resultPtr, objectPtr: objectPtr)
+}
+
+// MARK: - Terminal UI Actions
+
+@_cdecl("aro_action_render")
+public func aro_action_render(
+    _ contextPtr: UnsafeMutableRawPointer?,
+    _ resultPtr: UnsafeRawPointer?,
+    _ objectPtr: UnsafeRawPointer?
+) -> UnsafeMutableRawPointer? {
+    return executeAction(verb: "render", contextPtr: contextPtr, resultPtr: resultPtr, objectPtr: objectPtr)
+}
+
+@_cdecl("aro_action_clear")
+public func aro_action_clear(
+    _ contextPtr: UnsafeMutableRawPointer?,
+    _ resultPtr: UnsafeRawPointer?,
+    _ objectPtr: UnsafeRawPointer?
+) -> UnsafeMutableRawPointer? {
+    return executeAction(verb: "clear", contextPtr: contextPtr, resultPtr: resultPtr, objectPtr: objectPtr)
+}
+
+@_cdecl("aro_action_show")
+public func aro_action_show(
+    _ contextPtr: UnsafeMutableRawPointer?,
+    _ resultPtr: UnsafeRawPointer?,
+    _ objectPtr: UnsafeRawPointer?
+) -> UnsafeMutableRawPointer? {
+    return executeAction(verb: "show", contextPtr: contextPtr, resultPtr: resultPtr, objectPtr: objectPtr)
+}
+
+// MARK: - Streaming Actions
+
+@_cdecl("aro_action_stream")
+public func aro_action_stream(
+    _ contextPtr: UnsafeMutableRawPointer?,
+    _ resultPtr: UnsafeRawPointer?,
+    _ objectPtr: UnsafeRawPointer?
+) -> UnsafeMutableRawPointer? {
+    return executeAction(verb: "stream", contextPtr: contextPtr, resultPtr: resultPtr, objectPtr: objectPtr)
+}
+
+@_cdecl("aro_action_subscribe")
+public func aro_action_subscribe(
+    _ contextPtr: UnsafeMutableRawPointer?,
+    _ resultPtr: UnsafeRawPointer?,
+    _ objectPtr: UnsafeRawPointer?
+) -> UnsafeMutableRawPointer? {
+    return executeAction(verb: "subscribe", contextPtr: contextPtr, resultPtr: resultPtr, objectPtr: objectPtr)
 }
 
 // MARK: - Dynamic Plugin Actions

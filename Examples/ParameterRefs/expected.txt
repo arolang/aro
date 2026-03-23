@@ -1,0 +1,2 @@
+GET /farewell => {"message":"Goodbye, World!"}
+GET /greet => {"message":"Hello, World!"}

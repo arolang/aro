@@ -277,6 +277,20 @@ Published values can be referenced directly by their alias:
 
 Published values are scoped to the business activity. Feature sets in different business activities cannot access each other's published values.
 
+### Symbol Lifetime
+
+Published symbols have different lifetimes depending on where they are published:
+
+| Published from | Lifetime |
+|----------------|----------|
+| `Application-Start` | Entire process lifetime — persists until the application exits |
+| `Application-End` | Entire process lifetime |
+| Any other feature set | Until that feature set execution completes |
+
+For event handlers, HTTP handlers, and other short-lived feature sets, published symbols are **automatically evicted** when the feature set finishes. This ensures that a long-running application handling many requests does not accumulate stale entries in memory.
+
+**Best practice:** Publish long-lived configuration from `Application-Start`. For per-request state, prefer local variables (always cleaned up) or repositories (explicit, queryable).
+
 ---
 
 ## 8.5 Decision Guide

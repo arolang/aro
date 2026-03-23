@@ -1,0 +1,70 @@
+openapi: 3.0.3
+info:
+  title: Parameter Refs API
+  description: |
+    Demonstrates $ref in parameters using components/parameters.
+    Both path-level and operation-level parameter references are shown.
+  version: 1.0.0
+
+servers:
+  - url: http://localhost:8087
+
+paths:
+  /greet:
+    parameters:
+      - $ref: '#/components/parameters/Name'
+    get:
+      operationId: greet
+      summary: Greet by name
+      parameters:
+        - $ref: '#/components/parameters/Lang'
+      responses:
+        '200':
+          description: Greeting message
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Greeting'
+
+  /farewell:
+    parameters:
+      - $ref: '#/components/parameters/Name'
+    get:
+      operationId: farewell
+      summary: Say farewell by name
+      responses:
+        '200':
+          description: Farewell message
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Greeting'
+
+components:
+  parameters:
+    Name:
+      name: name
+      in: query
+      required: false
+      description: The name to address
+      schema:
+        type: string
+        default: World
+
+    Lang:
+      name: lang
+      in: query
+      required: false
+      description: Language code (en/de/fr)
+      schema:
+        type: string
+        default: en
+
+  schemas:
+    Greeting:
+      type: object
+      properties:
+        message:
+          type: string
+      required:
+        - message

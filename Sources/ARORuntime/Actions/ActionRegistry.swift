@@ -89,6 +89,9 @@ public actor ActionRegistry {
     /// Dynamic action handlers for plugin-provided actions
     private var dynamicHandlers: [String: DynamicActionHandler] = [:]
 
+    /// Maps plugin name → normalised verb keys it registered (for bulk unregister)
+    private var pluginVerbs: [String: Set<String>] = [:]
+
     /// Type alias for dynamic action handler
     public typealias DynamicActionHandler = @Sendable (
         ResultDescriptor,
@@ -106,11 +109,26 @@ public actor ActionRegistry {
     /// - Parameters:
     ///   - verb: The action verb
     ///   - handler: The handler function
+    ///   - pluginName: Optional plugin name for bulk unregistration via `unregisterPlugin(_:)`
     public func registerDynamic(
         verb: String,
-        handler: @escaping DynamicActionHandler
+        handler: @escaping DynamicActionHandler,
+        pluginName: String? = nil
     ) {
-        dynamicHandlers[normalizeActionName(verb)] = handler
+        let key = normalizeActionName(verb)
+        dynamicHandlers[key] = handler
+        if let name = pluginName {
+            pluginVerbs[name, default: []].insert(key)
+        }
+    }
+
+    /// Unregister all dynamic actions registered by a specific plugin.
+    /// - Parameter pluginName: The plugin name passed to `registerDynamic(pluginName:)`
+    public func unregisterPlugin(_ pluginName: String) {
+        guard let verbs = pluginVerbs.removeValue(forKey: pluginName) else { return }
+        for verb in verbs {
+            dynamicHandlers.removeValue(forKey: verb)
+        }
     }
 
     /// Get a dynamic action handler

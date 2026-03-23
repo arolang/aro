@@ -469,7 +469,11 @@ public final class LLVMExternalDeclEmitter {
         // Configuration
         "configure",
         // Notifications
-        "notify", "alert", "signal"
+        "notify", "alert", "signal",
+        // SSE / WebSocket streaming
+        "stream", "subscribe",
+        // Terminal UI
+        "render", "clear", "show"
     ]
 
     private func declareAllActionFunctions() {

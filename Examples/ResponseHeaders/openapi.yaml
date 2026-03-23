@@ -1,0 +1,16 @@
+openapi: 3.0.3
+info:
+  title: Response Headers Demo API
+  version: 1.0.0
+paths:
+  /demo:
+    get:
+      operationId: getDemoData
+      summary: Returns sample data for demonstrating response headers
+      responses:
+        '200':
+          description: Demo data
+          content:
+            application/json:
+              schema:
+                type: object

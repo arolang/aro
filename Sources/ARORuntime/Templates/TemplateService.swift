@@ -70,6 +70,9 @@ public final class AROTemplateService: TemplateService, @unchecked Sendable {
     /// Embedded templates storage (thread-safe via dedicated actor)
     private let storage = TemplateStorage()
 
+    /// Parse-result cache (thread-safe via dedicated actor)
+    private let parseCache = ParseCache()
+
     /// Template parser
     private let parser = TemplateParser()
 
@@ -170,17 +173,65 @@ public final class AROTemplateService: TemplateService, @unchecked Sendable {
         return FileManager.default.fileExists(atPath: fullPath)
     }
 
-    public func render(path: String, context: ExecutionContext) async throws -> String {
-        // Load template content
-        let content = try await load(path: path)
+    /// Load and parse a template, using the parse cache to avoid redundant disk reads and parses.
+    /// - Embedded/registered templates are cached unconditionally (they never change).
+    /// - File-system templates are cached keyed by mtime; re-parsed only when the file changes.
+    private func loadAndParse(path: String) async throws -> ParsedTemplate {
+        // 1. Compile-time embedded templates (binary mode) — cache unconditionally
+        if let embedded = embeddedTemplates, let content = embedded[path] {
+            if let cached = await parseCache.get(path: path) {
+                return cached.parsed
+            }
+            let parsed = try parseContent(content, path: path)
+            await parseCache.set(path: path, entry: CachedTemplate(parsed: parsed, mtime: nil))
+            return parsed
+        }
 
-        // Parse template
-        let parsed: ParsedTemplate
+        // 2. Runtime-registered templates (set-once semantics) — cache unconditionally
+        if let content = await storage.get(path: path) {
+            if let cached = await parseCache.get(path: path) {
+                return cached.parsed
+            }
+            let parsed = try parseContent(content, path: path)
+            await parseCache.set(path: path, entry: CachedTemplate(parsed: parsed, mtime: nil))
+            return parsed
+        }
+
+        // 3. File-system templates — cache with mtime validation
+        let fullPath = (templatesDirectory as NSString).appendingPathComponent(path)
+        guard FileManager.default.fileExists(atPath: fullPath) else {
+            throw TemplateError.notFound(path: path)
+        }
+
+        let mtime = (try? FileManager.default.attributesOfItem(atPath: fullPath))?[.modificationDate] as? Date
+        if let cached = await parseCache.get(path: path), cached.mtime == mtime {
+            return cached.parsed
+        }
+
+        // Cache miss or file changed — read and re-parse
+        let content: String
         do {
-            parsed = try parser.parse(content, path: path)
+            content = try String(contentsOfFile: fullPath, encoding: .utf8)
+        } catch {
+            throw TemplateError.notFound(path: path)
+        }
+
+        let parsed = try parseContent(content, path: path)
+        await parseCache.set(path: path, entry: CachedTemplate(parsed: parsed, mtime: mtime))
+        return parsed
+    }
+
+    /// Parse raw template content, wrapping TemplateParseError into TemplateError.
+    private func parseContent(_ content: String, path: String) throws -> ParsedTemplate {
+        do {
+            return try parser.parse(content, path: path)
         } catch let error as TemplateParseError {
             throw TemplateError.parseError(path: path, message: error.localizedDescription)
         }
+    }
+
+    public func render(path: String, context: ExecutionContext) async throws -> String {
+        let parsed = try await loadAndParse(path: path)
 
         // Get executor
         guard let templateExecutor = executor else {
@@ -198,14 +249,7 @@ public final class AROTemplateService: TemplateService, @unchecked Sendable {
     }
 
     public func renderAndTrack(path: String, context: ExecutionContext) async throws -> (String, [String: TerminalVarPosition]) {
-        let content = try await load(path: path)
-
-        let parsed: ParsedTemplate
-        do {
-            parsed = try parser.parse(content, path: path)
-        } catch let error as TemplateParseError {
-            throw TemplateError.parseError(path: path, message: error.localizedDescription)
-        }
+        let parsed = try await loadAndParse(path: path)
 
         guard let templateExecutor = executor else {
             throw TemplateError.renderError(path: path, message: "Template executor not configured")
@@ -218,6 +262,27 @@ public final class AROTemplateService: TemplateService, @unchecked Sendable {
         } catch {
             throw TemplateError.renderError(path: path, message: error.localizedDescription)
         }
+    }
+}
+
+/// Cached parse result with optional mtime for invalidation
+private struct CachedTemplate: Sendable {
+    let parsed: ParsedTemplate
+    /// nil → embedded/registered template; never invalidated.
+    /// non-nil → file-system template; invalidated when mtime changes.
+    let mtime: Date?
+}
+
+/// Thread-safe parsed-template cache
+private actor ParseCache {
+    private var entries: [String: CachedTemplate] = [:]
+
+    func get(path: String) -> CachedTemplate? {
+        entries[path]
+    }
+
+    func set(path: String, entry: CachedTemplate) {
+        entries[path] = entry
     }
 }
 
