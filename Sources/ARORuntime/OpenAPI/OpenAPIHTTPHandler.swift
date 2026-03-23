@@ -49,20 +49,21 @@ public final class OpenAPIHTTPHandler: @unchecked Sendable {
         // Check for deprecated parameters present in the request
         if let parameters = match.operation.parameters {
             for param in parameters where param.deprecated == true {
+                guard let paramName = param.name, let paramIn = param.in else { continue }
                 let isPresent: Bool
-                switch param.in {
+                switch paramIn {
                 case "query":
-                    isPresent = request.queryParameters[param.name] != nil
+                    isPresent = request.queryParameters[paramName] != nil
                 case "header":
-                    isPresent = request.headers[param.name] != nil
+                    isPresent = request.headers[paramName] != nil
                 case "path":
-                    isPresent = match.pathParameters[param.name] != nil
+                    isPresent = match.pathParameters[paramName] != nil
                 default:
                     isPresent = false
                 }
 
                 if isPresent {
-                    print("[DEPRECATION WARNING] Parameter '\(param.name)' on operation '\(match.operationId)' is deprecated")
+                    print("[DEPRECATION WARNING] Parameter '\(paramName)' on operation '\(match.operationId)' is deprecated")
                 }
             }
         }
