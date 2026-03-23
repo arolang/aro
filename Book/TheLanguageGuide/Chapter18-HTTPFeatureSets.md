@@ -180,7 +180,7 @@ paths:
         price: <item-data>.price
     }.
 
-    Store the <item> in the <item-repository>.
+    Store the <item> into the <item-repository>.
 
     (* Recalculate order total *)
     Emit an <OrderItemAdded: event> with { order: <order>, item: <item> }.

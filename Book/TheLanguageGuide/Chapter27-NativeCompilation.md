@@ -10,7 +10,7 @@ ARO can compile applications to standalone native binaries that run without the 
 
 The native compilation process translates ARO source code into LLVM IR (intermediate representation), compiles it to machine code, and links the result with a precompiled runtime library. The output is a native executable—a binary file that the operating system can run directly without any interpreter.
 
-This capability matters for deployment scenarios. When you deploy an interpreted ARO application, you must ensure the ARO runtime is available on the target system. When you deploy a native binary, you deploy just the binary (and any required data files like openapi.yaml). This simplifies deployment, reduces dependencies, and can improve startup time.
+This capability matters for deployment scenarios. When you deploy an interpreted ARO application, you must ensure the ARO runtime is available on the target system. When you deploy a native binary, you deploy just the binary — a single self-contained executable with the OpenAPI specification, templates, and plugins all embedded inside it. This simplifies deployment, reduces dependencies, and can improve startup time.
 
 Native binaries also provide some intellectual property protection. While not impossible to reverse engineer, native binaries obscure your application logic more than source code would. For applications where source visibility is a concern, native compilation provides a degree of protection.
 
@@ -47,9 +47,14 @@ Linking combines the object code with the ARO runtime library to produce the fin
 ## 27.4 Runtime Requirements
 
 Native binaries link against the ARO runtime library, which provides implementations of actions and services. This library is included in every binary.
-The OpenAPI specification file must still be present at runtime for applications that serve HTTP requests. The specification defines routing, and the runtime reads it when the HTTP server starts. Deploy the openapi.yaml file alongside your binary.
-Any configuration files or data files your application reads must also be deployed. The native binary does not embed these files; it reads them at runtime just as the interpreted version would.
-Plugins in the `Plugins/` directory are automatically compiled and bundled during `aro build`. Swift and C plugins are compiled to dynamic libraries; Python plugins are copied with their source files. The compiled plugins are placed in a `Plugins/` directory alongside the binary and loaded at runtime. This means plugin-based applications work identically in both interpreter and binary modes.
+
+The binary produced by `aro build` is fully self-contained. The following assets are embedded directly into the binary during compilation—no separate files are needed at runtime:
+
+- **OpenAPI specification** (`openapi.yaml`): Embedded as a string constant. The HTTP server reads it from memory at startup.
+- **Templates** (`templates/`): All template files are serialized and embedded. The template engine uses the embedded versions.
+- **Plugins** (`Plugins/`): All plugins are compiled and their compiled libraries are base64-encoded and embedded. At startup the binary extracts them to a temporary directory and loads them via `dlopen`. Rust, C, and Swift plugins all follow this path; Python plugins are copied with their source files.
+
+This means the output of `aro build` is a single executable file. You do not need to deploy `openapi.yaml`, `templates/`, or `Plugins/` alongside it.
 ---
 
 ## 27.5 Binary Size and Performance
@@ -63,8 +68,20 @@ Memory usage is typically lower for native binaries because they do not maintain
 
 ## 27.6 Deployment
 
-Native binaries simplify deployment because they have minimal runtime dependencies. The binary, the OpenAPI specification (if using HTTP), and any data files are all you need to deploy.
-Containerization with Docker works well with native binaries. A multi-stage build can use the full ARO development image for compilation and a minimal base image for the final container. The resulting container contains only the binary and required files, producing small, efficient images.
+Native binaries simplify deployment because they are fully self-contained. The single binary executable is all you need to deploy — no OpenAPI specification, templates directory, or Plugins directory required alongside it.
+Containerization with Docker works well with native binaries. A two-stage build uses the full ARO development image for compilation and a minimal base image for the final container. The resulting container contains only the binary, producing the smallest possible images:
+
+```dockerfile
+FROM ghcr.io/arolang/aro-buildsystem:latest AS builder
+WORKDIR /app
+COPY . .
+RUN aro build . --optimize
+
+FROM ghcr.io/arolang/aro-runtime:latest
+WORKDIR /app
+COPY --from=builder /app/app ./app
+CMD ["./app"]
+```
 Systemd and other service managers can run native binaries directly. Create a service unit file that specifies the binary location, working directory, user, and restart behavior. The binary behaves like any other system service.
 Cloud deployment to platforms that accept binaries—EC2, GCE, bare metal—is straightforward. Upload the binary and supporting files, configure networking and security, and run the binary. Platform-specific considerations like health checks and logging integrations apply as they would to any application.
 ---
@@ -119,6 +136,6 @@ Use interpreted mode during development for fast iteration and detailed diagnost
 Test native binaries before deployment. Some problems only appear in native builds—missing files, path issues, platform differences. Running your test suite against the native binary catches these problems early.
 Include native binary builds in continuous integration. Automated builds ensure that native compilation continues to work as the codebase evolves.
 Use release optimizations for production deployments. The strip, optimize, and size options (or the combined release option) produce the smallest and fastest binaries.
-Deploy the OpenAPI specification and other required files alongside the binary. The binary alone is not sufficient for applications that serve HTTP requests.
+Deploy only the binary. The OpenAPI specification, templates, and plugins are all embedded by `aro build` — the binary alone is sufficient for all applications, including those that serve HTTP requests.
 ---
 *Next: Chapter 28 — Code Signing*

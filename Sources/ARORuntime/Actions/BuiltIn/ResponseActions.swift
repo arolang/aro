@@ -441,7 +441,7 @@ public struct LogAction: ActionImplementation {
             // Apply specifiers (qualifiers) to the value
             // e.g., Log <numbers: reverse> applies the "reverse" qualifier
             for specifier in result.specifiers {
-                if let transformed = try? QualifierRegistry.shared.resolve(specifier, value: value) {
+                if let transformed = try? context.container.qualifierRegistry.resolve(specifier, value: value) {
                     value = transformed
                 }
             }
@@ -573,7 +573,7 @@ public struct StoreAction: ActionImplementation {
            let stream = runtimeContext.resolveAsRowStream(dataVarName),
            InMemoryRepositoryStorage.isRepositoryName(repoName) {
             // Drain stream by storing each element as it arrives
-            let storage = context.service(RepositoryStorageService.self) ?? InMemoryRepositoryStorage.shared
+            let storage = context.service(RepositoryStorageService.self) ?? context.container.repositoryStorage
             var count = 0
             var lastStoreResult: RepositoryStoreResult?
 
@@ -612,7 +612,7 @@ public struct StoreAction: ActionImplementation {
             }
 
             // Store each item individually and emit events only for actual changes
-            let storage = context.service(RepositoryStorageService.self) ?? InMemoryRepositoryStorage.shared
+            let storage = context.service(RepositoryStorageService.self) ?? context.container.repositoryStorage
 
             var lastStoreResult: RepositoryStoreResult?
             for item in itemsToStore {
@@ -1101,7 +1101,7 @@ public struct NotifyAction: ActionImplementation {
                     payload["user"] = item
                     payload[target] = item
                 }
-                await EventBus.shared.publishAndTrack(DomainEvent(eventType: "NotificationSent", payload: payload))
+                await context.container.eventBus.publishAndTrack(DomainEvent(eventType: "NotificationSent", payload: payload))
             }
         } else {
             for item in items {
