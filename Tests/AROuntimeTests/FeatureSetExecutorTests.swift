@@ -66,7 +66,7 @@ struct GlobalSymbolStorageIntegrationTests {
         let storage = GlobalSymbolStorage()
 
         // Publish in Activity1
-        await storage.publish(name: "config", value: "value1", fromFeatureSet: "FS1", businessActivity: "Activity1")
+        await storage.publish(name: "config", value: "value1", fromFeatureSet: "FS1", businessActivity: "Activity1", executionId: "exec-test")
 
         // Should resolve in same activity
         let value1: String? = await storage.resolve("config", forBusinessActivity: "Activity1")
@@ -82,7 +82,7 @@ struct GlobalSymbolStorageIntegrationTests {
         let storage = GlobalSymbolStorage()
 
         // Publish with empty business activity (framework-level)
-        await storage.publish(name: "global", value: "accessible", fromFeatureSet: "Framework", businessActivity: "")
+        await storage.publish(name: "global", value: "accessible", fromFeatureSet: "Framework", businessActivity: "", executionId: "exec-test")
 
         // Should be accessible from any activity
         let value1: String? = await storage.resolve("global", forBusinessActivity: "Activity1")
@@ -102,7 +102,7 @@ struct PublishStatementExecutorTests {
     func testPublishToGlobalSymbols() async {
         let storage = GlobalSymbolStorage()
 
-        await storage.publish(name: "exported", value: "test value", fromFeatureSet: "TestFS", businessActivity: "TestActivity")
+        await storage.publish(name: "exported", value: "test value", fromFeatureSet: "TestFS", businessActivity: "TestActivity", executionId: "exec-test")
 
         let value: String? = await storage.resolve("exported", forBusinessActivity: "TestActivity")
         #expect(value == "test value")
