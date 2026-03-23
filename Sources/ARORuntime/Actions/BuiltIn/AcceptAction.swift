@@ -120,7 +120,7 @@ public struct AcceptAction: ActionImplementation {
             "objectName": objectName
         ]
         if let eid = entityId { stPayload["entityId"] = eid }
-        EventBus.shared.publish(DomainEvent(eventType: "StateTransition", payload: stPayload))
+        (context.eventBus ?? context.container.eventBus).publish(DomainEvent(eventType: "StateTransition", payload: stPayload))
 
         return updatedObject
     }
