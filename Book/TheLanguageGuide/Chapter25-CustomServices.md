@@ -388,13 +388,13 @@ public struct RedisService: AROService {
     Extract the <user-id> from the <user: id>.
 
     Call the <result> from the <redis: set> with {
-        key: "user:" + <user-id>,
+        key: "user:" ++ <user-id>,
         value: <user>
     }.
 
     (* Set expiration to 1 hour *)
     Call the <expire-result> from the <redis: expire> with {
-        key: "user:" + <user-id>,
+        key: "user:" ++ <user-id>,
         seconds: 3600
     }.
 
@@ -405,7 +405,7 @@ public struct RedisService: AROService {
     Extract the <user-id> from the <request: id>.
 
     Call the <cached> from the <redis: get> with {
-        key: "user:" + <user-id>
+        key: "user:" ++ <user-id>
     }.
 
     Return an <OK: status> with <cached>.
