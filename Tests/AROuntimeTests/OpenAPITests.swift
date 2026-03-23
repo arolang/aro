@@ -890,7 +890,9 @@ private func applyAllowEmptyValueFilter(
 ) -> [String: String] {
     var allowEmptyValueByName: [String: Bool] = [:]
     for param in specParameters where param.in == "query" {
-        allowEmptyValueByName[param.name] = param.allowEmptyValue ?? false
+        if let paramName = param.name {
+            allowEmptyValueByName[paramName] = param.allowEmptyValue ?? false
+        }
     }
     return queryParameters.filter { name, value in
         guard value.isEmpty else { return true }
