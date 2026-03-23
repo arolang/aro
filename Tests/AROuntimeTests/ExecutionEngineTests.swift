@@ -51,7 +51,7 @@ struct GlobalSymbolStorageTests {
     func testPublishAndResolve() async {
         let storage = GlobalSymbolStorage()
 
-        await storage.publish(name: "user", value: "John", fromFeatureSet: "FS1", businessActivity: "Activity1")
+        await storage.publish(name: "user", value: "John", fromFeatureSet: "FS1", businessActivity: "Activity1", executionId: "exec-test")
 
         let value: String? = await storage.resolve("user", forBusinessActivity: "Activity1")
         #expect(value == "John")
@@ -61,7 +61,7 @@ struct GlobalSymbolStorageTests {
     func testBusinessActivityIsolation() async {
         let storage = GlobalSymbolStorage()
 
-        await storage.publish(name: "user", value: "John", fromFeatureSet: "FS1", businessActivity: "Activity1")
+        await storage.publish(name: "user", value: "John", fromFeatureSet: "FS1", businessActivity: "Activity1", executionId: "exec-test")
 
         let value: String? = await storage.resolve("user", forBusinessActivity: "Activity2")
         #expect(value == nil)
@@ -71,7 +71,7 @@ struct GlobalSymbolStorageTests {
     func testEmptyBusinessActivityAccessible() async {
         let storage = GlobalSymbolStorage()
 
-        await storage.publish(name: "config", value: "value", fromFeatureSet: "Framework", businessActivity: "")
+        await storage.publish(name: "config", value: "value", fromFeatureSet: "Framework", businessActivity: "", executionId: "exec-test")
 
         let value: String? = await storage.resolve("config", forBusinessActivity: "AnyActivity")
         #expect(value == "value")
@@ -81,7 +81,7 @@ struct GlobalSymbolStorageTests {
     func testResolveAny() async {
         let storage = GlobalSymbolStorage()
 
-        await storage.publish(name: "count", value: 42, fromFeatureSet: "FS1", businessActivity: "Activity1")
+        await storage.publish(name: "count", value: 42, fromFeatureSet: "FS1", businessActivity: "Activity1", executionId: "exec-test")
 
         let value = await storage.resolveAny("count", forBusinessActivity: "Activity1")
         #expect(value != nil)
@@ -92,7 +92,7 @@ struct GlobalSymbolStorageTests {
     func testIsPublished() async {
         let storage = GlobalSymbolStorage()
 
-        await storage.publish(name: "item", value: "data", fromFeatureSet: "FS1", businessActivity: "Activity1")
+        await storage.publish(name: "item", value: "data", fromFeatureSet: "FS1", businessActivity: "Activity1", executionId: "exec-test")
 
         let isPublished1 = await storage.isPublished("item", forBusinessActivity: "Activity1")
         let isPublished2 = await storage.isPublished("other", forBusinessActivity: "Activity1")
@@ -104,7 +104,7 @@ struct GlobalSymbolStorageTests {
     func testSourceFeatureSet() async {
         let storage = GlobalSymbolStorage()
 
-        await storage.publish(name: "data", value: "test", fromFeatureSet: "SourceFS", businessActivity: "Activity")
+        await storage.publish(name: "data", value: "test", fromFeatureSet: "SourceFS", businessActivity: "Activity", executionId: "exec-test")
 
         let sourceFS1 = await storage.sourceFeatureSet(for: "data")
         let sourceFS2 = await storage.sourceFeatureSet(for: "unknown")
@@ -116,7 +116,7 @@ struct GlobalSymbolStorageTests {
     func testBusinessActivityTracking() async {
         let storage = GlobalSymbolStorage()
 
-        await storage.publish(name: "config", value: "test", fromFeatureSet: "FS", businessActivity: "MyActivity")
+        await storage.publish(name: "config", value: "test", fromFeatureSet: "FS", businessActivity: "MyActivity", executionId: "exec-test")
 
         let activity1 = await storage.businessActivity(for: "config")
         let activity2 = await storage.businessActivity(for: "unknown")
@@ -128,7 +128,7 @@ struct GlobalSymbolStorageTests {
     func testIsAccessDenied() async {
         let storage = GlobalSymbolStorage()
 
-        await storage.publish(name: "private", value: "secret", fromFeatureSet: "FS1", businessActivity: "Activity1")
+        await storage.publish(name: "private", value: "secret", fromFeatureSet: "FS1", businessActivity: "Activity1", executionId: "exec-test")
 
         let denied1 = await storage.isAccessDenied("private", forBusinessActivity: "Activity2")
         let denied2 = await storage.isAccessDenied("private", forBusinessActivity: "Activity1")
@@ -142,8 +142,8 @@ struct GlobalSymbolStorageTests {
     func testSymbolOverwriting() async {
         let storage = GlobalSymbolStorage()
 
-        await storage.publish(name: "counter", value: 1, fromFeatureSet: "FS1", businessActivity: "Activity")
-        await storage.publish(name: "counter", value: 2, fromFeatureSet: "FS2", businessActivity: "Activity")
+        await storage.publish(name: "counter", value: 1, fromFeatureSet: "FS1", businessActivity: "Activity", executionId: "exec-test")
+        await storage.publish(name: "counter", value: 2, fromFeatureSet: "FS2", businessActivity: "Activity", executionId: "exec-test")
 
         let value: Int? = await storage.resolve("counter", forBusinessActivity: "Activity")
         let sourceFS = await storage.sourceFeatureSet(for: "counter")

@@ -21,7 +21,7 @@ Consider what ARO does well out of the box:
     Extract the <items> from the <order: items>.
     Validate the <items> against the <inventory>.
     Compute the <total> from the <items>.
-    Store the <order> in the <order-repository>.
+    Store the <order> into the <order-repository>.
     Emit an <OrderPlaced: event> with <order>.
     Return an <OK: status> with <order>.
 }
