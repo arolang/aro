@@ -48,8 +48,41 @@ WARM_ADAPTER = ADAPTER_DIR / 'warm_start'
 WIKI_DIR     = DATA_ROOT / 'wiki'
 
 # ── Model ─────────────────────────────────────────────────────────────────────
+# Preferred: the published fine-tuned ARO model (bootstrapped from this pipeline).
+# Fallback:  base Qwen3 used for initial training data generation.
+# Change only these two lines to swap models across the whole pipeline.
 
-MODEL_ID = 'mlx-community/Qwen3-Coder-30B-A3B-Instruct-4bit'
+PREFERRED_MODEL_ID = 'ARO-Lang/aro-coder-4bit'
+FALLBACK_MODEL_ID  = 'mlx-community/Qwen3-Coder-30B-A3B-Instruct-4bit'
+
+
+def _hf_model_exists(repo_id: str, timeout: int = 6) -> bool:
+    """Return True if repo_id exists on HuggingFace Hub AND contains config.json.
+    A repo page existing is not enough — it may be an empty placeholder."""
+    try:
+        import urllib.request
+        # Check for config.json specifically — required by mlx-lm to load the model.
+        url = f'https://huggingface.co/{repo_id}/resolve/main/config.json'
+        urllib.request.urlopen(urllib.request.Request(url), timeout=timeout)
+        return True
+    except Exception:
+        return False
+
+
+def resolve_model_id() -> tuple[str, bool]:
+    """
+    Check HuggingFace for the fine-tuned ARO model.
+    Returns (model_id, is_finetuned) so callers know whether to skip the warm adapter.
+    """
+    if _hf_model_exists(PREFERRED_MODEL_ID):
+        print(f'Fine-tuned model found: {PREFERRED_MODEL_ID}')
+        return PREFERRED_MODEL_ID, True
+    print(f'Fine-tuned model not found on HuggingFace, using base: {FALLBACK_MODEL_ID}')
+    return FALLBACK_MODEL_ID, False
+
+
+# Resolved once at import time — used by all notebooks via `MODEL_ID`.
+MODEL_ID, _MODEL_IS_FINETUNED = resolve_model_id()
 
 # ── Remote URLs ───────────────────────────────────────────────────────────────
 
@@ -101,18 +134,27 @@ def resolve_warm_adapter(kb=None):
 def load_model(with_adapter=True, kb=None):
     """
     Load MODEL_ID with optional warm-start adapter.
+
+    When the fine-tuned model (PREFERRED_MODEL_ID) is active, the warm adapter
+    is skipped — the fine-tuned weights already incorporate that knowledge.
+
     Returns (model, tokenizer, load_fn, generate_fn, make_sampler_fn).
     """
     load_fn, generate_fn, make_sampler_fn = ensure_mlx_lm()
-    adapter = resolve_warm_adapter(kb) if with_adapter else None
 
-    if adapter:
-        print(f'Loading {MODEL_ID} with warm-start adapter...')
-        model, tokenizer = load_fn(MODEL_ID, adapter_path=adapter)
-        print(f'  Adapter: {adapter}')
-    else:
-        print(f'Loading {MODEL_ID} (base weights)...')
+    # Fine-tuned model has knowledge baked in — no adapter needed or useful.
+    if _MODEL_IS_FINETUNED:
+        print(f'Loading fine-tuned model {MODEL_ID} (no adapter)...')
         model, tokenizer = load_fn(MODEL_ID)
+    else:
+        adapter = resolve_warm_adapter(kb) if with_adapter else None
+        if adapter:
+            print(f'Loading {MODEL_ID} with warm-start adapter...')
+            model, tokenizer = load_fn(MODEL_ID, adapter_path=adapter)
+            print(f'  Adapter: {adapter}')
+        else:
+            print(f'Loading {MODEL_ID} (base weights)...')
+            model, tokenizer = load_fn(MODEL_ID)
 
     print('Model ready.')
     return model, tokenizer, load_fn, generate_fn, make_sampler_fn
