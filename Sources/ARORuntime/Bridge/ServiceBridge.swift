@@ -2344,6 +2344,10 @@ nonisolated(unsafe) public var embeddedOpenAPISpec: String? = nil
 /// Global storage for embedded templates (JSON dictionary: path -> content, set at compile time)
 nonisolated(unsafe) public var embeddedTemplates: [String: String]? = nil
 
+/// Global registry for embedded plugin libraries (base64-encoded .so files compiled into the binary)
+/// Key: plugin name, Value: (yaml: plugin.yaml content, base64So: base64-encoded library bytes)
+nonisolated(unsafe) public var embeddedPluginRegistry: [String: (yaml: String, base64So: String)] = [:]
+
 /// Set the embedded OpenAPI spec (called from generated main)
 @_cdecl("aro_set_embedded_openapi")
 public func aro_set_embedded_openapi(_ specPtr: UnsafePointer<CChar>?) {
@@ -2363,6 +2367,24 @@ public func aro_set_embedded_templates(_ jsonPtr: UnsafePointer<CChar>?) {
         return
     }
     embeddedTemplates = dict
+}
+
+/// Register an embedded plugin library (called from generated main for each compiled plugin)
+/// - Parameters:
+///   - namePtr: Plugin name (e.g., "postgres")
+///   - yamlPtr: Content of plugin.yaml
+///   - base64Ptr: Base64-encoded bytes of the compiled .so/.dylib
+@_cdecl("aro_register_embedded_plugin")
+public func aro_register_embedded_plugin(
+    _ namePtr: UnsafePointer<CChar>?,
+    _ yamlPtr: UnsafePointer<CChar>?,
+    _ base64Ptr: UnsafePointer<CChar>?
+) {
+    guard let namePtr, let yamlPtr, let base64Ptr else { return }
+    let name = String(cString: namePtr)
+    let yaml = String(cString: yamlPtr)
+    let base64 = String(cString: base64Ptr)
+    embeddedPluginRegistry[name] = (yaml: yaml, base64So: base64)
 }
 
 /// Register a feature set handler for HTTP routing
@@ -3141,6 +3163,16 @@ public func aro_set_embedded_openapi(_ specPtr: UnsafePointer<CChar>?) {
 /// Set the embedded templates (Windows stub) - ARO-0050
 @_cdecl("aro_set_embedded_templates")
 public func aro_set_embedded_templates(_ jsonPtr: UnsafePointer<CChar>?) {
+    // No-op on Windows
+}
+
+/// Register an embedded plugin library (Windows stub)
+@_cdecl("aro_register_embedded_plugin")
+public func aro_register_embedded_plugin(
+    _ namePtr: UnsafePointer<CChar>?,
+    _ yamlPtr: UnsafePointer<CChar>?,
+    _ base64Ptr: UnsafePointer<CChar>?
+) {
     // No-op on Windows
 }
 
