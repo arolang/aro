@@ -292,7 +292,7 @@ Inside a feature set, statements execute **synchronously** and **serially**:
     Extract the <data> from the <request: body>.      (* 1. First *)
     Validate the <data> for the <order-schema>.       (* 2. Second *)
     Create the <order> with <data>.                   (* 3. Third *)
-    Store the <order> in the <order-repository>.      (* 4. Fourth *)
+    Store the <order> into the <order-repository>.      (* 4. Fourth *)
     Emit an <OrderCreated: event> with <order>.       (* 5. Fifth *)
     Return a <Created: status> with <order>.          (* 6. Last *)
 }
@@ -338,7 +338,7 @@ Feature sets trigger other feature sets via events:
 (Create User: User API) {
     Extract the <data> from the <request: body>.
     Create the <user> with <data>.
-    Store the <user> in the <user-repository>.
+    Store the <user> into the <user-repository>.
 
     (* Triggers other feature sets asynchronously *)
     Emit a <UserCreated: event> with <user>.
@@ -465,7 +465,7 @@ UserService/
     Extract the <data> from the <request: body>.
     Validate the <data> for the <user-schema>.
     Create the <user> with <data>.
-    Store the <user> in the <user-repository>.
+    Store the <user> into the <user-repository>.
     Emit a <UserCreated: event> with <user>.
     Return a <Created: status> with <user>.
 }

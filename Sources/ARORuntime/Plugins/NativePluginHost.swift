@@ -73,6 +73,11 @@ public final class NativePluginHost: @unchecked Sendable {
     /// Qualifier registrations from this plugin
     private var qualifierRegistrations: [QualifierRegistration] = []
 
+    /// Reused encoder/decoder — safe because NativePluginHost is @unchecked Sendable
+    /// and qualifier calls are serialised through the plugin host.
+    private let encoder = JSONEncoder()
+    private let decoder = JSONDecoder()
+
     // MARK: - Initialization
 
     /// Initialize with a plugin path and configuration
@@ -635,7 +640,8 @@ public final class NativePluginHost: @unchecked Sendable {
                     Task {
                         await ActionRegistry.shared.registerDynamic(
                             verb: registeredVerb,
-                            handler: wrapper.handle
+                            handler: wrapper.handle,
+                            pluginName: pluginName
                         )
                         semaphore.signal()
                     }
@@ -654,6 +660,14 @@ public final class NativePluginHost: @unchecked Sendable {
     /// Unload the plugin
     public func unload() {
         guard let handle = libraryHandle else { return }
+
+        // Unregister dynamic actions from ActionRegistry
+        let semaphore = DispatchSemaphore(value: 0)
+        Task {
+            await ActionRegistry.shared.unregisterPlugin(pluginName)
+            semaphore.signal()
+        }
+        semaphore.wait()
 
         // Unregister qualifiers
         QualifierRegistry.shared.unregisterPlugin(pluginName)
@@ -720,7 +734,6 @@ extension NativePluginHost: PluginQualifierHost {
 
         // Create input JSON using QualifierInput
         let qualifierInput = QualifierInput(value: input)
-        let encoder = JSONEncoder()
         let inputData = try encoder.encode(qualifierInput)
         let inputJSON = String(data: inputData, encoding: .utf8) ?? "{}"
 
@@ -754,7 +767,6 @@ extension NativePluginHost: PluginQualifierHost {
             )
         }
 
-        let decoder = JSONDecoder()
         let output = try decoder.decode(QualifierOutput.self, from: resultData)
 
         if let error = output.error {

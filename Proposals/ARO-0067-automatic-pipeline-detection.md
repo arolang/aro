@@ -131,7 +131,7 @@ Extract the <data> from the <request: body>.
 Transform the <cleaned> from the <data> with "trim".
 Transform the <parsed> from the <cleaned> with "parse-json".
 Validate the <valid> from the <parsed> against the <schema>.
-Store the <valid> in the <repository>.
+Store the <valid> into the <repository>.
 ```
 
 **What the runtime sees:**

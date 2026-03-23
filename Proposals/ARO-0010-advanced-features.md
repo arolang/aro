@@ -815,7 +815,7 @@ Extract the <unix-time> from the <now: timestamp>.
     Extract the <delay-minutes> from the <request: delayMinutes>.
 
     (* Calculate scheduled time *)
-    Compute the <offset> from "+" + <delay-minutes> + "m".
+    Compute the <offset> from "+" ++ <delay-minutes> ++ "m".
     Compute the <scheduled-at: ${offset}> from <now>.
 
     (* Format for display *)

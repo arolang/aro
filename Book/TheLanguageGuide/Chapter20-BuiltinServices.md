@@ -126,10 +126,7 @@ The Exists action checks whether a file or directory exists at a given path.
 
 ```aro
 Exists the <found> for the <file: "./config.json">.
-
-when <found> is false {
-    Log "Config not found!" to the <console>.
-}
+Log "Config not found!" to the <console> when <found> is false.
 ```
 
 ### Getting File Information

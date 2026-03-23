@@ -222,7 +222,7 @@ provides:
 (* FormatTitle — Capitalize first letter of each word *)
 (FormatTitle: String Operations) {
     Extract the <text> from the <input: text>.
-    Transform the <title> from <text> using <titlecase>.
+    Transform the <title: titlecase> from <text>.
     Return an <OK: status> with <title>.
 }
 
@@ -231,11 +231,14 @@ provides:
     Extract the <text> from the <input: text>.
     Extract the <max-length> from the <input: maxLength>.
     Compute the <length: length> from <text>.
-    when <length> > <max-length> {
-        Transform the <truncated> from <text> using <substring: 0> to <max-length>.
-        Create the <result> with <truncated> + "...".
-    } else {
-        Create the <result> with <text>.
+    match <length> > <max-length> {
+        case true {
+            Transform the <truncated: substring> from <text>.
+            Create the <result> with <truncated> ++ "...".
+        }
+        case false {
+            Create the <result> with <text>.
+        }
     }
     Return an <OK: status> with <result>.
 }
@@ -756,9 +759,69 @@ aro add git@github.com:yourname/my-plugin.git
 
 ---
 
-## 26.12 Example Plugins
+## 26.12 Plugin Lifecycle: Unload and Reload
 
-The ARO team maintains several example plugins:
+Plugins can be unloaded and reloaded at runtime. This is useful for hot-reloading during development or for dynamically swapping plugin implementations without restarting the application.
+
+### Unloading a Plugin
+
+When a plugin is unloaded, all actions and qualifiers it registered are automatically removed from their respective registries:
+
+```swift
+// Unload a plugin by name
+let wasLoaded = UnifiedPluginLoader.shared.unload(pluginName: "my-plugin")
+// Returns false if the plugin was not loaded
+```
+
+Unloading a plugin:
+- Removes all dynamic action verbs the plugin registered from `ActionRegistry`
+- Removes all qualifiers the plugin registered from `QualifierRegistry`
+- Closes the native library handle (`dlclose`) for C/Rust plugins
+- Is a no-op if the plugin is not currently loaded
+
+### Reloading a Plugin
+
+```swift
+// Reload a plugin (unload + load from the same directory)
+try UnifiedPluginLoader.shared.reload(pluginName: "my-plugin")
+// Throws UnifiedPluginError.notFound if plugin was never loaded
+```
+
+Reloading re-reads the plugin from disk, which picks up any changes made to the plugin binary or source files.
+
+### Error Handling
+
+```swift
+do {
+    try UnifiedPluginLoader.shared.reload(pluginName: "csv-processor")
+} catch UnifiedPluginError.notFound(let name) {
+    print("Plugin '\(name)' was not previously loaded")
+}
+```
+
+### Action Registry Tracking
+
+When a plugin registers actions, the registry tracks which plugin each action belongs to:
+
+```swift
+// Actions registered with pluginName are tracked for bulk removal
+await ActionRegistry.shared.registerDynamic(
+    verb: "parse-csv",
+    handler: myHandler,
+    pluginName: "csv-processor"
+)
+
+// Remove all verbs registered by this plugin at once
+await ActionRegistry.shared.unregisterPlugin("csv-processor")
+```
+
+Actions registered without a `pluginName` are not tracked and survive `unregisterPlugin` calls.
+
+---
+
+## 26.13 Example Plugins
+
+The ARO team maintains several reference plugins:
 
 | Plugin | Language | Purpose |
 |--------|----------|---------|

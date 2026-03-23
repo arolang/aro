@@ -191,9 +191,7 @@ And a feature set that expects a flag gets a boolean it can use in a guard:
 Extract the <params> from the <parameter>.
 Create the <verbose> with <params: verbose> or false.
 
-when <verbose> is true {
-    Log "Verbose mode enabled" to the <console>.
-}
+Log "Verbose mode enabled" to the <console> when <verbose> is true.
 ```
 
 ---
@@ -307,10 +305,8 @@ A CLI tool that reads a file, counts its words, and optionally shows verbose out
     Create the <verbose> with <params: verbose> or false.
     Create the <format> with <params: format> or "text".
 
-    when <verbose> is true {
-        Log "Processing file:" to the <console>.
-        Log <path> to the <console>.
-    }
+    Log "Processing file:" to the <console> when <verbose> is true.
+    Log <path> to the <console> when <verbose> is true.
 
     Read the <content> from the <file: path>.
     Split the <words> from <content> with " ".

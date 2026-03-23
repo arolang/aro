@@ -229,6 +229,14 @@ public protocol ExecutionContext: AnyObject, Sendable {
     /// - Returns: The response if set, nil otherwise
     func getResponse() -> Response?
 
+    // MARK: - Dependency Injection
+
+    /// The runtime container providing shared infrastructure services.
+    ///
+    /// Actions should prefer `context.container.xxx` over direct singleton
+    /// access (`XYZ.shared`) so tests can inject isolated instances.
+    var container: RuntimeContainer { get }
+
     // MARK: - Event Emission
 
     /// Access to the event bus for direct event operations
@@ -309,6 +317,11 @@ public extension ExecutionContext {
         }
         return value
     }
+
+    /// Default: the global container backed by all shared singletons.
+    /// Conformers that need test isolation should store and return a
+    /// per-instance `RuntimeContainer`.
+    var container: RuntimeContainer { .default }
 
     /// Default: not compiled (interpreter mode)
     var isCompiled: Bool { false }
@@ -396,7 +409,7 @@ public extension ExecutionContext {
     func resolveWithSpecifiers<T>(_ base: String, specifiers: [String]) throws -> T {
         let value = try resolveWithSpecifiers(base, specifiers: specifiers)
         guard let typed = value as? T else {
-            throw ActionError.runtimeError("Expected \(T.self) but got \(type(of: value))")
+            throw ActionError.typeMismatch(expected: "\(T.self)", actual: "\(type(of: value))")
         }
         return typed
     }

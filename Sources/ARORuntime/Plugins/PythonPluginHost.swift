@@ -64,6 +64,11 @@ public final class PythonPluginHost: @unchecked Sendable {
     /// Qualifier registrations from this plugin
     private var qualifierRegistrations: [QualifierRegistration] = []
 
+    /// Reused encoder/decoder — safe because PythonPluginHost is @unchecked Sendable
+    /// and qualifier calls are serialised through the plugin host.
+    private let encoder = JSONEncoder()
+    private let decoder = JSONDecoder()
+
     // MARK: - Initialization
 
     /// Initialize with a plugin path and configuration
@@ -260,7 +265,8 @@ public final class PythonPluginHost: @unchecked Sendable {
             Task {
                 await ActionRegistry.shared.registerDynamic(
                     verb: registeredVerb,
-                    handler: wrapper.handle
+                    handler: wrapper.handle,
+                    pluginName: pluginName
                 )
                 semaphore.signal()
             }
@@ -276,6 +282,14 @@ public final class PythonPluginHost: @unchecked Sendable {
 
     /// Unload the plugin
     public func unload() {
+        // Unregister dynamic actions from ActionRegistry
+        let semaphore = DispatchSemaphore(value: 0)
+        Task {
+            await ActionRegistry.shared.unregisterPlugin(pluginName)
+            semaphore.signal()
+        }
+        semaphore.wait()
+
         // Unregister qualifiers
         QualifierRegistry.shared.unregisterPlugin(pluginName)
         qualifierRegistrations.removeAll()
@@ -392,7 +406,6 @@ extension PythonPluginHost: PluginQualifierHost {
     public func executeQualifier(_ qualifier: String, input: any Sendable) throws -> any Sendable {
         // Create input JSON using QualifierInput
         let qualifierInput = QualifierInput(value: input)
-        let encoder = JSONEncoder()
         let inputData = try encoder.encode(qualifierInput)
         let base64Input = inputData.base64EncodedString()
 
@@ -427,7 +440,6 @@ extension PythonPluginHost: PluginQualifierHost {
             )
         }
 
-        let decoder = JSONDecoder()
         let output = try decoder.decode(QualifierOutput.self, from: resultData)
 
         if let error = output.error {

@@ -1,4 +1,5 @@
-mode: interpreter
+mode: both
+occurrence-check: true
 type: http
 include-server-output: true
 skip-on-windows: HTTP server tests not supported on Windows CI

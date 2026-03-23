@@ -34,6 +34,12 @@ private func debugPrint(_ message: String) {
 ///     └── Sources/             ← Swift plugin sources
 ///         └── MyPlugin.swift
 /// ```
+///
+/// ## Lazy Loading
+/// Plugins that declare their actions in `plugin.yaml` (via the `actions:` field on
+/// a `provides:` entry) are loaded lazily: the manifest is parsed at startup to register
+/// action stubs, but `dlopen`/`cargo build`/subprocess-launch is deferred to the first
+/// time an action from that plugin is invoked.
 public final class UnifiedPluginLoader: @unchecked Sendable {
     /// Shared instance
     public static let shared = UnifiedPluginLoader()
@@ -57,10 +63,37 @@ public final class UnifiedPluginLoader: @unchecked Sendable {
     /// Used to enforce handle uniqueness across plugins.
     private var registeredHandles: [String: String] = [:]
 
-    /// Lock for thread safety
+    /// Source directories for loaded plugins, keyed by plugin name.
+    /// Stored at load time to enable single-plugin reload.
+    private var pluginDirectories: [String: URL] = [:]
+
+    /// Lazy-load state for plugins whose actions are declared in the manifest.
+    private var lazyPlugins: [String: LazyPluginEntry] = [:]
+
+    /// Condition variable used to serialise concurrent lazy-load requests.
+    private let loadCondition = NSCondition()
+
+    /// Lock for thread safety (for non-load-condition paths)
     private let lock = NSLock()
 
     private init() {}
+
+    // MARK: - Lazy Load State
+
+    private enum LazyPluginEntry: @unchecked Sendable {
+        /// Manifest parsed, library not yet loaded.
+        case pendingNative(dir: URL, provide: UnifiedProvideEntry, effectiveHandle: String?)
+        /// Manifest parsed, Python subprocess not yet started.
+        case pendingPython(dir: URL, provide: UnifiedProvideEntry, effectiveHandle: String?)
+        /// A thread is currently performing the load.
+        case loading
+        /// Successfully loaded native plugin.
+        case loadedNative(NativePluginHost)
+        /// Successfully loaded Python plugin.
+        case loadedPython(PythonPluginHost)
+        /// Load failed; error cached to avoid retries.
+        case failed(Error)
+    }
 
     // MARK: - Plugin Loading
 
@@ -130,6 +163,7 @@ public final class UnifiedPluginLoader: @unchecked Sendable {
 
         lock.lock()
         manifests[manifest.name] = manifest
+        pluginDirectories[manifest.name] = pluginDir
         lock.unlock()
 
         // Resolve and validate the effective namespace handle
@@ -156,33 +190,302 @@ public final class UnifiedPluginLoader: @unchecked Sendable {
             case "swift-plugin":
                 // Swift plugins with @_cdecl are binary-compatible with C ABI
                 // Route through NativePluginHost for unified qualifier support
-                try loadNativePlugin(
-                    at: providePath,
-                    pluginName: manifest.name,
-                    config: provide,
-                    qualifierNamespace: effectiveHandle
-                )
+                if let actions = provide.actions, !actions.isEmpty {
+                    debugPrint("[UnifiedPluginLoader] Registering lazy stubs for swift-plugin '\(manifest.name)'")
+                    registerLazyNativePlugin(
+                        at: providePath,
+                        pluginName: manifest.name,
+                        provide: provide,
+                        effectiveHandle: effectiveHandle,
+                        actions: actions
+                    )
+                } else {
+                    try loadNativePlugin(
+                        at: providePath,
+                        pluginName: manifest.name,
+                        config: provide,
+                        qualifierNamespace: effectiveHandle
+                    )
+                }
 
             case "rust-plugin", "c-plugin", "cpp-plugin":
-                try loadNativePlugin(
-                    at: providePath,
-                    pluginName: manifest.name,
-                    config: provide,
-                    qualifierNamespace: effectiveHandle
-                )
+                if let actions = provide.actions, !actions.isEmpty {
+                    debugPrint("[UnifiedPluginLoader] Registering lazy stubs for '\(provide.type)' plugin '\(manifest.name)'")
+                    registerLazyNativePlugin(
+                        at: providePath,
+                        pluginName: manifest.name,
+                        provide: provide,
+                        effectiveHandle: effectiveHandle,
+                        actions: actions
+                    )
+                } else {
+                    try loadNativePlugin(
+                        at: providePath,
+                        pluginName: manifest.name,
+                        config: provide,
+                        qualifierNamespace: effectiveHandle
+                    )
+                }
 
             case "python-plugin":
-                try loadPythonPlugin(
-                    at: providePath,
-                    pluginName: manifest.name,
-                    config: provide,
-                    qualifierNamespace: effectiveHandle
-                )
+                if let actions = provide.actions, !actions.isEmpty {
+                    debugPrint("[UnifiedPluginLoader] Registering lazy stubs for python-plugin '\(manifest.name)'")
+                    registerLazyPythonPlugin(
+                        at: providePath,
+                        pluginName: manifest.name,
+                        provide: provide,
+                        effectiveHandle: effectiveHandle,
+                        actions: actions
+                    )
+                } else {
+                    try loadPythonPlugin(
+                        at: providePath,
+                        pluginName: manifest.name,
+                        config: provide,
+                        qualifierNamespace: effectiveHandle
+                    )
+                }
 
             default:
                 print("[UnifiedPluginLoader] Warning: Unknown provide type '\(provide.type)'")
             }
         }
+    }
+
+    // MARK: - Lazy Plugin Registration
+
+    /// Register lazy action stubs for a native (C/Rust/Swift) plugin whose actions
+    /// are declared in `plugin.yaml`. The actual `dlopen`/compile is deferred to
+    /// the first invocation.
+    private func registerLazyNativePlugin(
+        at providePath: URL,
+        pluginName: String,
+        provide: UnifiedProvideEntry,
+        effectiveHandle: String?,
+        actions: [ManifestActionEntry]
+    ) {
+        loadCondition.lock()
+        lazyPlugins[pluginName] = .pendingNative(dir: providePath, provide: provide, effectiveHandle: effectiveHandle)
+        loadCondition.unlock()
+
+        registerLazyActionStubs(
+            pluginName: pluginName,
+            effectiveHandle: effectiveHandle,
+            actions: actions,
+            isNative: true
+        )
+
+        // Register lazy service wrapper for Call action support
+        let wrapper = LazyNativeServiceWrapper(pluginName: pluginName, loader: self)
+        try? ExternalServiceRegistry.shared.register(wrapper, withName: pluginName)
+    }
+
+    /// Register lazy action stubs for a Python plugin.
+    private func registerLazyPythonPlugin(
+        at providePath: URL,
+        pluginName: String,
+        provide: UnifiedProvideEntry,
+        effectiveHandle: String?,
+        actions: [ManifestActionEntry]
+    ) {
+        loadCondition.lock()
+        lazyPlugins[pluginName] = .pendingPython(dir: providePath, provide: provide, effectiveHandle: effectiveHandle)
+        loadCondition.unlock()
+
+        registerLazyActionStubs(
+            pluginName: pluginName,
+            effectiveHandle: effectiveHandle,
+            actions: actions,
+            isNative: false
+        )
+
+        let wrapper = LazyPythonServiceWrapper(pluginName: pluginName, loader: self)
+        try? ExternalServiceRegistry.shared.register(wrapper, withName: pluginName)
+    }
+
+    /// Register action stubs in the ActionRegistry for manifest-declared actions.
+    private func registerLazyActionStubs(
+        pluginName: String,
+        effectiveHandle: String?,
+        actions: [ManifestActionEntry],
+        isNative: Bool
+    ) {
+        var semaphoreCount = 0
+        let semaphore = DispatchSemaphore(value: 0)
+
+        for action in actions {
+            let actionVerbs = action.verbs
+            let actionName = action.name
+
+            for verb in actionVerbs {
+                // Register both plain verb and namespaced verb (e.g. "hash" and "Hash.hash")
+                var registeredVerbs: [String] = [verb]
+                if let ns = effectiveHandle {
+                    registeredVerbs.append("\(ns).\(verb)")
+                }
+
+                for registeredVerb in registeredVerbs {
+                    let capturedVerb = verb
+                    let capturedPlugin = pluginName
+                    let capturedLoader = self
+
+                    semaphoreCount += 1
+                    Task {
+                        await ActionRegistry.shared.registerDynamic(verb: registeredVerb) { result, object, context in
+                            // Lazy-load on first invocation
+                            let input = Self.buildPluginInput(result: result, object: object, context: context)
+                            if isNative {
+                                let host = try capturedLoader.ensureNativePluginLoaded(pluginName: capturedPlugin)
+                                let output = try host.execute(action: capturedVerb, input: input)
+                                context.bind(result.base, value: output)
+                                return output
+                            } else {
+                                let host = try capturedLoader.ensurePythonPluginLoaded(pluginName: capturedPlugin)
+                                let output = try host.execute(action: capturedVerb, input: input)
+                                context.bind(result.base, value: output)
+                                return output
+                            }
+                        }
+                        semaphore.signal()
+                    }
+                }
+            }
+        }
+
+        for _ in 0..<semaphoreCount {
+            semaphore.wait()
+        }
+    }
+
+    // MARK: - Lazy Load Execution
+
+    /// Ensure a native plugin is loaded, loading it now if this is the first call.
+    /// Thread-safe: concurrent callers wait for the first loader to finish.
+    func ensureNativePluginLoaded(pluginName: String) throws -> NativePluginHost {
+        loadCondition.lock()
+
+        // Wait out any concurrent load in progress
+        while case .loading = lazyPlugins[pluginName] {
+            loadCondition.wait()
+        }
+
+        switch lazyPlugins[pluginName] {
+        case .loadedNative(let host):
+            loadCondition.unlock()
+            return host
+        case .failed(let error):
+            loadCondition.unlock()
+            throw error
+        case .pendingNative(let dir, let provide, let effectiveHandle):
+            // Claim the load slot
+            lazyPlugins[pluginName] = .loading
+            loadCondition.unlock()
+
+            debugPrint("[UnifiedPluginLoader] Lazily loading native plugin '\(pluginName)'")
+            do {
+                let host = try NativePluginHost(
+                    pluginPath: dir,
+                    pluginName: pluginName,
+                    config: provide,
+                    qualifierNamespace: effectiveHandle
+                )
+                // Note: we do NOT call host.registerActions() here — lazy stubs are
+                // already registered in ActionRegistry and delegate here directly.
+                // host.init() does call loadPluginInfo() which registers qualifiers.
+
+                loadCondition.lock()
+                nativePlugins[pluginName] = host
+                lazyPlugins[pluginName] = .loadedNative(host)
+                loadCondition.broadcast()
+                loadCondition.unlock()
+
+                debugPrint("[UnifiedPluginLoader] Native plugin '\(pluginName)' loaded lazily")
+                return host
+            } catch {
+                loadCondition.lock()
+                lazyPlugins[pluginName] = .failed(error)
+                loadCondition.broadcast()
+                loadCondition.unlock()
+                throw error
+            }
+        default:
+            loadCondition.unlock()
+            throw ActionError.runtimeError("Plugin '\(pluginName)' is not a lazy native plugin")
+        }
+    }
+
+    /// Ensure a Python plugin is loaded, loading it now if this is the first call.
+    func ensurePythonPluginLoaded(pluginName: String) throws -> PythonPluginHost {
+        loadCondition.lock()
+
+        while case .loading = lazyPlugins[pluginName] {
+            loadCondition.wait()
+        }
+
+        switch lazyPlugins[pluginName] {
+        case .loadedPython(let host):
+            loadCondition.unlock()
+            return host
+        case .failed(let error):
+            loadCondition.unlock()
+            throw error
+        case .pendingPython(let dir, let provide, let effectiveHandle):
+            lazyPlugins[pluginName] = .loading
+            loadCondition.unlock()
+
+            debugPrint("[UnifiedPluginLoader] Lazily loading Python plugin '\(pluginName)'")
+            do {
+                let host = try PythonPluginHost(
+                    pluginPath: dir,
+                    pluginName: pluginName,
+                    config: provide,
+                    qualifierNamespace: effectiveHandle
+                )
+                loadCondition.lock()
+                pythonPlugins[pluginName] = host
+                lazyPlugins[pluginName] = .loadedPython(host)
+                loadCondition.broadcast()
+                loadCondition.unlock()
+
+                debugPrint("[UnifiedPluginLoader] Python plugin '\(pluginName)' loaded lazily")
+                return host
+            } catch {
+                loadCondition.lock()
+                lazyPlugins[pluginName] = .failed(error)
+                loadCondition.broadcast()
+                loadCondition.unlock()
+                throw error
+            }
+        default:
+            loadCondition.unlock()
+            throw ActionError.runtimeError("Plugin '\(pluginName)' is not a lazy Python plugin")
+        }
+    }
+
+    // MARK: - Helpers
+
+    /// Build input dict for a plugin call from ARO context — mirrors NativePluginActionWrapper.handle
+    static func buildPluginInput(
+        result: ResultDescriptor,
+        object: ObjectDescriptor,
+        context: ExecutionContext
+    ) -> [String: any Sendable] {
+        var input: [String: any Sendable] = [:]
+        if let objValue = context.resolveAny(object.base) {
+            input["data"] = objValue
+            input["object"] = objValue
+            input[object.base] = objValue
+        }
+        if let specifier = object.specifiers.first {
+            input["qualifier"] = specifier
+        }
+        if let withArgs = context.resolveAny("_with_") as? [String: any Sendable] {
+            input.merge(withArgs) { _, new in new }
+        }
+        if let exprArgs = context.resolveAny("_expression_") as? [String: any Sendable] {
+            input.merge(exprArgs) { _, new in new }
+        }
+        return input
     }
 
     // MARK: - ARO File Loading
@@ -337,10 +640,35 @@ public final class UnifiedPluginLoader: @unchecked Sendable {
         return manifests[name]
     }
 
+    /// Returns true if the plugin has been fully loaded (not just discovered).
+    public func isPluginLoaded(name: String) -> Bool {
+        loadCondition.lock()
+        defer { loadCondition.unlock() }
+        switch lazyPlugins[name] {
+        case .loadedNative, .loadedPython: return true
+        default: break
+        }
+        lock.lock()
+        defer { lock.unlock() }
+        return nativePlugins[name] != nil || pythonPlugins[name] != nil
+    }
+
     // MARK: - Unload
 
     /// Unload all plugins
     public func unloadAll() {
+        loadCondition.lock()
+        // Unload any lazily-loaded native/python plugins
+        for entry in lazyPlugins.values {
+            switch entry {
+            case .loadedNative(let host): host.unload()
+            case .loadedPython(let host): host.unload()
+            default: break
+            }
+        }
+        lazyPlugins.removeAll()
+        loadCondition.unlock()
+
         lock.lock()
         aroPlugins.removeAll()
         nativePlugins.values.forEach { $0.unload() }
@@ -349,9 +677,63 @@ public final class UnifiedPluginLoader: @unchecked Sendable {
         pythonPlugins.removeAll()
         manifests.removeAll()
         registeredHandles.removeAll()
+        pluginDirectories.removeAll()
         lock.unlock()
 
         legacyLoader.unloadAll()
+    }
+
+    /// Unload a single plugin by name, releasing its library handle and
+    /// deregistering its actions and qualifiers from all registries.
+    ///
+    /// - Parameter pluginName: The name declared in the plugin's `plugin.yaml`
+    /// - Returns: `true` if the plugin was loaded and has been unloaded
+    @discardableResult
+    public func unload(pluginName: String) -> Bool {
+        lock.lock()
+        guard manifests[pluginName] != nil else {
+            lock.unlock()
+            return false
+        }
+
+        // Remove ARO file plugin (no native handle to close)
+        aroPlugins.removeValue(forKey: pluginName)
+
+        // Capture hosts before releasing lock so unload() runs outside it
+        let native = nativePlugins.removeValue(forKey: pluginName)
+        let python = pythonPlugins.removeValue(forKey: pluginName)
+
+        manifests.removeValue(forKey: pluginName)
+        pluginDirectories.removeValue(forKey: pluginName)
+        // Release the handle so another plugin can claim it
+        registeredHandles = registeredHandles.filter { $0.value != pluginName }
+        lock.unlock()
+
+        // Unload after releasing the lock (both call ActionRegistry / dlclose)
+        native?.unload()
+        python?.unload()
+
+        return true
+    }
+
+    /// Reload a single plugin: unload the current version then load the plugin
+    /// fresh from its source directory on disk.
+    ///
+    /// - Parameter pluginName: The name declared in the plugin's `plugin.yaml`
+    /// - Throws: If the plugin was never loaded or the fresh load fails
+    public func reload(pluginName: String) throws {
+        lock.lock()
+        let dir = pluginDirectories[pluginName]
+        lock.unlock()
+
+        guard let pluginDir = dir else {
+            throw UnifiedPluginError.notFound(pluginName)
+        }
+
+        unload(pluginName: pluginName)
+
+        let manifestPath = pluginDir.appendingPathComponent("plugin.yaml")
+        try loadPlugin(at: pluginDir, manifestPath: manifestPath)
     }
 
     // MARK: - Handle Resolution
@@ -416,6 +798,21 @@ public final class UnifiedPluginLoader: @unchecked Sendable {
         s.split(separator: "-")
             .map { $0.prefix(1).uppercased() + $0.dropFirst() }
             .joined()
+    }
+}
+
+// MARK: - Errors
+
+/// Errors thrown by `UnifiedPluginLoader`
+public enum UnifiedPluginError: Error, CustomStringConvertible {
+    /// No plugin with the given name is currently loaded
+    case notFound(String)
+
+    public var description: String {
+        switch self {
+        case .notFound(let name):
+            return "Plugin '\(name)' is not loaded and cannot be reloaded."
+        }
     }
 }
 
@@ -546,6 +943,30 @@ public struct UnifiedProvideEntry: Codable, Sendable {
     let handler: String?
     let build: UnifiedBuildConfig?
     let python: UnifiedPythonConfig?
+    /// Manifest-declared actions for this component.
+    ///
+    /// When present, the loader registers lazy action stubs at startup and defers
+    /// `dlopen`/`cargo build`/subprocess-launch to the first invocation.
+    let actions: [ManifestActionEntry]?
+}
+
+/// An action declared in a plugin manifest's `provides[].actions[]` array.
+///
+/// Used for lazy loading: the loader can register action stubs from the manifest
+/// without loading the plugin library.
+public struct ManifestActionEntry: Codable, Sendable {
+    /// Canonical action name (e.g. "Hash", "Greet").
+    let name: String
+    /// Verbs that invoke this action (e.g. ["hash", "digest"]).
+    let verbs: [String]
+    /// Semantic role ("own", "request", "response", "export"). Optional.
+    let role: String?
+    /// Valid prepositions ("from", "with", …). Optional.
+    let prepositions: [String]?
+    /// Human-readable description. Optional.
+    let description: String?
+    /// Version when this action was introduced. Optional.
+    let since: String?
 }
 
 public struct UnifiedBuildConfig: Codable, Sendable {
@@ -594,6 +1015,52 @@ struct NativePluginServiceWrapper: AROService {
     }
 
     func call(_ method: String, args: [String: any Sendable]) async throws -> any Sendable {
+        return try host.execute(action: method, input: args)
+    }
+}
+
+// MARK: - Lazy Service Wrappers
+
+/// Lazy service wrapper for native plugins — triggers load on first Call action use.
+struct LazyNativeServiceWrapper: AROService {
+    static let name: String = "_lazy_native_plugin_"
+
+    private let pluginName: String
+    private let loader: UnifiedPluginLoader
+
+    init(pluginName: String, loader: UnifiedPluginLoader) {
+        self.pluginName = pluginName
+        self.loader = loader
+    }
+
+    init() throws {
+        fatalError("LazyNativeServiceWrapper requires pluginName and loader")
+    }
+
+    func call(_ method: String, args: [String: any Sendable]) async throws -> any Sendable {
+        let host = try loader.ensureNativePluginLoaded(pluginName: pluginName)
+        return try host.execute(action: method, input: args)
+    }
+}
+
+/// Lazy service wrapper for Python plugins — triggers load on first Call action use.
+struct LazyPythonServiceWrapper: AROService {
+    static let name: String = "_lazy_python_plugin_"
+
+    private let pluginName: String
+    private let loader: UnifiedPluginLoader
+
+    init(pluginName: String, loader: UnifiedPluginLoader) {
+        self.pluginName = pluginName
+        self.loader = loader
+    }
+
+    init() throws {
+        fatalError("LazyPythonServiceWrapper requires pluginName and loader")
+    }
+
+    func call(_ method: String, args: [String: any Sendable]) async throws -> any Sendable {
+        let host = try loader.ensurePythonPluginLoaded(pluginName: pluginName)
         return try host.execute(action: method, input: args)
     }
 }

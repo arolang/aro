@@ -104,3 +104,107 @@ struct ErrorTests {
         #expect(error.message.contains("Cannot validate the data against the order-schema"))
     }
 }
+
+// MARK: - Structured ActionError Cases
+
+@Suite("Structured ActionError Tests")
+struct StructuredActionErrorTests {
+
+    @Test("missingRequiredField carries action and field")
+    func testMissingRequiredField() {
+        let error = ActionError.missingRequiredField(field: "a source path", action: "Copy")
+        let desc = error.description
+        #expect(desc.contains("Copy"))
+        #expect(desc.contains("a source path"))
+    }
+
+    @Test("invalidURL carries the offending URL")
+    func testInvalidURL() {
+        let error = ActionError.invalidURL("ftp://example.com")
+        let desc = error.description
+        #expect(desc.contains("ftp://example.com"))
+        #expect(desc.contains("http://") || desc.contains("https://"))
+    }
+
+    @Test("unsupportedPlatform carries the feature name")
+    func testUnsupportedPlatform() {
+        let error = ActionError.unsupportedPlatform("HTTP client")
+        #expect(error.description.contains("HTTP client"))
+        #expect(error.description.contains("platform"))
+    }
+
+    @Test("serviceStartFailed includes service name and port")
+    func testServiceStartFailedWithPort() {
+        let error = ActionError.serviceStartFailed(service: "HTTP server", port: 8080)
+        let desc = error.description
+        #expect(desc.contains("HTTP server"))
+        #expect(desc.contains("8080"))
+    }
+
+    @Test("serviceStartFailed without port omits port")
+    func testServiceStartFailedWithoutPort() {
+        let error = ActionError.serviceStartFailed(service: "scheduler", port: nil)
+        let desc = error.description
+        #expect(desc.contains("scheduler"))
+        #expect(!desc.contains("port"))
+    }
+
+    @Test("invalidArgument with valid values lists them")
+    func testInvalidArgumentWithValidValues() {
+        let error = ActionError.invalidArgument(
+            argument: "parse type",
+            value: "csv",
+            validValues: ["links", "content", "text", "markdown"]
+        )
+        let desc = error.description
+        #expect(desc.contains("csv"))
+        #expect(desc.contains("links"))
+        #expect(desc.contains("markdown"))
+    }
+
+    @Test("invalidArgument without valid values omits list")
+    func testInvalidArgumentWithoutValidValues() {
+        let error = ActionError.invalidArgument(argument: "state transition", value: "bad_val", validValues: nil)
+        let desc = error.description
+        #expect(desc.contains("bad_val"))
+        #expect(!desc.contains("Valid values"))
+    }
+
+    @Test("scopeViolation names variable and both activities")
+    func testScopeViolation() {
+        let error = ActionError.scopeViolation(
+            variable: "config",
+            sourceActivity: "Startup",
+            accessedFrom: "User API"
+        )
+        let desc = error.description
+        #expect(desc.contains("config"))
+        #expect(desc.contains("Startup"))
+        #expect(desc.contains("User API"))
+    }
+
+    @Test("pluginError names plugin and underlying message")
+    func testPluginError() {
+        let error = ActionError.pluginError(plugin: "my-plugin", underlying: "symbol not found")
+        let desc = error.description
+        #expect(desc.contains("my-plugin"))
+        #expect(desc.contains("symbol not found"))
+    }
+
+    @Test("all new cases conform to LocalizedError")
+    func testLocalizedError() {
+        let cases: [ActionError] = [
+            .missingRequiredField(field: "a path", action: "Make"),
+            .invalidURL("bad"),
+            .unsupportedPlatform("Sockets"),
+            .serviceStartFailed(service: "HTTP server", port: 443),
+            .invalidArgument(argument: "type", value: "x", validValues: nil),
+            .scopeViolation(variable: "v", sourceActivity: "A", accessedFrom: "B"),
+            .pluginError(plugin: "p", underlying: "err"),
+        ]
+        for error in cases {
+            #expect(error.errorDescription != nil)
+            #expect(error.errorDescription == error.description)
+        }
+    }
+}

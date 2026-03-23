@@ -358,7 +358,7 @@ components:
 
 ```aro
 (Application-Start: Weather Service) {
-    Log the <message> for the <console> with "Weather Service starting...".
+    Log "Weather Service starting..." to the <console>.
 
     (* Fetch weather from external API *)
     Call the <response> from the <http: get> with {
@@ -367,14 +367,14 @@ components:
 
     Extract the <weather> from the <response: body>.
 
-    Log the <message> for the <console> with "Current weather:".
-    Log the <message> for the <console> with <weather>.
+    Log "Current weather:" to the <console>.
+    Log <weather> to the <console>.
 
     Return an <OK: status> for the <startup>.
 }
 
 (Application-End: Success) {
-    Log the <message> for the <console> with "Weather Service shutting down...".
+    Log "Weather Service shutting down..." to the <console>.
     Return an <OK: status> for the <shutdown>.
 }
 ```

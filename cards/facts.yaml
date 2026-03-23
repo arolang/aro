@@ -524,6 +524,20 @@ facts:
     headline: "(Process Upload: File Event Handler)"
     explanation: "File Event Handler receives notifications. event:path is the changed file. event:type is created/modified/deleted. React to filesystem changes."
 
+  - id: "23-3"
+    week: 23
+    day: 3
+    category: "Repositories"
+    headline: "Configure the <session-repository: ttl> with 300."
+    explanation: "TTL (time-to-live) automatically expires old repository items. Items older than the threshold are invisible to Retrieve — no error, just gone. Use it for caches, session stores, and rate-limit windows."
+
+  - id: "23-4"
+    week: 23
+    day: 4
+    category: "Repositories"
+    headline: "Configure the <cache-repository: maxSize> with 1000."
+    explanation: "maxSize caps how many items a repository holds. When the limit is reached the oldest item is evicted (FIFO). Catch evictions with a {repo} Evicted Handler to archive, log, or react to the removed item."
+
   # ===== WEEK 24: Publish =====
   - id: "24-1"
     week: 24

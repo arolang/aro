@@ -43,7 +43,7 @@ public struct PromptAction: ActionImplementation {
 
         // Get terminal service from context
         guard let terminalService = context.service(TerminalService.self) else {
-            throw ActionError.runtimeError("Terminal service not available")
+            throw ActionError.missingService("TerminalService")
         }
 
         // Prompt for input
@@ -111,7 +111,7 @@ public struct SelectAction: ActionImplementation {
 
         // Get terminal service from context
         guard let terminalService = context.service(TerminalService.self) else {
-            throw ActionError.runtimeError("Terminal service not available")
+            throw ActionError.missingService("TerminalService")
         }
 
         // Display selection menu

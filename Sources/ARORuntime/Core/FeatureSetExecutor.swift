@@ -23,7 +23,7 @@ import AROParser
 /// By default, statements execute sequentially. When `enableParallelIO`
 /// is true, I/O operations may run in parallel based on data dependencies
 /// while maintaining sequential semantics (ARO-0011).
-public final class FeatureSetExecutor: @unchecked Sendable {
+public final class FeatureSetExecutor: Sendable {
     // MARK: - Properties
 
     private let actionRegistry: ActionRegistry
@@ -32,10 +32,7 @@ public final class FeatureSetExecutor: @unchecked Sendable {
     private let expressionEvaluator: ExpressionEvaluator
 
     /// Whether to enable parallel I/O optimization (ARO-0011)
-    public var enableParallelIO: Bool = false
-
-    /// The statement scheduler for parallel I/O (lazy initialization)
-    private lazy var scheduler = StatementScheduler()
+    public let enableParallelIO: Bool
 
     // MARK: - Initialization
 
@@ -66,6 +63,12 @@ public final class FeatureSetExecutor: @unchecked Sendable {
         let featureSet = analyzedFeatureSet.featureSet
         let startTime = Date()
 
+        // Determine whether this is an application-lifecycle feature set.
+        // Symbols published by Application-Start and Application-End must persist
+        // for the entire process lifetime and are therefore excluded from eviction.
+        let isLifecycleFeatureSet = featureSet.name == "Application-Start"
+            || featureSet.name.hasPrefix("Application-End")
+
         // Emit start event
         eventBus.publish(FeatureSetStartedEvent(
             featureSetName: featureSet.name,
@@ -78,10 +81,10 @@ public final class FeatureSetExecutor: @unchecked Sendable {
             // Check if access would be denied due to business activity mismatch
             if await globalSymbols.isAccessDenied(dependency, forBusinessActivity: context.businessActivity) {
                 let sourceActivity = await globalSymbols.businessActivity(for: dependency) ?? "unknown"
-                throw ActionError.runtimeError(
-                    "Variable '\(dependency)' is not accessible. " +
-                    "Published variables are only visible within the same business activity. " +
-                    "'\(dependency)' is published in \"\(sourceActivity)\" but accessed from \"\(context.businessActivity)\"."
+                throw ActionError.scopeViolation(
+                    variable: dependency,
+                    sourceActivity: sourceActivity,
+                    accessedFrom: context.businessActivity
                 )
             }
 
@@ -128,6 +131,7 @@ public final class FeatureSetExecutor: @unchecked Sendable {
         do {
             if enableParallelIO {
                 // ARO-0011: Data-flow driven parallel I/O execution
+                let scheduler = StatementScheduler()
                 _ = try await scheduler.execute(
                     analyzedFeatureSet,
                     context: context
@@ -159,6 +163,10 @@ public final class FeatureSetExecutor: @unchecked Sendable {
                     durationMs: duration
                 ))
 
+                if !isLifecycleFeatureSet {
+                    await globalSymbols.evict(executionId: context.executionId)
+                }
+
                 return response
             }
 
@@ -173,6 +181,10 @@ public final class FeatureSetExecutor: @unchecked Sendable {
                 durationMs: duration
             ))
 
+            if !isLifecycleFeatureSet {
+                await globalSymbols.evict(executionId: context.executionId)
+            }
+
             return Response.ok()
 
         } catch {
@@ -185,6 +197,10 @@ public final class FeatureSetExecutor: @unchecked Sendable {
                 success: false,
                 durationMs: duration
             ))
+
+            if !isLifecycleFeatureSet {
+                await globalSymbols.evict(executionId: context.executionId)
+            }
 
             throw error
         }
@@ -524,12 +540,13 @@ public final class FeatureSetExecutor: @unchecked Sendable {
             throw ActionError.undefinedVariable(statement.internalVariable)
         }
 
-        // Publish to global symbols with business activity
+        // Publish to global symbols with business activity and execution owner
         await globalSymbols.publish(
             name: statement.externalName,
             value: value,
             fromFeatureSet: context.featureSetName,
-            businessActivity: context.businessActivity
+            businessActivity: context.businessActivity,
+            executionId: context.executionId
         )
 
         // Also bind the external name locally
@@ -751,7 +768,7 @@ public final class FeatureSetExecutor: @unchecked Sendable {
         // Handle [String: any Sendable] dictionary
         if let dict = value as? [String: any Sendable] {
             guard let propValue = dict[property] else {
-                throw ActionError.runtimeError("Property '\(property)' not found on object")
+                throw ActionError.propertyNotFound(property: property, on: "object")
             }
             return propValue
         }
@@ -759,12 +776,12 @@ public final class FeatureSetExecutor: @unchecked Sendable {
         // Handle [String: AnySendable] dictionary
         if let dict = value as? [String: AnySendable] {
             guard let propValue = dict[property] else {
-                throw ActionError.runtimeError("Property '\(property)' not found on object")
+                throw ActionError.propertyNotFound(property: property, on: "object")
             }
             return propValue
         }
 
-        throw ActionError.runtimeError("Cannot access property '\(property)' on \(type(of: value))")
+        throw ActionError.propertyNotFound(property: property, on: String(describing: type(of: value)))
     }
 
     // MARK: - Range Loop Execution (ARO-0072)
@@ -774,7 +791,7 @@ public final class FeatureSetExecutor: @unchecked Sendable {
         let toVal   = try await expressionEvaluator.evaluate(loop.to,   context: context)
 
         guard let fromInt = toInt(fromVal), let toInt = toInt(toVal) else {
-            throw ActionError.runtimeError("Range loop bounds must be integers, got \(fromVal) to \(toVal)")
+            throw ActionError.typeMismatch(expected: "Int", actual: "\(type(of: fromVal))", variable: "range bounds")
         }
 
         for i in fromInt..<toInt {
@@ -1021,7 +1038,6 @@ public final class Runtime: @unchecked Sendable {
             let handlers = self.withLock {
                 self._compiledHandlers[event.domainEventType] ?? []
             }
-
             // Execute all matching handlers concurrently
             await withTaskGroup(of: Void.self) { group in
                 for (_, callback) in handlers {
