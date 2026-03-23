@@ -81,7 +81,7 @@ public struct ComputeAction: ActionImplementation {
         let computationName = resolveOperationName(from: result, knownOperations: knownComputations, fallback: "identity")
 
         // Check plugin qualifier first (e.g., pick-random from a plugin)
-        if let pluginResult = try QualifierRegistry.shared.resolve(computationName, value: input) {
+        if let pluginResult = try context.container.qualifierRegistry.resolve(computationName, value: input) {
             return pluginResult
         }
 
@@ -1003,7 +1003,7 @@ public struct UpdateAction: ActionImplementation {
 
         // Check if this is a repository configuration (e.g., Configure the <session-repository: ttl> with 300.)
         if InMemoryRepositoryStorage.isRepositoryName(result.base), let fieldName = result.specifiers.first {
-            let storage = context.service(RepositoryStorageService.self) ?? InMemoryRepositoryStorage.shared
+            let storage = context.service(RepositoryStorageService.self) ?? context.container.repositoryStorage
 
             // Read current config so setting ttl doesn't wipe maxSize and vice versa
             var currentTTL: TimeInterval? = nil
@@ -1424,7 +1424,7 @@ public struct DeleteAction: ActionImplementation {
             if let storage = context.service(RepositoryStorageService.self) {
                 await storage.clear(repository: repositoryName, businessActivity: context.businessActivity)
             } else {
-                await InMemoryRepositoryStorage.shared.clear(repository: repositoryName, businessActivity: context.businessActivity)
+                await context.container.repositoryStorage.clear(repository: repositoryName, businessActivity: context.businessActivity)
             }
             // Emit repository cleared event
             context.emit(RepositoryChangedEvent(
@@ -1451,8 +1451,8 @@ public struct DeleteAction: ActionImplementation {
                 equals: matchValue
             )
         } else {
-            // Fallback to shared instance
-            deleteResult = await InMemoryRepositoryStorage.shared.delete(
+            // Fallback to container storage
+            deleteResult = await context.container.repositoryStorage.delete(
                 from: repositoryName,
                 businessActivity: context.businessActivity,
                 where: field,

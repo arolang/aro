@@ -348,7 +348,15 @@ public final class PluginLoader: @unchecked Sendable {
                         var registrationCount = 0
 
                         for actionDef in actions {
-                            guard let verbs = actionDef["verbs"] as? [String] else { continue }
+                            // Support both {"verbs":["execute",...]} and {"name":"execute"} formats
+                            let verbs: [String]
+                            if let v = actionDef["verbs"] as? [String], !v.isEmpty {
+                                verbs = v
+                            } else if let actionName = actionDef["name"] as? String {
+                                verbs = [actionName.lowercased()]
+                            } else {
+                                continue
+                            }
 
                             for verb in verbs {
                                 let normalizedVerb = verb.lowercased().replacingOccurrences(of: "-", with: "")
@@ -551,6 +559,44 @@ public final class PluginLoader: @unchecked Sendable {
     /// - Parameter binaryPath: Path to the executable binary
     public func loadPrecompiledManagedPlugins(relativeTo binaryPath: URL) throws {
         let binaryDir = binaryPath.deletingLastPathComponent()
+
+        // Priority 1: Load plugins embedded in the binary (base64-encoded .so compiled into binary)
+        if !embeddedPluginRegistry.isEmpty {
+            #if os(Windows)
+            let libraryExtension = "dll"
+            #elseif os(Linux)
+            let libraryExtension = "so"
+            #else
+            let libraryExtension = "dylib"
+            #endif
+
+            let tmpPluginsDir = FileManager.default.temporaryDirectory.appendingPathComponent("aro-plugins")
+            try? FileManager.default.createDirectory(at: tmpPluginsDir, withIntermediateDirectories: true)
+
+            for (pluginName, embeddedData) in embeddedPluginRegistry {
+                guard let soData = Data(base64Encoded: embeddedData.base64So) else {
+                    print("[PluginLoader] Warning: Failed to decode embedded plugin '\(pluginName)'")
+                    continue
+                }
+
+                let pluginTmpDir = tmpPluginsDir.appendingPathComponent(pluginName)
+                try? FileManager.default.createDirectory(at: pluginTmpDir, withIntermediateDirectories: true)
+                let soPath = pluginTmpDir.appendingPathComponent("lib\(pluginName).\(libraryExtension)")
+
+                // Only write if not already present (stable across re-runs)
+                if !FileManager.default.fileExists(atPath: soPath.path) {
+                    try soData.write(to: soPath)
+                }
+
+                let namespace = parseHandlerFromPluginYAML(embeddedData.yaml)
+                do {
+                    try loadCPlugin(at: soPath, name: pluginName, namespace: namespace)
+                } catch {
+                    print("[PluginLoader] Warning: Failed to load embedded plugin '\(pluginName)': \(error)")
+                }
+            }
+        }
+
         let pluginsDir = binaryDir.appendingPathComponent("Plugins")
 
         #if os(Windows)
@@ -591,10 +637,12 @@ public final class PluginLoader: @unchecked Sendable {
             }()
 
             // Search for the library in common locations:
+            // - plugin root (pre-built .so placed directly in plugin dir)
             // - src/ (C plugins, Python plugins)
             // - Sources/ (Swift plugins)
-            // - target/release/ (Rust plugins)
+            // - target/release/ (Rust plugins compiled by cargo)
             let searchDirs = [
+                item,
                 item.appendingPathComponent("src"),
                 item.appendingPathComponent("Sources"),
                 item.appendingPathComponent("target/release")
@@ -805,7 +853,7 @@ public final class PluginLoader: @unchecked Sendable {
                 }
             }
 
-            // Check for src/ directory with C files
+            // Check for src/ directory with Rust (Cargo.toml) or C files
             let srcDir = item.appendingPathComponent("src")
             if FileManager.default.fileExists(atPath: srcDir.path) {
                 let srcContents = try? FileManager.default.contentsOfDirectory(
@@ -813,6 +861,19 @@ public final class PluginLoader: @unchecked Sendable {
                     includingPropertiesForKeys: nil,
                     options: [.skipsHiddenFiles]
                 )
+
+                // Check for Cargo.toml in src/ (Rust plugin)
+                let cargoInSrc = srcDir.appendingPathComponent("Cargo.toml")
+                if FileManager.default.fileExists(atPath: cargoInSrc.path) {
+                    let outputTargetDir = outputPluginDir.appendingPathComponent("target/release")
+                    do {
+                        try compileRustPlugin(projectDir: srcDir, outputDir: outputTargetDir, pluginName: pluginName)
+                    } catch {
+                        print("[PluginLoader] Warning: Failed to compile managed Rust plugin \(pluginName): \(error)")
+                    }
+                    continue
+                }
+
                 let cFiles = srcContents?.filter { $0.pathExtension == "c" } ?? []
 
                 if !cFiles.isEmpty {
@@ -827,6 +888,17 @@ public final class PluginLoader: @unchecked Sendable {
                     } catch {
                         print("[PluginLoader] Warning: Failed to compile managed C plugin \(pluginName): \(error)")
                     }
+                }
+            }
+
+            // Also check for Cargo.toml in the plugin root directory
+            let rootCargoToml = item.appendingPathComponent("Cargo.toml")
+            if FileManager.default.fileExists(atPath: rootCargoToml.path) {
+                let outputTargetDir = outputPluginDir.appendingPathComponent("target/release")
+                do {
+                    try compileRustPlugin(projectDir: item, outputDir: outputTargetDir, pluginName: pluginName)
+                } catch {
+                    print("[PluginLoader] Warning: Failed to compile managed Rust plugin \(pluginName): \(error)")
                 }
             }
 
@@ -939,6 +1011,73 @@ public final class PluginLoader: @unchecked Sendable {
             let errorData = errorPipe.fileHandleForReading.readDataToEndOfFile()
             let errorMessage = String(data: errorData, encoding: .utf8) ?? "Unknown error"
             throw PluginError.compilationFailed("cc", message: errorMessage)
+        }
+    }
+
+    /// Compile a Rust plugin using cargo build --release
+    /// - Parameters:
+    ///   - projectDir: Directory containing Cargo.toml
+    ///   - outputDir: Destination for the compiled library (e.g. outputPluginDir/target/release)
+    ///   - pluginName: Plugin name (for error messages)
+    private func compileRustPlugin(projectDir: URL, outputDir: URL, pluginName: String) throws {
+        let cargoPaths = [
+            "/root/.cargo/bin/cargo",
+            "\(FileManager.default.homeDirectoryForCurrentUser.path)/.cargo/bin/cargo",
+            "/usr/local/cargo/bin/cargo",
+            "/opt/homebrew/bin/cargo",
+            "/usr/local/bin/cargo",
+            "/usr/bin/cargo",
+        ]
+
+        guard let cargoPath = cargoPaths.first(where: { FileManager.default.isExecutableFile(atPath: $0) }) else {
+            throw PluginError.compilationFailed(pluginName, message: "Cargo not found. Install Rust to compile this plugin.")
+        }
+
+        let process = Process()
+        process.executableURL = URL(fileURLWithPath: cargoPath)
+        process.arguments = ["build", "--release"]
+        process.currentDirectoryURL = projectDir
+
+        let outputPipe = Pipe()
+        let errorPipe = Pipe()
+        process.standardOutput = outputPipe
+        process.standardError = errorPipe
+
+        try process.run()
+        process.waitUntilExit()
+
+        if process.terminationStatus != 0 {
+            let errorData = errorPipe.fileHandleForReading.readDataToEndOfFile()
+            let errorMessage = String(data: errorData, encoding: .utf8) ?? "Unknown error"
+            throw PluginError.compilationFailed(pluginName, message: "cargo build failed: \(errorMessage)")
+        }
+
+        // Locate the compiled library in target/release
+        let targetReleaseDir = projectDir.appendingPathComponent("target/release")
+
+        #if os(Windows)
+        let ext = "dll"
+        #elseif os(Linux)
+        let ext = "so"
+        #else
+        let ext = "dylib"
+        #endif
+
+        guard let contents = try? FileManager.default.contentsOfDirectory(
+            at: targetReleaseDir,
+            includingPropertiesForKeys: nil
+        ), let lib = contents.first(where: { $0.pathExtension == ext && $0.lastPathComponent.hasPrefix("lib") }) else {
+            throw PluginError.compilationFailed(pluginName, message: "Library not found in '\(targetReleaseDir.path)' after successful cargo build")
+        }
+
+        // Copy to the output directory (skip if source and dest are the same file)
+        try FileManager.default.createDirectory(at: outputDir, withIntermediateDirectories: true)
+        let dest = outputDir.appendingPathComponent(lib.lastPathComponent)
+        if lib.standardizedFileURL != dest.standardizedFileURL {
+            if FileManager.default.fileExists(atPath: dest.path) {
+                try FileManager.default.removeItem(at: dest)
+            }
+            try FileManager.default.copyItem(at: lib, to: dest)
         }
     }
 
@@ -1514,7 +1653,15 @@ public final class PluginLoader: @unchecked Sendable {
                         var registrationCount = 0
 
                         for actionDef in actions {
-                            guard let verbs = actionDef["verbs"] as? [String] else { continue }
+                            // Support both {"verbs":["execute",...]} and {"name":"execute"} formats
+                            let verbs: [String]
+                            if let v = actionDef["verbs"] as? [String], !v.isEmpty {
+                                verbs = v
+                            } else if let actionName = actionDef["name"] as? String {
+                                verbs = [actionName.lowercased()]
+                            } else {
+                                continue
+                            }
 
                             for verb in verbs {
                                 registrationCount += 1
