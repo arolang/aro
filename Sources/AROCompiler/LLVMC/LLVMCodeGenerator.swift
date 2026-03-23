@@ -48,12 +48,14 @@ public final class LLVMCodeGenerator {
     ///   - program: The analyzed ARO program
     ///   - openAPISpecJSON: Optional OpenAPI specification as JSON string
     ///   - templatesJSON: Optional templates dictionary as JSON string (ARO-0050)
+    ///   - embeddedPlugins: Optional array of plugin libraries to embed in the binary
     /// - Returns: Code generation result with IR text
     /// - Throws: LLVMCodeGenError if generation fails
     public func generate(
         program: AnalyzedProgram,
         openAPISpecJSON: String? = nil,
-        templatesJSON: String? = nil
+        templatesJSON: String? = nil,
+        embeddedPlugins: [(name: String, yaml: String, base64Library: String)]? = nil
     ) throws -> LLVMCodeGenerationResult {
         // Initialize components
         ctx = LLVMCodeGenContext(moduleName: "aro_program")
@@ -74,7 +76,7 @@ public final class LLVMCodeGenerator {
 
         // Collect and emit string constants
         let stringCollector = StringConstantCollector(context: ctx)
-        stringCollector.collect(from: program, openAPISpecJSON: openAPISpecJSON, templatesJSON: templatesJSON)
+        stringCollector.collect(from: program, openAPISpecJSON: openAPISpecJSON, templatesJSON: templatesJSON, embeddedPlugins: embeddedPlugins)
 
         // Generate feature set functions
         for analyzedFS in program.featureSets {
@@ -82,7 +84,7 @@ public final class LLVMCodeGenerator {
         }
 
         // Generate main function
-        generateMainFunction(program: program, openAPISpecJSON: openAPISpecJSON, templatesJSON: templatesJSON)
+        generateMainFunction(program: program, openAPISpecJSON: openAPISpecJSON, templatesJSON: templatesJSON, embeddedPlugins: embeddedPlugins)
 
         // Verify module
         try verifyModule()
@@ -1725,7 +1727,7 @@ public final class LLVMCodeGenerator {
 
     // MARK: - Main Function Generation
 
-    private func generateMainFunction(program: AnalyzedProgram, openAPISpecJSON: String?, templatesJSON: String? = nil) {
+    private func generateMainFunction(program: AnalyzedProgram, openAPISpecJSON: String?, templatesJSON: String? = nil, embeddedPlugins: [(name: String, yaml: String, base64Library: String)]? = nil) {
         let mainFunc = ctx.module.declareFunction("main", types.mainFunctionType)
 
         let entryBlock = ctx.module.appendBlock(named: "entry", to: mainFunc)
@@ -1753,6 +1755,16 @@ public final class LLVMCodeGenerator {
         if let templates = templatesJSON {
             let templatesStr = ctx.stringConstant(templates)
             _ = ctx.module.insertCall(externals.setEmbeddedTemplates, on: [templatesStr], at: ip)
+        }
+
+        // Register embedded plugins (base64-encoded .so files compiled into the binary)
+        if let plugins = embeddedPlugins {
+            for plugin in plugins {
+                let nameStr = ctx.stringConstant(plugin.name)
+                let yamlStr = ctx.stringConstant(plugin.yaml)
+                let base64Str = ctx.stringConstant(plugin.base64Library)
+                _ = ctx.module.insertCall(externals.registerEmbeddedPlugin, on: [nameStr, yamlStr, base64Str], at: ip)
+            }
         }
 
         // Load precompiled plugins
@@ -2059,7 +2071,7 @@ private final class StringConstantCollector {
         self.ctx = context
     }
 
-    func collect(from program: AnalyzedProgram, openAPISpecJSON: String?, templatesJSON: String? = nil) {
+    func collect(from program: AnalyzedProgram, openAPISpecJSON: String?, templatesJSON: String? = nil, embeddedPlugins: [(name: String, yaml: String, base64Library: String)]? = nil) {
         // Register built-in variable names
         let builtins = ["_literal_", "_expression_", "_result_expression_",
                         "_aggregation_type_", "_aggregation_field_",
@@ -2078,6 +2090,15 @@ private final class StringConstantCollector {
         // Register templates JSON if provided (ARO-0050)
         if let templates = templatesJSON {
             _ = ctx.stringConstant(templates)
+        }
+
+        // Pre-register embedded plugin strings
+        if let plugins = embeddedPlugins {
+            for plugin in plugins {
+                _ = ctx.stringConstant(plugin.name)
+                _ = ctx.stringConstant(plugin.yaml)
+                _ = ctx.stringConstant(plugin.base64Library)
+            }
         }
 
         // Collect from feature sets
