@@ -50,20 +50,21 @@ public final class OpenAPIHTTPHandler: @unchecked Sendable {
         let effectiveParameters = match.effectiveParameters
         if !effectiveParameters.isEmpty {
             for param in effectiveParameters where param.deprecated == true {
+                guard let paramName = param.name, let paramIn = param.in else { continue }
                 let isPresent: Bool
-                switch param.in {
+                switch paramIn {
                 case "query":
-                    isPresent = request.queryParameters[param.name] != nil
+                    isPresent = request.queryParameters[paramName] != nil
                 case "header":
-                    isPresent = request.headers[param.name] != nil
+                    isPresent = request.headers[paramName] != nil
                 case "path":
-                    isPresent = match.pathParameters[param.name] != nil
+                    isPresent = match.pathParameters[paramName] != nil
                 default:
                     isPresent = false
                 }
 
                 if isPresent {
-                    print("[DEPRECATION WARNING] Parameter '\(param.name)' on operation '\(match.operationId)' is deprecated")
+                    print("[DEPRECATION WARNING] Parameter '\(paramName)' on operation '\(match.operationId)' is deprecated")
                 }
             }
         }
@@ -72,7 +73,9 @@ public final class OpenAPIHTTPHandler: @unchecked Sendable {
         // Parameters not listed in the spec are not subject to this filter.
         var allowEmptyValueByName: [String: Bool] = [:]
         for param in effectiveParameters where param.in == "query" {
-            allowEmptyValueByName[param.name] = param.allowEmptyValue ?? false
+            if let paramName = param.name {
+                allowEmptyValueByName[paramName] = param.allowEmptyValue ?? false
+            }
         }
 
         // Filter query parameters: remove entries where the value is empty string
@@ -86,22 +89,23 @@ public final class OpenAPIHTTPHandler: @unchecked Sendable {
 
         // Validate required parameters (query and header)
         for param in effectiveParameters where param.required == true {
-            switch param.in {
+            guard let paramName = param.name, let paramIn = param.in else { continue }
+            switch paramIn {
             case "query":
-                if filteredQueryParameters[param.name] == nil {
+                if filteredQueryParameters[paramName] == nil {
                     return HTTPResponse(
                         statusCode: 400,
                         headers: ["Content-Type": "application/json"],
-                        body: "{\"error\":\"Bad Request\",\"message\":\"Required query parameter '\(param.name)' is missing\"}".data(using: .utf8)
+                        body: "{\"error\":\"Bad Request\",\"message\":\"Required query parameter '\(paramName)' is missing\"}".data(using: .utf8)
                     )
                 }
             case "header":
-                let lower = param.name.lowercased()
+                let lower = paramName.lowercased()
                 if !request.headers.keys.contains(where: { $0.lowercased() == lower }) {
                     return HTTPResponse(
                         statusCode: 400,
                         headers: ["Content-Type": "application/json"],
-                        body: "{\"error\":\"Bad Request\",\"message\":\"Required header '\(param.name)' is missing\"}".data(using: .utf8)
+                        body: "{\"error\":\"Bad Request\",\"message\":\"Required header '\(paramName)' is missing\"}".data(using: .utf8)
                     )
                 }
             default:
