@@ -1040,7 +1040,7 @@ public struct MCPToolProvider: Sendable {
         (createUser: User API) {
             Extract the <data> from the <request: body>.
             Create the <user> with <data>.
-            Store the <user> in the <user-repository>.
+            Store the <user> into the <user-repository>.
             Return a <Created: status> with <user>.
         }
 
@@ -1110,7 +1110,7 @@ public struct MCPToolProvider: Sendable {
         ## Storing Data
 
         ```aro
-        Store the <user> in the <user-repository>.
+        Store the <user> into the <user-repository>.
         ```
 
         ## Retrieving Data
@@ -1174,7 +1174,7 @@ public struct MCPToolProvider: Sendable {
         ```aro
         for each <item> in <items> {
             Log <item> to the <console>.
-            Store the <item> in the <processed-repository>.
+            Store the <item> into the <processed-repository>.
         }
         ```
 
@@ -1319,7 +1319,7 @@ public struct MCPToolProvider: Sendable {
 
         ```aro
         (* Transition an entity to a new state *)
-        Accept the <order: placed> for the <order-repository>.
+        Accept the <transition: order_to_placed> on the <order: status>.
         ```
 
         The `Accept` action:
@@ -1346,8 +1346,8 @@ public struct MCPToolProvider: Sendable {
         (createOrder: Order API) {
             Extract the <data> from the <request: body>.
             Create the <order> with <data>.
-            Store the <order> in the <order-repository>.
-            Accept the <order: pending> for the <order-repository>.
+            Store the <order> into the <order-repository>.
+            Accept the <transition: order_to_pending> on the <order: status>.
             Return a <Created: status> with <order>.
         }
 
@@ -1357,7 +1357,7 @@ public struct MCPToolProvider: Sendable {
             Extract the <payment> from the <request: body>.
             Retrieve the <order> from the <order-repository> where id = <id>.
             Validate the <payment> against the <order: total>.
-            Accept the <order: paid> for the <order-repository>.
+            Accept the <transition: order_to_paid> on the <order: status>.
             Return an <OK: status> with <order>.
         }
 
