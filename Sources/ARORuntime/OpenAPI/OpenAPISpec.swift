@@ -73,8 +73,8 @@ public struct Operation: Sendable, Codable {
 // MARK: - Parameter
 
 public struct Parameter: Sendable, Codable {
-    public let name: String
-    public let `in`: String
+    public let name: String?
+    public let `in`: String?
     public let required: Bool?
     public let description: String?
     public let schema: SchemaRef?
@@ -84,6 +84,20 @@ public struct Parameter: Sendable, Codable {
     private enum CodingKeys: String, CodingKey {
         case name, `in`, required, description, schema, allowEmptyValue
         case ref = "$ref"
+    }
+
+    /// Resolve this parameter's `$ref` against `components/parameters`.
+    /// Returns `self` when there is no `$ref`, the resolved `Parameter` when
+    /// the reference exists, or `nil` when the reference cannot be resolved.
+    public func resolved(using components: Components?) -> Parameter? {
+        guard let ref else { return self }
+        let parts = ref.split(separator: "/")
+        guard parts.count == 4,
+              parts[0] == "#",
+              parts[1] == "components",
+              parts[2] == "parameters" else { return nil }
+        let paramName = String(parts[3])
+        return components?.parameters?[paramName]
     }
 }
 

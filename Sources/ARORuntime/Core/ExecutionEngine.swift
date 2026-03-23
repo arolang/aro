@@ -16,6 +16,9 @@ import AROParser
 public actor ExecutionEngine {
     // MARK: - Properties
 
+    /// The dependency injection container
+    private let container: RuntimeContainer
+
     /// The action registry for looking up action implementations
     private let actionRegistry: ActionRegistry
 
@@ -55,10 +58,13 @@ public actor ExecutionEngine {
     ///   - eventBus: Event bus (defaults to shared)
     public init(
         actionRegistry: ActionRegistry = .shared,
-        eventBus: EventBus = .shared
+        eventBus: EventBus = .shared,
+        container: RuntimeContainer? = nil
     ) {
-        self.actionRegistry = actionRegistry
-        self.eventBus = eventBus
+        let resolvedContainer = container ?? .default
+        self.container = resolvedContainer
+        self.actionRegistry = resolvedContainer.actionRegistry
+        self.eventBus = resolvedContainer.eventBus
         self.globalSymbols = GlobalSymbolStorage()
         self.services = ServiceRegistry()
     }
@@ -89,10 +95,8 @@ public actor ExecutionEngine {
         entryPoint: String = "Application-Start"
     ) async throws -> Response {
 
-        // Find entry point
-        guard let entryFeatureSet = program.featureSets.first(where: {
-            $0.featureSet.name == entryPoint
-        }) else {
+        // Find entry point — O(1) via byName index
+        guard let entryFeatureSet = program.byName[entryPoint] else {
             throw ActionError.entryPointNotFound(entryPoint)
         }
 
@@ -103,7 +107,8 @@ public actor ExecutionEngine {
         let context = RuntimeContext(
             featureSetName: entryPoint,
             businessActivity: entryFeatureSet.featureSet.businessActivity,
-            eventBus: eventBus
+            eventBus: eventBus,
+            container: container
         )
 
         // Register services in context
@@ -185,10 +190,10 @@ public actor ExecutionEngine {
     /// Register socket event handlers for feature sets with "Socket Event Handler" business activity
     /// Socket events work on all platforms via platform-specific implementations
     private func registerSocketEventHandlers(for program: AnalyzedProgram, baseContext: RuntimeContext) {
-        // Find all feature sets with "Socket Event Handler" business activity
-        let socketHandlers = program.featureSets.filter { analyzedFS in
-            analyzedFS.featureSet.businessActivity.contains("Socket Event Handler")
-        }
+        // Use byActivity index: O(k) key scan instead of O(n) linear filter
+        let socketHandlers = program.byActivity
+            .filter { $0.key.contains("Socket Event Handler") }
+            .flatMap { $0.value }
 
 
         for analyzedFS in socketHandlers {
@@ -294,10 +299,10 @@ public actor ExecutionEngine {
 
     /// Register WebSocket event handlers for feature sets with "WebSocket Event Handler" business activity
     private func registerWebSocketEventHandlers(for program: AnalyzedProgram, baseContext: RuntimeContext) {
-        // Find all feature sets with "WebSocket Event Handler" business activity
-        let wsHandlers = program.featureSets.filter { analyzedFS in
-            analyzedFS.featureSet.businessActivity.contains("WebSocket Event Handler")
-        }
+        // Use byActivity index: O(k) key scan
+        let wsHandlers = program.byActivity
+            .filter { $0.key.contains("WebSocket Event Handler") }
+            .flatMap { $0.value }
 
         for analyzedFS in wsHandlers {
             let featureSetName = analyzedFS.featureSet.name
@@ -361,18 +366,18 @@ public actor ExecutionEngine {
     /// For example: "UserCreated Handler", "OrderPlaced Handler"
     /// Supports state guards: "UserCreated Handler<status:active>"
     private func registerDomainEventHandlers(for program: AnalyzedProgram, baseContext: RuntimeContext) {
-        // Find all feature sets with "*Handler" business activity (but not Socket/File/WebSocket event handlers)
-        // Also match handlers with state guards like "Handler<status:paid>"
-        let domainHandlers = program.featureSets.filter { analyzedFS in
-            let activity = analyzedFS.featureSet.businessActivity
-            let hasHandler = activity.contains(" Handler")
-            let isSpecialHandler = activity.contains("Socket Event Handler") ||
-                                   activity.contains("WebSocket Event Handler") ||
-                                   activity.contains("File Event Handler") ||
-                                   activity.contains("KeyPress Handler") ||
-                                   activity.contains("Application-End")
-            return hasHandler && !isSpecialHandler
-        }
+        // Use byActivity index: iterate keys instead of all feature sets
+        let domainHandlers = program.byActivity
+            .filter { key, _ in
+                let hasHandler = key.contains(" Handler")
+                let isSpecialHandler = key.contains("Socket Event Handler") ||
+                                       key.contains("WebSocket Event Handler") ||
+                                       key.contains("File Event Handler") ||
+                                       key.contains("KeyPress Handler") ||
+                                       key.contains("Application-End")
+                return hasHandler && !isSpecialHandler
+            }
+            .flatMap { $0.value }
 
         for analyzedFS in domainHandlers {
             let activity = analyzedFS.featureSet.businessActivity
@@ -655,10 +660,10 @@ public actor ExecutionEngine {
 
     /// Register notification event handlers for feature sets with "NotificationSent Handler" business activity
     private func registerNotificationEventHandlers(for program: AnalyzedProgram, baseContext: RuntimeContext) {
-        // Find all feature sets with "NotificationSent Handler" business activity
-        let notificationHandlers = program.featureSets.filter { analyzedFS in
-            analyzedFS.featureSet.businessActivity.contains("NotificationSent Handler")
-        }
+        // Use byActivity index for O(1) key lookup
+        let notificationHandlers = program.byActivity
+            .filter { $0.key.contains("NotificationSent Handler") }
+            .flatMap { $0.value }
 
         for analyzedFS in notificationHandlers {
             // Subscribe to NotificationSentEvent
@@ -763,10 +768,10 @@ public actor ExecutionEngine {
 
     /// Register file event handlers for feature sets with "File Event Handler" business activity
     private func registerFileEventHandlers(for program: AnalyzedProgram, baseContext: RuntimeContext) {
-        // Find all feature sets with "File Event Handler" business activity
-        let fileHandlers = program.featureSets.filter { analyzedFS in
-            analyzedFS.featureSet.businessActivity.contains("File Event Handler")
-        }
+        // Use byActivity index: O(k) key scan
+        let fileHandlers = program.byActivity
+            .filter { $0.key.contains("File Event Handler") }
+            .flatMap { $0.value }
 
         for analyzedFS in fileHandlers {
             let featureSetName = analyzedFS.featureSet.name
@@ -861,13 +866,10 @@ public actor ExecutionEngine {
     /// For example: "user-repository Observer", "order-repository Observer"
     /// Supports state guards: "user-repository Observer<status:active>"
     private func registerRepositoryObservers(for program: AnalyzedProgram, baseContext: RuntimeContext) {
-        // Find all feature sets with "*-repository Observer" business activity
-        // Also match observers with state guards like "Observer<status:active>"
-        let observers = program.featureSets.filter { analyzedFS in
-            let activity = analyzedFS.featureSet.businessActivity
-            return activity.contains(" Observer") &&
-                   activity.contains("-repository")
-        }
+        // Use byActivity index: O(k) key scan
+        let observers = program.byActivity
+            .filter { $0.key.contains(" Observer") && $0.key.contains("-repository") }
+            .flatMap { $0.value }
 
         for analyzedFS in observers {
             let activity = analyzedFS.featureSet.businessActivity
@@ -963,10 +965,10 @@ public actor ExecutionEngine {
     /// Register eviction handlers for feature sets with "Evicted Handler" business activity pattern.
     /// For example: "cache-repository Evicted Handler"
     private func registerEvictionHandlers(for program: AnalyzedProgram, baseContext: RuntimeContext) {
-        let handlers = program.featureSets.filter { analyzedFS in
-            let activity = analyzedFS.featureSet.businessActivity
-            return activity.hasSuffix(" Evicted Handler") && activity.contains("-repository")
-        }
+        // Use byActivity index: O(k) key scan
+        let handlers = program.byActivity
+            .filter { $0.key.hasSuffix(" Evicted Handler") && $0.key.contains("-repository") }
+            .flatMap { $0.value }
 
         for analyzedFS in handlers {
             let activity = analyzedFS.featureSet.businessActivity
@@ -1415,17 +1417,73 @@ public actor ExecutionEngine {
 
 // MARK: - Global Symbol Storage
 
+/// A single published symbol entry.
+public struct PublishedSymbol: Sendable {
+    public let value: any Sendable
+    public let featureSet: String
+    public let businessActivity: String
+    /// Unique ID of the feature-set invocation that published this symbol.
+    /// Used by `evict(executionId:)` to remove symbols when their execution ends.
+    public let executionId: String
+}
+
 /// Thread-safe storage for published symbols with business activity enforcement.
 /// Converted to actor for Swift 6.2 concurrency safety (Issue #2).
+///
+/// Symbols are scoped to their publishing execution. When `evict(executionId:)`
+/// is called after a feature set completes, its symbols are removed unless a
+/// newer invocation has overwritten them (ownership guard prevents stale eviction).
+/// Application-lifecycle feature sets (Application-Start / Application-End) are
+/// intentionally excluded from eviction so their symbols persist for the entire
+/// process lifetime.
 public actor GlobalSymbolStorage {
-    private var symbols: [String: (value: any Sendable, featureSet: String, businessActivity: String)] = [:]
+    private var symbols: [String: PublishedSymbol] = [:]
+
+    /// Reverse index: executionId → symbol names it owns.
+    /// Enables O(1) bulk eviction without scanning the entire symbol table.
+    private var executionIndex: [String: Set<String>] = [:]
 
     public init() {}
 
-    /// Store a published symbol with its business activity
-    public func publish(name: String, value: any Sendable, fromFeatureSet: String, businessActivity: String) {
-        symbols[name] = (value, fromFeatureSet, businessActivity)
+    // MARK: - Write
+
+    /// Store a published symbol with its business activity and execution owner.
+    public func publish(
+        name: String,
+        value: any Sendable,
+        fromFeatureSet: String,
+        businessActivity: String,
+        executionId: String
+    ) {
+        // If a previous entry exists under the same name, remove it from the
+        // old execution's index to keep the index clean.
+        if let existing = symbols[name], existing.executionId != executionId {
+            executionIndex[existing.executionId]?.remove(name)
+        }
+        symbols[name] = PublishedSymbol(
+            value: value,
+            featureSet: fromFeatureSet,
+            businessActivity: businessActivity,
+            executionId: executionId
+        )
+        executionIndex[executionId, default: []].insert(name)
     }
+
+    /// Remove all symbols published by a specific execution.
+    ///
+    /// The ownership guard ensures that a late-arriving eviction cannot remove
+    /// a symbol that was overwritten by a newer invocation: the stored
+    /// `executionId` is checked before deleting.
+    public func evict(executionId: String) {
+        guard let names = executionIndex.removeValue(forKey: executionId) else { return }
+        for name in names {
+            if symbols[name]?.executionId == executionId {
+                symbols.removeValue(forKey: name)
+            }
+        }
+    }
+
+    // MARK: - Read
 
     /// Resolve a published symbol (validates business activity)
     /// - Parameters:
@@ -1491,9 +1549,12 @@ public actor GlobalSymbolStorage {
     }
 
     /// Get all published symbols (for eager binding in feature sets)
-    public func allSymbols() -> [String: (value: any Sendable, featureSet: String, businessActivity: String)] {
+    public func allSymbols() -> [String: PublishedSymbol] {
         return symbols
     }
+
+    /// Total number of currently stored symbols. Useful for memory monitoring.
+    public var count: Int { symbols.count }
 }
 
 // MARK: - Service Registry

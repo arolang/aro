@@ -35,6 +35,9 @@ public actor RuntimeContext: ExecutionContext {
     /// Error tracking for binary mode
     nonisolated(unsafe) private var _executionError: Error?
 
+    /// DI container providing shared infrastructure services
+    public nonisolated let container: RuntimeContainer
+
     /// Event bus for event emission
     public nonisolated let eventBus: EventBus?
 
@@ -77,7 +80,8 @@ public actor RuntimeContext: ExecutionContext {
     ///   - featureSetName: Name of the feature set being executed
     ///   - businessActivity: Business activity this feature set belongs to
     ///   - outputContext: Output context for formatting (defaults to .human)
-    ///   - eventBus: Optional event bus for event emission
+    ///   - eventBus: Optional event bus for event emission (overrides container.eventBus when provided)
+    ///   - container: DI container providing shared services (defaults to `.default`)
     ///   - parent: Optional parent context for nested execution
     ///   - isCompiled: Whether this is a compiled binary execution (defaults to false)
     ///   - isTemplateContext: Whether this is a template rendering context (defaults to false)
@@ -86,6 +90,7 @@ public actor RuntimeContext: ExecutionContext {
         businessActivity: String = "",
         outputContext: OutputContext = .human,
         eventBus: EventBus? = nil,
+        container: RuntimeContainer? = nil,
         parent: ExecutionContext? = nil,
         isCompiled: Bool = false,
         isTemplateContext: Bool = false
@@ -94,10 +99,23 @@ public actor RuntimeContext: ExecutionContext {
         self.businessActivity = businessActivity
         self.executionId = UUID().uuidString
         self._outputContext = outputContext
-        self.eventBus = eventBus
-        self.parent = parent
         self._isCompiled = isCompiled
         self._isTemplateContext = isTemplateContext
+        self.parent = parent
+
+        // Container resolution order: explicit > inherit from parent > global default
+        let resolvedContainer: RuntimeContainer
+        if let c = container {
+            resolvedContainer = c
+        } else if let parentCtx = parent as? RuntimeContext {
+            resolvedContainer = parentCtx.container
+        } else {
+            resolvedContainer = .default
+        }
+        self.container = resolvedContainer
+
+        // EventBus resolution order: explicit > container
+        self.eventBus = eventBus ?? resolvedContainer.eventBus
     }
 
     // MARK: - Variable Management
@@ -130,7 +148,7 @@ public actor RuntimeContext: ExecutionContext {
 
         // Magic variable: <metrics> returns current execution metrics
         if name == "metrics" {
-            return MetricsCollector.shared.snapshot()
+            return container.metricsCollector.snapshot()
         }
 
         // Magic variable: <application> provides application context (used in Stop/Close actions)
@@ -352,6 +370,7 @@ public actor RuntimeContext: ExecutionContext {
             businessActivity: businessActivity,
             outputContext: _outputContext,
             eventBus: eventBus,
+            container: container,
             parent: self,
             isCompiled: _isCompiled,
             isTemplateContext: false
@@ -365,6 +384,7 @@ public actor RuntimeContext: ExecutionContext {
             businessActivity: businessActivity,
             outputContext: _outputContext,
             eventBus: eventBus,
+            container: container,
             parent: self,
             isCompiled: _isCompiled,
             isTemplateContext: false
@@ -379,6 +399,7 @@ public actor RuntimeContext: ExecutionContext {
             businessActivity: businessActivity,
             outputContext: _outputContext,
             eventBus: eventBus,
+            container: container,
             parent: self,
             isCompiled: _isCompiled,
             isTemplateContext: true

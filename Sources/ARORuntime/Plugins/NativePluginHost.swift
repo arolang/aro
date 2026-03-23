@@ -640,7 +640,8 @@ public final class NativePluginHost: @unchecked Sendable {
                     Task {
                         await ActionRegistry.shared.registerDynamic(
                             verb: registeredVerb,
-                            handler: wrapper.handle
+                            handler: wrapper.handle,
+                            pluginName: pluginName
                         )
                         semaphore.signal()
                     }
@@ -659,6 +660,14 @@ public final class NativePluginHost: @unchecked Sendable {
     /// Unload the plugin
     public func unload() {
         guard let handle = libraryHandle else { return }
+
+        // Unregister dynamic actions from ActionRegistry
+        let semaphore = DispatchSemaphore(value: 0)
+        Task {
+            await ActionRegistry.shared.unregisterPlugin(pluginName)
+            semaphore.signal()
+        }
+        semaphore.wait()
 
         // Unregister qualifiers
         QualifierRegistry.shared.unregisterPlugin(pluginName)
