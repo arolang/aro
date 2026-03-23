@@ -75,7 +75,7 @@ final class AROCRuntimeHandle: @unchecked Sendable {
 }
 
 /// Opaque context handle for C interop
-class AROCContextHandle {
+class AROCContextHandle: @unchecked Sendable {
     let context: RuntimeContext
     let runtime: AROCRuntimeHandle
 
@@ -454,7 +454,7 @@ public func aro_runtime_register_handler(
         // concurrent active execution to 4 * CPU count.
         await withCheckedContinuation { (continuation: CheckedContinuation<Void, Never>) in
             let pool = CompiledExecutionPool.shared
-            Thread {
+            let compiledThread = Thread {
                 pool.gate.wait()
                 pool.threadHoldsSlot = true
                 defer {
@@ -521,7 +521,9 @@ public func aro_runtime_register_handler(
 
                 // Resume the async continuation
                 continuation.resume()
-            }.start()
+            }
+            compiledThread.stackSize = 8 * 1024 * 1024
+            compiledThread.start()
         }
     }
 }
@@ -593,7 +595,7 @@ public func aro_register_repository_observer_with_guard(
         // soft limit which is easily exhausted by recursive event chains.
         await withCheckedContinuation { (continuation: CheckedContinuation<Void, Never>) in
             let pool = CompiledExecutionPool.shared
-            Thread {
+            let compiledThread2 = Thread {
                 pool.gate.wait()
                 pool.threadHoldsSlot = true
                 defer {
@@ -668,7 +670,9 @@ public func aro_register_repository_observer_with_guard(
 
                 // Resume the async continuation
                 continuation.resume()
-            }.start()
+            }
+            compiledThread2.stackSize = 8 * 1024 * 1024
+            compiledThread2.start()
         }
     }
 }
@@ -729,7 +733,7 @@ public func aro_runtime_register_state_transition_handler(
 
         await withCheckedContinuation { (continuation: CheckedContinuation<Void, Never>) in
             let pool = CompiledExecutionPool.shared
-            Thread {
+            let compiledThread3 = Thread {
                 pool.gate.wait()
                 pool.threadHoldsSlot = true
                 defer {
@@ -773,7 +777,9 @@ public func aro_runtime_register_state_transition_handler(
                 if let resultPtr = result { aro_value_free(resultPtr) }
                 Unmanaged<AROCContextHandle>.fromOpaque(contextPtr).release()
                 continuation.resume()
-            }.start()
+            }
+            compiledThread3.stackSize = 8 * 1024 * 1024
+            compiledThread3.start()
         }
     }
 }
@@ -837,7 +843,7 @@ public func aro_runtime_register_notification_handler(
 
         await withCheckedContinuation { (continuation: CheckedContinuation<Void, Never>) in
             let pool = CompiledExecutionPool.shared
-            Thread {
+            let compiledThread4 = Thread {
                 pool.gate.wait()
                 pool.threadHoldsSlot = true
                 defer {
@@ -884,7 +890,9 @@ public func aro_runtime_register_notification_handler(
                 if let resultPtr = result { aro_value_free(resultPtr) }
                 Unmanaged<AROCContextHandle>.fromOpaque(contextPtr).release()
                 continuation.resume()
-            }.start()
+            }
+            compiledThread4.stackSize = 8 * 1024 * 1024
+            compiledThread4.start()
         }
     }
 }
@@ -1466,6 +1474,68 @@ public func aro_copy_value_to_expression(
     contextHandle.context.bind("_expression_", value: boxed.value)
 }
 
+// MARK: - Stack Guard for Expression Evaluation
+
+/// Returns an estimate of remaining stack space on the current thread in bytes.
+///
+/// Uses pthread APIs to find the stack bounds, then compares against the current
+/// stack pointer (approximated via a local variable address). Returns `Int.max`
+/// on unsupported platforms so the guard always passes (fail-open).
+private func remainingStackBytes() -> Int {
+    var marker: UInt8 = 0
+    let sp = Int(bitPattern: withUnsafePointer(to: &marker) { $0 })
+#if canImport(Darwin)
+    let thread = pthread_self()
+    let stackTop = Int(bitPattern: pthread_get_stackaddr_np(thread))   // highest address
+    let stackSize = Int(pthread_get_stacksize_np(thread))
+    let lowest = stackTop - stackSize
+    return max(0, sp - lowest)
+#elseif os(Linux)
+    // pthread_getattr_np is a GNU extension not exposed by Swift's Glibc overlay.
+    // Return 0 so withStackGuard always offloads to a fresh 8 MB thread on Linux,
+    // guaranteeing safety at the cost of always spawning a thread.
+    _ = sp
+    return 0
+#else
+    return Int.max
+#endif
+}
+
+/// Minimum stack headroom required before attempting inline expression evaluation.
+/// JSONSerialization's recursive JSON parser can consume several hundred KB on
+/// deeply-nested input. Below this threshold we offload to a fresh 8 MB thread
+/// so the caller never receives a SIGBUS regardless of expression complexity.
+private let stackGuardThreshold = 512 * 1024   // 512 KB
+
+/// Run `body` on the current thread if there is enough stack headroom; otherwise
+/// spawn a fresh 8 MB Thread, execute `body` there, and block until it finishes.
+/// The result is returned synchronously either way, so callers are unaware of the
+/// indirection.
+private func withStackGuard<T>(_ body: @escaping @Sendable () -> T) -> T {
+    guard remainingStackBytes() >= stackGuardThreshold else {
+        // Stack is running low — offload to a fresh thread with a full 8 MB stack.
+        // The semaphore guarantees the borrow ends before we return, making this safe
+        // despite the unchecked Sendable transfer of the box.
+        let sema = DispatchSemaphore(value: 0)
+        let box = MutexBox<T>()
+        let t = Thread {
+            box.value = body()
+            sema.signal()
+        }
+        t.stackSize = 8 * 1024 * 1024
+        t.start()
+        sema.wait()
+        return box.value!
+    }
+    return body()
+}
+
+/// Thread-safe single-value box used to ferry a result out of `withStackGuard`.
+private final class MutexBox<T>: @unchecked Sendable {
+    var value: T?
+    init() {}
+}
+
 /// Evaluate a JSON-encoded expression and bind result to _expression_
 /// JSON format:
 ///   {"$lit": value}           - literal value
@@ -1484,35 +1554,40 @@ public func aro_evaluate_expression(
 
     let contextHandle = Unmanaged<AROCContextHandle>.fromOpaque(ptr).takeUnretainedValue()
 
-    // Parse the JSON
-    guard let data = jsonStr.data(using: .utf8),
-          let parsed = try? JSONSerialization.jsonObject(with: data, options: []) else {
-        return
-    }
+    // If the calling thread is running low on stack, evaluate on a fresh 8 MB thread.
+    // This prevents SIGBUS from JSONSerialization's recursive JSON parser consuming
+    // the remaining stack space in compiled handler threads.
+    withStackGuard {
+        // Parse the JSON
+        guard let data = jsonStr.data(using: .utf8),
+              let parsed = try? JSONSerialization.jsonObject(with: data, options: []) else {
+            return
+        }
 
-    // Handle arrays (e.g., JSON array literals)
-    if let array = parsed as? [Any] {
-        let result = evaluateJSONArray(array, context: contextHandle.context)
+        // Handle arrays (e.g., JSON array literals)
+        if let array = parsed as? [Any] {
+            let result = evaluateJSONArray(array, context: contextHandle.context)
+            contextHandle.context.bind("_expression_", value: result)
+            return
+        }
+
+        // Handle dictionaries (expressions like {"$var": ...}, {"$lit": ...}, {"$binary": ...})
+        guard let dict = parsed as? [String: Any] else {
+            return
+        }
+
+        let result = evaluateExpressionJSON(dict, context: contextHandle.context)
         contextHandle.context.bind("_expression_", value: result)
-        return
-    }
 
-    // Handle dictionaries (expressions like {"$var": ...}, {"$lit": ...}, {"$binary": ...})
-    guard let dict = parsed as? [String: Any] else {
-        return
-    }
-
-    let result = evaluateExpressionJSON(dict, context: contextHandle.context)
-    contextHandle.context.bind("_expression_", value: result)
-
-    // For simple variable references ($var), also set _expression_name_ so EmitAction
-    // can use the variable name as the payload key (instead of falling back to "data").
-    // For all other expression types, clear _expression_name_ so EmitAction doesn't
-    // use a stale name from a previous statement.
-    if let varName = dict["$var"] as? String, dict.count <= 2 /* $var + optional $specs */ {
-        contextHandle.context.bind("_expression_name_", value: varName, allowRebind: true)
-    } else {
-        contextHandle.context.bind("_expression_name_", value: "", allowRebind: true)
+        // For simple variable references ($var), also set _expression_name_ so EmitAction
+        // can use the variable name as the payload key (instead of falling back to "data").
+        // For all other expression types, clear _expression_name_ so EmitAction doesn't
+        // use a stale name from a previous statement.
+        if let varName = dict["$var"] as? String, dict.count <= 2 /* $var + optional $specs */ {
+            contextHandle.context.bind("_expression_name_", value: varName, allowRebind: true)
+        } else {
+            contextHandle.context.bind("_expression_name_", value: "", allowRebind: true)
+        }
     }
 }
 
@@ -1533,26 +1608,28 @@ public func aro_evaluate_and_bind(
 
     let contextHandle = Unmanaged<AROCContextHandle>.fromOpaque(ptr).takeUnretainedValue()
 
-    // Parse the JSON
-    guard let data = jsonStr.data(using: .utf8),
-          let parsed = try? JSONSerialization.jsonObject(with: data, options: []) else {
-        return
-    }
+    withStackGuard {
+        // Parse the JSON
+        guard let data = jsonStr.data(using: .utf8),
+              let parsed = try? JSONSerialization.jsonObject(with: data, options: []) else {
+            return
+        }
 
-    // Handle arrays
-    if let array = parsed as? [Any] {
-        let result = evaluateJSONArray(array, context: contextHandle.context)
+        // Handle arrays
+        if let array = parsed as? [Any] {
+            let result = evaluateJSONArray(array, context: contextHandle.context)
+            contextHandle.context.bind(nameStr, value: result)
+            return
+        }
+
+        // Handle dictionaries
+        guard let dict = parsed as? [String: Any] else {
+            return
+        }
+
+        let result = evaluateExpressionJSON(dict, context: contextHandle.context)
         contextHandle.context.bind(nameStr, value: result)
-        return
     }
-
-    // Handle dictionaries
-    guard let dict = parsed as? [String: Any] else {
-        return
-    }
-
-    let result = evaluateExpressionJSON(dict, context: contextHandle.context)
-    contextHandle.context.bind(nameStr, value: result)
 }
 
 /// Evaluate a JSON array by recursively evaluating each element
@@ -2762,7 +2839,7 @@ public func aro_parallel_for_each_execute(
         // Each iteration may block its thread via semaphore.wait() when calling
         // aro_action_* functions; pthreads don't count against GCD's dispatch limit.
         group.enter()
-        Thread {
+        let compiledThread5 = Thread {
             pool.threadHoldsSlot = true
             defer {
                 pool.threadHoldsSlot = false
@@ -2790,7 +2867,9 @@ public func aro_parallel_for_each_execute(
             }
             Unmanaged<AROCValue>.fromOpaque(itemValue).release()
             aro_context_destroy(childCtx)
-        }.start()
+        }
+        compiledThread5.stackSize = 8 * 1024 * 1024
+        compiledThread5.start()
     }
 
     // Wait for all iterations to complete

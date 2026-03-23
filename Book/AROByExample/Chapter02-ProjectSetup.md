@@ -80,7 +80,7 @@ Key rules about ARO applications:
 
 3. **Global Feature Sets.** All feature sets are visible to each other through events. A feature set in `storage.aro` can emit an event that a handler in `crawler.aro` receives.
 
-4. **No File Hierarchy.** ARO does not support subdirectories for `.aro` files. Everything lives at the top level.
+4. **Recursive Discovery.** ARO automatically discovers all `.aro` files in the application directory and all subdirectories to any depth. For larger projects, use a `sources/` subdirectory convention to organize files by domain.
 
 ---
 
