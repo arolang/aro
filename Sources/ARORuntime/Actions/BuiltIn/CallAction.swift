@@ -114,7 +114,7 @@ public struct CallAction: ActionImplementation {
         }
 
         // Call the service
-        let callResult = try await ExternalServiceRegistry.shared.call(
+        let callResult = try await context.container.externalServices.call(
             serviceName,
             method: methodName,
             args: args

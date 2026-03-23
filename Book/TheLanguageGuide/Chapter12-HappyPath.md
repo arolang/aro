@@ -107,7 +107,7 @@ Runtime Error: Cannot extract the id from the pathParameters: id
 (createOrder: Order API) {
     Extract the <data> from the <request: body>.
     Validate the <data> against the <order-schema>.
-    Store the <order> in the <order-repository>.
+    Store the <order> into the <order-repository>.
     Return a <Created: status> with <order>.
 }
 ```
@@ -123,10 +123,10 @@ Runtime Error: Cannot validate the data against the order-schema
 
 **When the repository is unavailable:**
 ```
-Runtime Error: Cannot store the order in the order-repository
+Runtime Error: Cannot store the order into the order-repository
   Feature: createOrder
   Business Activity: Order API
-  Statement: Store the <order> in the <order-repository>
+  Statement: Store the <order> into the <order-repository>
   Cause: Connection refused
 ```
 
