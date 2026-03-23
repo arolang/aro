@@ -89,8 +89,8 @@ Inside a feature set, statements execute **synchronously** and **serially**:
     Extract the <data> from the <request: body>.      (* 1. First *)
     Validate the <data> for the <order-schema>.       (* 2. Second *)
     Create the <order> with <data>.                   (* 3. Third *)
-    Store the <order> in the <order-repository>.      (* 4. Fourth *)
-    Emit to <Send Confirmation> with <order>.         (* 5. Fifth *)
+    Store the <order> into the <order-repository>.      (* 4. Fourth *)
+    Emit a <OrderConfirmed: event> with <order>.      (* 5. Fifth *)
     Return a <Created: status> with <order>.          (* 6. Last *)
 }
 ```
@@ -121,8 +121,8 @@ ARO code:
     Extract the <data> from the <request: body>.
     Validate the <data> for the <order-schema>.
     Create the <order> with <data>.
-    Store the <order> in the <order-repository>.
-    Emit to <Send Confirmation> with <order>.
+    Store the <order> into the <order-repository>.
+    Emit a <OrderConfirmed: event> with <order>.
     Return a <Created: status> with <order>.
 }
 ```
@@ -188,23 +188,23 @@ Feature sets can trigger other feature sets:
 (Create User: User API) {
     Extract the <data> from the <request: body>.
     Create the <user> with <data>.
-    Store the <user> in the <user-repository>.
+    Store the <user> into the <user-repository>.
 
     (* Triggers other feature sets asynchronously *)
-    Emit to <Send Welcome Email> with <user>.
+    Emit a <UserCreated: event> with <user>.
 
     (* Continues immediately, doesn't wait for handler *)
     Return a <Created: status> with <user>.
 }
 
-(Send Welcome Email: Notifications) {
+(Send Welcome Email: UserCreated Handler) {
     Extract the <email> from the <event: email>.
     Send the <welcome-email> to the <email>.
     Return an <OK: status>.
 }
 ```
 
-When `<Emit>` executes:
+When `Emit` executes:
 
 1. The event is dispatched to the target feature set
 2. Execution continues in the current feature set
@@ -424,7 +424,7 @@ Output (example):
 (Handle File Change: File Event Handler) {
     Extract the <path> from the <event: path>.
     Extract the <type> from the <event: type>.
-    Compute the <message> from "File " + <path> + " " + <type>.
+    Compute the <message> from "File " ++ <path> ++ " " ++ <type>.
     Log <message> to the <console>.
     Return an <OK: status>.
 }

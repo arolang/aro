@@ -871,7 +871,7 @@ public actor MCPResourceProvider {
 
         ### Publish
         Make a variable available across feature sets with the same business activity.
-        Prepositions: `with` | Aliases: `export`, `expose`, `share`
+        Prepositions: `as` | Aliases: `export`, `expose`, `share`
         ```aro
         Publish as <config> <settings>.
         ```
