@@ -7,5 +7,7 @@ Status:
 200
 Headers received:
 Temperature:
+22.5
 Latitude:
+52.52
 startup

@@ -48,13 +48,13 @@ public struct ExtractAction: ActionImplementation {
         if object.base == "parameter" {
             if let paramName = object.specifiers.first {
                 // Extract specific parameter
-                guard let value = ParameterStorage.shared.get(paramName) else {
+                guard let value = context.container.parameterStorage.get(paramName) else {
                     throw ActionError.undefinedVariable("parameter:\(paramName)")
                 }
                 return value
             } else {
                 // Return all parameters as a dictionary
-                return ParameterStorage.shared.getAll()
+                return context.container.parameterStorage.getAll()
             }
         }
 
@@ -122,39 +122,13 @@ public struct ExtractAction: ActionImplementation {
             }
         }
 
-        // ARO-0041: Check result specifiers for date type property extraction
+        // ARO-0041: Check result specifiers for property extraction on Extractable types
+        // (ARODate, ARODateRange, ARORecurrence, DateDistance).
         // Syntax: <Extract> the <vacation-days: days> from <vacation>.
-        if let specifier = result.specifiers.first {
-            if let date = resolvedSource as? ARODate {
-                if let value = date.property(specifier) {
-                    if let intVal = value as? Int { return intVal }
-                    if let strVal = value as? String { return strVal }
-                    if let tzVal = value as? TimeZone { return tzVal.identifier }
-                    return String(describing: value)
-                }
-            }
-            if let range = resolvedSource as? ARODateRange {
-                if let value = range.property(specifier) {
-                    if let intVal = value as? Int { return intVal }
-                    if let dateVal = value as? ARODate { return dateVal }
-                    return String(describing: value)
-                }
-            }
-            if let recurrence = resolvedSource as? ARORecurrence {
-                if let value = recurrence.property(specifier) {
-                    if let strVal = value as? String { return strVal }
-                    if let dateVal = value as? ARODate { return dateVal }
-                    if let arrVal = value as? [ARODate] { return arrVal }
-                    return String(describing: value)
-                }
-            }
-            if let distance = resolvedSource as? DateDistance {
-                if let value = distance.property(specifier) {
-                    if let intVal = value as? Int { return intVal }
-                    if let dblVal = value as? Double { return dblVal }
-                    return String(describing: value)
-                }
-            }
+        if let specifier = result.specifiers.first,
+           let extractable = resolvedSource as? any Extractable,
+           let value = extractable.property(specifier) {
+            return value
         }
 
         return resolvedSource
@@ -427,44 +401,13 @@ public struct ExtractAction: ActionImplementation {
         }
         #endif
 
-        // Handle ARODate properties (ARO-0041)
-        if let date = source as? ARODate {
-            if let value = date.property(key) {
-                // Convert to appropriate Sendable type
-                if let intVal = value as? Int { return intVal }
-                if let strVal = value as? String { return strVal }
-                if let dateVal = value as? ARODate { return dateVal }
-                if let tzVal = value as? TimeZone { return tzVal.identifier }
-                return String(describing: value)
-            }
-        }
-
-        // Handle ARODateRange properties (ARO-0041)
-        if let range = source as? ARODateRange {
-            if let value = range.property(key) {
-                if let intVal = value as? Int { return intVal }
-                if let dateVal = value as? ARODate { return dateVal }
-                return String(describing: value)
-            }
-        }
-
-        // Handle ARORecurrence properties (ARO-0041)
-        if let recurrence = source as? ARORecurrence {
-            if let value = recurrence.property(key) {
-                if let strVal = value as? String { return strVal }
-                if let dateVal = value as? ARODate { return dateVal }
-                if let arrVal = value as? [ARODate] { return arrVal }
-                return String(describing: value)
-            }
-        }
-
-        // Handle DateDistance properties (ARO-0041)
-        if let distance = source as? DateDistance {
-            if let value = distance.property(key) {
-                if let intVal = value as? Int { return intVal }
-                if let dblVal = value as? Double { return dblVal }
-                return String(describing: value)
-            }
+        // ARO-0041: Handle all Extractable types (ARODate, ARODateRange,
+        // ARORecurrence, DateDistance) uniformly via the Extractable protocol.
+        // Adding a new property-bearing type only requires an Extractable conformance;
+        // no changes here are needed.
+        if let extractable = source as? any Extractable,
+           let value = extractable.property(key) {
+            return value
         }
 
         // Return original source if key not found but exists
@@ -746,16 +689,16 @@ public struct RetrieveAction: ActionImplementation {
                     )
                 }
             } else {
-                // Fallback to shared instance if service not registered
+                // Fallback to container storage if service not registered
                 if let field = whereField, let matchValue = whereValue {
-                    values = await InMemoryRepositoryStorage.shared.retrieve(
+                    values = await context.container.repositoryStorage.retrieve(
                         from: repoName,
                         businessActivity: context.businessActivity,
                         where: field,
                         equals: matchValue
                     )
                 } else {
-                    values = await InMemoryRepositoryStorage.shared.retrieve(
+                    values = await context.container.repositoryStorage.retrieve(
                         from: repoName,
                         businessActivity: context.businessActivity
                     )

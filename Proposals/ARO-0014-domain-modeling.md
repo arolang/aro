@@ -178,7 +178,7 @@ components:
         where id = <user-id>.
 
     Update the <user: email> with <new-email>.
-    Store the <user> in the <user-repository>.
+    Store the <user> into the <user-repository>.
 
     Emit a <UserEmailChanged: event> with <user>.
     Return an <OK: status> with <user>.
@@ -289,7 +289,7 @@ components:
     Update the <order: totals> with <new-totals>.
 
     (* Persist entire aggregate *)
-    Store the <order> in the <order-repository>.
+    Store the <order> into the <order-repository>.
 
     Emit an <ItemAddedToOrder: event> with <order>.
     Return an <OK: status> with <order>.
@@ -408,7 +408,7 @@ Use the `<Emit>` action to publish domain events:
 (Register User: User Management) {
     Extract the <data> from the <request: body>.
     Create the <user: User> with <data>.
-    Store the <user> in the <user-repository>.
+    Store the <user> into the <user-repository>.
 
     (* Publish domain event *)
     Emit a <UserRegistered: event> with <user>.
@@ -447,7 +447,7 @@ Feature sets with `Handler` suffix subscribe to events:
 (Update Analytics: OrderPlaced Handler) {
     Extract the <order-id> from the <event: order-id>.
     Extract the <total> from the <event: total>.
-    Log the <message> for the <analytics> with "Order placed: " + <order-id>.
+    Log "Order placed: " ++ <order-id> to the <console>.
     Return an <OK: status> for the <analytics>.
 }
 ```
@@ -472,7 +472,7 @@ Retrieve the <pending-orders: List<Order>> from the <order-repository>
     where status = "pending".
 
 (* Save *)
-Store the <order> in the <order-repository>.
+Store the <order> into the <order-repository>.
 
 (* Delete *)
 Delete the <order> from the <order-repository>.
@@ -571,7 +571,7 @@ Feature sets that create objects serve as factories:
     Compute the <totals: OrderTotals> from the <order: items>.
     Update the <order: totals> with <totals>.
 
-    Store the <order> in the <order-repository>.
+    Store the <order> into the <order-repository>.
     Return a <Created: status> with <order>.
 }
 ```
@@ -677,7 +677,7 @@ components:
         totals: { subtotal: { amount: 0, currency: "USD" } }
     }.
 
-    Store the <order> in the <order-repository>.
+    Store the <order> into the <order-repository>.
     Return a <Created: status> with <order>.
 }
 
@@ -702,7 +702,7 @@ components:
     }.
 
     Update the <order: items> with <item>.
-    Store the <order> in the <order-repository>.
+    Store the <order> into the <order-repository>.
 
     Return an <OK: status> with <order>.
 }
@@ -717,7 +717,7 @@ components:
     Validate the <order: items> is not empty.
 
     Update the <order: status> with "placed".
-    Store the <order> in the <order-repository>.
+    Store the <order> into the <order-repository>.
 
     (* Publish domain event *)
     Emit an <OrderPlaced: event> with <order>.
@@ -744,7 +744,7 @@ components:
 
         Compute the <new-stock> from <product: stock> - <item: quantity>.
         Update the <product: stock> with <new-stock>.
-        Store the <product> in the <product-repository>.
+        Store the <product> into the <product-repository>.
     }.
 
     Emit a <StockReserved: event> with <order: id>.
@@ -773,7 +773,7 @@ components:
         status: "pending"
     }.
 
-    Store the <shipment> in the <shipment-repository>.
+    Store the <shipment> into the <shipment-repository>.
     Return an <OK: status> with <shipment>.
 }
 ```

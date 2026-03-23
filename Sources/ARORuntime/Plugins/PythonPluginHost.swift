@@ -265,7 +265,8 @@ public final class PythonPluginHost: @unchecked Sendable {
             Task {
                 await ActionRegistry.shared.registerDynamic(
                     verb: registeredVerb,
-                    handler: wrapper.handle
+                    handler: wrapper.handle,
+                    pluginName: pluginName
                 )
                 semaphore.signal()
             }
@@ -281,6 +282,14 @@ public final class PythonPluginHost: @unchecked Sendable {
 
     /// Unload the plugin
     public func unload() {
+        // Unregister dynamic actions from ActionRegistry
+        let semaphore = DispatchSemaphore(value: 0)
+        Task {
+            await ActionRegistry.shared.unregisterPlugin(pluginName)
+            semaphore.signal()
+        }
+        semaphore.wait()
+
         // Unregister qualifiers
         QualifierRegistry.shared.unregisterPlugin(pluginName)
         qualifierRegistrations.removeAll()
