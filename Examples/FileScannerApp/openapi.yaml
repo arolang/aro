@@ -1,0 +1,97 @@
+openapi: 3.0.3
+info:
+  title: File Scanner
+  description: Domain types for the file scanner application
+  version: 1.0.0
+
+paths: {}
+
+components:
+  schemas:
+
+    FileStat:
+      type: object
+      description: File statistics collected by the Stat action and stored in file-stats-repository
+      properties:
+        id:
+          type: string
+          description: Unique identifier auto-assigned by the repository
+        path:
+          type: string
+          description: Absolute file path
+        size:
+          type: integer
+          description: File size in bytes
+        modified:
+          type: string
+          format: date-time
+          description: Last-modified timestamp (ISO 8601)
+      required:
+        - id
+        - path
+        - size
+        - modified
+
+    Tracker:
+      type: object
+      description: Running best-candidate while scanning for the most recently modified file
+      properties:
+        key:
+          type: string
+          description: Repository key — always "tracker"
+        modified:
+          type: string
+          format: date-time
+          description: Best modified timestamp seen so far (epoch sentinel on init)
+        fileId:
+          type: string
+          description: Repository id of the current best file
+        filePath:
+          type: string
+          description: Path of the current best file
+        fileSize:
+          type: integer
+          description: Size of the current best file in bytes
+      required:
+        - key
+        - modified
+        - fileId
+        - filePath
+        - fileSize
+
+    ScanState:
+      type: object
+      description: Persistent scan state — holds the growing pruning threshold
+      properties:
+        key:
+          type: string
+          description: Repository key — always "main"
+        threshold:
+          type: integer
+          description: Entry count at which ProcessStats prunes; doubles after each prune, capped at 1024
+      required:
+        - key
+        - threshold
+
+    WinnerFile:
+      type: object
+      description: Most recently modified file — written by ProcessStats/FinalizeResult, read by RenderResult
+      properties:
+        key:
+          type: string
+          description: Repository key — always "winner"
+        path:
+          type: string
+          description: Absolute path to the winning file
+        size:
+          type: integer
+          description: File size in bytes
+        modified:
+          type: string
+          format: date-time
+          description: Last-modified timestamp (ISO 8601)
+      required:
+        - key
+        - path
+        - size
+        - modified

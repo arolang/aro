@@ -29,7 +29,7 @@
 
 (Render Result: RenderResult Handler) {
     Create the <wkey> with "winner".
-    Retrieve the <winner> from the <winner-repository> where <key> is <wkey>.
+    Retrieve the <winner: WinnerFile> from the <winner-repository> where <key> is <wkey>.
     Extract the <path> from the <winner: path>.
     Extract the <size> from the <winner: size>.
     Extract the <modified> from the <winner: modified>.
