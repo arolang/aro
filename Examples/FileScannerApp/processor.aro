@@ -1,0 +1,159 @@
+(* Processor — Three responsibilities:
+   1. Observer: watches file-stats-repository for new entries and emits
+      ProcessStats on every insertion.  No count tracking needed here —
+      the observer cannot read the locked repository anyway, so the count
+      check lives inside ProcessStats where it is safe.
+   2. ProcessStats handler: counts the repository itself, prunes to the
+      single most-recently-modified entry when the count reaches the current
+      threshold, then doubles the threshold (capped at 1024).
+   3. FinalizeResult handler: unconditionally prunes whatever remains after
+      the scan completes — handles the last batch of files that never
+      crossed the threshold.
+
+   Observer only reacts to "created" changes so that the deletions
+   performed inside ProcessStats / FinalizeResult do not re-trigger it.
+*)
+
+(* ─── Observer ────────────────────────────────────────────────────────────── *)
+
+(Watch File Count: file-stats-repository Observer) where <event: changeType> == "created" {
+    (* Only fires for new entries — deletions by ProcessStats/FinalizeResult
+       never re-trigger this observer *)
+    Emit a <ProcessStats: event> with "check".
+    Return an <OK: status> for the <observation>.
+}
+
+(* ─── Shared pruning logic ─────────────────────────────────────────────────── *)
+(*
+   Both ProcessStats and FinalizeResult run the same pruning loop:
+     – reset the tracker to the epoch sentinel
+     – walk all current entries, keeping the one with the greatest modified time
+     – write the winner to winner-repository
+     – delete every other entry from file-stats-repository
+*)
+
+(* ─── ProcessStats handler ─────────────────────────────────────────────────── *)
+
+(Process Stats: ProcessStats Handler) {
+    (* Count the repository directly — safe because this handler runs after
+       the Store that triggered the observer has already released its lock *)
+    Retrieve the <all-files> from the <file-stats-repository>.
+    Reduce the <file-count: Integer> from the <all-files> with count().
+
+    Create the <main-key> with "main".
+    Retrieve the <state> from the <scan-state-repository> where <key> is <main-key>.
+    Extract the <cur-threshold> from the <state: threshold>.
+
+    Compute the <threshold-reached> from <file-count> >= <cur-threshold>.
+
+    match <threshold-reached> {
+        case true {
+            (* Double threshold, capped at 1024 *)
+            Compute the <new-threshold> from <cur-threshold> * 2.
+            Update the <state: threshold> with <new-threshold> when <cur-threshold> < 1024.
+            Store the <state> into the <scan-state-repository> when <cur-threshold> < 1024.
+
+            (* Find and keep the most recently modified entry *)
+            Create the <tracker-key> with "tracker".
+            Delete the <old-tracker> from the <latest-tracker-repository> where <key> is <tracker-key>.
+            Create the <init-tracker> with { key: "tracker", modified: "1970-01-01T00:00:00Z", fileId: "", filePath: "", fileSize: 0 }.
+            Store the <init-tracker> into the <latest-tracker-repository>.
+
+            For each <stat-entry> in <all-files> {
+                Extract the <entry-modified> from the <stat-entry: modified>.
+                Extract the <entry-id> from the <stat-entry: id>.
+                Extract the <entry-path> from the <stat-entry: path>.
+                Extract the <entry-size> from the <stat-entry: size>.
+                Retrieve the <tracker> from the <latest-tracker-repository> where <key> is <tracker-key>.
+                Extract the <best-modified> from the <tracker: modified>.
+                Compute the <newer-entry> from <entry-modified> > <best-modified>.
+                Update the <tracker: modified> with <entry-modified> when <newer-entry>.
+                Update the <tracker: fileId> with <entry-id> when <newer-entry>.
+                Update the <tracker: filePath> with <entry-path> when <newer-entry>.
+                Update the <tracker: fileSize> with <entry-size> when <newer-entry>.
+                Store the <tracker> into the <latest-tracker-repository> when <newer-entry>.
+            }
+
+            Retrieve the <final-tracker> from the <latest-tracker-repository> where <key> is <tracker-key>.
+            Extract the <winner-id> from the <final-tracker: fileId>.
+            Extract the <winner-path> from the <final-tracker: filePath>.
+            Extract the <winner-size> from the <final-tracker: fileSize>.
+            Extract the <winner-modified> from the <final-tracker: modified>.
+
+            Create the <wkey> with "winner".
+            Delete the <old-winner> from the <winner-repository> where <key> is <wkey>.
+            Create the <winner-data> with { key: "winner", path: <winner-path>, size: <winner-size>, modified: <winner-modified> }.
+            Store the <winner-data> into the <winner-repository>.
+
+            Filter the <stale-files: List> from the <all-files> where <id> != <winner-id>.
+            For each <stale> in <stale-files> {
+                Extract the <stale-id> from the <stale: id>.
+                Delete the <removed> from the <file-stats-repository> where <id> is <stale-id>.
+            }
+
+            Log "Repository pruned: kept the most recently modified file." to the <console>.
+        }
+        otherwise {
+            Return an <OK: status> for the <below-threshold>.
+        }
+    }
+
+    Return an <OK: status> for the <processing>.
+}
+
+(* ─── FinalizeResult handler ───────────────────────────────────────────────── *)
+
+(Finalize Result: FinalizeResult Handler) {
+    (* Flush whatever remains — files that never triggered a threshold crossing *)
+    Retrieve the <all-files> from the <file-stats-repository>.
+    Reduce the <file-count: Integer> from the <all-files> with count().
+    Compute the <has-files> from <file-count> > 0.
+
+    match <has-files> {
+        case true {
+            Create the <tracker-key> with "tracker".
+            Delete the <old-tracker> from the <latest-tracker-repository> where <key> is <tracker-key>.
+            Create the <init-tracker> with { key: "tracker", modified: "1970-01-01T00:00:00Z", fileId: "", filePath: "", fileSize: 0 }.
+            Store the <init-tracker> into the <latest-tracker-repository>.
+
+            For each <stat-entry> in <all-files> {
+                Extract the <entry-modified> from the <stat-entry: modified>.
+                Extract the <entry-id> from the <stat-entry: id>.
+                Extract the <entry-path> from the <stat-entry: path>.
+                Extract the <entry-size> from the <stat-entry: size>.
+                Retrieve the <tracker> from the <latest-tracker-repository> where <key> is <tracker-key>.
+                Extract the <best-modified> from the <tracker: modified>.
+                Compute the <newer-entry> from <entry-modified> > <best-modified>.
+                Update the <tracker: modified> with <entry-modified> when <newer-entry>.
+                Update the <tracker: fileId> with <entry-id> when <newer-entry>.
+                Update the <tracker: filePath> with <entry-path> when <newer-entry>.
+                Update the <tracker: fileSize> with <entry-size> when <newer-entry>.
+                Store the <tracker> into the <latest-tracker-repository> when <newer-entry>.
+            }
+
+            Retrieve the <final-tracker> from the <latest-tracker-repository> where <key> is <tracker-key>.
+            Extract the <winner-id> from the <final-tracker: fileId>.
+            Extract the <winner-path> from the <final-tracker: filePath>.
+            Extract the <winner-size> from the <final-tracker: fileSize>.
+            Extract the <winner-modified> from the <final-tracker: modified>.
+
+            Create the <wkey> with "winner".
+            Delete the <old-winner> from the <winner-repository> where <key> is <wkey>.
+            Create the <winner-data> with { key: "winner", path: <winner-path>, size: <winner-size>, modified: <winner-modified> }.
+            Store the <winner-data> into the <winner-repository>.
+
+            Filter the <stale-files: List> from the <all-files> where <id> != <winner-id>.
+            For each <stale> in <stale-files> {
+                Extract the <stale-id> from the <stale: id>.
+                Delete the <removed> from the <file-stats-repository> where <id> is <stale-id>.
+            }
+
+            Log "Repository finalised: kept the most recently modified file." to the <console>.
+        }
+        otherwise {
+            Log "No files found." to the <console>.
+        }
+    }
+
+    Return an <OK: status> for the <finalize>.
+}
