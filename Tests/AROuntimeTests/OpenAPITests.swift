@@ -107,6 +107,54 @@ struct OpenAPISpecParsingTests {
         #expect(spec.servers?[0].description == "Local development")
     }
 
+    @Test("Parse spec with server variables")
+    func testParseSpecWithServerVariables() throws {
+        let json = """
+        {
+            "openapi": "3.0.3",
+            "info": {
+                "title": "Test API",
+                "version": "1.0.0"
+            },
+            "paths": {},
+            "servers": [
+                {
+                    "url": "{scheme}://api.{environment}.example.com:{port}",
+                    "description": "Configurable server",
+                    "variables": {
+                        "scheme": {
+                            "default": "https",
+                            "enum": ["https", "http"],
+                            "description": "The transfer protocol"
+                        },
+                        "environment": {
+                            "default": "production"
+                        },
+                        "port": {
+                            "default": "8080",
+                            "enum": ["8080", "443"]
+                        }
+                    }
+                }
+            ]
+        }
+        """
+
+        let data = json.data(using: .utf8)!
+        let spec = try JSONDecoder().decode(OpenAPISpec.self, from: data)
+
+        let server = try #require(spec.servers?.first)
+        #expect(server.url == "{scheme}://api.{environment}.example.com:{port}")
+        let variables = try #require(server.variables)
+        #expect(variables.count == 3)
+        #expect(variables["scheme"]?.default == "https")
+        #expect(variables["scheme"]?.enum == ["https", "http"])
+        #expect(variables["scheme"]?.description == "The transfer protocol")
+        #expect(variables["environment"]?.default == "production")
+        #expect(variables["environment"]?.enum == nil)
+        #expect(variables["port"]?.default == "8080")
+    }
+
     @Test("Parse spec with path parameters")
     func testParseSpecWithParameters() throws {
         let json = """
@@ -166,6 +214,91 @@ struct OpenAPISpecParsingTests {
         let spec = try JSONDecoder().decode(OpenAPISpec.self, from: data)
 
         #expect(spec.info.description == "A test API for unit testing")
+    }
+}
+
+// MARK: - Server Variable Tests
+
+@Suite("Server Variable Tests")
+struct ServerVariableTests {
+
+    @Test("resolvedURL substitutes all variable defaults")
+    func testResolvedURLSubstitutesAllVariables() {
+        let server = Server(
+            url: "{scheme}://api.{environment}.example.com:{port}",
+            description: nil,
+            variables: [
+                "scheme": ServerVariable(default: "https", enum: nil, description: nil),
+                "environment": ServerVariable(default: "production", enum: nil, description: nil),
+                "port": ServerVariable(default: "8080", enum: nil, description: nil)
+            ]
+        )
+        #expect(server.resolvedURL == "https://api.production.example.com:8080")
+    }
+
+    @Test("resolvedURL returns original URL when variables is nil")
+    func testResolvedURLWithNoVariables() {
+        let server = Server(url: "https://api.example.com:9000", description: nil, variables: nil)
+        #expect(server.resolvedURL == "https://api.example.com:9000")
+    }
+
+    @Test("resolvedURL leaves unreferenced placeholders intact")
+    func testResolvedURLLeavesUnknownPlaceholders() {
+        let server = Server(
+            url: "{scheme}://api.{environment}.example.com:{port}",
+            description: nil,
+            variables: [
+                "scheme": ServerVariable(default: "https", enum: nil, description: nil)
+                // environment and port not provided
+            ]
+        )
+        let resolved = server.resolvedURL
+        #expect(resolved == "https://api.{environment}.example.com:{port}")
+    }
+
+    @Test("serverPort uses resolvedURL to extract port")
+    func testServerPortUsesResolvedURL() throws {
+        let json = """
+        {
+            "openapi": "3.0.3",
+            "info": { "title": "Test API", "version": "1.0.0" },
+            "paths": {},
+            "servers": [
+                {
+                    "url": "http://localhost:{port}",
+                    "variables": {
+                        "port": { "default": "9090" }
+                    }
+                }
+            ]
+        }
+        """
+        let data = json.data(using: .utf8)!
+        let spec = try JSONDecoder().decode(OpenAPISpec.self, from: data)
+        #expect(spec.serverPort == 9090)
+    }
+
+    @Test("serverHost uses resolvedURL to extract host")
+    func testServerHostUsesResolvedURL() throws {
+        let json = """
+        {
+            "openapi": "3.0.3",
+            "info": { "title": "Test API", "version": "1.0.0" },
+            "paths": {},
+            "servers": [
+                {
+                    "url": "{scheme}://{host}:8080",
+                    "variables": {
+                        "scheme": { "default": "http" },
+                        "host": { "default": "myserver.local" }
+                    }
+                }
+            ]
+        }
+        """
+        let data = json.data(using: .utf8)!
+        let spec = try JSONDecoder().decode(OpenAPISpec.self, from: data)
+        #expect(spec.serverHost == "myserver.local")
     }
 }
 

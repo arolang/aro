@@ -22,11 +22,30 @@ public struct OpenAPIInfo: Sendable, Codable {
     public let description: String?
 }
 
+// MARK: - Server Variable
+
+public struct ServerVariable: Sendable, Codable {
+    public let `default`: String
+    public let `enum`: [String]?
+    public let description: String?
+}
+
 // MARK: - Server
 
 public struct Server: Sendable, Codable {
     public let url: String
     public let description: String?
+    public let variables: [String: ServerVariable]?
+
+    /// Returns the URL with all variable placeholders replaced by their default values
+    public var resolvedURL: String {
+        guard let variables = variables else { return url }
+        var resolved = url
+        for (name, variable) in variables {
+            resolved = resolved.replacingOccurrences(of: "{\(name)}", with: variable.default)
+        }
+        return resolved
+    }
 }
 
 // MARK: - Path Item

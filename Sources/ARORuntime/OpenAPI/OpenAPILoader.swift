@@ -124,7 +124,7 @@ extension OpenAPISpec {
     /// Extract port from the first server URL
     /// e.g., "http://localhost:8000" → 8000
     public var serverPort: Int? {
-        guard let serverURL = servers?.first?.url,
+        guard let serverURL = servers?.first?.resolvedURL,
               let url = URL(string: serverURL),
               let port = url.port else {
             return nil
@@ -134,7 +134,7 @@ extension OpenAPISpec {
 
     /// Extract host from the first server URL
     public var serverHost: String? {
-        guard let serverURL = servers?.first?.url,
+        guard let serverURL = servers?.first?.resolvedURL,
               let url = URL(string: serverURL) else {
             return nil
         }
