@@ -207,6 +207,34 @@ Reduce the <pending-count: Integer> from the <orders>
 | `first()` | First element | `with first()` |
 | `last()` | Last element | `with last()` |
 
+### `count()` vs `Compute length` — Choosing the Right Tool
+
+`Reduce … with count()` is not the only way to count a collection. The `Compute` action with a `length` or `count` qualifier does the same thing in one line:
+
+```aro
+Create the <all-files> with ["report.pdf", "notes.txt", "data.csv"].
+
+(* Pipeline style — explicit type, composes with Filter/Map/Retrieve *)
+Reduce the <file-count: Integer> from the <all-files> with count().
+
+(* OWN style — concise, works on lists and strings *)
+Compute the <file-count: length> from the <all-files>.
+```
+
+Both statements bind `file-count` to `3`. The difference is in role and context:
+
+| | `Reduce … with count()` | `Compute <n: length>` |
+|---|---|---|
+| **Role** | Aggregate (data pipeline) | OWN (pure transformation) |
+| **Type annotation** | Explicit (`: Integer`) | Inferred |
+| **Works on** | Collections | Collections and strings |
+| **Pipeline fit** | Natural (pairs with Filter/Map) | Standalone |
+| **Best for** | Aggregation inside a pipeline | Quick size check of any value |
+
+As a guideline: use `Reduce` when you are already in a pipeline (after a `Filter`, `Map`, or `Retrieve`) or when the explicit type annotation adds clarity. Use `Compute` for a quick, self-contained count.
+
+See **Chapter 9 — Computations** for the full `Compute` reference.
+
 ---
 
 ## Pipeline Composition
@@ -556,17 +584,19 @@ Filter the <premium-active: List<User>> from the <active>
     where <tier> is "premium".
 ```
 
-4. **Use Reduce for Counts**: Prefer `count()` over retrieving all items.
+4. **Use Reduce for Counts in Pipelines**: When you are already in a pipeline, prefer `Reduce … with count()` over retrieving everything just to measure it.
 
 ```aro
-(* Good: Aggregate directly *)
+(* Good: Aggregate directly inside the pipeline *)
 Reduce the <user-count: Integer> from the <users>
     with count().
 
-(* Expensive: Retrieve all just to count *)
+(* Expensive: Retrieve all items just to count them *)
 Retrieve the <all-users: List<User>> from the <users>.
 Compute the <count: length> from <all-users>.
 ```
+
+Note that `Compute <n: length>` is perfectly appropriate when the collection is already bound as a local variable—for example, after a `Filter`. The expensive anti-pattern above is the unnecessary `Retrieve`, not the `Compute` itself.
 
 ### Memory Considerations
 
