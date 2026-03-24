@@ -343,7 +343,7 @@ public final class Application: @unchecked Sendable {
             let declaredHeaderNames = Set(
                 match.effectiveParameters
                     .filter { $0.in == "header" }
-                    .map { $0.name.lowercased() }
+                    .compactMap { $0.name?.lowercased() }
             )
             var headerParams: [String: String] = [:]
             for (key, value) in request.headers {
@@ -356,7 +356,7 @@ public final class Application: @unchecked Sendable {
             let declaredCookieNames = Set(
                 match.effectiveParameters
                     .filter { $0.in == "cookie" }
-                    .map { $0.name }
+                    .compactMap { $0.name }
             )
             let rawCookieHeader = request.headers.first(where: { $0.key.lowercased() == "cookie" })?.value ?? ""
             let allCookies = parseCookieHeader(rawCookieHeader)
