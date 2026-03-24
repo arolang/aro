@@ -90,9 +90,10 @@ public final class OpenAPIHTTPHandler: @unchecked Sendable {
         // Inject default values for absent query parameters declared in the spec.
         var enrichedQueryParams = filteredQueryParameters
         for param in effectiveParameters where param.in == "query" {
-            guard enrichedQueryParams[param.name] == nil else { continue }
+            guard let paramName = param.name else { continue }
+            guard enrichedQueryParams[paramName] == nil else { continue }
             if let defaultVal = param.schema?.value.defaultValue {
-                enrichedQueryParams[param.name] = "\(defaultVal.anyValue)"
+                enrichedQueryParams[paramName] = "\(defaultVal.anyValue)"
             }
         }
 
@@ -104,7 +105,7 @@ public final class OpenAPIHTTPHandler: @unchecked Sendable {
         let declaredCookieNames = Set(
             effectiveParameters
                 .filter { $0.in == "cookie" }
-                .map { $0.name }
+                .compactMap { $0.name }
         )
         var cookieParams: [String: String] = [:]
         for name in declaredCookieNames {
@@ -115,30 +116,31 @@ public final class OpenAPIHTTPHandler: @unchecked Sendable {
 
         // Validate required parameters (query, header, and cookie)
         for param in effectiveParameters where param.required == true {
-            switch param.in {
+            guard let paramName = param.name, let paramIn = param.in else { continue }
+            switch paramIn {
             case "query":
-                if enrichedQueryParams[param.name] == nil {
+                if enrichedQueryParams[paramName] == nil {
                     return HTTPResponse(
                         statusCode: 400,
                         headers: ["Content-Type": "application/json"],
-                        body: "{\"error\":\"Bad Request\",\"message\":\"Required query parameter '\(param.name)' is missing\"}".data(using: .utf8)
+                        body: "{\"error\":\"Bad Request\",\"message\":\"Required query parameter '\(paramName)' is missing\"}".data(using: .utf8)
                     )
                 }
             case "header":
-                let lower = param.name.lowercased()
+                let lower = paramName.lowercased()
                 if !request.headers.keys.contains(where: { $0.lowercased() == lower }) {
                     return HTTPResponse(
                         statusCode: 400,
                         headers: ["Content-Type": "application/json"],
-                        body: "{\"error\":\"Bad Request\",\"message\":\"Required header '\(param.name)' is missing\"}".data(using: .utf8)
+                        body: "{\"error\":\"Bad Request\",\"message\":\"Required header '\(paramName)' is missing\"}".data(using: .utf8)
                     )
                 }
             case "cookie":
-                if cookieParams[param.name] == nil {
+                if cookieParams[paramName] == nil {
                     return HTTPResponse(
                         statusCode: 400,
                         headers: ["Content-Type": "application/json"],
-                        body: "{\"error\":\"Bad Request\",\"message\":\"Required cookie '\(param.name)' is missing\"}".data(using: .utf8)
+                        body: "{\"error\":\"Bad Request\",\"message\":\"Required cookie '\(paramName)' is missing\"}".data(using: .utf8)
                     )
                 }
             default:
