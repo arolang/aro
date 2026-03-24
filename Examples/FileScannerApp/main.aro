@@ -1,0 +1,48 @@
+(* FileScannerApp — Recursively scans files in the given directory,
+   collects their metadata via separate parallel events,
+   prunes the repository to keep only the most recently modified file,
+   and renders the result using a template.
+
+   Usage (scan a specific directory):
+       aro run ./Examples/FileScannerApp --dir ./Examples/FileScannerApp
+       aro run ./Examples/FileScannerApp --dir ./Sources
+
+   Without --dir the current working directory is scanned.
+*)
+
+(Application-Start: File Scanner) {
+    Log "File scanner starting..." to the <console>.
+
+    (* Threshold starts at 8 and doubles each time ProcessStats prunes.
+       ProcessStats reads its own count from file-stats-repository directly —
+       no separate counter needed. *)
+    Create the <init-state> with { key: "main", threshold: 8 }.
+    Store the <init-state> into the <scan-state-repository>.
+
+    (* Accept optional --dir argument *)
+    Extract the <dir-param> from the <parameter: dir>.
+    Compute the <no-dir> from <dir-param> == "".
+
+    (* Kick off the recursive file discovery — emit inside each branch so
+       the scan-path variable stays in scope for the Emit statement *)
+    match <no-dir> {
+        case true {
+            Create the <scan-path> with ".".
+            Log "Scanning: ." to the <console>.
+            Emit a <StartScan: event> with <scan-path>.
+        }
+        case false {
+            Create the <scan-path> with <dir-param>.
+            Log "Scanning:" to the <console>.
+            Log <dir-param> to the <console>.
+            Emit a <StartScan: event> with <scan-path>.
+        }
+    }
+
+    Return an <OK: status> for the <startup>.
+}
+
+(Application-End: Success) {
+    Log "File scanner finished." to the <console>.
+    Return an <OK: status> for the <shutdown>.
+}
