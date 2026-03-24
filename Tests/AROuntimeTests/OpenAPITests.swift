@@ -107,6 +107,54 @@ struct OpenAPISpecParsingTests {
         #expect(spec.servers?[0].description == "Local development")
     }
 
+    @Test("Parse spec with server variables")
+    func testParseSpecWithServerVariables() throws {
+        let json = """
+        {
+            "openapi": "3.0.3",
+            "info": {
+                "title": "Test API",
+                "version": "1.0.0"
+            },
+            "paths": {},
+            "servers": [
+                {
+                    "url": "{scheme}://api.{environment}.example.com:{port}",
+                    "description": "Configurable server",
+                    "variables": {
+                        "scheme": {
+                            "default": "https",
+                            "enum": ["https", "http"],
+                            "description": "The transfer protocol"
+                        },
+                        "environment": {
+                            "default": "production"
+                        },
+                        "port": {
+                            "default": "8080",
+                            "enum": ["8080", "443"]
+                        }
+                    }
+                }
+            ]
+        }
+        """
+
+        let data = json.data(using: .utf8)!
+        let spec = try JSONDecoder().decode(OpenAPISpec.self, from: data)
+
+        let server = try #require(spec.servers?.first)
+        #expect(server.url == "{scheme}://api.{environment}.example.com:{port}")
+        let variables = try #require(server.variables)
+        #expect(variables.count == 3)
+        #expect(variables["scheme"]?.default == "https")
+        #expect(variables["scheme"]?.enum == ["https", "http"])
+        #expect(variables["scheme"]?.description == "The transfer protocol")
+        #expect(variables["environment"]?.default == "production")
+        #expect(variables["environment"]?.enum == nil)
+        #expect(variables["port"]?.default == "8080")
+    }
+
     @Test("Parse spec with path parameters")
     func testParseSpecWithParameters() throws {
         let json = """
@@ -166,6 +214,91 @@ struct OpenAPISpecParsingTests {
         let spec = try JSONDecoder().decode(OpenAPISpec.self, from: data)
 
         #expect(spec.info.description == "A test API for unit testing")
+    }
+}
+
+// MARK: - Server Variable Tests
+
+@Suite("Server Variable Tests")
+struct ServerVariableTests {
+
+    @Test("resolvedURL substitutes all variable defaults")
+    func testResolvedURLSubstitutesAllVariables() {
+        let server = Server(
+            url: "{scheme}://api.{environment}.example.com:{port}",
+            description: nil,
+            variables: [
+                "scheme": ServerVariable(default: "https", enum: nil, description: nil),
+                "environment": ServerVariable(default: "production", enum: nil, description: nil),
+                "port": ServerVariable(default: "8080", enum: nil, description: nil)
+            ]
+        )
+        #expect(server.resolvedURL == "https://api.production.example.com:8080")
+    }
+
+    @Test("resolvedURL returns original URL when variables is nil")
+    func testResolvedURLWithNoVariables() {
+        let server = Server(url: "https://api.example.com:9000", description: nil, variables: nil)
+        #expect(server.resolvedURL == "https://api.example.com:9000")
+    }
+
+    @Test("resolvedURL leaves unreferenced placeholders intact")
+    func testResolvedURLLeavesUnknownPlaceholders() {
+        let server = Server(
+            url: "{scheme}://api.{environment}.example.com:{port}",
+            description: nil,
+            variables: [
+                "scheme": ServerVariable(default: "https", enum: nil, description: nil)
+                // environment and port not provided
+            ]
+        )
+        let resolved = server.resolvedURL
+        #expect(resolved == "https://api.{environment}.example.com:{port}")
+    }
+
+    @Test("serverPort uses resolvedURL to extract port")
+    func testServerPortUsesResolvedURL() throws {
+        let json = """
+        {
+            "openapi": "3.0.3",
+            "info": { "title": "Test API", "version": "1.0.0" },
+            "paths": {},
+            "servers": [
+                {
+                    "url": "http://localhost:{port}",
+                    "variables": {
+                        "port": { "default": "9090" }
+                    }
+                }
+            ]
+        }
+        """
+        let data = json.data(using: .utf8)!
+        let spec = try JSONDecoder().decode(OpenAPISpec.self, from: data)
+        #expect(spec.serverPort == 9090)
+    }
+
+    @Test("serverHost uses resolvedURL to extract host")
+    func testServerHostUsesResolvedURL() throws {
+        let json = """
+        {
+            "openapi": "3.0.3",
+            "info": { "title": "Test API", "version": "1.0.0" },
+            "paths": {},
+            "servers": [
+                {
+                    "url": "{scheme}://{host}:8080",
+                    "variables": {
+                        "scheme": { "default": "http" },
+                        "host": { "default": "myserver.local" }
+                    }
+                }
+            ]
+        }
+        """
+        let data = json.data(using: .utf8)!
+        let spec = try JSONDecoder().decode(OpenAPISpec.self, from: data)
+        #expect(spec.serverHost == "myserver.local")
     }
 }
 
@@ -500,3 +633,362 @@ struct ContractValidationTests {
         }
     }
 }
+
+// MARK: - Path-Level Parameter Merging Tests
+
+@Suite("Path-Level Parameter Merging Tests")
+struct PathLevelParameterMergingTests {
+
+    @Test("effectiveParameters includes path-level id param for GET operation without operation-level params")
+    func testPathLevelParamInheritedByGet() throws {
+        let json = """
+        {
+            "openapi": "3.0.3",
+            "info": { "title": "Test API", "version": "1.0.0" },
+            "paths": {
+                "/items/{id}": {
+                    "parameters": [
+                        { "name": "id", "in": "path", "required": true }
+                    ],
+                    "get": {
+                        "operationId": "getItem",
+                        "responses": { "200": { "description": "OK" } }
+                    },
+                    "delete": {
+                        "operationId": "deleteItem",
+                        "responses": { "204": { "description": "No Content" } }
+                    }
+                }
+            }
+        }
+        """
+        let data = json.data(using: .utf8)!
+        let spec = try JSONDecoder().decode(OpenAPISpec.self, from: data)
+        let registry = OpenAPIRouteRegistry(spec: spec)
+
+        let getMatch = try #require(registry.match(method: "GET", path: "/items/42"))
+        #expect(getMatch.effectiveParameters.count == 1)
+        #expect(getMatch.effectiveParameters.first?.name == "id")
+        #expect(getMatch.effectiveParameters.first?.in == "path")
+
+        let deleteMatch = try #require(registry.match(method: "DELETE", path: "/items/42"))
+        #expect(deleteMatch.effectiveParameters.count == 1)
+        #expect(deleteMatch.effectiveParameters.first?.name == "id")
+        #expect(deleteMatch.effectiveParameters.first?.in == "path")
+    }
+
+    @Test("operation-level parameter overrides path-level parameter with same name and in")
+    func testOperationLevelOverridesPathLevel() throws {
+        let json = """
+        {
+            "openapi": "3.0.3",
+            "info": { "title": "Test API", "version": "1.0.0" },
+            "paths": {
+                "/items/{id}": {
+                    "parameters": [
+                        { "name": "id", "in": "path", "required": true, "description": "path-level" }
+                    ],
+                    "get": {
+                        "operationId": "getItem",
+                        "parameters": [
+                            { "name": "id", "in": "path", "required": true, "description": "operation-level" }
+                        ],
+                        "responses": { "200": { "description": "OK" } }
+                    }
+                }
+            }
+        }
+        """
+        let data = json.data(using: .utf8)!
+        let spec = try JSONDecoder().decode(OpenAPISpec.self, from: data)
+        let registry = OpenAPIRouteRegistry(spec: spec)
+
+        let match = try #require(registry.match(method: "GET", path: "/items/99"))
+        // Only one parameter should remain (operation-level wins)
+        #expect(match.effectiveParameters.count == 1)
+        #expect(match.effectiveParameters.first?.description == "operation-level")
+    }
+
+    @Test("effectiveParameters combines path-level and operation-level params with different names")
+    func testPathAndOperationLevelParamsCombined() throws {
+        let json = """
+        {
+            "openapi": "3.0.3",
+            "info": { "title": "Test API", "version": "1.0.0" },
+            "paths": {
+                "/items/{id}": {
+                    "parameters": [
+                        { "name": "id", "in": "path", "required": true }
+                    ],
+                    "get": {
+                        "operationId": "getItem",
+                        "parameters": [
+                            { "name": "expand", "in": "query", "required": false }
+                        ],
+                        "responses": { "200": { "description": "OK" } }
+                    }
+                }
+            }
+        }
+        """
+        let data = json.data(using: .utf8)!
+        let spec = try JSONDecoder().decode(OpenAPISpec.self, from: data)
+        let registry = OpenAPIRouteRegistry(spec: spec)
+
+        let match = try #require(registry.match(method: "GET", path: "/items/7"))
+        #expect(match.effectiveParameters.count == 2)
+        let names = Set(match.effectiveParameters.map { $0.name })
+        #expect(names.contains("id"))
+        #expect(names.contains("expand"))
+    }
+
+    @Test("effectiveParameters is empty when neither path-level nor operation-level params exist")
+    func testNoParamsGivesEmptyEffectiveParameters() throws {
+        let json = """
+        {
+            "openapi": "3.0.3",
+            "info": { "title": "Test API", "version": "1.0.0" },
+            "paths": {
+                "/health": {
+                    "get": {
+                        "operationId": "healthCheck",
+                        "responses": { "200": { "description": "OK" } }
+                    }
+                }
+            }
+        }
+        """
+        let data = json.data(using: .utf8)!
+        let spec = try JSONDecoder().decode(OpenAPISpec.self, from: data)
+        let registry = OpenAPIRouteRegistry(spec: spec)
+
+        let match = try #require(registry.match(method: "GET", path: "/health"))
+        #expect(match.effectiveParameters.isEmpty)
+    }
+}
+
+// MARK: - Deprecation Warning Tests
+
+#if !os(Windows)
+
+@Suite("Deprecation Warning Tests")
+struct DeprecationWarningTests {
+
+    private func makeSpec(deprecated: Bool, parameters: [[String: Any]] = []) throws -> OpenAPISpec {
+        var operationDict: [String: Any] = [
+            "operationId": "oldOp",
+            "deprecated": deprecated,
+            "responses": ["200": ["description": "OK"]]
+        ]
+        if !parameters.isEmpty {
+            operationDict["parameters"] = parameters
+        }
+        let specDict: [String: Any] = [
+            "openapi": "3.0.3",
+            "info": ["title": "Test API", "version": "1.0.0"],
+            "paths": [
+                "/legacy": [
+                    "get": operationDict
+                ]
+            ]
+        ]
+        let data = try JSONSerialization.data(withJSONObject: specDict)
+        return try JSONDecoder().decode(OpenAPISpec.self, from: data)
+    }
+
+    private func makeHandler(spec: OpenAPISpec) -> OpenAPIHTTPHandler {
+        let registry = OpenAPIRouteRegistry(spec: spec)
+        let bus = EventBus()
+        return OpenAPIHTTPHandler(routeRegistry: registry, eventBus: bus)
+    }
+
+    @Test("Deprecated operation adds Deprecation: true response header")
+    func testDeprecatedOperationAddsHeader() async throws {
+        let spec = try makeSpec(deprecated: true)
+        let handler = makeHandler(spec: spec)
+
+        let request = HTTPRequest(method: "GET", path: "/legacy")
+        let response = await handler.handleRequest(request)
+
+        #expect(response.headers["Deprecation"] == "true")
+    }
+
+    @Test("Non-deprecated operation does not add Deprecation header")
+    func testNonDeprecatedOperationNoHeader() async throws {
+        let spec = try makeSpec(deprecated: false)
+        let handler = makeHandler(spec: spec)
+
+        let request = HTTPRequest(method: "GET", path: "/legacy")
+        let response = await handler.handleRequest(request)
+
+        #expect(response.headers["Deprecation"] == nil)
+    }
+
+    @Test("Deprecated operation preserves standard response headers")
+    func testDeprecatedOperationPreservesStandardHeaders() async throws {
+        let spec = try makeSpec(deprecated: true)
+        let handler = makeHandler(spec: spec)
+
+        let request = HTTPRequest(method: "GET", path: "/legacy")
+        let response = await handler.handleRequest(request)
+
+        #expect(response.headers["Content-Type"] == "application/json")
+        #expect(response.headers["X-Operation-ID"] == "oldOp")
+        #expect(response.headers["Deprecation"] == "true")
+    }
+
+    @Test("Deprecated parameter field is parsed from JSON")
+    func testDeprecatedParameterParsed() throws {
+        let json = """
+        {
+            "name": "legacyParam",
+            "in": "query",
+            "deprecated": true
+        }
+        """
+        let data = json.data(using: .utf8)!
+        let param = try JSONDecoder().decode(Parameter.self, from: data)
+
+        #expect(param.deprecated == true)
+    }
+
+    @Test("Non-deprecated parameter has nil deprecated field")
+    func testNonDeprecatedParameterFieldIsNil() throws {
+        let json = """
+        {
+            "name": "normalParam",
+            "in": "query"
+        }
+        """
+        let data = json.data(using: .utf8)!
+        let param = try JSONDecoder().decode(Parameter.self, from: data)
+
+        #expect(param.deprecated == nil)
+    }
+
+    @Test("Unmatched route returns 404 without Deprecation header")
+    func testUnmatchedRouteNoDeprecationHeader() async throws {
+        let spec = try makeSpec(deprecated: true)
+        let handler = makeHandler(spec: spec)
+
+        let request = HTTPRequest(method: "GET", path: "/nonexistent")
+        let response = await handler.handleRequest(request)
+
+        #expect(response.statusCode == 404)
+        #expect(response.headers["Deprecation"] == nil)
+    }
+}
+
+// MARK: - allowEmptyValue Filtering Tests
+
+/// Pure helper that mirrors the allowEmptyValue filter logic in OpenAPIHTTPHandler.handleRequest().
+/// Parameters with allowEmptyValue absent or false and an empty value are removed.
+/// Parameters not listed in the spec always pass through.
+private func applyAllowEmptyValueFilter(
+    queryParameters: [String: String],
+    specParameters: [Parameter]
+) -> [String: String] {
+    var allowEmptyValueByName: [String: Bool] = [:]
+    for param in specParameters where param.in == "query" {
+        if let paramName = param.name {
+            allowEmptyValueByName[paramName] = param.allowEmptyValue ?? false
+        }
+    }
+    return queryParameters.filter { name, value in
+        guard value.isEmpty else { return true }
+        guard let allowEmpty = allowEmptyValueByName[name] else { return true }
+        return allowEmpty
+    }
+}
+
+@Suite("allowEmptyValue Filtering Tests")
+struct AllowEmptyValueFilteringTests {
+
+    private func makeParameters(_ dicts: [[String: Any]]) throws -> [Parameter] {
+        let data = try JSONSerialization.data(withJSONObject: dicts)
+        return try JSONDecoder().decode([Parameter].self, from: data)
+    }
+
+    @Test("Empty query param is filtered out when allowEmptyValue is not set (defaults to false)")
+    func testEmptyValueFilteredWhenAllowEmptyValueNotSet() throws {
+        let params = try makeParameters([["name": "status", "in": "query"]])
+        let result = applyAllowEmptyValueFilter(queryParameters: ["status": ""], specParameters: params)
+        #expect(result["status"] == nil,
+                "Empty 'status' should be filtered out when allowEmptyValue is not set")
+    }
+
+    @Test("Empty query param passes through when allowEmptyValue is true")
+    func testEmptyValuePassesThroughWhenAllowEmptyValueTrue() throws {
+        let params = try makeParameters([
+            ["name": "status", "in": "query", "allowEmptyValue": true]
+        ])
+        let result = applyAllowEmptyValueFilter(queryParameters: ["status": ""], specParameters: params)
+        #expect(result["status"] == "",
+                "Empty 'status' should pass through when allowEmptyValue is true")
+    }
+
+    @Test("Non-empty query param always passes through regardless of allowEmptyValue")
+    func testNonEmptyValueAlwaysPassesThrough() throws {
+        let params = try makeParameters([["name": "status", "in": "query"]])
+        let result = applyAllowEmptyValueFilter(queryParameters: ["status": "active"], specParameters: params)
+        #expect(result["status"] == "active",
+                "Non-empty 'status' should always pass through")
+    }
+
+    @Test("Query param not listed in spec always passes through even if empty")
+    func testUnknownParamPassesThroughEvenIfEmpty() throws {
+        // spec declares 'status' but request sends 'unknown'
+        let params = try makeParameters([["name": "status", "in": "query"]])
+        let result = applyAllowEmptyValueFilter(queryParameters: ["unknown": ""], specParameters: params)
+        #expect(result["unknown"] == "",
+                "Param not in spec should pass through even if empty")
+    }
+
+    @Test("allowEmptyValue: false explicitly also filters empty value")
+    func testExplicitAllowEmptyValueFalseFiltersEmpty() throws {
+        let params = try makeParameters([
+            ["name": "tag", "in": "query", "allowEmptyValue": false]
+        ])
+        let result = applyAllowEmptyValueFilter(queryParameters: ["tag": ""], specParameters: params)
+        #expect(result["tag"] == nil,
+                "Empty 'tag' should be filtered when allowEmptyValue is explicitly false")
+    }
+
+    @Test("Mixed params: empty+not-allowed filtered, empty+allowed kept, non-empty kept")
+    func testMixedParamsFiltering() throws {
+        let params = try makeParameters([
+            ["name": "status", "in": "query"],                              // allowEmptyValue absent → false
+            ["name": "tag", "in": "query", "allowEmptyValue": true],        // explicitly true
+            ["name": "name", "in": "query", "allowEmptyValue": false]       // explicitly false
+        ])
+        let result = applyAllowEmptyValueFilter(queryParameters: [
+            "status": "",       // should be filtered (no allowEmptyValue)
+            "tag": "",          // should pass (allowEmptyValue: true)
+            "name": "",         // should be filtered (allowEmptyValue: false)
+            "extra": "",        // should pass (not in spec)
+            "q": "hello"        // non-empty, should pass
+        ], specParameters: params)
+        #expect(result["status"] == nil)
+        #expect(result["tag"] == "")
+        #expect(result["name"] == nil)
+        #expect(result["extra"] == "")
+        #expect(result["q"] == "hello")
+    }
+
+    @Test("allowEmptyValue filter uses effectiveParameters (path-level + operation-level merged)")
+    func testFilterUsesEffectiveParameters() throws {
+        // Path-level declares 'tag' with allowEmptyValue: false; operation-level overrides with true
+        let pathLevelParams = try makeParameters([
+            ["name": "tag", "in": "query", "allowEmptyValue": false]
+        ])
+        let operationLevelParams = try makeParameters([
+            ["name": "tag", "in": "query", "allowEmptyValue": true]
+        ])
+        let effective = mergedParameters(pathLevel: pathLevelParams, operationLevel: operationLevelParams)
+        let result = applyAllowEmptyValueFilter(queryParameters: ["tag": ""], specParameters: effective)
+        #expect(result["tag"] == "",
+                "Operation-level allowEmptyValue: true should override path-level false")
+    }
+}
+
+#endif  // !os(Windows)
