@@ -112,7 +112,7 @@ OWN actions transform, validate, and manipulate data within the internal executi
 | **Compare** | compare, match | against, with, to | Compare two values |
 | **Transform** | transform, convert, map | from, into, to | Transform data types |
 | **Create** | create, build, construct | with, from, for, to | Create new entities |
-| **Update** | update, modify, change, set | with, to, for, from | Update existing entities |
+| **Update** | update, modify, change, set | with, to, for, from | Update one or more fields of an existing object |
 | **Filter** | filter | from | Filter collections |
 | **Sort** | sort, order, arrange | for, with | Sort collections |
 | **Split** | split | from | Split strings by delimiter |
@@ -687,6 +687,49 @@ Actions must be `Sendable` and thread-safe. Do not store mutable state in action
 | 46 | Emit | export | emit | with, to |
 | 47 | Execute | own | execute, exec, run, shell | with |
 | 48 | Call | own | call, invoke | from, to, with, via |
+
+---
+
+## Update Action — Multi-Field Syntax
+
+The `Update` action supports two forms:
+
+### Single-Field Update
+
+Targets one field via the colon qualifier on the result variable:
+
+```aro
+Update the <obj: field> with <value>.
+Update the <obj: field> with <value> when <condition>.
+```
+
+### Multi-Field Update
+
+Provides an object literal; all listed keys are merged into the target object.
+Unlisted fields are left unchanged. The optional `when` guard applies to all fields atomically.
+
+```aro
+Update the <obj> with { field1: <expr1>, field2: <expr2> }.
+Update the <obj> with { field1: <expr1>, field2: <expr2> } when <condition>.
+```
+
+**Example — replacing four single-field Updates with one:**
+
+```aro
+(* Before *)
+Update the <tracker: modified> with <entry: modified> when <newer>.
+Update the <tracker: fileId>   with <entry: id>       when <newer>.
+Update the <tracker: filePath> with <entry: path>     when <newer>.
+Update the <tracker: fileSize> with <entry: size>     when <newer>.
+
+(* After *)
+Update the <tracker> with {
+    modified: <entry: modified>,
+    fileId:   <entry: id>,
+    filePath: <entry: path>,
+    fileSize: <entry: size>
+} when <newer>.
+```
 
 ---
 

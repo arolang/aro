@@ -1,0 +1,42 @@
+(* ObjectUpdate — Demonstrates multi-field object update syntax.
+   Shows both forms of Update:
+     1. Single-field:  Update the <obj: field> with <value>.
+     2. Multi-field:   Update the <obj> with { field: value, ... }.
+   Both forms support the optional `when` guard.
+*)
+
+(Application-Start: Object Update Demo) {
+
+    (* ── Single-field updates (existing syntax) ─────────────────────────── *)
+    Create the <profile> with { name: "Alice", role: "viewer", active: false }.
+    Log "Initial profile:" to the <console>.
+    Log <profile> to the <console>.
+
+    Update the <profile: role> with "editor".
+    Update the <profile: active> with true.
+    Log "After single-field updates:" to the <console>.
+    Log <profile> to the <console>.
+
+    (* ── Multi-field update ─────────────────────────────────────────────── *)
+    Create the <patch> with { role: "admin", active: true, department: "engineering" }.
+    Update the <profile> with {
+        role: <patch: role>,
+        department: <patch: department>
+    }.
+    Log "After multi-field update:" to the <console>.
+    Log <profile> to the <console>.
+
+    (* ── Multi-field update with when guard ─────────────────────────────── *)
+    Create the <should-promote> with true.
+    Create the <should-demote> with false.
+
+    Update the <profile> with { role: "owner", department: "leadership" } when <should-promote>.
+    Log "After conditional update (should-promote = true):" to the <console>.
+    Log <profile> to the <console>.
+
+    Update the <profile> with { role: "viewer", department: "none" } when <should-demote>.
+    Log "After conditional update (should-demote = false, no change expected):" to the <console>.
+    Log <profile> to the <console>.
+
+    Return an <OK: status> for the <startup>.
+}
