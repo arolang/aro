@@ -27,7 +27,7 @@ public struct ExpressionEvaluator: Sendable {
             // Special handling for repository count access: <repository-name: count>
             if InMemoryRepositoryStorage.isRepositoryName(varRef.noun.base) &&
                varRef.noun.specifiers == ["count"] {
-                return await InMemoryRepositoryStorage.shared.count(
+                return await context.container.repositoryStorage.count(
                     repository: varRef.noun.base,
                     businessActivity: context.businessActivity
                 )
@@ -52,14 +52,14 @@ public struct ExpressionEvaluator: Sendable {
             // This allows disambiguation when multiple plugins provide the same qualifier
             if specifiers.count > 1 {
                 let joined = specifiers.joined(separator: ".")
-                if let transformed = try QualifierRegistry.shared.resolve(joined, value: value) {
+                if let transformed = try context.container.qualifierRegistry.resolve(joined, value: value) {
                     return transformed
                 }
             }
 
             for specifier in specifiers {
                 // Try plugin qualifier first (e.g., <list: pick-random>)
-                if let transformed = try QualifierRegistry.shared.resolve(specifier, value: value) {
+                if let transformed = try context.container.qualifierRegistry.resolve(specifier, value: value) {
                     value = transformed
                 } else {
                     // Fall back to property access (e.g., <user: name> -> user.name)

@@ -330,10 +330,8 @@ public final class Application: @unchecked Sendable {
                 )
             }
 
-            // Find the feature set by operationId
-            guard let featureSet = program.featureSets.first(where: {
-                $0.featureSet.name == match.operationId
-            }) else {
+            // Find the feature set by operationId — O(1) via byName index
+            guard let featureSet = program.byName[match.operationId] else {
                 return HTTPResponse(
                     statusCode: 501,
                     headers: ["Content-Type": "application/json"],
@@ -345,7 +343,7 @@ public final class Application: @unchecked Sendable {
             let declaredHeaderNames = Set(
                 match.effectiveParameters
                     .filter { $0.in == "header" }
-                    .map { $0.name.lowercased() }
+                    .compactMap { $0.name?.lowercased() }
             )
             var headerParams: [String: String] = [:]
             for (key, value) in request.headers {
@@ -358,7 +356,7 @@ public final class Application: @unchecked Sendable {
             let declaredCookieNames = Set(
                 match.effectiveParameters
                     .filter { $0.in == "cookie" }
-                    .map { $0.name }
+                    .compactMap { $0.name }
             )
             let rawCookieHeader = request.headers.first(where: { $0.key.lowercased() == "cookie" })?.value ?? ""
             let allCookies = parseCookieHeader(rawCookieHeader)
@@ -414,11 +412,12 @@ public final class Application: @unchecked Sendable {
         let context = RuntimeContext(
             featureSetName: analyzedFeatureSet.featureSet.name,
             businessActivity: analyzedFeatureSet.featureSet.businessActivity,
-            eventBus: .shared
+            eventBus: RuntimeContainer.default.eventBus,
+            container: RuntimeContainer.default
         )
 
         // Register repository storage service for persistent in-memory storage
-        context.register(InMemoryRepositoryStorage.shared as RepositoryStorageService)
+        context.register(RuntimeContainer.default.repositoryStorage as RepositoryStorageService)
 
         // Register socket server service for TCP broadcast support
         if let ss = self.socketServer {

@@ -121,11 +121,25 @@ public struct AnalyzedProgram: Sendable {
     public let program: Program
     public let featureSets: [AnalyzedFeatureSet]
     public let globalRegistry: GlobalSymbolRegistry
-    
+
+    /// Feature sets grouped by business activity string.
+    ///
+    /// Built once at init time so event-handler registration is O(k) over
+    /// distinct activity keys rather than O(n) over all feature sets.
+    /// Key: `featureSet.businessActivity` (e.g. `"UserCreated Handler"`).
+    public let byActivity: [String: [AnalyzedFeatureSet]]
+
+    /// Feature sets indexed by name for O(1) lookup (e.g. by HTTP operationId).
+    public let byName: [String: AnalyzedFeatureSet]
+
     public init(program: Program, featureSets: [AnalyzedFeatureSet], globalRegistry: GlobalSymbolRegistry) {
         self.program = program
         self.featureSets = featureSets
         self.globalRegistry = globalRegistry
+        self.byActivity = Dictionary(grouping: featureSets, by: { $0.featureSet.businessActivity })
+        var nameIndex: [String: AnalyzedFeatureSet] = [:]
+        for fs in featureSets { nameIndex[fs.featureSet.name] = fs }
+        self.byName = nameIndex
     }
 }
 
@@ -457,6 +471,18 @@ public final class SemanticAnalyzer {
         if let whereClause = statement.queryModifiers.whereClause {
             let whereVars = extractVariables(from: whereClause.value)
             for varName in whereVars {
+                if !definedSymbols.contains(varName) && !isKnownExternal(varName) {
+                    dependencies.insert(varName)
+                }
+                inputs.insert(varName)
+            }
+        }
+
+        // Extract variables from range modifiers with clause (e.g., `from <url> with { headers: {...}, body: <var> }`)
+        // When the object is a bare variable reference, the with-dict is stored in rangeModifiers.withClause
+        if let withClause = statement.rangeModifiers.withClause {
+            let withVars = extractVariables(from: withClause)
+            for varName in withVars {
                 if !definedSymbols.contains(varName) && !isKnownExternal(varName) {
                     dependencies.insert(varName)
                 }
