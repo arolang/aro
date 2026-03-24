@@ -991,4 +991,202 @@ struct AllowEmptyValueFilteringTests {
     }
 }
 
+// MARK: - Required Parameter Validation Tests
+
+@Suite("Required Parameter Validation Tests")
+struct RequiredParameterValidationTests {
+
+    private func makeSpec(parameters: [[String: Any]], inPath: String = "/items") throws -> OpenAPISpec {
+        let specDict: [String: Any] = [
+            "openapi": "3.0.3",
+            "info": ["title": "Test API", "version": "1.0.0"],
+            "paths": [
+                inPath: [
+                    "get": [
+                        "operationId": "getItems",
+                        "parameters": parameters,
+                        "responses": ["200": ["description": "OK"]]
+                    ]
+                ]
+            ]
+        ]
+        let data = try JSONSerialization.data(withJSONObject: specDict)
+        return try JSONDecoder().decode(OpenAPISpec.self, from: data)
+    }
+
+    private func makeHandler(spec: OpenAPISpec) -> OpenAPIHTTPHandler {
+        let registry = OpenAPIRouteRegistry(spec: spec)
+        let bus = EventBus()
+        return OpenAPIHTTPHandler(routeRegistry: registry, eventBus: bus)
+    }
+
+    // MARK: Required query parameter
+
+    @Test("Missing required query parameter returns 400")
+    func testMissingRequiredQueryParamReturns400() async throws {
+        let spec = try makeSpec(parameters: [
+            ["name": "q", "in": "query", "required": true]
+        ])
+        let handler = makeHandler(spec: spec)
+
+        let request = HTTPRequest(method: "GET", path: "/items")
+        let response = await handler.handleRequest(request)
+
+        #expect(response.statusCode == 400)
+        if let body = response.body, let text = String(data: body, encoding: .utf8) {
+            #expect(text.contains("Required query parameter"))
+            #expect(text.contains("'q'"))
+        }
+    }
+
+    @Test("Present required query parameter does not return 400")
+    func testPresentRequiredQueryParamNotRejected() async throws {
+        let spec = try makeSpec(parameters: [
+            ["name": "q", "in": "query", "required": true]
+        ])
+        let handler = makeHandler(spec: spec)
+
+        let request = HTTPRequest(method: "GET", path: "/items", queryParameters: ["q": "hello"])
+        let response = await handler.handleRequest(request)
+
+        #expect(response.statusCode != 400)
+    }
+
+    @Test("Optional query parameter missing does not return 400")
+    func testMissingOptionalQueryParamNotRejected() async throws {
+        let spec = try makeSpec(parameters: [
+            ["name": "q", "in": "query", "required": false]
+        ])
+        let handler = makeHandler(spec: spec)
+
+        let request = HTTPRequest(method: "GET", path: "/items")
+        let response = await handler.handleRequest(request)
+
+        #expect(response.statusCode != 400)
+    }
+
+    @Test("Query parameter with no required field missing does not return 400")
+    func testMissingQueryParamWithoutRequiredFieldNotRejected() async throws {
+        let spec = try makeSpec(parameters: [
+            ["name": "q", "in": "query"]
+        ])
+        let handler = makeHandler(spec: spec)
+
+        let request = HTTPRequest(method: "GET", path: "/items")
+        let response = await handler.handleRequest(request)
+
+        #expect(response.statusCode != 400)
+    }
+
+    // MARK: Required header parameter
+
+    @Test("Missing required header returns 400")
+    func testMissingRequiredHeaderReturns400() async throws {
+        let spec = try makeSpec(parameters: [
+            ["name": "X-API-Key", "in": "header", "required": true]
+        ])
+        let handler = makeHandler(spec: spec)
+
+        let request = HTTPRequest(method: "GET", path: "/items")
+        let response = await handler.handleRequest(request)
+
+        #expect(response.statusCode == 400)
+        if let body = response.body, let text = String(data: body, encoding: .utf8) {
+            #expect(text.contains("Required header"))
+            #expect(text.contains("'X-API-Key'"))
+        }
+    }
+
+    @Test("Present required header does not return 400")
+    func testPresentRequiredHeaderNotRejected() async throws {
+        let spec = try makeSpec(parameters: [
+            ["name": "X-API-Key", "in": "header", "required": true]
+        ])
+        let handler = makeHandler(spec: spec)
+
+        let request = HTTPRequest(method: "GET", path: "/items", headers: ["X-API-Key": "secret"])
+        let response = await handler.handleRequest(request)
+
+        #expect(response.statusCode != 400)
+    }
+
+    @Test("Required header check is case-insensitive")
+    func testRequiredHeaderCaseInsensitive() async throws {
+        let spec = try makeSpec(parameters: [
+            ["name": "X-API-Key", "in": "header", "required": true]
+        ])
+        let handler = makeHandler(spec: spec)
+
+        // Provide the header with all-lowercase name
+        let request = HTTPRequest(method: "GET", path: "/items", headers: ["x-api-key": "secret"])
+        let response = await handler.handleRequest(request)
+
+        #expect(response.statusCode != 400)
+    }
+
+    @Test("Optional header missing does not return 400")
+    func testMissingOptionalHeaderNotRejected() async throws {
+        let spec = try makeSpec(parameters: [
+            ["name": "X-API-Key", "in": "header", "required": false]
+        ])
+        let handler = makeHandler(spec: spec)
+
+        let request = HTTPRequest(method: "GET", path: "/items")
+        let response = await handler.handleRequest(request)
+
+        #expect(response.statusCode != 400)
+    }
+
+    // MARK: Path-level required parameters
+
+    @Test("Required query param from path-level parameters also triggers 400 when missing")
+    func testPathLevelRequiredQueryParamMissingReturns400() async throws {
+        let specDict: [String: Any] = [
+            "openapi": "3.0.3",
+            "info": ["title": "Test API", "version": "1.0.0"],
+            "paths": [
+                "/items": [
+                    "parameters": [
+                        ["name": "version", "in": "query", "required": true]
+                    ],
+                    "get": [
+                        "operationId": "getItems",
+                        "responses": ["200": ["description": "OK"]]
+                    ]
+                ]
+            ]
+        ]
+        let data = try JSONSerialization.data(withJSONObject: specDict)
+        let spec = try JSONDecoder().decode(OpenAPISpec.self, from: data)
+        let handler = makeHandler(spec: spec)
+
+        let request = HTTPRequest(method: "GET", path: "/items")
+        let response = await handler.handleRequest(request)
+
+        #expect(response.statusCode == 400)
+        if let body = response.body, let text = String(data: body, encoding: .utf8) {
+            #expect(text.contains("Required query parameter"))
+            #expect(text.contains("'version'"))
+        }
+    }
+
+    @Test("400 response body contains JSON error and message fields")
+    func testMissingRequiredParamResponseBodyIsJSON() async throws {
+        let spec = try makeSpec(parameters: [
+            ["name": "q", "in": "query", "required": true]
+        ])
+        let handler = makeHandler(spec: spec)
+
+        let request = HTTPRequest(method: "GET", path: "/items")
+        let response = await handler.handleRequest(request)
+
+        #expect(response.statusCode == 400)
+        #expect(response.headers["Content-Type"] == "application/json")
+        let body = try #require(response.body)
+        let json = try #require(try JSONSerialization.jsonObject(with: body) as? [String: String])
+        #expect(json["error"] == "Bad Request")
+        #expect(json["message"] != nil)
+    }
+}
+
 #endif  // !os(Windows)
