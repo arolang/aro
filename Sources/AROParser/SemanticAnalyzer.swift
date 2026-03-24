@@ -478,6 +478,18 @@ public final class SemanticAnalyzer {
             }
         }
 
+        // Extract variables from range modifiers with clause (e.g., `from <url> with { headers: {...}, body: <var> }`)
+        // When the object is a bare variable reference, the with-dict is stored in rangeModifiers.withClause
+        if let withClause = statement.rangeModifiers.withClause {
+            let withVars = extractVariables(from: withClause)
+            for varName in withVars {
+                if !definedSymbols.contains(varName) && !isKnownExternal(varName) {
+                    dependencies.insert(varName)
+                }
+                inputs.insert(varName)
+            }
+        }
+
         // Determine data flow based on action semantic role
         switch statement.action.semanticRole {
         case .request:
