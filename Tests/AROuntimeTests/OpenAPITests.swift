@@ -879,4 +879,116 @@ struct DeprecationWarningTests {
     }
 }
 
+// MARK: - allowEmptyValue Filtering Tests
+
+/// Pure helper that mirrors the allowEmptyValue filter logic in OpenAPIHTTPHandler.handleRequest().
+/// Parameters with allowEmptyValue absent or false and an empty value are removed.
+/// Parameters not listed in the spec always pass through.
+private func applyAllowEmptyValueFilter(
+    queryParameters: [String: String],
+    specParameters: [Parameter]
+) -> [String: String] {
+    var allowEmptyValueByName: [String: Bool] = [:]
+    for param in specParameters where param.in == "query" {
+        if let paramName = param.name {
+            allowEmptyValueByName[paramName] = param.allowEmptyValue ?? false
+        }
+    }
+    return queryParameters.filter { name, value in
+        guard value.isEmpty else { return true }
+        guard let allowEmpty = allowEmptyValueByName[name] else { return true }
+        return allowEmpty
+    }
+}
+
+@Suite("allowEmptyValue Filtering Tests")
+struct AllowEmptyValueFilteringTests {
+
+    private func makeParameters(_ dicts: [[String: Any]]) throws -> [Parameter] {
+        let data = try JSONSerialization.data(withJSONObject: dicts)
+        return try JSONDecoder().decode([Parameter].self, from: data)
+    }
+
+    @Test("Empty query param is filtered out when allowEmptyValue is not set (defaults to false)")
+    func testEmptyValueFilteredWhenAllowEmptyValueNotSet() throws {
+        let params = try makeParameters([["name": "status", "in": "query"]])
+        let result = applyAllowEmptyValueFilter(queryParameters: ["status": ""], specParameters: params)
+        #expect(result["status"] == nil,
+                "Empty 'status' should be filtered out when allowEmptyValue is not set")
+    }
+
+    @Test("Empty query param passes through when allowEmptyValue is true")
+    func testEmptyValuePassesThroughWhenAllowEmptyValueTrue() throws {
+        let params = try makeParameters([
+            ["name": "status", "in": "query", "allowEmptyValue": true]
+        ])
+        let result = applyAllowEmptyValueFilter(queryParameters: ["status": ""], specParameters: params)
+        #expect(result["status"] == "",
+                "Empty 'status' should pass through when allowEmptyValue is true")
+    }
+
+    @Test("Non-empty query param always passes through regardless of allowEmptyValue")
+    func testNonEmptyValueAlwaysPassesThrough() throws {
+        let params = try makeParameters([["name": "status", "in": "query"]])
+        let result = applyAllowEmptyValueFilter(queryParameters: ["status": "active"], specParameters: params)
+        #expect(result["status"] == "active",
+                "Non-empty 'status' should always pass through")
+    }
+
+    @Test("Query param not listed in spec always passes through even if empty")
+    func testUnknownParamPassesThroughEvenIfEmpty() throws {
+        // spec declares 'status' but request sends 'unknown'
+        let params = try makeParameters([["name": "status", "in": "query"]])
+        let result = applyAllowEmptyValueFilter(queryParameters: ["unknown": ""], specParameters: params)
+        #expect(result["unknown"] == "",
+                "Param not in spec should pass through even if empty")
+    }
+
+    @Test("allowEmptyValue: false explicitly also filters empty value")
+    func testExplicitAllowEmptyValueFalseFiltersEmpty() throws {
+        let params = try makeParameters([
+            ["name": "tag", "in": "query", "allowEmptyValue": false]
+        ])
+        let result = applyAllowEmptyValueFilter(queryParameters: ["tag": ""], specParameters: params)
+        #expect(result["tag"] == nil,
+                "Empty 'tag' should be filtered when allowEmptyValue is explicitly false")
+    }
+
+    @Test("Mixed params: empty+not-allowed filtered, empty+allowed kept, non-empty kept")
+    func testMixedParamsFiltering() throws {
+        let params = try makeParameters([
+            ["name": "status", "in": "query"],                              // allowEmptyValue absent → false
+            ["name": "tag", "in": "query", "allowEmptyValue": true],        // explicitly true
+            ["name": "name", "in": "query", "allowEmptyValue": false]       // explicitly false
+        ])
+        let result = applyAllowEmptyValueFilter(queryParameters: [
+            "status": "",       // should be filtered (no allowEmptyValue)
+            "tag": "",          // should pass (allowEmptyValue: true)
+            "name": "",         // should be filtered (allowEmptyValue: false)
+            "extra": "",        // should pass (not in spec)
+            "q": "hello"        // non-empty, should pass
+        ], specParameters: params)
+        #expect(result["status"] == nil)
+        #expect(result["tag"] == "")
+        #expect(result["name"] == nil)
+        #expect(result["extra"] == "")
+        #expect(result["q"] == "hello")
+    }
+
+    @Test("allowEmptyValue filter uses effectiveParameters (path-level + operation-level merged)")
+    func testFilterUsesEffectiveParameters() throws {
+        // Path-level declares 'tag' with allowEmptyValue: false; operation-level overrides with true
+        let pathLevelParams = try makeParameters([
+            ["name": "tag", "in": "query", "allowEmptyValue": false]
+        ])
+        let operationLevelParams = try makeParameters([
+            ["name": "tag", "in": "query", "allowEmptyValue": true]
+        ])
+        let effective = mergedParameters(pathLevel: pathLevelParams, operationLevel: operationLevelParams)
+        let result = applyAllowEmptyValueFilter(queryParameters: ["tag": ""], specParameters: effective)
+        #expect(result["tag"] == "",
+                "Operation-level allowEmptyValue: true should override path-level false")
+    }
+}
+
 #endif  // !os(Windows)
