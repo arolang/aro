@@ -31,7 +31,7 @@
 (Get File Stat: GetFileStat Handler) {
     Extract the <entry> from the <event: entry>.
     Extract the <file-path> from the <entry: path>.
-    Stat the <stats> for the <file: file-path>.
+    Stat the <stats: FileStat> for the <file: file-path>.
     Store the <stats> into the <file-stats-repository>.
     Return an <OK: status> for the <stat>.
 }
