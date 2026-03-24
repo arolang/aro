@@ -388,6 +388,28 @@ public struct OpenAPIContextBinder {
         return result
     }
 
+    /// Bind header parameters to context (case-insensitive key normalisation)
+    ///
+    /// Header names are lowercased so feature sets can use consistent names
+    /// regardless of how the client capitalises them.
+    ///
+    /// ## ARO Usage
+    /// ```aro
+    /// Extract the <api-key> from the <headerParameters: x-api-key>.
+    /// ```
+    public static func bindHeaderParameters(_ headers: [String: String]) -> [String: Any] {
+        var result: [String: Any] = [:]
+        var normalised: [String: String] = [:]
+        for (key, value) in headers {
+            normalised[key.lowercased()] = value
+        }
+        result["headerParameters"] = normalised
+        for (key, value) in normalised {
+            result["headerParameters.\(key)"] = value
+        }
+        return result
+    }
+
     /// Bind request body to context
     public static func bindRequestBody(
         _ body: Data?,
