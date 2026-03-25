@@ -1698,4 +1698,552 @@ struct SchemaEnumValidationTests {
     }
 }
 
+// MARK: - Schema Default Value Tests
+
+@Suite("Schema Default Value Tests")
+struct SchemaDefaultValueTests {
+
+    @Test("Schema decodes string default value")
+    func testSchemaDecodesStringDefault() throws {
+        let json = """
+        {
+            "type": "string",
+            "default": "active"
+        }
+        """
+        let data = json.data(using: .utf8)!
+        let schema = try JSONDecoder().decode(Schema.self, from: data)
+
+        #expect(schema.defaultValue == .string("active"))
+    }
+
+    @Test("Schema decodes integer default value")
+    func testSchemaDecodesIntDefault() throws {
+        let json = """
+        {
+            "type": "integer",
+            "default": 1
+        }
+        """
+        let data = json.data(using: .utf8)!
+        let schema = try JSONDecoder().decode(Schema.self, from: data)
+
+        #expect(schema.defaultValue == .int(1))
+    }
+
+    @Test("Schema decodes boolean default value")
+    func testSchemaDecodesBoolDefault() throws {
+        let json = """
+        {
+            "type": "boolean",
+            "default": true
+        }
+        """
+        let data = json.data(using: .utf8)!
+        let schema = try JSONDecoder().decode(Schema.self, from: data)
+
+        #expect(schema.defaultValue == .bool(true))
+    }
+
+    @Test("Schema without default has nil defaultValue")
+    func testSchemaWithoutDefaultIsNil() throws {
+        let json = """
+        {
+            "type": "string"
+        }
+        """
+        let data = json.data(using: .utf8)!
+        let schema = try JSONDecoder().decode(Schema.self, from: data)
+
+        #expect(schema.defaultValue == nil)
+    }
+
+    @Test("Schema init sets defaultValue")
+    func testSchemaInitSetsDefault() {
+        let schema = Schema(type: "string", defaultValue: .string("pending"))
+        #expect(schema.defaultValue == .string("pending"))
+    }
+}
+
+// MARK: - Query Parameter Default Injection Tests
+
+@Suite("Query Parameter Default Injection Tests")
+struct QueryParameterDefaultInjectionTests {
+
+    private func makeSpec(parameters: [[String: Any]]) throws -> OpenAPISpec {
+        let specDict: [String: Any] = [
+            "openapi": "3.0.3",
+            "info": ["title": "Test API", "version": "1.0.0"],
+            "paths": [
+                "/items": [
+                    "get": [
+                        "operationId": "getItems",
+                        "parameters": parameters,
+                        "responses": ["200": ["description": "OK"]]
+                    ]
+                ]
+            ]
+        ]
+        let data = try JSONSerialization.data(withJSONObject: specDict)
+        return try JSONDecoder().decode(OpenAPISpec.self, from: data)
+    }
+
+    private func makeHandlerAndBus(spec: OpenAPISpec) -> (OpenAPIHTTPHandler, EventBus) {
+        let bus = EventBus()
+        let registry = OpenAPIRouteRegistry(spec: spec)
+        let handler = OpenAPIHTTPHandler(routeRegistry: registry, eventBus: bus)
+        return (handler, bus)
+    }
+
+    @Test("Absent query param with string default is injected")
+    func testAbsentQueryParamWithStringDefaultInjected() async throws {
+        let spec = try makeSpec(parameters: [
+            [
+                "name": "status",
+                "in": "query",
+                "required": false,
+                "schema": ["type": "string", "default": "active"]
+            ]
+        ])
+        let (handler, bus) = makeHandlerAndBus(spec: spec)
+
+        let latch = EventLatch()
+        _ = bus.subscribe(to: HTTPOperationEvent.self) { event in
+            await latch.store(event)
+        }
+
+        let request = HTTPRequest(method: "GET", path: "/items")
+        _ = await handler.handleRequest(request)
+        let event = await latch.wait()
+        #expect(event.queryParameters["status"] == "active")
+    }
+
+    @Test("Present query param is not overwritten by default")
+    func testPresentQueryParamNotOverwrittenByDefault() async throws {
+        let spec = try makeSpec(parameters: [
+            [
+                "name": "status",
+                "in": "query",
+                "required": false,
+                "schema": ["type": "string", "default": "active"]
+            ]
+        ])
+        let (handler, bus) = makeHandlerAndBus(spec: spec)
+
+        let latch = EventLatch()
+        _ = bus.subscribe(to: HTTPOperationEvent.self) { event in
+            await latch.store(event)
+        }
+
+        let request = HTTPRequest(method: "GET", path: "/items", queryParameters: ["status": "inactive"])
+        _ = await handler.handleRequest(request)
+        let event = await latch.wait()
+        #expect(event.queryParameters["status"] == "inactive")
+    }
+
+    @Test("Absent required query param with default does not return 400")
+    func testAbsentRequiredQueryParamWithDefaultNotRejected() async throws {
+        let spec = try makeSpec(parameters: [
+            [
+                "name": "status",
+                "in": "query",
+                "required": true,
+                "schema": ["type": "string", "default": "active"]
+            ]
+        ])
+        let (handler, _) = makeHandlerAndBus(spec: spec)
+
+        let request = HTTPRequest(method: "GET", path: "/items")
+        let response = await handler.handleRequest(request)
+
+        #expect(response.statusCode != 400)
+    }
+
+    @Test("Absent query param with integer default is injected as string")
+    func testAbsentQueryParamWithIntDefaultInjected() async throws {
+        let spec = try makeSpec(parameters: [
+            [
+                "name": "page",
+                "in": "query",
+                "required": false,
+                "schema": ["type": "integer", "default": 1]
+            ]
+        ])
+        let (handler, bus) = makeHandlerAndBus(spec: spec)
+
+        let latch = EventLatch()
+        _ = bus.subscribe(to: HTTPOperationEvent.self) { event in
+            await latch.store(event)
+        }
+
+        let request = HTTPRequest(method: "GET", path: "/items")
+        _ = await handler.handleRequest(request)
+        let event = await latch.wait()
+        #expect(event.queryParameters["page"] == "1")
+    }
+
+    @Test("Query param without schema default is not injected")
+    func testQueryParamWithoutSchemaDefaultNotInjected() async throws {
+        let spec = try makeSpec(parameters: [
+            ["name": "q", "in": "query", "required": false]
+        ])
+        let (handler, bus) = makeHandlerAndBus(spec: spec)
+
+        let latch = EventLatch()
+        _ = bus.subscribe(to: HTTPOperationEvent.self) { event in
+            await latch.store(event)
+        }
+
+        let request = HTTPRequest(method: "GET", path: "/items")
+        _ = await handler.handleRequest(request)
+        let event = await latch.wait()
+        #expect(event.queryParameters["q"] == nil)
+    }
+}
+
+// MARK: - Object Property Default Injection Tests
+
+@Suite("Object Property Default Injection Tests")
+struct ObjectPropertyDefaultInjectionTests {
+
+    @Test("Missing optional property gets default string value")
+    func testMissingPropertyGetsStringDefault() throws {
+        let schema = Schema(
+            type: "object",
+            properties: [
+                "name": SchemaRef(Schema(type: "string")),
+                "status": SchemaRef(Schema(type: "string", defaultValue: .string("active")))
+            ]
+        )
+        let json: [String: Any] = ["name": "Alice"]
+        let result = try SchemaBinding.parseValue(json: json, schema: schema, components: nil)
+
+        let dict = try #require(result as? [String: Any])
+        #expect(dict["name"] as? String == "Alice")
+        #expect(dict["status"] as? String == "active")
+    }
+
+    @Test("Missing optional property gets default integer value")
+    func testMissingPropertyGetsIntDefault() throws {
+        let schema = Schema(
+            type: "object",
+            properties: [
+                "name": SchemaRef(Schema(type: "string")),
+                "priority": SchemaRef(Schema(type: "integer", defaultValue: .int(0)))
+            ]
+        )
+        let json: [String: Any] = ["name": "Task"]
+        let result = try SchemaBinding.parseValue(json: json, schema: schema, components: nil)
+
+        let dict = try #require(result as? [String: Any])
+        #expect(dict["priority"] as? Int == 0)
+    }
+
+    @Test("Present optional property is not replaced by default")
+    func testPresentPropertyNotReplacedByDefault() throws {
+        let schema = Schema(
+            type: "object",
+            properties: [
+                "status": SchemaRef(Schema(type: "string", defaultValue: .string("active")))
+            ]
+        )
+        let json: [String: Any] = ["status": "inactive"]
+        let result = try SchemaBinding.parseValue(json: json, schema: schema, components: nil)
+
+        let dict = try #require(result as? [String: Any])
+        #expect(dict["status"] as? String == "inactive")
+    }
+
+    @Test("Missing property without default is not injected")
+    func testMissingPropertyWithoutDefaultNotInjected() throws {
+        let schema = Schema(
+            type: "object",
+            properties: [
+                "name": SchemaRef(Schema(type: "string")),
+                "tag": SchemaRef(Schema(type: "string"))
+            ]
+        )
+        let json: [String: Any] = ["name": "Alice"]
+        let result = try SchemaBinding.parseValue(json: json, schema: schema, components: nil)
+
+        let dict = try #require(result as? [String: Any])
+        #expect(dict["tag"] == nil)
+    }
+
+    @Test("Missing boolean property gets default false value")
+    func testMissingPropertyGetsBoolDefault() throws {
+        let schema = Schema(
+            type: "object",
+            properties: [
+                "active": SchemaRef(Schema(type: "boolean", defaultValue: .bool(false)))
+            ]
+        )
+        let json: [String: Any] = [:]
+        let result = try SchemaBinding.parseValue(json: json, schema: schema, components: nil)
+
+        let dict = try #require(result as? [String: Any])
+        #expect(dict["active"] as? Bool == false)
+    }
+}
+
+/// Minimal async latch for coordinating test event capture.
+private actor EventLatch {
+    private var continuation: CheckedContinuation<HTTPOperationEvent, Never>?
+    private var stored: HTTPOperationEvent?
+
+    func store(_ event: HTTPOperationEvent) {
+        if let cont = continuation {
+            continuation = nil
+            cont.resume(returning: event)
+        } else {
+            stored = event
+        }
+    }
+
+    func wait() async -> HTTPOperationEvent {
+        if let s = stored {
+            stored = nil
+            return s
+        }
+        return await withCheckedContinuation { cont in
+            continuation = cont
+        }
+    }
+}
+
+// MARK: - AdditionalProperties Tests
+
+@Suite("AdditionalProperties Schema Tests")
+struct AdditionalPropertiesTests {
+
+    // MARK: Decoding
+
+    @Test("AdditionalProperties decodes from false")
+    func testDecodeFromFalse() throws {
+        let json = """
+        {
+            "type": "object",
+            "properties": {
+                "name": { "type": "string" }
+            },
+            "additionalProperties": false
+        }
+        """
+        let data = json.data(using: .utf8)!
+        let schema = try JSONDecoder().decode(Schema.self, from: data)
+        if case .allowed(let b) = schema.additionalProperties {
+            #expect(b == false)
+        } else {
+            Issue.record("Expected .allowed(false)")
+        }
+    }
+
+    @Test("AdditionalProperties decodes from true")
+    func testDecodeFromTrue() throws {
+        let json = """
+        {
+            "type": "object",
+            "properties": {
+                "name": { "type": "string" }
+            },
+            "additionalProperties": true
+        }
+        """
+        let data = json.data(using: .utf8)!
+        let schema = try JSONDecoder().decode(Schema.self, from: data)
+        if case .allowed(let b) = schema.additionalProperties {
+            #expect(b == true)
+        } else {
+            Issue.record("Expected .allowed(true)")
+        }
+    }
+
+    @Test("AdditionalProperties decodes from schema object")
+    func testDecodeFromSchemaObject() throws {
+        let json = """
+        {
+            "type": "object",
+            "properties": {
+                "name": { "type": "string" }
+            },
+            "additionalProperties": { "type": "string" }
+        }
+        """
+        let data = json.data(using: .utf8)!
+        let schema = try JSONDecoder().decode(Schema.self, from: data)
+        if case .schema(let ref) = schema.additionalProperties {
+            #expect(ref.value.type == "string")
+        } else {
+            Issue.record("Expected .schema(...)")
+        }
+    }
+
+    @Test("AdditionalProperties is nil when absent")
+    func testDecodeNilWhenAbsent() throws {
+        let json = """
+        {
+            "type": "object",
+            "properties": {
+                "name": { "type": "string" }
+            }
+        }
+        """
+        let data = json.data(using: .utf8)!
+        let schema = try JSONDecoder().decode(Schema.self, from: data)
+        #expect(schema.additionalProperties == nil)
+    }
+
+    // MARK: parseValue enforcement
+
+    private func makeObjectSchema(
+        properties: [String: Schema],
+        additionalProperties: AdditionalProperties? = nil
+    ) -> Schema {
+        let props = properties.mapValues { SchemaRef($0) }
+        return Schema(type: "object", properties: props, additionalProperties: additionalProperties)
+    }
+
+    @Test("parseValue: additionalProperties false rejects extra keys")
+    func testParseValueRejectsExtraKeys() throws {
+        let schema = makeObjectSchema(
+            properties: ["name": Schema(type: "string")],
+            additionalProperties: .allowed(false)
+        )
+        let json: [String: Any] = ["name": "Alice", "extra": "value"]
+        #expect(throws: SchemaBindingError.additionalPropertiesNotAllowed(["extra"])) {
+            try SchemaBinding.parseValue(json: json, schema: schema, components: nil)
+        }
+    }
+
+    @Test("parseValue: additionalProperties false accepts no extra keys")
+    func testParseValueAcceptsNoExtraKeys() throws {
+        let schema = makeObjectSchema(
+            properties: ["name": Schema(type: "string")],
+            additionalProperties: .allowed(false)
+        )
+        let json: [String: Any] = ["name": "Alice"]
+        let result = try SchemaBinding.parseValue(json: json, schema: schema, components: nil)
+        let dict = result as? [String: Any]
+        #expect(dict?["name"] as? String == "Alice")
+    }
+
+    @Test("parseValue: additionalProperties true passes extra keys through")
+    func testParseValueAllowsExtraKeysExplicitTrue() throws {
+        let schema = makeObjectSchema(
+            properties: ["name": Schema(type: "string")],
+            additionalProperties: .allowed(true)
+        )
+        let json: [String: Any] = ["name": "Alice", "extra": "value"]
+        let result = try SchemaBinding.parseValue(json: json, schema: schema, components: nil)
+        let dict = result as? [String: Any]
+        #expect(dict?["extra"] as? String == "value")
+    }
+
+    @Test("parseValue: additionalProperties nil passes extra keys through")
+    func testParseValueAllowsExtraKeysNil() throws {
+        let schema = makeObjectSchema(
+            properties: ["name": Schema(type: "string")],
+            additionalProperties: nil
+        )
+        let json: [String: Any] = ["name": "Alice", "extra": "value"]
+        let result = try SchemaBinding.parseValue(json: json, schema: schema, components: nil)
+        let dict = result as? [String: Any]
+        #expect(dict?["extra"] as? String == "value")
+    }
+
+    @Test("parseValue: additionalProperties schema validates matching extra key")
+    func testParseValueValidatesExtraKeyAgainstSchema() throws {
+        let schema = makeObjectSchema(
+            properties: ["name": Schema(type: "string")],
+            additionalProperties: .schema(SchemaRef(Schema(type: "string")))
+        )
+        let json: [String: Any] = ["name": "Alice", "tag": "admin"]
+        let result = try SchemaBinding.parseValue(json: json, schema: schema, components: nil)
+        let dict = result as? [String: Any]
+        #expect(dict?["tag"] as? String == "admin")
+    }
+
+    @Test("parseValue: additionalProperties schema rejects non-matching extra key")
+    func testParseValueRejectsExtraKeyViolatingSchema() throws {
+        let schema = makeObjectSchema(
+            properties: ["name": Schema(type: "string")],
+            additionalProperties: .schema(SchemaRef(Schema(type: "string")))
+        )
+        let json: [String: Any] = ["name": "Alice", "count": 42]
+        #expect(throws: SchemaBindingError.typeMismatch(expected: "string")) {
+            try SchemaBinding.parseValue(json: json, schema: schema, components: nil)
+        }
+    }
+
+    // MARK: validateAgainstSchema enforcement
+
+    @Test("validateAgainstSchema: additionalProperties false rejects extra keys")
+    func testValidateRejectsExtraKeys() throws {
+        let schema = makeObjectSchema(
+            properties: ["name": Schema(type: "string")],
+            additionalProperties: .allowed(false)
+        )
+        let value: [String: any Sendable] = ["name": "Alice", "extra": "value"]
+        #expect(throws: SchemaBindingError.additionalPropertiesNotAllowed(["extra"])) {
+            try SchemaBinding.validateAgainstSchema(
+                value: value,
+                schemaName: "Test",
+                schema: schema,
+                components: nil
+            )
+        }
+    }
+
+    @Test("validateAgainstSchema: additionalProperties false accepts no extra keys")
+    func testValidateAcceptsNoExtraKeys() throws {
+        let schema = makeObjectSchema(
+            properties: ["name": Schema(type: "string")],
+            additionalProperties: .allowed(false)
+        )
+        let value: [String: any Sendable] = ["name": "Alice"]
+        let result = try SchemaBinding.validateAgainstSchema(
+            value: value,
+            schemaName: "Test",
+            schema: schema,
+            components: nil
+        )
+        let dict = result as? [String: any Sendable]
+        #expect(dict?["name"] as? String == "Alice")
+    }
+
+    @Test("validateAgainstSchema: additionalProperties schema validates matching extra key")
+    func testValidateExtraKeyAgainstSchema() throws {
+        let schema = makeObjectSchema(
+            properties: ["name": Schema(type: "string")],
+            additionalProperties: .schema(SchemaRef(Schema(type: "string")))
+        )
+        let value: [String: any Sendable] = ["name": "Alice", "tag": "admin"]
+        let result = try SchemaBinding.validateAgainstSchema(
+            value: value,
+            schemaName: "Test",
+            schema: schema,
+            components: nil
+        )
+        let dict = result as? [String: any Sendable]
+        #expect(dict?["tag"] as? String == "admin")
+    }
+
+    @Test("validateAgainstSchema: additionalProperties schema rejects non-matching extra key")
+    func testValidateRejectsExtraKeyViolatingSchema() throws {
+        let schema = makeObjectSchema(
+            properties: ["name": Schema(type: "string")],
+            additionalProperties: .schema(SchemaRef(Schema(type: "string")))
+        )
+        let value: [String: any Sendable] = ["name": "Alice", "count": 42]
+        #expect(throws: (any Error).self) {
+            try SchemaBinding.validateAgainstSchema(
+                value: value,
+                schemaName: "Test",
+                schema: schema,
+                components: nil
+            )
+        }
+    }
+}
+
 #endif  // !os(Windows)

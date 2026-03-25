@@ -90,13 +90,37 @@ public struct SchemaBinding {
             }
 
             var result: [String: Any] = [:]
+            let knownKeys = Set(properties.keys)
+            let extraKeys = dict.keys.filter { !knownKeys.contains($0) }
+
+            // Enforce additionalProperties constraint
+            switch schema.additionalProperties {
+            case .allowed(false):
+                if !extraKeys.isEmpty {
+                    throw SchemaBindingError.additionalPropertiesNotAllowed(extraKeys.sorted())
+                }
+            case .schema(let subRef):
+                for key in extraKeys {
+                    result[key] = try parseValue(json: dict[key]!, schema: subRef.value, components: components)
+                }
+            case .allowed(true), nil:
+                for key in extraKeys { result[key] = dict[key]! }
+            }
+
             for (key, value) in dict {
                 if let propSchemaRef = properties[key] {
                     result[key] = try parseValue(json: value, schema: propSchemaRef.value, components: components)
-                } else {
-                    result[key] = value
                 }
             }
+
+            // Inject default values for missing optional properties
+            for (key, propSchemaRef) in properties {
+                if result[key] == nil,
+                   let defaultVal = propSchemaRef.value.defaultValue {
+                    result[key] = defaultVal.anyValue
+                }
+            }
+
             parsedValue = result
 
         default:
@@ -145,12 +169,13 @@ public struct SchemaBinding {
 // MARK: - Errors
 
 /// Errors that can occur during schema binding
-public enum SchemaBindingError: Error, Sendable {
+public enum SchemaBindingError: Error, Sendable, Equatable {
     case typeMismatch(expected: String)
     case missingRequired(String)
     case invalidReference(String)
     case invalidJSON
     case enumViolation(value: String, allowed: String)
+    case additionalPropertiesNotAllowed([String])
 }
 
 extension SchemaBindingError: CustomStringConvertible {
@@ -166,6 +191,8 @@ extension SchemaBindingError: CustomStringConvertible {
             return "Invalid JSON data"
         case .enumViolation(let value, let allowed):
             return "Value '\(value)' is not allowed. Must be one of: \(allowed)"
+        case .additionalPropertiesNotAllowed(let keys):
+            return "Additional properties not allowed: '\(keys.joined(separator: "', '"))'"
         }
     }
 }
@@ -345,6 +372,28 @@ extension SchemaBinding {
             }
 
             var result: [String: any Sendable] = [:]
+            let knownKeys = Set(properties.keys)
+            let extraKeys = dict.keys.filter { !knownKeys.contains($0) }
+
+            // Enforce additionalProperties constraint
+            switch schema.additionalProperties {
+            case .allowed(false):
+                if !extraKeys.isEmpty {
+                    throw SchemaBindingError.additionalPropertiesNotAllowed(extraKeys.sorted())
+                }
+            case .schema(let subRef):
+                for key in extraKeys {
+                    result[key] = try validateAgainstSchema(
+                        value: dict[key]!,
+                        schemaName: schemaName,
+                        schema: subRef.value,
+                        components: components
+                    )
+                }
+            case .allowed(true), nil:
+                for key in extraKeys { result[key] = dict[key]! }
+            }
+
             for (key, val) in dict {
                 if let propSchemaRef = properties[key] {
                     do {
@@ -366,9 +415,6 @@ extension SchemaBinding {
                         }
                         throw error
                     }
-                } else {
-                    // Allow additional properties
-                    result[key] = val
                 }
             }
             validated = result
