@@ -980,7 +980,6 @@ public actor ExecutionEngine {
             let capturedActionRegistry = actionRegistry
             let capturedEventBus = eventBus
             let capturedGlobalSymbols = globalSymbols
-            let capturedServices = services
 
             eventBus.subscribe(to: RepositoryEvictedEvent.self) { event in
                 guard event.repositoryName == repositoryName else { return }
