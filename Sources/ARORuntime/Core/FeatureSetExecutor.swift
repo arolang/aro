@@ -259,7 +259,7 @@ public final class FeatureSetExecutor: Sendable {
         // These are statement-local and should not persist between statements
         context.unbind("_literal_")
         context.unbind("_expression_")
-        context.unbind("_expression_name_")
+        context.bind("_expression_name_", value: "")  // bind empty to shadow any parent binding
         context.unbind("_result_expression_")
         context.unbind("_aggregation_type_")
         context.unbind("_aggregation_field_")
