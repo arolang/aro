@@ -374,6 +374,11 @@ public final class LLVMCodeGenerator {
         // Store result
         ctx.module.insertStore(actionResult, to: ctx.currentResultPtr!, at: ctx.insertionPoint)
 
+        // Free the passRetained AROCValue box returned by executeAction.
+        // The inner Swift value was already bound to the context inside executeAction,
+        // so the wrapper is no longer needed after this point.
+        _ = ctx.module.insertCall(externals.valueFree, on: [actionResult], at: ctx.insertionPoint)
+
         // Check for action errors - halt execution if any action fails
         // This matches interpreter behavior where errors stop execution
         let hasError = ctx.module.insertCall(
@@ -1495,6 +1500,7 @@ public final class LLVMCodeGenerator {
                 at: ip
             )
             ctx.module.insertStore(actionResult, to: ctx.currentResultPtr!, at: ip)
+            _ = ctx.module.insertCall(externals.valueFree, on: [actionResult], at: ip)
         }
     }
 
@@ -1594,6 +1600,7 @@ public final class LLVMCodeGenerator {
                 at: ip
             )
             ctx.module.insertStore(actionResult, to: ctx.currentResultPtr!, at: ip)
+            _ = ctx.module.insertCall(externals.valueFree, on: [actionResult], at: ip)
         }
     }
 
