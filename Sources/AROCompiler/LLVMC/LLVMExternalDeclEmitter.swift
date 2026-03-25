@@ -37,6 +37,7 @@ public final class LLVMExternalDeclEmitter {
     private var _loadPrecompiledPlugins: Function?
     private var _setEmbeddedOpenapi: Function?
     private var _setEmbeddedTemplates: Function?
+    private var _registerEmbeddedPlugin: Function?
 
     // Variable operations
     private var _variableBindString: Function?
@@ -239,6 +240,13 @@ public final class LLVMExternalDeclEmitter {
         _setEmbeddedTemplates = ctx.module.declareFunction(
             "aro_set_embedded_templates",
             types.voidFunctionType(parameters: [ptr])
+        )
+
+        // void @aro_register_embedded_plugin(ptr name, ptr yaml, ptr base64so)
+        // Registers a compiled plugin library (base64-encoded) embedded in the binary
+        _registerEmbeddedPlugin = ctx.module.declareFunction(
+            "aro_register_embedded_plugin",
+            types.voidFunctionType(parameters: [ptr, ptr, ptr])
         )
     }
 
@@ -539,6 +547,7 @@ public final class LLVMExternalDeclEmitter {
     public var loadPrecompiledPlugins: Function { _loadPrecompiledPlugins! }
     public var setEmbeddedOpenapi: Function { _setEmbeddedOpenapi! }
     public var setEmbeddedTemplates: Function { _setEmbeddedTemplates! }
+    public var registerEmbeddedPlugin: Function { _registerEmbeddedPlugin! }
 
     // Variable operations
     public var variableBindString: Function { _variableBindString! }

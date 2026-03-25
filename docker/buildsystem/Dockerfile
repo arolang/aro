@@ -64,6 +64,10 @@ RUN mkdir -p /usr/lib/pkgconfig && \
     'Cflags: -I${includedir}' \
     > /usr/lib/pkgconfig/llvm.pc
 
+# Install Rust toolchain (required for compiling rust-plugin type managed plugins)
+RUN wget -qO- https://sh.rustup.rs | sh -s -- -y --default-toolchain stable --profile minimal
+ENV PATH="/root/.cargo/bin:${PATH}"
+
 # Build ARO from source
 WORKDIR /aro-build
 ARG ARO_VERSION=main

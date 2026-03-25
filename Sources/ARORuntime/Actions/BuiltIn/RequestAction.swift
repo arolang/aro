@@ -212,6 +212,9 @@ public struct RequestAction: ActionImplementation {
             return data
         } else if let string = value as? String {
             return string.data(using: .utf8)
+        } else if let array = value as? [any Sendable] {
+            let anyArray: [Any] = array.map { $0 }
+            return try? JSONSerialization.data(withJSONObject: anyArray)
         } else if let dict = value as? [String: Any] {
             return try? JSONSerialization.data(withJSONObject: dict)
         } else if let dict = value as? [String: any Sendable] {

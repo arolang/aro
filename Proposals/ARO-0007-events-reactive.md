@@ -53,7 +53,7 @@ Event types follow these conventions:
 (createUser: User API) {
     Extract the <data> from the <request: body>.
     Create the <user> with <data>.
-    Store the <user> in the <user-repository>.
+    Store the <user> into the <user-repository>.
 
     (* Emit event - handlers subscribe by event type *)
     Emit a <UserCreated: event> with <user>.
@@ -68,7 +68,7 @@ Event types follow these conventions:
 
     Create the <oldEmail> with <user: email>.
     Update the <user: email> with <newEmail>.
-    Store the <user> in the <user-repository>.
+    Store the <user> into the <user-repository>.
 
     (* Emit with inline object *)
     Emit a <UserEmailChanged: event> with {
@@ -472,7 +472,7 @@ Behavior:
 Syntax variations:
 ```aro
 Store the <user> into the <user-repository>.
-Store the <message> in the <message-repository>.
+Store the <message> into the <message-repository>.
 Store the <order> to the <order-repository>.
 ```
 

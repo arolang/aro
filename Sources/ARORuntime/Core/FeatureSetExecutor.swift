@@ -63,6 +63,12 @@ public final class FeatureSetExecutor: Sendable {
         let featureSet = analyzedFeatureSet.featureSet
         let startTime = Date()
 
+        // Determine whether this is an application-lifecycle feature set.
+        // Symbols published by Application-Start and Application-End must persist
+        // for the entire process lifetime and are therefore excluded from eviction.
+        let isLifecycleFeatureSet = featureSet.name == "Application-Start"
+            || featureSet.name.hasPrefix("Application-End")
+
         // Emit start event
         eventBus.publish(FeatureSetStartedEvent(
             featureSetName: featureSet.name,
@@ -157,6 +163,10 @@ public final class FeatureSetExecutor: Sendable {
                     durationMs: duration
                 ))
 
+                if !isLifecycleFeatureSet {
+                    await globalSymbols.evict(executionId: context.executionId)
+                }
+
                 return response
             }
 
@@ -171,6 +181,10 @@ public final class FeatureSetExecutor: Sendable {
                 durationMs: duration
             ))
 
+            if !isLifecycleFeatureSet {
+                await globalSymbols.evict(executionId: context.executionId)
+            }
+
             return Response.ok()
 
         } catch {
@@ -183,6 +197,10 @@ public final class FeatureSetExecutor: Sendable {
                 success: false,
                 durationMs: duration
             ))
+
+            if !isLifecycleFeatureSet {
+                await globalSymbols.evict(executionId: context.executionId)
+            }
 
             throw error
         }
@@ -241,7 +259,7 @@ public final class FeatureSetExecutor: Sendable {
         // These are statement-local and should not persist between statements
         context.unbind("_literal_")
         context.unbind("_expression_")
-        context.unbind("_expression_name_")
+        context.bind("_expression_name_", value: "")  // bind empty to shadow any parent binding
         context.unbind("_result_expression_")
         context.unbind("_aggregation_type_")
         context.unbind("_aggregation_field_")
@@ -522,12 +540,13 @@ public final class FeatureSetExecutor: Sendable {
             throw ActionError.undefinedVariable(statement.internalVariable)
         }
 
-        // Publish to global symbols with business activity
+        // Publish to global symbols with business activity and execution owner
         await globalSymbols.publish(
             name: statement.externalName,
             value: value,
             fromFeatureSet: context.featureSetName,
-            businessActivity: context.businessActivity
+            businessActivity: context.businessActivity,
+            executionId: context.executionId
         )
 
         // Also bind the external name locally

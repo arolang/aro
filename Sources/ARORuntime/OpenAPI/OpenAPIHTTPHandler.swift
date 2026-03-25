@@ -34,6 +34,59 @@ public final class OpenAPIHTTPHandler: @unchecked Sendable {
             )
         }
 
+        // Check for deprecated operation
+        var responseHeaders: [String: String] = [
+            "Content-Type": "application/json",
+            "X-Request-ID": request.id,
+            "X-Operation-ID": match.operationId
+        ]
+
+        if match.operation.deprecated == true {
+            print("[DEPRECATION WARNING] Operation '\(match.operationId)' is deprecated")
+            responseHeaders["Deprecation"] = "true"
+        }
+
+        // Check for deprecated parameters present in the request (includes path-level parameters)
+        let effectiveParameters = match.effectiveParameters
+        if !effectiveParameters.isEmpty {
+            for param in effectiveParameters where param.deprecated == true {
+                guard let paramName = param.name, let paramIn = param.in else { continue }
+                let isPresent: Bool
+                switch paramIn {
+                case "query":
+                    isPresent = request.queryParameters[paramName] != nil
+                case "header":
+                    isPresent = request.headers[paramName] != nil
+                case "path":
+                    isPresent = match.pathParameters[paramName] != nil
+                default:
+                    isPresent = false
+                }
+
+                if isPresent {
+                    print("[DEPRECATION WARNING] Parameter '\(paramName)' on operation '\(match.operationId)' is deprecated")
+                }
+            }
+        }
+
+        // Build allowEmptyValue lookup for query parameters defined in the spec.
+        // Parameters not listed in the spec are not subject to this filter.
+        var allowEmptyValueByName: [String: Bool] = [:]
+        for param in effectiveParameters where param.in == "query" {
+            if let paramName = param.name {
+                allowEmptyValueByName[paramName] = param.allowEmptyValue ?? false
+            }
+        }
+
+        // Filter query parameters: remove entries where the value is empty string
+        // and allowEmptyValue is not explicitly true for that parameter.
+        let filteredQueryParameters: [String: String] = request.queryParameters.filter { name, value in
+            guard value.isEmpty else { return true }
+            // If the parameter is not in the spec, always pass through.
+            guard let allowEmpty = allowEmptyValueByName[name] else { return true }
+            return allowEmpty
+        }
+
         let event = HTTPOperationEvent(
             requestId: request.id,
             operationId: match.operationId,
@@ -41,7 +94,7 @@ public final class OpenAPIHTTPHandler: @unchecked Sendable {
             path: path,
             pathTemplate: match.pathTemplate,
             pathParameters: match.pathParameters,
-            queryParameters: request.queryParameters,
+            queryParameters: filteredQueryParameters,
             headers: request.headers,
             body: request.body,
             operation: match.operation
@@ -60,11 +113,7 @@ public final class OpenAPIHTTPHandler: @unchecked Sendable {
 
         return HTTPResponse(
             statusCode: 200,
-            headers: [
-                "Content-Type": "application/json",
-                "X-Request-ID": request.id,
-                "X-Operation-ID": match.operationId
-            ],
+            headers: responseHeaders,
             body: """
                 {"status":"ok","operationId":"\(match.operationId)","requestId":"\(request.id)"}
                 """.data(using: .utf8)

@@ -200,6 +200,7 @@ private func executeAction(
             let runtime = ctxHandle.runtime.runtime
             let businessActivity = ctxHandle.context.businessActivity
             let featureSetName = ctxHandle.context.featureSetName
+            let executionId = ctxHandle.context.executionId
 
             // Store in globalSymbols asynchronously
             Task { @Sendable in
@@ -208,7 +209,8 @@ private func executeAction(
                     name: externalName,
                     value: value,
                     fromFeatureSet: featureSetName,
-                    businessActivity: businessActivity
+                    businessActivity: businessActivity,
+                    executionId: executionId
                 )
             }
         }
