@@ -343,7 +343,7 @@ public final class Application: @unchecked Sendable {
             let declaredHeaderNames = Set(
                 match.effectiveParameters
                     .filter { $0.in == "header" }
-                    .map { $0.name.lowercased() }
+                    .compactMap { $0.name?.lowercased() }
             )
             var headerParams: [String: String] = [:]
             for (key, value) in request.headers {
@@ -356,7 +356,7 @@ public final class Application: @unchecked Sendable {
             let declaredCookieNames = Set(
                 match.effectiveParameters
                     .filter { $0.in == "cookie" }
-                    .map { $0.name }
+                    .compactMap { $0.name }
             )
             let rawCookieHeader = request.headers.first(where: { $0.key.lowercased() == "cookie" })?.value ?? ""
             let allCookies = parseCookieHeader(rawCookieHeader)
@@ -512,16 +512,17 @@ public final class Application: @unchecked Sendable {
             // Deserialize declared query parameters using their style/explode metadata
             let components = routeRegistry?.spec.components
             for param in effectiveParameters where param.in == "query" {
-                guard let rawValues = multiValueQuery[param.name], !rawValues.isEmpty else { continue }
+                guard let paramName = param.name else { continue }
+                guard let rawValues = multiValueQuery[paramName], !rawValues.isEmpty else { continue }
                 let deserialized = SchemaBinding.deserializeParameter(
                     rawValues: rawValues,
                     parameter: param,
                     components: components
                 )
                 if let arr = deserialized as? [String] {
-                    deserializedQueryParams[param.name] = arr
+                    deserializedQueryParams[paramName] = arr
                 } else if let str = deserialized as? String {
-                    deserializedQueryParams[param.name] = str
+                    deserializedQueryParams[paramName] = str
                 }
             }
         } else {
