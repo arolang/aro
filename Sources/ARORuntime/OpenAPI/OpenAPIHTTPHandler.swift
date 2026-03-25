@@ -90,10 +90,10 @@ public final class OpenAPIHTTPHandler: @unchecked Sendable {
         // Inject default values for absent query parameters declared in the spec.
         var enrichedQueryParams = filteredQueryParameters
         for param in effectiveParameters where param.in == "query" {
-            guard let pName = param.name else { continue }
-            guard enrichedQueryParams[pName] == nil else { continue }
+            guard let paramName = param.name else { continue }
+            guard enrichedQueryParams[paramName] == nil else { continue }
             if let defaultVal = param.schema?.value.defaultValue {
-                enrichedQueryParams[pName] = "\(defaultVal.anyValue)"
+                enrichedQueryParams[paramName] = "\(defaultVal.anyValue)"
             }
         }
 
