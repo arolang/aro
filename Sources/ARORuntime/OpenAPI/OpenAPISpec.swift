@@ -12,6 +12,7 @@ public struct OpenAPISpec: Sendable, Codable {
     public let paths: [String: PathItem]
     public let components: Components?
     public let servers: [Server]?
+    public let security: [[String: [String]]]?
 }
 
 // MARK: - Info
