@@ -912,6 +912,18 @@ public actor ExecutionEngine {
                         parent: baseContext
                     )
 
+                    // Bind event fields so conditions like `where <event: changeType> == "created"`
+                    // can resolve event data during evaluation
+                    let changeTypeValue = event.changeType.rawValue
+                    let eventDict: [String: any Sendable] = [
+                        "changeType": changeTypeValue,
+                        "repositoryName": event.repositoryName
+                    ]
+                    evalContext.bind("event", value: eventDict)
+                    evalContext.bind("event:changeType", value: changeTypeValue)
+                    evalContext.bind("event:repositoryName", value: event.repositoryName)
+                    evalContext.bind("changeType", value: changeTypeValue)
+
                     let evaluator = ExpressionEvaluator()
                     do {
                         let conditionResult = try await evaluator.evaluate(condition, context: evalContext)
