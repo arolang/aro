@@ -36,35 +36,38 @@ public struct SchemaBinding {
             return json
         }
 
+        let parsedValue: Any
         switch schemaType {
         case "string":
             guard let str = json as? String else {
                 throw SchemaBindingError.typeMismatch(expected: "string")
             }
-            return str
+            parsedValue = str
 
         case "number", "integer":
             if let intVal = json as? Int {
-                return Double(intVal)
+                parsedValue = Double(intVal)
             } else if let doubleVal = json as? Double {
-                return doubleVal
+                parsedValue = doubleVal
+            } else {
+                throw SchemaBindingError.typeMismatch(expected: "number")
             }
-            throw SchemaBindingError.typeMismatch(expected: "number")
 
         case "boolean":
             guard let boolVal = json as? Bool else {
                 throw SchemaBindingError.typeMismatch(expected: "boolean")
             }
-            return boolVal
+            parsedValue = boolVal
 
         case "array":
             guard let arr = json as? [Any] else {
                 throw SchemaBindingError.typeMismatch(expected: "array")
             }
             if let itemSchema = schema.items?.value {
-                return try arr.map { try parseValue(json: $0, schema: itemSchema, components: components) }
+                parsedValue = try arr.map { try parseValue(json: $0, schema: itemSchema, components: components) }
+            } else {
+                parsedValue = arr
             }
-            return arr
 
         case "object":
             guard let dict = json as? [String: Any] else {
@@ -82,21 +85,70 @@ public struct SchemaBinding {
 
             // Parse properties
             guard let properties = schema.properties else {
-                return dict
+                parsedValue = dict
+                break
             }
 
             var result: [String: Any] = [:]
+            let knownKeys = Set(properties.keys)
+            let extraKeys = dict.keys.filter { !knownKeys.contains($0) }
+
+            // Enforce additionalProperties constraint
+            switch schema.additionalProperties {
+            case .allowed(false):
+                if !extraKeys.isEmpty {
+                    throw SchemaBindingError.additionalPropertiesNotAllowed(extraKeys.sorted())
+                }
+            case .schema(let subRef):
+                for key in extraKeys {
+                    result[key] = try parseValue(json: dict[key]!, schema: subRef.value, components: components)
+                }
+            case .allowed(true), nil:
+                for key in extraKeys { result[key] = dict[key]! }
+            }
+
             for (key, value) in dict {
                 if let propSchemaRef = properties[key] {
                     result[key] = try parseValue(json: value, schema: propSchemaRef.value, components: components)
-                } else {
-                    result[key] = value
                 }
             }
-            return result
+
+            // Inject default values for missing optional properties
+            for (key, propSchemaRef) in properties {
+                if result[key] == nil,
+                   let defaultVal = propSchemaRef.value.defaultValue {
+                    result[key] = defaultVal.anyValue
+                }
+            }
+
+            parsedValue = result
 
         default:
-            return json
+            parsedValue = json
+        }
+
+        // Validate enum constraint
+        if let enumValues = schema.enumValues, !enumValues.isEmpty {
+            try validateEnumConstraint(parsedValue, against: enumValues)
+        }
+
+        return parsedValue
+    }
+
+    /// Check that a parsed value matches one of the allowed enum values.
+    private static func validateEnumConstraint(_ parsedValue: Any, against enumValues: [AnyCodableValue]) throws {
+        let matchesEnum = enumValues.contains { enumVal in
+            switch enumVal {
+            case .string(let s): return (parsedValue as? String) == s
+            case .int(let i): return (parsedValue as? Int) == i || (parsedValue as? Double) == Double(i)
+            case .double(let d): return (parsedValue as? Double) == d
+            case .bool(let b): return (parsedValue as? Bool) == b
+            case .null: return parsedValue is NSNull
+            }
+        }
+        if !matchesEnum {
+            let allowed = enumValues.map { "\($0.anyValue)" }.joined(separator: ", ")
+            throw SchemaBindingError.enumViolation(value: "\(parsedValue)", allowed: allowed)
         }
     }
 
@@ -117,11 +169,13 @@ public struct SchemaBinding {
 // MARK: - Errors
 
 /// Errors that can occur during schema binding
-public enum SchemaBindingError: Error, Sendable {
+public enum SchemaBindingError: Error, Sendable, Equatable {
     case typeMismatch(expected: String)
     case missingRequired(String)
     case invalidReference(String)
     case invalidJSON
+    case enumViolation(value: String, allowed: String)
+    case additionalPropertiesNotAllowed([String])
 }
 
 extension SchemaBindingError: CustomStringConvertible {
@@ -135,6 +189,10 @@ extension SchemaBindingError: CustomStringConvertible {
             return "Invalid schema reference: \(ref)"
         case .invalidJSON:
             return "Invalid JSON data"
+        case .enumViolation(let value, let allowed):
+            return "Value '\(value)' is not allowed. Must be one of: \(allowed)"
+        case .additionalPropertiesNotAllowed(let keys):
+            return "Additional properties not allowed: '\(keys.joined(separator: "', '"))'"
         }
     }
 }
@@ -234,6 +292,7 @@ extension SchemaBinding {
             return value
         }
 
+        let validated: any Sendable
         switch schemaType {
         case "string":
             guard let strVal = value as? String else {
@@ -243,19 +302,20 @@ extension SchemaBinding {
                     actual: describeType(of: value)
                 )
             }
-            return strVal
+            validated = strVal
 
         case "number", "integer":
             if let intVal = value as? Int {
-                return schemaType == "integer" ? intVal : Double(intVal)
+                validated = schemaType == "integer" ? intVal : Double(intVal)
             } else if let doubleVal = value as? Double {
-                return doubleVal
+                validated = doubleVal
+            } else {
+                throw SchemaValidationError.typeMismatch(
+                    schemaName: schemaName,
+                    expected: schemaType,
+                    actual: describeType(of: value)
+                )
             }
-            throw SchemaValidationError.typeMismatch(
-                schemaName: schemaName,
-                expected: schemaType,
-                actual: describeType(of: value)
-            )
 
         case "boolean":
             guard let boolVal = value as? Bool else {
@@ -265,7 +325,7 @@ extension SchemaBinding {
                     actual: describeType(of: value)
                 )
             }
-            return boolVal
+            validated = boolVal
 
         case "array":
             guard let arr = value as? [any Sendable] else {
@@ -277,11 +337,12 @@ extension SchemaBinding {
             }
             // Validate array items if schema defines items
             if let itemSchema = schema.items?.value {
-                return try arr.map { item in
+                validated = try arr.map { item in
                     try validateAgainstSchema(value: item, schemaName: schemaName, schema: itemSchema, components: components)
                 }
+            } else {
+                validated = arr
             }
-            return arr
 
         case "object":
             guard let dict = value as? [String: any Sendable] else {
@@ -306,10 +367,33 @@ extension SchemaBinding {
 
             // Validate and coerce properties
             guard let properties = schema.properties else {
-                return dict
+                validated = dict
+                break
             }
 
             var result: [String: any Sendable] = [:]
+            let knownKeys = Set(properties.keys)
+            let extraKeys = dict.keys.filter { !knownKeys.contains($0) }
+
+            // Enforce additionalProperties constraint
+            switch schema.additionalProperties {
+            case .allowed(false):
+                if !extraKeys.isEmpty {
+                    throw SchemaBindingError.additionalPropertiesNotAllowed(extraKeys.sorted())
+                }
+            case .schema(let subRef):
+                for key in extraKeys {
+                    result[key] = try validateAgainstSchema(
+                        value: dict[key]!,
+                        schemaName: schemaName,
+                        schema: subRef.value,
+                        components: components
+                    )
+                }
+            case .allowed(true), nil:
+                for key in extraKeys { result[key] = dict[key]! }
+            }
+
             for (key, val) in dict {
                 if let propSchemaRef = properties[key] {
                     do {
@@ -331,16 +415,20 @@ extension SchemaBinding {
                         }
                         throw error
                     }
-                } else {
-                    // Allow additional properties
-                    result[key] = val
                 }
             }
-            return result
+            validated = result
 
         default:
-            return value
+            validated = value
         }
+
+        // Validate enum constraint
+        if let enumValues = schema.enumValues, !enumValues.isEmpty {
+            try validateEnumConstraint(validated, against: enumValues)
+        }
+
+        return validated
     }
 
     /// Describe the runtime type of a value for error messages
@@ -409,6 +497,55 @@ public struct OpenAPIContextBinder {
         }
         return result
     }
+
+    /// Bind cookie parameters to context
+    ///
+    /// Exposes cookies declared as `in: cookie` in the OpenAPI spec as
+    /// `cookieParameters` in the execution context.
+    ///
+    /// ## ARO Usage
+    /// ```aro
+    /// Extract the <session-id> from the <cookieParameters: session-id>.
+    /// ```
+    public static func bindCookieParameters(_ cookies: [String: String]) -> [String: Any] {
+        var result: [String: Any] = [:]
+        result["cookieParameters"] = cookies
+        for (key, value) in cookies {
+            result["cookieParameters.\(key)"] = value
+        }
+        return result
+    }
+}
+
+// MARK: - Cookie Header Parsing
+
+/// Parse a raw `Cookie` HTTP header into a name→value dictionary.
+///
+/// The Cookie header format is `name1=value1; name2=value2`.
+/// Values are percent-decoded. Malformed pairs (no `=`) are silently skipped.
+///
+/// - Parameter cookieHeader: The raw value of the `Cookie` HTTP header.
+/// - Returns: A dictionary mapping cookie names to their (decoded) values.
+public func parseCookieHeader(_ cookieHeader: String) -> [String: String] {
+    var result: [String: String] = [:]
+    let pairs = cookieHeader.split(separator: ";", omittingEmptySubsequences: true)
+    for pair in pairs {
+        let trimmed = pair.trimmingCharacters(in: .whitespaces)
+        guard let eqRange = trimmed.range(of: "=") else { continue }
+        let name = String(trimmed[trimmed.startIndex..<eqRange.lowerBound])
+            .trimmingCharacters(in: .whitespaces)
+        let rawValue = String(trimmed[eqRange.upperBound...])
+            .trimmingCharacters(in: .whitespaces)
+        let value = rawValue.removingPercentEncoding ?? rawValue
+        guard !name.isEmpty else { continue }
+        result[name] = value
+    }
+    return result
+}
+
+// MARK: - OpenAPIContextBinder (continued)
+
+extension OpenAPIContextBinder {
 
     /// Bind request body to context
     public static func bindRequestBody(
