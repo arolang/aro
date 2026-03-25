@@ -33,6 +33,8 @@ public struct OpenAPIRouteRegistry: Sendable {
 
         for (pathTemplate, pathItem) in allPathItems {
             let pattern = PathPattern(template: pathTemplate)
+            let resolvedPathParams = pathItem.parameters?
+                .compactMap { $0.resolved(using: spec.components) }
 
             for (method, operation) in pathItem.allOperations {
                 guard let operationId = operation.operationId else { continue }
@@ -42,7 +44,7 @@ public struct OpenAPIRouteRegistry: Sendable {
                     pattern: pattern,
                     operationId: operationId,
                     operation: operation,
-                    pathParameters: pathItem.parameters
+                    pathParameters: resolvedPathParams
                 ))
             }
         }

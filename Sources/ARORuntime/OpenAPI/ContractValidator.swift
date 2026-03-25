@@ -97,7 +97,8 @@ public struct ContractValidator {
     /// Validate all $ref references in the spec
     private static func validateReferences(in spec: OpenAPISpec) throws {
         // Collect all schema refs used
-        var usedRefs: Set<String> = []
+        var usedSchemaRefs: Set<String> = []
+        var usedParamRefs: Set<String> = []
 
         // Combine paths and webhooks for reference validation
         var allPathItems = spec.paths
@@ -107,11 +108,22 @@ public struct ContractValidator {
         }
 
         for (_, pathItem) in allPathItems {
+            // Collect parameter refs at path level
+            for param in pathItem.parameters ?? [] {
+                if let ref = param.ref { usedParamRefs.insert(ref) }
+            }
+
+
             for (_, operation) in pathItem.allOperations {
+                // Collect parameter refs at operation level
+                for param in operation.parameters ?? [] {
+                    if let ref = param.ref { usedParamRefs.insert(ref) }
+                }
+
                 // Check request body schema refs
                 if let requestBody = operation.requestBody {
                     for (_, mediaType) in requestBody.content {
-                        collectSchemaRefs(schemaRef: mediaType.schema, into: &usedRefs)
+                        collectSchemaRefs(schemaRef: mediaType.schema, into: &usedSchemaRefs)
                     }
                 }
 
@@ -119,14 +131,14 @@ public struct ContractValidator {
                 for (_, response) in operation.responses {
                     if let content = response.content {
                         for (_, mediaType) in content {
-                            collectSchemaRefs(schemaRef: mediaType.schema, into: &usedRefs)
+                            collectSchemaRefs(schemaRef: mediaType.schema, into: &usedSchemaRefs)
                         }
                     }
                 }
             }
         }
 
-        // Validate all refs exist in components
+        // Validate schema refs exist in components
         let availableSchemas: Set<String>
         if let schemas = spec.components?.schemas {
             availableSchemas = Set(schemas.keys)
@@ -134,8 +146,7 @@ public struct ContractValidator {
             availableSchemas = []
         }
 
-        for ref in usedRefs {
-            // Parse ref like "#/components/schemas/User"
+        for ref in usedSchemaRefs {
             let parts = ref.split(separator: "/")
             if parts.count == 4,
                parts[0] == "#",
@@ -146,6 +157,30 @@ public struct ContractValidator {
                     throw ContractValidationError.invalidSchemaReference(
                         ref: ref,
                         availableSchemas: Array(availableSchemas)
+                    )
+                }
+            }
+        }
+
+        // Validate parameter refs exist in components
+        let availableParams: Set<String>
+        if let params = spec.components?.parameters {
+            availableParams = Set(params.keys)
+        } else {
+            availableParams = []
+        }
+
+        for ref in usedParamRefs {
+            let parts = ref.split(separator: "/")
+            if parts.count == 4,
+               parts[0] == "#",
+               parts[1] == "components",
+               parts[2] == "parameters" {
+                let paramName = String(parts[3])
+                if !availableParams.contains(paramName) {
+                    throw ContractValidationError.invalidParameterReference(
+                        ref: ref,
+                        availableParameters: Array(availableParams)
                     )
                 }
             }
@@ -212,8 +247,11 @@ public enum ContractValidationError: Error, Sendable {
         second: (path: String, method: String)
     )
 
-    /// Invalid $ref reference
+    /// Invalid schema $ref reference
     case invalidSchemaReference(ref: String, availableSchemas: [String])
+
+    /// Invalid parameter $ref reference
+    case invalidParameterReference(ref: String, availableParameters: [String])
 
     /// No OpenAPI contract found
     case noContract(directory: String)
@@ -240,6 +278,13 @@ extension ContractValidationError: CustomStringConvertible {
             var message = "Invalid schema reference: \(ref)"
             if !availableSchemas.isEmpty {
                 message += "\nAvailable schemas: \(availableSchemas.joined(separator: ", "))"
+            }
+            return message
+
+        case .invalidParameterReference(let ref, let availableParameters):
+            var message = "Invalid parameter reference: \(ref)"
+            if !availableParameters.isEmpty {
+                message += "\nAvailable parameters: \(availableParameters.joined(separator: ", "))"
             }
             return message
 
