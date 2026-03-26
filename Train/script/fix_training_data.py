@@ -11,6 +11,7 @@ Call directly (python fix_training_data.py) or import and call generate().
 
 import json
 from pathlib import Path
+from typing import Optional, Tuple
 
 SCRIPT_DIR = Path(__file__).parent.resolve()
 
@@ -388,7 +389,7 @@ def _pair(user: str, assistant: str, task_type: str) -> dict:
     }
 
 
-def generate(out_dir: Path | None = None) -> tuple[Path, Path, Path]:
+def generate(out_dir: Optional[Path] = None) -> Tuple[Path, Path, Path]:
     """
     Write the three JSONL files.  Returns (path1, path2, path3).
     """
