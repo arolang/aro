@@ -79,6 +79,11 @@ class AROCContextHandle: @unchecked Sendable {
     let context: RuntimeContext
     let runtime: AROCRuntimeHandle
 
+    /// Phase 2: per-invocation async driver channel.
+    let driverChannel: ActionDriverChannel
+    /// True when this handle created (and owns) the channel — close it in deinit.
+    private let ownsDriverChannel: Bool
+
     /// Reused decoder for OpenAPI spec parsing during binary-mode init.
     private static let openAPIDecoder = JSONDecoder()
 
@@ -91,13 +96,27 @@ class AROCContextHandle: @unchecked Sendable {
     let terminalService: TerminalService?
     #endif
 
+    deinit {
+        if ownsDriverChannel {
+            driverChannel.close()
+        }
+    }
+
     init(runtime: AROCRuntimeHandle, featureSetName: String) {
         self.runtime = runtime
+
+        // Phase 2: create a per-invocation channel and start the cooperative driver task.
+        let channel = ActionDriverChannel()
+        self.driverChannel = channel
+        self.ownsDriverChannel = true
+        Task.detached { await ActionRunner.shared.driveFeatureSet(channel: channel) }
+
         // CRITICAL: Pass the eventBus from runtime to enable event emission in compiled binaries
         self.context = RuntimeContext(
             featureSetName: featureSetName,
             eventBus: runtime.runtime.eventBus,
-            isCompiled: true
+            isCompiled: true,
+            driverChannel: channel
         )
 
         // Register services in context (must match aro_runtime_init registration)
@@ -172,10 +191,22 @@ class AROCContextHandle: @unchecked Sendable {
         #endif
     }
 
-    /// Initializer that takes an existing context (for child contexts)
+    /// Initializer that takes an existing context (for child contexts).
+    /// Borrows the parent's driver channel so child action calls go through the same driver.
     init(runtime: AROCRuntimeHandle, existingContext: RuntimeContext) {
         self.runtime = runtime
         self.context = existingContext
+        // Borrow channel from the existing context (propagated via createChild).
+        // Do NOT start a new driver task — the parent's driver handles this too.
+        if let ch = existingContext.driverChannel {
+            self.driverChannel = ch
+            self.ownsDriverChannel = false
+        } else {
+            let ch = ActionDriverChannel()
+            self.driverChannel = ch
+            self.ownsDriverChannel = true
+            Task.detached { await ActionRunner.shared.driveFeatureSet(channel: ch) }
+        }
         #if !os(Windows)
         self.fileSystemService = nil
         self.socketServer = nil

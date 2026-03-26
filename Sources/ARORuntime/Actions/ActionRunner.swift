@@ -412,6 +412,31 @@ extension ActionRunner {
             return syncResult
         }
 
+        // Phase 2: if the context has an async driver channel, submit work there
+        // instead of spawning a new Task.detached per call.
+        if let channel = (context as? RuntimeContext)?.driverChannel {
+            let box = ActionRunnerResultBox()
+            let semaphore = DispatchSemaphore(value: 0)
+            channel.submit(ActionDriverWorkItem(
+                verb: verb, result: result, object: object,
+                context: context, holder: box, semaphore: semaphore
+            ))
+
+            // Yield pool slot while waiting (same as legacy path)
+            let pool = CompiledExecutionPool.shared
+            let hadSlot = pool.threadHoldsSlot
+            if hadSlot {
+                pool.gate.signal()
+                pool.threadHoldsSlot = false
+            }
+            semaphore.wait()
+            if hadSlot {
+                pool.gate.wait()
+                pool.threadHoldsSlot = true
+            }
+            return box.result
+        }
+
         let holder = ActionResultHolder()
         let semaphore = DispatchSemaphore(value: 0)
 
@@ -528,6 +553,142 @@ extension ActionRunner {
             if let bus = eventBus {
                 await bus.publishAndTrack(event)
             }
+        }
+    }
+}
+
+// MARK: - Per-Feature-Set Async Driver (Phase 2)
+
+/// Work item submitted by the C bridge for cooperative action dispatch.
+///
+/// The C feature set pthread submits a work item and blocks on `semaphore`.
+/// The driver Swift Task picks it up, calls `await executeAsync(...)`, stores
+/// the result, and signals `semaphore` — without spawning a new Task.
+public struct ActionDriverWorkItem: @unchecked Sendable {
+    public let verb: String
+    public let result: ResultDescriptor
+    public let object: ObjectDescriptor
+    public let context: ExecutionContext
+    public let holder: ActionRunnerResultBox
+    public let semaphore: DispatchSemaphore
+}
+
+/// Thread-safe box for `ActionRunnerResult` shared between the C bridge
+/// (writer, from the driver task) and the calling pthread (reader).
+public final class ActionRunnerResultBox: @unchecked Sendable {
+    private let lock = NSLock()
+    private var _result: ActionRunnerResult = .failure("pending")
+
+    public init() {}
+
+    public var result: ActionRunnerResult {
+        lock.lock(); defer { lock.unlock() }
+        return _result
+    }
+    public func set(_ r: ActionRunnerResult) {
+        lock.lock(); defer { lock.unlock() }
+        _result = r
+    }
+}
+
+/// Single-producer, single-consumer channel used to ferry action work items
+/// from the C feature set pthread to the cooperative driver Swift Task.
+///
+/// Closed via `close()` after the C function returns; `next()` returns `nil`
+/// when the channel is drained and closed.
+public final class ActionDriverChannel: @unchecked Sendable {
+    private let lock = NSLock()
+    private var queue: [ActionDriverWorkItem] = []
+    private var waiter: CheckedContinuation<ActionDriverWorkItem?, Never>? = nil
+    private var closed = false
+
+    public init() {}
+
+    /// Submit a work item from the C pthread.  Called while holding no locks.
+    public func submit(_ item: ActionDriverWorkItem) {
+        lock.lock()
+        if let cont = waiter {
+            waiter = nil
+            lock.unlock()
+            cont.resume(returning: item)
+        } else {
+            queue.append(item)
+            lock.unlock()
+        }
+    }
+
+    /// Receive the next work item on the driver Task.  Returns `nil` when the
+    /// channel is closed and the queue is drained.
+    ///
+    /// Uses `withLock` (the Swift-6-safe scoped form) instead of bare `lock()`/`unlock()`
+    /// so the async-context concurrency checker is satisfied.  The fast-path result is
+    /// checked outside the continuation to avoid unnecessary overhead; re-checked inside
+    /// the continuation body (which runs synchronously before suspension) to close the
+    /// TOCTOU window between the two checks.
+    public func next() async -> ActionDriverWorkItem? {
+        // Fast path: item already queued (synchronous, no suspension)
+        if let item = lock.withLock({ () -> ActionDriverWorkItem? in
+            guard let item = queue.first else { return nil }
+            queue.removeFirst()
+            return item
+        }) {
+            return item
+        }
+        // Closed and empty?
+        if lock.withLock({ closed }) { return nil }
+
+        // Slow path: register a continuation, re-checking under lock to close the TOCTOU
+        // window between the two withLock calls above.
+        return await withCheckedContinuation { (cont: CheckedContinuation<ActionDriverWorkItem?, Never>) in
+            lock.withLock {
+                if let item = queue.first {
+                    // Item arrived while we were setting up the continuation
+                    queue.removeFirst()
+                    cont.resume(returning: item)
+                } else if closed {
+                    cont.resume(returning: nil)
+                } else {
+                    waiter = cont
+                }
+            }
+        }
+    }
+
+    /// Signal end-of-stream after the C function returns.
+    public func close() {
+        lock.lock()
+        closed = true
+        if let cont = waiter {
+            waiter = nil
+            lock.unlock()
+            cont.resume(returning: nil)
+        } else {
+            lock.unlock()
+        }
+    }
+}
+
+extension ActionRunner {
+    /// Drive all action calls for a single feature set invocation cooperatively.
+    ///
+    /// Called as `Task.detached { await ActionRunner.shared.driveFeatureSet(channel) }`
+    /// once per compiled feature set invocation.  The C feature set pthread submits
+    /// work items via `channel.submit()` and the driver processes them with regular
+    /// `await` — no nested Task.detached per action.
+    public func driveFeatureSet(channel: ActionDriverChannel) async {
+        while let item = await channel.next() {
+            do {
+                let value = try await self.executeAsync(
+                    verb: item.verb,
+                    result: item.result,
+                    object: item.object,
+                    context: item.context
+                )
+                item.holder.set(.success(value))
+            } catch {
+                item.holder.set(.failure(String(describing: error)))
+            }
+            item.semaphore.signal()
         }
     }
 }
