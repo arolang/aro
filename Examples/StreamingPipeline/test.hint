@@ -1,8 +1,2 @@
-Total Amount:
-5650.00
-Transaction Count:
-4
-Average Amount:
-1412.50
-Max Amount:
-2000.00
+# Test hints for StreamingPipeline
+mode: interpreter
