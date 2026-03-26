@@ -825,13 +825,23 @@ public final class FeatureSetExecutor: Sendable {
         // Lazy stream path: iterate without materialising the collection into memory (ARO-0051).
         // Specifiers are not supported on streams — they require an in-memory value.
         if let anyStream = collectionValue as? AnyStreamingValue, loop.collection.specifiers.isEmpty {
-            try await executeStreamForEachLoop(loop, stream: anyStream.asStream(), context: context)
+            try await executeForEachLazy(loop, stream: anyStream.asStream(), context: context)
             return
         }
 
         // Handle specifiers as property access (e.g., <team: members> -> team.members)
         for specifier in loop.collection.specifiers {
             collectionValue = try accessCollectionProperty(specifier, on: collectionValue)
+        }
+
+        // ARO-0051: Streaming support — iterate lazy streams without materializing
+        if let anyStreaming = collectionValue as? AnyStreamingValue, !anyStreaming.isMaterialized {
+            if !loop.isParallel {
+                try await executeForEachLazy(loop, stream: anyStreaming.asStream(), context: context)
+                return
+            }
+            // Parallel loops must materialize (no streaming support for concurrent iteration)
+            collectionValue = try await anyStreaming.materialize() as any Sendable
         }
 
         // Convert to array
@@ -928,23 +938,17 @@ public final class FeatureSetExecutor: Sendable {
         }
     }
 
-    // MARK: - Streaming For-Each (ARO-0051)
+    // MARK: - Lazy Streaming For-Each (ARO-0051)
 
-    /// Iterates an `AROStream` without materialising it into an array.
-    ///
-    /// Memory usage stays O(1): only the current item exists in memory at any point.
-    /// `Task.yield()` is called every 500 items so Swift's cooperative scheduler can
-    /// dispatch other pending tasks and all CPU cores remain available.
-    private func executeStreamForEachLoop(
+    /// Iterate a lazy AROStream one element at a time without materializing the full collection.
+    /// Memory footprint is O(1) — only the current iteration's child context is live.
+    private func executeForEachLazy(
         _ loop: ForEachLoop,
         stream: AROStream<any Sendable>,
         context: ExecutionContext
     ) async throws {
         var index = 0
         for try await item in stream.stream {
-            // Cooperative scheduling to avoid pinning a single CPU core at 100%
-            if index % 500 == 0 { await Task.yield() }
-
             let iterationContext = context.createChild(featureSetName: context.featureSetName)
             iterationContext.bind(loop.itemVariable, value: item)
             if let indexVar = loop.indexVariable {
@@ -961,7 +965,9 @@ public final class FeatureSetExecutor: Sendable {
 
             for bodyStatement in loop.body {
                 try await executeStatement(bodyStatement, context: iterationContext)
-                if iterationContext.getResponse() != nil { return }
+                if iterationContext.getResponse() != nil {
+                    return
+                }
             }
             index += 1
         }

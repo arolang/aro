@@ -57,20 +57,26 @@ public struct ListAction: ActionImplementation {
             throw ActionError.missingService("FileSystemService")
         }
 
-        // List directory
+        // ARO-0051: Streaming — bind a lazy stream so for-each iterates one entry at a
+        // time without loading the full tree into memory. Interpreter mode only:
+        // compiled binary for-each uses index-based iteration that can't consume streams.
+        if let runtimeContext = context as? RuntimeContext, !runtimeContext.isCompiled {
+            let stream = try fileService.listStream(
+                directory: directoryPath,
+                pattern: pattern,
+                recursive: recursive
+            )
+            runtimeContext.bindLazy(result.base, stream: stream)
+            return stream
+        }
+
+        // Eager fallback
         let entries = try await fileService.list(
             directory: directoryPath,
             pattern: pattern,
             recursive: recursive
         )
-
-        // Convert to array of dictionaries for ARO context
-        let entriesArray: [[String: any Sendable]] = entries.map { $0.toDictionary() }
-
-        // Note: We don't rebind the result variable here to maintain immutability
-        // The return value is handled by the runtime
-
-        return entriesArray
+        return entries.map { $0.toDictionary() }
     }
 }
 

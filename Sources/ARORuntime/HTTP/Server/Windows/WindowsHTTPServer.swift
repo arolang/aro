@@ -122,11 +122,12 @@ public final class WindowsHTTPServer: HTTPServerService, @unchecked Sendable {
 
         // Parse query parameters from path
         var queryParams: [String: String] = [:]
+        var rawQueryString = ""
         var path = foxRequest.path
         if let questionMark = path.firstIndex(of: "?") {
-            let queryString = String(path[path.index(after: questionMark)...])
+            rawQueryString = String(path[path.index(after: questionMark)...])
             path = String(path[..<questionMark])
-            for pair in queryString.split(separator: "&") {
+            for pair in rawQueryString.split(separator: "&") {
                 let parts = pair.split(separator: "=", maxSplits: 1)
                 if parts.count == 2 {
                     let key = String(parts[0]).removingPercentEncoding ?? String(parts[0])
@@ -150,7 +151,8 @@ public final class WindowsHTTPServer: HTTPServerService, @unchecked Sendable {
             path: path,
             headers: headers,
             body: bodyData,
-            queryParameters: queryParams
+            queryParameters: queryParams,
+            rawQueryString: rawQueryString
         )
 
         // Emit request received event

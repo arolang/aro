@@ -127,11 +127,11 @@ public struct ComputeAction: ActionImplementation {
             if let dict = input as? [String: any Sendable] {
                 return dict.count
             }
-            if input is AnyStreamingValue {
-                throw ActionError.runtimeError(
-                    "Cannot count a stream — streams must be consumed with 'for each'. " +
-                    "Remove this count statement, or replace 'Stream' with 'Read' if you need the total count."
-                )
+            // ARO-0051: Streaming support — count stream elements and rebind source as array
+            if let anyStreaming = input as? AnyStreamingValue {
+                let materialized = try await anyStreaming.materialize()
+                context.bind(object.base, value: materialized, allowRebind: true)
+                return materialized.count
             }
             // For types where count/length doesn't apply (Int, Double, etc.),
             // return input unchanged (identity behavior). This allows using
