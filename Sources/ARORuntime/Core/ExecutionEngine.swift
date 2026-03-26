@@ -38,9 +38,9 @@ public actor ExecutionEngine {
     /// Service registry for dependency injection
     private let services: ServiceRegistry
 
-    /// URLs currently being processed (for deduplication of CrawlPage events)
-    /// This prevents multiple parallel handlers from processing the same URL
-    private var processingUrls: Set<String> = []
+    /// Visited-URL store for CrawlPage deduplication (issue #154).
+    /// Uses a bounded FIFO-evicting set so long-running crawlers cannot exhaust memory.
+    private let visitedUrls = VisitedURLStore(maxSize: 100_000)
 
     /// Track if the application entered wait state (Keepalive action)
     private var _enteredWaitState: Bool = false
@@ -404,10 +404,20 @@ public actor ExecutionEngine {
             let capturedEventBus = eventBus
             let capturedGlobalSymbols = globalSymbols
             let capturedServices = services
+            let capturedVisitedUrls = visitedUrls
 
             eventBus.subscribe(to: DomainEvent.self) { event in
                 // Only handle events that match this handler's event type
                 guard event.domainEventType == eventType else { return }
+
+                // CrawlPage visited-URL deduplication (issue #154):
+                // Skip URLs that have already been crawled. Uses a bounded store
+                // so long-running crawlers cannot exhaust memory.
+                if eventType == "CrawlPage",
+                   let data = event.payload["data"] as? [String: any Sendable],
+                   let url = data["url"] as? String {
+                    guard capturedVisitedUrls.tryInsert(url) else { return }
+                }
 
                 // Apply state guards if present
                 if !guardSet.isEmpty {
