@@ -175,8 +175,8 @@ public final class LLVMCodeGenerator {
         let ctxParam = function.parameters[0]
         ctx.currentContextVar = ctxParam
 
-        // Allocate result storage
-        let resultPtr = ctx.module.insertAlloca(ctx.ptrType, at: ctx.insertionPoint)
+        // Allocate result storage — always in entry block via atEntryOf.
+        let resultPtr = ctx.module.insertAlloca(ctx.ptrType, atEntryOf: function)
         ctx.currentResultPtr = resultPtr
 
         // Initialize result to null
@@ -371,13 +371,14 @@ public final class LLVMCodeGenerator {
             )
         }
 
-        // Store result
-        ctx.module.insertStore(actionResult, to: ctx.currentResultPtr!, at: ctx.insertionPoint)
+        // Free the PREVIOUS result box before overwriting resultPtr.
+        // aro_value_free handles null safely (initial value is null).
+        // The final result stored here is returned by the function and freed by the caller.
+        let prevResult = ctx.module.insertLoad(ctx.ptrType, from: ctx.currentResultPtr!, at: ctx.insertionPoint)
+        _ = ctx.module.insertCall(externals.valueFree, on: [prevResult], at: ctx.insertionPoint)
 
-        // Free the passRetained AROCValue box returned by executeAction.
-        // The inner Swift value was already bound to the context inside executeAction,
-        // so the wrapper is no longer needed after this point.
-        _ = ctx.module.insertCall(externals.valueFree, on: [actionResult], at: ctx.insertionPoint)
+        // Store new result
+        ctx.module.insertStore(actionResult, to: ctx.currentResultPtr!, at: ctx.insertionPoint)
 
         // Check for action errors - halt execution if any action fails
         // This matches interpreter behavior where errors stop execution
@@ -417,17 +418,19 @@ public final class LLVMCodeGenerator {
         let ip = ctx.insertionPoint
         let descType = types.resultDescriptorType
 
-        // Allocate descriptor on stack
-        let descPtr = ctx.module.insertAlloca(descType, at: ip)
+        // Hoist alloca to function entry block so it is a *static* stack allocation
+        // (allocated once at function entry). Allocas in loop-body blocks are "dynamic"
+        // in LLVM at -O0: they grow the stack on every iteration and cause SIGBUS after
+        // ~30 k files when the 8 MB thread stack overflows.
+        let descPtr = ctx.module.insertAlloca(descType, atEntryOf: ctx.currentFunction!)
 
-        // Store base name
+        // Fill in the struct fields at the current (body) insertion point.
         let baseStr = ctx.stringConstant(result.base)
         let basePtr = ctx.module.insertGetStructElementPointer(
             of: descPtr, typed: descType, index: 0, at: ip
         )
         ctx.module.insertStore(baseStr, to: basePtr, at: ip)
 
-        // Store specifiers array (or null if none)
         let specsPtr = ctx.module.insertGetStructElementPointer(
             of: descPtr, typed: descType, index: 1, at: ip
         )
@@ -435,9 +438,8 @@ public final class LLVMCodeGenerator {
         if result.specifiers.isEmpty {
             ctx.module.insertStore(ctx.ptrType.null, to: specsPtr, at: ip)
         } else {
-            // Create specifiers array
             let arrayType = types.pointerArrayType(count: result.specifiers.count)
-            let arrayPtr = ctx.module.insertAlloca(arrayType, at: ip)
+            let arrayPtr = ctx.module.insertAlloca(arrayType, atEntryOf: ctx.currentFunction!)
 
             for (i, spec) in result.specifiers.enumerated() {
                 let specStr = ctx.stringConstant(spec)
@@ -453,7 +455,6 @@ public final class LLVMCodeGenerator {
             ctx.module.insertStore(arrayPtr, to: specsPtr, at: ip)
         }
 
-        // Store specifier count
         let countPtr = ctx.module.insertGetStructElementPointer(
             of: descPtr, typed: descType, index: 2, at: ip
         )
@@ -466,23 +467,19 @@ public final class LLVMCodeGenerator {
         let ip = ctx.insertionPoint
         let descType = types.objectDescriptorType
 
-        // Allocate descriptor on stack
-        let descPtr = ctx.module.insertAlloca(descType, at: ip)
+        let descPtr = ctx.module.insertAlloca(descType, atEntryOf: ctx.currentFunction!)
 
-        // Store base name
         let baseStr = ctx.stringConstant(object.noun.base)
         let basePtr = ctx.module.insertGetStructElementPointer(
             of: descPtr, typed: descType, index: 0, at: ip
         )
         ctx.module.insertStore(baseStr, to: basePtr, at: ip)
 
-        // Store preposition
         let prepPtr = ctx.module.insertGetStructElementPointer(
             of: descPtr, typed: descType, index: 1, at: ip
         )
         ctx.module.insertStore(ctx.i32Type.constant(LLVMTypeMapper.prepositionValue(object.preposition)), to: prepPtr, at: ip)
 
-        // Store specifiers array (or null if none)
         let specsPtr = ctx.module.insertGetStructElementPointer(
             of: descPtr, typed: descType, index: 2, at: ip
         )
@@ -491,9 +488,8 @@ public final class LLVMCodeGenerator {
         if specifiers.isEmpty {
             ctx.module.insertStore(ctx.ptrType.null, to: specsPtr, at: ip)
         } else {
-            // Create specifiers array
             let arrayType = types.pointerArrayType(count: specifiers.count)
-            let arrayPtr = ctx.module.insertAlloca(arrayType, at: ip)
+            let arrayPtr = ctx.module.insertAlloca(arrayType, atEntryOf: ctx.currentFunction!)
 
             for (i, spec) in specifiers.enumerated() {
                 let specStr = ctx.stringConstant(spec)
@@ -509,7 +505,6 @@ public final class LLVMCodeGenerator {
             ctx.module.insertStore(arrayPtr, to: specsPtr, at: ip)
         }
 
-        // Store specifier count
         let countPtr = ctx.module.insertGetStructElementPointer(
             of: descPtr, typed: descType, index: 3, at: ip
         )
@@ -1084,7 +1079,7 @@ public final class LLVMCodeGenerator {
         let condBlock = ctx.module.appendBlock(named: "\(prefix)_cond", to: ctx.currentFunction!)
         let bodyBlock = ctx.module.appendBlock(named: "\(prefix)_body", to: ctx.currentFunction!)
         let incrBlock = ctx.module.appendBlock(named: "\(prefix)_incr", to: ctx.currentFunction!)
-        let endBlock = ctx.module.appendBlock(named: "\(prefix)_end", to: ctx.currentFunction!)
+        let endBlock  = ctx.module.appendBlock(named: "\(prefix)_end",  to: ctx.currentFunction!)
 
         // Resolve collection (with optional specifier for nested properties like <team: members>)
         let collectionName = ctx.stringConstant(loop.collection.base)
@@ -1094,50 +1089,58 @@ public final class LLVMCodeGenerator {
             at: ctx.insertionPoint
         )
 
-        // Handle specifiers to access nested properties
+        // Handle specifiers to access nested properties.
+        // Each aro_dict_get call returns a NEW passRetained box wrapping the nested value,
+        // making the previous box unreachable — free it before reassigning.
         for spec in loop.collection.specifiers {
             let specName = ctx.stringConstant(spec)
+            let prevCollection = collection
             collection = ctx.module.insertCall(
                 externals.dictGet,
                 on: [collection, specName],
                 at: ctx.insertionPoint
             )
+            _ = ctx.module.insertCall(externals.valueFree, on: [prevCollection], at: ctx.insertionPoint)
         }
 
-        // Get collection count
-        let count = ctx.module.insertCall(
-            externals.arrayCount,
-            on: [collection],
-            at: ctx.insertionPoint
-        )
+        // Iterator state: a stack-allocated i64 initialised to 0.
+        // For arrays: aro_array_get_next uses it as a 0-based index.
+        // For LazyDirectoryList: aro_array_get_next increments it as a monotonic counter;
+        // the enumerator tracks the actual position internally.
+        let statePtr = ctx.module.insertAlloca(ctx.i64Type, at: ctx.insertionPoint)
+        ctx.module.insertStore(ctx.i64Type.zero, to: statePtr, at: ctx.insertionPoint)
 
-        // Allocate index counter
-        let indexPtr = ctx.module.insertAlloca(ctx.i64Type, at: ctx.insertionPoint)
-        ctx.module.insertStore(ctx.i64Type.zero, to: indexPtr, at: ctx.insertionPoint)
+        // If the caller wants a 0-based iteration index variable, track it separately.
+        let iterIndexPtr: IRValue?
+        if loop.indexVariable != nil {
+            let p = ctx.module.insertAlloca(ctx.i64Type, at: ctx.insertionPoint)
+            ctx.module.insertStore(ctx.i64Type.zero, to: p, at: ctx.insertionPoint)
+            iterIndexPtr = p
+        } else {
+            iterIndexPtr = nil
+        }
 
         // Jump to condition check
         ctx.module.insertBr(to: condBlock, at: ctx.insertionPoint)
 
         // === Condition Block ===
+        // Call aro_array_get_next — returns the next passRetained element or NULL when done.
         ctx.setInsertionPoint(atEndOf: condBlock)
 
-        let curIndex = ctx.module.insertLoad(ctx.i64Type, from: indexPtr, at: ctx.insertionPoint)
-        let done = ctx.module.insertIntegerComparison(
-            .sge, curIndex, count, at: ctx.insertionPoint
+        let nextElem = ctx.module.insertCall(
+            externals.arrayGetNext,
+            on: [collection, statePtr],
+            at: ctx.insertionPoint
         )
-        ctx.module.insertCondBr(if: done, then: endBlock, else: bodyBlock, at: ctx.insertionPoint)
+        let isNull = ctx.module.insertIntegerComparison(
+            .eq, nextElem, ctx.ptrType.null, at: ctx.insertionPoint
+        )
+        ctx.module.insertCondBr(if: isNull, then: endBlock, else: bodyBlock, at: ctx.insertionPoint)
 
         // === Body Block ===
         ctx.setInsertionPoint(atEndOf: bodyBlock)
 
-        // Get current element
-        let element = ctx.module.insertCall(
-            externals.arrayGet,
-            on: [collection, curIndex],
-            at: ctx.insertionPoint
-        )
-
-        // Unbind and rebind element to item variable (unbind allows rebinding on each iteration)
+        // Unbind and rebind item variable for this iteration
         let itemVarName = ctx.stringConstant(loop.itemVariable)
         _ = ctx.module.insertCall(
             externals.variableUnbind,
@@ -1146,26 +1149,24 @@ public final class LLVMCodeGenerator {
         )
         _ = ctx.module.insertCall(
             externals.variableBindValue,
-            on: [ctx.currentContextVar!, itemVarName, element],
+            on: [ctx.currentContextVar!, itemVarName, nextElem],
             at: ctx.insertionPoint
         )
 
-        // Bind index if specified
-        if let indexVar = loop.indexVariable {
-            // Create index value (0-based like most programming languages)
+        // Bind index variable if specified (0-based).
+        // The boxed integer is freed immediately after binding — the inner Int value
+        // was already copied into the context, so the AROCValue wrapper is not needed.
+        if let indexVar = loop.indexVariable, let iterIndexPtr = iterIndexPtr {
             let indexVarName = ctx.stringConstant(indexVar)
-
-            // Unbind first to allow rebinding on each iteration
             _ = ctx.module.insertCall(
                 externals.variableUnbind,
                 on: [ctx.currentContextVar!, indexVarName],
                 at: ctx.insertionPoint
             )
-
-            // Create boxed integer value
+            let curIterIdx = ctx.module.insertLoad(ctx.i64Type, from: iterIndexPtr, at: ctx.insertionPoint)
             let indexValue = ctx.module.insertCall(
                 externals.valueCreateInt,
-                on: [curIndex],
+                on: [curIterIdx],
                 at: ctx.insertionPoint
             )
             _ = ctx.module.insertCall(
@@ -1173,12 +1174,12 @@ public final class LLVMCodeGenerator {
                 on: [ctx.currentContextVar!, indexVarName, indexValue],
                 at: ctx.insertionPoint
             )
+            // Free the passRetained box — the Int was extracted into the context by variableBindValue.
+            _ = ctx.module.insertCall(externals.valueFree, on: [indexValue], at: ctx.insertionPoint)
         }
 
-        // Check filter if present
+        // Check filter if present — failed filter jumps to incrBlock (freeing nextElem there)
         if let filter = loop.filter {
-            // Filter: if condition fails, skip to increment block
-
             let filterJSON = ctx.stringConstant(serializeExpression(filter))
             let filterResult = ctx.module.insertCall(
                 externals.evaluateWhenGuard,
@@ -1188,19 +1189,14 @@ public final class LLVMCodeGenerator {
             let passed = ctx.module.insertIntegerComparison(
                 .ne, filterResult, ctx.i32Type.zero, at: ctx.insertionPoint
             )
-
             let filterBodyBlock = ctx.module.appendBlock(named: "\(prefix)_filter_body", to: ctx.currentFunction!)
             ctx.module.insertCondBr(if: passed, then: filterBodyBlock, else: incrBlock, at: ctx.insertionPoint)
-
             ctx.setInsertionPoint(atEndOf: filterBodyBlock)
         }
 
-        // Unbind all variables that will be bound in the loop body
-        // This simulates the child context behavior of the interpreter,
-        // allowing variables to be rebound on each iteration.
-        // Exclude the item variable and index variable — they are already
-        // managed by the dedicated unbind+rebind code above, mirroring
-        // the same exclusion in generateRangeLoop (line: varName != loop.variable).
+        // Pre-unbind all body-bound variables to simulate child-context isolation,
+        // allowing rebinding on each iteration. Item/index variables are excluded —
+        // they are managed by the dedicated unbind+rebind code above.
         var managedByLoop = Set([loop.itemVariable])
         if let indexVar = loop.indexVariable { managedByLoop.insert(indexVar) }
         let bodyVariables = collectBoundVariables(from: loop.body)
@@ -1224,31 +1220,25 @@ public final class LLVMCodeGenerator {
         // === Increment Block ===
         ctx.setInsertionPoint(atEndOf: incrBlock)
 
-        // Free the element box created by aro_array_get (passRetained).
-        // aro_variable_bind_value already extracted the inner Swift value into the context,
-        // so the AROCValue wrapper is no longer needed after binding. Releasing it here
-        // prevents O(N) AROCValue leaks that accumulate to hundreds of MB on large collections
-        // and eventually cause SIGBUS when the allocator can no longer back mmap pages.
-        _ = ctx.module.insertCall(
-            externals.valueFree,
-            on: [element],
-            at: ctx.insertionPoint
-        )
+        // Free the element box returned passRetained by aro_array_get_next.
+        // The inner Swift value was already bound to the context; only the wrapper is released.
+        _ = ctx.module.insertCall(externals.valueFree, on: [nextElem], at: ctx.insertionPoint)
 
-        let nextIndex = ctx.module.insertAdd(curIndex, ctx.i64Type.constant(1), at: ctx.insertionPoint)
-        ctx.module.insertStore(nextIndex, to: indexPtr, at: ctx.insertionPoint)
+        // Advance the iteration index (used for the user-facing index variable, if any).
+        if let iterIndexPtr = iterIndexPtr {
+            let cur = ctx.module.insertLoad(ctx.i64Type, from: iterIndexPtr, at: ctx.insertionPoint)
+            let next = ctx.module.insertAdd(cur, ctx.i64Type.constant(1), at: ctx.insertionPoint)
+            ctx.module.insertStore(next, to: iterIndexPtr, at: ctx.insertionPoint)
+        }
+
         ctx.module.insertBr(to: condBlock, at: ctx.insertionPoint)
 
         // === End Block ===
         ctx.setInsertionPoint(atEndOf: endBlock)
 
-        // Free the collection box created by aro_variable_resolve (passRetained).
-        // The inner Swift array remains alive in the context; only the AROCValue wrapper is freed.
-        _ = ctx.module.insertCall(
-            externals.valueFree,
-            on: [collection],
-            at: ctx.insertionPoint
-        )
+        // Free the collection box from aro_variable_resolve (or the final aro_dict_get).
+        // The inner collection value stays alive in the context; only the wrapper is freed.
+        _ = ctx.module.insertCall(externals.valueFree, on: [collection], at: ctx.insertionPoint)
     }
 
     // MARK: - Range Loop Generation (for <var> from <low> to <high>)
@@ -1301,11 +1291,13 @@ public final class LLVMCodeGenerator {
 
         let bodyCount = ctx.module.insertLoad(ctx.i64Type, from: counterPtr, at: ctx.insertionPoint)
 
-        // Bind loop variable as boxed integer (unbind first to allow rebinding)
+        // Bind loop variable as boxed integer (unbind first to allow rebinding).
+        // Free the box immediately after binding — the Int was extracted into the context.
         let varNameStr = ctx.stringConstant(loop.variable)
         _ = ctx.module.insertCall(externals.variableUnbind, on: [ctx.currentContextVar!, varNameStr], at: ctx.insertionPoint)
         let varValue = ctx.module.insertCall(externals.valueCreateInt, on: [bodyCount], at: ctx.insertionPoint)
         _ = ctx.module.insertCall(externals.variableBindValue, on: [ctx.currentContextVar!, varNameStr, varValue], at: ctx.insertionPoint)
+        _ = ctx.module.insertCall(externals.valueFree, on: [varValue], at: ctx.insertionPoint)
 
         // Unbind all body-bound variables to allow rebinding on each iteration
         let bodyVars = collectBoundVariables(from: loop.body)
@@ -1444,7 +1436,7 @@ public final class LLVMCodeGenerator {
 
         // Build result descriptor for the publish action
         let descType = types.resultDescriptorType
-        let resultDesc = ctx.module.insertAlloca(descType, at: ip)
+        let resultDesc = ctx.module.insertAlloca(descType, atEntryOf: ctx.currentFunction!)
 
         let baseStr = ctx.stringConstant(statement.externalName)
         let basePtr = ctx.module.insertGetStructElementPointer(
@@ -1466,7 +1458,7 @@ public final class LLVMCodeGenerator {
 
         // Build object descriptor for the internal variable
         let objDescType = types.objectDescriptorType
-        let objectDesc = ctx.module.insertAlloca(objDescType, at: ip)
+        let objectDesc = ctx.module.insertAlloca(objDescType, atEntryOf: ctx.currentFunction!)
 
         let objBaseStr = ctx.stringConstant(statement.internalVariable)
         let objBasePtr = ctx.module.insertGetStructElementPointer(
@@ -1499,8 +1491,9 @@ public final class LLVMCodeGenerator {
                 on: [ctx.currentContextVar!, resultDesc, objectDesc],
                 at: ip
             )
+            let prevResult = ctx.module.insertLoad(ctx.ptrType, from: ctx.currentResultPtr!, at: ip)
+            _ = ctx.module.insertCall(externals.valueFree, on: [prevResult], at: ip)
             ctx.module.insertStore(actionResult, to: ctx.currentResultPtr!, at: ip)
-            _ = ctx.module.insertCall(externals.valueFree, on: [actionResult], at: ip)
         }
     }
 
@@ -1544,7 +1537,7 @@ public final class LLVMCodeGenerator {
 
         // Build result descriptor for the require action
         let descType = types.resultDescriptorType
-        let resultDesc = ctx.module.insertAlloca(descType, at: ip)
+        let resultDesc = ctx.module.insertAlloca(descType, atEntryOf: ctx.currentFunction!)
 
         let baseStr = ctx.stringConstant(statement.variableName)
         let basePtr = ctx.module.insertGetStructElementPointer(
@@ -1566,7 +1559,7 @@ public final class LLVMCodeGenerator {
 
         // Build object descriptor for the source
         let objDescType = types.objectDescriptorType
-        let objectDesc = ctx.module.insertAlloca(objDescType, at: ip)
+        let objectDesc = ctx.module.insertAlloca(objDescType, atEntryOf: ctx.currentFunction!)
 
         let objBaseStr = ctx.stringConstant(sourceValue)
         let objBasePtr = ctx.module.insertGetStructElementPointer(
@@ -1599,8 +1592,9 @@ public final class LLVMCodeGenerator {
                 on: [ctx.currentContextVar!, resultDesc, objectDesc],
                 at: ip
             )
+            let prevResult = ctx.module.insertLoad(ctx.ptrType, from: ctx.currentResultPtr!, at: ip)
+            _ = ctx.module.insertCall(externals.valueFree, on: [prevResult], at: ip)
             ctx.module.insertStore(actionResult, to: ctx.currentResultPtr!, at: ip)
-            _ = ctx.module.insertCall(externals.valueFree, on: [actionResult], at: ip)
         }
     }
 

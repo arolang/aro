@@ -59,7 +59,7 @@ public struct ListAction: ActionImplementation {
 
         // ARO-0051: Streaming — bind a lazy stream so for-each iterates one entry at a
         // time without loading the full tree into memory. Interpreter mode only:
-        // compiled binary for-each uses index-based iteration that can't consume streams.
+        // compiled binary for-each uses aro_array_get_next (see below).
         if let runtimeContext = context as? RuntimeContext, !runtimeContext.isCompiled {
             let stream = try fileService.listStream(
                 directory: directoryPath,
@@ -70,13 +70,77 @@ public struct ListAction: ActionImplementation {
             return stream
         }
 
-        // Eager fallback
+        // Eager materialization for compiled mode
         let entries = try await fileService.list(
             directory: directoryPath,
             pattern: pattern,
             recursive: recursive
         )
         return entries.map { $0.toDictionary() }
+    }
+}
+
+// MARK: - LazyDirectoryList (binary mode O(1) streaming)
+
+/// Wraps a synchronous `FileManager.DirectoryEnumerator` so that `aro_array_get_next`
+/// can materialise one file-entry dict per call.  Used exclusively in compiled (binary)
+/// mode where the LLVM-generated for-each loop cannot consume async streams.
+public final class LazyDirectoryList: @unchecked Sendable {
+    private let enumerator: FileManager.DirectoryEnumerator
+    private let pattern: String?
+    private let fmt = ISO8601DateFormatter()
+
+    public init(enumerator: FileManager.DirectoryEnumerator, pattern: String?) {
+        self.enumerator = enumerator
+        self.pattern = pattern
+    }
+
+    /// Advance the enumerator and return the next matching entry as a dict, or nil when done.
+    /// Wraps each iteration in an autoreleasepool to prevent NSObject accumulation over
+    /// large directory trees (80k+ entries would otherwise exhaust the thread pool).
+    public func next() -> [String: any Sendable]? {
+        while true {
+            guard let url = autoreleasepool(invoking: { self.enumerator.nextObject() as? URL }) else { return nil }
+
+            let name = url.lastPathComponent
+            if let pattern = pattern, !matchesGlob(name, pattern: pattern) { continue }
+
+            let entry: [String: any Sendable]? = autoreleasepool {
+                guard let res = try? url.resourceValues(
+                    forKeys: [.isDirectoryKey, .fileSizeKey,
+                              .contentModificationDateKey, .creationDateKey]
+                ) else { return nil }
+
+                let isDirectory = res.isDirectory ?? false
+                let size = res.fileSize ?? 0
+                var dict: [String: any Sendable] = [
+                    "name": name,
+                    "path": url.path,
+                    "size": size,
+                    "isFile": !isDirectory,
+                    "isDirectory": isDirectory
+                ]
+                if let d = res.contentModificationDate { dict["modified"] = self.fmt.string(from: d) }
+                if let d = res.creationDate           { dict["created"]  = self.fmt.string(from: d) }
+                return dict
+            }
+            if let entry = entry { return entry }
+        }
+    }
+
+    private func matchesGlob(_ name: String, pattern: String) -> Bool {
+        var regex = "^"
+        for ch in pattern {
+            switch ch {
+            case "*": regex += ".*"
+            case "?": regex += "."
+            case ".": regex += "\\."
+            default:  regex += NSRegularExpression.escapedPattern(for: String(ch))
+            }
+        }
+        regex += "$"
+        return (try? NSRegularExpression(pattern: regex, options: .caseInsensitive))?
+            .firstMatch(in: name, options: [], range: NSRange(name.startIndex..., in: name)) != nil
     }
 }
 

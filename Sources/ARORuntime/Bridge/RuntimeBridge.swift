@@ -2639,6 +2639,50 @@ public func aro_array_get(
     return nil
 }
 
+/// Get the next element from a collection, advancing the iterator state in-place.
+/// Works for both eagerly-materialised arrays and `LazyDirectoryList` (O(1) streaming).
+/// - Parameters:
+///   - valuePtr:  Value handle wrapping an array or LazyDirectoryList
+///   - statePtr:  Pointer to an Int64 caller-allocated state (initialised to 0).
+///               For arrays: used as a 0-based index, incremented per call.
+///               For LazyDirectoryList: used as a monotonic counter; the enumerator
+///               holds the actual position internally.
+/// - Returns: passRetained value handle for the next element, or NULL when exhausted.
+@_cdecl("aro_array_get_next")
+public func aro_array_get_next(
+    _ valuePtr: UnsafeMutableRawPointer?,
+    _ statePtr: UnsafeMutablePointer<Int64>?
+) -> UnsafeMutableRawPointer? {
+    guard let ptr = valuePtr, let statePtr = statePtr else { return nil }
+    let boxed = Unmanaged<AROCValue>.fromOpaque(ptr).takeUnretainedValue()
+
+    if let lazyList = boxed.value as? LazyDirectoryList {
+        guard let entry = lazyList.next() else { return nil }
+        statePtr.pointee &+= 1
+        let boxedElement = AROCValue(value: entry as any Sendable)
+        return UnsafeMutableRawPointer(Unmanaged.passRetained(boxedElement).toOpaque())
+    }
+
+    if let array = boxed.value as? [any Sendable] {
+        let index = Int(statePtr.pointee)
+        guard index < array.count else { return nil }
+        statePtr.pointee &+= 1
+        let boxedElement = AROCValue(value: array[index])
+        return UnsafeMutableRawPointer(Unmanaged.passRetained(boxedElement).toOpaque())
+    }
+
+    if let stringArray = boxed.value as? [String] {
+        let index = Int(statePtr.pointee)
+        guard index < stringArray.count else { return nil }
+        statePtr.pointee &+= 1
+        let element: any Sendable = stringArray[index]
+        let boxedElement = AROCValue(value: element)
+        return UnsafeMutableRawPointer(Unmanaged.passRetained(boxedElement).toOpaque())
+    }
+
+    return nil
+}
+
 /// Bind a value to a variable name in the context
 /// - Parameters:
 ///   - contextPtr: Context handle
