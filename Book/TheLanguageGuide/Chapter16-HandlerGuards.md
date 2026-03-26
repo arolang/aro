@@ -66,6 +66,34 @@ In the example above, `<age>` resolves to the `age` field of the notified object
 
 For regular event handlers (not Notify), the event payload fields are available in the same way. If the event carries `{ status: "paid", amount: 150 }`, the guard `when <amount> > 100` resolves `amount` from the payload.
 
+### Guard Evaluation Scope
+
+**Handler declaration guards evaluate only event data.** Only the fields present in the event payload — accessible as `<event: field>` or as bare `<field>` if bound from the payload — are available in the guard expression. Application-scope variables, repository entries, and results computed in other handlers are not visible.
+
+This is a deliberate constraint. Guards run before the handler body, at event dispatch time, with no handler context established yet. The only information available is what the event itself carries.
+
+**Pattern:** if you need a value from the application state in a guard, include it in the event when emitting:
+
+```aro
+(* Observer bundles both count and threshold into the event *)
+(Watch File Count: file-stats-repository Observer) where <event: changeType> == "created" {
+    Retrieve the <all-files> from the <file-stats-repository>.
+    Reduce the <file-count: Integer> from the <all-files> with count().
+    Create the <main-key> with "main".
+    Retrieve the <state: ScanState> from the <scan-state-repository> where <key> is <main-key>.
+    Emit a <ProcessStats: event> with { count: <file-count>, threshold: <state: threshold> }.
+    Return an <OK: status> for the <observation>.
+}
+
+(* Handler guards on the event data it received *)
+(Process Stats: ProcessStats Handler) when <event: count> >= <event: threshold> {
+    (* only runs when threshold is reached — no retrieve/compute/match needed *)
+    ...
+}
+```
+
+Two event payload fields can be compared directly in the guard (`<event: count> >= <event: threshold>`), because both are in scope as event data. The handler body is entered only when the condition holds.
+
 ### Comparison Operators
 
 The `when` guard supports the full set of comparison operators:

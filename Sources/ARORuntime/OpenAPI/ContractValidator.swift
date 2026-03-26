@@ -23,8 +23,15 @@ public struct ContractValidator {
         // Track missing handlers
         var missingHandlers: [(operationId: String, path: String, method: String)] = []
 
+        // Combine paths and webhooks (OpenAPI 3.1) for validation
+        var allPathItems = spec.paths
+        for (name, item) in spec.webhooks ?? [:] {
+            let key = name.hasPrefix("/") ? name : "/\(name)"
+            allPathItems[key] = item
+        }
+
         // Check each operation has a matching feature set
-        for (path, pathItem) in spec.paths {
+        for (path, pathItem) in allPathItems {
             for (method, operation) in pathItem.allOperations {
                 guard let operationId = operation.operationId else {
                     throw ContractValidationError.missingOperationId(
@@ -55,7 +62,14 @@ public struct ContractValidator {
         // Check for duplicate operation IDs
         var seenIds: [String: (path: String, method: String)] = [:]
 
-        for (path, pathItem) in spec.paths {
+        // Combine paths and webhooks
+        var allPathItems = spec.paths
+        for (name, item) in spec.webhooks ?? [:] {
+            let key = name.hasPrefix("/") ? name : "/\(name)"
+            allPathItems[key] = item
+        }
+
+        for (path, pathItem) in allPathItems {
             for (method, operation) in pathItem.allOperations {
                 guard let operationId = operation.operationId else {
                     throw ContractValidationError.missingOperationId(
@@ -86,11 +100,19 @@ public struct ContractValidator {
         var usedSchemaRefs: Set<String> = []
         var usedParamRefs: Set<String> = []
 
-        for (_, pathItem) in spec.paths {
+        // Combine paths and webhooks for reference validation
+        var allPathItems = spec.paths
+        for (name, item) in spec.webhooks ?? [:] {
+            let key = name.hasPrefix("/") ? name : "/\(name)"
+            allPathItems[key] = item
+        }
+
+        for (_, pathItem) in allPathItems {
             // Collect parameter refs at path level
             for param in pathItem.parameters ?? [] {
                 if let ref = param.ref { usedParamRefs.insert(ref) }
             }
+
 
             for (_, operation) in pathItem.allOperations {
                 // Collect parameter refs at operation level

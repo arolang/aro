@@ -370,7 +370,31 @@ public final class Application: @unchecked Sendable {
             // Execute the feature set
             do {
                 let response = try await self.executeFeatureSet(featureSet, request: request, pathParams: match.pathParameters, headerParams: headerParams, cookieParams: cookieParams, effectiveParameters: match.effectiveParameters)
-                return self.convertToHTTPResponse(response, requestPath: request.path)
+                var httpResponse = self.convertToHTTPResponse(response, requestPath: request.path)
+
+                // Validate response body against OpenAPI response schema (ARO-0180)
+                if let body = httpResponse.body,
+                   let bodyJSON = try? JSONSerialization.jsonObject(with: body) {
+                    let components = self.routeRegistry?.spec.components
+                    if let violationMessage = SchemaBinding.validateResponseBody(
+                        bodyJSON,
+                        forStatusCode: httpResponse.statusCode,
+                        operation: match.operation,
+                        components: components
+                    ) {
+                        let operationId = match.operationId
+                        print("[CONTRACT VIOLATION] Response for operation '\(operationId)' (status \(httpResponse.statusCode)) does not match schema: \(violationMessage)")
+                        var headers = httpResponse.headers
+                        headers["X-Contract-Violation"] = "true"
+                        httpResponse = HTTPResponse(
+                            statusCode: httpResponse.statusCode,
+                            headers: headers,
+                            body: httpResponse.body
+                        )
+                    }
+                }
+
+                return httpResponse
             } catch let templateError as TemplateError {
                 // Handle template errors with appropriate HTTP status codes
                 switch templateError {
