@@ -221,19 +221,12 @@ public struct StreamAction: ActionImplementation {
                         continuation.finish(throwing: ActionError.runtimeError("Cannot open file: \(capturedURL.path)"))
                         return
                     }
-                    defer { try? handle.close() }
+                    defer { handle.closeFile() }
                     var buffer = ""
                     let chunkSize = 65_536
                     while true {
-                        let data: Data
-                        if #available(macOS 10.15.4, *) {
-                            guard let chunk = try? handle.read(upToCount: chunkSize), !chunk.isEmpty else { break }
-                            data = chunk
-                        } else {
-                            let chunk = handle.readData(ofLength: chunkSize)
-                            guard !chunk.isEmpty else { break }
-                            data = chunk
-                        }
+                        let data = handle.readData(ofLength: chunkSize)
+                        guard !data.isEmpty else { break }
                         buffer += String(data: data, encoding: .utf8) ?? ""
                         while let range = buffer.range(of: "\n") {
                             let line = String(buffer[buffer.startIndex..<range.lowerBound])
