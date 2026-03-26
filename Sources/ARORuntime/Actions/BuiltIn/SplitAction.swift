@@ -8,18 +8,18 @@ import AROParser
 
 /// Splits a string into parts using a regex delimiter
 /// Syntax: <Split> the <parts> from <string> by /delimiter/.
-public struct SplitAction: ActionImplementation {
+public struct SplitAction: SynchronousAction {
     public static let role: ActionRole = .own
     public static let verbs: Set<String> = ["split"]
     public static let validPrepositions: Set<Preposition> = [.from]
 
     public init() {}
 
-    public func execute(
+    public func executeSynchronously(
         result: ResultDescriptor,
         object: ObjectDescriptor,
         context: ExecutionContext
-    ) async throws -> any Sendable {
+    ) throws -> any Sendable {
         try validatePreposition(object.preposition)
 
         // Get string to split from object, applying specifiers for qualified access (e.g. <params: recipient>)

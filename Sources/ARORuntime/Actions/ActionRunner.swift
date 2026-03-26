@@ -23,9 +23,75 @@ public final class ActionRunner: @unchecked Sendable {
     /// The action registry to use
     private let registry: ActionRegistry
 
+    /// Synchronous-action lookup table (verb → type), built at startup.
+    /// Keyed by canonical verb.  Safe to access from any thread because it
+    /// is populated once in `init` and never mutated afterward.
+    private let syncActions: [String: any SynchronousAction.Type]
+
     /// Private initializer
     private init() {
         self.registry = ActionRegistry.shared
+        self.syncActions = Self.buildSyncActionsTable()
+    }
+
+    /// Build a flat verb → SynchronousAction.Type table that mirrors ActionRegistry's
+    /// final verb→type mapping but only retains entries where the winning type is a
+    /// SynchronousAction.  This prevents a sync-capable type from shadowing a
+    /// later-registered non-sync type that overrides the same verb.
+    private static func buildSyncActionsTable() -> [String: any SynchronousAction.Type] {
+        let allModuleActions: [[any ActionImplementation.Type]] = [
+            RequestActionsModule.actions,
+            OwnActionsModule.actions,
+            ResponseActionsModule.actions,
+            ServerActionsModule.actions,
+            SocketActionsModule.actions,
+            FileActionsModule.actions,
+            DataPipelineActionsModule.actions,
+            TestActionsModule.actions,
+            TerminalActionsModule.actions,
+            SystemActionsModule.actions,
+        ]
+
+        // Step 1: build the full verb→type dict in the same order as ActionRegistry
+        var fullDict: [String: any ActionImplementation.Type] = [:]
+        for moduleActions in allModuleActions {
+            for actionType in moduleActions {
+                for verb in actionType.verbs {
+                    fullDict[verb.lowercased()] = actionType
+                }
+            }
+        }
+
+        // Step 2: retain only verbs whose winning type is a SynchronousAction
+        var table: [String: any SynchronousAction.Type] = [:]
+        for (verb, actionType) in fullDict {
+            if let syncType = actionType as? any SynchronousAction.Type {
+                let canonical = canonicalizeVerb(verb)
+                table[canonical] = syncType
+            }
+        }
+        return table
+    }
+
+    /// Execute an action on the calling thread if it is a `SynchronousAction`.
+    /// Returns `nil` if the verb is unknown or the action signals `NeedsAsyncExecution`.
+    private func executeSynchronouslyIfSupported(
+        canonicalVerb: String,
+        result: ResultDescriptor,
+        object: ObjectDescriptor,
+        context: ExecutionContext
+    ) -> ActionRunnerResult? {
+        guard let syncType = syncActions[canonicalVerb] else { return nil }
+        let action = syncType.init()
+        do {
+            let value = try action.executeSynchronously(result: result, object: object, context: context)
+            return .success(value)
+        } catch is NeedsAsyncExecution {
+            // Action has async paths that need Task dispatch — fall through
+            return nil
+        } catch {
+            return .failure(String(describing: error))
+        }
     }
 
     // MARK: - Verb Canonicalization
@@ -183,6 +249,14 @@ public final class ActionRunner: @unchecked Sendable {
         object: ObjectDescriptor,
         context: ExecutionContext
     ) -> (any Sendable)? {
+        // Fast path: bypass Task.detached + semaphore for synchronous actions
+        let canonicalVerb = Self.canonicalizeVerb(verb)
+        if let syncResult = executeSynchronouslyIfSupported(
+            canonicalVerb: canonicalVerb, result: result, object: object, context: context
+        ) {
+            return syncResult.value
+        }
+
         let holder = ResultHolder()
         let semaphore = DispatchSemaphore(value: 0)
 
@@ -330,6 +404,14 @@ extension ActionRunner {
         object: ObjectDescriptor,
         context: ExecutionContext
     ) -> ActionRunnerResult {
+        // Fast path: bypass Task.detached + semaphore for synchronous actions
+        let canonicalVerb = Self.canonicalizeVerb(verb)
+        if let syncResult = executeSynchronouslyIfSupported(
+            canonicalVerb: canonicalVerb, result: result, object: object, context: context
+        ) {
+            return syncResult
+        }
+
         let holder = ActionResultHolder()
         let semaphore = DispatchSemaphore(value: 0)
 

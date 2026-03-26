@@ -22,18 +22,18 @@ import CoreFoundation
 /// ```
 /// <Extract> the <user: identifier> from the <incoming-request: parameters>.
 /// ```
-public struct ExtractAction: ActionImplementation {
+public struct ExtractAction: SynchronousAction {
     public static let role: ActionRole = .request
     public static let verbs: Set<String> = ["extract", "parse", "get"]
     public static let validPrepositions: Set<Preposition> = [.from, .via]
 
     public init() {}
 
-    public func execute(
+    public func executeSynchronously(
         result: ResultDescriptor,
         object: ObjectDescriptor,
         context: ExecutionContext
-    ) async throws -> any Sendable {
+    ) throws -> any Sendable {
         try validatePreposition(object.preposition)
 
         // Handle environment variable extraction: <env: VAR_NAME>

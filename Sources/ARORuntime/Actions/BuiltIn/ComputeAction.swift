@@ -52,53 +52,52 @@ private func resolveOperationName(
 /// ```
 /// <Compute> the <password: hash> for the <user: credentials>.
 /// ```
-public struct ComputeAction: ActionImplementation {
+public struct ComputeAction: SynchronousAction {
     public static let role: ActionRole = .own
     public static let verbs: Set<String> = ["compute", "calculate", "derive"]
     public static let validPrepositions: Set<Preposition> = [.from, .for, .with]
 
     public init() {}
 
-    public func execute(
+    // MARK: - Synchronous fast path (no Task.detached overhead in binary mode)
+
+    public func executeSynchronously(
         result: ResultDescriptor,
         object: ObjectDescriptor,
         context: ExecutionContext
-    ) async throws -> any Sendable {
+    ) throws -> any Sendable {
         try validatePreposition(object.preposition)
 
-        // Get input value
         guard let input = context.resolveAny(object.base) else {
             throw ActionError.undefinedVariable(object.base)
         }
 
-        // Computation name from result specifiers or base (for backward compatibility)
         let knownComputations: Set<String> = [
             "hash", "length", "count", "uppercase", "lowercase", "identity",
-            "clip", "take",                        // String/list limiting
-            "date", "format", "distance",          // Date operations (ARO-0041)
-            "intersect", "difference", "union"     // Set operations (ARO-0042)
+            "clip", "take",
+            "date", "format", "distance",
+            "intersect", "difference", "union"
         ]
         let computationName = resolveOperationName(from: result, knownOperations: knownComputations, fallback: "identity")
 
-        // Check plugin qualifier first (e.g., pick-random from a plugin)
+        // Plugin qualifier — synchronous when the qualifier registry is sync
         if let pluginResult = try context.container.qualifierRegistry.resolve(computationName, value: input) {
             return pluginResult
         }
 
-        // Check for date offset pattern (e.g., +1h, -3d)
+        // Date offset — synchronous
         if DateOffset.isOffsetPattern(computationName) {
             return try computeDateOffset(input: input, offsetPattern: computationName, context: context)
         }
 
-        // Look up computation service
-        if let computeService = context.service(ComputationService.self) {
-            return try await computeService.compute(named: computationName, input: input)
+        // Computation service (plugin): needs async — fall back to Task path
+        if context.service(ComputationService.self) != nil {
+            throw NeedsAsyncExecution()
         }
 
-        // Built-in computations
+        // Built-in computations — all synchronous except "count" on streaming input
         switch computationName.lowercased() {
         case "hash":
-            // Use SHA256 for cryptographically secure hashing
             let stringToHash: String
             if let str = input as? String {
                 stringToHash = str
@@ -109,53 +108,32 @@ public struct ComputeAction: ActionImplementation {
             } else {
                 stringToHash = "\(input)"
             }
-
             guard let data = stringToHash.data(using: .utf8) else {
                 throw ActionError.ioError("Failed to encode string as UTF-8")
             }
-
             let hash = SHA256.hash(data: data)
             return hash.compactMap { String(format: "%02x", $0) }.joined()
 
         case "length", "count":
-            if let str = input as? String {
-                return str.count
-            }
-            if let arr = input as? [any Sendable] {
-                return arr.count
-            }
-            if let dict = input as? [String: any Sendable] {
-                return dict.count
-            }
-            // ARO-0051: Streaming support — count stream elements and rebind source as array
-            if let anyStreaming = input as? AnyStreamingValue {
-                let materialized = try await anyStreaming.materialize()
-                context.bind(object.base, value: materialized, allowRebind: true)
-                return materialized.count
-            }
-            // For types where count/length doesn't apply (Int, Double, etc.),
-            // return input unchanged (identity behavior). This allows using
-            // "count" as a variable name in sink syntax: <Compute> the <count> from 42.
+            if let str = input as? String { return str.count }
+            if let arr = input as? [any Sendable] { return arr.count }
+            if let dict = input as? [String: any Sendable] { return dict.count }
+            // Streaming inputs need async — fall back to Task path
+            if input is AnyStreamingValue { throw NeedsAsyncExecution() }
             return input
 
         case "uppercase":
-            if let str = input as? String {
-                return str.uppercased()
-            }
+            if let str = input as? String { return str.uppercased() }
             return String(describing: input).uppercased()
 
         case "lowercase":
-            if let str = input as? String {
-                return str.lowercased()
-            }
+            if let str = input as? String { return str.lowercased() }
             return String(describing: input).lowercased()
 
         case "identity":
             return input
 
         case "clip":
-            // Clip a string to N visible characters (subview width constraint).
-            // Width comes from the 'with' clause: Compute the <x: clip> from <text> with <width>.
             let str = input as? String ?? String(describing: input)
             var width = 80
             if let w = context.resolveAny("_with_") as? Int { width = w }
@@ -164,33 +142,19 @@ public struct ComputeAction: ActionImplementation {
             return String(str.prefix(width))
 
         case "take":
-            // Take the first N elements from a list, or first N characters from a string.
-            // N comes from the 'with' clause: Compute the <x: take> from <list> with <n>.
             var n = 0
             if let w = context.resolveAny("_with_") as? Int { n = w }
             else if let w = context.resolveAny("_with_") as? Double { n = Int(w) }
-            if let arr = input as? [any Sendable] {
-                return Array(arr.prefix(n))
-            }
-            if let str = input as? String {
-                return String(str.prefix(n))
-            }
+            if let arr = input as? [any Sendable] { return Array(arr.prefix(n)) }
+            if let str = input as? String { return String(str.prefix(n)) }
             return input
 
-        // Date operations (ARO-0041)
         case "date":
-            // Parse ISO 8601 string to ARODate
-            if let str = input as? String {
-                return try ARODate.parse(str)
-            }
-            if let date = input as? ARODate {
-                return date
-            }
+            if let str = input as? String { return try ARODate.parse(str) }
+            if let date = input as? ARODate { return date }
             throw ActionError.typeMismatch(expected: "String (ISO 8601)", actual: String(describing: type(of: input)))
 
         case "format":
-            // Format a date using a pattern string
-            // Pattern comes from the 'with' clause (_expression_)
             guard let date = getARODate(from: input) else {
                 throw ActionError.typeMismatch(expected: "ARODate or ISO 8601 String", actual: String(describing: type(of: input)))
             }
@@ -199,8 +163,6 @@ public struct ComputeAction: ActionImplementation {
             return dateService.format(date, pattern: pattern)
 
         case "distance":
-            // Calculate distance between two dates
-            // The 'to' date comes from the 'to' clause (_to_)
             guard let fromDate = getARODate(from: input) else {
                 throw ActionError.typeMismatch(expected: "ARODate", actual: String(describing: type(of: input)))
             }
@@ -211,32 +173,68 @@ public struct ComputeAction: ActionImplementation {
             let dateService = context.service(DateService.self) ?? DefaultDateService()
             return dateService.distance(from: fromDate, to: toDate)
 
-        // Set operations (ARO-0042)
         case "intersect":
-            // Get second operand from 'with' clause (stored in _with_ by FeatureSetExecutor)
             guard let secondOperand = context.resolveAny("_with_") else {
                 throw ActionError.missingRequiredField(field: "a 'with' clause", action: "Compute intersect")
             }
             return try computeIntersect(input, with: secondOperand)
 
         case "difference":
-            // Get second operand from 'with' clause (stored in _with_ by FeatureSetExecutor)
             guard let secondOperand = context.resolveAny("_with_") else {
                 throw ActionError.missingRequiredField(field: "a 'with' clause", action: "Compute difference")
             }
             return try computeDifference(input, minus: secondOperand)
 
         case "union":
-            // Get second operand from 'with' clause (stored in _with_ by FeatureSetExecutor)
             guard let secondOperand = context.resolveAny("_with_") else {
                 throw ActionError.missingRequiredField(field: "a 'with' clause", action: "Compute union")
             }
             return try computeUnion(input, with: secondOperand)
 
         default:
-            // Return input as-is for unknown computations
             return input
         }
+    }
+
+    // MARK: - Async path (handles computeService plugins and streaming inputs)
+
+    /// Override the default `SynchronousAction.execute` to handle the two cases
+    /// that genuinely need `await`: plugin compute services and streaming count.
+    public func execute(
+        result: ResultDescriptor,
+        object: ObjectDescriptor,
+        context: ExecutionContext
+    ) async throws -> any Sendable {
+        do {
+            return try executeSynchronously(result: result, object: object, context: context)
+        } catch is NeedsAsyncExecution {
+            // Fall through to async-only paths
+        }
+
+        try validatePreposition(object.preposition)
+        guard let input = context.resolveAny(object.base) else {
+            throw ActionError.undefinedVariable(object.base)
+        }
+        let knownComputations: Set<String> = [
+            "hash", "length", "count", "uppercase", "lowercase", "identity",
+            "clip", "take", "date", "format", "distance",
+            "intersect", "difference", "union"
+        ]
+        let computationName = resolveOperationName(from: result, knownOperations: knownComputations, fallback: "identity")
+
+        // Plugin compute service
+        if let computeService = context.service(ComputationService.self) {
+            return try await computeService.compute(named: computationName, input: input)
+        }
+
+        // ARO-0051: Streaming count — materialize and rebind
+        if let anyStreaming = input as? AnyStreamingValue {
+            let materialized = try await anyStreaming.materialize()
+            context.bind(object.base, value: materialized, allowRebind: true)
+            return materialized.count
+        }
+
+        return input
     }
 
     /// Get an ARODate from various input types
@@ -953,19 +951,24 @@ public struct CreateAction: ActionImplementation {
 }
 
 /// Updates an existing entity
-public struct UpdateAction: ActionImplementation {
+public struct UpdateAction: SynchronousAction {
     public static let role: ActionRole = .own
     public static let verbs: Set<String> = ["update", "modify", "change", "set", "configure"]
     public static let validPrepositions: Set<Preposition> = [.with, .to, .for, .from]
 
     public init() {}
 
-    public func execute(
+    public func executeSynchronously(
         result: ResultDescriptor,
         object: ObjectDescriptor,
         context: ExecutionContext
-    ) async throws -> any Sendable {
+    ) throws -> any Sendable {
         try validatePreposition(object.preposition)
+
+        // Repository configuration path needs async — fall back to Task path
+        if InMemoryRepositoryStorage.isRepositoryName(result.base), result.specifiers.first != nil {
+            throw NeedsAsyncExecution()
+        }
 
         // For "configure" verb, allow creating new configuration if it doesn't exist
         // This enables: <Configure> the <validation: timeout> with <value>.
@@ -1005,40 +1008,6 @@ public struct UpdateAction: ActionImplementation {
         } else {
             // Treat as literal value
             updateValue = object.base
-        }
-
-        // Check if this is a repository configuration (e.g., Configure the <session-repository: ttl> with 300.)
-        if InMemoryRepositoryStorage.isRepositoryName(result.base), let fieldName = result.specifiers.first {
-            let storage = context.service(RepositoryStorageService.self) ?? context.container.repositoryStorage
-
-            // Read current config so setting ttl doesn't wipe maxSize and vice versa
-            var currentTTL: TimeInterval? = nil
-            var currentMaxSize: Int? = nil
-            if let existing = context.resolveAny(result.base) as? [String: any Sendable] {
-                if let t = existing["ttl"] as? TimeInterval { currentTTL = t }
-                else if let t = existing["ttl"] as? Double { currentTTL = t }
-                else if let t = existing["ttl"] as? Int { currentTTL = TimeInterval(t) }
-                if let m = existing["maxSize"] as? Int { currentMaxSize = m }
-                else if let m = existing["maxSize"] as? Double { currentMaxSize = Int(m) }
-            }
-
-            switch fieldName {
-            case "ttl":
-                if let v = updateValue as? Double { currentTTL = v }
-                else if let v = updateValue as? Int { currentTTL = TimeInterval(v) }
-            case "maxSize":
-                if let v = updateValue as? Int { currentMaxSize = v }
-                else if let v = updateValue as? Double { currentMaxSize = Int(v) }
-            default:
-                break
-            }
-
-            await storage.configure(repository: result.base, ttl: currentTTL, maxSize: currentMaxSize)
-
-            var configDict = context.resolveAny(result.base) as? [String: any Sendable] ?? [:]
-            configDict[fieldName] = updateValue
-            context.bind(result.base, value: configDict, allowRebind: true)
-            return configDict
         }
 
         // Check if we're updating a specific field (e.g., <order: status>)
@@ -1087,6 +1056,59 @@ public struct UpdateAction: ActionImplementation {
 
         // Fallback: return the update value
         return updateValue
+    }
+
+    /// Override to handle the repository-configuration path that needs `await`.
+    public func execute(
+        result: ResultDescriptor,
+        object: ObjectDescriptor,
+        context: ExecutionContext
+    ) async throws -> any Sendable {
+        do {
+            return try executeSynchronously(result: result, object: object, context: context)
+        } catch is NeedsAsyncExecution {
+            // Fall through to async repository-configuration path
+        }
+
+        // Repository configuration: Configure the <repo: ttl> with <value>.
+        try validatePreposition(object.preposition)
+        let entity: any Sendable = context.resolveAny(result.base) ?? [String: any Sendable]()
+
+        let updateValue: any Sendable
+        if let literal = context.resolveAny("_literal_") {
+            updateValue = literal
+        } else if let resolved = context.resolveAny(object.base) {
+            updateValue = resolved
+        } else {
+            updateValue = object.base
+        }
+
+        guard let fieldName = result.specifiers.first else { return entity }
+        let storage = context.service(RepositoryStorageService.self) ?? context.container.repositoryStorage
+
+        var currentTTL: TimeInterval? = nil
+        var currentMaxSize: Int? = nil
+        if let existing = context.resolveAny(result.base) as? [String: any Sendable] {
+            if let t = existing["ttl"] as? TimeInterval { currentTTL = t }
+            else if let t = existing["ttl"] as? Double { currentTTL = t }
+            else if let t = existing["ttl"] as? Int { currentTTL = TimeInterval(t) }
+            if let m = existing["maxSize"] as? Int { currentMaxSize = m }
+            else if let m = existing["maxSize"] as? Double { currentMaxSize = Int(m) }
+        }
+        switch fieldName {
+        case "ttl":
+            if let v = updateValue as? Double { currentTTL = v }
+            else if let v = updateValue as? Int { currentTTL = TimeInterval(v) }
+        case "maxSize":
+            if let v = updateValue as? Int { currentMaxSize = v }
+            else if let v = updateValue as? Double { currentMaxSize = Int(v) }
+        default: break
+        }
+        await storage.configure(repository: result.base, ttl: currentTTL, maxSize: currentMaxSize)
+        var configDict = context.resolveAny(result.base) as? [String: any Sendable] ?? [:]
+        configDict[fieldName] = updateValue
+        context.bind(result.base, value: configDict, allowRebind: true)
+        return configDict
     }
 
     private func convertToSendable(_ value: Any) -> any Sendable {
