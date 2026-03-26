@@ -343,12 +343,19 @@ public struct FilterAction: ActionImplementation {
             return filteredStream
         }
 
-        // Handle array filtering with predicate (eager mode)
-        guard let array = source as? [any Sendable] else {
+        // Materialise LazyDirectoryList (compiled mode) before filtering
+        let arraySource: [any Sendable]
+        if let lazyList = source as? LazyDirectoryList {
+            var materialized: [any Sendable] = []
+            while let entry = lazyList.next() { materialized.append(entry) }
+            arraySource = materialized
+        } else if let array = source as? [any Sendable] {
+            arraySource = array
+        } else {
             return source
         }
 
-        return array.filter { item in
+        return arraySource.filter { item in
             guard let dict = item as? [String: any Sendable],
                   let actualValue = dict[field] else {
                 return false

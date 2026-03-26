@@ -70,11 +70,27 @@ public struct ListAction: ActionImplementation {
             return stream
         }
 
-        // Eager materialization for compiled mode
+        // Lazy streaming for compiled mode — O(1) memory, starts comparing immediately.
+        // aro_array_get_next already handles LazyDirectoryList via the existing branch.
+        // Non-recursive: still eager (single directory level, negligible size).
+        if recursive {
+            let url = URL(fileURLWithPath: directoryPath)
+            guard let enumerator = FileManager.default.enumerator(
+                at: url,
+                includingPropertiesForKeys: [.isDirectoryKey, .fileSizeKey,
+                                              .contentModificationDateKey, .creationDateKey],
+                options: []
+            ) else {
+                return [] as [any Sendable]
+            }
+            return LazyDirectoryList(enumerator: enumerator, pattern: pattern)
+        }
+
+        // Non-recursive: eager (single level, fast)
         let entries = try await fileService.list(
             directory: directoryPath,
             pattern: pattern,
-            recursive: recursive
+            recursive: false
         )
         return entries.map { $0.toDictionary() }
     }
