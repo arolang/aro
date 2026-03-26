@@ -890,8 +890,9 @@ private func applyAllowEmptyValueFilter(
 ) -> [String: String] {
     var allowEmptyValueByName: [String: Bool] = [:]
     for param in specParameters where param.in == "query" {
-        guard let paramName = param.name else { continue }
-        allowEmptyValueByName[paramName] = param.allowEmptyValue ?? false
+        if let paramName = param.name {
+            allowEmptyValueByName[paramName] = param.allowEmptyValue ?? false
+        }
     }
     return queryParameters.filter { name, value in
         guard value.isEmpty else { return true }
@@ -2922,6 +2923,500 @@ struct ContentTypeNegotiationTests {
         )
         let response = await handler.handleRequest(request)
         #expect(response.statusCode != 415)
+    }
+}
+
+// MARK: - parseQueryString Tests
+
+@Suite("parseQueryString Tests")
+struct ParseQueryStringTests {
+
+    @Test("Empty query string returns empty dict")
+    func testEmptyQueryString() {
+        let result = parseQueryString("")
+        #expect(result.isEmpty)
+    }
+
+    @Test("Single key-value pair")
+    func testSinglePair() {
+        let result = parseQueryString("foo=bar")
+        #expect(result["foo"] == ["bar"])
+    }
+
+    @Test("Multiple distinct keys")
+    func testMultipleDistinctKeys() {
+        let result = parseQueryString("a=1&b=2&c=3")
+        #expect(result["a"] == ["1"])
+        #expect(result["b"] == ["2"])
+        #expect(result["c"] == ["3"])
+    }
+
+    @Test("Repeated key produces multiple values")
+    func testRepeatedKey() {
+        let result = parseQueryString("ids=1&ids=2&ids=3")
+        #expect(result["ids"] == ["1", "2", "3"])
+    }
+
+    @Test("Percent-encoded values are decoded")
+    func testPercentEncoding() {
+        let result = parseQueryString("name=hello%20world")
+        #expect(result["name"] == ["hello world"])
+    }
+
+    @Test("Value with no key is ignored")
+    func testEmptyKey() {
+        let result = parseQueryString("=value")
+        #expect(result.isEmpty)
+    }
+
+    @Test("Key without value gets empty string")
+    func testKeyWithoutValue() {
+        let result = parseQueryString("flag")
+        #expect(result["flag"] == [""])
+    }
+
+    @Test("Mixed repeated and unique keys")
+    func testMixedKeys() {
+        let result = parseQueryString("ids=1&name=alice&ids=2")
+        #expect(result["ids"] == ["1", "2"])
+        #expect(result["name"] == ["alice"])
+    }
+}
+
+// MARK: - deserializeParameter Tests
+
+@Suite("SchemaBinding.deserializeParameter Tests")
+struct DeserializeParameterTests {
+
+    // Helper to build a Parameter with the given schema type, style, and explode
+    private func makeParam(
+        name: String = "ids",
+        schemaType: String,
+        style: String? = nil,
+        explode: Bool? = nil
+    ) -> Parameter {
+        let schemaJSON = """
+        {"type":"\(schemaType)","items":{"type":"string"}}
+        """
+        let schemaRef = try! JSONDecoder().decode(SchemaRef.self, from: schemaJSON.data(using: .utf8)!)
+        let paramJSON = """
+        {"name":"\(name)","in":"query"}
+        """
+        // Build via JSON to get default codable state, then we need explicit fields
+        // Since Parameter doesn't have a memberwise public init, decode from JSON including optional fields
+        var jsonDict: [String: Any] = ["name": name, "in": "query", "schema": ["type": schemaType, "items": ["type": "string"]]]
+        if let s = style { jsonDict["style"] = s }
+        if let e = explode { jsonDict["explode"] = e }
+        let data = try! JSONSerialization.data(withJSONObject: jsonDict)
+        return try! JSONDecoder().decode(Parameter.self, from: data)
+    }
+
+    private func makeScalarParam(name: String = "q", schemaType: String = "string") -> Parameter {
+        var jsonDict: [String: Any] = ["name": name, "in": "query", "schema": ["type": schemaType]]
+        let data = try! JSONSerialization.data(withJSONObject: jsonDict)
+        return try! JSONDecoder().decode(Parameter.self, from: data)
+    }
+
+    @Test("form + explode:true (default) → rawValues as array")
+    func testFormExplodeTrue() {
+        let param = makeParam(schemaType: "array", style: "form", explode: true)
+        let result = SchemaBinding.deserializeParameter(rawValues: ["1", "2", "3"], parameter: param, components: nil)
+        let arr = result as? [String]
+        #expect(arr == ["1", "2", "3"])
+    }
+
+    @Test("form + explode:false → comma-split single value")
+    func testFormExplodeFalse() {
+        let param = makeParam(schemaType: "array", style: "form", explode: false)
+        let result = SchemaBinding.deserializeParameter(rawValues: ["1,2,3"], parameter: param, components: nil)
+        let arr = result as? [String]
+        #expect(arr == ["1", "2", "3"])
+    }
+
+    @Test("form default (no explode specified) → explode:true behaviour")
+    func testFormDefaultExplode() {
+        let param = makeParam(schemaType: "array", style: "form")
+        let result = SchemaBinding.deserializeParameter(rawValues: ["a", "b"], parameter: param, components: nil)
+        let arr = result as? [String]
+        #expect(arr == ["a", "b"])
+    }
+
+    @Test("pipeDelimited + explode:false → pipe-split single value")
+    func testPipeDelimited() {
+        let param = makeParam(schemaType: "array", style: "pipeDelimited", explode: false)
+        let result = SchemaBinding.deserializeParameter(rawValues: ["a|b|c"], parameter: param, components: nil)
+        let arr = result as? [String]
+        #expect(arr == ["a", "b", "c"])
+    }
+
+    @Test("spaceDelimited + explode:false → space-split single value")
+    func testSpaceDelimited() {
+        let param = makeParam(schemaType: "array", style: "spaceDelimited", explode: false)
+        let result = SchemaBinding.deserializeParameter(rawValues: ["a b c"], parameter: param, components: nil)
+        let arr = result as? [String]
+        #expect(arr == ["a", "b", "c"])
+    }
+
+    @Test("spaceDelimited + percent-encoded space")
+    func testSpaceDelimitedPercentEncoded() {
+        let param = makeParam(schemaType: "array", style: "spaceDelimited", explode: false)
+        let result = SchemaBinding.deserializeParameter(rawValues: ["a%20b%20c"], parameter: param, components: nil)
+        let arr = result as? [String]
+        #expect(arr == ["a", "b", "c"])
+    }
+
+    @Test("Scalar param with multiple values → returns first value as String")
+    func testScalarParamReturnsFirst() {
+        let param = makeScalarParam()
+        let result = SchemaBinding.deserializeParameter(rawValues: ["first", "second"], parameter: param, components: nil)
+        let str = result as? String
+        #expect(str == "first")
+    }
+
+    @Test("Param with no schema → treated as scalar, returns first value")
+    func testNoSchema() {
+        let data = """
+        {"name":"x","in":"query"}
+        """.data(using: .utf8)!
+        let param = try! JSONDecoder().decode(Parameter.self, from: data)
+        let result = SchemaBinding.deserializeParameter(rawValues: ["val"], parameter: param, components: nil)
+        let str = result as? String
+        #expect(str == "val")
+    }
+
+    @Test("Empty rawValues for scalar → empty string")
+    func testEmptyRawValuesScalar() {
+        let param = makeScalarParam()
+        let result = SchemaBinding.deserializeParameter(rawValues: [], parameter: param, components: nil)
+        let str = result as? String
+        #expect(str == "")
+    }
+}
+
+// MARK: - OpenAPI 3.1 Tests
+
+@Suite("OpenAPI 3.1 Support Tests")
+struct OpenAPI31Tests {
+
+    // MARK: - Schema.types parsing
+
+    @Test("3.1 spec with type array parses as types = [string, null]")
+    func testTypeArrayParsed() throws {
+        let json = """
+        {
+            "type": ["string", "null"]
+        }
+        """
+        let data = json.data(using: .utf8)!
+        let schema = try JSONDecoder().decode(Schema.self, from: data)
+        #expect(schema.types == ["string", "null"])
+        #expect(schema.type == "string")
+        #expect(schema.isNullable == true)
+    }
+
+    @Test("3.0 spec with type string parses as types = [string]")
+    func testTypeStringSingleElement() throws {
+        let json = """
+        {
+            "type": "string"
+        }
+        """
+        let data = json.data(using: .utf8)!
+        let schema = try JSONDecoder().decode(Schema.self, from: data)
+        #expect(schema.types == ["string"])
+        #expect(schema.type == "string")
+        #expect(schema.isNullable == false)
+    }
+
+    @Test("nullable: true (3.0.x) → isNullable == true")
+    func testNullableTrue30() throws {
+        let json = """
+        {
+            "type": "string",
+            "nullable": true
+        }
+        """
+        let data = json.data(using: .utf8)!
+        let schema = try JSONDecoder().decode(Schema.self, from: data)
+        #expect(schema.nullable == true)
+        #expect(schema.isNullable == true)
+    }
+
+    @Test("nullable: false (3.0.x) → isNullable == false")
+    func testNullableFalse30() throws {
+        let json = """
+        {
+            "type": "string",
+            "nullable": false
+        }
+        """
+        let data = json.data(using: .utf8)!
+        let schema = try JSONDecoder().decode(Schema.self, from: data)
+        #expect(schema.nullable == false)
+        #expect(schema.isNullable == false)
+    }
+
+    @Test("No type specified → types is empty, type is nil")
+    func testNoType() throws {
+        let json = """
+        {
+            "description": "no type"
+        }
+        """
+        let data = json.data(using: .utf8)!
+        let schema = try JSONDecoder().decode(Schema.self, from: data)
+        #expect(schema.types.isEmpty)
+        #expect(schema.type == nil)
+        #expect(schema.isNullable == false)
+    }
+
+    // MARK: - exclusiveMinimum / exclusiveMaximum
+
+    @Test("exclusiveMinimum as Bool (3.0.x) parses correctly")
+    func testExclusiveMinimumBool() throws {
+        let json = """
+        {
+            "type": "number",
+            "minimum": 0,
+            "exclusiveMinimum": true
+        }
+        """
+        let data = json.data(using: .utf8)!
+        let schema = try JSONDecoder().decode(Schema.self, from: data)
+        #expect(schema.exclusiveMinimumBool == true)
+        #expect(schema.exclusiveMinimumValue == nil)
+    }
+
+    @Test("exclusiveMinimum as number (3.1) parses correctly")
+    func testExclusiveMinimumValue() throws {
+        let json = """
+        {
+            "type": "number",
+            "exclusiveMinimum": 5.0
+        }
+        """
+        let data = json.data(using: .utf8)!
+        let schema = try JSONDecoder().decode(Schema.self, from: data)
+        #expect(schema.exclusiveMinimumBool == nil)
+        #expect(schema.exclusiveMinimumValue == 5.0)
+    }
+
+    @Test("exclusiveMaximum as Bool (3.0.x) parses correctly")
+    func testExclusiveMaximumBool() throws {
+        let json = """
+        {
+            "type": "number",
+            "maximum": 100,
+            "exclusiveMaximum": true
+        }
+        """
+        let data = json.data(using: .utf8)!
+        let schema = try JSONDecoder().decode(Schema.self, from: data)
+        #expect(schema.exclusiveMaximumBool == true)
+        #expect(schema.exclusiveMaximumValue == nil)
+    }
+
+    @Test("exclusiveMaximum as number (3.1) parses correctly")
+    func testExclusiveMaximumValue() throws {
+        let json = """
+        {
+            "type": "number",
+            "exclusiveMaximum": 100.0
+        }
+        """
+        let data = json.data(using: .utf8)!
+        let schema = try JSONDecoder().decode(Schema.self, from: data)
+        #expect(schema.exclusiveMaximumBool == nil)
+        #expect(schema.exclusiveMaximumValue == 100.0)
+    }
+
+    // MARK: - const constraint
+
+    @Test("const: active — matching value passes")
+    func testConstMatchPasses() throws {
+        let schema = Schema(type: "string", const: .string("active"))
+        #expect(try SchemaBinding.parseValue(json: "active", schema: schema, components: nil) as? String == "active")
+    }
+
+    @Test("const: active — non-matching value throws")
+    func testConstMismatchThrows() throws {
+        let schema = Schema(type: "string", const: .string("active"))
+        #expect(throws: (any Error).self) {
+            try SchemaBinding.parseValue(json: "inactive", schema: schema, components: nil)
+        }
+    }
+
+    @Test("const: 42 — matching integer passes")
+    func testConstIntMatchPasses() throws {
+        let schema = Schema(type: "integer", const: .int(42))
+        // parseValue returns Double for numbers; int 42 decoded via JSONSerialization may come as Int or Double
+        let result = try SchemaBinding.parseValue(json: 42, schema: schema, components: nil)
+        // Allow either Int or Double representation
+        let isMatch = (result as? Int) == 42 || (result as? Double) == 42.0
+        #expect(isMatch)
+    }
+
+    // MARK: - Nullable pass-through in SchemaBinding
+
+    @Test("Nullable schema — NSNull value accepted")
+    func testNullableSchemaAcceptsNSNull() throws {
+        let schema = Schema(type: "string", nullable: true)
+        let result = try SchemaBinding.parseValue(json: NSNull(), schema: schema, components: nil)
+        #expect(result is NSNull)
+    }
+
+    @Test("Nullable schema via type array — NSNull value accepted")
+    func testNullableTypeArrayAcceptsNSNull() throws {
+        let schema = Schema(types: ["string", "null"])
+        let result = try SchemaBinding.parseValue(json: NSNull(), schema: schema, components: nil)
+        #expect(result is NSNull)
+    }
+
+    @Test("Non-nullable schema — NSNull value throws")
+    func testNonNullableSchemaRejectsNSNull() throws {
+        let schema = Schema(type: "string")
+        #expect(throws: (any Error).self) {
+            try SchemaBinding.parseValue(json: NSNull(), schema: schema, components: nil)
+        }
+    }
+
+    // MARK: - OpenAPI 3.1 top-level fields
+
+    @Test("jsonSchemaDialect parses in 3.1 spec")
+    func testJsonSchemaDialectParses() throws {
+        let json = """
+        {
+            "openapi": "3.1.0",
+            "jsonSchemaDialect": "https://json-schema.org/draft/2020-12/schema",
+            "info": {
+                "title": "Test API",
+                "version": "1.0.0"
+            },
+            "paths": {}
+        }
+        """
+        let data = json.data(using: .utf8)!
+        let spec = try JSONDecoder().decode(OpenAPISpec.self, from: data)
+        #expect(spec.jsonSchemaDialect == "https://json-schema.org/draft/2020-12/schema")
+        #expect(spec.is31 == true)
+    }
+
+    @Test("is31 returns false for 3.0.x spec")
+    func testIs31FalseFor30() throws {
+        let json = """
+        {
+            "openapi": "3.0.3",
+            "info": { "title": "T", "version": "1" },
+            "paths": {}
+        }
+        """
+        let data = json.data(using: .utf8)!
+        let spec = try JSONDecoder().decode(OpenAPISpec.self, from: data)
+        #expect(spec.is31 == false)
+    }
+
+    // MARK: - info.summary and license.identifier
+
+    @Test("info.summary parses in 3.1 spec")
+    func testInfoSummaryParses() throws {
+        let json = """
+        {
+            "openapi": "3.1.0",
+            "info": {
+                "title": "Test API",
+                "version": "1.0.0",
+                "summary": "A short summary"
+            },
+            "paths": {}
+        }
+        """
+        let data = json.data(using: .utf8)!
+        let spec = try JSONDecoder().decode(OpenAPISpec.self, from: data)
+        #expect(spec.info.summary == "A short summary")
+    }
+
+    @Test("license.identifier (SPDX) parses in 3.1 spec")
+    func testLicenseIdentifierParses() throws {
+        let json = """
+        {
+            "openapi": "3.1.0",
+            "info": {
+                "title": "Test API",
+                "version": "1.0.0",
+                "license": {
+                    "name": "Apache 2.0",
+                    "identifier": "Apache-2.0"
+                }
+            },
+            "paths": {}
+        }
+        """
+        let data = json.data(using: .utf8)!
+        let spec = try JSONDecoder().decode(OpenAPISpec.self, from: data)
+        #expect(spec.info.license?.name == "Apache 2.0")
+        #expect(spec.info.license?.identifier == "Apache-2.0")
+    }
+
+    // MARK: - webhooks
+
+    @Test("Webhook route registered and matchable")
+    func testWebhookRouteRegistered() throws {
+        let json = """
+        {
+            "openapi": "3.1.0",
+            "info": { "title": "Test API", "version": "1.0.0" },
+            "paths": {},
+            "webhooks": {
+                "newOrder": {
+                    "post": {
+                        "operationId": "handleNewOrder",
+                        "responses": {
+                            "200": { "description": "OK" }
+                        }
+                    }
+                }
+            }
+        }
+        """
+        let data = json.data(using: .utf8)!
+        let spec = try JSONDecoder().decode(OpenAPISpec.self, from: data)
+        #expect(spec.webhooks?["newOrder"] != nil)
+
+        // The route registry should register the webhook
+        let registry = OpenAPIRouteRegistry(spec: spec)
+        let match = registry.match(method: "POST", path: "/newOrder")
+        #expect(match?.operationId == "handleNewOrder")
+    }
+
+    @Test("allOperationIds includes webhook operation IDs")
+    func testAllOperationIdsIncludesWebhooks() throws {
+        let json = """
+        {
+            "openapi": "3.1.0",
+            "info": { "title": "Test API", "version": "1.0.0" },
+            "paths": {
+                "/users": {
+                    "get": {
+                        "operationId": "listUsers",
+                        "responses": { "200": { "description": "OK" } }
+                    }
+                }
+            },
+            "webhooks": {
+                "newOrder": {
+                    "post": {
+                        "operationId": "handleNewOrder",
+                        "responses": { "200": { "description": "OK" } }
+                    }
+                }
+            }
+        }
+        """
+        let data = json.data(using: .utf8)!
+        let spec = try JSONDecoder().decode(OpenAPISpec.self, from: data)
+        let ids = spec.allOperationIds
+        #expect(ids.contains("listUsers"))
+        #expect(ids.contains("handleNewOrder"))
     }
 }
 

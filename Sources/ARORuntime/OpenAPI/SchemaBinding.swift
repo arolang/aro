@@ -31,6 +31,11 @@ public struct SchemaBinding {
             return try parseValue(json: json, schema: resolved, components: components)
         }
 
+        // Handle nullable: if the schema allows null and the value is NSNull, short-circuit
+        if schema.isNullable && json is NSNull {
+            return NSNull()
+        }
+
         // Handle by type
         guard let schemaType = schema.type else {
             // No type constraint — still apply composition keywords if present
@@ -136,6 +141,11 @@ public struct SchemaBinding {
             try validateEnumConstraint(parsedValue, against: enumValues)
         }
 
+        // Validate const constraint (OpenAPI 3.1 / JSON Schema)
+        if let constValue = schema.const {
+            try validateConstConstraint(parsedValue, against: constValue)
+        }
+
         // Apply composition keywords (allOf / anyOf / oneOf / not)
         if schema.allOf != nil || schema.anyOf != nil || schema.oneOf != nil || schema.not != nil {
             return try validateComposition(json: parsedValue, schema: schema, components: components)
@@ -230,6 +240,24 @@ public struct SchemaBinding {
         }
 
         return json
+    }
+
+    /// Check that a parsed value matches the `const` constraint.
+    private static func validateConstConstraint(_ parsedValue: Any, against constValue: AnyCodableValue) throws {
+        let matches: Bool
+        switch constValue {
+        case .string(let s): matches = (parsedValue as? String) == s
+        case .int(let i): matches = (parsedValue as? Int) == i || (parsedValue as? Double) == Double(i)
+        case .double(let d): matches = (parsedValue as? Double) == d
+        case .bool(let b): matches = (parsedValue as? Bool) == b
+        case .null: matches = parsedValue is NSNull
+        }
+        if !matches {
+            throw SchemaBindingError.enumViolation(
+                value: "\(parsedValue)",
+                allowed: "\(constValue.anyValue)"
+            )
+        }
     }
 
     /// Check that a parsed value matches one of the allowed enum values.
@@ -386,6 +414,11 @@ extension SchemaBinding {
             return try validateAgainstSchema(value: value, schemaName: schemaName, schema: resolved, components: components)
         }
 
+        // Handle nullable: if the schema allows null and the value is NSNull, short-circuit
+        if schema.isNullable && value is NSNull {
+            return NSNull()
+        }
+
         // Determine expected type
         guard let schemaType = schema.type else {
             // No type constraint — still apply composition keywords if present
@@ -532,6 +565,11 @@ extension SchemaBinding {
             try validateEnumConstraint(validated, against: enumValues)
         }
 
+        // Validate const constraint (OpenAPI 3.1 / JSON Schema)
+        if let constValue = schema.const {
+            try validateConstConstraint(validated, against: constValue)
+        }
+
         // Apply composition keywords (allOf / anyOf / oneOf / not)
         if schema.allOf != nil || schema.anyOf != nil || schema.oneOf != nil || schema.not != nil {
             // validateComposition works on Any values; the result is structurally
@@ -542,6 +580,121 @@ extension SchemaBinding {
         }
 
         return validated
+    }
+
+    /// Validate a response body against the schema defined in Operation.responses for the given status code.
+    ///
+    /// Looks up the matching response schema by status code string (e.g. "200"), then falls back to "default".
+    /// Returns nil when the body is valid or there is no schema to validate against.
+    /// Returns an error description string when the body does not match the schema.
+    ///
+    /// - Parameters:
+    ///   - body: The response body value to validate (any JSON-compatible type)
+    ///   - statusCode: The HTTP status code of the response
+    ///   - operation: The OpenAPI Operation containing `responses`
+    ///   - components: Components for `$ref` resolution
+    /// - Returns: An error description string, or nil if valid / no schema defined
+    public static func validateResponseBody(
+        _ body: Any,
+        forStatusCode statusCode: Int,
+        operation: Operation,
+        components: Components?
+    ) -> String? {
+        // Find matching response definition by status code, then fall back to "default"
+        let response = operation.responses["\(statusCode)"] ?? operation.responses["default"]
+        guard let response = response,
+              let content = response.content,
+              let mediaType = content["application/json"] ?? content.values.first,
+              let schema = mediaType.schema?.value else {
+            return nil  // No schema to validate against
+        }
+
+        do {
+            _ = try validateAgainstSchema(
+                value: body as AnyObject as! any Sendable,
+                schemaName: "response",
+                schema: schema,
+                components: components
+            )
+            return nil  // Valid
+        } catch {
+            return error.localizedDescription
+        }
+    }
+
+    /// Deserialize a query (or path) parameter from its raw string value(s) according
+    /// to the OpenAPI `style` and `explode` serialization rules.
+    ///
+    /// - Parameters:
+    ///   - rawValues: All occurrences of this parameter's key in the query string, in order.
+    ///   - parameter: The OpenAPI `Parameter` declaration (provides `style`, `explode`, and `schema`).
+    ///   - components: Components for `$ref` resolution when inspecting the schema type.
+    /// - Returns: A `String` for scalar parameters, or `[String]` for array parameters.
+    ///   Object parameters (e.g. `deepObject`) are not yet supported and return the first raw value.
+    public static func deserializeParameter(
+        rawValues: [String],
+        parameter: Parameter,
+        components: Components?
+    ) -> Any {
+        // Resolve schema type to decide whether this parameter is an array/object
+        let resolvedSchema: Schema?
+        if let schemaRef = parameter.schema {
+            if let ref = schemaRef.value.ref, let resolved = resolveRef(ref, components: components) {
+                resolvedSchema = resolved
+            } else {
+                resolvedSchema = schemaRef.value
+            }
+        } else {
+            resolvedSchema = nil
+        }
+
+        let schemaType = resolvedSchema?.type ?? ""
+        guard schemaType == "array" || schemaType == "object" else {
+            // Scalar parameter — return first value as a string
+            return rawValues.first ?? ""
+        }
+
+        // Object parameters (deepObject, etc.) are not yet supported
+        if schemaType == "object" {
+            return rawValues.first ?? ""
+        }
+
+        // Array parameter — apply style/explode deserialization
+        let style = parameter.style ?? "form"
+        // Default for explode: true when style == "form", false otherwise
+        let explodeDefault = (style == "form")
+        let explode = parameter.explode ?? explodeDefault
+
+        switch style {
+        case "form":
+            if explode {
+                // Each key occurrence is one element: rawValues already holds all elements
+                return rawValues
+            } else {
+                // Single value, comma-delimited: "1,2,3" → ["1","2","3"]
+                return (rawValues.first ?? "").split(separator: ",", omittingEmptySubsequences: false).map(String.init)
+            }
+        case "spaceDelimited":
+            if explode {
+                return rawValues
+            } else {
+                // Split by space or percent-encoded space (%20)
+                let raw = rawValues.first ?? ""
+                return raw
+                    .replacingOccurrences(of: "%20", with: " ")
+                    .split(separator: " ", omittingEmptySubsequences: false)
+                    .map(String.init)
+            }
+        case "pipeDelimited":
+            if explode {
+                return rawValues
+            } else {
+                return (rawValues.first ?? "").split(separator: "|", omittingEmptySubsequences: false).map(String.init)
+            }
+        default:
+            // Unknown style — fall back to exploded form behaviour
+            return explode ? rawValues : [(rawValues.first ?? "")]
+        }
     }
 
     /// Describe the runtime type of a value for error messages
@@ -630,6 +783,39 @@ public struct OpenAPIContextBinder {
     }
 }
 
+// MARK: - Query String Parsing
+
+/// Parse a raw URL query string into a multi-value dictionary.
+///
+/// Handles repeated keys (`?ids=1&ids=2` → `["ids": ["1", "2"]]`) and
+/// percent-decodes both keys and values. Pairs without `=` are treated as
+/// a key with an empty-string value.
+///
+/// - Parameter query: The raw query string, **without** the leading `?`.
+/// - Returns: A dictionary mapping each key to all its values in order.
+public func parseQueryString(_ query: String) -> [String: [String]] {
+    var result: [String: [String]] = [:]
+    guard !query.isEmpty else { return result }
+    for pair in query.split(separator: "&", omittingEmptySubsequences: false) {
+        let pairStr = String(pair)
+        let eqIdx = pairStr.firstIndex(of: "=")
+        let rawKey: String
+        let rawValue: String
+        if let idx = eqIdx {
+            rawKey = String(pairStr[pairStr.startIndex..<idx])
+            rawValue = String(pairStr[pairStr.index(after: idx)...])
+        } else {
+            rawKey = pairStr
+            rawValue = ""
+        }
+        let key = rawKey.removingPercentEncoding ?? rawKey
+        let value = rawValue.removingPercentEncoding ?? rawValue
+        guard !key.isEmpty else { continue }
+        result[key, default: []].append(value)
+    }
+    return result
+}
+
 // MARK: - Cookie Header Parsing
 
 /// Parse a raw `Cookie` HTTP header into a name→value dictionary.
@@ -656,35 +842,193 @@ public func parseCookieHeader(_ cookieHeader: String) -> [String: String] {
     return result
 }
 
+// MARK: - Form Body Parsing
+
+extension SchemaBinding {
+
+    /// Parse an `application/x-www-form-urlencoded` body into a dictionary.
+    ///
+    /// Handles repeated keys by collecting values into an array:
+    /// `a=1&a=2` → `["a": ["1", "2"]]`.
+    /// `+` characters in values are decoded as spaces.
+    public static func parseFormURLEncoded(_ body: Data) -> [String: Any] {
+        guard let str = String(data: body, encoding: .utf8) else { return [:] }
+        var result: [String: Any] = [:]
+        for pair in str.split(separator: "&") {
+            let parts = pair.split(separator: "=", maxSplits: 1).map(String.init)
+            if parts.count == 2 {
+                let key = parts[0].removingPercentEncoding ?? parts[0]
+                let value = (parts[1].removingPercentEncoding ?? parts[1])
+                    .replacingOccurrences(of: "+", with: " ")
+                if let existing = result[key] as? [String] {
+                    result[key] = existing + [value]
+                } else if let existing = result[key] as? String {
+                    result[key] = [existing, value]
+                } else {
+                    result[key] = value
+                }
+            } else if parts.count == 1 {
+                let key = parts[0].removingPercentEncoding ?? parts[0]
+                if !key.isEmpty {
+                    result[key] = ""
+                }
+            }
+        }
+        return result
+    }
+
+    /// Parse a `multipart/form-data` body into a dictionary.
+    ///
+    /// Text parts (no `Content-Type` or `text/*`) are stored as `String`.
+    /// Binary parts are stored as `Data`.
+    public static func parseMultipartFormData(_ body: Data, boundary: String) -> [String: Any] {
+        var result: [String: Any] = [:]
+        guard let boundaryData = "--\(boundary)".data(using: .utf8) else { return result }
+
+        // Split body by boundary marker
+        var parts: [Data] = []
+        var searchRange = body.startIndex..<body.endIndex
+        while let range = body.range(of: boundaryData, in: searchRange) {
+            parts.append(body[searchRange.lowerBound..<range.lowerBound])
+            searchRange = range.upperBound..<body.endIndex
+        }
+        // Append remainder after last boundary
+        if searchRange.lowerBound < body.endIndex {
+            parts.append(body[searchRange])
+        }
+
+        guard let closingMarker = "--".data(using: .utf8),
+              let crlfData = "\r\n\r\n".data(using: .utf8),
+              let crlfTwo = "\r\n".data(using: .utf8) else { return result }
+
+        for part in parts.dropFirst() {  // skip preamble before first boundary
+            // Skip the closing boundary suffix "--"
+            if part.starts(with: closingMarker) { continue }
+            // Strip leading \r\n after boundary line
+            var partBody = part
+            if partBody.starts(with: crlfTwo) {
+                partBody = partBody.dropFirst(2)
+            }
+            // Split headers from content at \r\n\r\n
+            guard let separatorRange = partBody.range(of: crlfData) else { continue }
+            let headerData = partBody[partBody.startIndex..<separatorRange.lowerBound]
+            let contentSlice = partBody[separatorRange.upperBound...]
+            // Remove trailing \r\n from content
+            let content: Data
+            let sliceData = Data(contentSlice)
+            if sliceData.count >= 2 && sliceData.suffix(2) == crlfTwo {
+                content = sliceData.dropLast(2)
+            } else {
+                content = sliceData
+            }
+
+            guard let headerStr = String(data: headerData, encoding: .utf8) else { continue }
+            let headers = parsePartHeaders(headerStr)
+            guard let disposition = headers["content-disposition"],
+                  let name = extractDispositionParam("name", from: disposition) else { continue }
+
+            let contentType = headers["content-type"] ?? "text/plain"
+            if contentType.hasPrefix("text/") || !headers.keys.contains("content-type") {
+                result[name] = String(data: content, encoding: .utf8) ?? ""
+            } else {
+                result[name] = content
+            }
+        }
+        return result
+    }
+
+    // MARK: - Multipart Helpers
+
+    private static func parsePartHeaders(_ headerStr: String) -> [String: String] {
+        var result: [String: String] = [:]
+        for line in headerStr.components(separatedBy: "\r\n") {
+            guard let colonIdx = line.firstIndex(of: ":") else { continue }
+            let key = String(line[..<colonIdx]).trimmingCharacters(in: .whitespaces).lowercased()
+            let value = String(line[line.index(after: colonIdx)...]).trimmingCharacters(in: .whitespaces)
+            result[key] = value
+        }
+        return result
+    }
+
+    private static func extractDispositionParam(_ param: String, from disposition: String) -> String? {
+        let pattern = "\(param)=\"([^\"]*)\""
+        guard let range = disposition.range(of: pattern, options: .regularExpression) else { return nil }
+        let match = String(disposition[range])
+        // match looks like: name="value" — extract the quoted part
+        guard let openQ = match.firstIndex(of: "\""),
+              let closeQ = match.lastIndex(of: "\""),
+              openQ != closeQ else { return nil }
+        return String(match[match.index(after: openQ)..<closeQ])
+    }
+
+    /// Extract the `boundary` parameter from a `multipart/form-data` Content-Type value.
+    public static func extractBoundary(from contentType: String) -> String? {
+        for part in contentType.split(separator: ";").map({ $0.trimmingCharacters(in: .whitespaces) }) {
+            if part.lowercased().hasPrefix("boundary=") {
+                return String(part.dropFirst("boundary=".count))
+                    .trimmingCharacters(in: CharacterSet(charactersIn: "\""))
+            }
+        }
+        return nil
+    }
+}
+
 // MARK: - OpenAPIContextBinder (continued)
 
 extension OpenAPIContextBinder {
 
-    /// Bind request body to context
+    /// Bind request body to context, dispatching on `contentType`.
+    ///
+    /// - `application/x-www-form-urlencoded`: parsed via `SchemaBinding.parseFormURLEncoded`
+    /// - `multipart/form-data`: parsed via `SchemaBinding.parseMultipartFormData`
+    /// - All other types (default JSON): parsed via `SchemaBinding.parseRequestBody` or
+    ///   `JSONSerialization` fallback.
+    ///
+    /// The parsed value is exposed as `request.body` and, when it is a dictionary,
+    /// each key is also exposed as `request.body.<key>`.
     public static func bindRequestBody(
         _ body: Data?,
         schema: Schema?,
-        components: Components?
+        components: Components?,
+        contentType: String? = nil
     ) throws -> [String: Any] {
-        var result: [String: Any] = [:]
+        guard let body = body, !body.isEmpty else { return [:] }
 
-        guard let body = body else {
-            return result
-        }
+        let baseContentType = contentType?
+            .split(separator: ";").first
+            .map(String.init)?
+            .trimmingCharacters(in: .whitespaces)
+            .lowercased()
 
-        if let schema = schema {
-            let parsed = try SchemaBinding.parseRequestBody(body: body, schema: schema, components: components)
-            result["request.body"] = parsed
-
-            if let dict = parsed as? [String: Any] {
-                for (key, value) in dict {
-                    result["request.body.\(key)"] = value
-                }
+        let parsed: Any
+        switch baseContentType {
+        case "application/x-www-form-urlencoded":
+            parsed = SchemaBinding.parseFormURLEncoded(body)
+        case "multipart/form-data":
+            if let ct = contentType, let boundary = SchemaBinding.extractBoundary(from: ct) {
+                parsed = SchemaBinding.parseMultipartFormData(body, boundary: boundary)
+            } else {
+                // No boundary — fall back to form-urlencoded parsing
+                parsed = SchemaBinding.parseFormURLEncoded(body)
             }
-        } else if let json = try? JSONSerialization.jsonObject(with: body) {
-            result["request.body"] = json
+        default:
+            // JSON (or unknown content type)
+            if let schema = schema {
+                parsed = try SchemaBinding.parseRequestBody(body: body, schema: schema, components: components)
+            } else if let json = try? JSONSerialization.jsonObject(with: body) {
+                parsed = json
+            } else {
+                return [:]
+            }
         }
 
+        var result: [String: Any] = [:]
+        result["request.body"] = parsed
+        if let dict = parsed as? [String: Any] {
+            for (key, value) in dict {
+                result["request.body.\(key)"] = value
+            }
+        }
         return result
     }
 }
