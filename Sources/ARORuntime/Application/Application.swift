@@ -369,8 +369,32 @@ public final class Application: @unchecked Sendable {
 
             // Execute the feature set
             do {
-                let response = try await self.executeFeatureSet(featureSet, request: request, pathParams: match.pathParameters, headerParams: headerParams, cookieParams: cookieParams)
-                return self.convertToHTTPResponse(response, requestPath: request.path)
+                let response = try await self.executeFeatureSet(featureSet, request: request, pathParams: match.pathParameters, headerParams: headerParams, cookieParams: cookieParams, effectiveParameters: match.effectiveParameters)
+                var httpResponse = self.convertToHTTPResponse(response, requestPath: request.path)
+
+                // Validate response body against OpenAPI response schema (ARO-0180)
+                if let body = httpResponse.body,
+                   let bodyJSON = try? JSONSerialization.jsonObject(with: body) {
+                    let components = self.routeRegistry?.spec.components
+                    if let violationMessage = SchemaBinding.validateResponseBody(
+                        bodyJSON,
+                        forStatusCode: httpResponse.statusCode,
+                        operation: match.operation,
+                        components: components
+                    ) {
+                        let operationId = match.operationId
+                        print("[CONTRACT VIOLATION] Response for operation '\(operationId)' (status \(httpResponse.statusCode)) does not match schema: \(violationMessage)")
+                        var headers = httpResponse.headers
+                        headers["X-Contract-Violation"] = "true"
+                        httpResponse = HTTPResponse(
+                            statusCode: httpResponse.statusCode,
+                            headers: headers,
+                            body: httpResponse.body
+                        )
+                    }
+                }
+
+                return httpResponse
             } catch let templateError as TemplateError {
                 // Handle template errors with appropriate HTTP status codes
                 switch templateError {
@@ -406,7 +430,8 @@ public final class Application: @unchecked Sendable {
         request: HTTPRequest,
         pathParams: [String: String],
         headerParams: [String: String] = [:],
-        cookieParams: [String: String] = [:]
+        cookieParams: [String: String] = [:],
+        effectiveParameters: [Parameter] = []
     ) async throws -> Response {
         // Create execution context for this request
         let context = RuntimeContext(
@@ -436,18 +461,73 @@ public final class Application: @unchecked Sendable {
             context.register(ts as TemplateService)
         }
 
-        // Parse JSON body if present
+        // Parse request body based on Content-Type
+        let rawContentType = request.headers.first(where: { $0.key.lowercased() == "content-type" })?.value
         var bodyValue: any Sendable = request.bodyString ?? ""
-        if let body = request.body,
-           let contentType = request.headers["Content-Type"],
-           contentType.contains("application/json") {
-            if let json = try? JSONSerialization.jsonObject(with: body) as? [String: Any] {
-                // Convert to Sendable dictionary
+        if let body = request.body, !body.isEmpty {
+            let baseContentType = rawContentType?
+                .split(separator: ";").first
+                .map(String.init)?
+                .trimmingCharacters(in: .whitespaces)
+                .lowercased()
+
+            switch baseContentType {
+            case "application/x-www-form-urlencoded":
+                let formDict = SchemaBinding.parseFormURLEncoded(body)
                 var sendableDict: [String: any Sendable] = [:]
-                for (key, value) in json {
+                for (key, value) in formDict {
                     sendableDict[key] = convertJSONValueToSendable(value)
                 }
                 bodyValue = sendableDict
+            case "multipart/form-data":
+                if let ct = rawContentType, let boundary = SchemaBinding.extractBoundary(from: ct) {
+                    let formDict = SchemaBinding.parseMultipartFormData(body, boundary: boundary)
+                    var sendableDict: [String: any Sendable] = [:]
+                    for (key, value) in formDict {
+                        sendableDict[key] = convertJSONValueToSendable(value)
+                    }
+                    bodyValue = sendableDict
+                }
+            default:
+                // Default: treat as JSON
+                if let json = try? JSONSerialization.jsonObject(with: body) as? [String: Any] {
+                    var sendableDict: [String: any Sendable] = [:]
+                    for (key, value) in json {
+                        sendableDict[key] = convertJSONValueToSendable(value)
+                    }
+                    bodyValue = sendableDict
+                }
+            }
+        }
+
+        // Deserialize query parameters using style/explode rules from the OpenAPI spec.
+        // For declared array parameters, the value may be [String] instead of String.
+        var deserializedQueryParams: [String: any Sendable] = [:]
+        if !request.rawQueryString.isEmpty {
+            let multiValueQuery = parseQueryString(request.rawQueryString)
+            // Populate from raw multi-value map first (preserves string passthrough for unknown params)
+            for (key, values) in multiValueQuery {
+                deserializedQueryParams[key] = values.last ?? ""
+            }
+            // Deserialize declared query parameters using their style/explode metadata
+            let components = routeRegistry?.spec.components
+            for param in effectiveParameters where param.in == "query" {
+                guard let paramName = param.name else { continue }
+                guard let rawValues = multiValueQuery[paramName], !rawValues.isEmpty else { continue }
+                let deserialized = SchemaBinding.deserializeParameter(
+                    rawValues: rawValues,
+                    parameter: param,
+                    components: components
+                )
+                if let arr = deserialized as? [String] {
+                    deserializedQueryParams[paramName] = arr
+                } else if let str = deserialized as? String {
+                    deserializedQueryParams[paramName] = str
+                }
+            }
+        } else {
+            for (key, value) in request.queryParameters {
+                deserializedQueryParams[key] = value
             }
         }
 
@@ -463,8 +543,8 @@ public final class Application: @unchecked Sendable {
         // Bind path parameters
         context.bind("pathParameters", value: pathParams)
 
-        // Bind query parameters
-        context.bind("queryParameters", value: request.queryParameters)
+        // Bind query parameters (with style/explode deserialization for declared array params)
+        context.bind("queryParameters", value: deserializedQueryParams)
 
         // Bind header parameters (declared as in: header in the OpenAPI spec)
         context.bind("headerParameters", value: headerParams)
@@ -737,6 +817,7 @@ public final class Application: @unchecked Sendable {
         if let num = value as? Int { return num }
         if let num = value as? Double { return num }
         if let bool = value as? Bool { return bool }
+        if let data = value as? Data { return data }
         if let array = value as? [Any] {
             return array.map { convertJSONValueToSendable($0) }
         }
