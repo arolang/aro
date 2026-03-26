@@ -34,6 +34,150 @@ public final class OpenAPIHTTPHandler: @unchecked Sendable {
             )
         }
 
+        // Enforce security requirements declared in the OpenAPI spec.
+        if let unauthorized = SecurityEnforcer.enforce(
+            operation: match.operation,
+            globalSecurity: spec.security,
+            securitySchemes: spec.components?.securitySchemes,
+            headers: request.headers,
+            queryParameters: request.queryParameters
+        ) {
+            return unauthorized
+        }
+
+        // Check for deprecated operation
+        var responseHeaders: [String: String] = [
+            "Content-Type": "application/json",
+            "X-Request-ID": request.id,
+            "X-Operation-ID": match.operationId
+        ]
+
+        if match.operation.deprecated == true {
+            print("[DEPRECATION WARNING] Operation '\(match.operationId)' is deprecated")
+            responseHeaders["Deprecation"] = "true"
+        }
+
+        // Check for deprecated parameters present in the request (includes path-level parameters)
+        let effectiveParameters = match.effectiveParameters
+        if !effectiveParameters.isEmpty {
+            for param in effectiveParameters where param.deprecated == true {
+                guard let paramName = param.name, let paramIn = param.in else { continue }
+                let isPresent: Bool
+                switch paramIn {
+                case "query":
+                    isPresent = request.queryParameters[paramName] != nil
+                case "header":
+                    isPresent = request.headers[paramName] != nil
+                case "path":
+                    isPresent = match.pathParameters[paramName] != nil
+                default:
+                    isPresent = false
+                }
+
+                if isPresent {
+                    print("[DEPRECATION WARNING] Parameter '\(paramName)' on operation '\(match.operationId)' is deprecated")
+                }
+            }
+        }
+
+        // Build allowEmptyValue lookup for query parameters defined in the spec.
+        // Parameters not listed in the spec are not subject to this filter.
+        var allowEmptyValueByName: [String: Bool] = [:]
+        for param in effectiveParameters where param.in == "query" {
+            guard let paramName = param.name else { continue }
+            allowEmptyValueByName[paramName] = param.allowEmptyValue ?? false
+        }
+
+        // Filter query parameters: remove entries where the value is empty string
+        // and allowEmptyValue is not explicitly true for that parameter.
+        let filteredQueryParameters: [String: String] = request.queryParameters.filter { name, value in
+            guard value.isEmpty else { return true }
+            // If the parameter is not in the spec, always pass through.
+            guard let allowEmpty = allowEmptyValueByName[name] else { return true }
+            return allowEmpty
+        }
+
+        // Inject default values for absent query parameters declared in the spec.
+        var enrichedQueryParams = filteredQueryParameters
+        for param in effectiveParameters where param.in == "query" {
+            guard let paramName = param.name else { continue }
+            guard enrichedQueryParams[paramName] == nil else { continue }
+            if let defaultVal = param.schema?.value.defaultValue {
+                enrichedQueryParams[paramName] = "\(defaultVal.anyValue)"
+            }
+        }
+
+        // Parse cookie parameters from Cookie header (case-insensitive lookup)
+        let rawCookieHeader = request.headers.first(where: { $0.key.lowercased() == "cookie" })?.value ?? ""
+        let allCookies = parseCookieHeader(rawCookieHeader)
+
+        // Filter to only cookies declared as `in: cookie` in the spec
+        let declaredCookieNames = Set(
+            effectiveParameters
+                .filter { $0.in == "cookie" }
+                .compactMap { $0.name }
+        )
+        var cookieParams: [String: String] = [:]
+        for name in declaredCookieNames {
+            if let value = allCookies[name] {
+                cookieParams[name] = value
+            }
+        }
+
+        // Validate required parameters (query, header, and cookie)
+        for param in effectiveParameters where param.required == true {
+            guard let paramName = param.name else { continue }
+            switch param.in {
+            case "query":
+                if enrichedQueryParams[paramName] == nil {
+                    return HTTPResponse(
+                        statusCode: 400,
+                        headers: ["Content-Type": "application/json"],
+                        body: "{\"error\":\"Bad Request\",\"message\":\"Required query parameter '\(paramName)' is missing\"}".data(using: .utf8)
+                    )
+                }
+            case "header":
+                let lower = paramName.lowercased()
+                if !request.headers.keys.contains(where: { $0.lowercased() == lower }) {
+                    return HTTPResponse(
+                        statusCode: 400,
+                        headers: ["Content-Type": "application/json"],
+                        body: "{\"error\":\"Bad Request\",\"message\":\"Required header '\(paramName)' is missing\"}".data(using: .utf8)
+                    )
+                }
+            case "cookie":
+                if cookieParams[paramName] == nil {
+                    return HTTPResponse(
+                        statusCode: 400,
+                        headers: ["Content-Type": "application/json"],
+                        body: "{\"error\":\"Bad Request\",\"message\":\"Required cookie '\(paramName)' is missing\"}".data(using: .utf8)
+                    )
+                }
+            default:
+                break
+            }
+        }
+
+        // Content-type negotiation for request bodies
+        if let requestBody = match.operation.requestBody, let body = request.body, !body.isEmpty {
+            let rawContentType = request.headers.first(where: { $0.key.lowercased() == "content-type" })?.value
+
+            if let rawContentType = rawContentType {
+                // A Content-Type header was sent — verify it is declared in the spec
+                if findMatchingMediaType(in: requestBody.content, for: rawContentType) == nil {
+                    let supported = requestBody.content.keys.sorted().joined(separator: ", ")
+                    return HTTPResponse(
+                        statusCode: 415,
+                        headers: ["Content-Type": "application/json"],
+                        body: """
+                            {"error":"Unsupported Media Type","message":"Content-Type '\(rawContentType)' is not supported. Supported types: \(supported)"}
+                            """.data(using: .utf8)
+                    )
+                }
+            }
+            // If no Content-Type header, fall through and use existing behavior (first media type)
+        }
+
         let event = HTTPOperationEvent(
             requestId: request.id,
             operationId: match.operationId,
@@ -41,8 +185,9 @@ public final class OpenAPIHTTPHandler: @unchecked Sendable {
             path: path,
             pathTemplate: match.pathTemplate,
             pathParameters: match.pathParameters,
-            queryParameters: request.queryParameters,
+            queryParameters: enrichedQueryParams,
             headers: request.headers,
+            cookieParameters: cookieParams,
             body: request.body,
             operation: match.operation
         )
@@ -60,11 +205,7 @@ public final class OpenAPIHTTPHandler: @unchecked Sendable {
 
         return HTTPResponse(
             statusCode: 200,
-            headers: [
-                "Content-Type": "application/json",
-                "X-Request-ID": request.id,
-                "X-Operation-ID": match.operationId
-            ],
+            headers: responseHeaders,
             body: """
                 {"status":"ok","operationId":"\(match.operationId)","requestId":"\(request.id)"}
                 """.data(using: .utf8)
@@ -87,6 +228,7 @@ public struct HTTPOperationEvent: RuntimeEvent {
     public let pathParameters: [String: String]
     public let queryParameters: [String: String]
     public let headers: [String: String]
+    public let cookieParameters: [String: String]
     public let body: Data?
     public let operation: Operation
 
@@ -99,6 +241,7 @@ public struct HTTPOperationEvent: RuntimeEvent {
         pathParameters: [String: String],
         queryParameters: [String: String],
         headers: [String: String],
+        cookieParameters: [String: String] = [:],
         body: Data?,
         operation: Operation
     ) {
@@ -111,6 +254,7 @@ public struct HTTPOperationEvent: RuntimeEvent {
         self.pathParameters = pathParameters
         self.queryParameters = queryParameters
         self.headers = headers
+        self.cookieParameters = cookieParameters
         self.body = body
         self.operation = operation
     }
@@ -127,5 +271,37 @@ public struct HTTPOperationEvent: RuntimeEvent {
 }
 
 // Note: HTTPRequestReceivedEvent and HTTPResponseSentEvent are defined in Events/EventTypes.swift
+
+// MARK: - Content-Type Negotiation
+
+/// Find the best matching media type from an OpenAPI content map for a given Content-Type header value.
+///
+/// Matching is performed in priority order:
+/// 1. Exact match (after stripping parameters such as `; charset=utf-8`)
+/// 2. Subtype wildcard match (`application/*`)
+/// 3. Catch-all wildcard (`*/*`)
+///
+/// - Parameters:
+///   - content: The `content` map from an OpenAPI `requestBody`.
+///   - contentType: The raw value of the incoming `Content-Type` header.
+/// - Returns: The matched `MediaType`, or `nil` if no match was found.
+func findMatchingMediaType(in content: [String: MediaType], for contentType: String) -> MediaType? {
+    // Strip parameters: "application/json; charset=utf-8" -> "application/json"
+    let baseType = contentType.split(separator: ";").first
+        .map(String.init)?.trimmingCharacters(in: .whitespaces) ?? contentType
+
+    // 1. Exact match
+    if let exact = content[baseType] { return exact }
+
+    // 2. Subtype wildcard: "application/*"
+    let parts = baseType.split(separator: "/")
+    if parts.count == 2 {
+        let mainType = String(parts[0])
+        if let wildcard = content["\(mainType)/*"] { return wildcard }
+    }
+
+    // 3. Catch-all wildcard
+    return content["*/*"]
+}
 
 #endif  // !os(Windows)

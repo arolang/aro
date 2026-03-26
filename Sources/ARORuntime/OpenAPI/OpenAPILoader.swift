@@ -124,7 +124,7 @@ extension OpenAPISpec {
     /// Extract port from the first server URL
     /// e.g., "http://localhost:8000" → 8000
     public var serverPort: Int? {
-        guard let serverURL = servers?.first?.url,
+        guard let serverURL = servers?.first?.resolvedURL,
               let url = URL(string: serverURL),
               let port = url.port else {
             return nil
@@ -134,7 +134,7 @@ extension OpenAPISpec {
 
     /// Extract host from the first server URL
     public var serverHost: String? {
-        guard let serverURL = servers?.first?.url,
+        guard let serverURL = servers?.first?.resolvedURL,
               let url = URL(string: serverURL) else {
             return nil
         }
@@ -146,7 +146,14 @@ extension OpenAPISpec {
             throw OpenAPILoadError.invalidVersion(openapi)
         }
 
-        for (path, pathItem) in paths {
+        // Combine paths and webhooks for validation
+        var allPathItems = paths
+        for (name, item) in webhooks ?? [:] {
+            let key = name.hasPrefix("/") ? name : "/\(name)"
+            allPathItems[key] = item
+        }
+
+        for (path, pathItem) in allPathItems {
             for (method, operation) in pathItem.allOperations {
                 if operation.operationId == nil || operation.operationId?.isEmpty == true {
                     throw OpenAPIValidationError.missingOperationId(path: path, method: method)
@@ -157,7 +164,13 @@ extension OpenAPISpec {
 
     public var allOperationIds: [String] {
         var ids: [String] = []
-        for (_, pathItem) in paths {
+        // Include both paths and webhooks
+        var allPathItems = paths
+        for (name, item) in webhooks ?? [:] {
+            let key = name.hasPrefix("/") ? name : "/\(name)"
+            allPathItems[key] = item
+        }
+        for (_, pathItem) in allPathItems {
             for (_, operation) in pathItem.allOperations {
                 if let opId = operation.operationId {
                     ids.append(opId)
@@ -168,7 +181,13 @@ extension OpenAPISpec {
     }
 
     public func operation(byId operationId: String) -> (path: String, method: String, operation: Operation)? {
-        for (path, pathItem) in paths {
+        // Search paths first, then webhooks
+        var allPathItems = paths
+        for (name, item) in webhooks ?? [:] {
+            let key = name.hasPrefix("/") ? name : "/\(name)"
+            allPathItems[key] = item
+        }
+        for (path, pathItem) in allPathItems {
             for (method, operation) in pathItem.allOperations {
                 if operation.operationId == operationId {
                     return (path, method, operation)

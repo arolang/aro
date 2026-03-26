@@ -430,6 +430,29 @@ Output (example):
 }
 ```
 
+## CrawlPage Event Deduplication
+
+When building web crawlers or recursive-fetch workflows with `CrawlPage` events, the runtime automatically deduplicates events by URL. If a URL is emitted more than once (because multiple pages link to the same target), only the first emission triggers the handler — subsequent ones are silently dropped.
+
+```aro
+(Crawl Page: Web Crawler) {
+    Extract the <url> from the <event: url>.
+    Fetch the <page> from <url>.
+    Extract the <links> from the <page: links>.
+
+    (* The runtime deduplicates: already-visited URLs are skipped *)
+    For each <link> in <links> {
+        Emit a <CrawlPage: event> with <link>.
+    }
+
+    Return an <OK: status>.
+}
+```
+
+The deduplication store is bounded to **100 000 URLs** (FIFO eviction) so that very large crawls cannot exhaust memory. If your crawl needs to revisit URLs or requires a larger cap, track visited state explicitly in a repository.
+
+---
+
 ## Summary
 
 | Concept | Behavior |
@@ -439,6 +462,7 @@ Output (example):
 | I/O operations | Async under the hood |
 | Events | Non-blocking dispatch |
 | Concurrency primitives | None needed |
+| CrawlPage dedup | Automatic, bounded to 100K URLs |
 
 Write synchronous code. Get async performance. No callbacks, no promises, no await.
 

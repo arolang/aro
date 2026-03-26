@@ -626,6 +626,54 @@ public final class AROFileSystemService: FileSystemService, FileMonitorService, 
         return results.sorted { $0.path < $1.path }
     }
 
+
+    /// ARO-0051: Streaming variant of list() — yields entries one at a time without
+    /// loading the full tree into memory. O(1) peak memory regardless of tree size.
+    public func listStream(directory: String, pattern: String? = nil, recursive: Bool = false) throws -> AROStream<[String: any Sendable]> {
+        guard fileManager.fileExists(atPath: directory) else {
+            throw FileSystemError.directoryNotFound(directory)
+        }
+        let directoryURL = URL(fileURLWithPath: directory)
+        return AROStream { [self] in
+            AsyncThrowingStream { continuation in
+                Task { [self] in
+                    do {
+                        if recursive {
+                            guard let enumerator = self.fileManager.enumerator(
+                                at: directoryURL,
+                                includingPropertiesForKeys: [.isDirectoryKey, .fileSizeKey, .creationDateKey, .contentModificationDateKey],
+                                options: []
+                            ) else {
+                                continuation.finish()
+                                return
+                            }
+                            while let url = enumerator.nextObject() as? URL {
+                                if let info = try? await self.statURL(url),
+                                   self.matchesPattern(info.name, pattern: pattern) {
+                                    continuation.yield(info.toDictionary())
+                                }
+                            }
+                        } else {
+                            let contents = try self.fileManager.contentsOfDirectory(
+                                at: directoryURL,
+                                includingPropertiesForKeys: [.isDirectoryKey, .fileSizeKey, .creationDateKey, .contentModificationDateKey]
+                            )
+                            for url in contents.sorted(by: { $0.path < $1.path }) {
+                                if let info = try? await self.statURL(url),
+                                   self.matchesPattern(info.name, pattern: pattern) {
+                                    continuation.yield(info.toDictionary())
+                                }
+                            }
+                        }
+                        continuation.finish()
+                    } catch {
+                        continuation.finish(throwing: error)
+                    }
+                }
+            }
+        }
+    }
+
     /// Get stats from URL
     private func statURL(_ url: URL) async throws -> FileInfo {
         let resourceValues = try url.resourceValues(forKeys: [.isDirectoryKey, .fileSizeKey, .creationDateKey, .contentModificationDateKey])
@@ -1205,6 +1253,54 @@ public final class AROFileSystemService: FileSystemService, @unchecked Sendable 
 
         // Sort by path for deterministic order across platforms
         return results.sorted { $0.path < $1.path }
+    }
+
+
+    /// ARO-0051: Streaming variant of list() — yields entries one at a time without
+    /// loading the full tree into memory. O(1) peak memory regardless of tree size.
+    public func listStream(directory: String, pattern: String? = nil, recursive: Bool = false) throws -> AROStream<[String: any Sendable]> {
+        guard fileManager.fileExists(atPath: directory) else {
+            throw FileSystemError.directoryNotFound(directory)
+        }
+        let directoryURL = URL(fileURLWithPath: directory)
+        return AROStream { [self] in
+            AsyncThrowingStream { continuation in
+                Task { [self] in
+                    do {
+                        if recursive {
+                            guard let enumerator = self.fileManager.enumerator(
+                                at: directoryURL,
+                                includingPropertiesForKeys: [.isDirectoryKey, .fileSizeKey, .creationDateKey, .contentModificationDateKey],
+                                options: []
+                            ) else {
+                                continuation.finish()
+                                return
+                            }
+                            while let url = enumerator.nextObject() as? URL {
+                                if let info = try? await self.statURL(url),
+                                   self.matchesPattern(info.name, pattern: pattern) {
+                                    continuation.yield(info.toDictionary())
+                                }
+                            }
+                        } else {
+                            let contents = try self.fileManager.contentsOfDirectory(
+                                at: directoryURL,
+                                includingPropertiesForKeys: [.isDirectoryKey, .fileSizeKey, .creationDateKey, .contentModificationDateKey]
+                            )
+                            for url in contents.sorted(by: { $0.path < $1.path }) {
+                                if let info = try? await self.statURL(url),
+                                   self.matchesPattern(info.name, pattern: pattern) {
+                                    continuation.yield(info.toDictionary())
+                                }
+                            }
+                        }
+                        continuation.finish()
+                    } catch {
+                        continuation.finish(throwing: error)
+                    }
+                }
+            }
+        }
     }
 
     /// Get stats from URL

@@ -1219,12 +1219,31 @@ public final class LLVMCodeGenerator {
         // === Increment Block ===
         ctx.setInsertionPoint(atEndOf: incrBlock)
 
+        // Free the element box created by aro_array_get (passRetained).
+        // aro_variable_bind_value already extracted the inner Swift value into the context,
+        // so the AROCValue wrapper is no longer needed after binding. Releasing it here
+        // prevents O(N) AROCValue leaks that accumulate to hundreds of MB on large collections
+        // and eventually cause SIGBUS when the allocator can no longer back mmap pages.
+        _ = ctx.module.insertCall(
+            externals.valueFree,
+            on: [element],
+            at: ctx.insertionPoint
+        )
+
         let nextIndex = ctx.module.insertAdd(curIndex, ctx.i64Type.constant(1), at: ctx.insertionPoint)
         ctx.module.insertStore(nextIndex, to: indexPtr, at: ctx.insertionPoint)
         ctx.module.insertBr(to: condBlock, at: ctx.insertionPoint)
 
         // === End Block ===
         ctx.setInsertionPoint(atEndOf: endBlock)
+
+        // Free the collection box created by aro_variable_resolve (passRetained).
+        // The inner Swift array remains alive in the context; only the AROCValue wrapper is freed.
+        _ = ctx.module.insertCall(
+            externals.valueFree,
+            on: [collection],
+            at: ctx.insertionPoint
+        )
     }
 
     // MARK: - Range Loop Generation (for <var> from <low> to <high>)

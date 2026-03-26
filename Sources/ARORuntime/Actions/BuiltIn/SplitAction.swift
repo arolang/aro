@@ -22,8 +22,18 @@ public struct SplitAction: ActionImplementation {
     ) async throws -> any Sendable {
         try validatePreposition(object.preposition)
 
-        // Get string to split from object
-        guard let input = context.resolveAny(object.base) as? String else {
+        // Get string to split from object, applying specifiers for qualified access (e.g. <params: recipient>)
+        guard var resolved = context.resolveAny(object.base) else {
+            throw ActionError.undefinedVariable(object.base)
+        }
+        for spec in object.specifiers {
+            if let dict = resolved as? [String: any Sendable], let nested = dict[spec] {
+                resolved = nested
+            } else if let dict = resolved as? [String: Any], let nested = dict[spec] {
+                resolved = "\(nested)"
+            }
+        }
+        guard let input = resolved as? String else {
             throw ActionError.undefinedVariable(object.base)
         }
 

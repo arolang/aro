@@ -193,6 +193,48 @@ public struct QueryParametersObject: SystemObject {
     }
 }
 
+// MARK: - Header Parameters Object
+
+/// Header parameters system object
+///
+/// Direct access to HTTP header parameters declared as `in: header` in the OpenAPI spec.
+/// Header names are lowercased for consistent access.
+///
+/// ## ARO Usage
+/// ```aro
+/// Extract the <api-key> from the <headerParameters: x-api-key>.
+/// ```
+public struct HeaderParametersObject: SystemObject {
+    public static let identifier = "headerParameters"
+    public static let description = "HTTP header parameters (declared in: header in OpenAPI spec)"
+
+    public var capabilities: SystemObjectCapabilities { .source }
+
+    private let parameters: [String: String]
+
+    public init(parameters: [String: String]) {
+        self.parameters = parameters
+    }
+
+    public func read(property: String?) async throws -> any Sendable {
+        guard let key = property else {
+            return parameters
+        }
+
+        // Case-insensitive lookup (keys are already lowercased, but be defensive)
+        let matchingKey = parameters.keys.first { $0.lowercased() == key.lowercased() }
+        guard let matchingKey = matchingKey, let value = parameters[matchingKey] else {
+            throw SystemObjectError.propertyNotFound(key, in: Self.identifier)
+        }
+
+        return value
+    }
+
+    public func write(_ value: any Sendable) async throws {
+        throw SystemObjectError.notWritable(Self.identifier)
+    }
+}
+
 // MARK: - Headers Object
 
 /// HTTP headers system object
@@ -308,6 +350,14 @@ public extension SystemObjectRegistry {
         register(
             "queryParameters",
             description: QueryParametersObject.description,
+            capabilities: .source
+        ) { _ in
+            PlaceholderRequestObject()
+        }
+
+        register(
+            "headerParameters",
+            description: HeaderParametersObject.description,
             capabilities: .source
         ) { _ in
             PlaceholderRequestObject()

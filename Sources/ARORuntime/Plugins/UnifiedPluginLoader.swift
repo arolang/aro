@@ -315,7 +315,7 @@ public final class UnifiedPluginLoader: @unchecked Sendable {
 
         for action in actions {
             let actionVerbs = action.verbs
-            let actionName = action.name
+
 
             for verb in actionVerbs {
                 // Register both plain verb and namespaced verb (e.g. "hash" and "Hash.hash")

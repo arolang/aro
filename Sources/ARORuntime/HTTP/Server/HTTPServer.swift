@@ -18,6 +18,10 @@ public struct HTTPRequest: Sendable {
     public let headers: [String: String]
     public let body: Data?
     public let queryParameters: [String: String]
+    /// The raw query string from the URL (everything after `?`), without percent-decoding.
+    /// Empty string when there is no query string.
+    /// Used for multi-value parameter deserialization (style/explode).
+    public let rawQueryString: String
 
     public init(
         id: String = UUID().uuidString,
@@ -25,7 +29,8 @@ public struct HTTPRequest: Sendable {
         path: String,
         headers: [String: String] = [:],
         body: Data? = nil,
-        queryParameters: [String: String] = [:]
+        queryParameters: [String: String] = [:],
+        rawQueryString: String = ""
     ) {
         self.id = id
         self.method = method
@@ -33,6 +38,7 @@ public struct HTTPRequest: Sendable {
         self.headers = headers
         self.body = body
         self.queryParameters = queryParameters
+        self.rawQueryString = rawQueryString
     }
 
     /// Parse body as JSON
@@ -319,9 +325,10 @@ private final class HTTPHandler: ChannelInboundHandler, RemovableChannelHandler,
 
             // Parse query parameters from URI
             var queryParams: [String: String] = [:]
+            var rawQueryString = ""
             if let questionMark = head.uri.firstIndex(of: "?") {
-                let queryString = String(head.uri[head.uri.index(after: questionMark)...])
-                for pair in queryString.split(separator: "&") {
+                rawQueryString = String(head.uri[head.uri.index(after: questionMark)...])
+                for pair in rawQueryString.split(separator: "&") {
                     let parts = pair.split(separator: "=", maxSplits: 1)
                     if parts.count == 2 {
                         let key = String(parts[0]).removingPercentEncoding ?? String(parts[0])
@@ -346,7 +353,8 @@ private final class HTTPHandler: ChannelInboundHandler, RemovableChannelHandler,
                 path: path,
                 headers: Dictionary(head.headers.map { ($0.name, $0.value) }) { _, last in last },
                 body: bodyData,
-                queryParameters: queryParams
+                queryParameters: queryParams,
+                rawQueryString: rawQueryString
             )
 
             // Emit HTTP request event

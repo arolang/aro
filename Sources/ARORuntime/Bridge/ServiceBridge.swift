@@ -1927,7 +1927,7 @@ public final class NativeHTTPServer: @unchecked Sendable {
         _ = shutdown(fd, Int32(SHUT_WR))
         // Wait up to 10 ms for the client to drain; DispatchSemaphore avoids blocking a Dispatch thread
         let drainWait = DispatchSemaphore(value: 0)
-        drainWait.wait(timeout: .now() + 0.01)
+        _ = drainWait.wait(timeout: .now() + 0.01)
         _ = systemClose(fd)
     }
 
