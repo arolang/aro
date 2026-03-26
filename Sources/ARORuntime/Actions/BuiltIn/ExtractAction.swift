@@ -737,6 +737,7 @@ public struct RetrieveAction: ActionImplementation {
             }
 
             // No specifier - return the list of values (empty list if repository is empty)
+            // Note: Repository data is already in-memory so streaming provides no RAM benefit.
             return values
         }
 
@@ -964,6 +965,9 @@ public protocol FileSystemService: Sendable {
     // ARO-0036: Extended file operations
     func stat(path: String) async throws -> FileInfo
     func list(directory: String, pattern: String?, recursive: Bool) async throws -> [FileInfo]
+
+    // ARO-0051: Streaming variant — yields entries one at a time, O(1) memory
+    func listStream(directory: String, pattern: String?, recursive: Bool) throws -> AROStream<[String: any Sendable]>
     func existsWithType(path: String) -> (exists: Bool, isDirectory: Bool)
     func createDirectory(path: String) async throws
     func touch(path: String) async throws
