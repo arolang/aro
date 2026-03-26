@@ -417,10 +417,10 @@ extension ActionRunner {
         if let channel = (context as? RuntimeContext)?.driverChannel {
             let box = ActionRunnerResultBox()
             let semaphore = DispatchSemaphore(value: 0)
-            channel.submit(ActionDriverWorkItem(
+            channel.submitAction(
                 verb: verb, result: result, object: object,
                 context: context, holder: box, semaphore: semaphore
-            ))
+            )
 
             // Yield pool slot while waiting (same as legacy path)
             let pool = CompiledExecutionPool.shared
@@ -573,6 +573,23 @@ public struct ActionDriverWorkItem: @unchecked Sendable {
     public let semaphore: DispatchSemaphore
 }
 
+/// Work item for cooperative directory iteration (Phase 3 pipelining).
+///
+/// `aro_array_get_next_ctx` submits one of these per loop iteration so that
+/// `PipelinedDirectoryIterator.nextAsync()` is awaited on the cooperative pool
+/// rather than on the C pthread — letting the producer and consumer overlap.
+public struct ArrayNextWorkItem: @unchecked Sendable {
+    public let iterator: PipelinedDirectoryIterator
+    public let holder: ActionRunnerResultBox
+    public let semaphore: DispatchSemaphore
+}
+
+/// Unified work-item type for `ActionDriverChannel`.
+public enum DriverWorkItem: @unchecked Sendable {
+    case action(ActionDriverWorkItem)
+    case arrayNext(ArrayNextWorkItem)
+}
+
 /// Thread-safe box for `ActionRunnerResult` shared between the C bridge
 /// (writer, from the driver task) and the calling pthread (reader).
 public final class ActionRunnerResultBox: @unchecked Sendable {
@@ -591,21 +608,37 @@ public final class ActionRunnerResultBox: @unchecked Sendable {
     }
 }
 
-/// Single-producer, single-consumer channel used to ferry action work items
+/// Single-producer, single-consumer channel used to ferry work items
 /// from the C feature set pthread to the cooperative driver Swift Task.
 ///
-/// Closed via `close()` after the C function returns; `next()` returns `nil`
-/// when the channel is drained and closed.
+/// Accepts both action work items (via `submitAction`) and array-next items
+/// (via `submitArrayNext`).  Closed via `close()` after the C function returns;
+/// `next()` returns `nil` when the channel is drained and closed.
 public final class ActionDriverChannel: @unchecked Sendable {
     private let lock = NSLock()
-    private var queue: [ActionDriverWorkItem] = []
-    private var waiter: CheckedContinuation<ActionDriverWorkItem?, Never>? = nil
+    private var queue: [DriverWorkItem] = []
+    private var waiter: CheckedContinuation<DriverWorkItem?, Never>? = nil
     private var closed = false
 
     public init() {}
 
-    /// Submit a work item from the C pthread.  Called while holding no locks.
-    public func submit(_ item: ActionDriverWorkItem) {
+    /// Submit an action work item from the C pthread.
+    public func submitAction(verb: String, result: ResultDescriptor, object: ObjectDescriptor,
+                             context: ExecutionContext, holder: ActionRunnerResultBox,
+                             semaphore: DispatchSemaphore) {
+        let item = ActionDriverWorkItem(verb: verb, result: result, object: object,
+                                       context: context, holder: holder, semaphore: semaphore)
+        enqueue(.action(item))
+    }
+
+    /// Submit an array-next work item from `aro_array_get_next_ctx`.
+    public func submitArrayNext(iterator: PipelinedDirectoryIterator,
+                                holder: ActionRunnerResultBox,
+                                semaphore: DispatchSemaphore) {
+        enqueue(.arrayNext(ArrayNextWorkItem(iterator: iterator, holder: holder, semaphore: semaphore)))
+    }
+
+    private func enqueue(_ item: DriverWorkItem) {
         lock.lock()
         if let cont = waiter {
             waiter = nil
@@ -621,13 +654,10 @@ public final class ActionDriverChannel: @unchecked Sendable {
     /// channel is closed and the queue is drained.
     ///
     /// Uses `withLock` (the Swift-6-safe scoped form) instead of bare `lock()`/`unlock()`
-    /// so the async-context concurrency checker is satisfied.  The fast-path result is
-    /// checked outside the continuation to avoid unnecessary overhead; re-checked inside
-    /// the continuation body (which runs synchronously before suspension) to close the
-    /// TOCTOU window between the two checks.
-    public func next() async -> ActionDriverWorkItem? {
+    /// so the async-context concurrency checker is satisfied.
+    public func next() async -> DriverWorkItem? {
         // Fast path: item already queued (synchronous, no suspension)
-        if let item = lock.withLock({ () -> ActionDriverWorkItem? in
+        if let item = lock.withLock({ () -> DriverWorkItem? in
             guard let item = queue.first else { return nil }
             queue.removeFirst()
             return item
@@ -639,10 +669,9 @@ public final class ActionDriverChannel: @unchecked Sendable {
 
         // Slow path: register a continuation, re-checking under lock to close the TOCTOU
         // window between the two withLock calls above.
-        return await withCheckedContinuation { (cont: CheckedContinuation<ActionDriverWorkItem?, Never>) in
+        return await withCheckedContinuation { (cont: CheckedContinuation<DriverWorkItem?, Never>) in
             lock.withLock {
                 if let item = queue.first {
-                    // Item arrived while we were setting up the continuation
                     queue.removeFirst()
                     cont.resume(returning: item)
                 } else if closed {
@@ -673,22 +702,36 @@ extension ActionRunner {
     ///
     /// Called as `Task.detached { await ActionRunner.shared.driveFeatureSet(channel) }`
     /// once per compiled feature set invocation.  The C feature set pthread submits
-    /// work items via `channel.submit()` and the driver processes them with regular
-    /// `await` — no nested Task.detached per action.
+    /// work items via `channel.submitAction/submitArrayNext()` and the driver processes
+    /// them cooperatively — no nested Task.detached per action or array iteration.
     public func driveFeatureSet(channel: ActionDriverChannel) async {
         while let item = await channel.next() {
-            do {
-                let value = try await self.executeAsync(
-                    verb: item.verb,
-                    result: item.result,
-                    object: item.object,
-                    context: item.context
-                )
-                item.holder.set(.success(value))
-            } catch {
-                item.holder.set(.failure(String(describing: error)))
+            switch item {
+            case .action(let actionItem):
+                do {
+                    let value = try await self.executeAsync(
+                        verb: actionItem.verb,
+                        result: actionItem.result,
+                        object: actionItem.object,
+                        context: actionItem.context
+                    )
+                    actionItem.holder.set(.success(value))
+                } catch {
+                    actionItem.holder.set(.failure(String(describing: error)))
+                }
+                actionItem.semaphore.signal()
+
+            case .arrayNext(let nextItem):
+                // Cooperative: await the next directory entry from the producer Task.
+                // The producer runs on a different cooperative-pool thread, so this
+                // await allows the producer to prefetch while the driver is suspended.
+                if let entry = await nextItem.iterator.nextAsync() {
+                    nextItem.holder.set(.success(entry as any Sendable))
+                } else {
+                    nextItem.holder.set(.failure("__exhausted__"))
+                }
+                nextItem.semaphore.signal()
             }
-            item.semaphore.signal()
         }
     }
 }

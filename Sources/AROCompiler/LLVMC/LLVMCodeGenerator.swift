@@ -1124,12 +1124,14 @@ public final class LLVMCodeGenerator {
         ctx.module.insertBr(to: condBlock, at: ctx.insertionPoint)
 
         // === Condition Block ===
-        // Call aro_array_get_next — returns the next passRetained element or NULL when done.
+        // Call aro_array_get_next_ctx — context-aware cooperative variant that uses
+        // PipelinedDirectoryIterator + driver channel for zero-overhead pipelined iteration.
+        // Falls back to synchronous aro_array_get_next for eager arrays.
         ctx.setInsertionPoint(atEndOf: condBlock)
 
         let nextElem = ctx.module.insertCall(
-            externals.arrayGetNext,
-            on: [collection, statePtr],
+            externals.arrayGetNextCtx,
+            on: [ctx.currentContextVar!, collection, statePtr],
             at: ctx.insertionPoint
         )
         let isNull = ctx.module.insertIntegerComparison(

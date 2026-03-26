@@ -70,6 +70,7 @@ public final class LLVMExternalDeclEmitter {
     private var _arrayCount: Function?
     private var _arrayGet: Function?
     private var _arrayGetNext: Function?
+    private var _arrayGetNextCtx: Function?
     private var _dictGet: Function?
     private var _parallelForEachExecute: Function?
 
@@ -435,6 +436,15 @@ public final class LLVMExternalDeclEmitter {
             types.functionType(parameters: [ptr, ptr], returning: ptr)
         )
 
+        // ptr @aro_array_get_next_ctx(ptr context, ptr collection, ptr stateI64)
+        // Context-aware cooperative variant: uses PipelinedDirectoryIterator + driver channel.
+        // Fast path (item buffered): returns immediately like aro_array_get_next.
+        // Slow path (buffer empty): submits to driver channel for cooperative await.
+        _arrayGetNextCtx = ctx.module.declareFunction(
+            "aro_array_get_next_ctx",
+            types.functionType(parameters: [ptr, ptr, ptr], returning: ptr)
+        )
+
         // ptr @aro_dict_get(ptr, ptr)
         _dictGet = ctx.module.declareFunction(
             "aro_dict_get",
@@ -575,6 +585,7 @@ public final class LLVMExternalDeclEmitter {
     public var arrayCount: Function { _arrayCount! }
     public var arrayGet: Function { _arrayGet! }
     public var arrayGetNext: Function { _arrayGetNext! }
+    public var arrayGetNextCtx: Function { _arrayGetNextCtx! }
     public var dictGet: Function { _dictGet! }
     public var parallelForEachExecute: Function { _parallelForEachExecute! }
 

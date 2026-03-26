@@ -2171,12 +2171,14 @@ public func aro_variable_resolve_int(
 // MARK: - Value Boxing
 
 /// Boxed value for C interop
-final class AROCValue {
-    let value: any Sendable
+final class AROCValue: @unchecked Sendable {
+    private let lock = NSLock()
+    private var _value: any Sendable
+    var value: any Sendable { lock.withLock { _value } }
+    /// Atomically replace the value (used to lazily upgrade LazyDirectoryList → PipelinedDirectoryIterator).
+    func upgradeValue(_ newValue: any Sendable) { lock.withLock { _value = newValue } }
 
-    init(value: any Sendable) {
-        self.value = value
-    }
+    init(value: any Sendable) { _value = value }
 }
 
 /// Free a value returned by aro_variable_resolve
@@ -2694,6 +2696,35 @@ public func aro_array_get_next(
         return UnsafeMutableRawPointer(Unmanaged.passRetained(boxedElement).toOpaque())
     }
 
+    // Backward compat: PipelinedDirectoryIterator from binaries compiled without _ctx.
+    // Falls back to Task.detached + semaphore (same as Phase 1 pattern).
+    if let pipelined = boxed.value as? PipelinedDirectoryIterator {
+        if let entry = pipelined.tryNextSync() {
+            statePtr.pointee &+= 1
+            return UnsafeMutableRawPointer(Unmanaged.passRetained(AROCValue(value: entry as any Sendable)).toOpaque())
+        }
+        if pipelined.isExhausted { return nil }
+        let box = ActionRunnerResultBox()
+        let sem = DispatchSemaphore(value: 0)
+        Task.detached {
+            if let entry = await pipelined.nextAsync() {
+                box.set(ActionRunnerResult.success(entry as any Sendable))
+            } else {
+                box.set(ActionRunnerResult.failure("__exhausted__"))
+            }
+            sem.signal()
+        }
+        let pool = CompiledExecutionPool.shared
+        let hadSlot = pool.threadHoldsSlot
+        if hadSlot { pool.gate.signal(); pool.threadHoldsSlot = false }
+        sem.wait()
+        if hadSlot { pool.gate.wait(); pool.threadHoldsSlot = true }
+        let res = box.result
+        guard res.succeeded, let entry = res.value as? [String: any Sendable] else { return nil }
+        statePtr.pointee &+= 1
+        return UnsafeMutableRawPointer(Unmanaged.passRetained(AROCValue(value: entry as any Sendable)).toOpaque())
+    }
+
     if let array = boxed.value as? [any Sendable] {
         let index = Int(statePtr.pointee)
         guard index < array.count else { return nil }
@@ -2712,6 +2743,66 @@ public func aro_array_get_next(
     }
 
     return nil
+}
+
+/// Context-aware for-each iterator — cooperative pipelined variant of aro_array_get_next.
+///
+/// For `PipelinedDirectoryIterator` values:
+///  - Fast path: returns the next buffered entry synchronously (no Task, no semaphore).
+///  - Slow path: submits an `ArrayNextWorkItem` to the driver channel so the driver Task
+///    can `await iterator.nextAsync()` cooperatively, allowing the producer Task to
+///    continue prefetching while the driver waits.
+/// For all other value types: delegates to `aro_array_get_next` (synchronous fast path).
+@_cdecl("aro_array_get_next_ctx")
+public func aro_array_get_next_ctx(
+    _ contextPtr: UnsafeMutableRawPointer?,
+    _ valuePtr: UnsafeMutableRawPointer?,
+    _ statePtr: UnsafeMutablePointer<Int64>?
+) -> UnsafeMutableRawPointer? {
+    guard let contextPtr, let valuePtr, let statePtr else {
+        return aro_array_get_next(valuePtr, statePtr)
+    }
+
+    let boxed = Unmanaged<AROCValue>.fromOpaque(valuePtr).takeUnretainedValue()
+
+    // Lazy upgrade: first for-each call on a LazyDirectoryList wraps it in a
+    // PipelinedDirectoryIterator so the producer and driver Task can overlap.
+    if let lazyList = boxed.value as? LazyDirectoryList {
+        let pipelined = PipelinedDirectoryIterator(from: lazyList)
+        boxed.upgradeValue(pipelined)
+        // Fall through to pipelined path below (re-read value)
+    }
+
+    guard let pipelined = boxed.value as? PipelinedDirectoryIterator else {
+        return aro_array_get_next(valuePtr, statePtr)
+    }
+
+    // Fast path: item is already buffered — return it directly, zero overhead.
+    if let entry = pipelined.tryNextSync() {
+        statePtr.pointee &+= 1
+        return UnsafeMutableRawPointer(Unmanaged.passRetained(AROCValue(value: entry as any Sendable)).toOpaque())
+    }
+    if pipelined.isExhausted { return nil }
+
+    // Slow path: producer hasn't buffered an item yet — go through driver channel.
+    // The driver Task calls `await pipelined.nextAsync()` cooperatively; meanwhile
+    // the producer Task can run on another cooperative-pool thread.
+    let contextHandle = Unmanaged<AROCContextHandle>.fromOpaque(contextPtr).takeUnretainedValue()
+    let channel = contextHandle.driverChannel
+    let box = ActionRunnerResultBox()
+    let sem = DispatchSemaphore(value: 0)
+    channel.submitArrayNext(iterator: pipelined, holder: box, semaphore: sem)
+
+    let pool = CompiledExecutionPool.shared
+    let hadSlot = pool.threadHoldsSlot
+    if hadSlot { pool.gate.signal(); pool.threadHoldsSlot = false }
+    sem.wait()
+    if hadSlot { pool.gate.wait(); pool.threadHoldsSlot = true }
+
+    let res = box.result
+    guard res.succeeded, let entry = res.value as? [String: any Sendable] else { return nil }
+    statePtr.pointee &+= 1
+    return UnsafeMutableRawPointer(Unmanaged.passRetained(AROCValue(value: entry as any Sendable)).toOpaque())
 }
 
 /// Bind a value to a variable name in the context
