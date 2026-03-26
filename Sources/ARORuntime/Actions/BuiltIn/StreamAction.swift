@@ -210,18 +210,43 @@ public struct StreamAction: ActionImplementation {
         // Both modes use the lazy O(1) stream — only one line in memory at a time.
         // Interpreter mode: consumed by executeStreamForEachLoop in FeatureSetExecutor.
         // Binary mode: consumed by aro_runtime_foreach_stream callback loop in compiled code.
+        //
+        // Uses FileHandle-based chunked reading for cross-platform compatibility
+        // (URL.lines is Darwin-only and not available in swift-corelibs-foundation).
         let capturedURL = fileURL
         let stream = AROStream<any Sendable> {
             AsyncThrowingStream { continuation in
                 Task.detached {
-                    do {
-                        for try await line in capturedURL.lines {
+                    guard let handle = try? FileHandle(forReadingFrom: capturedURL) else {
+                        continuation.finish(throwing: ActionError.runtimeError("Cannot open file: \(capturedURL.path)"))
+                        return
+                    }
+                    defer { try? handle.close() }
+                    var buffer = ""
+                    let chunkSize = 65_536
+                    while true {
+                        let data: Data
+                        if #available(macOS 10.15.4, *) {
+                            guard let chunk = try? handle.read(upToCount: chunkSize), !chunk.isEmpty else { break }
+                            data = chunk
+                        } else {
+                            let chunk = handle.readData(ofLength: chunkSize)
+                            guard !chunk.isEmpty else { break }
+                            data = chunk
+                        }
+                        buffer += String(data: data, encoding: .utf8) ?? ""
+                        while let range = buffer.range(of: "\n") {
+                            let line = String(buffer[buffer.startIndex..<range.lowerBound])
+                                .trimmingCharacters(in: CharacterSet(charactersIn: "\r"))
+                            buffer = String(buffer[range.upperBound...])
                             continuation.yield(line as any Sendable)
                         }
-                        continuation.finish()
-                    } catch {
-                        continuation.finish(throwing: error)
                     }
+                    // Yield final line if file doesn't end with newline
+                    if !buffer.isEmpty {
+                        continuation.yield(buffer as any Sendable)
+                    }
+                    continuation.finish()
                 }
             }
         }
