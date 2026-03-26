@@ -126,8 +126,8 @@ public final class OpenAPIHTTPHandler: @unchecked Sendable {
 
         // Validate required parameters (query, header, and cookie)
         for param in effectiveParameters where param.required == true {
-            guard let paramName = param.name, let paramIn = param.in else { continue }
-            switch paramIn {
+            guard let paramName = param.name else { continue }
+            switch param.in {
             case "query":
                 if enrichedQueryParams[paramName] == nil {
                     return HTTPResponse(

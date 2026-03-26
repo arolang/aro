@@ -259,7 +259,7 @@ public final class FeatureSetExecutor: Sendable {
         // These are statement-local and should not persist between statements
         context.unbind("_literal_")
         context.unbind("_expression_")
-        context.unbind("_expression_name_")
+        context.bind("_expression_name_", value: "")  // bind empty to shadow any parent binding
         context.unbind("_result_expression_")
         context.unbind("_aggregation_type_")
         context.unbind("_aggregation_field_")
@@ -827,6 +827,16 @@ public final class FeatureSetExecutor: Sendable {
             collectionValue = try accessCollectionProperty(specifier, on: collectionValue)
         }
 
+        // ARO-0051: Streaming support — iterate lazy streams without materializing
+        if let anyStreaming = collectionValue as? AnyStreamingValue, !anyStreaming.isMaterialized {
+            if !loop.isParallel {
+                try await executeForEachLazy(loop, stream: anyStreaming.asStream(), context: context)
+                return
+            }
+            // Parallel loops must materialize (no streaming support for concurrent iteration)
+            collectionValue = try await anyStreaming.materialize() as any Sendable
+        }
+
         // Convert to array
         let items: [any Sendable]
         if let array = collectionValue as? [any Sendable] {
@@ -914,6 +924,41 @@ public final class FeatureSetExecutor: Sendable {
                     }
                 }
             }
+        }
+    }
+
+    // MARK: - Lazy Streaming For-Each (ARO-0051)
+
+    /// Iterate a lazy AROStream one element at a time without materializing the full collection.
+    /// Memory footprint is O(1) — only the current iteration's child context is live.
+    private func executeForEachLazy(
+        _ loop: ForEachLoop,
+        stream: AROStream<any Sendable>,
+        context: ExecutionContext
+    ) async throws {
+        var index = 0
+        for try await item in stream.stream {
+            let iterationContext = context.createChild(featureSetName: context.featureSetName)
+            iterationContext.bind(loop.itemVariable, value: item)
+            if let indexVar = loop.indexVariable {
+                iterationContext.bind(indexVar, value: index)
+            }
+
+            if let filter = loop.filter {
+                let filterResult = try await expressionEvaluator.evaluate(filter, context: iterationContext)
+                guard let passes = filterResult as? Bool, passes else {
+                    index += 1
+                    continue
+                }
+            }
+
+            for bodyStatement in loop.body {
+                try await executeStatement(bodyStatement, context: iterationContext)
+                if iterationContext.getResponse() != nil {
+                    return
+                }
+            }
+            index += 1
         }
     }
 
