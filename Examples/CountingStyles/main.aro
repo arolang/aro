@@ -49,5 +49,5 @@
     Log <char-count> to the <console>.
 
     Log "=== Done ===" to the <console>.
-    Return an <OK: status> for the <demo>.
+    Return an <OK: status> for the <application>.
 }
