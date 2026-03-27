@@ -261,6 +261,26 @@ public struct ExtractAction: ActionImplementation {
     }
 
     private func extractProperty(from source: any Sendable, key: String) throws -> any Sendable {
+        // Handle ServerStartResult — lets ARO code extract port/type from server startup result.
+        if let serverResult = source as? ServerStartResult {
+            switch key {
+            case "port": return (serverResult.port ?? 8080) as any Sendable
+            case "type", "serverType": return serverResult.serverType
+            case "success": return serverResult.success
+            default: break
+            }
+        }
+
+        // Handle HTTPServerConfig — lets ARO code extract port/hostname from http-server magic object.
+        if let config = source as? HTTPServerConfig {
+            if let value = config.property(key) { return value }
+        }
+
+        // Handle Contract — lets ARO code extract http-server config from contract magic object.
+        if let contract = source as? Contract {
+            if let value = contract.property(key) { return value }
+        }
+
         // Handle AROHTTPResult — body, status, headers keys plus body-fallthrough
         // for backwards compatibility (existing key access delegated to body).
         if let httpResult = source as? AROHTTPResult {
@@ -737,6 +757,7 @@ public struct RetrieveAction: ActionImplementation {
             }
 
             // No specifier - return the list of values (empty list if repository is empty)
+            // Note: Repository data is already in-memory so streaming provides no RAM benefit.
             return values
         }
 
@@ -964,6 +985,9 @@ public protocol FileSystemService: Sendable {
     // ARO-0036: Extended file operations
     func stat(path: String) async throws -> FileInfo
     func list(directory: String, pattern: String?, recursive: Bool) async throws -> [FileInfo]
+
+    // ARO-0051: Streaming variant — yields entries one at a time, O(1) memory
+    func listStream(directory: String, pattern: String?, recursive: Bool) throws -> AROStream<[String: any Sendable]>
     func existsWithType(path: String) -> (exists: Bool, isDirectory: Bool)
     func createDirectory(path: String) async throws
     func touch(path: String) async throws

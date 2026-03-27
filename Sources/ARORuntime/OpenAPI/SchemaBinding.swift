@@ -31,6 +31,11 @@ public struct SchemaBinding {
             return try parseValue(json: json, schema: resolved, components: components)
         }
 
+        // Handle nullable: if the schema allows null and the value is NSNull, short-circuit
+        if schema.isNullable && json is NSNull {
+            return NSNull()
+        }
+
         // Handle by type
         guard let schemaType = schema.type else {
             // No type constraint — still apply composition keywords if present
@@ -136,6 +141,11 @@ public struct SchemaBinding {
             try validateEnumConstraint(parsedValue, against: enumValues)
         }
 
+        // Validate const constraint (OpenAPI 3.1 / JSON Schema)
+        if let constValue = schema.const {
+            try validateConstConstraint(parsedValue, against: constValue)
+        }
+
         // Apply composition keywords (allOf / anyOf / oneOf / not)
         if schema.allOf != nil || schema.anyOf != nil || schema.oneOf != nil || schema.not != nil {
             return try validateComposition(json: parsedValue, schema: schema, components: components)
@@ -230,6 +240,24 @@ public struct SchemaBinding {
         }
 
         return json
+    }
+
+    /// Check that a parsed value matches the `const` constraint.
+    private static func validateConstConstraint(_ parsedValue: Any, against constValue: AnyCodableValue) throws {
+        let matches: Bool
+        switch constValue {
+        case .string(let s): matches = (parsedValue as? String) == s
+        case .int(let i): matches = (parsedValue as? Int) == i || (parsedValue as? Double) == Double(i)
+        case .double(let d): matches = (parsedValue as? Double) == d
+        case .bool(let b): matches = (parsedValue as? Bool) == b
+        case .null: matches = parsedValue is NSNull
+        }
+        if !matches {
+            throw SchemaBindingError.enumViolation(
+                value: "\(parsedValue)",
+                allowed: "\(constValue.anyValue)"
+            )
+        }
     }
 
     /// Check that a parsed value matches one of the allowed enum values.
@@ -386,6 +414,11 @@ extension SchemaBinding {
             return try validateAgainstSchema(value: value, schemaName: schemaName, schema: resolved, components: components)
         }
 
+        // Handle nullable: if the schema allows null and the value is NSNull, short-circuit
+        if schema.isNullable && value is NSNull {
+            return NSNull()
+        }
+
         // Determine expected type
         guard let schemaType = schema.type else {
             // No type constraint — still apply composition keywords if present
@@ -530,6 +563,11 @@ extension SchemaBinding {
         // Validate enum constraint
         if let enumValues = schema.enumValues, !enumValues.isEmpty {
             try validateEnumConstraint(validated, against: enumValues)
+        }
+
+        // Validate const constraint (OpenAPI 3.1 / JSON Schema)
+        if let constValue = schema.const {
+            try validateConstConstraint(validated, against: constValue)
         }
 
         // Apply composition keywords (allOf / anyOf / oneOf / not)

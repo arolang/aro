@@ -84,8 +84,9 @@ public final class OpenAPIHTTPHandler: @unchecked Sendable {
         // Parameters not listed in the spec are not subject to this filter.
         var allowEmptyValueByName: [String: Bool] = [:]
         for param in effectiveParameters where param.in == "query" {
-            guard let paramName = param.name else { continue }
-            allowEmptyValueByName[paramName] = param.allowEmptyValue ?? false
+            if let paramName = param.name {
+                allowEmptyValueByName[paramName] = param.allowEmptyValue ?? false
+            }
         }
 
         // Filter query parameters: remove entries where the value is empty string

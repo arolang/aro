@@ -52,6 +52,7 @@ public struct StartAction: ActionImplementation {
 
     private func startHTTPServer(object: ObjectDescriptor, context: ExecutionContext) async throws -> any Sendable {
         // Get port from:
+        // 0. ARO_HTTP_PORT env var (test/CI override — highest priority)
         // 1. Explicit port in ARO code (_with_ clause, object specifiers, or literal)
         // 2. OpenAPI spec (contract is source of truth)
         // 3. Default to 8080
@@ -117,6 +118,12 @@ public struct StartAction: ActionImplementation {
             if let p = Int(portStr) {
                 port = p
             }
+        }
+
+        // Final override: ARO_HTTP_PORT env var lets the test harness pick a free port
+        // without modifying openapi.yaml. Takes precedence over everything above.
+        if let envPort = ProcessInfo.processInfo.environment["ARO_HTTP_PORT"], let p = Int(envPort) {
+            port = p
         }
 
         // Try HTTP server service (interpreter mode with NIO)
@@ -199,25 +206,28 @@ public struct StartAction: ActionImplementation {
             port = 9000
         }
 
+        // Final override: ARO_SOCKET_PORT env var lets the test harness pick a free port
+        let finalPort = ProcessInfo.processInfo.environment["ARO_SOCKET_PORT"].flatMap(Int.init) ?? port
+
         // Try using the SocketServerService (interpreter mode with NIO)
         if let socketService = context.service(SocketServerService.self) {
-            try await socketService.start(port: port)
+            try await socketService.start(port: finalPort)
             await EventBus.shared.registerEventSource()
-            return ServerStartResult(serverType: "socket-server", success: true, port: port)
+            return ServerStartResult(serverType: "socket-server", success: true, port: finalPort)
         }
 
         // For compiled binaries, use the native socket server (BSD sockets)
         #if !os(Windows)
-        let result = aro_native_socket_server_start(Int32(port))
+        let result = aro_native_socket_server_start(Int32(finalPort))
         if result == 0 {
             await EventBus.shared.registerEventSource()
-            return ServerStartResult(serverType: "socket-server", success: true, port: port)
+            return ServerStartResult(serverType: "socket-server", success: true, port: finalPort)
         } else {
-            throw ActionError.serviceStartFailed(service: "socket server", port: port)
+            throw ActionError.serviceStartFailed(service: "socket server", port: finalPort)
         }
         #else
-        context.emit(SocketServerStartRequestedEvent(port: port))
-        return ServerStartResult(serverType: "socket-server", success: true, port: port)
+        context.emit(SocketServerStartRequestedEvent(port: finalPort))
+        return ServerStartResult(serverType: "socket-server", success: true, port: finalPort)
         #endif
     }
 
