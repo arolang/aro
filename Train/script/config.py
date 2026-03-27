@@ -22,10 +22,11 @@ from pathlib import Path
 
 # ── Root paths ────────────────────────────────────────────────────────────────
 
-SCRIPT_DIR   = Path(__file__).parent.resolve()
-ARO_ROOT     = (SCRIPT_DIR / '../../').resolve()
-EXAMPLES_DIR = ARO_ROOT / 'Examples'
-BOOK_ROOT    = ARO_ROOT / 'Book'
+SCRIPT_DIR          = Path(__file__).parent.resolve()
+ARO_ROOT            = (SCRIPT_DIR / '../../').resolve()
+EXAMPLES_DIR        = ARO_ROOT / 'Examples'
+BOOK_ROOT           = ARO_ROOT / 'Book'
+ARO_APPLICATION_ROOT = Path('/Users/kris/Projects/ARO-Application').resolve()
 
 # ── Output root (override this to redirect all data to a different location) ──
 # SCRIPT_DIR
