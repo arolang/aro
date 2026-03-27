@@ -11,8 +11,9 @@
     (* Wait briefly for server to start accepting connections *)
     Sleep the <startup-wait> for 500 milliseconds.
 
-    (* Make a request to our local server *)
-    Create the <url> with "http://localhost:8080/demo".
+    (* Build URL using the http-server port (respects ARO_HTTP_PORT env var override) *)
+    Extract the <server-port> from the <http-server: port>.
+    Compute the <url> from "http://localhost:" ++ <server-port> ++ "/demo".
     Request the <response> from the <url>.
 
     (* Access the HTTP status code *)
