@@ -69,6 +69,10 @@ public struct HTTPServerConfig: Sendable {
     public func property(_ name: String) -> (any Sendable)? {
         switch name {
         case "port":
+            // ARO_HTTP_PORT env var overrides the OpenAPI port (used by test harness)
+            if let envPort = ProcessInfo.processInfo.environment["ARO_HTTP_PORT"], let p = Int(envPort) {
+                return p
+            }
             return port
         case "hostname", "host":
             return hostname
