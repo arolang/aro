@@ -38,5 +38,5 @@
     Log "After conditional update (should-demote = false, no change expected):" to the <console>.
     Log <profile> to the <console>.
 
-    Return an <OK: status> for the <startup>.
+    Return an <OK: status> for the <application>.
 }
