@@ -2246,4 +2246,1178 @@ struct AdditionalPropertiesTests {
     }
 }
 
+// MARK: - SecurityEnforcer Tests
+
+@Suite("SecurityEnforcer Tests")
+struct SecurityEnforcerTests {
+
+    // MARK: Helpers
+
+    private func makeOperation(security: [[String: [String]]]? = nil) -> ARORuntime.Operation {
+        ARORuntime.Operation(
+            operationId: "testOp",
+            summary: nil,
+            description: nil,
+            tags: nil,
+            parameters: nil,
+            requestBody: nil,
+            responses: ["200": OpenAPIResponse(description: "OK", headers: nil, content: nil, ref: nil)],
+            deprecated: nil,
+            security: security
+        )
+    }
+
+    private func bearerScheme() -> SecurityScheme {
+        SecurityScheme(type: "http", description: nil, name: nil, in: nil, scheme: "bearer", bearerFormat: nil)
+    }
+
+    private func basicScheme() -> SecurityScheme {
+        SecurityScheme(type: "http", description: nil, name: nil, in: nil, scheme: "basic", bearerFormat: nil)
+    }
+
+    private func apiKeyHeaderScheme(name: String = "X-API-Key") -> SecurityScheme {
+        SecurityScheme(type: "apiKey", description: nil, name: name, in: "header", scheme: nil, bearerFormat: nil)
+    }
+
+    private func apiKeyQueryScheme(name: String = "api_key") -> SecurityScheme {
+        SecurityScheme(type: "apiKey", description: nil, name: name, in: "query", scheme: nil, bearerFormat: nil)
+    }
+
+    private func apiKeyCookieScheme(name: String = "session") -> SecurityScheme {
+        SecurityScheme(type: "apiKey", description: nil, name: name, in: "cookie", scheme: nil, bearerFormat: nil)
+    }
+
+    private func oauth2Scheme() -> SecurityScheme {
+        SecurityScheme(type: "oauth2", description: nil, name: nil, in: nil, scheme: nil, bearerFormat: nil)
+    }
+
+    private func openIdConnectScheme() -> SecurityScheme {
+        SecurityScheme(type: "openIdConnect", description: nil, name: nil, in: nil, scheme: nil, bearerFormat: nil)
+    }
+
+    // MARK: No Security
+
+    @Test("No security field on spec and operation — passes")
+    func testNoSecurityPassesThrough() {
+        let op = makeOperation(security: nil)
+        let result = SecurityEnforcer.enforce(
+            operation: op,
+            globalSecurity: nil,
+            securitySchemes: nil,
+            headers: [:],
+            queryParameters: [:]
+        )
+        #expect(result == nil)
+    }
+
+    @Test("Empty global security array — passes")
+    func testEmptyGlobalSecurityPasses() {
+        let op = makeOperation(security: nil)
+        let result = SecurityEnforcer.enforce(
+            operation: op,
+            globalSecurity: [],
+            securitySchemes: nil,
+            headers: [:],
+            queryParameters: [:]
+        )
+        #expect(result == nil)
+    }
+
+    @Test("Empty operation security array — explicitly public, passes")
+    func testEmptyOperationSecurityMeansPublic() {
+        let op = makeOperation(security: [])
+        let result = SecurityEnforcer.enforce(
+            operation: op,
+            globalSecurity: [["bearerAuth": []]],
+            securitySchemes: ["bearerAuth": bearerScheme()],
+            headers: [:],
+            queryParameters: [:]
+        )
+        #expect(result == nil)
+    }
+
+    // MARK: HTTP Bearer
+
+    @Test("Bearer token present — passes")
+    func testBearerTokenPresent() {
+        let op = makeOperation(security: [["bearerAuth": []]])
+        let result = SecurityEnforcer.enforce(
+            operation: op,
+            globalSecurity: nil,
+            securitySchemes: ["bearerAuth": bearerScheme()],
+            headers: ["Authorization": "Bearer mytoken123"],
+            queryParameters: [:]
+        )
+        #expect(result == nil)
+    }
+
+    @Test("Bearer token missing — 401")
+    func testBearerTokenMissing() {
+        let op = makeOperation(security: [["bearerAuth": []]])
+        let result = SecurityEnforcer.enforce(
+            operation: op,
+            globalSecurity: nil,
+            securitySchemes: ["bearerAuth": bearerScheme()],
+            headers: [:],
+            queryParameters: [:]
+        )
+        #expect(result?.statusCode == 401)
+    }
+
+    @Test("Bearer check is case-insensitive on header name")
+    func testBearerCaseInsensitiveHeaderName() {
+        let op = makeOperation(security: [["bearerAuth": []]])
+        let result = SecurityEnforcer.enforce(
+            operation: op,
+            globalSecurity: nil,
+            securitySchemes: ["bearerAuth": bearerScheme()],
+            headers: ["authorization": "Bearer tok"],
+            queryParameters: [:]
+        )
+        #expect(result == nil)
+    }
+
+    @Test("HTTP basic present — passes")
+    func testBasicAuthPresent() {
+        let op = makeOperation(security: [["basicAuth": []]])
+        let result = SecurityEnforcer.enforce(
+            operation: op,
+            globalSecurity: nil,
+            securitySchemes: ["basicAuth": basicScheme()],
+            headers: ["Authorization": "Basic dXNlcjpwYXNz"],
+            queryParameters: [:]
+        )
+        #expect(result == nil)
+    }
+
+    @Test("HTTP basic missing — 401")
+    func testBasicAuthMissing() {
+        let op = makeOperation(security: [["basicAuth": []]])
+        let result = SecurityEnforcer.enforce(
+            operation: op,
+            globalSecurity: nil,
+            securitySchemes: ["basicAuth": basicScheme()],
+            headers: [:],
+            queryParameters: [:]
+        )
+        #expect(result?.statusCode == 401)
+    }
+
+    // MARK: apiKey — header
+
+    @Test("apiKey header present — passes")
+    func testApiKeyHeaderPresent() {
+        let op = makeOperation(security: [["apiKeyAuth": []]])
+        let result = SecurityEnforcer.enforce(
+            operation: op,
+            globalSecurity: nil,
+            securitySchemes: ["apiKeyAuth": apiKeyHeaderScheme()],
+            headers: ["X-API-Key": "secret"],
+            queryParameters: [:]
+        )
+        #expect(result == nil)
+    }
+
+    @Test("apiKey header missing — 401")
+    func testApiKeyHeaderMissing() {
+        let op = makeOperation(security: [["apiKeyAuth": []]])
+        let result = SecurityEnforcer.enforce(
+            operation: op,
+            globalSecurity: nil,
+            securitySchemes: ["apiKeyAuth": apiKeyHeaderScheme()],
+            headers: [:],
+            queryParameters: [:]
+        )
+        #expect(result?.statusCode == 401)
+    }
+
+    @Test("apiKey header name match is case-insensitive")
+    func testApiKeyHeaderCaseInsensitive() {
+        let op = makeOperation(security: [["apiKeyAuth": []]])
+        let result = SecurityEnforcer.enforce(
+            operation: op,
+            globalSecurity: nil,
+            securitySchemes: ["apiKeyAuth": apiKeyHeaderScheme(name: "X-API-Key")],
+            headers: ["x-api-key": "secret"],
+            queryParameters: [:]
+        )
+        #expect(result == nil)
+    }
+
+    // MARK: apiKey — query
+
+    @Test("apiKey query present — passes")
+    func testApiKeyQueryPresent() {
+        let op = makeOperation(security: [["queryAuth": []]])
+        let result = SecurityEnforcer.enforce(
+            operation: op,
+            globalSecurity: nil,
+            securitySchemes: ["queryAuth": apiKeyQueryScheme()],
+            headers: [:],
+            queryParameters: ["api_key": "mykey"]
+        )
+        #expect(result == nil)
+    }
+
+    @Test("apiKey query missing — 401")
+    func testApiKeyQueryMissing() {
+        let op = makeOperation(security: [["queryAuth": []]])
+        let result = SecurityEnforcer.enforce(
+            operation: op,
+            globalSecurity: nil,
+            securitySchemes: ["queryAuth": apiKeyQueryScheme()],
+            headers: [:],
+            queryParameters: [:]
+        )
+        #expect(result?.statusCode == 401)
+    }
+
+    // MARK: apiKey — cookie
+
+    @Test("apiKey cookie present — passes")
+    func testApiKeyCookiePresent() {
+        let op = makeOperation(security: [["cookieAuth": []]])
+        let result = SecurityEnforcer.enforce(
+            operation: op,
+            globalSecurity: nil,
+            securitySchemes: ["cookieAuth": apiKeyCookieScheme()],
+            headers: ["Cookie": "session=abc123"],
+            queryParameters: [:]
+        )
+        #expect(result == nil)
+    }
+
+    @Test("apiKey cookie missing — 401")
+    func testApiKeyCookieMissing() {
+        let op = makeOperation(security: [["cookieAuth": []]])
+        let result = SecurityEnforcer.enforce(
+            operation: op,
+            globalSecurity: nil,
+            securitySchemes: ["cookieAuth": apiKeyCookieScheme()],
+            headers: [:],
+            queryParameters: [:]
+        )
+        #expect(result?.statusCode == 401)
+    }
+
+    // MARK: oauth2 / openIdConnect
+
+    @Test("oauth2 with Bearer token — passes")
+    func testOAuth2BearerPresent() {
+        let op = makeOperation(security: [["oauth2Auth": ["read"]]])
+        let result = SecurityEnforcer.enforce(
+            operation: op,
+            globalSecurity: nil,
+            securitySchemes: ["oauth2Auth": oauth2Scheme()],
+            headers: ["Authorization": "Bearer access_token"],
+            queryParameters: [:]
+        )
+        #expect(result == nil)
+    }
+
+    @Test("oauth2 without token — 401")
+    func testOAuth2BearerMissing() {
+        let op = makeOperation(security: [["oauth2Auth": ["read"]]])
+        let result = SecurityEnforcer.enforce(
+            operation: op,
+            globalSecurity: nil,
+            securitySchemes: ["oauth2Auth": oauth2Scheme()],
+            headers: [:],
+            queryParameters: [:]
+        )
+        #expect(result?.statusCode == 401)
+    }
+
+    @Test("openIdConnect with Bearer token — passes")
+    func testOpenIdConnectBearerPresent() {
+        let op = makeOperation(security: [["oidcAuth": []]])
+        let result = SecurityEnforcer.enforce(
+            operation: op,
+            globalSecurity: nil,
+            securitySchemes: ["oidcAuth": openIdConnectScheme()],
+            headers: ["Authorization": "Bearer id_token"],
+            queryParameters: [:]
+        )
+        #expect(result == nil)
+    }
+
+    @Test("openIdConnect without token — 401")
+    func testOpenIdConnectBearerMissing() {
+        let op = makeOperation(security: [["oidcAuth": []]])
+        let result = SecurityEnforcer.enforce(
+            operation: op,
+            globalSecurity: nil,
+            securitySchemes: ["oidcAuth": openIdConnectScheme()],
+            headers: [:],
+            queryParameters: [:]
+        )
+        #expect(result?.statusCode == 401)
+    }
+
+    // MARK: OR'd requirements
+
+    @Test("OR'd requirements: second satisfied — passes")
+    func testOrRequirementsSecondSatisfied() {
+        let op = makeOperation(security: [
+            ["bearerAuth": []],
+            ["apiKeyAuth": []]
+        ])
+        // No Bearer header, but API key present — second requirement satisfied
+        let result = SecurityEnforcer.enforce(
+            operation: op,
+            globalSecurity: nil,
+            securitySchemes: [
+                "bearerAuth": bearerScheme(),
+                "apiKeyAuth": apiKeyHeaderScheme()
+            ],
+            headers: ["X-API-Key": "secret"],
+            queryParameters: [:]
+        )
+        #expect(result == nil)
+    }
+
+    @Test("OR'd requirements: neither satisfied — 401")
+    func testOrRequirementsNeitherSatisfied() {
+        let op = makeOperation(security: [
+            ["bearerAuth": []],
+            ["apiKeyAuth": []]
+        ])
+        let result = SecurityEnforcer.enforce(
+            operation: op,
+            globalSecurity: nil,
+            securitySchemes: [
+                "bearerAuth": bearerScheme(),
+                "apiKeyAuth": apiKeyHeaderScheme()
+            ],
+            headers: [:],
+            queryParameters: [:]
+        )
+        #expect(result?.statusCode == 401)
+    }
+
+    // MARK: Global security fallback
+
+    @Test("Operation inherits global security — missing credentials return 401")
+    func testOperationInheritsGlobalSecurity() {
+        let op = makeOperation(security: nil)
+        let result = SecurityEnforcer.enforce(
+            operation: op,
+            globalSecurity: [["bearerAuth": []]],
+            securitySchemes: ["bearerAuth": bearerScheme()],
+            headers: [:],
+            queryParameters: [:]
+        )
+        #expect(result?.statusCode == 401)
+    }
+
+    @Test("Operation inherits global security — valid credentials pass")
+    func testOperationInheritsGlobalSecurityPasses() {
+        let op = makeOperation(security: nil)
+        let result = SecurityEnforcer.enforce(
+            operation: op,
+            globalSecurity: [["bearerAuth": []]],
+            securitySchemes: ["bearerAuth": bearerScheme()],
+            headers: ["Authorization": "Bearer tok"],
+            queryParameters: [:]
+        )
+        #expect(result == nil)
+    }
+
+    // MARK: Unknown scheme name
+
+    @Test("Unknown scheme name in requirement — 401")
+    func testUnknownSchemeNameReturns401() {
+        let op = makeOperation(security: [["unknownScheme": []]])
+        let result = SecurityEnforcer.enforce(
+            operation: op,
+            globalSecurity: nil,
+            securitySchemes: [:],
+            headers: ["Authorization": "Bearer tok"],
+            queryParameters: [:]
+        )
+        #expect(result?.statusCode == 401)
+    }
+
+    // MARK: 401 response shape
+
+    @Test("401 response contains correct status code and WWW-Authenticate header")
+    func test401ResponseShape() {
+        let op = makeOperation(security: [["bearerAuth": []]])
+        let response = SecurityEnforcer.enforce(
+            operation: op,
+            globalSecurity: nil,
+            securitySchemes: ["bearerAuth": bearerScheme()],
+            headers: [:],
+            queryParameters: [:]
+        )
+        #expect(response?.statusCode == 401)
+        #expect(response?.headers["WWW-Authenticate"] == "Bearer")
+        #expect(response?.headers["Content-Type"] == "application/json")
+    }
+
+    // MARK: OpenAPISpec global security parsing
+
+    @Test("Parse OpenAPISpec with global security field")
+    func testParseGlobalSecurity() throws {
+        let json = """
+        {
+            "openapi": "3.0.3",
+            "info": { "title": "Secure API", "version": "1.0.0" },
+            "paths": {},
+            "security": [{"bearerAuth": []}],
+            "components": {
+                "securitySchemes": {
+                    "bearerAuth": {
+                        "type": "http",
+                        "scheme": "bearer"
+                    }
+                }
+            }
+        }
+        """
+        let spec = try JSONDecoder().decode(OpenAPISpec.self, from: json.data(using: .utf8)!)
+        #expect(spec.security?.count == 1)
+        #expect(spec.security?.first?["bearerAuth"] != nil)
+        #expect(spec.components?.securitySchemes?["bearerAuth"]?.type == "http")
+        #expect(spec.components?.securitySchemes?["bearerAuth"]?.scheme == "bearer")
+    }
+}
+
+// MARK: - Content-Type Negotiation Tests (Issue #179)
+
+@Suite("Content-Type Negotiation Tests")
+struct ContentTypeNegotiationTests {
+
+    // MARK: - findMatchingMediaType unit tests
+
+    @Test("Exact match returns matching media type")
+    func testExactMatch() {
+        let jsonMediaType = MediaType(schema: nil)
+        let content: [String: MediaType] = ["application/json": jsonMediaType]
+        let result = findMatchingMediaType(in: content, for: "application/json")
+        #expect(result != nil)
+    }
+
+    @Test("Parameters are stripped before matching")
+    func testParameterStripping() {
+        let jsonMediaType = MediaType(schema: nil)
+        let content: [String: MediaType] = ["application/json": jsonMediaType]
+        let result = findMatchingMediaType(in: content, for: "application/json; charset=utf-8")
+        #expect(result != nil)
+    }
+
+    @Test("Subtype wildcard matches when exact type absent")
+    func testSubtypeWildcard() {
+        let wildcardMediaType = MediaType(schema: nil)
+        let content: [String: MediaType] = ["application/*": wildcardMediaType]
+        let result = findMatchingMediaType(in: content, for: "application/json")
+        #expect(result != nil)
+    }
+
+    @Test("Catch-all wildcard matches any content type")
+    func testCatchAllWildcard() {
+        let wildcardMediaType = MediaType(schema: nil)
+        let content: [String: MediaType] = ["*/*": wildcardMediaType]
+        let result = findMatchingMediaType(in: content, for: "text/plain")
+        #expect(result != nil)
+    }
+
+    @Test("Exact match takes precedence over subtype wildcard")
+    func testExactMatchPrecedenceOverSubtypeWildcard() {
+        let exactMediaType = MediaType(schema: SchemaRef(Schema(type: "object")))
+        let wildcardMediaType = MediaType(schema: SchemaRef(Schema(type: "string")))
+        let content: [String: MediaType] = [
+            "application/json": exactMediaType,
+            "application/*": wildcardMediaType
+        ]
+        let result = findMatchingMediaType(in: content, for: "application/json")
+        // Must return exact match, not wildcard
+        #expect(result?.schema?.value.type == "object")
+    }
+
+    @Test("Subtype wildcard takes precedence over catch-all wildcard")
+    func testSubtypeWildcardPrecedenceOverCatchAll() {
+        let subtypeMediaType = MediaType(schema: SchemaRef(Schema(type: "object")))
+        let catchAllMediaType = MediaType(schema: SchemaRef(Schema(type: "string")))
+        let content: [String: MediaType] = [
+            "application/*": subtypeMediaType,
+            "*/*": catchAllMediaType
+        ]
+        let result = findMatchingMediaType(in: content, for: "application/json")
+        #expect(result?.schema?.value.type == "object")
+    }
+
+    @Test("Returns nil when content type not in spec")
+    func testNoMatch() {
+        let jsonMediaType = MediaType(schema: nil)
+        let content: [String: MediaType] = ["application/json": jsonMediaType]
+        let result = findMatchingMediaType(in: content, for: "text/xml")
+        #expect(result == nil)
+    }
+
+    @Test("Returns nil for empty content map")
+    func testEmptyContent() {
+        let result = findMatchingMediaType(in: [:], for: "application/json")
+        #expect(result == nil)
+    }
+
+    // MARK: - Integration tests via OpenAPIHTTPHandler.handleRequest
+
+    private func makeSpec() throws -> OpenAPISpec {
+        let json = """
+        {
+            "openapi": "3.0.3",
+            "info": { "title": "Test API", "version": "1.0.0" },
+            "paths": {
+                "/items": {
+                    "post": {
+                        "operationId": "createItem",
+                        "requestBody": {
+                            "required": true,
+                            "content": {
+                                "application/json": {
+                                    "schema": { "type": "object" }
+                                }
+                            }
+                        },
+                        "responses": { "201": { "description": "Created" } }
+                    }
+                },
+                "/wildcard": {
+                    "post": {
+                        "operationId": "createWildcard",
+                        "requestBody": {
+                            "content": {
+                                "*/*": {}
+                            }
+                        },
+                        "responses": { "200": { "description": "OK" } }
+                    }
+                }
+            }
+        }
+        """
+        return try JSONDecoder().decode(OpenAPISpec.self, from: json.data(using: .utf8)!)
+    }
+
+    private func makeHandler(spec: OpenAPISpec) -> OpenAPIHTTPHandler {
+        let registry = OpenAPIRouteRegistry(spec: spec)
+        let bus = EventBus()
+        return OpenAPIHTTPHandler(routeRegistry: registry, eventBus: bus)
+    }
+
+    @Test("application/json matches application/json spec — 200 response")
+    func testExactContentTypeAccepted() async throws {
+        let handler = makeHandler(spec: try makeSpec())
+        let body = #"{"name":"widget"}"#.data(using: .utf8)
+        let request = HTTPRequest(
+            method: "POST",
+            path: "/items",
+            headers: ["Content-Type": "application/json"],
+            body: body
+        )
+        let response = await handler.handleRequest(request)
+        #expect(response.statusCode != 415)
+    }
+
+    @Test("application/json; charset=utf-8 matches application/json spec — no 415")
+    func testContentTypeWithParametersAccepted() async throws {
+        let handler = makeHandler(spec: try makeSpec())
+        let body = #"{"name":"widget"}"#.data(using: .utf8)
+        let request = HTTPRequest(
+            method: "POST",
+            path: "/items",
+            headers: ["Content-Type": "application/json; charset=utf-8"],
+            body: body
+        )
+        let response = await handler.handleRequest(request)
+        #expect(response.statusCode != 415)
+    }
+
+    @Test("Unsupported Content-Type returns 415 with error body")
+    func testUnsupportedContentTypeReturns415() async throws {
+        let handler = makeHandler(spec: try makeSpec())
+        let body = "<item><name>widget</name></item>".data(using: .utf8)
+        let request = HTTPRequest(
+            method: "POST",
+            path: "/items",
+            headers: ["Content-Type": "text/xml"],
+            body: body
+        )
+        let response = await handler.handleRequest(request)
+        #expect(response.statusCode == 415)
+        #expect(response.headers["Content-Type"] == "application/json")
+        if let data = response.body, let text = String(data: data, encoding: .utf8) {
+            #expect(text.contains("Unsupported Media Type"))
+            #expect(text.contains("text/xml"))
+            #expect(text.contains("application/json"))
+        }
+    }
+
+    @Test("415 error message lists supported media types")
+    func test415ErrorListsSupportedTypes() async throws {
+        let handler = makeHandler(spec: try makeSpec())
+        let body = "plain text".data(using: .utf8)
+        let request = HTTPRequest(
+            method: "POST",
+            path: "/items",
+            headers: ["Content-Type": "text/plain"],
+            body: body
+        )
+        let response = await handler.handleRequest(request)
+        #expect(response.statusCode == 415)
+        if let data = response.body, let text = String(data: data, encoding: .utf8) {
+            #expect(text.contains("application/json"))
+        }
+    }
+
+    @Test("*/* in spec accepts any content type — no 415")
+    func testCatchAllWildcardInSpecAcceptsAnyType() async throws {
+        let handler = makeHandler(spec: try makeSpec())
+        let body = "anything".data(using: .utf8)
+        let request = HTTPRequest(
+            method: "POST",
+            path: "/wildcard",
+            headers: ["Content-Type": "text/csv"],
+            body: body
+        )
+        let response = await handler.handleRequest(request)
+        #expect(response.statusCode != 415)
+    }
+
+    @Test("No Content-Type header and body present — backward compatible, no 415")
+    func testMissingContentTypeHeaderIsBackwardCompatible() async throws {
+        let handler = makeHandler(spec: try makeSpec())
+        let body = #"{"name":"widget"}"#.data(using: .utf8)
+        let request = HTTPRequest(
+            method: "POST",
+            path: "/items",
+            headers: [:],
+            body: body
+        )
+        let response = await handler.handleRequest(request)
+        #expect(response.statusCode != 415)
+    }
+
+    @Test("No body — content-type negotiation is skipped, no 415")
+    func testNoBodySkipsContentTypeNegotiation() async throws {
+        let handler = makeHandler(spec: try makeSpec())
+        let request = HTTPRequest(
+            method: "POST",
+            path: "/items",
+            headers: ["Content-Type": "text/xml"],
+            body: nil
+        )
+        let response = await handler.handleRequest(request)
+        #expect(response.statusCode != 415)
+    }
+
+    @Test("Empty body — content-type negotiation is skipped, no 415")
+    func testEmptyBodySkipsContentTypeNegotiation() async throws {
+        let handler = makeHandler(spec: try makeSpec())
+        let request = HTTPRequest(
+            method: "POST",
+            path: "/items",
+            headers: ["Content-Type": "text/xml"],
+            body: Data()
+        )
+        let response = await handler.handleRequest(request)
+        #expect(response.statusCode != 415)
+    }
+}
+
+// MARK: - parseQueryString Tests
+
+@Suite("parseQueryString Tests")
+struct ParseQueryStringTests {
+
+    @Test("Empty query string returns empty dict")
+    func testEmptyQueryString() {
+        let result = parseQueryString("")
+        #expect(result.isEmpty)
+    }
+
+    @Test("Single key-value pair")
+    func testSinglePair() {
+        let result = parseQueryString("foo=bar")
+        #expect(result["foo"] == ["bar"])
+    }
+
+    @Test("Multiple distinct keys")
+    func testMultipleDistinctKeys() {
+        let result = parseQueryString("a=1&b=2&c=3")
+        #expect(result["a"] == ["1"])
+        #expect(result["b"] == ["2"])
+        #expect(result["c"] == ["3"])
+    }
+
+    @Test("Repeated key produces multiple values")
+    func testRepeatedKey() {
+        let result = parseQueryString("ids=1&ids=2&ids=3")
+        #expect(result["ids"] == ["1", "2", "3"])
+    }
+
+    @Test("Percent-encoded values are decoded")
+    func testPercentEncoding() {
+        let result = parseQueryString("name=hello%20world")
+        #expect(result["name"] == ["hello world"])
+    }
+
+    @Test("Value with no key is ignored")
+    func testEmptyKey() {
+        let result = parseQueryString("=value")
+        #expect(result.isEmpty)
+    }
+
+    @Test("Key without value gets empty string")
+    func testKeyWithoutValue() {
+        let result = parseQueryString("flag")
+        #expect(result["flag"] == [""])
+    }
+
+    @Test("Mixed repeated and unique keys")
+    func testMixedKeys() {
+        let result = parseQueryString("ids=1&name=alice&ids=2")
+        #expect(result["ids"] == ["1", "2"])
+        #expect(result["name"] == ["alice"])
+    }
+}
+
+// MARK: - deserializeParameter Tests
+
+@Suite("SchemaBinding.deserializeParameter Tests")
+struct DeserializeParameterTests {
+
+    // Helper to build a Parameter with the given schema type, style, and explode
+    private func makeParam(
+        name: String = "ids",
+        schemaType: String,
+        style: String? = nil,
+        explode: Bool? = nil
+    ) -> Parameter {
+        let schemaJSON = """
+        {"type":"\(schemaType)","items":{"type":"string"}}
+        """
+        let schemaRef = try! JSONDecoder().decode(SchemaRef.self, from: schemaJSON.data(using: .utf8)!)
+        let paramJSON = """
+        {"name":"\(name)","in":"query"}
+        """
+        // Build via JSON to get default codable state, then we need explicit fields
+        // Since Parameter doesn't have a memberwise public init, decode from JSON including optional fields
+        var jsonDict: [String: Any] = ["name": name, "in": "query", "schema": ["type": schemaType, "items": ["type": "string"]]]
+        if let s = style { jsonDict["style"] = s }
+        if let e = explode { jsonDict["explode"] = e }
+        let data = try! JSONSerialization.data(withJSONObject: jsonDict)
+        return try! JSONDecoder().decode(Parameter.self, from: data)
+    }
+
+    private func makeScalarParam(name: String = "q", schemaType: String = "string") -> Parameter {
+        var jsonDict: [String: Any] = ["name": name, "in": "query", "schema": ["type": schemaType]]
+        let data = try! JSONSerialization.data(withJSONObject: jsonDict)
+        return try! JSONDecoder().decode(Parameter.self, from: data)
+    }
+
+    @Test("form + explode:true (default) → rawValues as array")
+    func testFormExplodeTrue() {
+        let param = makeParam(schemaType: "array", style: "form", explode: true)
+        let result = SchemaBinding.deserializeParameter(rawValues: ["1", "2", "3"], parameter: param, components: nil)
+        let arr = result as? [String]
+        #expect(arr == ["1", "2", "3"])
+    }
+
+    @Test("form + explode:false → comma-split single value")
+    func testFormExplodeFalse() {
+        let param = makeParam(schemaType: "array", style: "form", explode: false)
+        let result = SchemaBinding.deserializeParameter(rawValues: ["1,2,3"], parameter: param, components: nil)
+        let arr = result as? [String]
+        #expect(arr == ["1", "2", "3"])
+    }
+
+    @Test("form default (no explode specified) → explode:true behaviour")
+    func testFormDefaultExplode() {
+        let param = makeParam(schemaType: "array", style: "form")
+        let result = SchemaBinding.deserializeParameter(rawValues: ["a", "b"], parameter: param, components: nil)
+        let arr = result as? [String]
+        #expect(arr == ["a", "b"])
+    }
+
+    @Test("pipeDelimited + explode:false → pipe-split single value")
+    func testPipeDelimited() {
+        let param = makeParam(schemaType: "array", style: "pipeDelimited", explode: false)
+        let result = SchemaBinding.deserializeParameter(rawValues: ["a|b|c"], parameter: param, components: nil)
+        let arr = result as? [String]
+        #expect(arr == ["a", "b", "c"])
+    }
+
+    @Test("spaceDelimited + explode:false → space-split single value")
+    func testSpaceDelimited() {
+        let param = makeParam(schemaType: "array", style: "spaceDelimited", explode: false)
+        let result = SchemaBinding.deserializeParameter(rawValues: ["a b c"], parameter: param, components: nil)
+        let arr = result as? [String]
+        #expect(arr == ["a", "b", "c"])
+    }
+
+    @Test("spaceDelimited + percent-encoded space")
+    func testSpaceDelimitedPercentEncoded() {
+        let param = makeParam(schemaType: "array", style: "spaceDelimited", explode: false)
+        let result = SchemaBinding.deserializeParameter(rawValues: ["a%20b%20c"], parameter: param, components: nil)
+        let arr = result as? [String]
+        #expect(arr == ["a", "b", "c"])
+    }
+
+    @Test("Scalar param with multiple values → returns first value as String")
+    func testScalarParamReturnsFirst() {
+        let param = makeScalarParam()
+        let result = SchemaBinding.deserializeParameter(rawValues: ["first", "second"], parameter: param, components: nil)
+        let str = result as? String
+        #expect(str == "first")
+    }
+
+    @Test("Param with no schema → treated as scalar, returns first value")
+    func testNoSchema() {
+        let data = """
+        {"name":"x","in":"query"}
+        """.data(using: .utf8)!
+        let param = try! JSONDecoder().decode(Parameter.self, from: data)
+        let result = SchemaBinding.deserializeParameter(rawValues: ["val"], parameter: param, components: nil)
+        let str = result as? String
+        #expect(str == "val")
+    }
+
+    @Test("Empty rawValues for scalar → empty string")
+    func testEmptyRawValuesScalar() {
+        let param = makeScalarParam()
+        let result = SchemaBinding.deserializeParameter(rawValues: [], parameter: param, components: nil)
+        let str = result as? String
+        #expect(str == "")
+    }
+}
+
+// MARK: - OpenAPI 3.1 Tests
+
+@Suite("OpenAPI 3.1 Support Tests")
+struct OpenAPI31Tests {
+
+    // MARK: - Schema.types parsing
+
+    @Test("3.1 spec with type array parses as types = [string, null]")
+    func testTypeArrayParsed() throws {
+        let json = """
+        {
+            "type": ["string", "null"]
+        }
+        """
+        let data = json.data(using: .utf8)!
+        let schema = try JSONDecoder().decode(Schema.self, from: data)
+        #expect(schema.types == ["string", "null"])
+        #expect(schema.type == "string")
+        #expect(schema.isNullable == true)
+    }
+
+    @Test("3.0 spec with type string parses as types = [string]")
+    func testTypeStringSingleElement() throws {
+        let json = """
+        {
+            "type": "string"
+        }
+        """
+        let data = json.data(using: .utf8)!
+        let schema = try JSONDecoder().decode(Schema.self, from: data)
+        #expect(schema.types == ["string"])
+        #expect(schema.type == "string")
+        #expect(schema.isNullable == false)
+    }
+
+    @Test("nullable: true (3.0.x) → isNullable == true")
+    func testNullableTrue30() throws {
+        let json = """
+        {
+            "type": "string",
+            "nullable": true
+        }
+        """
+        let data = json.data(using: .utf8)!
+        let schema = try JSONDecoder().decode(Schema.self, from: data)
+        #expect(schema.nullable == true)
+        #expect(schema.isNullable == true)
+    }
+
+    @Test("nullable: false (3.0.x) → isNullable == false")
+    func testNullableFalse30() throws {
+        let json = """
+        {
+            "type": "string",
+            "nullable": false
+        }
+        """
+        let data = json.data(using: .utf8)!
+        let schema = try JSONDecoder().decode(Schema.self, from: data)
+        #expect(schema.nullable == false)
+        #expect(schema.isNullable == false)
+    }
+
+    @Test("No type specified → types is empty, type is nil")
+    func testNoType() throws {
+        let json = """
+        {
+            "description": "no type"
+        }
+        """
+        let data = json.data(using: .utf8)!
+        let schema = try JSONDecoder().decode(Schema.self, from: data)
+        #expect(schema.types.isEmpty)
+        #expect(schema.type == nil)
+        #expect(schema.isNullable == false)
+    }
+
+    // MARK: - exclusiveMinimum / exclusiveMaximum
+
+    @Test("exclusiveMinimum as Bool (3.0.x) parses correctly")
+    func testExclusiveMinimumBool() throws {
+        let json = """
+        {
+            "type": "number",
+            "minimum": 0,
+            "exclusiveMinimum": true
+        }
+        """
+        let data = json.data(using: .utf8)!
+        let schema = try JSONDecoder().decode(Schema.self, from: data)
+        #expect(schema.exclusiveMinimumBool == true)
+        #expect(schema.exclusiveMinimumValue == nil)
+    }
+
+    @Test("exclusiveMinimum as number (3.1) parses correctly")
+    func testExclusiveMinimumValue() throws {
+        let json = """
+        {
+            "type": "number",
+            "exclusiveMinimum": 5.0
+        }
+        """
+        let data = json.data(using: .utf8)!
+        let schema = try JSONDecoder().decode(Schema.self, from: data)
+        #expect(schema.exclusiveMinimumBool == nil)
+        #expect(schema.exclusiveMinimumValue == 5.0)
+    }
+
+    @Test("exclusiveMaximum as Bool (3.0.x) parses correctly")
+    func testExclusiveMaximumBool() throws {
+        let json = """
+        {
+            "type": "number",
+            "maximum": 100,
+            "exclusiveMaximum": true
+        }
+        """
+        let data = json.data(using: .utf8)!
+        let schema = try JSONDecoder().decode(Schema.self, from: data)
+        #expect(schema.exclusiveMaximumBool == true)
+        #expect(schema.exclusiveMaximumValue == nil)
+    }
+
+    @Test("exclusiveMaximum as number (3.1) parses correctly")
+    func testExclusiveMaximumValue() throws {
+        let json = """
+        {
+            "type": "number",
+            "exclusiveMaximum": 100.0
+        }
+        """
+        let data = json.data(using: .utf8)!
+        let schema = try JSONDecoder().decode(Schema.self, from: data)
+        #expect(schema.exclusiveMaximumBool == nil)
+        #expect(schema.exclusiveMaximumValue == 100.0)
+    }
+
+    // MARK: - const constraint
+
+    @Test("const: active — matching value passes")
+    func testConstMatchPasses() throws {
+        let schema = Schema(type: "string", const: .string("active"))
+        #expect(try SchemaBinding.parseValue(json: "active", schema: schema, components: nil) as? String == "active")
+    }
+
+    @Test("const: active — non-matching value throws")
+    func testConstMismatchThrows() throws {
+        let schema = Schema(type: "string", const: .string("active"))
+        #expect(throws: (any Error).self) {
+            try SchemaBinding.parseValue(json: "inactive", schema: schema, components: nil)
+        }
+    }
+
+    @Test("const: 42 — matching integer passes")
+    func testConstIntMatchPasses() throws {
+        let schema = Schema(type: "integer", const: .int(42))
+        // parseValue returns Double for numbers; int 42 decoded via JSONSerialization may come as Int or Double
+        let result = try SchemaBinding.parseValue(json: 42, schema: schema, components: nil)
+        // Allow either Int or Double representation
+        let isMatch = (result as? Int) == 42 || (result as? Double) == 42.0
+        #expect(isMatch)
+    }
+
+    // MARK: - Nullable pass-through in SchemaBinding
+
+    @Test("Nullable schema — NSNull value accepted")
+    func testNullableSchemaAcceptsNSNull() throws {
+        let schema = Schema(type: "string", nullable: true)
+        let result = try SchemaBinding.parseValue(json: NSNull(), schema: schema, components: nil)
+        #expect(result is NSNull)
+    }
+
+    @Test("Nullable schema via type array — NSNull value accepted")
+    func testNullableTypeArrayAcceptsNSNull() throws {
+        let schema = Schema(types: ["string", "null"])
+        let result = try SchemaBinding.parseValue(json: NSNull(), schema: schema, components: nil)
+        #expect(result is NSNull)
+    }
+
+    @Test("Non-nullable schema — NSNull value throws")
+    func testNonNullableSchemaRejectsNSNull() throws {
+        let schema = Schema(type: "string")
+        #expect(throws: (any Error).self) {
+            try SchemaBinding.parseValue(json: NSNull(), schema: schema, components: nil)
+        }
+    }
+
+    // MARK: - OpenAPI 3.1 top-level fields
+
+    @Test("jsonSchemaDialect parses in 3.1 spec")
+    func testJsonSchemaDialectParses() throws {
+        let json = """
+        {
+            "openapi": "3.1.0",
+            "jsonSchemaDialect": "https://json-schema.org/draft/2020-12/schema",
+            "info": {
+                "title": "Test API",
+                "version": "1.0.0"
+            },
+            "paths": {}
+        }
+        """
+        let data = json.data(using: .utf8)!
+        let spec = try JSONDecoder().decode(OpenAPISpec.self, from: data)
+        #expect(spec.jsonSchemaDialect == "https://json-schema.org/draft/2020-12/schema")
+        #expect(spec.is31 == true)
+    }
+
+    @Test("is31 returns false for 3.0.x spec")
+    func testIs31FalseFor30() throws {
+        let json = """
+        {
+            "openapi": "3.0.3",
+            "info": { "title": "T", "version": "1" },
+            "paths": {}
+        }
+        """
+        let data = json.data(using: .utf8)!
+        let spec = try JSONDecoder().decode(OpenAPISpec.self, from: data)
+        #expect(spec.is31 == false)
+    }
+
+    // MARK: - info.summary and license.identifier
+
+    @Test("info.summary parses in 3.1 spec")
+    func testInfoSummaryParses() throws {
+        let json = """
+        {
+            "openapi": "3.1.0",
+            "info": {
+                "title": "Test API",
+                "version": "1.0.0",
+                "summary": "A short summary"
+            },
+            "paths": {}
+        }
+        """
+        let data = json.data(using: .utf8)!
+        let spec = try JSONDecoder().decode(OpenAPISpec.self, from: data)
+        #expect(spec.info.summary == "A short summary")
+    }
+
+    @Test("license.identifier (SPDX) parses in 3.1 spec")
+    func testLicenseIdentifierParses() throws {
+        let json = """
+        {
+            "openapi": "3.1.0",
+            "info": {
+                "title": "Test API",
+                "version": "1.0.0",
+                "license": {
+                    "name": "Apache 2.0",
+                    "identifier": "Apache-2.0"
+                }
+            },
+            "paths": {}
+        }
+        """
+        let data = json.data(using: .utf8)!
+        let spec = try JSONDecoder().decode(OpenAPISpec.self, from: data)
+        #expect(spec.info.license?.name == "Apache 2.0")
+        #expect(spec.info.license?.identifier == "Apache-2.0")
+    }
+
+    // MARK: - webhooks
+
+    @Test("Webhook route registered and matchable")
+    func testWebhookRouteRegistered() throws {
+        let json = """
+        {
+            "openapi": "3.1.0",
+            "info": { "title": "Test API", "version": "1.0.0" },
+            "paths": {},
+            "webhooks": {
+                "newOrder": {
+                    "post": {
+                        "operationId": "handleNewOrder",
+                        "responses": {
+                            "200": { "description": "OK" }
+                        }
+                    }
+                }
+            }
+        }
+        """
+        let data = json.data(using: .utf8)!
+        let spec = try JSONDecoder().decode(OpenAPISpec.self, from: data)
+        #expect(spec.webhooks?["newOrder"] != nil)
+
+        // The route registry should register the webhook
+        let registry = OpenAPIRouteRegistry(spec: spec)
+        let match = registry.match(method: "POST", path: "/newOrder")
+        #expect(match?.operationId == "handleNewOrder")
+    }
+
+    @Test("allOperationIds includes webhook operation IDs")
+    func testAllOperationIdsIncludesWebhooks() throws {
+        let json = """
+        {
+            "openapi": "3.1.0",
+            "info": { "title": "Test API", "version": "1.0.0" },
+            "paths": {
+                "/users": {
+                    "get": {
+                        "operationId": "listUsers",
+                        "responses": { "200": { "description": "OK" } }
+                    }
+                }
+            },
+            "webhooks": {
+                "newOrder": {
+                    "post": {
+                        "operationId": "handleNewOrder",
+                        "responses": { "200": { "description": "OK" } }
+                    }
+                }
+            }
+        }
+        """
+        let data = json.data(using: .utf8)!
+        let spec = try JSONDecoder().decode(OpenAPISpec.self, from: data)
+        let ids = spec.allOperationIds
+        #expect(ids.contains("listUsers"))
+        #expect(ids.contains("handleNewOrder"))
+    }
+}
+
 #endif  // !os(Windows)

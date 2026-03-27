@@ -150,8 +150,13 @@ public actor RuntimeContext: ExecutionContext {
 
         // Magic variable: <http-server> returns Contract.http-server
         // This allows both <Contract> and <http-server> to work
+        // Falls through to regular variable store if contract is not available
+        // (e.g. in binary mode after `Start the <http-server>` binds a ServerStartResult)
         if name == "http-server" || name == "httpServer" {
-            return buildContractObject()?.httpServer
+            if let httpServer = buildContractObject()?.httpServer {
+                return httpServer
+            }
+            // Fall through to regular variable lookup below
         }
 
         // Magic variable: <metrics> returns current execution metrics
