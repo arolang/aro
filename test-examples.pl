@@ -847,6 +847,12 @@ sub run_console_example_internal {
         push @cmd, '--keep-alive' if $keep_alive;
     }
 
+    # Inject free-port env vars so examples that self-host HTTP/socket servers
+    # don't conflict with other processes (e.g. kubectl port-forward on 8080).
+    # Harmless for examples that don't start servers (env vars are simply ignored).
+    local $ENV{ARO_HTTP_PORT}   = $ENV{ARO_HTTP_PORT}   // ($has_net_emptyport ? Net::EmptyPort::empty_port(8080) : 8080);
+    local $ENV{ARO_SOCKET_PORT} = $ENV{ARO_SOCKET_PORT} // ($has_net_emptyport ? Net::EmptyPort::empty_port(9000) : 9000);
+
     # Use IPC::Run for better control
     my ($in, $out, $err) = ('', '', '');
     my $handle = eval {
@@ -931,6 +937,10 @@ sub run_debug_example {
         # Add --keep-alive flag for long-running apps that need SIGINT shutdown
         push @cmd, '--keep-alive' if $keep_alive;
     }
+
+    # Inject free ports so the debug server doesn't collide with kubectl or other processes
+    local $ENV{ARO_HTTP_PORT}   = $ENV{ARO_HTTP_PORT}   // ($has_net_emptyport ? Net::EmptyPort::empty_port(8080) : 8080);
+    local $ENV{ARO_SOCKET_PORT} = $ENV{ARO_SOCKET_PORT} // ($has_net_emptyport ? Net::EmptyPort::empty_port(9000) : 9000);
 
     # Use IPC::Run for better control
     my ($in, $out, $err) = ('', '', '');
@@ -1077,15 +1087,21 @@ sub run_http_example_internal {
         return (undef, "ERROR: Failed to parse openapi.yaml: $@");
     }
 
-    # Extract port
-    my $port = 8080;
+    # Extract port from OpenAPI spec, then find a free port to avoid conflicts
+    my $spec_port = 8080;
     if ($spec->{servers} && $spec->{servers}[0]{url}) {
         my $url = $spec->{servers}[0]{url};
-        $port = $1 if $url =~ /:(\d+)/;
+        $spec_port = $1 if $url =~ /:(\d+)/;
     }
+    # Use a free port so parallel runs and occupied ports don't conflict.
+    # ARO_HTTP_PORT env var overrides the openapi.yaml port inside the server.
+    my $port = $has_net_emptyport
+        ? Net::EmptyPort::empty_port($spec_port)
+        : $spec_port;
 
     # Determine command based on mode
     my @cmd;
+    my %extra_env = (ARO_HTTP_PORT => $port);
     if ($mode eq 'compiled') {
         # Execute compiled binary directly
         # Use provided binary_name (for workdir cases) or derive from dir
@@ -1107,7 +1123,8 @@ sub run_http_example_internal {
         @cmd = ($aro_bin, 'run', $dir);
     }
 
-    # Start server in background
+    # Start server in background (with ARO_HTTP_PORT override)
+    local %ENV = (%ENV, %extra_env);
     my ($in, $out, $err) = ('', '', '');
     my $handle = eval {
         start(\@cmd, \$in, \$out, \$err, timeout($timeout));
@@ -1805,8 +1822,8 @@ sub run_multiservice_example_internal {
         $dir = File::Spec->catdir($examples_dir, $example_name);
     }
 
-    my $http_port   = 8080;
-    my $socket_port = 9000;
+    my $http_port   = Net::EmptyPort::empty_port(8080);
+    my $socket_port = Net::EmptyPort::empty_port(9000);
     my $watch_dir   = File::Spec->catdir(cwd(), 'watched-dir');
 
     mkdir $watch_dir unless -d $watch_dir;
@@ -1835,7 +1852,9 @@ sub run_multiservice_example_internal {
         return (undef, "Failed to fork multi-service app: $!");
     }
     if ($child_pid == 0) {
-        # Child: redirect stdout/stderr and exec
+        # Child: redirect stdout/stderr and exec; pass free ports via env
+        $ENV{ARO_HTTP_PORT}   = $http_port;
+        $ENV{ARO_SOCKET_PORT} = $socket_port;
         open(STDOUT, '>', '/dev/null') or POSIX::_exit(1);
         open(STDERR, '>', '/dev/null') or POSIX::_exit(1);
         exec(@cmd) or POSIX::_exit(1);

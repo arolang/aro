@@ -34,6 +34,17 @@ public final class OpenAPIHTTPHandler: @unchecked Sendable {
             )
         }
 
+        // Enforce security requirements declared in the OpenAPI spec.
+        if let unauthorized = SecurityEnforcer.enforce(
+            operation: match.operation,
+            globalSecurity: spec.security,
+            securitySchemes: spec.components?.securitySchemes,
+            headers: request.headers,
+            queryParameters: request.queryParameters
+        ) {
+            return unauthorized
+        }
+
         // Check for deprecated operation
         var responseHeaders: [String: String] = [
             "Content-Type": "application/json",
@@ -90,10 +101,10 @@ public final class OpenAPIHTTPHandler: @unchecked Sendable {
         // Inject default values for absent query parameters declared in the spec.
         var enrichedQueryParams = filteredQueryParameters
         for param in effectiveParameters where param.in == "query" {
-            guard let pName = param.name else { continue }
-            guard enrichedQueryParams[pName] == nil else { continue }
+            guard let paramName = param.name else { continue }
+            guard enrichedQueryParams[paramName] == nil else { continue }
             if let defaultVal = param.schema?.value.defaultValue {
-                enrichedQueryParams[pName] = "\(defaultVal.anyValue)"
+                enrichedQueryParams[paramName] = "\(defaultVal.anyValue)"
             }
         }
 
@@ -146,6 +157,26 @@ public final class OpenAPIHTTPHandler: @unchecked Sendable {
             default:
                 break
             }
+        }
+
+        // Content-type negotiation for request bodies
+        if let requestBody = match.operation.requestBody, let body = request.body, !body.isEmpty {
+            let rawContentType = request.headers.first(where: { $0.key.lowercased() == "content-type" })?.value
+
+            if let rawContentType = rawContentType {
+                // A Content-Type header was sent — verify it is declared in the spec
+                if findMatchingMediaType(in: requestBody.content, for: rawContentType) == nil {
+                    let supported = requestBody.content.keys.sorted().joined(separator: ", ")
+                    return HTTPResponse(
+                        statusCode: 415,
+                        headers: ["Content-Type": "application/json"],
+                        body: """
+                            {"error":"Unsupported Media Type","message":"Content-Type '\(rawContentType)' is not supported. Supported types: \(supported)"}
+                            """.data(using: .utf8)
+                    )
+                }
+            }
+            // If no Content-Type header, fall through and use existing behavior (first media type)
         }
 
         let event = HTTPOperationEvent(
@@ -241,5 +272,37 @@ public struct HTTPOperationEvent: RuntimeEvent {
 }
 
 // Note: HTTPRequestReceivedEvent and HTTPResponseSentEvent are defined in Events/EventTypes.swift
+
+// MARK: - Content-Type Negotiation
+
+/// Find the best matching media type from an OpenAPI content map for a given Content-Type header value.
+///
+/// Matching is performed in priority order:
+/// 1. Exact match (after stripping parameters such as `; charset=utf-8`)
+/// 2. Subtype wildcard match (`application/*`)
+/// 3. Catch-all wildcard (`*/*`)
+///
+/// - Parameters:
+///   - content: The `content` map from an OpenAPI `requestBody`.
+///   - contentType: The raw value of the incoming `Content-Type` header.
+/// - Returns: The matched `MediaType`, or `nil` if no match was found.
+func findMatchingMediaType(in content: [String: MediaType], for contentType: String) -> MediaType? {
+    // Strip parameters: "application/json; charset=utf-8" -> "application/json"
+    let baseType = contentType.split(separator: ";").first
+        .map(String.init)?.trimmingCharacters(in: .whitespaces) ?? contentType
+
+    // 1. Exact match
+    if let exact = content[baseType] { return exact }
+
+    // 2. Subtype wildcard: "application/*"
+    let parts = baseType.split(separator: "/")
+    if parts.count == 2 {
+        let mainType = String(parts[0])
+        if let wildcard = content["\(mainType)/*"] { return wildcard }
+    }
+
+    // 3. Catch-all wildcard
+    return content["*/*"]
+}
 
 #endif  // !os(Windows)
