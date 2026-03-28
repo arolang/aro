@@ -59,7 +59,7 @@ public struct ListAction: ActionImplementation {
 
         // ARO-0051: Streaming — bind a lazy stream so for-each iterates one entry at a
         // time without loading the full tree into memory. Interpreter mode only:
-        // compiled binary for-each uses index-based iteration that can't consume streams.
+        // compiled binary for-each uses aro_array_get_next (see below).
         if let runtimeContext = context as? RuntimeContext, !runtimeContext.isCompiled {
             let stream = try fileService.listStream(
                 directory: directoryPath,
@@ -70,13 +70,253 @@ public struct ListAction: ActionImplementation {
             return stream
         }
 
-        // Eager fallback
+        // Compiled mode: return LazyDirectoryList for O(1) streaming.
+        // aro_array_get_next_ctx will lazily upgrade it to PipelinedDirectoryIterator
+        // on the first for-each call, enabling cooperative pipelining without breaking
+        // Filter / Compute-length / Store operations that consume the raw list.
+        if recursive {
+            let url = URL(fileURLWithPath: directoryPath)
+            guard let enumerator = FileManager.default.enumerator(
+                at: url,
+                includingPropertiesForKeys: [.isDirectoryKey, .fileSizeKey,
+                                              .contentModificationDateKey, .creationDateKey],
+                options: []
+            ) else {
+                return [] as [any Sendable]
+            }
+            return LazyDirectoryList(enumerator: enumerator, pattern: pattern)
+        }
+
+        // Non-recursive: eager (single level, fast)
         let entries = try await fileService.list(
             directory: directoryPath,
             pattern: pattern,
-            recursive: recursive
+            recursive: false
         )
         return entries.map { $0.toDictionary() }
+    }
+}
+
+// MARK: - Directory Entry Builder
+
+/// Build a file-entry dict from a URL, shared between Darwin and Linux code paths.
+private func buildEntry(url: URL, fmt: ISO8601DateFormatter) -> [String: any Sendable]? {
+    guard let res = try? url.resourceValues(
+        forKeys: [.isDirectoryKey, .fileSizeKey,
+                  .contentModificationDateKey, .creationDateKey]
+    ) else { return nil }
+
+    let isDirectory = res.isDirectory ?? false
+    let size = res.fileSize ?? 0
+    var dict: [String: any Sendable] = [
+        "name": url.lastPathComponent,
+        "path": url.path,
+        "size": size,
+        "isFile": !isDirectory,
+        "isDirectory": isDirectory
+    ]
+    if let d = res.contentModificationDate { dict["modified"] = fmt.string(from: d) }
+    if let d = res.creationDate           { dict["created"]  = fmt.string(from: d) }
+    return dict
+}
+
+// MARK: - LazyDirectoryList (binary mode O(1) streaming)
+
+/// Wraps a synchronous `FileManager.DirectoryEnumerator` so that `aro_array_get_next`
+/// can materialise one file-entry dict per call.  Used exclusively in compiled (binary)
+/// mode where the LLVM-generated for-each loop cannot consume async streams.
+public final class LazyDirectoryList: @unchecked Sendable {
+    private let enumerator: FileManager.DirectoryEnumerator
+    private let pattern: String?
+    private let fmt = ISO8601DateFormatter()
+
+    public init(enumerator: FileManager.DirectoryEnumerator, pattern: String?) {
+        self.enumerator = enumerator
+        self.pattern = pattern
+    }
+
+    /// Advance the enumerator and return the next matching entry as a dict, or nil when done.
+    /// On Darwin, wraps each iteration in an autoreleasepool to prevent NSObject accumulation
+    /// over large directory trees (80k+ entries would otherwise exhaust the thread pool).
+    public func next() -> [String: any Sendable]? {
+        while true {
+            #if canImport(ObjectiveC)
+            guard let url = autoreleasepool(invoking: { self.enumerator.nextObject() as? URL }) else { return nil }
+            #else
+            guard let url = self.enumerator.nextObject() as? URL else { return nil }
+            #endif
+
+            let name = url.lastPathComponent
+            if let pattern = pattern, !matchesGlob(name, pattern: pattern) { continue }
+
+            // On Darwin, autoreleasepool prevents NSObject accumulation over large trees.
+            // On Linux, there is no ObjC runtime, so a plain closure is used instead.
+            #if canImport(ObjectiveC)
+            let entry: [String: any Sendable]? = autoreleasepool {
+                buildEntry(url: url, fmt: self.fmt)
+            }
+            #else
+            let entry: [String: any Sendable]? = buildEntry(url: url, fmt: self.fmt)
+            #endif
+            if let entry = entry { return entry }
+        }
+    }
+
+    private func matchesGlob(_ name: String, pattern: String) -> Bool {
+        var regex = "^"
+        for ch in pattern {
+            switch ch {
+            case "*": regex += ".*"
+            case "?": regex += "."
+            case ".": regex += "\\."
+            default:  regex += NSRegularExpression.escapedPattern(for: String(ch))
+            }
+        }
+        regex += "$"
+        return (try? NSRegularExpression(pattern: regex, options: .caseInsensitive))?
+            .firstMatch(in: name, options: [], range: NSRange(name.startIndex..., in: name)) != nil
+    }
+}
+
+// MARK: - PipelinedDirectoryIterator (binary mode cooperative streaming)
+
+/// Wraps `LazyDirectoryList` with a producer Task that prefetches up to `maxBuffer`
+/// entries in advance, allowing the driver Task and the file-system I/O to overlap.
+///
+/// The producer runs on Swift's cooperative pool.  While the driver Task is awaiting
+/// an async action (e.g. a Retrieve actor hop), the producer concurrently calls
+/// `LazyDirectoryList.next()` for the next entry.  When the consumer asks for the next
+/// item via `tryNextSync()` / `nextAsync()`, it is already buffered — zero extra wait.
+///
+/// Bounded backpressure (default 8 entries) keeps memory O(1) regardless of tree size.
+public final class PipelinedDirectoryIterator: @unchecked Sendable {
+    /// Maximum pre-fetched entries kept in the in-flight buffer.
+    private static let maxBuffer = 8
+
+    private let lock = NSLock()
+    private var buffer: [[String: any Sendable]] = []
+    private var done = false
+    /// Set when the consumer is waiting for an entry and the buffer is empty.
+    private var consumerCont: CheckedContinuation<[String: any Sendable]?, Never>? = nil
+    /// Set when the producer is waiting because the buffer is full.
+    private var pendingProducer: (entry: [String: any Sendable], cont: CheckedContinuation<Void, Never>)? = nil
+
+    public init(enumerator: FileManager.DirectoryEnumerator, pattern: String?) {
+        let list = LazyDirectoryList(enumerator: enumerator, pattern: pattern)
+        Task.detached { [weak self] in
+            while let entry = list.next() {
+                guard let self else { break }
+                await self.produce(entry)
+            }
+            self?.markDone()
+        }
+    }
+
+    /// Wraps an existing `LazyDirectoryList`, starting the prefetch producer immediately.
+    /// Used by `aro_array_get_next_ctx` for a lazy upgrade on the first for-each call.
+    public init(from list: LazyDirectoryList) {
+        Task.detached { [weak self] in
+            while let entry = list.next() {
+                guard let self else { break }
+                await self.produce(entry)
+            }
+            self?.markDone()
+        }
+    }
+
+    // Called from producer Task to enqueue an entry (with backpressure).
+    private func produce(_ entry: [String: any Sendable]) async {
+        await withCheckedContinuation { (cont: CheckedContinuation<Void, Never>) in
+            lock.withLock {
+                if let cc = consumerCont {
+                    // Consumer is waiting — hand it directly, producer continues immediately.
+                    consumerCont = nil
+                    cont.resume()
+                    cc.resume(returning: entry)
+                } else if buffer.count < Self.maxBuffer {
+                    buffer.append(entry)
+                    cont.resume()
+                } else {
+                    // Buffer full — producer suspends until consumer dequeues.
+                    pendingProducer = (entry, cont)
+                }
+            }
+        }
+    }
+
+    private func markDone() {
+        lock.withLock {
+            done = true
+            consumerCont?.resume(returning: nil)
+            consumerCont = nil
+        }
+    }
+
+    /// Synchronous fast path: returns the next entry if one is buffered, or nil.
+    /// Also wakes a blocked producer if the buffer now has room.
+    /// Called from `aro_array_get_next_ctx` on the C pthread.
+    public func tryNextSync() -> [String: any Sendable]? {
+        var toResumeProducer: CheckedContinuation<Void, Never>? = nil
+
+        let result = lock.withLock { () -> [String: any Sendable]? in
+            if let entry = buffer.first {
+                buffer.removeFirst()
+                // If producer was blocked waiting for buffer space, move its pending entry
+                // into the buffer and schedule it to continue.
+                if let (pe, pc) = pendingProducer {
+                    pendingProducer = nil
+                    buffer.append(pe)
+                    toResumeProducer = pc
+                }
+                return entry
+            }
+            // Also check pending producer: take its entry directly if buffer is empty.
+            if let (pe, pc) = pendingProducer {
+                pendingProducer = nil
+                toResumeProducer = pc
+                return pe
+            }
+            return nil
+        }
+
+        // Resume producer continuation OUTSIDE the lock (avoids lock inversion).
+        toResumeProducer?.resume()
+        return result
+    }
+
+    /// True when the producer has finished AND nothing remains in the buffer.
+    public var isExhausted: Bool {
+        lock.withLock { done && buffer.isEmpty && pendingProducer == nil }
+    }
+
+    /// Async wait: used by the driver Task when `tryNextSync` returned nil.
+    /// Suspends until the producer delivers the next entry.
+    public func nextAsync() async -> [String: any Sendable]? {
+        return await withCheckedContinuation { (cont: CheckedContinuation<[String: any Sendable]?, Never>) in
+            var toResumeProducer: CheckedContinuation<Void, Never>? = nil
+
+            lock.withLock {
+                if let entry = buffer.first {
+                    buffer.removeFirst()
+                    if let (pe, pc) = pendingProducer {
+                        pendingProducer = nil
+                        buffer.append(pe)
+                        toResumeProducer = pc
+                    }
+                    cont.resume(returning: entry)
+                } else if let (pe, pc) = pendingProducer {
+                    pendingProducer = nil
+                    toResumeProducer = pc
+                    cont.resume(returning: pe)
+                } else if done {
+                    cont.resume(returning: nil)
+                } else {
+                    consumerCont = cont
+                }
+            }
+
+            toResumeProducer?.resume()
+        }
     }
 }
 

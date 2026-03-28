@@ -69,6 +69,8 @@ public final class LLVMExternalDeclEmitter {
     // Collection operations
     private var _arrayCount: Function?
     private var _arrayGet: Function?
+    private var _arrayGetNext: Function?
+    private var _arrayGetNextCtx: Function?
     private var _dictGet: Function?
     private var _parallelForEachExecute: Function?
 
@@ -426,6 +428,23 @@ public final class LLVMExternalDeclEmitter {
             types.functionType(parameters: [ptr, i64], returning: ptr)
         )
 
+        // ptr @aro_array_get_next(ptr collection, ptr stateI64)
+        // Returns the next passRetained element or NULL; updates *stateI64 in-place.
+        // Works for both eagerly-materialised arrays and LazyDirectoryList.
+        _arrayGetNext = ctx.module.declareFunction(
+            "aro_array_get_next",
+            types.functionType(parameters: [ptr, ptr], returning: ptr)
+        )
+
+        // ptr @aro_array_get_next_ctx(ptr context, ptr collection, ptr stateI64)
+        // Context-aware cooperative variant: uses PipelinedDirectoryIterator + driver channel.
+        // Fast path (item buffered): returns immediately like aro_array_get_next.
+        // Slow path (buffer empty): submits to driver channel for cooperative await.
+        _arrayGetNextCtx = ctx.module.declareFunction(
+            "aro_array_get_next_ctx",
+            types.functionType(parameters: [ptr, ptr, ptr], returning: ptr)
+        )
+
         // ptr @aro_dict_get(ptr, ptr)
         _dictGet = ctx.module.declareFunction(
             "aro_dict_get",
@@ -565,6 +584,8 @@ public final class LLVMExternalDeclEmitter {
     // Collection operations
     public var arrayCount: Function { _arrayCount! }
     public var arrayGet: Function { _arrayGet! }
+    public var arrayGetNext: Function { _arrayGetNext! }
+    public var arrayGetNextCtx: Function { _arrayGetNextCtx! }
     public var dictGet: Function { _dictGet! }
     public var parallelForEachExecute: Function { _parallelForEachExecute! }
 

@@ -1,0 +1,23 @@
+Initial profile:
+active: false
+name: Alice
+role: viewer
+After single-field updates:
+active: true
+name: Alice
+role: editor
+After multi-field update:
+active: true
+department: engineering
+name: Alice
+role: admin
+After conditional update (should-promote = true):
+active: true
+department: leadership
+name: Alice
+role: owner
+After conditional update (should-demote = false, no change expected):
+active: true
+department: leadership
+name: Alice
+role: owner

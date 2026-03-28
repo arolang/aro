@@ -422,7 +422,69 @@ See Chapter 20 for the full plugin development guide.
 
 ---
 
-## 9.7 Computation Patterns
+## 9.7 Counting Collections: Two Styles
+
+ARO provides two distinct ways to count the elements in a collection. They produce the same number, but they belong to different roles and serve different purposes.
+
+### Style 1 — Compute with `length` or `count` (OWN role)
+
+`Compute` is a pure OWN-role action: it reads an existing binding, measures it, and produces a new binding. No pipeline machinery is involved.
+
+```aro
+Create the <all-files> with ["report.pdf", "notes.txt", "data.csv"].
+Compute the <file-count: length> from the <all-files>.
+Log <file-count> to the <console>.
+(* Output: 3 *)
+```
+
+`length` and `count` are interchangeable for collections. `length` additionally works on strings, counting characters:
+
+```aro
+Create the <message> with "Hello!".
+Compute the <char-count: length> from the <message>.
+(* char-count = 6 *)
+```
+
+Use this style when you already have a collection bound to a variable and just need its size—it is concise and self-contained.
+
+### Style 2 — Reduce with `count()` (Aggregate role)
+
+`Reduce` is the aggregation action in ARO's data pipeline. It collapses a collection to a single value using a function. `count()` is one of those functions.
+
+```aro
+Create the <all-files> with ["report.pdf", "notes.txt", "data.csv"].
+Reduce the <file-count: Integer> from the <all-files> with count().
+Log <file-count> to the <console>.
+(* Output: 3 *)
+```
+
+The explicit `: Integer` type annotation documents intent and enables compile-time type checking. More importantly, `Reduce` composes naturally with the rest of the pipeline—you can filter before counting in a declarative chain:
+
+```aro
+(* Count only complete orders *)
+Filter the <complete-orders: List> from the <orders>
+    where <status> is "complete".
+Reduce the <complete-count: Integer> from the <complete-orders>
+    with count().
+```
+
+### Choosing Between the Two
+
+| | `Compute <n: length>` | `Reduce <n: Integer> … with count()` |
+|---|---|---|
+| **Role** | OWN (pure transformation) | Aggregate (data pipeline) |
+| **Type annotation** | Inferred | Explicit |
+| **Works on** | Lists, strings, dictionaries | Collections |
+| **Pipeline composition** | Standalone | Pairs with Filter / Map / Retrieve |
+| **Best for** | Quick size check of any value | Aggregation as part of a data pipeline |
+
+In practice: reach for `Compute` when you need a quick measurement and `Reduce` when you are building a data pipeline or need an explicit type annotation.
+
+See Chapter 34 for the full data pipeline documentation.
+
+---
+
+## 9.8 Computation Patterns
 
 Several patterns emerge in how computations are used within feature sets.
 

@@ -15,18 +15,18 @@ import AROParser
 /// ```
 /// <Return> an <OK: status> for a <valid: authentication>.
 /// ```
-public struct ReturnAction: ActionImplementation {
+public struct ReturnAction: SynchronousAction {
     public static let role: ActionRole = .response
     public static let verbs: Set<String> = ["return", "respond"]
     public static let validPrepositions: Set<Preposition> = [.for, .to, .with]
 
     public init() {}
 
-    public func execute(
+    public func executeSynchronously(
         result: ResultDescriptor,
         object: ObjectDescriptor,
         context: ExecutionContext
-    ) async throws -> any Sendable {
+    ) throws -> any Sendable {
         try validatePreposition(object.preposition)
 
         let statusName = result.base
@@ -246,18 +246,18 @@ public struct ReturnAction: ActionImplementation {
 }
 
 /// Throws an error
-public struct ThrowAction: ActionImplementation {
+public struct ThrowAction: SynchronousAction {
     public static let role: ActionRole = .response
     public static let verbs: Set<String> = ["throw", "raise", "fail"]
     public static let validPrepositions: Set<Preposition> = [.for]
 
     public init() {}
 
-    public func execute(
+    public func executeSynchronously(
         result: ResultDescriptor,
         object: ObjectDescriptor,
         context: ExecutionContext
-    ) async throws -> any Sendable {
+    ) throws -> any Sendable {
         try validatePreposition(object.preposition)
 
         let errorType = result.base
@@ -912,18 +912,18 @@ public struct URLWriteResult: Sendable {
 }
 
 /// Publishes a variable for cross-feature-set access
-public struct PublishAction: ActionImplementation {
+public struct PublishAction: SynchronousAction {
     public static let role: ActionRole = .export
     public static let verbs: Set<String> = ["publish", "export", "expose", "share"]
     public static let validPrepositions: Set<Preposition> = [.with]
 
     public init() {}
 
-    public func execute(
+    public func executeSynchronously(
         result: ResultDescriptor,
         object: ObjectDescriptor,
         context: ExecutionContext
-    ) async throws -> any Sendable {
+    ) throws -> any Sendable {
         // Publish is handled specially - the external name is in result, internal in object
         guard let value = context.resolveAny(object.base) else {
             throw ActionError.undefinedVariable(object.base)

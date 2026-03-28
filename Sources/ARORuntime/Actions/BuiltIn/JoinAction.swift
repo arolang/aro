@@ -10,18 +10,18 @@ import AROParser
 /// Syntax: Join the <result> from <collection> with "separator".
 /// Uses expression-mode object (no article): object is resolved via _expression_,
 /// and the 'with' clause binds the separator to _with_.
-public struct JoinAction: ActionImplementation {
+public struct JoinAction: SynchronousAction {
     public static let role: ActionRole = .own
     public static let verbs: Set<String> = ["join"]
     public static let validPrepositions: Set<Preposition> = [.from]
 
     public init() {}
 
-    public func execute(
+    public func executeSynchronously(
         result: ResultDescriptor,
         object: ObjectDescriptor,
         context: ExecutionContext
-    ) async throws -> any Sendable {
+    ) throws -> any Sendable {
         try validatePreposition(object.preposition)
 
         // Resolve the collection — either from named variable or _expression_

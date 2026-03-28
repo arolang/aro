@@ -1,0 +1,53 @@
+(* ============================================================
+   CountingStyles Example
+   Demonstrates two ways to count a collection:
+     1. Compute with length/count qualifier (OWN role)
+     2. Reduce with count() aggregation (Aggregate role)
+   ============================================================ *)
+
+(Application-Start: Counting Styles) {
+    Log "=== Counting Collections: Two Styles ===" to the <console>.
+
+    Create the <fruits> with ["apple", "banana", "cherry", "date", "elderberry"].
+
+    (* --- Style 1: Compute with length qualifier --- *)
+    (* OWN role: pure in-memory measurement, works on lists and strings *)
+    Log "--- Style 1: Compute ---" to the <console>.
+    Compute the <fruit-count: length> from the <fruits>.
+    Log "Count via Compute:" to the <console>.
+    Log <fruit-count> to the <console>.
+
+    (* --- Style 2: Reduce with count() --- *)
+    (* Aggregate role: part of the data pipeline pattern, supports type annotation *)
+    Log "--- Style 2: Reduce ---" to the <console>.
+    Reduce the <total: Integer> from the <fruits> with count().
+    Log "Count via Reduce:" to the <console>.
+    Log <total> to the <console>.
+
+    (* --- Reduce adds pipeline power: filter before counting --- *)
+    Log "--- Reduce with inline filter ---" to the <console>.
+    Create the <orders> with [
+        {id: 1, status: "complete"},
+        {id: 2, status: "pending"},
+        {id: 3, status: "complete"},
+        {id: 4, status: "pending"},
+        {id: 5, status: "complete"}
+    ].
+
+    Filter the <complete-orders: List> from the <orders>
+        where <status> is "complete".
+    Reduce the <complete-count: Integer> from the <complete-orders>
+        with count().
+    Log "Complete orders:" to the <console>.
+    Log <complete-count> to the <console>.
+
+    (* --- Compute also works on strings (character count) --- *)
+    Log "--- Compute on a string ---" to the <console>.
+    Create the <greeting> with "Hello!".
+    Compute the <char-count: length> from the <greeting>.
+    Log "Characters in greeting:" to the <console>.
+    Log <char-count> to the <console>.
+
+    Log "=== Done ===" to the <console>.
+    Return an <OK: status> for the <application>.
+}

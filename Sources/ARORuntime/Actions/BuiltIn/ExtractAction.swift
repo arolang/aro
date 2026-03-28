@@ -22,18 +22,18 @@ import CoreFoundation
 /// ```
 /// <Extract> the <user: identifier> from the <incoming-request: parameters>.
 /// ```
-public struct ExtractAction: ActionImplementation {
+public struct ExtractAction: SynchronousAction {
     public static let role: ActionRole = .request
     public static let verbs: Set<String> = ["extract", "parse", "get"]
     public static let validPrepositions: Set<Preposition> = [.from, .via]
 
     public init() {}
 
-    public func execute(
+    public func executeSynchronously(
         result: ResultDescriptor,
         object: ObjectDescriptor,
         context: ExecutionContext
-    ) async throws -> any Sendable {
+    ) throws -> any Sendable {
         try validatePreposition(object.preposition)
 
         // Handle environment variable extraction: <env: VAR_NAME>
@@ -261,6 +261,26 @@ public struct ExtractAction: ActionImplementation {
     }
 
     private func extractProperty(from source: any Sendable, key: String) throws -> any Sendable {
+        // Handle ServerStartResult — lets ARO code extract port/type from server startup result.
+        if let serverResult = source as? ServerStartResult {
+            switch key {
+            case "port": return (serverResult.port ?? 8080) as any Sendable
+            case "type", "serverType": return serverResult.serverType
+            case "success": return serverResult.success
+            default: break
+            }
+        }
+
+        // Handle HTTPServerConfig — lets ARO code extract port/hostname from http-server magic object.
+        if let config = source as? HTTPServerConfig {
+            if let value = config.property(key) { return value }
+        }
+
+        // Handle Contract — lets ARO code extract http-server config from contract magic object.
+        if let contract = source as? Contract {
+            if let value = contract.property(key) { return value }
+        }
+
         // Handle AROHTTPResult — body, status, headers keys plus body-fallthrough
         // for backwards compatibility (existing key access delegated to body).
         if let httpResult = source as? AROHTTPResult {

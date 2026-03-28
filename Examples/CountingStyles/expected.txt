@@ -1,0 +1,14 @@
+=== Counting Collections: Two Styles ===
+--- Style 1: Compute ---
+Count via Compute:
+5
+--- Style 2: Reduce ---
+Count via Reduce:
+5
+--- Reduce with inline filter ---
+Complete orders:
+3
+--- Compute on a string ---
+Characters in greeting:
+6
+=== Done ===

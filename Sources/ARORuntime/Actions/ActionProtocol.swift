@@ -231,6 +231,44 @@ public extension ActionImplementation {
     }
 }
 
+// MARK: - Async Fallback Sentinel
+
+/// Thrown from `SynchronousAction.executeSynchronously` when the action encounters
+/// a path that genuinely needs `await` (e.g., an optional plugin service is present,
+/// or input is a streaming value).  `ActionRunner` treats this as a signal to retry
+/// via the normal `Task.detached + DispatchSemaphore` path.
+public struct NeedsAsyncExecution: Error {}
+
+// MARK: - Synchronous Action Protocol
+
+/// Optional sub-protocol for actions that contain no real suspension points.
+///
+/// Conforming actions are executed directly on the calling thread in
+/// compiled-binary mode, bypassing the `Task.detached + DispatchSemaphore`
+/// round-trip that would otherwise be used.  This is safe as long as the
+/// implementation never calls `await` on a suspension point that would
+/// block (actor hops on the RepositoryStorageActor are NOT safe here).
+///
+/// A default `execute` implementation is provided so conforming types only
+/// need to implement `executeSynchronously`.
+public protocol SynchronousAction: ActionImplementation {
+    func executeSynchronously(
+        result: ResultDescriptor,
+        object: ObjectDescriptor,
+        context: ExecutionContext
+    ) throws -> any Sendable
+}
+
+public extension SynchronousAction {
+    func execute(
+        result: ResultDescriptor,
+        object: ObjectDescriptor,
+        context: ExecutionContext
+    ) async throws -> any Sendable {
+        return try executeSynchronously(result: result, object: object, context: context)
+    }
+}
+
 // MARK: - Action Module Protocol
 
 /// Groups related built-in actions into a named category.
