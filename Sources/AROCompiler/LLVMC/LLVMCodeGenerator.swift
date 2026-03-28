@@ -1084,7 +1084,15 @@ public final class LLVMCodeGenerator {
         // Stream path: if the collection variable holds a lazy stream, use the callback-based
         // stream iterator (O(1) memory) instead of the index-based array loop.
         // Only applies when iterating a plain variable (no specifiers).
+        //
+        // When the stream dispatch is active, `collection` (from aro_variable_resolve) is only
+        // defined in the array path. To satisfy LLVM dominance, we introduce a dedicated
+        // `arrayEndBlock` that frees `collection` and then falls through to `endBlock`.
+        // The stream path jumps directly to `endBlock` (no collection box to free).
+        var arrayEndBlock: BasicBlock? = nil
         if loop.collection.specifiers.isEmpty {
+            arrayEndBlock = ctx.module.appendBlock(named: "\(prefix)_aend", to: ctx.currentFunction!)
+
             let collVarName = ctx.stringConstant(loop.collection.base)
             let isStreamResult = ctx.module.insertCall(
                 externals.isStream,
@@ -1160,7 +1168,10 @@ public final class LLVMCodeGenerator {
         let isNull = ctx.module.insertIntegerComparison(
             .eq, nextElem, ctx.ptrType.null, at: ctx.insertionPoint
         )
-        ctx.module.insertCondBr(if: isNull, then: endBlock, else: bodyBlock, at: ctx.insertionPoint)
+        // When stream dispatch is active, jump to arrayEndBlock (frees collection) then endBlock.
+        // Otherwise jump directly to endBlock (collection freed there, as before).
+        let arrayDoneBlock = arrayEndBlock ?? endBlock
+        ctx.module.insertCondBr(if: isNull, then: arrayDoneBlock, else: bodyBlock, at: ctx.insertionPoint)
 
         // === Body Block ===
         ctx.setInsertionPoint(atEndOf: bodyBlock)
@@ -1258,12 +1269,24 @@ public final class LLVMCodeGenerator {
 
         ctx.module.insertBr(to: condBlock, at: ctx.insertionPoint)
 
+        // === Array End Block (only present when stream dispatch is active) ===
+        // Frees `collection` before falling through to endBlock. This keeps `collection`
+        // within the array-only control-flow path, satisfying LLVM dominance.
+        if let aEnd = arrayEndBlock {
+            ctx.setInsertionPoint(atEndOf: aEnd)
+            _ = ctx.module.insertCall(externals.valueFree, on: [collection], at: ctx.insertionPoint)
+            ctx.module.insertBr(to: endBlock, at: ctx.insertionPoint)
+        }
+
         // === End Block ===
         ctx.setInsertionPoint(atEndOf: endBlock)
 
         // Free the collection box from aro_variable_resolve (or the final aro_dict_get).
-        // The inner collection value stays alive in the context; only the wrapper is freed.
-        _ = ctx.module.insertCall(externals.valueFree, on: [collection], at: ctx.insertionPoint)
+        // Only inserted when there is no stream dispatch (array-only path); when stream
+        // dispatch is active the free is done in arrayEndBlock above.
+        if arrayEndBlock == nil {
+            _ = ctx.module.insertCall(externals.valueFree, on: [collection], at: ctx.insertionPoint)
+        }
     }
 
     // MARK: - Stream For-Each Loop Generation (lazy O(1) path)
