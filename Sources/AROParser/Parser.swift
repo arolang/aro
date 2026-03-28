@@ -1819,6 +1819,20 @@ extension Parser {
             let right = try parsePrecedence(precedence)
             let span = left.span.merged(with: right.span)
 
+            // Short-hand logical: `<x> = "a" or "b"` → `<x> = "a" or <x> = "b"`
+            // When `or`/`and` joins a comparison on the left with a bare value on the right,
+            // distribute the left-hand comparison's subject and operator to the right side.
+            if (actualOp == .or || actualOp == .and),
+               let leftBin = left as? BinaryExpression,
+               leftBin.op.isComparison,
+               !((right as? BinaryExpression)?.op.isComparison ?? false),
+               !((right as? BinaryExpression)?.op.isLogical ?? false) {
+                let expandedRight = BinaryExpression(
+                    left: leftBin.left, op: leftBin.op, right: right, span: right.span
+                )
+                return BinaryExpression(left: left, op: actualOp, right: expandedRight, span: span)
+            }
+
             return BinaryExpression(left: left, op: actualOp, right: right, span: span)
         }
     }

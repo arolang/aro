@@ -1147,6 +1147,23 @@ public enum BinaryOperator: String, Sendable, CaseIterable {
     // Collection
     case contains = "contains"
     case matches = "matches"
+
+    /// True for comparison/equality operators (==, !=, <, >, <=, >=, is, is not, contains, matches)
+    public var isComparison: Bool {
+        switch self {
+        case .equal, .notEqual, .lessThan, .greaterThan,
+             .lessEqual, .greaterEqual, .is, .isNot,
+             .contains, .matches:
+            return true
+        default:
+            return false
+        }
+    }
+
+    /// True for logical connectives (and, or)
+    public var isLogical: Bool {
+        self == .and || self == .or
+    }
 }
 
 /// Unary operators

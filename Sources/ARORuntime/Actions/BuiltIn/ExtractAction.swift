@@ -112,6 +112,15 @@ public struct ExtractAction: SynchronousAction {
             return extracted
         }
 
+        // Extract from dictionary using result specifier as key
+        // Example: <Extract> the <message-text: message> from the <body>.
+        // When body is already a parsed dictionary, uses "message" as key
+        if let specifier = result.specifiers.first,
+           let dict = resolvedSource as? [String: any Sendable],
+           let value = dict[specifier] {
+            return value
+        }
+
         // Use result specifier to extract from string (form data, JSON, etc.)
         // Example: <Extract> the <message-text: message> from the <body>.
         // Uses "message" as the key to extract from body string

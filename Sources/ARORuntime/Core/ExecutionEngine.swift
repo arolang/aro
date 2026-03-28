@@ -1310,6 +1310,9 @@ public actor ExecutionEngine {
             let eventData: [String: any Sendable] = ["key": event.key]
             context.bind("event", value: eventData)
             context.bind("event:key", value: event.key)
+            // Also bind plain "key" so `where <key> = "down"` works
+            // (consistent with binary mode which binds all payload keys)
+            context.bind("key", value: event.key)
         }
     }
 
