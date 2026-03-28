@@ -59,7 +59,7 @@ public struct ListAction: ActionImplementation {
 
         // ARO-0051: Streaming — bind a lazy stream so for-each iterates one entry at a
         // time without loading the full tree into memory. Interpreter mode only:
-        // compiled binary for-each uses index-based iteration that can't consume streams.
+        // compiled binary for-each uses aro_array_get_next (see below).
         if let runtimeContext = context as? RuntimeContext, !runtimeContext.isCompiled {
             let stream = try fileService.listStream(
                 directory: directoryPath,
@@ -70,13 +70,110 @@ public struct ListAction: ActionImplementation {
             return stream
         }
 
-        // Eager fallback
+        // Lazy streaming for compiled mode — O(1) memory, starts comparing immediately.
+        // aro_array_get_next already handles LazyDirectoryList via the existing branch.
+        // Non-recursive: still eager (single directory level, negligible size).
+        if recursive {
+            let url = URL(fileURLWithPath: directoryPath)
+            guard let enumerator = FileManager.default.enumerator(
+                at: url,
+                includingPropertiesForKeys: [.isDirectoryKey, .fileSizeKey,
+                                              .contentModificationDateKey, .creationDateKey],
+                options: []
+            ) else {
+                return [] as [any Sendable]
+            }
+            return LazyDirectoryList(enumerator: enumerator, pattern: pattern)
+        }
+
+        // Non-recursive: eager (single level, fast)
         let entries = try await fileService.list(
             directory: directoryPath,
             pattern: pattern,
-            recursive: recursive
+            recursive: false
         )
         return entries.map { $0.toDictionary() }
+    }
+}
+
+// MARK: - Directory Entry Builder
+
+/// Build a file-entry dict from a URL, shared between Darwin and Linux code paths.
+private func buildEntry(url: URL, fmt: ISO8601DateFormatter) -> [String: any Sendable]? {
+    guard let res = try? url.resourceValues(
+        forKeys: [.isDirectoryKey, .fileSizeKey,
+                  .contentModificationDateKey, .creationDateKey]
+    ) else { return nil }
+
+    let isDirectory = res.isDirectory ?? false
+    let size = res.fileSize ?? 0
+    var dict: [String: any Sendable] = [
+        "name": url.lastPathComponent,
+        "path": url.path,
+        "size": size,
+        "isFile": !isDirectory,
+        "isDirectory": isDirectory
+    ]
+    if let d = res.contentModificationDate { dict["modified"] = fmt.string(from: d) }
+    if let d = res.creationDate           { dict["created"]  = fmt.string(from: d) }
+    return dict
+}
+
+// MARK: - LazyDirectoryList (binary mode O(1) streaming)
+
+/// Wraps a synchronous `FileManager.DirectoryEnumerator` so that `aro_array_get_next`
+/// can materialise one file-entry dict per call.  Used exclusively in compiled (binary)
+/// mode where the LLVM-generated for-each loop cannot consume async streams.
+public final class LazyDirectoryList: @unchecked Sendable {
+    private let enumerator: FileManager.DirectoryEnumerator
+    private let pattern: String?
+    private let fmt = ISO8601DateFormatter()
+
+    public init(enumerator: FileManager.DirectoryEnumerator, pattern: String?) {
+        self.enumerator = enumerator
+        self.pattern = pattern
+    }
+
+    /// Advance the enumerator and return the next matching entry as a dict, or nil when done.
+    /// On Darwin, wraps each iteration in an autoreleasepool to prevent NSObject accumulation
+    /// over large directory trees (80k+ entries would otherwise exhaust the thread pool).
+    public func next() -> [String: any Sendable]? {
+        while true {
+            #if canImport(ObjectiveC)
+            guard let url = autoreleasepool(invoking: { self.enumerator.nextObject() as? URL }) else { return nil }
+            #else
+            guard let url = self.enumerator.nextObject() as? URL else { return nil }
+            #endif
+
+            let name = url.lastPathComponent
+            if let pattern = pattern, !matchesGlob(name, pattern: pattern) { continue }
+
+            // On Darwin, autoreleasepool prevents NSObject accumulation over large trees.
+            // On Linux, there is no ObjC runtime, so a plain closure is used instead.
+            #if canImport(ObjectiveC)
+            let entry: [String: any Sendable]? = autoreleasepool {
+                buildEntry(url: url, fmt: self.fmt)
+            }
+            #else
+            let entry: [String: any Sendable]? = buildEntry(url: url, fmt: self.fmt)
+            #endif
+            if let entry = entry { return entry }
+        }
+    }
+
+    private func matchesGlob(_ name: String, pattern: String) -> Bool {
+        var regex = "^"
+        for ch in pattern {
+            switch ch {
+            case "*": regex += ".*"
+            case "?": regex += "."
+            case ".": regex += "\\."
+            default:  regex += NSRegularExpression.escapedPattern(for: String(ch))
+            }
+        }
+        regex += "$"
+        return (try? NSRegularExpression(pattern: regex, options: .caseInsensitive))?
+            .firstMatch(in: name, options: [], range: NSRange(name.startIndex..., in: name)) != nil
     }
 }
 

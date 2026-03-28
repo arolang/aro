@@ -1,0 +1,3 @@
+# Test hints for CountingStyles
+# Demonstrates two ways to count: Compute (OWN) vs Reduce (Aggregate)
+mode: both

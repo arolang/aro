@@ -585,6 +585,53 @@ Merge the <greeting> with <name>.
 
 **Valid Prepositions:** `with`, `into`, `from`
 
+### Update
+
+Modifies fields of an existing in-memory object. Supports two forms:
+
+- **Single-field**: targets one field via the colon qualifier on the result
+- **Multi-field**: provides an object literal whose keys are merged into the target
+
+**Syntax:**
+```aro
+(* Single-field *)
+Update the <obj: field> with <value>.
+Update the <obj: field> with <value> when <condition>.
+
+(* Multi-field — merges all provided keys into the object *)
+Update the <obj> with { field1: <value1>, field2: <value2> }.
+Update the <obj> with { field1: <value1>, field2: <value2> } when <condition>.
+```
+
+**Examples:**
+```aro
+(* Single-field update *)
+Update the <user: role> with "admin".
+Update the <order: status> with "shipped" when <payment-confirmed>.
+
+(* Multi-field update — four lines become one *)
+Update the <tracker> with {
+    modified: <stat-entry: modified>,
+    fileId:   <stat-entry: id>,
+    filePath: <stat-entry: path>,
+    fileSize: <stat-entry: size>
+} when <newer-entry>.
+
+(* Update from another object's fields *)
+Create the <patch> with { role: "editor", department: "engineering" }.
+Update the <profile> with {
+    role:       <patch: role>,
+    department: <patch: department>
+}.
+```
+
+**Behaviour:**
+- Only the keys listed in the object literal are updated; all other fields are preserved
+- The `when` guard is evaluated before any field is written; if false the object is unchanged
+- Field access expressions (`<obj: field>`) are valid on the right-hand side
+
+**Valid Prepositions:** `with`, `to`, `for`, `from`
+
 ---
 
 ## RESPONSE Actions
