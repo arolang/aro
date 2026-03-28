@@ -69,7 +69,7 @@ public struct StreamAction: ActionImplementation {
         context: ExecutionContext
     ) async throws -> any Sendable {
         #if !os(Windows)
-        // Resolve URL
+        // Resolve URL or file path
         let url: String
         if context.exists(object.base) {
             if let resolved = context.resolveAny(object.base) as? String {
@@ -77,15 +77,17 @@ public struct StreamAction: ActionImplementation {
             } else {
                 url = object.base
             }
-        } else if let literal = context.resolveAny("_literal_") as? String, literal.hasPrefix("http") {
+        } else if let literal = context.resolveAny("_literal_") as? String {
             url = literal
         } else {
             url = object.base
         }
 
-        guard url.hasPrefix("http://") || url.hasPrefix("https://")
-           || url.hasPrefix("ws://") || url.hasPrefix("wss://") else {
-            throw ActionError.invalidURL(url)
+        // Route local file paths to the lazy line-streaming path (O(1) memory)
+        let isNetworkURL = url.hasPrefix("http://") || url.hasPrefix("https://")
+            || url.hasPrefix("ws://") || url.hasPrefix("wss://")
+        guard isNetworkURL else {
+            return streamFile(source: url, result: result, context: context)
         }
 
         // Extract optional config from with { ... } clause
@@ -180,6 +182,76 @@ public struct StreamAction: ActionImplementation {
         if let retry = config["retry"] as? Double { return retry }
         return nil
     }
+
+    // MARK: - File Streaming
+
+    /// Creates a lazy line-by-line stream from a local file.
+    ///
+    /// The stream is backed by `URL.lines` (AsyncLineSequence), which reads
+    /// the file in kernel-sized chunks and yields one decoded line at a time.
+    /// Peak memory usage is O(1) — no full-file load, no intermediate array.
+    ///
+    /// The result variable is bound lazily in the RuntimeContext so that a
+    /// subsequent `for each` loop can iterate without materialising the stream.
+    #if !os(Windows)
+    private func streamFile(
+        source: String,
+        result: ResultDescriptor,
+        context: ExecutionContext
+    ) -> any Sendable {
+        let fileURL: URL
+        if source.hasPrefix("/") {
+            fileURL = URL(fileURLWithPath: source)
+        } else {
+            fileURL = URL(fileURLWithPath: FileManager.default.currentDirectoryPath)
+                .appendingPathComponent(source)
+        }
+
+        // Both modes use the lazy O(1) stream — only one line in memory at a time.
+        // Interpreter mode: consumed by executeStreamForEachLoop in FeatureSetExecutor.
+        // Binary mode: consumed by aro_runtime_foreach_stream callback loop in compiled code.
+        //
+        // Uses FileHandle-based chunked reading for cross-platform compatibility
+        // (URL.lines is Darwin-only and not available in swift-corelibs-foundation).
+        let capturedURL = fileURL
+        let stream = AROStream<any Sendable> {
+            AsyncThrowingStream { continuation in
+                Task.detached {
+                    guard let handle = try? FileHandle(forReadingFrom: capturedURL) else {
+                        continuation.finish(throwing: ActionError.runtimeError("Cannot open file: \(capturedURL.path)"))
+                        return
+                    }
+                    defer { handle.closeFile() }
+                    var buffer = ""
+                    let chunkSize = 65_536
+                    while true {
+                        let data = handle.readData(ofLength: chunkSize)
+                        guard !data.isEmpty else { break }
+                        buffer += String(data: data, encoding: .utf8) ?? ""
+                        while let range = buffer.range(of: "\n") {
+                            let line = String(buffer[buffer.startIndex..<range.lowerBound])
+                                .trimmingCharacters(in: CharacterSet(charactersIn: "\r"))
+                            buffer = String(buffer[range.upperBound...])
+                            continuation.yield(line as any Sendable)
+                        }
+                    }
+                    // Yield final line if file doesn't end with newline
+                    if !buffer.isEmpty {
+                        continuation.yield(buffer as any Sendable)
+                    }
+                    continuation.finish()
+                }
+            }
+        }
+
+        if let rc = context as? RuntimeContext {
+            rc.bindLazy(result.base, stream: stream)
+        } else {
+            context.bind(result.base, value: stream)
+        }
+        return stream
+    }
+    #endif
 }
 
 // MARK: - WebSocket Stream Runner

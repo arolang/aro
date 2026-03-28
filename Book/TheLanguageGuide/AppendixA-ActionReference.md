@@ -10,6 +10,7 @@ Complete reference for all built-in actions in ARO.
 | **Retrieve** | REQUEST | Fetch from repository | `Retrieve the <user> from the <users> where id = <id>.` |
 | **Request** | REQUEST | Make HTTP request | `Request the <data> from the <api-url>.` |
 | **Read** | REQUEST | Read from file or URL | `Read the <config> from the <file: "./config.json">.` |
+| **Stream** | REQUEST | Stream a file line-by-line (O(1) memory) or subscribe to SSE/WebSocket | `Stream the <lines> from "./bigfile.dat".` |
 | **List** | REQUEST | List directory contents | `List the <files> from the <directory: src-path>.` |
 | **Stat** | REQUEST | Get file metadata | `Stat the <info> for the <file: "./doc.pdf">.` |
 | **Exists** | REQUEST | Check file existence | `Exists the <found> for the <file: "./config.json">.` |
@@ -219,6 +220,61 @@ Read the <data> from the <url: "https://api.example.com/protected"> with {
 Response is automatically parsed based on `Content-Type` header (JSON, XML, CSV, YAML, etc.).
 
 **Valid Prepositions:** `from`
+
+---
+
+### Stream
+
+Reads a local file line by line as a lazy stream, or subscribes to an SSE / WebSocket source.
+
+**Syntax:**
+```aro
+(* File streaming — yields one line at a time, O(1) memory *)
+Stream the <result> from <file-path>.
+
+(* SSE streaming — emits a domain event for each server-sent message *)
+Stream the <event-name> from <https-url>.
+Stream the <event-name> from <https-url> with { headers: {...}, retry: 3.0, timeout: 30.0 }.
+
+(* WebSocket streaming *)
+Stream the <event-name> from <wss-url>.
+```
+
+**Examples:**
+```aro
+(* Stream a large log file — O(1) memory regardless of file size *)
+Stream the <log-lines> from "./access.log".
+for each <line> in <log-lines> {
+    (* process one line at a time *)
+}
+
+(* Stream and accumulate *)
+Stream the <data-lines> from "./numbers.dat".
+for each <raw-line> in <data-lines> {
+    Transform the <value: float> from the <raw-line>.
+    (* ... accumulate into repository ... *)
+}
+
+(* SSE streaming — stays alive and fires handlers for each message *)
+Stream the <price-update> from "https://api.example.com/prices/stream".
+Keepalive the <application> for the <events>.
+```
+
+**File vs Network source:**
+
+| Source prefix | Behaviour |
+|---|---|
+| `/`, `./`, `../`, plain path | Lazy line-by-line file read (O(1) memory) |
+| `http://` or `https://` | SSE connection with automatic reconnection |
+| `ws://` or `wss://` | WebSocket connection with automatic reconnection |
+
+**Notes:**
+- File mode does not perform format detection. Lines are yielded as raw `String` values.
+- `Compute the <n: count> from <stream>.` throws a runtime error (counting materialises the stream). Use `Read` + `Split` if you need the count before iterating.
+- `Task.yield()` is called every 500 iterations, keeping all CPU cores available during large loops.
+- SSE and WebSocket mode emits a `DomainEvent` per message and requires `Keepalive` to process events.
+
+**Valid Prepositions:** `from`, `with`
 
 ---
 

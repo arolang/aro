@@ -32,6 +32,7 @@ Complete reference of all 51 ARO actions organized by category.
 | **Stop**      | Execution Control | OWN               | Ends a process or session.<br>`Stop the <http-server> with <application>.` |
 | **Stat**      | Inspection        | REQUEST           | Checks metadata or status of a resource.<br>`Stat the <info> for the <file: "./doc.pdf">.` |
 | **Read**      | I/O               | REQUEST           | Reads data from storage or stream.<br>`Read the <config> from the <file: "./config.json">.` |
+| **Stream**    | I/O               | REQUEST           | Reads a file line-by-line as a lazy stream (O(1) memory), or subscribes to SSE/WebSocket.<br>`Stream the <lines> from "./bigfile.dat".` |
 | **Write**     | I/O               | RESPONSE          | Writes data to storage or stream.<br>`Write the <data> to the <file: "./output.txt">.` |
 | **Append**    | I/O               | RESPONSE          | Adds data to end of existing resource.<br>`Append the <log-line> to the <file: "./app.log">.` |
 | **Split**     | Manipulation      | OWN               | Breaks a data sequence into parts.<br>`Split the <words> from the <sentence> by /\s+/.` |
@@ -56,7 +57,7 @@ Complete reference of all 51 ARO actions organized by category.
 
 ## Summary by Semantic Role
 
-- **REQUEST** (8 actions): Extract, Retrieve, Receive, Request, Read, List, Stat, Exists
+- **REQUEST** (9 actions): Extract, Retrieve, Receive, Request, Read, Stream, List, Stat, Exists
 - **OWN** (32 actions): Compute, Validate, Compare, Transform, Create, Update, Filter, Sort, Split, Merge, Copy, Move, Map, ParseHtml, Reduce, Accept, Given, When, Then, Assert, Start, Stop, Listen, Connect, Close, Keepalive, Make, Execute, Call
 - **RESPONSE** (8 actions): Return, Throw, Send, Log, Write, Append, Notify, Broadcast
 - **EXPORT** (3 actions): Publish, Store, Emit, Delete
@@ -72,7 +73,7 @@ Complete reference of all 51 ARO actions organized by category.
 - **Error Handling** (1): Throw
 - **Execution Control** (2): Start, Stop
 - **Inspection** (1): Stat
-- **I/O** (3): Read, Write, Append
+- **I/O** (4): Read, Stream, Write, Append
 - **Manipulation** (2): Split, Merge
 - **Monitoring** (1): Log
 - **Mutation** (5): Create, Update, Delete, Copy, Move

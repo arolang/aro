@@ -822,6 +822,13 @@ public final class FeatureSetExecutor: Sendable {
             throw ActionError.undefinedVariable(loop.collection.base)
         }
 
+        // Lazy stream path: iterate without materialising the collection into memory (ARO-0051).
+        // Specifiers are not supported on streams — they require an in-memory value.
+        if let anyStream = collectionValue as? AnyStreamingValue, loop.collection.specifiers.isEmpty {
+            try await executeForEachLazy(loop, stream: anyStream.asStream(), context: context)
+            return
+        }
+
         // Handle specifiers as property access (e.g., <team: members> -> team.members)
         for specifier in loop.collection.specifiers {
             collectionValue = try accessCollectionProperty(specifier, on: collectionValue)
@@ -898,6 +905,10 @@ public final class FeatureSetExecutor: Sendable {
         } else {
             // Sequential execution
             for (index, item) in items.enumerated() {
+                // Cooperative scheduling: yield every 500 iterations so other Swift tasks
+                // can run and the process does not pin a single CPU core at 100%.
+                if index % 500 == 0 { await Task.yield() }
+
                 // Create fresh child context for this iteration
                 // This gives us fresh immutable bindings per iteration
                 let iterationContext = context.createChild(featureSetName: context.featureSetName)
