@@ -99,16 +99,21 @@ public struct ListAction: ActionImplementation {
 
 // MARK: - Directory Entry Builder
 
+/// Build a file-entry dict from a URL, shared between Darwin and Linux code paths.
 private func buildEntry(url: URL, fmt: ISO8601DateFormatter) -> [String: any Sendable]? {
     guard let res = try? url.resourceValues(
         forKeys: [.isDirectoryKey, .fileSizeKey,
                   .contentModificationDateKey, .creationDateKey]
     ) else { return nil }
+
     let isDirectory = res.isDirectory ?? false
     let size = res.fileSize ?? 0
     var dict: [String: any Sendable] = [
-        "name": url.lastPathComponent, "path": url.path,
-        "size": size, "isFile": !isDirectory, "isDirectory": isDirectory
+        "name": url.lastPathComponent,
+        "path": url.path,
+        "size": size,
+        "isFile": !isDirectory,
+        "isDirectory": isDirectory
     ]
     if let d = res.contentModificationDate { dict["modified"] = fmt.string(from: d) }
     if let d = res.creationDate           { dict["created"]  = fmt.string(from: d) }
@@ -131,7 +136,7 @@ public final class LazyDirectoryList: @unchecked Sendable {
     }
 
     /// Advance the enumerator and return the next matching entry as a dict, or nil when done.
-    /// Wraps each iteration in an autoreleasepool (Darwin only) to prevent NSObject accumulation
+    /// On Darwin, wraps each iteration in an autoreleasepool to prevent NSObject accumulation
     /// over large directory trees (80k+ entries would otherwise exhaust the thread pool).
     public func next() -> [String: any Sendable]? {
         while true {
@@ -144,8 +149,12 @@ public final class LazyDirectoryList: @unchecked Sendable {
             let name = url.lastPathComponent
             if let pattern = pattern, !matchesGlob(name, pattern: pattern) { continue }
 
+            // On Darwin, autoreleasepool prevents NSObject accumulation over large trees.
+            // On Linux, there is no ObjC runtime, so a plain closure is used instead.
             #if canImport(ObjectiveC)
-            let entry: [String: any Sendable]? = autoreleasepool { buildEntry(url: url, fmt: self.fmt) }
+            let entry: [String: any Sendable]? = autoreleasepool {
+                buildEntry(url: url, fmt: self.fmt)
+            }
             #else
             let entry: [String: any Sendable]? = buildEntry(url: url, fmt: self.fmt)
             #endif
