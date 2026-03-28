@@ -23,9 +23,75 @@ public final class ActionRunner: @unchecked Sendable {
     /// The action registry to use
     private let registry: ActionRegistry
 
+    /// Synchronous-action lookup table (verb → type), built at startup.
+    /// Keyed by canonical verb.  Safe to access from any thread because it
+    /// is populated once in `init` and never mutated afterward.
+    private let syncActions: [String: any SynchronousAction.Type]
+
     /// Private initializer
     private init() {
         self.registry = ActionRegistry.shared
+        self.syncActions = Self.buildSyncActionsTable()
+    }
+
+    /// Build a flat verb → SynchronousAction.Type table that mirrors ActionRegistry's
+    /// final verb→type mapping but only retains entries where the winning type is a
+    /// SynchronousAction.  This prevents a sync-capable type from shadowing a
+    /// later-registered non-sync type that overrides the same verb.
+    private static func buildSyncActionsTable() -> [String: any SynchronousAction.Type] {
+        let allModuleActions: [[any ActionImplementation.Type]] = [
+            RequestActionsModule.actions,
+            OwnActionsModule.actions,
+            ResponseActionsModule.actions,
+            ServerActionsModule.actions,
+            SocketActionsModule.actions,
+            FileActionsModule.actions,
+            DataPipelineActionsModule.actions,
+            TestActionsModule.actions,
+            TerminalActionsModule.actions,
+            SystemActionsModule.actions,
+        ]
+
+        // Step 1: build the full verb→type dict in the same order as ActionRegistry
+        var fullDict: [String: any ActionImplementation.Type] = [:]
+        for moduleActions in allModuleActions {
+            for actionType in moduleActions {
+                for verb in actionType.verbs {
+                    fullDict[verb.lowercased()] = actionType
+                }
+            }
+        }
+
+        // Step 2: retain only verbs whose winning type is a SynchronousAction
+        var table: [String: any SynchronousAction.Type] = [:]
+        for (verb, actionType) in fullDict {
+            if let syncType = actionType as? any SynchronousAction.Type {
+                let canonical = canonicalizeVerb(verb)
+                table[canonical] = syncType
+            }
+        }
+        return table
+    }
+
+    /// Execute an action on the calling thread if it is a `SynchronousAction`.
+    /// Returns `nil` if the verb is unknown or the action signals `NeedsAsyncExecution`.
+    private func executeSynchronouslyIfSupported(
+        canonicalVerb: String,
+        result: ResultDescriptor,
+        object: ObjectDescriptor,
+        context: ExecutionContext
+    ) -> ActionRunnerResult? {
+        guard let syncType = syncActions[canonicalVerb] else { return nil }
+        let action = syncType.init()
+        do {
+            let value = try action.executeSynchronously(result: result, object: object, context: context)
+            return .success(value)
+        } catch is NeedsAsyncExecution {
+            // Action has async paths that need Task dispatch — fall through
+            return nil
+        } catch {
+            return .failure(String(describing: error))
+        }
     }
 
     // MARK: - Verb Canonicalization
@@ -183,6 +249,14 @@ public final class ActionRunner: @unchecked Sendable {
         object: ObjectDescriptor,
         context: ExecutionContext
     ) -> (any Sendable)? {
+        // Fast path: bypass Task.detached + semaphore for synchronous actions
+        let canonicalVerb = Self.canonicalizeVerb(verb)
+        if let syncResult = executeSynchronouslyIfSupported(
+            canonicalVerb: canonicalVerb, result: result, object: object, context: context
+        ) {
+            return syncResult.value
+        }
+
         let holder = ResultHolder()
         let semaphore = DispatchSemaphore(value: 0)
 
@@ -330,6 +404,39 @@ extension ActionRunner {
         object: ObjectDescriptor,
         context: ExecutionContext
     ) -> ActionRunnerResult {
+        // Fast path: bypass Task.detached + semaphore for synchronous actions
+        let canonicalVerb = Self.canonicalizeVerb(verb)
+        if let syncResult = executeSynchronouslyIfSupported(
+            canonicalVerb: canonicalVerb, result: result, object: object, context: context
+        ) {
+            return syncResult
+        }
+
+        // Phase 2: if the context has an async driver channel, submit work there
+        // instead of spawning a new Task.detached per call.
+        if let channel = (context as? RuntimeContext)?.driverChannel {
+            let box = ActionRunnerResultBox()
+            let semaphore = DispatchSemaphore(value: 0)
+            channel.submitAction(
+                verb: verb, result: result, object: object,
+                context: context, holder: box, semaphore: semaphore
+            )
+
+            // Yield pool slot while waiting (same as legacy path)
+            let pool = CompiledExecutionPool.shared
+            let hadSlot = pool.threadHoldsSlot
+            if hadSlot {
+                pool.gate.signal()
+                pool.threadHoldsSlot = false
+            }
+            semaphore.wait()
+            if hadSlot {
+                pool.gate.wait()
+                pool.threadHoldsSlot = true
+            }
+            return box.result
+        }
+
         let holder = ActionResultHolder()
         let semaphore = DispatchSemaphore(value: 0)
 
@@ -445,6 +552,185 @@ extension ActionRunner {
             // Publish and wait for handlers
             if let bus = eventBus {
                 await bus.publishAndTrack(event)
+            }
+        }
+    }
+}
+
+// MARK: - Per-Feature-Set Async Driver (Phase 2)
+
+/// Work item submitted by the C bridge for cooperative action dispatch.
+///
+/// The C feature set pthread submits a work item and blocks on `semaphore`.
+/// The driver Swift Task picks it up, calls `await executeAsync(...)`, stores
+/// the result, and signals `semaphore` — without spawning a new Task.
+public struct ActionDriverWorkItem: @unchecked Sendable {
+    public let verb: String
+    public let result: ResultDescriptor
+    public let object: ObjectDescriptor
+    public let context: ExecutionContext
+    public let holder: ActionRunnerResultBox
+    public let semaphore: DispatchSemaphore
+}
+
+/// Work item for cooperative directory iteration (Phase 3 pipelining).
+///
+/// `aro_array_get_next_ctx` submits one of these per loop iteration so that
+/// `PipelinedDirectoryIterator.nextAsync()` is awaited on the cooperative pool
+/// rather than on the C pthread — letting the producer and consumer overlap.
+public struct ArrayNextWorkItem: @unchecked Sendable {
+    public let iterator: PipelinedDirectoryIterator
+    public let holder: ActionRunnerResultBox
+    public let semaphore: DispatchSemaphore
+}
+
+/// Unified work-item type for `ActionDriverChannel`.
+public enum DriverWorkItem: @unchecked Sendable {
+    case action(ActionDriverWorkItem)
+    case arrayNext(ArrayNextWorkItem)
+}
+
+/// Thread-safe box for `ActionRunnerResult` shared between the C bridge
+/// (writer, from the driver task) and the calling pthread (reader).
+public final class ActionRunnerResultBox: @unchecked Sendable {
+    private let lock = NSLock()
+    private var _result: ActionRunnerResult = .failure("pending")
+
+    public init() {}
+
+    public var result: ActionRunnerResult {
+        lock.lock(); defer { lock.unlock() }
+        return _result
+    }
+    public func set(_ r: ActionRunnerResult) {
+        lock.lock(); defer { lock.unlock() }
+        _result = r
+    }
+}
+
+/// Single-producer, single-consumer channel used to ferry work items
+/// from the C feature set pthread to the cooperative driver Swift Task.
+///
+/// Accepts both action work items (via `submitAction`) and array-next items
+/// (via `submitArrayNext`).  Closed via `close()` after the C function returns;
+/// `next()` returns `nil` when the channel is drained and closed.
+public final class ActionDriverChannel: @unchecked Sendable {
+    private let lock = NSLock()
+    private var queue: [DriverWorkItem] = []
+    private var waiter: CheckedContinuation<DriverWorkItem?, Never>? = nil
+    private var closed = false
+
+    public init() {}
+
+    /// Submit an action work item from the C pthread.
+    public func submitAction(verb: String, result: ResultDescriptor, object: ObjectDescriptor,
+                             context: ExecutionContext, holder: ActionRunnerResultBox,
+                             semaphore: DispatchSemaphore) {
+        let item = ActionDriverWorkItem(verb: verb, result: result, object: object,
+                                       context: context, holder: holder, semaphore: semaphore)
+        enqueue(.action(item))
+    }
+
+    /// Submit an array-next work item from `aro_array_get_next_ctx`.
+    public func submitArrayNext(iterator: PipelinedDirectoryIterator,
+                                holder: ActionRunnerResultBox,
+                                semaphore: DispatchSemaphore) {
+        enqueue(.arrayNext(ArrayNextWorkItem(iterator: iterator, holder: holder, semaphore: semaphore)))
+    }
+
+    private func enqueue(_ item: DriverWorkItem) {
+        lock.lock()
+        if let cont = waiter {
+            waiter = nil
+            lock.unlock()
+            cont.resume(returning: item)
+        } else {
+            queue.append(item)
+            lock.unlock()
+        }
+    }
+
+    /// Receive the next work item on the driver Task.  Returns `nil` when the
+    /// channel is closed and the queue is drained.
+    ///
+    /// Uses `withLock` (the Swift-6-safe scoped form) instead of bare `lock()`/`unlock()`
+    /// so the async-context concurrency checker is satisfied.
+    public func next() async -> DriverWorkItem? {
+        // Fast path: item already queued (synchronous, no suspension)
+        if let item = lock.withLock({ () -> DriverWorkItem? in
+            guard let item = queue.first else { return nil }
+            queue.removeFirst()
+            return item
+        }) {
+            return item
+        }
+        // Closed and empty?
+        if lock.withLock({ closed }) { return nil }
+
+        // Slow path: register a continuation, re-checking under lock to close the TOCTOU
+        // window between the two withLock calls above.
+        return await withCheckedContinuation { (cont: CheckedContinuation<DriverWorkItem?, Never>) in
+            lock.withLock {
+                if let item = queue.first {
+                    queue.removeFirst()
+                    cont.resume(returning: item)
+                } else if closed {
+                    cont.resume(returning: nil)
+                } else {
+                    waiter = cont
+                }
+            }
+        }
+    }
+
+    /// Signal end-of-stream after the C function returns.
+    public func close() {
+        lock.lock()
+        closed = true
+        if let cont = waiter {
+            waiter = nil
+            lock.unlock()
+            cont.resume(returning: nil)
+        } else {
+            lock.unlock()
+        }
+    }
+}
+
+extension ActionRunner {
+    /// Drive all action calls for a single feature set invocation cooperatively.
+    ///
+    /// Called as `Task.detached { await ActionRunner.shared.driveFeatureSet(channel) }`
+    /// once per compiled feature set invocation.  The C feature set pthread submits
+    /// work items via `channel.submitAction/submitArrayNext()` and the driver processes
+    /// them cooperatively — no nested Task.detached per action or array iteration.
+    public func driveFeatureSet(channel: ActionDriverChannel) async {
+        while let item = await channel.next() {
+            switch item {
+            case .action(let actionItem):
+                do {
+                    let value = try await self.executeAsync(
+                        verb: actionItem.verb,
+                        result: actionItem.result,
+                        object: actionItem.object,
+                        context: actionItem.context
+                    )
+                    actionItem.holder.set(.success(value))
+                } catch {
+                    actionItem.holder.set(.failure(String(describing: error)))
+                }
+                actionItem.semaphore.signal()
+
+            case .arrayNext(let nextItem):
+                // Cooperative: await the next directory entry from the producer Task.
+                // The producer runs on a different cooperative-pool thread, so this
+                // await allows the producer to prefetch while the driver is suspended.
+                if let entry = await nextItem.iterator.nextAsync() {
+                    nextItem.holder.set(.success(entry as any Sendable))
+                } else {
+                    nextItem.holder.set(.failure("__exhausted__"))
+                }
+                nextItem.semaphore.signal()
             }
         }
     }

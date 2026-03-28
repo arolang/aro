@@ -70,9 +70,10 @@ public struct ListAction: ActionImplementation {
             return stream
         }
 
-        // Lazy streaming for compiled mode — O(1) memory, starts comparing immediately.
-        // aro_array_get_next already handles LazyDirectoryList via the existing branch.
-        // Non-recursive: still eager (single directory level, negligible size).
+        // Compiled mode: return LazyDirectoryList for O(1) streaming.
+        // aro_array_get_next_ctx will lazily upgrade it to PipelinedDirectoryIterator
+        // on the first for-each call, enabling cooperative pipelining without breaking
+        // Filter / Compute-length / Store operations that consume the raw list.
         if recursive {
             let url = URL(fileURLWithPath: directoryPath)
             guard let enumerator = FileManager.default.enumerator(
@@ -174,6 +175,148 @@ public final class LazyDirectoryList: @unchecked Sendable {
         regex += "$"
         return (try? NSRegularExpression(pattern: regex, options: .caseInsensitive))?
             .firstMatch(in: name, options: [], range: NSRange(name.startIndex..., in: name)) != nil
+    }
+}
+
+// MARK: - PipelinedDirectoryIterator (binary mode cooperative streaming)
+
+/// Wraps `LazyDirectoryList` with a producer Task that prefetches up to `maxBuffer`
+/// entries in advance, allowing the driver Task and the file-system I/O to overlap.
+///
+/// The producer runs on Swift's cooperative pool.  While the driver Task is awaiting
+/// an async action (e.g. a Retrieve actor hop), the producer concurrently calls
+/// `LazyDirectoryList.next()` for the next entry.  When the consumer asks for the next
+/// item via `tryNextSync()` / `nextAsync()`, it is already buffered — zero extra wait.
+///
+/// Bounded backpressure (default 8 entries) keeps memory O(1) regardless of tree size.
+public final class PipelinedDirectoryIterator: @unchecked Sendable {
+    /// Maximum pre-fetched entries kept in the in-flight buffer.
+    private static let maxBuffer = 8
+
+    private let lock = NSLock()
+    private var buffer: [[String: any Sendable]] = []
+    private var done = false
+    /// Set when the consumer is waiting for an entry and the buffer is empty.
+    private var consumerCont: CheckedContinuation<[String: any Sendable]?, Never>? = nil
+    /// Set when the producer is waiting because the buffer is full.
+    private var pendingProducer: (entry: [String: any Sendable], cont: CheckedContinuation<Void, Never>)? = nil
+
+    public init(enumerator: FileManager.DirectoryEnumerator, pattern: String?) {
+        let list = LazyDirectoryList(enumerator: enumerator, pattern: pattern)
+        Task.detached { [weak self] in
+            while let entry = list.next() {
+                guard let self else { break }
+                await self.produce(entry)
+            }
+            self?.markDone()
+        }
+    }
+
+    /// Wraps an existing `LazyDirectoryList`, starting the prefetch producer immediately.
+    /// Used by `aro_array_get_next_ctx` for a lazy upgrade on the first for-each call.
+    public init(from list: LazyDirectoryList) {
+        Task.detached { [weak self] in
+            while let entry = list.next() {
+                guard let self else { break }
+                await self.produce(entry)
+            }
+            self?.markDone()
+        }
+    }
+
+    // Called from producer Task to enqueue an entry (with backpressure).
+    private func produce(_ entry: [String: any Sendable]) async {
+        await withCheckedContinuation { (cont: CheckedContinuation<Void, Never>) in
+            lock.withLock {
+                if let cc = consumerCont {
+                    // Consumer is waiting — hand it directly, producer continues immediately.
+                    consumerCont = nil
+                    cont.resume()
+                    cc.resume(returning: entry)
+                } else if buffer.count < Self.maxBuffer {
+                    buffer.append(entry)
+                    cont.resume()
+                } else {
+                    // Buffer full — producer suspends until consumer dequeues.
+                    pendingProducer = (entry, cont)
+                }
+            }
+        }
+    }
+
+    private func markDone() {
+        lock.withLock {
+            done = true
+            consumerCont?.resume(returning: nil)
+            consumerCont = nil
+        }
+    }
+
+    /// Synchronous fast path: returns the next entry if one is buffered, or nil.
+    /// Also wakes a blocked producer if the buffer now has room.
+    /// Called from `aro_array_get_next_ctx` on the C pthread.
+    public func tryNextSync() -> [String: any Sendable]? {
+        var toResumeProducer: CheckedContinuation<Void, Never>? = nil
+
+        let result = lock.withLock { () -> [String: any Sendable]? in
+            if let entry = buffer.first {
+                buffer.removeFirst()
+                // If producer was blocked waiting for buffer space, move its pending entry
+                // into the buffer and schedule it to continue.
+                if let (pe, pc) = pendingProducer {
+                    pendingProducer = nil
+                    buffer.append(pe)
+                    toResumeProducer = pc
+                }
+                return entry
+            }
+            // Also check pending producer: take its entry directly if buffer is empty.
+            if let (pe, pc) = pendingProducer {
+                pendingProducer = nil
+                toResumeProducer = pc
+                return pe
+            }
+            return nil
+        }
+
+        // Resume producer continuation OUTSIDE the lock (avoids lock inversion).
+        toResumeProducer?.resume()
+        return result
+    }
+
+    /// True when the producer has finished AND nothing remains in the buffer.
+    public var isExhausted: Bool {
+        lock.withLock { done && buffer.isEmpty && pendingProducer == nil }
+    }
+
+    /// Async wait: used by the driver Task when `tryNextSync` returned nil.
+    /// Suspends until the producer delivers the next entry.
+    public func nextAsync() async -> [String: any Sendable]? {
+        return await withCheckedContinuation { (cont: CheckedContinuation<[String: any Sendable]?, Never>) in
+            var toResumeProducer: CheckedContinuation<Void, Never>? = nil
+
+            lock.withLock {
+                if let entry = buffer.first {
+                    buffer.removeFirst()
+                    if let (pe, pc) = pendingProducer {
+                        pendingProducer = nil
+                        buffer.append(pe)
+                        toResumeProducer = pc
+                    }
+                    cont.resume(returning: entry)
+                } else if let (pe, pc) = pendingProducer {
+                    pendingProducer = nil
+                    toResumeProducer = pc
+                    cont.resume(returning: pe)
+                } else if done {
+                    cont.resume(returning: nil)
+                } else {
+                    consumerCont = cont
+                }
+            }
+
+            toResumeProducer?.resume()
+        }
     }
 }
 
