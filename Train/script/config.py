@@ -22,19 +22,18 @@ from pathlib import Path
 
 # ── Root paths ────────────────────────────────────────────────────────────────
 
-SCRIPT_DIR          = Path(__file__).parent.resolve()
-ARO_ROOT            = (SCRIPT_DIR / '../../').resolve()
-EXAMPLES_DIR        = ARO_ROOT / 'Examples'
-BOOK_ROOT           = ARO_ROOT / 'Book'
-ARO_APPLICATION_ROOT = Path('/Users/kris/Projects/ARO-Application').resolve()
-
-# ── Output root (override this to redirect all data to a different location) ──
-# SCRIPT_DIR
-GLOBAL_OUT_DIR = Path('/Volumes/Models/data').resolve()
+SCRIPT_DIR           = Path(__file__).parent.resolve()
+TRAIN_ROOT           = SCRIPT_DIR.parent              # .../Train
+ARO_ROOT             = (TRAIN_ROOT / '..').resolve()   # .../ARO-Train
+EXAMPLES_DIR         = ARO_ROOT / 'Examples'
+BOOK_ROOT            = ARO_ROOT / 'Book'
+ARO_APPLICATION_ROOT = Path('/Users/kris/Projects/ARO/ARO-Application').resolve()
 
 # ── Data directories ──────────────────────────────────────────────────────────
+# All pipeline artifacts live under TRAIN_ROOT.  Individual notebooks write to
+# stage-specific subdirectories of DATA_ROOT.
 
-DATA_ROOT    = GLOBAL_OUT_DIR / '../data'
+DATA_ROOT    = TRAIN_ROOT / 'data'
 DATA_IN      = DATA_ROOT / '02_knowledge'   # primary knowledge base
 DATA_DIR     = DATA_IN                       # alias used by some notebooks
 
@@ -47,6 +46,27 @@ ADAPTER_DIR.mkdir(parents=True, exist_ok=True)
 WARM_ADAPTER = ADAPTER_DIR / 'warm_start'
 
 WIKI_DIR     = DATA_ROOT / 'wiki'
+
+# ── Notebook restart behavior ────────────────────────────────────────────────
+# When True, each notebook removes its own pairs from knowledge_pairs.jsonl
+# on startup, so re-running a notebook replaces its data instead of appending
+# duplicates.  Set to False to keep accumulating across runs.
+CLEAN_ON_RESTART = True
+
+MODELS_DIR   = TRAIN_ROOT / 'models'
+RELEASE_DIR  = TRAIN_ROOT / 'release'
+
+# ── External volume for large model checkpoints ──────────────────────────────
+# Fine-tuning 30B models produces multi-GB checkpoints that may not fit on the
+# internal disk.  When /Volumes/Models is mounted, use it; otherwise fall back
+# to MODELS_DIR on the local disk.
+_EXTERNAL_VOLUME = Path('/Volumes/Models/data')
+if _EXTERNAL_VOLUME.exists():
+    FINETUNE_MODELS_DIR = _EXTERNAL_VOLUME / 'finetune_models'
+    ITERATIVE_MODELS_DIR = _EXTERNAL_VOLUME / 'iterative_models'
+else:
+    FINETUNE_MODELS_DIR = MODELS_DIR / 'finetune'
+    ITERATIVE_MODELS_DIR = MODELS_DIR / 'iterative'
 
 # ── Model ─────────────────────────────────────────────────────────────────────
 # Preferred: the published fine-tuned ARO model (bootstrapped from this pipeline).
@@ -198,3 +218,67 @@ RULES:
 - Return an <OK: status> ... to end a feature set
 
 Output ONLY valid ARO code. No markdown fences unless asked."""
+
+
+# ── Notebook pair tracking ───────────────────────────────────────────────────
+# Every pair written to PAIRS_FILE gets a `notebook` tag (e.g. "NB07").
+# On restart, clean_notebook_pairs() removes all pairs from that notebook
+# so re-runs produce a clean replacement, not duplicates.
+
+def clean_notebook_pairs(notebook_tag: str) -> int:
+    """
+    Remove all pairs tagged with `notebook_tag` from PAIRS_FILE.
+    Returns the number of pairs removed.
+    Only acts when CLEAN_ON_RESTART is True.
+    """
+    if not CLEAN_ON_RESTART:
+        return 0
+    if not PAIRS_FILE.exists():
+        return 0
+
+    lines = PAIRS_FILE.read_text().splitlines()
+    kept, removed = [], 0
+    for line in lines:
+        if not line.strip():
+            continue
+        try:
+            rec = json.loads(line)
+            if rec.get('notebook') == notebook_tag:
+                removed += 1
+                continue
+        except Exception:
+            pass
+        kept.append(line)
+
+    if removed > 0:
+        PAIRS_FILE.write_text('\n'.join(kept) + '\n' if kept else '')
+        print(f'[{notebook_tag}] Cleaned {removed} pairs from previous run')
+    return removed
+
+
+def save_notebook_pair(notebook_tag: str, pair: dict) -> bool:
+    """
+    Append a single training pair to PAIRS_FILE with the notebook tag.
+    The pair dict should contain at minimum `instruction`+`output` or `messages`.
+    Returns True if written.
+    """
+    pair['notebook'] = notebook_tag
+    PAIRS_FILE.parent.mkdir(parents=True, exist_ok=True)
+    with open(PAIRS_FILE, 'a') as f:
+        f.write(json.dumps(pair) + '\n')
+    return True
+
+
+def save_notebook_pairs(notebook_tag: str, pairs: list[dict]) -> int:
+    """
+    Append multiple training pairs to PAIRS_FILE, all tagged with notebook_tag.
+    Returns the number of pairs written.
+    """
+    if not pairs:
+        return 0
+    PAIRS_FILE.parent.mkdir(parents=True, exist_ok=True)
+    with open(PAIRS_FILE, 'a') as f:
+        for pair in pairs:
+            pair['notebook'] = notebook_tag
+            f.write(json.dumps(pair) + '\n')
+    return len(pairs)
