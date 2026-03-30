@@ -56,17 +56,8 @@ CLEAN_ON_RESTART = True
 MODELS_DIR   = TRAIN_ROOT / 'models'
 RELEASE_DIR  = TRAIN_ROOT / 'release'
 
-# ── External volume for large model checkpoints ──────────────────────────────
-# Fine-tuning 30B models produces multi-GB checkpoints that may not fit on the
-# internal disk.  When /Volumes/Models is mounted, use it; otherwise fall back
-# to MODELS_DIR on the local disk.
-_EXTERNAL_VOLUME = Path('/Volumes/Models/data')
-if _EXTERNAL_VOLUME.exists():
-    FINETUNE_MODELS_DIR = _EXTERNAL_VOLUME / 'finetune_models'
-    ITERATIVE_MODELS_DIR = _EXTERNAL_VOLUME / 'iterative_models'
-else:
-    FINETUNE_MODELS_DIR = MODELS_DIR / 'finetune'
-    ITERATIVE_MODELS_DIR = MODELS_DIR / 'iterative'
+FINETUNE_MODELS_DIR = MODELS_DIR / 'finetune'
+ITERATIVE_MODELS_DIR = MODELS_DIR / 'iterative'
 
 # ── Model ─────────────────────────────────────────────────────────────────────
 # Preferred: the published fine-tuned ARO model (bootstrapped from this pipeline).
