@@ -60,12 +60,17 @@ FINETUNE_MODELS_DIR = MODELS_DIR / 'finetune'
 ITERATIVE_MODELS_DIR = MODELS_DIR / 'iterative'
 
 # ── Model ─────────────────────────────────────────────────────────────────────
-# Preferred: the published fine-tuned ARO model (bootstrapped from this pipeline).
-# Fallback:  base Qwen3 used for initial training data generation.
-# Change only these two lines to swap models across the whole pipeline.
+# TRAIN_ON_BASE controls whether to train from the base Qwen model (True) or
+# from the published fine-tuned ARO model (False).
+#   True  → always use BASE_MODEL_ID (fresh training / new base model)
+#   False → use PREFERRED_MODEL_ID if available on HF, else fall back to BASE_MODEL_ID
+TRAIN_ON_BASE = True
 
 PREFERRED_MODEL_ID = 'ARO-Lang/aro-coder-4bit'
-FALLBACK_MODEL_ID  = 'mlx-community/Qwen3-Coder-30B-A3B-Instruct-4bit'
+BASE_MODEL_ID      = 'mlx-community/Qwen3-Coder-8B-Instruct-4bit'
+
+# Legacy alias — notebooks that reference FALLBACK_MODEL_ID still work.
+FALLBACK_MODEL_ID  = BASE_MODEL_ID
 
 
 def _hf_model_exists(repo_id: str, timeout: int = 6) -> bool:
@@ -83,14 +88,20 @@ def _hf_model_exists(repo_id: str, timeout: int = 6) -> bool:
 
 def resolve_model_id() -> tuple[str, bool]:
     """
-    Check HuggingFace for the fine-tuned ARO model.
+    Resolve which model to use for training / generation.
     Returns (model_id, is_finetuned) so callers know whether to skip the warm adapter.
+
+    When TRAIN_ON_BASE is True, always returns the base model — useful for
+    initial training or switching to a new base architecture.
     """
+    if TRAIN_ON_BASE:
+        print(f'TRAIN_ON_BASE=True → using base model: {BASE_MODEL_ID}')
+        return BASE_MODEL_ID, False
     if _hf_model_exists(PREFERRED_MODEL_ID):
         print(f'Fine-tuned model found: {PREFERRED_MODEL_ID}')
         return PREFERRED_MODEL_ID, True
-    print(f'Fine-tuned model not found on HuggingFace, using base: {FALLBACK_MODEL_ID}')
-    return FALLBACK_MODEL_ID, False
+    print(f'Fine-tuned model not found on HuggingFace, using base: {BASE_MODEL_ID}')
+    return BASE_MODEL_ID, False
 
 
 # Resolved once at import time — used by all notebooks via `MODEL_ID`.
@@ -208,7 +219,8 @@ RULES:
 - Conditions: when <var> = value or when <expr>
 - Return an <OK: status> ... to end a feature set
 
-Output ONLY valid ARO code. No markdown fences unless asked."""
+Wrap ARO code in ```aro ... ``` markdown fences.
+Output valid ARO code. Do not invent actions or prepositions not listed above."""
 
 
 # ── Notebook pair tracking ───────────────────────────────────────────────────
