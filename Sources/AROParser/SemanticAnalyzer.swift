@@ -132,6 +132,29 @@ public struct AnalyzedProgram: Sendable {
     /// Feature sets indexed by name for O(1) lookup (e.g. by HTTP operationId).
     public let byName: [String: AnalyzedFeatureSet]
 
+    // MARK: - Pre-computed handler category indexes
+
+    /// Feature sets whose business activity contains "Socket Event Handler".
+    public let socketHandlers: [AnalyzedFeatureSet]
+    /// Feature sets whose business activity contains "WebSocket Event Handler".
+    public let webSocketHandlers: [AnalyzedFeatureSet]
+    /// Feature sets whose business activity contains "File Event Handler".
+    public let fileHandlers: [AnalyzedFeatureSet]
+    /// Feature sets whose business activity contains "NotificationSent Handler".
+    public let notificationHandlers: [AnalyzedFeatureSet]
+    /// Feature sets whose business activity contains " Observer" and "-repository".
+    public let repositoryObservers: [AnalyzedFeatureSet]
+    /// Feature sets whose business activity has " Evicted Handler" suffix and "-repository".
+    public let evictionHandlers: [AnalyzedFeatureSet]
+    /// Feature sets whose business activity contains " Watch:".
+    public let watchHandlers: [AnalyzedFeatureSet]
+    /// Feature sets whose business activity contains "StateObserver" or "StateTransition Handler".
+    public let stateObservers: [AnalyzedFeatureSet]
+    /// Feature sets whose business activity contains "KeyPress Handler".
+    public let keyPressHandlers: [AnalyzedFeatureSet]
+    /// Domain event handlers: contain " Handler" but not socket/websocket/file/keypress/application-end.
+    public let domainHandlers: [AnalyzedFeatureSet]
+
     public init(program: Program, featureSets: [AnalyzedFeatureSet], globalRegistry: GlobalSymbolRegistry) {
         self.program = program
         self.featureSets = featureSets
@@ -140,6 +163,68 @@ public struct AnalyzedProgram: Sendable {
         var nameIndex: [String: AnalyzedFeatureSet] = [:]
         for fs in featureSets { nameIndex[fs.featureSet.name] = fs }
         self.byName = nameIndex
+
+        // Pre-classify feature sets by handler category (single pass)
+        var socket: [AnalyzedFeatureSet] = []
+        var ws: [AnalyzedFeatureSet] = []
+        var file: [AnalyzedFeatureSet] = []
+        var notification: [AnalyzedFeatureSet] = []
+        var repoObs: [AnalyzedFeatureSet] = []
+        var eviction: [AnalyzedFeatureSet] = []
+        var watch: [AnalyzedFeatureSet] = []
+        var state: [AnalyzedFeatureSet] = []
+        var keyPress: [AnalyzedFeatureSet] = []
+        var domain: [AnalyzedFeatureSet] = []
+
+        for fs in featureSets {
+            let activity = fs.featureSet.businessActivity
+
+            if activity.contains(" Watch:") {
+                watch.append(fs)
+            }
+            if activity.contains("StateObserver") || activity.contains("StateTransition Handler") {
+                state.append(fs)
+            }
+            if activity.contains("KeyPress Handler") {
+                keyPress.append(fs)
+            }
+
+            let isSocket = activity.contains("Socket Event Handler")
+            let isWS = activity.contains("WebSocket Event Handler")
+            let isFile = activity.contains("File Event Handler")
+            let isNotification = activity.contains("NotificationSent Handler")
+
+            if isSocket { socket.append(fs) }
+            if isWS { ws.append(fs) }
+            if isFile { file.append(fs) }
+            if isNotification { notification.append(fs) }
+
+            if activity.contains(" Observer") && activity.contains("-repository") {
+                repoObs.append(fs)
+            }
+            if activity.hasSuffix(" Evicted Handler") && activity.contains("-repository") {
+                eviction.append(fs)
+            }
+
+            // Domain handlers: have " Handler" but aren't special handler types
+            if activity.contains(" Handler") &&
+               !isSocket && !isWS && !isFile &&
+               !activity.contains("KeyPress Handler") &&
+               !activity.contains("Application-End") {
+                domain.append(fs)
+            }
+        }
+
+        self.socketHandlers = socket
+        self.webSocketHandlers = ws
+        self.fileHandlers = file
+        self.notificationHandlers = notification
+        self.repositoryObservers = repoObs
+        self.evictionHandlers = eviction
+        self.watchHandlers = watch
+        self.stateObservers = state
+        self.keyPressHandlers = keyPress
+        self.domainHandlers = domain
     }
 }
 
