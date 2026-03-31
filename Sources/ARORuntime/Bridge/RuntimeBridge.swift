@@ -2036,7 +2036,7 @@ private func evaluateBinaryOp(op: String, left: any Sendable, right: any Sendabl
         let str = asString(left)
         let pattern = asString(right)
         do {
-            let regex = try NSRegularExpression(pattern: pattern)
+            let regex = try RegexCache.shared.regex(pattern)
             let range = NSRange(str.startIndex..., in: str)
             return regex.firstMatch(in: str, range: range) != nil
         } catch {
@@ -2464,7 +2464,7 @@ public func aro_match_pattern(
         if flags.contains("m") { options.insert(.anchorsMatchLines) }
 
         do {
-            let regex = try NSRegularExpression(pattern: pattern, options: options)
+            let regex = try RegexCache.shared.regex(pattern, options: options)
             let range = NSRange(stringValue.startIndex..., in: stringValue)
             return regex.firstMatch(in: stringValue, options: [], range: range) != nil ? 1 : 0
         } catch {

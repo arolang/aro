@@ -677,7 +677,7 @@ public final class FeatureSetExecutor: Sendable {
         if flags.contains("m") { options.insert(.anchorsMatchLines) }
 
         do {
-            let regex = try NSRegularExpression(pattern: pattern, options: options)
+            let regex = try RegexCache.shared.regex(pattern, options: options)
             let range = NSRange(string.startIndex..., in: string)
             return regex.firstMatch(in: string, range: range) != nil
         } catch {
