@@ -34,6 +34,18 @@ public final class FeatureSetExecutor: Sendable {
     /// Whether to enable parallel I/O optimization (ARO-0011)
     public let enableParallelIO: Bool
 
+    // Cached VerbSets — copied once at init to avoid repeated static-property indirection
+    private let testVerbs: Set<String>
+    private let requestVerbs: Set<String>
+    private let updateVerbs: Set<String>
+    private let createVerbs: Set<String>
+    private let mergeVerbs: Set<String>
+    private let computeVerbs: Set<String>
+    private let extractVerbs: Set<String>
+    private let queryVerbs: Set<String>
+    private let responseVerbs: Set<String>
+    private let serverVerbs: Set<String>
+
     // MARK: - Initialization
 
     public init(
@@ -47,6 +59,16 @@ public final class FeatureSetExecutor: Sendable {
         self.globalSymbols = globalSymbols
         self.expressionEvaluator = ExpressionEvaluator()
         self.enableParallelIO = enableParallelIO
+        self.testVerbs = VerbSets.testVerbs
+        self.requestVerbs = VerbSets.requestVerbs
+        self.updateVerbs = VerbSets.updateVerbs
+        self.createVerbs = VerbSets.createVerbs
+        self.mergeVerbs = VerbSets.mergeVerbs
+        self.computeVerbs = VerbSets.computeVerbs
+        self.extractVerbs = VerbSets.extractVerbs
+        self.queryVerbs = VerbSets.queryVerbs
+        self.responseVerbs = VerbSets.responseVerbs
+        self.serverVerbs = VerbSets.serverVerbs
     }
 
     // MARK: - Execution
@@ -309,16 +331,6 @@ public final class FeatureSetExecutor: Sendable {
             // comparison/assertion actions like Then/Assert that need to run.
             if statement.object.noun.base == "_expression_" {
                 // Check if the action needs to be executed (see VerbSets.swift for rationale per category)
-                let testVerbs = VerbSets.testVerbs
-                let requestVerbs = VerbSets.requestVerbs
-                let updateVerbs = VerbSets.updateVerbs
-                let createVerbs = VerbSets.createVerbs
-                let mergeVerbs = VerbSets.mergeVerbs
-                let computeVerbs = VerbSets.computeVerbs
-                let extractVerbs = VerbSets.extractVerbs
-                let queryVerbs = VerbSets.queryVerbs
-                let responseVerbs = VerbSets.responseVerbs
-                let serverVerbs = VerbSets.serverVerbs
                 // Check if there's a dynamic handler registered for this verb (plugin-provided action)
                 let hasDynamicHandler = await actionRegistry.dynamicHandler(for: verb) != nil
                 let needsExecution = testVerbs.contains(verb.lowercased()) ||
