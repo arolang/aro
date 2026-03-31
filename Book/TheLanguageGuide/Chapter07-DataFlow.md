@@ -18,7 +18,7 @@ The flow is unidirectional within a single execution. Data moves forward through
 
 ## 7.2 Semantic Roles
 
-Every action in ARO has a semantic role that categorizes its data flow characteristics. The role is determined by the action's verb and affects how the runtime processes the action and validates its usage. There are four roles: REQUEST, OWN, RESPONSE, and EXPORT.
+Every action in ARO has a semantic role that categorizes its data flow characteristics. The role is determined by the action's verb and affects how the runtime processes the action and validates its usage. There are five roles: REQUEST, OWN, RESPONSE, EXPORT, and SERVER.
 
 REQUEST actions bring data from outside the feature set into its local scope. When you extract data from a request, retrieve records from a repository, fetch content from a URL, or read a file, you are performing a REQUEST operation. The characteristic of REQUEST actions is that they produce new bindings by pulling data inward. After a REQUEST action executes, the symbol table contains a new entry that was not there before, and the value came from somewhere external.
 
@@ -26,7 +26,11 @@ OWN actions transform data that already exists within the feature set. When you 
 
 RESPONSE actions send data out of the feature set to the caller and terminate normal execution. When you return a response to an HTTP client or throw an error, you are performing a RESPONSE operation. The characteristic of RESPONSE actions is that they move data outward and end the feature set's execution. After a RESPONSE action, no subsequent statements execute because control has returned to the caller.
 
-EXPORT actions make data available beyond the current execution without terminating it. When you store data to a repository, emit an event for handlers to process, publish a value for other feature sets in the same business activity, log a message, or send a notification, you are performing an EXPORT operation. The characteristic of EXPORT actions is that they have side effects—they change something in the outside world—but execution continues with the next statement.
+EXPORT actions make data globally available without terminating execution. When you emit an event for handlers to process, publish a value for other feature sets in the same business activity, or schedule a delayed action, you are performing an EXPORT operation. The characteristic of EXPORT actions is that they broadcast data—they make it visible to other feature sets—but execution continues with the next statement.
+
+SERVER actions manage service lifecycle. When you start an HTTP server, stop a service, listen for keyboard input, connect to a remote host, or keep the application alive, you are performing a SERVER operation. The characteristic of SERVER actions is that they establish or tear down long-running infrastructure without directly moving business data.
+
+Note that actions like Store, Log, Send, and Write are classified as RESPONSE, not EXPORT. They produce side effects (persisting data, outputting to console, sending messages) but do not terminate execution—only Return and Throw cause the feature set to stop.
 
 The runtime uses these roles for validation and optimization. It can detect when you try to use a value that has not been bound, when you attempt to read from a binding that a statement's role would not produce, or when you have dead code after a RESPONSE action. Understanding the roles helps you write code that the runtime can validate effectively.
 

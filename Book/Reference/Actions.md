@@ -1,84 +1,99 @@
 # ARO Action Reference
 
-Complete reference of all 51 ARO actions organized by category.
+Complete reference of all 61 ARO actions organized by category.
 
 | **Action**    | **Category**      | **Semantic Role** | **Description**                                           |
 | ------------- | ----------------- | ----------------- | --------------------------------------------------------- |
-| **Send**      | Communication     | RESPONSE          | Delivers data or message outward.<br>`Send "Hello" to the <connection>.` |
-| **Receive**   | Communication     | REQUEST           | Accepts incoming data or message from external source.<br>`Receive the <message> from the <event>.` |
-| **Request**   | Communication     | REQUEST           | Initiates a query or ask for data or service.<br>`Request the <data> from the <api-url>.` |
-| **Listen**    | Communication     | OWN               | Waits for incoming events or data.<br>`Listen on port 9000 as <socket-server>.` |
-| **Connect**   | Communication     | OWN               | Establishes a link between endpoints.<br>`Connect to <host: "localhost"> on port 5432 as <db>.` |
-| **Close**     | Communication     | OWN               | Terminates a connection or handle.<br>`Close the <database-connection>.` |
-| **Keepalive** | Communication     | OWN               | Maintains an active connection.<br>`Keepalive the <application> for the <events>.` |
-| **Notify**    | Communication     | RESPONSE          | Signals a change or event to observers.<br>`Notify the <alert> to the <admin>.` |
-| **Broadcast** | Communication     | RESPONSE          | Sends to multiple recipients.<br>`Broadcast the <message> to the <socket-server>.` |
-| **Publish**   | Communication     | EXPORT            | Publishes an event or message to a channel.<br>`Publish as <app-config> <config>.` |
-| **Emit**      | Communication     | EXPORT            | Emits an event or signal.<br>`Emit a <UserCreated: event> with <user>.` |
-| **Make**      | Construction      | OWN               | Builds or prepares a resource (e.g., dirs).<br>`Make the <output-dir> to the <path: "./output">.` |
-| **Execute**   | Control           | OWN               | Runs a command or code block.<br>`Execute the <result> for the <command: "ls"> with "-la".` |
-| **Call**      | Control           | OWN               | Invokes a function or service.<br>`Call the <result> via <API: POST /users> with <data>.` |
-| **Return**    | Control           | RESPONSE          | Sends back a result from a call.<br>`Return an <OK: status> with <data>.` |
-| **Given**     | Control/Spec      | OWN               | Denotes initial precondition in scenarios.<br>`Given the <user> with { name: "Test" }.` |
-| **When**      | Control/Spec      | OWN               | Denotes conditional trigger.<br>`When the <action> from the <feature-set>.` |
-| **Then**      | Control/Spec      | OWN               | Denotes expected result after condition.<br>`Then the <result> with <expected>.` |
-| **Extract**   | Data Access       | REQUEST           | Pulls a subset or component from a larger data structure. PascalCase qualifiers enable typed extraction with OpenAPI schema validation (ARO-0046).<br>`Extract the <user-id> from the <request: parameters>.`<br>`Extract the <data: UserEvent> from the <event: data>.` |
-| **Retrieve**  | Data Access       | REQUEST           | Gets existing data by key or identifier.<br>`Retrieve the <user> from the <user-repository> where id = <id>.` |
-| **List**      | Enumeration       | REQUEST           | Enumerates items in a collection or directory.<br>`List the <files> from the <directory: "./src">.` |
-| **Filter**    | Enumeration       | OWN               | Selects items matching criteria.<br>`Filter the <active> from the <users> where status = "active".` |
-| **Sort**      | Enumeration       | OWN               | Orders items in a sequence.<br>`Sort the <users> by <name>.` |
-| **Throw**     | Error Handling    | RESPONSE          | Signals an exception or fault.<br>`Throw a <NotFound: error> for the <user>.` |
-| **Start**     | Execution Control | OWN               | Begins a process or session.<br>`Start the <http-server> with <contract>.` |
-| **Stop**      | Execution Control | OWN               | Ends a process or session.<br>`Stop the <http-server> with <application>.` |
-| **Stat**      | Inspection        | REQUEST           | Checks metadata or status of a resource.<br>`Stat the <info> for the <file: "./doc.pdf">.` |
-| **Read**      | I/O               | REQUEST           | Reads data from storage or stream.<br>`Read the <config> from the <file: "./config.json">.` |
-| **Stream**    | I/O               | REQUEST           | Reads a file line-by-line as a lazy stream (O(1) memory), or subscribes to SSE/WebSocket.<br>`Stream the <lines> from "./bigfile.dat".` |
-| **Write**     | I/O               | RESPONSE          | Writes data to storage or stream.<br>`Write the <data> to the <file: "./output.txt">.` |
+| **Accept**    | Protocol          | OWN               | Acknowledges or agrees to a state transition.<br>`Accept the <order: placed>.` |
 | **Append**    | I/O               | RESPONSE          | Adds data to end of existing resource.<br>`Append the <log-line> to the <file: "./app.log">.` |
-| **Split**     | Manipulation      | OWN               | Breaks a data sequence into parts.<br>`Split the <words> from the <sentence> by /\s+/.` |
-| **Merge**     | Manipulation      | OWN               | Combines multiple sequences into one.<br>`Merge the <existing-user> with <update-data>.` |
-| **Log**       | Monitoring        | RESPONSE          | Records informational/debug output.<br>`Log "Server started" to the <console>.` |
-| **Create**    | Mutation          | OWN               | Makes a new resource or object.<br>`Create the <user> with { name: "Alice" }.` |
-| **Update**    | Mutation          | OWN               | Modifies an existing resource or object.<br>`Update the <user> with <changes>.` |
-| **Delete**    | Mutation          | EXPORT            | Removes a resource or entry.<br>`Delete the <user> from the <users> where id = <id>.` |
-| **Copy**      | Mutation          | OWN               | Duplicates data from one location to another.<br>`Copy the <file: "./a.txt"> to the <destination: "./b.txt">.` |
-| **Move**      | Mutation          | OWN               | Transfers data or resources.<br>`Move the <file: "./old.txt"> to the <destination: "./new.txt">.` |
-| **Store**     | Persistence       | EXPORT            | Saves data persistently.<br>`Store the <user> into the <user-repository>.` |
-| **Compute**   | Processing        | OWN               | Performs calculation or algorithm.<br>`Compute the <total> from <price> * <quantity>.` |
-| **Transform** | Processing        | OWN               | Converts data from one form to another.<br>`Transform the <dto> from the <entity>.` |
-| **Map**       | Processing        | OWN               | Applies a function across elements.<br>`Map the <names> from the <users: name>.` |
-| **ParseHtml** | Processing        | OWN               | Extracts structured data from HTML. Specifiers: `links`, `content`, `text`, `markdown`.<br>`ParseHtml the <result: markdown> from the <html>.` |
-| **Reduce**    | Processing        | OWN               | Aggregates elements into a summary.<br>`Reduce the <total> from the <amounts> with sum.` |
-| **Accept**    | Protocol          | OWN               | Acknowledges or agrees to a connection/request.<br>`Accept the <order: placed>.` |
-| **Exists**    | Query             | REQUEST           | Tests whether a resource or value is present.<br>`Exists the <found> for the <file: "./config.json">.` |
-| **Validate**  | Verification      | OWN               | Checks correctness or conformance.<br>`Validate the <data> for the <schema>.` |
-| **Compare**   | Evaluation        | OWN               | Compares two values or structures.<br>`Compare the <hash> against the <stored-hash>.` |
 | **Assert**    | Verification      | OWN               | Checks that a condition holds true.<br>`Assert the <value> equals <expected>.` |
+| **Broadcast** | Communication     | RESPONSE          | Sends to multiple WebSocket recipients.<br>`Broadcast the <message> to the <websocket>.` |
+| **Call**      | Control           | OWN               | Invokes a function or service.<br>`Call the <result> via <API: POST /users> with <data>.` |
+| **Clear**     | Terminal          | OWN               | Clears the terminal screen.<br>`Clear the <screen> for the <terminal>.` |
+| **Close**     | Server            | SERVER            | Terminates a connection or handle.<br>`Close the <database-connections> for the <application>.` |
+| **Compare**   | Evaluation        | OWN               | Compares two values or structures.<br>`Compare the <hash> against the <stored-hash>.` |
+| **Compute**   | Processing        | OWN               | Performs calculation or algorithm.<br>`Compute the <total> from <price> * <quantity>.` |
+| **Connect**   | Server            | SERVER            | Establishes a link between endpoints.<br>`Connect the <socket> to the <host: "localhost">.` |
+| **Copy**      | File System       | SERVER            | Duplicates data from one location to another.<br>`Copy the <file: "./a.txt"> to the <destination: "./b.txt">.` |
+| **Create**    | Mutation          | OWN               | Makes a new resource or object.<br>`Create the <user> with { name: "Alice" }.` |
+| **Delete**    | Mutation          | OWN               | Removes a resource or entry.<br>`Delete the <user> from the <user-repository> where id = <id>.` |
+| **Emit**      | Communication     | EXPORT            | Emits an event to the event bus.<br>`Emit a <UserCreated: event> with <user>.` |
+| **Execute**   | Control           | OWN               | Runs a system command.<br>`Exec the <result> for the <command> with "ls -la".` |
+| **Exists**    | Query             | REQUEST           | Tests whether a resource or value is present.<br>`Exists the <found> for the <file: "./config.json">.` |
+| **Extract**   | Data Access       | REQUEST           | Pulls a field from a data structure. PascalCase qualifiers enable typed extraction with OpenAPI schema validation (ARO-0046).<br>`Extract the <user-id> from the <request: body>.`<br>`Extract the <data: UserEvent> from the <event>.` |
+| **Filter**    | Enumeration       | OWN               | Selects items matching criteria.<br>`Filter the <active> from the <users> where status = "active".` |
+| **Given**     | Testing           | OWN               | Denotes initial precondition in test scenarios.<br>`Given the <user> with { name: "Test" }.` |
+| **Include**   | Templates         | OWN               | Includes a partial template.<br>`Include the <header> from the <template: "header.tpl">.` |
+| **Join**      | Manipulation      | OWN               | Joins a collection with a separator.<br>`Join the <csv-line> from the <fields> by ",".` |
+| **Keepalive** | Server            | SERVER            | Blocks execution to keep application alive for external events.<br>`Keepalive the <application> for the <events>.` |
+| **List**      | Enumeration       | REQUEST           | Enumerates items in a collection or directory.<br>`List the <files> from the <directory: "./src">.` |
+| **Listen**    | Server            | SERVER            | Waits for incoming events or data.<br>`Listen the <keyboard> to the <stdin>.` |
+| **Log**       | Monitoring        | RESPONSE          | Records informational/debug output.<br>`Log "Server started" to the <console>.` |
+| **Make**      | File System       | SERVER            | Builds or creates a directory.<br>`Make the <output-dir> to the <directory: output-path>.` |
+| **Map**       | Processing        | OWN               | Applies a transformation across elements.<br>`Map the <names> from the <users: name>.` |
+| **Merge**     | Manipulation      | OWN               | Combines multiple objects or collections into one.<br>`Merge the <existing-user> with <update-data>.` |
+| **Move**      | File System       | SERVER            | Transfers or renames files.<br>`Move the <file: "./old.txt"> to the <destination: "./new.txt">.` |
+| **Notify**    | Communication     | RESPONSE          | Signals a change or event to observers.<br>`Notify the <alert> to the <admin>.` |
+| **ParseHtml** | Processing        | OWN               | Extracts structured data from HTML. Specifiers: `links`, `markdown`, `title`.<br>`ParseHtml the <result: markdown> from the <html>.` |
+| **ParseLinkHeader** | Processing   | OWN               | Parses RFC 8288 Link headers for pagination.<br>`Parse the <links: link-header> from the <response>.` |
+| **Prompt**    | Terminal          | REQUEST           | Prompts the user for terminal input.<br>`Prompt the <answer> for the <question>.` |
+| **Publish**   | Communication     | EXPORT            | Makes a variable globally accessible across feature sets.<br>`Publish as <app-config> <config>.` |
+| **Read**      | I/O               | REQUEST           | Reads data from a file.<br>`Read the <config> from the <file: "./config.json">.` |
+| **Receive**   | Communication     | REQUEST           | Accepts incoming data from external source.<br>`Receive the <message> from the <event>.` |
+| **Reduce**    | Processing        | OWN               | Aggregates elements into a summary.<br>`Reduce the <total> from the <amounts> with sum.` |
+| **Render**    | Terminal          | RESPONSE          | Renders a terminal UI screen from a template.<br>`Render the <screen> from the <template: "menu.screen">.` |
+| **Repaint**   | Terminal          | RESPONSE          | Incrementally updates a terminal screen.<br>`Repaint the <screen> from the <template: "monitor.screen">.` |
+| **Request**   | Communication     | REQUEST           | Makes an HTTP request. Returns response object with body, status, headers.<br>`Request the <response> from the <url>.`<br>`Request the <response> to the <url> with <data>.` |
+| **Retrieve**  | Data Access       | REQUEST           | Gets existing data by key or identifier from a repository.<br>`Retrieve the <user> from the <user-repository> where id = <id>.` |
+| **Return**    | Control           | RESPONSE          | Sends back a result from a feature set.<br>`Return an <OK: status> with <data>.` |
+| **Schedule**  | Communication     | EXPORT            | Schedules a delayed or recurring action.<br>`Schedule the <task> for the <timer> with 5000.` |
+| **Select**    | Terminal          | REQUEST           | Presents a terminal selection menu.<br>`Select the <choice> from the <options>.` |
+| **Send**      | Communication     | RESPONSE          | Delivers data or message outward.<br>`Send the <message> to the <connection>.` |
+| **Show**      | Terminal          | OWN               | Shows content on the terminal.<br>`Show the <content> to the <terminal>.` |
+| **Sleep**     | Control           | OWN               | Pauses execution for a duration.<br>`Sleep the <delay> for 1000.` |
+| **Sort**      | Enumeration       | OWN               | Orders items in a sequence.<br>`Sort the <users> by <name>.` |
+| **Split**     | Manipulation      | OWN               | Breaks a string into parts by regex delimiter.<br>`Split the <words> from the <sentence> by /\s+/.` |
+| **Start**     | Server            | SERVER            | Begins a server or service.<br>`Start the <http-server> with <contract>.` |
+| **Stat**      | Inspection        | REQUEST           | Checks metadata or status of a resource.<br>`Stat the <info> for the <file: "./doc.pdf">.` |
+| **Stop**      | Server            | SERVER            | Ends a server or service.<br>`Stop the <http-server> with <application>.` |
+| **Store**     | Persistence       | RESPONSE          | Saves data to a repository.<br>`Store the <user> into the <user-repository>.` |
+| **Stream**    | I/O               | REQUEST           | Reads a file line-by-line as a lazy stream, or subscribes to SSE/WebSocket.<br>`Stream the <lines> from "./bigfile.dat".` |
+| **Then**      | Testing           | OWN               | Denotes expected result in test scenarios.<br>`Then the <result> with <expected>.` |
+| **Throw**     | Error Handling    | RESPONSE          | Signals an exception or fault.<br>`Throw a <NotFound: error> for the <user>.` |
+| **Transform** | Processing        | OWN               | Renders a template with data context.<br>`Transform the <output> from the <template: "welcome.tpl">.` |
+| **Update**    | Mutation          | OWN               | Modifies an existing resource or object field.<br>`Update the <user: name> with "Alice".` |
+| **Validate**  | Verification      | OWN               | Checks correctness or conformance.<br>`Validate the <data> for the <schema>.` |
+| **When**      | Testing           | OWN               | Denotes conditional trigger in test scenarios.<br>`When the <action> from the <feature-set>.` |
+| **Write**     | I/O               | RESPONSE          | Writes data to a file.<br>`Write the <data> to the <file: "./output.txt">.` |
 
 ## Summary by Semantic Role
 
-- **REQUEST** (9 actions): Extract, Retrieve, Receive, Request, Read, Stream, List, Stat, Exists
-- **OWN** (32 actions): Compute, Validate, Compare, Transform, Create, Update, Filter, Sort, Split, Merge, Copy, Move, Map, ParseHtml, Reduce, Accept, Given, When, Then, Assert, Start, Stop, Listen, Connect, Close, Keepalive, Make, Execute, Call
-- **RESPONSE** (8 actions): Return, Throw, Send, Log, Write, Append, Notify, Broadcast
-- **EXPORT** (3 actions): Publish, Store, Emit, Delete
+- **REQUEST** (11 actions): Extract, Retrieve, Receive, Request, Read, Stream, List, Stat, Exists, Prompt, Select
+- **OWN** (27 actions): Compute, Validate, Compare, Transform, Create, Update, Delete, Filter, Sort, Split, Merge, Join, Map, ParseHtml, ParseLinkHeader, Reduce, Accept, Given, When, Then, Assert, Call, Execute, Sleep, Clear, Show, Include
+- **RESPONSE** (11 actions): Return, Throw, Send, Log, Write, Append, Store, Notify, Broadcast, Render, Repaint
+- **EXPORT** (3 actions): Publish, Emit, Schedule
+- **SERVER** (9 actions): Start, Stop, Listen, Connect, Close, Keepalive, Make, Copy, Move
 
 ## Summary by Category
 
-- **Communication** (11): Send, Receive, Request, Listen, Connect, Close, Keepalive, Notify, Broadcast, Publish, Emit
-- **Construction** (1): Make
-- **Control** (3): Execute, Call, Return
-- **Control/Spec** (3): Given, When, Then
+- **Communication** (7): Send, Receive, Request, Notify, Publish, Emit, Schedule
+- **Control** (4): Execute, Call, Return, Sleep
 - **Data Access** (2): Extract, Retrieve
 - **Enumeration** (3): List, Filter, Sort
 - **Error Handling** (1): Throw
-- **Execution Control** (2): Start, Stop
-- **Inspection** (1): Stat
+- **Evaluation** (1): Compare
+- **File System** (3): Make, Copy, Move
 - **I/O** (4): Read, Stream, Write, Append
-- **Manipulation** (2): Split, Merge
+- **Inspection** (1): Stat
+- **Manipulation** (3): Split, Merge, Join
 - **Monitoring** (1): Log
-- **Mutation** (5): Create, Update, Delete, Copy, Move
+- **Mutation** (3): Create, Update, Delete
 - **Persistence** (1): Store
-- **Processing** (5): Compute, Transform, Map, ParseHtml, Reduce
+- **Processing** (5): Compute, Transform, Map, ParseHtml, ParseLinkHeader, Reduce
 - **Protocol** (1): Accept
 - **Query** (1): Exists
-- **Verification** (3): Validate, Compare, Assert
+- **Server** (6): Start, Stop, Listen, Connect, Close, Keepalive
+- **Templates** (1): Include
+- **Terminal** (6): Prompt, Select, Clear, Show, Render, Repaint
+- **Testing** (4): Given, When, Then, Assert
+- **Verification** (1): Validate

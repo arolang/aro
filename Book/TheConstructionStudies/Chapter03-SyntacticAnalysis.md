@@ -441,7 +441,7 @@ ARO's parser demonstrates several clean techniques:
 
 4. **Compound identifiers in parser**: Hyphenated names are assembled from separate tokens — the lexer keeps things simple, the parser assembles.
 
-The parser is ~2000 lines — larger than the lexer but still manageable. The constrained grammar (eight statement types, fixed expression operators) keeps complexity bounded. And the hybrid design means each half is as simple as it can be.
+The parser is ~2000 lines — larger than the lexer but still manageable. The constrained grammar (nine statement types, fixed expression operators) keeps complexity bounded. And the hybrid design means each half is as simple as it can be.
 
 Implementation reference: `Sources/AROParser/Parser.swift`
 

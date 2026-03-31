@@ -10,7 +10,7 @@ Every programmer eventually discovers a counterintuitive truth: simplicity isn't
 
 General-purpose languages like Python, JavaScript, and Go are magnificent tools. They let you express almost anything. But "almost anything" is precisely the problem. When a language permits infinite variation, every codebase becomes a unique dialect. Reading someone else's Express.js handler requires decoding their personal philosophy of error handling, their opinions on async/await versus callbacks, their stance on mutation.
 
-ARO takes a different path. It deliberately limits what you can express. No loops. No conditionals. No arbitrary function definitions. Just 50 verbs, a fixed grammar, and a commitment to the happy path.
+ARO takes a different path. It deliberately limits what you can express. No loops. No conditionals. No arbitrary function definitions. Just 61 verbs, a fixed grammar, and a commitment to the happy path.
 
 This isn't a limitation born of laziness or naivety. It's a design philosophy with historical precedent:
 
@@ -28,7 +28,7 @@ These languages succeeded not despite their constraints but because of them. Whe
 ARO makes specific choices about what it will and won't express:
 
 **What ARO Has:**
-- 50 built-in actions (verbs like Extract, Compute, Return, Emit)
+- 61 built-in actions (verbs like Extract, Compute, Return, Emit)
 - A fixed sentence structure: `Action the <Result> preposition the <Object>`
 - Feature sets that respond to events
 - First-class support for HTTP, files, and sockets
@@ -41,7 +41,7 @@ ARO makes specific choices about what it will and won't express:
 - Complex type system (primitives built-in, complex types from OpenAPI schemas)
 - Exception handling (happy path only)
 
-This sounds limiting because it is. But limitation is the point. When the 50 built-in actions aren't enough, ARO provides escape hatches—custom actions written in Swift and distributable plugins. But that's a topic for later chapters, after you've learned the language itself.
+This sounds limiting because it is. But limitation is the point. When the 61 built-in actions aren't enough, ARO provides escape hatches—custom actions written in Swift and distributable plugins. But that's a topic for later chapters, after you've learned the language itself.
 
 ---
 
@@ -185,7 +185,7 @@ Bugs ∝ (API Surface) × (Complexity) × (Mutability)
 ```
 
 ARO attacks all three factors:
-- **Smaller API surface**: 50 actions vs. infinite function possibilities
+- **Smaller API surface**: 61 actions vs. infinite function possibilities
 - **Reduced complexity**: No control flow means fewer execution paths
 - **Limited mutability**: Actions transform and return; they don't mutate shared state (though explicit shared repositories exist for business domain data and can be safely used across feature sets)
 
@@ -229,9 +229,9 @@ If your team already has battle-tested Go services with excellent patterns, intr
 
 ---
 
-## 1.7 The Missing Parts — A Pre-Alpha Disclaimer
+## 1.7 The Missing Parts — An Honest Status
 
-> ARO is pre-alpha software. This section exists because honesty is a feature.
+> ARO is beta software (0.8.0). This section exists because honesty is a feature.
 
 ### What's Not Here Yet
 
@@ -249,11 +249,11 @@ ARO has four built-in primitive types (String, Integer, Float, Boolean) and coll
 
 **Debugging Tools**
 
-No step debugger exists. Limited introspection. Debugging means reading logs and error messages. IDE integration is primitive—syntax highlighting exists; language server protocol support is in progress.
+No step debugger exists. Limited introspection. Debugging means reading logs and error messages. IDE integration includes syntax highlighting, an LSP server with diagnostics, completions, and hover, plus IntelliJ and VS Code extensions.
 
 **Standard Library**
 
-50 actions is a starting point. The vocabulary will grow. Database abstractions. Authentication patterns. These need to be built.
+61 actions is a starting point. The vocabulary will grow. Database abstractions. Authentication patterns. These need to be built.
 
 **Documentation**
 
@@ -261,7 +261,7 @@ You're reading the first attempt. Expect gaps, errors, and outdated information.
 
 ### What Will Change
 
-This is pre-alpha software. Expect:
+This is beta software. Expect:
 
 - Action signatures may evolve incompatibly
 - Preposition semantics are still being refined
@@ -278,9 +278,8 @@ For the latest version, check the repository. For the authoritative specificatio
 ---
 
 ```
-This chapter reflects ARO as of December 2025.
-Language version: pre-alpha
-Book revision: 0.1
+This chapter reflects ARO as of March 2026.
+Language version: 0.8.0
 ```
 
 ---

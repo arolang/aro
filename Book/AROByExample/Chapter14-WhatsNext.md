@@ -55,7 +55,7 @@ Wait for 1000.  (* milliseconds *)
 Skip pages based on URL patterns, content type, or page size:
 
 ```aro
-Request the <html> from the <url> when <url> contains "/docs/".
+Request the <response> from the <url> when <url> contains "/docs/".
 ```
 
 **Robots.txt Compliance**
@@ -249,7 +249,7 @@ Thank you for taking this journey. We hope ARO serves you well.
 
 ## Chapter Recap
 
-- You built a complete web crawler in 211 lines of ARO
+- You built a complete web crawler in ~200 lines of ARO (plus event schemas)
 - Extensions like rate limiting and depth limiting are straightforward
 - ARO supports many patterns: APIs, file processing, event sourcing
 - Documentation and examples are available on GitHub

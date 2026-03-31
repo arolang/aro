@@ -29,21 +29,22 @@ The first thing that happened: everyone wanted branching.
 
 ---
 
-## Statement Count: 5 → 8
+## Statement Count: 5 → 9
 
 The original grammar had five statement types: `AROStatement`, `PublishStatement`, `RequireStatement`, `MatchStatement`, and `ForEachLoop`. Five felt clean. Five felt principled.
 
 Then we shipped the first real application and immediately needed to count. Not collection iteration — numeric counting. `for i from 1 to 10` is not the same as `for each item in items`. The grammar was technically expressive enough (you could simulate it with repositories and observers), but it was absurd in practice.
 
-Range loops came first. Then while loops, because there are legitimately cases where you don't know the count upfront. Then `Break`, because without it, while loops have no exit.
+Range loops came first. Then while loops, because there are legitimately cases where you don't know the count upfront. Then `Break`, because without it, while loops have no exit. Finally, the pipeline operator (`|>`) added `PipelineStatement` for chaining multiple actions concisely.
 
-Three new statement types later, the grammar still felt principled — just more honest about what people actually need.
+Four new statement types later, the grammar still felt principled — just more honest about what people actually need.
 
 | Added In | Statement | Why |
 |----------|-----------|-----|
 | ARO 0.7 | `RangeLoop` | Numeric iteration without collection overhead |
 | ARO 0.7 | `WhileLoop` | Unknown-count iteration |
 | ARO 0.7 | `BreakStatement` | WhileLoop exit |
+| ARO 0.7 | `PipelineStatement` | Chained action composition via `\|>` operator (ARO-0067) |
 
 The lesson: you discover the grammar by building with it, not by designing it on paper.
 
@@ -243,7 +244,7 @@ Looking back with honest eyes:
 ARO 0.1 was a proof of concept that could parse and execute five statement types.
 
 ARO 0.7 is a system with:
-- Eight statement types
+- Nine statement types
 - 61 built-in actions
 - A plugin system supporting four languages
 - Dual-mode execution (interpreter and native binary)

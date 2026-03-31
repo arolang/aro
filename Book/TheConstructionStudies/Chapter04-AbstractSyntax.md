@@ -123,7 +123,7 @@ ARO draws a clear line between statements and expressions. This is not just synt
 
 **Statements** do things. They perform actions and produce side effects. `Statement` is a marker protocol — it adds no requirements beyond `ASTNode`, just marks the distinction.
 
-The eight statement types:
+The nine statement types:
 
 | Statement | Purpose | Example |
 |-----------|---------|---------|
@@ -135,6 +135,7 @@ The eight statement types:
 | `RangeLoop` | Numeric range iteration | `for <i> from 1 to <count> { ... }` |
 | `WhileLoop` | Condition-based iteration | `while <condition> { ... }` |
 | `BreakStatement` | Exit innermost loop | `Break.` |
+| `PipelineStatement` | Chained statements | `Extract ... |> Compute ... .` |
 
 **Expressions** compute values without side effects. `Expression` is likewise a marker protocol. Expression types:
 
@@ -442,11 +443,11 @@ The classifier is a lookup: check verb against known request verbs, then respons
 
 ## Chapter Summary
 
-ARO's AST design reflects the language's constraints. Eight statement types, fixed expression forms, and a consistent action-result-object shape make the tree predictable — which is exactly what you want when you're building a semantic analyzer, interpreter, and compiler on top of it.
+ARO's AST design reflects the language's constraints. Nine statement types, fixed expression forms, and a consistent action-result-object shape make the tree predictable — which is exactly what you want when you're building a semantic analyzer, interpreter, and compiler on top of it.
 
 The big ideas:
 
-1. **Eight statement types**: Uniform structure enables simple tooling. Adding `RangeLoop`, `WhileLoop`, and `BreakStatement` in ARO 0.7 expanded iteration without breaking anything.
+1. **Nine statement types**: Uniform structure enables simple tooling. Adding `RangeLoop`, `WhileLoop`, `BreakStatement`, and `PipelineStatement` expanded iteration and composition without breaking anything.
 
 2. **Grouped clause types**: `ValueSource`, `QueryModifiers`, `RangeModifiers`, and `StatementGuard` organize optional clauses into semantic groups. Invalid combinations are unrepresentable. Pattern matching is clean.
 

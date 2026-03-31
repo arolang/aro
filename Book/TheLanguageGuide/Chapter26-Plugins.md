@@ -183,20 +183,25 @@ Each entry in `provides:` can have these fields:
 |-------|----------|-------------|
 | `type` | Yes | Plugin type (see table above) |
 | `path` | Yes | Path to source files or library |
-| `handler` | No | Qualifier namespace prefix |
+| `handler` | No | Qualifier namespace prefix (legacy; prefer root-level `handle:`) |
 | `build` | No | Build configuration (for compiled plugins) |
 | `python` | No | Python configuration (for python-plugin) |
 
-The `handler` field defines the **qualifier namespace** for plugin-provided qualifiers. When set, qualifiers from this plugin are accessed as `handler.qualifier` in ARO code. If omitted, the plugin name is used as the namespace.
+The qualifier namespace is declared via the root-level `handle:` field (PascalCase, canonical). Qualifiers from this plugin are accessed as `Handle.qualifier` in ARO code. If omitted, the plugin name is used as the namespace. The legacy `handler:` field inside `provides:` still works but emits a deprecation warning.
 
 **Example:**
 
 ```yaml
+name: plugin-math
+version: 1.0.0
+handle: Math          # PascalCase root-level handle (canonical)
 provides:
   - type: swift-plugin
     path: Sources/
-    handler: math      # Qualifiers accessed as <value: math.round>, <value: math.abs>
+    # handler: math   # Legacy — use root-level handle: instead
 ```
+
+Qualifiers are accessed as `Math.round`, `Math.abs` in ARO code.
 
 See section 22.5 for complete documentation on plugin qualifiers.
 
@@ -275,21 +280,21 @@ Compute the <sorted: stats.sort> from the <numbers>.
 Log <numbers: collections.reverse> to the <console>.
 ```
 
-### The Handler Namespace
+### The Handle Namespace
 
-Each plugin that provides qualifiers must declare a `handler:` field in its `provides:` entry. This becomes the **namespace prefix** for all qualifiers from that plugin.
+Each plugin that provides qualifiers declares a root-level `handle:` field (PascalCase) in `plugin.yaml`. This becomes the **namespace prefix** for all qualifiers from that plugin.
 
 ```yaml
 # plugin.yaml
 name: plugin-swift-collection
 version: 1.0.0
+handle: Collections       # PascalCase root-level handle (canonical)
 provides:
   - type: swift-plugin
     path: Sources/
-    handler: collections    # Namespace for all qualifiers from this plugin
 ```
 
-In ARO code, qualifiers are accessed as `handler.qualifier`:
+In ARO code, qualifiers are accessed as `Handle.qualifier`:
 
 ```aro
 (* handler = collections, qualifier = reverse *)
@@ -335,10 +340,10 @@ char* aro_plugin_qualifier(const char* qualifier_name, const char* input_json) {
 ```yaml
 name: plugin-c-list
 version: 1.0.0
+handle: List            # qualifiers accessed as List.first, List.last, List.size
 provides:
   - type: c-plugin
     path: src/
-    handler: list     # qualifiers accessed as list.first, list.last, list.size
 ```
 
 **Usage:**
@@ -385,10 +390,10 @@ def aro_plugin_qualifier(qualifier_name, input_json):
 ```yaml
 name: plugin-python-stats
 version: 1.0.0
+handle: Stats           # qualifiers accessed as Stats.sort, Stats.min, etc.
 provides:
   - type: python-plugin
     path: src/
-    handler: stats    # qualifiers accessed as stats.sort, stats.min, etc.
 ```
 
 **Usage:**

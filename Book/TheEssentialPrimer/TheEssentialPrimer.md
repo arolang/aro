@@ -4,7 +4,7 @@
 
 ---
 
-*Language version: pre-alpha · Revision: 0.1 · March 2026*
+*Language version: 0.8.0 · March 2026*
 
 ---
 
@@ -50,7 +50,7 @@ Every ARO statement follows one grammatical pattern without exception:
 Action [article] <Result> preposition [article] <Object>.
 ```
 
-The *Action* is a verb drawn from a vocabulary of approximately fifty built-in words. The *Result* is a named binding that will hold the produced value, written in angle brackets. The *Object*, introduced by a preposition, is the input to the action. Articles (`the`, `a`, `an`) are optional syntactic sugar that improve readability without affecting semantics.
+The *Action* is a verb drawn from a vocabulary of sixty-one built-in words. The *Result* is a named binding that will hold the produced value, written in angle brackets. The *Object*, introduced by a preposition, is the input to the action. Articles (`the`, `a`, `an`) are optional syntactic sugar that improve readability without affecting semantics.
 
 A representative statement:
 
@@ -60,7 +60,7 @@ Extract the <user-id> from the <pathParameters: id>.
 
 This statement pulls the URL path parameter named `id` and binds it to the local variable `user-id`. The verb `Extract` signals that data is flowing inward from an external source. The preposition `from` indicates the direction of that flow. The colon notation inside the angle brackets (`pathParameters: id`) is a *qualifier*, selecting a specific field within the object.
 
-Every ARO statement is this legible. There are no operator precedences to memorise, no special forms for loops or exceptions, no syntactic irregularities. If you can read one statement, you can read any statement in any ARO program.
+Every ARO statement is this legible. There are no operator precedences to memorise, no special forms for exceptions, no syntactic irregularities. If you can read one statement, you can read any statement in any ARO program.
 
 ### 3.2 Feature Sets
 
@@ -90,7 +90,7 @@ Extract the <id> from the <pathParameters: id>.
 Compute the <length: length> from the <message>.
 ```
 
-The qualifier can select a field (`:email`, `:id`), specify a transformation (`:length`, `:uppercase`), or address a named source (`:body`, `:headers`). This uniform notation applies consistently across all variable references, eliminating the need for different accessor syntax for different data types.
+The qualifier can select a field (`:email`, `:id`), specify a transformation (`:length`, `:uppercase`), or address a named source (`:body`, `:headers`). PascalCase qualifiers enable typed extraction with OpenAPI schema validation — `Extract the <data: UserCreatedEvent> from the <event>.` validates the event payload against the named schema. This uniform notation applies consistently across all variable references, eliminating the need for different accessor syntax for different data types.
 
 ### 3.4 Immutability and Data Flow
 
@@ -106,13 +106,36 @@ Compare the <first-length> against the <second-length>.
 
 The qualifier-as-name pattern — where the result name carries the variable identity and the qualifier specifies the operation — allows multiple applications of the same transformation without name collisions.
 
-### 3.5 The Happy Path
+### 3.5 Control Flow
+
+ARO provides pattern matching and conditional guards in place of traditional branching:
+
+```aro
+match <raw-url> {
+    case /^https?:\/\// {
+        (* Absolute URL handling *)
+    }
+    case /^\// {
+        (* Root-relative URL handling *)
+    }
+}
+```
+
+The `when` guard makes individual statements conditional:
+
+```aro
+Emit a <QueueUrl: event> with { url: <url> } when <url> contains <base-domain>.
+```
+
+For iteration, `for each` iterates over collections (with an optional `parallel` modifier), `for <i> from <start> to <end>` handles numeric ranges, and `while <condition>` handles unbounded iteration. `Break` exits the innermost loop.
+
+### 3.6 The Happy Path
 
 ARO source code contains only the success path. There is no error handling syntax because there is no error handling responsibility. When an action fails — the database returns no record, the schema validation rejects the input, the HTTP request times out — the runtime generates a structured error response describing exactly what failed and why, in business terms.
 
 A failed `Retrieve` produces: *"Cannot retrieve the user from the user-repository where id = 530."* That message is the error. The developer need not write code to produce it.
 
-This design is deliberately opinionated and deliberately incomplete. Complex conditional error handling — retry logic, fallback strategies, partial failures — must be implemented as custom actions. The language handles the common case; the extension mechanism handles everything else.
+This design is deliberately opinionated and deliberately incomplete. Complex conditional error handling — retry logic, fallback strategies, partial failures — must be implemented as custom actions or plugins. The language handles the common case; the extension mechanism handles everything else.
 
 ---
 
@@ -130,14 +153,18 @@ Lexer ────── Tokenises source, recognising articles, prepositions,
              compound identifiers, and qualified references.
     │
     ▼
-Parser ───── Recursive descent. Produces a Program tree of FeatureSets,
-             each containing a sequence of Statements (AROStatement or
-             PublishStatement).
+Parser ───── Recursive descent + Pratt parsing. Produces a Program
+             tree of FeatureSets, each containing a sequence of
+             statements. Nine user-facing types: AROStatement,
+             PublishStatement, RequireStatement, MatchStatement,
+             ForEachLoop, RangeLoop, WhileLoop, BreakStatement,
+             PipelineStatement.
     │
     ▼
 SemanticAnalyzer ── Builds per-feature-set SymbolTables. Validates
-                    variable references, preposition legality, and
-                    cross-feature-set published variable access.
+                    variable references, preposition legality,
+                    cross-feature-set published variable access,
+                    and detects circular event chains.
     │
     ▼
 Compiler ──── Orchestrates the three stages above. Produces validated
@@ -152,9 +179,9 @@ All core types (`Token`, AST nodes, `SymbolTable`) are `Sendable` and immutable,
 
 ### 4.2 The Execution Engine
 
-At runtime, the `ExecutionEngine` loads the compiled application, validates the existence of exactly one `Application-Start` feature set, starts configured services, and hands control to the event loop.
+At runtime, the `ExecutionEngine` (a Swift actor) loads the compiled application, validates the existence of exactly one `Application-Start` feature set, registers all event handlers, starts configured services, and hands control to the event loop.
 
-The `EventBus` is the central coordination mechanism. It maintains a registry of subscribed handlers — feature sets — indexed by event type. When an event is published, the bus finds all matching handlers and dispatches execution to each. Events are the only mechanism by which feature sets communicate. There are no direct calls between feature sets.
+The `EventBus` (also a Swift actor) is the central coordination mechanism. It maintains a registry of subscribed handlers — feature sets — indexed by event type. When an event is published, the bus finds all matching handlers and dispatches execution to each. Events are the only mechanism by which feature sets communicate. There are no direct calls between feature sets.
 
 ```
 HTTP Request
@@ -169,13 +196,13 @@ EventBus ── publishes HTTP route event
 FeatureSetExecutor ── executes matching feature set
     │
     ▼
-ActionRegistry ── dispatches each statement to its action implementation
+ActionRunner ── dispatches each statement to its action implementation
     │
     ▼
 Response
 ```
 
-The `ActionRegistry` maps verbs to `ActionImplementation` instances. Every verb in the language is backed by a registered action. Custom actions extend the registry at startup; plugin actions are loaded from dynamic libraries and registered the same way.
+The `ActionRunner` canonicalises verb synonyms (e.g., `calculate` → `compute`, `save` → `store`) and dispatches to the matching `ActionImplementation`. Every verb in the language is backed by a registered action. Custom actions extend the registry at startup; plugin actions are loaded from dynamic libraries and registered the same way.
 
 ### 4.3 Semantic Roles and Data Flow Classification
 
@@ -183,12 +210,13 @@ Each action carries a *semantic role* that classifies the direction of its data 
 
 | Role | Direction | Representative Verbs |
 |------|-----------|----------------------|
-| **REQUEST** | External → Internal | Extract, Retrieve, Fetch, Read |
-| **OWN** | Internal → Internal | Compute, Validate, Create, Transform |
-| **RESPONSE** | Internal → External (terminates) | Return, Throw |
-| **EXPORT** | Internal → External (continues) | Store, Emit, Publish, Log |
+| **REQUEST** | External → Internal | Extract, Retrieve, Read, Request, Stream, List, Receive |
+| **OWN** | Internal → Internal | Compute, Validate, Create, Transform, Filter, Update, Delete |
+| **RESPONSE** | Internal → External (terminates or outputs) | Return, Throw, Log, Send, Write, Store, Broadcast |
+| **EXPORT** | Internal → Global | Emit, Publish, Schedule |
+| **SERVER** | Service lifecycle | Start, Stop, Listen, Connect, Close, Keepalive |
 
-This classification is not merely documentation. The `FeatureSetExecutor` uses it to determine whether a statement needs full execution or can be short-circuited in specific contexts. RESPONSE actions terminate the feature set; EXPORT actions continue it. The semantic role is the runtime's understanding of what a statement does, independently of its specific implementation.
+This classification is not merely documentation. The `FeatureSetExecutor` uses it to determine whether a statement needs full execution or can be short-circuited in specific contexts. RESPONSE actions like `Return` and `Throw` terminate the feature set; other RESPONSE actions like `Log`, `Store`, and `Write` continue it. The semantic role is the runtime's understanding of what a statement does, independently of its specific implementation.
 
 ### 4.4 The Repository System
 
@@ -197,7 +225,7 @@ Repositories are in-memory, event-sourced key-value stores managed by the runtim
 ```aro
 Store the <user> into the <user-repository>.
 Retrieve the <user> from the <user-repository> where id = <user-id>.
-Update the <user> with <changes> in the <user-repository>.
+Update the <user: name> with "Alice".
 ```
 
 Repositories emit change events automatically. Any feature set whose business activity contains the repository name followed by `Observer` receives those events:
@@ -212,9 +240,19 @@ Repositories emit change events automatically. Any feature set whose business ac
 
 This pattern decouples the code that modifies data from the code that reacts to modifications. The `createUser` feature set stores a user. It has no knowledge of what happens next. The observer pattern handles all downstream consequences without any coupling between feature sets.
 
-### 4.5 The Event Bus and Typed Events
+### 4.5 The Event Bus and Handler Types
 
-The event bus supports both typed events (interpreter mode) and domain events (binary mode). Typed events carry structured payloads and enable compile-time validation of event shapes. Domain events are serialised payloads dispatched through a string-keyed registry — the mechanism used in compiled binaries where Swift types cannot cross the C ABI boundary.
+The event bus supports seven handler types, distinguished by naming convention in the business activity:
+
+| Handler Type | Pattern | Triggered By |
+|-------------|---------|--------------|
+| Domain | `{EventName} Handler` | Custom events via `Emit` |
+| Repository | `{repo-name} Observer` | Store, Update, Delete on repository |
+| File | `{desc}: File Event Handler` | File system changes |
+| Socket | `{desc}: Socket Event Handler` | TCP socket events |
+| State | `{field} StateObserver` | State transitions via `Accept` |
+| KeyPress | `{desc}: KeyPress Handler` | Keyboard input |
+| WebSocket | `{desc}: WebSocket Event Handler` | WebSocket lifecycle |
 
 Custom events follow the same subscription model as built-in events:
 
@@ -222,10 +260,10 @@ Custom events follow the same subscription model as built-in events:
 Emit a <UserCreated: event> with <user>.
 ```
 
-Any feature set with the activity `UserCreated Handler` will receive this event. Handler guards allow filtering:
+Any feature set with the activity `UserCreated Handler` will receive this event. Handler guards allow filtering at the feature set level:
 
 ```aro
-(Send Welcome Email: UserCreated Handler) when <role> is "customer" {
+(Send Welcome Email: UserCreated Handler) where <event: role> == "customer" {
     ...
 }
 ```
@@ -238,27 +276,27 @@ The guard is evaluated before the feature set body executes. If the condition is
 
 ARO applications can be compiled to standalone native executables with `aro build`. The interpreter is the development workflow; native binaries are the deployment artefact.
 
-The compilation path replaces the interpreter with an LLVM code generator. Each ARO statement becomes a call to the ARO C runtime (`AROCRuntime`), a precompiled static library that exposes the full action vocabulary through C ABI functions:
+The compilation path replaces the interpreter with an LLVM code generator. Each ARO statement becomes a call to the ARO C runtime, a precompiled library that exposes the full action vocabulary through `@_cdecl` Swift functions callable from LLVM-generated code:
 
-```c
-// The runtime interface (simplified)
-void aro_action_extract(AROContext* ctx, const char* result, const char* object);
-void aro_action_retrieve(AROContext* ctx, const char* result, const char* object,
-                         const char* field, const char* value);
-void aro_action_return(AROContext* ctx, int status, const char* result);
+```swift
+// The bridge interface (simplified)
+@_cdecl("aro_action_extract")
+func aro_action_extract(_ ctx: UnsafeRawPointer,
+                        _ result: UnsafePointer<CChar>,
+                        _ object: UnsafePointer<CChar>) -> UnsafeRawPointer?
 ```
 
-The LLVM IR generator (`LLVMCodeGenerator.swift`) emits a `main` function that initialises the context, registers all feature sets as event handlers, and starts the event loop. Feature set bodies are emitted as LLVM functions that call into the C runtime sequentially.
+The LLVM IR generator (`LLVMCodeGenerator.swift`) uses the Swifty-LLVM C API for type-safe IR generation. It emits a `main` function that initialises the context, registers all feature sets as event handlers, and starts the event loop. Feature set bodies are emitted as LLVM functions that call into the C runtime sequentially.
 
-The output is a self-contained binary that embeds the complete runtime, all actions, and all compiled plugin libraries. The only external dependency at runtime is the `openapi.yaml` specification file, which is read to configure HTTP routing.
+The output is a self-contained binary. The `openapi.yaml` specification file, if present, is embedded or read at startup to configure HTTP routing.
 
-This dual-mode architecture — interpreter for development, native binary for deployment — means that the same ARO source runs identically in both contexts. Parity is enforced by the test suite, which runs every example in both modes.
+This dual-mode architecture — interpreter for development, native binary for deployment — means that the same ARO source runs identically in both contexts. Parity is enforced by the test suite, which runs examples in both modes and compares output.
 
 ---
 
 ## 6. The Plugin System
 
-When the built-in vocabulary of fifty actions is insufficient, plugins extend it. Plugins are packages installed into the application's `Plugins/` directory and loaded at startup.
+When the built-in vocabulary of sixty-one actions is insufficient, plugins extend it. Plugins are packages installed into the application's `Plugins/` directory, either manually or via the package manager (`aro add`).
 
 ARO supports plugins written in Swift, Rust, C, C++, and Python. All native plugins communicate through a C ABI:
 
@@ -271,14 +309,14 @@ void  aro_plugin_free(char* ptr);
 
 `aro_plugin_info` returns a JSON manifest declaring the plugin's name, version, and the actions and qualifiers it provides. `aro_plugin_execute` runs a named action, receiving and returning JSON. This protocol is deliberately simple: any language that can produce a shared library implementing these four functions can be an ARO plugin.
 
-*Qualifiers* are a particular capability of plugins. Rather than adding new verbs, a qualifier extends how a value is transformed when referenced. A plugin providing a `collections` qualifier allows expressions like:
+*Qualifiers* are a particular capability of plugins. Rather than adding new verbs, a qualifier extends how a value is transformed when referenced. A plugin providing a `Collections` handle allows expressions like:
 
 ```aro
 Compute the <random-item: Collections.pick-random> from the <items>.
 Compute the <sorted: Stats.sort> from the <numbers>.
 ```
 
-Qualifiers are namespaced by the plugin handle (`Collections`, `Stats`) to avoid conflicts between independent plugins. The `QualifierRegistry` resolves these at runtime, dispatching to the appropriate plugin.
+Qualifiers are namespaced by the plugin handle (declared as the root-level `handle:` field in `plugin.yaml`, using PascalCase) to avoid conflicts between independent plugins. The `QualifierRegistry` resolves these at runtime, dispatching to the appropriate plugin.
 
 ---
 
@@ -291,6 +329,8 @@ ARO's constraints are not universally beneficial. Understanding where they help 
 **Event-Driven Architectures.** ARO's event model is first-class, not an afterthought. The observer pattern, typed events, handler guards, and the event bus are core language features. Applications that react to changes — webhook processors, integration services, audit systems — fit ARO's model naturally.
 
 **Microservices and Internal Tools.** Small, focused applications benefit most from ARO's constraints. A service that handles one domain — user management, notifications, billing — stays coherent as ARO because the vocabulary remains sufficient. Large monolithic applications with diverse concerns are harder to fit into a single action vocabulary.
+
+**Terminal Applications.** ARO includes a terminal UI subsystem with shadow buffers, ANSI rendering, and keyboard input handling. Applications like file managers, monitoring dashboards, and interactive menus can be built with screen templates and reactive state updates via repository observers.
 
 **DevOps and Build Systems.** Declarative actions like Provision, Deploy, and Configure map to infrastructure operations. ARO's event-driven model suits pipeline triggers. The precedent set by Make and Terraform suggests this domain is viable, though the ecosystem has not yet developed the necessary action vocabulary.
 
@@ -305,6 +345,7 @@ The following table summarises the assessment:
 | Business Logic / CRUD APIs | Excellent | Vocabulary aligns; constraints reduce complexity |
 | Event-Driven Services | Excellent | First-class event model |
 | Internal Tools and CLIs | Good | Rapid development with native compilation |
+| Terminal Applications | Good | Shadow buffer UI, keyboard handlers, screen templates |
 | DevOps / Infrastructure | Moderate | Declarative style fits; vocabulary incomplete |
 | Data Science / ML | Poor | Iteration-heavy; ecosystem dependency |
 | Systems / Embedded | Poor | No low-level control; abstraction overhead |
@@ -313,17 +354,17 @@ The following table summarises the assessment:
 
 ## 8. Honest Limitations
 
-ARO is pre-alpha software. The following limitations are current facts, not future risks.
+ARO is beta software. The following limitations are current facts, not future risks.
 
-**No step debugger.** Errors are reported by the runtime in business terms, which is useful for production but insufficient for complex development scenarios. The approach is to add logging and redeploy — a workflow familiar from early-stage distributed systems, but friction for complex business logic.
+**No step debugger.** Errors are reported by the runtime in business terms, which is useful for production but insufficient for complex development scenarios. The approach is to add logging and redeploy — a workflow familiar from early-stage distributed systems, but friction for complex business logic. An LSP server provides diagnostics, completions, and hover information in supported editors.
 
-**Small ecosystem.** There is no package index comparable to npm or PyPI. The action vocabulary covers common cases; unusual requirements need custom implementations in Swift. This is an investment with high upfront cost.
+**Growing ecosystem.** The package manager (`aro add`, `aro remove`) enables plugin installation from git repositories. However, there is no centralised package index comparable to npm or PyPI. The action vocabulary covers common cases; unusual requirements need custom implementations via plugins in Swift, Rust, C, or Python.
 
-**No conditional branching.** The `when` guard and `match` expression handle the common cases — executing a statement conditionally, dispatching on a value. Complex nested conditionals require escape to custom actions. Applications with fundamentally conditional logic — tax calculations, permission systems with many rules — will spend more time in the extension layer than in ARO itself.
+**Limited conditional branching.** The `when` guard, `match` expression, and `while` loop handle common cases. Complex nested conditionals require escape to plugins or custom actions. Applications with fundamentally conditional logic — tax calculations, permission systems with many rules — will spend more time in the extension layer than in ARO itself.
 
-**Extension overhead.** Adding a custom action requires writing Swift, implementing the `ActionImplementation` protocol, registering the action, and rebuilding. For exploratory development, this friction is real.
+**HTTP disabled in compiled binaries.** The SwiftNIO HTTP server does not initialise correctly in LLVM-generated binaries due to type metadata issues. A native BSD socket HTTP server provides a workaround, but with reduced functionality compared to the interpreter's SwiftNIO-based server.
 
-**Breaking changes.** Action signatures, preposition semantics, and the plugin ABI are not yet stable. Applications built today may require updates as the language matures. This is an explicit expectation, not a possibility to plan for.
+**Breaking changes.** Action signatures, preposition semantics, and the plugin ABI are stabilising but not yet frozen. Applications built today may require updates as the language matures toward 1.0.
 
 ---
 
@@ -347,8 +388,8 @@ aro run ./HelloWorld
 Build a native binary with:
 
 ```bash
-aro build ./HelloWorld
-./HelloWorld/HelloWorld
+aro build ./HelloWorld -o hello
+./hello
 ```
 
 An HTTP API adds an `openapi.yaml` file at the directory root and feature sets named after the `operationId` values it defines:
@@ -386,7 +427,7 @@ ARO is a language built around three commitments: statements read like sentences
 
 The sentence commitment comes from FDD's insight that business language can be formally structured. The event commitment comes from the observation that business systems are inherently reactive. The error commitment comes from the recognition that most error handling is defensive boilerplate that obscures the intent of the code.
 
-These commitments impose real constraints. The language cannot express arbitrary algorithms. The extension mechanism requires stepping outside the language. The ecosystem is thin. These are not problems to be solved; they are trade-offs to be understood. A language that says no to some things enables it to say yes, clearly and reliably, to others.
+These commitments impose real constraints. The language cannot express arbitrary algorithms. The extension mechanism requires stepping outside the language via plugins. These are not problems to be solved; they are trade-offs to be understood. A language that says no to some things enables it to say yes, clearly and reliably, to others.
 
 For teams building event-driven business services, for organisations that need code their business stakeholders can read, and for developers who want their architecture to enforce the patterns they would impose by convention anyway, those trade-offs are favourable. For everyone else, ARO is an interesting design point in the space of constrained languages — a reminder that the most powerful thing a language can do is decide what it will not express.
 
@@ -397,5 +438,5 @@ For teams building event-driven business services, for organisations that need c
 ---
 
 ```
-ARO · pre-alpha · March 2026
+ARO · 0.8.0 · March 2026
 ```

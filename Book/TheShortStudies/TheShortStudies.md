@@ -2,7 +2,7 @@
 
 ## How a Language Gets Built in Ten Pages
 
-*ARO Language Project · March 2026 · ARO 0.7.1*
+*ARO Language Project · March 2026 · ARO 0.8.0*
 
 ---
 
@@ -14,7 +14,7 @@ This is the condensed version of *The Construction Studies*. Every major archite
 
 ARO is built on one hypothesis: **expressiveness and predictability are inversely correlated**, and for business-feature code, predictability wins.
 
-The consequence is radical constraint. ARO has exactly **eight statement types**:
+The consequence is radical constraint. ARO has exactly **nine statement types**:
 
 | # | Statement | What it does |
 |---|-----------|-------------|
@@ -26,8 +26,9 @@ The consequence is radical constraint. ARO has exactly **eight statement types**
 | 6 | `WhileLoop` | Condition-based loop |
 | 7 | `BreakStatement` | Exits a loop |
 | 8 | `RequireStatement` | Declares a dependency |
+| 9 | `PipelineStatement` | Chained actions via `\|>` operator |
 
-Eight. That's it. Python's AST has over 40 statement types. Every statement type you don't have is a parser case, a semantic pass, a code generation branch, and a tool integration you don't have to write. The constraint propagates as simplification through the entire stack.
+Nine. That's it. Python's AST has over 40 statement types. Every statement type you don't have is a parser case, a semantic pass, a code generation branch, and a tool integration you don't have to write. The constraint propagates as simplification through the entire stack.
 
 Every action is classified by data flow direction — not as documentation, but as an enforced type:
 
@@ -171,7 +172,7 @@ ExecutionEngine  →  EventBus  →  FeatureSetExecutor (×N)
 
 Everything in ARO is event-driven. HTTP requests arrive as events. File changes arrive as events. Domain events travel between feature sets as events. The `EventBus` is the central router.
 
-Five handler types, registered by naming convention:
+Seven handler types, registered by naming convention:
 
 | Pattern | Triggered by |
 |---------|-------------|
@@ -180,6 +181,8 @@ Five handler types, registered by naming convention:
 | `{repo-name} Observer` | Repository store/update/delete |
 | `File Event Handler` | File system changes |
 | `Socket Event Handler` | TCP socket events |
+| `KeyPress Handler` | Keyboard input (with `where` guards) |
+| `WebSocket Event Handler` | WebSocket lifecycle |
 
 **StateGuards** let handlers filter on event payload fields:
 
@@ -282,7 +285,7 @@ The `mode: both` test directive is the defense mechanism. Every example runs in 
 **The things that worked:**
 
 - Uniform syntax makes tooling cheap. One statement shape means one parser, one formatter, one AST walker.
-- Eight statement types kept every backend small. Every new execution target (interpreter, LLVM, future transpiler) starts with eight cases.
+- Nine statement types kept every backend small. Every new execution target (interpreter, LLVM, future transpiler) starts with nine cases.
 - `mode: both` testing caught divergence that would otherwise be invisible for months.
 - VerbSets as a shared module eliminated the drift between interpreter and compiler verb classification.
 
@@ -303,6 +306,7 @@ The `mode: both` test directive is the defense mechanism. Every example runs in 
 | 0.6 | Swifty-LLVM replaces text IR; `verifyModule()` catches IR errors early |
 | 0.7 | DomainEvent co-publishing; 81/85 examples run `mode: both` |
 | 0.7.1 | Integer division parity; KeyboardService binary mode; SocketClient (#134 open) |
+| 0.8.0 | PipelineStatement (9 types); KeyPress/WebSocket handlers (7 handler types); package manager (`aro add`/`aro remove`); LSP server; terminal UI subsystem |
 
 **For the next implementer:**
 

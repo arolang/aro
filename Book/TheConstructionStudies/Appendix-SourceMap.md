@@ -10,19 +10,23 @@ This appendix provides a quick reference to key source files in the ARO implemen
 |------|-------|-------------|
 | `Lexer.swift` | ~960 | Tokenization, string interpolation, regex detection, hex/binary/raw/triple-quoted literals |
 | `Token.swift` | ~200 | Token types, articles, prepositions |
-| `Parser.swift` | ~2000 | Recursive descent + Pratt parsing, 8 statement types |
+| `Parser.swift` | ~2000 | Recursive descent + Pratt parsing, 9 statement types |
+| `Parser/TokenStream.swift` | ~100 | Token stream protocol and error recovery |
 | `AST.swift` | ~1600 | AST node definitions, visitor pattern |
 | `SemanticAnalyzer.swift` | ~800 | Symbol tables, data flow analysis |
-| `SymbolTable.swift` | ~200 | Symbol storage, visibility levels |
+| `EventChainAnalyzer.swift` | ~200 | Circular event chain and orphan detection |
+| `SymbolTable.swift` | ~200 | Symbol storage, visibility levels, DataType enum |
+| `SourceLocation.swift` | ~100 | SourceLocation, SourceSpan, Locatable protocol |
+| `Errors.swift` | ~200 | LexerError, ParserError, SemanticError, Diagnostic, DiagnosticCollector |
 | `Compiler.swift` | ~150 | Pipeline orchestration |
-| `DiagnosticEngine.swift` | ~100 | Error collection and reporting |
+| `Exports.swift` | — | Public API re-exports |
 
 ### Key Entry Points
 
 **Parsing a source file**:
 ```swift
 let lexer = Lexer(source: sourceCode)
-let tokens = lexer.tokenize()
+let tokens = try lexer.tokenize()
 let parser = Parser(tokens: tokens)
 let program = try parser.parse()
 ```
@@ -30,7 +34,7 @@ let program = try parser.parse()
 **Semantic analysis**:
 ```swift
 let analyzer = SemanticAnalyzer()
-let analyzed = try analyzer.analyze(program)
+let analyzed = analyzer.analyze(program)
 ```
 
 ---
@@ -41,25 +45,46 @@ let analyzed = try analyzer.analyze(program)
 
 | File | Lines | Description |
 |------|-------|-------------|
-| `ExecutionEngine.swift` | ~850 | Program execution, handler registration |
-| `FeatureSetExecutor.swift` | ~600 | Statement execution, control flow |
-| `RuntimeContext.swift` | ~300 | Variable binding, service access |
-| `Runtime.swift` | ~150 | Top-level runtime container |
+| `ExecutionEngine.swift` | ~850 | Program execution, handler registration (actor) |
+| `FeatureSetExecutor.swift` | ~600 | Statement execution, control flow, cached VerbSets (ARO-0162) |
+| `ExecutionContext.swift` | ~200 | ExecutionContext protocol |
+| `RuntimeContext.swift` | ~500 | RuntimeContext actor (protocol implementation) |
+| `RuntimeContainer.swift` | ~100 | DI container for infrastructure services |
 | `VerbSets.swift` | ~45 | Canonical verb classification (shared by interpreter and compiler) |
+| `TypedValue.swift` | ~100 | Type-preserving value wrapper |
+| `OutputContext.swift` | ~50 | Output mode (.human, .machine, .developer) |
+| `StatementScheduler.swift` | ~100 | Statement scheduling utilities |
+| `BoundedSet.swift` | ~50 | Bounded set for deduplication |
+| `DependencyGraph.swift` | ~100 | Dependency graph utilities |
 
 ### Actions (`Actions/`)
 
 | File | Lines | Description |
 |------|-------|-------------|
-| `ActionRegistry.swift` | ~100 | Verb → implementation mapping |
-| `ActionImplementation.swift` | ~80 | Action protocol definition |
-| `ActionRunner.swift` | ~200 | Unified execution (sync/async) |
-| `BuiltIn/ExtractAction.swift` | ~150 | Data extraction |
-| `BuiltIn/ComputeAction.swift` | ~300 | Computations (length, hash, arithmetic) |
-| `BuiltIn/ReturnAction.swift` | ~100 | Response generation |
-| `BuiltIn/StoreAction.swift` | ~200 | Repository storage |
-| `BuiltIn/EmitAction.swift` | ~100 | Event emission |
-| *(56 more actions)* | | 61 total built-in actions |
+| `ActionRegistry.swift` | ~100 | Verb → implementation mapping (actor) |
+| `ActionProtocol.swift` | ~200 | ActionImplementation protocol, ActionRole enum, ActionModule |
+| `ActionRunner.swift` | ~400 | Unified execution (sync/async), verb canonicalization, ActionDriverChannel |
+| `ActionDescriptors.swift` | ~100 | ResultDescriptor, ObjectDescriptor |
+| `ActionError.swift` | ~50 | Action error types |
+| `BuiltIn/ExtractAction.swift` | ~800 | Data extraction, typed extraction (ARO-0046), Retrieve, Receive, Read |
+| `BuiltIn/ComputeAction.swift` | ~1400 | Compute, Validate, Compare, Create, Update, Sort, Merge, Delete, Transform |
+| `BuiltIn/ResponseActions.swift` | ~1200 | Return, Throw, Send, Log, Store, Write, Publish, Notify, Emit |
+| `BuiltIn/RequestAction.swift` | ~200 | HTTP requests |
+| `BuiltIn/ServerActions.swift` | ~1300 | Start, Stop, Listen, Keepalive, Connect, Broadcast, Close |
+| `BuiltIn/TerminalActions.swift` | ~300 | Prompt, Select, Clear, Show, Render, Repaint |
+| `BuiltIn/TestActions.swift` | ~300 | Given, When, Then, Assert |
+| `BuiltIn/FileActions.swift` | ~700 | List, Stat, Exists, Make, Copy, Move, Append |
+| `BuiltIn/QueryActions.swift` | ~300 | Map, Reduce, Filter |
+| `BuiltIn/StreamAction.swift` | ~200 | Stream/Subscribe for files, SSE, WebSocket |
+| `BuiltIn/ParseAction.swift` | ~200 | ParseHtml, ParseLinkHeader |
+| `BuiltIn/CallAction.swift` | ~100 | External service calls |
+| `BuiltIn/ExecAction.swift` | ~200 | System command execution |
+| `BuiltIn/SplitAction.swift` | ~50 | String splitting by regex |
+| `BuiltIn/JoinAction.swift` | ~50 | Collection joining |
+| `BuiltIn/AcceptAction.swift` | ~50 | State transitions |
+| `BuiltIn/ScheduleAction.swift` | ~50 | Delayed/recurring tasks |
+| `BuiltIn/SleepAction.swift` | ~50 | Execution delay |
+| **Total** | | **61 built-in actions** |
 
 ### Events (`Events/`)
 
@@ -123,11 +148,18 @@ The compiler uses Swifty-LLVM for type-safe LLVM IR generation:
 
 | File | Lines | Description |
 |------|-------|-------------|
-| `main.swift` | ~50 | Entry point |
+| `ARO.swift` | ~50 | Entry point, ArgumentParser root command |
 | `Commands/RunCommand.swift` | ~150 | `aro run` - interpreter execution |
 | `Commands/BuildCommand.swift` | ~200 | `aro build` - native compilation |
 | `Commands/CheckCommand.swift` | ~300 | `aro check` - syntax validation + `aro check plugins` compatibility |
 | `Commands/CompileCommand.swift` | ~100 | `aro compile` - IR only |
+| `Commands/TestCommand.swift` | ~100 | `aro test` - run colocated tests |
+| `Commands/LSPCommand.swift` | ~50 | `aro lsp` - language server |
+| `Commands/MCPCommand.swift` | ~50 | `aro mcp` - MCP server |
+| `Commands/ReplCommand.swift` | ~50 | `aro repl` - interactive session |
+| `Commands/AddCommand.swift` | ~100 | `aro add` - package management |
+| `Commands/RemoveCommand.swift` | ~100 | `aro remove` - package management |
+| `Commands/PluginsCommand.swift` | ~100 | `aro plugins` - plugin management |
 
 ---
 
@@ -185,13 +217,18 @@ The compiler uses Swifty-LLVM for type-safe LLVM IR generation:
 | How tokens are classified | `Lexer.swift:classifyIdentifier()` |
 | How expressions are parsed | `Parser.swift:parseExpression()` |
 | How actions are registered | `ActionRegistry.swift` (actor) |
+| How verbs are canonicalized | `ActionRunner.swift:verbMappings` |
 | How events are dispatched | `EventBus.swift:publishAndTrack()` |
+| How typed extraction works | `ExtractAction.swift` + `SchemaRegistry` (ARO-0046) |
 | How LLVM IR is generated | `LLVMC/LLVMCodeGenerator.swift` |
 | How descriptor types are defined | `LLVMC/LLVMTypeMapper.swift` |
 | How C calls Swift | `Bridge/ActionBridge.swift:executeAction()` |
 | How pointers are managed | `Bridge/RuntimeBridge.swift:AROCRuntimeHandle` |
 | How streaming works | `Streaming/JSONStreamParser.swift`, `RuntimeContext:isLazy()` |
 | How aggregations are fused | `Streaming/PipelineOptimizer.swift` |
+| How plugins are loaded | `Plugins/UnifiedPluginLoader.swift`, `Plugins/NativePluginHost.swift` |
+| How templates work | `Templates/TemplateParser.swift`, `Templates/TemplateService.swift` |
+| How terminal UI works | `Terminal/ShadowBuffer.swift`, `Terminal/ANSIRenderer.swift` |
 
 ---
 
