@@ -108,16 +108,13 @@ Emit a <OrderPlaced: event> with { order: <order-data>, customer: <customer> }.
 
 ## 4.5 Receiving Event Data
 
-When a handler receives an event, it extracts data using nested `<Extract>` actions:
+When a handler receives an event, it extracts data using `<Extract>` with the `<event>` object:
 
 ```aro
 (Process Order: OrderPlaced Handler) {
-    (* First, extract the event data object *)
-    Extract the <event-data> from the <event: data>.
-
-    (* Then, extract individual fields from the object *)
-    Extract the <order-id> from the <event-data: id>.
-    Extract the <customer-name> from the <event-data: customer>.
+    (* Extract individual fields directly from the event *)
+    Extract the <order-id> from the <event: id>.
+    Extract the <customer-name> from the <event: customer>.
 
     (* Now use the extracted values *)
     Log "Processing order ${<order-id>} for ${<customer-name>}" to the <console>.
@@ -126,10 +123,7 @@ When a handler receives an event, it extracts data using nested `<Extract>` acti
 }
 ```
 
-The pattern is always:
-
-1. `Extract the <event-data> from the <event: data>.` — Get the data object
-2. `Extract the <field-name> from the <event-data: field>.` — Get each field
+The pattern is: `Extract the <field-name> from the <event: field>.` — Fields from the emitted data are available directly on the `<event>` object.
 
 ---
 
@@ -181,11 +175,10 @@ Let us write a simple two-handler pipeline to see this in action. Create a file 
 (Application-Start: Event Demo) {
     Log "Starting event demo..." to the <console>.
 
-    (* Emit first event *)
+    (* Emit first event - blocks until the entire chain completes *)
     Emit a <Greet: event> with { name: "World" }.
 
-    Log "Event emitted, waiting..." to the <console>.
-    Keepalive the <application> for the <events>.
+    Log "All events processed!" to the <console>.
 
     Return an <OK: status> for the <startup>.
 }
@@ -193,9 +186,8 @@ Let us write a simple two-handler pipeline to see this in action. Create a file 
 (Say Hello: Greet Handler) {
     Log "Greet handler triggered!" to the <console>.
 
-    (* Extract the name from event data *)
-    Extract the <event-data> from the <event: data>.
-    Extract the <name> from the <event-data: name>.
+    (* Extract the name directly from the event *)
+    Extract the <name> from the <event: name>.
 
     Log "Hello, ${<name>}!" to the <console>.
 
@@ -208,8 +200,7 @@ Let us write a simple two-handler pipeline to see this in action. Create a file 
 (Say Goodbye: Farewell Handler) {
     Log "Farewell handler triggered!" to the <console>.
 
-    Extract the <event-data> from the <event: data>.
-    Extract the <name> from the <event-data: name>.
+    Extract the <name> from the <event: name>.
 
     Log "Goodbye, ${<name>}!" to the <console>.
 
@@ -227,14 +218,14 @@ Output:
 
 ```
 Starting event demo...
-Event emitted, waiting...
 Greet handler triggered!
 Hello, World!
 Farewell handler triggered!
 Goodbye, World!
+All events processed!
 ```
 
-Notice the flow: Start → Greet event → Hello handler → Farewell event → Goodbye handler.
+Notice the flow: Start → Greet event → Hello handler → Farewell event → Goodbye handler → back to Start. The `<Emit>` blocks until the entire chain completes, so "All events processed!" appears last.
 
 ---
 
@@ -252,7 +243,7 @@ Notice the flow: Start → Greet event → Hello handler → Farewell event → 
 
 **No Event Tracing.** When something goes wrong, there is no built-in way to trace which events led to the error. You add `<Log>` statements manually.
 
-**Event Schema Validation.** Event data is untyped by default. If a handler expects `name` but the emitter sends `userName`, you get a runtime error. However, ARO-0046 introduces **typed event extraction** which validates event data against OpenAPI schemas defined in `components.schemas`. See Chapter 6 for details on using `Extract the <data: SchemaName> from the <event: data>.`
+**Event Schema Validation.** Event data is untyped by default. If a handler expects `name` but the emitter sends `userName`, you get a runtime error. However, ARO-0046 introduces **typed event extraction** which validates event data against OpenAPI schemas defined in `components.schemas`. See Chapter 6 for details on using `Extract the <data: SchemaName> from the <event>.`
 
 **No Guaranteed Order.** If multiple handlers listen to the same event, their execution order is not guaranteed. Usually this is fine, but sometimes order matters.
 

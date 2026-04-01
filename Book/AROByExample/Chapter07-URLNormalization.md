@@ -71,10 +71,9 @@ Add to `links.aro`:
 ```aro
 (Normalize URL: NormalizeUrl Handler) {
     (* Extract from event data structure *)
-    Extract the <event-data> from the <event: data>.
-    Extract the <raw-url> from the <event-data: raw>.
-    Extract the <source-url> from the <event-data: source>.
-    Extract the <base-domain> from the <event-data: base>.
+    Extract the <raw-url> from the <event: raw>.
+    Extract the <source-url> from the <event: source>.
+    Extract the <base-domain> from the <event: base>.
 
     Return an <OK: status> for the <normalization>.
 }
@@ -101,10 +100,9 @@ Similarly, `https://example.com/page/` and `https://example.com/page` are typica
 
 ```aro
 (Normalize URL: NormalizeUrl Handler) {
-    Extract the <event-data> from the <event: data>.
-    Extract the <raw-url> from the <event-data: raw>.
-    Extract the <source-url> from the <event-data: source>.
-    Extract the <base-domain> from the <event-data: base>.
+    Extract the <raw-url> from the <event: raw>.
+    Extract the <source-url> from the <event: source>.
+    Extract the <base-domain> from the <event: base>.
 
     (* Determine URL type and normalize *)
     match <raw-url> {
@@ -248,10 +246,9 @@ For these, we do nothing—no emit, no error. They silently disappear from the p
 
 ```aro
 (Normalize URL: NormalizeUrl Handler) {
-    Extract the <event-data> from the <event: data>.
-    Extract the <raw-url> from the <event-data: raw>.
-    Extract the <source-url> from the <event-data: source>.
-    Extract the <base-domain> from the <event-data: base>.
+    Extract the <raw-url> from the <event: raw>.
+    Extract the <source-url> from the <event: source>.
+    Extract the <base-domain> from the <event: base>.
 
     match <raw-url> {
         case /^https?:\/\// {

@@ -66,6 +66,7 @@ An ARO application is a **directory** containing `.aro` files. Here is the struc
 
 ```
 web-crawler/
+├── openapi.yaml      # Event schemas for typed extraction
 ├── main.aro          # Application entry point
 ├── crawler.aro       # Page fetching and parsing
 ├── links.aro         # Link extraction and filtering
@@ -96,7 +97,7 @@ cd web-crawler
 Create empty files for our four modules:
 
 ```bash
-touch main.aro crawler.aro links.aro storage.aro
+touch openapi.yaml main.aro crawler.aro links.aro storage.aro
 ```
 
 Create an output directory for crawled pages:
@@ -109,6 +110,7 @@ Your directory should now look like this:
 
 ```
 web-crawler/
+├── openapi.yaml
 ├── main.aro
 ├── crawler.aro
 ├── links.aro

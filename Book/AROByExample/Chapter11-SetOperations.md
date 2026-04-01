@@ -160,9 +160,8 @@ Here is the pattern our crawler actually uses:
 ```aro
 (Queue URL: QueueUrl Handler) {
     (* Extract from event data structure *)
-    Extract the <event-data> from the <event: data>.
-    Extract the <url> from the <event-data: url>.
-    Extract the <base-domain> from the <event-data: base>.
+    Extract the <url> from the <event: url>.
+    Extract the <base-domain> from the <event: base>.
 
     (* Atomic store - the repository Actor serializes concurrent access,
        so only the first caller for a given URL gets is-new-entry = 1 *)

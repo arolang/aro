@@ -50,16 +50,15 @@ Create `storage.aro`:
 
 (Save Page: SavePage Handler) {
     (* Extract from event data structure *)
-    Extract the <event-data> from the <event: data>.
-    Extract the <url> from the <event-data: url>.
-    Extract the <title> from the <event-data: title>.
-    Extract the <content> from the <event-data: content>.
+    Extract the <url> from the <event: url>.
+    Extract the <title> from the <event: title>.
+    Extract the <content> from the <event: content>.
 
     Return an <OK: status> for the <save>.
 }
 ```
 
-The event carries:
+The event carries three fields, accessible directly as `<event: field>`:
 
 - `url` — The page URL (for metadata)
 - `title` — The page title (from HTML)
@@ -73,10 +72,9 @@ Add the hash computation:
 
 ```aro
 (Save Page: SavePage Handler) {
-    Extract the <event-data> from the <event: data>.
-    Extract the <url> from the <event-data: url>.
-    Extract the <title> from the <event-data: title>.
-    Extract the <content> from the <event-data: content>.
+    Extract the <url> from the <event: url>.
+    Extract the <title> from the <event: title>.
+    Extract the <content> from the <event: content>.
 
     (* Use URL hash as filename *)
     Compute the <url-hash: hash> from the <url>.
@@ -149,10 +147,9 @@ The `<Write>` action writes a string to a file. The `<file: ...>` specifier indi
 
 (Save Page: SavePage Handler) {
     (* Extract from event data structure *)
-    Extract the <event-data> from the <event: data>.
-    Extract the <url> from the <event-data: url>.
-    Extract the <title> from the <event-data: title>.
-    Extract the <content> from the <event-data: content>.
+    Extract the <url> from the <event: url>.
+    Extract the <title> from the <event: title>.
+    Extract the <content> from the <event: content>.
 
     (* Use URL hash as filename *)
     Compute the <url-hash: hash> from the <url>.
