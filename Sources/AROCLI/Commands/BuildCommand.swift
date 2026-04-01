@@ -214,7 +214,7 @@ struct BuildCommand: AsyncParsableCommand {
                    FileManager.default.fileExists(atPath: outputManagedPluginsDirEarly.path) {
                     try FileManager.default.removeItem(at: outputManagedPluginsDirEarly)
                 }
-                try PluginLoader.shared.compileManagedPlugins(from: sourceManagedPluginsDirEarly, to: outputManagedPluginsDirEarly)
+                try await PluginLoader.shared.compileManagedPluginsParallel(from: sourceManagedPluginsDirEarly, to: outputManagedPluginsDirEarly)
 
                 #if os(Windows)
                 let libExt = "dll"
@@ -538,7 +538,7 @@ struct BuildCommand: AsyncParsableCommand {
             }
 
             do {
-                try PluginLoader.shared.compilePlugins(from: sourcePluginsDir, to: outputPluginsDir)
+                try await PluginLoader.shared.compilePluginsParallel(from: sourcePluginsDir, to: outputPluginsDir)
                 if verbose {
                     // Count compiled plugins
                     let pluginFiles = try? FileManager.default.contentsOfDirectory(at: outputPluginsDir, includingPropertiesForKeys: nil)
