@@ -20,7 +20,12 @@ public final class Lexer: @unchecked Sendable {
     private var location: SourceLocation
     private var tokens: [Token] = []
     private var lastTokenKind: TokenKind?
-    
+
+    /// String intern table — deduplicates identifier and keyword lexemes.
+    /// Avoids thousands of duplicate heap allocations for repeated strings
+    /// like action verbs, prepositions, and variable names.
+    private var internTable: [String: String] = [:]
+
     /// Reserved word classification for unified lookup
     private enum ReservedWord {
         case keyword(TokenKind)
@@ -808,9 +813,10 @@ public final class Lexer: @unchecked Sendable {
         while !isAtEnd && (peek().isLetter || peek().isNumber || peek() == "_") {
             _ = advance()
         }
-        
-        let lexeme = String(bytes: utf8[start.byteOffset..<pos], encoding: .utf8) ?? ""
-        let lowerLexeme = lexeme.lowercased()
+
+        let raw = String(bytes: utf8[start.byteOffset..<pos], encoding: .utf8) ?? ""
+        let lexeme = intern(raw)
+        let lowerLexeme = intern(lexeme.lowercased())
 
         // Unified reserved word lookup (ARO-0055: single lookup instead of 3)
         if let reserved = Self.reservedWords[lowerLexeme] {
@@ -923,17 +929,30 @@ public final class Lexer: @unchecked Sendable {
         return char
     }
 
+    // MARK: - String Interning
+
+    /// Returns the canonical copy of `string`, reusing an existing allocation
+    /// if the same content has been seen before.
+    private func intern(_ string: String) -> String {
+        if let existing = internTable[string] {
+            return existing
+        }
+        internTable[string] = string
+        return string
+    }
+
     // MARK: - Token Creation
 
     /// Extracts the token's lexeme via O(1) byte-range slicing (ARO-0115).
     private func addToken(_ kind: TokenKind, start: SourceLocation) {
-        let lexeme = String(bytes: utf8[start.byteOffset..<pos], encoding: .utf8) ?? ""
+        let raw = String(bytes: utf8[start.byteOffset..<pos], encoding: .utf8) ?? ""
+        let lexeme = intern(raw)
         addToken(kind, lexeme: lexeme, start: start)
     }
-    
+
     private func addToken(_ kind: TokenKind, lexeme: String, start: SourceLocation) {
         let span = SourceSpan(start: start, end: location)
-        tokens.append(Token(kind: kind, span: span, lexeme: lexeme))
+        tokens.append(Token(kind: kind, span: span, lexeme: intern(lexeme)))
         lastTokenKind = kind
     }
 }
