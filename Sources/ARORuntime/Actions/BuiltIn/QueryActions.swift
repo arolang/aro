@@ -64,10 +64,23 @@ public struct MapAction: ActionImplementation {
             return stream
         }
 
-        // Handle array mapping (eager mode)
+        // Handle array mapping
+        // ARO-0051 / Issue #165: Return lazy stream for large collections so
+        // downstream Filter/Map/Reduce can chain without O(n) intermediate arrays.
         if let array = source as? [any Sendable] {
-            // If there's a field specifier, extract that field from each item
+            let useLazy = array.count >= StreamingHeuristics.elementCountThreshold
+                          && context is RuntimeContext
+
             if let field = fieldSpecifier {
+                if useLazy, let runtimeContext = context as? RuntimeContext {
+                    let rows: [[String: any Sendable]] = array.compactMap { $0 as? [String: any Sendable] }
+                    let mappedStream = AROStream<[String: any Sendable]>.from(rows).compactMap { item -> (any Sendable)? in
+                        item[field]
+                    }
+                    let value = AROValue<any Sendable>.lazy(mappedStream)
+                    runtimeContext.bindStreamingValue(result.base, value: value)
+                    return value
+                }
                 return array.compactMap { item -> (any Sendable)? in
                     if let dict = item as? [String: any Sendable] {
                         return dict[field]
@@ -76,9 +89,13 @@ public struct MapAction: ActionImplementation {
                 }
             }
 
-            // Map entire objects - filter fields based on target type
-            // For now, pass through the entire objects
-            // OpenAPI type filtering would be done by a type-aware runtime
+            // No field specifier — pass through as lazy stream for large collections
+            if useLazy, let runtimeContext = context as? RuntimeContext {
+                let rows: [[String: any Sendable]] = array.compactMap { $0 as? [String: any Sendable] }
+                let stream = AROStream<[String: any Sendable]>.from(rows)
+                runtimeContext.bindLazy(result.base, stream: stream)
+                return stream
+            }
             return array
         }
 
@@ -353,6 +370,22 @@ public struct FilterAction: ActionImplementation {
             arraySource = array
         } else {
             return source
+        }
+
+        // ARO-0051 / Issue #165: Return lazy stream for large collections so
+        // downstream collection operations chain without O(n) intermediate arrays.
+        if arraySource.count >= StreamingHeuristics.elementCountThreshold,
+           let runtimeContext = context as? RuntimeContext {
+            let rows: [[String: any Sendable]] = arraySource.compactMap { $0 as? [String: any Sendable] }
+            let stream = AROStream<[String: any Sendable]>.from(rows)
+            let filteredStream = stream.filter { [field, op, expectedValue] item in
+                guard let actualValue = item[field] else {
+                    return false
+                }
+                return self.matchesPredicate(actual: actualValue, op: op, expected: expectedValue)
+            }
+            runtimeContext.bindLazy(result.base, stream: filteredStream)
+            return filteredStream
         }
 
         return arraySource.filter { item in

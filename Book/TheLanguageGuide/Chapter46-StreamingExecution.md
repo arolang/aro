@@ -503,12 +503,16 @@ With JSON arrays, a single malformed record corrupts the entire parse.
 
 ## Streaming Heuristics
 
-ARO automatically decides whether to stream based on file size:
+ARO automatically decides whether to stream based on data size:
 
-| File Size | Default Mode | Reason |
-|-----------|--------------|--------|
-| < 10MB | Eager | Fast for small files |
-| >= 10MB | Streaming | Memory efficiency |
+| Source | Threshold | Default Mode |
+|--------|-----------|--------------|
+| File | < 10MB | Eager |
+| File | >= 10MB | Streaming |
+| In-memory collection | < 10,000 elements | Eager |
+| In-memory collection | >= 10,000 elements | Streaming |
+
+When an in-memory collection exceeds the element threshold, `Filter` and `Map` return lazy streams instead of materialised arrays. Downstream operations (`Filter`, `Map`, `Reduce`, `for each`) chain onto the stream without allocating intermediate arrays, giving O(1) memory per pipeline stage. Terminal actions (`Log`, `Return`) materialise the stream on demand. `Reduce` naturally produces a scalar with O(1) accumulators regardless of collection size.
 
 You can override this with explicit qualifiers when needed.
 
