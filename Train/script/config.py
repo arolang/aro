@@ -67,7 +67,7 @@ ITERATIVE_MODELS_DIR = MODELS_DIR / 'iterative'
 TRAIN_ON_BASE = True
 
 PREFERRED_MODEL_ID = 'ARO-Lang/aro-coder-4bit'
-BASE_MODEL_ID      = 'mlx-community/Qwen3-Coder-8B-Instruct-4bit'
+BASE_MODEL_ID      = 'mlx-community/Qwen3-Coder-30B-A3B-Instruct-4bit'
 
 # Legacy alias — notebooks that reference FALLBACK_MODEL_ID still work.
 FALLBACK_MODEL_ID  = BASE_MODEL_ID
