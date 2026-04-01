@@ -600,7 +600,8 @@ Note that `Compute <n: length>` is perfectly appropriate when the collection is 
 
 ### Memory Considerations
 
-- Each pipeline operation creates a new collection (immutability)
+- For collections under 10,000 elements, each pipeline operation creates a new collection (immutability)
+- For collections of 10,000+ elements, `Filter` and `Map` return lazy streams — chained operations execute in O(1) memory per stage without materialising intermediate arrays (see Chapter 46)
 - For large datasets, use `limit` and `offset` for pagination
 - Intermediate results are garbage-collected when no longer referenced
 - Map operations to smaller types reduce memory usage

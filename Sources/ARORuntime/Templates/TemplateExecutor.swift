@@ -109,10 +109,22 @@ public final class TemplateExecutor: @unchecked Sendable {
         }
         templateContext.bind("terminal", value: terminalObject, allowRebind: true)
 
-        var output = ""
+        var parts: [String] = []
         var currentRow = 0
         var currentCol = 0
         var positions: [String: TerminalVarPosition] = [:]
+
+        /// Advance row/col tracking over visible characters in a string.
+        func advancePosition(_ text: String) {
+            for char in text {
+                if char == "\n" {
+                    currentRow += 1
+                    currentCol = 0
+                } else {
+                    currentCol += 1
+                }
+            }
+        }
 
         var index = 0
         while index < template.segments.count {
@@ -120,15 +132,8 @@ public final class TemplateExecutor: @unchecked Sendable {
 
             switch segment {
             case .staticText(let text):
-                for char in text {
-                    if char == "\n" {
-                        currentRow += 1
-                        currentCol = 0
-                    } else {
-                        currentCol += 1
-                    }
-                }
-                output += text
+                advancePosition(text)
+                parts.append(text)
                 index += 1
 
             case .expressionShorthand(let expression):
@@ -142,7 +147,8 @@ public final class TemplateExecutor: @unchecked Sendable {
                 let rendered = await applyFilters(formatValue(value), filters: filters, context: templateContext)
 
                 // Compute visible width (strip ANSI codes)
-                let visibleLen = stripANSI(rendered).count
+                let stripped = stripANSI(rendered)
+                let visibleLen = stripped.count
 
                 // First occurrence wins for position tracking
                 if positions[key] == nil {
@@ -150,16 +156,9 @@ public final class TemplateExecutor: @unchecked Sendable {
                 }
 
                 // Advance position tracker by visible characters
-                for char in stripANSI(rendered) {
-                    if char == "\n" {
-                        currentRow += 1
-                        currentCol = 0
-                    } else {
-                        currentCol += 1
-                    }
-                }
+                advancePosition(stripped)
 
-                output += rendered
+                parts.append(rendered)
                 index += 1
 
             case .statements(let statementsSource):
@@ -167,11 +166,8 @@ public final class TemplateExecutor: @unchecked Sendable {
                 // to subsequent expression blocks in the same template rendering pass.
                 try await executeStatements(statementsSource, context: templateContext, templatePath: template.path)
                 let stmtOutput = templateContext.flushTemplateBuffer()
-                for char in stmtOutput {
-                    if char == "\n" { currentRow += 1; currentCol = 0 }
-                    else { currentCol += 1 }
-                }
-                output += stmtOutput
+                advancePosition(stmtOutput)
+                parts.append(stmtOutput)
                 index += 1
 
             case .forEachOpen(let config):
@@ -187,11 +183,8 @@ public final class TemplateExecutor: @unchecked Sendable {
                     templateService: templateService,
                     templatePath: template.path
                 )
-                for char in loopOutput {
-                    if char == "\n" { currentRow += 1; currentCol = 0 }
-                    else { currentCol += 1 }
-                }
-                output += loopOutput
+                advancePosition(loopOutput)
+                parts.append(loopOutput)
                 index = closeIndex + 1
 
             case .forEachClose:
@@ -199,7 +192,7 @@ public final class TemplateExecutor: @unchecked Sendable {
             }
         }
 
-        return (output, positions)
+        return (parts.joined(), positions)
     }
 
     /// Render a parsed template with the given context
@@ -251,8 +244,8 @@ public final class TemplateExecutor: @unchecked Sendable {
         }
         templateContext.bind("terminal", value: terminalObject, allowRebind: true)
 
-        // Process segments
-        var output = ""
+        // Process segments — collect parts and join once to avoid O(n²) copying
+        var parts: [String] = []
 
         var index = 0
         while index < template.segments.count {
@@ -260,17 +253,17 @@ public final class TemplateExecutor: @unchecked Sendable {
 
             switch segment {
             case .staticText(let text):
-                output += text
+                parts.append(text)
                 index += 1
 
             case .expressionShorthand(let expression):
                 let (value, filters) = try await evaluateExpressionWithFilters(expression, context: templateContext)
-                output += await applyFilters(formatValue(value), filters: filters, context: templateContext)
+                parts.append(await applyFilters(formatValue(value), filters: filters, context: templateContext))
                 index += 1
 
             case .statements(let statementsSource):
                 try await executeStatements(statementsSource, context: templateContext, templatePath: template.path)
-                output += templateContext.flushTemplateBuffer()
+                parts.append(templateContext.flushTemplateBuffer())
                 index += 1
 
             case .forEachOpen(let config):
@@ -288,7 +281,7 @@ public final class TemplateExecutor: @unchecked Sendable {
                     templateService: templateService,
                     templatePath: template.path
                 )
-                output += loopOutput
+                parts.append(loopOutput)
                 index = closeIndex + 1
 
             case .forEachClose:
@@ -297,7 +290,7 @@ public final class TemplateExecutor: @unchecked Sendable {
             }
         }
 
-        return output
+        return parts.joined()
     }
 
     // MARK: - Expression Evaluation
@@ -549,26 +542,27 @@ public final class TemplateExecutor: @unchecked Sendable {
 
     /// Evaluate concatenation expression: <a> ++ <b> ++ "literal"
     private func evaluateConcatenation(_ expression: String, context: ExecutionContext) async throws -> String {
-        let parts = expression.components(separatedBy: " ++ ")
-        var result = ""
+        let segments = expression.components(separatedBy: " ++ ")
+        var results: [String] = []
+        results.reserveCapacity(segments.count)
 
-        for part in parts {
+        for part in segments {
             let trimmed = part.trimmingCharacters(in: .whitespaces)
 
             if trimmed.hasPrefix("\"") && trimmed.hasSuffix("\"") {
                 // String literal
-                result += String(trimmed.dropFirst().dropLast())
+                results.append(String(trimmed.dropFirst().dropLast()))
             } else if trimmed.hasPrefix("<") && trimmed.hasSuffix(">") {
                 // Variable reference
                 let value = try resolveVariableExpression(trimmed, context: context)
-                result += formatValue(value)
+                results.append(formatValue(value))
             } else {
                 // Literal text
-                result += trimmed
+                results.append(trimmed)
             }
         }
 
-        return result
+        return results.joined()
     }
 
     /// Evaluate arithmetic expression
@@ -878,7 +872,8 @@ public final class TemplateExecutor: @unchecked Sendable {
         templateService: TemplateService,
         templatePath: String
     ) async throws -> String {
-        var output = ""
+        var parts: [String] = []
+        parts.reserveCapacity(items.count)
 
         for (index, item) in items.enumerated() {
             // Create child context for this iteration
@@ -904,10 +899,10 @@ public final class TemplateExecutor: @unchecked Sendable {
             let bodyTemplate = ParsedTemplate(path: templatePath, segments: body)
 
             // Render the body
-            output += try await render(template: bodyTemplate, context: iterationContext, templateService: templateService)
+            parts.append(try await render(template: bodyTemplate, context: iterationContext, templateService: templateService))
         }
 
-        return output
+        return parts.joined()
     }
 
     // MARK: - Formatting

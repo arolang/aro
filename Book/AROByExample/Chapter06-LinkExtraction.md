@@ -77,17 +77,16 @@ Create `links.aro` with the `ExtractLinks` handler:
 (Extract Links: ExtractLinks Handler) {
     Log "ExtractLinks handler triggered" to the <console>.
 
-    (* Extract from event data structure *)
-    Extract the <event-data> from the <event: data>.
-    Extract the <html> from the <event-data: html>.
-    Extract the <source-url> from the <event-data: url>.
-    Extract the <base-domain> from the <event-data: base>.
+    (* Extract fields directly from the event *)
+    Extract the <html> from the <event: html>.
+    Extract the <source-url> from the <event: url>.
+    Extract the <base-domain> from the <event: base>.
 
     Return an <OK: status> for the <extraction>.
 }
 ```
 
-The event carries three pieces of data:
+The event carries three pieces of data, accessible directly as `<event: field>`:
 
 - `html` — The raw HTML content to parse
 - `url` — The page we fetched (needed for relative URL resolution)
@@ -97,7 +96,7 @@ The event carries three pieces of data:
 
 ## 6.5 Typed Event Extraction (ARO-0046)
 
-The field-by-field extraction in section 6.4 works well, but ARO provides a more concise alternative: **typed event extraction**. By defining the event structure in your OpenAPI specification, you can extract and validate the entire event in one statement.
+The field-by-field extraction in section 6.4 works well, but ARO provides a more concise alternative: **typed event extraction**. By defining the event structure in your OpenAPI specification, you can validate the entire event in one statement and access properties through a single typed variable.
 
 ### Defining the Event Schema
 
@@ -132,7 +131,7 @@ With the schema defined, the handler becomes:
     Log "ExtractLinks handler triggered" to the <console>.
 
     (* Typed extraction - validates against ExtractLinksEvent schema *)
-    Extract the <event-data: ExtractLinksEvent> from the <event: data>.
+    Extract the <event-data: ExtractLinksEvent> from the <event>.
 
     Return an <OK: status> for the <extraction>.
 }
@@ -142,6 +141,8 @@ The PascalCase qualifier `ExtractLinksEvent` tells ARO to:
 1. Look up the schema in `components.schemas`
 2. Validate the event data against that schema
 3. Fail fast if required properties are missing or types don't match
+
+Note the extraction is `from the <event>` — not from a nested `data` field. Event properties are exposed directly on the event object.
 
 ### Accessing Properties
 
@@ -171,10 +172,9 @@ Add the link extraction:
 (Extract Links: ExtractLinks Handler) {
     Log "ExtractLinks handler triggered" to the <console>.
 
-    Extract the <event-data> from the <event: data>.
-    Extract the <html> from the <event-data: html>.
-    Extract the <source-url> from the <event-data: url>.
-    Extract the <base-domain> from the <event-data: base>.
+    Extract the <html> from the <event: html>.
+    Extract the <source-url> from the <event: url>.
+    Extract the <base-domain> from the <event: base>.
 
     (* Use ParseHtml action to extract all href attributes from anchor tags *)
     ParseHtml the <links: links> from the <html>.
@@ -234,7 +234,7 @@ This processes links concurrently. For now, sequential processing works fine. We
 
 ## 6.9 The Complete Handler
 
-Here is the complete `ExtractLinks` handler:
+Here is the complete `ExtractLinks` handler using typed event extraction:
 
 ```aro
 (* ============================================================
@@ -244,31 +244,26 @@ Here is the complete `ExtractLinks` handler:
    ============================================================ *)
 
 (Extract Links: ExtractLinks Handler) {
-    Log "ExtractLinks handler triggered" to the <console>.
-
-    (* Extract from event data structure *)
-    Extract the <event-data> from the <event: data>.
-    Extract the <html> from the <event-data: html>.
-    Extract the <source-url> from the <event-data: url>.
-    Extract the <base-domain> from the <event-data: base>.
+    (* Typed event extraction - validates against ExtractLinksEvent schema *)
+    Extract the <event-data: ExtractLinksEvent> from the <event>.
 
     (* Use ParseHtml action to extract all href attributes from anchor tags *)
-    ParseHtml the <links: links> from the <html>.
-    Compute the <link-count: count> from the <links>.
-    Log "Found ${<link-count>} links" to the <console>.
+    ParseHtml the <links: links> from the <event-data: html>.
 
     (* Process each extracted link using for each *)
     for each <raw-url> in <links> {
         Emit a <NormalizeUrl: event> with {
             raw: <raw-url>,
-            source: <source-url>,
-            base: <base-domain>
+            source: <event-data: url>,
+            base: <event-data: base>
         }.
     }
 
     Return an <OK: status> for the <extraction>.
 }
 ```
+
+Notice how typed extraction makes the handler more concise. We access `<event-data: html>`, `<event-data: url>`, and `<event-data: base>` directly without extracting each field into a separate variable.
 
 ---
 
@@ -294,7 +289,7 @@ Here is the complete `ExtractLinks` handler:
 
 - `ParseHtml ... links` extracts all href values from anchor tags
 - The result is a list of raw strings (relative and absolute URLs, fragments, etc.)
-- Typed event extraction (`Extract the <data: SchemaName> from <event>`) validates data against OpenAPI schemas
+- Typed event extraction (`Extract the <data: SchemaName> from the <event>`) validates data against OpenAPI schemas
 - `for each <item> in <list>` iterates over collections
 - We emit a `NormalizeUrl` event for each link, passing through the source and base
 - This handler is focused: extract and emit, nothing more

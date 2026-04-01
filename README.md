@@ -136,6 +136,7 @@ ARO runs on macOS, Linux, and Windows. Most features work across all platforms.
 | **File System** |
 | File Operations | ✅ | ✅ | ✅ |
 | File Monitoring | ✅ | ✅ | ✅² |
+| Large File Streaming | ✅ | ✅ | ❌⁵ |
 | **Data Processing** |
 | HTML Parsing | ✅ | ✅ | ✅ |
 | JSON/YAML Processing | ✅ | ✅ | ✅ |
@@ -147,6 +148,7 @@ ARO runs on macOS, Linux, and Windows. Most features work across all platforms.
 ² Uses polling-based monitoring instead of native events
 ³ LanguageServerProtocol library doesn't support Windows yet
 ⁴ LLVM not available in Windows CI environment
+⁵ `URL.lines` not available on Windows; use `Read` + `Split` instead
 
 ## Quick Start
 

@@ -720,7 +720,7 @@ public final class AROFileSystemService: FileSystemService, FileMonitorService, 
         }
         regex += "$"
 
-        return (try? NSRegularExpression(pattern: regex, options: .caseInsensitive))?.firstMatch(
+        return (try? RegexCache.shared.regex(regex, options: .caseInsensitive))?.firstMatch(
             in: name,
             options: [],
             range: NSRange(name.startIndex..., in: name)
@@ -1349,7 +1349,7 @@ public final class AROFileSystemService: FileSystemService, @unchecked Sendable 
         }
         regex += "$"
 
-        return (try? NSRegularExpression(pattern: regex, options: .caseInsensitive))?.firstMatch(
+        return (try? RegexCache.shared.regex(regex, options: .caseInsensitive))?.firstMatch(
             in: name,
             options: [],
             range: NSRange(name.startIndex..., in: name)

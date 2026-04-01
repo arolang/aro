@@ -73,6 +73,8 @@ public final class LLVMExternalDeclEmitter {
     private var _arrayGetNextCtx: Function?
     private var _dictGet: Function?
     private var _parallelForEachExecute: Function?
+    private var _isStream: Function?
+    private var _foreachStream: Function?
 
     // Standard library
     private var _strcmp: Function?
@@ -456,6 +458,18 @@ public final class LLVMExternalDeclEmitter {
             "aro_parallel_for_each_execute",
             types.functionType(parameters: [ptr, ptr, ptr, ptr, i64, ptr, ptr], returning: i32)
         )
+
+        // i32 @aro_runtime_is_stream(ptr ctx, ptr varName)
+        _isStream = ctx.module.declareFunction(
+            "aro_runtime_is_stream",
+            types.functionType(parameters: [ptr, ptr], returning: i32)
+        )
+
+        // void @aro_runtime_foreach_stream(ptr ctx, ptr varName, ptr loopBodyFn)
+        _foreachStream = ctx.module.declareFunction(
+            "aro_runtime_foreach_stream",
+            types.voidFunctionType(parameters: [ptr, ptr, ptr])
+        )
     }
 
     // MARK: - Action Functions
@@ -588,6 +602,8 @@ public final class LLVMExternalDeclEmitter {
     public var arrayGetNextCtx: Function { _arrayGetNextCtx! }
     public var dictGet: Function { _dictGet! }
     public var parallelForEachExecute: Function { _parallelForEachExecute! }
+    public var isStream: Function { _isStream! }
+    public var foreachStream: Function { _foreachStream! }
 
     // Standard library
     public var strcmp: Function { _strcmp! }

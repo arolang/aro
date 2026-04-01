@@ -53,7 +53,7 @@ The engine is a Swift actor — which means the compiler ensures no two tasks to
   <rect x="530" y="30" width="140" height="80" rx="5" class="box"/>
   <text x="600" y="55" class="title" text-anchor="middle">ActionRegistry</text>
   <text x="540" y="75" class="label">verb → Action</text>
-  <text x="540" y="90" class="label">48 built-in</text>
+  <text x="540" y="90" class="label">61 built-in</text>
 
   <!-- Arrows -->
   <path d="M 350 110 L 350 140" class="arrow"/>
@@ -79,9 +79,9 @@ Swift 6.2 made data races compile errors. Actors are the answer: the compiler en
 
 All actor method calls must be `await`-ed. This propagates up the call stack, making the entire execution path asynchronous — which is exactly what we want for I/O-heavy work.
 
-### EventBus Exception
+### EventBus as Actor
 
-EventBus uses a plain lock instead of an actor. The reason: event publishing is fire-and-forget, and actor hops add latency. For high-frequency event dispatch, the lock wins.
+EventBus is also an actor. It provides both `nonisolated` entry points for synchronous publishing (fire-and-forget via `Task`) and actor-isolated methods for coordinated operations like `publishAndWait` and `awaitPendingEvents`.
 
 ---
 
@@ -91,12 +91,18 @@ Actions access runtime services through the context. Think of it as the action's
 
 | Method Group | Methods | Purpose |
 |-------------|---------|---------|
-| Variables | `resolve`, `require`, `bind`, `exists` | Read/write the variable space |
+| Variables | `resolve`, `require`, `bind`, `exists`, `unbind` | Read/write the variable space |
+| Type-Aware | `resolveTyped`, `bindTyped`, `typeOf` | Typed value management |
 | Services | `service`, `register` | Access HTTP, file, socket services |
-| Repositories | `repository` | CRUD storage access |
+| Repositories | `repository`, `registerRepository` | CRUD storage access |
 | Response | `setResponse`, `getResponse` | Track the response for short-circuit |
 | Events | `emit` | Fire events into the bus |
-| Metadata | `featureSetName`, `businessActivity`, `executionId` | Who am I? |
+| Schema | `schemaRegistry` | OpenAPI schema access (ARO-0046) |
+| Wait State | `enterWaitState`, `waitForShutdown`, `signalShutdown` | Keepalive management |
+| Streaming | `bindLazy`, `resolveAsStream`, `isLazy`, `teeIfNeeded` | Lazy stream support (ARO-0051) |
+| Templates | `appendToTemplateBuffer`, `flushTemplateBuffer` | Template rendering (ARO-0050) |
+| Output | `outputContext`, `isDebugMode`, `isTestMode`, `isCompiled` | Execution mode |
+| Metadata | `featureSetName`, `businessActivity`, `executionId`, `parent` | Who am I? |
 
 ---
 
@@ -320,7 +326,7 @@ The interpreted execution model is straightforward:
 
 1. **ExecutionEngine** (actor) loads the program and registers feature sets with EventBus
 2. **ActionRegistry** (actor) maps verbs to action implementations with thread-safe access
-3. **EventBus** routes events to matching handlers (uses NSLock, not actor)
+3. **EventBus** (actor) routes events to matching handlers
 4. **FeatureSetExecutor** processes statements sequentially
 5. **Descriptors** carry structured information to actions
 6. **Context hierarchy** enables scoped variable binding for loops

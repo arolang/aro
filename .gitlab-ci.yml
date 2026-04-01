@@ -40,6 +40,7 @@ test:
     - if: $CI_COMMIT_TAG
     - if: $CI_COMMIT_BRANCH == "main"
     - if: $CI_COMMIT_BRANCH =~ /^release\/.*/
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
   cache:
     key:
       files:
@@ -81,6 +82,11 @@ test:
 build:linux:
   stage: build
   image: swift:6.2-jammy
+  rules:
+    - if: $CI_COMMIT_TAG
+    - if: $CI_COMMIT_BRANCH == "main"
+    - if: $CI_COMMIT_BRANCH =~ /^release\/.*/
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
   needs:
     - job: test
       optional: true
@@ -203,6 +209,11 @@ build:linux:
 integration:linux:
   stage: integration
   image: ubuntu:22.04
+  rules:
+    - if: $CI_COMMIT_TAG
+    - if: $CI_COMMIT_BRANCH == "main"
+    - if: $CI_COMMIT_BRANCH =~ /^release\/.*/
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
   needs:
     - job: build:linux
       artifacts: true
@@ -285,6 +296,11 @@ integration:linux:
 integration:repl:
   stage: integration
   image: ubuntu:22.04
+  rules:
+    - if: $CI_COMMIT_TAG
+    - if: $CI_COMMIT_BRANCH == "main"
+    - if: $CI_COMMIT_BRANCH =~ /^release\/.*/
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
   needs:
     - job: build:linux
       artifacts: true
@@ -316,6 +332,11 @@ integration:repl:
 documentation:
   stage: documentation
   image: ubuntu:22.04
+  rules:
+    - if: $CI_COMMIT_TAG
+    - if: $CI_COMMIT_BRANCH == "main"
+    - if: $CI_COMMIT_BRANCH =~ /^release\/.*/
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
   needs:
     - job: test
       optional: true

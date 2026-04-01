@@ -23,8 +23,12 @@ private final class EventBusResultBox<T>: @unchecked Sendable {
 private actor SubscriptionStore {
     var subscriptionsByType: [String: [EventBus.Subscription]] = [:]
     var wildcardSubscriptions: [EventBus.Subscription] = []
+    /// Side-map from subscription ID to its event type (or "*" for wildcard).
+    /// Allows remove() to locate the correct bucket in O(1).
+    private var idToType: [UUID: String] = [:]
 
     func add(_ subscription: EventBus.Subscription) {
+        idToType[subscription.id] = subscription.eventType
         if subscription.eventType == "*" {
             wildcardSubscriptions.append(subscription)
         } else {
@@ -33,11 +37,13 @@ private actor SubscriptionStore {
     }
 
     func remove(_ id: UUID) {
-        wildcardSubscriptions.removeAll { $0.id == id }
-        for key in subscriptionsByType.keys {
-            subscriptionsByType[key]?.removeAll { $0.id == id }
-            if subscriptionsByType[key]?.isEmpty == true {
-                subscriptionsByType.removeValue(forKey: key)
+        guard let eventType = idToType.removeValue(forKey: id) else { return }
+        if eventType == "*" {
+            wildcardSubscriptions.removeAll { $0.id == id }
+        } else {
+            subscriptionsByType[eventType]?.removeAll { $0.id == id }
+            if subscriptionsByType[eventType]?.isEmpty == true {
+                subscriptionsByType.removeValue(forKey: eventType)
             }
         }
     }
@@ -45,6 +51,7 @@ private actor SubscriptionStore {
     func removeAll() {
         wildcardSubscriptions.removeAll()
         subscriptionsByType.removeAll()
+        idToType.removeAll()
     }
 
     func matching(for eventType: String) -> [EventBus.Subscription] {

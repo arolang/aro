@@ -6,7 +6,7 @@
 
 ## 9.1 The OWN Role
 
-Among the four semantic roles in ARO—REQUEST, OWN, RESPONSE, and EXPORT—the OWN role occupies a special place. While REQUEST brings data in and RESPONSE sends it out, OWN is where the actual work happens. OWN actions transform data that already exists within the feature set, producing new values without external side effects.
+Among the five semantic roles in ARO—REQUEST, OWN, RESPONSE, EXPORT, and SERVER—the OWN role occupies a special place. While REQUEST brings data in and RESPONSE sends it out, OWN is where the actual work happens. OWN actions transform data that already exists within the feature set, producing new values without external side effects.
 
 The Compute action is the quintessential OWN action. It takes existing bindings, applies operations to them, and produces new bindings. No network calls, no file access, no external dependencies—just pure transformation of data that is already present. This purity makes OWN actions predictable and easy to reason about.
 

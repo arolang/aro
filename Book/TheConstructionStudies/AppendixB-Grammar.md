@@ -43,7 +43,8 @@ statement = aro_statement
           | for_each_loop
           | range_loop
           | while_loop
-          | break_statement ;
+          | break_statement
+          | pipeline_statement ;
 
 (* Core ARO statement: Action-Result-Object *)
 aro_statement = action , [ article ] , result , preposition , [ article ] , object , [ modifiers ] , "." ;
@@ -72,6 +73,9 @@ while_loop = "while" , condition , block ;
 
 (* Break statement — exit innermost loop (ARO 0.7) *)
 break_statement = "Break" , "." ;
+
+(* Pipeline statement — chained actions (ARO-0067) *)
+pipeline_statement = aro_statement , { "|>" , aro_statement } , "." ;
 ```
 
 ## Actions and Objects

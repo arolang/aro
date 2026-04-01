@@ -16,10 +16,11 @@
 
 ## 12.1 The Complete Picture
 
-We have built four files with eight handlers:
+We have built five files with eight handlers:
 
 | File | Handler | Triggered By | Emits |
 |------|---------|--------------|-------|
+| `openapi.yaml` | — | — | Event schemas for typed extraction |
 | `main.aro` | Application-Start | Application launch | QueueUrl |
 | `main.aro` | Application-End: Success | Graceful shutdown | — |
 | `crawler.aro` | Crawl Page | CrawlPage | SavePage, ExtractLinks |
@@ -82,6 +83,7 @@ Make sure you have all four files:
 
 ```
 web-crawler/
+├── openapi.yaml
 ├── main.aro
 ├── crawler.aro
 ├── links.aro
@@ -192,7 +194,7 @@ Try a different site or check your network connection.
 
 Here are all four files for reference:
 
-**main.aro** (13 lines)
+**main.aro** (14 lines)
 ```aro
 (Application-Start: Web Crawler) {
     Log "Starting Web Crawler..." to the <console>.
@@ -206,7 +208,8 @@ Here are all four files for reference:
 }
 
 (Application-End: Success) {
-    Log "Web Crawler completed!" to the <console>.
+    Log "🥁 Web Crawler completed!" to the <console>.
+    Log the <metrics: table> to the <console>.
     Return an <OK: status> for the <shutdown>.
 }
 ```
@@ -217,7 +220,7 @@ Here are all four files for reference:
 
 **storage.aro** (28 lines) — See Chapter 9
 
-Total: **148 lines** of ARO code for a complete, concurrent web crawler.
+Total: **~150 lines** of ARO code for a complete, concurrent web crawler (plus the `openapi.yaml` schema file).
 
 ---
 
@@ -243,7 +246,7 @@ Total: **148 lines** of ARO code for a complete, concurrent web crawler.
 
 ## Chapter Recap
 
-- Four files, eight handlers, 148 lines of code
+- Five files (four `.aro` plus `openapi.yaml`), eight handlers
 - Events create a self-sustaining crawl loop
 - Each handler has a single responsibility
 - Running is simple: set CRAWL_URL and run

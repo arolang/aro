@@ -25,6 +25,8 @@ Each feature set gets its own symbol table, built during the first pass. Here's 
 | `dataFlows` | Per-statement inputs, outputs, and side effects |
 | `dependencies` | External symbols this feature set needs |
 | `exports` | Symbols published to the global registry |
+| `aggregationFusions` | Groups of Reduce operations on the same source that can be fused into a single pass (ARO-0051) |
+| `streamConsumers` | Variables consumed by multiple downstream statements, requiring stream teeing (ARO-0051) |
 
 <svg viewBox="0 0 700 350" xmlns="http://www.w3.org/2000/svg">
   <style>

@@ -1,0 +1,3 @@
+workdir: Examples/StreamExample
+mode: both
+skip-on-windows: Stream (file mode) uses URL.lines which is not available on Windows

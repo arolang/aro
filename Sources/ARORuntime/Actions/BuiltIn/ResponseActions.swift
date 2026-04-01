@@ -429,14 +429,25 @@ public struct LogAction: ActionImplementation {
                 message = "No metrics available"
             }
         } else if let resultExpr = context.resolveAny("_result_expression_") {
-            // ARO-0043: Message from sink syntax result expression
-            message = ResponseFormatter.formatValue(resultExpr, for: context.outputContext)
+            // ARO-0051: If the result expression resolved to a streaming value,
+            // materialize it so Log formats it identically to the eager path.
+            if let anyStreaming = resultExpr as? AnyStreamingValue, !anyStreaming.isMaterialized {
+                let materialized = try await anyStreaming.materialize()
+                message = ResponseFormatter.formatValue(materialized, for: context.outputContext)
+            } else {
+                // ARO-0043: Message from sink syntax result expression
+                message = ResponseFormatter.formatValue(resultExpr, for: context.outputContext)
+            }
         } else if let literal = context.resolveAny("_literal_") {
             // Message from "with" clause (string literal)
             message = ResponseFormatter.formatValue(literal, for: context.outputContext)
         } else if let expr = context.resolveAny("_expression_") {
             // Message from "with" clause (expression)
             message = ResponseFormatter.formatValue(expr, for: context.outputContext)
+        } else if let anyStreaming = context.resolveAny(result.base) as? AnyStreamingValue, !anyStreaming.isMaterialized {
+            // ARO-0051: Materialize lazy streaming value for consistent formatting
+            let materialized = try await anyStreaming.materialize()
+            message = ResponseFormatter.formatValue(materialized, for: context.outputContext)
         } else if var value = context.resolveAny(result.base) {
             // Apply specifiers (qualifiers) to the value
             // e.g., Log <numbers: reverse> applies the "reverse" qualifier

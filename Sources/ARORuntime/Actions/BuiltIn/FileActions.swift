@@ -173,7 +173,7 @@ public final class LazyDirectoryList: @unchecked Sendable {
             }
         }
         regex += "$"
-        return (try? NSRegularExpression(pattern: regex, options: .caseInsensitive))?
+        return (try? RegexCache.shared.regex(regex, options: .caseInsensitive))?
             .firstMatch(in: name, options: [], range: NSRange(name.startIndex..., in: name)) != nil
     }
 }

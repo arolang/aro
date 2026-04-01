@@ -1081,6 +1081,39 @@ public final class LLVMCodeGenerator {
         let incrBlock = ctx.module.appendBlock(named: "\(prefix)_incr", to: ctx.currentFunction!)
         let endBlock  = ctx.module.appendBlock(named: "\(prefix)_end",  to: ctx.currentFunction!)
 
+        // Stream path: if the collection variable holds a lazy stream, use the callback-based
+        // stream iterator (O(1) memory) instead of the index-based array loop.
+        // Only applies when iterating a plain variable (no specifiers).
+        //
+        // When the stream dispatch is active, `collection` (from aro_variable_resolve) is only
+        // defined in the array path. To satisfy LLVM dominance, we introduce a dedicated
+        // `arrayEndBlock` that frees `collection` and then falls through to `endBlock`.
+        // The stream path jumps directly to `endBlock` (no collection box to free).
+        var arrayEndBlock: BasicBlock? = nil
+        if loop.collection.specifiers.isEmpty {
+            arrayEndBlock = ctx.module.appendBlock(named: "\(prefix)_aend", to: ctx.currentFunction!)
+
+            let collVarName = ctx.stringConstant(loop.collection.base)
+            let isStreamResult = ctx.module.insertCall(
+                externals.isStream,
+                on: [ctx.currentContextVar!, collVarName],
+                at: ctx.insertionPoint
+            )
+            let isStreamBool = ctx.module.insertIntegerComparison(
+                .ne, isStreamResult, ctx.i32Type.zero, at: ctx.insertionPoint
+            )
+            let streamPath = ctx.module.appendBlock(named: "\(prefix)_stream", to: ctx.currentFunction!)
+            let arrayPath  = ctx.module.appendBlock(named: "\(prefix)_array",  to: ctx.currentFunction!)
+            ctx.module.insertCondBr(if: isStreamBool, then: streamPath, else: arrayPath, at: ctx.insertionPoint)
+
+            // === Stream path ===
+            ctx.setInsertionPoint(atEndOf: streamPath)
+            generateStreamForEachLoop(loop, index: index, endBlock: endBlock, errorBlock: errorBlock)
+
+            // === Array path (fall-through to existing logic) ===
+            ctx.setInsertionPoint(atEndOf: arrayPath)
+        }
+
         // Resolve collection (with optional specifier for nested properties like <team: members>)
         let collectionName = ctx.stringConstant(loop.collection.base)
         var collection = ctx.module.insertCall(
@@ -1137,7 +1170,10 @@ public final class LLVMCodeGenerator {
         let isNull = ctx.module.insertIntegerComparison(
             .eq, nextElem, ctx.ptrType.null, at: ctx.insertionPoint
         )
-        ctx.module.insertCondBr(if: isNull, then: endBlock, else: bodyBlock, at: ctx.insertionPoint)
+        // When stream dispatch is active, jump to arrayEndBlock (frees collection) then endBlock.
+        // Otherwise jump directly to endBlock (collection freed there, as before).
+        let arrayDoneBlock = arrayEndBlock ?? endBlock
+        ctx.module.insertCondBr(if: isNull, then: arrayDoneBlock, else: bodyBlock, at: ctx.insertionPoint)
 
         // === Body Block ===
         ctx.setInsertionPoint(atEndOf: bodyBlock)
@@ -1235,12 +1271,146 @@ public final class LLVMCodeGenerator {
 
         ctx.module.insertBr(to: condBlock, at: ctx.insertionPoint)
 
+        // === Array End Block (only present when stream dispatch is active) ===
+        // Frees `collection` before falling through to endBlock. This keeps `collection`
+        // within the array-only control-flow path, satisfying LLVM dominance.
+        if let aEnd = arrayEndBlock {
+            ctx.setInsertionPoint(atEndOf: aEnd)
+            _ = ctx.module.insertCall(externals.valueFree, on: [collection], at: ctx.insertionPoint)
+            ctx.module.insertBr(to: endBlock, at: ctx.insertionPoint)
+        }
+
         // === End Block ===
         ctx.setInsertionPoint(atEndOf: endBlock)
 
         // Free the collection box from aro_variable_resolve (or the final aro_dict_get).
-        // The inner collection value stays alive in the context; only the wrapper is freed.
-        _ = ctx.module.insertCall(externals.valueFree, on: [collection], at: ctx.insertionPoint)
+        // Only inserted when there is no stream dispatch (array-only path); when stream
+        // dispatch is active the free is done in arrayEndBlock above.
+        if arrayEndBlock == nil {
+            _ = ctx.module.insertCall(externals.valueFree, on: [collection], at: ctx.insertionPoint)
+        }
+    }
+
+    // MARK: - Stream For-Each Loop Generation (lazy O(1) path)
+
+    /// Generates a stream-based for-each loop that processes elements one at a time
+    /// via a callback function, preserving O(1) memory usage.
+    ///
+    /// Creates a separate LLVM loop-body function and passes it to `aro_runtime_foreach_stream`,
+    /// which drives iteration from within a Task while blocking the calling thread.
+    private func generateStreamForEachLoop(
+        _ loop: ForEachLoop,
+        index: Int,
+        endBlock: BasicBlock,
+        errorBlock: BasicBlock
+    ) {
+        let prefix = "stream\(index)"
+
+        // --- Build the loop body function ---
+        let bodyFuncName = ctx.uniqueLoopBodyName()
+        // signature: (ptr ctx, ptr element, i64 index) -> ptr
+        let bodyFunc = ctx.module.declareFunction(bodyFuncName, types.loopBodyFunctionType)
+
+        // Save outer function state
+        let outerFunction   = ctx.currentFunction
+        let outerContextVar = ctx.currentContextVar
+        let outerResultPtr  = ctx.currentResultPtr
+        let outerIP         = ctx.currentInsertionPoint
+
+        // Switch to body function
+        ctx.currentFunction = bodyFunc
+        let bodyEntry = ctx.module.appendBlock(named: "entry", to: bodyFunc)
+        ctx.setInsertionPoint(atEndOf: bodyEntry)
+
+        let bodyCtxParam     = bodyFunc.parameters[0]  // ptr %ctx
+        let bodyElementParam = bodyFunc.parameters[1]  // ptr %element
+        let bodyIndexParam   = bodyFunc.parameters[2]  // i64 %index
+
+        ctx.currentContextVar = bodyCtxParam
+
+        // Allocate result storage for actions inside the body
+        let bodyResultPtr = ctx.module.insertAlloca(ctx.ptrType, at: ctx.insertionPoint)
+        ctx.module.insertStore(ctx.ptrType.null, to: bodyResultPtr, at: ctx.insertionPoint)
+        ctx.currentResultPtr = bodyResultPtr
+
+        // Error block: action failed → return null (error stored in context; caller checks it)
+        let bodyErrorBlock = ctx.module.appendBlock(named: "\(prefix)_error", to: bodyFunc)
+        ctx.setInsertionPoint(atEndOf: bodyErrorBlock)
+        ctx.module.insertReturn(ctx.ptrType.null, at: ctx.insertionPoint)
+
+        // Continue generating in the entry block
+        ctx.setInsertionPoint(atEndOf: bodyEntry)
+
+        // Bind item variable to current element
+        let itemVarName = ctx.stringConstant(loop.itemVariable)
+        _ = ctx.module.insertCall(externals.variableUnbind, on: [bodyCtxParam, itemVarName], at: ctx.insertionPoint)
+        _ = ctx.module.insertCall(externals.variableBindValue, on: [bodyCtxParam, itemVarName, bodyElementParam], at: ctx.insertionPoint)
+
+        // Bind index variable (if requested)
+        if let indexVar = loop.indexVariable {
+            let indexVarName = ctx.stringConstant(indexVar)
+            _ = ctx.module.insertCall(externals.variableUnbind, on: [bodyCtxParam, indexVarName], at: ctx.insertionPoint)
+            let indexValue = ctx.module.insertCall(externals.valueCreateInt, on: [bodyIndexParam], at: ctx.insertionPoint)
+            _ = ctx.module.insertCall(externals.variableBindValue, on: [bodyCtxParam, indexVarName, indexValue], at: ctx.insertionPoint)
+        }
+
+        // Apply filter (if present)
+        if let filter = loop.filter {
+            let filterJSON = ctx.stringConstant(serializeExpression(filter))
+            let filterResult = ctx.module.insertCall(
+                externals.evaluateWhenGuard, on: [bodyCtxParam, filterJSON], at: ctx.insertionPoint)
+            let passed = ctx.module.insertIntegerComparison(
+                .ne, filterResult, ctx.i32Type.zero, at: ctx.insertionPoint)
+            let filterBodyBlock = ctx.module.appendBlock(named: "\(prefix)_fb", to: bodyFunc)
+            let filterSkipBlock = ctx.module.appendBlock(named: "\(prefix)_fs", to: bodyFunc)
+            ctx.module.insertCondBr(if: passed, then: filterBodyBlock, else: filterSkipBlock, at: ctx.insertionPoint)
+            // Skip: return null (continue iteration)
+            ctx.setInsertionPoint(atEndOf: filterSkipBlock)
+            ctx.module.insertReturn(ctx.ptrType.null, at: ctx.insertionPoint)
+            ctx.setInsertionPoint(atEndOf: filterBodyBlock)
+        }
+
+        // Pre-unbind body variables (mirrors inline for-each behaviour)
+        var managedByLoop = Set([loop.itemVariable])
+        if let iv = loop.indexVariable { managedByLoop.insert(iv) }
+        for varName in collectBoundVariables(from: loop.body) where !managedByLoop.contains(varName) {
+            let vn = ctx.stringConstant(varName)
+            _ = ctx.module.insertCall(externals.variableUnbind, on: [bodyCtxParam, vn], at: ctx.insertionPoint)
+        }
+
+        // Generate body statements (errors branch to bodyErrorBlock)
+        for (stmtIndex, stmt) in loop.body.enumerated() {
+            generateStatement(stmt, index: index * 100 + stmtIndex, errorBlock: bodyErrorBlock)
+        }
+
+        // Normal exit: return null (continue iteration)
+        ctx.module.insertReturn(ctx.ptrType.null, at: ctx.insertionPoint)
+
+        // --- Restore outer function state ---
+        ctx.currentFunction    = outerFunction
+        ctx.currentContextVar  = outerContextVar
+        ctx.currentResultPtr   = outerResultPtr
+        ctx.currentInsertionPoint = outerIP
+
+        // --- Call aro_runtime_foreach_stream in the outer function ---
+        let collVarName = ctx.stringConstant(loop.collection.base)
+        _ = ctx.module.insertCall(
+            externals.foreachStream,
+            on: [ctx.currentContextVar!, collVarName, bodyFunc],
+            at: ctx.insertionPoint
+        )
+
+        // After stream iteration: check for errors
+        let hasError = ctx.module.insertCall(
+            externals.contextHasError, on: [ctx.currentContextVar!], at: ctx.insertionPoint)
+        let errorOccurred = ctx.module.insertIntegerComparison(
+            .ne, hasError, ctx.i32Type.zero, at: ctx.insertionPoint)
+        let continueBlock = ctx.module.appendBlock(named: "\(prefix)_cont", to: ctx.currentFunction!)
+        ctx.module.insertCondBr(if: errorOccurred, then: errorBlock, else: continueBlock, at: ctx.insertionPoint)
+        ctx.setInsertionPoint(atEndOf: continueBlock)
+
+        // Jump to endBlock (shared with array path)
+        ctx.module.insertBr(to: endBlock, at: ctx.insertionPoint)
     }
 
     // MARK: - Range Loop Generation (for <var> from <low> to <high>)

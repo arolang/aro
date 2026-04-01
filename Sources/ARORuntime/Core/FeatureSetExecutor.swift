@@ -34,6 +34,18 @@ public final class FeatureSetExecutor: Sendable {
     /// Whether to enable parallel I/O optimization (ARO-0011)
     public let enableParallelIO: Bool
 
+    // Cached VerbSets — copied once at init to avoid repeated static-property indirection
+    private let testVerbs: Set<String>
+    private let requestVerbs: Set<String>
+    private let updateVerbs: Set<String>
+    private let createVerbs: Set<String>
+    private let mergeVerbs: Set<String>
+    private let computeVerbs: Set<String>
+    private let extractVerbs: Set<String>
+    private let queryVerbs: Set<String>
+    private let responseVerbs: Set<String>
+    private let serverVerbs: Set<String>
+
     // MARK: - Initialization
 
     public init(
@@ -47,6 +59,16 @@ public final class FeatureSetExecutor: Sendable {
         self.globalSymbols = globalSymbols
         self.expressionEvaluator = ExpressionEvaluator()
         self.enableParallelIO = enableParallelIO
+        self.testVerbs = VerbSets.testVerbs
+        self.requestVerbs = VerbSets.requestVerbs
+        self.updateVerbs = VerbSets.updateVerbs
+        self.createVerbs = VerbSets.createVerbs
+        self.mergeVerbs = VerbSets.mergeVerbs
+        self.computeVerbs = VerbSets.computeVerbs
+        self.extractVerbs = VerbSets.extractVerbs
+        self.queryVerbs = VerbSets.queryVerbs
+        self.responseVerbs = VerbSets.responseVerbs
+        self.serverVerbs = VerbSets.serverVerbs
     }
 
     // MARK: - Execution
@@ -309,16 +331,6 @@ public final class FeatureSetExecutor: Sendable {
             // comparison/assertion actions like Then/Assert that need to run.
             if statement.object.noun.base == "_expression_" {
                 // Check if the action needs to be executed (see VerbSets.swift for rationale per category)
-                let testVerbs = VerbSets.testVerbs
-                let requestVerbs = VerbSets.requestVerbs
-                let updateVerbs = VerbSets.updateVerbs
-                let createVerbs = VerbSets.createVerbs
-                let mergeVerbs = VerbSets.mergeVerbs
-                let computeVerbs = VerbSets.computeVerbs
-                let extractVerbs = VerbSets.extractVerbs
-                let queryVerbs = VerbSets.queryVerbs
-                let responseVerbs = VerbSets.responseVerbs
-                let serverVerbs = VerbSets.serverVerbs
                 // Check if there's a dynamic handler registered for this verb (plugin-provided action)
                 let hasDynamicHandler = await actionRegistry.dynamicHandler(for: verb) != nil
                 let needsExecution = testVerbs.contains(verb.lowercased()) ||
@@ -677,7 +689,7 @@ public final class FeatureSetExecutor: Sendable {
         if flags.contains("m") { options.insert(.anchorsMatchLines) }
 
         do {
-            let regex = try NSRegularExpression(pattern: pattern, options: options)
+            let regex = try RegexCache.shared.regex(pattern, options: options)
             let range = NSRange(string.startIndex..., in: string)
             return regex.firstMatch(in: string, range: range) != nil
         } catch {
@@ -822,6 +834,13 @@ public final class FeatureSetExecutor: Sendable {
             throw ActionError.undefinedVariable(loop.collection.base)
         }
 
+        // Lazy stream path: iterate without materialising the collection into memory (ARO-0051).
+        // Specifiers are not supported on streams — they require an in-memory value.
+        if let anyStream = collectionValue as? AnyStreamingValue, loop.collection.specifiers.isEmpty {
+            try await executeForEachLazy(loop, stream: anyStream.asStream(), context: context)
+            return
+        }
+
         // Handle specifiers as property access (e.g., <team: members> -> team.members)
         for specifier in loop.collection.specifiers {
             collectionValue = try accessCollectionProperty(specifier, on: collectionValue)
@@ -898,6 +917,10 @@ public final class FeatureSetExecutor: Sendable {
         } else {
             // Sequential execution
             for (index, item) in items.enumerated() {
+                // Cooperative scheduling: yield every 500 iterations so other Swift tasks
+                // can run and the process does not pin a single CPU core at 100%.
+                if index % 500 == 0 { await Task.yield() }
+
                 // Create fresh child context for this iteration
                 // This gives us fresh immutable bindings per iteration
                 let iterationContext = context.createChild(featureSetName: context.featureSetName)

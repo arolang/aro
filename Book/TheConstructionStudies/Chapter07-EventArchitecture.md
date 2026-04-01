@@ -4,7 +4,7 @@
 
 ARO uses a centralized publish-subscribe pattern for inter-component communication. The EventBus decouples event producers from consumers, enabling reactive programming without tight coupling.
 
-The bus holds a list of subscriptions (each with an event type string, a unique ID, and a handler closure), a set of AsyncStream continuations for stream-based subscribers, and a counter for in-flight handlers.
+The bus is a Swift actor holding a list of subscriptions (each with an event type string, a unique ID, and a handler closure), a set of AsyncStream continuations for stream-based subscribers, and a counter for in-flight handlers. Nonisolated entry points provide fire-and-forget publishing without awaiting the actor.
 
 <svg viewBox="0 0 700 350" xmlns="http://www.w3.org/2000/svg">
   <style>
@@ -29,7 +29,7 @@ The bus holds a list of subscriptions (each with an event type string, a unique 
   <text x="260" y="170" class="label">subscriptions: [Subscription]</text>
   <text x="260" y="185" class="label">continuations: AsyncStreams</text>
   <text x="260" y="200" class="label">inFlightHandlers: Int</text>
-  <text x="260" y="215" class="label">lock: NSLock</text>
+  <text x="260" y="215" class="label">isolation: actor</text>
 
   <!-- Producers (left) -->
   <rect x="30" y="40" width="140" height="50" rx="5" class="box producer"/>
@@ -165,9 +165,9 @@ Step 1 before Step 2 is critical. If Application-Start emits an event, the handl
 
 ---
 
-## Five Handler Types
+## Seven Handler Types
 
-ARO supports five categories of event handlers, distinguished by business activity patterns.
+ARO supports seven categories of event handlers, distinguished by business activity patterns.
 
 ### 1. Domain Event Handlers
 
@@ -246,6 +246,32 @@ Pattern: `{fieldName} StateObserver` or `{fieldName} StateObserver<from_to_to>`
     Return an <OK: status> for the <notification>.
 }
 ```
+
+### 6. KeyPress Handlers
+
+Pattern: `{description}: KeyPress Handler` with `where <key> = "keyname"` guards
+
+```aro
+(Move Down: KeyPress Handler) where <key> = "down" {
+    (* Handle down arrow key press *)
+    Return an <OK: status> for the <keypress>.
+}
+```
+
+KeyPress handlers use `where` clause filtering at the feature set level to match specific keys. Multiple handlers can listen for different keys. Requires `Listen the <keyboard> to the <stdin>.` in Application-Start.
+
+### 7. WebSocket Event Handlers
+
+Pattern: `{description}: WebSocket Event Handler`
+
+```aro
+(Handle WebSocket Connect: WebSocket Event Handler) {
+    Log "Client connected" to the <console>.
+    Return an <OK: status> for the <connection>.
+}
+```
+
+WebSocket handlers respond to WebSocket lifecycle events (connect, message, disconnect). Requires `Start the <http-server> with { websocket: "/ws" }.` in Application-Start.
 
 ---
 
@@ -356,17 +382,17 @@ After `Application-Start` completes, the engine waits for all handlers to finish
 
 ## Race Condition Prevention
 
-The check and the continuation append happen inside the same lock. This prevents the classic race where a handler finishes between the zero-check and the append, leaving the continuation waiting forever.
+The check and the continuation append happen inside the same actor-isolated method. This prevents the classic race where a handler finishes between the zero-check and the append, leaving the continuation waiting forever.
 
-In plain terms: you can't safely check "are we done?" and then decide to wait separately. Both steps must be atomic. The lock makes that happen.
+In plain terms: you can't safely check "are we done?" and then decide to wait separately. Both steps must be atomic. Actor isolation makes that happen.
 
 ---
 
 ## Concurrency Design
 
-EventBus uses NSLock, not an actor. Actor hops add latency; for high-frequency event publishing, a lock is faster and simpler.
+EventBus is a Swift actor. Nonisolated entry points like `publish()` and `subscribe()` spawn fire-and-forget tasks that hop into the actor, keeping the caller's path fast. Actor-isolated methods like `publishAndWait()` and `awaitPendingEvents()` provide coordination when needed.
 
-Handlers run on GCD queues, not Swift's cooperative executor. On Linux, a cooperative executor pool can deadlock if handlers block on I/O — GCD avoids this.
+Handlers run via `Task` on the cooperative executor. For compiled binaries, a `CompiledExecutionPool` gates concurrent execution to prevent thread exhaustion under intensive event cascades.
 
 ---
 
@@ -397,10 +423,10 @@ The event architecture enables loosely coupled, reactive programming:
 
 1. **EventBus** provides centralized publish-subscribe with type-based routing
 2. **Handler Registration** happens before entry point execution
-3. **Five Handler Types** cover domain events, repositories, files, sockets, and state transitions
+3. **Seven Handler Types** cover domain events, repositories, files, sockets, state transitions, key presses, and WebSocket events
 4. **State Guards** enable declarative filtering without code
 5. **In-Flight Tracking** ensures cascaded events complete before shutdown
-6. **Race Prevention** uses careful lock ordering for correctness
+6. **Race Prevention** uses actor isolation for correctness
 7. **AsyncStream** integration supports modern Swift concurrency patterns
 
 The event system is the glue between services. When an HTTP request arrives, the server publishes an event. When a file changes, the monitor publishes an event. Feature sets subscribe to these events and react — without knowing or caring about the source.

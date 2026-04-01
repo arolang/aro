@@ -66,10 +66,9 @@ Add to `links.aro`:
 
 ```aro
 (Filter URL: FilterUrl Handler) {
-    (* Extract from event data structure *)
-    Extract the <event-data> from the <event: data>.
-    Extract the <url> from the <event-data: url>.
-    Extract the <base-domain> from the <event-data: base>.
+    (* Extract fields directly from the event *)
+    Extract the <url> from the <event: url>.
+    Extract the <base-domain> from the <event: base>.
 
     Return an <OK: status> for the <filter>.
 }
@@ -88,10 +87,9 @@ Now add the conditional emit:
 
 ```aro
 (Filter URL: FilterUrl Handler) {
-    (* Extract from event data structure *)
-    Extract the <event-data> from the <event: data>.
-    Extract the <url> from the <event-data: url>.
-    Extract the <base-domain> from the <event-data: base>.
+    (* Extract fields directly from the event *)
+    Extract the <url> from the <event: url>.
+    Extract the <base-domain> from the <event: base>.
 
     (* Filter URLs that belong to the same domain as base-domain *)
     Emit a <QueueUrl: event> with { url: <url>, base: <base-domain> } when <url> contains <base-domain>.
@@ -126,10 +124,9 @@ However, there are edge cases. `https://example.com.malicious.com` would match b
 
 ```aro
 (Filter URL: FilterUrl Handler) {
-    (* Extract from event data structure *)
-    Extract the <event-data> from the <event: data>.
-    Extract the <url> from the <event-data: url>.
-    Extract the <base-domain> from the <event-data: base>.
+    (* Extract fields directly from the event *)
+    Extract the <url> from the <event: url>.
+    Extract the <base-domain> from the <event: base>.
 
     (* Filter URLs that belong to the same domain as base-domain *)
     Log "Queuing: ${<url>}" to the <console> when <url> contains <base-domain>.
@@ -149,10 +146,9 @@ The final handler in the link pipeline queues URLs for crawling. Add to `links.a
 
 ```aro
 (Queue URL: QueueUrl Handler) {
-    (* Extract from event data structure *)
-    Extract the <event-data> from the <event: data>.
-    Extract the <url> from the <event-data: url>.
-    Extract the <base-domain> from the <event-data: base>.
+    (* Extract fields directly from the event *)
+    Extract the <url> from the <event: url>.
+    Extract the <base-domain> from the <event: base>.
 
     (* Generate deterministic id from URL hash for deduplication *)
     Compute the <url-id: hash> from the <url>.
@@ -200,21 +196,18 @@ We now have four handlers plus one observer in `links.aro`. Here is the complete
    ============================================================ *)
 
 (Extract Links: ExtractLinks Handler) {
-    (* Extract from event data structure *)
-    Extract the <event-data> from the <event: data>.
-    Extract the <html> from the <event-data: html>.
-    Extract the <source-url> from the <event-data: url>.
-    Extract the <base-domain> from the <event-data: base>.
+    (* Typed event extraction - validates against ExtractLinksEvent schema *)
+    Extract the <event-data: ExtractLinksEvent> from the <event>.
 
     (* Use ParseHtml action to extract all href attributes from anchor tags *)
-    ParseHtml the <links: links> from the <html>.
+    ParseHtml the <links: links> from the <event-data: html>.
 
     (* Process links in parallel - repository Actor ensures atomic dedup *)
     parallel for each <raw-url> in <links> {
         Emit a <NormalizeUrl: event> with {
             raw: <raw-url>,
-            source: <source-url>,
-            base: <base-domain>
+            source: <event-data: url>,
+            base: <event-data: base>
         }.
     }
 
@@ -223,10 +216,9 @@ We now have four handlers plus one observer in `links.aro`. Here is the complete
 
 (Normalize URL: NormalizeUrl Handler) {
     (* Extract from event data structure *)
-    Extract the <event-data> from the <event: data>.
-    Extract the <raw-url> from the <event-data: raw>.
-    Extract the <source-url> from the <event-data: source>.
-    Extract the <base-domain> from the <event-data: base>.
+    Extract the <raw-url> from the <event: raw>.
+    Extract the <source-url> from the <event: source>.
+    Extract the <base-domain> from the <event: base>.
 
     (* Determine URL type and normalize *)
     match <raw-url> {
@@ -260,10 +252,9 @@ We now have four handlers plus one observer in `links.aro`. Here is the complete
 }
 
 (Filter URL: FilterUrl Handler) {
-    (* Extract from event data structure *)
-    Extract the <event-data> from the <event: data>.
-    Extract the <url> from the <event-data: url>.
-    Extract the <base-domain> from the <event-data: base>.
+    (* Extract fields directly from the event *)
+    Extract the <url> from the <event: url>.
+    Extract the <base-domain> from the <event: base>.
 
     (* Filter URLs that belong to the same domain as base-domain *)
     Emit a <QueueUrl: event> with { url: <url>, base: <base-domain> } when <url> contains <base-domain>.
@@ -272,10 +263,9 @@ We now have four handlers plus one observer in `links.aro`. Here is the complete
 }
 
 (Queue URL: QueueUrl Handler) {
-    (* Extract from event data structure *)
-    Extract the <event-data> from the <event: data>.
-    Extract the <url> from the <event-data: url>.
-    Extract the <base-domain> from the <event-data: base>.
+    (* Extract fields directly from the event *)
+    Extract the <url> from the <event: url>.
+    Extract the <base-domain> from the <event: base>.
 
     (* Generate deterministic id from URL hash for deduplication *)
     Compute the <url-id: hash> from the <url>.

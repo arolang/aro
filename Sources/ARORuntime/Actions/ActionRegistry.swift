@@ -92,6 +92,9 @@ public actor ActionRegistry {
     /// Maps plugin name → normalised verb keys it registered (for bulk unregister)
     private var pluginVerbs: [String: Set<String>] = [:]
 
+    /// Cache of raw verb string → normalised form so the string work happens at most once per unique input.
+    private var normalizedNameCache: [String: String] = [:]
+
     /// Type alias for dynamic action handler
     public typealias DynamicActionHandler = @Sendable (
         ResultDescriptor,
@@ -99,10 +102,13 @@ public actor ActionRegistry {
         ExecutionContext
     ) async throws -> any Sendable
 
-    /// Normalize action name by removing hyphens and lowercasing
-    /// This allows `parse-csv` and `ParseCSV` to match as `parsecsv`
+    /// Normalize action name by removing hyphens and lowercasing.
+    /// Results are cached so repeated lookups of the same raw name are O(1).
     private func normalizeActionName(_ name: String) -> String {
-        return name.replacingOccurrences(of: "-", with: "").lowercased()
+        if let cached = normalizedNameCache[name] { return cached }
+        let normalized = name.replacingOccurrences(of: "-", with: "").lowercased()
+        normalizedNameCache[name] = normalized
+        return normalized
     }
 
     /// Register a dynamic action from a plugin

@@ -728,7 +728,7 @@ private func matchesGlobPattern(_ name: String, pattern: String?) -> Bool {
     }
     regex += "$"
 
-    return (try? NSRegularExpression(pattern: regex, options: .caseInsensitive))?.firstMatch(
+    return (try? RegexCache.shared.regex(regex, options: .caseInsensitive))?.firstMatch(
         in: name,
         options: [],
         range: NSRange(name.startIndex..., in: name)

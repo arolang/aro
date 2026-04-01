@@ -75,7 +75,7 @@ This is not a universal truth — it is a design bet. The bet is that for certai
 
 In a general-purpose language, AST node types proliferate. Python's AST has over 40 statement types and 20+ expression types. Each new construct adds parsing rules, semantic analysis passes, and code generation cases.
 
-ARO has eight statement types:
+ARO has nine statement types:
 
 1. `AROStatement` — the core action-result-object form
 2. `PublishStatement` — variable export across feature sets
@@ -85,10 +85,13 @@ ARO has eight statement types:
 6. `RangeLoop` — numeric range iteration
 7. `WhileLoop` — condition-based iteration
 8. `BreakStatement` — loop exit
+9. `PipelineStatement` — chained statements via `|>` operator (ARO-0067)
+
+(There is also an internal `ErrorStatement` used for parser error recovery, but it never appears in valid programs.)
 
 **Lifecycle feature sets** (`Application-Start`, `Application-End: Success`, `Application-End: Error`) are not special statement types. They are regular feature sets distinguished by naming convention. The runtime treats them specially based on their business activity names.
 
-Here's why that's clever: every new statement type would add cases everywhere — in the parser, the semantic analyzer, the code generator, the interpreter, the LLVM backend, and every tool that reads an AST. Eight types means all of those places stay small and focused. The constraint propagates as a simplification through the entire codebase.
+Here's why that's clever: every new statement type would add cases everywhere — in the parser, the semantic analyzer, the code generator, the interpreter, the LLVM backend, and every tool that reads an AST. Nine types means all of those places stay small and focused. The constraint propagates as a simplification through the entire codebase.
 
 ---
 
@@ -98,10 +101,11 @@ We classify every action by its data flow direction. This is not just documentat
 
 | Role | Direction | Examples |
 |------|-----------|---------|
-| `request` | External → Internal | Extract, Retrieve, Fetch, Read |
+| `request` | External → Internal | Extract, Retrieve, Read, Request, Stream, List |
 | `own` | Internal → Internal | Compute, Validate, Compare, Create, Transform |
-| `response` | Internal → External | Return, Throw |
-| `export` | Internal → Persistent / Global | Publish, Store, Log, Send, Emit |
+| `response` | Internal → External | Return, Throw, Log, Send, Write, Store, Broadcast, Notify |
+| `export` | Internal → Global | Publish, Emit, Schedule |
+| `server` | Service lifecycle | Start, Stop, Listen, Connect, Close, Keepalive |
 
 <svg viewBox="0 0 700 350" xmlns="http://www.w3.org/2000/svg">
   <style>
@@ -182,7 +186,7 @@ We classify every action by its data flow direction. This is not just documentat
   <text x="610" y="160" class="label" text-anchor="middle">Events</text>
 </svg>
 
-**Figure 1.2**: Action role data flow. Every action in ARO belongs to exactly one of four roles, determining where data flows.
+**Figure 1.2**: Action role data flow. Every action in ARO belongs to exactly one of five roles, determining where data flows. The fifth role, `server`, manages service lifecycle (Start, Stop, Listen, Connect, Close, Keepalive, Broadcast, Make, Copy, Move) and is not shown in this diagram for clarity.
 
 ### Why Roles Matter
 
@@ -276,7 +280,7 @@ The security issue is real and worth emphasizing. Error messages expose variable
 
 | Gained Property | How It Was Achieved | Benefit |
 |-----------------|---------------------|---------|
-| Uniform AST | Eight statement types | Simple tooling |
+| Uniform AST | Nine statement types | Simple tooling |
 | Predictable execution | Linear statement flow | Easy debugging |
 | Auditable code | One way to do things | Code review is fast |
 | Consistent error messages | Code-derived errors | Debugging by reading |
@@ -334,7 +338,7 @@ The security issue is real and worth emphasizing. Error messages expose variable
 
 The escape hatch is essential. Without it, ARO would be too limited for real use. We offer two levels:
 
-**Plugins** (Swift, Rust, C, Python) are loaded as dynamic libraries or subprocesses. They can add new actions and qualifiers without touching the ARO runtime itself. They are namespaced via a `handler:` field in `plugin.yaml` — so a `collections` handler exposes qualifiers as `collections.pick-random`, `collections.shuffle`, and so on. This is the preferred escape mechanism: write your plugin, drop it in `Plugins/`, and the runtime finds it automatically.
+**Plugins** (Swift, Rust, C, Python) are loaded as dynamic libraries or subprocesses. They can add new actions and qualifiers without touching the ARO runtime itself. They are namespaced via a root-level `handle:` field in `plugin.yaml` (PascalCase, canonical) — so a `Collections` handle exposes qualifiers as `Collections.pick-random`, `Collections.shuffle`, and so on. (The legacy `handler:` field inside `provides:` still works but emits a deprecation warning.) This is the preferred escape mechanism: write your plugin, drop it in `Plugins/`, and the runtime finds it automatically.
 
 **Custom actions in Swift** are compiled directly into the runtime. More tightly integrated, but requires recompiling the ARO binary. Useful for actions that need deep access to the execution engine.
 
@@ -346,9 +350,9 @@ With these escape hatches, the constraint becomes a useful default rather than a
 
 ARO's design philosophy rests on four pillars:
 
-1. **Constraint over expressiveness**: Fewer constructs means simpler implementation and more predictable behavior. Eight statement types instead of forty. That constraint saves work in every phase of the compiler.
+1. **Constraint over expressiveness**: Fewer constructs means simpler implementation and more predictable behavior. Nine statement types instead of forty. That constraint saves work in every phase of the compiler.
 
-2. **Data flow classification**: Every action has a role — request, own, response, or export. That role determines valid operations and enables static analysis without reading implementation code.
+2. **Data flow classification**: Every action has a role — request, own, response, export, or server. That role determines valid operations and enables static analysis without reading implementation code.
 
 3. **Immutability by default**: Variables cannot be rebound, eliminating whole categories of bugs and enabling safe concurrency. The semantic analyzer enforces it; the runtime double-checks.
 

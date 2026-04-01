@@ -138,11 +138,12 @@ Optionally, we can add a handler that runs when the application shuts down:
 ```aro
 (Application-End: Success) {
     Log "🥁 Web Crawler completed!" to the <console>.
+    Log the <metrics: table> to the <console>.
     Return an <OK: status> for the <shutdown>.
 }
 ```
 
-`Application-End: Success` runs automatically when `Application-Start` completes normally. For our crawler, this means it fires after the `<Emit>` finishes and all crawled pages have been processed. There is no need to send a signal or press Ctrl+C -- the application shuts down on its own once the work is done.
+`Application-End: Success` runs automatically when `Application-Start` completes normally. The `<metrics: table>` line prints a summary table of execution statistics—how many times each feature set ran, total time, and so on. This is a built-in capability that requires no setup. For our crawler, this means it fires after the `<Emit>` finishes and all crawled pages have been processed. There is no need to send a signal or press Ctrl+C -- the application shuts down on its own once the work is done.
 
 ---
 
@@ -178,6 +179,7 @@ Here is the complete entry point file:
 
 (Application-End: Success) {
     Log "🥁 Web Crawler completed!" to the <console>.
+    Log the <metrics: table> to the <console>.
     Return an <OK: status> for the <shutdown>.
 }
 ```

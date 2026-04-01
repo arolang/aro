@@ -59,21 +59,18 @@ Change the `for each` to `parallel for each` in `links.aro`:
 
 ```aro
 (Extract Links: ExtractLinks Handler) {
-    (* Extract from event data structure *)
-    Extract the <event-data> from the <event: data>.
-    Extract the <html> from the <event-data: html>.
-    Extract the <source-url> from the <event-data: url>.
-    Extract the <base-domain> from the <event-data: base>.
+    (* Typed event extraction - validates against ExtractLinksEvent schema *)
+    Extract the <event-data: ExtractLinksEvent> from the <event>.
 
     (* Use ParseHtml action to extract all href attributes from anchor tags *)
-    ParseHtml the <links: links> from the <html>.
+    ParseHtml the <links: links> from the <event-data: html>.
 
     (* Process links in parallel - repository Actor ensures atomic dedup *)
     parallel for each <raw-url> in <links> {
         Emit a <NormalizeUrl: event> with {
             raw: <raw-url>,
-            source: <source-url>,
-            base: <base-domain>
+            source: <event-data: url>,
+            base: <event-data: base>
         }.
     }
 

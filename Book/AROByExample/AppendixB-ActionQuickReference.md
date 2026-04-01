@@ -14,7 +14,7 @@ This appendix provides a quick reference for all actions used in the web crawler
 
 **Examples:**
 ```aro
-Extract the <url> from the <event-data: url>.
+Extract the <url> from the <event: url>.
 Extract the <start-url> from the <env: CRAWL_URL>.
 Extract the <title> from the <markdown-result: title>.
 ```
@@ -58,12 +58,15 @@ Create the <absolute-url> with "${<base>}${<path>}".
 
 | Action | Syntax | Description |
 |--------|--------|-------------|
-| Request | `Request the <result> from the <url>.` | HTTP GET request |
+| Request | `Request the <response> from the <url>.` | HTTP GET request (returns response object) |
 
 **Example:**
 ```aro
-Request the <html> from the <url>.
+Request the <response> from the <url>.
+Extract the <body> from the <response: body>.
 ```
+
+The response object contains `body` (parsed content), `status` (HTTP status code), and `headers` (response headers).
 
 ---
 
