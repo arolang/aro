@@ -411,7 +411,7 @@ public struct FilterAction: ActionImplementation {
         case "matches":
             // Regex matching
             do {
-                let regex = try NSRegularExpression(pattern: expectedStr)
+                let regex = try RegexCache.shared.regex(expectedStr)
                 let range = NSRange(actualStr.startIndex..., in: actualStr)
                 return regex.firstMatch(in: actualStr, range: range) != nil
             } catch {

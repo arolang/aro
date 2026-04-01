@@ -514,7 +514,7 @@ public struct ExpressionEvaluator: Sendable {
         if flags.contains("m") { options.insert(.anchorsMatchLines) }
 
         do {
-            let regex = try NSRegularExpression(pattern: patternStr, options: options)
+            let regex = try RegexCache.shared.regex(patternStr, options: options)
             let range = NSRange(str.startIndex..., in: str)
             return regex.firstMatch(in: str, range: range) != nil
         } catch {

@@ -60,7 +60,7 @@ public struct SplitAction: SynchronousAction {
         if flags.contains("s") { options.insert(.dotMatchesLineSeparators) }
         if flags.contains("m") { options.insert(.anchorsMatchLines) }
 
-        let regex = try NSRegularExpression(pattern: pattern, options: options)
+        let regex = try RegexCache.shared.regex(pattern, options: options)
         let range = NSRange(string.startIndex..., in: string)
         let matches = regex.matches(in: string, range: range)
 

@@ -291,7 +291,7 @@ public enum RecurrenceType: Sendable, Equatable {
     private static func parseOrdinalUnit(_ ordinalStr: String, _ unitStr: String) -> (Int, DateUnit)? {
         // Parse ordinals like "2nd", "3rd", "4th"
         let ordinalPattern = #"^(\d+)(st|nd|rd|th)$"#
-        guard let regex = try? NSRegularExpression(pattern: ordinalPattern),
+        guard let regex = try? RegexCache.shared.regex(ordinalPattern),
               let match = regex.firstMatch(in: ordinalStr, range: NSRange(ordinalStr.startIndex..., in: ordinalStr)),
               let numRange = Range(match.range(at: 1), in: ordinalStr),
               let count = Int(ordinalStr[numRange]),
@@ -353,7 +353,7 @@ public enum WeekdayOrdinal: Sendable, Equatable {
         default:
             // Try parsing numeric ordinals like "2nd", "3rd"
             let ordinalPattern = #"^(\d+)(st|nd|rd|th)$"#
-            guard let regex = try? NSRegularExpression(pattern: ordinalPattern),
+            guard let regex = try? RegexCache.shared.regex(ordinalPattern),
                   let match = regex.firstMatch(in: normalized, range: NSRange(normalized.startIndex..., in: normalized)),
                   let numRange = Range(match.range(at: 1), in: normalized),
                   let num = Int(normalized[numRange]) else {
