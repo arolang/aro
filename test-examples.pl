@@ -1203,7 +1203,10 @@ sub run_http_example_internal {
     say "  Server ready on port $port" if $options{verbose};
 
     # Test endpoints
-    my $http = HTTP::Tiny->new(timeout => 5);
+    # Tests with server output (observers) need longer timeout because
+    # publishAndTrack awaits all handler completions before HTTP response
+    my $http_timeout = $hints->{'include-server-output'} ? 30 : 5;
+    my $http = HTTP::Tiny->new(timeout => $http_timeout);
     my @output;
     my %captured_ids;  # Store IDs from responses for use in subsequent requests
     my $latest_created_id;  # Track the most recently created resource ID
@@ -1298,23 +1301,30 @@ sub run_http_example_internal {
                 my $payload = generate_test_payload($operation_id, $operation);
 
                 my $response;
-                if (uc($method) eq 'GET') {
-                    $response = $http->get($test_url);
-                } elsif (uc($method) eq 'POST') {
-                    $response = $http->post($test_url, {
-                        headers => { 'Content-Type' => 'application/json' },
-                        content => $payload,
-                    });
-                } elsif (uc($method) eq 'PUT') {
-                    $response = $http->put($test_url, {
-                        headers => { 'Content-Type' => 'application/json' },
-                        content => $payload,
-                    });
-                } elsif (uc($method) eq 'DELETE') {
-                    $response = $http->delete($test_url);
-                } else {
-                    # Unsupported method, skip
-                    next;
+                my $max_retries = 2;  # retry once on transient 599 (client timeout)
+                for my $attempt (1 .. $max_retries) {
+                    if (uc($method) eq 'GET') {
+                        $response = $http->get($test_url);
+                    } elsif (uc($method) eq 'POST') {
+                        $response = $http->post($test_url, {
+                            headers => { 'Content-Type' => 'application/json' },
+                            content => $payload,
+                        });
+                    } elsif (uc($method) eq 'PUT') {
+                        $response = $http->put($test_url, {
+                            headers => { 'Content-Type' => 'application/json' },
+                            content => $payload,
+                        });
+                    } elsif (uc($method) eq 'DELETE') {
+                        $response = $http->delete($test_url);
+                    } else {
+                        # Unsupported method, skip
+                        last;
+                    }
+                    # Retry on 599 (client-side timeout/connection failure)
+                    last unless $response && $response->{status} == 599 && $attempt < $max_retries;
+                    say "  Retrying $method $path (attempt $attempt timed out)" if $options{verbose};
+                    select(undef, undef, undef, 2.0);  # wait before retry
                 }
 
                 if ($response && $response->{success}) {
@@ -1350,9 +1360,14 @@ sub run_http_example_internal {
 
     # Optionally collect server console output (for observer/event tests)
     if ($hints->{'include-server-output'}) {
-        # Wait briefly for async handlers (observers, event handlers) to complete
-        select(undef, undef, undef, 0.5);
-        eval { $handle->pump_nb(); };  # Flush any remaining stdout
+        # Wait for async handlers (observers, event handlers) to complete,
+        # then pump repeatedly to ensure all buffered output is captured.
+        # A single pump_nb() may miss output still being flushed by the server.
+        my $pump_deadline = time() + 3.0;
+        while (time() < $pump_deadline && $handle->pumpable()) {
+            select(undef, undef, undef, 0.3);
+            eval { $handle->pump_nb(); };
+        }
 
         # Parse accumulated server stdout — keep only observer/handler output lines,
         # strip startup/HTTP infrastructure lines, strip [FeatureName] prefix,
