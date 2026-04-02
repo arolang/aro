@@ -233,14 +233,41 @@ public struct FormatDeserializer: Sendable {
             // Parse array item
             let itemContent = String(trimmedLine.dropFirst(2))
             if itemContent.contains(": ") {
-                // Inline object in array
+                // Object in array: first key-value is on the "- " line,
+                // continuation keys are indented on subsequent lines.
+                // Build a synthetic line array where the first key is at
+                // the continuation indent so parseYAMLObject sees them all.
+                let dashIndent = currentIndent
+                let continuationIndent = dashIndent + 2
+                let prefix = String(repeating: " ", count: continuationIndent)
+                var objectLines = [prefix + itemContent]
+
+                // Collect continuation lines that belong to this object
+                var peek = index + 1
+                while peek < lines.count {
+                    let pLine = lines[peek]
+                    let pTrimmed = pLine.trimmingCharacters(in: .whitespaces)
+                    if pTrimmed.isEmpty || pTrimmed.hasPrefix("#") {
+                        objectLines.append(pLine)
+                        peek += 1
+                        continue
+                    }
+                    let pIndent = pLine.prefix(while: { $0 == " " }).count
+                    if pIndent >= continuationIndent && !pTrimmed.hasPrefix("- ") {
+                        objectLines.append(pLine)
+                        peek += 1
+                    } else {
+                        break
+                    }
+                }
+
                 let (obj, _) = parseYAMLObject(
-                    [itemContent] + Array(lines.dropFirst(index + 1)),
+                    objectLines,
                     startIndex: 0,
-                    indent: 0
+                    indent: continuationIndent
                 )
                 result.append(obj)
-                index += 1
+                index = peek
             } else if itemContent.isEmpty {
                 // Multi-line value after dash
                 index += 1

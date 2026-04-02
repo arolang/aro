@@ -97,7 +97,25 @@ struct BuildCommand: AsyncParsableCommand {
             for file in appConfig.sourceFiles {
                 print("    - \(file.lastPathComponent)")
             }
+            if !appConfig.storeFiles.isEmpty {
+                print("  Store files: \(appConfig.storeFiles.count)")
+                for store in appConfig.storeFiles {
+                    let mode = store.isWritable ? "writable" : "read-only"
+                    print("    - \(store.filePath.lastPathComponent) -> \(store.repositoryName) (\(mode))")
+                }
+            }
             print()
+        }
+
+        // Reject writable .store files in compiled binaries
+        let writableStores = appConfig.storeFiles.filter { $0.isWritable }
+        if !writableStores.isEmpty {
+            print("Error: Writable store files cannot be used in compiled binaries.")
+            for store in writableStores {
+                print("  - \(store.filePath.lastPathComponent) has o+w permission set")
+            }
+            print("Hint: Remove world-write permission (chmod o-w <file>.store) to embed as read-only data.")
+            throw ExitCode.failure
         }
 
         // Compile all source files to AST
