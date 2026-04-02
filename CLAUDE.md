@@ -484,6 +484,7 @@ Examples/               # 65 examples organized by category (run `ls Examples/` 
 │
 │   # Data Processing
 ├── DataPipeline/       # Filter, transform, aggregate
+├── GroupDemo/          # Group action: partition collections by field
 ├── SetOperations/      # Union, intersect, difference
 ├── CollectionMerge/    # Merging collections and objects
 ├── RepositoryObserver/ # Repository change observers
@@ -578,7 +579,7 @@ The `Proposals/` directory contains language specifications:
 | **0014 Domain Modeling** | DDD patterns, entities, aggregates |
 | **0015 Testing Framework** | Colocated tests, Given/When/Then |
 | **0016 Interoperability** | External services, Call action, plugins |
-| **0018 Data Pipelines** | Filter, transform, aggregate collections |
+| **0018 Data Pipelines** | Filter, transform, aggregate, group collections |
 | **0019 Standard Library** | Primitive types, utilities |
 | **0022 State Guards** | Event handler filtering with field:value syntax |
 | **0030 IDE Integration** | Syntax highlighting, snippets |

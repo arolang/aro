@@ -39,6 +39,7 @@ Match
 Split
 Map
 Reduce
+Group
 Set
 Merge
 Delete

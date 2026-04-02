@@ -690,6 +690,15 @@ public func aro_action_map(
     return executeAction(verb: "map", contextPtr: contextPtr, resultPtr: resultPtr, objectPtr: objectPtr)
 }
 
+@_cdecl("aro_action_group")
+public func aro_action_group(
+    _ contextPtr: UnsafeMutableRawPointer?,
+    _ resultPtr: UnsafeRawPointer?,
+    _ objectPtr: UnsafeRawPointer?
+) -> UnsafeMutableRawPointer? {
+    return executeAction(verb: "group", contextPtr: contextPtr, resultPtr: resultPtr, objectPtr: objectPtr)
+}
+
 // MARK: - Sort Actions
 
 @_cdecl("aro_action_sort")

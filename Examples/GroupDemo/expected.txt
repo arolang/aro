@@ -1,0 +1,5 @@
+=== Group Action Demo ===
+--- Group by status ---
+--- Group by country ---
+--- Group by role ---
+=== Demo Complete ===

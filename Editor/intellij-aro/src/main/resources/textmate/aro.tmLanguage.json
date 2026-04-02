@@ -90,7 +90,7 @@
         },
         {
           "name": "keyword.operator.aro",
-          "match": "<(Compute|Validate|Compare|Create|Transform|Filter|Match|Split|Set|Merge|Copy|Move|Append)>",
+          "match": "<(Compute|Validate|Compare|Create|Transform|Filter|Match|Split|Group|Set|Merge|Copy|Move|Append)>",
           "comment": "OWN actions (Internal → Internal)"
         },
         {

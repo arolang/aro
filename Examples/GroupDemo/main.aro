@@ -1,0 +1,42 @@
+(* Group Action Demo
+   Demonstrates the Group action that partitions a collection
+   into sub-collections based on a field value. *)
+
+(Application-Start: Group Demo) {
+    Log "=== Group Action Demo ===" to the <console>.
+
+    (* Create sample data *)
+    Create the <orders> with [
+        { id: 1, status: "active", amount: 100 },
+        { id: 2, status: "pending", amount: 250 },
+        { id: 3, status: "active", amount: 500 },
+        { id: 4, status: "cancelled", amount: 75 },
+        { id: 5, status: "active", amount: 300 },
+        { id: 6, status: "pending", amount: 150 }
+    ].
+
+    (* Group orders by status *)
+    Log "--- Group by status ---" to the <console>.
+    Group the <status-groups> from the <orders> by "status".
+    Log <status-groups> to the <console>.
+
+    (* Group by a different field *)
+    Create the <users> with [
+        { name: "Alice", country: "DE", role: "admin" },
+        { name: "Bob", country: "US", role: "user" },
+        { name: "Charlie", country: "DE", role: "user" },
+        { name: "Diana", country: "US", role: "admin" },
+        { name: "Eve", country: "FR", role: "user" }
+    ].
+
+    Log "--- Group by country ---" to the <console>.
+    Group the <country-groups> from the <users> by "country".
+    Log <country-groups> to the <console>.
+
+    Log "--- Group by role ---" to the <console>.
+    Group the <role-groups> from the <users> by "role".
+    Log <role-groups> to the <console>.
+
+    Log "=== Demo Complete ===" to the <console>.
+    Return an <OK: status> for the <demo>.
+}

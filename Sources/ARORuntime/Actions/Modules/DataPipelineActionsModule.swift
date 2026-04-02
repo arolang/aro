@@ -10,6 +10,7 @@ public enum DataPipelineActionsModule: ActionModule {
             MapAction.self,
             ReduceAction.self,
             FilterAction.self,
+            GroupAction.self,
         ]
     }
 }
