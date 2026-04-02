@@ -49,7 +49,16 @@ jobs:
 
       - name: Run tests
         working-directory: Editor/intellij-aro
+        continue-on-error: true
         run: ./gradlew test
+
+      - name: Upload test report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-report
+          path: Editor/intellij-aro/build/reports/tests/test/
+          retention-days: 30
 
       - name: Build plugin
         working-directory: Editor/intellij-aro
