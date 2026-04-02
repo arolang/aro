@@ -106,7 +106,10 @@ const docsSubPages = [
     'working-with-dates.html',
     'set-operations.html',
     'packages.html',
-    'writing-extensions.html'
+    'writing-extensions.html',
+    'metrics.html',
+    'streaming.html',
+    'repl.html'
 ];
 docsSubPages.forEach(file => {
     processHtmlFile(`src/docs/${file}`, `dist/docs/${file}`, '../');
