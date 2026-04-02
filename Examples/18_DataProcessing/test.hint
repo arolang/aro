@@ -1,5 +1,0 @@
-# Test hints for 18_DataProcessing
-# Requires network access to download CSV from ourworldindata.org
-type: console
-mode: both
-skip-on-windows: File operations not supported on Windows CI
