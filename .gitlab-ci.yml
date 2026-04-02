@@ -11,6 +11,7 @@ stages:
   - documentation
   - release
   - mastodon
+  - plugins
 
 variables:
   SWIFT_VERSION: '6.2.3'
@@ -566,3 +567,16 @@ post:mastodon:
     - node post-to-mastodon.js
   tags:
     - spencer
+
+# =============================================================================
+# Plugins Stage - IntelliJ Plugin Build & Publish (manual trigger only)
+# =============================================================================
+intellij-plugin:
+  stage: plugins
+  trigger:
+    include: .gitlab/intellij-plugin.gitlab-ci.yml
+    strategy: depend
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "web"
+      when: manual
+      allow_failure: true

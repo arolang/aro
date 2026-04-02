@@ -4,7 +4,7 @@ plugins {
 }
 
 group = "com.arolang"
-version = "1.3.0"
+version = "1.4.0"
 
 repositories {
     mavenCentral()
@@ -40,7 +40,7 @@ intellijPlatform {
         name = "ARO Language Support"
         ideaVersion {
             sinceBuild = "243"
-            untilBuild = "251.*"
+            untilBuild = "252.*"
         }
     }
 
