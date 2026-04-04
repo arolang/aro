@@ -108,6 +108,10 @@
         <!-- Spell checker dictionary for ARO-specific terms -->
         <spellchecker.bundledDictionaryProvider
             implementation="com.arolang.aro.AROSpellCheckerDictionary"/>
+
+        <!-- Run Configuration -->
+        <configurationType implementation="com.arolang.aro.run.ARORunConfigurationType"/>
+        <runConfigurationProducer implementation="com.arolang.aro.run.ARORunConfigurationProducer"/>
     </extensions>
 
     <!-- LSP4IJ Language Server Registration -->
