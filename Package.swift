@@ -181,6 +181,23 @@ let package = Package(
                 ],
                 path: "Sources/AROPackageManager"
             ),
+            // Local LLM integration (aro lm subcommand)
+            .target(
+                name: "AROLM",
+                dependencies: [
+                    "AROParser",
+                    "ARORuntime",
+                    "AROVersion",
+                    .product(name: "ArgumentParser", package: "swift-argument-parser"),
+                    .product(name: "Yams", package: "Yams"),
+                    .product(name: "Crypto", package: "swift-crypto"),
+                    .product(name: "LineNoise", package: "linenoise-swift"),
+                ],
+                path: "Sources/AROLM",
+                resources: [
+                    .copy("Resources/model-manifest.json")
+                ]
+            ),
             // CLI tool
             .executableTarget(
                 name: "AROCLI",
@@ -190,6 +207,7 @@ let package = Package(
                     "ARORuntime",
                     "AROCompiler",
                     "AROPackageManager",
+                    "AROLM",
                     .product(name: "ArgumentParser", package: "swift-argument-parser"),
                     .product(name: "LineNoise", package: "linenoise-swift"),
                 ] + cliLspDependency,
@@ -219,6 +237,12 @@ let package = Package(
                 name: "AROPackageManagerTests",
                 dependencies: ["AROPackageManager"],
                 path: "Tests/AROPackageManagerTests"
+            ),
+            // AROLM tests
+            .testTarget(
+                name: "AROLMTests",
+                dependencies: ["AROLM"],
+                path: "Tests/AROLMTests"
             ),
         ]
 

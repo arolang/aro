@@ -34,6 +34,9 @@ aro compile ./MyApp   # Compile all .aro files in directory
 aro check ./MyApp     # Syntax check all .aro files
 aro build ./MyApp     # Compile to native binary (LLVM IR + object file)
 aro build ./MyApp --verbose --optimize  # Verbose build with optimizations
+aro lm "prompt"       # Ask the local LLM coding assistant (aro lm)
+aro lm                # Start the interactive aro lm REPL
+aro lm /index         # (Re)build the project retrieval index
 ```
 
 ## Architecture

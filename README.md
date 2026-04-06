@@ -128,6 +128,7 @@ ARO runs on macOS, Linux, and Windows. Most features work across all platforms.
 | Interpreter (`aro run`) | ✅ | ✅ | ✅ |
 | Syntax checking (`aro check`) | ✅ | ✅ | ✅ |
 | Native compilation (`aro build`) | ✅ | ✅ | ❌⁴ |
+| Local LLM assistant (`aro lm`) | ✅ | ✅ | ✅⁶ |
 | **Networking** |
 | HTTP Server | ✅ | ✅ | ✅¹ |
 | HTTP Client | ✅ | ✅ | ✅ |
@@ -149,6 +150,7 @@ ARO runs on macOS, Linux, and Windows. Most features work across all platforms.
 ³ LanguageServerProtocol library doesn't support Windows yet
 ⁴ LLVM not available in Windows CI environment
 ⁵ `URL.lines` not available on Windows; use `Read` + `Split` instead
+⁶ Requires `llama-server`, `mlx_lm.server`, or `$ARO_LM_ENDPOINT` to be reachable
 
 ## Quick Start
 
