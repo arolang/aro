@@ -373,13 +373,21 @@ documentation:
     - cd Book/TheEssentialPrimer
     - chmod +x build-pdf.sh
     - ./build-pdf.sh
+    - cd ../..
+    # Build ARO by Haluzination
+    - cd Book/AROByHaluzination
+    - chmod +x build-pdf.sh
+    - ./build-pdf.sh
   artifacts:
     name: aro-documentation
     paths:
       - Book/TheLanguageGuide/output/ARO-Language-Guide.pdf
+      - Book/TheLanguageGuide/output/ARO-Language-Guide.html
       - Book/TheConstructionStudies/output/ARO-Construction-Studies.pdf
       - Book/AROByExample/output/ARO-By-Example.pdf
       - Book/TheEssentialPrimer/output/ARO-Essential-Primer.pdf
+      - Book/AROByHaluzination/output/ARO-by-Haluzination.pdf
+      - Book/AROByHaluzination/output/ARO-by-Haluzination.html
     expire_in: 30 days
   tags:
     - spencer
@@ -417,6 +425,7 @@ release:
     - ls -la Book/TheConstructionStudies/output/ARO-Construction-Studies.pdf || echo "Construction Studies PDF not found"
     - ls -la Book/AROByExample/output/ARO-By-Example.pdf || echo "ARO By Example PDF not found"
     - ls -la Book/TheEssentialPrimer/output/ARO-Essential-Primer.pdf || echo "Essential Primer PDF not found"
+    - ls -la Book/AROByHaluzination/output/ARO-by-Haluzination.pdf || echo "ARO by Haluzination PDF not found"
 
     # Determine if prerelease
     - |
@@ -432,6 +441,7 @@ release:
       - Book/TheConstructionStudies/output/ARO-Construction-Studies.pdf
       - Book/AROByExample/output/ARO-By-Example.pdf
       - Book/TheEssentialPrimer/output/ARO-Essential-Primer.pdf
+      - Book/AROByHaluzination/output/ARO-by-Haluzination.pdf
     expire_in: 1 year
   release:
     tag_name: $CI_COMMIT_TAG
@@ -453,6 +463,7 @@ release:
       | ARO Construction Studies | [ARO-Construction-Studies.pdf]($CI_PROJECT_URL/-/releases/$CI_COMMIT_TAG/downloads/ARO-Construction-Studies.pdf) |
       | ARO By Example | [ARO-By-Example.pdf]($CI_PROJECT_URL/-/releases/$CI_COMMIT_TAG/downloads/ARO-By-Example.pdf) |
       | ARO Essential Primer | [ARO-Essential-Primer.pdf]($CI_PROJECT_URL/-/releases/$CI_COMMIT_TAG/downloads/ARO-Essential-Primer.pdf) |
+      | ARO by Haluzination | [ARO-by-Haluzination.pdf]($CI_PROJECT_URL/-/releases/$CI_COMMIT_TAG/downloads/ARO-by-Haluzination.pdf) |
 
       ### Installation
 
@@ -482,6 +493,10 @@ release:
         - name: 'ARO-Essential-Primer.pdf'
           url: '$CI_PROJECT_URL/-/jobs/artifacts/$CI_COMMIT_TAG/raw/Book/TheEssentialPrimer/output/ARO-Essential-Primer.pdf?job=release'
           filepath: '/ARO-Essential-Primer.pdf'
+          link_type: 'other'
+        - name: 'ARO-by-Haluzination.pdf'
+          url: '$CI_PROJECT_URL/-/jobs/artifacts/$CI_COMMIT_TAG/raw/Book/AROByHaluzination/output/ARO-by-Haluzination.pdf?job=release'
+          filepath: '/ARO-by-Haluzination.pdf'
           link_type: 'other'
   tags:
     - spencer
