@@ -191,7 +191,7 @@ public struct LMCommand: AsyncParsableCommand {
         try await session.prepare(modelManager: manager)
         defer { Task { await session.shutdown() } }
 
-        let isTTY = isatty(fileno(stdin)) != 0
+        let isTTY = isatty(FileHandle.standardInput.fileDescriptor) != 0
         let ln: LineNoise? = isTTY ? LineNoise() : nil
 
         let info = await session.backendInfo()

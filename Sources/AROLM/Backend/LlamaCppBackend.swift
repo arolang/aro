@@ -4,6 +4,9 @@
 // ============================================================
 
 import Foundation
+#if canImport(FoundationNetworking)
+import FoundationNetworking
+#endif
 
 /// Backend that spawns `llama-server` as a child process and routes chat
 /// requests to its OpenAI-compatible `/v1/chat/completions` endpoint.

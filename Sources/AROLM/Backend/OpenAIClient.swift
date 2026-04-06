@@ -4,6 +4,9 @@
 // ============================================================
 
 import Foundation
+#if canImport(FoundationNetworking)
+import FoundationNetworking
+#endif
 
 /// Thin client around an OpenAI-compatible `/v1/chat/completions` endpoint.
 /// Used by both the llama.cpp and MLX backends once their runners are up.

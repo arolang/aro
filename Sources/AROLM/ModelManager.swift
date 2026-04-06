@@ -4,6 +4,9 @@
 // ============================================================
 
 import Foundation
+#if canImport(FoundationNetworking)
+import FoundationNetworking
+#endif
 
 /// Per-model descriptor loaded from the bundled `model-manifest.json`.
 public struct ModelManifestEntry: Codable, Sendable {

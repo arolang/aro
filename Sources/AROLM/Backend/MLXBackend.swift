@@ -4,6 +4,9 @@
 // ============================================================
 
 import Foundation
+#if canImport(FoundationNetworking)
+import FoundationNetworking
+#endif
 
 /// Backend that spawns `mlx_lm.server` (Python, ships with the `mlx-lm`
 /// package) and routes chat requests to its OpenAI-compatible endpoint.
