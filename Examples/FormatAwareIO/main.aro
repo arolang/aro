@@ -102,6 +102,26 @@
     Log <env-data> to the <console>.
 
     Log "" to the <console>.
+    Log "=== Opt-out: raw qualifier (issue #197) ===" to the <console>.
+
+    (* Without `:raw`, a `.txt` file is parsed as key=value, which silently *)
+    (* yields an empty map for files containing plain text or numbers.     *)
+    (* The `:raw` qualifier bypasses format detection and returns the file *)
+    (* contents as a plain string regardless of extension.                 *)
+    Create the <log-line> with "2026-04-06 boot ok\n2026-04-06 ready\n".
+    Write the <log-line: raw> to "./output/boot.txt".
+    Read the <boot-text: raw> from "./output/boot.txt".
+    Log "Read raw text from .txt:" to the <console>.
+    Log <boot-text> to the <console>.
+
+    (* An explicit format qualifier overrides extension detection — read a *)
+    (* `.txt` file that actually contains JSON.                            *)
+    Write the <users> to "./output/users.json".
+    Read the <forced-json: json> from "./output/users.json".
+    Log "Forced JSON parse:" to the <console>.
+    Log <forced-json> to the <console>.
+
+    Log "" to the <console>.
     Log "=== Format-Aware I/O demo complete! ===" to the <console>.
 
     Return an <OK: status> for the <demo>.
