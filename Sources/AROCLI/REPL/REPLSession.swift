@@ -109,6 +109,18 @@ public final class REPLSession: @unchecked Sendable {
         let fileService = AROFileSystemService(eventBus: eventBus)
         self.context.register(fileService as FileSystemService)
 
+        // Register terminal service so <terminal> reflects the real TTY
+        // (issue #172). Mirrors Application.registerDefaultServices().
+        #if !os(Windows)
+        if isatty(STDOUT_FILENO) != 0 {
+            self.context.register(TerminalService())
+        }
+        #else
+        if ProcessInfo.processInfo.environment["WT_SESSION"] != nil {
+            self.context.register(TerminalService())
+        }
+        #endif
+
         self.executor = FeatureSetExecutor(
             actionRegistry: ActionRegistry.shared,
             eventBus: eventBus,
@@ -319,6 +331,16 @@ public final class REPLSession: @unchecked Sendable {
         // Re-register services after context reset
         let fileService = AROFileSystemService(eventBus: eventBus)
         context.register(fileService as FileSystemService)
+
+        #if !os(Windows)
+        if isatty(STDOUT_FILENO) != 0 {
+            context.register(TerminalService())
+        }
+        #else
+        if ProcessInfo.processInfo.environment["WT_SESSION"] != nil {
+            context.register(TerminalService())
+        }
+        #endif
     }
 
     /// Get all variable names

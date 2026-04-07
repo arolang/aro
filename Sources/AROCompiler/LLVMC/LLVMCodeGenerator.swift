@@ -279,10 +279,12 @@ public final class LLVMCodeGenerator {
         case let requireStatement as RequireStatement:
             generateRequireStatement(requireStatement, index: index, errorBlock: errorBlock)
         case let pipelineStatement as PipelineStatement:
-            // ARO-0067: Each stage's result is referenced by name in the next stage's object,
-            // so sequential execution is all that's needed.
-            for (stageIndex, stage) in pipelineStatement.stages.enumerated() {
-                generateAROStatement(stage, index: index * 100 + stageIndex, errorBlock: errorBlock)
+            // ARO-0067: A pipeline is just a sequence of ARO statements where
+            // each stage's object is the previous stage's result. The parser
+            // has already rewritten the stages to reference the chained names,
+            // so we can emit them sequentially like plain statements.
+            for (stageOffset, stage) in pipelineStatement.stages.enumerated() {
+                generateAROStatement(stage, index: index * 1000 + stageOffset, errorBlock: errorBlock)
             }
         default:
             // Unsupported statement type
@@ -1073,6 +1075,11 @@ public final class LLVMCodeGenerator {
             // While loop variables are in the outer scope — collect them
             for stmt in whileLoop.body {
                 collectBoundVariablesFromStatement(stmt, into: &variables)
+            }
+        } else if let pipeline = statement as? PipelineStatement {
+            // ARO-0067: Each pipeline stage binds its result variable
+            for stage in pipeline.stages {
+                variables.insert(stage.result.base)
             }
         }
         // PublishStatement, RequireStatement, and BreakStatement don't bind new variables
@@ -2200,6 +2207,10 @@ private final class StringConstantCollector {
             _ = ctx.stringConstant(loop.collection.base)
             for stmt in loop.body {
                 collectFromStatement(stmt)
+            }
+        } else if let pipeline = statement as? PipelineStatement {
+            for stage in pipeline.stages {
+                collectFromStatement(stage)
             }
         } else if let publish = statement as? PublishStatement {
             _ = ctx.stringConstant(publish.externalName)
