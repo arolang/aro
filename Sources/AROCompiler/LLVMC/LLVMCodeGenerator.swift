@@ -278,6 +278,12 @@ public final class LLVMCodeGenerator {
             generatePublishStatement(publishStatement, index: index, errorBlock: errorBlock)
         case let requireStatement as RequireStatement:
             generateRequireStatement(requireStatement, index: index, errorBlock: errorBlock)
+        case let pipelineStatement as PipelineStatement:
+            // ARO-0067: Each stage's result is referenced by name in the next stage's object,
+            // so sequential execution is all that's needed.
+            for (stageIndex, stage) in pipelineStatement.stages.enumerated() {
+                generateAROStatement(stage, index: index * 100 + stageIndex, errorBlock: errorBlock)
+            }
         default:
             // Unsupported statement type
             ctx.recordError(.invalidExpression(
