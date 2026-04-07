@@ -1,7 +1,10 @@
 (* Fetch weather data from an external API *)
 (Application-Start: Weather Client) {
     Log "Fetching weather..." to the <console>.
-    Create the <api-url> with "https://api.open-meteo.com/v1/forecast?latitude=52.52&longitude=13.41&current_weather=true".
+    (* This points at a local stub (see stub.py) so the example does not
+       depend on a third-party service. To call the real Open-Meteo API,
+       use: "https://api.open-meteo.com/v1/forecast?latitude=52.52&longitude=13.41&current_weather=true" *)
+    Create the <api-url> with "http://127.0.0.1:18766/v1/forecast?latitude=52.52&longitude=13.41&current_weather=true".
     Request the <response> from the <api-url>.
     Extract the <weather> from the <response: body>.
     Log <weather> to the <console>.

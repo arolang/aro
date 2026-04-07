@@ -1,2 +1,6 @@
 mode: both
 occurrence-check: true
+# Start a local stub for the Open-Meteo API so the test does not depend on
+# a third-party service that occasionally returns 502s. The stub
+# self-terminates after 60s; pkill cleans up any leftover from a previous run.
+pre-script: pkill -f 'Examples/WeatherClient/stub.py' 2>/dev/null; nohup python3 Examples/WeatherClient/stub.py 18766 >/dev/null 2>&1 & disown 2>/dev/null; sleep 0.5

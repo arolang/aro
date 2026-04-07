@@ -2,3 +2,7 @@
 # Uses occurrence-check since API responses contain dynamic data (weather, timestamps)
 # Verifies HTTP client functionality and response structure
 occurrence-check: true
+# Start a local stub for the Open-Meteo API so the test does not depend on
+# a third-party service that occasionally returns 502s. The stub
+# self-terminates after 60s; pkill cleans up any leftover from a previous run.
+pre-script: pkill -f 'Examples/HTTPClient/stub.py' 2>/dev/null; nohup python3 Examples/HTTPClient/stub.py 18765 >/dev/null 2>&1 & disown 2>/dev/null; sleep 0.5
