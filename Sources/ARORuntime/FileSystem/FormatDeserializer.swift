@@ -662,7 +662,12 @@ public struct FormatDeserializer: Sendable {
         hasHeader: Bool = true,
         quoteChar: String = "\""
     ) -> any Sendable {
-        let lines = content.split(separator: "\n", omittingEmptySubsequences: false).map { String($0) }
+        // Normalize CRLF and lone CR line endings to LF so downstream parsing
+        // works regardless of how the source file was saved (Windows/macOS-classic).
+        let normalized = content
+            .replacingOccurrences(of: "\r\n", with: "\n")
+            .replacingOccurrences(of: "\r", with: "\n")
+        let lines = normalized.split(separator: "\n", omittingEmptySubsequences: false).map { String($0) }
         guard !lines.isEmpty else {
             return content
         }
