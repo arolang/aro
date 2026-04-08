@@ -816,8 +816,11 @@ public struct ReceiveAction: ActionImplementation {
 /// - .txt: Parse as key=value -> Map
 /// - .md/.html/.sql/.obj/unknown: Return raw string
 ///
-/// Use `as String` specifier to bypass parsing and get raw content:
-/// `<Read> the <raw: as String> from "./data.json".`
+/// Use `raw` (or legacy `as String`) specifier to bypass parsing and get raw content:
+/// `<Read> the <raw: raw> from "./bigfile.txt".`
+///
+/// Use an explicit format qualifier to override extension-based detection:
+/// `<Read> the <data: json> from "./payload.txt".`
 public struct ReadAction: ActionImplementation {
     public static let role: ActionRole = .request
     public static let verbs: Set<String> = ["read"]
@@ -870,15 +873,15 @@ public struct ReadAction: ActionImplementation {
         // Read file content
         let content = try await fileService.read(path: path)
 
-        // Check for "as String" specifier to bypass format detection (ARO-0040)
-        let asString = result.specifiers.contains { specifier in
-            specifier.lowercased() == "string" || specifier.lowercased() == "as string"
-        }
-
-        if asString {
-            // Return raw content without parsing
+        // Check for `raw` / `as String` qualifier — bypass format detection
+        // entirely and return the file content unchanged (issue #197).
+        if result.specifiers.contains(where: { FileFormat.isRawQualifier($0) }) {
             return content
         }
+
+        // Check for an explicit format qualifier (e.g. `<data: json>`),
+        // which overrides extension-based detection (issue #197).
+        let explicitFormat = result.specifiers.lazy.compactMap { FileFormat.fromQualifier($0) }.first
 
         // Get format options from "with" clause (ARO-0040)
         // Options can include: delimiter, header, quote
@@ -895,8 +898,9 @@ public struct ReadAction: ActionImplementation {
             }
         }
 
-        // Detect format from file extension and deserialize (ARO-0040)
-        let format = FileFormat.detect(from: path)
+        // Detect format from file extension (ARO-0040), unless an explicit
+        // format qualifier was supplied above (issue #197).
+        let format = explicitFormat ?? FileFormat.detect(from: path)
         return FormatDeserializer.deserialize(content, format: format, options: formatOptions)
     }
 
@@ -951,22 +955,21 @@ public struct ReadAction: ActionImplementation {
         // Perform GET request
         let response = try await httpClient.get(url: urlString, headers: headers, timeout: timeout)
 
-        // Check for "as String" specifier to bypass format detection
-        let asString = result.specifiers.contains { specifier in
-            specifier.lowercased() == "string" || specifier.lowercased() == "as string"
-        }
-
-        if asString {
+        // Check for `raw` / `as String` qualifier — return body unparsed (issue #197).
+        if result.specifiers.contains(where: { FileFormat.isRawQualifier($0) }) {
             return response.bodyString ?? ""
         }
+
+        // Allow an explicit format qualifier to override Content-Type detection.
+        let explicitFormat = result.specifiers.lazy.compactMap { FileFormat.fromQualifier($0) }.first
 
         // Get Content-Type header for format detection
         let contentType = response.headers["Content-Type"]
             ?? response.headers["content-type"]
             ?? "text/plain"
 
-        // Detect format from Content-Type (ARO-0052)
-        let format = FormatDeserializer.formatFromContentType(contentType)
+        // Detect format from Content-Type (ARO-0052), unless overridden.
+        let format = explicitFormat ?? FormatDeserializer.formatFromContentType(contentType)
 
         // Deserialize response body
         let content = response.bodyString ?? ""

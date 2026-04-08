@@ -1203,7 +1203,10 @@ sub run_http_example_internal {
     say "  Server ready on port $port" if $options{verbose};
 
     # Test endpoints
-    my $http = HTTP::Tiny->new(timeout => 5);
+    # Disable keep-alive to avoid stale-connection issues between sequential
+    # requests (HTTP::Tiny reuses sockets by default; if the server drops an
+    # idle connection, the next request surfaces as "599 Internal Exception").
+    my $http = HTTP::Tiny->new(timeout => 5, keep_alive => 0);
     my @output;
     my %captured_ids;  # Store IDs from responses for use in subsequent requests
     my $latest_created_id;  # Track the most recently created resource ID
@@ -1297,25 +1300,32 @@ sub run_http_example_internal {
                 # Generate appropriate request payload based on operation
                 my $payload = generate_test_payload($operation_id, $operation);
 
+                # Retry once on HTTP::Tiny transport errors (status 599) — these are
+                # typically transient connection issues, not real server errors.
                 my $response;
-                if (uc($method) eq 'GET') {
-                    $response = $http->get($test_url);
-                } elsif (uc($method) eq 'POST') {
-                    $response = $http->post($test_url, {
-                        headers => { 'Content-Type' => 'application/json' },
-                        content => $payload,
-                    });
-                } elsif (uc($method) eq 'PUT') {
-                    $response = $http->put($test_url, {
-                        headers => { 'Content-Type' => 'application/json' },
-                        content => $payload,
-                    });
-                } elsif (uc($method) eq 'DELETE') {
-                    $response = $http->delete($test_url);
-                } else {
-                    # Unsupported method, skip
-                    next;
+                for my $attempt (1..2) {
+                    if (uc($method) eq 'GET') {
+                        $response = $http->get($test_url);
+                    } elsif (uc($method) eq 'POST') {
+                        $response = $http->post($test_url, {
+                            headers => { 'Content-Type' => 'application/json' },
+                            content => $payload,
+                        });
+                    } elsif (uc($method) eq 'PUT') {
+                        $response = $http->put($test_url, {
+                            headers => { 'Content-Type' => 'application/json' },
+                            content => $payload,
+                        });
+                    } elsif (uc($method) eq 'DELETE') {
+                        $response = $http->delete($test_url);
+                    } else {
+                        # Unsupported method, skip
+                        last;
+                    }
+                    last if !$response || $response->{status} != 599;
+                    select(undef, undef, undef, 0.1);  # brief pause before retry
                 }
+                next unless $response;
 
                 if ($response && $response->{success}) {
                     my $content = $response->{content} // '';
@@ -1336,6 +1346,12 @@ sub run_http_example_internal {
                     }
                 } elsif ($response) {
                     push @output, sprintf("%s %s => ERROR: %s %s", uc($method), $path, $response->{status}, $response->{reason});
+                    # Log full error content to STDERR for debugging (not included in test output)
+                    if ($options{verbose} && $response->{content}) {
+                        my $err_content = $response->{content};
+                        $err_content =~ s/\s+/ /g;
+                        say STDERR "  [DEBUG] $method $path error content: ", substr($err_content, 0, 300);
+                    }
                 } else {
                     push @output, sprintf("%s %s => ERROR: No response", uc($method), $path);
                 }
@@ -1350,8 +1366,11 @@ sub run_http_example_internal {
 
     # Optionally collect server console output (for observer/event tests)
     if ($hints->{'include-server-output'}) {
-        # Wait briefly for async handlers (observers, event handlers) to complete
-        select(undef, undef, undef, 0.5);
+        # Wait for async handlers (observers, event handlers) to complete.
+        # Observers run on background event-loop tasks and their stdout can lag
+        # behind the HTTP response, especially under CPU load or when multiple
+        # observers are subscribed to the same repository.
+        select(undef, undef, undef, 1.5);
         eval { $handle->pump_nb(); };  # Flush any remaining stdout
 
         # Parse accumulated server stdout — keep only observer/handler output lines,

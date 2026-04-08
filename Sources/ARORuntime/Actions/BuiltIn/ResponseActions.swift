@@ -752,8 +752,11 @@ public struct WriteAction: ActionImplementation {
             path = object.base
         }
 
-        // Detect format from file extension (ARO-0040)
-        let format = FileFormat.detect(from: path)
+        // Resolve format: explicit qualifier wins over extension detection,
+        // and `raw` forces a string pass-through (issue #197).
+        let isRaw = result.specifiers.contains(where: { FileFormat.isRawQualifier($0) })
+        let explicitFormat = result.specifiers.lazy.compactMap { FileFormat.fromQualifier($0) }.first
+        let format = explicitFormat ?? FileFormat.detect(from: path)
 
         // Get format options from "with" clause (ARO-0040)
         // Options can include: delimiter, header, quote, encoding
@@ -778,8 +781,12 @@ public struct WriteAction: ActionImplementation {
         // only fall back to string if no structured data available
         let content: String
         if let value = context.resolveAny(result.base) {
-            // Check if it's a simple string (for binary format passthrough)
-            if format == .binary, let strValue = value as? String {
+            if isRaw {
+                // `raw` qualifier: write the value's string form unchanged,
+                // bypassing any serialiser (issue #197).
+                content = (value as? String) ?? String(describing: value)
+            } else if format == .binary, let strValue = value as? String {
+                // Binary format pass-through for plain strings
                 content = strValue
             } else {
                 // Serialize structured data to the detected format

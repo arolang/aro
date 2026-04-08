@@ -1118,6 +1118,11 @@ public final class LLVMCodeGenerator {
             for stmt in whileLoop.body {
                 collectBoundVariablesFromStatement(stmt, into: &variables)
             }
+        } else if let pipeline = statement as? PipelineStatement {
+            // ARO-0067: Each pipeline stage binds its result variable
+            for stage in pipeline.stages {
+                variables.insert(stage.result.base)
+            }
         }
         // PublishStatement, RequireStatement, and BreakStatement don't bind new variables
     }
@@ -2244,6 +2249,10 @@ private final class StringConstantCollector {
             _ = ctx.stringConstant(loop.collection.base)
             for stmt in loop.body {
                 collectFromStatement(stmt)
+            }
+        } else if let pipeline = statement as? PipelineStatement {
+            for stage in pipeline.stages {
+                collectFromStatement(stage)
             }
         } else if let publish = statement as? PublishStatement {
             _ = ctx.stringConstant(publish.externalName)
