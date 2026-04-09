@@ -8,7 +8,8 @@ Behaviour:
 - Listens on 127.0.0.1:<port> (default 18766, override with $1).
 - Responds to any GET with a canned forecast JSON payload that mirrors the
   fields the example expects (current_weather, latitude, longitude, ...).
-- Self-terminates after 60s so a leaked process cannot survive a CI job.
+- Self-terminates after STUB_TIMEOUT seconds (default 1800) so a leaked
+  process cannot survive a CI job.
 """
 import http.server
 import json
@@ -44,8 +45,11 @@ class Handler(http.server.BaseHTTPRequestHandler):
 
 
 def main():
+    # Set SO_REUSEADDR so a quick restart doesn't hit TIME_WAIT.
+    http.server.HTTPServer.allow_reuse_address = True
     server = http.server.HTTPServer(("127.0.0.1", PORT), Handler)
-    threading.Timer(60.0, server.shutdown).start()
+    timeout = float(os.environ.get("STUB_TIMEOUT", "1800"))
+    threading.Timer(timeout, server.shutdown).start()
     server.serve_forever()
 
 
