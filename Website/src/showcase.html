@@ -11,19 +11,15 @@
             padding: 60px 24px;
         }
 
-        .showcase-grid {
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(480px, 1fr));
-            gap: 32px;
-            margin-top: 40px;
-        }
-
         .showcase-card {
             background: var(--color-bg-alt);
             border: 1px solid rgba(255, 255, 255, 0.08);
             border-radius: var(--radius-lg);
             overflow: hidden;
+            display: flex;
+            align-items: stretch;
             transition: transform 0.3s, box-shadow 0.3s;
+            margin-bottom: 32px;
         }
 
         .showcase-card:hover {
@@ -32,15 +28,18 @@
         }
 
         .showcase-card-image {
-            width: 100%;
-            aspect-ratio: 16 / 10;
-            object-fit: cover;
+            width: 480px;
+            object-fit: contain;
             display: block;
-            border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+            flex-shrink: 0;
+            border-right: 1px solid rgba(255, 255, 255, 0.06);
         }
 
         .showcase-card-body {
-            padding: 28px 32px 32px;
+            padding: 32px 36px;
+            display: flex;
+            flex-direction: column;
+            justify-content: flex-start;
         }
 
         .showcase-card-body h3 {
@@ -77,16 +76,16 @@
             height: 16px;
         }
 
-        .showcase-intro {
-            font-size: 1.15rem;
-            color: var(--color-text-muted);
-            line-height: 1.7;
-            max-width: 720px;
-        }
 
-        @media (max-width: 540px) {
-            .showcase-grid {
-                grid-template-columns: 1fr;
+        @media (max-width: 768px) {
+            .showcase-card {
+                flex-direction: column;
+            }
+
+            .showcase-card-image {
+                width: 100%;
+                border-right: none;
+                border-bottom: 1px solid rgba(255, 255, 255, 0.06);
             }
         }
 
@@ -151,9 +150,7 @@
     </header>
 
     <main class="showcase-content">
-        <div class="showcase-grid">
-
-            <!-- ShowFiles -->
+        <!-- ShowFiles -->
             <div class="showcase-card">
                 <img src="img/showfiles-screen.jpg" alt="ShowFiles terminal file manager screenshot" class="showcase-card-image" loading="lazy">
                 <div class="showcase-card-body">
@@ -165,8 +162,6 @@
                     </a>
                 </div>
             </div>
-
-        </div>
     </main>
 
 {{footer}}
