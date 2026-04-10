@@ -1,0 +1,174 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <title>Showcase - ARO Programming Language</title>
+{{head}}
+    <style>
+        /* Showcase-specific styles (extends subpage.css) */
+        .showcase-content {
+            max-width: 1100px;
+            margin: 0 auto;
+            padding: 60px 24px;
+        }
+
+        .showcase-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(480px, 1fr));
+            gap: 32px;
+            margin-top: 40px;
+        }
+
+        .showcase-card {
+            background: var(--color-bg-alt);
+            border: 1px solid rgba(255, 255, 255, 0.08);
+            border-radius: var(--radius-lg);
+            overflow: hidden;
+            transition: transform 0.3s, box-shadow 0.3s;
+        }
+
+        .showcase-card:hover {
+            transform: translateY(-4px);
+            box-shadow: var(--shadow-glow);
+        }
+
+        .showcase-card-image {
+            width: 100%;
+            aspect-ratio: 16 / 10;
+            object-fit: cover;
+            display: block;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+        }
+
+        .showcase-card-body {
+            padding: 28px 32px 32px;
+        }
+
+        .showcase-card-body h3 {
+            font-size: 1.4rem;
+            font-weight: 600;
+            margin-bottom: 12px;
+            color: var(--color-text);
+        }
+
+        .showcase-card-body p {
+            font-size: 1rem;
+            color: var(--color-text-muted);
+            line-height: 1.7;
+            margin-bottom: 20px;
+        }
+
+        .showcase-card-link {
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            color: var(--color-emerald);
+            text-decoration: none;
+            font-weight: 500;
+            font-size: 0.95rem;
+            transition: opacity 0.2s;
+        }
+
+        .showcase-card-link:hover {
+            text-decoration: underline;
+        }
+
+        .showcase-card-link svg {
+            width: 16px;
+            height: 16px;
+        }
+
+        .showcase-intro {
+            font-size: 1.15rem;
+            color: var(--color-text-muted);
+            line-height: 1.7;
+            max-width: 720px;
+        }
+
+        @media (max-width: 540px) {
+            .showcase-grid {
+                grid-template-columns: 1fr;
+            }
+        }
+
+        /* Light mode overrides */
+        @media (prefers-color-scheme: light) {
+            .showcase-card {
+                border: 1px solid rgba(0, 0, 0, 0.1);
+            }
+
+            .showcase-card-image {
+                border-bottom: 1px solid rgba(0, 0, 0, 0.08);
+            }
+        }
+    </style>
+</head>
+<body>
+    <nav class="nav">
+        <div class="nav-content">
+            <a href="/aro/" class="logo">
+                <span class="logo-aro">ARO</span>
+            </a>
+            <div class="nav-links">
+                <a href="fdd.html">The FDD Story</a>
+                <a href="getting-started.html">Get Started</a>
+                <a href="tutorial.html">Tutorial</a>
+                <a href="showcase.html" class="nav-active">Showcase</a>
+                <a href="docs.html">Docs</a>
+                <a href="disclaimer.html">Motivation</a>
+                <a href="download.html">Download</a>
+                <a href="https://github.com/arolang/aro" class="nav-github">
+                    <svg viewBox="0 0 16 16" fill="currentColor"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z"/></svg>
+                    <span class="github-stars">
+                        <svg viewBox="0 0 16 16"><path d="M8 .25a.75.75 0 01.673.418l1.882 3.815 4.21.612a.75.75 0 01.416 1.279l-3.046 2.97.719 4.192a.75.75 0 01-1.088.791L8 12.347l-3.766 1.98a.75.75 0 01-1.088-.79l.72-4.194L.818 6.374a.75.75 0 01.416-1.28l4.21-.611L7.327.668A.75.75 0 018 .25z"/></svg>
+                        <span class="github-stars-count"></span>
+                    </span>
+                </a>
+            </div>
+            <button class="nav-toggle" aria-label="Toggle menu">
+                <span></span>
+                <span></span>
+                <span></span>
+            </button>
+        </div>
+    </nav>
+
+    <div class="mobile-menu">
+        <a href="fdd.html">The FDD Story</a>
+        <a href="getting-started.html">Get Started</a>
+        <a href="tutorial.html">Tutorial</a>
+        <a href="showcase.html">Showcase</a>
+        <a href="docs.html">Docs</a>
+        <a href="disclaimer.html">Motivation</a>
+        <a href="download.html">Download</a>
+        <a href="https://github.com/arolang/aro" class="nav-github">GitHub</a>
+    </div>
+
+    <header class="subpage-hero">
+        <div class="container">
+            <h1>Built with <span class="accent">ARO</span></h1>
+            <p class="lead">Applications and tools built with the ARO programming language.</p>
+        </div>
+    </header>
+
+    <main class="showcase-content">
+        <div class="showcase-grid">
+
+            <!-- ShowFiles -->
+            <div class="showcase-card">
+                <img src="img/showfiles-screen.jpg" alt="ShowFiles terminal file manager screenshot" class="showcase-card-image" loading="lazy">
+                <div class="showcase-card-body">
+                    <h3>ShowFiles</h3>
+                    <p>A Midnight Commander-style terminal file manager with dual-panel layout, keyboard navigation, and streaming file previews. Compiled to a native binary with <code>aro build</code>.</p>
+                    <a href="https://github.com/arolang/ShowFiles" class="showcase-card-link">
+                        <svg viewBox="0 0 16 16" fill="currentColor"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z"/></svg>
+                        View on GitHub
+                    </a>
+                </div>
+            </div>
+
+        </div>
+    </main>
+
+{{footer}}
+</body>
+</html>
