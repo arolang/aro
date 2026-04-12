@@ -87,7 +87,7 @@ public actor ModelManager {
     public func ensureInstalled(
         _ modelId: String,
         confirm: @Sendable (Double) async -> Bool,
-        progress: @Sendable (String, Int64, Int64?) async -> Void
+        progress: @Sendable (DownloadProgress) async -> Void
     ) async throws -> URL {
         let dir = modelDirectory(for: modelId)
 
@@ -133,16 +133,17 @@ public actor ModelManager {
     private func downloadModel(
         modelId: String,
         to dir: URL,
-        progress: @Sendable (String, Int64, Int64?) async -> Void
+        progress: @Sendable (DownloadProgress) async -> Void
     ) async throws {
         try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
 
-        // Fetch file list from HuggingFace API
-        let listURL = URL(string: "https://huggingface.co/api/models/\(modelId)")!
+        // Fetch file list with sizes from HuggingFace API
+        let listURL = URL(string: "https://huggingface.co/api/models/\(modelId)?blobs=true")!
         var listRequest = URLRequest(url: listURL)
         listRequest.timeoutInterval = 30
 
-        if let token = ProcessInfo.processInfo.environment["HF_TOKEN"] {
+        let token = ProcessInfo.processInfo.environment["HF_TOKEN"]
+        if let token {
             listRequest.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
         }
 
@@ -157,23 +158,130 @@ public actor ModelManager {
             try Data(sha.utf8).write(to: dir.appendingPathComponent(".commit_sha"))
         }
 
-        let files = siblings.compactMap { $0["rfilename"] as? String }
-        for file in files {
-            let fileURL = URL(string: "https://huggingface.co/\(modelId)/resolve/main/\(file)")!
+        // Build file list with known sizes
+        struct RemoteFile {
+            let name: String
+            let size: Int64  // 0 if unknown
+        }
+        let files: [RemoteFile] = siblings.compactMap { entry in
+            guard let name = entry["rfilename"] as? String else { return nil }
+            let size = (entry["size"] as? Int64) ?? (entry["size"] as? Int).map(Int64.init) ?? 0
+            return RemoteFile(name: name, size: size)
+        }
+        let totalBytes: Int64 = files.reduce(0) { $0 + $1.size }
+        var downloadedBytes: Int64 = 0
+
+        await progress(DownloadProgress(
+            phase: .starting,
+            currentFile: "",
+            fileIndex: 0,
+            fileCount: files.count,
+            fileBytes: 0,
+            fileTotalBytes: 0,
+            overallBytes: 0,
+            overallTotalBytes: totalBytes
+        ))
+
+        for (index, file) in files.enumerated() {
+            let fileURL = URL(string: "https://huggingface.co/\(modelId)/resolve/main/\(file.name)")!
             var req = URLRequest(url: fileURL)
-            if let token = ProcessInfo.processInfo.environment["HF_TOKEN"] {
+            if let token {
                 req.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
             }
-            let (data, _) = try await URLSession.shared.data(for: req)
 
-            let dest = dir.appendingPathComponent(file)
+            let dest = dir.appendingPathComponent(file.name)
             try FileManager.default.createDirectory(
                 at: dest.deletingLastPathComponent(),
                 withIntermediateDirectories: true
             )
-            try data.write(to: dest)
-            await progress(file, Int64(data.count), nil)
+
+            // Stream download with per-chunk progress
+            let (bytes, response) = try await URLSession.shared.bytes(for: req)
+            let expectedLength = (response as? HTTPURLResponse)
+                .flatMap { Int64($0.value(forHTTPHeaderField: "Content-Length") ?? "") }
+                ?? file.size
+
+            var fileData = Data()
+            if expectedLength > 0 {
+                fileData.reserveCapacity(Int(expectedLength))
+            }
+            var fileReceived: Int64 = 0
+            let reportInterval: Int64 = max(expectedLength / 200, 65536) // ~0.5% or 64KB
+
+            for try await byte in bytes {
+                fileData.append(byte)
+                fileReceived += 1
+
+                if fileReceived % reportInterval == 0 || fileReceived == expectedLength {
+                    await progress(DownloadProgress(
+                        phase: .downloading,
+                        currentFile: file.name,
+                        fileIndex: index,
+                        fileCount: files.count,
+                        fileBytes: fileReceived,
+                        fileTotalBytes: expectedLength,
+                        overallBytes: downloadedBytes + fileReceived,
+                        overallTotalBytes: totalBytes
+                    ))
+                }
+            }
+
+            try fileData.write(to: dest)
+            downloadedBytes += fileReceived
+
+            await progress(DownloadProgress(
+                phase: .fileComplete,
+                currentFile: file.name,
+                fileIndex: index,
+                fileCount: files.count,
+                fileBytes: fileReceived,
+                fileTotalBytes: expectedLength,
+                overallBytes: downloadedBytes,
+                overallTotalBytes: totalBytes
+            ))
         }
+
+        await progress(DownloadProgress(
+            phase: .complete,
+            currentFile: "",
+            fileIndex: files.count,
+            fileCount: files.count,
+            fileBytes: 0,
+            fileTotalBytes: 0,
+            overallBytes: downloadedBytes,
+            overallTotalBytes: totalBytes
+        ))
+    }
+}
+
+/// Progress state reported during model download.
+public struct DownloadProgress: Sendable {
+    public enum Phase: Sendable {
+        case starting
+        case downloading
+        case fileComplete
+        case complete
+    }
+    public let phase: Phase
+    public let currentFile: String
+    public let fileIndex: Int
+    public let fileCount: Int
+    public let fileBytes: Int64
+    public let fileTotalBytes: Int64
+    public let overallBytes: Int64
+    public let overallTotalBytes: Int64
+
+    public var overallPercent: Int {
+        guard overallTotalBytes > 0 else { return 0 }
+        return Int(Double(overallBytes) / Double(overallTotalBytes) * 100)
+    }
+
+    public var overallGBDownloaded: Double {
+        Double(overallBytes) / 1_000_000_000
+    }
+
+    public var overallGBTotal: Double {
+        Double(overallTotalBytes) / 1_000_000_000
     }
 }
 

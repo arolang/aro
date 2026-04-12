@@ -136,4 +136,59 @@ public enum TerminalUI {
         let stderr = FileHandle.standardError
         stderr.write(Data("\(Style.dim)\(message)\(Style.reset)\n".utf8))
     }
+
+    // MARK: - Download progress
+
+    /// Render a download progress bar on stderr. Overwrites the current line.
+    ///
+    /// Example output:
+    /// ```
+    ///   Downloading ARO-Lang/aro-coder-4bit
+    ///   ━━━━━━━━━━━━━━━━━━━━░░░░░░░░░░  62%  3.1 / 5.0 GB  (7/12) model.safetensors
+    /// ```
+    public static func printDownloadProgress(_ p: DownloadProgress) {
+        let stderr = FileHandle.standardError
+        let clearLine = "\u{001B}[2K\r"
+
+        switch p.phase {
+        case .starting:
+            stderr.write(Data("\n\(Style.dim)  Fetching file list...\(Style.reset)\n".utf8))
+
+        case .downloading:
+            let barWidth = 30
+            let filled = p.overallTotalBytes > 0
+                ? Int(Double(p.overallBytes) / Double(p.overallTotalBytes) * Double(barWidth))
+                : 0
+            let empty = barWidth - filled
+
+            let bar = String(repeating: "━", count: filled)
+                + String(repeating: "░", count: empty)
+
+            let pct = String(format: "%3d%%", p.overallPercent)
+            let gb = String(format: "%.1f / %.1f GB", p.overallGBDownloaded, p.overallGBTotal)
+            let fileLabel = "(\(p.fileIndex + 1)/\(p.fileCount))"
+            let fileName = shortenFilename(p.currentFile, maxLen: 25)
+
+            let line = "\(clearLine)  \(Style.cyan)\(bar)\(Style.reset)  \(Style.bold)\(pct)\(Style.reset)  \(Style.dim)\(gb)  \(fileLabel) \(fileName)\(Style.reset)"
+            stderr.write(Data(line.utf8))
+
+        case .fileComplete:
+            // Stay on same line — next downloading update will overwrite
+            break
+
+        case .complete:
+            let gb = String(format: "%.1f", p.overallGBDownloaded)
+            let line = "\(clearLine)  \(Style.green)\(String(repeating: "━", count: 30))\(Style.reset)  \(Style.bold)\(Style.green)100%\(Style.reset)  \(Style.dim)\(gb) GB  \(p.fileCount) files\(Style.reset)\n\n"
+            stderr.write(Data(line.utf8))
+        }
+    }
+
+    private static func shortenFilename(_ name: String, maxLen: Int) -> String {
+        guard name.count > maxLen else { return name }
+        let ext = (name as NSString).pathExtension
+        let base = (name as NSString).deletingPathExtension
+        let available = maxLen - ext.count - 4  // "..." + "."
+        guard available > 0 else { return String(name.suffix(maxLen)) }
+        return String(base.prefix(available)) + "..." + (ext.isEmpty ? "" : ".\(ext)")
+    }
 }

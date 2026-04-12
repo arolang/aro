@@ -440,10 +440,11 @@ public struct AskCommand: AsyncParsableCommand {
             let msg = "Download update? [y/N] "
             FileHandle.standardError.write(Data(msg.utf8))
             if let line = readLine(), line.lowercased().hasPrefix("y") {
+                TerminalUI.printStatus("Downloading \(capturedModel)")
                 _ = try await manager.ensureInstalled(
                     capturedModel,
                     confirm: { _ in true },
-                    progress: downloadProgress
+                    progress: { TerminalUI.printDownloadProgress($0) }
                 )
             }
         case .notInstalled:
@@ -455,20 +456,10 @@ public struct AskCommand: AsyncParsableCommand {
                     guard let line = readLine() else { return false }
                     return line.lowercased().hasPrefix("y")
                 },
-                progress: downloadProgress
+                progress: { TerminalUI.printDownloadProgress($0) }
             )
         default:
             break
-        }
-    }
-
-    private var downloadProgress: @Sendable (String, Int64, Int64?) async -> Void {
-        { file, received, total in
-            if let total = total, total > 0 {
-                let pct = Int(Double(received) / Double(total) * 100)
-                let msg = "\r\(Style.dim)\(file): \(pct)%\(Style.reset)"
-                FileHandle.standardError.write(Data(msg.utf8))
-            }
         }
     }
 }
