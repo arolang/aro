@@ -8,9 +8,10 @@ import Foundation
 /// Chooses an `LMBackend` based on environment and available runners.
 ///
 /// Priority:
-///   1. `ARO_ASK_ENDPOINT` set -> `RemoteBackend`
-///   2. `llama-server` on PATH -> `LlamaCppBackend`
-///   3. `mlx_lm` Python module or standalone binary -> `MLXBackend`
+///   1. `ARO_ASK_ENDPOINT` set        -> `RemoteBackend`
+///   2. macOS Apple Silicon            -> `NativeMLXBackend` (in-process, no deps)
+///   3. `llama-server` on PATH         -> `LlamaCppBackend`
+///   4. `mlx_lm` Python module         -> `MLXBackend` (subprocess)
 public enum BackendFactory {
     public static func detect(
         modelIdentifier: String,
@@ -18,7 +19,7 @@ public enum BackendFactory {
     ) throws -> any LMBackend {
         let env = ProcessInfo.processInfo.environment
 
-        // Also support legacy ARO_LM_ENDPOINT for backwards compat
+        // 1. Explicit remote endpoint
         if let endpointString = env["ARO_ASK_ENDPOINT"] ?? env["ARO_LM_ENDPOINT"],
            let endpoint = URL(string: endpointString) {
             return RemoteBackend(
@@ -28,6 +29,15 @@ public enum BackendFactory {
             )
         }
 
+        // 2. Native MLX on Apple Silicon — preferred, no Python needed
+        #if arch(arm64) && canImport(MLXLLM)
+        return NativeMLXBackend(
+            modelIdentifier: modelIdentifier,
+            modelDirectory: modelPath.deletingLastPathComponent()
+        )
+        #else
+
+        // 3. llama-server subprocess
         if ProcessRunner.which("llama-server") != nil {
             return try LlamaCppBackend(
                 modelIdentifier: modelIdentifier,
@@ -35,7 +45,7 @@ public enum BackendFactory {
             )
         }
 
-        // Check for mlx_lm as standalone binary OR python3 module
+        // 4. Python mlx_lm subprocess (fallback)
         if let mlx = MLXBackend.detect() {
             return try MLXBackend(
                 modelIdentifier: modelIdentifier,
@@ -46,5 +56,6 @@ public enum BackendFactory {
         }
 
         throw LMBackendError.noBackendAvailable
+        #endif
     }
 }

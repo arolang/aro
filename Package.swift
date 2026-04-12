@@ -129,6 +129,10 @@ let package = Package(
         .package(url: "https://github.com/apple/swift-crypto.git", from: "4.0.0"),
         // LineNoise for REPL line editing (arrow keys, history)
         .package(url: "https://github.com/andybest/linenoise-swift.git", from: "0.0.3"),
+        // MLX Swift LM — native LLM inference on Apple Silicon (aro ask)
+        .package(url: "https://github.com/ml-explore/mlx-swift-lm.git", branch: "main"),
+        // Swift Transformers — tokenizer support for native LLM inference
+        .package(url: "https://github.com/huggingface/swift-transformers.git", from: "0.1.8"),
     ],
     targets: {
         // AROAsk dependencies (non-Windows)
@@ -257,6 +261,9 @@ let package = Package(
                     .product(name: "Yams", package: "Yams"),
                     .product(name: "Crypto", package: "swift-crypto"),
                     .product(name: "LineNoise", package: "linenoise-swift"),
+                    .product(name: "MLXLLM", package: "mlx-swift-lm"),
+                    .product(name: "MLXLMCommon", package: "mlx-swift-lm"),
+                    .product(name: "Transformers", package: "swift-transformers"),
                 ],
                 path: "Sources/AROAsk",
                 resources: [.copy("Resources/model-manifest.json")]
