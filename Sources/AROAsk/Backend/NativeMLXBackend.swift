@@ -7,6 +7,7 @@
 // no HTTP server. This is the preferred backend when running on macOS.
 
 import Foundation
+import Hub
 import MLXLLM
 import MLXLMCommon
 import Tokenizers
@@ -84,40 +85,43 @@ private struct HFTokenizerLoader: TokenizerLoader, Sendable {
 public actor NativeMLXBackend: LMBackend {
     public nonisolated let name: String = "mlx-native"
     public nonisolated let modelIdentifier: String
-    private let modelDirectory: URL?
 
     private var container: ModelContainer?
 
-    public init(modelIdentifier: String, modelDirectory: URL? = nil) {
+    public init(modelIdentifier: String) {
         self.modelIdentifier = modelIdentifier
-        self.modelDirectory = modelDirectory
     }
 
     public func start() async throws {
         if container != nil { return }
+
+        // Ensure the MLX Metal shader library is available before any MLX call.
+        // SPM doesn't compile .metal files, so we embed the pre-compiled metallib
+        // as a resource and extract it to where MLX expects to find it.
+        try Self.ensureMetalLib()
 
         FileHandle.standardError.write(
             Data("  Loading model \(modelIdentifier)...\n".utf8)
         )
 
         let tokenizerLoader = HFTokenizerLoader()
-        let dir: URL
 
-        if let modelDirectory {
-            dir = modelDirectory
-        } else {
-            throw LMBackendError.invalidResponse(
-                "No model directory provided. Run `aro ask` to download the model first."
-            )
+        // Use HuggingFace Hub API to download/cache the model properly.
+        // This handles large files with resume support, unlike our ModelManager.
+        let hubApi = HubApi()
+        let repo = Hub.Repo(id: modelIdentifier)
+        let dir = try await hubApi.snapshot(
+            from: repo,
+            matching: ["*.safetensors", "*.json", "*.jinja"]
+        ) { progress in
+            let pct = Int(progress.fractionCompleted * 100)
+            if pct % 5 == 0 {
+                FileHandle.standardError.write(
+                    Data("\r\u{001B}[2K  Downloading... \(pct)%".utf8)
+                )
+            }
         }
-
-        guard FileManager.default.fileExists(
-            atPath: dir.appendingPathComponent("config.json").path
-        ) else {
-            throw LMBackendError.invalidResponse(
-                "Model not found at \(dir.path). Run `aro ask` to download it."
-            )
-        }
+        FileHandle.standardError.write(Data("\r\u{001B}[2K".utf8))
 
         container = try await LLMModelFactory.shared.loadContainer(
             from: dir,
@@ -341,6 +345,85 @@ public actor NativeMLXBackend: LMBackend {
             var dict: [String: any Sendable] = [:]
             for (k, v) in obj { dict[k] = convertToDict(v) }
             return dict as any Sendable
+        }
+    }
+
+    // MARK: - Metal shader library setup
+
+    /// Extract the embedded Metal shader library to where MLX expects it.
+    ///
+    /// MLX looks for `mlx.metallib` colocated with the binary, then
+    /// `mlx-swift_Cmlx.bundle/default.metallib` in loaded bundles.
+    /// We extract the embedded metallib to both locations (binary dir +
+    /// cache fallback) so it works in all deployment scenarios.
+    private static func ensureMetalLib() throws {
+        // Check if metallib is already in place next to the binary
+        let binaryDir = URL(fileURLWithPath: CommandLine.arguments[0])
+            .deletingLastPathComponent()
+        let colocatedPath = binaryDir.appendingPathComponent("mlx.metallib")
+        if FileManager.default.fileExists(atPath: colocatedPath.path) {
+            return
+        }
+
+        // Check the SPM bundle location (development builds)
+        let spmBundlePath = binaryDir
+            .appendingPathComponent("mlx-swift_Cmlx.bundle")
+            .appendingPathComponent("default.metallib")
+        if FileManager.default.fileExists(atPath: spmBundlePath.path) {
+            return
+        }
+
+        // Find the embedded metallib resource
+        guard let resourceURL = Bundle.module.url(
+            forResource: "default", withExtension: "metallib"
+        ) else {
+            throw LMBackendError.invalidResponse(
+                "Embedded default.metallib not found in AROAsk bundle. "
+                + "Rebuild with: tools/build-metallib.sh"
+            )
+        }
+
+        // Try to write next to the binary (fastest lookup for MLX)
+        let fm = FileManager.default
+        do {
+            try fm.copyItem(at: resourceURL, to: colocatedPath)
+            return
+        } catch {
+            // Binary directory may be read-only (e.g. /usr/local/bin/)
+        }
+
+        // Fallback: create the SPM bundle in the binary directory
+        let bundleDir = binaryDir.appendingPathComponent("mlx-swift_Cmlx.bundle")
+        do {
+            try fm.createDirectory(at: bundleDir, withIntermediateDirectories: true)
+            try fm.copyItem(at: resourceURL, to: spmBundlePath)
+            return
+        } catch {
+            // Still can't write next to binary
+        }
+
+        // Last resort: write to cache and symlink
+        let cacheDir = fm.homeDirectoryForCurrentUser
+            .appendingPathComponent(".cache")
+            .appendingPathComponent("aro")
+            .appendingPathComponent("mlx")
+        try fm.createDirectory(at: cacheDir, withIntermediateDirectories: true)
+        let cachedLib = cacheDir.appendingPathComponent("mlx.metallib")
+        if !fm.fileExists(atPath: cachedLib.path) {
+            try fm.copyItem(at: resourceURL, to: cachedLib)
+        }
+
+        // Try to symlink from the binary directory
+        do {
+            try fm.createSymbolicLink(at: colocatedPath, withDestinationURL: cachedLib)
+        } catch {
+            // If even symlinking fails, MLX will fail at init time with
+            // a clear error about the missing metallib.
+            FileHandle.standardError.write(Data(
+                "warning: could not place mlx.metallib next to the aro binary. "
+                .appending("Copy \(cachedLib.path) to \(binaryDir.path) manually.\n")
+                .utf8
+            ))
         }
     }
 }

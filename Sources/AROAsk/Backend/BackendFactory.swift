@@ -30,11 +30,9 @@ public enum BackendFactory {
         }
 
         // 2. Native MLX on Apple Silicon — preferred, no Python needed
+        //    Uses HuggingFace Hub API for download/caching (not ModelManager)
         #if arch(arm64) && canImport(MLXLLM)
-        return NativeMLXBackend(
-            modelIdentifier: modelIdentifier,
-            modelDirectory: modelPath.deletingLastPathComponent()
-        )
+        return NativeMLXBackend(modelIdentifier: modelIdentifier)
         #else
 
         // 3. llama-server subprocess

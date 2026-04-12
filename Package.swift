@@ -266,7 +266,10 @@ let package = Package(
                     .product(name: "Transformers", package: "swift-transformers"),
                 ],
                 path: "Sources/AROAsk",
-                resources: [.copy("Resources/model-manifest.json")]
+                resources: [
+                    .copy("Resources/model-manifest.json"),
+                    .copy("Resources/default.metallib"),
+                ]
             ),
         ])
         #endif
