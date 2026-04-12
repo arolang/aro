@@ -10,7 +10,7 @@ import Foundation
 /// Priority:
 ///   1. `ARO_ASK_ENDPOINT` set -> `RemoteBackend`
 ///   2. `llama-server` on PATH -> `LlamaCppBackend`
-///   3. `mlx_lm.server` on PATH -> `MLXBackend`
+///   3. `mlx_lm` Python module or standalone binary -> `MLXBackend`
 public enum BackendFactory {
     public static func detect(
         modelIdentifier: String,
@@ -35,10 +35,13 @@ public enum BackendFactory {
             )
         }
 
-        if ProcessRunner.which("mlx_lm.server") != nil {
+        // Check for mlx_lm as standalone binary OR python3 module
+        if let mlx = MLXBackend.detect() {
             return try MLXBackend(
                 modelIdentifier: modelIdentifier,
-                modelPath: modelPath
+                modelPath: modelPath,
+                executable: mlx.executable,
+                prefixArgs: mlx.prefixArgs
             )
         }
 

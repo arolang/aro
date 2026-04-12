@@ -109,7 +109,13 @@ public enum LMBackendError: Error, CustomStringConvertible {
     public var description: String {
         switch self {
         case .noBackendAvailable:
-            return "No LM backend is available. Install llama.cpp (llama-server) or mlx_lm, or set ARO_ASK_ENDPOINT."
+            return """
+            No LM backend available. Install one of:
+
+              pip3 install mlx-lm          # Apple Silicon (recommended)
+              brew install llama.cpp       # llama-server (GGUF models)
+              ARO_ASK_ENDPOINT=http://...  # remote OpenAI-compatible server
+            """
         case .runnerNotFound(let name):
             return "Runner '\(name)' not found on PATH"
         case .httpError(let code, let body):
