@@ -80,21 +80,46 @@ sentencepiece>=0.1.99
 
 ## 10.4 The Python Plugin Interface
 
-Python plugins export two types of functions:
-
 ### aro_plugin_info()
 
-Returns plugin metadata as a dictionary:
+`aro_plugin_info` is **required**. It returns plugin metadata as a dictionary that mirrors the unified info JSON schema used by all plugin languages:
 
 ```python
 def aro_plugin_info() -> dict:
-    """Return plugin metadata."""
+    """Return plugin metadata. REQUIRED."""
     return {
         "name": "plugin-python-transformer",
         "version": "1.0.0",
-        "actions": ["generate", "summarize", "embed", "classify"]
+        "actions": [
+            {
+                "name": "Generate",
+                "role": "own",
+                "verbs": ["generate"],
+                "prepositions": ["from", "with"],
+                "description": "Generate text continuation using a language model"
+            },
+            {
+                "name": "Summarize",
+                "role": "own",
+                "verbs": ["summarize"],
+                "prepositions": ["from", "with"],
+                "description": "Summarize a document"
+            }
+        ],
+        "qualifiers": [
+            {
+                "name": "truncate",
+                "input_types": ["String"],
+                "accepts_parameters": True,
+                "description": "Truncate a string to a maximum length"
+            }
+        ]
     }
 ```
+
+The `actions` list now uses the same rich format as native plugins: each action declares its name, role, verbs, and prepositions. The flat `"actions": ["generate", "summarize"]` shorthand is still accepted for backward compatibility, but the structured form is preferred.
+
+The `qualifiers` list can declare `"accepts_parameters": true` to indicate that the qualifier accepts a `with { }` clause.
 
 ### aro_action_{name}(input_json: str) -> str
 
@@ -104,14 +129,45 @@ Each action is a function named `aro_action_{action_name}`:
 def aro_action_generate(input_json: str) -> str:
     """Generate text using a language model."""
     params = json.loads(input_json)
-    prompt = params.get("prompt", "")
+
+    # Primary value comes from "data" key
+    prompt = params.get("data", params.get("prompt", ""))
+
+    # Parameters from the ARO `with { }` clause arrive nested under "_with"
+    with_params = params.get("_with", {})
+    max_length = with_params.get("max_length", params.get("max_length", 100))
+
+    # Execution context (requestId, featureSet, businessActivity) is under "_context"
+    context = params.get("_context", {})
 
     # Process...
-
     return json.dumps({"generated_text": result})
 ```
 
-The naming convention is important: `aro_action_` prefix + action name from the `actions` list.
+The naming convention is important: `aro_action_` prefix + action name (lowercased, with hyphens replaced by underscores). Input parameters from the `with { }` clause are **nested under `"_with"`**, not flat-merged with the primary value.
+
+### aro_qualifier_{name}(input_json: str) -> str
+
+Qualifier functions follow a similar naming convention:
+
+```python
+def aro_qualifier_truncate(input_json: str) -> str:
+    """Truncate a string to a maximum length."""
+    params = json.loads(input_json)
+    value = params.get("value", "")
+    with_params = params.get("_with", {})
+    max_length = with_params.get("maxLength", 100)
+    suffix = with_params.get("suffix", "...")
+    if len(value) <= max_length:
+        return json.dumps(value)
+    return json.dumps(value[:max_length] + suffix)
+```
+
+### Persistent Mode
+
+Python plugins run as long-lived subprocesses. The process is spawned once and reused for all calls—this is why model loading in the LLM example only happens on the first call. This persistent architecture also means you can maintain module-level state safely (within a single plugin process).
+
+ARO communicates with the Python process via JSON messages over stdin/stdout. Your plugin's `main()` loop handles this communication.
 
 ## 10.5 Building an LLM Inference Plugin: Custom Actions
 
@@ -181,18 +237,53 @@ def _load_model(task: str, model_name: Optional[str] = None):
 # ============================================================
 
 def aro_plugin_info() -> Dict[str, Any]:
-    """Return plugin metadata."""
+    """Return plugin metadata. REQUIRED."""
     return {
         "name": "plugin-python-transformer",
         "version": "1.0.0",
-        "language": "python",
         "actions": [
-            "generate",
-            "summarize",
-            "embed",
-            "classify",
-            "answer",
-            "models"
+            {
+                "name": "Generate",
+                "role": "own",
+                "verbs": ["generate"],
+                "prepositions": ["from", "with"],
+                "description": "Generate text continuation using a language model"
+            },
+            {
+                "name": "Summarize",
+                "role": "own",
+                "verbs": ["summarize"],
+                "prepositions": ["from", "with"],
+                "description": "Summarize a document"
+            },
+            {
+                "name": "Embed",
+                "role": "own",
+                "verbs": ["embed"],
+                "prepositions": ["from", "with"],
+                "description": "Generate text embeddings"
+            },
+            {
+                "name": "Classify",
+                "role": "own",
+                "verbs": ["classify"],
+                "prepositions": ["from", "with"],
+                "description": "Classify text sentiment or category"
+            },
+            {
+                "name": "Answer",
+                "role": "own",
+                "verbs": ["answer"],
+                "prepositions": ["from", "with"],
+                "description": "Answer questions based on context"
+            },
+            {
+                "name": "Models",
+                "role": "own",
+                "verbs": ["models"],
+                "prepositions": ["from"],
+                "description": "List available models"
+            }
         ]
     }
 
@@ -206,10 +297,10 @@ def aro_action_generate(input_json: str) -> str:
     Generate text continuation using a language model.
 
     Input:
-        - prompt: The text to continue
-        - max_length: Maximum length of generated text (default: 100)
-        - temperature: Sampling temperature (default: 0.7)
-        - model: Model name (default: "gpt2")
+        - data: The text to continue (primary value)
+        - _with.max_length: Maximum length of generated text (default: 100)
+        - _with.temperature: Sampling temperature (default: 0.7)
+        - _with.model: Model name (default: "gpt2")
 
     Output:
         - generated_text: The generated continuation
@@ -217,10 +308,12 @@ def aro_action_generate(input_json: str) -> str:
         - model: Model used
     """
     params = json.loads(input_json)
-    prompt = params.get("prompt", params.get("data", ""))
-    max_length = params.get("max_length", 100)
-    temperature = params.get("temperature", 0.7)
-    model_name = params.get("model")
+    prompt = params.get("data", params.get("prompt", ""))
+    # Parameters from `with { }` are nested under "_with"
+    with_params = params.get("_with", {})
+    max_length = with_params.get("max_length", params.get("max_length", 100))
+    temperature = with_params.get("temperature", params.get("temperature", 0.7))
+    model_name = with_params.get("model", params.get("model"))
 
     if not prompt:
         return json.dumps({"error": "Missing 'prompt' field"})
@@ -254,10 +347,10 @@ def aro_action_summarize(input_json: str) -> str:
     Summarize text using a summarization model.
 
     Input:
-        - text: The text to summarize
-        - max_length: Maximum summary length (default: 130)
-        - min_length: Minimum summary length (default: 30)
-        - model: Model name (default: "facebook/bart-large-cnn")
+        - data: The text to summarize (primary value)
+        - _with.max_length: Maximum summary length (default: 130)
+        - _with.min_length: Minimum summary length (default: 30)
+        - _with.model: Model name (default: "facebook/bart-large-cnn")
 
     Output:
         - summary: The generated summary
@@ -265,10 +358,11 @@ def aro_action_summarize(input_json: str) -> str:
         - compression_ratio: How much the text was compressed
     """
     params = json.loads(input_json)
-    text = params.get("text", params.get("data", ""))
-    max_length = params.get("max_length", 130)
-    min_length = params.get("min_length", 30)
-    model_name = params.get("model")
+    text = params.get("data", params.get("text", ""))
+    with_params = params.get("_with", {})
+    max_length = with_params.get("max_length", params.get("max_length", 130))
+    min_length = with_params.get("min_length", params.get("min_length", 30))
+    model_name = with_params.get("model", params.get("model"))
 
     if not text:
         return json.dumps({"error": "Missing 'text' field"})
@@ -302,8 +396,8 @@ def aro_action_embed(input_json: str) -> str:
     Generate embeddings for text.
 
     Input:
-        - text: Single text or list of texts to embed
-        - model: Model name (default: "sentence-transformers/all-MiniLM-L6-v2")
+        - data: Single text or list of texts to embed (primary value)
+        - _with.model: Model name (default: "sentence-transformers/all-MiniLM-L6-v2")
 
     Output:
         - embeddings: List of embedding vectors
@@ -311,8 +405,9 @@ def aro_action_embed(input_json: str) -> str:
         - count: Number of texts embedded
     """
     params = json.loads(input_json)
-    text = params.get("text", params.get("data", ""))
-    model_name = params.get("model")
+    text = params.get("data", params.get("text", ""))
+    with_params = params.get("_with", {})
+    model_name = with_params.get("model", params.get("model"))
 
     if not text:
         return json.dumps({"error": "Missing 'text' field"})
@@ -350,8 +445,8 @@ def aro_action_classify(input_json: str) -> str:
     Classify text sentiment or category.
 
     Input:
-        - text: Text to classify
-        - model: Model name (default: sentiment analysis model)
+        - data: Text to classify (primary value)
+        - _with.model: Model name (default: sentiment analysis model)
 
     Output:
         - label: Predicted label
@@ -359,8 +454,9 @@ def aro_action_classify(input_json: str) -> str:
         - all_scores: All label scores
     """
     params = json.loads(input_json)
-    text = params.get("text", params.get("data", ""))
-    model_name = params.get("model")
+    text = params.get("data", params.get("text", ""))
+    with_params = params.get("_with", {})
+    model_name = with_params.get("model", params.get("model"))
 
     if not text:
         return json.dumps({"error": "Missing 'text' field"})
@@ -392,9 +488,9 @@ def aro_action_answer(input_json: str) -> str:
     Answer questions based on context.
 
     Input:
-        - question: The question to answer
-        - context: The context containing the answer
-        - model: Model name (default: DistilBERT QA model)
+        - data: The question to answer (primary value)
+        - _with.context: The context containing the answer
+        - _with.model: Model name (default: DistilBERT QA model)
 
     Output:
         - answer: The extracted answer
@@ -403,9 +499,10 @@ def aro_action_answer(input_json: str) -> str:
         - end: End position in context
     """
     params = json.loads(input_json)
-    question = params.get("question", "")
-    context = params.get("context", "")
-    model_name = params.get("model")
+    with_params = params.get("_with", {})
+    question = params.get("data", params.get("question", ""))
+    context = with_params.get("context", params.get("context", ""))
+    model_name = with_params.get("model", params.get("model"))
 
     if not question:
         return json.dumps({"error": "Missing 'question' field"})
@@ -734,7 +831,13 @@ def aro_plugin_info() -> Dict[str, Any]:
     return {
         "name": "plugin-python-text",
         "version": "1.0.0",
-        "actions": ["analyze", "extract-emails", "extract-urls", "hash", "diff"]
+        "actions": [
+            {"name": "Analyze", "role": "own", "verbs": ["analyze"], "prepositions": ["from"]},
+            {"name": "ExtractEmails", "role": "own", "verbs": ["extractemails"], "prepositions": ["from"]},
+            {"name": "ExtractURLs", "role": "own", "verbs": ["extracturls"], "prepositions": ["from"]},
+            {"name": "Hash", "role": "own", "verbs": ["hash"], "prepositions": ["from", "with"]},
+            {"name": "Diff", "role": "own", "verbs": ["diff"], "prepositions": ["from", "with"]}
+        ]
     }
 
 
@@ -792,8 +895,9 @@ def aro_action_extract_urls(input_json: str) -> str:
 def aro_action_hash(input_json: str) -> str:
     """Generate various hashes of text."""
     params = json.loads(input_json)
-    text = params.get("text", params.get("data", ""))
-    algorithm = params.get("algorithm", "sha256")
+    text = params.get("data", params.get("text", ""))
+    with_params = params.get("_with", {})
+    algorithm = with_params.get("algorithm", params.get("algorithm", "sha256"))
 
     if not text:
         return json.dumps({"error": "Missing 'text' field"})
@@ -862,8 +966,11 @@ Avoid Python when:
 
 Python plugins open the entire Python ecosystem to ARO:
 
-- **Interface**: `aro_plugin_info()` + `aro_action_{name}()` functions
-- **Communication**: JSON over stdin/stdout
+- **`aro_plugin_info()`** is **required**—returns a dict with structured action declarations matching the unified schema
+- **`aro_action_{name}(input_json: str) -> str`** for each action the plugin provides
+- **`aro_qualifier_{name}(input_json: str) -> str`** for qualifier implementations; declare `"accepts_parameters": True` in `aro_plugin_info` to support `with { }` clauses
+- **Input JSON**: primary value under `"data"`, `with { }` parameters nested under `"_with"`, execution context under `"_context"`
+- **Communication**: JSON over stdin/stdout via a persistent subprocess (models/state cached across calls)
 - **Dependencies**: Standard `requirements.txt` with pip
 - **ML/AI**: Hugging Face Transformers for LLM inference
 - **Performance**: Model caching, batching, GPU acceleration

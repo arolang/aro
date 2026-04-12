@@ -298,16 +298,25 @@ This dual-mode architecture — interpreter for development, native binary for d
 
 When the built-in vocabulary of sixty-one actions is insufficient, plugins extend it. Plugins are packages installed into the application's `Plugins/` directory, either manually or via the package manager (`aro add`).
 
-ARO supports plugins written in Swift, Rust, C, C++, and Python. All native plugins communicate through a C ABI:
+ARO supports plugins written in Swift, Rust, C, C++, and Python. All native plugins communicate through a C ABI. Only two functions are required:
 
 ```c
-char* aro_plugin_info(void);
-char* aro_plugin_execute(const char* action, const char* input_json);
-char* aro_plugin_qualifier(const char* qualifier, const char* input_json);
-void  aro_plugin_free(char* ptr);
+/* Required */
+char* aro_plugin_info(void);       /* JSON manifest: name, version, actions, qualifiers, services, events */
+void  aro_plugin_free(char* ptr);  /* Free any string the plugin allocated */
+
+/* Optional — implement only what the plugin provides */
+void  aro_plugin_init(void);       /* One-time initialisation (connections, model loading) */
+void  aro_plugin_shutdown(void);   /* Cleanup on unload */
+char* aro_plugin_execute(const char* action, const char* input_json); /* Actions and services */
+char* aro_plugin_qualifier(const char* qualifier, const char* input_json); /* Qualifiers */
+void  aro_plugin_on_event(const char* event_type, const char* data); /* Event subscriptions */
+char* aro_object_read(const char* id, const char* qualifier);        /* System objects */
+char* aro_object_write(const char* id, const char* qualifier, const char* value);
+char* aro_object_list(const char* pattern);
 ```
 
-`aro_plugin_info` returns a JSON manifest declaring the plugin's name, version, and the actions and qualifiers it provides. `aro_plugin_execute` runs a named action, receiving and returning JSON. This protocol is deliberately simple: any language that can produce a shared library implementing these four functions can be an ARO plugin.
+`aro_plugin_info` returns a JSON manifest declaring everything the plugin provides. A qualifier-only plugin need not implement `aro_plugin_execute`. Services route through `aro_plugin_execute` using the action name `"service:<method>"` — there is no separate service ABI. The protocol is deliberately minimal: any language that can produce a shared library implementing the two required functions can be an ARO plugin.
 
 *Qualifiers* are a particular capability of plugins. Rather than adding new verbs, a qualifier extends how a value is transformed when referenced. A plugin providing a `Collections` handle allows expressions like:
 
