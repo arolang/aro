@@ -1,12 +1,12 @@
 # Example: PipelineDemo
 # Type: console
 ---
-=== Computation Pipeline ===
+=== Pipeline Operator ===
 text:
 hello
-upper (should be HELLO):
+upper:
 HELLO
-len (should be 5):
+len:
 5
 === Extraction Pipeline ===
 data:
@@ -14,7 +14,7 @@ age: 30
 name: Alice
 name:
 Alice
-name-len (should be 5):
+name-len:
 5
 [OK] demo
   value: ["name": "Alice", "age": 30]

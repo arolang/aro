@@ -7,10 +7,12 @@
     { "include": "#featureset" },
     { "include": "#strings" },
     { "include": "#numbers" },
+    { "include": "#status-codes" },
     { "include": "#keywords" },
     { "include": "#actions" },
     { "include": "#results" },
     { "include": "#objects" },
+    { "include": "#variables" },
     { "include": "#prepositions" },
     { "include": "#articles" },
     { "include": "#operators" }
@@ -70,10 +72,12 @@
             { "include": "#comments" },
             { "include": "#strings" },
             { "include": "#numbers" },
+            { "include": "#status-codes" },
             { "include": "#keywords" },
             { "include": "#actions" },
             { "include": "#results" },
             { "include": "#objects" },
+            { "include": "#variables" },
             { "include": "#prepositions" },
             { "include": "#articles" },
             { "include": "#operators" }
@@ -86,32 +90,62 @@
         {
           "name": "keyword.control.import.aro",
           "match": "<(Extract|Parse|Retrieve|Fetch|Read|Accept|List|Stat|Exists)>",
-          "comment": "REQUEST actions (External → Internal)"
+          "comment": "REQUEST actions (External -> Internal) - angle bracket syntax"
         },
         {
           "name": "keyword.operator.aro",
           "match": "<(Compute|Validate|Compare|Create|Transform|Filter|Match|Split|Group|Set|Merge|Copy|Move|Append)>",
-          "comment": "OWN actions (Internal → Internal)"
+          "comment": "OWN actions (Internal -> Internal) - angle bracket syntax"
         },
         {
           "name": "keyword.control.flow.return.aro",
           "match": "<(Return|Throw)>",
-          "comment": "RESPONSE actions (Internal → External)"
+          "comment": "RESPONSE actions (Internal -> External) - angle bracket syntax"
         },
         {
           "name": "keyword.control.export.aro",
           "match": "<(Publish|Store|Log|Send|Emit|Write|CreateDirectory)>",
-          "comment": "EXPORT actions (Persistence/Export)"
+          "comment": "EXPORT actions (Persistence/Export) - angle bracket syntax"
         },
         {
           "name": "support.function.builtin.aro",
           "match": "<(Start|Stop|Keepalive|Watch|Configure|Request)>",
-          "comment": "LIFECYCLE actions (System management)"
+          "comment": "LIFECYCLE actions (System management) - angle bracket syntax"
         },
         {
           "name": "entity.name.tag.aro",
           "match": "<(Given|When|Then|Assert)>",
-          "comment": "TEST actions (BDD testing)"
+          "comment": "TEST actions (BDD testing) - angle bracket syntax"
+        },
+        {
+          "name": "entity.name.tag.aro",
+          "match": "\\b(Extract|Parse|Retrieve|Fetch|Read|Receive|Request|Accept|List|Stat|Exists|Parameters|Prompt|Select|Get|Find|Load|Stream|Subscribe|Ask|Choose|Http)\\b",
+          "comment": "REQUEST actions (word boundary)"
+        },
+        {
+          "name": "storage.type.aro",
+          "match": "\\b(Compute|Validate|Compare|Create|Transform|Update|Sort|Filter|Match|Split|Map|Reduce|Group|Set|Merge|Delete|Copy|Move|Append|Execute|Call|ParseHtml|ParseLinkHeader|Accept|Clear|Render|Schedule|Sleep|Repaint|Show|Calculate|Derive|Verify|Check|Build|Construct|Convert|Modify|Change|Order|Arrange|Combine|Remove|Destroy|Run|Shell|Exec|Invoke|Delay|Pause|Patch|Join|Aggregate|Include|Embed|Insert)\\b",
+          "comment": "OWN actions (word boundary)"
+        },
+        {
+          "name": "constant.language.aro",
+          "match": "\\b(Return|Throw|Respond|Raise|Fail)\\b",
+          "comment": "RESPONSE actions (word boundary)"
+        },
+        {
+          "name": "entity.other.attribute-name.aro",
+          "match": "\\b(Publish|Store|Log|Send|Emit|Write|Notify|CreateDirectory|Print|Output|Debug|Save|Persist|Alert|Signal|Dispatch|Export|Expose|Share)\\b",
+          "comment": "EXPORT actions (word boundary)"
+        },
+        {
+          "name": "support.function.aro",
+          "match": "\\b(Start|Stop|Keepalive|Listen|Connect|Close|Disconnect|Make|Watch|Configure|Broadcast|Await|Block|Wait|Terminate|Touch|Mkdir|Rename)\\b",
+          "comment": "LIFECYCLE actions (word boundary)"
+        },
+        {
+          "name": "markup.heading.aro",
+          "match": "\\b(Given|When|Then|Assert)\\b",
+          "comment": "TEST actions (word boundary)"
         }
       ]
     },
@@ -131,11 +165,27 @@
         }
       ]
     },
+    "variables": {
+      "patterns": [
+        {
+          "name": "variable.other.aro",
+          "match": "<[a-zA-Z][a-zA-Z0-9-]*(?::[^>]+)?>"
+        }
+      ]
+    },
+    "status-codes": {
+      "patterns": [
+        {
+          "name": "support.constant.aro",
+          "match": "<(?:OK|Created|Accepted|NoContent|BadRequest|Unauthorized|Forbidden|NotFound|Conflict|Error|InternalError):\\s*status>"
+        }
+      ]
+    },
     "prepositions": {
       "patterns": [
         {
           "name": "keyword.other.preposition.aro",
-          "match": "\\b(from|to|with|for|into|on|where)\\b"
+          "match": "\\b(from|to|with|for|into|on|where|against|as|at|via|by)\\b"
         }
       ]
     },
@@ -159,7 +209,7 @@
         },
         {
           "name": "constant.language.status.aro",
-          "match": "<(OK|Created|Accepted|NoContent|BadRequest|Unauthorized|Forbidden|NotFound|Error):\\s*status>"
+          "match": "<(OK|Created|Accepted|NoContent|BadRequest|Unauthorized|Forbidden|NotFound|Conflict|Error|InternalError):\\s*status>"
         }
       ]
     },
@@ -175,6 +225,17 @@
               "match": "\\\\."
             }
           ]
+        },
+        {
+          "name": "string.quoted.single.aro",
+          "begin": "'",
+          "end": "'",
+          "patterns": [
+            {
+              "name": "constant.character.escape.aro",
+              "match": "\\\\'"
+            }
+          ]
         }
       ]
     },
@@ -182,31 +243,23 @@
       "patterns": [
         {
           "name": "constant.numeric.float.aro",
-          "match": "\\b[0-9]+\\.[0-9]+\\b"
+          "match": "\\b[0-9][0-9_]*\\.[0-9][0-9_]*\\b"
         },
         {
           "name": "constant.numeric.integer.aro",
-          "match": "\\b[0-9]+\\b"
+          "match": "\\b[0-9][0-9_]*\\b"
         }
       ]
     },
     "operators": {
       "patterns": [
         {
-          "name": "keyword.operator.arithmetic.aro",
-          "match": "[+\\-*/]"
-        },
-        {
-          "name": "keyword.operator.comparison.aro",
-          "match": "(==|!=|<=|>=|<|>)"
-        },
-        {
-          "name": "keyword.operator.logical.aro",
-          "match": "\\b(and|or|not)\\b"
+          "name": "keyword.operator.aro",
+          "match": "\\|>|==|!=|<=|>=|\\+\\+|[+\\-*/%]|\\b(?:and|or|not)\\b"
         },
         {
           "name": "keyword.operator.assignment.aro",
-          "match": "="
+          "match": "(?<![<>])=(?![=])"
         }
       ]
     }

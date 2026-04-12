@@ -44,6 +44,12 @@ public final class Application: @unchecked Sendable {
     /// Template service for HTML template rendering (ARO-0050)
     private var templateService: AROTemplateService?
 
+    /// Store file descriptors for file-backed repositories
+    private let storeFiles: [StoreFileDescriptor]
+
+    /// Store flush service for writable .store files
+    private var storeFlushService: StoreFlushService?
+
     /// Event recorder for debugging (ARO-0007, GitLab #124)
     private let eventRecorder: EventRecorder
 
@@ -72,7 +78,8 @@ public final class Application: @unchecked Sendable {
         config: ApplicationConfig = .default,
         openAPISpec: OpenAPISpec? = nil,
         recordPath: String? = nil,
-        replayPath: String? = nil
+        replayPath: String? = nil,
+        storeFiles: [StoreFileDescriptor] = []
     ) {
         self.programs = programs
         self.entryPoint = entryPoint
@@ -83,6 +90,7 @@ public final class Application: @unchecked Sendable {
         self.eventRecorder = EventRecorder(eventBus: .shared)
         self.recordPath = recordPath
         self.replayPath = replayPath
+        self.storeFiles = storeFiles
         // Services are registered when run() is called (async context)
     }
 
@@ -165,6 +173,36 @@ public final class Application: @unchecked Sendable {
         let keyboardService = KeyboardService(eventBus: .shared)
         await runtime.register(service: keyboardService)
         #endif
+
+        // Seed repositories from .store files before Application-Start executes
+        if !storeFiles.isEmpty {
+            let repoStorage = InMemoryRepositoryStorage.shared
+            for descriptor in storeFiles {
+                for entry in descriptor.entries {
+                    await repoStorage.store(
+                        value: entry as [String: any Sendable],
+                        in: descriptor.repositoryName,
+                        businessActivity: "store-seed"
+                    )
+                }
+            }
+
+            // Set up write-back service for writable stores
+            let writableStores = storeFiles.filter { $0.isWritable }
+            if !writableStores.isEmpty {
+                let flushService = StoreFlushService(storage: InMemoryRepositoryStorage.shared)
+                await flushService.register(stores: storeFiles)
+                self.storeFlushService = flushService
+
+                // Subscribe to repository changes for writable stores
+                let writableNames = Set(writableStores.map { $0.repositoryName })
+                EventBus.shared.subscribe(to: RepositoryChangedEvent.self) { event in
+                    if writableNames.contains(event.repositoryName) {
+                        await flushService.markDirty(repositoryName: event.repositoryName)
+                    }
+                }
+            }
+        }
     }
 
     /// Initialize from source files
@@ -244,12 +282,17 @@ public final class Application: @unchecked Sendable {
         do {
             response = try await runtime.run(mainProgram, entryPoint: entryPoint)
         } catch {
+            // Flush writable stores before exiting on error
+            await storeFlushService?.flushAll()
             // Stop recording and save even if execution fails
             if let recordPath {
                 try await saveRecording(to: recordPath)
             }
             throw error
         }
+
+        // Flush writable stores on shutdown
+        await storeFlushService?.flushAll()
 
         // Stop recording and save if requested
         if let recordPath {
@@ -290,12 +333,17 @@ public final class Application: @unchecked Sendable {
         do {
             try await runtime.runAndKeepAlive(mainProgram, entryPoint: entryPoint)
         } catch {
+            // Flush writable stores before exiting on error
+            await storeFlushService?.flushAll()
             // Stop recording and save even if execution fails
             if let recordPath {
                 try await saveRecording(to: recordPath)
             }
             throw error
         }
+
+        // Flush writable stores on shutdown
+        await storeFlushService?.flushAll()
 
         // Stop recording and save if requested
         if let recordPath {
@@ -1002,13 +1050,18 @@ public struct ApplicationDiscovery {
         // Check for OpenAPI contract
         let openAPISpec = try loadOpenAPISpec(from: rootPath)
 
+        // Discover .store files for file-backed repositories
+        let storeLoader = StoreFileLoader()
+        let storeFiles = (try? storeLoader.discover(in: rootPath)) ?? []
+
         return DiscoveredApplication(
             rootPath: rootPath,
             sourceFiles: sourceFiles,
             importPaths: [],  // Basic discover doesn't resolve imports
             entryPointFeatureSet: entryPoint,
             openAPISpec: openAPISpec,
-            hasOpenAPIContract: openAPISpec != nil
+            hasOpenAPIContract: openAPISpec != nil,
+            storeFiles: storeFiles
         )
     }
 
@@ -1102,6 +1155,9 @@ public struct DiscoveredApplication: Sendable {
 
     /// Whether an OpenAPI contract was found
     public let hasOpenAPIContract: Bool
+
+    /// Store file descriptors for file-backed repositories
+    public let storeFiles: [StoreFileDescriptor]
 }
 
 // MARK: - Import Resolution (ARO-0007)
@@ -1229,13 +1285,18 @@ extension ApplicationDiscovery {
         // Check for OpenAPI contract
         let openAPISpec = try loadOpenAPISpec(from: rootPath)
 
+        // Discover .store files for file-backed repositories
+        let storeFileLoader = StoreFileLoader()
+        let storeFiles = (try? storeFileLoader.discover(in: rootPath)) ?? []
+
         return DiscoveredApplication(
             rootPath: rootPath,
             sourceFiles: allSourceFiles,
             importPaths: allImportPaths,
             entryPointFeatureSet: entryPoint,
             openAPISpec: openAPISpec,
-            hasOpenAPIContract: openAPISpec != nil
+            hasOpenAPIContract: openAPISpec != nil,
+            storeFiles: storeFiles
         )
     }
 }

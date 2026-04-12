@@ -81,6 +81,31 @@ public struct FileInfo: Sendable, Equatable {
     }
 }
 
+// MARK: - URL Cursor (pull-based iterator, issue #198)
+
+/// Thread-safe, pull-based cursor over a pre-sorted array of URLs. Used by the
+/// non-recursive `listStream` path so the unfolding `AsyncThrowingStream`
+/// closure can advance one entry per consumer pull without holding the whole
+/// result set in an async buffer.
+final class URLCursor: @unchecked Sendable {
+    private let urls: [URL]
+    private let lock = NSLock()
+    private var index: Int = 0
+
+    init(urls: [URL]) {
+        self.urls = urls
+    }
+
+    func next() -> URL? {
+        lock.lock()
+        defer { lock.unlock() }
+        guard index < urls.count else { return nil }
+        let url = urls[index]
+        index += 1
+        return url
+    }
+}
+
 // MARK: - File System Errors (Platform-agnostic)
 
 /// Errors that can occur during file system operations
@@ -629,47 +654,63 @@ public final class AROFileSystemService: FileSystemService, FileMonitorService, 
 
     /// ARO-0051: Streaming variant of list() — yields entries one at a time without
     /// loading the full tree into memory. O(1) peak memory regardless of tree size.
+    ///
+    /// Uses a **pull-based** `AsyncThrowingStream(unfolding:)` so the closure is
+    /// invoked exactly once per consumer `next()` call. No producer Task, no
+    /// unbounded buffer, no NSObject accumulation (autorelease-pooled per pull
+    /// on Darwin via `LazyDirectoryList`). Fixes issue #198.
     public func listStream(directory: String, pattern: String? = nil, recursive: Bool = false) throws -> AROStream<[String: any Sendable]> {
         guard fileManager.fileExists(atPath: directory) else {
             throw FileSystemError.directoryNotFound(directory)
         }
         let directoryURL = URL(fileURLWithPath: directory)
+
+        if recursive {
+            // Recursive streaming: reuse LazyDirectoryList (same iterator used by
+            // the compiled-mode path), which wraps each pull in an autoreleasepool
+            // on Darwin and produces the same entry dict shape as
+            // FileInfo.toDictionary().
+            return AROStream {
+                guard let enumerator = FileManager.default.enumerator(
+                    at: directoryURL,
+                    includingPropertiesForKeys: [.isDirectoryKey, .fileSizeKey,
+                                                  .creationDateKey, .contentModificationDateKey],
+                    options: []
+                ) else {
+                    return AsyncThrowingStream { continuation in continuation.finish() }
+                }
+                let lazyList = LazyDirectoryList(enumerator: enumerator, pattern: pattern)
+                return AsyncThrowingStream { () async throws -> [String: any Sendable]? in
+                    // Pull one entry on demand. O(1) memory per step.
+                    lazyList.next()
+                }
+            }
+        }
+
+        // Non-recursive: single directory level. Still pull-based so the async
+        // for-each loop doesn't buffer the full level-1 stat results.
         return AROStream { [self] in
-            AsyncThrowingStream { continuation in
-                Task { [self] in
-                    do {
-                        if recursive {
-                            guard let enumerator = self.fileManager.enumerator(
-                                at: directoryURL,
-                                includingPropertiesForKeys: [.isDirectoryKey, .fileSizeKey, .creationDateKey, .contentModificationDateKey],
-                                options: []
-                            ) else {
-                                continuation.finish()
-                                return
-                            }
-                            while let url = enumerator.nextObject() as? URL {
-                                if let info = try? await self.statURL(url),
-                                   self.matchesPattern(info.name, pattern: pattern) {
-                                    continuation.yield(info.toDictionary())
-                                }
-                            }
-                        } else {
-                            let contents = try self.fileManager.contentsOfDirectory(
-                                at: directoryURL,
-                                includingPropertiesForKeys: [.isDirectoryKey, .fileSizeKey, .creationDateKey, .contentModificationDateKey]
-                            )
-                            for url in contents.sorted(by: { $0.path < $1.path }) {
-                                if let info = try? await self.statURL(url),
-                                   self.matchesPattern(info.name, pattern: pattern) {
-                                    continuation.yield(info.toDictionary())
-                                }
-                            }
-                        }
-                        continuation.finish()
-                    } catch {
-                        continuation.finish(throwing: error)
+            let sortedURLs: [URL]
+            do {
+                sortedURLs = try self.fileManager.contentsOfDirectory(
+                    at: directoryURL,
+                    includingPropertiesForKeys: [.isDirectoryKey, .fileSizeKey,
+                                                  .creationDateKey, .contentModificationDateKey]
+                ).sorted(by: { $0.path < $1.path })
+            } catch {
+                return AsyncThrowingStream { continuation in
+                    continuation.finish(throwing: error)
+                }
+            }
+            let cursor = URLCursor(urls: sortedURLs)
+            return AsyncThrowingStream { [self] () async throws -> [String: any Sendable]? in
+                while let url = cursor.next() {
+                    if let info = try? await self.statURL(url),
+                       self.matchesPattern(info.name, pattern: pattern) {
+                        return info.toDictionary()
                     }
                 }
+                return nil
             }
         }
     }
@@ -1258,47 +1299,63 @@ public final class AROFileSystemService: FileSystemService, @unchecked Sendable 
 
     /// ARO-0051: Streaming variant of list() — yields entries one at a time without
     /// loading the full tree into memory. O(1) peak memory regardless of tree size.
+    ///
+    /// Uses a **pull-based** `AsyncThrowingStream(unfolding:)` so the closure is
+    /// invoked exactly once per consumer `next()` call. No producer Task, no
+    /// unbounded buffer, no NSObject accumulation (autorelease-pooled per pull
+    /// on Darwin via `LazyDirectoryList`). Fixes issue #198.
     public func listStream(directory: String, pattern: String? = nil, recursive: Bool = false) throws -> AROStream<[String: any Sendable]> {
         guard fileManager.fileExists(atPath: directory) else {
             throw FileSystemError.directoryNotFound(directory)
         }
         let directoryURL = URL(fileURLWithPath: directory)
+
+        if recursive {
+            // Recursive streaming: reuse LazyDirectoryList (same iterator used by
+            // the compiled-mode path), which wraps each pull in an autoreleasepool
+            // on Darwin and produces the same entry dict shape as
+            // FileInfo.toDictionary().
+            return AROStream {
+                guard let enumerator = FileManager.default.enumerator(
+                    at: directoryURL,
+                    includingPropertiesForKeys: [.isDirectoryKey, .fileSizeKey,
+                                                  .creationDateKey, .contentModificationDateKey],
+                    options: []
+                ) else {
+                    return AsyncThrowingStream { continuation in continuation.finish() }
+                }
+                let lazyList = LazyDirectoryList(enumerator: enumerator, pattern: pattern)
+                return AsyncThrowingStream { () async throws -> [String: any Sendable]? in
+                    // Pull one entry on demand. O(1) memory per step.
+                    lazyList.next()
+                }
+            }
+        }
+
+        // Non-recursive: single directory level. Still pull-based so the async
+        // for-each loop doesn't buffer the full level-1 stat results.
         return AROStream { [self] in
-            AsyncThrowingStream { continuation in
-                Task { [self] in
-                    do {
-                        if recursive {
-                            guard let enumerator = self.fileManager.enumerator(
-                                at: directoryURL,
-                                includingPropertiesForKeys: [.isDirectoryKey, .fileSizeKey, .creationDateKey, .contentModificationDateKey],
-                                options: []
-                            ) else {
-                                continuation.finish()
-                                return
-                            }
-                            while let url = enumerator.nextObject() as? URL {
-                                if let info = try? await self.statURL(url),
-                                   self.matchesPattern(info.name, pattern: pattern) {
-                                    continuation.yield(info.toDictionary())
-                                }
-                            }
-                        } else {
-                            let contents = try self.fileManager.contentsOfDirectory(
-                                at: directoryURL,
-                                includingPropertiesForKeys: [.isDirectoryKey, .fileSizeKey, .creationDateKey, .contentModificationDateKey]
-                            )
-                            for url in contents.sorted(by: { $0.path < $1.path }) {
-                                if let info = try? await self.statURL(url),
-                                   self.matchesPattern(info.name, pattern: pattern) {
-                                    continuation.yield(info.toDictionary())
-                                }
-                            }
-                        }
-                        continuation.finish()
-                    } catch {
-                        continuation.finish(throwing: error)
+            let sortedURLs: [URL]
+            do {
+                sortedURLs = try self.fileManager.contentsOfDirectory(
+                    at: directoryURL,
+                    includingPropertiesForKeys: [.isDirectoryKey, .fileSizeKey,
+                                                  .creationDateKey, .contentModificationDateKey]
+                ).sorted(by: { $0.path < $1.path })
+            } catch {
+                return AsyncThrowingStream { continuation in
+                    continuation.finish(throwing: error)
+                }
+            }
+            let cursor = URLCursor(urls: sortedURLs)
+            return AsyncThrowingStream { [self] () async throws -> [String: any Sendable]? in
+                while let url = cursor.next() {
+                    if let info = try? await self.statURL(url),
+                       self.matchesPattern(info.name, pattern: pattern) {
+                        return info.toDictionary()
                     }
                 }
+                return nil
             }
         }
     }

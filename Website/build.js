@@ -22,6 +22,16 @@ fs.copyFileSync('src/partials/subpage.css', 'dist/subpage.css');
 // Copy social share image
 fs.copyFileSync('../Graphics/social.png', 'dist/social.png');
 
+// Copy showcase images
+if (!fs.existsSync('dist/img')) {
+    fs.mkdirSync('dist/img', { recursive: true });
+}
+if (fs.existsSync('src/img')) {
+    fs.readdirSync('src/img').forEach(file => {
+        fs.copyFileSync(`src/img/${file}`, `dist/img/${file}`);
+    });
+}
+
 // Process HTML file with partial injection
 function processHtmlFile(srcPath, destPath, basePath = '') {
     if (!fs.existsSync(srcPath)) return;
@@ -72,7 +82,7 @@ function processHtmlFile(srcPath, destPath, basePath = '') {
 }
 
 // Process main HTML files (at root level)
-const mainHtmlFiles = ['index.html', 'fdd.html', 'docs.html', 'getting-started.html', 'disclaimer.html', 'tutorial.html', 'download.html', 'imprint.html'];
+const mainHtmlFiles = ['index.html', 'fdd.html', 'docs.html', 'getting-started.html', 'disclaimer.html', 'tutorial.html', 'showcase.html', 'download.html', 'imprint.html'];
 mainHtmlFiles.forEach(file => {
     processHtmlFile(`src/${file}`, `dist/${file}`, '');
 });

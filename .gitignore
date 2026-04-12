@@ -162,3 +162,7 @@ core
 /Examples/ResponseHeaders/ResponseHeaders
 /Examples/MultilineString/MultilineString
 /Examples/LinkHeaderPagination/LinkHeaderPagination
+/Examples/CountingStyles/CountingStyles
+/Examples/ParameterRefs/ParameterRefs
+/Examples/RepositoryLimits/RepositoryLimits
+/Examples/StreamExample/StreamExample
