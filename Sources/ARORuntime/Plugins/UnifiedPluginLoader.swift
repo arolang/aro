@@ -978,19 +978,34 @@ public struct UnifiedPluginManifest: Codable, Sendable {
     let dependencies: [String: UnifiedDependencySpec]?
 
     /// Root-level namespace handle (PascalCase, e.g. `Markdown`, `Hash`, `Collections`).
-    ///
-    /// This is the canonical way to declare a plugin namespace. When set, all plugin-provided
-    /// actions and qualifiers are accessed with this prefix in ARO code:
-    /// - Actions:    `Markdown.ToHTML the <result> from the <input>.`
-    /// - Qualifiers: `Compute the <item: Collections.pick-random> from the <list>.`
-    ///
-    /// Takes priority over the legacy `handler:` field inside `provides:` entries.
     let handle: String?
 
+    /// Platform-specific configuration (ARO-0073)
+    let platforms: UnifiedPlatformConfig?
+
     enum CodingKeys: String, CodingKey {
-        case name, version, description, author, license, handle
+        case name, version, description, author, license, handle, platforms
         case aroVersion = "aro-version"
         case source, provides, dependencies
+    }
+}
+
+/// Platform-specific configuration (ARO-0073)
+public struct UnifiedPlatformConfig: Codable, Sendable {
+    let macos: PlatformRequirement?
+    let linux: PlatformRequirement?
+    let windows: PlatformRequirement?
+}
+
+/// Requirements for a specific platform
+public struct PlatformRequirement: Codable, Sendable {
+    let minVersion: String?
+    let architectures: [String]?
+    let distributions: [String]?
+
+    enum CodingKeys: String, CodingKey {
+        case minVersion = "min-version"
+        case architectures, distributions
     }
 }
 

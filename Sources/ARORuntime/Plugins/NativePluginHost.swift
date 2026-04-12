@@ -90,6 +90,8 @@ public final class NativePluginHost: @unchecked Sendable {
     typealias ObjectReadFunc = @convention(c) (UnsafePointer<CChar>, UnsafePointer<CChar>) -> UnsafeMutablePointer<CChar>?
     typealias ObjectWriteFunc = @convention(c) (UnsafePointer<CChar>, UnsafePointer<CChar>, UnsafePointer<CChar>) -> UnsafeMutablePointer<CChar>?
     typealias ObjectListFunc = @convention(c) (UnsafePointer<CChar>) -> UnsafeMutablePointer<CChar>?
+    typealias InvokeFunc = @convention(c) (UnsafePointer<CChar>, UnsafePointer<CChar>) -> UnsafeMutablePointer<CChar>?
+    typealias SetInvokeFunc = @convention(c) (InvokeFunc?) -> Void
 
     private var executeFunc: ExecuteFunc?
     private var freeFunc: FreeFunc?
@@ -496,6 +498,23 @@ public final class NativePluginHost: @unchecked Sendable {
         }
         if let listSymbol = resolveSymbol("aro_object_list") {
             objectListFunc = unsafeBitCast(listSymbol, to: ObjectListFunc.self)
+        }
+
+        // --- Optional: aro_plugin_set_invoke (for plugin-to-runtime invocation) ---
+        if let setInvokeSymbol = resolveSymbol("aro_plugin_set_invoke") {
+            let setInvokeFn = unsafeBitCast(setInvokeSymbol, to: SetInvokeFunc.self)
+            // Pass the invoke callback if one has been registered by the runtime
+            if NativePluginHost.invokeCallback != nil {
+                let callback: InvokeFunc = { featureSetPtr, inputPtr in
+                    guard let invoke = NativePluginHost.invokeCallback else { return nil }
+                    let featureSet = String(cString: featureSetPtr)
+                    let inputJSON = String(cString: inputPtr)
+                    let resultJSON = invoke(featureSet, inputJSON)
+                    return resultJSON.withCString { strdup($0) }
+                }
+                setInvokeFn(callback)
+                debugPrint("[NativePluginHost] Passed invoke callback to \(pluginName)")
+            }
         }
 
         // Load and parse plugin info JSON
