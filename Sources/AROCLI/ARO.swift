@@ -10,6 +10,9 @@ import ARORuntime
 import AROCompiler
 import AROPackageManager
 import AROVersion
+#if !os(Windows)
+import AROAsk
+#endif
 
 @main
 struct ARO: AsyncParsableCommand {
@@ -50,6 +53,7 @@ struct ARO: AsyncParsableCommand {
         #if !os(Windows)
         commands.append(LSPCommand.self)
         commands.append(MCPCommand.self)
+        commands.append(AskCommand.self)
         #endif
         return commands
     }

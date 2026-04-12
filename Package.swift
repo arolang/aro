@@ -131,6 +131,13 @@ let package = Package(
         .package(url: "https://github.com/andybest/linenoise-swift.git", from: "0.0.3"),
     ],
     targets: {
+        // AROAsk dependencies (non-Windows)
+        #if !os(Windows)
+        let askDependency: [Target.Dependency] = ["AROAsk"]
+        #else
+        let askDependency: [Target.Dependency] = []
+        #endif
+
         // Core targets available on all platforms
         var targets: [Target] = [
             // Version information library
@@ -192,7 +199,7 @@ let package = Package(
                     "AROPackageManager",
                     .product(name: "ArgumentParser", package: "swift-argument-parser"),
                     .product(name: "LineNoise", package: "linenoise-swift"),
-                ] + cliLspDependency,
+                ] + cliLspDependency + askDependency,
                 path: "Sources/AROCLI",
                 linkerSettings: llvmLinkerSettings
             ),
@@ -238,6 +245,21 @@ let package = Package(
                 name: "AROLSPTests",
                 dependencies: ["AROLSP", "AROParser"] + lspTargetDependencies,
                 path: "Tests/AROLSPTests"
+            ),
+            // AROAsk - local LLM coding assistant (`aro ask`)
+            .target(
+                name: "AROAsk",
+                dependencies: [
+                    "AROParser",
+                    "ARORuntime",
+                    "AROVersion",
+                    .product(name: "ArgumentParser", package: "swift-argument-parser"),
+                    .product(name: "Yams", package: "Yams"),
+                    .product(name: "Crypto", package: "swift-crypto"),
+                    .product(name: "LineNoise", package: "linenoise-swift"),
+                ],
+                path: "Sources/AROAsk",
+                resources: [.copy("Resources/model-manifest.json")]
             ),
         ])
         #endif

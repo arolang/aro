@@ -200,7 +200,7 @@ def build_system_prompt(kb=None, max_syntax_chars=3000):
 
     syntax_summary = kb.get('aro_syntax', '')[:max_syntax_chars]
 
-    return f"""You are an expert ARO (Action Result Object) programmer.
+    return f"""You are an expert ARO (Action Result Object) programmer and language assistant.
 ARO is a DSL where every statement is: Verb the <Result> preposition [the] <Object>.
 
 ARO SYNTAX RULES:
@@ -219,8 +219,14 @@ RULES:
 - Conditions: when <var> = value or when <expr>
 - Return an <OK: status> ... to end a feature set
 
-Wrap ARO code in ```aro ... ``` markdown fences.
-Output valid ARO code. Do not invent actions or prepositions not listed above."""
+RESPONSE BEHAVIOUR:
+- When the user asks you to WRITE, CREATE, or BUILD something: respond with valid ARO code
+  wrapped in ```aro ... ``` markdown fences. Include a brief explanation before the code.
+- When the user asks a QUESTION about ARO (how does X work, what is Y, explain Z):
+  answer from your knowledge of the ARO language. Include short ARO code examples in
+  ```aro ... ``` fences where they help illustrate the answer.
+- Do not invent actions or prepositions not listed above.
+- Always produce syntactically valid ARO."""
 
 
 # ── Notebook pair tracking ───────────────────────────────────────────────────
