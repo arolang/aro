@@ -50,7 +50,9 @@ MyApp/
 ├── main.aro           # Contains Application-Start (required, exactly one)
 ├── users.aro          # Feature sets for user operations
 ├── orders.aro         # Feature sets for order operations
-└── events.aro         # Event handler feature sets
+├── events.aro         # Event handler feature sets
+├── products.store     # Seeds products-repository (read-only)
+└── sessions.store     # Seeds sessions-repository (writable if chmod o+w)
 ```
 
 For larger applications, use the `sources/` subdirectory convention:
@@ -518,7 +520,10 @@ Examples/               # 65 examples organized by category (run `ls Examples/` 
 │   # Plugin Qualifiers
 ├── QualifierPlugin/    # Swift plugin with qualifiers (pick-random, shuffle, reverse)
 ├── QualifierPluginC/   # C plugin with qualifiers (first, last, size)
-└── QualifierPluginPython/ # Python plugin with qualifiers (sort, unique, sum, avg, min, max)
+├── QualifierPluginPython/ # Python plugin with qualifiers (sort, unique, sum, avg, min, max)
+│
+│   # Store Files
+└── StoreFileDemo/      # File-backed repositories via .store files
 
 Proposals/              # Language specifications
 ├── ARO-0001-language-fundamentals.md
@@ -555,7 +560,8 @@ Proposals/              # Language specifications
 ├── ARO-0046-typed-event-extraction.md
 ├── ARO-0047-command-line-parameters.md
 ├── ARO-0048-websocket.md
-└── ARO-0051-streaming-execution.md
+├── ARO-0051-streaming-execution.md
+└── ARO-0073-store-files.md
 ```
 
 ## Language Proposals
@@ -599,6 +605,7 @@ The `Proposals/` directory contains language specifications:
 | **0048 WebSocket** | WebSocket server support, real-time messaging |
 | **0050 Template Engine** | Mustache-style templates, Render action |
 | **0051 Streaming Execution** | Lazy evaluation, Stream Tee, Aggregation Fusion |
+| **0073 Store Files** | File-backed repositories, YAML seed data, permission-based writability |
 
 ## Concurrency
 
