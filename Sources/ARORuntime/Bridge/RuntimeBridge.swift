@@ -1737,6 +1737,11 @@ private func evaluateExpressionJSON(_ expr: [String: Any], context: RuntimeConte
     if let varName = expr["$var"] as? String {
         let specs = expr["$specs"] as? [String] ?? []
 
+        // Environment variable access: <env: VAR_NAME>
+        if varName == "env", let envKey = specs.first {
+            return ProcessInfo.processInfo.environment[envKey] ?? "" as any Sendable
+        }
+
         // Special handling for repository count access: <repository-name: count>
         if specs == ["count"] && InMemoryRepositoryStorage.isRepositoryName(varName) {
             // Get count synchronously using the actor's sync count method
