@@ -2725,9 +2725,9 @@ final class CPluginQualifierHost: PluginQualifierHost, @unchecked Sendable {
         self.freeFunc = freeFunc
     }
 
-    func executeQualifier(_ qualifier: String, input: any Sendable) throws -> any Sendable {
-        // Create input JSON
-        let qualifierInput = QualifierInput(value: input)
+    func executeQualifier(_ qualifier: String, input: any Sendable, withParams: [String: any Sendable]? = nil) throws -> any Sendable {
+        // Create input JSON (ARO-0073: includes _with params)
+        let qualifierInput = QualifierInput(value: input, withParams: withParams)
 
         let inputData = try encoder.encode(qualifierInput)
         let inputJSON = String(data: inputData, encoding: .utf8) ?? "{}"
