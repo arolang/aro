@@ -51,7 +51,7 @@ struct ListActions: AsyncParsableCommand {
                 try UnifiedPluginLoader.shared.loadPlugins(from: appDir)
             } catch {
                 // Non-fatal: print warning but continue showing built-ins
-                fputs("Warning: Failed to load plugins: \(error)\n", stderr)
+                FileHandle.standardError.write(Data("Warning: Failed to load plugins: \(error)\n".utf8))
             }
         }
 
