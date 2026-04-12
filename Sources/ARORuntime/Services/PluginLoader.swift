@@ -13,11 +13,13 @@ import WinSDK
 
 /// Loads and manages dynamic plugins for ARO
 ///
-/// > **Deprecation Note (ARO-0073):** The legacy service ABI documented below
-/// > (aro_plugin_init returning service metadata, 3-parameter _call functions)
-/// > is deprecated. New plugins should use the clean ABI defined in ARO-0073:
-/// > `aro_plugin_info` (required) + `aro_plugin_execute` (optional).
-/// > See `NativePluginHost` and `UnifiedPluginLoader` for the current ABI.
+/// Plugins must export the C ABI defined in ARO-0073:
+/// - `aro_plugin_info` (required) — returns JSON metadata
+/// - `aro_plugin_execute` (required) — executes an action
+/// - `aro_plugin_qualifier` (optional) — executes a qualifier transformation
+/// - `aro_plugin_free` (optional) — frees memory allocated by the plugin
+///
+/// See `NativePluginHost` and `UnifiedPluginLoader` for the managed plugin path.
 ///
 /// The PluginLoader discovers Swift plugin files in the `./plugins/` directory,
 /// compiles them to dynamic libraries, and loads them at runtime.
@@ -41,18 +43,8 @@ public final class PluginLoader: @unchecked Sendable {
     /// Loaded plugin handles (to prevent unloading)
     private var loadedPlugins: [String: UnsafeMutableRawPointer] = [:]
 
-    /// Registered plugin service functions
-    private var pluginFunctions: [String: PluginCallFunction] = [:]
-
     /// Lock for thread safety
     private let lock = NSLock()
-
-    /// Plugin call function type
-    typealias PluginCallFunction = @convention(c) (
-        UnsafePointer<CChar>,      // method
-        UnsafePointer<CChar>,      // args JSON
-        UnsafeMutablePointer<UnsafeMutablePointer<CChar>?>  // result JSON
-    ) -> Int32
 
     /// ARO-0043: Plugin system object read function type
     typealias PluginReadFunction = @convention(c) (
@@ -1329,60 +1321,6 @@ public final class PluginLoader: @unchecked Sendable {
         try loadDylib(at: dylibPath, name: pluginName)
     }
 
-    /// Call a plugin service method
-    /// - Parameters:
-    ///   - serviceName: Service name
-    ///   - method: Method name
-    ///   - args: Arguments dictionary
-    /// - Returns: Result value
-    func callPlugin(
-        _ serviceName: String,
-        method: String,
-        args: [String: any Sendable]
-    ) throws -> any Sendable {
-        lock.lock()
-        let callFunc = pluginFunctions[serviceName.lowercased()]
-        lock.unlock()
-
-        guard let callFunc = callFunc else {
-            throw PluginError.serviceNotFound(serviceName)
-        }
-
-        // Convert args to JSON
-        let argsData = try JSONSerialization.data(withJSONObject: args)
-        let argsJSON = String(data: argsData, encoding: .utf8) ?? "{}"
-
-        // Call the plugin
-        var resultPtr: UnsafeMutablePointer<CChar>?
-        let status = method.withCString { methodCStr in
-            argsJSON.withCString { argsCStr in
-                callFunc(methodCStr, argsCStr, &resultPtr)
-            }
-        }
-
-        // Check for error
-        if status != 0 {
-            let errorMsg = resultPtr.map { String(cString: $0) } ?? "Unknown error"
-            resultPtr.map { free($0) }
-            throw PluginError.executionFailed(serviceName, method: method, message: errorMsg)
-        }
-
-        // Parse result
-        guard let resultPtr = resultPtr else {
-            return [String: any Sendable]()
-        }
-
-        let resultJSON = String(cString: resultPtr)
-        free(resultPtr)
-
-        guard let resultData = resultJSON.data(using: .utf8),
-              let result = try JSONSerialization.jsonObject(with: resultData) as? [String: Any] else {
-            return resultJSON
-        }
-
-        return convertToSendable(result)
-    }
-
     // MARK: - Private
 
     /// Find the Swift executable (swift command) in PATH or common locations
@@ -1966,154 +1904,8 @@ public final class PluginLoader: @unchecked Sendable {
             return
         }
 
-        // Try legacy interface (aro_plugin_init)
-        #if os(Windows)
-        let initSymbol = GetProcAddress(handle, "aro_plugin_init")
-        #else
-        let initSymbol = dlsym(handle, "aro_plugin_init")
-        #endif
-
-        guard let initSymbol = initSymbol else {
-            // No init function, try to load as simple service
-            // Look for a function named after the plugin
-            let serviceSymbol = "\(name.lowercased())_call"
-            #if os(Windows)
-            let callSymbol = GetProcAddress(handle, serviceSymbol)
-            #else
-            let callSymbol = dlsym(handle, serviceSymbol)
-            #endif
-
-            if let callSymbol = callSymbol {
-                let callFunc = unsafeBitCast(callSymbol, to: PluginCallFunction.self)
-                pluginFunctions[name.lowercased()] = callFunc
-
-                // Register as AROService
-                let wrapper = PluginServiceWrapper(name: name, loader: self)
-                try ExternalServiceRegistry.shared.register(wrapper, withName: name)
-
-                return
-            }
-            throw PluginError.initFunctionNotFound(name)
-        }
-
-        // Call init function to get service metadata
-        typealias InitFunc = @convention(c) () -> UnsafePointer<CChar>
-        let initFunc = unsafeBitCast(initSymbol, to: InitFunc.self)
-        let metadataPtr = initFunc()
-        let metadataJSON = String(cString: metadataPtr)
-
-        // Parse metadata
-        guard let metadataData = metadataJSON.data(using: .utf8),
-              let metadata = try JSONSerialization.jsonObject(with: metadataData) as? [String: Any],
-              let services = metadata["services"] as? [[String: Any]] else {
-            throw PluginError.invalidMetadata(name, message: "Invalid JSON metadata")
-        }
-
-        // Register each service
-        for service in services {
-            guard let serviceName = service["name"] as? String,
-                  let symbolName = service["symbol"] as? String else {
-                continue
-            }
-
-            #if os(Windows)
-            let callSymbol = GetProcAddress(handle, symbolName)
-            #else
-            let callSymbol = dlsym(handle, symbolName)
-            #endif
-
-            guard let callSymbol = callSymbol else {
-                print("[PluginLoader] Warning: Symbol '\(symbolName)' not found in \(name)")
-                continue
-            }
-
-            let callFunc = unsafeBitCast(callSymbol, to: PluginCallFunction.self)
-            pluginFunctions[serviceName.lowercased()] = callFunc
-
-            // Register as AROService
-            let wrapper = PluginServiceWrapper(name: serviceName, loader: self)
-            try ExternalServiceRegistry.shared.register(wrapper, withName: serviceName)
-
-        }
-
-        // ARO-0043: Register system objects from plugin metadata
-        if let systemObjects = metadata["systemObjects"] as? [[String: Any]] {
-            for objDef in systemObjects {
-                guard let identifier = objDef["identifier"] as? String else {
-                    continue
-                }
-
-                let description = objDef["description"] as? String ?? "Plugin system object"
-
-                // Parse capabilities
-                var capabilities: SystemObjectCapabilities = []
-                if let caps = objDef["capabilities"] as? [String] {
-                    for cap in caps {
-                        switch cap.lowercased() {
-                        case "readable", "source":
-                            capabilities.insert(.readable)
-                        case "writable", "sink":
-                            capabilities.insert(.writable)
-                        default:
-                            break
-                        }
-                    }
-                }
-
-                // Get symbol names
-                let readSymbol = objDef["readSymbol"] as? String
-                let writeSymbol = objDef["writeSymbol"] as? String
-
-                // Load read function
-                var readFunc: PluginReadFunction? = nil
-                if let symbolName = readSymbol {
-                    #if os(Windows)
-                    let symbol = GetProcAddress(handle, symbolName)
-                    #else
-                    let symbol = dlsym(rawHandle, symbolName)
-                    #endif
-                    if let symbol = symbol {
-                        readFunc = unsafeBitCast(symbol, to: PluginReadFunction.self)
-                    }
-                }
-
-                // Load write function
-                var writeFunc: PluginWriteFunction? = nil
-                if let symbolName = writeSymbol {
-                    #if os(Windows)
-                    let symbol = GetProcAddress(handle, symbolName)
-                    #else
-                    let symbol = dlsym(rawHandle, symbolName)
-                    #endif
-                    if let symbol = symbol {
-                        writeFunc = unsafeBitCast(symbol, to: PluginWriteFunction.self)
-                    }
-                }
-
-                // Capture values as constants for the closure (Swift concurrency safety)
-                let capturedIdentifier = identifier
-                let capturedDescription = description
-                let capturedCapabilities = capabilities
-                let capturedReadFunc = readFunc
-                let capturedWriteFunc = writeFunc
-
-                // Register the system object with the registry
-                SystemObjectRegistry.shared.register(
-                    identifier,
-                    description: description,
-                    capabilities: capabilities
-                ) { _ in
-                    PluginSystemObjectWrapper(
-                        pluginIdentifier: capturedIdentifier,
-                        pluginDescription: capturedDescription,
-                        pluginCapabilities: capturedCapabilities,
-                        readFunc: capturedReadFunc,
-                        writeFunc: capturedWriteFunc
-                    )
-                }
-
-            }
-        }
+        // Plugin does not export the required aro_plugin_info / aro_plugin_execute symbols.
+        throw PluginError.initFunctionNotFound(name)
     }
 
     #if os(Windows)
@@ -2175,7 +1967,6 @@ public final class PluginLoader: @unchecked Sendable {
             #endif
         }
         loadedPlugins.removeAll()
-        pluginFunctions.removeAll()
         pluginMetadata.removeAll()
     }
 
@@ -2356,45 +2147,51 @@ public final class PluginLoader: @unchecked Sendable {
         defer { dlclose(handle) }
         #endif
 
-        // Find init function
+        // Query plugin metadata via the new C ABI (aro_plugin_info)
         #if os(Windows)
-        let initSymbol = GetProcAddress(handle, "aro_plugin_init")
+        let infoSymbol = GetProcAddress(handle, "aro_plugin_info")
+        let freeSymbol = GetProcAddress(handle, "aro_plugin_free")
         #else
-        let initSymbol = dlsym(handle, "aro_plugin_init")
+        let infoSymbol = dlsym(handle, "aro_plugin_info")
+        let freeSymbol = dlsym(handle, "aro_plugin_free")
         #endif
 
         var services: [LocalPluginService] = []
 
-        if let initSymbol = initSymbol {
-            // Call init to get metadata
-            typealias InitFunc = @convention(c) () -> UnsafePointer<CChar>
-            let initFunc = unsafeBitCast(initSymbol, to: InitFunc.self)
-            let metadataPtr = initFunc()
-            let metadataJSON = String(cString: metadataPtr)
+        if let infoSymbol = infoSymbol {
+            let infoFunc = unsafeBitCast(infoSymbol, to: CPluginInfoFunction.self)
+            let freeFunc: CPluginFreeFunction? = freeSymbol.map { unsafeBitCast($0, to: CPluginFreeFunction.self) }
 
-            // Parse metadata
-            if let metadataData = metadataJSON.data(using: .utf8),
-               let metadata = try? JSONSerialization.jsonObject(with: metadataData) as? [String: Any],
-               let servicesArray = metadata["services"] as? [[String: Any]] {
-                for serviceDict in servicesArray {
-                    if let serviceName = serviceDict["name"] as? String {
-                        let methods = serviceDict["methods"] as? [String] ?? []
-                        services.append(LocalPluginService(name: serviceName, methods: methods))
+            if let infoPtr = infoFunc() {
+                let infoJSON = String(cString: infoPtr)
+                freeFunc?(infoPtr)
+
+                if let data = infoJSON.data(using: .utf8),
+                   let info = try? JSONSerialization.jsonObject(with: data) as? [String: Any] {
+
+                    // Collect actions as services for display
+                    if let actions = info["actions"] as? [[String: Any]] {
+                        var verbs: [String] = []
+                        for actionDef in actions {
+                            if let v = actionDef["verbs"] as? [String] {
+                                verbs.append(contentsOf: v)
+                            } else if let actionName = actionDef["name"] as? String {
+                                verbs.append(actionName)
+                            }
+                        }
+                        if !verbs.isEmpty {
+                            services.append(LocalPluginService(name: name.lowercased(), methods: verbs))
+                        }
+                    }
+
+                    // Also include qualifiers
+                    if let qualifiers = info["qualifiers"] as? [[String: Any]] {
+                        let qualifierNames = qualifiers.compactMap { $0["name"] as? String }
+                        if !qualifierNames.isEmpty {
+                            services.append(LocalPluginService(name: "\(name.lowercased()).qualifiers", methods: qualifierNames))
+                        }
                     }
                 }
-            }
-        } else {
-            // Try simple service (function named after plugin)
-            let serviceSymbol = "\(name.lowercased())_call"
-            #if os(Windows)
-            let callSymbol = GetProcAddress(handle, serviceSymbol)
-            #else
-            let callSymbol = dlsym(handle, serviceSymbol)
-            #endif
-
-            if callSymbol != nil {
-                // Plugin exports a simple service - methods unknown
-                services.append(LocalPluginService(name: name.lowercased(), methods: []))
             }
         }
 
@@ -2445,27 +2242,6 @@ public struct LocalPluginService: Sendable {
 
 // MARK: - Plugin Service Wrapper
 
-/// Wraps a plugin as an AROService
-private struct PluginServiceWrapper: AROService {
-    static let name: String = "_plugin_"
-
-    private let serviceName: String
-    private let loader: PluginLoader
-
-    init(name: String, loader: PluginLoader) {
-        self.serviceName = name
-        self.loader = loader
-    }
-
-    init() throws {
-        fatalError("PluginServiceWrapper requires name and loader")
-    }
-
-    func call(_ method: String, args: [String: any Sendable]) async throws -> any Sendable {
-        return try loader.callPlugin(serviceName, method: method, args: args)
-    }
-}
-
 /// Wraps a C plugin as an AROService
 private struct CPluginServiceWrapper: AROService {
     static let name: String = "_c_plugin_"
@@ -2505,7 +2281,7 @@ public enum PluginError: Error, CustomStringConvertible {
         case .loadFailed(let name, let message):
             return "Failed to load plugin '\(name)': \(message)"
         case .initFunctionNotFound(let name):
-            return "Plugin '\(name)' missing aro_plugin_init or <name>_call function"
+            return "Plugin '\(name)' missing required aro_plugin_info / aro_plugin_execute exports"
         case .invalidMetadata(let name, let message):
             return "Plugin '\(name)' has invalid metadata: \(message)"
         case .serviceNotFound(let name):
