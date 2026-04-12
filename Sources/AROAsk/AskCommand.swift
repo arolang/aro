@@ -451,7 +451,8 @@ public struct AskCommand: AsyncParsableCommand {
             _ = try await manager.ensureInstalled(
                 capturedModel,
                 confirm: { sizeGb in
-                    let msg = "\(Style.bold)Model '\(capturedModel)'\(Style.reset) (~\(String(format: "%.1f", sizeGb)) GB) is not installed.\nDownload from Hugging Face? [y/N] "
+                    let sizeStr = sizeGb > 0 ? "~\(String(format: "%.1f", sizeGb)) GB" : "unknown size"
+                    let msg = "\(Style.bold)Model '\(capturedModel)'\(Style.reset) (\(sizeStr)) is not installed.\nDownload from Hugging Face? [y/N] "
                     FileHandle.standardError.write(Data(msg.utf8))
                     guard let line = readLine() else { return false }
                     return line.lowercased().hasPrefix("y")

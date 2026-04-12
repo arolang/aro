@@ -4,7 +4,6 @@
       "model_id": "ARO-Lang/aro-coder-4bit",
       "primary_file": "config.json",
       "backend": "auto",
-      "size_gb": 5.0,
       "context_length": 8192
     }
   ]

@@ -11,14 +11,12 @@ public struct ModelEntry: Codable, Sendable {
     public var modelId: String
     public var primaryFile: String
     public var backend: String
-    public var sizeGb: Double?
     public var contextLength: Int?
 
     enum CodingKeys: String, CodingKey {
         case modelId = "model_id"
         case primaryFile = "primary_file"
         case backend
-        case sizeGb = "size_gb"
         case contextLength = "context_length"
     }
 }
@@ -66,7 +64,6 @@ public actor ModelManager {
             modelId: modelId,
             primaryFile: "config.json",
             backend: "auto",
-            sizeGb: nil,
             contextLength: 4096
         )
     }
@@ -95,8 +92,8 @@ public actor ModelManager {
             return dir
         }
 
-        let entry = try entry(for: modelId)
-        let sizeGb = entry.sizeGb ?? 5.0
+        // Fetch real size from HuggingFace API
+        let sizeGb = await fetchModelSize(modelId)
 
         guard await confirm(sizeGb) else {
             throw ModelManagerError.userDeclined
@@ -105,6 +102,25 @@ public actor ModelManager {
         // Download from HuggingFace using the API
         try await downloadModel(modelId: modelId, to: dir, progress: progress)
         return dir
+    }
+
+    /// Query the HuggingFace API for the total size of a model's files.
+    private func fetchModelSize(_ modelId: String) async -> Double {
+        let url = URL(string: "https://huggingface.co/api/models/\(modelId)?blobs=true")!
+        var request = URLRequest(url: url)
+        request.timeoutInterval = 15
+        if let token = ProcessInfo.processInfo.environment["HF_TOKEN"] {
+            request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+        }
+        guard let (data, _) = try? await URLSession.shared.data(for: request),
+              let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+              let siblings = json["siblings"] as? [[String: Any]] else {
+            return 0  // unknown — will show "unknown size"
+        }
+        let totalBytes: Int64 = siblings.reduce(0) { sum, entry in
+            sum + ((entry["size"] as? Int64) ?? (entry["size"] as? Int).map(Int64.init) ?? 0)
+        }
+        return Double(totalBytes) / 1_000_000_000
     }
 
     /// Check for updates by comparing local vs remote commit SHAs.
