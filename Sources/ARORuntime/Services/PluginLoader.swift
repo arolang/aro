@@ -13,8 +13,15 @@ import WinSDK
 
 /// Loads and manages dynamic plugins for ARO
 ///
+/// > **Deprecation Note (ARO-0073):** The legacy service ABI documented below
+/// > (aro_plugin_init returning service metadata, 3-parameter _call functions)
+/// > is deprecated. New plugins should use the clean ABI defined in ARO-0073:
+/// > `aro_plugin_info` (required) + `aro_plugin_execute` (optional).
+/// > See `NativePluginHost` and `UnifiedPluginLoader` for the current ABI.
+///
 /// The PluginLoader discovers Swift plugin files in the `./plugins/` directory,
 /// compiles them to dynamic libraries, and loads them at runtime.
+/// It also provides compilation utilities used by `aro build`.
 ///
 /// ## Plugin Structure
 /// ```
@@ -23,36 +30,6 @@ import WinSDK
 /// ├── plugins/
 /// │   └── MyService.swift
 /// └── aro.yaml
-/// ```
-///
-/// ## Plugin File Format
-/// Each plugin must export an `aro_plugin_init` function that returns
-/// a JSON description of the services it provides.
-///
-/// ```swift
-/// import Foundation
-///
-/// // Service implementation - called via JSON interface
-/// @_cdecl("greeting_call")
-/// public func greetingCall(
-///     _ methodPtr: UnsafePointer<CChar>,
-///     _ argsPtr: UnsafePointer<CChar>,
-///     _ resultPtr: UnsafeMutablePointer<UnsafeMutablePointer<CChar>?>
-/// ) -> Int32 {
-///     let method = String(cString: methodPtr)
-///     let argsJSON = String(cString: argsPtr)
-///
-///     // Parse args, execute method, return result
-///     // Return 0 for success, non-zero for error
-/// }
-///
-/// // Plugin initialization - returns service metadata as JSON
-/// @_cdecl("aro_plugin_init")
-/// public func pluginInit() -> UnsafePointer<CChar> {
-///     return """
-///     {"services": [{"name": "greeting", "symbol": "greeting_call"}]}
-///     """.withCString { strdup($0)! }
-/// }
 /// ```
 public final class PluginLoader: @unchecked Sendable {
     /// Shared instance

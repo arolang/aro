@@ -15,56 +15,87 @@
 import Foundation
 import Zip
 
-// MARK: - Plugin Initialization
+// MARK: - Plugin Info
 
-/// Plugin initialization - returns service metadata as JSON
-/// This tells ARO what services and symbols this plugin provides
-@_cdecl("aro_plugin_init")
-public func pluginInit() -> UnsafePointer<CChar> {
-    let metadata = """
-    {"services": [{"name": "zip", "symbol": "zip_call"}]}
+/// Returns full plugin metadata as JSON.
+/// Declares this plugin provides a "zip" service with compress/decompress/list methods.
+@_cdecl("aro_plugin_info")
+public func aroPluginInfo() -> UnsafeMutablePointer<CChar> {
+    let info = """
+    {
+      "name": "ZipPlugin",
+      "version": "1.0.0",
+      "handle": "Zip",
+      "actions": [],
+      "qualifiers": [],
+      "services": [
+        {
+          "name": "zip",
+          "methods": ["compress", "decompress", "list"]
+        }
+      ]
+    }
     """
-    let cstr = strdup(metadata)!
-    return UnsafePointer(cstr)
+    return strdup(info)!
 }
 
-// MARK: - Service Implementation
+// MARK: - Lifecycle Hooks
 
-/// Main entry point for the zip service
-/// - Parameters:
-///   - methodPtr: Method name (C string)
-///   - argsPtr: Arguments as JSON (C string)
-///   - resultPtr: Output - result as JSON (caller must free)
-/// - Returns: 0 for success, non-zero for error
-@_cdecl("zip_call")
-public func zipCall(
-    _ methodPtr: UnsafePointer<CChar>,
-    _ argsPtr: UnsafePointer<CChar>,
-    _ resultPtr: UnsafeMutablePointer<UnsafeMutablePointer<CChar>?>
-) -> Int32 {
-    let method = String(cString: methodPtr)
-    let argsJSON = String(cString: argsPtr)
+/// Called once when the plugin is loaded. No setup required for the Zip library.
+@_cdecl("aro_plugin_init")
+public func aroPluginInit() {
+    // No global state to initialise
+}
 
-    // Parse arguments
+/// Called when the plugin is unloaded. No teardown required.
+@_cdecl("aro_plugin_shutdown")
+public func aroPluginShutdown() {
+    // No global state to release
+}
+
+// MARK: - Execute
+
+/// Main dispatch function. Routes service actions via the "service:" prefix.
+/// Action format: "service:<method>", e.g. "service:compress", "service:decompress", "service:list"
+@_cdecl("aro_plugin_execute")
+public func aroPluginExecute(
+    _ actionPtr: UnsafePointer<CChar>,
+    _ inputJSONPtr: UnsafePointer<CChar>
+) -> UnsafeMutablePointer<CChar> {
+    let action = String(cString: actionPtr)
+    let inputJSON = String(cString: inputJSONPtr)
+
+    // Parse arguments (allow empty object)
     var args: [String: Any] = [:]
-    if let data = argsJSON.data(using: .utf8),
+    if let data = inputJSON.data(using: .utf8),
        let parsed = try? JSONSerialization.jsonObject(with: data) as? [String: Any] {
         args = parsed
     }
 
+    // Route service actions via "service:<method>" prefix
+    guard action.hasPrefix("service:") else {
+        return errorResponse("Unknown action: \(action)")
+    }
+    let method = String(action.dropFirst("service:".count))
+
     // Execute method
     do {
         let result = try executeMethod(method, args: args)
-        let resultJSON = try encodeResult(result)
-        resultPtr.pointee = resultJSON.withCString { strdup($0) }
-        return 0
+        return jsonResponse(result)
     } catch {
-        // Return error message
-        let errorJSON = "{\"error\": \"\(escapeJSON(String(describing: error)))\"}"
-        resultPtr.pointee = errorJSON.withCString { strdup($0) }
-        return 1
+        return errorResponse(String(describing: error))
     }
 }
+
+// MARK: - Free
+
+/// Frees memory allocated by this plugin.
+@_cdecl("aro_plugin_free")
+public func aroPluginFree(_ ptr: UnsafeMutablePointer<CChar>?) {
+    free(ptr)
+}
+
+// MARK: - Zip Logic
 
 /// Execute a zip method
 private func executeMethod(_ method: String, args: [String: Any]) throws -> [String: Any] {
@@ -181,28 +212,35 @@ private func listContents(args: [String: Any]) throws -> [String: Any] {
     ]
 }
 
-/// Encode result as JSON string
-private func encodeResult(_ result: [String: Any]) throws -> String {
-    let data = try JSONSerialization.data(withJSONObject: result)
-    return String(data: data, encoding: .utf8) ?? "{}"
+// MARK: - Helpers
+
+/// Build a JSON response string from a dictionary and return as a C string.
+private func jsonResponse(_ result: [String: Any]) -> UnsafeMutablePointer<CChar> {
+    do {
+        let data = try JSONSerialization.data(withJSONObject: result)
+        let json = String(data: data, encoding: .utf8) ?? "{}"
+        return strdup(json)!
+    } catch {
+        return strdup("{\"error\": \"Failed to encode result\"}")!
+    }
 }
 
-/// Escape string for JSON
-/// Uses manual character replacement to avoid Foundation bridging issues
-private func escapeJSON(_ string: String) -> String {
-    var result = ""
-    result.reserveCapacity(string.count)
-    for char in string {
+/// Build an error JSON response and return as a C string.
+/// Uses manual character replacement to avoid Foundation bridging issues.
+private func errorResponse(_ message: String) -> UnsafeMutablePointer<CChar> {
+    var escaped = ""
+    escaped.reserveCapacity(message.count)
+    for char in message {
         switch char {
-        case "\\": result += "\\\\"
-        case "\"": result += "\\\""
-        case "\n": result += "\\n"
-        case "\r": result += "\\r"
-        case "\t": result += "\\t"
-        default: result.append(char)
+        case "\\": escaped += "\\\\"
+        case "\"": escaped += "\\\""
+        case "\n": escaped += "\\n"
+        case "\r": escaped += "\\r"
+        case "\t": escaped += "\\t"
+        default: escaped.append(char)
         }
     }
-    return result
+    return strdup("{\"error\": \"\(escaped)\"}")!
 }
 
 // MARK: - Errors

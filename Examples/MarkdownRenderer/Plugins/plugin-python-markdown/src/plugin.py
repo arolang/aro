@@ -15,14 +15,68 @@ def aro_plugin_info() -> Dict[str, Any]:
     return {
         "name": "plugin-python-markdown",
         "version": "1.0.0",
-        "actions": ["to-html", "extract-links", "extract-headings", "word-count"]
+        "handle": "Markdown",
+        "actions": [
+            {
+                "name": "to-html",
+                "verbs": ["tohtml", "rendermarkdown"],
+                "role": "own",
+                "prepositions": ["from", "with"],
+                "description": "Convert a Markdown string to HTML",
+            },
+            {
+                "name": "extract-links",
+                "verbs": ["extractlinks"],
+                "role": "own",
+                "prepositions": ["from"],
+                "description": "Extract all hyperlinks from a Markdown string",
+            },
+            {
+                "name": "extract-headings",
+                "verbs": ["extractheadings"],
+                "role": "own",
+                "prepositions": ["from"],
+                "description": "Extract all headings from a Markdown string",
+            },
+            {
+                "name": "word-count",
+                "verbs": ["wordcount"],
+                "role": "own",
+                "prepositions": ["from"],
+                "description": "Count words, characters, and lines in a Markdown string",
+            },
+        ],
     }
+
+
+def on_init(self) -> None:
+    """Lifecycle hook called once when the plugin is loaded."""
+    pass
+
+
+def on_shutdown(self) -> None:
+    """Lifecycle hook called once when the plugin is unloaded."""
+    pass
+
+
+def _resolve_markdown(params: Dict[str, Any]) -> str:
+    """Extract the markdown text from input params.
+
+    Prefers the 'data' key, then looks inside '_with', then falls back
+    to the legacy 'object' key.
+    """
+    if "data" in params:
+        return params["data"]
+    with_obj = params.get("_with", {})
+    if isinstance(with_obj, dict) and "data" in with_obj:
+        return with_obj["data"]
+    return params.get("object", "")
 
 
 def aro_action_to_html(input_json: str) -> str:
     """Convert Markdown to HTML."""
     params = json.loads(input_json)
-    markdown = params.get("data", params.get("object", ""))
+    markdown = _resolve_markdown(params)
 
     html = markdown_to_html(markdown)
 
@@ -36,7 +90,7 @@ def aro_action_to_html(input_json: str) -> str:
 def aro_action_extract_links(input_json: str) -> str:
     """Extract all links from Markdown text."""
     params = json.loads(input_json)
-    markdown = params.get("data", params.get("object", ""))
+    markdown = _resolve_markdown(params)
 
     links = extract_links(markdown)
 
@@ -49,7 +103,7 @@ def aro_action_extract_links(input_json: str) -> str:
 def aro_action_extract_headings(input_json: str) -> str:
     """Extract all headings from Markdown text."""
     params = json.loads(input_json)
-    markdown = params.get("data", params.get("object", ""))
+    markdown = _resolve_markdown(params)
 
     headings = extract_headings(markdown)
 
@@ -62,7 +116,7 @@ def aro_action_extract_headings(input_json: str) -> str:
 def aro_action_word_count(input_json: str) -> str:
     """Count words, characters, and lines in Markdown text."""
     params = json.loads(input_json)
-    markdown = params.get("data", params.get("object", ""))
+    markdown = _resolve_markdown(params)
 
     # Remove Markdown syntax for accurate word count
     plain_text = strip_markdown(markdown)
@@ -222,6 +276,10 @@ print("Hello, World!")
 
     print("\n\nTo HTML:")
     result = aro_action_to_html(json.dumps({"data": test_md}))
+    print(json.dumps(json.loads(result), indent=2))
+
+    print("\n\nTo HTML (via _with):")
+    result = aro_action_to_html(json.dumps({"_with": {"data": test_md}}))
     print(json.dumps(json.loads(result), indent=2))
 
     print("\n\nExtract Links:")

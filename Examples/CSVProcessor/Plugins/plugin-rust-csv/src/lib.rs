@@ -13,9 +13,10 @@ use serde_json::{json, Value};
 #[derive(Serialize)]
 struct ActionDef {
     name: &'static str,
-    role: &'static str,
     verbs: Vec<&'static str>,
+    role: &'static str,
     prepositions: Vec<&'static str>,
+    description: &'static str,
 }
 
 /// Plugin info structure
@@ -23,6 +24,7 @@ struct ActionDef {
 struct PluginInfo {
     name: &'static str,
     version: &'static str,
+    handle: &'static str,
     actions: Vec<ActionDef>,
 }
 
@@ -35,24 +37,28 @@ pub extern "C" fn aro_plugin_info() -> *mut c_char {
     let info = PluginInfo {
         name: "plugin-rust-csv",
         version: "1.0.0",
+        handle: "CSV",
         actions: vec![
             ActionDef {
                 name: "ParseCSV",
-                role: "own",
                 verbs: vec!["parsecsv", "readcsv"],
+                role: "own",
                 prepositions: vec!["from", "with"],
+                description: "Parse a CSV string into an array of rows",
             },
             ActionDef {
                 name: "FormatCSV",
-                role: "own",
                 verbs: vec!["formatcsv", "writecsv"],
+                role: "own",
                 prepositions: vec!["from", "with"],
+                description: "Format an array of rows as a CSV string",
             },
             ActionDef {
                 name: "CSVToJSON",
-                role: "own",
                 verbs: vec!["csvtojson"],
+                role: "own",
                 prepositions: vec!["from"],
+                description: "Convert a CSV string to an array of JSON objects using the first row as headers",
             },
         ],
     };
@@ -62,6 +68,14 @@ pub extern "C" fn aro_plugin_info() -> *mut c_char {
         Err(_) => std::ptr::null_mut(),
     }
 }
+
+/// Lifecycle hook called once when the plugin is loaded
+#[no_mangle]
+pub extern "C" fn aro_plugin_init() {}
+
+/// Lifecycle hook called once when the plugin is unloaded
+#[no_mangle]
+pub extern "C" fn aro_plugin_shutdown() {}
 
 /// Execute a plugin action
 ///
@@ -103,12 +117,15 @@ pub extern "C" fn aro_plugin_execute(
         Err(e) => return error_result(&format!("Invalid JSON input: {}", e)),
     };
 
+    // Flatten _with nested object into top-level for parameter lookup
+    let effective_input = flatten_with(&input_value);
+
     // Dispatch to the appropriate action
     // Support both hyphenated (parse-csv) and normalized (parsecsv) forms
     let result = match action {
-        "parse-csv" | "parsecsv" | "readcsv" => parse_csv(&input_value),
-        "format-csv" | "formatcsv" | "writecsv" => format_csv(&input_value),
-        "csv-to-json" | "csvtojson" => csv_to_json(&input_value),
+        "parse-csv" | "parsecsv" | "readcsv" => parse_csv(&effective_input),
+        "format-csv" | "formatcsv" | "writecsv" => format_csv(&effective_input),
+        "csv-to-json" | "csvtojson" => csv_to_json(&effective_input),
         _ => Err(format!("Unknown action: {}", action)),
     };
 
@@ -133,6 +150,33 @@ pub extern "C" fn aro_plugin_free(ptr: *mut c_char) {
 fn error_result(message: &str) -> *mut c_char {
     let error = json!({ "error": message });
     CString::new(error.to_string()).unwrap().into_raw()
+}
+
+/// Merge keys from the `_with` nested object into a flat copy of the input.
+/// Direct top-level keys take precedence over `_with` keys.
+fn flatten_with(input: &Value) -> Value {
+    let obj = match input.as_object() {
+        Some(o) => o,
+        None => return input.clone(),
+    };
+
+    let mut merged = serde_json::Map::new();
+
+    // First, copy in _with entries (lower precedence)
+    if let Some(Value::Object(with_obj)) = obj.get("_with") {
+        for (k, v) in with_obj {
+            merged.insert(k.clone(), v.clone());
+        }
+    }
+
+    // Then overlay all direct top-level keys (higher precedence), skipping _with itself
+    for (k, v) in obj {
+        if k != "_with" {
+            merged.insert(k.clone(), v.clone());
+        }
+    }
+
+    Value::Object(merged)
 }
 
 // MARK: - Actions
@@ -288,5 +332,34 @@ mod tests {
 
         let result = csv_to_json(&input).unwrap();
         assert_eq!(result["count"], 2);
+    }
+
+    #[test]
+    fn test_flatten_with() {
+        let input = json!({
+            "top": "direct",
+            "_with": {
+                "data": "csv,content",
+                "headers": false
+            }
+        });
+        let flat = flatten_with(&input);
+        assert_eq!(flat["data"], "csv,content");
+        assert_eq!(flat["headers"], false);
+        assert_eq!(flat["top"], "direct");
+        assert!(flat.get("_with").is_none());
+    }
+
+    #[test]
+    fn test_flatten_with_precedence() {
+        // top-level key should win over _with key
+        let input = json!({
+            "data": "override",
+            "_with": {
+                "data": "from_with"
+            }
+        });
+        let flat = flatten_with(&input);
+        assert_eq!(flat["data"], "override");
     }
 }

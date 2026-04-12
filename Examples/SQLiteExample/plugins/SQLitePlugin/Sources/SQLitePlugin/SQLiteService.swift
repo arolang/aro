@@ -19,65 +19,96 @@ import SQLite
 private var database: Connection?
 private let dbQueue = DispatchQueue(label: "sqlite.plugin")
 
-// MARK: - Plugin Initialization
+// MARK: - Plugin Info
 
-/// Plugin initialization - returns service metadata as JSON
-/// This tells ARO what services and symbols this plugin provides
-@_cdecl("aro_plugin_init")
-public func pluginInit() -> UnsafePointer<CChar> {
-    let metadata = "{\"services\": [{\"name\": \"sqlite\", \"symbol\": \"sqlite_call\"}]}"
-    let cstr = strdup(metadata)!
-    return UnsafePointer(cstr)
+/// Returns full plugin metadata as JSON.
+/// Declares this plugin provides a "sqlite" service with query/execute methods.
+@_cdecl("aro_plugin_info")
+public func aroPluginInfo() -> UnsafeMutablePointer<CChar> {
+    let info = """
+    {
+      "name": "SQLitePlugin",
+      "version": "1.0.0",
+      "handle": "SQLite",
+      "actions": [],
+      "qualifiers": [],
+      "services": [
+        {
+          "name": "sqlite",
+          "methods": ["query", "execute"]
+        }
+      ]
+    }
+    """
+    return strdup(info)!
 }
 
-// MARK: - Service Implementation
+// MARK: - Lifecycle Hooks
 
-/// Main entry point for the sqlite service
-/// - Parameters:
-///   - methodPtr: Method name (C string)
-///   - argsPtr: Arguments as JSON (C string)
-///   - resultPtr: Output - result as JSON (caller must free)
-/// - Returns: 0 for success, non-zero for error
-@_cdecl("sqlite_call")
-public func sqliteCall(
-    _ methodPtr: UnsafePointer<CChar>,
-    _ argsPtr: UnsafePointer<CChar>,
-    _ resultPtr: UnsafeMutablePointer<UnsafeMutablePointer<CChar>?>
-) -> Int32 {
-    let method = String(cString: methodPtr)
-    let argsJSON = String(cString: argsPtr)
+/// Called once when the plugin is loaded. Opens the in-memory database connection.
+@_cdecl("aro_plugin_init")
+public func aroPluginInit() {
+    dbQueue.sync {
+        if database == nil {
+            database = try? Connection(.inMemory)
+        }
+    }
+}
 
-    // Parse args
-    guard let argsData = argsJSON.data(using: .utf8),
-          let args = try? JSONSerialization.jsonObject(with: argsData) as? [String: Any] else {
-        let error = "{\"error\": \"Invalid JSON arguments\"}"
-        resultPtr.pointee = error.withCString { strdup($0) }
-        return 1
+/// Called when the plugin is unloaded. Releases the database connection.
+@_cdecl("aro_plugin_shutdown")
+public func aroPluginShutdown() {
+    dbQueue.sync {
+        database = nil
+    }
+}
+
+// MARK: - Execute
+
+/// Main dispatch function. Routes service actions via the "service:" prefix.
+/// Action format: "service:<method>", e.g. "service:query", "service:execute"
+@_cdecl("aro_plugin_execute")
+public func aroPluginExecute(
+    _ actionPtr: UnsafePointer<CChar>,
+    _ inputJSONPtr: UnsafePointer<CChar>
+) -> UnsafeMutablePointer<CChar> {
+    let action = String(cString: actionPtr)
+    let inputJSON = String(cString: inputJSONPtr)
+
+    // Parse input JSON
+    guard let inputData = inputJSON.data(using: .utf8),
+          let input = try? JSONSerialization.jsonObject(with: inputData) as? [String: Any] else {
+        return errorResponse("Invalid JSON input")
     }
 
-    // Execute method in thread-safe manner
+    // Route service actions via "service:<method>" prefix
+    guard action.hasPrefix("service:") else {
+        return errorResponse("Unknown action: \(action)")
+    }
+    let method = String(action.dropFirst("service:".count))
+
+    // Execute in thread-safe manner
     let result: [String: Any]
     do {
         result = try dbQueue.sync {
-            try executeMethod(method, args: args)
+            try executeMethod(method, args: input)
         }
     } catch {
-        let errorJSON = "{\"error\": \"\(escapeJSON(String(describing: error)))\"}"
-        resultPtr.pointee = errorJSON.withCString { strdup($0) }
-        return 1
+        return errorResponse(String(describing: error))
     }
 
-    // Return success result as JSON
-    do {
-        let resultJSON = try encodeResult(result)
-        resultPtr.pointee = resultJSON.withCString { strdup($0) }
-        return 0
-    } catch {
-        let errorJSON = "{\"error\": \"Failed to encode result\"}"
-        resultPtr.pointee = errorJSON.withCString { strdup($0) }
-        return 1
-    }
+    return jsonResponse(result)
 }
+
+// MARK: - Free
+
+/// Frees memory allocated by this plugin.
+@_cdecl("aro_plugin_free")
+public func aroPluginFree(_ ptr: UnsafeMutablePointer<CChar>?) {
+    free(ptr)
+}
+
+// MARK: - SQL Logic
 
 /// Execute a database method (thread-safe via dbQueue)
 private func executeMethod(_ method: String, args: [String: Any]) throws -> [String: Any] {
@@ -137,20 +168,28 @@ private func executeStatement(db: Connection, sql: String) throws -> [String: An
     ]
 }
 
-/// Encode result as JSON string
-private func encodeResult(_ result: [String: Any]) throws -> String {
-    let data = try JSONSerialization.data(withJSONObject: result)
-    return String(data: data, encoding: .utf8) ?? "{}"
+// MARK: - Helpers
+
+/// Build a JSON response string from a dictionary and return as a C string.
+private func jsonResponse(_ result: [String: Any]) -> UnsafeMutablePointer<CChar> {
+    do {
+        let data = try JSONSerialization.data(withJSONObject: result)
+        let json = String(data: data, encoding: .utf8) ?? "{}"
+        return strdup(json)!
+    } catch {
+        return strdup("{\"error\": \"Failed to encode result\"}")!
+    }
 }
 
-/// Escape string for JSON
-private func escapeJSON(_ string: String) -> String {
-    return string
+/// Build an error JSON response and return as a C string.
+private func errorResponse(_ message: String) -> UnsafeMutablePointer<CChar> {
+    let escaped = message
         .replacingOccurrences(of: "\\", with: "\\\\")
         .replacingOccurrences(of: "\"", with: "\\\"")
         .replacingOccurrences(of: "\n", with: "\\n")
         .replacingOccurrences(of: "\r", with: "\\r")
         .replacingOccurrences(of: "\t", with: "\\t")
+    return strdup("{\"error\": \"\(escaped)\"}")!
 }
 
 // MARK: - Error Types

@@ -20,32 +20,38 @@ def aro_plugin_info() -> Dict[str, Any]:
             {
                 "name": "sort",
                 "inputTypes": ["List"],
-                "description": "Sorts a list in ascending order"
+                "description": "Sorts a list in ascending order",
+                "accepts_parameters": False
             },
             {
                 "name": "unique",
                 "inputTypes": ["List"],
-                "description": "Returns unique elements from a list"
+                "description": "Returns unique elements from a list",
+                "accepts_parameters": False
             },
             {
                 "name": "sum",
                 "inputTypes": ["List"],
-                "description": "Returns the sum of numeric list elements"
+                "description": "Returns the sum of numeric list elements",
+                "accepts_parameters": False
             },
             {
                 "name": "avg",
                 "inputTypes": ["List"],
-                "description": "Returns the average of numeric list elements"
+                "description": "Returns the average of numeric list elements",
+                "accepts_parameters": False
             },
             {
                 "name": "min",
                 "inputTypes": ["List"],
-                "description": "Returns the minimum element"
+                "description": "Returns the minimum element",
+                "accepts_parameters": False
             },
             {
                 "name": "max",
                 "inputTypes": ["List"],
-                "description": "Returns the maximum element"
+                "description": "Returns the maximum element",
+                "accepts_parameters": False
             }
         ]
     }

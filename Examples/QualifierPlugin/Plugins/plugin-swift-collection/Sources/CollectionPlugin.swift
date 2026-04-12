@@ -23,19 +23,22 @@ public func aroPluginInfo() -> UnsafeMutablePointer<CChar>? {
     let pickRandomQualifier: NSDictionary = [
         "name": "pick-random",
         "inputTypes": ["List"] as NSArray,
-        "description": "Picks a random element from a list"
+        "description": "Picks a random element from a list",
+        "accepts_parameters": false
     ]
 
     let shuffleQualifier: NSDictionary = [
         "name": "shuffle",
         "inputTypes": ["List", "String"] as NSArray,
-        "description": "Shuffles elements in a list or characters in a string"
+        "description": "Shuffles elements in a list or characters in a string",
+        "accepts_parameters": false
     ]
 
     let reverseQualifier: NSDictionary = [
         "name": "reverse",
         "inputTypes": ["List", "String"] as NSArray,
-        "description": "Reverses elements in a list or characters in a string"
+        "description": "Reverses elements in a list or characters in a string",
+        "accepts_parameters": false
     ]
 
     let info: NSDictionary = [
@@ -93,14 +96,13 @@ public func aroPluginQualifier(
     return strdup(resultString)
 }
 
-/// Execute a plugin action (not used but required)
-@_cdecl("aro_plugin_execute")
-public func aroPluginExecute(
-    action: UnsafePointer<CChar>?,
-    inputJson: UnsafePointer<CChar>?
-) -> UnsafeMutablePointer<CChar>? {
-    return strdup("{\"error\":\"No actions defined\"}")
-}
+/// Plugin lifecycle hook - called once when the plugin is loaded
+@_cdecl("aro_plugin_init")
+public func aroPluginInit() {}
+
+/// Plugin lifecycle hook - called once when the plugin is unloaded
+@_cdecl("aro_plugin_shutdown")
+public func aroPluginShutdown() {}
 
 /// Free memory allocated by the plugin
 @_cdecl("aro_plugin_free")

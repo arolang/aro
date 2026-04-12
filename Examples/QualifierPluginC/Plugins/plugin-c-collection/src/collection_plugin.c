@@ -113,9 +113,9 @@ char* aro_plugin_info(void) {
         "\"language\":\"c\","
         "\"actions\":[],"
         "\"qualifiers\":["
-            "{\"name\":\"first\",\"inputTypes\":[\"List\"],\"description\":\"Returns the first element of a list\"},"
-            "{\"name\":\"last\",\"inputTypes\":[\"List\"],\"description\":\"Returns the last element of a list\"},"
-            "{\"name\":\"size\",\"inputTypes\":[\"List\",\"String\"],\"description\":\"Returns the size/length\"}"
+            "{\"name\":\"first\",\"inputTypes\":[\"List\"],\"description\":\"Returns the first element of a list\",\"accepts_parameters\":false},"
+            "{\"name\":\"last\",\"inputTypes\":[\"List\"],\"description\":\"Returns the last element of a list\",\"accepts_parameters\":false},"
+            "{\"name\":\"size\",\"inputTypes\":[\"List\",\"String\"],\"description\":\"Returns the size/length\",\"accepts_parameters\":false}"
         "]"
         "}";
 
@@ -250,14 +250,11 @@ char* aro_plugin_qualifier(const char* qualifier, const char* input_json) {
     return result;
 }
 
-/* Execute action (not used but required) */
-char* aro_plugin_execute(const char* action, const char* input_json) {
-    char* result = malloc(256);
-    if (result) {
-        snprintf(result, 256, "{\"error\":\"No actions defined\"}");
-    }
-    return result;
-}
+/* Plugin lifecycle hook - called once when the plugin is loaded */
+void aro_plugin_init(void) {}
+
+/* Plugin lifecycle hook - called once when the plugin is unloaded */
+void aro_plugin_shutdown(void) {}
 
 /* Free memory allocated by the plugin */
 void aro_plugin_free(char* ptr) {
