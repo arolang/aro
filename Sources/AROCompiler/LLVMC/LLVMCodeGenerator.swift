@@ -315,6 +315,18 @@ public final class LLVMCodeGenerator {
                 gen.generateRequireStatement(stmt as! RequireStatement, index: index, errorBlock: errorBlock)
             }
         },
+        ObjectIdentifier(PipelineStatement.self): { gen in
+            { stmt, index, errorBlock in
+                // ARO-0067: A pipeline is just a sequence of ARO statements where
+                // each stage's object is the previous stage's result. The parser
+                // has already rewritten the stages to reference the chained names,
+                // so we can emit them sequentially like plain statements.
+                let pipeline = stmt as! PipelineStatement
+                for (stageOffset, stage) in pipeline.stages.enumerated() {
+                    gen.generateAROStatement(stage, index: index * 1000 + stageOffset, errorBlock: errorBlock)
+                }
+            }
+        },
     ]
 
     /// Return the set of statement metatypes that have a registered handler.

@@ -263,6 +263,7 @@ final class LLVMCodeGeneratorTests: XCTestCase {
             ObjectIdentifier(BreakStatement.self),
             ObjectIdentifier(PublishStatement.self),
             ObjectIdentifier(RequireStatement.self),
+            ObjectIdentifier(PipelineStatement.self),
         ]
         XCTAssertEqual(
             LLVMCodeGenerator.supportedStatementTypeIdentifiers,
