@@ -6,11 +6,11 @@ keepalive
 websocket
 http
 https
-statuspost
 openapi
 datetime
 localhost
 prepositions
+pipeline
 
 Extract
 Parse
@@ -26,6 +26,14 @@ Exists
 Parameters
 Prompt
 Select
+Get
+Find
+Load
+Stream
+Subscribe
+Ask
+Choose
+Http
 
 Compute
 Validate
@@ -48,12 +56,45 @@ Append
 Execute
 Call
 ParseHtml
+ParseLinkHeader
 Clear
 Render
+Schedule
+Sleep
+Repaint
+Show
+Calculate
+Derive
+Verify
+Check
+Build
+Construct
+Convert
+Modify
+Change
+Order
+Arrange
+Combine
+Remove
+Destroy
+Run
+Shell
+Exec
+Invoke
+Delay
+Pause
+Patch
+Join
+Aggregate
+Include
+Embed
+Insert
 
 Return
 Throw
-Broadcast
+Respond
+Raise
+Fail
 
 Publish
 Store
@@ -63,6 +104,17 @@ Emit
 Write
 Notify
 CreateDirectory
+Print
+Output
+Debug
+Save
+Persist
+Alert
+Signal
+Dispatch
+Export
+Expose
+Share
 
 Start
 Stop
@@ -74,6 +126,14 @@ Disconnect
 Make
 Watch
 Configure
+Broadcast
+Await
+Block
+Wait
+Terminate
+Touch
+Mkdir
+Rename
 
 Given
 When
@@ -84,3 +144,4 @@ pathParameters
 queryParameters
 requestBody
 responseBody
+statuspost

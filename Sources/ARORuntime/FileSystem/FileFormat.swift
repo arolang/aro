@@ -70,6 +70,39 @@ public enum FileFormat: String, Sendable, CaseIterable {
         }
     }
 
+    /// Resolve an explicit format qualifier (e.g. `<data: json>`, `<text: raw>`)
+    /// to a `FileFormat`. Returns `nil` if the qualifier is not a recognised
+    /// format name. The special `raw` qualifier is handled by callers and is
+    /// NOT returned here — use `isRawQualifier(_:)` for that.
+    /// - Parameter qualifier: A qualifier string from `result.specifiers`.
+    /// - Returns: Matching `FileFormat`, or `nil` if unrecognised.
+    public static func fromQualifier(_ qualifier: String) -> FileFormat? {
+        switch qualifier.lowercased() {
+        case "json": return .json
+        case "jsonl", "ndjson", "json-lines": return .jsonl
+        case "yaml", "yml": return .yaml
+        case "xml": return .xml
+        case "toml": return .toml
+        case "csv": return .csv
+        case "tsv": return .tsv
+        case "md", "markdown": return .markdown
+        case "html", "htm": return .html
+        case "txt", "text": return .text
+        case "sql": return .sql
+        case "log": return .log
+        case "env": return .env
+        case "binary", "bin": return .binary
+        default: return nil
+        }
+    }
+
+    /// Whether the given qualifier requests raw (unparsed) string content.
+    /// Recognises `raw`, `string`, and the legacy `as string` form.
+    public static func isRawQualifier(_ qualifier: String) -> Bool {
+        let lower = qualifier.lowercased()
+        return lower == "raw" || lower == "string" || lower == "as string"
+    }
+
     /// Whether this format supports deserialization (parsing back to structured data)
     public var supportsDeserialization: Bool {
         switch self {

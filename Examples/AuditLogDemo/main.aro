@@ -18,18 +18,21 @@
     Emit a <UserCreated: event> with {
         user: { id: "user-123", name: "Alice", email: "alice@example.com" }
     }.
+    Sleep the <wait1> for 100 milliseconds.
 
     (* Emit an OrderPlaced event - the plugin handler will respond *)
     Log "Emitting OrderPlaced event..." to the <console>.
     Emit an <OrderPlaced: event> with {
         order: { id: "order-456", total: 99.99, items: 3 }
     }.
+    Sleep the <wait2> for 100 milliseconds.
 
     (* Emit a PaymentReceived event - the plugin handler will respond *)
     Log "Emitting PaymentReceived event..." to the <console>.
     Emit a <PaymentReceived: event> with {
         payment: { id: "pay-789", amount: 99.99, method: "credit_card" }
     }.
+    Sleep the <wait3> for 100 milliseconds.
 
     Log "=== Demo Complete ===" to the <console>.
     Return an <OK: status> for the <startup>.

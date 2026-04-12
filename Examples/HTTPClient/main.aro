@@ -4,8 +4,12 @@
     Log "HTTP Client Demo" to the <console>.
     Log "Fetching weather data from Open-Meteo API..." to the <console>.
 
-    (* Create the API URL *)
-    Create the <api-url> with "https://api.open-meteo.com/v1/forecast?latitude=52.52&longitude=13.41&current_weather=true".
+    (* Create the API URL.
+       For reliable, offline-friendly tests this points at a local stub
+       (see stub.py). To call the real Open-Meteo API instead, replace
+       the URL below with:
+         "https://api.open-meteo.com/v1/forecast?latitude=52.52&longitude=13.41&current_weather=true" *)
+    Create the <api-url> with "http://127.0.0.1:18765/v1/forecast?latitude=52.52&longitude=13.41&current_weather=true".
 
     (* Simple GET request — response includes body, status, and headers *)
     Request the <response> from the <api-url>.

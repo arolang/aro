@@ -212,25 +212,60 @@ Read the <data> from the <file: "./data.tsv">.
 
 ### 6.1 Explicit Format Specifier
 
-Override auto-detection with explicit format:
+Override auto-detection with an explicit format qualifier on the result:
 
 ```aro
-Read the <data: JSON> from the <file: "./data.txt">.
+Read the <data: json> from the <file: "./data.txt">.
 (* Force JSON parsing even though extension is .txt *)
+
+Write the <users: csv> to "./report.dat".
+(* Force CSV serialisation even though extension is .dat *)
 ```
 
-### 6.2 Available Specifiers
+### 6.2 Raw (Unparsed) Mode — Opt-Out (issue #197)
 
-| Specifier | Format |
-|-----------|--------|
-| `JSON` | JSON |
-| `YAML` | YAML |
-| `CSV` | CSV |
-| `TSV` | TSV |
-| `XML` | XML |
-| `TOML` | TOML |
-| `TEXT` | Plain text |
-| `BYTES` | Binary data |
+Use the `raw` qualifier to bypass format detection entirely. The file is
+read as a plain `String` (or written verbatim) regardless of extension.
+This avoids silent failures when a `.txt` / `.csv` / `.yaml` file does not
+actually contain that format — for example a list of integers, a log
+fragment, or a free-form text dump:
+
+```aro
+(* Always returns the raw bytes as a String, no key=value parsing *)
+Read the <raw-content: raw> from "./bigfile.txt".
+Split the <lines> from <raw-content> by /\n/.
+
+(* Writes the string as-is, no serialisation *)
+Write the <log-line: raw> to "./output.txt".
+```
+
+`raw` is recognised on both `Read` and `Write`. The legacy `as String`
+form is still accepted for backwards compatibility.
+
+### 6.3 Available Specifiers
+
+| Specifier(s) | Format |
+|--------------|--------|
+| `raw`, `string`, `as string` | Raw / unparsed string (opt-out) |
+| `json` | JSON |
+| `jsonl`, `ndjson`, `json-lines` | JSON Lines |
+| `yaml`, `yml` | YAML |
+| `csv` | CSV |
+| `tsv` | TSV |
+| `xml` | XML |
+| `toml` | TOML |
+| `md`, `markdown` | Markdown |
+| `html`, `htm` | HTML |
+| `txt`, `text` | Plain text (key=value) |
+| `sql` | SQL |
+| `log` | Log entries |
+| `env` | `.env` (key=value, uppercased) |
+| `binary`, `bin` | Binary pass-through |
+
+Qualifiers are case-insensitive. Resolution order on `Read`/`Write` is:
+1. `raw` qualifier → bypass formatting entirely.
+2. Explicit format qualifier → use that format.
+3. File extension → auto-detect via `FileFormat.detect(from:)`.
 
 ---
 

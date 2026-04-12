@@ -1,0 +1,652 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <title>Interactive REPL - ARO Programming Language</title>
+{{head}}
+    <style>
+        .doc-page {
+            padding: 120px 24px 80px;
+            max-width: 900px;
+            margin: 0 auto;
+        }
+
+        .doc-header {
+            margin-bottom: 48px;
+        }
+
+        .doc-header h1 {
+            font-size: clamp(2rem, 5vw, 3rem);
+            font-weight: 700;
+            margin-bottom: 16px;
+            letter-spacing: -0.02em;
+        }
+
+        .doc-header .lead {
+            font-size: 1.25rem;
+            color: var(--color-text-muted);
+            line-height: 1.7;
+        }
+
+        .doc-page h2 {
+            font-size: 1.8rem;
+            font-weight: 600;
+            margin: 48px 0 16px;
+            padding-top: 24px;
+            border-top: 1px solid rgba(255, 255, 255, 0.1);
+        }
+
+        .doc-page h3 {
+            font-size: 1.3rem;
+            font-weight: 600;
+            margin: 32px 0 12px;
+            color: var(--color-secondary);
+        }
+
+        .doc-page p {
+            font-size: 1.1rem;
+            color: var(--color-text-muted);
+            line-height: 1.8;
+            margin-bottom: 16px;
+        }
+
+        .doc-page code {
+            font-family: var(--font-mono);
+            background: var(--color-bg-alt);
+            padding: 3px 8px;
+            border-radius: 4px;
+            font-size: 0.9rem;
+            color: var(--color-secondary);
+        }
+
+        .doc-page pre {
+            background: var(--color-bg-alt);
+            border-radius: var(--radius-md);
+            padding: 24px;
+            overflow-x: auto;
+            margin: 24px 0;
+            border: 1px solid rgba(255, 255, 255, 0.1);
+        }
+
+        .doc-page pre code {
+            background: none;
+            padding: 0;
+            font-size: 0.9rem;
+            line-height: 1.7;
+            color: var(--color-text);
+        }
+
+        .doc-page ul {
+            color: var(--color-text-muted);
+            margin: 16px 0 16px 24px;
+            line-height: 1.8;
+        }
+
+        .doc-page li {
+            margin-bottom: 8px;
+        }
+
+        .doc-page strong {
+            color: var(--color-text);
+        }
+
+        .doc-page em {
+            color: var(--color-secondary);
+            font-style: normal;
+        }
+
+        .doc-page table {
+            width: 100%;
+            border-collapse: collapse;
+            margin: 24px 0;
+        }
+
+        .doc-page th, .doc-page td {
+            padding: 12px 16px;
+            text-align: left;
+            border: 1px solid rgba(255, 255, 255, 0.1);
+        }
+
+        .doc-page th {
+            background: var(--color-bg-alt);
+            font-weight: 600;
+            color: var(--color-text);
+        }
+
+        .doc-page td {
+            color: var(--color-text-muted);
+        }
+
+        .doc-page td code {
+            font-size: 0.85rem;
+        }
+
+        .highlight-box {
+            background: rgba(124, 58, 237, 0.1);
+            border: 1px solid rgba(124, 58, 237, 0.3);
+            border-radius: var(--radius-md);
+            padding: 24px;
+            margin: 32px 0;
+        }
+
+        .highlight-box h4 {
+            color: var(--color-primary);
+            font-size: 1.1rem;
+            margin-bottom: 12px;
+        }
+
+        .highlight-box p {
+            margin-bottom: 0;
+        }
+
+        .code-comment { color: #6b7280; }
+        .code-keyword { color: #7c3aed; font-weight: 600; }
+        .code-string { color: #10b981; }
+        .code-feature { color: #f472b6; }
+        .code-result { color: #06b6d4; }
+        .code-prompt { color: #f59e0b; font-weight: 600; }
+        .code-output { color: #10b981; }
+
+        .back-link {
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            color: var(--color-text-muted);
+            text-decoration: none;
+            font-size: 0.95rem;
+            margin-bottom: 24px;
+            transition: color 0.2s;
+        }
+
+        .back-link:hover {
+            color: var(--color-primary);
+        }
+    </style>
+</head>
+<body>
+    <nav class="nav">
+        <div class="nav-content">
+            <a href="/aro/" class="logo">
+                <span class="logo-aro">ARO</span>
+            </a>
+            <div class="nav-links">
+                <a href="../fdd.html">The FDD Story</a>
+                <a href="../getting-started.html">Get Started</a>
+                <a href="../docs.html" style="color: var(--color-text);">Docs</a>
+                <a href="../disclaimer.html">Motivation</a>
+                <a href="../download.html">Download</a>
+                <a href="https://github.com/arolang/aro" class="nav-github">
+                    <svg viewBox="0 0 16 16" fill="currentColor"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z"/></svg>
+                    <span class="github-stars">
+                        <svg viewBox="0 0 16 16"><path d="M8 .25a.75.75 0 01.673.418l1.882 3.815 4.21.612a.75.75 0 01.416 1.279l-3.046 2.97.719 4.192a.75.75 0 01-1.088.791L8 12.347l-3.766 1.98a.75.75 0 01-1.088-.79l.72-4.194L.818 6.374a.75.75 0 01.416-1.28l4.21-.611L7.327.668A.75.75 0 018 .25z"/></svg>
+                        <span class="github-stars-count"></span>
+                    </span>
+                </a>
+            </div>
+        </div>
+    </nav>
+
+    <main class="doc-page">
+        <a href="../docs.html" class="back-link">&#x2190; Back to Documentation</a>
+
+        <header class="doc-header">
+            <h1 class="gradient-text">Interactive REPL</h1>
+            <p class="lead">
+                Explore, prototype, and test ARO statements interactively without creating files or defining feature sets.
+                The REPL provides immediate feedback with session persistence and export capabilities.
+            </p>
+        </header>
+
+        <div class="highlight-box">
+            <h4>Dual-Mode Design</h4>
+            <p>
+                The REPL supports two seamless modes: <strong>Direct Mode</strong> for immediate statement execution
+                and <strong>Feature Set Mode</strong> for defining complete feature sets interactively.
+                Variables persist across statements within a session.
+            </p>
+        </div>
+
+        <h2>Overview</h2>
+        <p>
+            The ARO REPL (Read-Eval-Print Loop) provides an interactive environment for working with ARO.
+            It eliminates the need to create files and define feature sets when you just want to explore
+            how actions work, prototype a computation, or learn the language.
+        </p>
+        <p>
+            Internally, the REPL session acts as an implicit feature set named <code>_repl_session_</code>
+            with the business activity <code>Interactive</code>. All variables you define persist across
+            statements until you clear the session or exit.
+        </p>
+
+        <h2>Starting the REPL</h2>
+        <p>
+            Launch the REPL from the command line:
+        </p>
+
+        <pre><code><span class="code-comment"># Start the interactive REPL</span>
+aro repl
+
+<span class="code-comment"># Start with a file pre-loaded</span>
+aro repl --load ./my-definitions.aro
+
+<span class="code-comment"># Start with plugins available</span>
+aro repl --plugin ./Plugins/my-plugin
+
+<span class="code-comment"># Start with an HTTP server enabled</span>
+aro repl --http 8080</code></pre>
+
+        <h3>Command-Line Options</h3>
+
+        <table>
+            <thead>
+                <tr>
+                    <th>Option</th>
+                    <th>Description</th>
+                </tr>
+            </thead>
+            <tbody>
+                <tr>
+                    <td><code>--load &lt;file&gt;</code></td>
+                    <td>Pre-load definitions from a <code>.aro</code> file</td>
+                </tr>
+                <tr>
+                    <td><code>--plugin &lt;path&gt;</code></td>
+                    <td>Load a plugin at startup</td>
+                </tr>
+                <tr>
+                    <td><code>--http &lt;port&gt;</code></td>
+                    <td>Start an HTTP server on the given port</td>
+                </tr>
+                <tr>
+                    <td><code>--history &lt;file&gt;</code></td>
+                    <td>Use a custom history file</td>
+                </tr>
+                <tr>
+                    <td><code>--no-color</code></td>
+                    <td>Disable colored output</td>
+                </tr>
+            </tbody>
+        </table>
+
+        <h2>Direct Mode</h2>
+        <p>
+            In Direct Mode, you type ARO statements and they execute immediately. Variables persist
+            across statements so you can build up state incrementally:
+        </p>
+
+        <pre><code><span class="code-prompt">aro&gt;</span> Set the &lt;name&gt; to <span class="code-string">"Alice"</span>.
+<span class="code-output">=&gt; OK</span>
+
+<span class="code-prompt">aro&gt;</span> Set the &lt;age&gt; to 30.
+<span class="code-output">=&gt; OK</span>
+
+<span class="code-prompt">aro&gt;</span> Compute the &lt;greeting&gt; from <span class="code-string">"Hello, "</span> ++ &lt;name&gt; ++ <span class="code-string">"!"</span>.
+<span class="code-output">=&gt; "Hello, Alice!"</span>
+
+<span class="code-prompt">aro&gt;</span> Compute the &lt;sum&gt; from &lt;age&gt; + 10.
+<span class="code-output">=&gt; 40</span>
+
+<span class="code-prompt">aro&gt;</span> Log <span class="code-string">"Name is ${&lt;name&gt;}"</span> to the &lt;console&gt;.
+Name is Alice
+<span class="code-output">=&gt; OK</span></code></pre>
+
+        <h3>Result Display</h3>
+
+        <table>
+            <thead>
+                <tr>
+                    <th>Result Type</th>
+                    <th>Display</th>
+                </tr>
+            </thead>
+            <tbody>
+                <tr>
+                    <td>Bound variable</td>
+                    <td><code>=&gt; &lt;value&gt;</code></td>
+                </tr>
+                <tr>
+                    <td>Void / OK</td>
+                    <td><code>=&gt; OK</code></td>
+                </tr>
+                <tr>
+                    <td>Error</td>
+                    <td><code>Error: &lt;message&gt;</code></td>
+                </tr>
+                <tr>
+                    <td>Complex object</td>
+                    <td>Pretty-printed JSON</td>
+                </tr>
+            </tbody>
+        </table>
+
+        <h2>Built-in Commands</h2>
+        <p>
+            Meta-commands start with <code>:</code> and control the REPL session itself.
+        </p>
+
+        <table>
+            <thead>
+                <tr>
+                    <th>Command</th>
+                    <th>Aliases</th>
+                    <th>Description</th>
+                </tr>
+            </thead>
+            <tbody>
+                <tr>
+                    <td><code>:help</code></td>
+                    <td><code>:h</code>, <code>:?</code></td>
+                    <td>Show help message with all commands</td>
+                </tr>
+                <tr>
+                    <td><code>:vars</code></td>
+                    <td><code>:v</code></td>
+                    <td>List all session variables with types and values</td>
+                </tr>
+                <tr>
+                    <td><code>:vars &lt;name&gt;</code></td>
+                    <td></td>
+                    <td>Show detailed info for a specific variable</td>
+                </tr>
+                <tr>
+                    <td><code>:type &lt;name&gt;</code></td>
+                    <td><code>:t</code></td>
+                    <td>Show the type of a variable</td>
+                </tr>
+                <tr>
+                    <td><code>:clear</code></td>
+                    <td><code>:c</code></td>
+                    <td>Clear all session state (variables, feature sets, history)</td>
+                </tr>
+                <tr>
+                    <td><code>:history</code></td>
+                    <td><code>:hist</code></td>
+                    <td>Show full input history</td>
+                </tr>
+                <tr>
+                    <td><code>:history &lt;n&gt;</code></td>
+                    <td></td>
+                    <td>Show last <em>n</em> history entries</td>
+                </tr>
+                <tr>
+                    <td><code>:fs</code></td>
+                    <td></td>
+                    <td>List defined feature sets</td>
+                </tr>
+                <tr>
+                    <td><code>:invoke &lt;name&gt;</code></td>
+                    <td><code>:i</code></td>
+                    <td>Invoke a defined feature set</td>
+                </tr>
+                <tr>
+                    <td><code>:invoke &lt;name&gt; &lt;json&gt;</code></td>
+                    <td></td>
+                    <td>Invoke a feature set with JSON input data</td>
+                </tr>
+                <tr>
+                    <td><code>:set &lt;name&gt; &lt;value&gt;</code></td>
+                    <td></td>
+                    <td>Set a variable directly (accepts JSON, numbers, booleans, strings)</td>
+                </tr>
+                <tr>
+                    <td><code>:load &lt;file&gt;</code></td>
+                    <td></td>
+                    <td>Load and compile a <code>.aro</code> file into the session</td>
+                </tr>
+                <tr>
+                    <td><code>:export</code></td>
+                    <td><code>:e</code></td>
+                    <td>Print session as <code>.aro</code> code</td>
+                </tr>
+                <tr>
+                    <td><code>:export &lt;file&gt;</code></td>
+                    <td></td>
+                    <td>Save session to a file</td>
+                </tr>
+                <tr>
+                    <td><code>:export --test &lt;file&gt;</code></td>
+                    <td></td>
+                    <td>Export as a test file with assertions</td>
+                </tr>
+                <tr>
+                    <td><code>:quit</code></td>
+                    <td><code>:q</code>, <code>:exit</code></td>
+                    <td>Exit the REPL</td>
+                </tr>
+            </tbody>
+        </table>
+
+        <h3>Variable Inspection</h3>
+        <p>
+            Use <code>:vars</code> to see all variables or inspect a specific one:
+        </p>
+
+        <pre><code><span class="code-prompt">aro&gt;</span> :vars
+Name     Type      Value
+name     String    "Alice"
+age      Integer   30
+user     Object    { name, age, ... }
+
+<span class="code-prompt">aro&gt;</span> :vars user
+user
+  Type:  Object
+  Value: {
+    age: 30
+    name: "Alice"
+  }
+
+<span class="code-prompt">aro&gt;</span> :type user
+Object { age: Integer, name: String }</code></pre>
+
+        <h3>History</h3>
+        <p>
+            The <code>:history</code> command shows previous inputs with their status and execution time:
+        </p>
+
+        <pre><code><span class="code-prompt">aro&gt;</span> :history 5
+1. [ok]  Set the &lt;name&gt; to "Alice".           2.0ms
+2. [ok]  Set the &lt;age&gt; to 30.                 1.0ms
+3. [ok]  Compute the &lt;sum&gt; from &lt;x&gt; + &lt;y&gt;.    3.0ms
+4. [err] Get the &lt;missing&gt; from &lt;nowhere&gt;.
+5. [ok]  Log "test" to the &lt;console&gt;.         1.0ms</code></pre>
+
+        <h2>Multiline Input</h2>
+        <p>
+            The REPL automatically detects incomplete input and continues to the next line.
+            This triggers when it encounters:
+        </p>
+        <ul>
+            <li>Unclosed braces <code>{</code>, parentheses <code>(</code>, or brackets <code>[</code></li>
+            <li>Unclosed string literals</li>
+            <li>A statement without a terminating <code>.</code></li>
+        </ul>
+
+        <pre><code><span class="code-prompt">aro&gt;</span> Create the &lt;user&gt; with {
+<span class="code-prompt">...&gt;</span>   name: <span class="code-string">"Alice"</span>,
+<span class="code-prompt">...&gt;</span>   age: 30
+<span class="code-prompt">...&gt;</span> }.
+<span class="code-output">=&gt; { name: "Alice", age: 30 }</span></code></pre>
+
+        <p>
+            Feature set definitions also use multiline input. The prompt changes to show the
+            feature set name while you are inside a definition:
+        </p>
+
+        <pre><code><span class="code-prompt">aro&gt;</span> (Calculate Tax: Finance) {
+<span class="code-prompt">(Calculate Tax)&gt;</span> Extract the &lt;amount&gt; from the &lt;input: value&gt;.
+<span class="code-prompt">(Calculate Tax)&gt;</span> Compute the &lt;tax&gt; from &lt;amount&gt; * 0.2.
+<span class="code-prompt">(Calculate Tax)&gt;</span> Return an &lt;OK: status&gt; with { tax: &lt;tax&gt; }.
+<span class="code-prompt">(Calculate Tax)&gt;</span> }
+Feature set 'Calculate Tax' defined</code></pre>
+
+        <h2>Feature Set Mode</h2>
+        <p>
+            When you type a feature set header like <code>(Name: Activity) {</code>, the REPL
+            enters Feature Set Mode. Statements are accumulated until you close with <code>}</code>,
+            then the entire feature set is compiled and registered.
+        </p>
+        <p>
+            Once defined, you can invoke feature sets with the <code>:invoke</code> command:
+        </p>
+
+        <pre><code><span class="code-prompt">aro&gt;</span> :invoke Calculate Tax { "value": 500 }
+<span class="code-output">=&gt; { tax: 100 }</span>
+
+<span class="code-comment">(* Or set variables first, then invoke *)</span>
+<span class="code-prompt">aro&gt;</span> :set input { "value": 100 }
+<span class="code-output">=&gt; OK</span>
+<span class="code-prompt">aro&gt;</span> :invoke Calculate Tax
+<span class="code-output">=&gt; { tax: 20 }</span></code></pre>
+
+        <p>
+            Use <code>:fs</code> to list all defined feature sets:
+        </p>
+
+        <pre><code><span class="code-prompt">aro&gt;</span> :fs
+Feature Sets:
+  - Calculate Tax (Finance)
+  - Greet User (API)</code></pre>
+
+        <h2>Session Export</h2>
+        <p>
+            Convert your interactive session into a proper <code>.aro</code> file. This is useful
+            for turning exploratory work into production code or tests.
+        </p>
+
+        <h3>Export as Feature Set</h3>
+
+        <pre><code><span class="code-prompt">aro&gt;</span> Set the &lt;base-price&gt; to 100.
+<span class="code-output">=&gt; OK</span>
+<span class="code-prompt">aro&gt;</span> Compute the &lt;tax&gt; from &lt;base-price&gt; * 0.2.
+<span class="code-output">=&gt; 20</span>
+<span class="code-prompt">aro&gt;</span> Compute the &lt;total&gt; from &lt;base-price&gt; + &lt;tax&gt;.
+<span class="code-output">=&gt; 120</span>
+
+<span class="code-prompt">aro&gt;</span> :export
+<span class="code-comment">(* Generated from ARO REPL session *)</span>
+
+(REPL Session: Interactive) {
+    Set the &lt;base-price&gt; to 100.
+    Compute the &lt;tax&gt; from &lt;base-price&gt; * 0.2.
+    Compute the &lt;total&gt; from &lt;base-price&gt; + &lt;tax&gt;.
+}
+
+<span class="code-prompt">aro&gt;</span> :export ./pricing.aro
+Exported to ./pricing.aro</code></pre>
+
+        <h3>Export as Test</h3>
+        <p>
+            The <code>--test</code> flag generates a test file with assertions based on the values
+            computed during the session:
+        </p>
+
+        <pre><code><span class="code-prompt">aro&gt;</span> :export --test ./pricing-test.aro
+Exported to ./pricing-test.aro
+
+<span class="code-comment">(* Generated content: *)</span>
+(Pricing Test: Test) {
+    Set the &lt;base-price&gt; to 100.
+    Assert the &lt;base-price&gt; is 100.
+
+    Compute the &lt;tax&gt; from &lt;base-price&gt; * 0.2.
+    Assert the &lt;tax&gt; is 20.
+
+    Compute the &lt;total&gt; from &lt;base-price&gt; + &lt;tax&gt;.
+    Assert the &lt;total&gt; is 120.
+}</code></pre>
+
+        <h2>Keyboard Shortcuts</h2>
+
+        <table>
+            <thead>
+                <tr>
+                    <th>Shortcut</th>
+                    <th>Action</th>
+                </tr>
+            </thead>
+            <tbody>
+                <tr>
+                    <td><code>Up / Down</code></td>
+                    <td>Navigate input history</td>
+                </tr>
+                <tr>
+                    <td><code>Ctrl+C</code></td>
+                    <td>Cancel current input</td>
+                </tr>
+                <tr>
+                    <td><code>Ctrl+D</code></td>
+                    <td>Exit REPL (on empty line)</td>
+                </tr>
+                <tr>
+                    <td><code>Ctrl+L</code></td>
+                    <td>Clear screen</td>
+                </tr>
+                <tr>
+                    <td><code>Ctrl+U</code></td>
+                    <td>Clear current line</td>
+                </tr>
+                <tr>
+                    <td><code>Ctrl+W</code></td>
+                    <td>Delete word backward</td>
+                </tr>
+            </tbody>
+        </table>
+
+        <h2>Example Session</h2>
+        <p>
+            Here is a complete session demonstrating data processing, feature set definition,
+            invocation, and export:
+        </p>
+
+        <pre><code><span class="code-prompt">aro&gt;</span> Create the &lt;scores&gt; with [
+<span class="code-prompt">...&gt;</span>   { name: <span class="code-string">"Alice"</span>, score: 85 },
+<span class="code-prompt">...&gt;</span>   { name: <span class="code-string">"Bob"</span>, score: 92 },
+<span class="code-prompt">...&gt;</span>   { name: <span class="code-string">"Carol"</span>, score: 78 }
+<span class="code-prompt">...&gt;</span> ].
+<span class="code-output">=&gt; OK</span>
+
+<span class="code-prompt">aro&gt;</span> Filter the &lt;passing&gt; from &lt;scores&gt; where score &gt;= 80.
+<span class="code-output">=&gt; [{ name: "Alice", score: 85 }, { name: "Bob", score: 92 }]</span>
+
+<span class="code-prompt">aro&gt;</span> :vars
+Name      Type    Value
+scores    List    [3 items]
+passing   List    [2 items]
+
+<span class="code-comment">(* Define a reusable feature set *)</span>
+<span class="code-prompt">aro&gt;</span> (Grade Report: Education) {
+<span class="code-prompt">(Grade Report)&gt;</span> Filter the &lt;passing&gt; from &lt;scores&gt; where score &gt;= 80.
+<span class="code-prompt">(Grade Report)&gt;</span> Compute the &lt;count: length&gt; from &lt;passing&gt;.
+<span class="code-prompt">(Grade Report)&gt;</span> Return an &lt;OK: status&gt; with { passing: &lt;count&gt; }.
+<span class="code-prompt">(Grade Report)&gt;</span> }
+Feature set 'Grade Report' defined
+
+<span class="code-prompt">aro&gt;</span> :fs
+Feature Sets:
+  - Grade Report (Education)
+
+<span class="code-prompt">aro&gt;</span> :invoke Grade Report
+<span class="code-output">=&gt; { passing: 2 }</span>
+
+<span class="code-prompt">aro&gt;</span> :export ./grade-report.aro
+Exported to ./grade-report.aro
+
+<span class="code-prompt">aro&gt;</span> :quit</code></pre>
+
+        <div class="highlight-box">
+            <h4>Learn More</h4>
+            <p>
+                See the full REPL specification in
+                <a href="https://github.com/arolang/aro/blob/main/Proposals/ARO-0049-repl.md">ARO-0049: Interactive REPL</a>.
+            </p>
+        </div>
+    </main>
+
+    <footer class="footer">
+        <div class="container">
+            <div class="footer-bottom">
+                <p>Sometime this page should build with ARO. Obviously.</p>
+            </div>
+        </div>
+    </footer>
+</body>
+</html>

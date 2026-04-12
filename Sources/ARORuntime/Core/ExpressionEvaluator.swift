@@ -41,6 +41,11 @@ public struct ExpressionEvaluator: Sendable {
                 return MetricsFormatter.format(metricsSnapshot, as: format, context: context.outputContext)
             }
 
+            // Environment variable access: <env: VAR_NAME>
+            if varRef.noun.base == "env", let varName = varRef.noun.specifiers.first {
+                return ProcessInfo.processInfo.environment[varName] ?? ""
+            }
+
             guard var value = context.resolveAny(varRef.noun.base) else {
                 throw ExpressionError.undefinedVariable(varRef.noun.base)
             }

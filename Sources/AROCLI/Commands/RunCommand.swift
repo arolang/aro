@@ -169,6 +169,13 @@ struct RunCommand: AsyncParsableCommand {
             for file in appConfig.sourceFiles {
                 print("    - \(file.lastPathComponent)")
             }
+            if !appConfig.storeFiles.isEmpty {
+                print("  Store files: \(appConfig.storeFiles.count)")
+                for store in appConfig.storeFiles {
+                    let mode = store.isWritable ? "writable" : "read-only"
+                    print("    - \(store.filePath.lastPathComponent) -> \(store.repositoryName) (\(mode))")
+                }
+            }
             print()
         }
 
@@ -262,7 +269,8 @@ struct RunCommand: AsyncParsableCommand {
             config: ApplicationConfig(verbose: verbose, workingDirectory: appConfig.rootPath.path),
             openAPISpec: appConfig.openAPISpec,
             recordPath: recordPath,
-            replayPath: replayPath
+            replayPath: replayPath,
+            storeFiles: appConfig.storeFiles
         )
 
         if verbose {

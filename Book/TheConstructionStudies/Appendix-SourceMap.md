@@ -73,7 +73,7 @@ let analyzed = analyzer.analyze(program)
 | `BuiltIn/ServerActions.swift` | ~1300 | Start, Stop, Listen, Keepalive, Connect, Broadcast, Close |
 | `BuiltIn/TerminalActions.swift` | ~300 | Prompt, Select, Clear, Show, Render, Repaint |
 | `BuiltIn/TestActions.swift` | ~300 | Given, When, Then, Assert |
-| `BuiltIn/FileActions.swift` | ~700 | List, Stat, Exists, Make, Copy, Move, Append |
+| `BuiltIn/FileActions.swift` | ~700 | List (+ `LazyDirectoryList` pull iterator, issue #198), Stat, Exists, Make, Copy, Move, Append |
 | `BuiltIn/QueryActions.swift` | ~300 | Map, Reduce, Filter |
 | `BuiltIn/StreamAction.swift` | ~200 | Stream/Subscribe for files, SSE, WebSocket |
 | `BuiltIn/ParseAction.swift` | ~200 | ParseHtml, ParseLinkHeader |
@@ -225,6 +225,9 @@ The compiler uses Swifty-LLVM for type-safe LLVM IR generation:
 | How C calls Swift | `Bridge/ActionBridge.swift:executeAction()` |
 | How pointers are managed | `Bridge/RuntimeBridge.swift:AROCRuntimeHandle` |
 | How streaming works | `Streaming/JSONStreamParser.swift`, `RuntimeContext:isLazy()` |
+| How recursive directory listing streams without buffering | `FileSystem/FileSystemService.swift:listStream()` (pull-based `AsyncThrowingStream(unfolding:)` + `LazyDirectoryList`, issue #198) |
+| How `Read` opts out of format-aware parsing | `FileFormat.swift:isRawQualifier(_:)` / `fromQualifier(_:)` + `ExtractAction.swift` (issue #197) |
+| How the REPL exposes real terminal capabilities | `REPL/REPLSession.swift:init()` — TTY-gated `TerminalService` registration (issue #172) |
 | How aggregations are fused | `Streaming/PipelineOptimizer.swift` |
 | How plugins are loaded | `Plugins/UnifiedPluginLoader.swift`, `Plugins/NativePluginHost.swift` |
 | How templates work | `Templates/TemplateParser.swift`, `Templates/TemplateService.swift` |

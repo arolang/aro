@@ -1,0 +1,18 @@
+(* Store File Demo — File-backed repositories *)
+(* products.store seeds products-repository automatically *)
+
+(Application-Start: Store File Demo) {
+    Retrieve the <products> from the <products-repository>.
+    Compute the <product-count: length> from <products>.
+    Log <product-count> to the <console>.
+
+    Retrieve the <hardware> from the <products-repository> where <category> is "hardware".
+    Compute the <hardware-count: length> from <hardware>.
+    Log <hardware-count> to the <console>.
+
+    Retrieve the <widget> from the <products-repository> where <id> is "p1".
+    Extract the <name> from the <widget: name>.
+    Log <name> to the <console>.
+
+    Return an <OK: status> for the <startup>.
+}

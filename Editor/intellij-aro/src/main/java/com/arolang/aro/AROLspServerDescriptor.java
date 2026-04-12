@@ -14,8 +14,6 @@ import org.jetbrains.annotations.NotNull;
 
 import java.util.ArrayList;
 import java.util.List;
-import java.nio.file.Files;
-import java.nio.file.Path;
 
 /**
  * LSP server factory for ARO language support.
@@ -24,17 +22,10 @@ import java.nio.file.Path;
 @SuppressWarnings("UnstableApiUsage")
 public class AROLspServerDescriptor implements LanguageServerFactory {
 
-    // Common installation paths for ARO
-    private static final String[] COMMON_PATHS = {
-        "/opt/homebrew/bin/aro",
-        "/usr/local/bin/aro",
-        "/usr/bin/aro"
-    };
-
     @Override
     public @NotNull StreamConnectionProvider createConnectionProvider(@NotNull Project project) {
         AROSettingsState settings = AROSettingsState.getInstance();
-        String aroPath = resolveAroPath(settings.aroPath);
+        String aroPath = AROPathResolver.resolve(settings.aroPath);
 
         List<String> commands = new ArrayList<>();
         commands.add(aroPath);
@@ -54,33 +45,6 @@ public class AROLspServerDescriptor implements LanguageServerFactory {
         }
 
         return provider;
-    }
-
-    /**
-     * Resolve the ARO binary path.
-     * If the configured path is just "aro", try common installation paths.
-     */
-    private String resolveAroPath(String configuredPath) {
-        // If it's an absolute path that exists, use it directly
-        if (configuredPath != null && !configuredPath.isEmpty()) {
-            Path path = Path.of(configuredPath);
-            if (path.isAbsolute() && Files.exists(path) && Files.isExecutable(path)) {
-                return configuredPath;
-            }
-        }
-
-        // If path is "aro" or not configured, check common installation paths
-        if (configuredPath == null || configuredPath.isEmpty() || configuredPath.equals("aro")) {
-            for (String pathStr : COMMON_PATHS) {
-                Path path = Path.of(pathStr);
-                if (Files.exists(path) && Files.isExecutable(path)) {
-                    return pathStr;
-                }
-            }
-        }
-
-        // Fall back to the configured path (may work if it's in PATH)
-        return configuredPath != null ? configuredPath : "aro";
     }
 
     @Override

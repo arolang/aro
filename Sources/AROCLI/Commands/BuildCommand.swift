@@ -97,7 +97,25 @@ struct BuildCommand: AsyncParsableCommand {
             for file in appConfig.sourceFiles {
                 print("    - \(file.lastPathComponent)")
             }
+            if !appConfig.storeFiles.isEmpty {
+                print("  Store files: \(appConfig.storeFiles.count)")
+                for store in appConfig.storeFiles {
+                    let mode = store.isWritable ? "writable" : "read-only"
+                    print("    - \(store.filePath.lastPathComponent) -> \(store.repositoryName) (\(mode))")
+                }
+            }
             print()
+        }
+
+        // Reject writable .store files in compiled binaries
+        let writableStores = appConfig.storeFiles.filter { $0.isWritable }
+        if !writableStores.isEmpty {
+            print("Error: Writable store files cannot be used in compiled binaries.")
+            for store in writableStores {
+                print("  - \(store.filePath.lastPathComponent) has o+w permission set")
+            }
+            print("Hint: Remove world-write permission (chmod o-w <file>.store) to embed as read-only data.")
+            throw ExitCode.failure
         }
 
         // Compile all source files to AST
@@ -214,7 +232,7 @@ struct BuildCommand: AsyncParsableCommand {
                    FileManager.default.fileExists(atPath: outputManagedPluginsDirEarly.path) {
                     try FileManager.default.removeItem(at: outputManagedPluginsDirEarly)
                 }
-                try PluginLoader.shared.compileManagedPlugins(from: sourceManagedPluginsDirEarly, to: outputManagedPluginsDirEarly)
+                try await PluginLoader.shared.compileManagedPluginsParallel(from: sourceManagedPluginsDirEarly, to: outputManagedPluginsDirEarly)
 
                 #if os(Windows)
                 let libExt = "dll"
@@ -538,7 +556,7 @@ struct BuildCommand: AsyncParsableCommand {
             }
 
             do {
-                try PluginLoader.shared.compilePlugins(from: sourcePluginsDir, to: outputPluginsDir)
+                try await PluginLoader.shared.compilePluginsParallel(from: sourcePluginsDir, to: outputPluginsDir)
                 if verbose {
                     // Count compiled plugins
                     let pluginFiles = try? FileManager.default.contentsOfDirectory(at: outputPluginsDir, includingPropertiesForKeys: nil)

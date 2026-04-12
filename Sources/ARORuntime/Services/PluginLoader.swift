@@ -940,6 +940,255 @@ public final class PluginLoader: @unchecked Sendable {
         }
     }
 
+    // MARK: - Parallel Plugin Compilation
+
+    /// Compile legacy plugins concurrently using a TaskGroup.
+    ///
+    /// Independent plugins share no build artefacts, so their `swiftc` / `swift build`
+    /// invocations can run in parallel.  Compilation warnings are collected and printed
+    /// after all tasks complete; individual failures do not abort other compilations.
+    public func compilePluginsParallel(from sourceDirectory: URL, to outputDirectory: URL) async throws {
+        let sourcePluginsDir = sourceDirectory
+        let outputPluginsDir = outputDirectory
+
+        #if os(Windows)
+        let libraryExtension = "dll"
+        #elseif os(Linux)
+        let libraryExtension = "so"
+        #else
+        let libraryExtension = "dylib"
+        #endif
+
+        guard FileManager.default.fileExists(atPath: sourcePluginsDir.path) else { return }
+        try FileManager.default.createDirectory(at: outputPluginsDir, withIntermediateDirectories: true)
+
+        let contents = try FileManager.default.contentsOfDirectory(
+            at: sourcePluginsDir,
+            includingPropertiesForKeys: [.isDirectoryKey],
+            options: [.skipsHiddenFiles]
+        )
+
+        // Build a list of compilation work items
+        struct CompileJob: Sendable {
+            let name: String
+            let source: URL
+            let output: URL
+            let isPackage: Bool
+        }
+
+        var jobs: [CompileJob] = []
+
+        // Single-file Swift plugins
+        for swiftFile in contents where swiftFile.pathExtension == "swift" {
+            let name = swiftFile.deletingPathExtension().lastPathComponent
+            let output = outputPluginsDir.appendingPathComponent("\(name).\(libraryExtension)")
+            jobs.append(CompileJob(name: name, source: swiftFile, output: output, isPackage: false))
+        }
+
+        // Swift package plugins
+        for item in contents {
+            var isDir: ObjCBool = false
+            guard FileManager.default.fileExists(atPath: item.path, isDirectory: &isDir),
+                  isDir.boolValue else { continue }
+            let packageSwift = item.appendingPathComponent("Package.swift")
+            guard FileManager.default.fileExists(atPath: packageSwift.path) else { continue }
+            let name = item.lastPathComponent
+            let output = outputPluginsDir.appendingPathComponent("lib\(name).\(libraryExtension)")
+            jobs.append(CompileJob(name: name, source: item, output: output, isPackage: true))
+        }
+
+        guard !jobs.isEmpty else { return }
+
+        // Run all compilations concurrently
+        await withTaskGroup(of: String?.self) { group in
+            for job in jobs {
+                group.addTask {
+                    do {
+                        if job.isPackage {
+                            try self.compilePackagePlugin(source: job.source, output: job.output)
+                        } else {
+                            try self.compilePlugin(source: job.source, output: job.output)
+                        }
+                        return nil  // success
+                    } catch {
+                        return "[PluginLoader] Warning: Failed to compile \(job.name): \(error)"
+                    }
+                }
+            }
+            for await warning in group {
+                if let warning { print(warning) }
+            }
+        }
+    }
+
+    /// Compile managed plugins concurrently using a TaskGroup.
+    ///
+    /// Each plugin in `Plugins/` is compiled independently, so all builds run in parallel.
+    /// Directory setup and file copies happen inside each task (they target separate output dirs).
+    public func compileManagedPluginsParallel(from sourceDirectory: URL, to outputDirectory: URL) async throws {
+        #if os(Windows)
+        let libraryExtension = "dll"
+        #elseif os(Linux)
+        let libraryExtension = "so"
+        #else
+        let libraryExtension = "dylib"
+        #endif
+
+        guard FileManager.default.fileExists(atPath: sourceDirectory.path) else { return }
+
+        let contents = try FileManager.default.contentsOfDirectory(
+            at: sourceDirectory,
+            includingPropertiesForKeys: [.isDirectoryKey],
+            options: [.skipsHiddenFiles]
+        )
+
+        // Filter to valid plugin directories (must contain plugin.yaml)
+        let pluginDirs = contents.filter { item -> Bool in
+            var isDir: ObjCBool = false
+            guard FileManager.default.fileExists(atPath: item.path, isDirectory: &isDir),
+                  isDir.boolValue else { return false }
+            return FileManager.default.fileExists(
+                atPath: item.appendingPathComponent("plugin.yaml").path
+            )
+        }
+
+        guard !pluginDirs.isEmpty else { return }
+
+        // Run all plugin compilations concurrently
+        await withTaskGroup(of: String?.self) { group in
+            for item in pluginDirs {
+                let libExt = libraryExtension
+                let outDir = outputDirectory
+                group.addTask {
+                    do {
+                        try self.compileSingleManagedPlugin(
+                            item: item,
+                            outputDirectory: outDir,
+                            libraryExtension: libExt
+                        )
+                        return nil
+                    } catch {
+                        return "[PluginLoader] Warning: Failed to compile managed plugin \(item.lastPathComponent): \(error)"
+                    }
+                }
+            }
+            for await warning in group {
+                if let warning { print(warning) }
+            }
+        }
+    }
+
+    /// Compile a single managed plugin (extracted from the sequential loop body).
+    private func compileSingleManagedPlugin(
+        item: URL,
+        outputDirectory: URL,
+        libraryExtension: String
+    ) throws {
+        let pluginName = item.lastPathComponent
+        let outputPluginDir = outputDirectory.appendingPathComponent(pluginName)
+        try FileManager.default.createDirectory(at: outputPluginDir, withIntermediateDirectories: true)
+
+        // Copy plugin.yaml
+        let manifestPath = item.appendingPathComponent("plugin.yaml")
+        let outputManifestPath = outputPluginDir.appendingPathComponent("plugin.yaml")
+        if !FileManager.default.fileExists(atPath: outputManifestPath.path) {
+            try FileManager.default.copyItem(at: manifestPath, to: outputManifestPath)
+        }
+
+        // Check for Package.swift (Swift Package)
+        let packageSwift = item.appendingPathComponent("Package.swift")
+        if FileManager.default.fileExists(atPath: packageSwift.path) {
+            let outputLibPath = outputPluginDir.appendingPathComponent("Sources")
+                .appendingPathComponent("lib\(pluginName).\(libraryExtension)")
+            try FileManager.default.createDirectory(
+                at: outputLibPath.deletingLastPathComponent(),
+                withIntermediateDirectories: true
+            )
+            try compilePackagePlugin(source: item, output: outputLibPath)
+            return
+        }
+
+        // Check for Sources/ directory with Swift files
+        let sourcesDir = item.appendingPathComponent("Sources")
+        if FileManager.default.fileExists(atPath: sourcesDir.path) {
+            let sourceContents = try? FileManager.default.contentsOfDirectory(
+                at: sourcesDir, includingPropertiesForKeys: nil, options: [.skipsHiddenFiles]
+            )
+            let swiftFiles = sourceContents?.filter { $0.pathExtension == "swift" } ?? []
+
+            if !swiftFiles.isEmpty {
+                let outputSourcesDir = outputPluginDir.appendingPathComponent("Sources")
+                try FileManager.default.createDirectory(at: outputSourcesDir, withIntermediateDirectories: true)
+                let outputLibPath = outputSourcesDir.appendingPathComponent("\(pluginName).\(libraryExtension)")
+                if swiftFiles.count == 1 {
+                    try compilePlugin(source: swiftFiles[0], output: outputLibPath)
+                } else {
+                    try compileMultipleSwiftFiles(sources: swiftFiles, output: outputLibPath)
+                }
+            }
+        }
+
+        // Check for src/ directory with Rust or C files
+        let srcDir = item.appendingPathComponent("src")
+        if FileManager.default.fileExists(atPath: srcDir.path) {
+            let srcContents = try? FileManager.default.contentsOfDirectory(
+                at: srcDir, includingPropertiesForKeys: nil, options: [.skipsHiddenFiles]
+            )
+
+            let cargoInSrc = srcDir.appendingPathComponent("Cargo.toml")
+            if FileManager.default.fileExists(atPath: cargoInSrc.path) {
+                let outputTargetDir = outputPluginDir.appendingPathComponent("target/release")
+                try compileRustPlugin(projectDir: srcDir, outputDir: outputTargetDir, pluginName: pluginName)
+                return
+            }
+
+            let cFiles = srcContents?.filter { $0.pathExtension == "c" } ?? []
+            if !cFiles.isEmpty {
+                let outputSrcDir = outputPluginDir.appendingPathComponent("src")
+                try FileManager.default.createDirectory(at: outputSrcDir, withIntermediateDirectories: true)
+                let outputLibPath = outputSrcDir.appendingPathComponent("\(pluginName).\(libraryExtension)")
+                try compileCPlugin(sources: cFiles, output: outputLibPath)
+            }
+        }
+
+        // Check for Cargo.toml in root
+        let rootCargoToml = item.appendingPathComponent("Cargo.toml")
+        if FileManager.default.fileExists(atPath: rootCargoToml.path) {
+            let outputTargetDir = outputPluginDir.appendingPathComponent("target/release")
+            try compileRustPlugin(projectDir: item, outputDir: outputTargetDir, pluginName: pluginName)
+        }
+
+        // Python plugins — copy only
+        if FileManager.default.fileExists(atPath: srcDir.path) {
+            let srcContents = try? FileManager.default.contentsOfDirectory(
+                at: srcDir, includingPropertiesForKeys: nil, options: [.skipsHiddenFiles]
+            )
+            let pyFiles = srcContents?.filter { $0.pathExtension == "py" } ?? []
+            if !pyFiles.isEmpty {
+                let outputSrcDir = outputPluginDir.appendingPathComponent("src")
+                if !FileManager.default.fileExists(atPath: outputSrcDir.path) {
+                    try FileManager.default.copyItem(at: srcDir, to: outputSrcDir)
+                }
+                let requirementsFile = item.appendingPathComponent("requirements.txt")
+                if FileManager.default.fileExists(atPath: requirementsFile.path) {
+                    let outputReq = outputPluginDir.appendingPathComponent("requirements.txt")
+                    if !FileManager.default.fileExists(atPath: outputReq.path) {
+                        try FileManager.default.copyItem(at: requirementsFile, to: outputReq)
+                    }
+                }
+            }
+        }
+
+        // Copy features/ directory if present
+        let featuresDir = item.appendingPathComponent("features")
+        if FileManager.default.fileExists(atPath: featuresDir.path) {
+            let outputFeaturesDir = outputPluginDir.appendingPathComponent("features")
+            if !FileManager.default.fileExists(atPath: outputFeaturesDir.path) {
+                try FileManager.default.copyItem(at: featuresDir, to: outputFeaturesDir)
+            }
+        }
+    }
+
     /// Compile multiple Swift files to a dynamic library
     private func compileMultipleSwiftFiles(sources: [URL], output: URL) throws {
         guard let swiftc = findSwiftCompiler() else {

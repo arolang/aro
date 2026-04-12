@@ -1,0 +1,552 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <title>Streaming Execution - ARO Programming Language</title>
+{{head}}
+    <style>
+        .doc-page {
+            padding: 120px 24px 80px;
+            max-width: 900px;
+            margin: 0 auto;
+        }
+
+        .doc-header {
+            margin-bottom: 48px;
+        }
+
+        .doc-header h1 {
+            font-size: clamp(2rem, 5vw, 3rem);
+            font-weight: 700;
+            margin-bottom: 16px;
+            letter-spacing: -0.02em;
+        }
+
+        .doc-header .lead {
+            font-size: 1.25rem;
+            color: var(--color-text-muted);
+            line-height: 1.7;
+        }
+
+        .doc-page h2 {
+            font-size: 1.8rem;
+            font-weight: 600;
+            margin: 48px 0 16px;
+            padding-top: 24px;
+            border-top: 1px solid rgba(255, 255, 255, 0.1);
+        }
+
+        .doc-page h3 {
+            font-size: 1.3rem;
+            font-weight: 600;
+            margin: 32px 0 12px;
+            color: var(--color-secondary);
+        }
+
+        .doc-page p {
+            font-size: 1.1rem;
+            color: var(--color-text-muted);
+            line-height: 1.8;
+            margin-bottom: 16px;
+        }
+
+        .doc-page code {
+            font-family: var(--font-mono);
+            background: var(--color-bg-alt);
+            padding: 3px 8px;
+            border-radius: 4px;
+            font-size: 0.9rem;
+            color: var(--color-secondary);
+        }
+
+        .doc-page pre {
+            background: var(--color-bg-alt);
+            border-radius: var(--radius-md);
+            padding: 24px;
+            overflow-x: auto;
+            margin: 24px 0;
+            border: 1px solid rgba(255, 255, 255, 0.1);
+        }
+
+        .doc-page pre code {
+            background: none;
+            padding: 0;
+            font-size: 0.9rem;
+            line-height: 1.7;
+            color: var(--color-text);
+        }
+
+        .doc-page ul {
+            color: var(--color-text-muted);
+            margin: 16px 0 16px 24px;
+            line-height: 1.8;
+        }
+
+        .doc-page li {
+            margin-bottom: 8px;
+        }
+
+        .doc-page strong {
+            color: var(--color-text);
+        }
+
+        .doc-page em {
+            color: var(--color-secondary);
+            font-style: normal;
+        }
+
+        .doc-page table {
+            width: 100%;
+            border-collapse: collapse;
+            margin: 24px 0;
+        }
+
+        .doc-page th, .doc-page td {
+            padding: 12px 16px;
+            text-align: left;
+            border: 1px solid rgba(255, 255, 255, 0.1);
+        }
+
+        .doc-page th {
+            background: var(--color-bg-alt);
+            font-weight: 600;
+            color: var(--color-text);
+        }
+
+        .doc-page td {
+            color: var(--color-text-muted);
+        }
+
+        .doc-page td code {
+            font-size: 0.85rem;
+        }
+
+        .highlight-box {
+            background: rgba(124, 58, 237, 0.1);
+            border: 1px solid rgba(124, 58, 237, 0.3);
+            border-radius: var(--radius-md);
+            padding: 24px;
+            margin: 32px 0;
+        }
+
+        .highlight-box h4 {
+            color: var(--color-primary);
+            font-size: 1.1rem;
+            margin-bottom: 12px;
+        }
+
+        .highlight-box p {
+            margin-bottom: 0;
+        }
+
+        .code-comment { color: #6b7280; }
+        .code-keyword { color: #7c3aed; font-weight: 600; }
+        .code-string { color: #10b981; }
+        .code-feature { color: #f472b6; }
+        .code-result { color: #06b6d4; }
+
+        .back-link {
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            color: var(--color-text-muted);
+            text-decoration: none;
+            font-size: 0.95rem;
+            margin-bottom: 24px;
+            transition: color 0.2s;
+        }
+
+        .back-link:hover {
+            color: var(--color-primary);
+        }
+
+        .pipeline-visual {
+            padding: 24px;
+            background: var(--color-bg-alt);
+            border-radius: var(--radius-md);
+            margin: 32px 0;
+            overflow-x: auto;
+        }
+
+        .pipeline-visual pre {
+            background: none;
+            border: none;
+            padding: 0;
+            margin: 0;
+        }
+    </style>
+</head>
+<body>
+    <nav class="nav">
+        <div class="nav-content">
+            <a href="/aro/" class="logo">
+                <span class="logo-aro">ARO</span>
+            </a>
+            <div class="nav-links">
+                <a href="../fdd.html">The FDD Story</a>
+                <a href="../getting-started.html">Get Started</a>
+                <a href="../docs.html" style="color: var(--color-text);">Docs</a>
+                <a href="../disclaimer.html">Motivation</a>
+                <a href="../download.html">Download</a>
+                <a href="https://github.com/arolang/aro" class="nav-github">
+                    <svg viewBox="0 0 16 16" fill="currentColor"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z"/></svg>
+                    <span class="github-stars">
+                        <svg viewBox="0 0 16 16"><path d="M8 .25a.75.75 0 01.673.418l1.882 3.815 4.21.612a.75.75 0 01.416 1.279l-3.046 2.97.719 4.192a.75.75 0 01-1.088.791L8 12.347l-3.766 1.98a.75.75 0 01-1.088-.79l.72-4.194L.818 6.374a.75.75 0 01.416-1.28l4.21-.611L7.327.668A.75.75 0 018 .25z"/></svg>
+                        <span class="github-stars-count"></span>
+                    </span>
+                </a>
+            </div>
+        </div>
+    </nav>
+
+    <main class="doc-page">
+        <a href="../docs.html" class="back-link">&#x2190; Back to Documentation</a>
+
+        <header class="doc-header">
+            <h1 class="gradient-text">Streaming Execution</h1>
+            <p class="lead">
+                Process arbitrarily large datasets with constant memory.
+                Same ARO syntax, streaming pipeline under the hood.
+            </p>
+        </header>
+
+        <div class="highlight-box">
+            <h4>Syntax Transparency</h4>
+            <p>
+                Streaming is an <strong>internal optimization</strong>, not a new feature.
+                You write the exact same ARO code. The runtime automatically detects pipeline
+                patterns and executes them as memory-efficient streams.
+            </p>
+        </div>
+
+        <h2>Overview</h2>
+        <p>
+            When ARO processes a large file, the naive approach loads everything into memory at once.
+            A 10 GB CSV file would consume 20 GB or more of RAM, crashing most systems.
+            With streaming execution, the same code runs in roughly 1 MB of memory by processing
+            data one row at a time.
+        </p>
+
+        <table>
+            <thead>
+                <tr>
+                    <th>Step</th>
+                    <th>Without Streaming</th>
+                    <th>With Streaming</th>
+                </tr>
+            </thead>
+            <tbody>
+                <tr>
+                    <td>Read file</td>
+                    <td>10 GB (full load)</td>
+                    <td>64 KB (chunked)</td>
+                </tr>
+                <tr>
+                    <td>Parse rows</td>
+                    <td>15-20 GB (all at once)</td>
+                    <td>~1 KB per row</td>
+                </tr>
+                <tr>
+                    <td>Filter</td>
+                    <td>15-20 GB (new array)</td>
+                    <td>0 (pass/reject inline)</td>
+                </tr>
+                <tr>
+                    <td><strong>Peak memory</strong></td>
+                    <td><strong>~20 GB</strong></td>
+                    <td><strong>~1 MB</strong></td>
+                </tr>
+            </tbody>
+        </table>
+
+        <h2>Syntax Transparency</h2>
+        <p>
+            There are no new keywords. The code you already write is the streaming code:
+        </p>
+
+        <pre><code><span class="code-comment">(* This is automatically streamed - no syntax change needed *)</span>
+<span class="code-keyword">Read</span> the <span class="code-result">&lt;data&gt;</span> from the &lt;file: <span class="code-string">"huge.csv"</span>&gt;.
+<span class="code-keyword">Filter</span> the <span class="code-result">&lt;filtered&gt;</span> from &lt;data&gt; where &lt;status&gt; = <span class="code-string">"active"</span>.
+<span class="code-keyword">Log</span> &lt;filtered&gt; to the &lt;console&gt;.</code></pre>
+
+        <p>
+            Under the hood, ARO sees this as a pipeline of three stages. Each row flows from
+            <code>Read</code> through <code>Filter</code> to <code>Log</code> without the entire
+            dataset ever being held in memory.
+        </p>
+
+        <div class="pipeline-visual">
+            <pre><code>  ┌──────────┐    ┌──────────┐    ┌──────────┐
+  │  Read    │───>│  Filter  │───>│   Log    │
+  │ (Stream) │    │ (Stream) │    │ (Drain)  │
+  └──────────┘    └──────────┘    └──────────┘
+       │               │               │
+       │    Row 1      │    Pass?      │    Print
+       │──────────────>│──────────────>│────────> console
+       │    Row 2      │    Reject     │
+       │──────────────>│───────X       │
+       │    Row 3      │    Pass?      │    Print
+       │──────────────>│──────────────>│────────> console
+
+  Memory: O(1) per row, not O(n) for entire dataset</code></pre>
+        </div>
+
+        <h3>Action Classification</h3>
+        <p>
+            Actions fall into three categories that determine how they participate in a streaming pipeline:
+        </p>
+
+        <table>
+            <thead>
+                <tr>
+                    <th>Category</th>
+                    <th>Actions</th>
+                    <th>Behavior</th>
+                </tr>
+            </thead>
+            <tbody>
+                <tr>
+                    <td><strong>Transformations</strong></td>
+                    <td><code>Filter</code>, <code>Map</code>, <code>Transform</code>, <code>Parse</code>, <code>Validate</code></td>
+                    <td>Process one element at a time, pass it downstream</td>
+                </tr>
+                <tr>
+                    <td><strong>Drains</strong></td>
+                    <td><code>Log</code>, <code>Return</code>, <code>Store</code>, <code>Send</code>, <code>Reduce</code></td>
+                    <td>Consume the stream and produce a final result</td>
+                </tr>
+                <tr>
+                    <td><strong>Barriers</strong></td>
+                    <td><code>Sort</code>, <code>GroupBy</code>, <code>Distinct</code>, <code>Reverse</code></td>
+                    <td>Need the full dataset; use external algorithms with disk spillover</td>
+                </tr>
+            </tbody>
+        </table>
+
+        <h3>Explicit Control</h3>
+        <p>
+            Streaming is the default. If you need the legacy eager behavior for small files
+            that will be accessed multiple times, use the <code>eager</code> qualifier:
+        </p>
+
+        <pre><code><span class="code-comment">(* Default: streaming - constant memory *)</span>
+<span class="code-keyword">Read</span> the <span class="code-result">&lt;data&gt;</span> from the &lt;file: <span class="code-string">"huge.csv"</span>&gt;.
+
+<span class="code-comment">(* Explicit: load everything into memory *)</span>
+<span class="code-keyword">&lt;Read: eager&gt;</span> the <span class="code-result">&lt;data&gt;</span> from the &lt;file: <span class="code-string">"small.csv"</span>&gt;.</code></pre>
+
+        <h2>Stream Tee</h2>
+        <p>
+            A stream can only be consumed once. When the same variable feeds into multiple
+            downstream operations of different types, ARO automatically creates a
+            <strong>Stream Tee</strong> that splits the stream for parallel consumption:
+        </p>
+
+        <pre><code><span class="code-keyword">Filter</span> the <span class="code-result">&lt;active&gt;</span> from &lt;orders&gt; where &lt;status&gt; = <span class="code-string">"active"</span>.
+<span class="code-keyword">Reduce</span> the <span class="code-result">&lt;total&gt;</span> from &lt;active&gt; with sum(&lt;amount&gt;).  <span class="code-comment">(* consumer 1 *)</span>
+<span class="code-keyword">Log</span> &lt;active&gt; to the &lt;console&gt;.                       <span class="code-comment">(* consumer 2 *)</span></code></pre>
+
+        <p>
+            The Stream Tee uses a bounded ring buffer so both consumers see every element.
+            The fastest consumer drives the stream; slower consumers read from the buffer.
+            If a consumer falls behind, the buffer spills to disk automatically.
+        </p>
+
+        <div class="pipeline-visual">
+            <pre><code>                          ┌─────────────────┐
+  active-stream ────────> │   Stream Tee    │
+                          └─────────────────┘
+                               │         │
+                               v         v
+                          Consumer 1  Consumer 2
+                          (Reduce)    (Log)</code></pre>
+        </div>
+
+        <h2>Pipeline Optimization</h2>
+
+        <h3>Aggregation Fusion</h3>
+        <p>
+            When multiple <code>Reduce</code> operations consume the same stream, ARO's
+            semantic analyzer fuses them into a <strong>single pass</strong>.
+            Instead of iterating the data three times, the runtime maintains all accumulators
+            simultaneously:
+        </p>
+
+        <pre><code><span class="code-comment">(* These three reduces are fused into one pass *)</span>
+<span class="code-keyword">Reduce</span> the <span class="code-result">&lt;total&gt;</span> from &lt;active-orders&gt; with sum(&lt;amount&gt;).
+<span class="code-keyword">Reduce</span> the <span class="code-result">&lt;count&gt;</span> from &lt;active-orders&gt; with count().
+<span class="code-keyword">Reduce</span> the <span class="code-result">&lt;avg&gt;</span> from &lt;active-orders&gt; with avg(&lt;amount&gt;).</code></pre>
+
+        <p>
+            The parser detects that all three operations share the same source
+            (<code>active-orders</code>) and rewrites them into a single fused reduce.
+            Memory usage is O(1) regardless of dataset size -- just the accumulators.
+        </p>
+
+        <table>
+            <thead>
+                <tr>
+                    <th>Approach</th>
+                    <th>Memory</th>
+                    <th>Passes Over Data</th>
+                </tr>
+            </thead>
+            <tbody>
+                <tr>
+                    <td>Naive (3 separate reduces)</td>
+                    <td>O(n) materialized</td>
+                    <td>3</td>
+                </tr>
+                <tr>
+                    <td>Stream Tee</td>
+                    <td>O(buffer) bounded</td>
+                    <td>1 (shared)</td>
+                </tr>
+                <tr>
+                    <td><strong>Aggregation Fusion</strong></td>
+                    <td><strong>O(1) accumulators</strong></td>
+                    <td><strong>1</strong></td>
+                </tr>
+            </tbody>
+        </table>
+
+        <h2>Unified Data Sources</h2>
+        <p>
+            Every data source in ARO produces the same stream abstraction. The same filter,
+            reduce, and transform operations work identically whether the data comes from a
+            file, an HTTP response, a socket, or a repository:
+        </p>
+
+        <table>
+            <thead>
+                <tr>
+                    <th>Source</th>
+                    <th>ARO Syntax</th>
+                    <th>Chunk Strategy</th>
+                </tr>
+            </thead>
+            <tbody>
+                <tr>
+                    <td>CSV File</td>
+                    <td><code>Read from &lt;file: "x.csv"&gt;</code></td>
+                    <td>Line by line</td>
+                </tr>
+                <tr>
+                    <td>JSON File</td>
+                    <td><code>Read from &lt;file: "x.json"&gt;</code></td>
+                    <td>Array elements</td>
+                </tr>
+                <tr>
+                    <td>JSONL File</td>
+                    <td><code>Read from &lt;file: "x.jsonl"&gt;</code></td>
+                    <td>Line by line (native)</td>
+                </tr>
+                <tr>
+                    <td>HTTP Response</td>
+                    <td><code>Request from &lt;url&gt;</code></td>
+                    <td>Chunked transfer</td>
+                </tr>
+                <tr>
+                    <td>TCP Socket</td>
+                    <td><code>Extract from &lt;packet: data&gt;</code></td>
+                    <td>Packet by packet</td>
+                </tr>
+                <tr>
+                    <td>Repository</td>
+                    <td><code>Retrieve from &lt;repo&gt;</code></td>
+                    <td>Cursor-based</td>
+                </tr>
+                <tr>
+                    <td>Directory</td>
+                    <td><code>List from &lt;directory&gt;</code></td>
+                    <td>Entry by entry</td>
+                </tr>
+            </tbody>
+        </table>
+
+        <h2>Example: Multi-Stage Pipeline</h2>
+        <p>
+            This example processes a list of transactions through multiple filter stages,
+            then runs aggregation on the result. In streaming mode, each row flows through
+            all stages immediately -- non-matching rows are discarded without allocating memory:
+        </p>
+
+        <pre><code><span class="code-feature">(Application-Start: Streaming Pipeline Demo)</span> {
+    <span class="code-keyword">Create</span> the <span class="code-result">&lt;transactions&gt;</span> with [
+        {id: 1, year: <span class="code-string">"2024"</span>, amount: 1200, status: <span class="code-string">"completed"</span>, category: <span class="code-string">"electronics"</span>},
+        {id: 2, year: <span class="code-string">"2024"</span>, amount: 450, status: <span class="code-string">"pending"</span>, category: <span class="code-string">"electronics"</span>},
+        {id: 3, year: <span class="code-string">"2024"</span>, amount: 800, status: <span class="code-string">"completed"</span>, category: <span class="code-string">"furniture"</span>},
+        {id: 4, year: <span class="code-string">"2024"</span>, amount: 950, status: <span class="code-string">"completed"</span>, category: <span class="code-string">"electronics"</span>},
+        {id: 5, year: <span class="code-string">"2024"</span>, amount: 2000, status: <span class="code-string">"completed"</span>, category: <span class="code-string">"electronics"</span>}
+    ].
+
+    <span class="code-comment">(* Multi-stage filter pipeline *)</span>
+    <span class="code-keyword">Filter</span> the <span class="code-result">&lt;high-value&gt;</span> from &lt;transactions&gt;
+        where &lt;amount&gt; > 500.
+
+    <span class="code-keyword">Filter</span> the <span class="code-result">&lt;completed&gt;</span> from &lt;high-value&gt;
+        where &lt;status&gt; = <span class="code-string">"completed"</span>.
+
+    <span class="code-keyword">Filter</span> the <span class="code-result">&lt;electronics&gt;</span> from &lt;completed&gt;
+        where &lt;category&gt; = <span class="code-string">"electronics"</span>.
+
+    <span class="code-comment">(* Aggregation fusion: all reduces run in a single pass *)</span>
+    <span class="code-keyword">Reduce</span> the <span class="code-result">&lt;total-amount&gt;</span> from &lt;electronics&gt; with sum(&lt;amount&gt;).
+    <span class="code-keyword">Reduce</span> the <span class="code-result">&lt;count&gt;</span> from &lt;electronics&gt; with count().
+    <span class="code-keyword">Reduce</span> the <span class="code-result">&lt;avg-amount&gt;</span> from &lt;electronics&gt; with avg(&lt;amount&gt;).
+    <span class="code-keyword">Reduce</span> the <span class="code-result">&lt;max-amount&gt;</span> from &lt;electronics&gt; with max(&lt;amount&gt;).
+
+    <span class="code-keyword">Log</span> &lt;total-amount&gt; to the &lt;console&gt;.
+    <span class="code-keyword">Log</span> &lt;count&gt; to the &lt;console&gt;.
+    <span class="code-keyword">Log</span> &lt;avg-amount&gt; to the &lt;console&gt;.
+    <span class="code-keyword">Log</span> &lt;max-amount&gt; to the &lt;console&gt;.
+
+    <span class="code-keyword">Return</span> an <span class="code-result">&lt;OK: status&gt;</span> for the &lt;streaming-demo&gt;.
+}</code></pre>
+
+        <h2>Example: JSONL Streaming</h2>
+        <p>
+            JSONL (JSON Lines) is the ideal format for streaming because each line is an
+            independently parseable JSON object. ARO reads JSONL files line by line without
+            loading the entire file:
+        </p>
+
+        <pre><code><span class="code-feature">(Application-Start: Streaming Demo)</span> {
+    <span class="code-comment">(* Read JSONL file - streamed line by line in production *)</span>
+    <span class="code-keyword">Read</span> the <span class="code-result">&lt;log-data&gt;</span> from <span class="code-string">"./events.jsonl"</span>.
+
+    <span class="code-comment">(* Filter errors - streaming: pass/reject each element *)</span>
+    <span class="code-keyword">Filter</span> the <span class="code-result">&lt;errors&gt;</span> from &lt;log-data&gt; where &lt;level&gt; = <span class="code-string">"ERROR"</span>.
+
+    <span class="code-comment">(* Multi-stage filter pipeline *)</span>
+    <span class="code-keyword">Filter</span> the <span class="code-result">&lt;api-events&gt;</span> from &lt;log-data&gt; where &lt;service&gt; = <span class="code-string">"api"</span>.
+    <span class="code-keyword">Filter</span> the <span class="code-result">&lt;api-errors&gt;</span> from &lt;api-events&gt; where &lt;level&gt; = <span class="code-string">"ERROR"</span>.
+
+    <span class="code-comment">(* Reduce with O(1) memory accumulators *)</span>
+    <span class="code-keyword">Reduce</span> the <span class="code-result">&lt;error-count&gt;</span> from &lt;errors&gt; with count().
+    <span class="code-keyword">Reduce</span> the <span class="code-result">&lt;total-time&gt;</span> from &lt;api-events&gt; with sum(&lt;time&gt;).
+    <span class="code-keyword">Reduce</span> the <span class="code-result">&lt;avg-time&gt;</span> from &lt;api-events&gt; with avg(&lt;time&gt;).
+
+    <span class="code-keyword">Log</span> &lt;error-count&gt; to the &lt;console&gt;.
+    <span class="code-keyword">Log</span> &lt;avg-time&gt; to the &lt;console&gt;.
+
+    <span class="code-keyword">Return</span> an <span class="code-result">&lt;OK: status&gt;</span> for the &lt;demo&gt;.
+}</code></pre>
+
+        <div class="highlight-box">
+            <h4>Learn More</h4>
+            <p>
+                See the full streaming specification in
+                <a href="https://github.com/arolang/aro/blob/main/Proposals/ARO-0051-streaming-execution.md">ARO-0051: Streaming Execution Engine</a>.
+            </p>
+        </div>
+    </main>
+
+    <footer class="footer">
+        <div class="container">
+            <div class="footer-bottom">
+                <p>Sometime this page should build with ARO. Obviously.</p>
+            </div>
+        </div>
+    </footer>
+</body>
+</html>

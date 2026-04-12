@@ -309,6 +309,30 @@ public func aro_runtime_init() -> UnsafeMutableRawPointer? {
         await handle.runtime.register(service: httpServer as HTTPServerService)
         #endif
 
+        // Seed repositories from .store files (read-only in compiled binaries)
+        let execPath = CommandLine.arguments[0]
+        let binDir: String
+        if execPath.hasPrefix("/") {
+            binDir = (execPath as NSString).deletingLastPathComponent
+        } else {
+            let cwd = FileManager.default.currentDirectoryPath
+            let abs = (cwd as NSString).appendingPathComponent(execPath)
+            binDir = ((abs as NSString).resolvingSymlinksInPath as NSString).deletingLastPathComponent
+        }
+        let storeLoader = StoreFileLoader()
+        if let storeFiles = try? storeLoader.discover(in: URL(fileURLWithPath: binDir)) {
+            let repoStorage = InMemoryRepositoryStorage.shared
+            for descriptor in storeFiles {
+                for entry in descriptor.entries {
+                    await repoStorage.store(
+                        value: entry as [String: any Sendable],
+                        in: descriptor.repositoryName,
+                        businessActivity: "store-seed"
+                    )
+                }
+            }
+        }
+
         semaphore.signal()
     }
 
@@ -1712,6 +1736,11 @@ private func evaluateExpressionJSON(_ expr: [String: Any], context: RuntimeConte
     // Variable reference (with optional specifiers)
     if let varName = expr["$var"] as? String {
         let specs = expr["$specs"] as? [String] ?? []
+
+        // Environment variable access: <env: VAR_NAME>
+        if varName == "env", let envKey = specs.first {
+            return ProcessInfo.processInfo.environment[envKey] ?? "" as any Sendable
+        }
 
         // Special handling for repository count access: <repository-name: count>
         if specs == ["count"] && InMemoryRepositoryStorage.isRepositoryName(varName) {

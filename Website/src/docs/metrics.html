@@ -1,0 +1,548 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <title>Runtime Metrics - ARO Programming Language</title>
+{{head}}
+    <style>
+        .doc-page {
+            padding: 120px 24px 80px;
+            max-width: 900px;
+            margin: 0 auto;
+        }
+
+        .doc-header {
+            margin-bottom: 48px;
+        }
+
+        .doc-header h1 {
+            font-size: clamp(2rem, 5vw, 3rem);
+            font-weight: 700;
+            margin-bottom: 16px;
+            letter-spacing: -0.02em;
+        }
+
+        .doc-header .lead {
+            font-size: 1.25rem;
+            color: var(--color-text-muted);
+            line-height: 1.7;
+        }
+
+        .doc-page h2 {
+            font-size: 1.8rem;
+            font-weight: 600;
+            margin: 48px 0 16px;
+            padding-top: 24px;
+            border-top: 1px solid rgba(255, 255, 255, 0.1);
+        }
+
+        .doc-page h3 {
+            font-size: 1.3rem;
+            font-weight: 600;
+            margin: 32px 0 12px;
+            color: var(--color-secondary);
+        }
+
+        .doc-page p {
+            font-size: 1.1rem;
+            color: var(--color-text-muted);
+            line-height: 1.8;
+            margin-bottom: 16px;
+        }
+
+        .doc-page code {
+            font-family: var(--font-mono);
+            background: var(--color-bg-alt);
+            padding: 3px 8px;
+            border-radius: 4px;
+            font-size: 0.9rem;
+            color: var(--color-secondary);
+        }
+
+        .doc-page pre {
+            background: var(--color-bg-alt);
+            border-radius: var(--radius-md);
+            padding: 24px;
+            overflow-x: auto;
+            margin: 24px 0;
+            border: 1px solid rgba(255, 255, 255, 0.1);
+        }
+
+        .doc-page pre code {
+            background: none;
+            padding: 0;
+            font-size: 0.9rem;
+            line-height: 1.7;
+            color: var(--color-text);
+        }
+
+        .doc-page ul {
+            color: var(--color-text-muted);
+            margin: 16px 0 16px 24px;
+            line-height: 1.8;
+        }
+
+        .doc-page li {
+            margin-bottom: 8px;
+        }
+
+        .doc-page strong {
+            color: var(--color-text);
+        }
+
+        .doc-page em {
+            color: var(--color-secondary);
+            font-style: normal;
+        }
+
+        .doc-page table {
+            width: 100%;
+            border-collapse: collapse;
+            margin: 24px 0;
+        }
+
+        .doc-page th, .doc-page td {
+            padding: 12px 16px;
+            text-align: left;
+            border: 1px solid rgba(255, 255, 255, 0.1);
+        }
+
+        .doc-page th {
+            background: var(--color-bg-alt);
+            font-weight: 600;
+            color: var(--color-text);
+        }
+
+        .doc-page td {
+            color: var(--color-text-muted);
+        }
+
+        .doc-page td code {
+            font-size: 0.85rem;
+        }
+
+        .highlight-box {
+            background: rgba(124, 58, 237, 0.1);
+            border: 1px solid rgba(124, 58, 237, 0.3);
+            border-radius: var(--radius-md);
+            padding: 24px;
+            margin: 32px 0;
+        }
+
+        .highlight-box h4 {
+            color: var(--color-primary);
+            font-size: 1.1rem;
+            margin-bottom: 12px;
+        }
+
+        .highlight-box p {
+            margin-bottom: 0;
+        }
+
+        .code-comment { color: #6b7280; }
+        .code-keyword { color: #7c3aed; font-weight: 600; }
+        .code-string { color: #10b981; }
+        .code-feature { color: #f472b6; }
+        .code-result { color: #06b6d4; }
+
+        .back-link {
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            color: var(--color-text-muted);
+            text-decoration: none;
+            font-size: 0.95rem;
+            margin-bottom: 24px;
+            transition: color 0.2s;
+        }
+
+        .back-link:hover {
+            color: var(--color-primary);
+        }
+    </style>
+</head>
+<body>
+    <nav class="nav">
+        <div class="nav-content">
+            <a href="/aro/" class="logo">
+                <span class="logo-aro">ARO</span>
+            </a>
+            <div class="nav-links">
+                <a href="../fdd.html">The FDD Story</a>
+                <a href="../getting-started.html">Get Started</a>
+                <a href="../docs.html" style="color: var(--color-text);">Docs</a>
+                <a href="../disclaimer.html">Motivation</a>
+                <a href="../download.html">Download</a>
+                <a href="https://github.com/arolang/aro" class="nav-github">
+                    <svg viewBox="0 0 16 16" fill="currentColor"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z"/></svg>
+                    <span class="github-stars">
+                        <svg viewBox="0 0 16 16"><path d="M8 .25a.75.75 0 01.673.418l1.882 3.815 4.21.612a.75.75 0 01.416 1.279l-3.046 2.97.719 4.192a.75.75 0 01-1.088.791L8 12.347l-3.766 1.98a.75.75 0 01-1.088-.79l.72-4.194L.818 6.374a.75.75 0 01.416-1.28l4.21-.611L7.327.668A.75.75 0 018 .25z"/></svg>
+                        <span class="github-stars-count"></span>
+                    </span>
+                </a>
+            </div>
+        </div>
+    </nav>
+
+    <main class="doc-page">
+        <a href="../docs.html" class="back-link">&#x2190; Back to Documentation</a>
+
+        <header class="doc-header">
+            <h1 class="gradient-text">Runtime Metrics</h1>
+            <p class="lead">
+                Monitor feature set execution with built-in metrics collection.
+                Track action counts, timing, success rates, and system resource usage
+                with multiple output formats including Prometheus.
+            </p>
+        </header>
+
+        <div class="highlight-box">
+            <h4>Zero Configuration</h4>
+            <p>
+                Metrics are collected automatically for every feature set execution.
+                Access them anytime via the <code>&lt;metrics&gt;</code> magic variable &mdash; no setup required.
+            </p>
+        </div>
+
+        <h2>Overview</h2>
+        <p>
+            ARO automatically tracks metrics for every feature set that executes in your application.
+            The runtime records execution counts, success/failure rates, and timing statistics.
+            System-level process metrics (CPU, memory, file descriptors) are also available.
+        </p>
+        <p>
+            Metrics are accessed through the <code>&lt;metrics&gt;</code> magic variable, which is
+            available in any feature set without declaration. Use a qualifier to choose the output format.
+        </p>
+
+        <h2>Enabling Metrics Output</h2>
+        <p>
+            Use the <code>Log</code> action with the <code>&lt;metrics&gt;</code> variable and a format qualifier:
+        </p>
+
+        <pre><code><span class="code-comment">(* Table format - ASCII table for terminal display *)</span>
+<span class="code-keyword">Log</span> the <span class="code-result">&lt;metrics: table&gt;</span> to the <span class="code-result">&lt;console&gt;</span>.
+
+<span class="code-comment">(* Short format - single-line summary *)</span>
+<span class="code-keyword">Log</span> the <span class="code-result">&lt;metrics: short&gt;</span> to the <span class="code-result">&lt;console&gt;</span>.
+
+<span class="code-comment">(* Plain format - detailed human-readable output *)</span>
+<span class="code-keyword">Log</span> the <span class="code-result">&lt;metrics: plain&gt;</span> to the <span class="code-result">&lt;console&gt;</span>.
+
+<span class="code-comment">(* Prometheus format - for monitoring systems *)</span>
+<span class="code-keyword">Log</span> the <span class="code-result">&lt;metrics: prometheus&gt;</span> to the <span class="code-result">&lt;console&gt;</span>.</code></pre>
+
+        <p>
+            Without a qualifier, <code>&lt;metrics&gt;</code> defaults to the <code>plain</code> format:
+        </p>
+
+        <pre><code><span class="code-comment">(* These are equivalent *)</span>
+<span class="code-keyword">Log</span> the <span class="code-result">&lt;metrics&gt;</span> to the <span class="code-result">&lt;console&gt;</span>.
+<span class="code-keyword">Log</span> the <span class="code-result">&lt;metrics: plain&gt;</span> to the <span class="code-result">&lt;console&gt;</span>.</code></pre>
+
+        <h2>Output Formats</h2>
+
+        <table>
+            <thead>
+                <tr>
+                    <th>Qualifier</th>
+                    <th>Description</th>
+                    <th>Use Case</th>
+                </tr>
+            </thead>
+            <tbody>
+                <tr>
+                    <td><code>plain</code></td>
+                    <td>Context-aware detailed output</td>
+                    <td>Development, debugging</td>
+                </tr>
+                <tr>
+                    <td><code>short</code></td>
+                    <td>Single-line summary</td>
+                    <td>Quick status checks</td>
+                </tr>
+                <tr>
+                    <td><code>table</code></td>
+                    <td>ASCII table format</td>
+                    <td>Terminal display</td>
+                </tr>
+                <tr>
+                    <td><code>prometheus</code></td>
+                    <td>Prometheus text format</td>
+                    <td>Monitoring integration</td>
+                </tr>
+            </tbody>
+        </table>
+
+        <h3>Table Format</h3>
+        <p>
+            The <code>table</code> qualifier produces an ASCII table showing all feature sets with their counts and timing:
+        </p>
+
+        <pre><code>+-------------------+-------+---------+--------+---------+---------+
+| Feature Set       | Count | Success | Failed | Avg(ms) | Max(ms) |
++-------------------+-------+---------+--------+---------+---------+
+| Application-Start |     1 |       1 |      0 |   12.50 |   12.50 |
+| listUsers         |     2 |       2 |      0 |    8.30 |    9.50 |
++-------------------+-------+---------+--------+---------+---------+
+| TOTAL             |     3 |       3 |      0 |   10.40 |   12.50 |
++-------------------+-------+---------+--------+---------+---------+</code></pre>
+
+        <h3>Short Format</h3>
+        <p>
+            The <code>short</code> qualifier produces a single-line summary:
+        </p>
+
+        <pre><code>metrics: 3 executions, 2 featuresets, avg=10.4ms, uptime=5.2s</code></pre>
+
+        <h3>Plain Format</h3>
+        <p>
+            The <code>plain</code> qualifier provides a detailed breakdown per feature set:
+        </p>
+
+        <pre><code>Feature Set Metrics (3 total executions, uptime: 5.2s)
+
+Application-Start (Entry Point)
+  Executions: 1 (success: 1, failed: 0)
+  Duration: avg=12.5ms, min=12.5ms, max=12.5ms
+
+listUsers (User API)
+  Executions: 2 (success: 2, failed: 0)
+  Duration: avg=8.3ms, min=7.1ms, max=9.5ms</code></pre>
+
+        <h2>Prometheus Format</h2>
+        <p>
+            The <code>prometheus</code> qualifier outputs metrics in standard
+            <a href="https://prometheus.io/docs/instrumenting/exposition_formats/">Prometheus text format</a>,
+            ready for scraping by monitoring systems:
+        </p>
+
+        <pre><code># HELP aro_featureset_executions_total Total number of feature set executions
+# TYPE aro_featureset_executions_total counter
+aro_featureset_executions_total{featureset="Application-Start",activity="Entry Point"} 1
+aro_featureset_executions_total{featureset="listUsers",activity="User API"} 2
+
+# HELP aro_featureset_duration_ms_avg Average execution duration in milliseconds
+# TYPE aro_featureset_duration_ms_avg gauge
+aro_featureset_duration_ms_avg{featureset="Application-Start",activity="Entry Point"} 12.5
+aro_featureset_duration_ms_avg{featureset="listUsers",activity="User API"} 8.3
+
+# HELP aro_application_uptime_seconds Application uptime in seconds
+# TYPE aro_application_uptime_seconds gauge
+aro_application_uptime_seconds 5.2</code></pre>
+
+        <p>
+            You can also expose metrics as an HTTP endpoint for Prometheus scraping:
+        </p>
+
+        <pre><code><span class="code-feature">(getMetrics: Monitoring API)</span> {
+    <span class="code-keyword">Return</span> an <span class="code-result">&lt;OK: status&gt;</span> with <span class="code-result">&lt;metrics: prometheus&gt;</span>.
+}</code></pre>
+
+        <h2>Example Usage</h2>
+        <p>
+            A complete example that emits events, processes them in parallel, and displays metrics at shutdown:
+        </p>
+
+        <pre><code><span class="code-feature">(Application-Start: Metrics Demo)</span> {
+    <span class="code-keyword">Log</span> <span class="code-string">"=== Metrics Demo ==="</span> to the <span class="code-result">&lt;console&gt;</span>.
+    <span class="code-keyword">Log</span> <span class="code-string">"Emitting events in parallel..."</span> to the <span class="code-result">&lt;console&gt;</span>.
+
+    <span class="code-comment">(* Emit events in parallel for each item *)</span>
+    <span class="code-keyword">Create</span> the <span class="code-result">&lt;items&gt;</span> with [1, 2, 3].
+    parallel for each &lt;item&gt; in &lt;items&gt; {
+        <span class="code-keyword">Emit</span> a <span class="code-result">&lt;ProcessItem: event&gt;</span> with <span class="code-result">&lt;item&gt;</span>.
+    }
+
+    <span class="code-keyword">Log</span> <span class="code-string">"Events emitted. Metrics will be shown at shutdown."</span> to the <span class="code-result">&lt;console&gt;</span>.
+    <span class="code-keyword">Return</span> an <span class="code-result">&lt;OK: status&gt;</span> for the <span class="code-result">&lt;demo&gt;</span>.
+}
+
+<span class="code-feature">(Process Item: ProcessItem Handler)</span> {
+    <span class="code-keyword">Extract</span> the <span class="code-result">&lt;value&gt;</span> from the <span class="code-result">&lt;event: item&gt;</span>.
+    <span class="code-keyword">Log</span> <span class="code-string">"Processing item: ${value}"</span> to the <span class="code-result">&lt;console&gt;</span>.
+    <span class="code-keyword">Return</span> an <span class="code-result">&lt;OK: status&gt;</span> for the <span class="code-result">&lt;processing&gt;</span>.
+}
+
+<span class="code-feature">(Application-End: Success)</span> {
+    <span class="code-keyword">Log</span> <span class="code-string">"=== Final Metrics ==="</span> to the <span class="code-result">&lt;console&gt;</span>.
+
+    <span class="code-comment">(* Short summary *)</span>
+    <span class="code-keyword">Log</span> the <span class="code-result">&lt;metrics: short&gt;</span> to the <span class="code-result">&lt;console&gt;</span>.
+
+    <span class="code-comment">(* Detailed table *)</span>
+    <span class="code-keyword">Log</span> the <span class="code-result">&lt;metrics: table&gt;</span> to the <span class="code-result">&lt;console&gt;</span>.
+
+    <span class="code-comment">(* Prometheus format for monitoring *)</span>
+    <span class="code-keyword">Log</span> the <span class="code-result">&lt;metrics: prometheus&gt;</span> to the <span class="code-result">&lt;console&gt;</span>.
+
+    <span class="code-keyword">Return</span> an <span class="code-result">&lt;OK: status&gt;</span> for the <span class="code-result">&lt;shutdown&gt;</span>.
+}</code></pre>
+
+        <h2>Available Metric Types</h2>
+
+        <h3>Per-Feature Set Metrics</h3>
+        <p>
+            Each feature set that executes is tracked individually with the following metrics:
+        </p>
+
+        <table>
+            <thead>
+                <tr>
+                    <th>Metric</th>
+                    <th>Type</th>
+                    <th>Description</th>
+                </tr>
+            </thead>
+            <tbody>
+                <tr>
+                    <td><code>executionCount</code></td>
+                    <td>Counter</td>
+                    <td>Total number of times the feature set has been executed</td>
+                </tr>
+                <tr>
+                    <td><code>successCount</code></td>
+                    <td>Counter</td>
+                    <td>Number of successful executions</td>
+                </tr>
+                <tr>
+                    <td><code>failureCount</code></td>
+                    <td>Counter</td>
+                    <td>Number of failed executions</td>
+                </tr>
+                <tr>
+                    <td><code>averageDurationMs</code></td>
+                    <td>Computed</td>
+                    <td>Average execution time in milliseconds</td>
+                </tr>
+                <tr>
+                    <td><code>minDurationMs</code></td>
+                    <td>Gauge</td>
+                    <td>Fastest execution time in milliseconds</td>
+                </tr>
+                <tr>
+                    <td><code>maxDurationMs</code></td>
+                    <td>Gauge</td>
+                    <td>Slowest execution time in milliseconds</td>
+                </tr>
+                <tr>
+                    <td><code>successRate</code></td>
+                    <td>Computed</td>
+                    <td>Percentage of successful executions (0&ndash;100)</td>
+                </tr>
+            </tbody>
+        </table>
+
+        <h3>Global Application Metrics</h3>
+
+        <table>
+            <thead>
+                <tr>
+                    <th>Metric</th>
+                    <th>Type</th>
+                    <th>Description</th>
+                </tr>
+            </thead>
+            <tbody>
+                <tr>
+                    <td><code>totalExecutions</code></td>
+                    <td>Counter</td>
+                    <td>Sum of all feature set executions</td>
+                </tr>
+                <tr>
+                    <td><code>uptimeSeconds</code></td>
+                    <td>Computed</td>
+                    <td>Time since application start</td>
+                </tr>
+                <tr>
+                    <td><code>applicationStartTime</code></td>
+                    <td>Timestamp</td>
+                    <td>When the application started</td>
+                </tr>
+            </tbody>
+        </table>
+
+        <h3>System Process Metrics</h3>
+        <p>
+            The metrics snapshot also includes system-level process information collected from the operating system:
+        </p>
+
+        <table>
+            <thead>
+                <tr>
+                    <th>Metric</th>
+                    <th>Description</th>
+                </tr>
+            </thead>
+            <tbody>
+                <tr>
+                    <td><code>cpuUserTime</code></td>
+                    <td>CPU time spent in user mode (seconds)</td>
+                </tr>
+                <tr>
+                    <td><code>cpuSystemTime</code></td>
+                    <td>CPU time spent in system/kernel mode (seconds)</td>
+                </tr>
+                <tr>
+                    <td><code>residentMemoryBytes</code></td>
+                    <td>Physical memory used by the process</td>
+                </tr>
+                <tr>
+                    <td><code>virtualMemoryBytes</code></td>
+                    <td>Virtual memory allocated to the process</td>
+                </tr>
+                <tr>
+                    <td><code>openFileDescriptors</code></td>
+                    <td>Number of currently open file descriptors</td>
+                </tr>
+                <tr>
+                    <td><code>maxFileDescriptors</code></td>
+                    <td>Maximum allowed file descriptors for the process</td>
+                </tr>
+            </tbody>
+        </table>
+
+        <h2>Prometheus Labels</h2>
+        <p>
+            Each Prometheus metric includes identifying labels for filtering and grouping in dashboards:
+        </p>
+
+        <table>
+            <thead>
+                <tr>
+                    <th>Label</th>
+                    <th>Description</th>
+                    <th>Example</th>
+                </tr>
+            </thead>
+            <tbody>
+                <tr>
+                    <td><code>featureset</code></td>
+                    <td>Feature set name</td>
+                    <td><code>listUsers</code></td>
+                </tr>
+                <tr>
+                    <td><code>activity</code></td>
+                    <td>Business activity</td>
+                    <td><code>User API</code></td>
+                </tr>
+            </tbody>
+        </table>
+
+        <div class="highlight-box">
+            <h4>Learn More</h4>
+            <p>
+                See the full runtime metrics specification in
+                <a href="https://github.com/arolang/aro/blob/main/Proposals/ARO-0044-metrics.md">ARO-0044: Runtime Metrics</a>.
+            </p>
+        </div>
+    </main>
+
+    <footer class="footer">
+        <div class="container">
+            <div class="footer-bottom">
+                <p>Sometime this page should build with ARO. Obviously.</p>
+            </div>
+        </div>
+    </footer>
+</body>
+</html>

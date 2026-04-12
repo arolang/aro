@@ -280,6 +280,15 @@ integration:linux:
     - timeout 60 ./aro-dist/aro build ./Examples/HelloWorld --verbose 2>&1 || echo "Build failed with exit code $?"
     - echo "=== aro build completed ==="
 
+    # Start local Open-Meteo stubs (offline HTTPClient / WeatherClient tests).
+    # Running them here, outside the test harness, avoids IPC::Run keeping
+    # pipes tied to backgrounded processes when a per-test pre-script exits.
+    - STUB_TIMEOUT=1800 nohup python3 Examples/HTTPClient/stub.py 18765 >/tmp/httpclient-stub.log 2>&1 </dev/null &
+    - STUB_TIMEOUT=1800 nohup python3 Examples/WeatherClient/stub.py 18766 >/tmp/weatherclient-stub.log 2>&1 </dev/null &
+    - for i in $(seq 1 50); do python3 -c 'import socket; s=socket.socket(); s.settimeout(0.2); exit(0 if s.connect_ex(("127.0.0.1",18765))==0 else 1)' && python3 -c 'import socket; s=socket.socket(); s.settimeout(0.2); exit(0 if s.connect_ex(("127.0.0.1",18766))==0 else 1)' && break; sleep 0.2; done
+    - python3 -c 'import urllib.request; print(urllib.request.urlopen("http://127.0.0.1:18765/v1/forecast").read()[:120])'
+    - python3 -c 'import urllib.request; print(urllib.request.urlopen("http://127.0.0.1:18766/v1/forecast").read()[:120])'
+
     - chmod +x test-examples.pl
     - perl test-examples.pl --verbose
   artifacts:
