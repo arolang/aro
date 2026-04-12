@@ -1,155 +1,52 @@
 // ============================================================
 // CollectionPlugin.swift
-// ARO Plugin - Swift Qualifier Example
+// ARO Plugin - Swift Qualifier Example (using AROPluginSDK)
 // ============================================================
+//
+// This plugin demonstrates the zero-boilerplate SDK pattern.
+// No @_cdecl, no JSON, no manual memory management.
+// The SDK auto-generates all C ABI exports.
 
 import Foundation
+import AROPluginSDK
 
-/// A Swift plugin that provides collection qualifiers
-///
-/// This plugin demonstrates how to implement plugin qualifiers.
-/// Qualifiers transform values in ARO expressions like <list: pick-random>.
-public struct CollectionPlugin {
-    public static let name = "plugin-swift-collection"
-    public static let version = "1.0.0"
-}
-
-// MARK: - C ABI Interface
-
-/// Returns plugin metadata as JSON string with qualifier definitions
-@_cdecl("aro_plugin_info")
-public func aroPluginInfo() -> UnsafeMutablePointer<CChar>? {
-    // Define qualifiers this plugin provides
-    let pickRandomQualifier: NSDictionary = [
-        "name": "pick-random",
-        "inputTypes": ["List"] as NSArray,
-        "description": "Picks a random element from a list",
-        "accepts_parameters": false
-    ]
-
-    let shuffleQualifier: NSDictionary = [
-        "name": "shuffle",
-        "inputTypes": ["List", "String"] as NSArray,
-        "description": "Shuffles elements in a list or characters in a string",
-        "accepts_parameters": false
-    ]
-
-    let reverseQualifier: NSDictionary = [
-        "name": "reverse",
-        "inputTypes": ["List", "String"] as NSArray,
-        "description": "Reverses elements in a list or characters in a string",
-        "accepts_parameters": false
-    ]
-
-    let info: NSDictionary = [
-        "name": "plugin-swift-collection",
-        "version": "1.0.0",
-        "actions": [] as NSArray,
-        "qualifiers": [pickRandomQualifier, shuffleQualifier, reverseQualifier] as NSArray
-    ]
-
-    guard let jsonData = try? JSONSerialization.data(withJSONObject: info),
-          let jsonString = String(data: jsonData, encoding: .utf8) else {
-        return nil
-    }
-
-    return strdup(jsonString)
-}
-
-/// Execute a qualifier transformation
-@_cdecl("aro_plugin_qualifier")
-public func aroPluginQualifier(
-    qualifier: UnsafePointer<CChar>?,
-    inputJson: UnsafePointer<CChar>?
-) -> UnsafeMutablePointer<CChar>? {
-    guard let qualifier = qualifier.map({ String(cString: $0) }),
-          let inputJson = inputJson.map({ String(cString: $0) }) else {
-        return strdup("{\"error\":\"Invalid input\"}")
-    }
-
-    guard let jsonData = inputJson.data(using: .utf8),
-          let input = try? JSONSerialization.jsonObject(with: jsonData) as? [String: Any] else {
-        return strdup("{\"error\":\"Invalid JSON input\"}")
-    }
-
-    // Get the value and type from input
-    let value = input["value"]
-    let type = input["type"] as? String ?? "Unknown"
-
-    let result: [String: Any]
-    switch qualifier {
-    case "pick-random":
-        result = CollectionPlugin.pickRandom(value: value, type: type)
-    case "shuffle":
-        result = CollectionPlugin.shuffle(value: value, type: type)
-    case "reverse":
-        result = CollectionPlugin.reverse(value: value, type: type)
-    default:
-        result = ["error": "Unknown qualifier: \(qualifier)"]
-    }
-
-    guard let resultData = try? JSONSerialization.data(withJSONObject: result),
-          let resultString = String(data: resultData, encoding: .utf8) else {
-        return strdup("{\"error\":\"Failed to serialize result\"}")
-    }
-
-    return strdup(resultString)
-}
-
-/// Plugin lifecycle hook - called once when the plugin is loaded
-@_cdecl("aro_plugin_init")
-public func aroPluginInit() {}
-
-/// Plugin lifecycle hook - called once when the plugin is unloaded
-@_cdecl("aro_plugin_shutdown")
-public func aroPluginShutdown() {}
-
-/// Free memory allocated by the plugin
-@_cdecl("aro_plugin_free")
-public func aroPluginFree(ptr: UnsafeMutablePointer<CChar>?) {
-    if let ptr = ptr {
-        free(ptr)
-    }
-}
-
-// MARK: - Qualifier Implementations
-
-extension CollectionPlugin {
-
-    /// Pick a random element from a list
-    static func pickRandom(value: Any?, type: String) -> [String: Any] {
-        guard let array = value as? [Any], !array.isEmpty else {
-            return ["error": "pick-random requires a non-empty list"]
+/// Plugin registration — this is the ONLY setup needed.
+/// The SDK generates aro_plugin_info, aro_plugin_qualifier,
+/// aro_plugin_free, aro_plugin_init, and aro_plugin_shutdown.
+private let plugin = AROPlugin(name: "plugin-swift-collection", version: "1.0.0", handle: "Collections")
+    .qualifier("pick-random", inputTypes: ["List"], description: "Pick a random element from a list") { params in
+        guard let array = params.arrayValue, !array.isEmpty else {
+            return .failure("pick-random requires a non-empty list")
         }
-
         let randomIndex = Int.random(in: 0..<array.count)
-        return ["result": array[randomIndex]]
+        return .success(array[randomIndex])
+    }
+    .qualifier("shuffle", inputTypes: ["List", "String"], description: "Shuffle elements or characters") { params in
+        if let array = params.arrayValue {
+            return .success(array.shuffled())
+        }
+        if let string = params.stringValue {
+            return .success(String(string.shuffled()))
+        }
+        return .failure("shuffle requires a list or string")
+    }
+    .qualifier("reverse", inputTypes: ["List", "String"], description: "Reverse elements or characters") { params in
+        if let array = params.arrayValue {
+            return .success(Array(array.reversed()))
+        }
+        if let string = params.stringValue {
+            return .success(String(string.reversed()))
+        }
+        return .failure("reverse requires a list or string")
     }
 
-    /// Shuffle elements in a list or characters in a string
-    static func shuffle(value: Any?, type: String) -> [String: Any] {
-        if let array = value as? [Any] {
-            return ["result": array.shuffled()]
-        }
-
-        if let string = value as? String {
-            let shuffled = String(string.shuffled())
-            return ["result": shuffled]
-        }
-
-        return ["error": "shuffle requires a list or string"]
-    }
-
-    /// Reverse elements in a list or characters in a string
-    static func reverse(value: Any?, type: String) -> [String: Any] {
-        if let array = value as? [Any] {
-            return ["result": Array(array.reversed())]
-        }
-
-        if let string = value as? String {
-            return ["result": String(string.reversed())]
-        }
-
-        return ["error": "reverse requires a list or string"]
-    }
+// Register with the SDK — this wires up all C ABI exports automatically
+@_cdecl("_aro_plugin_register")
+public func register() {
+    AROPluginExport.register(plugin)
 }
+
+// Static initializer to ensure registration happens at load time
+private let _: Void = {
+    AROPluginExport.register(plugin)
+}()

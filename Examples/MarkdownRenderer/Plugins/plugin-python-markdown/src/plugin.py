@@ -2,136 +2,85 @@
 ARO Plugin - Python Markdown Processor
 
 This plugin provides Markdown processing functionality for ARO.
-It implements the ARO Python plugin interface.
+Uses the ARO Plugin SDK decorator API.
 """
 
-import json
 import re
 from typing import Any, Dict, List
 
+from aro_plugin_sdk import AROInput, action, plugin, run
 
-def aro_plugin_info() -> Dict[str, Any]:
-    """Return plugin metadata."""
+
+@plugin(name="plugin-python-markdown", version="1.0.0", handle="Markdown")
+class MarkdownPlugin:
+    pass
+
+
+# MARK: - Action handlers
+
+@action(
+    name="to-html",
+    verbs=["tohtml", "rendermarkdown"],
+    role="own",
+    prepositions=["from", "with"],
+    description="Convert a Markdown string to HTML",
+)
+def handle_to_html(input: AROInput) -> Dict[str, Any]:
+    markdown = input.string("data")
+    html = markdown_to_html(markdown)
     return {
-        "name": "plugin-python-markdown",
-        "version": "1.0.0",
-        "handle": "Markdown",
-        "actions": [
-            {
-                "name": "to-html",
-                "verbs": ["tohtml", "rendermarkdown"],
-                "role": "own",
-                "prepositions": ["from", "with"],
-                "description": "Convert a Markdown string to HTML",
-            },
-            {
-                "name": "extract-links",
-                "verbs": ["extractlinks"],
-                "role": "own",
-                "prepositions": ["from"],
-                "description": "Extract all hyperlinks from a Markdown string",
-            },
-            {
-                "name": "extract-headings",
-                "verbs": ["extractheadings"],
-                "role": "own",
-                "prepositions": ["from"],
-                "description": "Extract all headings from a Markdown string",
-            },
-            {
-                "name": "word-count",
-                "verbs": ["wordcount"],
-                "role": "own",
-                "prepositions": ["from"],
-                "description": "Count words, characters, and lines in a Markdown string",
-            },
-        ],
+        "html": html,
+        "input_length": len(markdown),
+        "output_length": len(html),
     }
 
 
-def on_init(self) -> None:
-    """Lifecycle hook called once when the plugin is loaded."""
-    pass
-
-
-def on_shutdown(self) -> None:
-    """Lifecycle hook called once when the plugin is unloaded."""
-    pass
-
-
-def _resolve_markdown(params: Dict[str, Any]) -> str:
-    """Extract the markdown text from input params.
-
-    Prefers the 'data' key, then looks inside '_with', then falls back
-    to the legacy 'object' key.
-    """
-    if "data" in params:
-        return params["data"]
-    with_obj = params.get("_with", {})
-    if isinstance(with_obj, dict) and "data" in with_obj:
-        return with_obj["data"]
-    return params.get("object", "")
-
-
-def aro_action_to_html(input_json: str) -> str:
-    """Convert Markdown to HTML."""
-    params = json.loads(input_json)
-    markdown = _resolve_markdown(params)
-
-    html = markdown_to_html(markdown)
-
-    return json.dumps({
-        "html": html,
-        "input_length": len(markdown),
-        "output_length": len(html)
-    })
-
-
-def aro_action_extract_links(input_json: str) -> str:
-    """Extract all links from Markdown text."""
-    params = json.loads(input_json)
-    markdown = _resolve_markdown(params)
-
+@action(
+    name="extract-links",
+    verbs=["extractlinks"],
+    role="own",
+    prepositions=["from"],
+    description="Extract all hyperlinks from a Markdown string",
+)
+def handle_extract_links(input: AROInput) -> Dict[str, Any]:
+    markdown = input.string("data")
     links = extract_links(markdown)
-
-    return json.dumps({
-        "links": links,
-        "count": len(links)
-    })
+    return {"links": links, "count": len(links)}
 
 
-def aro_action_extract_headings(input_json: str) -> str:
-    """Extract all headings from Markdown text."""
-    params = json.loads(input_json)
-    markdown = _resolve_markdown(params)
-
+@action(
+    name="extract-headings",
+    verbs=["extractheadings"],
+    role="own",
+    prepositions=["from"],
+    description="Extract all headings from a Markdown string",
+)
+def handle_extract_headings(input: AROInput) -> Dict[str, Any]:
+    markdown = input.string("data")
     headings = extract_headings(markdown)
-
-    return json.dumps({
-        "headings": headings,
-        "count": len(headings)
-    })
+    return {"headings": headings, "count": len(headings)}
 
 
-def aro_action_word_count(input_json: str) -> str:
-    """Count words, characters, and lines in Markdown text."""
-    params = json.loads(input_json)
-    markdown = _resolve_markdown(params)
-
-    # Remove Markdown syntax for accurate word count
+@action(
+    name="word-count",
+    verbs=["wordcount"],
+    role="own",
+    prepositions=["from"],
+    description="Count words, characters, and lines in a Markdown string",
+)
+def handle_word_count(input: AROInput) -> Dict[str, Any]:
+    markdown = input.string("data")
     plain_text = strip_markdown(markdown)
-
     words = len(plain_text.split())
     chars = len(plain_text)
     chars_no_spaces = len(plain_text.replace(" ", "").replace("\n", ""))
     lines = len(markdown.split("\n"))
-
-    return json.dumps({
+    return {
         "words": words,
         "characters": chars,
         "characters_no_spaces": chars_no_spaces,
-        "lines": lines
-    })
+        "lines": lines,
+    }
 
 
 # MARK: - Markdown Processing Functions
@@ -196,10 +145,7 @@ def extract_links(markdown: str) -> List[Dict[str, str]]:
 
     links = []
     for text, url in matches:
-        links.append({
-            "text": text,
-            "url": url
-        })
+        links.append({"text": text, "url": url})
 
     return links
 
@@ -213,10 +159,7 @@ def extract_headings(markdown: str) -> List[Dict[str, Any]]:
     for match in matches:
         level = len(match.group(1))
         text = match.group(2).strip()
-        headings.append({
-            "level": level,
-            "text": text
-        })
+        headings.append({"level": level, "text": text})
 
     return headings
 
@@ -253,43 +196,5 @@ def strip_markdown(markdown: str) -> str:
     return text.strip()
 
 
-# For testing
 if __name__ == "__main__":
-    test_md = """
-# Hello World
-
-This is a **bold** and *italic* example.
-
-## Links
-
-Check out [ARO](https://github.com/arolang/aro) for more info.
-
-### Code
-
-```python
-print("Hello, World!")
-```
-"""
-
-    print("Plugin Info:")
-    print(json.dumps(aro_plugin_info(), indent=2))
-
-    print("\n\nTo HTML:")
-    result = aro_action_to_html(json.dumps({"data": test_md}))
-    print(json.dumps(json.loads(result), indent=2))
-
-    print("\n\nTo HTML (via _with):")
-    result = aro_action_to_html(json.dumps({"_with": {"data": test_md}}))
-    print(json.dumps(json.loads(result), indent=2))
-
-    print("\n\nExtract Links:")
-    result = aro_action_extract_links(json.dumps({"data": test_md}))
-    print(json.dumps(json.loads(result), indent=2))
-
-    print("\n\nExtract Headings:")
-    result = aro_action_extract_headings(json.dumps({"data": test_md}))
-    print(json.dumps(json.loads(result), indent=2))
-
-    print("\n\nWord Count:")
-    result = aro_action_word_count(json.dumps({"data": test_md}))
-    print(json.dumps(json.loads(result), indent=2))
+    run()

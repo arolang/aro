@@ -12,6 +12,7 @@
 
 import Foundation
 import SQLite
+import AROPluginSDK
 
 // MARK: - State Management
 
@@ -24,7 +25,7 @@ private let dbQueue = DispatchQueue(label: "sqlite.plugin")
 /// Returns full plugin metadata as JSON.
 /// Declares this plugin provides a "sqlite" service with query/execute methods.
 @_cdecl("aro_plugin_info")
-public func aroPluginInfo() -> UnsafeMutablePointer<CChar> {
+public func aroPluginInfo() -> UnsafeMutablePointer<CChar>? {
     let info = """
     {
       "name": "SQLitePlugin",
@@ -40,7 +41,7 @@ public func aroPluginInfo() -> UnsafeMutablePointer<CChar> {
       ]
     }
     """
-    return strdup(info)!
+    return aroStrdup(info)
 }
 
 // MARK: - Lifecycle Hooks
@@ -71,33 +72,34 @@ public func aroPluginShutdown() {
 public func aroPluginExecute(
     _ actionPtr: UnsafePointer<CChar>,
     _ inputJSONPtr: UnsafePointer<CChar>
-) -> UnsafeMutablePointer<CChar> {
+) -> UnsafeMutablePointer<CChar>? {
     let action = String(cString: actionPtr)
-    let inputJSON = String(cString: inputJSONPtr)
-
-    // Parse input JSON
-    guard let inputData = inputJSON.data(using: .utf8),
-          let input = try? JSONSerialization.jsonObject(with: inputData) as? [String: Any] else {
-        return errorResponse("Invalid JSON input")
-    }
+    let input  = ActionInput(aroParseJSON(inputJSONPtr))
 
     // Route service actions via "service:<method>" prefix
     guard action.hasPrefix("service:") else {
-        return errorResponse("Unknown action: \(action)")
+        return ActionOutput.failure(.unsupported, "Unknown action: \(action)").toCString()
     }
     let method = String(action.dropFirst("service:".count))
+
+    // SQL is passed in "_with.sql" or top-level "sql"
+    let sql = input.with.string("sql") ?? input.string("sql")
+
+    guard let sql else {
+        return ActionOutput.failure(.invalidInput, "Missing required argument: sql").toCString()
+    }
 
     // Execute in thread-safe manner
     let result: [String: Any]
     do {
         result = try dbQueue.sync {
-            try executeMethod(method, args: input)
+            try executeMethod(method, sql: sql)
         }
     } catch {
-        return errorResponse(String(describing: error))
+        return ActionOutput.failure(.executionFailed, String(describing: error)).toCString()
     }
 
-    return jsonResponse(result)
+    return ActionOutput.success(result).toCString()
 }
 
 // MARK: - Free
@@ -111,12 +113,8 @@ public func aroPluginFree(_ ptr: UnsafeMutablePointer<CChar>?) {
 // MARK: - SQL Logic
 
 /// Execute a database method (thread-safe via dbQueue)
-private func executeMethod(_ method: String, args: [String: Any]) throws -> [String: Any] {
+private func executeMethod(_ method: String, sql: String) throws -> [String: Any] {
     let db = try getOrCreateConnection()
-
-    guard let sql = args["sql"] as? String else {
-        throw PluginError.missingSQLArgument
-    }
 
     switch method.lowercased() {
     case "query":
@@ -146,7 +144,6 @@ private func executeQuery(db: Connection, sql: String) throws -> [String: Any] {
     for row in stmt {
         var dict: [String: Any] = [:]
         for (index, name) in stmt.columnNames.enumerated() {
-            // Get value and convert to JSON-compatible type
             if let value = row[index] {
                 dict[name] = value
             } else {
@@ -168,33 +165,8 @@ private func executeStatement(db: Connection, sql: String) throws -> [String: An
     ]
 }
 
-// MARK: - Helpers
-
-/// Build a JSON response string from a dictionary and return as a C string.
-private func jsonResponse(_ result: [String: Any]) -> UnsafeMutablePointer<CChar> {
-    do {
-        let data = try JSONSerialization.data(withJSONObject: result)
-        let json = String(data: data, encoding: .utf8) ?? "{}"
-        return strdup(json)!
-    } catch {
-        return strdup("{\"error\": \"Failed to encode result\"}")!
-    }
-}
-
-/// Build an error JSON response and return as a C string.
-private func errorResponse(_ message: String) -> UnsafeMutablePointer<CChar> {
-    let escaped = message
-        .replacingOccurrences(of: "\\", with: "\\\\")
-        .replacingOccurrences(of: "\"", with: "\\\"")
-        .replacingOccurrences(of: "\n", with: "\\n")
-        .replacingOccurrences(of: "\r", with: "\\r")
-        .replacingOccurrences(of: "\t", with: "\\t")
-    return strdup("{\"error\": \"\(escaped)\"}")!
-}
-
 // MARK: - Error Types
 
 enum PluginError: Error {
-    case missingSQLArgument
     case unknownMethod(String)
 }

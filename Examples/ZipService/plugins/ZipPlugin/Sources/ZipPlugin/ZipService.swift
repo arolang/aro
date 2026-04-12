@@ -14,13 +14,14 @@
 
 import Foundation
 import Zip
+import AROPluginSDK
 
 // MARK: - Plugin Info
 
 /// Returns full plugin metadata as JSON.
 /// Declares this plugin provides a "zip" service with compress/decompress/list methods.
 @_cdecl("aro_plugin_info")
-public func aroPluginInfo() -> UnsafeMutablePointer<CChar> {
+public func aroPluginInfo() -> UnsafeMutablePointer<CChar>? {
     let info = """
     {
       "name": "ZipPlugin",
@@ -36,7 +37,7 @@ public func aroPluginInfo() -> UnsafeMutablePointer<CChar> {
       ]
     }
     """
-    return strdup(info)!
+    return aroStrdup(info)
 }
 
 // MARK: - Lifecycle Hooks
@@ -61,29 +62,24 @@ public func aroPluginShutdown() {
 public func aroPluginExecute(
     _ actionPtr: UnsafePointer<CChar>,
     _ inputJSONPtr: UnsafePointer<CChar>
-) -> UnsafeMutablePointer<CChar> {
+) -> UnsafeMutablePointer<CChar>? {
     let action = String(cString: actionPtr)
-    let inputJSON = String(cString: inputJSONPtr)
-
-    // Parse arguments (allow empty object)
-    var args: [String: Any] = [:]
-    if let data = inputJSON.data(using: .utf8),
-       let parsed = try? JSONSerialization.jsonObject(with: data) as? [String: Any] {
-        args = parsed
-    }
+    let input  = ActionInput(aroParseJSON(inputJSONPtr))
 
     // Route service actions via "service:<method>" prefix
     guard action.hasPrefix("service:") else {
-        return errorResponse("Unknown action: \(action)")
+        return ActionOutput.failure(.unsupported, "Unknown action: \(action)").toCString()
     }
     let method = String(action.dropFirst("service:".count))
 
-    // Execute method
+    // Parameters come from the "_with" clause
+    let args = input.with
+
     do {
         let result = try executeMethod(method, args: args)
-        return jsonResponse(result)
+        return ActionOutput.success(result).toCString()
     } catch {
-        return errorResponse(String(describing: error))
+        return ActionOutput.failure(.executionFailed, String(describing: error)).toCString()
     }
 }
 
@@ -98,7 +94,7 @@ public func aroPluginFree(_ ptr: UnsafeMutablePointer<CChar>?) {
 // MARK: - Zip Logic
 
 /// Execute a zip method
-private func executeMethod(_ method: String, args: [String: Any]) throws -> [String: Any] {
+private func executeMethod(_ method: String, args: Params) throws -> [String: Any] {
     switch method.lowercased() {
     case "compress", "zip":
         return try compress(args: args)
@@ -115,12 +111,13 @@ private func executeMethod(_ method: String, args: [String: Any]) throws -> [Str
 }
 
 /// Compress files into a zip archive
-private func compress(args: [String: Any]) throws -> [String: Any] {
-    guard let files = args["files"] as? [String] else {
+private func compress(args: Params) throws -> [String: Any] {
+    guard let rawFiles = args.array("files") else {
         throw ZipPluginError.missingArgument("files")
     }
+    let files = rawFiles.compactMap { $0 as? String }
 
-    guard let outputPath = args["output"] as? String else {
+    guard let outputPath = args.string("output") else {
         throw ZipPluginError.missingArgument("output")
     }
 
@@ -146,12 +143,12 @@ private func compress(args: [String: Any]) throws -> [String: Any] {
 }
 
 /// Decompress a zip archive
-private func decompress(args: [String: Any]) throws -> [String: Any] {
-    guard let archivePath = args["archive"] as? String else {
+private func decompress(args: Params) throws -> [String: Any] {
+    guard let archivePath = args.string("archive") else {
         throw ZipPluginError.missingArgument("archive")
     }
 
-    let destination = args["destination"] as? String ?? "."
+    let destination = args.string("destination") ?? "."
 
     let archiveURL = URL(fileURLWithPath: archivePath)
     let destinationURL = URL(fileURLWithPath: destination)
@@ -170,8 +167,8 @@ private func decompress(args: [String: Any]) throws -> [String: Any] {
 }
 
 /// List contents of a zip archive
-private func listContents(args: [String: Any]) throws -> [String: Any] {
-    guard let archivePath = args["archive"] as? String else {
+private func listContents(args: Params) throws -> [String: Any] {
+    guard let archivePath = args.string("archive") else {
         throw ZipPluginError.missingArgument("archive")
     }
 
@@ -196,10 +193,8 @@ private func listContents(args: [String: Any]) throws -> [String: Any] {
     if let enumerator = FileManager.default.enumerator(at: tempDir, includingPropertiesForKeys: nil) {
         while let fileURL = enumerator.nextObject() as? URL {
             let fullPath = fileURL.path
-            // Use pure Swift string handling to avoid Foundation bridging issues
             if fullPath.hasPrefix(prefixToRemove) {
-                let relativePath = String(fullPath.dropFirst(prefixToRemove.count))
-                files.append(relativePath)
+                files.append(String(fullPath.dropFirst(prefixToRemove.count)))
             } else {
                 files.append(fullPath)
             }
@@ -210,37 +205,6 @@ private func listContents(args: [String: Any]) throws -> [String: Any] {
         "archive": archivePath,
         "files": files
     ]
-}
-
-// MARK: - Helpers
-
-/// Build a JSON response string from a dictionary and return as a C string.
-private func jsonResponse(_ result: [String: Any]) -> UnsafeMutablePointer<CChar> {
-    do {
-        let data = try JSONSerialization.data(withJSONObject: result)
-        let json = String(data: data, encoding: .utf8) ?? "{}"
-        return strdup(json)!
-    } catch {
-        return strdup("{\"error\": \"Failed to encode result\"}")!
-    }
-}
-
-/// Build an error JSON response and return as a C string.
-/// Uses manual character replacement to avoid Foundation bridging issues.
-private func errorResponse(_ message: String) -> UnsafeMutablePointer<CChar> {
-    var escaped = ""
-    escaped.reserveCapacity(message.count)
-    for char in message {
-        switch char {
-        case "\\": escaped += "\\\\"
-        case "\"": escaped += "\\\""
-        case "\n": escaped += "\\n"
-        case "\r": escaped += "\\r"
-        case "\t": escaped += "\\t"
-        default: escaped.append(char)
-        }
-    }
-    return strdup("{\"error\": \"\(escaped)\"}")!
 }
 
 // MARK: - Errors

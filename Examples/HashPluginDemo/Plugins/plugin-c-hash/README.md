@@ -3,6 +3,8 @@
 A C plugin for ARO that provides various hash functions.
 Implements the **ARO-0073 ABI**.
 
+> **Note:** For new C plugins, use the [ARO Plugin SDK for C](https://github.com/arolang/aro-plugin-sdk-c) which provides helpers and boilerplate for the ARO-0073 ABI.
+
 ## Installation
 
 ```bash

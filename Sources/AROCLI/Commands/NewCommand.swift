@@ -326,14 +326,13 @@ struct NewPluginCommand: ParsableCommand {
                 ),
             ],
             dependencies: [
-                // TODO: Replace with the published AROPluginSDK package
-                // .package(url: "https://github.com/arolang/plugin-sdk-swift.git", from: "1.0.0"),
+                .package(url: "https://github.com/arolang/aro-plugin-sdk-swift.git", branch: "main"),
             ],
             targets: [
                 .target(
                     name: "\(handle)Plugin",
                     dependencies: [
-                        // "AROPluginSDK",
+                        .product(name: "AROPluginSDK", package: "aro-plugin-sdk-swift"),
                     ],
                     path: "Sources"
                 ),
@@ -582,8 +581,7 @@ struct NewPluginCommand: ParsableCommand {
 
         [dependencies]
         serde_json = "1.0"
-        # TODO: Add aro-plugin-sdk when published
-        # aro-plugin-sdk = { git = "https://github.com/arolang/plugin-sdk-rust.git", tag = "v1.0.0" }
+        aro-plugin-sdk = { git = "https://github.com/arolang/aro-plugin-sdk-rust.git", branch = "main" }
 
         [profile.release]
         lto = true
@@ -712,6 +710,17 @@ struct NewPluginCommand: ParsableCommand {
         let srcURL = pluginDir.appendingPathComponent("src/plugin.c")
         try write(content: cPluginSource(options: options, cpp: false), to: srcURL)
         created.append(relativePath(srcURL, to: pluginDir))
+
+        // Download the C SDK header from the repo
+        let includeDir = pluginDir.appendingPathComponent("include")
+        try FileManager.default.createDirectory(at: includeDir, withIntermediateDirectories: true)
+        let sdkHeaderURL = "https://raw.githubusercontent.com/arolang/aro-plugin-sdk-c/main/include/aro_plugin_sdk.h"
+        if let url = URL(string: sdkHeaderURL),
+           let data = try? Data(contentsOf: url) {
+            let headerPath = includeDir.appendingPathComponent("aro_plugin_sdk.h")
+            try data.write(to: headerPath)
+            created.append(relativePath(headerPath, to: pluginDir))
+        }
 
         if options.includeHybrid {
             let featuresURL = pluginDir.appendingPathComponent("features/example.aro")
@@ -909,6 +918,19 @@ struct NewPluginCommand: ParsableCommand {
         try write(content: cPluginSource(options: options, cpp: true), to: srcURL)
         created.append(relativePath(srcURL, to: pluginDir))
 
+        // Download the C/C++ SDK headers from the repo
+        let includeDir = pluginDir.appendingPathComponent("include")
+        try FileManager.default.createDirectory(at: includeDir, withIntermediateDirectories: true)
+        for header in ["aro_plugin_sdk.h", "aro_plugin_sdk.hpp"] {
+            let sdkURL = "https://raw.githubusercontent.com/arolang/aro-plugin-sdk-c/main/include/\(header)"
+            if let url = URL(string: sdkURL),
+               let data = try? Data(contentsOf: url) {
+                let headerPath = includeDir.appendingPathComponent(header)
+                try data.write(to: headerPath)
+                created.append(relativePath(headerPath, to: pluginDir))
+            }
+        }
+
         if options.includeHybrid {
             let featuresURL = pluginDir.appendingPathComponent("features/example.aro")
             try write(content: aroFeaturesExample(options: options), to: featuresURL)
@@ -961,7 +983,7 @@ struct NewPluginCommand: ParsableCommand {
         created.append(relativePath(srcURL, to: pluginDir))
 
         let reqURL = pluginDir.appendingPathComponent("src/requirements.txt")
-        try write(content: "# Add your Python dependencies here\n# e.g.:\n# requests>=2.28.0\n", to: reqURL)
+        try write(content: "aro-plugin-sdk @ git+https://github.com/arolang/aro-plugin-sdk-python.git@main\n", to: reqURL)
         created.append(relativePath(reqURL, to: pluginDir))
 
         if options.includeHybrid {

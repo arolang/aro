@@ -1,4 +1,4 @@
-# Makefile for plugin-c-hash
+# Makefile for plugin-c-collection
 
 CC = clang
 CFLAGS = -O2 -fPIC -Wall -Wextra -Iinclude
@@ -7,16 +7,16 @@ CFLAGS = -O2 -fPIC -Wall -Wextra -Iinclude
 UNAME_S := $(shell uname -s)
 ifeq ($(UNAME_S),Darwin)
     LDFLAGS = -dynamiclib
-    OUTPUT = libhash_plugin.dylib
+    OUTPUT = libcollection_plugin.dylib
 else ifeq ($(UNAME_S),Linux)
     LDFLAGS = -shared
-    OUTPUT = libhash_plugin.so
+    OUTPUT = libcollection_plugin.so
 else
     LDFLAGS = -shared
-    OUTPUT = hash_plugin.dll
+    OUTPUT = collection_plugin.dll
 endif
 
-SRC = src/hash_plugin.c
+SRC = src/collection_plugin.c
 
 .PHONY: all clean test
 

@@ -1,23 +1,24 @@
-// swift-tools-version:5.9
+// swift-tools-version: 5.9
 import PackageDescription
 
+// Built as a dynamic library so the ARO runtime can dlopen() it.
+
 let package = Package(
-    name: "ZipPlugin",
+    name: "CollectionPlugin",
     platforms: [.macOS(.v12)],
     products: [
-        .library(name: "ZipPlugin", type: .dynamic, targets: ["ZipPlugin"])
+        .library(name: "CollectionPlugin", type: .dynamic, targets: ["CollectionPlugin"]),
     ],
     dependencies: [
-        .package(url: "https://github.com/marmelroy/Zip.git", exact: "2.1.1"),
         .package(url: "https://github.com/arolang/aro-plugin-sdk-swift.git", branch: "main"),
     ],
     targets: [
         .target(
-            name: "ZipPlugin",
+            name: "CollectionPlugin",
             dependencies: [
-                .product(name: "Zip", package: "Zip"),
                 .product(name: "AROPluginSDK", package: "aro-plugin-sdk-swift"),
-            ]
-        )
+            ],
+            path: "Sources"
+        ),
     ]
 )
