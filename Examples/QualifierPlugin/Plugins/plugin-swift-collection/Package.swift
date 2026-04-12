@@ -16,7 +16,7 @@ let package = Package(
         .target(
             name: "CollectionPlugin",
             dependencies: [
-                .product(name: "AROPluginSDK", package: "aro-plugin-sdk-swift"),
+                .product(name: "AROPluginSDKExport", package: "aro-plugin-sdk-swift"),
             ],
             path: "Sources"
         ),

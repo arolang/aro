@@ -1,14 +1,7 @@
 // ============================================================
 // CounterService.swift
-// Example ARO Plugin - Stateful Counter Service
+// Example ARO Plugin - Stateful Counter Service (ARO-0073 ABI)
 // ============================================================
-//
-// This plugin demonstrates the Call action with stateful services.
-// It answers: "Why does Call exist when Request handles HTTP and Exec handles commands?"
-//
-// - Request: Stateless HTTP - each call is independent
-// - Exec: Command execution - no persistence between calls
-// - Call: Stateful services - maintain connections/state for application lifetime
 //
 // Usage in ARO:
 //   <Call> the <result> from the <counter: increment> with {}.
@@ -23,89 +16,79 @@ import Foundation
 private var globalCount: Int = 0
 private let counterQueue = DispatchQueue(label: "counter.service")
 
-// MARK: - Plugin Initialization
+// MARK: - Plugin Info (required)
 
-/// Plugin initialization - returns service metadata as JSON
-/// This tells ARO what services and symbols this plugin provides
-@_cdecl("aro_plugin_init")
-public func pluginInit() -> UnsafePointer<CChar> {
-    let metadata = "{\"services\": [{\"name\": \"counter\", \"symbol\": \"counter_call\"}]}"
-    let cstr = strdup(metadata)!
-    return UnsafePointer(cstr)
+@_cdecl("aro_plugin_info")
+public func aroPluginInfo() -> UnsafeMutablePointer<CChar>? {
+    let json = """
+    {
+      "name": "counter-plugin",
+      "version": "1.0.0",
+      "actions": [],
+      "qualifiers": [],
+      "services": [
+        {
+          "name": "counter",
+          "methods": ["increment", "get", "reset"]
+        }
+      ]
+    }
+    """
+    return json.withCString { strdup($0) }
 }
 
-// MARK: - Service Implementation
+// MARK: - Plugin Execute (handles service routing)
 
-/// Main entry point for the counter service
-/// - Parameters:
-///   - methodPtr: Method name (C string)
-///   - argsPtr: Arguments as JSON (C string)
-///   - resultPtr: Output - result as JSON (caller must free)
-/// - Returns: 0 for success, non-zero for error
-@_cdecl("counter_call")
-public func counterCall(
-    _ methodPtr: UnsafePointer<CChar>,
-    _ argsPtr: UnsafePointer<CChar>,
-    _ resultPtr: UnsafeMutablePointer<UnsafeMutablePointer<CChar>?>
-) -> Int32 {
-    let method = String(cString: methodPtr)
+@_cdecl("aro_plugin_execute")
+public func aroPluginExecute(
+    _ action: UnsafePointer<CChar>,
+    _ inputJson: UnsafePointer<CChar>
+) -> UnsafeMutablePointer<CChar>? {
+    let actionStr = String(cString: action)
 
-    // Execute method (all methods are synchronous and thread-safe)
-    let result: [String: Any]
-    do {
-        result = try executeMethod(method)
-    } catch {
-        // Return error message
-        let errorJSON = "{\"error\": \"\(escapeJSON(String(describing: error)))\"}"
-        resultPtr.pointee = errorJSON.withCString { strdup($0) }
-        return 1
+    // Extract method from "service:method" prefix
+    let method: String
+    if actionStr.hasPrefix("service:") {
+        method = String(actionStr.dropFirst(8))
+    } else {
+        method = actionStr
     }
 
-    // Return success result as JSON
-    do {
-        let resultJSON = try encodeResult(result)
-        resultPtr.pointee = resultJSON.withCString { strdup($0) }
-        return 0
-    } catch {
-        let errorJSON = "{\"error\": \"Failed to encode result\"}"
-        resultPtr.pointee = errorJSON.withCString { strdup($0) }
-        return 1
-    }
-}
-
-/// Execute a counter method (thread-safe)
-private func executeMethod(_ method: String) throws -> [String: Any] {
-    return counterQueue.sync {
+    // Execute method (thread-safe)
+    let result: [String: Any] = counterQueue.sync {
         switch method.lowercased() {
         case "increment":
             globalCount += 1
             return ["count": globalCount, "message": "Incremented"]
-
         case "get":
             return ["count": globalCount]
-
         case "reset":
             globalCount = 0
             return ["count": 0, "message": "Reset"]
-
         default:
             return ["error": "Unknown method: \(method). Available: increment, get, reset"]
         }
     }
+
+    guard let data = try? JSONSerialization.data(withJSONObject: result),
+          let json = String(data: data, encoding: .utf8) else {
+        return "{}".withCString { strdup($0) }
+    }
+    return json.withCString { strdup($0) }
 }
 
-/// Encode result as JSON string
-private func encodeResult(_ result: [String: Any]) throws -> String {
-    let data = try JSONSerialization.data(withJSONObject: result)
-    return String(data: data, encoding: .utf8) ?? "{}"
-}
+// MARK: - Lifecycle
 
-/// Escape string for JSON
-private func escapeJSON(_ string: String) -> String {
-    return string
-        .replacingOccurrences(of: "\\", with: "\\\\")
-        .replacingOccurrences(of: "\"", with: "\\\"")
-        .replacingOccurrences(of: "\n", with: "\\n")
-        .replacingOccurrences(of: "\r", with: "\\r")
-        .replacingOccurrences(of: "\t", with: "\\t")
+@_cdecl("aro_plugin_init")
+public func aroPluginInit() {}
+
+@_cdecl("aro_plugin_shutdown")
+public func aroPluginShutdown() {}
+
+// MARK: - Free
+
+@_cdecl("aro_plugin_free")
+public func aroPluginFree(_ ptr: UnsafeMutablePointer<CChar>?) {
+    guard let ptr else { return }
+    free(ptr)
 }

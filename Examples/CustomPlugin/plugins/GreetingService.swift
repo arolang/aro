@@ -1,108 +1,99 @@
 // ============================================================
 // GreetingService.swift
-// Example ARO Plugin - Custom Greeting Service
+// Example ARO Plugin - Custom Greeting Service (ARO-0073 ABI)
 // ============================================================
-//
-// This plugin demonstrates the ARO plugin system.
-// It provides a "greeting" service with "hello" and "goodbye" methods.
 //
 // Usage in ARO:
 //   <Call> the <result> from the <greeting: hello> with { name: "World" }.
-//
-// Plugins use a C-compatible JSON interface:
-// - Input: method name and args as JSON
-// - Output: result as JSON (must be freed by caller)
-// - Return: 0 for success, non-zero for error
 
 import Foundation
 
-// MARK: - Plugin Initialization
+// MARK: - Plugin Info (required)
 
-/// Plugin initialization - returns service metadata as JSON
-/// This tells ARO what services and symbols this plugin provides
-@_cdecl("aro_plugin_init")
-public func pluginInit() -> UnsafePointer<CChar> {
-    let metadata = "{\"services\": [{\"name\": \"greeting\", \"symbol\": \"greeting_call\"}]}"
-    let cstr = strdup(metadata)!
-    return UnsafePointer(cstr)
+@_cdecl("aro_plugin_info")
+public func aroPluginInfo() -> UnsafeMutablePointer<CChar>? {
+    let json = """
+    {
+      "name": "greeting-service",
+      "version": "1.0.0",
+      "actions": [],
+      "qualifiers": [],
+      "services": [
+        {
+          "name": "greeting",
+          "methods": ["hello", "goodbye", "greet"]
+        }
+      ]
+    }
+    """
+    return json.withCString { strdup($0) }
 }
 
-// MARK: - Service Implementation
+// MARK: - Plugin Execute (handles service routing)
 
-/// Main entry point for the greeting service
-/// - Parameters:
-///   - methodPtr: Method name (C string)
-///   - argsPtr: Arguments as JSON (C string)
-///   - resultPtr: Output - result as JSON (caller must free)
-/// - Returns: 0 for success, non-zero for error
-@_cdecl("greeting_call")
-public func greetingCall(
-    _ methodPtr: UnsafePointer<CChar>,
-    _ argsPtr: UnsafePointer<CChar>,
-    _ resultPtr: UnsafeMutablePointer<UnsafeMutablePointer<CChar>?>
-) -> Int32 {
-    let method = String(cString: methodPtr)
-    let argsJSON = String(cString: argsPtr)
+@_cdecl("aro_plugin_execute")
+public func aroPluginExecute(
+    _ action: UnsafePointer<CChar>,
+    _ inputJson: UnsafePointer<CChar>
+) -> UnsafeMutablePointer<CChar>? {
+    let actionStr = String(cString: action)
+    let inputStr = String(cString: inputJson)
 
-    // Parse arguments
+    // Parse input
     var args: [String: Any] = [:]
-    if let data = argsJSON.data(using: .utf8),
+    if let data = inputStr.data(using: .utf8),
        let parsed = try? JSONSerialization.jsonObject(with: data) as? [String: Any] {
         args = parsed
     }
 
-    // Execute method
-    let result: String
-    do {
-        result = try executeMethod(method, args: args)
-    } catch {
-        // Return error message
-        let errorJSON = "{\"error\": \"\(error)\"}"
-        resultPtr.pointee = errorJSON.withCString { strdup($0) }
-        return 1
+    // Extract method from "service:method" prefix
+    let method: String
+    if actionStr.hasPrefix("service:") {
+        method = String(actionStr.dropFirst(8))
+    } else {
+        method = actionStr
     }
 
-    // Return success result as JSON
-    let resultJSON = "{\"result\": \"\(result)\"}"
-    resultPtr.pointee = resultJSON.withCString { strdup($0) }
-    return 0
-}
+    let name = (args["_with"] as? [String: Any])?["name"] as? String
+        ?? args["name"] as? String
+        ?? "World"
 
-/// Execute a greeting method
-private func executeMethod(_ method: String, args: [String: Any]) throws -> String {
-    let name = args["name"] as? String ?? "World"
-
+    let result: String
     switch method.lowercased() {
     case "hello":
-        return "Hello, \(name)!"
-
+        result = "Hello, \(name)!"
     case "goodbye":
-        return "Goodbye, \(name)! See you next time."
-
+        result = "Goodbye, \(name)! See you next time."
     case "greet":
-        let style = args["style"] as? String ?? "formal"
+        let style = (args["_with"] as? [String: Any])?["style"] as? String
+            ?? args["style"] as? String
+            ?? "formal"
         switch style {
-        case "casual":
-            return "Hey \(name)! What's up?"
-        case "enthusiastic":
-            return "WOW! Great to see you, \(name)!"
-        default:
-            return "Good day, \(name). How may I assist you?"
+        case "casual": result = "Hey \(name)! What's up?"
+        case "enthusiastic": result = "WOW! Great to see you, \(name)!"
+        default: result = "Good day, \(name). How may I assist you?"
         }
-
     default:
-        throw PluginError.unknownMethod(method)
+        let errJSON = "{\"error\":\"Unknown method: \(method)\"}"
+        return errJSON.withCString { strdup($0) }
     }
+
+    let resultJSON = "{\"result\":\"\(result)\"}"
+    return resultJSON.withCString { strdup($0) }
 }
 
-/// Plugin-specific errors
-enum PluginError: Error, CustomStringConvertible {
-    case unknownMethod(String)
+// MARK: - Lifecycle
 
-    var description: String {
-        switch self {
-        case .unknownMethod(let method):
-            return "Unknown method: \(method)"
-        }
-    }
+@_cdecl("aro_plugin_init")
+public func aroPluginInit() {}
+
+@_cdecl("aro_plugin_shutdown")
+public func aroPluginShutdown() {}
+
+// MARK: - Free
+
+@_cdecl("aro_plugin_free")
+public func aroPluginFree(_ ptr: UnsafeMutablePointer<CChar>?) {
+    guard let ptr else { return }
+    free(ptr)
 }

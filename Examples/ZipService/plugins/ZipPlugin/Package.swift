@@ -16,7 +16,7 @@ let package = Package(
             name: "ZipPlugin",
             dependencies: [
                 .product(name: "Zip", package: "Zip"),
-                .product(name: "AROPluginSDK", package: "aro-plugin-sdk-swift"),
+                .product(name: "AROPluginSDKExport", package: "aro-plugin-sdk-swift"),
             ]
         )
     ]

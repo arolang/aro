@@ -102,10 +102,15 @@ public final class UnifiedPluginLoader: @unchecked Sendable {
     public func loadPlugins(from directory: URL) throws {
         let pluginsDir = directory.appendingPathComponent("Plugins")
 
-        // Check if Plugins directory exists
-        guard FileManager.default.fileExists(atPath: pluginsDir.path) else {
-            // Fall back to legacy plugins/ directory
+        // Always try legacy plugins/ directory first (lowercase — bare .swift files and SPM packages)
+        do {
             try legacyLoader.loadPlugins(from: directory)
+        } catch {
+            debugPrint("[UnifiedPluginLoader] Legacy loader error: \(error)")
+        }
+
+        // Check if Plugins directory exists (uppercase — managed plugins with plugin.yaml)
+        guard FileManager.default.fileExists(atPath: pluginsDir.path) else {
             return
         }
 
@@ -649,6 +654,16 @@ public final class UnifiedPluginLoader: @unchecked Sendable {
         // Register as an external service for Call action support
         let wrapper = NativePluginServiceWrapper(name: pluginName, host: host)
         try ExternalServiceRegistry.shared.register(wrapper, withName: pluginName)
+
+        // ARO-0073: Also register under each declared service name from aro_plugin_info
+        // so "Call the <result> from the <sqlite: method>" works when the service name
+        // differs from the plugin name
+        for svcDesc in host.declaredServiceNames {
+            if svcDesc != pluginName {
+                let svcWrapper = NativePluginServiceWrapper(name: svcDesc, host: host)
+                try? ExternalServiceRegistry.shared.register(svcWrapper, withName: svcDesc)
+            }
+        }
     }
 
     // MARK: - Python Plugin Loading
@@ -1098,7 +1113,8 @@ struct NativePluginServiceWrapper: AROService {
     }
 
     func call(_ method: String, args: [String: any Sendable]) async throws -> any Sendable {
-        return try host.execute(action: method, input: args)
+        // ARO-0073: route services through aro_plugin_execute with "service:" prefix
+        return try host.execute(action: "service:\(method)", input: args)
     }
 }
 
@@ -1122,7 +1138,8 @@ struct LazyNativeServiceWrapper: AROService {
 
     func call(_ method: String, args: [String: any Sendable]) async throws -> any Sendable {
         let host = try loader.ensureNativePluginLoaded(pluginName: pluginName)
-        return try host.execute(action: method, input: args)
+        // ARO-0073: route services through aro_plugin_execute with "service:" prefix
+        return try host.execute(action: "service:\(method)", input: args)
     }
 }
 
@@ -1144,7 +1161,8 @@ struct LazyPythonServiceWrapper: AROService {
 
     func call(_ method: String, args: [String: any Sendable]) async throws -> any Sendable {
         let host = try loader.ensurePythonPluginLoaded(pluginName: pluginName)
-        return try host.execute(action: method, input: args)
+        // ARO-0073: route services through aro_plugin_execute with "service:" prefix
+        return try host.execute(action: "service:\(method)", input: args)
     }
 }
 
@@ -1237,6 +1255,7 @@ struct PythonPluginServiceWrapper: AROService {
     }
 
     func call(_ method: String, args: [String: any Sendable]) async throws -> any Sendable {
-        return try host.execute(action: method, input: args)
+        // ARO-0073: route services through aro_plugin_execute with "service:" prefix
+        return try host.execute(action: "service:\(method)", input: args)
     }
 }

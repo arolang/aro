@@ -1,6 +1,15 @@
 {
   "pins" : [
     {
+      "identity" : "aro-plugin-sdk-swift",
+      "kind" : "remoteSourceControl",
+      "location" : "https://github.com/arolang/aro-plugin-sdk-swift.git",
+      "state" : {
+        "branch" : "main",
+        "revision" : "a24a7d3095dbcf3ed43db26eb17071569369f439"
+      }
+    },
+    {
       "identity" : "zip",
       "kind" : "remoteSourceControl",
       "location" : "https://github.com/marmelroy/Zip.git",

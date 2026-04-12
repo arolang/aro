@@ -989,6 +989,11 @@ public final class NativePluginHost: @unchecked Sendable {
         invokeCallback = callback
     }
 
+    /// Service names declared in aro_plugin_info (ARO-0073)
+    public var declaredServiceNames: [String] {
+        pluginInfo?.services.map { $0.name } ?? []
+    }
+
     // MARK: - Helpers
 
     private func convertToSendable(_ value: Any) -> any Sendable {

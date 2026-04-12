@@ -111,6 +111,25 @@ public final class PluginLoader: @unchecked Sendable {
             }
         }
 
+        // Load pre-built dynamic libraries (.dylib, .so)
+        #if os(Windows)
+        let libExtension = "dll"
+        #elseif os(Linux)
+        let libExtension = "so"
+        #else
+        let libExtension = "dylib"
+        #endif
+        let dylibs = contents.filter { $0.pathExtension == libExtension }
+        for dylib in dylibs {
+            let name = dylib.deletingPathExtension().lastPathComponent
+                .replacingOccurrences(of: "lib", with: "")
+            do {
+                try loadDylib(at: dylib, name: name)
+            } catch {
+                print("[PluginLoader] Warning: Failed to load \(dylib.lastPathComponent): \(error)")
+            }
+        }
+
         // Load Swift package plugins (directories with Package.swift)
         for item in contents {
             var isDirectory: ObjCBool = false
@@ -448,10 +467,11 @@ public final class PluginLoader: @unchecked Sendable {
         let argsData = try JSONSerialization.data(withJSONObject: args)
         let argsJSON = String(data: argsData, encoding: .utf8) ?? "{}"
 
-        // Call the plugin
-        let resultPtr = method.withCString { methodCStr in
+        // ARO-0073: route services through aro_plugin_execute with "service:" prefix
+        let serviceAction = "service:\(method)"
+        let resultPtr = serviceAction.withCString { actionCStr in
             argsJSON.withCString { argsCStr in
-                pluginFuncs.execute(methodCStr, argsCStr)
+                pluginFuncs.execute(actionCStr, argsCStr)
             }
         }
 
@@ -1859,6 +1879,17 @@ public final class PluginLoader: @unchecked Sendable {
 
                         for _ in 0..<registrationCount {
                             semaphore.wait()
+                        }
+                    }
+
+                    // ARO-0073: Register under each declared service name
+                    if let services = info["services"] as? [[String: Any]] {
+                        for svcDef in services {
+                            if let svcName = svcDef["name"] as? String, svcName.lowercased() != name.lowercased() {
+                                self.cPluginFunctions[svcName.lowercased()] = (execute: executeFunc, free: freeFunc)
+                                let svcWrapper = CPluginServiceWrapper(name: svcName, loader: self)
+                                try? ExternalServiceRegistry.shared.register(svcWrapper, withName: svcName)
+                            }
                         }
                     }
 

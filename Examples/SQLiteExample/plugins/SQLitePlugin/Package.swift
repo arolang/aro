@@ -17,7 +17,7 @@ let package = Package(
             name: "SQLitePlugin",
             dependencies: [
                 .product(name: "SQLite", package: "SQLite.swift"),
-                .product(name: "AROPluginSDK", package: "aro-plugin-sdk-swift"),
+                .product(name: "AROPluginSDKExport", package: "aro-plugin-sdk-swift"),
             ]
         )
     ]

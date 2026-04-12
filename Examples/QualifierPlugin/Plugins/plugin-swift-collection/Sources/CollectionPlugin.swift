@@ -8,7 +8,7 @@
 // The SDK auto-generates all C ABI exports.
 
 import Foundation
-import AROPluginSDK
+import AROPluginSDKExport
 
 /// Plugin registration — this is the ONLY setup needed.
 /// The SDK generates aro_plugin_info, aro_plugin_qualifier,
@@ -47,6 +47,6 @@ public func register() {
 }
 
 // Static initializer to ensure registration happens at load time
-private let _: Void = {
+private let _registration: Void = {
     AROPluginExport.register(plugin)
 }()
