@@ -80,8 +80,9 @@ public actor StoreFlushService {
                 }
                 #endif
 
-                // Atomic rename
-                _ = try fm.replaceItemAt(filePath, withItemAt: tmpURL)
+                // Atomic rename (avoid replaceItemAt which is unreliable on Linux)
+                try fm.removeItem(at: filePath)
+                try fm.moveItem(at: tmpURL, to: filePath)
             } catch {
                 // Clean up temp file on failure
                 try? FileManager.default.removeItem(at: tmpURL)
@@ -119,7 +120,8 @@ public actor StoreFlushService {
                 }
                 #endif
 
-                _ = try FileManager.default.replaceItemAt(filePath, withItemAt: tmpURL)
+                try FileManager.default.removeItem(at: filePath)
+                try FileManager.default.moveItem(at: tmpURL, to: filePath)
             } catch {
                 try? FileManager.default.removeItem(at: tmpURL)
             }
