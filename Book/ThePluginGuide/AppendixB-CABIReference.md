@@ -6,11 +6,25 @@ This appendix provides a complete reference for the C ABI functions that plugins
 
 ARO communicates with native plugins through a C-compatible Application Binary Interface (ABI). This design enables plugins written in any language that can produce C-compatible functions—Swift, Rust, C, C++, and others—to integrate seamlessly.
 
+## Function Summary
+
+| Function | Required | Purpose |
+|----------|----------|---------|
+| `aro_plugin_info` | **Required** | Returns plugin metadata as JSON |
+| `aro_plugin_free` | **Required** | Frees memory allocated by the plugin |
+| `aro_plugin_execute` | Optional | Executes actions and service calls |
+| `aro_plugin_init` | Optional | One-time initialization on load |
+| `aro_plugin_shutdown` | Optional | Cleanup on unload |
+| `aro_plugin_on_event` | Optional | Receives subscribed events |
+| `aro_object_read` | Optional | Reads from a system object |
+| `aro_object_write` | Optional | Writes to a system object |
+| `aro_object_list` | Optional | Lists entries from a system object |
+
 ## Required Functions
 
 ### aro_plugin_info
 
-Returns plugin metadata as a JSON string.
+Returns plugin metadata as a JSON string. **This function is required.** ARO calls it immediately after loading the plugin to discover what the plugin provides. If this function is absent, the plugin will fail to load.
 
 ```c
 const char* aro_plugin_info(void);
@@ -34,10 +48,33 @@ const char* aro_plugin_info(void);
       "prepositions": ["from", "to", "with", "for", "into", "as"]
     }
   ],
+  "qualifiers": [
+    {
+      "name": "string",
+      "accepts_parameters": false
+    }
+  ],
+  "services": [
+    {
+      "name": "string",
+      "method": "string"
+    }
+  ],
   "system_objects": [
     {
       "name": "string",
       "capabilities": ["readable", "writable", "enumerable"]
+    }
+  ],
+  "events": {
+    "emits": ["EventName"],
+    "subscribes": ["OtherEventName"]
+  },
+  "deprecations": [
+    {
+      "name": "string",
+      "since": "string",
+      "replacement": "string"
     }
   ]
 }
@@ -53,6 +90,13 @@ const char* aro_plugin_info(void);
 | `verbs` | No | Array of verbs that trigger this action (e.g., `["hash", "digest"]`) |
 | `prepositions` | No | Valid prepositions: `from`, `to`, `with`, `for`, `into`, `as`, `against`, `via` |
 
+**Qualifier Metadata Fields:**
+
+| Field | Required | Description |
+|-------|----------|-------------|
+| `name` | Yes | Qualifier identifier (plain name, no namespace prefix) |
+| `accepts_parameters` | No | Whether the qualifier accepts inline parameters (default: `false`) |
+
 **Action Roles:**
 
 | Role | Data Flow | Examples |
@@ -62,7 +106,21 @@ const char* aro_plugin_info(void);
 | `response` | Internal → External | Return, Send, Log |
 | `export` | Makes data available | Publish, Store, Emit |
 
-**Full Action Example:**
+**Top-Level Metadata Fields:**
+
+| Field | Required | Description |
+|-------|----------|-------------|
+| `name` | Yes | Plugin name |
+| `version` | Yes | Plugin version string |
+| `actions` | No | Array of action descriptors |
+| `qualifiers` | No | Array of qualifier descriptors |
+| `services` | No | Array of service descriptors |
+| `system_objects` | No | Array of system object descriptors |
+| `events.emits` | No | Event names this plugin emits |
+| `events.subscribes` | No | Event names this plugin subscribes to (requires `aro_plugin_on_event`) |
+| `deprecations` | No | List of deprecated names with replacement guidance |
+
+**Full Example:**
 ```json
 {
   "name": "crypto-plugin",
@@ -81,6 +139,33 @@ const char* aro_plugin_info(void);
       "verbs": ["encrypt"],
       "prepositions": ["with"]
     }
+  ],
+  "qualifiers": [
+    {
+      "name": "sha256",
+      "accepts_parameters": false
+    },
+    {
+      "name": "truncate",
+      "accepts_parameters": true
+    }
+  ],
+  "services": [
+    {
+      "name": "key-store",
+      "method": "keystore"
+    }
+  ],
+  "events": {
+    "emits": ["KeyRotated"],
+    "subscribes": ["ApplicationStart"]
+  },
+  "deprecations": [
+    {
+      "name": "md5",
+      "since": "2.0.0",
+      "replacement": "sha256"
+    }
   ]
 }
 ```
@@ -98,7 +183,7 @@ static const char* plugin_info_json =
     "  \"name\": \"my-plugin\","
     "  \"version\": \"1.0.0\","
     "  \"actions\": ["
-    "    {\"name\": \"myAction\", \"symbol\": \"my_action_execute\"}"
+    "    {\"name\": \"myAction\", \"symbol\": \"aro_plugin_execute\"}"
     "  ]"
     "}";
 
@@ -114,7 +199,7 @@ pub extern "C" fn aro_plugin_info() -> *const c_char {
     static INFO: &str = r#"{
         "name": "my-plugin",
         "version": "1.0.0",
-        "actions": [{"name": "myAction", "symbol": "my_action_execute"}]
+        "actions": [{"name": "myAction", "symbol": "aro_plugin_execute"}]
     }"#;
 
     // Use a leaked CString for static lifetime
@@ -133,85 +218,9 @@ public func pluginInfo() -> UnsafePointer<CChar> {
 }
 ```
 
-### aro_plugin_execute
-
-Executes a plugin action.
-
-```c
-int32_t aro_plugin_execute(
-    const char* action_name,
-    const char* arguments_json,
-    char** result_ptr
-);
-```
-
-**Parameters:**
-- `action_name`: Null-terminated string with the action name
-- `arguments_json`: Null-terminated JSON string containing action arguments
-- `result_ptr`: Output pointer where result JSON will be stored
-
-**Returns:**
-- `0` on success
-- Non-zero error code on failure
-
-**Result Ownership:**
-- On success, `*result_ptr` must point to a heap-allocated string
-- Caller (ARO runtime) will call `aro_plugin_free` to release the memory
-
-**Example Implementation (C):**
-```c
-int32_t aro_plugin_execute(
-    const char* action_name,
-    const char* arguments_json,
-    char** result_ptr
-) {
-    if (strcmp(action_name, "myAction") == 0) {
-        // Parse arguments
-        // Execute action
-        // Format result
-
-        *result_ptr = strdup("{\"result\": \"success\"}");
-        return 0;
-    }
-
-    *result_ptr = strdup("{\"error\": \"Unknown action\"}");
-    return 1;
-}
-```
-
-**Example Implementation (Rust):**
-```rust
-#[no_mangle]
-pub extern "C" fn aro_plugin_execute(
-    action_name: *const c_char,
-    arguments_json: *const c_char,
-    result_ptr: *mut *mut c_char
-) -> i32 {
-    let action = unsafe { CStr::from_ptr(action_name).to_str().unwrap() };
-    let args = unsafe { CStr::from_ptr(arguments_json).to_str().unwrap() };
-
-    let result = match action {
-        "myAction" => execute_my_action(args),
-        _ => Err("Unknown action".to_string())
-    };
-
-    match result {
-        Ok(json) => {
-            unsafe { *result_ptr = CString::new(json).unwrap().into_raw(); }
-            0
-        }
-        Err(e) => {
-            let error_json = format!("{{\"error\": \"{}\"}}", e);
-            unsafe { *result_ptr = CString::new(error_json).unwrap().into_raw(); }
-            1
-        }
-    }
-}
-```
-
 ### aro_plugin_free
 
-Frees memory allocated by the plugin.
+Frees memory allocated by the plugin. **This function is required.** ARO calls it to release any heap-allocated string returned by plugin functions.
 
 ```c
 void aro_plugin_free(void* ptr);
@@ -251,29 +260,103 @@ public func pluginFree(_ ptr: UnsafeMutableRawPointer?) {
 
 ## Optional Functions
 
-### aro_plugin_init
+### aro_plugin_execute
 
-Called when the plugin is loaded. Use for one-time initialization.
+Executes a plugin action or service call. **This function is optional.** Implement it only if your plugin provides actions or services. If the plugin only provides qualifiers or system objects, you may omit this function.
 
 ```c
-int32_t aro_plugin_init(void);
+char* aro_plugin_execute(
+    const char* action_name,
+    const char* input_json
+);
 ```
 
+**Parameters:**
+- `action_name`: Null-terminated string with the action name, or `"service:<method>"` for service calls (e.g., `"service:keystore"`)
+- `input_json`: Null-terminated JSON string containing the full input descriptor (see [Plugin Input JSON](#plugin-input-json))
+
 **Returns:**
-- `0` on success
-- Non-zero on initialization failure (plugin will not be loaded)
+- Pointer to a heap-allocated null-terminated JSON string on success or error
+- ARO will call `aro_plugin_free` to release the returned string
+
+**Service Routing:**
+
+Services no longer have a separate ABI entry point. Instead, service method calls are routed through `aro_plugin_execute` with the `action_name` set to `"service:<method>"`:
+
+```c
+// Action call:   action_name = "Hash"
+// Service call:  action_name = "service:keystore"
+char* aro_plugin_execute(const char* action_name, const char* input_json) {
+    if (strncmp(action_name, "service:", 8) == 0) {
+        const char* method = action_name + 8;
+        return handle_service_call(method, input_json);
+    }
+    return handle_action(action_name, input_json);
+}
+```
+
+**Example Implementation (C):**
+```c
+char* aro_plugin_execute(const char* action_name, const char* input_json) {
+    if (strcmp(action_name, "myAction") == 0) {
+        // Parse input_json
+        // Execute action
+        // Format result
+        return strdup("{\"result\": \"success\"}");
+    }
+
+    if (strncmp(action_name, "service:", 8) == 0) {
+        const char* method = action_name + 8;
+        // Handle service method
+        return strdup("{\"ok\": true}");
+    }
+
+    return strdup("{\"error\": \"Unknown action\"}");
+}
+```
+
+**Example Implementation (Rust):**
+```rust
+#[no_mangle]
+pub extern "C" fn aro_plugin_execute(
+    action_name: *const c_char,
+    input_json: *const c_char
+) -> *mut c_char {
+    let action = unsafe { CStr::from_ptr(action_name).to_str().unwrap_or("") };
+    let input = unsafe { CStr::from_ptr(input_json).to_str().unwrap_or("{}") };
+
+    let result = if action.starts_with("service:") {
+        let method = &action["service:".len()..];
+        handle_service(method, input)
+    } else {
+        match action {
+            "myAction" => execute_my_action(input),
+            _ => format!(r#"{{"error": "Unknown action: {}"}}"#, action)
+        }
+    };
+
+    CString::new(result).unwrap().into_raw()
+}
+```
+
+### aro_plugin_init
+
+Called once when the plugin is loaded. Use for one-time initialization such as setting up connection pools, loading configuration, or allocating global resources.
+
+```c
+void aro_plugin_init(void);
+```
 
 **Example:**
 ```c
-int32_t aro_plugin_init(void) {
+void aro_plugin_init(void) {
     // Initialize global state, connection pools, etc.
-    return 0;
 }
 ```
 
 ### aro_plugin_shutdown
 
-Called when the plugin is unloaded. Use for cleanup.
+Called when the plugin is unloaded. Use for cleanup such as closing connections and freeing global resources.
 
 ```c
 void aro_plugin_shutdown(void);
@@ -286,98 +369,195 @@ void aro_plugin_shutdown(void) {
 }
 ```
 
-## System Object Functions
+### aro_plugin_on_event
 
-For plugins that provide system objects.
-
-### aro_object_read
-
-Read from a system object.
+Called when an event that the plugin has subscribed to is emitted. The plugin declares subscriptions in the `events.subscribes` array in `aro_plugin_info`.
 
 ```c
-int32_t aro_object_read(
-    const char* object_name,
-    const char* qualifier,
-    const char* options_json,
-    char** result_ptr
-);
+void aro_plugin_on_event(const char* event_type, const char* data_json);
 ```
 
 **Parameters:**
-- `object_name`: System object identifier (e.g., "redis")
-- `qualifier`: Object qualifier (e.g., key name)
-- `options_json`: Additional options as JSON
-- `result_ptr`: Output pointer for result JSON
+- `event_type`: Null-terminated string with the event name (e.g., `"UserCreated"`)
+- `data_json`: Null-terminated JSON string with the event payload
 
-**Returns:**
-- `0` on success
-- Non-zero on error
-
-### aro_object_write
-
-Write to a system object.
-
+**Example:**
 ```c
-int32_t aro_object_write(
-    const char* object_name,
-    const char* qualifier,
-    const char* data_json,
-    const char* options_json,
-    char** result_ptr
-);
-```
-
-**Parameters:**
-- `object_name`: System object identifier
-- `qualifier`: Object qualifier (e.g., key name)
-- `data_json`: Data to write as JSON
-- `options_json`: Additional options as JSON
-- `result_ptr`: Output pointer for result/status JSON
-
-### aro_object_list
-
-List entries from an enumerable system object.
-
-```c
-int32_t aro_object_list(
-    const char* object_name,
-    const char* qualifier,
-    const char* options_json,
-    char** result_ptr
-);
-```
-
-**Parameters:**
-- `object_name`: System object identifier
-- `qualifier`: Pattern or filter (e.g., glob pattern)
-- `options_json`: Options like limit, offset
-- `result_ptr`: Output pointer for JSON array of results
-
-## JSON Argument Format
-
-### Standard Argument Structure
-
-Arguments are passed as a JSON object:
-
-```json
-{
-  "arg1": "string value",
-  "arg2": 123,
-  "arg3": true,
-  "arg4": ["array", "values"],
-  "arg5": {"nested": "object"}
+void aro_plugin_on_event(const char* event_type, const char* data_json) {
+    if (strcmp(event_type, "ApplicationStart") == 0) {
+        // Perform startup work triggered by the app lifecycle event
+    }
 }
 ```
 
-### Context Information
+To subscribe to events, declare them in `aro_plugin_info`:
+```json
+{
+  "events": {
+    "subscribes": ["ApplicationStart", "UserCreated"]
+  }
+}
+```
 
-ARO may include context information with the prefix `_context_`:
+## System Object Functions
+
+For plugins that provide system objects, implement the following functions. Declare the objects in `aro_plugin_info` under `system_objects`.
+
+### aro_object_read
+
+Reads from a system object.
+
+```c
+char* aro_object_read(const char* identifier, const char* qualifier);
+```
+
+**Parameters:**
+- `identifier`: System object identifier (e.g., `"redis"`)
+- `qualifier`: Object qualifier or key (e.g., a Redis key name)
+
+**Returns:**
+- Pointer to a heap-allocated null-terminated JSON string with the result
+- ARO will call `aro_plugin_free` to release the returned string
+
+**Example:**
+```c
+char* aro_object_read(const char* identifier, const char* qualifier) {
+    if (strcmp(identifier, "redis") == 0) {
+        const char* value = redis_get(qualifier);
+        char* buf = malloc(strlen(value) + 16);
+        sprintf(buf, "{\"value\": \"%s\"}", value);
+        return buf;
+    }
+    return strdup("{\"error\": \"Unknown object\"}");
+}
+```
+
+### aro_object_write
+
+Writes to a system object.
+
+```c
+char* aro_object_write(
+    const char* identifier,
+    const char* qualifier,
+    const char* value_json
+);
+```
+
+**Parameters:**
+- `identifier`: System object identifier
+- `qualifier`: Object qualifier or key
+- `value_json`: Value to write, as a JSON string
+
+**Returns:**
+- Pointer to a heap-allocated null-terminated JSON string with the result or status
+- ARO will call `aro_plugin_free` to release the returned string
+
+**Example:**
+```c
+char* aro_object_write(
+    const char* identifier,
+    const char* qualifier,
+    const char* value_json
+) {
+    if (strcmp(identifier, "redis") == 0) {
+        int ok = redis_set(qualifier, value_json);
+        return strdup(ok ? "{\"ok\": true}" : "{\"error\": \"Write failed\"}");
+    }
+    return strdup("{\"error\": \"Unknown object\"}");
+}
+```
+
+### aro_object_list
+
+Lists entries from an enumerable system object.
+
+```c
+char* aro_object_list(const char* pattern);
+```
+
+**Parameters:**
+- `pattern`: Glob pattern or filter string (e.g., `"user:*"`)
+
+**Returns:**
+- Pointer to a heap-allocated null-terminated JSON array string with matching keys or entries
+- ARO will call `aro_plugin_free` to release the returned string
+
+**Example:**
+```c
+char* aro_object_list(const char* pattern) {
+    // Return a JSON array of matching keys
+    return strdup("[\"user:1\", \"user:2\", \"user:3\"]");
+}
+```
+
+## Plugin Input JSON
+
+When ARO calls `aro_plugin_execute`, the `input_json` parameter carries a structured descriptor that describes the ARO statement being executed.
+
+### Input JSON Schema
 
 ```json
 {
-  "inputValue": "user data",
-  "_context_requestId": "abc-123",
-  "_context_userId": "user-456"
+  "result": {
+    "base": "result-variable-name",
+    "specifiers": ["qualifier1", "qualifier2"]
+  },
+  "source": {
+    "base": "source-variable-name",
+    "specifiers": ["qualifier1"]
+  },
+  "preposition": "from",
+  "_context": {
+    "requestId": "abc-123",
+    "featureSet": "listUsers",
+    "businessActivity": "User API"
+  },
+  "_with": {
+    "param1": "value1",
+    "param2": 42
+  }
+}
+```
+
+**Input Fields:**
+
+| Field | Description |
+|-------|-------------|
+| `result.base` | The base name of the result binding (left-hand side of the statement) |
+| `result.specifiers` | Qualifiers applied to the result (e.g., `["sha256"]` from `<result: sha256>`) |
+| `source.base` | The base name of the source object (right-hand side of the statement) |
+| `source.specifiers` | Qualifiers applied to the source |
+| `preposition` | The preposition used in the statement (`from`, `to`, `with`, `for`, `into`, `as`, `against`, `via`) |
+| `_context.requestId` | Unique identifier for the current HTTP request, if applicable |
+| `_context.featureSet` | Name of the feature set currently executing |
+| `_context.businessActivity` | Business activity of the feature set |
+| `_with` | Additional named parameters passed via `with` clauses |
+
+**Example:** For the ARO statement:
+
+```aro
+Hash the <digest: sha256> from the <password>.
+```
+
+The input JSON will be:
+```json
+{
+  "result": {
+    "base": "digest",
+    "specifiers": ["sha256"]
+  },
+  "source": {
+    "base": "password",
+    "specifiers": []
+  },
+  "preposition": "from",
+  "_context": {
+    "requestId": "req-789",
+    "featureSet": "createUser",
+    "businessActivity": "User API"
+  },
+  "_with": {}
 }
 ```
 
@@ -394,7 +574,7 @@ ARO may include context information with the prefix `_context_`:
 }
 ```
 
-Or simply the result value:
+Or simply the result value directly:
 
 ```json
 "direct string result"
@@ -422,38 +602,41 @@ Or simply the result value:
 
 ## Error Codes
 
-Standard error codes returned by `aro_plugin_execute`:
+Standard integer return codes apply only in contexts where a function returns `int32_t` (see legacy notes). The primary `aro_plugin_execute` function returns a JSON string and communicates errors via the `error` field in the response body.
+
+For reference, the conventional error semantics in the JSON `code` field are:
 
 | Code | Meaning |
 |------|---------|
-| 0 | Success |
-| 1 | General error (see error JSON) |
-| 2 | Invalid arguments |
-| 3 | Action not found |
-| 4 | Resource not available |
-| 5 | Permission denied |
-| 6 | Timeout |
-| 7 | Internal error |
+| `SUCCESS` | Operation completed successfully |
+| `GENERAL_ERROR` | General error (see `error` message) |
+| `INVALID_ARGUMENTS` | Arguments were malformed or missing |
+| `NOT_FOUND` | Action or resource not found |
+| `UNAVAILABLE` | Resource not currently available |
+| `PERMISSION_DENIED` | Caller lacks required permission |
+| `TIMEOUT` | Operation timed out |
+| `INTERNAL_ERROR` | Unexpected internal error |
 
 ## Memory Management Rules
 
-1. **Strings passed TO the plugin** (action_name, arguments_json):
+1. **Strings passed TO the plugin** (`action_name`, `input_json`, `identifier`, `qualifier`, etc.):
    - Owned by ARO
    - Valid only for the duration of the call
    - Do not free or store pointers to these strings
 
-2. **Strings returned FROM the plugin** (via result_ptr):
+2. **Strings returned FROM the plugin** (return values of `aro_plugin_execute`, `aro_object_read`, `aro_object_write`, `aro_object_list`):
    - Must be heap-allocated (`malloc`, `strdup`, etc.)
    - Ownership transfers to ARO
    - ARO will call `aro_plugin_free` when done
 
-3. **Static strings** (from aro_plugin_info):
+3. **Static strings** (from `aro_plugin_info`):
    - May be static or leaked (never freed)
    - Must remain valid for plugin lifetime
 
 ## Thread Safety
 
 - `aro_plugin_execute` may be called from multiple threads concurrently
+- `aro_plugin_on_event` may also be called from different threads
 - Plugins must ensure thread-safe access to shared state
 - Use mutexes, atomic operations, or thread-local storage as needed
 
@@ -467,9 +650,13 @@ static SHARED_STATE: Lazy<Mutex<SharedState>> = Lazy::new(|| {
 });
 
 #[no_mangle]
-pub extern "C" fn aro_plugin_execute(...) -> i32 {
+pub extern "C" fn aro_plugin_execute(
+    action_name: *const c_char,
+    input_json: *const c_char
+) -> *mut c_char {
     let mut state = SHARED_STATE.lock().unwrap();
     // Safe access to shared state
+    todo!()
 }
 ```
 
@@ -480,7 +667,7 @@ pub extern "C" fn aro_plugin_execute(...) -> i32 {
 #include <string.h>
 #include <stdio.h>
 
-// Plugin metadata
+// Plugin metadata (required)
 static const char* PLUGIN_INFO =
     "{"
     "  \"name\": \"my-plugin\","
@@ -496,9 +683,8 @@ const char* aro_plugin_info(void) {
 }
 
 // Plugin initialization (optional)
-int32_t aro_plugin_init(void) {
+void aro_plugin_init(void) {
     // Initialize resources
-    return 0;
 }
 
 // Plugin shutdown (optional)
@@ -506,27 +692,33 @@ void aro_plugin_shutdown(void) {
     // Cleanup resources
 }
 
-// Action execution (required)
-int32_t aro_plugin_execute(
-    const char* action_name,
-    const char* arguments_json,
-    char** result_ptr
-) {
+// Event handler (optional)
+void aro_plugin_on_event(const char* event_type, const char* data_json) {
+    // Handle subscribed events
+}
+
+// Action/service execution (optional — only needed if plugin provides actions or services)
+char* aro_plugin_execute(const char* action_name, const char* input_json) {
     if (strcmp(action_name, "myAction") == 0) {
-        // Parse arguments_json
+        // Parse input_json
         // Execute action logic
         // Build result JSON
 
         char* result = malloc(256);
         snprintf(result, 256, "{\"success\": true, \"message\": \"Hello from plugin!\"}");
-        *result_ptr = result;
-        return 0;
+        return result;
+    }
+
+    if (strncmp(action_name, "service:", 8) == 0) {
+        const char* method = action_name + 8;
+        char* result = malloc(128);
+        snprintf(result, 128, "{\"ok\": true, \"method\": \"%s\"}", method);
+        return result;
     }
 
     char* error = malloc(128);
     snprintf(error, 128, "{\"error\": \"Unknown action: %s\"}", action_name);
-    *result_ptr = error;
-    return 3;
+    return error;
 }
 
 // Memory cleanup (required)
@@ -539,18 +731,22 @@ void aro_plugin_free(void* ptr) {
 
 ```rust
 use std::ffi::{CStr, CString};
-use std::os::raw::{c_char, c_void};
+use std::os::raw::c_char;
 
 #[no_mangle]
 pub extern "C" fn aro_plugin_info() -> *const c_char {
-    let info = r#"{"name":"my-plugin","version":"1.0.0","actions":[{"name":"myAction"}]}"#;
+    let info = r#"{
+        "name": "my-plugin",
+        "version": "1.0.0",
+        "actions": [{"name": "myAction"}]
+    }"#;
+    // Leak the CString so it lives for the plugin's lifetime
     CString::new(info).unwrap().into_raw()
 }
 
 #[no_mangle]
-pub extern "C" fn aro_plugin_init() -> i32 {
+pub extern "C" fn aro_plugin_init() {
     // Initialize
-    0
 }
 
 #[no_mangle]
@@ -559,28 +755,35 @@ pub extern "C" fn aro_plugin_shutdown() {
 }
 
 #[no_mangle]
+pub extern "C" fn aro_plugin_on_event(
+    event_type: *const c_char,
+    data_json: *const c_char
+) {
+    let _event = unsafe { CStr::from_ptr(event_type).to_str().unwrap_or("") };
+    let _data = unsafe { CStr::from_ptr(data_json).to_str().unwrap_or("{}") };
+    // Handle subscribed events
+}
+
+// Optional — only implement if plugin provides actions or services
+#[no_mangle]
 pub extern "C" fn aro_plugin_execute(
     action_name: *const c_char,
-    arguments_json: *const c_char,
-    result_ptr: *mut *mut c_char
-) -> i32 {
+    input_json: *const c_char
+) -> *mut c_char {
     let action = unsafe { CStr::from_ptr(action_name).to_str().unwrap_or("") };
-    let _args = unsafe { CStr::from_ptr(arguments_json).to_str().unwrap_or("{}") };
+    let _input = unsafe { CStr::from_ptr(input_json).to_str().unwrap_or("{}") };
 
-    let result = match action {
-        "myAction" => {
-            r#"{"success": true, "message": "Hello from Rust!"}"#.to_string()
-        }
-        _ => {
-            format!(r#"{{"error": "Unknown action: {}"}}"#, action)
+    let result = if action.starts_with("service:") {
+        let method = &action["service:".len()..];
+        format!(r#"{{"ok": true, "method": "{}"}}"#, method)
+    } else {
+        match action {
+            "myAction" => r#"{"success": true, "message": "Hello from Rust!"}"#.to_string(),
+            _ => format!(r#"{{"error": "Unknown action: {}"}}"#, action),
         }
     };
 
-    unsafe {
-        *result_ptr = CString::new(result).unwrap().into_raw();
-    }
-
-    0
+    CString::new(result).unwrap().into_raw()
 }
 
 #[no_mangle]

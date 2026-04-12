@@ -258,6 +258,7 @@
                 <a href="fdd.html">The FDD Story</a>
                 <a href="getting-started.html">Get Started</a>
                 <a href="tutorial.html">Tutorial</a>
+                <a href="showcase.html">Showcase</a>
                 <a href="docs.html">Docs</a>
                 <a href="disclaimer.html">Motivation</a>
                 <a href="download.html" class="nav-active">Download</a>
@@ -281,6 +282,7 @@
         <a href="fdd.html">The FDD Story</a>
         <a href="getting-started.html">Get Started</a>
         <a href="tutorial.html">Tutorial</a>
+        <a href="showcase.html">Showcase</a>
         <a href="docs.html">Docs</a>
         <a href="disclaimer.html">Motivation</a>
         <a href="download.html">Download</a>
@@ -328,12 +330,12 @@ brew install aro</pre>
                 <div class="download-card">
                     <div class="platform-icon">&#x1F34E;</div>
                     <h3>macOS</h3>
-                    <p class="platform-desc">Universal binary for Apple Silicon and Intel Macs</p>
+                    <p class="platform-desc">Native binary for Apple Silicon Macs</p>
                     <a href="https://github.com/arolang/aro/releases/latest" class="download-btn">
                         <svg viewBox="0 0 16 16" fill="currentColor"><path d="M2.75 14A1.75 1.75 0 011 12.25v-2.5a.75.75 0 011.5 0v2.5c0 .138.112.25.25.25h10.5a.25.25 0 00.25-.25v-2.5a.75.75 0 011.5 0v2.5A1.75 1.75 0 0113.25 14H2.75z"/><path d="M7.25 7.689V2a.75.75 0 011.5 0v5.689l1.97-1.969a.749.749 0 111.06 1.06l-3.25 3.25a.749.749 0 01-1.06 0L4.22 6.78a.749.749 0 111.06-1.06l1.97 1.969z"/></svg>
                         Download for macOS
                     </a>
-                    <span class="version">aro-macos-universal.tar.gz</span>
+                    <span class="version">aro-macos-arm64.tar.gz</span>
                 </div>
 
                 <div class="download-card">
@@ -344,7 +346,7 @@ brew install aro</pre>
                         <svg viewBox="0 0 16 16" fill="currentColor"><path d="M2.75 14A1.75 1.75 0 011 12.25v-2.5a.75.75 0 011.5 0v2.5c0 .138.112.25.25.25h10.5a.25.25 0 00.25-.25v-2.5a.75.75 0 011.5 0v2.5A1.75 1.75 0 0113.25 14H2.75z"/><path d="M7.25 7.689V2a.75.75 0 011.5 0v5.689l1.97-1.969a.749.749 0 111.06 1.06l-3.25 3.25a.749.749 0 01-1.06 0L4.22 6.78a.749.749 0 111.06-1.06l1.97 1.969z"/></svg>
                         Download for Linux
                     </a>
-                    <span class="version">aro-linux-x86_64.tar.gz</span>
+                    <span class="version">aro-linux-amd64.tar.gz</span>
                 </div>
 
                 <div class="download-card">
@@ -379,6 +381,17 @@ swift build -c release
             </p>
 
             <div class="download-grid">
+                <div class="download-card">
+                    <div class="platform-icon">&#x1F4D3;</div>
+                    <h3>Essential Primer</h3>
+                    <p class="platform-desc">A concise introduction to ARO for developers who want to get up to speed quickly</p>
+                    <a href="https://github.com/arolang/aro/releases/latest/download/ARO-Essential-Primer.pdf" class="download-btn">
+                        <svg viewBox="0 0 16 16" fill="currentColor"><path d="M2.75 14A1.75 1.75 0 011 12.25v-2.5a.75.75 0 011.5 0v2.5c0 .138.112.25.25.25h10.5a.25.25 0 00.25-.25v-2.5a.75.75 0 011.5 0v2.5A1.75 1.75 0 0113.25 14H2.75z"/><path d="M7.25 7.689V2a.75.75 0 011.5 0v5.689l1.97-1.969a.749.749 0 111.06 1.06l-3.25 3.25a.749.749 0 01-1.06 0L4.22 6.78a.749.749 0 111.06-1.06l1.97 1.969z"/></svg>
+                        Download PDF
+                    </a>
+                    <span class="version">ARO-Essential-Primer.pdf</span>
+                </div>
+
                 <div class="download-card">
                     <div class="platform-icon">&#x1F4D8;</div>
                     <h3>The Language Guide</h3>
@@ -444,8 +457,8 @@ swift build -c release
                             <li>Bracket matching and auto-closing</li>
                             <li>Code folding for feature sets</li>
                         </ul>
-                        <a href="https://marketplace.visualstudio.com/items?itemName=arolang.aro-language" class="editor-link">
-                            Install from Marketplace &#x2192;
+                        <a href="https://github.com/arolang/aro/tree/main/Editor/vscode-aro" class="editor-link">
+                            Install from GitHub &#x2192;
                         </a>
                     </div>
                 </div>
@@ -461,7 +474,7 @@ swift build -c release
                             <li>Works with all JetBrains IDEs</li>
                             <li>File type association</li>
                         </ul>
-                        <a href="https://plugins.jetbrains.com/plugin/com.arolang.aro" class="editor-link">
+                        <a href="https://plugins.jetbrains.com/plugin/30696-aro-language-support" class="editor-link">
                             Install from JetBrains Marketplace &#x2192;
                         </a>
                     </div>

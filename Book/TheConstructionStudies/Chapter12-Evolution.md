@@ -225,6 +225,55 @@ Chapter 11 documents this pattern formally. It was learned by adding socket even
 
 ---
 
+## Streaming Wasn't Streaming
+
+ARO-0051 introduced `listStream` as the O(1)-memory answer to `List the <entries: recursively>`. The claim was true in the spec and false in the code. On a 200k-file home directory the process peaked at 1.7 GB RSS and then settled back to 192 MB when the scan completed. Not a leak — a buffering mistake.
+
+The implementation looked right at a glance:
+
+```swift
+AsyncThrowingStream { continuation in
+    Task {
+        while let url = enumerator.nextObject() as? URL {
+            continuation.yield(entry)
+        }
+        continuation.finish()
+    }
+}
+```
+
+A producer Task walks the tree; each entry is yielded to the consumer. What's wrong with that?
+
+`AsyncThrowingStream` defaults to an **unbounded** buffering policy. `yield` never blocks. The producer Task ran flat out through the entire tree, pushing hundreds of thousands of `[String: any Sendable]` dicts into the stream's internal buffer, while the for-each consumer drained them at actor-hop speed. Peak memory was proportional to tree size, not to iteration depth.
+
+The fix was small and the lesson is not. The replacement uses the pull-based initializer:
+
+```swift
+AsyncThrowingStream { () async throws -> Entry? in
+    lazyList.next()   // advances the enumerator on demand
+}
+```
+
+The closure runs **exactly once per consumer `next()` call**. No producer task, no buffer, no race between enumeration speed and consumption speed. Peak memory drops from O(tree) back to the O(1) that the proposal described.
+
+The lesson: **"streaming" is a promise about memory, not about API shape**. Wrapping something in `AsyncSequence` doesn't make it lazy — you have to verify that pull pressure actually reaches the source. Every `AsyncThrowingStream` initializer in the codebase is now a thing to audit: if it spawns a Task that loops and yields, it has an unbounded buffer unless you prove otherwise.
+
+---
+
+## The Convenience-by-Default Trap
+
+Two smaller bugs in the same release had the same shape: a feature was convenient when it worked and silent when it didn't.
+
+**Format-aware `Read`.** ARO-0040 let you write `Read the <users> from "./users.json"` and get parsed JSON back. The file extension determined the format. This is lovely when the file contains JSON — and a silent failure when `./bigfile.txt` contains a million integers. The `.txt` extension triggers the key=value parser, no valid pairs are found, and the variable is bound to `[:]`. The next statement fails on the empty dict with a message that never mentions the extension.
+
+The fix added a `:raw` opt-out (plus explicit format qualifiers that also solve the inverse case). The prior legacy `as String` hatch existed but wasn't discoverable — developers renamed files to `.dat` instead. The lesson: **any convenience that is silent when wrong needs a visible opt-out, and the opt-out name should be the first thing someone Googles**.
+
+**REPL terminal.** `aro run` registers `TerminalService` at startup if stdout is a TTY. The REPL session never registered it. The REPL is always interactive, so `<terminal>` reported `is_tty: false`, 80×24, no color — and there was nothing in the error path to notice, because reading a hardcoded default is not an error. The fix was one TTY-gated `context.register(TerminalService())` in `REPLSession.init()`, mirroring the production path byte for byte.
+
+Neither of these was hard to fix. Both were hard to *notice*. The common thread: a feature that degrades quietly to a plausible-looking default is worse than a feature that throws. The graceful fallback is load-bearing for exactly the people who didn't want it.
+
+---
+
 ## What We'd Design Differently
 
 Looking back with honest eyes:

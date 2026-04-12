@@ -15,14 +15,22 @@ public protocol PluginQualifierHost: Sendable {
     /// The name of this plugin host (for error messages)
     var pluginName: String { get }
 
-    /// Execute a qualifier transformation
+    /// Execute a qualifier transformation (ARO-0073: with optional parameters)
     ///
     /// - Parameters:
     ///   - qualifier: The qualifier name (e.g., "pick-random")
     ///   - input: The input value to transform
+    ///   - withParams: Optional parameters from the `with` clause
     /// - Returns: The transformed value
     /// - Throws: QualifierError or other errors on failure
-    func executeQualifier(_ qualifier: String, input: any Sendable) throws -> any Sendable
+    func executeQualifier(_ qualifier: String, input: any Sendable, withParams: [String: any Sendable]?) throws -> any Sendable
+}
+
+// Default implementation for backward compatibility during migration
+extension PluginQualifierHost {
+    public func executeQualifier(_ qualifier: String, input: any Sendable) throws -> any Sendable {
+        try executeQualifier(qualifier, input: input, withParams: nil)
+    }
 }
 
 /// Input format sent to plugins for qualifier execution
@@ -33,9 +41,13 @@ public struct QualifierInput: Codable, Sendable {
     /// The detected type of the value
     public let type: String
 
-    public init(value: any Sendable) {
+    /// Parameters from the `with` clause (ARO-0073)
+    public let _with: [String: AnyCodable]?
+
+    public init(value: any Sendable, withParams: [String: any Sendable]? = nil) {
         self.value = AnyCodable(value)
         self.type = QualifierInputType.detect(from: value).rawValue
+        self._with = withParams?.mapValues { AnyCodable($0) }
     }
 }
 

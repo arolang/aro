@@ -1,0 +1,14 @@
+{
+  "pins" : [
+    {
+      "identity" : "aro-plugin-sdk-swift",
+      "kind" : "remoteSourceControl",
+      "location" : "https://github.com/arolang/aro-plugin-sdk-swift.git",
+      "state" : {
+        "branch" : "main",
+        "revision" : "276727edca1522e2cfc21d8aa86d2db264154dda"
+      }
+    }
+  ],
+  "version" : 2
+}

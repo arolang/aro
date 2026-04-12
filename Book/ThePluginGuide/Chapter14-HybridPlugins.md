@@ -214,7 +214,7 @@ version: 1.0.0
 description: Hybrid authentication plugin with native crypto and ARO workflows
 
 provides:
-  # Native layer - provides the 'auth' service
+  # Native layer - provides the 'auth' actions
   - type: swift-plugin
     path: src/
     actions:
@@ -223,52 +223,58 @@ provides:
       - generateToken
       - validateToken
 
-  # ARO layer - provides feature sets
+  # ARO layer - provides feature sets (loaded after native)
   - type: aro-files
     path: features/
+
+  # Optional: ARO template files (loaded last)
+  # - type: aro-templates
+  #   path: templates/
 ```
 
 ### How ARO Loads Hybrid Plugins
 
-When ARO encounters a hybrid plugin:
+When ARO encounters a hybrid plugin, the `UnifiedPluginLoader` processes providers in a fixed order:
 
-1. **Load native code first**: The native library is compiled and loaded
-2. **Register native actions**: Actions become available via `<Call>`
-3. **Parse ARO files**: Feature sets are compiled from `.aro` files
-4. **Register feature sets**: ARO feature sets join the plugin's namespace
-5. **Link dependencies**: ARO code can now call native actions
+1. **Load native code first**: The native library is compiled and loaded via `dlopen`
+2. **Register native actions**: Actions and system objects become available
+3. **Parse ARO files** (`aro-files`): Feature sets are compiled from `.aro` files
+4. **Process ARO templates** (`aro-templates`): Template files are registered
+5. **Link dependencies**: ARO code can now call native actions via `<Call>`
+
+The strict ordering—native first, then `aro-files`, then `aro-templates`—ensures that ARO code can always reference the native symbols it depends on.
 
 ```
-┌─────────────────────────────────────────────────────────────┐
-│                      UnifiedPluginLoader                      │
-├─────────────────────────────────────────────────────────────┤
-│                                                               │
-│   1. Parse plugin.yaml                                        │
-│                    │                                          │
-│   ┌────────────────┴────────────────┐                        │
-│   │                                 │                         │
-│   ▼                                 ▼                         │
-│ ┌─────────────────┐     ┌─────────────────┐                  │
-│ │  Native Loader  │     │  ARO File Loader │                  │
-│ │                 │     │                  │                  │
-│ │ - Compile Swift │     │ - Parse .aro     │                  │
-│ │ - Load .dylib   │     │ - Compile AST    │                  │
-│ │ - Register fns  │     │ - Register FS    │                  │
-│ └────────┬────────┘     └────────┬─────────┘                  │
-│          │                       │                            │
-│          └───────────┬───────────┘                            │
-│                      │                                        │
-│                      ▼                                        │
-│          ┌─────────────────────┐                             │
-│          │  Unified Plugin     │                             │
-│          │                     │                             │
-│          │  - auth:hashPassword│                             │
-│          │  - auth:verifyPwd   │                             │
-│          │  - Authenticate User│                             │
-│          │  - Reset Password   │                             │
-│          └─────────────────────┘                             │
-│                                                               │
-└─────────────────────────────────────────────────────────────┘
+┌──────────────────────────────────────────────────────────────────┐
+│                       UnifiedPluginLoader                         │
+├──────────────────────────────────────────────────────────────────┤
+│                                                                    │
+│   1. Parse plugin.yaml                                             │
+│                         │                                          │
+│   ┌─────────────────────┼────────────────────┐                   │
+│   │                     │                    │                    │
+│   ▼ (first)             ▼ (second)           ▼ (third)           │
+│ ┌──────────────┐  ┌──────────────┐  ┌────────────────┐           │
+│ │ Native Loader│  │ ARO File     │  │ ARO Template   │           │
+│ │              │  │ Loader       │  │ Loader         │           │
+│ │ - Load .dylib│  │ - Parse .aro │  │ - Register     │           │
+│ │ - Register   │  │ - Compile AST│  │   templates    │           │
+│ │   actions    │  │ - Register FS│  │                │           │
+│ └──────┬───────┘  └──────┬───────┘  └───────┬────────┘           │
+│        │                 │                   │                    │
+│        └─────────────────┼───────────────────┘                   │
+│                          │                                        │
+│                          ▼                                        │
+│             ┌─────────────────────┐                              │
+│             │  Unified Plugin     │                              │
+│             │                     │                              │
+│             │  - auth:hashPassword│                              │
+│             │  - auth:verifyPwd   │                              │
+│             │  - Authenticate User│                              │
+│             │  - Reset Password   │                              │
+│             └─────────────────────┘                              │
+│                                                                    │
+└──────────────────────────────────────────────────────────────────┘
 ```
 
 ## 13.3 Building a Complete Authentication Plugin
@@ -367,7 +373,7 @@ let package = Package(
 
 import Foundation
 
-/// Plugin initialization - returns service metadata
+/// Plugin metadata — declares actions, system objects, etc.
 @_cdecl("aro_plugin_info")
 public func pluginInfo() -> UnsafePointer<CChar> {
     let metadata = """
@@ -384,6 +390,14 @@ public func pluginInfo() -> UnsafePointer<CChar> {
     }
     """
     return UnsafePointer(strdup(metadata)!)
+}
+
+/// Lifecycle hook — called once after the plugin library is loaded.
+/// Returns void; use aro_plugin_info for metadata, not this function.
+@_cdecl("aro_plugin_init")
+public func pluginInit() {
+    // One-time setup: initialise shared resources, connect to services, etc.
+    // Do NOT return service discovery data here — that belongs in aro_plugin_info.
 }
 
 /// Execute an action by name
@@ -1022,6 +1036,51 @@ func generateToken(args: [String: Any], ...) -> Int32 {
 }
 ```
 
+### Pattern 5: Calling ARO Feature Sets from Native Code
+
+Sometimes native code needs to trigger ARO logic—for example, a background timer fires in native code and should emit an event processed by an ARO handler. The `aro_plugin_invoke` callback makes this possible.
+
+ARO passes the callback pointer to the plugin during initialisation. The plugin stores it and can call it at any time to invoke a named ARO feature set:
+
+```c
+// C ABI for the callback ARO provides to the plugin
+typedef char* (*AROInvokeCallback)(
+    const char* feature_set,   // ARO feature set name to invoke
+    const char* input_json     // JSON input passed to the feature set
+);
+```
+
+```swift
+// Receive and store the callback during init
+private var aroInvoke: AROInvokeCallback? = nil
+
+@_cdecl("aro_plugin_set_invoke")
+public func setInvoke(_ callback: AROInvokeCallback?) {
+    aroInvoke = callback
+}
+
+// Call an ARO feature set from native code
+func notifyARO(event: String, payload: [String: Any]) {
+    guard let invoke = aroInvoke else { return }
+    let json = (try? JSONSerialization.data(withJSONObject: payload))
+        .flatMap { String(data: $0, encoding: .utf8) } ?? "{}"
+    let result = invoke(event, json)
+    // result is a heap-allocated JSON string; free if non-nil
+    if let result = result { free(result) }
+}
+```
+
+```aro
+(* The feature set invoked by native code via aro_plugin_invoke *)
+(Token Expired: Auth Handler) {
+    Extract the <token-id> from the <event: tokenId>.
+    Delete from the <session-repository> where tokenId = <token-id>.
+    Return an <OK: status> for the <cleanup>.
+}
+```
+
+The `aro_plugin_invoke` mechanism is one-way: native code fires and does not block waiting for the ARO result. Use it for notifications and side-effects, not for request/response flows.
+
 ## 13.5 Testing Hybrid Plugins
 
 Testing hybrid plugins requires coverage at multiple levels.
@@ -1258,9 +1317,14 @@ provides:
 Hybrid plugins combine the best of both worlds: native performance and security with ARO's expressiveness and maintainability. The key insights from this chapter:
 
 - **Clear boundaries**: Native code for crypto and performance; ARO for workflows
+- **Loading order**: Native first, then `aro-files`, then `aro-templates`
+- **`aro_plugin_init` is void**: Use it for one-time setup only; metadata belongs in `aro_plugin_info`
+- **`aro_plugin_invoke` callback**: Allows native code to call ARO feature sets for notifications and side-effects
 - **State management**: Choose the right pattern for your needs
 - **Testing at all levels**: Unit tests for native, integration tests for ARO, E2E for workflows
 - **Consistent interfaces**: Structured JSON communication between layers
+
+> **Migration note**: The old service-discovery ABI (where `aro_plugin_init` returned a `char*` describing services) has been removed. If you have plugins using the old pattern, move their metadata into `aro_plugin_info()` and change `aro_plugin_init` to return `void`.
 
 Hybrid architecture works particularly well for:
 - **Authentication systems**: Native crypto + ARO workflows

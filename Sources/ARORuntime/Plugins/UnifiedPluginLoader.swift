@@ -187,6 +187,10 @@ public final class UnifiedPluginLoader: @unchecked Sendable {
                 debugPrint("[UnifiedPluginLoader] Loading ARO files from: \(providePath.path)")
                 try loadAROFiles(at: providePath, pluginName: manifest.name)
 
+            case "aro-templates":
+                debugPrint("[UnifiedPluginLoader] Loading ARO templates from: \(providePath.path)")
+                try loadAROTemplates(at: providePath, pluginName: manifest.name)
+
             case "swift-plugin":
                 // Swift plugins with @_cdecl are binary-compatible with C ABI
                 // Route through NativePluginHost for unified qualifier support
@@ -525,6 +529,64 @@ public final class UnifiedPluginLoader: @unchecked Sendable {
         }
     }
 
+    // MARK: - Template Loading
+
+    /// Load template files provided by a plugin (`aro-templates` provide type).
+    ///
+    /// Scans `path` for template files (`*.mustache`, `*.html`, `*.txt`) and registers
+    /// them with the shared `AROTemplateService` when one is available, or logs their
+    /// discovery when no template service has been configured.
+    ///
+    /// Template files are registered under their filename (e.g. `welcome.mustache`).
+    /// If the provide path is a directory, all matching files in the directory are
+    /// registered.  If it points to a single template file, only that file is registered.
+    private func loadAROTemplates(at path: URL, pluginName: String) throws {
+        let templateExtensions: Set<String> = ["mustache", "html", "txt"]
+
+        // Collect template files
+        var templateFiles: [URL]
+
+        var isDirectory: ObjCBool = false
+        if FileManager.default.fileExists(atPath: path.path, isDirectory: &isDirectory),
+           isDirectory.boolValue {
+            let contents = try FileManager.default.contentsOfDirectory(
+                at: path,
+                includingPropertiesForKeys: nil,
+                options: [.skipsHiddenFiles]
+            )
+            templateFiles = contents.filter { templateExtensions.contains($0.pathExtension.lowercased()) }
+        } else if templateExtensions.contains(path.pathExtension.lowercased()) {
+            templateFiles = [path]
+        } else {
+            templateFiles = []
+        }
+
+        guard !templateFiles.isEmpty else {
+            debugPrint("[UnifiedPluginLoader] No template files found at: \(path.path)")
+            return
+        }
+
+        debugPrint("[UnifiedPluginLoader] Found \(templateFiles.count) template(s) in plugin '\(pluginName)'")
+
+        // Register templates with the shared service when available.
+        // AROTemplateService is created per-application and not a global singleton;
+        // plugins that ship templates rely on the template service being configured
+        // with the plugin's template directory (or register them as embedded templates).
+        for templateFile in templateFiles {
+            let templateName = templateFile.lastPathComponent
+            do {
+                let content = try String(contentsOf: templateFile, encoding: .utf8)
+                // Register with the global embedded template store so that any
+                // AROTemplateService instance created later can resolve the template
+                // by name without knowing the plugin path.
+                PluginTemplateStore.shared.register(name: templateName, content: content, pluginName: pluginName)
+                debugPrint("[UnifiedPluginLoader] Registered template '\(templateName)' from plugin '\(pluginName)'")
+            } catch {
+                print("[UnifiedPluginLoader] Warning: Could not read template '\(templateName)' from '\(pluginName)': \(error)")
+            }
+        }
+    }
+
     // MARK: - Swift Plugin Loading
 
     /// Load Swift plugins using legacy loader
@@ -680,6 +742,9 @@ public final class UnifiedPluginLoader: @unchecked Sendable {
         pluginDirectories.removeAll()
         lock.unlock()
 
+        // Remove all plugin-registered templates
+        PluginTemplateStore.shared.removeAll()
+
         legacyLoader.unloadAll()
     }
 
@@ -712,6 +777,9 @@ public final class UnifiedPluginLoader: @unchecked Sendable {
         // Unload after releasing the lock (both call ActionRegistry / dlclose)
         native?.unload()
         python?.unload()
+
+        // Remove plugin-registered templates
+        PluginTemplateStore.shared.removeTemplates(forPlugin: pluginName)
 
         return true
     }
@@ -1062,6 +1130,76 @@ struct LazyPythonServiceWrapper: AROService {
     func call(_ method: String, args: [String: any Sendable]) async throws -> any Sendable {
         let host = try loader.ensurePythonPluginLoaded(pluginName: pluginName)
         return try host.execute(action: method, input: args)
+    }
+}
+
+// MARK: - Plugin Template Store
+
+/// Thread-safe store for templates registered by plugins at load time.
+///
+/// Plugins that ship templates via the `aro-templates` provide type register
+/// their files here during `loadPlugins(from:)`.  The `AROTemplateService`
+/// consults this store via `PluginTemplateStore.shared.allTemplates` when
+/// initialising embedded templates, enabling plugin-supplied templates to be
+/// resolved by name without knowing plugin paths.
+///
+/// ## Usage in AROTemplateService
+/// ```swift
+/// let pluginTemplates = PluginTemplateStore.shared.allTemplates
+/// templateService.registerEmbeddedTemplates(pluginTemplates)
+/// ```
+public final class PluginTemplateStore: @unchecked Sendable {
+    /// Shared instance
+    public static let shared = PluginTemplateStore()
+
+    private let lock = NSLock()
+
+    /// Registered templates: template name → (content, plugin name)
+    private var templates: [String: (content: String, pluginName: String)] = [:]
+
+    private init() {}
+
+    /// Register a template.
+    /// - Parameters:
+    ///   - name: Template filename (e.g. `welcome.mustache`)
+    ///   - content: Raw template content
+    ///   - pluginName: The plugin that owns this template
+    public func register(name: String, content: String, pluginName: String) {
+        lock.lock()
+        defer { lock.unlock() }
+        if let existing = templates[name] {
+            print("[PluginTemplateStore] Warning: template '\(name)' from plugin '\(pluginName)' " +
+                  "overwrites existing entry from plugin '\(existing.pluginName)'.")
+        }
+        templates[name] = (content: content, pluginName: pluginName)
+    }
+
+    /// All registered templates as a `[name: content]` dictionary.
+    public var allTemplates: [String: String] {
+        lock.lock()
+        defer { lock.unlock() }
+        return templates.mapValues { $0.content }
+    }
+
+    /// Look up a single template by name.
+    public func template(named name: String) -> String? {
+        lock.lock()
+        defer { lock.unlock() }
+        return templates[name]?.content
+    }
+
+    /// Remove all registered templates (used in tests / unload scenarios).
+    public func removeAll() {
+        lock.lock()
+        defer { lock.unlock() }
+        templates.removeAll()
+    }
+
+    /// Remove all templates registered by a specific plugin.
+    public func removeTemplates(forPlugin pluginName: String) {
+        lock.lock()
+        defer { lock.unlock() }
+        templates = templates.filter { $0.value.pluginName != pluginName }
     }
 }
 

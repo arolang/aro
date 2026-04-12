@@ -80,6 +80,15 @@ public struct ComputeAction: SynchronousAction {
         ]
         let computationName = resolveOperationName(from: result, knownOperations: knownComputations, fallback: "identity")
 
+        // Qualifier chain — e.g., "stats.sort|list.take" evaluated left-to-right
+        if computationName.contains("|") {
+            let chain = computationName.split(separator: "|").map { $0.trimmingCharacters(in: .whitespaces) }
+            if let chainResult = try context.container.qualifierRegistry.resolveChain(chain, value: input) {
+                context.bind(result.base, value: chainResult)
+                return chainResult
+            }
+        }
+
         // Plugin qualifier — synchronous when the qualifier registry is sync
         if let pluginResult = try context.container.qualifierRegistry.resolve(computationName, value: input) {
             return pluginResult

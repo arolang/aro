@@ -41,12 +41,25 @@ public struct ExpressionEvaluator: Sendable {
                 return MetricsFormatter.format(metricsSnapshot, as: format, context: context.outputContext)
             }
 
+            // Environment variable access: <env: VAR_NAME>
+            if varRef.noun.base == "env", let varName = varRef.noun.specifiers.first {
+                return ProcessInfo.processInfo.environment[varName] ?? ""
+            }
+
             guard var value = context.resolveAny(varRef.noun.base) else {
                 throw ExpressionError.undefinedVariable(varRef.noun.base)
             }
             // Handle specifiers as qualifiers or property access
             // Plugin qualifiers are checked first, then property access as fallback
             let specifiers = varRef.noun.specifiers
+
+            // Qualifier chaining: <value: stats.sort | list.take>
+            // The typeAnnotation contains "|" separating chained qualifiers.
+            if let chain = varRef.noun.qualifierChain {
+                if let transformed = try context.container.qualifierRegistry.resolveChain(chain, value: value) {
+                    return transformed
+                }
+            }
 
             // Try namespaced qualifier form first (e.g., <list: plugin-swift-collection.reverse>)
             // This allows disambiguation when multiple plugins provide the same qualifier

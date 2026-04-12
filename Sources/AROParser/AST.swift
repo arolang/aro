@@ -890,6 +890,11 @@ public struct QualifiedNoun: Sendable, Equatable, CustomStringConvertible {
     // Specifiers are parsed from typeAnnotation as dot-separated property path
     public var specifiers: [String] {
         guard let type = typeAnnotation else { return [] }
+        // Qualifier chains (e.g., "stats.sort|list.take") are returned as a single element
+        // so that the runtime can detect and handle them via resolveChain.
+        if type.contains("|") {
+            return [type]
+        }
         // If it contains < it's a generic type like List<User>, return as single element
         if type.contains("<") {
             return [type]
@@ -905,6 +910,18 @@ public struct QualifiedNoun: Sendable, Equatable, CustomStringConvertible {
         }
         // Split by dots for property path syntax (e.g., "customer.address.city")
         return type.split(separator: ".").map(String.init)
+    }
+
+    /// Whether this noun has a chained qualifier annotation (contains |)
+    public var isQualifierChain: Bool {
+        typeAnnotation?.contains("|") == true
+    }
+
+    /// Returns the individual qualifier names in a chain, or nil if not a chain.
+    /// For "stats.sort|list.take" returns ["stats.sort", "list.take"].
+    public var qualifierChain: [String]? {
+        guard let type = typeAnnotation, type.contains("|") else { return nil }
+        return type.split(separator: "|").map { $0.trimmingCharacters(in: .whitespaces) }
     }
 
     public init(base: String, typeAnnotation: String? = nil, span: SourceSpan) {

@@ -403,9 +403,9 @@ extension PythonPluginHost: PluginQualifierHost {
     ///   - input: The input value to transform
     /// - Returns: The transformed value
     /// - Throws: QualifierError on failure
-    public func executeQualifier(_ qualifier: String, input: any Sendable) throws -> any Sendable {
-        // Create input JSON using QualifierInput
-        let qualifierInput = QualifierInput(value: input)
+    public func executeQualifier(_ qualifier: String, input: any Sendable, withParams: [String: any Sendable]? = nil) throws -> any Sendable {
+        // Create input JSON using QualifierInput (ARO-0073: includes _with params)
+        let qualifierInput = QualifierInput(value: input, withParams: withParams)
         let inputData = try encoder.encode(qualifierInput)
         let base64Input = inputData.base64EncodedString()
 

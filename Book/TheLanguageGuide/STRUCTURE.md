@@ -71,7 +71,7 @@ Chapter numbers in this file match the file names in `Book/TheLanguageGuide/`.
 33. **Control Flow** — Guards, match expressions, regex patterns, conditional execution
 34. **Data Pipelines** — Map, Filter, Reduce for collection processing
 35. **Set Operations** — intersect, difference, union across lists, strings, and objects
-36. **Repositories** — Persistent in-memory storage and observers
+36. **Repositories** — Persistent in-memory storage, observers, and store files
 37. **System Commands** — Shell execution with the Exec action
 38. **HTTP Client** — Making requests to external services
 39. **Concurrency** — Feature sets are async, statements are sync

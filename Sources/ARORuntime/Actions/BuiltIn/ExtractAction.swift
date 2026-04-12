@@ -37,11 +37,9 @@ public struct ExtractAction: SynchronousAction {
         try validatePreposition(object.preposition)
 
         // Handle environment variable extraction: <env: VAR_NAME>
+        // Returns empty string for unset variables (like shell default behavior)
         if object.base == "env", let varName = object.specifiers.first {
-            guard let value = ProcessInfo.processInfo.environment[varName] else {
-                throw ActionError.undefinedVariable("env:\(varName)")
-            }
-            return value
+            return ProcessInfo.processInfo.environment[varName] ?? ""
         }
 
         // ARO-0047: Handle command-line parameter extraction: <parameter: NAME>

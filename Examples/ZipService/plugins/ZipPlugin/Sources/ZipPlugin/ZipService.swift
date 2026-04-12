@@ -14,60 +14,87 @@
 
 import Foundation
 import Zip
+import AROPluginSDK
 
-// MARK: - Plugin Initialization
+// MARK: - Plugin Info
 
-/// Plugin initialization - returns service metadata as JSON
-/// This tells ARO what services and symbols this plugin provides
-@_cdecl("aro_plugin_init")
-public func pluginInit() -> UnsafePointer<CChar> {
-    let metadata = """
-    {"services": [{"name": "zip", "symbol": "zip_call"}]}
+/// Returns full plugin metadata as JSON.
+/// Declares this plugin provides a "zip" service with compress/decompress/list methods.
+@_cdecl("aro_plugin_info")
+public func aroPluginInfo() -> UnsafeMutablePointer<CChar>? {
+    let info = """
+    {
+      "name": "ZipPlugin",
+      "version": "1.0.0",
+      "handle": "Zip",
+      "actions": [],
+      "qualifiers": [],
+      "services": [
+        {
+          "name": "zip",
+          "methods": ["compress", "decompress", "list"]
+        }
+      ]
+    }
     """
-    let cstr = strdup(metadata)!
-    return UnsafePointer(cstr)
+    return aroStrdup(info)
 }
 
-// MARK: - Service Implementation
+// MARK: - Lifecycle Hooks
 
-/// Main entry point for the zip service
-/// - Parameters:
-///   - methodPtr: Method name (C string)
-///   - argsPtr: Arguments as JSON (C string)
-///   - resultPtr: Output - result as JSON (caller must free)
-/// - Returns: 0 for success, non-zero for error
-@_cdecl("zip_call")
-public func zipCall(
-    _ methodPtr: UnsafePointer<CChar>,
-    _ argsPtr: UnsafePointer<CChar>,
-    _ resultPtr: UnsafeMutablePointer<UnsafeMutablePointer<CChar>?>
-) -> Int32 {
-    let method = String(cString: methodPtr)
-    let argsJSON = String(cString: argsPtr)
+/// Called once when the plugin is loaded. No setup required for the Zip library.
+@_cdecl("aro_plugin_init")
+public func aroPluginInit() {
+    // No global state to initialise
+}
 
-    // Parse arguments
-    var args: [String: Any] = [:]
-    if let data = argsJSON.data(using: .utf8),
-       let parsed = try? JSONSerialization.jsonObject(with: data) as? [String: Any] {
-        args = parsed
+/// Called when the plugin is unloaded. No teardown required.
+@_cdecl("aro_plugin_shutdown")
+public func aroPluginShutdown() {
+    // No global state to release
+}
+
+// MARK: - Execute
+
+/// Main dispatch function. Routes service actions via the "service:" prefix.
+/// Action format: "service:<method>", e.g. "service:compress", "service:decompress", "service:list"
+@_cdecl("aro_plugin_execute")
+public func aroPluginExecute(
+    _ actionPtr: UnsafePointer<CChar>,
+    _ inputJSONPtr: UnsafePointer<CChar>
+) -> UnsafeMutablePointer<CChar>? {
+    let action = String(cString: actionPtr)
+    let input  = ActionInput(aroParseJSON(inputJSONPtr))
+
+    // Route service actions via "service:<method>" prefix
+    guard action.hasPrefix("service:") else {
+        return ActionOutput.failure(.unsupported, "Unknown action: \(action)").toCString()
     }
+    let method = String(action.dropFirst("service:".count))
 
-    // Execute method
+    // Parameters come from the "_with" clause
+    let args = input.with
+
     do {
         let result = try executeMethod(method, args: args)
-        let resultJSON = try encodeResult(result)
-        resultPtr.pointee = resultJSON.withCString { strdup($0) }
-        return 0
+        return ActionOutput.success(result).toCString()
     } catch {
-        // Return error message
-        let errorJSON = "{\"error\": \"\(escapeJSON(String(describing: error)))\"}"
-        resultPtr.pointee = errorJSON.withCString { strdup($0) }
-        return 1
+        return ActionOutput.failure(.executionFailed, String(describing: error)).toCString()
     }
 }
 
+// MARK: - Free
+
+/// Frees memory allocated by this plugin.
+@_cdecl("aro_plugin_free")
+public func aroPluginFree(_ ptr: UnsafeMutablePointer<CChar>?) {
+    free(ptr)
+}
+
+// MARK: - Zip Logic
+
 /// Execute a zip method
-private func executeMethod(_ method: String, args: [String: Any]) throws -> [String: Any] {
+private func executeMethod(_ method: String, args: Params) throws -> [String: Any] {
     switch method.lowercased() {
     case "compress", "zip":
         return try compress(args: args)
@@ -84,12 +111,13 @@ private func executeMethod(_ method: String, args: [String: Any]) throws -> [Str
 }
 
 /// Compress files into a zip archive
-private func compress(args: [String: Any]) throws -> [String: Any] {
-    guard let files = args["files"] as? [String] else {
+private func compress(args: Params) throws -> [String: Any] {
+    guard let rawFiles = args.array("files") else {
         throw ZipPluginError.missingArgument("files")
     }
+    let files = rawFiles.compactMap { $0 as? String }
 
-    guard let outputPath = args["output"] as? String else {
+    guard let outputPath = args.string("output") else {
         throw ZipPluginError.missingArgument("output")
     }
 
@@ -115,12 +143,12 @@ private func compress(args: [String: Any]) throws -> [String: Any] {
 }
 
 /// Decompress a zip archive
-private func decompress(args: [String: Any]) throws -> [String: Any] {
-    guard let archivePath = args["archive"] as? String else {
+private func decompress(args: Params) throws -> [String: Any] {
+    guard let archivePath = args.string("archive") else {
         throw ZipPluginError.missingArgument("archive")
     }
 
-    let destination = args["destination"] as? String ?? "."
+    let destination = args.string("destination") ?? "."
 
     let archiveURL = URL(fileURLWithPath: archivePath)
     let destinationURL = URL(fileURLWithPath: destination)
@@ -139,8 +167,8 @@ private func decompress(args: [String: Any]) throws -> [String: Any] {
 }
 
 /// List contents of a zip archive
-private func listContents(args: [String: Any]) throws -> [String: Any] {
-    guard let archivePath = args["archive"] as? String else {
+private func listContents(args: Params) throws -> [String: Any] {
+    guard let archivePath = args.string("archive") else {
         throw ZipPluginError.missingArgument("archive")
     }
 
@@ -165,10 +193,8 @@ private func listContents(args: [String: Any]) throws -> [String: Any] {
     if let enumerator = FileManager.default.enumerator(at: tempDir, includingPropertiesForKeys: nil) {
         while let fileURL = enumerator.nextObject() as? URL {
             let fullPath = fileURL.path
-            // Use pure Swift string handling to avoid Foundation bridging issues
             if fullPath.hasPrefix(prefixToRemove) {
-                let relativePath = String(fullPath.dropFirst(prefixToRemove.count))
-                files.append(relativePath)
+                files.append(String(fullPath.dropFirst(prefixToRemove.count)))
             } else {
                 files.append(fullPath)
             }
@@ -179,30 +205,6 @@ private func listContents(args: [String: Any]) throws -> [String: Any] {
         "archive": archivePath,
         "files": files
     ]
-}
-
-/// Encode result as JSON string
-private func encodeResult(_ result: [String: Any]) throws -> String {
-    let data = try JSONSerialization.data(withJSONObject: result)
-    return String(data: data, encoding: .utf8) ?? "{}"
-}
-
-/// Escape string for JSON
-/// Uses manual character replacement to avoid Foundation bridging issues
-private func escapeJSON(_ string: String) -> String {
-    var result = ""
-    result.reserveCapacity(string.count)
-    for char in string {
-        switch char {
-        case "\\": result += "\\\\"
-        case "\"": result += "\\\""
-        case "\n": result += "\\n"
-        case "\r": result += "\\r"
-        case "\t": result += "\\t"
-        default: result.append(char)
-        }
-    }
-    return result
 }
 
 // MARK: - Errors

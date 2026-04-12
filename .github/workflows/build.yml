@@ -1413,6 +1413,8 @@ jobs:
             echo '  # Only support macOS for now (ARM64 binary)'
             echo '  depends_on :macos'
             echo '  depends_on arch: :arm64'
+            echo '  depends_on "libgit2"'
+            echo '  depends_on "llvm@20"'
             echo ''
             echo '  def install'
             echo '    bin.install "aro"'

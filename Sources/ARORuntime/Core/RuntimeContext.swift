@@ -406,10 +406,17 @@ public actor RuntimeContext: ExecutionContext {
         )
     }
 
-    /// Create a child context for template rendering (ARO-0050)
-    /// This context has an isolated template buffer and copies all parent variables
+    /// Create a child context for template rendering (ARO-0050).
+    ///
+    /// The child has its own isolated template buffer and variable storage,
+    /// but inherits read-only access to the parent via the existing
+    /// `resolve`/`resolveAny`/`service` fall-through chain. Mutations made
+    /// during rendering stay local to the child and are discarded when the
+    /// render completes, so concurrent renders off the same parent — e.g.
+    /// two HTTP handlers rendering templates at the same time — cannot see
+    /// each other's intermediate bindings (issue #166).
     public nonisolated func createTemplateContext() -> RuntimeContext {
-        let templateContext = RuntimeContext(
+        return RuntimeContext(
             featureSetName: "template:\(featureSetName)",
             businessActivity: businessActivity,
             outputContext: _outputContext,
@@ -419,21 +426,6 @@ public actor RuntimeContext: ExecutionContext {
             isCompiled: _isCompiled,
             isTemplateContext: true
         )
-
-        // Copy all variables from parent context for isolation
-        // Changes in template context won't affect parent
-        for name in variableNames {
-            if let value = resolveAny(name) {
-                templateContext.bind(name, value: value, allowRebind: true)
-            }
-        }
-
-        // Copy services from parent
-        for (typeId, service) in services {
-            templateContext.registerWithTypeId(typeId, service: service)
-        }
-
-        return templateContext
     }
 
     // MARK: - Wait State Management

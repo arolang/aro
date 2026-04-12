@@ -1,151 +1,128 @@
 /**
  * ARO Plugin - C Hash Functions
  *
- * This plugin provides various hash functions for ARO.
- * It implements the ARO native plugin interface (C ABI).
+ * Provides djb2, fnv1a, and simple polynomial hash functions for ARO,
+ * written using the ARO C Plugin SDK macro syntax.
+ *
+ * SDK docs: https://github.com/arolang/aro-plugin-sdk-c
  */
 
-#include <stdio.h>
-#include <stdlib.h>
-#include <string.h>
+#define ARO_PLUGIN_SDK_IMPLEMENTATION
+#include "aro_plugin_sdk.h"
+
 #include <stdint.h>
 
-/* Simple JSON parsing helpers (for demo purposes) */
-static const char* find_json_string(const char* json, const char* key) {
-    char search[256];
-    snprintf(search, sizeof(search), "\"%s\":", key);
+/* ── Plugin identity ───────────────────────────────────────────────────── */
 
-    const char* pos = strstr(json, search);
-    if (!pos) return NULL;
+ARO_PLUGIN("plugin-c-hash", "1.0.0")
+ARO_HANDLE("Hash")
 
-    pos = strchr(pos, ':');
-    if (!pos) return NULL;
-    pos++;
+/* ── Lifecycle ─────────────────────────────────────────────────────────── */
 
-    /* Skip whitespace */
-    while (*pos == ' ' || *pos == '\t' || *pos == '\n') pos++;
-
-    if (*pos != '"') return NULL;
-    return pos + 1;  /* Return pointer to string content */
+ARO_INIT() {
+    /* Nothing to initialise */
 }
 
-static char* extract_json_string(const char* json, const char* key) {
-    const char* start = find_json_string(json, key);
-    if (!start) return NULL;
-
-    const char* end = strchr(start, '"');
-    if (!end) return NULL;
-
-    size_t len = end - start;
-    char* result = malloc(len + 1);
-    if (!result) return NULL;
-
-    memcpy(result, start, len);
-    result[len] = '\0';
-    return result;
+ARO_SHUTDOWN() {
+    /* Nothing to tear down */
 }
 
-/* DJB2 hash algorithm */
+/* ── Hash algorithm implementations ────────────────────────────────────── */
+
+/* DJB2 — 64-bit */
 static uint64_t djb2_hash(const char* str) {
     uint64_t hash = 5381;
     int c;
-
-    while ((c = *str++)) {
+    while ((c = (unsigned char)*str++)) {
         hash = ((hash << 5) + hash) + c;  /* hash * 33 + c */
     }
-
     return hash;
 }
 
-/* FNV-1a hash algorithm */
+/* FNV-1a — 64-bit */
 static uint64_t fnv1a_hash(const char* str) {
-    uint64_t hash = 14695981039346656037ULL;
+    uint64_t hash            = 14695981039346656037ULL;
     const uint64_t fnv_prime = 1099511628211ULL;
-
     while (*str) {
         hash ^= (uint8_t)*str++;
         hash *= fnv_prime;
     }
-
     return hash;
 }
 
-/* Simple string hash (for shorter outputs) */
+/* Simple — 32-bit (polynomial hash) */
 static uint32_t simple_hash(const char* str) {
     uint32_t hash = 0;
-
     while (*str) {
-        hash = hash * 31 + *str++;
+        hash = hash * 31 + (unsigned char)*str++;
     }
-
     return hash;
 }
 
-/* Plugin info - returns JSON with plugin metadata */
-char* aro_plugin_info(void) {
-    const char* info =
-        "{"
-        "\"name\":\"plugin-c-hash\","
-        "\"version\":\"1.0.0\","
-        "\"language\":\"c\","
-        "\"actions\":["
-            "{\"name\":\"Hash\",\"role\":\"own\",\"verbs\":[\"hash\"],\"prepositions\":[\"with\",\"for\"]},"
-            "{\"name\":\"DJB2\",\"role\":\"own\",\"verbs\":[\"djb2\"],\"prepositions\":[\"with\",\"for\"]},"
-            "{\"name\":\"FNV1A\",\"role\":\"own\",\"verbs\":[\"fnv1a\"],\"prepositions\":[\"with\",\"for\"]}"
-        "]"
-        "}";
+/* ── Actions ────────────────────────────────────────────────────────────── */
 
-    char* result = malloc(strlen(info) + 1);
-    if (result) {
-        strcpy(result, info);
-    }
-    return result;
+/*
+ * Hash.Hash  —  simple 32-bit polynomial hash
+ *
+ * ARO usage:
+ *   Compute the <hash: Hash.Hash> from the <data>.
+ */
+ARO_ACTION("Hash", "own", "from,with,for") {
+    const char* data = aro_input_string(ctx, "data");
+    if (!data) data = aro_input_string(ctx, "source");
+    if (!data) data = aro_input_string(ctx, "value");
+    if (!data) return aro_error(ctx, ARO_ERR_INVALID_INPUT,
+                                "No hashable value found in input");
+
+    uint32_t h = simple_hash(data);
+    char buf[32];
+    snprintf(buf, sizeof(buf), "%08x", h);
+    aro_output_string(ctx, "hash", buf);
+    aro_output_string(ctx, "algorithm", "simple");
+    aro_output_string(ctx, "input", data);
+    return aro_ok(ctx);
 }
 
-/* Execute action */
-char* aro_plugin_execute(const char* action, const char* input_json) {
-    char* result = malloc(512);
-    if (!result) return NULL;
+/*
+ * Hash.DJB2  —  64-bit DJB2 hash
+ *
+ * ARO usage:
+ *   Compute the <hash: Hash.DJB2> from the <data>.
+ */
+ARO_ACTION("DJB2", "own", "from,with,for") {
+    const char* data = aro_input_string(ctx, "data");
+    if (!data) data = aro_input_string(ctx, "source");
+    if (!data) data = aro_input_string(ctx, "value");
+    if (!data) return aro_error(ctx, ARO_ERR_INVALID_INPUT,
+                                "No hashable value found in input");
 
-    char* data = extract_json_string(input_json, "data");
-    if (!data) {
-        data = extract_json_string(input_json, "object");
-    }
-
-    if (!data) {
-        snprintf(result, 512, "{\"error\":\"Missing 'data' field\"}");
-        return result;
-    }
-
-    if (strcmp(action, "hash") == 0 || strcmp(action, "simple") == 0) {
-        uint32_t hash = simple_hash(data);
-        snprintf(result, 512,
-                 "{\"hash\":\"%08x\",\"algorithm\":\"simple\",\"input\":\"%s\"}",
-                 hash, data);
-    }
-    else if (strcmp(action, "djb2") == 0) {
-        uint64_t hash = djb2_hash(data);
-        snprintf(result, 512,
-                 "{\"hash\":\"%016llx\",\"algorithm\":\"djb2\",\"input\":\"%s\"}",
-                 (unsigned long long)hash, data);
-    }
-    else if (strcmp(action, "fnv1a") == 0) {
-        uint64_t hash = fnv1a_hash(data);
-        snprintf(result, 512,
-                 "{\"hash\":\"%016llx\",\"algorithm\":\"fnv1a\",\"input\":\"%s\"}",
-                 (unsigned long long)hash, data);
-    }
-    else {
-        snprintf(result, 512, "{\"error\":\"Unknown action: %s\"}", action);
-    }
-
-    free(data);
-    return result;
+    uint64_t h = djb2_hash(data);
+    char buf[32];
+    snprintf(buf, sizeof(buf), "%016llx", (unsigned long long)h);
+    aro_output_string(ctx, "hash", buf);
+    aro_output_string(ctx, "algorithm", "djb2");
+    aro_output_string(ctx, "input", data);
+    return aro_ok(ctx);
 }
 
-/* Free memory allocated by the plugin */
-void aro_plugin_free(char* ptr) {
-    if (ptr) {
-        free(ptr);
-    }
+/*
+ * Hash.FNV1a  —  64-bit FNV-1a hash
+ *
+ * ARO usage:
+ *   Compute the <hash: Hash.FNV1a> from the <data>.
+ */
+ARO_ACTION("FNV1a", "own", "from,with,for") {
+    const char* data = aro_input_string(ctx, "data");
+    if (!data) data = aro_input_string(ctx, "source");
+    if (!data) data = aro_input_string(ctx, "value");
+    if (!data) return aro_error(ctx, ARO_ERR_INVALID_INPUT,
+                                "No hashable value found in input");
+
+    uint64_t h = fnv1a_hash(data);
+    char buf[32];
+    snprintf(buf, sizeof(buf), "%016llx", (unsigned long long)h);
+    aro_output_string(ctx, "hash", buf);
+    aro_output_string(ctx, "algorithm", "fnv1a");
+    aro_output_string(ctx, "input", data);
+    return aro_ok(ctx);
 }

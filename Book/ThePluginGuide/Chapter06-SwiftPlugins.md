@@ -62,9 +62,9 @@ Here's the key insight: despite being Swift, plugins communicate with ARO throug
 Swift provides the `@_cdecl` attribute to export functions with C calling conventions:
 
 ```swift
-@_cdecl("aro_plugin_init")
-public func pluginInit() -> UnsafePointer<CChar> {
-    // Return JSON metadata
+@_cdecl("aro_plugin_info")
+public func pluginInfo() -> UnsafePointer<CChar> {
+    // Return JSON metadata — REQUIRED
 }
 ```
 
@@ -72,6 +72,27 @@ The `@_cdecl` attribute:
 - Exports the function with the specified C symbol name
 - Uses C calling conventions (no Swift ABI features)
 - Makes the function visible to `dlsym` when the library is loaded
+
+### Required and Optional Exports
+
+Every Swift plugin **must** export exactly two symbols:
+
+| Symbol | Signature | Required? |
+|--------|-----------|-----------|
+| `aro_plugin_info` | `() -> UnsafePointer<CChar>` | **Yes** |
+| `aro_plugin_free` | `(UnsafeMutablePointer<CChar>?) -> Void` | **Yes** |
+
+The remaining exports are optional and depend on what the plugin provides:
+
+| Symbol | Signature | When needed |
+|--------|-----------|-------------|
+| `aro_plugin_init` | `() -> Void` | Stateful plugins needing one-time setup |
+| `aro_plugin_shutdown` | `() -> Void` | Plugins that need cleanup on unload |
+| `aro_plugin_execute` | `(UnsafePointer<CChar>, UnsafePointer<CChar>) -> UnsafeMutablePointer<CChar>` | Plugins providing actions or services |
+| `aro_plugin_qualifier` | `(UnsafePointer<CChar>, UnsafePointer<CChar>) -> UnsafeMutablePointer<CChar>` | Plugins providing qualifiers |
+| `aro_plugin_on_event` | `(UnsafePointer<CChar>, UnsafePointer<CChar>) -> Void` | Plugins subscribing to events |
+
+**Note**: `aro_plugin_execute` is no longer required for qualifier-only plugins. The old service ABI (`aro_plugin_init` returning service metadata as `UnsafePointer<CChar>`, plus a three-parameter `_call` function) is removed—services are now routed through `aro_plugin_execute("service:<method>", input)`.
 
 ## 6.4 Your First Swift Plugin: Custom Actions
 
@@ -127,8 +148,8 @@ import Foundation
 
 // MARK: - Plugin Initialization
 
-/// Returns plugin metadata as JSON
-/// This function is called once when the plugin is loaded.
+/// Returns plugin metadata as JSON.
+/// This function is REQUIRED and called once when the plugin is loaded.
 @_cdecl("aro_plugin_info")
 public func pluginInfo() -> UnsafePointer<CChar> {
     let metadata = """
@@ -160,68 +181,89 @@ public func pluginInfo() -> UnsafePointer<CChar> {
     return strdup(metadata)!
 }
 
-// MARK: - Service Implementation
+// MARK: - Lifecycle Hooks (Optional)
 
-/// Main service entry point
+/// Called once after the plugin is loaded, before any action is invoked.
+/// Use this for one-time initialization: opening connections, loading models, etc.
+@_cdecl("aro_plugin_init")
+public func pluginInit() {
+    // Perform any one-time setup here.
+    // Note: this function returns void — it is NOT the old service-discovery
+    // init that returned a char* with service metadata. That pattern is removed.
+}
+
+/// Called when the plugin is about to be unloaded.
+/// Use this for cleanup: closing connections, flushing buffers, etc.
+@_cdecl("aro_plugin_shutdown")
+public func pluginShutdown() {
+    // Cleanup resources here.
+}
+
+// MARK: - Action Execution
+
+/// Executes a plugin action.
+///
+/// This function is OPTIONAL — only needed if the plugin provides actions or services.
+/// Qualifier-only plugins do not need to implement it.
 ///
 /// - Parameters:
-///   - methodPtr: C string with the method name
-///   - argsPtr: C string with JSON arguments
-///   - resultPtr: Pointer where to store the result JSON
-/// - Returns: 0 for success, non-zero for error
-@_cdecl("datetime_call")
-public func datetimeCall(
-    _ methodPtr: UnsafePointer<CChar>,
-    _ argsPtr: UnsafePointer<CChar>,
-    _ resultPtr: UnsafeMutablePointer<UnsafeMutablePointer<CChar>?>
-) -> Int32 {
-    let method = String(cString: methodPtr)
-    let argsJSON = String(cString: argsPtr)
+///   - actionPtr: C string with the action name (e.g., "format-date")
+///   - inputPtr:  C string with JSON input (includes _with, result, source, _context)
+/// - Returns: JSON string with the result. Caller must free with aro_plugin_free.
+@_cdecl("aro_plugin_execute")
+public func pluginExecute(
+    _ actionPtr: UnsafePointer<CChar>,
+    _ inputPtr: UnsafePointer<CChar>
+) -> UnsafeMutablePointer<CChar> {
+    let action = String(cString: actionPtr)
+    let inputJSON = String(cString: inputPtr)
 
-    // Parse arguments
-    guard let argsData = argsJSON.data(using: .utf8),
-          let args = try? JSONSerialization.jsonObject(with: argsData) as? [String: Any] else {
-        return setError(resultPtr, "Invalid JSON arguments")
+    // Parse input JSON
+    guard let inputData = inputJSON.data(using: .utf8),
+          let input = try? JSONSerialization.jsonObject(with: inputData) as? [String: Any] else {
+        return strdup("{\"error\":\"Invalid JSON input\"}")!
     }
 
-    // Dispatch to the appropriate method
+    // Parameters from the `with { }` clause arrive nested under "_with"
+    let withParams = input["_with"] as? [String: Any] ?? [:]
+
+    // Dispatch to the appropriate action
     do {
         let result: [String: Any]
 
-        switch method {
-        case "format":
-            result = try formatDate(args)
-        case "parse":
-            result = try parseDate(args)
-        case "relative":
-            result = try relativeDate(args)
-        case "now":
-            result = getCurrentTime()
+        switch action {
+        case "format-date", "format":
+            result = try formatDate(input, params: withParams)
+        case "parse-date", "parsedate":
+            result = try parseDate(input, params: withParams)
+        case "relative-date", "relativedate", "relative":
+            result = try relativeDate(input)
         default:
-            return setError(resultPtr, "Unknown method: \(method)")
+            return strdup("{\"error\":\"Unknown action: \(action)\"}")!
         }
 
         // Serialize result to JSON
         let resultData = try JSONSerialization.data(withJSONObject: result)
         let resultJSON = String(data: resultData, encoding: .utf8)!
-        resultPtr.pointee = strdup(resultJSON)
-        return 0
+        return strdup(resultJSON)!
 
     } catch {
-        return setError(resultPtr, error.localizedDescription)
+        let msg = error.localizedDescription.replacingOccurrences(of: "\"", with: "\\\"")
+        return strdup("{\"error\":\"\(msg)\"}")!
     }
 }
 
 // MARK: - Method Implementations
 
-/// Format a date according to the specified format and locale
-private func formatDate(_ args: [String: Any]) throws -> [String: Any] {
-    guard let timestamp = args["timestamp"] as? TimeInterval else {
+/// Format a date according to the specified format and locale.
+/// The primary value comes from the main input; options come from _with params.
+private func formatDate(_ args: [String: Any], params: [String: Any]) throws -> [String: Any] {
+    guard let timestamp = args["data"] as? TimeInterval ?? args["timestamp"] as? TimeInterval else {
         throw PluginError.missingParameter("timestamp")
     }
 
-    let format = args["format"] as? String ?? "yyyy-MM-dd HH:mm:ss"
-    let localeIdentifier = args["locale"] as? String ?? "en_US"
+    let format = params["format"] as? String ?? args["format"] as? String ?? "yyyy-MM-dd HH:mm:ss"
+    let localeIdentifier = params["locale"] as? String ?? args["locale"] as? String ?? "en_US"
 
     let date = Date(timeIntervalSince1970: timestamp)
     let formatter = DateFormatter()
@@ -238,14 +280,15 @@ private func formatDate(_ args: [String: Any]) throws -> [String: Any] {
     ]
 }
 
-/// Parse a date string into a timestamp
-private func parseDate(_ args: [String: Any]) throws -> [String: Any] {
-    guard let dateString = args["date"] as? String else {
+/// Parse a date string into a timestamp.
+/// The primary value comes from the main input; format and locale from _with params.
+private func parseDate(_ args: [String: Any], params: [String: Any]) throws -> [String: Any] {
+    guard let dateString = args["data"] as? String ?? args["date"] as? String else {
         throw PluginError.missingParameter("date")
     }
 
-    let format = args["format"] as? String ?? "yyyy-MM-dd"
-    let localeIdentifier = args["locale"] as? String ?? "en_US"
+    let format = params["format"] as? String ?? args["format"] as? String ?? "yyyy-MM-dd"
+    let localeIdentifier = params["locale"] as? String ?? args["locale"] as? String ?? "en_US"
 
     let formatter = DateFormatter()
     formatter.dateFormat = format
@@ -264,7 +307,7 @@ private func parseDate(_ args: [String: Any]) throws -> [String: Any] {
 
 /// Generate a relative time description
 private func relativeDate(_ args: [String: Any]) throws -> [String: Any] {
-    guard let timestamp = args["timestamp"] as? TimeInterval else {
+    guard let timestamp = args["data"] as? TimeInterval ?? args["timestamp"] as? TimeInterval else {
         throw PluginError.missingParameter("timestamp")
     }
 
@@ -299,17 +342,15 @@ private func getCurrentTime() -> [String: Any] {
     ]
 }
 
-// MARK: - Error Handling
+// MARK: - Free
 
-/// Set an error result and return failure code
-private func setError(
-    _ resultPtr: UnsafeMutablePointer<UnsafeMutablePointer<CChar>?>,
-    _ message: String
-) -> Int32 {
-    let errorJSON = "{\"error\": \"\(message.replacingOccurrences(of: "\"", with: "\\\""))\"}"
-    resultPtr.pointee = strdup(errorJSON)
-    return 1
+/// Frees memory allocated by the plugin. REQUIRED.
+@_cdecl("aro_plugin_free")
+public func pluginFree(_ ptr: UnsafeMutablePointer<CChar>?) {
+    ptr.map { free($0) }
 }
+
+// MARK: - Error Handling
 
 /// Plugin errors
 private enum PluginError: LocalizedError {
@@ -368,30 +409,50 @@ The `<FormatDate>`, `<ParseDate>`, and `<RelativeDate>` actions work exactly lik
 
 ## 6.5 Working with Foundation Types
 
-Swift plugins can leverage Foundation's rich type system. Here's a currency formatting plugin:
+Swift plugins can leverage Foundation's rich type system. Here's a currency formatting plugin. Notice that `aro_plugin_execute` now takes two parameters and returns `UnsafeMutablePointer<CChar>` directly—no out-pointer or integer return code:
 
 ```swift
 import Foundation
 
-@_cdecl("currency_call")
-public func currencyCall(
-    _ methodPtr: UnsafePointer<CChar>,
-    _ argsPtr: UnsafePointer<CChar>,
-    _ resultPtr: UnsafeMutablePointer<UnsafeMutablePointer<CChar>?>
-) -> Int32 {
-    let method = String(cString: methodPtr)
-    guard let args = parseJSON(String(cString: argsPtr)) else {
-        return setError(resultPtr, "Invalid JSON")
+@_cdecl("aro_plugin_info")
+public func pluginInfo() -> UnsafePointer<CChar> {
+    return strdup("""
+    {
+        "name": "plugin-swift-currency",
+        "version": "1.0.0",
+        "actions": [
+            {
+                "name": "FormatCurrency",
+                "role": "own",
+                "verbs": ["formatcurrency"],
+                "prepositions": ["from", "with"]
+            }
+        ]
+    }
+    """)!
+}
+
+@_cdecl("aro_plugin_execute")
+public func pluginExecute(
+    _ actionPtr: UnsafePointer<CChar>,
+    _ inputPtr: UnsafePointer<CChar>
+) -> UnsafeMutablePointer<CChar> {
+    let action = String(cString: actionPtr)
+    guard let args = parseJSON(String(cString: inputPtr)) else {
+        return strdup("{\"error\":\"Invalid JSON\"}")!
     }
 
-    switch method {
-    case "format":
-        guard let amount = args["amount"] as? Double else {
-            return setError(resultPtr, "Missing 'amount'")
+    // _with parameters (from the `with { }` clause)
+    let withParams = args["_with"] as? [String: Any] ?? [:]
+
+    switch action {
+    case "format-currency", "formatcurrency":
+        guard let amount = (args["data"] as? Double) ?? (args["amount"] as? Double) else {
+            return strdup("{\"error\":\"Missing 'amount'\"}")!
         }
 
-        let currencyCode = args["currency"] as? String ?? "USD"
-        let localeIdentifier = args["locale"] as? String ?? "en_US"
+        let currencyCode = withParams["currency"] as? String ?? args["currency"] as? String ?? "USD"
+        let localeIdentifier = withParams["locale"] as? String ?? args["locale"] as? String ?? "en_US"
 
         let formatter = NumberFormatter()
         formatter.numberStyle = .currency
@@ -399,34 +460,19 @@ public func currencyCall(
         formatter.locale = Locale(identifier: localeIdentifier)
 
         guard let formatted = formatter.string(from: NSNumber(value: amount)) else {
-            return setError(resultPtr, "Formatting failed")
+            return strdup("{\"error\":\"Formatting failed\"}")!
         }
 
-        return setResult(resultPtr, ["formatted": formatted, "amount": amount])
-
-    case "parse":
-        guard let text = args["text"] as? String else {
-            return setError(resultPtr, "Missing 'text'")
-        }
-
-        let localeIdentifier = args["locale"] as? String ?? "en_US"
-
-        let formatter = NumberFormatter()
-        formatter.numberStyle = .currency
-        formatter.locale = Locale(identifier: localeIdentifier)
-
-        guard let number = formatter.number(from: text) else {
-            return setError(resultPtr, "Could not parse '\(text)'")
-        }
-
-        return setResult(resultPtr, [
-            "amount": number.doubleValue,
-            "text": text
-        ])
+        return jsonResult(["formatted": formatted, "amount": amount])
 
     default:
-        return setError(resultPtr, "Unknown method: \(method)")
+        return strdup("{\"error\":\"Unknown action: \(action)\"}")!
     }
+}
+
+@_cdecl("aro_plugin_free")
+public func pluginFree(_ ptr: UnsafeMutablePointer<CChar>?) {
+    ptr.map { free($0) }
 }
 
 // Helper functions
@@ -438,20 +484,12 @@ private func parseJSON(_ json: String) -> [String: Any]? {
     return obj
 }
 
-private func setResult(_ ptr: UnsafeMutablePointer<UnsafeMutablePointer<CChar>?>,
-                       _ value: [String: Any]) -> Int32 {
+private func jsonResult(_ value: [String: Any]) -> UnsafeMutablePointer<CChar> {
     guard let data = try? JSONSerialization.data(withJSONObject: value),
           let json = String(data: data, encoding: .utf8) else {
-        return setError(ptr, "Serialization failed")
+        return strdup("{\"error\":\"Serialization failed\"}")!
     }
-    ptr.pointee = strdup(json)
-    return 0
-}
-
-private func setError(_ ptr: UnsafeMutablePointer<UnsafeMutablePointer<CChar>?>,
-                      _ msg: String) -> Int32 {
-    ptr.pointee = strdup("{\"error\":\"\(msg)\"}")
-    return 1
+    return strdup(json)!
 }
 ```
 
@@ -573,40 +611,40 @@ let package = Package(
 import Foundation
 import Crypto
 
-@_cdecl("crypto_call")
-public func cryptoCall(
-    _ methodPtr: UnsafePointer<CChar>,
-    _ argsPtr: UnsafePointer<CChar>,
-    _ resultPtr: UnsafeMutablePointer<UnsafeMutablePointer<CChar>?>
-) -> Int32 {
-    let method = String(cString: methodPtr)
-    let argsJSON = String(cString: argsPtr)
+@_cdecl("aro_plugin_execute")
+public func pluginExecute(
+    _ actionPtr: UnsafePointer<CChar>,
+    _ inputPtr: UnsafePointer<CChar>
+) -> UnsafeMutablePointer<CChar> {
+    let action = String(cString: actionPtr)
+    let inputJSON = String(cString: inputPtr)
 
-    guard let data = argsJSON.data(using: .utf8),
-          let args = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else {
-        return setError(resultPtr, "Invalid JSON")
+    guard let inputData = inputJSON.data(using: .utf8),
+          let args = try? JSONSerialization.jsonObject(with: inputData) as? [String: Any] else {
+        return strdup("{\"error\":\"Invalid JSON\"}")!
     }
 
-    switch method {
+    switch action {
     case "sha256":
         guard let input = args["data"] as? String else {
-            return setError(resultPtr, "Missing 'data'")
+            return strdup("{\"error\":\"Missing 'data'\"}")!
         }
 
-        let inputData = Data(input.utf8)
-        let hash = SHA256.hash(data: inputData)
+        let data = Data(input.utf8)
+        let hash = SHA256.hash(data: data)
         let hashString = hash.map { String(format: "%02x", $0) }.joined()
 
-        return setResult(resultPtr, [
+        return jsonResult([
             "hash": hashString,
             "algorithm": "SHA256",
             "input_length": input.count
         ])
 
     case "hmac":
-        guard let message = args["message"] as? String,
-              let key = args["key"] as? String else {
-            return setError(resultPtr, "Missing 'message' or 'key'")
+        guard let message = args["data"] as? String,
+              let key = (args["_with"] as? [String: Any])?["key"] as? String
+                        ?? args["key"] as? String else {
+            return strdup("{\"error\":\"Missing 'data' or 'key'\"}")!
         }
 
         let keyData = SymmetricKey(data: Data(key.utf8))
@@ -614,13 +652,13 @@ public func cryptoCall(
         let authCode = HMAC<SHA256>.authenticationCode(for: messageData, using: keyData)
         let hmacString = Data(authCode).map { String(format: "%02x", $0) }.joined()
 
-        return setResult(resultPtr, [
+        return jsonResult([
             "hmac": hmacString,
             "algorithm": "HMAC-SHA256"
         ])
 
     default:
-        return setError(resultPtr, "Unknown method: \(method)")
+        return strdup("{\"error\":\"Unknown action: \(action)\"}")!
     }
 }
 ```
@@ -632,31 +670,30 @@ Swift plugins can perform async operations, but the plugin interface is synchron
 ```swift
 import Foundation
 
-@_cdecl("network_call")
-public func networkCall(
-    _ methodPtr: UnsafePointer<CChar>,
-    _ argsPtr: UnsafePointer<CChar>,
-    _ resultPtr: UnsafeMutablePointer<UnsafeMutablePointer<CChar>?>
-) -> Int32 {
-    let method = String(cString: methodPtr)
-    let argsJSON = String(cString: argsPtr)
+@_cdecl("aro_plugin_execute")
+public func pluginExecute(
+    _ actionPtr: UnsafePointer<CChar>,
+    _ inputPtr: UnsafePointer<CChar>
+) -> UnsafeMutablePointer<CChar> {
+    let action = String(cString: actionPtr)
+    let inputJSON = String(cString: inputPtr)
 
-    guard let args = parseJSON(argsJSON) else {
-        return setError(resultPtr, "Invalid JSON")
+    guard let args = parseJSON(inputJSON) else {
+        return strdup("{\"error\":\"Invalid JSON\"}")!
     }
 
-    // Use a semaphore to wait for async completion
+    // Use a semaphore to bridge async completion into the synchronous C ABI
     let semaphore = DispatchSemaphore(value: 0)
     var asyncResult: [String: Any]?
     var asyncError: String?
 
     Task {
         do {
-            switch method {
+            switch action {
             case "fetch":
                 asyncResult = try await fetchURL(args)
             default:
-                asyncError = "Unknown method: \(method)"
+                asyncError = "Unknown action: \(action)"
             }
         } catch {
             asyncError = error.localizedDescription
@@ -667,18 +704,21 @@ public func networkCall(
     // Wait with timeout
     let timeout = DispatchTime.now() + .seconds(30)
     if semaphore.wait(timeout: timeout) == .timedOut {
-        return setError(resultPtr, "Request timed out")
+        return strdup("{\"error\":\"Request timed out\"}")!
     }
 
     if let error = asyncError {
-        return setError(resultPtr, error)
+        let msg = error.replacingOccurrences(of: "\"", with: "\\\"")
+        return strdup("{\"error\":\"\(msg)\"}")!
     }
 
-    if let result = asyncResult {
-        return setResult(resultPtr, result)
+    if let result = asyncResult,
+       let data = try? JSONSerialization.data(withJSONObject: result),
+       let json = String(data: data, encoding: .utf8) {
+        return strdup(json)!
     }
 
-    return setError(resultPtr, "No result")
+    return strdup("{\"error\":\"No result\"}")!
 }
 
 private func fetchURL(_ args: [String: Any]) async throws -> [String: Any] {
@@ -724,14 +764,14 @@ Swift's ARC handles most memory management automatically, but the C interface re
 When returning strings through the C interface, use `strdup`:
 
 ```swift
-// CORRECT: strdup creates a new allocation that ARO can free
-resultPtr.pointee = strdup(jsonString)
+// CORRECT: strdup creates a new allocation that ARO can free via aro_plugin_free
+return strdup(jsonString)!
 
 // WRONG: This pointer may be invalidated when the Swift string is deallocated
-resultPtr.pointee = jsonString.withCString { $0 }
+return jsonString.withCString { $0 }
 ```
 
-ARO calls `free()` on the returned pointer after reading it. Using `strdup` ensures the memory is allocated in a way that `free()` can safely deallocate.
+ARO calls `aro_plugin_free` (which calls `free()`) on the returned pointer after reading it. Using `strdup` ensures the memory is heap-allocated in a way that `free()` can safely deallocate.
 
 ### Rule: Don't Hold References Across Calls
 
@@ -741,17 +781,20 @@ Each plugin call should be stateless:
 // WRONG: Storing state between calls
 private var sessionData: [String: Any] = [:]
 
-@_cdecl("session_call")
-public func sessionCall(...) -> Int32 {
+@_cdecl("aro_plugin_execute")
+public func pluginExecute(_ actionPtr: UnsafePointer<CChar>,
+                          _ inputPtr: UnsafePointer<CChar>) -> UnsafeMutablePointer<CChar> {
     // This will cause thread safety issues
     sessionData["key"] = value
+    return strdup("{}")!
 }
 
 // CORRECT: Return all state in the response
-@_cdecl("session_call")
-public func sessionCall(...) -> Int32 {
+@_cdecl("aro_plugin_execute")
+public func pluginExecute(_ actionPtr: UnsafePointer<CChar>,
+                          _ inputPtr: UnsafePointer<CChar>) -> UnsafeMutablePointer<CChar> {
     // Include all necessary data in the result
-    return setResult(resultPtr, ["session_id": "...", "data": [...]])
+    return strdup("{\"session_id\": \"...\", \"data\": []}")!
 }
 ```
 
@@ -763,12 +806,14 @@ import Foundation
 private let stateLock = NSLock()
 private var globalState: [String: Any] = [:]
 
-@_cdecl("stateful_call")
-public func statefulCall(...) -> Int32 {
+@_cdecl("aro_plugin_execute")
+public func pluginExecute(_ actionPtr: UnsafePointer<CChar>,
+                          _ inputPtr: UnsafePointer<CChar>) -> UnsafeMutablePointer<CChar> {
     stateLock.lock()
     defer { stateLock.unlock() }
 
     // Safe to access globalState here
+    return strdup("{\"ok\":true}")!
 }
 ```
 
@@ -793,22 +838,26 @@ One plugin, one responsibility:
 Check all required parameters before processing:
 
 ```swift
-@_cdecl("service_call")
-public func serviceCall(...) -> Int32 {
-    guard let args = parseJSON(argsJSON) else {
-        return setError(resultPtr, "Invalid JSON arguments")
+@_cdecl("aro_plugin_execute")
+public func pluginExecute(
+    _ actionPtr: UnsafePointer<CChar>,
+    _ inputPtr: UnsafePointer<CChar>
+) -> UnsafeMutablePointer<CChar> {
+    guard let args = parseJSON(String(cString: inputPtr)) else {
+        return strdup("{\"error\":\"Invalid JSON arguments\"}")!
     }
 
     // Validate required fields
     guard let requiredField = args["field"] as? String else {
-        return setError(resultPtr, "Missing required field: 'field'")
+        return strdup("{\"error\":\"Missing required field: 'field'\"}")!
     }
 
     guard !requiredField.isEmpty else {
-        return setError(resultPtr, "Field 'field' cannot be empty")
+        return strdup("{\"error\":\"Field 'field' cannot be empty\"}")!
     }
 
     // Now proceed with processing...
+    return strdup("{\"ok\":true}")!
 }
 ```
 
@@ -817,9 +866,7 @@ public func serviceCall(...) -> Int32 {
 Include enough context for debugging:
 
 ```swift
-private func setError(_ ptr: UnsafeMutablePointer<UnsafeMutablePointer<CChar>?>,
-                      _ message: String,
-                      code: String? = nil) -> Int32 {
+private func pluginError(_ message: String, code: String? = nil) -> UnsafeMutablePointer<CChar> {
     var error: [String: Any] = ["error": message]
     if let code = code {
         error["code"] = code
@@ -827,31 +874,39 @@ private func setError(_ ptr: UnsafeMutablePointer<UnsafeMutablePointer<CChar>?>,
 
     guard let data = try? JSONSerialization.data(withJSONObject: error),
           let json = String(data: data, encoding: .utf8) else {
-        ptr.pointee = strdup("{\"error\":\"Unknown error\"}")
-        return 1
+        return strdup("{\"error\":\"Unknown error\"}")!
     }
 
-    ptr.pointee = strdup(json)
-    return 1
+    return strdup(json)!
 }
 
-// Usage
-return setError(resultPtr, "User not found", code: "USER_NOT_FOUND")
+// Usage in aro_plugin_execute:
+return pluginError("User not found", code: "USER_NOT_FOUND")
 ```
 
-### Document Your Methods
+### Document Your Actions in aro_plugin_info
 
-The `methods` array in your init metadata helps users discover available operations:
+The `actions` and `services` arrays in `aro_plugin_info` help ARO discover what the plugin provides. Services are now declared here too—the old `aro_plugin_init` returning service metadata is removed:
 
 ```swift
-@_cdecl("aro_plugin_init")
-public func pluginInit() -> UnsafePointer<CChar> {
+@_cdecl("aro_plugin_info")
+public func pluginInfo() -> UnsafePointer<CChar> {
     let metadata = """
     {
+        "name": "plugin-swift-datetime",
+        "version": "1.0.0",
+        "actions": [
+            {
+                "name": "FormatDate",
+                "role": "own",
+                "verbs": ["formatdate", "format"],
+                "prepositions": ["from", "with"],
+                "description": "Format a date with locale support"
+            }
+        ],
         "services": [
             {
                 "name": "datetime",
-                "symbol": "datetime_call",
                 "methods": ["format", "parse", "relative", "now", "add", "diff"],
                 "description": "Date and time manipulation"
             }
@@ -862,15 +917,22 @@ public func pluginInit() -> UnsafePointer<CChar> {
 }
 ```
 
+Services route through `aro_plugin_execute` using the action name `"service:<method>"`. No separate `_call` symbol is needed.
+
 ## 6.10 Summary
 
 Swift plugins combine the power of Apple's ecosystem with ARO's extensibility:
 
 - **`@_cdecl`** exports functions with C calling conventions
+- **`aro_plugin_info`** is **required**—declares all actions, services, and qualifiers
+- **`aro_plugin_execute`** is **optional**—only needed for actions and services
+- **`aro_plugin_init` / `aro_plugin_shutdown`** are optional `void` lifecycle hooks (the old init returning service metadata is removed)
+- **`aro_plugin_execute`** uses a 2-parameter signature `(action, input) -> result`—no out-pointer or integer return code
+- **Input JSON** nests `with { }` parameters under `"_with"`, and provides `result`, `source`, and `_context` descriptors
 - **Single-file plugins** for simple cases, **package plugins** for dependencies
 - **Foundation types** (DateFormatter, NumberFormatter, etc.) handle common formatting
 - **SPM integration** enables using any Swift package
-- **Memory**: Use `strdup` for return values, keep calls stateless
+- **Memory**: Use `strdup` for return values, implement `aro_plugin_free`
 
 The C ABI bridge adds a thin layer of complexity, but the payoff is access to Swift's entire ecosystem from your ARO applications.
 
