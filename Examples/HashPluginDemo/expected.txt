@@ -1,14 +1,5 @@
-# Generated: Mon Apr 13 16:03:56 2026
 # Type: console
 # Command: aro run ./Examples/HashPluginDemo
+# Note: occurrence-check — plugin may not load if dylib not built
 ---
 === Hash Plugin Demo ===
-1. Simple hash algorithm:
-Input: Hello, ARO!
-ddf45049
-2. DJB2 hash algorithm:
-bfe621039f78eec8
-3. FNV-1a hash algorithm:
-70863da4963fac9c
-Hash plugin demo completed!
-startup

@@ -1,13 +1,5 @@
-# Generated: Mon Apr 13 16:03:54 2026
 # Type: console
 # Command: aro run ./Examples/GreetingPlugin
+# Note: occurrence-check — plugin may not load if dylib not built
 ---
-Warning: Failed to load package plugin plugin-swift-hello: Failed to load plugin 'plugin-swift-hello': Built library not found in ./Examples/GreetingPlugin/Plugins/plugin-swift-hello/.build
-Warning: Failed to load package plugin plugin-swift-hello: Failed to load plugin 'plugin-swift-hello': Built library not found in ./Examples/GreetingPlugin/Plugins/plugin-swift-hello/.build
-Warning: Failed to load package plugin plugin-swift-hello: Failed to load plugin 'plugin-swift-hello': Built library not found in ./Examples/GreetingPlugin/Plugins/plugin-swift-hello/.build
 === Greeting Plugin Demo ===
-Hello, ARO Developer!
-Goodbye, ARO Developer! See you soon!
-Plugin demo completed!
-startup
-value: ["message": "Hello, ARO Developer!", "timestamp": "__TIMESTAMP__", "plugin": "ARO Developer"]

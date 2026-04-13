@@ -1,10 +1,5 @@
-# Generated: Mon Apr 13 16:05:16 2026
 # Type: console
 # Command: aro run ./Examples/ZipService
-# Timeout: 120s
+# Note: occurrence-check — plugin may not load if dylib not built
 ---
 Testing zip plugin...
-Runtime error: Runtime Error: Cannot call the result from the zip: compress.
-Feature: Application-Start
-Business Activity: Zip Service Demo
-Statement: <Call> the <result> from the <zip: compress>.

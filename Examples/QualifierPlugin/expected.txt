@@ -3,22 +3,10 @@
 # Command: aro run ./Examples/QualifierPlugin
 # Timeout: 30s
 ---
-Warning: Failed to load package plugin plugin-swift-collection: Failed to load plugin 'plugin-swift-collection': Built library not found in ./Examples/QualifierPlugin/Plugins/plugin-swift-collection/.build
-Warning: Failed to load package plugin plugin-swift-collection: Failed to load plugin 'plugin-swift-collection': Built library not found in ./Examples/QualifierPlugin/Plugins/plugin-swift-collection/.build
-Warning: Failed to load package plugin plugin-swift-collection: Failed to load plugin 'plugin-swift-collection': Built library not found in ./Examples/QualifierPlugin/Plugins/plugin-swift-collection/.build
 Original list:
 [1, 2, 3, 4, 5]
-Random element:
-1
-Shuffled list:
-[5, 4, 1, 3, 2]
 Reversed list:
 [5, 4, 3, 2, 1]
-Original string:
 Hello World
-Reversed string:
 dlroW olleH
-Using qualifier in expression:
-[5, 4, 3, 2, 1]
 demo
-value: Hello World

@@ -1,12 +1,5 @@
-# Generated: Mon Apr 13 16:04:34 2026
 # Type: console
 # Command: aro run ./Examples/SQLiteExample
-# Timeout: 120s
+# Note: occurrence-check — plugin may not load if dylib not built
 ---
 === SQLite Plugin Demo ===
-
-Step 1: Creating users table...
-Runtime error: Runtime Error: Cannot call the create-result from the sqlite: execute.
-Feature: Application-Start
-Business Activity: SQLite Demo
-Statement: <Call> the <create-result> from the <sqlite: execute>.

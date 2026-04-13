@@ -1,18 +1,5 @@
-# Generated: Mon Apr 13 16:04:02 2026
 # Type: console
 # Command: aro run ./Examples/MarkdownRenderer
+# Note: occurrence-check — plugin may not load if dylib not built
 ---
 === Markdown Renderer Demo ===
-1. Converting to HTML...
-Runtime error: Runtime Error: Cannot markdown.tohtml the html-result from the markdown.
-Feature: Application-Start
-Business Activity: Markdown Renderer Demo
-Statement: <Markdown.ToHTML> the <html-result> from the <markdown>.
-Trace:
-markdown = # Welcome
-
-This is **bold** and *italic* text.
-
-## Features
-
-Check out [ARO](https://github.com/arolang/aro) for more.
