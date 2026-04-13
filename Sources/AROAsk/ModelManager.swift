@@ -273,7 +273,7 @@ public actor ModelManager {
                 fileIndex: index,
                 fileCount: files.count,
                 fileBytes: fileReceived,
-                fileTotalBytes: expectedLength,
+                fileTotalBytes: fileReceived,
                 overallBytes: downloadedBytes,
                 overallTotalBytes: totalBytes
             ))

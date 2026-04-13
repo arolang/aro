@@ -279,7 +279,7 @@ public struct AskCommand: AsyncParsableCommand {
         try await session.prepare(modelManager: manager)
         defer { Task { await session.shutdown() } }
 
-        let isTTY = isatty(fileno(stdin)) != 0
+        let isTTY = isatty(STDIN_FILENO) != 0
         let ln: LineNoise? = isTTY ? LineNoise() : nil
 
         TerminalUI.printBanner()
