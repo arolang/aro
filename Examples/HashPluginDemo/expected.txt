@@ -1,3 +1,7 @@
+# Generated: Mon Apr 13 12:06:35 2026
+# Type: console
+# Command: aro run ./Examples/HashPluginDemo
+---
 === Hash Plugin Demo ===
 1. Simple hash algorithm:
 Input: Hello, ARO!

@@ -1,17 +1,18 @@
+# Generated: Mon Apr 13 12:06:40 2026
+# Type: console
+# Command: aro run ./Examples/MarkdownRenderer
+---
 === Markdown Renderer Demo ===
 1. Converting to HTML...
-<h1>Welcome</h1>
+Runtime error: Runtime Error: Cannot markdown.tohtml the html-result from the markdown.
+Feature: Application-Start
+Business Activity: Markdown Renderer Demo
+Statement: <Markdown.ToHTML> the <html-result> from the <markdown>.
+Trace:
+markdown = # Welcome
 
-<p>This is <strong>bold</strong> and <em>italic</em> text.</p>
+This is **bold** and *italic* text.
 
-<h2>Features</h2>
+## Features
 
-<p>Check out <a href="https://github.com/arolang/aro">ARO</a> for more.</p>
-2. Extracting headings...
-Headings found:
-2
-3. Word count...
-Words:
-13
-Markdown processing completed!
-startup
+Check out [ARO](https://github.com/arolang/aro) for more.

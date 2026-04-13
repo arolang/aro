@@ -1,3 +1,7 @@
+# Generated: Mon Apr 13 12:06:02 2026
+# Type: console
+# Command: aro run ./Examples/CSVProcessor
+---
 === CSV Processor Demo ===
 1. Parsing CSV data...
 Parsed rows:

@@ -1,6 +1,15 @@
 {
   "pins" : [
     {
+      "identity" : "aro-plugin-sdk-swift",
+      "kind" : "remoteSourceControl",
+      "location" : "https://github.com/arolang/aro-plugin-sdk-swift.git",
+      "state" : {
+        "branch" : "main",
+        "revision" : "f376d7a45f8e5acdf5158edc941ebc9040a493e4"
+      }
+    },
+    {
       "identity" : "sqlite.swift",
       "kind" : "remoteSourceControl",
       "location" : "https://github.com/stephencelis/SQLite.swift.git",

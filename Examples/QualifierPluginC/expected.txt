@@ -1,3 +1,8 @@
+# Generated: Mon Apr 13 12:07:03 2026
+# Type: console
+# Command: aro run ./Examples/QualifierPluginC
+# Timeout: 30s
+---
 List:
 [10, 20, 30, 40, 50]
 First element:

@@ -12,7 +12,7 @@
 
 import Foundation
 import SQLite
-import AROPluginSDKExport
+import AROPluginSDK
 
 // MARK: - State Management
 

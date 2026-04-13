@@ -1,13 +1,11 @@
-# Generated: Sat Jan 31 17:49:20 2026
+# Generated: Mon Apr 13 12:07:55 2026
 # Type: console
 # Command: aro run ./Examples/ZipService
 # Timeout: 120s
-# Note: Dictionary ordering in value line is non-deterministic, so we use occurrence-check
 ---
+Warning: Failed to load libZipPlugin.dylib: Plugin 'ZipPlugin' missing required aro_plugin_info / aro_plugin_execute exports
 Testing zip plugin...
-Zip result:
-filesCompressed: 2
-output: Examples/ZipService/content/archive.zip
-success: true
-Zip service demo completed.
-startup
+Runtime error: Runtime Error: Cannot call the result from the zip: compress.
+Feature: Application-Start
+Business Activity: Zip Service Demo
+Statement: <Call> the <result> from the <zip: compress>.

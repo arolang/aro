@@ -8,7 +8,7 @@
 // The SDK auto-generates all C ABI exports.
 
 import Foundation
-import AROPluginSDKExport
+import AROPluginKit
 
 /// Plugin registration — this is the ONLY setup needed.
 private let plugin = AROPlugin(name: "plugin-swift-hello", version: "1.0.0", handle: "Greeting")

@@ -8,7 +8,7 @@
 // The SDK auto-generates all C ABI exports.
 
 import Foundation
-import AROPluginSDKExport
+import AROPluginKit
 
 /// Plugin registration — this is the ONLY setup needed.
 /// The SDK generates aro_plugin_info, aro_plugin_qualifier,

@@ -14,7 +14,7 @@
 
 import Foundation
 import Zip
-import AROPluginSDKExport
+import AROPluginSDK
 
 // MARK: - Plugin Registration
 

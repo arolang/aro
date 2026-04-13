@@ -1,0 +1,14 @@
+--- /var/folders/6_/5361qdnn507_dc0m58yxxwhh0000gn/T/fWvlrsir21.expected.txt	2026-04-13 12:14:35
++++ /var/folders/6_/5361qdnn507_dc0m58yxxwhh0000gn/T/oNO7RSd9vn.actual.txt	2026-04-13 12:14:35
+@@ -4,9 +4,9 @@
+ Original list:
+ [1, 2, 3, 4, 5]
+ Random element:
+-5
++1
+ Shuffled list:
+-[1, 4, 2, 3, 5]
++[5, 1, 2, 3, 4]
+ Reversed list:
+ [5, 4, 3, 2, 1]
+ Original string:

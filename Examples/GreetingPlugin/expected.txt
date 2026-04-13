@@ -1,6 +1,13 @@
+# Generated: Mon Apr 13 12:06:33 2026
+# Type: console
+# Command: aro run ./Examples/GreetingPlugin
+---
+Warning: Failed to load package plugin plugin-swift-hello: Failed to load plugin 'plugin-swift-hello': Built library not found in ./Examples/GreetingPlugin/Plugins/plugin-swift-hello/.build
+Warning: Failed to load package plugin plugin-swift-hello: Failed to load plugin 'plugin-swift-hello': Built library not found in ./Examples/GreetingPlugin/Plugins/plugin-swift-hello/.build
+Warning: Failed to load package plugin plugin-swift-hello: Failed to load plugin 'plugin-swift-hello': Built library not found in ./Examples/GreetingPlugin/Plugins/plugin-swift-hello/.build
 === Greeting Plugin Demo ===
 Hello, ARO Developer!
 Goodbye, ARO Developer! See you soon!
 Plugin demo completed!
 startup
-value: ["message": "Hello, ARO Developer!", "plugin": "ARO Developer", "timestamp": "__TIMESTAMP__"]
+value: ["plugin": "ARO Developer", "timestamp": "__TIMESTAMP__", "message": "Hello, ARO Developer!"]
