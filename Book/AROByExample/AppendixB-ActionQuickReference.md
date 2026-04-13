@@ -86,6 +86,22 @@ The response object contains `body` (parsed content), `status` (HTTP status code
 
 ---
 
+### Data Grouping
+
+| Action | Syntax | Description |
+|--------|--------|-------------|
+| Group | `Group the <result> from the <collection> by "field".` | Partition a collection by field value |
+
+**Examples:**
+```aro
+Group the <by-status> from the <orders> by "status".
+(* Result: { "active": [...], "pending": [...] } *)
+
+Extract the <active-orders> from the <by-status: active>.
+```
+
+---
+
 ### String Splitting
 
 | Action | Syntax | Description |
@@ -304,6 +320,9 @@ Escape sequences:
 
     (* HTML parsing *)
     ParseHtml the <result: specifier> from the <html>.
+
+    (* Data grouping *)
+    Group the <result> from the <collection> by "field".
 
     (* String splitting *)
     Split the <parts> from the <string> by /regex/.

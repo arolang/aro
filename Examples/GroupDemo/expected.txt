@@ -1,0 +1,13 @@
+=== Group Action Demo ===
+--- Group by status ---
+active:
+pending:
+cancelled:
+--- Group by country ---
+DE:
+US:
+FR:
+--- Group by role ---
+admin:
+user:
+=== Demo Complete ===

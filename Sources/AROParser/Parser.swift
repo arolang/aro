@@ -458,15 +458,18 @@ public final class Parser {
             whereClause = try parseWhereClause()
         }
 
-        // Parse optional by clause (ARO-0037): `by /pattern/flags`
+        // Parse optional by clause: `by /pattern/flags` (ARO-0037) or `by "field"` (Group)
         var byClause: ByClause?
         if case .preposition(.by) = peek().kind {
             let byToken = advance() // consume 'by'
             if case .regexLiteral(let pattern, let flags) = peek().kind {
                 advance() // consume regex literal
                 byClause = ByClause(pattern: pattern, flags: flags, span: byToken.span.merged(with: previous().span))
+            } else if case .stringLiteral(let fieldName) = peek().kind {
+                advance() // consume string literal
+                byClause = ByClause(pattern: fieldName, flags: "", span: byToken.span.merged(with: previous().span), isFieldName: true)
             } else {
-                throw ParserError.unexpectedToken(expected: "regex literal after 'by'", got: peek())
+                throw ParserError.unexpectedToken(expected: "regex literal or string literal after 'by'", got: peek())
             }
         }
 

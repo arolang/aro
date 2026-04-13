@@ -394,7 +394,7 @@ sub build_example {
     my $build_duration = time - $start_time;
 
     if ($? != 0) {
-        my $combined_err = $err || $out;
+        my $combined_err = ($err && $out) ? "$err\n$out" : ($err || $out);
         my $exit_code = $? >> 8;
         my $error_msg = "Build failed: $combined_err";
         write_testrun_log($example_name, 'compiled', 'BUILD_FAILURE', $error_msg, "$aro_bin build $dir", $exit_code);

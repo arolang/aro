@@ -509,6 +509,73 @@ public struct FilterAction: ActionImplementation {
     }
 }
 
+// MARK: - Group Action
+
+/// Groups a collection by a field, returning a dictionary of key → array of items
+///
+/// The Group action partitions a collection into sub-collections based on the
+/// value of a specified field. Each unique field value becomes a key in the
+/// resulting dictionary.
+///
+/// ## Example
+/// ```aro
+/// Group the <by-status> from the <orders> by "status".
+/// Group the <by-country> from the <users> by "country".
+/// ```
+public struct GroupAction: ActionImplementation {
+    public static let role: ActionRole = .own
+    public static let verbs: Set<String> = ["group"]
+    public static let validPrepositions: Set<Preposition> = [.from]
+
+    public init() {}
+
+    public func execute(
+        result: ResultDescriptor,
+        object: ObjectDescriptor,
+        context: ExecutionContext
+    ) async throws -> any Sendable {
+        try validatePreposition(object.preposition)
+
+        // Get source collection
+        guard let source = context.resolveAny(object.base) else {
+            throw ActionError.undefinedVariable(object.base)
+        }
+
+        // Get grouping field from by clause or result specifier
+        let groupField: String
+        if let byField = context.resolveAny("_by_field_") as? String {
+            groupField = byField
+        } else if let specifier = result.specifiers.first {
+            groupField = specifier
+        } else {
+            throw ActionError.missingRequiredField(field: "a 'by' clause with field name", action: "Group")
+        }
+
+        // ARO-0051: Streaming support — materialise lazy sources before grouping
+        let arraySource: [any Sendable]
+        if let runtimeContext = context as? RuntimeContext,
+           runtimeContext.isLazy(object.base),
+           let stream = runtimeContext.resolveAsRowStream(object.base) {
+            arraySource = try await stream.collect()
+        } else if let array = source as? [any Sendable] {
+            arraySource = array
+        } else {
+            // Single item — wrap in array
+            arraySource = [source]
+        }
+
+        // Group items by field value
+        var groups: [String: [any Sendable]] = [:]
+        for item in arraySource {
+            guard let dict = item as? [String: any Sendable] else { continue }
+            let key = dict[groupField].map { String(describing: $0) } ?? "(nil)"
+            groups[key, default: []].append(item)
+        }
+
+        return groups as [String: any Sendable]
+    }
+}
+
 // MARK: - Aggregation Helpers
 
 /// Helper functions for collection aggregations

@@ -80,7 +80,22 @@ Map the <summaries: List<UserSummary>> from the <users>.
 map_statement = "<Map>" , "the" , typed_result , "from" , "the" , source , "." ;
 ```
 
-### 1.4 Reduce
+### 1.4 Group
+
+Partitions a collection into a dictionary mapping each unique field value to an array of items with that value.
+
+```aro
+Group the <status-groups> from the <orders> by "status".
+(* Result: { "active": [...], "pending": [...], "cancelled": [...] } *)
+```
+
+**Syntax:**
+```ebnf
+group_statement = "<Group>" , "the" , result , "from" , "the" , source ,
+                  "by" , string_literal , "." ;
+```
+
+### 1.5 Reduce
 
 Aggregates a collection to a single value.
 
@@ -218,6 +233,10 @@ filter_statement = "<Filter>" , "the" , typed_result , "from" , "the" , source ,
 (* Map *)
 map_statement = "<Map>" , "the" , typed_result , "from" , "the" , source , "." ;
 
+(* Group *)
+group_statement = "<Group>" , "the" , result , "from" , "the" , source ,
+                  "by" , string_literal , "." ;
+
 (* Reduce *)
 reduce_statement = "<Reduce>" , "the" , typed_result , "from" , "the" , source ,
                    [ where_clause ] , "with" , aggregate_function , "." ;
@@ -333,11 +352,15 @@ components:
     Filter the <high-value: List<Order>> from the <recent-orders>
         where <amount> > 1000.
 
+    (* Group orders by status *)
+    Group the <by-status> from the <recent-orders> by "status".
+
     Return an <OK: status> with {
         orders: <summaries>,
         total: <total-revenue>,
         pending: <pending-count>,
-        high-value-count: <high-value>.count()
+        high-value-count: <high-value>.count(),
+        by-status: <by-status>
     }.
 }
 ```
@@ -350,3 +373,4 @@ components:
 |---------|------|---------|
 | 1.0 | 2024-01 | Initial specification (SQL-like) |
 | 2.0 | 2025-12 | Simplified to map/reduce style. Removed JOINs, subqueries, CTEs, set operations. Results typed via OpenAPI. |
+| 2.1 | 2026-04-02 | Added Group action for partitioning collections by field value. |

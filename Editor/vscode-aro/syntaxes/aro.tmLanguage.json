@@ -83,7 +83,7 @@
         },
         {
           "name": "keyword.action.own.aro",
-          "match": "\\b(Compute|Validate|Compare|Create|Transform|Update|Sort|Filter|Match|Split|Map|Reduce|Set|Merge|Delete|Copy|Move|Append|Execute|Call|ParseHtml|Accept|Clear|Render|Schedule|Sleep|Repaint|Show)\\b",
+          "match": "\\b(Compute|Validate|Compare|Create|Transform|Update|Sort|Filter|Match|Split|Map|Reduce|Group|Set|Merge|Delete|Copy|Move|Append|Execute|Call|ParseHtml|Accept|Clear|Render|Schedule|Sleep|Repaint|Show)\\b",
           "comment": "OWN actions - internal processing"
         },
         {

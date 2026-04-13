@@ -27,7 +27,7 @@ public enum VerbSets {
     public static let extractVerbs: Set<String> = ["extract", "parse", "get"]
 
     /// Query/collection verbs — always execute for where-clause and regex processing
-    public static let queryVerbs: Set<String> = ["filter", "map", "reduce", "aggregate", "split"]
+    public static let queryVerbs: Set<String> = ["filter", "map", "reduce", "aggregate", "split", "group"]
 
     /// Response/export verbs — result must not be rebound to the expression value
     public static let responseVerbs: Set<String> = [

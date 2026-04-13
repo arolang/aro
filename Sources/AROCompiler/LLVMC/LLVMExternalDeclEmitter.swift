@@ -487,7 +487,7 @@ public final class LLVMExternalDeclEmitter {
         // External call
         "call",
         // Data pipeline (ARO-0018)
-        "filter", "reduce", "map",
+        "filter", "reduce", "map", "group",
         // Sort
         "sort", "order", "arrange",
         // System exec (ARO-0033)

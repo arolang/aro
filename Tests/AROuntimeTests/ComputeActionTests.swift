@@ -1167,3 +1167,136 @@ struct FilterActionTests {
         #expect(values?.contains(7) == true)
     }
 }
+
+// MARK: - Group Action Tests
+
+@Suite("Group Action Tests")
+struct GroupActionTests {
+
+    func createDescriptors(
+        resultBase: String = "grouped",
+        resultSpecifiers: [String] = [],
+        objectBase: String = "items",
+        objectSpecifiers: [String] = [],
+        preposition: Preposition = .from
+    ) -> (ResultDescriptor, ObjectDescriptor) {
+        let span = SourceSpan(at: SourceLocation())
+        let result = ResultDescriptor(base: resultBase, specifiers: resultSpecifiers, span: span)
+        let object = ObjectDescriptor(preposition: preposition, base: objectBase, specifiers: objectSpecifiers, span: span)
+        return (result, object)
+    }
+
+    @Test("Group action role is own")
+    func testGroupActionRole() {
+        #expect(GroupAction.role == .own)
+    }
+
+    @Test("Group action verbs")
+    func testGroupActionVerbs() {
+        #expect(GroupAction.verbs.contains("group"))
+    }
+
+    @Test("Group by field using by clause")
+    func testGroupByField() async throws {
+        let action = GroupAction()
+        let context = RuntimeContext(featureSetName: "Test")
+        let items: [any Sendable] = [
+            ["id": 1, "status": "active"] as [String: any Sendable],
+            ["id": 2, "status": "pending"] as [String: any Sendable],
+            ["id": 3, "status": "active"] as [String: any Sendable],
+            ["id": 4, "status": "cancelled"] as [String: any Sendable],
+            ["id": 5, "status": "active"] as [String: any Sendable]
+        ]
+        context.bind("items", value: items)
+        context.bind("_by_field_", value: "status")
+
+        let (result, object) = createDescriptors()
+        let value = try await action.execute(result: result, object: object, context: context)
+
+        let groups = value as? [String: any Sendable]
+        #expect(groups != nil)
+        #expect(groups?.count == 3)
+
+        let activeGroup = groups?["active"] as? [any Sendable]
+        #expect(activeGroup?.count == 3)
+
+        let pendingGroup = groups?["pending"] as? [any Sendable]
+        #expect(pendingGroup?.count == 1)
+
+        let cancelledGroup = groups?["cancelled"] as? [any Sendable]
+        #expect(cancelledGroup?.count == 1)
+    }
+
+    @Test("Group by field using result specifier")
+    func testGroupBySpecifier() async throws {
+        let action = GroupAction()
+        let context = RuntimeContext(featureSetName: "Test")
+        let items: [any Sendable] = [
+            ["name": "Alice", "role": "admin"] as [String: any Sendable],
+            ["name": "Bob", "role": "user"] as [String: any Sendable],
+            ["name": "Charlie", "role": "user"] as [String: any Sendable]
+        ]
+        context.bind("items", value: items)
+
+        let (result, object) = createDescriptors(resultSpecifiers: ["role"])
+        let value = try await action.execute(result: result, object: object, context: context)
+
+        let groups = value as? [String: any Sendable]
+        #expect(groups?.count == 2)
+
+        let adminGroup = groups?["admin"] as? [any Sendable]
+        #expect(adminGroup?.count == 1)
+
+        let userGroup = groups?["user"] as? [any Sendable]
+        #expect(userGroup?.count == 2)
+    }
+
+    @Test("Group with missing field returns nil key")
+    func testGroupMissingField() async throws {
+        let action = GroupAction()
+        let context = RuntimeContext(featureSetName: "Test")
+        let items: [any Sendable] = [
+            ["id": 1, "status": "active"] as [String: any Sendable],
+            ["id": 2] as [String: any Sendable]
+        ]
+        context.bind("items", value: items)
+        context.bind("_by_field_", value: "status")
+
+        let (result, object) = createDescriptors()
+        let value = try await action.execute(result: result, object: object, context: context)
+
+        let groups = value as? [String: any Sendable]
+        #expect(groups?.count == 2)
+        let activeGroup = groups?["active"] as? [any Sendable]
+        #expect(activeGroup?.count == 1)
+        let nilGroup = groups?["(nil)"] as? [any Sendable]
+        #expect(nilGroup?.count == 1)
+    }
+
+    @Test("Group with no by clause throws error")
+    func testGroupNoByclause() async throws {
+        let action = GroupAction()
+        let context = RuntimeContext(featureSetName: "Test")
+        context.bind("items", value: [["id": 1] as [String: any Sendable]] as [any Sendable])
+
+        let (result, object) = createDescriptors()
+        await #expect(throws: ActionError.self) {
+            _ = try await action.execute(result: result, object: object, context: context)
+        }
+    }
+
+    @Test("Group empty collection")
+    func testGroupEmpty() async throws {
+        let action = GroupAction()
+        let context = RuntimeContext(featureSetName: "Test")
+        let items: [any Sendable] = []
+        context.bind("items", value: items)
+        context.bind("_by_field_", value: "status")
+
+        let (result, object) = createDescriptors()
+        let value = try await action.execute(result: result, object: object, context: context)
+
+        let groups = value as? [String: any Sendable]
+        #expect(groups?.count == 0)
+    }
+}
