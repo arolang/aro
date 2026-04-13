@@ -107,15 +107,15 @@ struct BuildCommand: AsyncParsableCommand {
             print()
         }
 
-        // Reject writable .store files in compiled binaries
+        // Warn about writable .store files — compiled binaries always load them
+        // as read-only, so the o+w bit is harmless (but may surprise the user).
         let writableStores = appConfig.storeFiles.filter { $0.isWritable }
         if !writableStores.isEmpty {
-            print("Error: Writable store files cannot be used in compiled binaries.")
+            print("Warning: Store files with world-write permission will be treated as read-only in compiled binaries.")
             for store in writableStores {
                 print("  - \(store.filePath.lastPathComponent) has o+w permission set")
             }
-            print("Hint: Remove world-write permission (chmod o-w <file>.store) to embed as read-only data.")
-            throw ExitCode.failure
+            print("Hint: chmod o-w <file>.store to silence this warning.")
         }
 
         // Compile all source files to AST
