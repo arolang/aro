@@ -42,39 +42,76 @@ private struct TokenizerBridge: MLXLMCommon.Tokenizer, @unchecked Sendable {
     var eosToken: String? { upstream.eosToken }
     var unknownToken: String? { upstream.unknownToken }
 
+    /// The chat template string, loaded from the model's .jinja file or
+    /// falling back to the standard Qwen/ChatML format.
+    var chatTemplateOverride: String?
+
     func applyChatTemplate(
         messages: [[String: any Sendable]],
         tools: [[String: any Sendable]]?,
         additionalContext: [String: any Sendable]?
     ) throws -> [Int] {
-        // Convert [[String: any Sendable]] → [[String: String]] for swift-transformers
         let stringMessages: [[String: String]] = messages.map { msg in
             var result: [String: String] = [:]
             for (k, v) in msg { result[k] = "\(v)" }
             return result
         }
-        // Convert tools to [[String: Any]]
         let anyTools: [[String: Any]]? = tools?.map { tool in
             var result: [String: Any] = [:]
             for (k, v) in tool { result[k] = v }
             return result
         }
-        return try upstream.applyChatTemplate(
-            messages: stringMessages,
-            chatTemplate: nil,
-            addGenerationPrompt: true,
-            truncation: false,
-            maxLength: nil,
-            tools: anyTools
-        )
+
+        // Try with the model's built-in template first
+        do {
+            return try upstream.applyChatTemplate(
+                messages: stringMessages,
+                chatTemplate: chatTemplateOverride.map { .literal($0) },
+                addGenerationPrompt: true,
+                truncation: false,
+                maxLength: nil,
+                tools: anyTools
+            )
+        } catch {
+            // If no chat template, fall back to ChatML format and encode manually
+            var prompt = ""
+            for msg in stringMessages {
+                let role = msg["role"] ?? "user"
+                let content = msg["content"] ?? ""
+                prompt += "<|im_start|>\(role)\n\(content)<|im_end|>\n"
+            }
+            prompt += "<|im_start|>assistant\n"
+            return upstream.encode(text: prompt)
+        }
     }
 }
 
 /// A tokenizer loader that uses swift-transformers `AutoTokenizer`.
+/// Also reads `chat_template.jinja` if present (Qwen3 models store the
+/// template in a separate file rather than inline in tokenizer_config.json).
 private struct HFTokenizerLoader: TokenizerLoader, Sendable {
     func load(from directory: URL) async throws -> any MLXLMCommon.Tokenizer {
         let hfTokenizer = try await AutoTokenizer.from(modelFolder: directory)
-        return TokenizerBridge(hfTokenizer)
+
+        // Try to load chat template from .jinja file (Qwen3 convention)
+        var chatTemplate: String? = nil
+        let jinjaFile = directory.appendingPathComponent("chat_template.jinja")
+        if FileManager.default.fileExists(atPath: jinjaFile.path) {
+            chatTemplate = try? String(contentsOf: jinjaFile, encoding: .utf8)
+        }
+        // Also check tokenizer_config.json for inline template
+        if chatTemplate == nil {
+            let configFile = directory.appendingPathComponent("tokenizer_config.json")
+            if let data = try? Data(contentsOf: configFile),
+               let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+               let tmpl = json["chat_template"] as? String {
+                chatTemplate = tmpl
+            }
+        }
+
+        var bridge = TokenizerBridge(hfTokenizer)
+        bridge.chatTemplateOverride = chatTemplate
+        return bridge
     }
 }
 
