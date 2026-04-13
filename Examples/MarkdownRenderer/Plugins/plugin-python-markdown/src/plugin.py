@@ -8,7 +8,7 @@ Uses the ARO Plugin SDK decorator API.
 import re
 from typing import Any, Dict, List
 
-from aro_plugin_sdk import AROInput, action, plugin, run
+from aro_plugin_sdk import AROInput, action, export_abi, plugin, run
 
 
 @plugin(name="plugin-python-markdown", version="1.0.0", handle="Markdown")
@@ -195,6 +195,9 @@ def strip_markdown(markdown: str) -> str:
 
     return text.strip()
 
+
+# Generate backward-compatible module-level functions for the ARO runtime
+export_abi(globals())
 
 if __name__ == "__main__":
     run()

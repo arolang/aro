@@ -1,9 +1,8 @@
-# Generated: Mon Apr 13 12:07:14 2026
+# Generated: Mon Apr 13 16:04:34 2026
 # Type: console
 # Command: aro run ./Examples/SQLiteExample
 # Timeout: 120s
 ---
-Warning: Failed to load libSQLitePlugin.dylib: Plugin 'SQLitePlugin' missing required aro_plugin_info / aro_plugin_execute exports
 === SQLite Plugin Demo ===
 
 Step 1: Creating users table...

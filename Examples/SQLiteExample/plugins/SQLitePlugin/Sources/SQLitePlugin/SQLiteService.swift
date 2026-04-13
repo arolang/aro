@@ -12,7 +12,7 @@
 
 import Foundation
 import SQLite
-import AROPluginSDK
+import AROPluginKit
 
 // MARK: - State Management
 
@@ -53,7 +53,8 @@ private let plugin = AROPlugin(name: "SQLitePlugin", version: "1.0.0", handle: "
         }
     }
 
-private let _registration: Void = { AROPluginExport.register(plugin) }()
+@_cdecl("aro_plugin_register")
+public func registerPlugin() { _ = plugin }
 
 // MARK: - SQL Logic
 

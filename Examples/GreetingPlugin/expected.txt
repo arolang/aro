@@ -1,4 +1,4 @@
-# Generated: Mon Apr 13 12:06:33 2026
+# Generated: Mon Apr 13 16:03:54 2026
 # Type: console
 # Command: aro run ./Examples/GreetingPlugin
 ---
@@ -10,4 +10,4 @@ Hello, ARO Developer!
 Goodbye, ARO Developer! See you soon!
 Plugin demo completed!
 startup
-value: ["plugin": "ARO Developer", "timestamp": "__TIMESTAMP__", "message": "Hello, ARO Developer!"]
+value: ["message": "Hello, ARO Developer!", "timestamp": "__TIMESTAMP__", "plugin": "ARO Developer"]

@@ -1,0 +1,30 @@
+--- /var/folders/6_/5361qdnn507_dc0m58yxxwhh0000gn/T/syOQqhXKmP.expected.txt	2026-04-13 16:12:00
++++ /var/folders/6_/5361qdnn507_dc0m58yxxwhh0000gn/T/8aAtT0CaLf.actual.txt	2026-04-13 16:12:00
+@@ -1,15 +1,13 @@
+ GET /users => {"users":[]}
+ GET /users/{id} => {"data":[]}
+-POST /users => {"email":"test@example.com","id":"__UUID__","name":"Test User"}
+-PUT /users/{id} => {"email":"updated@example.com","id":"__UUID__","name":"Updated User"}
+-DELETE /users/{id} => {"deleted":"__UUID__"}
++POST /users => {"email":"test@example.com","id":"930388AF-F8E8-44E3-8FF5-0CCCEB377165","name":"Test User"}
++PUT /users/{id} => {"email":"updated@example.com","id":"930388AF-F8E8-44E3-8FF5-0CCCEB377165","name":"Updated User"}
++DELETE /users/{id} => {"deleted":"930388AF-F8E8-44E3-8FF5-0CCCEB377165"}
+ ---server---
+-user-repository: created (id: __UUID__)
+-user-repository: deleted (id: __UUID__)
+-user-repository: updated (id: __UUID__)
+-User __UUID__ changed: created
+-User __UUID__ changed: deleted
+-User __UUID__ changed: updated
+-Entity __UUID__ - operation: created
+-Entity __UUID__ - operation: deleted
+-Entity __UUID__ - operation: updated
+\ No newline at end of file
++user-repository: created (id: 930388AF-F8E8-44E3-8FF5-0CCCEB377165)
++user-repository: deleted (id: 930388AF-F8E8-44E3-8FF5-0CCCEB377165)
++User 930388AF-F8E8-44E3-8FF5-0CCCEB377165 changed: created
++User 930388AF-F8E8-44E3-8FF5-0CCCEB377165 changed: deleted
++User 930388AF-F8E8-44E3-8FF5-0CCCEB377165 changed: updated
++Entity 930388AF-F8E8-44E3-8FF5-0CCCEB377165 - operation: created
++Entity 930388AF-F8E8-44E3-8FF5-0CCCEB377165 - operation: deleted
+\ No newline at end of file

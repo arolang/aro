@@ -120,11 +120,13 @@ public final class PluginLoader: @unchecked Sendable {
         let libExtension = "dylib"
         #endif
         let dylibs = contents.filter { $0.pathExtension == libExtension }
+        // debugPrint("[PluginLoader] Found dynamic libraries: \(dylibs.map { $0.lastPathComponent })")
         for dylib in dylibs {
             let name = dylib.deletingPathExtension().lastPathComponent
                 .replacingOccurrences(of: "lib", with: "")
             do {
                 try loadDylib(at: dylib, name: name)
+                // debugPrint("[PluginLoader] Loaded dylib: \(dylib.lastPathComponent) as '\(name)'")
             } catch {
                 print("[PluginLoader] Warning: Failed to load \(dylib.lastPathComponent): \(error)")
             }
@@ -460,16 +462,20 @@ public final class PluginLoader: @unchecked Sendable {
         lock.unlock()
 
         guard let pluginFuncs = pluginFuncs else {
+            let allKeys = Array(cPluginFunctions.keys)
+            // debugPrint("[PluginLoader] Service not found. Available: \(allKeys)")
             throw PluginError.serviceNotFound(serviceName)
         }
 
-        // Convert args to JSON
-        let argsData = try JSONSerialization.data(withJSONObject: args)
+        // Convert args to JSON — nest under _with for SDK-based plugins (ARO-0073)
+        var enrichedArgs: [String: any Sendable] = args
+        enrichedArgs["_with"] = args
+        let argsData = try JSONSerialization.data(withJSONObject: enrichedArgs)
         let argsJSON = String(data: argsData, encoding: .utf8) ?? "{}"
 
-        // ARO-0073: route services through aro_plugin_execute with "service:" prefix
-        let serviceAction = "service:\(method)"
-        let resultPtr = serviceAction.withCString { actionCStr in
+        // ARO-0073: prepend "service:" prefix so SDK-based plugins route correctly
+        let actionName = "service:\(method)"
+        let resultPtr = actionName.withCString { actionCStr in
             argsJSON.withCString { argsCStr in
                 pluginFuncs.execute(actionCStr, argsCStr)
             }
@@ -1821,6 +1827,19 @@ public final class PluginLoader: @unchecked Sendable {
             let wrapper = CPluginServiceWrapper(name: name, loader: self)
             try ExternalServiceRegistry.shared.register(wrapper, withName: name)
 
+            // ARO-0073: Call aro_plugin_register (if exported) to trigger plugin's
+            // file-scope initialization before querying aro_plugin_info.
+            #if os(Windows)
+            let registerSymbol = GetProcAddress(handle, "aro_plugin_register")
+            #else
+            let registerSymbol = dlsym(handle, "aro_plugin_register")
+            #endif
+            if let registerSymbol = registerSymbol {
+                typealias RegisterFunc = @convention(c) () -> Void
+                let registerFn = unsafeBitCast(registerSymbol, to: RegisterFunc.self)
+                registerFn()
+            }
+
             // Parse plugin info for custom actions
             let infoFunc = unsafeBitCast(infoSymbol, to: CPluginInfoFunction.self)
             if let infoPtr = infoFunc() {
@@ -1888,7 +1907,12 @@ public final class PluginLoader: @unchecked Sendable {
                             if let svcName = svcDef["name"] as? String, svcName.lowercased() != name.lowercased() {
                                 self.cPluginFunctions[svcName.lowercased()] = (execute: executeFunc, free: freeFunc)
                                 let svcWrapper = CPluginServiceWrapper(name: svcName, loader: self)
-                                try? ExternalServiceRegistry.shared.register(svcWrapper, withName: svcName)
+                                do {
+                                    try ExternalServiceRegistry.shared.register(svcWrapper, withName: svcName)
+                                    // debugPrint("[PluginLoader] Registered service '\(svcName)' for plugin '\(name)'")
+                                } catch {
+                                    // debugPrint("[PluginLoader] Service registration failed: \(error)")
+                                }
                             }
                         }
                     }

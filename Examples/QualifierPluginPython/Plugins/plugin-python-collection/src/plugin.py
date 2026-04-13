@@ -7,7 +7,7 @@ Uses the ARO Plugin SDK decorator API.
 
 from typing import Any, List
 
-from aro_plugin_sdk import AROInput, plugin, qualifier, run
+from aro_plugin_sdk import AROInput, export_abi, plugin, qualifier, run
 
 
 @plugin(name="plugin-python-collection", version="1.0.0", handle="Collections")
@@ -97,6 +97,9 @@ def qualifier_max(input: AROInput) -> dict:
         maximum = max(value, key=str)
     return {"result": maximum}
 
+
+# Generate backward-compatible module-level functions for the ARO runtime
+export_abi(globals())
 
 if __name__ == "__main__":
     run()

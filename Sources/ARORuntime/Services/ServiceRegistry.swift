@@ -125,7 +125,6 @@ public final class ExternalServiceRegistry: @unchecked Sendable {
         do {
             try register(BuiltInHTTPService())
         } catch {
-            print("[ExternalServiceRegistry] Warning: Failed to register HTTP service: \(error)")
         }
     }
 

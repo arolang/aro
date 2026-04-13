@@ -1,9 +1,8 @@
-# Generated: Mon Apr 13 12:07:55 2026
+# Generated: Mon Apr 13 16:05:16 2026
 # Type: console
 # Command: aro run ./Examples/ZipService
 # Timeout: 120s
 ---
-Warning: Failed to load libZipPlugin.dylib: Plugin 'ZipPlugin' missing required aro_plugin_info / aro_plugin_execute exports
 Testing zip plugin...
 Runtime error: Runtime Error: Cannot call the result from the zip: compress.
 Feature: Application-Start

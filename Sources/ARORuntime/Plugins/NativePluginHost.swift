@@ -517,6 +517,15 @@ public final class NativePluginHost: @unchecked Sendable {
             }
         }
 
+        // ARO-0073: Call aro_plugin_register (if exported) to trigger plugin's
+        // file-scope initialization before querying aro_plugin_info.
+        // Swift SDK plugins need this because file-scope let is lazy.
+        if let registerSymbol = resolveSymbol("aro_plugin_register") {
+            let registerFn = unsafeBitCast(registerSymbol, to: InitFunc.self)
+            registerFn()
+            debugPrint("[NativePluginHost] Called aro_plugin_register for \(pluginName)")
+        }
+
         // Load and parse plugin info JSON
         if let infoPtr = infoFunc() {
             defer { freeFunc?(infoPtr) }

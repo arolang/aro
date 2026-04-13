@@ -40,13 +40,6 @@ private let plugin = AROPlugin(name: "plugin-swift-collection", version: "1.0.0"
         return .failure("reverse requires a list or string")
     }
 
-// Register with the SDK — this wires up all C ABI exports automatically
-@_cdecl("_aro_plugin_register")
-public func register() {
-    AROPluginExport.register(plugin)
-}
-
-// Static initializer to ensure registration happens at load time
-private let _registration: Void = {
-    AROPluginExport.register(plugin)
-}()
+// Register with the SDK — called by the SDK's aro_plugin_info to trigger init
+@_cdecl("aro_plugin_register")
+public func registerPlugin() { _ = plugin }

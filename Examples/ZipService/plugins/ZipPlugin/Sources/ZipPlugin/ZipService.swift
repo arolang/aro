@@ -14,7 +14,7 @@
 
 import Foundation
 import Zip
-import AROPluginSDK
+import AROPluginKit
 
 // MARK: - Plugin Registration
 
@@ -30,7 +30,8 @@ private let plugin = AROPlugin(name: "ZipPlugin", version: "1.0.0", handle: "Zip
         }
     }
 
-private let _registration: Void = { AROPluginExport.register(plugin) }()
+@_cdecl("aro_plugin_register")
+public func registerPlugin() { _ = plugin }
 
 // MARK: - Zip Logic
 
