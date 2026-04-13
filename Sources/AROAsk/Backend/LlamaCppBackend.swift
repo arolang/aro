@@ -4,6 +4,9 @@
 // ============================================================
 
 import Foundation
+#if canImport(FoundationNetworking)
+import FoundationNetworking
+#endif
 
 public actor LlamaCppBackend: LMBackend {
     public nonisolated let name: String = "llama.cpp"

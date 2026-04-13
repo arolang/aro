@@ -10,6 +10,9 @@
 // Cached at ~/.cache/aro/bin/llama-server — subsequent runs are instant.
 
 import Foundation
+#if canImport(FoundationNetworking)
+import FoundationNetworking
+#endif
 
 /// Downloads and caches `llama-server` from llama.cpp GitHub releases.
 public enum LlamaServerProvisioner {

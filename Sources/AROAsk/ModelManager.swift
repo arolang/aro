@@ -4,6 +4,9 @@
 // ============================================================
 
 import Foundation
+#if canImport(FoundationNetworking)
+import FoundationNetworking
+#endif
 import Crypto
 
 /// Metadata for a model entry in the bundled manifest.
@@ -175,14 +178,10 @@ public actor ModelManager {
         }
 
         // Build file list with known sizes
-        struct RemoteFile {
-            let name: String
-            let size: Int64  // 0 if unknown
-        }
-        let files: [RemoteFile] = siblings.compactMap { entry in
+        let files: [(name: String, size: Int64)] = siblings.compactMap { entry -> (String, Int64)? in
             guard let name = entry["rfilename"] as? String else { return nil }
             let size = (entry["size"] as? Int64) ?? (entry["size"] as? Int).map(Int64.init) ?? 0
-            return RemoteFile(name: name, size: size)
+            return (name, size)
         }
         let totalBytes: Int64 = files.reduce(0) { $0 + $1.size }
         var downloadedBytes: Int64 = 0
@@ -211,7 +210,27 @@ public actor ModelManager {
                 withIntermediateDirectories: true
             )
 
-            // Stream download with per-chunk progress
+            // Download file — use streaming on macOS, bulk on Linux
+            let fileReceived: Int64
+
+            #if canImport(FoundationNetworking)
+            // Linux: FoundationNetworking lacks .bytes(for:), use .data(for:)
+            let (fileData, _) = try await URLSession.shared.data(for: req)
+            try fileData.write(to: dest)
+            fileReceived = Int64(fileData.count)
+
+            await progress(DownloadProgress(
+                phase: .downloading,
+                currentFile: file.name,
+                fileIndex: index,
+                fileCount: files.count,
+                fileBytes: fileReceived,
+                fileTotalBytes: file.size,
+                overallBytes: downloadedBytes + fileReceived,
+                overallTotalBytes: totalBytes
+            ))
+            #else
+            // macOS: stream download with per-chunk progress
             let (bytes, response) = try await URLSession.shared.bytes(for: req)
             let expectedLength = (response as? HTTPURLResponse)
                 .flatMap { Int64($0.value(forHTTPHeaderField: "Content-Length") ?? "") }
@@ -221,28 +240,31 @@ public actor ModelManager {
             if expectedLength > 0 {
                 fileData.reserveCapacity(Int(expectedLength))
             }
-            var fileReceived: Int64 = 0
-            let reportInterval: Int64 = max(expectedLength / 200, 65536) // ~0.5% or 64KB
+            var chunkReceived: Int64 = 0
+            let reportInterval: Int64 = max(expectedLength / 200, 65536)
 
             for try await byte in bytes {
                 fileData.append(byte)
-                fileReceived += 1
+                chunkReceived += 1
 
-                if fileReceived % reportInterval == 0 || fileReceived == expectedLength {
+                if chunkReceived % reportInterval == 0 || chunkReceived == expectedLength {
                     await progress(DownloadProgress(
                         phase: .downloading,
                         currentFile: file.name,
                         fileIndex: index,
                         fileCount: files.count,
-                        fileBytes: fileReceived,
+                        fileBytes: chunkReceived,
                         fileTotalBytes: expectedLength,
-                        overallBytes: downloadedBytes + fileReceived,
+                        overallBytes: downloadedBytes + chunkReceived,
                         overallTotalBytes: totalBytes
                     ))
                 }
             }
 
             try fileData.write(to: dest)
+            fileReceived = chunkReceived
+            #endif
+
             downloadedBytes += fileReceived
 
             await progress(DownloadProgress(
