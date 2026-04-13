@@ -8,65 +8,78 @@
 //
 // Usage in ARO:
 //   <Call> the <result> from the <greeting: hello> with { name: "World" }.
-//
-// Plugins use a C-compatible JSON interface:
-// - Input: method name and args as JSON
-// - Output: result as JSON (must be freed by caller)
-// - Return: 0 for success, non-zero for error
 
 import Foundation
 
-// MARK: - Plugin Initialization
+// MARK: - Plugin Info (ARO-0073)
 
-/// Plugin initialization - returns service metadata as JSON
-/// This tells ARO what services and symbols this plugin provides
-@_cdecl("aro_plugin_init")
-public func pluginInit() -> UnsafePointer<CChar> {
-    let metadata = "{\"services\": [{\"name\": \"greeting\", \"symbol\": \"greeting_call\"}]}"
-    let cstr = strdup(metadata)!
-    return UnsafePointer(cstr)
+@_cdecl("aro_plugin_info")
+public func aroPluginInfo() -> UnsafeMutablePointer<CChar>? {
+    let info = """
+    {
+      "name": "GreetingService",
+      "version": "1.0.0",
+      "handle": "Greeting",
+      "actions": [],
+      "qualifiers": [],
+      "services": [
+        {
+          "name": "greeting",
+          "methods": ["hello", "goodbye", "greet"]
+        }
+      ]
+    }
+    """
+    return strdup(info)
 }
 
-// MARK: - Service Implementation
+// MARK: - Execute (ARO-0073)
 
-/// Main entry point for the greeting service
-/// - Parameters:
-///   - methodPtr: Method name (C string)
-///   - argsPtr: Arguments as JSON (C string)
-///   - resultPtr: Output - result as JSON (caller must free)
-/// - Returns: 0 for success, non-zero for error
-@_cdecl("greeting_call")
-public func greetingCall(
-    _ methodPtr: UnsafePointer<CChar>,
-    _ argsPtr: UnsafePointer<CChar>,
-    _ resultPtr: UnsafeMutablePointer<UnsafeMutablePointer<CChar>?>
-) -> Int32 {
-    let method = String(cString: methodPtr)
-    let argsJSON = String(cString: argsPtr)
+@_cdecl("aro_plugin_execute")
+public func aroPluginExecute(
+    _ actionPtr: UnsafePointer<CChar>,
+    _ inputJSONPtr: UnsafePointer<CChar>
+) -> UnsafeMutablePointer<CChar>? {
+    let action = String(cString: actionPtr)
+    let inputJSON = String(cString: inputJSONPtr)
 
-    // Parse arguments
+    // Parse input arguments
     var args: [String: Any] = [:]
-    if let data = argsJSON.data(using: .utf8),
+    if let data = inputJSON.data(using: .utf8),
        let parsed = try? JSONSerialization.jsonObject(with: data) as? [String: Any] {
         args = parsed
+        // Flatten _with into top-level for service method args
+        if let withArgs = args["_with"] as? [String: Any] {
+            for (k, v) in withArgs { args[k] = v }
+        }
     }
 
-    // Execute method
+    // Route service actions — strip "service:" prefix if present
+    let method: String
+    if action.hasPrefix("service:") {
+        method = String(action.dropFirst("service:".count))
+    } else {
+        method = action
+    }
+
     let result: String
     do {
         result = try executeMethod(method, args: args)
     } catch {
-        // Return error message
-        let errorJSON = "{\"error\": \"\(error)\"}"
-        resultPtr.pointee = errorJSON.withCString { strdup($0) }
-        return 1
+        return strdup("{\"error\": \"\(error)\"}")
     }
 
-    // Return success result as JSON
-    let resultJSON = "{\"result\": \"\(result)\"}"
-    resultPtr.pointee = resultJSON.withCString { strdup($0) }
-    return 0
+    return strdup("{\"result\": \"\(result)\"}")
 }
+
+// MARK: - Free
+
+@_cdecl("aro_plugin_free")
+public func aroPluginFree(_ ptr: UnsafeMutablePointer<CChar>?) {
+    ptr.map { free($0) }
+}
+
+// MARK: - Implementation
 
 /// Execute a greeting method
 private func executeMethod(_ method: String, args: [String: Any]) throws -> String {

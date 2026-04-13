@@ -1200,8 +1200,12 @@ public final class PluginLoader: @unchecked Sendable {
     private func compileCPlugin(sources: [URL], output: URL) throws {
         // Find clang/gcc
         let compiler: String
-        if FileManager.default.fileExists(atPath: "/usr/bin/clang") {
-            compiler = "/usr/bin/clang"
+        let clangCandidates = [
+            "/usr/bin/clang",
+            "/usr/share/swift/usr/bin/clang",
+        ]
+        if let found = clangCandidates.first(where: { FileManager.default.fileExists(atPath: $0) }) {
+            compiler = found
         } else if FileManager.default.fileExists(atPath: "/usr/bin/gcc") {
             compiler = "/usr/bin/gcc"
         } else {
@@ -1214,6 +1218,25 @@ public final class PluginLoader: @unchecked Sendable {
         args.append("-fPIC")
         args.append("-o")
         args.append(output.path)
+
+        // Add include paths for SDK headers (check include/ relative to each source
+        // and relative to the plugin root — covers both src/ and root layouts)
+        var includeDirs: Set<String> = []
+        for source in sources {
+            let sourceParent = source.deletingLastPathComponent()
+            let candidates = [
+                sourceParent.appendingPathComponent("include"),
+                sourceParent.deletingLastPathComponent().appendingPathComponent("include"),
+            ]
+            for dir in candidates {
+                if FileManager.default.fileExists(atPath: dir.path) {
+                    includeDirs.insert(dir.path)
+                }
+            }
+        }
+        for dir in includeDirs.sorted() {
+            args.insert(contentsOf: ["-I", dir], at: 1)
+        }
 
         let process = Process()
         process.executableURL = URL(fileURLWithPath: args[0])
@@ -1797,105 +1820,111 @@ public final class PluginLoader: @unchecked Sendable {
             // Store the execute function
             cPluginFunctions[name.lowercased()] = (execute: executeFunc, free: freeFunc)
 
-            // Register as AROService
-            let wrapper = CPluginServiceWrapper(name: name, loader: self)
-            try ExternalServiceRegistry.shared.register(wrapper, withName: name)
-
-            // Parse plugin info for custom actions
+            // Parse plugin info for custom actions, qualifiers, and services
             let infoFunc = unsafeBitCast(infoSymbol, to: CPluginInfoFunction.self)
+            var parsedInfo: [String: Any]? = nil
             if let infoPtr = infoFunc() {
                 let infoJSON = String(cString: infoPtr)
                 freeFunc?(infoPtr)
+                if let data = infoJSON.data(using: .utf8) {
+                    parsedInfo = try? JSONSerialization.jsonObject(with: data) as? [String: Any]
+                }
+            }
 
-                // Parse JSON to get actions and qualifiers
-                if let data = infoJSON.data(using: .utf8),
-                   let info = try? JSONSerialization.jsonObject(with: data) as? [String: Any] {
+            // Register services declared in plugin info (by their declared names),
+            // or fall back to registering with the plugin directory name.
+            if let services = parsedInfo?["services"] as? [[String: Any]], !services.isEmpty {
+                for serviceDef in services {
+                    guard let serviceName = serviceDef["name"] as? String else { continue }
+                    let wrapper = CPluginServiceWrapper(name: name, loader: self)
+                    try ExternalServiceRegistry.shared.register(wrapper, withName: serviceName)
+                }
+            } else {
+                let wrapper = CPluginServiceWrapper(name: name, loader: self)
+                try ExternalServiceRegistry.shared.register(wrapper, withName: name)
+            }
 
-                    // Register actions
-                    if let actions = info["actions"] as? [[String: Any]] {
-                        let semaphore = DispatchSemaphore(value: 0)
-                        var registrationCount = 0
+            if let info = parsedInfo {
+                // Register actions
+                if let actions = info["actions"] as? [[String: Any]] {
+                    let semaphore = DispatchSemaphore(value: 0)
+                    var registrationCount = 0
 
-                        for actionDef in actions {
-                            // Support both {"verbs":["execute",...]} and {"name":"execute"} formats
-                            let verbs: [String]
-                            if let v = actionDef["verbs"] as? [String], !v.isEmpty {
-                                verbs = v
-                            } else if let actionName = actionDef["name"] as? String {
-                                verbs = [actionName.lowercased()]
-                            } else {
-                                continue
-                            }
-
-                            for verb in verbs {
-                                registrationCount += 1
-                                let normalizedVerb = verb.lowercased().replacingOccurrences(of: "-", with: "")
-                                let originalVerb = verb
-                                Task {
-                                    await ActionRegistry.shared.registerDynamic(
-                                        verb: normalizedVerb,
-                                        handler: { result, object, context in
-                                            var input: [String: any Sendable] = [:]
-                                            if let data = context.resolveAny(object.base) {
-                                                input["data"] = data
-                                                input["object"] = data
-                                                input[object.base] = data
-                                            }
-                                            if let withArgs = context.resolveAny("_with_") as? [String: any Sendable] {
-                                                input.merge(withArgs) { _, new in new }
-                                            }
-                                            if let exprArgs = context.resolveAny("_expression_") as? [String: any Sendable] {
-                                                input.merge(exprArgs) { _, new in new }
-                                            }
-                                            let pluginResult = try self.callCPlugin(name, method: originalVerb, args: input)
-                                            context.bind(result.base, value: pluginResult)
-                                            return pluginResult
-                                        }
-                                    )
-                                    semaphore.signal()
-                                }
-                            }
+                    for actionDef in actions {
+                        let verbs: [String]
+                        if let v = actionDef["verbs"] as? [String], !v.isEmpty {
+                            verbs = v
+                        } else if let actionName = actionDef["name"] as? String {
+                            verbs = [actionName.lowercased()]
+                        } else {
+                            continue
                         }
 
-                        for _ in 0..<registrationCount {
-                            semaphore.wait()
+                        for verb in verbs {
+                            registrationCount += 1
+                            let normalizedVerb = verb.lowercased().replacingOccurrences(of: "-", with: "")
+                            let originalVerb = verb
+                            Task {
+                                await ActionRegistry.shared.registerDynamic(
+                                    verb: normalizedVerb,
+                                    handler: { result, object, context in
+                                        var input: [String: any Sendable] = [:]
+                                        if let data = context.resolveAny(object.base) {
+                                            input["data"] = data
+                                            input["object"] = data
+                                            input[object.base] = data
+                                        }
+                                        if let withArgs = context.resolveAny("_with_") as? [String: any Sendable] {
+                                            input.merge(withArgs) { _, new in new }
+                                        }
+                                        if let exprArgs = context.resolveAny("_expression_") as? [String: any Sendable] {
+                                            input.merge(exprArgs) { _, new in new }
+                                        }
+                                        let pluginResult = try self.callCPlugin(name, method: originalVerb, args: input)
+                                        context.bind(result.base, value: pluginResult)
+                                        return pluginResult
+                                    }
+                                )
+                                semaphore.signal()
+                            }
                         }
                     }
 
-                    // Register qualifiers (plugin-provided value transformations)
-                    if let qualifiers = info["qualifiers"] as? [[String: Any]] {
-                        // Load aro_plugin_qualifier symbol
-                        #if os(Windows)
-                        let qualifierSymbol = GetProcAddress(handle, "aro_plugin_qualifier")
-                        #else
-                        let qualifierSymbol = dlsym(handle, "aro_plugin_qualifier")
-                        #endif
+                    for _ in 0..<registrationCount {
+                        semaphore.wait()
+                    }
+                }
 
-                        if let qualifierSymbol = qualifierSymbol {
-                            typealias QualifierFunc = @convention(c) (UnsafePointer<CChar>?, UnsafePointer<CChar>?) -> UnsafeMutablePointer<CChar>?
-                            let qualifierFunc = unsafeBitCast(qualifierSymbol, to: QualifierFunc.self)
+                // Register qualifiers (plugin-provided value transformations)
+                if let qualifiers = info["qualifiers"] as? [[String: Any]] {
+                    #if os(Windows)
+                    let qualifierSymbol = GetProcAddress(handle, "aro_plugin_qualifier")
+                    #else
+                    let qualifierSymbol = dlsym(handle, "aro_plugin_qualifier")
+                    #endif
 
-                            // Create a host wrapper for the plugin
-                            let host = CPluginQualifierHost(
+                    if let qualifierSymbol = qualifierSymbol {
+                        typealias QualifierFunc = @convention(c) (UnsafePointer<CChar>?, UnsafePointer<CChar>?) -> UnsafeMutablePointer<CChar>?
+                        let qualifierFunc = unsafeBitCast(qualifierSymbol, to: QualifierFunc.self)
+
+                        let host = CPluginQualifierHost(
+                            pluginName: name,
+                            qualifierFunc: qualifierFunc,
+                            freeFunc: freeFunc
+                        )
+
+                        for qualifierDef in qualifiers {
+                            guard let qualifierName = qualifierDef["name"] as? String else { continue }
+                            let inputTypesRaw = qualifierDef["inputTypes"] as? [String] ?? []
+                            let inputTypes = Set(inputTypesRaw.compactMap { QualifierInputType(rawValue: $0) })
+
+                            let registration = QualifierRegistration(
+                                qualifier: qualifierName,
+                                inputTypes: inputTypes.isEmpty ? Set(QualifierInputType.allCases) : inputTypes,
                                 pluginName: name,
-                                qualifierFunc: qualifierFunc,
-                                freeFunc: freeFunc
+                                pluginHost: host
                             )
-
-                            // Register each qualifier
-                            for qualifierDef in qualifiers {
-                                guard let qualifierName = qualifierDef["name"] as? String else { continue }
-                                let inputTypesRaw = qualifierDef["inputTypes"] as? [String] ?? []
-                                let inputTypes = Set(inputTypesRaw.compactMap { QualifierInputType(rawValue: $0) })
-
-                                let registration = QualifierRegistration(
-                                    qualifier: qualifierName,
-                                    inputTypes: inputTypes.isEmpty ? Set(QualifierInputType.allCases) : inputTypes,
-                                    pluginName: name,
-                                    pluginHost: host
-                                )
-                                QualifierRegistry.shared.register(registration)
-                            }
+                            QualifierRegistry.shared.register(registration)
                         }
                     }
                 }

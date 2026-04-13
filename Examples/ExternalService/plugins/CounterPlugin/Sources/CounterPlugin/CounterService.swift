@@ -23,55 +23,68 @@ import Foundation
 private var globalCount: Int = 0
 private let counterQueue = DispatchQueue(label: "counter.service")
 
-// MARK: - Plugin Initialization
+// MARK: - Plugin Info (ARO-0073)
 
-/// Plugin initialization - returns service metadata as JSON
-/// This tells ARO what services and symbols this plugin provides
-@_cdecl("aro_plugin_init")
-public func pluginInit() -> UnsafePointer<CChar> {
-    let metadata = "{\"services\": [{\"name\": \"counter\", \"symbol\": \"counter_call\"}]}"
-    let cstr = strdup(metadata)!
-    return UnsafePointer(cstr)
+@_cdecl("aro_plugin_info")
+public func aroPluginInfo() -> UnsafeMutablePointer<CChar>? {
+    let info = """
+    {
+      "name": "CounterPlugin",
+      "version": "1.0.0",
+      "handle": "Counter",
+      "actions": [],
+      "qualifiers": [],
+      "services": [
+        {
+          "name": "counter",
+          "methods": ["increment", "get", "reset"]
+        }
+      ]
+    }
+    """
+    return strdup(info)
 }
 
-// MARK: - Service Implementation
+// MARK: - Execute (ARO-0073)
 
-/// Main entry point for the counter service
-/// - Parameters:
-///   - methodPtr: Method name (C string)
-///   - argsPtr: Arguments as JSON (C string)
-///   - resultPtr: Output - result as JSON (caller must free)
-/// - Returns: 0 for success, non-zero for error
-@_cdecl("counter_call")
-public func counterCall(
-    _ methodPtr: UnsafePointer<CChar>,
-    _ argsPtr: UnsafePointer<CChar>,
-    _ resultPtr: UnsafeMutablePointer<UnsafeMutablePointer<CChar>?>
-) -> Int32 {
-    let method = String(cString: methodPtr)
+@_cdecl("aro_plugin_execute")
+public func aroPluginExecute(
+    _ actionPtr: UnsafePointer<CChar>,
+    _ inputJSONPtr: UnsafePointer<CChar>
+) -> UnsafeMutablePointer<CChar>? {
+    let action = String(cString: actionPtr)
 
-    // Execute method (all methods are synchronous and thread-safe)
+    // Route service actions — strip "service:" prefix if present
+    let method: String
+    if action.hasPrefix("service:") {
+        method = String(action.dropFirst("service:".count))
+    } else {
+        method = action
+    }
+
     let result: [String: Any]
     do {
         result = try executeMethod(method)
     } catch {
-        // Return error message
-        let errorJSON = "{\"error\": \"\(escapeJSON(String(describing: error)))\"}"
-        resultPtr.pointee = errorJSON.withCString { strdup($0) }
-        return 1
+        return strdup("{\"error\": \"\(escapeJSON(String(describing: error)))\"}")
     }
 
-    // Return success result as JSON
     do {
         let resultJSON = try encodeResult(result)
-        resultPtr.pointee = resultJSON.withCString { strdup($0) }
-        return 0
+        return strdup(resultJSON)
     } catch {
-        let errorJSON = "{\"error\": \"Failed to encode result\"}"
-        resultPtr.pointee = errorJSON.withCString { strdup($0) }
-        return 1
+        return strdup("{\"error\": \"Failed to encode result\"}")
     }
 }
+
+// MARK: - Free
+
+@_cdecl("aro_plugin_free")
+public func aroPluginFree(_ ptr: UnsafeMutablePointer<CChar>?) {
+    ptr.map { free($0) }
+}
+
+// MARK: - Implementation
 
 /// Execute a counter method (thread-safe)
 private func executeMethod(_ method: String) throws -> [String: Any] {
