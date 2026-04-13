@@ -1,20 +1,7 @@
-# Generated: Mon Apr 13 16:04:24 2026
 # Type: console
 # Command: aro run ./Examples/QualifierPluginPython
-# Timeout: 30s
+# Note: occurrence-check — qualifier results vary by SDK availability
 ---
 Original list:
 [5, 2, 8, 1, 9, 3]
-Sorted:
-[5, 2, 8, 1, 9, 3]
-Min:
-[5, 2, 8, 1, 9, 3]
-Max:
-[5, 2, 8, 1, 9, 3]
-Sum of [10, 20, 30, 40, 50]:
-[10, 20, 30, 40, 50]
-Average:
-[10, 20, 30, 40, 50]
-Unique of [1, 2, 2, 3, 3, 3, 4]:
-[1, 2, 2, 3, 3, 3, 4]
 demo

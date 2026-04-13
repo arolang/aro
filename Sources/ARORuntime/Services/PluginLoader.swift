@@ -473,11 +473,11 @@ public final class PluginLoader: @unchecked Sendable {
         let argsData = try JSONSerialization.data(withJSONObject: enrichedArgs)
         let argsJSON = String(data: argsData, encoding: .utf8) ?? "{}"
 
-        // ARO-0073: prepend "service:" prefix so SDK-based plugins route correctly
-        let actionName = "service:\(method)"
-        let resultPtr = actionName.withCString { actionCStr in
+        // Pass method directly to aro_plugin_execute
+        // For service routing, CPluginServiceWrapper prepends "service:" before calling here
+        let resultPtr = method.withCString { methodCStr in
             argsJSON.withCString { argsCStr in
-                pluginFuncs.execute(actionCStr, argsCStr)
+                pluginFuncs.execute(methodCStr, argsCStr)
             }
         }
 
@@ -2314,7 +2314,8 @@ private struct CPluginServiceWrapper: AROService {
     }
 
     func call(_ method: String, args: [String: any Sendable]) async throws -> any Sendable {
-        return try loader.callCPlugin(serviceName, method: method, args: args)
+        // ARO-0073: prepend "service:" for SDK-based plugins that dispatch by prefix
+        return try loader.callCPlugin(serviceName, method: "service:\(method)", args: args)
     }
 }
 
