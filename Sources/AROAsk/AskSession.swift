@@ -82,7 +82,7 @@ public actor AskSession {
         let entry = try await modelManager.entry(for: config.model)
         let dir = await modelManager.modelDirectory(for: config.model)
         let modelFile = dir.appendingPathComponent(entry.primaryFile)
-        let selected = try BackendFactory.detect(
+        let selected = try await BackendFactory.detect(
             modelIdentifier: config.model,
             modelPath: modelFile
         )
