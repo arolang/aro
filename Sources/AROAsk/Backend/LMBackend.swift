@@ -109,13 +109,27 @@ public enum LMBackendError: Error, CustomStringConvertible {
     public var description: String {
         switch self {
         case .noBackendAvailable:
+            #if os(macOS)
             return """
-            No LM backend available. Install one of:
+            No LM backend available. On macOS the native MLX backend
+            should start automatically. If it fails, install one of:
 
-              pip3 install mlx-lm          # Apple Silicon (recommended)
               brew install llama.cpp       # llama-server (GGUF models)
               ARO_ASK_ENDPOINT=http://...  # remote OpenAI-compatible server
             """
+            #else
+            return """
+            No LM backend available. Install one of:
+
+              llama-server                 # llama.cpp with CUDA (apt/build from source)
+              ARO_ASK_ENDPOINT=http://...  # remote OpenAI-compatible server
+
+            On Linux with CUDA, install llama.cpp:
+              git clone https://github.com/ggerganov/llama.cpp && cd llama.cpp
+              cmake -B build -DGGML_CUDA=ON && cmake --build build --target llama-server
+              sudo cp build/bin/llama-server /usr/local/bin/
+            """
+            #endif
         case .runnerNotFound(let name):
             return "Runner '\(name)' not found on PATH"
         case .httpError(let code, let body):

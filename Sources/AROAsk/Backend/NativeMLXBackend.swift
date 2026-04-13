@@ -5,6 +5,11 @@
 //
 // Runs the model directly on Apple Silicon GPU — no Python, no subprocess,
 // no HTTP server. This is the preferred backend when running on macOS.
+//
+// On Linux, this entire file is compiled out. Linux uses llama-server
+// (llama.cpp with CUDA) or a remote OpenAI-compatible endpoint instead.
+
+#if canImport(MLXLLM)
 
 import Foundation
 import Hub
@@ -464,3 +469,5 @@ public actor NativeMLXBackend: LMBackend {
         }
     }
 }
+
+#endif // canImport(MLXLLM)
