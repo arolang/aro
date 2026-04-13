@@ -236,6 +236,8 @@
             <span class="pipeline-arrow">&#x2192;</span>
             <span class="pipeline-step">Map</span>
             <span class="pipeline-arrow">&#x2192;</span>
+            <span class="pipeline-step">Group</span>
+            <span class="pipeline-arrow">&#x2192;</span>
             <span class="pipeline-step">Reduce</span>
         </div>
 
@@ -286,6 +288,18 @@
 <span class="code-keyword">Reduce</span> the <span class="code-result">&lt;avg-price: Float&gt;</span> from the &lt;products&gt;
     where &lt;category&gt; is <span class="code-string">"electronics"</span>
     with avg(&lt;price&gt;).</code></pre>
+
+        <h2>Group: Partition by Field</h2>
+        <p>
+            Partition a collection into sub-collections grouped by a field value.
+            Returns a dictionary mapping each unique field value to an array of matching items:
+        </p>
+
+        <pre><code><span class="code-comment">(* Group orders by status *)</span>
+<span class="code-keyword">Group</span> the <span class="code-result">&lt;status-groups&gt;</span> from the &lt;orders&gt; by <span class="code-string">"status"</span>.
+
+<span class="code-comment">(* Group users by department *)</span>
+<span class="code-keyword">Group</span> the <span class="code-result">&lt;departments&gt;</span> from the &lt;employees&gt; by <span class="code-string">"department"</span>.</code></pre>
 
         <h2>Comparison Operators</h2>
         <p>
@@ -425,11 +439,15 @@
     <span class="code-keyword">Filter</span> the <span class="code-result">&lt;high-value: List&lt;Order&gt;&gt;</span> from the &lt;recent-orders&gt;
         where &lt;amount&gt; > 1000.
 
+    <span class="code-comment">(* Group orders by status *)</span>
+    <span class="code-keyword">Group</span> the <span class="code-result">&lt;by-status&gt;</span> from the &lt;recent-orders&gt; by <span class="code-string">"status"</span>.
+
     <span class="code-keyword">Return</span> an <span class="code-result">&lt;OK: status&gt;</span> with {
         orders: &lt;summaries&gt;,
         total: &lt;total-revenue&gt;,
         pending: &lt;pending-count&gt;,
-        high-value-count: &lt;high-value&gt;.count()
+        high-value-count: &lt;high-value&gt;.count(),
+        by-status: &lt;by-status&gt;
     }.
 }</code></pre>
 

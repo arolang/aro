@@ -290,6 +290,7 @@ public final class FeatureSetExecutor: Sendable {
         context.unbind("_where_value_")
         context.unbind("_by_pattern_")
         context.unbind("_by_flags_")
+        context.unbind("_by_field_")
         context.unbind("_default_value_")
         context.unbind("_to_")
         context.unbind("_with_")
@@ -405,10 +406,13 @@ public final class FeatureSetExecutor: Sendable {
             context.bind("_where_value_", value: whereValue)
         }
 
-        // ARO-0037: Bind by clause if present (for Split action)
+        // ARO-0037: Bind by clause if present (for Split and Group actions)
         if let byClause = statement.queryModifiers.byClause {
             context.bind("_by_pattern_", value: byClause.pattern)
             context.bind("_by_flags_", value: byClause.flags)
+            if byClause.isFieldName {
+                context.bind("_by_field_", value: byClause.pattern)
+            }
         }
 
         // ARO-0072: Bind default value if present (for optional retrieve)

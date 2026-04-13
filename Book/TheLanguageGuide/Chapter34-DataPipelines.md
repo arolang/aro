@@ -4,7 +4,7 @@ ARO provides a map/reduce style data pipeline for filtering, transforming, and a
 
 ## Pipeline Operations
 
-ARO supports four core data operations:
+ARO supports five core data operations:
 
 | Operation | Purpose | Example |
 |-----------|---------|---------|
@@ -12,6 +12,7 @@ ARO supports four core data operations:
 | **Filter** | Filter existing collection | `Filter the <active: List<User>> from the <users>...` |
 | **Map** | Transform to different type | `Map the <summaries> as List<UserSummary> from the <users>.` |
 | **Reduce** | Aggregate to single value | `Reduce the <total> as Float from the <orders> with sum(<amount>).` |
+| **Group** | Partition by field value | `Group the <by-status> from the <orders> by "status".` |
 
 ### Type Annotation Syntax
 
@@ -234,6 +235,62 @@ Both statements bind `file-count` to `3`. The difference is in role and context:
 As a guideline: use `Reduce` when you are already in a pipeline (after a `Filter`, `Map`, or `Retrieve`) or when the explicit type annotation adds clarity. Use `Compute` for a quick, self-contained count.
 
 See **Chapter 9 — Computations** for the full `Compute` reference.
+
+---
+
+## Group
+
+Partitions a collection into sub-collections based on a field value. Returns a dictionary mapping each unique field value to an array of matching items.
+
+```aro
+(* Group by a field *)
+Group the <result> from the <collection> by "fieldName".
+```
+
+### Examples
+
+```aro
+(* Group orders by status *)
+Create the <orders> with [
+    { id: 1, status: "active", amount: 100 },
+    { id: 2, status: "pending", amount: 250 },
+    { id: 3, status: "active", amount: 500 }
+].
+Group the <status-groups> from the <orders> by "status".
+(* Result: { "active": [{id:1,...}, {id:3,...}], "pending": [{id:2,...}] } *)
+
+(* Group users by role *)
+Group the <by-role> from the <users> by "role".
+(* Result: { "admin": [...], "editor": [...], "viewer": [...] } *)
+```
+
+### Using Grouped Results
+
+The grouped result is a dictionary, so you can extract individual groups or iterate over them:
+
+```aro
+Group the <by-region> from the <orders> by "region".
+
+(* Extract a specific group *)
+Extract the <eu-orders> from the <by-region: EU>.
+
+(* Aggregate within a group *)
+Reduce the <eu-total: Float> from the <eu-orders>
+    with sum(<amount>).
+```
+
+### Relationship to Filter
+
+`Group` is the multi-bucket equivalent of `Filter`. Where `Filter` selects items matching a single predicate, `Group` partitions the entire collection at once:
+
+```aro
+(* Using Filter — one predicate at a time *)
+Filter the <active> from the <orders> where <status> is "active".
+Filter the <pending> from the <orders> where <status> is "pending".
+
+(* Using Group — all buckets in one pass *)
+Group the <by-status> from the <orders> by "status".
+```
 
 ---
 
@@ -540,6 +597,7 @@ When working with data pipelines, keep these performance guidelines in mind:
 | Filter | O(n) | Scans entire collection once |
 | Map | O(n) | Transforms each element |
 | Reduce | O(n) | Single pass aggregation |
+| Group | O(n) | Single pass partitioning |
 | Retrieve | O(n) + sort | Filtering and optional sorting |
 | Sort | O(n log n) | Standard comparison sort |
 
