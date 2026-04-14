@@ -23,9 +23,9 @@ func safeDlopenProbe(_ path: String) -> Bool {
     let pid = fork()
     if pid == 0 {
         // Child — try the dlopen, then exit.
-        // Close stdout/stderr to avoid mixing output.
-        fclose(stdout)
-        fclose(stderr)
+        // Close stdout/stderr file descriptors to avoid mixing output.
+        close(STDOUT_FILENO)
+        close(STDERR_FILENO)
         _ = dlopen(path, RTLD_NOW | RTLD_LOCAL)
         _exit(0)  // Success — even if dlopen returned NULL, it didn't crash.
     }
