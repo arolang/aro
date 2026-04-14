@@ -285,6 +285,14 @@ public final class PluginLoader: @unchecked Sendable {
         }
         let rawHandle = UnsafeMutableRawPointer(handle)
         #else
+        // On Linux, probe dlopen in a forked child to avoid SIGSEGV from TLS exhaustion
+        // when loading Swift-built .so files into a process with the Swift runtime active.
+        #if os(Linux)
+        if !safeDlopenProbe(path.path) {
+            throw PluginError.loadFailed(name,
+                message: "dlopen probe crashed — the library is not safe to load in this process")
+        }
+        #endif
         guard let handle = dlopen(path.path, RTLD_NOW | RTLD_LOCAL) else {
             let error = String(cString: dlerror())
             throw PluginError.loadFailed(name, message: error)
@@ -1770,6 +1778,19 @@ public final class PluginLoader: @unchecked Sendable {
             try FileManager.default.removeItem(at: output)
         }
         try FileManager.default.copyItem(at: builtLibPath, to: output)
+
+        // Also copy dependency libraries (e.g. AROPluginKit) so dlopen can resolve them.
+        // Without these, loading the plugin .so crashes the dynamic linker.
+        let buildDir = builtLibPath.deletingLastPathComponent()
+        let outputDir = output.deletingLastPathComponent()
+        if let siblings = try? FileManager.default.contentsOfDirectory(at: buildDir, includingPropertiesForKeys: nil) {
+            for sibling in siblings where sibling.pathExtension == libraryExtension && sibling != builtLibPath {
+                let dest = outputDir.appendingPathComponent(sibling.lastPathComponent)
+                if !FileManager.default.fileExists(atPath: dest.path) {
+                    try? FileManager.default.copyItem(at: sibling, to: dest)
+                }
+            }
+        }
     }
 
     /// Load a dynamic library and register its services
@@ -1791,6 +1812,12 @@ public final class PluginLoader: @unchecked Sendable {
         }
         let rawHandle = UnsafeMutableRawPointer(handle)
         #else
+        #if os(Linux)
+        if !safeDlopenProbe(path.path) {
+            throw PluginError.loadFailed(name,
+                message: "dlopen probe crashed — the library is not safe to load in this process")
+        }
+        #endif
         guard let handle = dlopen(path.path, RTLD_NOW | RTLD_LOCAL) else {
             let error = String(cString: dlerror())
             throw PluginError.loadFailed(name, message: error)
@@ -2195,6 +2222,12 @@ public final class PluginLoader: @unchecked Sendable {
         }
         defer { FreeLibrary(handle) }
         #else
+        #if os(Linux)
+        if !safeDlopenProbe(dylibPath.path) {
+            throw PluginError.loadFailed(name,
+                message: "dlopen probe crashed — the library is not safe to load in this process")
+        }
+        #endif
         guard let handle = dlopen(dylibPath.path, RTLD_NOW | RTLD_LOCAL) else {
             let error = String(cString: dlerror())
             throw PluginError.loadFailed(name, message: error)

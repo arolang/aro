@@ -198,6 +198,16 @@ public final class NativePluginHost: @unchecked Sendable {
         }
         libraryHandle = UnsafeMutableRawPointer(handle)
         #else
+        // On Linux, Swift-built .so files can crash the dynamic linker (SIGSEGV in
+        // ld-linux due to TLS exhaustion) when dlopen'd into a running Swift process.
+        // Probe in a forked child first so a crash doesn't take out the host.
+        #if os(Linux)
+        if !safeDlopenProbe(libraryPath.path) {
+            throw NativePluginError.loadFailed(pluginName,
+                message: "dlopen probe crashed — the library is not safe to load in this process")
+        }
+        #endif
+
         guard let handle = dlopen(libraryPath.path, RTLD_NOW | RTLD_LOCAL) else {
             let error = String(cString: dlerror())
             throw NativePluginError.loadFailed(pluginName, message: error)
@@ -228,7 +238,24 @@ public final class NativePluginHost: @unchecked Sendable {
             return outputPath
         }
 
-        // Check for Package.swift (Swift package plugin) - check current path and parent
+        // Check for Swift source files — try standalone swiftc first (fast, produces a simple
+        // C-ABI .so that loads safely via dlopen on all platforms).
+        let swiftFiles = findSourceFiles(withExtension: "swift")
+        if !swiftFiles.isEmpty {
+            debugPrint("[NativePluginHost] Found Swift files: \(swiftFiles.map { $0.lastPathComponent })")
+            let outputPath = pluginPath.appendingPathComponent("lib\(pluginName).\(ext)")
+            do {
+                try compileSwiftPlugin(sources: swiftFiles, output: outputPath)
+                return outputPath
+            } catch {
+                debugPrint("[NativePluginHost] Standalone swiftc failed (\(error)), trying Package.swift...")
+            }
+        }
+
+        // Fallback: check for Package.swift (Swift package plugin with SPM dependencies)
+        // Note: on Linux, Swift dynamic libraries built via SPM can crash the dynamic linker
+        // (TLS exhaustion) when loaded via dlopen into a process with the Swift runtime already
+        // active.  Guard the dlopen with a fork-based probe to avoid a hard SEGV.
         let packageSwiftCandidates = [
             pluginPath.appendingPathComponent("Package.swift"),
             pluginPath.deletingLastPathComponent().appendingPathComponent("Package.swift"),
@@ -238,15 +265,6 @@ public final class NativePluginHost: @unchecked Sendable {
             let packageDir = packageSwift.deletingLastPathComponent()
             debugPrint("[NativePluginHost] Found Package.swift at \(packageSwift.path), building Swift package plugin: \(pluginName)")
             return try compileSwiftPackagePlugin(packageDir: packageDir, ext: ext)
-        }
-
-        // Check for Swift source files (standalone, no Package.swift)
-        let swiftFiles = findSourceFiles(withExtension: "swift")
-        if !swiftFiles.isEmpty {
-            debugPrint("[NativePluginHost] Found Swift files: \(swiftFiles.map { $0.lastPathComponent })")
-            let outputPath = pluginPath.appendingPathComponent("lib\(pluginName).\(ext)")
-            try compileSwiftPlugin(sources: swiftFiles, output: outputPath)
-            return outputPath
         }
 
         debugPrint("[NativePluginHost] No compilable sources found for plugin: \(pluginName)")
@@ -436,12 +454,12 @@ public final class NativePluginHost: @unchecked Sendable {
 
             let libFiles = contents.filter { $0.pathExtension == ext }
             if let lib = libFiles.first(where: { $0.lastPathComponent.lowercased().contains(pluginName.lowercased().replacingOccurrences(of: "-", with: "")) }) ?? libFiles.first {
-                // Copy to plugin root for future loads
-                let destPath = packageDir.appendingPathComponent(lib.lastPathComponent)
-                try? FileManager.default.removeItem(at: destPath)
-                try FileManager.default.copyItem(at: lib, to: destPath)
-                debugPrint("[NativePluginHost] Swift package plugin built: \(destPath.path)")
-                return destPath
+                // Return the library in-place from the build directory.
+                // Do NOT copy it out — the RPATH in the .so references sibling
+                // dependencies (e.g. AROPluginKit) that live in the same build dir.
+                // Copying breaks those references and causes dlopen to crash.
+                debugPrint("[NativePluginHost] Swift package plugin built: \(lib.path)")
+                return lib
             }
         }
 
