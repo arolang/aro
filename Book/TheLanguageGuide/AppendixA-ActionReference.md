@@ -30,6 +30,7 @@ Complete reference for all built-in actions in ARO.
 | **Move** | OWN | Move/rename file | `Move the <file: "./old.txt"> to the <destination: "./new.txt">.` |
 | **Map** | OWN | Transform collection elements | `Map the <names> from the <users: name>.` |
 | **Filter** | OWN | Select matching elements | `Filter the <active> from the <users> where status = "active".` |
+| **Group** | OWN | Partition collection by field | `Group the <by-status> from the <orders> by "status".` |
 | **Reduce** | OWN | Aggregate collection | `Reduce the <total> from the <items> with sum(<amount>).` |
 | **Sort** | OWN | Order collection | `Sort the <users> by <name>.` |
 | **Split** | OWN | Split string by regex | `Split the <parts> from the <string> by /,/.` |
@@ -584,6 +585,46 @@ Merge the <greeting> with <name>.
 - **Strings**: Source string concatenated to target string
 
 **Valid Prepositions:** `with`, `into`, `from`
+
+---
+
+### Group
+
+Partitions a collection into sub-collections based on a field value. Returns a dictionary mapping each unique field value to an array of matching items.
+
+**Syntax:**
+```aro
+Group the <result> from the <collection> by "fieldName".
+```
+
+**Examples:**
+```aro
+(* Group orders by status *)
+Create the <orders> with [
+    { id: 1, status: "active", amount: 100 },
+    { id: 2, status: "pending", amount: 250 },
+    { id: 3, status: "active", amount: 500 }
+].
+Group the <status-groups> from the <orders> by "status".
+(* Result: { "active": [{id:1,...}, {id:3,...}], "pending": [{id:2,...}] } *)
+
+(* Group users by role *)
+Group the <by-role> from the <users> by "role".
+
+(* Extract a specific group and aggregate *)
+Extract the <active-orders> from the <status-groups: active>.
+Reduce the <active-total: Float> from the <active-orders>
+    with sum(<amount>).
+```
+
+**Behavior:**
+- Returns a dictionary where keys are unique field values and values are arrays of matching items
+- Items missing the specified field are excluded from the result
+- The original collection is not modified (immutability)
+
+**Valid Prepositions:** `from` (with `by` clause)
+
+---
 
 ### Update
 
@@ -1350,6 +1391,7 @@ The `Keepalive` action blocks execution until a shutdown signal is received (SIG
 | Update | OWN | with |
 | Map | OWN | from |
 | Filter | OWN | from, where |
+| Group | OWN | from (by clause) |
 | Reduce | OWN | from, with |
 | Sort | OWN | by |
 | Split | OWN | from (by clause) |

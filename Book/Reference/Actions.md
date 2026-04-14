@@ -1,6 +1,6 @@
 # ARO Action Reference
 
-Complete reference of all 61 ARO actions organized by category.
+Complete reference of all 62 ARO actions organized by category.
 
 | **Action**    | **Category**      | **Semantic Role** | **Description**                                           |
 | ------------- | ----------------- | ----------------- | --------------------------------------------------------- |
@@ -23,6 +23,7 @@ Complete reference of all 61 ARO actions organized by category.
 | **Extract**   | Data Access       | REQUEST           | Pulls a field from a data structure. PascalCase qualifiers enable typed extraction with OpenAPI schema validation (ARO-0046).<br>`Extract the <user-id> from the <request: body>.`<br>`Extract the <data: UserEvent> from the <event>.` |
 | **Filter**    | Enumeration       | OWN               | Selects items matching criteria.<br>`Filter the <active> from the <users> where status = "active".` |
 | **Given**     | Testing           | OWN               | Denotes initial precondition in test scenarios.<br>`Given the <user> with { name: "Test" }.` |
+| **Group**     | Processing        | OWN               | Partitions a collection into sub-collections by field value.<br>`Group the <by-status> from the <orders> by "status".` |
 | **Include**   | Templates         | OWN               | Includes a partial template.<br>`Include the <header> from the <template: "header.tpl">.` |
 | **Join**      | Manipulation      | OWN               | Joins a collection with a separator.<br>`Join the <csv-line> from the <fields> by ",".` |
 | **Keepalive** | Server            | SERVER            | Blocks execution to keep application alive for external events.<br>`Keepalive the <application> for the <events>.` |
@@ -69,7 +70,7 @@ Complete reference of all 61 ARO actions organized by category.
 ## Summary by Semantic Role
 
 - **REQUEST** (11 actions): Extract, Retrieve, Receive, Request, Read, Stream, List, Stat, Exists, Prompt, Select
-- **OWN** (27 actions): Compute, Validate, Compare, Transform, Create, Update, Delete, Filter, Sort, Split, Merge, Join, Map, ParseHtml, ParseLinkHeader, Reduce, Accept, Given, When, Then, Assert, Call, Execute, Sleep, Clear, Show, Include
+- **OWN** (28 actions): Compute, Validate, Compare, Transform, Create, Update, Delete, Filter, Group, Sort, Split, Merge, Join, Map, ParseHtml, ParseLinkHeader, Reduce, Accept, Given, When, Then, Assert, Call, Execute, Sleep, Clear, Show, Include
 - **RESPONSE** (11 actions): Return, Throw, Send, Log, Write, Append, Store, Notify, Broadcast, Render, Repaint
 - **EXPORT** (3 actions): Publish, Emit, Schedule
 - **SERVER** (9 actions): Start, Stop, Listen, Connect, Close, Keepalive, Make, Copy, Move
@@ -89,7 +90,7 @@ Complete reference of all 61 ARO actions organized by category.
 - **Monitoring** (1): Log
 - **Mutation** (3): Create, Update, Delete
 - **Persistence** (1): Store
-- **Processing** (5): Compute, Transform, Map, ParseHtml, ParseLinkHeader, Reduce
+- **Processing** (7): Compute, Transform, Map, Group, ParseHtml, ParseLinkHeader, Reduce
 - **Protocol** (1): Accept
 - **Query** (1): Exists
 - **Server** (6): Start, Stop, Listen, Connect, Close, Keepalive

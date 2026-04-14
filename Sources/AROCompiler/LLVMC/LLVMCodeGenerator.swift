@@ -397,7 +397,7 @@ public final class LLVMCodeGenerator {
         // Without this, where/by bindings from earlier Retrieve calls persist and contaminate
         // subsequent Retrieve calls (e.g. "Retrieve all" after "Retrieve where key = X" would
         // incorrectly still filter by key = X).
-        for transientKey in ["_where_field_", "_where_op_", "_where_value_", "_by_pattern_", "_by_flags_",
+        for transientKey in ["_where_field_", "_where_op_", "_where_value_", "_by_pattern_", "_by_flags_", "_by_field_",
                              "_aggregation_type_", "_aggregation_field_", "_default_value_"] {
             let keyStr = ctx.stringConstant(transientKey)
             _ = ctx.module.insertCall(externals.variableUnbind, on: [ctx.currentContextVar!, keyStr], at: ctx.insertionPoint)
@@ -667,7 +667,7 @@ public final class LLVMCodeGenerator {
             )
         }
 
-        // Bind by clause if present (for Split action with regex)
+        // Bind by clause if present (for Split action with regex, or Group action with field name)
         if let byClause = modifiers.byClause {
             // Bind _by_pattern_
             let patternName = ctx.stringConstant("_by_pattern_")
@@ -686,6 +686,17 @@ public final class LLVMCodeGenerator {
                 on: [ctx.currentContextVar!, flagsName, flagsValue],
                 at: ip
             )
+
+            // Bind _by_field_ for Group action (field-based grouping)
+            if byClause.isFieldName {
+                let fieldName = ctx.stringConstant("_by_field_")
+                let fieldValue = ctx.stringConstant(byClause.pattern)
+                _ = ctx.module.insertCall(
+                    externals.variableBindString,
+                    on: [ctx.currentContextVar!, fieldName, fieldValue],
+                    at: ip
+                )
+            }
         }
 
         // Bind default value if present (for optional retrieve with fallback)
@@ -2187,7 +2198,7 @@ private final class StringConstantCollector {
         // Register built-in variable names
         let builtins = ["_literal_", "_expression_", "_result_expression_",
                         "_aggregation_type_", "_aggregation_field_",
-                        "_where_field_", "_where_op_", "_where_value_", "_by_pattern_", "_by_flags_",
+                        "_where_field_", "_where_op_", "_where_value_", "_by_pattern_", "_by_flags_", "_by_field_",
                         "_with_", "_to_", "_publish_alias_", "_publish_variable_",
                         "_require_variable_", "_require_source_", "Application-Start"]
         for name in builtins {

@@ -386,19 +386,29 @@ public struct WhereClause: Sendable, CustomStringConvertible {
 
 // MARK: - By Clause (ARO-0037)
 
-/// A by clause for regex-based splitting: by /pattern/flags
+/// A by clause for regex-based splitting or field-based grouping
+///
+/// Supports two forms:
+/// - Regex: `by /pattern/flags` (for Split action)
+/// - Field: `by "fieldName"` (for Group action)
 public struct ByClause: Sendable, CustomStringConvertible {
     public let pattern: String
     public let flags: String
+    /// When true, `pattern` is a literal field name rather than a regex.
+    public let isFieldName: Bool
     public let span: SourceSpan
 
-    public init(pattern: String, flags: String, span: SourceSpan) {
+    public init(pattern: String, flags: String, span: SourceSpan, isFieldName: Bool = false) {
         self.pattern = pattern
         self.flags = flags
+        self.isFieldName = isFieldName
         self.span = span
     }
 
     public var description: String {
+        if isFieldName {
+            return "by \"\(pattern)\""
+        }
         if flags.isEmpty {
             return "by /\(pattern)/"
         }
