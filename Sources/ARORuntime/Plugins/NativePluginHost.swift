@@ -401,14 +401,39 @@ public final class NativePluginHost: @unchecked Sendable {
             throw NativePluginError.compilationFailed(pluginName, message: "swift build failed: \(errorMessage)")
         }
 
-        // Find the built dynamic library in .build/release/
-        let releaseDir = packageDir.appendingPathComponent(".build/release")
-        if let contents = try? FileManager.default.contentsOfDirectory(
-            at: releaseDir,
-            includingPropertiesForKeys: nil,
-            options: [.skipsHiddenFiles]
-        ) {
-            // Look for a dynamic library matching the plugin name or any .dylib/.so
+        // Use `swift build --show-bin-path` to find the actual output directory
+        // (on Linux this may be .build/x86_64-unknown-linux-gnu/release/ rather than .build/release/)
+        var binDir: URL? = nil
+        let binPathProcess = Process()
+        binPathProcess.executableURL = URL(fileURLWithPath: swiftPath)
+        binPathProcess.arguments = ["build", "-c", "release", "--show-bin-path"]
+        binPathProcess.currentDirectoryURL = packageDir
+        let binPathPipe = Pipe()
+        binPathProcess.standardOutput = binPathPipe
+        binPathProcess.standardError = FileHandle.nullDevice
+        if let _ = try? binPathProcess.run() {
+            binPathProcess.waitUntilExit()
+            if binPathProcess.terminationStatus == 0,
+               let path = String(data: binPathPipe.fileHandleForReading.readDataToEndOfFile(), encoding: .utf8)?
+                   .trimmingCharacters(in: .whitespacesAndNewlines),
+               !path.isEmpty {
+                binDir = URL(fileURLWithPath: path)
+            }
+        }
+
+        // Fallback to .build/release/ if --show-bin-path didn't work
+        let searchDirs = [
+            binDir,
+            packageDir.appendingPathComponent(".build/release"),
+        ].compactMap { $0 }
+
+        for releaseDir in searchDirs {
+            guard let contents = try? FileManager.default.contentsOfDirectory(
+                at: releaseDir,
+                includingPropertiesForKeys: nil,
+                options: [.skipsHiddenFiles]
+            ) else { continue }
+
             let libFiles = contents.filter { $0.pathExtension == ext }
             if let lib = libFiles.first(where: { $0.lastPathComponent.lowercased().contains(pluginName.lowercased().replacingOccurrences(of: "-", with: "")) }) ?? libFiles.first {
                 // Copy to plugin root for future loads
@@ -420,7 +445,7 @@ public final class NativePluginHost: @unchecked Sendable {
             }
         }
 
-        debugPrint("[NativePluginHost] Swift package built but no dynamic library found in \(releaseDir.path)")
+        debugPrint("[NativePluginHost] Swift package built but no dynamic library found")
         return nil
     }
 
