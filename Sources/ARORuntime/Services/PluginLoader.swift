@@ -327,6 +327,23 @@ public final class PluginLoader: @unchecked Sendable {
         let wrapper = CPluginServiceWrapper(name: name, loader: self)
         try ExternalServiceRegistry.shared.register(wrapper, withName: name)
 
+        // Call aro_plugin_register / aro_plugin_init if present — SDK-based plugins
+        // use lazy static initializers that only run when explicitly triggered.
+        #if os(Windows)
+        let registerSymbol = GetProcAddress(handle, "aro_plugin_register")
+        let initSymbol = GetProcAddress(handle, "aro_plugin_init")
+        #else
+        let registerSymbol = dlsym(handle, "aro_plugin_register")
+        let initSymbol = dlsym(handle, "aro_plugin_init")
+        #endif
+        if let registerSymbol {
+            let registerFunc = unsafeBitCast(registerSymbol, to: (@convention(c) () -> Void).self)
+            registerFunc()
+        } else if let initSymbol {
+            let pluginInitFunc = unsafeBitCast(initSymbol, to: (@convention(c) () -> Void).self)
+            pluginInitFunc()
+        }
+
         // Parse plugin info to get custom action definitions and qualifiers
         if let infoSymbol = infoSymbol {
             let infoFunc = unsafeBitCast(infoSymbol, to: CPluginInfoFunction.self)
