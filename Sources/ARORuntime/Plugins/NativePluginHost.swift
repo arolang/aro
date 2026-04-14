@@ -228,7 +228,19 @@ public final class NativePluginHost: @unchecked Sendable {
             return outputPath
         }
 
-        // Check for Swift source files
+        // Check for Package.swift (Swift package plugin) - check current path and parent
+        let packageSwiftCandidates = [
+            pluginPath.appendingPathComponent("Package.swift"),
+            pluginPath.deletingLastPathComponent().appendingPathComponent("Package.swift"),
+        ]
+
+        if let packageSwift = packageSwiftCandidates.first(where: { FileManager.default.fileExists(atPath: $0.path) }) {
+            let packageDir = packageSwift.deletingLastPathComponent()
+            debugPrint("[NativePluginHost] Found Package.swift at \(packageSwift.path), building Swift package plugin: \(pluginName)")
+            return try compileSwiftPackagePlugin(packageDir: packageDir, ext: ext)
+        }
+
+        // Check for Swift source files (standalone, no Package.swift)
         let swiftFiles = findSourceFiles(withExtension: "swift")
         if !swiftFiles.isEmpty {
             debugPrint("[NativePluginHost] Found Swift files: \(swiftFiles.map { $0.lastPathComponent })")
@@ -324,6 +336,94 @@ public final class NativePluginHost: @unchecked Sendable {
         debugPrint("[NativePluginHost] Swift plugin compiled to: \(output.path)")
     }
 
+    /// Compile Swift plugin using Package.swift (swift build)
+    private func compileSwiftPackagePlugin(packageDir: URL, ext: String) throws -> URL? {
+        // Find swift executable
+        var swiftPath: String? = nil
+        if let swiftEnv = ProcessInfo.processInfo.environment["SWIFT_PATH"],
+           !swiftEnv.isEmpty,
+           FileManager.default.isExecutableFile(atPath: swiftEnv) {
+            swiftPath = swiftEnv
+        }
+
+        if swiftPath == nil {
+            let whichProcess = Process()
+            whichProcess.executableURL = URL(fileURLWithPath: "/usr/bin/which")
+            whichProcess.arguments = ["swift"]
+            let pipe = Pipe()
+            whichProcess.standardOutput = pipe
+            whichProcess.standardError = FileHandle.nullDevice
+            if let _ = try? whichProcess.run() {
+                whichProcess.waitUntilExit()
+                if whichProcess.terminationStatus == 0,
+                   let path = String(data: pipe.fileHandleForReading.readDataToEndOfFile(), encoding: .utf8)?
+                       .trimmingCharacters(in: .whitespacesAndNewlines),
+                   !path.isEmpty {
+                    swiftPath = path
+                }
+            }
+        }
+
+        if swiftPath == nil {
+            let commonPaths = [
+                "/usr/bin/swift",
+                "/usr/share/swift/usr/bin/swift",
+                "/opt/swift/usr/bin/swift",
+                "/opt/homebrew/bin/swift",
+                "/usr/local/bin/swift",
+            ]
+            swiftPath = commonPaths.first(where: { FileManager.default.isExecutableFile(atPath: $0) })
+        }
+
+        guard let swiftPath = swiftPath else {
+            throw NativePluginError.compilationFailed(pluginName, message: "swift not found")
+        }
+
+        debugPrint("[NativePluginHost] Building Swift package plugin with \(swiftPath) in \(packageDir.path)")
+
+        let process = Process()
+        process.executableURL = URL(fileURLWithPath: swiftPath)
+        process.arguments = ["build", "-c", "release"]
+        process.currentDirectoryURL = packageDir
+
+        let outputPipe = Pipe()
+        let errorPipe = Pipe()
+        process.standardOutput = outputPipe
+        process.standardError = errorPipe
+
+        try process.run()
+        process.waitUntilExit()
+
+        if process.terminationStatus != 0 {
+            let errorData = errorPipe.fileHandleForReading.readDataToEndOfFile()
+            let errorMessage = String(data: errorData, encoding: .utf8) ?? "Unknown error"
+            debugPrint("[NativePluginHost] Swift package build failed: \(errorMessage)")
+            throw NativePluginError.compilationFailed(pluginName, message: "swift build failed: \(errorMessage)")
+        }
+
+        // Find the built dynamic library in .build/release/
+        let releaseDir = packageDir.appendingPathComponent(".build/release")
+        if let contents = try? FileManager.default.contentsOfDirectory(
+            at: releaseDir,
+            includingPropertiesForKeys: nil,
+            options: [.skipsHiddenFiles]
+        ) {
+            // Look for a dynamic library matching the plugin name or any .dylib/.so
+            let libFiles = contents.filter { $0.pathExtension == ext }
+            if let lib = libFiles.first(where: { $0.lastPathComponent.lowercased().contains(pluginName.lowercased().replacingOccurrences(of: "-", with: "")) }) ?? libFiles.first {
+                // Copy to plugin root for future loads
+                let destPath = packageDir.appendingPathComponent(lib.lastPathComponent)
+                try? FileManager.default.removeItem(at: destPath)
+                try FileManager.default.copyItem(at: lib, to: destPath)
+                debugPrint("[NativePluginHost] Swift package plugin built: \(destPath.path)")
+                return destPath
+            }
+        }
+
+        debugPrint("[NativePluginHost] Swift package built but no dynamic library found in \(releaseDir.path)")
+        return nil
+    }
+
     /// Compile Rust plugin using cargo
     private func compileRustPlugin(projectDir: URL, ext: String) throws -> URL? {
         // Find cargo executable
@@ -417,6 +517,18 @@ public final class NativePluginHost: @unchecked Sendable {
         args.append("-fPIC")
         args.append("-o")
         args.append(output.path)
+
+        // Add include paths: check for include/ directory in plugin root (parent of source path)
+        let pluginRoot = pluginPath.deletingLastPathComponent()
+        let includeDir = pluginRoot.appendingPathComponent("include")
+        if FileManager.default.fileExists(atPath: includeDir.path) {
+            args.append("-I\(includeDir.path)")
+        }
+        // Also check for include/ in the source directory itself
+        let localIncludeDir = pluginPath.appendingPathComponent("include")
+        if FileManager.default.fileExists(atPath: localIncludeDir.path) {
+            args.append("-I\(localIncludeDir.path)")
+        }
 
         let process = Process()
         process.executableURL = URL(fileURLWithPath: args[0])
