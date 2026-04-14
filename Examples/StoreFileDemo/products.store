@@ -1,0 +1,13 @@
+# Product catalog — read-only seed data
+- id: p1
+  name: Widget
+  price: 9.99
+  category: hardware
+- id: p2
+  name: Gadget
+  price: 24.99
+  category: electronics
+- id: p3
+  name: Gizmo
+  price: 14.99
+  category: hardware

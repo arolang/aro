@@ -312,6 +312,100 @@ struct IncludeActionTests {
     }
 }
 
+// MARK: - Template Context Isolation Tests (issue #166)
+
+@Suite("Template Context Isolation Tests")
+struct TemplateContextIsolationTests {
+
+    @Test("Template context does not leak bindings back to parent")
+    func testTemplateContextDoesNotLeakToParent() {
+        let parent = RuntimeContext(featureSetName: "Parent")
+        parent.bind("shared", value: "parent-value", allowRebind: true)
+
+        let child = parent.createTemplateContext()
+        child.bind("local", value: "child-value", allowRebind: true)
+
+        // Child sees its own local binding
+        #expect(child.resolveAny("local") as? String == "child-value")
+        // Child sees parent's shared binding via read-through
+        #expect(child.resolveAny("shared") as? String == "parent-value")
+        // Parent does NOT see the child's local binding
+        #expect(parent.resolveAny("local") == nil)
+    }
+
+    @Test("Template context shadow does not mutate parent binding")
+    func testTemplateContextShadowsParent() {
+        let parent = RuntimeContext(featureSetName: "Parent")
+        parent.bind("name", value: "alice", allowRebind: true)
+
+        let child = parent.createTemplateContext()
+        child.bind("name", value: "bob", allowRebind: true)
+
+        #expect(child.resolveAny("name") as? String == "bob")
+        // Parent keeps its original value — mutation is local to the child
+        #expect(parent.resolveAny("name") as? String == "alice")
+    }
+
+    @Test("Sibling template contexts do not share bindings")
+    func testSiblingTemplateContextsAreIsolated() {
+        let parent = RuntimeContext(featureSetName: "Parent")
+        parent.bind("shared", value: 42, allowRebind: true)
+
+        let childA = parent.createTemplateContext()
+        let childB = parent.createTemplateContext()
+
+        childA.bind("only-in-a", value: "A", allowRebind: true)
+        childB.bind("only-in-b", value: "B", allowRebind: true)
+
+        // Each sibling sees its own local binding and the shared parent binding,
+        // but neither sees the other sibling's local binding.
+        #expect(childA.resolveAny("only-in-a") as? String == "A")
+        #expect(childA.resolveAny("only-in-b") == nil)
+        #expect(childA.resolveAny("shared") as? Int == 42)
+
+        #expect(childB.resolveAny("only-in-b") as? String == "B")
+        #expect(childB.resolveAny("only-in-a") == nil)
+        #expect(childB.resolveAny("shared") as? Int == 42)
+    }
+
+    @Test("Concurrent template contexts remain isolated under race")
+    func testConcurrentTemplateContextsAreIsolated() async {
+        let parent = RuntimeContext(featureSetName: "Parent")
+        parent.bind("base", value: "base-value", allowRebind: true)
+
+        // Spawn many concurrent "renders" that each create their own template
+        // context and bind a unique local variable. No binding should leak
+        // between concurrent children, and none should leak to the parent.
+        await withTaskGroup(of: (Int, String?, String?, String?).self) { group in
+            for i in 0..<64 {
+                group.addTask {
+                    let child = parent.createTemplateContext()
+                    let uniqueName = "local-\(i)"
+                    let uniqueValue = "value-\(i)"
+                    child.bind(uniqueName, value: uniqueValue, allowRebind: true)
+                    // Yield so concurrent tasks can interleave before reading back
+                    await Task.yield()
+                    let ownValue = child.resolveAny(uniqueName) as? String
+                    let baseValue = child.resolveAny("base") as? String
+                    let neighborKey = "local-\((i + 1) % 64)"
+                    let neighborValue = child.resolveAny(neighborKey) as? String
+                    return (i, ownValue, baseValue, neighborValue)
+                }
+            }
+            for await (i, ownValue, baseValue, neighborValue) in group {
+                #expect(ownValue == "value-\(i)")
+                #expect(baseValue == "base-value")
+                #expect(neighborValue == nil, "Sibling context leaked binding into concurrent child \(i)")
+            }
+        }
+
+        // Parent must not have picked up any of the children's local bindings.
+        for i in 0..<64 {
+            #expect(parent.resolveAny("local-\(i)") == nil)
+        }
+    }
+}
+
 // MARK: - Template Error Tests
 
 @Suite("Template Error Tests")

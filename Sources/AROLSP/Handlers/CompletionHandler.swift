@@ -90,6 +90,7 @@ public struct CompletionHandler: Sendable {
             ("Join", "OWN", "Join collection elements into a string"),
             ("Map", "OWN", "Transform each element of a collection"),
             ("Reduce", "OWN", "Reduce a collection to a single value"),
+            ("Group", "OWN", "Group collection by field value"),
             ("Copy", "OWN", "Copy file"),
             ("Move", "OWN", "Move file"),
             ("Append", "OWN", "Append to file or collection"),

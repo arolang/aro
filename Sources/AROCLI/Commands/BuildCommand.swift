@@ -97,7 +97,25 @@ struct BuildCommand: AsyncParsableCommand {
             for file in appConfig.sourceFiles {
                 print("    - \(file.lastPathComponent)")
             }
+            if !appConfig.storeFiles.isEmpty {
+                print("  Store files: \(appConfig.storeFiles.count)")
+                for store in appConfig.storeFiles {
+                    let mode = store.isWritable ? "writable" : "read-only"
+                    print("    - \(store.filePath.lastPathComponent) -> \(store.repositoryName) (\(mode))")
+                }
+            }
             print()
+        }
+
+        // Warn about writable .store files — compiled binaries always load them
+        // as read-only, so the o+w bit is harmless (but may surprise the user).
+        let writableStores = appConfig.storeFiles.filter { $0.isWritable }
+        if !writableStores.isEmpty {
+            print("Warning: Store files with world-write permission will be treated as read-only in compiled binaries.")
+            for store in writableStores {
+                print("  - \(store.filePath.lastPathComponent) has o+w permission set")
+            }
+            print("Hint: chmod o-w <file>.store to silence this warning.")
         }
 
         // Compile all source files to AST

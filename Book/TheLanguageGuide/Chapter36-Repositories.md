@@ -1005,6 +1005,101 @@ Store the <user> into the <user-repository>.
 Store the <entire-request-context> into the <debug-repository>.
 ```
 
+## Store Files
+
+Repositories can be seeded from **`.store` files** — YAML files placed alongside your `.aro` source files. A `.store` file automatically populates the repository of the same name before `Application-Start` executes.
+
+### Naming Convention
+
+The filename determines the repository name:
+
+| File | Repository |
+|------|-----------|
+| `users.store` | `users-repository` |
+| `config.store` | `config-repository` |
+| `products.store` | `products-repository` |
+
+### Read-Only Stores (Default)
+
+A `.store` file is **read-only by default** — it seeds the repository at startup, but runtime `Store` and `Delete` operations only modify the in-memory repository and never write back to the file.
+
+```yaml
+# products.store
+- id: p1
+  name: Widget
+  price: 9.99
+- id: p2
+  name: Gadget
+  price: 24.99
+```
+
+```aro
+(Application-Start: My App) {
+    (* products-repository is already populated from products.store *)
+    Retrieve the <products> from the <products-repository>.
+    Compute the <count: length> from <products>.
+    Log <count> to the <console>.  (* Output: 2 *)
+
+    Return an <OK: status> for the <startup>.
+}
+```
+
+No imports or explicit loading required — ARO discovers `.store` files automatically.
+
+### Writable Stores
+
+To make a store **writable** — meaning runtime changes persist back to the file — set the POSIX **other-write** permission bit:
+
+```bash
+chmod o+w sessions.store
+```
+
+When the other-write bit (`o+w`) is set, ARO:
+
+1. Seeds the repository from the file at startup (same as read-only)
+2. Watches for `Store` and `Delete` operations on that repository
+3. Debounces changes (1-second window) to avoid excessive disk I/O
+4. Writes changes atomically (via a temporary file + rename)
+5. Flushes all pending changes on graceful shutdown
+
+```bash
+# Create a writable store
+touch sessions.store
+chmod o+w sessions.store
+```
+
+On the next application start, any data in `sessions.store` is loaded, and any new `Store` operations against `sessions-repository` will be persisted back.
+
+### Crash Behavior
+
+| Permission | Crash behavior |
+|-----------|---------------|
+| Read-only (default) | File never modified — no data loss risk |
+| Writable (`o+w`) | At most ~1 second of changes may be lost (debounce window) |
+
+### Build Restrictions
+
+`aro build` **rejects writable store files** — a compiled binary cannot write back to embedded resources. Remove the world-write permission before building:
+
+```bash
+chmod o-w sessions.store   # Make read-only for aro build
+aro build ./MyApp
+```
+
+Read-only `.store` files are embedded as seed data in compiled binaries.
+
+### When to Use Store Files
+
+| Use Case | Store Type |
+|----------|-----------|
+| Reference data (countries, categories) | Read-only |
+| Default configuration | Read-only |
+| Secrets and API keys | Read-only (add to `.gitignore`) |
+| Session or cache data | Writable |
+| Simple persistence (no database needed) | Writable |
+
+For full details, see the [Store Files proposal (ARO-0073)](../Proposals/ARO-0073-store-files.md).
+
 ---
 
 *Next: Chapter 37 — System Commands*
