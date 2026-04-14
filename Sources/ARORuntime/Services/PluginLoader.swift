@@ -285,14 +285,6 @@ public final class PluginLoader: @unchecked Sendable {
         }
         let rawHandle = UnsafeMutableRawPointer(handle)
         #else
-        // On Linux, probe dlopen in a forked child to avoid SIGSEGV from TLS exhaustion
-        // when loading Swift-built .so files into a process with the Swift runtime active.
-        #if os(Linux)
-        if !safeDlopenProbe(path.path) {
-            throw PluginError.loadFailed(name,
-                message: "dlopen probe crashed — the library is not safe to load in this process")
-        }
-        #endif
         guard let handle = dlopen(path.path, RTLD_NOW | RTLD_LOCAL) else {
             let error = String(cString: dlerror())
             throw PluginError.loadFailed(name, message: error)
@@ -1829,12 +1821,6 @@ public final class PluginLoader: @unchecked Sendable {
         }
         let rawHandle = UnsafeMutableRawPointer(handle)
         #else
-        #if os(Linux)
-        if !safeDlopenProbe(path.path) {
-            throw PluginError.loadFailed(name,
-                message: "dlopen probe crashed — the library is not safe to load in this process")
-        }
-        #endif
         guard let handle = dlopen(path.path, RTLD_NOW | RTLD_LOCAL) else {
             let error = String(cString: dlerror())
             throw PluginError.loadFailed(name, message: error)
@@ -2239,12 +2225,6 @@ public final class PluginLoader: @unchecked Sendable {
         }
         defer { FreeLibrary(handle) }
         #else
-        #if os(Linux)
-        if !safeDlopenProbe(dylibPath.path) {
-            throw PluginError.loadFailed(name,
-                message: "dlopen probe crashed — the library is not safe to load in this process")
-        }
-        #endif
         guard let handle = dlopen(dylibPath.path, RTLD_NOW | RTLD_LOCAL) else {
             let error = String(cString: dlerror())
             throw PluginError.loadFailed(name, message: error)

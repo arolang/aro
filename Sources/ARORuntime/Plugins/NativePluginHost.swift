@@ -198,16 +198,6 @@ public final class NativePluginHost: @unchecked Sendable {
         }
         libraryHandle = UnsafeMutableRawPointer(handle)
         #else
-        // On Linux, Swift-built .so files can crash the dynamic linker (SIGSEGV in
-        // ld-linux due to TLS exhaustion) when dlopen'd into a running Swift process.
-        // Probe in a forked child first so a crash doesn't take out the host.
-        #if os(Linux)
-        if !safeDlopenProbe(libraryPath.path) {
-            throw NativePluginError.loadFailed(pluginName,
-                message: "dlopen probe crashed — the library is not safe to load in this process")
-        }
-        #endif
-
         guard let handle = dlopen(libraryPath.path, RTLD_NOW | RTLD_LOCAL) else {
             let error = String(cString: dlerror())
             throw NativePluginError.loadFailed(pluginName, message: error)
@@ -253,9 +243,11 @@ public final class NativePluginHost: @unchecked Sendable {
         }
 
         // Fallback: check for Package.swift (Swift package plugin with SPM dependencies)
-        // Note: on Linux, Swift dynamic libraries built via SPM can crash the dynamic linker
-        // (TLS exhaustion) when loaded via dlopen into a process with the Swift runtime already
-        // active.  Guard the dlopen with a fork-based probe to avoid a hard SEGV.
+        // On Linux, Swift dynamic libraries built via SPM crash the dynamic linker
+        // (TLS exhaustion / SIGSEGV at 0x39e in ld-linux) when dlopen'd into a running
+        // Swift process.  Skip Package.swift compilation in the interpreter on Linux;
+        // aro build embeds these plugins via PluginLoader.compilePackagePlugin instead.
+        #if !os(Linux)
         let packageSwiftCandidates = [
             pluginPath.appendingPathComponent("Package.swift"),
             pluginPath.deletingLastPathComponent().appendingPathComponent("Package.swift"),
@@ -266,6 +258,7 @@ public final class NativePluginHost: @unchecked Sendable {
             debugPrint("[NativePluginHost] Found Package.swift at \(packageSwift.path), building Swift package plugin: \(pluginName)")
             return try compileSwiftPackagePlugin(packageDir: packageDir, ext: ext)
         }
+        #endif
 
         debugPrint("[NativePluginHost] No compilable sources found for plugin: \(pluginName)")
         return nil
