@@ -164,38 +164,18 @@ public actor ModelManager {
             request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
         }
 
-        let (bytes, response) = try await urlSession.bytes(for: request)
+        let (data, response) = try await urlSession.data(for: request)
         guard let http = response as? HTTPURLResponse else {
             throw ModelManagerError.invalidResponse
         }
         if http.statusCode < 200 || http.statusCode >= 300 {
             throw ModelManagerError.downloadFailed(url.absoluteString, http.statusCode)
         }
-        let total: Int64? = http.expectedContentLength > 0 ? http.expectedContentLength : nil
+        let total = Int64(data.count)
+        progress(file, total, total)
 
         let tmp = destination.appendingPathExtension("part")
-        FileManager.default.createFile(atPath: tmp.path, contents: nil)
-        let handle = try FileHandle(forWritingTo: tmp)
-        defer { try? handle.close() }
-
-        var buffer = Data()
-        buffer.reserveCapacity(64 * 1024)
-        var received: Int64 = 0
-        for try await byte in bytes {
-            buffer.append(byte)
-            if buffer.count >= 64 * 1024 {
-                try handle.write(contentsOf: buffer)
-                received += Int64(buffer.count)
-                progress(file, received, total)
-                buffer.removeAll(keepingCapacity: true)
-            }
-        }
-        if !buffer.isEmpty {
-            try handle.write(contentsOf: buffer)
-            received += Int64(buffer.count)
-            progress(file, received, total)
-        }
-        try handle.close()
+        try data.write(to: tmp)
         if FileManager.default.fileExists(atPath: destination.path) {
             try FileManager.default.removeItem(at: destination)
         }
