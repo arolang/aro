@@ -1,0 +1,28 @@
+{
+  "models": {
+    "ARO-Lang/aro-coder-4bit": {
+      "repo": "ARO-Lang/aro-coder-4bit",
+      "backend": "llama.cpp",
+      "approximate_size_gb": 4.5,
+      "files": [
+        "model.gguf",
+        "tokenizer.json",
+        "config.json"
+      ],
+      "primary_file": "model.gguf",
+      "context_length": 8192,
+      "default_temperature": 0.2
+    },
+    "ARO-Lang/aro-embed": {
+      "repo": "ARO-Lang/aro-embed",
+      "backend": "llama.cpp",
+      "approximate_size_gb": 0.15,
+      "files": [
+        "embed.gguf"
+      ],
+      "primary_file": "embed.gguf",
+      "context_length": 2048,
+      "embedding_dim": 384
+    }
+  }
+}
