@@ -9,6 +9,16 @@ import Foundation
 import WinSDK
 #endif
 
+// On Linux, Swift-built .so files can crash the dynamic linker with RTLD_NOW
+// due to TLS exhaustion.  RTLD_LAZY defers symbol resolution past the critical
+// TLS allocation phase, and RTLD_GLOBAL lets the plugin share the host process's
+// already-loaded Swift runtime instead of pulling in a second copy.
+#if os(Linux)
+private let aroDlopenFlags: Int32 = RTLD_LAZY | RTLD_GLOBAL
+#else
+private let aroDlopenFlags: Int32 = Int32(RTLD_NOW | RTLD_LOCAL)
+#endif
+
 // MARK: - Plugin Loader
 
 /// Loads and manages dynamic plugins for ARO
@@ -82,8 +92,10 @@ public final class PluginLoader: @unchecked Sendable {
     // MARK: - Public API
 
     /// Load all plugins from the plugins directory
-    /// - Parameter directory: Base directory containing the `plugins/` folder
-    public func loadPlugins(from directory: URL) throws {
+    /// - Parameters:
+    ///   - directory: Base directory containing the `plugins/` folder
+    ///   - excluding: Directory names to skip (already managed by UnifiedPluginLoader)
+    public func loadPlugins(from directory: URL, excluding: Set<String> = []) throws {
         let pluginsDir = directory.appendingPathComponent("plugins")
 
         // Check if plugins directory exists
@@ -120,23 +132,26 @@ public final class PluginLoader: @unchecked Sendable {
         let libExtension = "dylib"
         #endif
         let dylibs = contents.filter { $0.pathExtension == libExtension }
-        // debugPrint("[PluginLoader] Found dynamic libraries: \(dylibs.map { $0.lastPathComponent })")
         for dylib in dylibs {
             let name = dylib.deletingPathExtension().lastPathComponent
                 .replacingOccurrences(of: "lib", with: "")
             do {
                 try loadDylib(at: dylib, name: name)
-                // debugPrint("[PluginLoader] Loaded dylib: \(dylib.lastPathComponent) as '\(name)'")
             } catch {
                 print("[PluginLoader] Warning: Failed to load \(dylib.lastPathComponent): \(error)")
             }
         }
 
         // Load Swift package plugins (directories with Package.swift)
+        // Skip directories already managed by UnifiedPluginLoader to prevent
+        // double-loading (and module-cache conflicts on case-insensitive mounts).
         for item in contents {
             var isDirectory: ObjCBool = false
             if FileManager.default.fileExists(atPath: item.path, isDirectory: &isDirectory),
                isDirectory.boolValue {
+                if excluding.contains(item.lastPathComponent) {
+                    continue
+                }
                 let packageSwift = item.appendingPathComponent("Package.swift")
                 if FileManager.default.fileExists(atPath: packageSwift.path) {
                     do {
@@ -285,7 +300,7 @@ public final class PluginLoader: @unchecked Sendable {
         }
         let rawHandle = UnsafeMutableRawPointer(handle)
         #else
-        guard let handle = dlopen(path.path, RTLD_NOW | RTLD_LOCAL) else {
+        guard let handle = dlopen(path.path, aroDlopenFlags) else {
             let error = String(cString: dlerror())
             throw PluginError.loadFailed(name, message: error)
         }
@@ -1600,13 +1615,32 @@ public final class PluginLoader: @unchecked Sendable {
         // Possible library names: libCounterPlugin.dylib or CounterPlugin.dylib
         let libNames = ["lib\(name).\(ext)", "\(name).\(ext)"]
 
+        // Search a release directory for a matching library.
+        // First tries exact name matches, then falls back to any .dylib/.so file
+        // (SPM product names often differ from plugin directory names).
+        func searchReleaseDir(_ releaseDir: URL) -> URL? {
+            // Exact name match
+            for libName in libNames {
+                let path = releaseDir.appendingPathComponent(libName)
+                if FileManager.default.fileExists(atPath: path.path) {
+                    return path
+                }
+            }
+            // Fallback: any dynamic library in the directory
+            if let files = try? FileManager.default.contentsOfDirectory(
+                at: releaseDir, includingPropertiesForKeys: nil, options: [.skipsHiddenFiles]
+            ) {
+                if let lib = files.first(where: { $0.pathExtension == ext && $0.lastPathComponent.hasPrefix("lib") }) ?? files.first(where: { $0.pathExtension == ext }) {
+                    return lib
+                }
+            }
+            return nil
+        }
+
         // First, try the legacy path: .build/release/
         let legacyReleaseDir = buildDir.appendingPathComponent("release")
-        for libName in libNames {
-            let path = legacyReleaseDir.appendingPathComponent(libName)
-            if FileManager.default.fileExists(atPath: path.path) {
-                return path
-            }
+        if let found = searchReleaseDir(legacyReleaseDir) {
+            return found
         }
 
         // Next, search for arch-specific directories like:
@@ -1628,11 +1662,8 @@ public final class PluginLoader: @unchecked Sendable {
                     let dirName = item.lastPathComponent
                     if dirName.contains("-") && dirName != "checkouts" {
                         let releaseDir = item.appendingPathComponent("release")
-                        for libName in libNames {
-                            let path = releaseDir.appendingPathComponent(libName)
-                            if FileManager.default.fileExists(atPath: path.path) {
-                                return path
-                            }
+                        if let found = searchReleaseDir(releaseDir) {
+                            return found
                         }
                     }
                 }
@@ -1711,16 +1742,21 @@ public final class PluginLoader: @unchecked Sendable {
         process.currentDirectoryURL = packageDir
         process.arguments = ["build", "-c", "release"]
 
-        let pipe = Pipe()
-        process.standardError = pipe
-        process.standardOutput = pipe
+        let outPipe = Pipe()
+        let errorPipe = Pipe()
+        process.standardOutput = outPipe
+        process.standardError = errorPipe
 
         try process.run()
         process.waitUntilExit()
+        let outData = outPipe.fileHandleForReading.readDataToEndOfFile()
+        let errorData = errorPipe.fileHandleForReading.readDataToEndOfFile()
 
         if process.terminationStatus != 0 {
-            let errorData = pipe.fileHandleForReading.readDataToEndOfFile()
-            let errorMessage = String(data: errorData, encoding: .utf8) ?? "Unknown error"
+            let stderrStr = String(data: errorData, encoding: .utf8) ?? ""
+            let stdoutStr = String(data: outData, encoding: .utf8) ?? ""
+            let combined = [stderrStr, stdoutStr].filter { !$0.isEmpty }.joined(separator: "\n")
+            let errorMessage = combined.isEmpty ? "exit code \(process.terminationStatus)" : combined
             throw PluginError.compilationFailed(pluginName, message: errorMessage)
         }
 
@@ -1744,23 +1780,35 @@ public final class PluginLoader: @unchecked Sendable {
     private func compilePackagePlugin(source: URL, output: URL) throws {
         let pluginName = source.lastPathComponent
 
+        // Use a dedicated scratch path inside the plugin dir so that builds from
+        // different callers (interpreter vs aro-build) don't clash. On case-insensitive
+        // mounts the module cache can contain entries from both path casings; using a
+        // fresh scratch path avoids those conflicts.
+        let scratchPath = source.appendingPathComponent(".build-aro")
+
         // Build the package using swift build
         let process = Process()
         let swiftPath = findSwiftExecutable() ?? "/usr/bin/swift"
         process.executableURL = URL(fileURLWithPath: swiftPath)
         process.currentDirectoryURL = source
-        process.arguments = ["build", "-c", "release"]
+        process.arguments = ["build", "-c", "release", "--scratch-path", scratchPath.path]
 
-        let pipe = Pipe()
-        process.standardError = pipe
-        process.standardOutput = pipe
+        // Capture both stdout and stderr so we get the full error on failure.
+        let outPipe = Pipe()
+        let errorPipe = Pipe()
+        process.standardOutput = outPipe
+        process.standardError = errorPipe
 
         try process.run()
         process.waitUntilExit()
+        let outData = outPipe.fileHandleForReading.readDataToEndOfFile()
+        let errorData = errorPipe.fileHandleForReading.readDataToEndOfFile()
 
         if process.terminationStatus != 0 {
-            let errorData = pipe.fileHandleForReading.readDataToEndOfFile()
-            let errorMessage = String(data: errorData, encoding: .utf8) ?? "Unknown error"
+            let stderrStr = String(data: errorData, encoding: .utf8) ?? ""
+            let stdoutStr = String(data: outData, encoding: .utf8) ?? ""
+            let combined = [stderrStr, stdoutStr].filter { !$0.isEmpty }.joined(separator: "\n")
+            let errorMessage = combined.isEmpty ? "exit code \(process.terminationStatus)" : combined
             throw PluginError.compilationFailed(pluginName, message: errorMessage)
         }
 
@@ -1772,14 +1820,13 @@ public final class PluginLoader: @unchecked Sendable {
         let libraryExtension = "dylib"
         #endif
 
-        // Find the built dynamic library
-        // Swift now uses arch-specific paths like .build/arm64-apple-macosx/release/
+        // Find the built dynamic library in the scratch path
         guard let builtLibPath = findBuiltLibrary(
-            in: source.appendingPathComponent(".build"),
+            in: scratchPath,
             name: pluginName,
             extension: libraryExtension
         ) else {
-            throw PluginError.loadFailed(pluginName, message: "Built library not found in \(source.appendingPathComponent(".build").path)")
+            throw PluginError.loadFailed(pluginName, message: "Built library not found in \(scratchPath.path)")
         }
 
         // Copy to output location
@@ -1821,7 +1868,7 @@ public final class PluginLoader: @unchecked Sendable {
         }
         let rawHandle = UnsafeMutableRawPointer(handle)
         #else
-        guard let handle = dlopen(path.path, RTLD_NOW | RTLD_LOCAL) else {
+        guard let handle = dlopen(path.path, aroDlopenFlags) else {
             let error = String(cString: dlerror())
             throw PluginError.loadFailed(name, message: error)
         }
@@ -2225,7 +2272,7 @@ public final class PluginLoader: @unchecked Sendable {
         }
         defer { FreeLibrary(handle) }
         #else
-        guard let handle = dlopen(dylibPath.path, RTLD_NOW | RTLD_LOCAL) else {
+        guard let handle = dlopen(dylibPath.path, aroDlopenFlags) else {
             let error = String(cString: dlerror())
             throw PluginError.loadFailed(name, message: error)
         }

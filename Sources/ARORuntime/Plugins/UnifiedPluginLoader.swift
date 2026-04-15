@@ -102,51 +102,55 @@ public final class UnifiedPluginLoader: @unchecked Sendable {
     public func loadPlugins(from directory: URL) throws {
         let pluginsDir = directory.appendingPathComponent("Plugins")
 
-        // Always try legacy plugins/ directory first (lowercase — bare .swift files and SPM packages)
+        // Check if Plugins directory exists (uppercase — managed plugins with plugin.yaml)
+        let hasPluginsDir = FileManager.default.fileExists(atPath: pluginsDir.path)
+
+        // Collect names of managed plugins (those with plugin.yaml in Plugins/) so the
+        // legacy loader can skip them — prevents double-loading and module-cache conflicts
+        // on case-insensitive filesystem mounts (macOS/Docker) where "plugins/" == "Plugins/".
+        var managedPluginNames = Set<String>()
+
+        if hasPluginsDir {
+            // Scan for plugins with plugin.yaml
+            let contents = try FileManager.default.contentsOfDirectory(
+                at: pluginsDir,
+                includingPropertiesForKeys: [.isDirectoryKey],
+                options: [.skipsHiddenFiles]
+            )
+
+            debugPrint("[UnifiedPluginLoader] Found \(contents.count) items in Plugins/: \(contents.map { $0.lastPathComponent })")
+
+            for item in contents {
+                var isDirectory: ObjCBool = false
+                guard FileManager.default.fileExists(atPath: item.path, isDirectory: &isDirectory),
+                      isDirectory.boolValue else {
+                    continue
+                }
+
+                // Check for plugin.yaml
+                let manifestPath = item.appendingPathComponent("plugin.yaml")
+                if FileManager.default.fileExists(atPath: manifestPath.path) {
+                    managedPluginNames.insert(item.lastPathComponent)
+                    do {
+                        debugPrint("[UnifiedPluginLoader] Loading plugin: \(item.lastPathComponent)")
+                        try loadPlugin(at: item, manifestPath: manifestPath)
+                        debugPrint("[UnifiedPluginLoader] Successfully loaded plugin: \(item.lastPathComponent)")
+                    } catch {
+                        print("[UnifiedPluginLoader] Warning: Failed to load \(item.lastPathComponent): \(error)")
+                    }
+                } else {
+                    debugPrint("[UnifiedPluginLoader] Warning: \(item.lastPathComponent) missing plugin.yaml, skipping")
+                }
+            }
+        }
+
+        // Load legacy plugins from plugins/ directory (lowercase — bare .swift files and
+        // SPM packages without plugin.yaml). Skip any names already managed above.
         do {
-            try legacyLoader.loadPlugins(from: directory)
+            try legacyLoader.loadPlugins(from: directory, excluding: managedPluginNames)
         } catch {
             debugPrint("[UnifiedPluginLoader] Legacy loader error: \(error)")
         }
-
-        // Check if Plugins directory exists (uppercase — managed plugins with plugin.yaml)
-        guard FileManager.default.fileExists(atPath: pluginsDir.path) else {
-            return
-        }
-
-        // Scan for plugins with plugin.yaml
-        let contents = try FileManager.default.contentsOfDirectory(
-            at: pluginsDir,
-            includingPropertiesForKeys: [.isDirectoryKey],
-            options: [.skipsHiddenFiles]
-        )
-
-        debugPrint("[UnifiedPluginLoader] Found \(contents.count) items in Plugins/: \(contents.map { $0.lastPathComponent })")
-
-        for item in contents {
-            var isDirectory: ObjCBool = false
-            guard FileManager.default.fileExists(atPath: item.path, isDirectory: &isDirectory),
-                  isDirectory.boolValue else {
-                continue
-            }
-
-            // Check for plugin.yaml
-            let manifestPath = item.appendingPathComponent("plugin.yaml")
-            if FileManager.default.fileExists(atPath: manifestPath.path) {
-                do {
-                    debugPrint("[UnifiedPluginLoader] Loading plugin: \(item.lastPathComponent)")
-                    try loadPlugin(at: item, manifestPath: manifestPath)
-                    debugPrint("[UnifiedPluginLoader] Successfully loaded plugin: \(item.lastPathComponent)")
-                } catch {
-                    print("[UnifiedPluginLoader] Warning: Failed to load \(item.lastPathComponent): \(error)")
-                }
-            } else {
-                debugPrint("[UnifiedPluginLoader] Warning: \(item.lastPathComponent) missing plugin.yaml, skipping")
-            }
-        }
-
-        // Also load legacy plugins from plugins/ directory
-        try legacyLoader.loadPlugins(from: directory)
     }
 
     /// Load a single plugin

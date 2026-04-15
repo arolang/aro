@@ -165,12 +165,40 @@ public final class NativePluginHost: @unchecked Sendable {
 
             libraryPath = candidates.first(where: { FileManager.default.fileExists(atPath: $0.path) })
         } else {
-            // Try common patterns
-            let candidates = [
+            // Try common patterns (pluginPath is typically the Sources/ subdirectory)
+            let pluginRoot = pluginPath.deletingLastPathComponent()
+            var candidates = [
                 pluginPath.appendingPathComponent("lib\(pluginName).\(ext)"),
                 pluginPath.appendingPathComponent("\(pluginName).\(ext)"),
                 pluginPath.appendingPathComponent("target/release/lib\(pluginName).\(ext)"),  // Rust
             ]
+
+            // Also check SPM build output (for Package.swift-based plugins).
+            // The library may live under .build/<triple>/release/ in the plugin root.
+            let spmBuildDir = pluginRoot.appendingPathComponent(".build")
+            if FileManager.default.fileExists(atPath: spmBuildDir.path) {
+                // Try .build/release/ first (simple SPM layout)
+                let releaseDir = spmBuildDir.appendingPathComponent("release")
+                candidates.append(releaseDir.appendingPathComponent("lib\(pluginName).\(ext)"))
+                candidates.append(releaseDir.appendingPathComponent("\(pluginName).\(ext)"))
+
+                // Search arch-specific dirs: .build/<triple>/release/
+                if let buildContents = try? FileManager.default.contentsOfDirectory(
+                    at: spmBuildDir, includingPropertiesForKeys: [.isDirectoryKey], options: [.skipsHiddenFiles]
+                ) {
+                    for dir in buildContents where dir.lastPathComponent.contains("-") && dir.lastPathComponent != "checkouts" {
+                        let archRelease = dir.appendingPathComponent("release")
+                        // Look for any dynamic library matching the extension
+                        if let libs = try? FileManager.default.contentsOfDirectory(
+                            at: archRelease, includingPropertiesForKeys: nil, options: [.skipsHiddenFiles]
+                        ) {
+                            for lib in libs where lib.pathExtension == ext {
+                                candidates.append(lib)
+                            }
+                        }
+                    }
+                }
+            }
 
             libraryPath = candidates.first(where: { FileManager.default.fileExists(atPath: $0.path) })
         }
@@ -198,7 +226,15 @@ public final class NativePluginHost: @unchecked Sendable {
         }
         libraryHandle = UnsafeMutableRawPointer(handle)
         #else
-        guard let handle = dlopen(libraryPath.path, RTLD_NOW | RTLD_LOCAL) else {
+        // On Linux, Swift-built .so files can crash the dynamic linker with RTLD_NOW
+        // due to TLS exhaustion.  Use RTLD_LAZY | RTLD_GLOBAL so symbol resolution is
+        // deferred and the plugin can share the host process's Swift runtime.
+        #if os(Linux)
+        let dlopenFlags = RTLD_LAZY | RTLD_GLOBAL
+        #else
+        let dlopenFlags = RTLD_NOW | RTLD_LOCAL
+        #endif
+        guard let handle = dlopen(libraryPath.path, Int32(dlopenFlags)) else {
             let error = String(cString: dlerror())
             throw NativePluginError.loadFailed(pluginName, message: error)
         }
@@ -239,15 +275,12 @@ public final class NativePluginHost: @unchecked Sendable {
                 return outputPath
             } catch {
                 debugPrint("[NativePluginHost] Standalone swiftc failed (\(error)), trying Package.swift...")
+                // Clean up partial output so SPM doesn't complain about unhandled files
+                try? FileManager.default.removeItem(at: outputPath)
             }
         }
 
         // Fallback: check for Package.swift (Swift package plugin with SPM dependencies)
-        // On Linux, Swift dynamic libraries built via SPM crash the dynamic linker
-        // (TLS exhaustion / SIGSEGV at 0x39e in ld-linux) when dlopen'd into a running
-        // Swift process.  Skip Package.swift compilation in the interpreter on Linux;
-        // aro build embeds these plugins via PluginLoader.compilePackagePlugin instead.
-        #if !os(Linux)
         let packageSwiftCandidates = [
             pluginPath.appendingPathComponent("Package.swift"),
             pluginPath.deletingLastPathComponent().appendingPathComponent("Package.swift"),
@@ -258,7 +291,6 @@ public final class NativePluginHost: @unchecked Sendable {
             debugPrint("[NativePluginHost] Found Package.swift at \(packageSwift.path), building Swift package plugin: \(pluginName)")
             return try compileSwiftPackagePlugin(packageDir: packageDir, ext: ext)
         }
-        #endif
 
         debugPrint("[NativePluginHost] No compilable sources found for plugin: \(pluginName)")
         return nil
@@ -397,17 +429,22 @@ public final class NativePluginHost: @unchecked Sendable {
         process.arguments = ["build", "-c", "release"]
         process.currentDirectoryURL = packageDir
 
-        let outputPipe = Pipe()
+        // Capture both stdout and stderr so we can report the full error on failure.
+        let outPipe = Pipe()
         let errorPipe = Pipe()
-        process.standardOutput = outputPipe
+        process.standardOutput = outPipe
         process.standardError = errorPipe
 
         try process.run()
         process.waitUntilExit()
+        let outData = outPipe.fileHandleForReading.readDataToEndOfFile()
+        let errorData = errorPipe.fileHandleForReading.readDataToEndOfFile()
 
         if process.terminationStatus != 0 {
-            let errorData = errorPipe.fileHandleForReading.readDataToEndOfFile()
-            let errorMessage = String(data: errorData, encoding: .utf8) ?? "Unknown error"
+            let stderrStr = String(data: errorData, encoding: .utf8) ?? ""
+            let stdoutStr = String(data: outData, encoding: .utf8) ?? ""
+            let combined = [stderrStr, stdoutStr].filter { !$0.isEmpty }.joined(separator: "\n")
+            let errorMessage = combined.isEmpty ? "exit code \(process.terminationStatus), reason: \(process.terminationReason.rawValue)" : combined
             debugPrint("[NativePluginHost] Swift package build failed: \(errorMessage)")
             throw NativePluginError.compilationFailed(pluginName, message: "swift build failed: \(errorMessage)")
         }
