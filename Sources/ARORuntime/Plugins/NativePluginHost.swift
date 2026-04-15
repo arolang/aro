@@ -234,6 +234,21 @@ public final class NativePluginHost: @unchecked Sendable {
         #else
         let dlopenFlags = RTLD_NOW | RTLD_LOCAL
         #endif
+
+        #if os(Linux)
+        // Pre-load dependency libraries (e.g. AROPluginSDK, AROPluginKit) from the same
+        // directory with RTLD_GLOBAL so their symbols merge with the host process's Swift
+        // runtime. Without this, Swift-built plugins crash on Linux (TLS exhaustion).
+        let libDir = libraryPath.deletingLastPathComponent()
+        if let siblings = try? FileManager.default.contentsOfDirectory(
+            at: libDir, includingPropertiesForKeys: nil, options: [.skipsHiddenFiles]
+        ) {
+            for dep in siblings where dep.pathExtension == ext && dep != libraryPath {
+                _ = dlopen(dep.path, Int32(dlopenFlags))
+            }
+        }
+        #endif
+
         guard let handle = dlopen(libraryPath.path, Int32(dlopenFlags)) else {
             let error = String(cString: dlerror())
             throw NativePluginError.loadFailed(pluginName, message: error)

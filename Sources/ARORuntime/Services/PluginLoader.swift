@@ -688,13 +688,19 @@ public final class PluginLoader: @unchecked Sendable {
                         options: [.skipsHiddenFiles]
                     )
 
-                    // Check for native libraries first
-                    for libFile in dirContents {
-                        if libFile.pathExtension == libraryExtension {
-                            try loadCPlugin(at: libFile, name: pluginName, namespace: pluginHandler)
-                            found = true
-                            break
+                    // Check for native libraries
+                    let libFiles = dirContents.filter { $0.pathExtension == libraryExtension }
+                    if let pluginLib = libFiles.first(where: { $0.lastPathComponent.lowercased().contains(pluginName.lowercased().replacingOccurrences(of: "-", with: "")) }) ?? libFiles.first {
+                        // Pre-load dependency libraries (e.g. AROPluginSDK, AROPluginKit) so
+                        // the plugin .so can resolve its Swift runtime symbols via RTLD_GLOBAL.
+                        // Without this, dlopen of Swift-built plugins crashes on Linux (TLS).
+                        #if !os(Windows)
+                        for dep in libFiles where dep != pluginLib {
+                            _ = dlopen(dep.path, aroDlopenFlags)
                         }
+                        #endif
+                        try loadCPlugin(at: pluginLib, name: pluginName, namespace: pluginHandler)
+                        found = true
                     }
 
                     // If no native library found, check for Python plugins

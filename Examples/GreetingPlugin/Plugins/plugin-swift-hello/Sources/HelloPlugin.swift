@@ -29,7 +29,11 @@ private let plugin = AROPlugin(name: "plugin-swift-hello", version: "1.0.0", han
         return .success(["farewell": "Goodbye, \(name)!"])
     }
 
-// Static initializer — registers the plugin at dylib load time
-private let _registration: Void = {
+// Explicit registration entry point — called by the ARO runtime before
+// aro_plugin_info.  On Linux, lazy static initializers may not run before
+// the first function call into the .so, and the SDK's fallback dlsym lookup
+// crashes the dynamic linker (TLS exhaustion).  This @_cdecl ensures safe init.
+@_cdecl("aro_plugin_register")
+public func registerPlugin() {
     AROPluginExport.register(plugin)
-}()
+}
