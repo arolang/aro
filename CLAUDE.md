@@ -238,22 +238,24 @@ MyApp/
 - **PythonPluginHost** (`Plugins/PythonPluginHost.swift`): Runs Python plugins via subprocess
 - **SwiftPluginHost** (`Plugins/SwiftPluginHost.swift`): Loads Swift plugins
 
-### C ABI Interface (Required)
+### Plugin Registration by Language
 
-All native plugins must implement:
+| Language | Registration Pattern |
+|----------|---------------------|
+| **Swift** | `@AROExport` macro on `let plugin = AROPlugin(...)` — SDK generates all C ABI exports |
+| **Rust** | `#[no_mangle] extern "C"` functions (`aro_plugin_info`, `aro_plugin_execute`, etc.) |
+| **C/C++** | `ARO_PLUGIN()` + `ARO_ACTION()` / `ARO_QUALIFIER()` macros from `aro_plugin_sdk.h` |
+| **Python** | `@plugin` + `@action` / `@qualifier` decorators + `export_abi(globals())` |
+
+### C ABI Interface
+
+Underlying all plugins is a C-compatible ABI. The SDKs generate these exports automatically:
 
 ```c
-// Return plugin metadata as JSON
-char* aro_plugin_info(void);
-
-// Execute an action, return JSON result
-char* aro_plugin_execute(const char* action, const char* input_json);
-
-// Execute a qualifier transformation (optional)
-char* aro_plugin_qualifier(const char* qualifier, const char* input_json);
-
-// Free memory allocated by plugin
-void aro_plugin_free(char* ptr);
+char* aro_plugin_info(void);                                      // metadata JSON
+char* aro_plugin_execute(const char* action, const char* input);  // action dispatch
+char* aro_plugin_qualifier(const char* name, const char* input);  // qualifier dispatch
+void  aro_plugin_free(char* ptr);                                 // memory cleanup
 ```
 
 ### Plugin Qualifiers

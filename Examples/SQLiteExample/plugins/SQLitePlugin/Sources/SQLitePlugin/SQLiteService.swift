@@ -22,6 +22,7 @@ private let dbQueue = DispatchQueue(label: "sqlite.plugin")
 
 // MARK: - Plugin Registration
 
+@AROExport
 private let plugin = AROPlugin(name: "SQLitePlugin", version: "1.0.0", handle: "SQLite")
     .service("sqlite", methods: ["query", "execute"]) { method, input in
         // SQL is passed in "_with.sql" or top-level "sql"
@@ -52,9 +53,6 @@ private let plugin = AROPlugin(name: "SQLitePlugin", version: "1.0.0", handle: "
             database = nil
         }
     }
-
-@_cdecl("aro_plugin_register")
-public func registerPlugin() { _ = plugin }
 
 // MARK: - SQL Logic
 

@@ -13,6 +13,7 @@ import AROPluginKit
 /// Plugin registration — this is the ONLY setup needed.
 /// The SDK generates aro_plugin_info, aro_plugin_qualifier,
 /// aro_plugin_free, aro_plugin_init, and aro_plugin_shutdown.
+@AROExport
 private let plugin = AROPlugin(name: "plugin-swift-collection", version: "1.0.0", handle: "Collections")
     .qualifier("pick-random", inputTypes: ["List"], description: "Pick a random element from a list") { params in
         guard let array = params.arrayValue, !array.isEmpty else {
@@ -40,6 +41,3 @@ private let plugin = AROPlugin(name: "plugin-swift-collection", version: "1.0.0"
         return .failure("reverse requires a list or string")
     }
 
-// Register with the SDK — called by the SDK's aro_plugin_info to trigger init
-@_cdecl("aro_plugin_register")
-public func registerPlugin() { _ = plugin }

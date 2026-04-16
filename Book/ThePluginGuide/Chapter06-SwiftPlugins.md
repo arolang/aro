@@ -55,203 +55,137 @@ Plugins/
 
 Package plugins are built using `swift build`, enabling full SPM integration.
 
-## 6.3 The C ABI Bridge
+## 6.3 The AROPluginKit SDK
 
-Here's the key insight: despite being Swift, plugins communicate with ARO through a C-compatible interface. This is what makes the plugin system language-agnostic.
-
-Swift provides the `@_cdecl` attribute to export functions with C calling conventions:
+While you *can* write all the `@_cdecl` exports by hand, the **AROPluginKit** SDK eliminates the boilerplate. Import it via Swift Package Manager:
 
 ```swift
-@_cdecl("aro_plugin_info")
-public func pluginInfo() -> UnsafePointer<CChar> {
-    // Return JSON metadata — REQUIRED
-}
+// Package.swift
+dependencies: [
+    .package(url: "https://github.com/arolang/aro-plugin-sdk-swift.git", branch: "main"),
+],
+targets: [
+    .target(name: "MyPlugin", dependencies: [
+        .product(name: "AROPluginKit", package: "aro-plugin-sdk-swift"),
+    ]),
+]
 ```
 
-The `@_cdecl` attribute:
-- Exports the function with the specified C symbol name
-- Uses C calling conventions (no Swift ABI features)
-- Makes the function visible to `dlsym` when the library is loaded
+Then declare your plugin with the builder API and the `@AROExport` macro:
 
-### Required and Optional Exports
+```swift
+import AROPluginKit
 
-Every Swift plugin **must** export exactly two symbols:
+@AROExport
+private let plugin = AROPlugin(name: "my-plugin", version: "1.0.0", handle: "My")
+    .action("Greet", verbs: ["greet"], role: "own", prepositions: ["with"],
+            description: "Generate a greeting") { input in
+        let name = input.string("name") ?? "World"
+        return .success(["greeting": "Hello, \(name)!"])
+    }
+    .qualifier("reverse", inputTypes: ["List", "String"],
+               description: "Reverse elements") { params in
+        if let arr = params.arrayValue { return .success(Array(arr.reversed())) }
+        if let str = params.stringValue { return .success(String(str.reversed())) }
+        return .failure("reverse requires a list or string")
+    }
+    .service("math", methods: ["add", "multiply"]) { method, input in
+        let a = input.with.double("a") ?? 0
+        let b = input.with.double("b") ?? 0
+        switch method {
+        case "add": return .success(["result": a + b])
+        case "multiply": return .success(["result": a * b])
+        default: return .failure(.notFound, "Unknown method: \(method)")
+        }
+    }
+    .onInit { /* one-time setup */ }
+    .onShutdown { /* cleanup */ }
+```
 
-| Symbol | Signature | Required? |
-|--------|-----------|-----------|
-| `aro_plugin_info` | `() -> UnsafePointer<CChar>` | **Yes** |
-| `aro_plugin_free` | `(UnsafeMutablePointer<CChar>?) -> Void` | **Yes** |
+That's the entire plugin. The SDK auto-generates all C ABI exports (`aro_plugin_info`, `aro_plugin_execute`, `aro_plugin_qualifier`, `aro_plugin_free`, etc.), and the `@AROExport` macro generates the registration entry point that the ARO runtime calls to initialize the plugin.
 
-The remaining exports are optional and depend on what the plugin provides:
+### Registration Across Languages
 
-| Symbol | Signature | When needed |
-|--------|-----------|-------------|
-| `aro_plugin_init` | `() -> Void` | Stateful plugins needing one-time setup |
-| `aro_plugin_shutdown` | `() -> Void` | Plugins that need cleanup on unload |
-| `aro_plugin_execute` | `(UnsafePointer<CChar>, UnsafePointer<CChar>) -> UnsafeMutablePointer<CChar>` | Plugins providing actions or services |
-| `aro_plugin_qualifier` | `(UnsafePointer<CChar>, UnsafePointer<CChar>) -> UnsafeMutablePointer<CChar>` | Plugins providing qualifiers |
-| `aro_plugin_on_event` | `(UnsafePointer<CChar>, UnsafePointer<CChar>) -> Void` | Plugins subscribing to events |
+Every language has a native, idiomatic way to register plugins:
 
-**Note**: `aro_plugin_execute` is no longer required for qualifier-only plugins. The old service ABI (`aro_plugin_init` returning service metadata as `UnsafePointer<CChar>`, plus a three-parameter `_call` function) is removed—services are now routed through `aro_plugin_execute("service:<method>", input)`.
+| Language | Registration | Generated Exports |
+|----------|-------------|-------------------|
+| **Swift** | `@AROExport` macro | `aro_plugin_register` + all C ABI |
+| **Rust** | `#[no_mangle] extern "C"` functions | Manual C ABI |
+| **C** | `ARO_PLUGIN()` + `ARO_ACTION()` macros | Automatic via header |
+| **Python** | `@plugin` + `@action` decorators + `export_abi()` | Automatic via SDK |
 
 ## 6.4 Your First Swift Plugin: Custom Actions
 
-Let's build a date formatting plugin. It will format dates according to locale and provide relative time descriptions like "2 hours ago."
+Let's build a greeting plugin using the SDK.
 
 ### Step 1: Create the Directory Structure
 
 ```
 Plugins/
-└── plugin-swift-datetime/
+└── plugin-swift-greeting/
     ├── plugin.yaml
+    ├── Package.swift
     └── Sources/
-        └── DateTimePlugin.swift
+        └── GreetingPlugin.swift
 ```
 
-### Step 2: Write the Manifest
+### Step 2: Write the Manifest and Package.swift
 
 ```yaml
 # plugin.yaml
-name: plugin-swift-datetime
+name: plugin-swift-greeting
 version: 1.0.0
-description: "Date and time formatting with locale support"
-author: "Your Name"
-license: MIT
-aro-version: ">=0.1.0"
-
+handle: Greeting
 provides:
   - type: swift-plugin
     path: Sources/
-    actions:
-      - name: FormatDate
-        role: own
-        verbs: [formatdate, format]
-        prepositions: [from, with]
-        description: Format a date according to a pattern and locale
-      - name: ParseDate
-        role: own
-        verbs: [parsedate]
-        prepositions: [from, with]
-        description: Parse a date string into a timestamp
-      - name: RelativeDate
-        role: own
-        verbs: [relativedate, relative]
-        prepositions: [from]
-        description: Generate relative time description
+```
+
+```swift
+// Package.swift
+// swift-tools-version: 5.9
+import PackageDescription
+
+let package = Package(
+    name: "GreetingPlugin",
+    platforms: [.macOS(.v12)],
+    products: [
+        .library(name: "GreetingPlugin", type: .dynamic, targets: ["GreetingPlugin"]),
+    ],
+    dependencies: [
+        .package(url: "https://github.com/arolang/aro-plugin-sdk-swift.git", branch: "main"),
+    ],
+    targets: [
+        .target(name: "GreetingPlugin", dependencies: [
+            .product(name: "AROPluginKit", package: "aro-plugin-sdk-swift"),
+        ]),
+    ]
+)
 ```
 
 ### Step 3: Implement the Plugin
 
 ```swift
-// DateTimePlugin.swift
+// GreetingPlugin.swift
 import Foundation
+import AROPluginKit
 
-// MARK: - Plugin Initialization
-
-/// Returns plugin metadata as JSON.
-/// This function is REQUIRED and called once when the plugin is loaded.
-@_cdecl("aro_plugin_info")
-public func pluginInfo() -> UnsafePointer<CChar> {
-    let metadata = """
-    {
-        "name": "plugin-swift-datetime",
-        "version": "1.0.0",
-        "actions": [
-            {
-                "name": "FormatDate",
-                "role": "own",
-                "verbs": ["formatdate", "format"],
-                "prepositions": ["from", "with"]
-            },
-            {
-                "name": "ParseDate",
-                "role": "own",
-                "verbs": ["parsedate"],
-                "prepositions": ["from", "with"]
-            },
-            {
-                "name": "RelativeDate",
-                "role": "own",
-                "verbs": ["relativedate", "relative"],
-                "prepositions": ["from"]
-            }
-        ]
+@AROExport
+private let plugin = AROPlugin(name: "plugin-swift-greeting", version: "1.0.0", handle: "Greeting")
+    .action("Greet", verbs: ["greet"], role: "own", prepositions: ["with"],
+            description: "Generate a greeting message") { input in
+        let name = input.string("name") ?? input.with.string("name") ?? "World"
+        return .success(["greeting": "Hello, \(name)!"])
     }
-    """
-    return strdup(metadata)!
-}
-
-// MARK: - Lifecycle Hooks (Optional)
-
-/// Called once after the plugin is loaded, before any action is invoked.
-/// Use this for one-time initialization: opening connections, loading models, etc.
-@_cdecl("aro_plugin_init")
-public func pluginInit() {
-    // Perform any one-time setup here.
-    // Note: this function returns void — it is NOT the old service-discovery
-    // init that returned a char* with service metadata. That pattern is removed.
-}
-
-/// Called when the plugin is about to be unloaded.
-/// Use this for cleanup: closing connections, flushing buffers, etc.
-@_cdecl("aro_plugin_shutdown")
-public func pluginShutdown() {
-    // Cleanup resources here.
-}
-
-// MARK: - Action Execution
-
-/// Executes a plugin action.
-///
-/// This function is OPTIONAL — only needed if the plugin provides actions or services.
-/// Qualifier-only plugins do not need to implement it.
-///
-/// - Parameters:
-///   - actionPtr: C string with the action name (e.g., "format-date")
-///   - inputPtr:  C string with JSON input (includes _with, result, source, _context)
-/// - Returns: JSON string with the result. Caller must free with aro_plugin_free.
-@_cdecl("aro_plugin_execute")
-public func pluginExecute(
-    _ actionPtr: UnsafePointer<CChar>,
-    _ inputPtr: UnsafePointer<CChar>
-) -> UnsafeMutablePointer<CChar> {
-    let action = String(cString: actionPtr)
-    let inputJSON = String(cString: inputPtr)
-
-    // Parse input JSON
-    guard let inputData = inputJSON.data(using: .utf8),
-          let input = try? JSONSerialization.jsonObject(with: inputData) as? [String: Any] else {
-        return strdup("{\"error\":\"Invalid JSON input\"}")!
+    .action("Farewell", verbs: ["farewell"], role: "own", prepositions: ["with"],
+            description: "Generate a farewell message") { input in
+        let name = input.string("name") ?? input.with.string("name") ?? "World"
+        return .success(["farewell": "Goodbye, \(name)!"])
     }
+```
 
-    // Parameters from the `with { }` clause arrive nested under "_with"
-    let withParams = input["_with"] as? [String: Any] ?? [:]
-
-    // Dispatch to the appropriate action
-    do {
-        let result: [String: Any]
-
-        switch action {
-        case "format-date", "format":
-            result = try formatDate(input, params: withParams)
-        case "parse-date", "parsedate":
-            result = try parseDate(input, params: withParams)
-        case "relative-date", "relativedate", "relative":
-            result = try relativeDate(input)
-        default:
-            return strdup("{\"error\":\"Unknown action: \(action)\"}")!
-        }
-
-        // Serialize result to JSON
-        let resultData = try JSONSerialization.data(withJSONObject: result)
-        let resultJSON = String(data: resultData, encoding: .utf8)!
-        return strdup(resultJSON)!
-
-    } catch {
-        let msg = error.localizedDescription.replacingOccurrences(of: "\"", with: "\\\"")
-        return strdup("{\"error\":\"\(msg)\"}")!
-    }
-}
+That's it. No manual JSON, no `@_cdecl`, no memory management. The `@AROExport` macro and the SDK handle everything.
 
 // MARK: - Method Implementations
 

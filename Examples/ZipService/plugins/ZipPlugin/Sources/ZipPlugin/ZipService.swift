@@ -18,6 +18,7 @@ import AROPluginKit
 
 // MARK: - Plugin Registration
 
+@AROExport
 private let plugin = AROPlugin(name: "ZipPlugin", version: "1.0.0", handle: "Zip")
     .service("zip", methods: ["compress", "decompress", "list"]) { method, input in
         let args = input.with
@@ -29,9 +30,6 @@ private let plugin = AROPlugin(name: "ZipPlugin", version: "1.0.0", handle: "Zip
             return .failure(.executionFailed, String(describing: error))
         }
     }
-
-@_cdecl("aro_plugin_register")
-public func registerPlugin() { _ = plugin }
 
 // MARK: - Zip Logic
 

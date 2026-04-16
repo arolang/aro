@@ -22,6 +22,7 @@ private let counterQueue = DispatchQueue(label: "counter.service")
 
 // MARK: - Plugin Registration
 
+@AROExport
 private let plugin = AROPlugin(name: "counter-plugin", version: "1.0.0", handle: "Counter")
     .service("counter", methods: ["increment", "get", "reset"]) { method, input in
         let result: [String: Any] = counterQueue.sync {
@@ -44,5 +45,3 @@ private let plugin = AROPlugin(name: "counter-plugin", version: "1.0.0", handle:
         counterQueue.sync { globalCount = 0 }
     }
 
-@_cdecl("aro_plugin_register")
-public func registerPlugin() { _ = plugin }

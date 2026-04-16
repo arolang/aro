@@ -11,6 +11,7 @@
 import Foundation
 import AROPluginKit
 
+@AROExport
 private let plugin = AROPlugin(name: "greeting-service", version: "1.0.0", handle: "Greeting")
     .service("greeting", methods: ["hello", "goodbye", "greet"]) { method, input in
         let name = input.with.string("name") ?? input.string("name") ?? "World"
@@ -34,5 +35,4 @@ private let plugin = AROPlugin(name: "greeting-service", version: "1.0.0", handl
         }
     }
 
-@_cdecl("aro_plugin_register")
-public func registerPlugin() { _ = plugin }
+
