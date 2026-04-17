@@ -245,6 +245,32 @@ final class LLVMCodeGeneratorTests: XCTestCase {
                       "Should contain function for Entry Point 2")
         XCTAssertTrue(result.irText.contains("main"), "Should contain main function")
     }
+
+    // MARK: - Statement dispatch table (issue #170)
+
+    /// The data-driven statement dispatch table must have an entry for every
+    /// `Statement` subtype the code generator claims to support. If a new
+    /// statement is added to the AST and wired into the generator, add it to
+    /// this expectation — and if it is NOT yet supported, that is the signal
+    /// to either add a handler or explicitly leave it on the error path.
+    func testStatementDispatchTableCoversSupportedTypes() throws {
+        let expected: Set<ObjectIdentifier> = [
+            ObjectIdentifier(AROStatement.self),
+            ObjectIdentifier(MatchStatement.self),
+            ObjectIdentifier(ForEachLoop.self),
+            ObjectIdentifier(RangeLoop.self),
+            ObjectIdentifier(WhileLoop.self),
+            ObjectIdentifier(BreakStatement.self),
+            ObjectIdentifier(PublishStatement.self),
+            ObjectIdentifier(RequireStatement.self),
+            ObjectIdentifier(PipelineStatement.self),
+        ]
+        XCTAssertEqual(
+            LLVMCodeGenerator.supportedStatementTypeIdentifiers,
+            expected,
+            "LLVMCodeGenerator.statementHandlers drifted from the expected set of supported Statement subtypes"
+        )
+    }
 }
 
 #endif

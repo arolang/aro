@@ -271,8 +271,24 @@ public final class NativePluginHost: @unchecked Sendable {
             return try compileRustPlugin(projectDir: rustProjectDir, ext: ext)
         }
 
-        // Check for C source files
-        let cFiles = findSourceFiles(withExtension: "c")
+        // Check for Package.swift (Swift Package plugin with dependencies)
+        let packageSwift = pluginPath.appendingPathComponent("Package.swift")
+        if FileManager.default.fileExists(atPath: packageSwift.path) {
+            debugPrint("[NativePluginHost] Found Package.swift, compiling Swift package plugin: \(pluginName)")
+            let outputPath = pluginPath.appendingPathComponent("lib\(pluginName).\(ext)")
+            try compileSwiftPackagePlugin(packageDir: pluginPath, output: outputPath, ext: ext)
+            return outputPath
+        }
+
+        // Check for C source files (in src/ or plugin root)
+        var cFiles = findSourceFiles(withExtension: "c")
+        let srcDir = pluginPath.appendingPathComponent("src")
+        if cFiles.isEmpty, FileManager.default.fileExists(atPath: srcDir.path) {
+            let srcContents = (try? FileManager.default.contentsOfDirectory(
+                at: srcDir, includingPropertiesForKeys: nil, options: [.skipsHiddenFiles]
+            )) ?? []
+            cFiles = srcContents.filter { $0.pathExtension == "c" }
+        }
         if !cFiles.isEmpty {
             let outputPath = pluginPath.appendingPathComponent("\(pluginName).\(ext)")
             try compileCPlugin(sources: cFiles, output: outputPath)
@@ -587,12 +603,85 @@ public final class NativePluginHost: @unchecked Sendable {
         return contents.filter { $0.pathExtension == ext }
     }
 
+    /// Compile a Swift Package plugin using `swift build`
+    private func compileSwiftPackagePlugin(packageDir: URL, output: URL, ext: String) throws {
+        let swiftPath = findSwiftExecutable() ?? "/usr/bin/swift"
+
+        debugPrint("[NativePluginHost] Building Swift package at \(packageDir.path)")
+
+        let process = Process()
+        process.executableURL = URL(fileURLWithPath: swiftPath)
+        process.currentDirectoryURL = packageDir
+        process.arguments = ["build", "-c", "release"]
+
+        let errorPipe = Pipe()
+        process.standardOutput = FileHandle.nullDevice
+        process.standardError = errorPipe
+
+        try process.run()
+        process.waitUntilExit()
+
+        if process.terminationStatus != 0 {
+            let errorData = errorPipe.fileHandleForReading.readDataToEndOfFile()
+            let errorMessage = String(data: errorData, encoding: .utf8) ?? "Unknown error"
+            throw NativePluginError.compilationFailed(pluginName, message: errorMessage)
+        }
+
+        // Find the built dynamic library in .build/release/ or .build/<arch>/release/
+        let buildDir = packageDir.appendingPathComponent(".build")
+        if let builtLib = findBuiltLibrary(in: buildDir, name: pluginName, extension: ext) {
+            if FileManager.default.fileExists(atPath: output.path) {
+                try FileManager.default.removeItem(at: output)
+            }
+            try FileManager.default.copyItem(at: builtLib, to: output)
+            debugPrint("[NativePluginHost] Swift package plugin compiled to: \(output.path)")
+        } else {
+            throw NativePluginError.compilationFailed(pluginName, message: "Built library not found in \(buildDir.path)")
+        }
+    }
+
+    /// Find a built dynamic library by searching common Swift build output directories
+    private func findBuiltLibrary(in buildDir: URL, name: String, extension ext: String) -> URL? {
+        let fm = FileManager.default
+        let libName = "lib\(name).\(ext)"
+
+        // Check release/ directly
+        let releasePath = buildDir.appendingPathComponent("release").appendingPathComponent(libName)
+        if fm.fileExists(atPath: releasePath.path) { return releasePath }
+
+        // Check arch-specific paths (e.g. .build/arm64-apple-macosx/release/)
+        if let contents = try? fm.contentsOfDirectory(at: buildDir, includingPropertiesForKeys: nil) {
+            for dir in contents {
+                let candidate = dir.appendingPathComponent("release").appendingPathComponent(libName)
+                if fm.fileExists(atPath: candidate.path) { return candidate }
+            }
+        }
+
+        return nil
+    }
+
+    /// Find swift executable
+    private func findSwiftExecutable() -> String? {
+        let paths = [
+            "/usr/bin/swift",
+            "/usr/share/swift/usr/bin/swift",
+            "/opt/swift/usr/bin/swift",
+            "/opt/homebrew/bin/swift",
+            "/usr/local/bin/swift",
+        ]
+        return paths.first(where: { FileManager.default.isExecutableFile(atPath: $0) })
+    }
+
     /// Compile C source files to a dynamic library
     private func compileCPlugin(sources: [URL], output: URL) throws {
         // Find clang/gcc
         let compiler: String
-        if FileManager.default.fileExists(atPath: "/usr/bin/clang") {
-            compiler = "/usr/bin/clang"
+        let clangCandidates = [
+            "/usr/bin/clang",
+            "/usr/share/swift/usr/bin/clang",
+        ]
+        if let found = clangCandidates.first(where: { FileManager.default.fileExists(atPath: $0) }) {
+            compiler = found
         } else if FileManager.default.fileExists(atPath: "/usr/bin/gcc") {
             compiler = "/usr/bin/gcc"
         } else {

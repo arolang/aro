@@ -260,39 +260,93 @@ public final class LLVMCodeGenerator {
 
     // MARK: - Statement Generation
 
-    private func generateStatement(_ statement: Statement, index: Int, errorBlock: BasicBlock) {
-        switch statement {
-        case let aroStatement as AROStatement:
-            generateAROStatement(aroStatement, index: index, errorBlock: errorBlock)
-        case let matchStatement as MatchStatement:
-            generateMatchStatement(matchStatement, index: index, errorBlock: errorBlock)
-        case let forEachLoop as ForEachLoop:
-            generateForEachLoop(forEachLoop, index: index, errorBlock: errorBlock)
-        case let rangeLoop as RangeLoop:
-            generateRangeLoop(rangeLoop, index: index, errorBlock: errorBlock)
-        case let whileLoop as WhileLoop:
-            generateWhileLoop(whileLoop, index: index, errorBlock: errorBlock)
-        case is BreakStatement:
-            generateBreakStatement(index: index)
-        case let publishStatement as PublishStatement:
-            generatePublishStatement(publishStatement, index: index, errorBlock: errorBlock)
-        case let requireStatement as RequireStatement:
-            generateRequireStatement(requireStatement, index: index, errorBlock: errorBlock)
-        case let pipelineStatement as PipelineStatement:
-            // ARO-0067: A pipeline is just a sequence of ARO statements where
-            // each stage's object is the previous stage's result. The parser
-            // has already rewritten the stages to reference the chained names,
-            // so we can emit them sequentially like plain statements.
-            for (stageOffset, stage) in pipelineStatement.stages.enumerated() {
-                generateAROStatement(stage, index: index * 1000 + stageOffset, errorBlock: errorBlock)
+    /// Handler for a single concrete `Statement` subtype. Each handler performs
+    /// the (checked) downcast and delegates to the corresponding `generate...`
+    /// method on the generator instance it is given.
+    ///
+    /// Using a method-reference-style table (`(LLVMCodeGenerator) -> (...) -> Void`)
+    /// lets the dispatch stay a stored `static let` with no captured `self`,
+    /// no reference cycles, and no per-instance setup work — while still giving
+    /// us a single place to register new statement types (issue #170).
+    typealias StatementHandler = (LLVMCodeGenerator) -> (Statement, Int, BasicBlock) -> Void
+
+    // The handler table itself is immutable after initialization. The closures
+    // capture no shared mutable state (they only forward to instance methods
+    // on the `LLVMCodeGenerator` argument), so marking the stored table as
+    // `nonisolated(unsafe)` is sound under Swift 6 strict concurrency.
+    nonisolated(unsafe) private static let statementHandlers: [ObjectIdentifier: StatementHandler] = [
+        ObjectIdentifier(AROStatement.self): { gen in
+            { stmt, index, errorBlock in
+                gen.generateAROStatement(stmt as! AROStatement, index: index, errorBlock: errorBlock)
             }
-        default:
-            // Unsupported statement type
-            ctx.recordError(.invalidExpression(
-                description: "Unsupported statement type",
-                span: statement.span
-            ))
+        },
+        ObjectIdentifier(MatchStatement.self): { gen in
+            { stmt, index, errorBlock in
+                gen.generateMatchStatement(stmt as! MatchStatement, index: index, errorBlock: errorBlock)
+            }
+        },
+        ObjectIdentifier(ForEachLoop.self): { gen in
+            { stmt, index, errorBlock in
+                gen.generateForEachLoop(stmt as! ForEachLoop, index: index, errorBlock: errorBlock)
+            }
+        },
+        ObjectIdentifier(RangeLoop.self): { gen in
+            { stmt, index, errorBlock in
+                gen.generateRangeLoop(stmt as! RangeLoop, index: index, errorBlock: errorBlock)
+            }
+        },
+        ObjectIdentifier(WhileLoop.self): { gen in
+            { stmt, index, errorBlock in
+                gen.generateWhileLoop(stmt as! WhileLoop, index: index, errorBlock: errorBlock)
+            }
+        },
+        ObjectIdentifier(BreakStatement.self): { gen in
+            { _, index, _ in
+                gen.generateBreakStatement(index: index)
+            }
+        },
+        ObjectIdentifier(PublishStatement.self): { gen in
+            { stmt, index, errorBlock in
+                gen.generatePublishStatement(stmt as! PublishStatement, index: index, errorBlock: errorBlock)
+            }
+        },
+        ObjectIdentifier(RequireStatement.self): { gen in
+            { stmt, index, errorBlock in
+                gen.generateRequireStatement(stmt as! RequireStatement, index: index, errorBlock: errorBlock)
+            }
+        },
+        ObjectIdentifier(PipelineStatement.self): { gen in
+            { stmt, index, errorBlock in
+                // ARO-0067: A pipeline is just a sequence of ARO statements where
+                // each stage's object is the previous stage's result. The parser
+                // has already rewritten the stages to reference the chained names,
+                // so we can emit them sequentially like plain statements.
+                let pipeline = stmt as! PipelineStatement
+                for (stageOffset, stage) in pipeline.stages.enumerated() {
+                    gen.generateAROStatement(stage, index: index * 1000 + stageOffset, errorBlock: errorBlock)
+                }
+            }
+        },
+    ]
+
+    /// Return the set of statement metatypes that have a registered handler.
+    /// Used by the test suite to guard against regressions when new statement
+    /// types are added to the AST without a corresponding code-gen entry.
+    internal static var supportedStatementTypeIdentifiers: Set<ObjectIdentifier> {
+        Set(statementHandlers.keys)
+    }
+
+    private func generateStatement(_ statement: Statement, index: Int, errorBlock: BasicBlock) {
+        let key = ObjectIdentifier(type(of: statement))
+        if let handler = Self.statementHandlers[key] {
+            handler(self)(statement, index, errorBlock)
+            return
         }
+        // Unsupported statement type
+        ctx.recordError(.invalidExpression(
+            description: "Unsupported statement type: \(type(of: statement))",
+            span: statement.span
+        ))
     }
 
     private func generateAROStatement(_ statement: AROStatement, index: Int, errorBlock: BasicBlock) {

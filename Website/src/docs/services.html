@@ -153,47 +153,26 @@
         └── Sources/ZipPlugin/
             └── ZipService.swift</code></pre>
 
-        <h3>Writing a Plugin</h3>
-        <p>Plugins use a C-compatible JSON interface:</p>
+        <h3>Writing a Plugin Service</h3>
+        <p>Use the <code>AROPluginKit</code> SDK with the <code>.service()</code> builder:</p>
 
-        <pre><code><span class="code-comment">// plugins/GreetingService.swift</span>
-import Foundation
+        <pre><code><span class="code-comment">// plugins/GreetingService/Sources/GreetingService/GreetingService.swift</span>
+import AROPluginKit
 
-<span class="code-comment">/// Plugin initialization - returns service metadata as JSON</span>
-@_cdecl(<span class="code-string">"aro_plugin_init"</span>)
-public func pluginInit() -> UnsafePointer&lt;CChar&gt; {
-    let metadata = <span class="code-string">"""
-    {"services": [{"name": "greeting", "symbol": "greeting_call"}]}
-    """</span>
-    return UnsafePointer(strdup(metadata)!)
-}
+<span class="code-keyword">@AROExport</span>
+private let plugin = AROPlugin(name: <span class="code-string">"greeting-service"</span>, version: <span class="code-string">"1.0.0"</span>, handle: <span class="code-string">"Greeting"</span>)
+    .service(<span class="code-string">"greeting"</span>, methods: [<span class="code-string">"hello"</span>, <span class="code-string">"goodbye"</span>]) { method, input in
+        let name = input.with.string(<span class="code-string">"name"</span>) ?? <span class="code-string">"World"</span>
 
-<span class="code-comment">/// Service entry point - C-callable interface</span>
-@_cdecl(<span class="code-string">"greeting_call"</span>)
-public func greetingCall(
-    _ methodPtr: UnsafePointer&lt;CChar&gt;,
-    _ argsPtr: UnsafePointer&lt;CChar&gt;,
-    _ resultPtr: UnsafeMutablePointer&lt;UnsafeMutablePointer&lt;CChar&gt;?&gt;
-) -> Int32 {
-    let method = String(cString: methodPtr)
-    let argsJSON = String(cString: argsPtr)
-
-    <span class="code-comment">// Parse arguments from JSON</span>
-    var args: [String: Any] = [:]
-    if let data = argsJSON.data(using: .utf8),
-       let parsed = try? JSONSerialization.jsonObject(with: data) as? [String: Any] {
-        args = parsed
-    }
-
-    <span class="code-comment">// Execute method</span>
-    let name = args[<span class="code-string">"name"</span>] as? String ?? <span class="code-string">"World"</span>
-    let result = <span class="code-string">"Hello, \(name)!"</span>
-
-    <span class="code-comment">// Return result as JSON</span>
-    let resultJSON = <span class="code-string">"{\"result\": \"\(result)\"}"</span>
-    resultPtr.pointee = strdup(resultJSON)
-    return 0  <span class="code-comment">// 0 = success</span>
-}</code></pre>
+        switch method {
+        case <span class="code-string">"hello"</span>:
+            return .success([<span class="code-string">"result"</span>: <span class="code-string">"Hello, \(name)!"</span>])
+        case <span class="code-string">"goodbye"</span>:
+            return .success([<span class="code-string">"result"</span>: <span class="code-string">"Goodbye, \(name)!"</span>])
+        default:
+            return .failure(.notFound, <span class="code-string">"Unknown method: \(method)"</span>)
+        }
+    }</code></pre>
 
         <h3>Package Plugin with Dependencies</h3>
         <p>For plugins that need external libraries (e.g., Zip, databases):</p>
