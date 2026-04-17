@@ -1,7 +1,7 @@
 # Makefile for plugin-c-hash
 
 CC = clang
-CFLAGS = -O2 -fPIC -Wall -Wextra
+CFLAGS = -O2 -fPIC -Wall -Wextra -Iinclude
 
 # Platform-specific settings
 UNAME_S := $(shell uname -s)

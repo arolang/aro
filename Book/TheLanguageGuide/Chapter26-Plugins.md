@@ -524,17 +524,53 @@ Geocode the <coordinates> from the <address>.
 
 Native plugins use a C ABI interface for high-performance operations.
 
-### Required C Interface
+### The C ABI Contract
+
+`aro_plugin_info` and `aro_plugin_free` are the only **required** exports. Everything else is optional and implemented only when your plugin needs that capability:
 
 ```c
-// Get plugin info as JSON
+/* ---- REQUIRED ---- */
+
+// Return JSON metadata describing everything this plugin provides
 char* aro_plugin_info(void);
 
-// Execute an action
+// Free any string returned by the plugin
+void aro_plugin_free(char* ptr);
+
+/* ---- OPTIONAL: implement only what you need ---- */
+
+// One-time initialization (DB connections, model loading, etc.)
+void aro_plugin_init(void);
+
+// Cleanup on unload (close connections, flush buffers, etc.)
+void aro_plugin_shutdown(void);
+
+// Execute an action or service method — only needed if you provide actions or services
+// Service calls arrive as action="service:<method>"
 char* aro_plugin_execute(const char* action, const char* input_json);
 
-// Free memory
-void aro_plugin_free(char* ptr);
+// Execute a qualifier transformation — only needed if you provide qualifiers
+char* aro_plugin_qualifier(const char* name, const char* input_json);
+
+// Handle a subscribed event — only needed if you subscribe to events
+void aro_plugin_on_event(const char* event_type, const char* data);
+
+// System object read — only needed if you provide readable system objects
+char* aro_object_read(const char* id, const char* qualifier);
+
+// System object write — only needed if you provide writable system objects
+char* aro_object_write(const char* id, const char* qualifier, const char* value);
+
+// System object list — only needed if you provide enumerable system objects
+char* aro_object_list(const char* pattern);
+```
+
+`aro_plugin_invoke` is a **callback provided by the runtime**, not an export you implement. The runtime sets it before calling any plugin function, enabling hybrid plugins to call back into ARO feature sets:
+
+```c
+// Runtime-provided: call an ARO feature set from native code
+typedef char* (*aro_invoke_fn)(const char* feature_set, const char* input_json);
+extern aro_invoke_fn aro_plugin_invoke;
 ```
 
 ### Rust Plugin Example
@@ -558,19 +594,38 @@ provides:
 use std::ffi::{CStr, CString};
 use std::os::raw::c_char;
 
+// aro_plugin_info and aro_plugin_free are the only required exports.
 #[no_mangle]
 pub extern "C" fn aro_plugin_info() -> *mut c_char {
-    let info = r#"{"name":"plugin-rust-csv","version":"1.0.0","actions":["parse-csv"]}"#;
+    let info = r#"{
+        "name": "plugin-rust-csv",
+        "version": "1.0.0",
+        "actions": [
+            {
+                "name": "ParseCSV",
+                "verbs": ["parse-csv"],
+                "role": "own",
+                "prepositions": ["from"]
+            }
+        ]
+    }"#;
     CString::new(info).unwrap().into_raw()
 }
 
+// aro_plugin_execute is optional — implement it only if providing actions or services.
+// The input JSON now includes result/source descriptors, preposition, _context, and _with.
 #[no_mangle]
 pub extern "C" fn aro_plugin_execute(
     action: *const c_char,
     input_json: *const c_char,
 ) -> *mut c_char {
-    // Parse action and input, execute, return JSON result
-    let result = r#"{"rows": [], "count": 0}"#;
+    let action = unsafe { CStr::from_ptr(action) }.to_str().unwrap_or("");
+    let _input = unsafe { CStr::from_ptr(input_json) }.to_str().unwrap_or("{}");
+    // Parse _input to access: "data", "preposition", "result", "source", "_context", "_with"
+    let result = match action {
+        "parse-csv" => r#"{"rows": [], "count": 0}"#,
+        _ => r#"{"error": "unknown action"}"#,
+    };
     CString::new(result).unwrap().into_raw()
 }
 
@@ -603,18 +658,36 @@ provides:
 ```c
 #include <stdlib.h>
 #include <string.h>
+#include <stdio.h>
 
+/* aro_plugin_info and aro_plugin_free are the only required exports. */
 char* aro_plugin_info(void) {
-    const char* info = "{\"name\":\"plugin-c-hash\",\"actions\":[\"hash\"]}";
+    const char* info =
+        "{"
+        "\"name\":\"plugin-c-hash\","
+        "\"version\":\"1.0.0\","
+        "\"actions\":[{"
+        "  \"name\":\"ComputeHash\","
+        "  \"verbs\":[\"hash\",\"computehash\"],"
+        "  \"role\":\"own\","
+        "  \"prepositions\":[\"from\"]"
+        "}]"
+        "}";
     char* result = malloc(strlen(info) + 1);
     strcpy(result, info);
     return result;
 }
 
+/* aro_plugin_execute is optional — implement only if providing actions or services.
+   Input JSON includes: "data", "preposition", "result", "source", "_context", "_with". */
 char* aro_plugin_execute(const char* action, const char* input) {
-    // Implementation
     char* result = malloc(256);
-    snprintf(result, 256, "{\"hash\":\"abc123\"}");
+    if (strcmp(action, "hash") == 0 || strcmp(action, "computehash") == 0) {
+        /* Read "data" from input JSON, compute hash, return result */
+        snprintf(result, 256, "{\"hash\":\"abc123\"}");
+    } else {
+        snprintf(result, 256, "{\"error\":\"unknown action: %s\"}", action);
+    }
     return result;
 }
 
@@ -697,7 +770,180 @@ def markdown_to_html(md):
 
 ---
 
-## 26.9 Plugin Dependencies
+## 26.9 Lifecycle Hooks
+
+Stateful plugins can perform one-time initialization and cleanup by implementing lifecycle hooks. Both are optional — only add them if your plugin needs them.
+
+```c
+/* Called once after the plugin is loaded, before any execute calls */
+void aro_plugin_init(void) {
+    db_pool = open_connection(getenv("DB_URL"));
+}
+
+/* Called before the plugin is unloaded */
+void aro_plugin_shutdown(void) {
+    close_connection(db_pool);
+}
+```
+
+In Swift (using the `AROPluginSDK`):
+
+```swift
+@AROPlugin(handle: "Postgres", version: "1.0.0")
+struct PostgresPlugin {
+
+    @OnInit
+    static func setup() {
+        pool = PostgresConnectionPool(url: ProcessInfo.processInfo.environment["DB_URL"]!)
+    }
+
+    @OnShutdown
+    static func cleanup() {
+        pool.close()
+    }
+}
+```
+
+---
+
+## 26.9b Event Support
+
+Plugins can subscribe to and emit domain events. Declare subscriptions in `aro_plugin_info` and implement `aro_plugin_on_event` to receive them:
+
+**aro_plugin_info JSON:**
+
+```json
+{
+  "name": "plugin-notifier",
+  "version": "1.0.0",
+  "events": {
+    "emits": ["NotificationSent"],
+    "subscribes": ["UserCreated", "OrderPlaced"]
+  }
+}
+```
+
+**C handler:**
+
+```c
+void aro_plugin_on_event(const char* event_type, const char* data) {
+    if (strcmp(event_type, "UserCreated") == 0) {
+        /* Parse data JSON and send welcome notification */
+    } else if (strcmp(event_type, "OrderPlaced") == 0) {
+        /* Parse data JSON and send order confirmation */
+    }
+}
+```
+
+**Swift (SDK):**
+
+```swift
+@OnEvent("UserCreated")
+func handleUserCreated(event: EventData) {
+    let userId = event.string("userId") ?? "unknown"
+    sendWelcomeEmail(to: userId)
+}
+```
+
+---
+
+## 26.9c System Objects
+
+Plugins can provide custom system objects that integrate with ARO's Source/Sink model. System objects appear as native ARO objects and are accessed with familiar qualifier syntax:
+
+```aro
+(* Using a Redis system object provided by a plugin *)
+Store the <user-data> to the <redis: users/42>.
+Retrieve the <cached> from the <redis: sessions/abc>.
+```
+
+Declare capabilities in `aro_plugin_info`:
+
+```json
+{
+  "name": "plugin-redis",
+  "version": "1.0.0",
+  "system_objects": [
+    {
+      "identifier": "redis",
+      "capabilities": ["readable", "writable", "enumerable"],
+      "description": "Redis key-value store"
+    }
+  ]
+}
+```
+
+Then implement the corresponding ABI functions:
+
+| Capability | Function to implement | ARO usage |
+|------------|----------------------|-----------|
+| `readable` | `aro_object_read(id, qualifier)` | `Retrieve the <x> from the <redis: key>` |
+| `writable` | `aro_object_write(id, qualifier, value)` | `Store the <x> to the <redis: key>` |
+| `enumerable` | `aro_object_list(pattern)` | `Retrieve the <keys> from the <redis: *>` |
+
+```c
+char* aro_object_read(const char* id, const char* qualifier) {
+    const char* value = redis_get(qualifier, id);
+    /* Return JSON: {"value": <the_value>} */
+    char* out = malloc(256);
+    snprintf(out, 256, "{\"value\":\"%s\"}", value ? value : "");
+    return out;
+}
+
+char* aro_object_write(const char* id, const char* qualifier, const char* value) {
+    redis_set(qualifier, id, value);
+    return strdup("{\"stored\":true}");
+}
+```
+
+---
+
+## 26.9d Hybrid Plugins: Calling Back into ARO
+
+Plugins that combine native performance with ARO business logic can call ARO feature sets from native code using `aro_plugin_invoke`. The runtime provides this callback before any plugin function is called:
+
+```c
+typedef char* (*aro_invoke_fn)(const char* feature_set, const char* input_json);
+extern aro_invoke_fn aro_plugin_invoke;   /* set by the runtime */
+```
+
+Usage from a native action:
+
+```c
+char* aro_plugin_execute(const char* action, const char* input_json) {
+    if (strcmp(action, "process-order") == 0) {
+        /* Do native computation (hashing, compression, etc.) */
+        const char* processed = do_native_work(input_json);
+
+        /* Call back into an ARO feature set for business logic */
+        char* validation_result = aro_plugin_invoke(
+            "Validate Order: Order Validation",
+            processed
+        );
+
+        /* Use the result, then free it */
+        char* out = build_response(validation_result);
+        aro_plugin_free(validation_result);
+        return out;
+    }
+    return strdup("{\"error\":\"unknown action\"}");
+}
+```
+
+Swift SDK equivalent:
+
+```swift
+let result = try ARORuntime.invoke(
+    "Validate Order: Order Validation",
+    input: ["order": orderData]
+)
+```
+
+This enables the **hybrid plugin pattern**: native code handles computation (Argon2 hashing, JWT signing, image processing), while ARO feature sets handle business logic (authentication workflows, validation rules).
+
+---
+
+## 26.10 Plugin Dependencies
 
 Plugins can depend on other plugins:
 
@@ -719,7 +965,7 @@ When installing a plugin, ARO automatically resolves and installs dependencies i
 
 ---
 
-## 26.10 Choosing a Plugin Type
+## 26.11 Choosing a Plugin Type
 
 | If you need... | Choose |
 |----------------|--------|
@@ -740,7 +986,7 @@ When installing a plugin, ARO automatically resolves and installs dependencies i
 
 ---
 
-## 26.11 Publishing Plugins
+## 26.12 Publishing Plugins
 
 1. Create a Git repository with `plugin.yaml`
 2. Tag releases following semantic versioning
@@ -764,7 +1010,7 @@ aro add git@github.com:yourname/my-plugin.git
 
 ---
 
-## 26.12 Plugin Lifecycle: Unload and Reload
+## 26.13 Plugin Lifecycle: Unload and Reload
 
 Plugins can be unloaded and reloaded at runtime. This is useful for hot-reloading during development or for dynamically swapping plugin implementations without restarting the application.
 
@@ -824,7 +1070,7 @@ Actions registered without a `pluginName` are not tracked and survive `unregiste
 
 ---
 
-## 26.13 Example Plugins
+## 26.14 Example Plugins
 
 The ARO team maintains several reference plugins:
 

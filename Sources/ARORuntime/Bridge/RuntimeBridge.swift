@@ -385,10 +385,8 @@ public func aro_load_plugins(_ path: UnsafePointer<CChar>?) -> Int32 {
     let directory = URL(fileURLWithPath: pathString)
 
     do {
-        // Load legacy plugins from plugins/ directory
-        try PluginLoader.shared.loadPlugins(from: directory)
-
-        // Load managed plugins from Plugins/ directory (ARO-0045)
+        // UnifiedPluginLoader handles both managed Plugins/ and legacy plugins/ directories.
+        // It passes managed plugin names to the legacy loader so they aren't double-loaded.
         try UnifiedPluginLoader.shared.loadPlugins(from: directory)
 
         return 1

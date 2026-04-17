@@ -546,11 +546,25 @@ struct BuildCommand: AsyncParsableCommand {
             print("  Intermediate files kept at: \(buildDir.path)")
         }
 
-        // Compile plugins if present (ARO-0031: plugins are compiled during build, not at runtime)
+        // Compile legacy plugins/ if present (ARO-0031: plugins are compiled during build, not at runtime)
+        // Skip if it resolves to the same directory as Plugins/ (case-insensitive FS).
         let sourcePluginsDir = appConfig.rootPath.appendingPathComponent("plugins")
         let outputPluginsDir = binaryPath.deletingLastPathComponent().appendingPathComponent("plugins")
 
-        if FileManager.default.fileExists(atPath: sourcePluginsDir.path) {
+        // On case-insensitive filesystems (macOS, Docker virtiofs mounts), "plugins/" and
+        // "Plugins/" resolve to the same directory. Skip legacy compilation in that case to
+        // avoid double-compiling managed plugins and causing module-cache conflicts.
+        let isLegacySameAsManaged: Bool = {
+            guard let legacyAttrs = try? FileManager.default.attributesOfItem(atPath: sourcePluginsDir.path),
+                  let managedAttrs = try? FileManager.default.attributesOfItem(atPath: sourceManagedPluginsDirEarly.path),
+                  let legacyInode = legacyAttrs[.systemFileNumber] as? UInt,
+                  let managedInode = managedAttrs[.systemFileNumber] as? UInt else {
+                return false
+            }
+            return legacyInode == managedInode
+        }()
+
+        if FileManager.default.fileExists(atPath: sourcePluginsDir.path) && !isLegacySameAsManaged {
             if verbose {
                 print("Compiling plugins...")
             }

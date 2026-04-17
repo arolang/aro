@@ -20,13 +20,11 @@ private func debugPrint(_ message: String) {
 /// Host for native plugins written in C, C++, or Rust
 ///
 /// Native plugins communicate through a C ABI interface using JSON strings.
-/// The execute function takes an action name and JSON input, returns JSON output.
 ///
-/// ## Required C Interface
+/// ## Required C Interface (ARO-0073)
 /// ```c
-/// // Execute an action with JSON input, return JSON output
-/// // Caller must free the returned string using aro_plugin_free
-/// char* aro_plugin_execute(const char* action, const char* input_json);
+/// // Get plugin info as JSON (name, version, actions[], qualifiers[], etc.)
+/// char* aro_plugin_info(void);
 ///
 /// // Free memory allocated by the plugin
 /// void aro_plugin_free(char* ptr);
@@ -34,8 +32,29 @@ private func debugPrint(_ message: String) {
 ///
 /// ## Optional C Interface
 /// ```c
-/// // Get plugin info as JSON (name, version, actions[])
-/// char* aro_plugin_info(void);
+/// // Execute an action with JSON input, return JSON output
+/// char* aro_plugin_execute(const char* action, const char* input_json);
+///
+/// // Execute a qualifier transformation
+/// char* aro_plugin_qualifier(const char* name, const char* input_json);
+///
+/// // One-time initialization (DB connections, model loading, etc.)
+/// void aro_plugin_init(void);
+///
+/// // Cleanup on unload (close connections, flush buffers, etc.)
+/// void aro_plugin_shutdown(void);
+///
+/// // Event handler (called when subscribed events fire)
+/// void aro_plugin_on_event(const char* event_type, const char* data_json);
+///
+/// // System object read
+/// char* aro_object_read(const char* identifier, const char* qualifier);
+///
+/// // System object write
+/// char* aro_object_write(const char* identifier, const char* qualifier, const char* value_json);
+///
+/// // System object list
+/// char* aro_object_list(const char* pattern);
 /// ```
 public final class NativePluginHost: @unchecked Sendable {
     /// Plugin name
@@ -65,10 +84,33 @@ public final class NativePluginHost: @unchecked Sendable {
     typealias ExecuteFunc = @convention(c) (UnsafePointer<CChar>, UnsafePointer<CChar>) -> UnsafeMutablePointer<CChar>?
     typealias FreeFunc = @convention(c) (UnsafeMutablePointer<CChar>?) -> Void
     typealias QualifierFunc = @convention(c) (UnsafePointer<CChar>, UnsafePointer<CChar>) -> UnsafeMutablePointer<CChar>?
+    typealias InitFunc = @convention(c) () -> Void
+    typealias ShutdownFunc = @convention(c) () -> Void
+    typealias OnEventFunc = @convention(c) (UnsafePointer<CChar>, UnsafePointer<CChar>) -> Void
+    typealias ObjectReadFunc = @convention(c) (UnsafePointer<CChar>, UnsafePointer<CChar>) -> UnsafeMutablePointer<CChar>?
+    typealias ObjectWriteFunc = @convention(c) (UnsafePointer<CChar>, UnsafePointer<CChar>, UnsafePointer<CChar>) -> UnsafeMutablePointer<CChar>?
+    typealias ObjectListFunc = @convention(c) (UnsafePointer<CChar>) -> UnsafeMutablePointer<CChar>?
+    typealias InvokeFunc = @convention(c) (UnsafePointer<CChar>, UnsafePointer<CChar>) -> UnsafeMutablePointer<CChar>?
+    typealias SetInvokeFunc = @convention(c) (InvokeFunc?) -> Void
 
     private var executeFunc: ExecuteFunc?
     private var freeFunc: FreeFunc?
     private var qualifierFunc: QualifierFunc?
+    private var initFunc: InitFunc?
+    private var shutdownFunc: ShutdownFunc?
+    private var onEventFunc: OnEventFunc?
+    private var objectReadFunc: ObjectReadFunc?
+    private var objectWriteFunc: ObjectWriteFunc?
+    private var objectListFunc: ObjectListFunc?
+
+    /// Event subscriptions from plugin info
+    private var eventSubscriptions: [String] = []
+
+    /// System objects declared by this plugin
+    private var systemObjects: [SystemObjectDescriptor] = []
+
+    /// Invoke callback: set by the runtime so plugins can call ARO feature sets
+    private nonisolated(unsafe) static var invokeCallback: ((_ featureSet: String, _ inputJSON: String) -> String)?
 
     /// Qualifier registrations from this plugin
     private var qualifierRegistrations: [QualifierRegistration] = []
@@ -123,12 +165,40 @@ public final class NativePluginHost: @unchecked Sendable {
 
             libraryPath = candidates.first(where: { FileManager.default.fileExists(atPath: $0.path) })
         } else {
-            // Try common patterns
-            let candidates = [
+            // Try common patterns (pluginPath is typically the Sources/ subdirectory)
+            let pluginRoot = pluginPath.deletingLastPathComponent()
+            var candidates = [
                 pluginPath.appendingPathComponent("lib\(pluginName).\(ext)"),
                 pluginPath.appendingPathComponent("\(pluginName).\(ext)"),
                 pluginPath.appendingPathComponent("target/release/lib\(pluginName).\(ext)"),  // Rust
             ]
+
+            // Also check SPM build output (for Package.swift-based plugins).
+            // The library may live under .build/<triple>/release/ in the plugin root.
+            let spmBuildDir = pluginRoot.appendingPathComponent(".build")
+            if FileManager.default.fileExists(atPath: spmBuildDir.path) {
+                // Try .build/release/ first (simple SPM layout)
+                let releaseDir = spmBuildDir.appendingPathComponent("release")
+                candidates.append(releaseDir.appendingPathComponent("lib\(pluginName).\(ext)"))
+                candidates.append(releaseDir.appendingPathComponent("\(pluginName).\(ext)"))
+
+                // Search arch-specific dirs: .build/<triple>/release/
+                if let buildContents = try? FileManager.default.contentsOfDirectory(
+                    at: spmBuildDir, includingPropertiesForKeys: [.isDirectoryKey], options: [.skipsHiddenFiles]
+                ) {
+                    for dir in buildContents where dir.lastPathComponent.contains("-") && dir.lastPathComponent != "checkouts" {
+                        let archRelease = dir.appendingPathComponent("release")
+                        // Look for any dynamic library matching the extension
+                        if let libs = try? FileManager.default.contentsOfDirectory(
+                            at: archRelease, includingPropertiesForKeys: nil, options: [.skipsHiddenFiles]
+                        ) {
+                            for lib in libs where lib.pathExtension == ext {
+                                candidates.append(lib)
+                            }
+                        }
+                    }
+                }
+            }
 
             libraryPath = candidates.first(where: { FileManager.default.fileExists(atPath: $0.path) })
         }
@@ -156,7 +226,30 @@ public final class NativePluginHost: @unchecked Sendable {
         }
         libraryHandle = UnsafeMutableRawPointer(handle)
         #else
-        guard let handle = dlopen(libraryPath.path, RTLD_NOW | RTLD_LOCAL) else {
+        // On Linux, Swift-built .so files can crash the dynamic linker with RTLD_NOW
+        // due to TLS exhaustion.  Use RTLD_LAZY | RTLD_GLOBAL so symbol resolution is
+        // deferred and the plugin can share the host process's Swift runtime.
+        #if os(Linux)
+        let dlopenFlags = RTLD_LAZY | RTLD_GLOBAL
+        #else
+        let dlopenFlags = RTLD_NOW | RTLD_LOCAL
+        #endif
+
+        #if os(Linux)
+        // Pre-load dependency libraries (e.g. AROPluginSDK, AROPluginKit) from the same
+        // directory with RTLD_GLOBAL so their symbols merge with the host process's Swift
+        // runtime. Without this, Swift-built plugins crash on Linux (TLS exhaustion).
+        let libDir = libraryPath.deletingLastPathComponent()
+        if let siblings = try? FileManager.default.contentsOfDirectory(
+            at: libDir, includingPropertiesForKeys: nil, options: [.skipsHiddenFiles]
+        ) {
+            for dep in siblings where dep.pathExtension == ext && dep != libraryPath {
+                _ = dlopen(dep.path, Int32(dlopenFlags))
+            }
+        }
+        #endif
+
+        guard let handle = dlopen(libraryPath.path, Int32(dlopenFlags)) else {
             let error = String(cString: dlerror())
             throw NativePluginError.loadFailed(pluginName, message: error)
         }
@@ -186,13 +279,32 @@ public final class NativePluginHost: @unchecked Sendable {
             return outputPath
         }
 
-        // Check for Swift source files
+        // Check for Swift source files — try standalone swiftc first (fast, produces a simple
+        // C-ABI .so that loads safely via dlopen on all platforms).
         let swiftFiles = findSourceFiles(withExtension: "swift")
         if !swiftFiles.isEmpty {
             debugPrint("[NativePluginHost] Found Swift files: \(swiftFiles.map { $0.lastPathComponent })")
             let outputPath = pluginPath.appendingPathComponent("lib\(pluginName).\(ext)")
-            try compileSwiftPlugin(sources: swiftFiles, output: outputPath)
-            return outputPath
+            do {
+                try compileSwiftPlugin(sources: swiftFiles, output: outputPath)
+                return outputPath
+            } catch {
+                debugPrint("[NativePluginHost] Standalone swiftc failed (\(error)), trying Package.swift...")
+                // Clean up partial output so SPM doesn't complain about unhandled files
+                try? FileManager.default.removeItem(at: outputPath)
+            }
+        }
+
+        // Fallback: check for Package.swift (Swift package plugin with SPM dependencies)
+        let packageSwiftCandidates = [
+            pluginPath.appendingPathComponent("Package.swift"),
+            pluginPath.deletingLastPathComponent().appendingPathComponent("Package.swift"),
+        ]
+
+        if let packageSwift = packageSwiftCandidates.first(where: { FileManager.default.fileExists(atPath: $0.path) }) {
+            let packageDir = packageSwift.deletingLastPathComponent()
+            debugPrint("[NativePluginHost] Found Package.swift at \(packageSwift.path), building Swift package plugin: \(pluginName)")
+            return try compileSwiftPackagePlugin(packageDir: packageDir, ext: ext)
         }
 
         debugPrint("[NativePluginHost] No compilable sources found for plugin: \(pluginName)")
@@ -280,6 +392,124 @@ public final class NativePluginHost: @unchecked Sendable {
         }
 
         debugPrint("[NativePluginHost] Swift plugin compiled to: \(output.path)")
+    }
+
+    /// Compile Swift plugin using Package.swift (swift build)
+    private func compileSwiftPackagePlugin(packageDir: URL, ext: String) throws -> URL? {
+        // Find swift executable
+        var swiftPath: String? = nil
+        if let swiftEnv = ProcessInfo.processInfo.environment["SWIFT_PATH"],
+           !swiftEnv.isEmpty,
+           FileManager.default.isExecutableFile(atPath: swiftEnv) {
+            swiftPath = swiftEnv
+        }
+
+        if swiftPath == nil {
+            let whichProcess = Process()
+            whichProcess.executableURL = URL(fileURLWithPath: "/usr/bin/which")
+            whichProcess.arguments = ["swift"]
+            let pipe = Pipe()
+            whichProcess.standardOutput = pipe
+            whichProcess.standardError = FileHandle.nullDevice
+            if let _ = try? whichProcess.run() {
+                whichProcess.waitUntilExit()
+                if whichProcess.terminationStatus == 0,
+                   let path = String(data: pipe.fileHandleForReading.readDataToEndOfFile(), encoding: .utf8)?
+                       .trimmingCharacters(in: .whitespacesAndNewlines),
+                   !path.isEmpty {
+                    swiftPath = path
+                }
+            }
+        }
+
+        if swiftPath == nil {
+            let commonPaths = [
+                "/usr/bin/swift",
+                "/usr/share/swift/usr/bin/swift",
+                "/opt/swift/usr/bin/swift",
+                "/opt/homebrew/bin/swift",
+                "/usr/local/bin/swift",
+            ]
+            swiftPath = commonPaths.first(where: { FileManager.default.isExecutableFile(atPath: $0) })
+        }
+
+        guard let swiftPath = swiftPath else {
+            throw NativePluginError.compilationFailed(pluginName, message: "swift not found")
+        }
+
+        debugPrint("[NativePluginHost] Building Swift package plugin with \(swiftPath) in \(packageDir.path)")
+
+        let process = Process()
+        process.executableURL = URL(fileURLWithPath: swiftPath)
+        process.arguments = ["build", "-c", "release"]
+        process.currentDirectoryURL = packageDir
+
+        // Capture both stdout and stderr so we can report the full error on failure.
+        let outPipe = Pipe()
+        let errorPipe = Pipe()
+        process.standardOutput = outPipe
+        process.standardError = errorPipe
+
+        try process.run()
+        process.waitUntilExit()
+        let outData = outPipe.fileHandleForReading.readDataToEndOfFile()
+        let errorData = errorPipe.fileHandleForReading.readDataToEndOfFile()
+
+        if process.terminationStatus != 0 {
+            let stderrStr = String(data: errorData, encoding: .utf8) ?? ""
+            let stdoutStr = String(data: outData, encoding: .utf8) ?? ""
+            let combined = [stderrStr, stdoutStr].filter { !$0.isEmpty }.joined(separator: "\n")
+            let errorMessage = combined.isEmpty ? "exit code \(process.terminationStatus), reason: \(process.terminationReason.rawValue)" : combined
+            debugPrint("[NativePluginHost] Swift package build failed: \(errorMessage)")
+            throw NativePluginError.compilationFailed(pluginName, message: "swift build failed: \(errorMessage)")
+        }
+
+        // Use `swift build --show-bin-path` to find the actual output directory
+        // (on Linux this may be .build/x86_64-unknown-linux-gnu/release/ rather than .build/release/)
+        var binDir: URL? = nil
+        let binPathProcess = Process()
+        binPathProcess.executableURL = URL(fileURLWithPath: swiftPath)
+        binPathProcess.arguments = ["build", "-c", "release", "--show-bin-path"]
+        binPathProcess.currentDirectoryURL = packageDir
+        let binPathPipe = Pipe()
+        binPathProcess.standardOutput = binPathPipe
+        binPathProcess.standardError = FileHandle.nullDevice
+        if let _ = try? binPathProcess.run() {
+            binPathProcess.waitUntilExit()
+            if binPathProcess.terminationStatus == 0,
+               let path = String(data: binPathPipe.fileHandleForReading.readDataToEndOfFile(), encoding: .utf8)?
+                   .trimmingCharacters(in: .whitespacesAndNewlines),
+               !path.isEmpty {
+                binDir = URL(fileURLWithPath: path)
+            }
+        }
+
+        // Fallback to .build/release/ if --show-bin-path didn't work
+        let searchDirs = [
+            binDir,
+            packageDir.appendingPathComponent(".build/release"),
+        ].compactMap { $0 }
+
+        for releaseDir in searchDirs {
+            guard let contents = try? FileManager.default.contentsOfDirectory(
+                at: releaseDir,
+                includingPropertiesForKeys: nil,
+                options: [.skipsHiddenFiles]
+            ) else { continue }
+
+            let libFiles = contents.filter { $0.pathExtension == ext }
+            if let lib = libFiles.first(where: { $0.lastPathComponent.lowercased().contains(pluginName.lowercased().replacingOccurrences(of: "-", with: "")) }) ?? libFiles.first {
+                // Return the library in-place from the build directory.
+                // Do NOT copy it out — the RPATH in the .so references sibling
+                // dependencies (e.g. AROPluginKit) that live in the same build dir.
+                // Copying breaks those references and causes dlopen to crash.
+                debugPrint("[NativePluginHost] Swift package plugin built: \(lib.path)")
+                return lib
+            }
+        }
+
+        debugPrint("[NativePluginHost] Swift package built but no dynamic library found")
+        return nil
     }
 
     /// Compile Rust plugin using cargo
@@ -376,6 +606,18 @@ public final class NativePluginHost: @unchecked Sendable {
         args.append("-o")
         args.append(output.path)
 
+        // Add include paths: check for include/ directory in plugin root (parent of source path)
+        let pluginRoot = pluginPath.deletingLastPathComponent()
+        let includeDir = pluginRoot.appendingPathComponent("include")
+        if FileManager.default.fileExists(atPath: includeDir.path) {
+            args.append("-I\(includeDir.path)")
+        }
+        // Also check for include/ in the source directory itself
+        let localIncludeDir = pluginPath.appendingPathComponent("include")
+        if FileManager.default.fileExists(atPath: localIncludeDir.path) {
+            args.append("-I\(localIncludeDir.path)")
+        }
+
         let process = Process()
         process.executableURL = URL(fileURLWithPath: args[0])
         process.arguments = Array(args.dropFirst())
@@ -393,63 +635,102 @@ public final class NativePluginHost: @unchecked Sendable {
         }
     }
 
+    /// Resolve a symbol from the loaded library handle
+    private func resolveSymbol(_ name: String) -> UnsafeMutableRawPointer? {
+        guard let handle = libraryHandle else { return nil }
+        #if os(Windows)
+        let hmodule = unsafeBitCast(handle, to: HMODULE.self)
+        return GetProcAddress(hmodule, name).map { UnsafeMutableRawPointer($0) }
+        #else
+        return dlsym(handle, name)
+        #endif
+    }
+
     private func loadPluginInfo() throws {
-        guard let handle = libraryHandle else {
+        guard libraryHandle != nil else {
             throw NativePluginError.notLoaded(pluginName)
         }
 
-        // Get execute function (required)
-        #if os(Windows)
-        let hmodule = unsafeBitCast(handle, to: HMODULE.self)
-        let execSymbol = GetProcAddress(hmodule, "aro_plugin_execute")
-        #else
-        let execSymbol = dlsym(handle, "aro_plugin_execute")
-        #endif
-
-        guard let execSymbol = execSymbol else {
-            throw NativePluginError.missingFunction(pluginName, function: "aro_plugin_execute")
+        // --- Required: aro_plugin_info ---
+        guard let infoSymbol = resolveSymbol("aro_plugin_info") else {
+            throw NativePluginError.missingFunction(pluginName, function: "aro_plugin_info")
         }
-        executeFunc = unsafeBitCast(execSymbol, to: ExecuteFunc.self)
+        let infoFunc = unsafeBitCast(infoSymbol, to: PluginInfoFunc.self)
 
-        // Get free function (optional but recommended)
-        #if os(Windows)
-        let freeSymbol = GetProcAddress(hmodule, "aro_plugin_free")
-        #else
-        let freeSymbol = dlsym(handle, "aro_plugin_free")
-        #endif
-
-        if let freeSymbol = freeSymbol {
+        // --- Required: aro_plugin_free ---
+        if let freeSymbol = resolveSymbol("aro_plugin_free") {
             freeFunc = unsafeBitCast(freeSymbol, to: FreeFunc.self)
         }
 
-        // Get qualifier function (optional - for plugins providing qualifiers)
-        #if os(Windows)
-        let qualifierSymbol = GetProcAddress(hmodule, "aro_plugin_qualifier")
-        #else
-        let qualifierSymbol = dlsym(handle, "aro_plugin_qualifier")
-        #endif
-
-        if let qualifierSymbol = qualifierSymbol {
-            qualifierFunc = unsafeBitCast(qualifierSymbol, to: QualifierFunc.self)
-            debugPrint("[NativePluginHost] Found aro_plugin_qualifier function in \(pluginName)")
-        } else {
-            debugPrint("[NativePluginHost] No aro_plugin_qualifier function in \(pluginName)")
+        // --- Optional: aro_plugin_execute (only needed if plugin provides actions/services) ---
+        if let execSymbol = resolveSymbol("aro_plugin_execute") {
+            executeFunc = unsafeBitCast(execSymbol, to: ExecuteFunc.self)
         }
 
-        // Get plugin info function (optional)
-        #if os(Windows)
-        let infoSymbol = GetProcAddress(hmodule, "aro_plugin_info")
-        #else
-        let infoSymbol = dlsym(handle, "aro_plugin_info")
-        #endif
+        // --- Optional: aro_plugin_qualifier ---
+        if let qualifierSymbol = resolveSymbol("aro_plugin_qualifier") {
+            qualifierFunc = unsafeBitCast(qualifierSymbol, to: QualifierFunc.self)
+            debugPrint("[NativePluginHost] Found aro_plugin_qualifier in \(pluginName)")
+        }
 
-        if let infoSymbol = infoSymbol {
-            let infoFunc = unsafeBitCast(infoSymbol, to: PluginInfoFunc.self)
-            if let infoPtr = infoFunc() {
-                defer { freeFunc?(infoPtr) }
-                let infoJSON = String(cString: infoPtr)
-                parsePluginInfo(json: infoJSON)
+        // --- Optional: aro_plugin_init (lifecycle) ---
+        if let initSymbol = resolveSymbol("aro_plugin_init") {
+            initFunc = unsafeBitCast(initSymbol, to: InitFunc.self)
+        }
+
+        // --- Optional: aro_plugin_shutdown (lifecycle) ---
+        if let shutdownSymbol = resolveSymbol("aro_plugin_shutdown") {
+            shutdownFunc = unsafeBitCast(shutdownSymbol, to: ShutdownFunc.self)
+        }
+
+        // --- Optional: aro_plugin_on_event ---
+        if let eventSymbol = resolveSymbol("aro_plugin_on_event") {
+            onEventFunc = unsafeBitCast(eventSymbol, to: OnEventFunc.self)
+            debugPrint("[NativePluginHost] Found aro_plugin_on_event in \(pluginName)")
+        }
+
+        // --- Optional: system object functions ---
+        if let readSymbol = resolveSymbol("aro_object_read") {
+            objectReadFunc = unsafeBitCast(readSymbol, to: ObjectReadFunc.self)
+        }
+        if let writeSymbol = resolveSymbol("aro_object_write") {
+            objectWriteFunc = unsafeBitCast(writeSymbol, to: ObjectWriteFunc.self)
+        }
+        if let listSymbol = resolveSymbol("aro_object_list") {
+            objectListFunc = unsafeBitCast(listSymbol, to: ObjectListFunc.self)
+        }
+
+        // --- Optional: aro_plugin_set_invoke (for plugin-to-runtime invocation) ---
+        if let setInvokeSymbol = resolveSymbol("aro_plugin_set_invoke") {
+            let setInvokeFn = unsafeBitCast(setInvokeSymbol, to: SetInvokeFunc.self)
+            // Pass the invoke callback if one has been registered by the runtime
+            if NativePluginHost.invokeCallback != nil {
+                let callback: InvokeFunc = { featureSetPtr, inputPtr in
+                    guard let invoke = NativePluginHost.invokeCallback else { return nil }
+                    let featureSet = String(cString: featureSetPtr)
+                    let inputJSON = String(cString: inputPtr)
+                    let resultJSON = invoke(featureSet, inputJSON)
+                    return resultJSON.withCString { strdup($0) }
+                }
+                setInvokeFn(callback)
+                debugPrint("[NativePluginHost] Passed invoke callback to \(pluginName)")
             }
+        }
+
+        // ARO-0073: Call aro_plugin_register (if exported) to trigger plugin's
+        // file-scope initialization before querying aro_plugin_info.
+        // Swift SDK plugins need this because file-scope let is lazy.
+        if let registerSymbol = resolveSymbol("aro_plugin_register") {
+            let registerFn = unsafeBitCast(registerSymbol, to: InitFunc.self)
+            registerFn()
+            debugPrint("[NativePluginHost] Called aro_plugin_register for \(pluginName)")
+        }
+
+        // Load and parse plugin info JSON
+        if let infoPtr = infoFunc() {
+            defer { freeFunc?(infoPtr) }
+            let infoJSON = String(cString: infoPtr)
+            parsePluginInfo(json: infoJSON)
         }
 
         // If no info was loaded, use defaults
@@ -461,6 +742,9 @@ public final class NativePluginHost: @unchecked Sendable {
                 actions: []
             )
         }
+
+        // Call init lifecycle hook after everything is loaded
+        initFunc?()
     }
 
     private func parsePluginInfo(json: String) {
@@ -513,11 +797,66 @@ public final class NativePluginHost: @unchecked Sendable {
                     }
 
                     let description = qualifierObj["description"] as? String
+                    let acceptsParams = qualifierObj["accepts_parameters"] as? Bool ?? false
 
                     qualifierDescriptors.append(NativeQualifierDescriptor(
                         name: qualifierName,
                         inputTypes: inputTypes,
+                        description: description,
+                        acceptsParameters: acceptsParams
+                    ))
+                }
+            }
+        }
+
+        // Parse services (declared in plugin info, routed through aro_plugin_execute)
+        var serviceDescriptors: [NativeServiceDescriptor] = []
+        if let serviceObjects = dict["services"] as? [[String: Any]] {
+            for serviceObj in serviceObjects {
+                if let serviceName = serviceObj["name"] as? String {
+                    let methods = serviceObj["methods"] as? [String] ?? []
+                    serviceDescriptors.append(NativeServiceDescriptor(
+                        name: serviceName,
+                        methods: methods
+                    ))
+                }
+            }
+        }
+
+        // Parse event subscriptions
+        if let events = dict["events"] as? [String: Any] {
+            if let subscribes = events["subscribes"] as? [String] {
+                eventSubscriptions = subscribes
+            }
+        }
+
+        // Parse system objects
+        var sysObjDescriptors: [SystemObjectDescriptor] = []
+        if let sysObjects = dict["system_objects"] as? [[String: Any]] {
+            for sysObj in sysObjects {
+                if let identifier = sysObj["identifier"] as? String {
+                    let capabilities = sysObj["capabilities"] as? [String] ?? []
+                    let description = sysObj["description"] as? String
+                    sysObjDescriptors.append(SystemObjectDescriptor(
+                        identifier: identifier,
+                        capabilities: Set(capabilities),
                         description: description
+                    ))
+                }
+            }
+        }
+        systemObjects = sysObjDescriptors
+
+        // Parse deprecations
+        var deprecationList: [DeprecationDescriptor] = []
+        if let deprecations = dict["deprecations"] as? [[String: Any]] {
+            for dep in deprecations {
+                if let feature = dep["feature"] as? String {
+                    deprecationList.append(DeprecationDescriptor(
+                        feature: feature,
+                        message: dep["message"] as? String ?? "",
+                        since: dep["since"] as? String,
+                        removeIn: dep["remove_in"] as? String
                     ))
                 }
             }
@@ -529,7 +868,9 @@ public final class NativePluginHost: @unchecked Sendable {
             language: language,
             actions: actionNames,
             verbsMap: verbsMap,
-            qualifiers: qualifierDescriptors
+            qualifiers: qualifierDescriptors,
+            services: serviceDescriptors,
+            deprecations: deprecationList
         )
 
         // Create action descriptors
@@ -552,11 +893,37 @@ public final class NativePluginHost: @unchecked Sendable {
                     pluginName: pluginName,
                     namespace: qualifierNamespace,
                     description: descriptor.description,
+                    acceptsParameters: descriptor.acceptsParameters,
                     pluginHost: self
                 )
                 qualifierRegistrations.append(registration)
                 QualifierRegistry.shared.register(registration)
             }
+        }
+
+        // Subscribe to domain events if plugin has on_event function
+        if onEventFunc != nil && !eventSubscriptions.isEmpty {
+            debugPrint("[NativePluginHost] Subscribing \(pluginName) to events: \(eventSubscriptions)")
+            EventBus.shared.subscribe(to: DomainEvent.self) { [weak self] event in
+                guard let self = self else { return }
+                // Check if this event matches any of the plugin's subscriptions
+                let matches = self.eventSubscriptions.contains { pattern in
+                    if pattern == "*" { return true }
+                    if pattern.hasSuffix("*") {
+                        let prefix = String(pattern.dropLast())
+                        return event.domainEventType.hasPrefix(prefix)
+                    }
+                    return pattern == event.domainEventType
+                }
+                if matches {
+                    self.deliverEvent(type: event.domainEventType, data: event.payload)
+                }
+            }
+        }
+
+        // Log deprecation warnings
+        for dep in deprecationList {
+            debugPrint("[NativePluginHost] ⚠ Deprecation in \(pluginName): \(dep.feature) - \(dep.message)")
         }
     }
 
@@ -565,7 +932,7 @@ public final class NativePluginHost: @unchecked Sendable {
     /// Execute an action
     public func execute(action: String, input: [String: any Sendable]) throws -> any Sendable {
         guard let execFunc = executeFunc else {
-            throw NativePluginError.notLoaded(pluginName)
+            throw NativePluginError.missingFunction(pluginName, function: "aro_plugin_execute")
         }
 
         // Serialize input to JSON
@@ -661,6 +1028,9 @@ public final class NativePluginHost: @unchecked Sendable {
     public func unload() {
         guard let handle = libraryHandle else { return }
 
+        // Call shutdown lifecycle hook before unloading
+        shutdownFunc?()
+
         // Unregister dynamic actions from ActionRegistry
         let semaphore = DispatchSemaphore(value: 0)
         Task {
@@ -684,7 +1054,153 @@ public final class NativePluginHost: @unchecked Sendable {
         executeFunc = nil
         freeFunc = nil
         qualifierFunc = nil
+        initFunc = nil
+        shutdownFunc = nil
+        onEventFunc = nil
+        objectReadFunc = nil
+        objectWriteFunc = nil
+        objectListFunc = nil
+        eventSubscriptions.removeAll()
+        systemObjects.removeAll()
         actions.removeAll()
+    }
+
+    // MARK: - Event Delivery (ARO-0073)
+
+    /// Deliver an event to this plugin
+    public func deliverEvent(type: String, data: [String: any Sendable]) {
+        guard let onEventFunc = onEventFunc else { return }
+
+        var dataJSON = "{}"
+        if let jsonData = try? JSONSerialization.data(withJSONObject: data),
+           let json = String(data: jsonData, encoding: .utf8) {
+            dataJSON = json
+        }
+
+        type.withCString { typeCStr in
+            dataJSON.withCString { dataCStr in
+                onEventFunc(typeCStr, dataCStr)
+            }
+        }
+    }
+
+    /// Check if plugin has event subscriptions
+    public var hasEventSubscriptions: Bool { !eventSubscriptions.isEmpty }
+
+    /// Get event types this plugin subscribes to
+    public var subscribedEventTypes: [String] { eventSubscriptions }
+
+    // MARK: - System Objects (ARO-0073)
+
+    /// Read from a system object
+    public func objectRead(identifier: String, qualifier: String) throws -> any Sendable {
+        guard let readFunc = objectReadFunc else {
+            throw NativePluginError.missingFunction(pluginName, function: "aro_object_read")
+        }
+
+        let resultPtr = identifier.withCString { idCStr in
+            qualifier.withCString { qualCStr in
+                readFunc(idCStr, qualCStr)
+            }
+        }
+
+        defer { if let ptr = resultPtr { freeFunc?(ptr) } }
+
+        guard let resultPtr = resultPtr else {
+            return [String: any Sendable]()
+        }
+
+        let resultJSON = String(cString: resultPtr)
+        guard let data = resultJSON.data(using: .utf8),
+              let result = try JSONSerialization.jsonObject(with: data) as? [String: Any] else {
+            return resultJSON
+        }
+        return convertToSendable(result)
+    }
+
+    /// Write to a system object
+    public func objectWrite(identifier: String, qualifier: String, value: any Sendable) throws -> any Sendable {
+        guard let writeFunc = objectWriteFunc else {
+            throw NativePluginError.missingFunction(pluginName, function: "aro_object_write")
+        }
+
+        var valueJSON = "{}"
+        if let dict = value as? [String: any Sendable] {
+            if let data = try? JSONSerialization.data(withJSONObject: dict),
+               let json = String(data: data, encoding: .utf8) {
+                valueJSON = json
+            }
+        } else {
+            valueJSON = "\(value)"
+        }
+
+        let resultPtr = identifier.withCString { idCStr in
+            qualifier.withCString { qualCStr in
+                valueJSON.withCString { valCStr in
+                    writeFunc(idCStr, qualCStr, valCStr)
+                }
+            }
+        }
+
+        defer { if let ptr = resultPtr { freeFunc?(ptr) } }
+
+        guard let resultPtr = resultPtr else {
+            return [String: any Sendable]()
+        }
+
+        let resultJSON = String(cString: resultPtr)
+        guard let data = resultJSON.data(using: .utf8),
+              let result = try JSONSerialization.jsonObject(with: data) as? [String: Any] else {
+            return resultJSON
+        }
+        return convertToSendable(result)
+    }
+
+    /// List from a system object
+    public func objectList(pattern: String) throws -> any Sendable {
+        guard let listFunc = objectListFunc else {
+            throw NativePluginError.missingFunction(pluginName, function: "aro_object_list")
+        }
+
+        let resultPtr = pattern.withCString { patCStr in
+            listFunc(patCStr)
+        }
+
+        defer { if let ptr = resultPtr { freeFunc?(ptr) } }
+
+        guard let resultPtr = resultPtr else {
+            return [any Sendable]()
+        }
+
+        let resultJSON = String(cString: resultPtr)
+        guard let data = resultJSON.data(using: .utf8),
+              let result = try JSONSerialization.jsonObject(with: data) as? [String: Any] else {
+            return resultJSON
+        }
+        return convertToSendable(result)
+    }
+
+    /// Get system object descriptors
+    public var systemObjectDescriptors: [SystemObjectDescriptor] { systemObjects }
+
+    /// Check if plugin provides a specific system object
+    public func providesSystemObject(_ identifier: String) -> Bool {
+        systemObjects.contains { $0.identifier == identifier }
+    }
+
+    // MARK: - Plugin Invoke Callback (ARO-0073)
+
+    /// Set the invoke callback so plugins can call ARO feature sets
+    ///
+    /// This should be called by the runtime after the execution engine is ready.
+    /// The callback takes a feature set name and input JSON string, returns result JSON.
+    public static func setInvokeCallback(_ callback: @escaping (_ featureSet: String, _ inputJSON: String) -> String) {
+        invokeCallback = callback
+    }
+
+    /// Service names declared in aro_plugin_info (ARO-0073)
+    public var declaredServiceNames: [String] {
+        pluginInfo?.services.map { $0.name } ?? []
     }
 
     // MARK: - Helpers
@@ -717,14 +1233,15 @@ public final class NativePluginHost: @unchecked Sendable {
 // MARK: - PluginQualifierHost Conformance
 
 extension NativePluginHost: PluginQualifierHost {
-    /// Execute a qualifier transformation via the native plugin
+    /// Execute a qualifier transformation via the native plugin (ARO-0073: with parameters)
     ///
     /// - Parameters:
     ///   - qualifier: The qualifier name (e.g., "pick-random")
     ///   - input: The input value to transform
+    ///   - withParams: Optional parameters from the `with` clause
     /// - Returns: The transformed value
     /// - Throws: QualifierError on failure
-    public func executeQualifier(_ qualifier: String, input: any Sendable) throws -> any Sendable {
+    public func executeQualifier(_ qualifier: String, input: any Sendable, withParams: [String: any Sendable]? = nil) throws -> any Sendable {
         guard let qualifierFunc = qualifierFunc else {
             throw QualifierError.executionFailed(
                 qualifier: qualifier,
@@ -732,8 +1249,8 @@ extension NativePluginHost: PluginQualifierHost {
             )
         }
 
-        // Create input JSON using QualifierInput
-        let qualifierInput = QualifierInput(value: input)
+        // Create input JSON using QualifierInput (ARO-0073: includes _with params)
+        let qualifierInput = QualifierInput(value: input, withParams: withParams)
         let inputData = try encoder.encode(qualifierInput)
         let inputJSON = String(data: inputData, encoding: .utf8) ?? "{}"
 
@@ -796,14 +1313,20 @@ struct NativePluginInfo: Sendable {
     let verbsMap: [String: [String]]
     /// Qualifiers provided by this plugin
     let qualifiers: [NativeQualifierDescriptor]
+    /// Services provided by this plugin (routed through aro_plugin_execute)
+    let services: [NativeServiceDescriptor]
+    /// Deprecated features
+    let deprecations: [DeprecationDescriptor]
 
-    init(name: String, version: String, language: String, actions: [String], verbsMap: [String: [String]] = [:], qualifiers: [NativeQualifierDescriptor] = []) {
+    init(name: String, version: String, language: String, actions: [String], verbsMap: [String: [String]] = [:], qualifiers: [NativeQualifierDescriptor] = [], services: [NativeServiceDescriptor] = [], deprecations: [DeprecationDescriptor] = []) {
         self.name = name
         self.version = version
         self.language = language
         self.actions = actions
         self.verbsMap = verbsMap
         self.qualifiers = qualifiers
+        self.services = services
+        self.deprecations = deprecations
     }
 }
 
@@ -812,6 +1335,14 @@ struct NativeQualifierDescriptor: Sendable {
     let name: String
     let inputTypes: Set<QualifierInputType>
     let description: String?
+    let acceptsParameters: Bool
+
+    init(name: String, inputTypes: Set<QualifierInputType>, description: String? = nil, acceptsParameters: Bool = false) {
+        self.name = name
+        self.inputTypes = inputTypes
+        self.description = description
+        self.acceptsParameters = acceptsParameters
+    }
 }
 
 /// Action descriptor
@@ -819,6 +1350,27 @@ struct NativeActionDescriptor: Sendable {
     let name: String
     let inputSchema: String?
     let outputSchema: String?
+}
+
+/// Service descriptor (ARO-0073)
+struct NativeServiceDescriptor: Sendable {
+    let name: String
+    let methods: [String]
+}
+
+/// System object descriptor (ARO-0073)
+public struct SystemObjectDescriptor: Sendable {
+    public let identifier: String
+    public let capabilities: Set<String>
+    public let description: String?
+}
+
+/// Deprecation descriptor (ARO-0073)
+struct DeprecationDescriptor: Sendable {
+    let feature: String
+    let message: String
+    let since: String?
+    let removeIn: String?
 }
 
 // MARK: - Native Plugin Action Wrapper
@@ -856,8 +1408,8 @@ final class NativePluginActionWrapper: @unchecked Sendable {
         // Add object value if bound (use multiple keys for compatibility)
         if let objValue = context.resolveAny(object.base) {
             input["data"] = objValue
-            input["object"] = objValue  // Also include as "object" for backward compat
-            input[object.base] = objValue  // Also include using original variable name
+            input["object"] = objValue
+            input[object.base] = objValue
         }
 
         // Add specifiers if present
@@ -865,18 +1417,62 @@ final class NativePluginActionWrapper: @unchecked Sendable {
             input["qualifier"] = specifier
         }
 
-        // Add with clause arguments if present
-        if let withArgs = context.resolveAny("_with_") as? [String: any Sendable] {
-            input.merge(withArgs) { _, new in new }
+        // ARO-0073: Add result and source descriptors
+        input["result"] = [
+            "base": result.base,
+            "specifiers": result.specifiers,
+        ] as [String: any Sendable]
+
+        input["source"] = [
+            "base": object.base,
+            "specifiers": object.specifiers,
+        ] as [String: any Sendable]
+
+        // ARO-0073: Add preposition
+        input["preposition"] = String(describing: object.preposition)
+
+        // ARO-0073: Add execution context
+        var contextInfo: [String: any Sendable] = [:]
+        if let reqId = context.resolveAny("_requestId_") {
+            contextInfo["requestId"] = reqId
         }
+        if let fsName = context.resolveAny("_featureSet_") {
+            contextInfo["featureSet"] = fsName
+        }
+        if let ba = context.resolveAny("_businessActivity_") {
+            contextInfo["businessActivity"] = ba
+        }
+        if !contextInfo.isEmpty {
+            input["_context"] = contextInfo
+        }
+
+        // ARO-0073: Add with-clause arguments as nested _with key
+        if let withArgs = context.resolveAny("_with_") as? [String: any Sendable] {
+            input["_with"] = withArgs
+        }
+        // Also merge expression args at top level for backward compat
         if let exprArgs = context.resolveAny("_expression_") as? [String: any Sendable] {
             input.merge(exprArgs) { _, new in new }
         }
 
-        // Execute native action using the plain verb (without namespace prefix).
-        // The plugin's aro_plugin_execute receives the unqualified verb (e.g., "greet"),
-        // not the registered verb which may include a namespace (e.g., "greeting.greet").
+        // Execute native action
         let output = try host.execute(action: pluginVerb, input: input)
+
+        // ARO-0073: Parse _events from response and publish to EventBus
+        if let outputDict = output as? [String: any Sendable],
+           let events = outputDict["_events"] as? [[String: any Sendable]] {
+            for event in events {
+                if let eventType = event["type"] as? String {
+                    let eventData = event["data"] as? [String: any Sendable] ?? [:]
+                    EventBus.shared.publish(DomainEvent(eventType: eventType, payload: eventData))
+                }
+            }
+            // Strip _events from the result before binding
+            var cleanOutput = outputDict
+            cleanOutput.removeValue(forKey: "_events")
+            context.bind(result.base, value: cleanOutput)
+            return cleanOutput
+        }
 
         // Bind result
         context.bind(result.base, value: output)

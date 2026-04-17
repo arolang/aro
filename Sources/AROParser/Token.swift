@@ -28,6 +28,7 @@ public enum TokenKind: Sendable, Equatable, CustomStringConvertible {
     case fatArrow           // =>
     case equals             // =
     case pipe               // |> (ARO-0067 pipeline operator)
+    case bar                // |  (qualifier chain separator)
 
     // Operators
     case plus               // +
@@ -140,6 +141,7 @@ public enum TokenKind: Sendable, Equatable, CustomStringConvertible {
         case .fatArrow: return "=>"
         case .equals: return "="
         case .pipe: return "|>"
+        case .bar: return "|"
         case .plus: return "+"
         case .minus: return "-"
         case .star: return "*"

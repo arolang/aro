@@ -131,12 +131,74 @@ When your action executes, it receives:
 
 **ResultDescriptor:**
 - `base`: The variable name to bind (e.g., "hash")
-- `qualifiers`: Optional qualifiers (e.g., "sha256" in `<hash: sha256>`)
+- `specifiers`: List of specifiers (e.g., `["sha256"]` in `<hash: sha256>`)
 
 **ObjectDescriptor:**
 - `base`: The source variable name (e.g., "password")
 - `preposition`: How it's connected (e.g., `.from`)
 - `specifiers`: Additional specifiers from the statement
+
+### Plugin Input JSON Structure
+
+When the runtime calls your plugin, it passes a richer JSON payload than earlier versions. The full structure is:
+
+```json
+{
+  "result": {
+    "base": "hash",
+    "specifiers": ["sha256"]
+  },
+  "source": {
+    "base": "password",
+    "specifiers": []
+  },
+  "preposition": "from",
+  "_context": {
+    "requestId": "req-abc123",
+    "featureSet": "createUser",
+    "businessActivity": "User API"
+  },
+  "_with": {
+    "algorithm": "sha512",
+    "encoding": "hex"
+  }
+}
+```
+
+Key fields:
+
+| Field | Description |
+|-------|-------------|
+| `result` | Full `ResultDescriptor`: `base` name and `specifiers` array |
+| `source` | Full `ObjectDescriptor`: `base` name and `specifiers` array |
+| `preposition` | The preposition used (`"from"`, `"to"`, `"with"`, `"for"`, etc.) |
+| `_context` | Execution context: `requestId`, `featureSet`, `businessActivity` |
+| `_with` | With-clause parameters as a **nested object** (not merged flat) |
+
+Note: `_with` is always a nested object. If the ARO statement is `Hash the <result> from the <data> with { algorithm: "sha512" }`, your plugin receives `_with: { "algorithm": "sha512" }` — not `algorithm` at the top level.
+
+### Action Response JSON Structure
+
+Your action returns a JSON object. In addition to result data, you can include an `_events` key to emit domain events:
+
+```json
+{
+  "hash": "a9f3...",
+  "algorithm": "sha256",
+  "_events": [
+    {
+      "type": "HashComputed",
+      "data": { "algorithm": "sha256", "inputLength": 32 }
+    }
+  ]
+}
+```
+
+The `_events` array is optional. Each entry has:
+- `type`: The event name (string)
+- `data`: Arbitrary event payload (object)
+
+Events are dispatched to the ARO event bus after the action completes, triggering any matching `Handler` feature sets.
 
 ## 5.3 Declaring Custom Actions
 
@@ -202,7 +264,7 @@ provides:
 
 ### The `aro_plugin_info` Response
 
-Your plugin's info function returns action metadata:
+Your plugin's info function returns action metadata. `aro_plugin_execute` is **optional** — qualifier-only or system-object-only plugins do not need to implement it:
 
 ```json
 {
@@ -231,6 +293,8 @@ Your plugin's info function returns action metadata:
   ]
 }
 ```
+
+A plugin that only provides qualifiers (no custom action verbs) can return `"actions": []` and omit `aro_plugin_execute` entirely.
 
 ## 5.4 Implementing Custom Actions
 
@@ -331,7 +395,9 @@ pub extern "C" fn aro_plugin_info() -> *const c_char {
 // ============================================================
 
 /// Execute an action
-/// Called by ARO runtime when the action verb is used
+/// Called by ARO runtime when the action verb is used.
+/// This function is REQUIRED for action-providing plugins.
+/// Qualifier-only plugins may omit it.
 #[no_mangle]
 pub extern "C" fn aro_plugin_execute(
     action_ptr: *const c_char,
@@ -341,6 +407,14 @@ pub extern "C" fn aro_plugin_execute(
     let action = unsafe { CStr::from_ptr(action_ptr).to_str().unwrap_or("") };
     let input_json = unsafe { CStr::from_ptr(input_ptr).to_str().unwrap_or("{}") };
 
+    // Input is the richer ARO-0073 structure:
+    // {
+    //   "result":      { "base": "hash", "specifiers": ["sha256"] },
+    //   "source":      { "base": "password", "specifiers": [] },
+    //   "preposition": "from",
+    //   "_context":    { "requestId": "...", "featureSet": "...", "businessActivity": "..." },
+    //   "_with":       { "algorithm": "sha512", "encoding": "hex" }
+    // }
     let input: Value = serde_json::from_str(input_json).unwrap_or(json!({}));
 
     let result = match action.to_lowercase().as_str() {
@@ -368,24 +442,33 @@ pub extern "C" fn aro_plugin_execute(
 // ============================================================
 
 fn execute_hash(input: &Value) -> Result<Value, String> {
-    // Get the data to hash
-    // Can come from "object" (the <object> in ARO syntax)
-    // or "data" argument
-    let data = input.get("object")
-        .or_else(|| input.get("data"))
+    // Get the data to hash from source.base (resolved by runtime)
+    // The "source" field contains the full ObjectDescriptor
+    let data = input.get("source")
+        .and_then(|s| s.get("base"))
         .and_then(|v| v.as_str())
         .ok_or("Missing data to hash")?;
 
-    // Get algorithm from qualifier or argument
-    // Supports: Hash the <result: sha256> from <data>
-    // Or: Hash the <result> from <data> with { algorithm: "sha256" }
-    let algorithm = input.get("qualifier")
-        .or_else(|| input.get("algorithm"))
+    // Get algorithm:
+    //   1. From result specifier: Hash the <result: sha256> from <data>
+    //   2. From _with parameters: Hash the <result> from <data> with { algorithm: "sha256" }
+    let result_specifiers = input.get("result")
+        .and_then(|r| r.get("specifiers"))
+        .and_then(|s| s.as_array());
+
+    let algorithm = result_specifiers
+        .and_then(|specs| specs.first())
         .and_then(|v| v.as_str())
+        .or_else(|| {
+            input.get("_with")
+                .and_then(|w| w.get("algorithm"))
+                .and_then(|v| v.as_str())
+        })
         .unwrap_or("sha256");
 
-    // Get output encoding
-    let encoding = input.get("encoding")
+    // Get output encoding from _with (nested, not flat)
+    let encoding = input.get("_with")
+        .and_then(|w| w.get("encoding"))
         .and_then(|v| v.as_str())
         .unwrap_or("hex");
 
@@ -423,12 +506,15 @@ fn execute_hash(input: &Value) -> Result<Value, String> {
 // ============================================================
 
 fn execute_encrypt(input: &Value) -> Result<Value, String> {
-    let data = input.get("object")
-        .or_else(|| input.get("data"))
+    // Data to encrypt comes from source.base
+    let data = input.get("source")
+        .and_then(|s| s.get("base"))
         .and_then(|v| v.as_str())
         .ok_or("Missing data to encrypt")?;
 
-    let key_str = input.get("key")
+    // Key comes from _with parameters (never merged flat)
+    let key_str = input.get("_with")
+        .and_then(|w| w.get("key"))
         .and_then(|v| v.as_str())
         .ok_or("Missing encryption key")?;
 
@@ -466,12 +552,15 @@ fn execute_encrypt(input: &Value) -> Result<Value, String> {
 // ============================================================
 
 fn execute_decrypt(input: &Value) -> Result<Value, String> {
-    let encrypted = input.get("object")
-        .or_else(|| input.get("data"))
+    // Encrypted data comes from source.base
+    let encrypted = input.get("source")
+        .and_then(|s| s.get("base"))
         .and_then(|v| v.as_str())
         .ok_or("Missing data to decrypt")?;
 
-    let key_str = input.get("key")
+    // Key comes from _with parameters (never merged flat)
+    let key_str = input.get("_with")
+        .and_then(|w| w.get("key"))
         .and_then(|v| v.as_str())
         .ok_or("Missing decryption key")?;
 
@@ -569,21 +658,24 @@ actions:
 
 ### Qualifier-Based Dispatch
 
-Use the result qualifier to specify options:
+Use the result specifier to specify options:
 
 ```aro
-(* Qualifier specifies algorithm *)
+(* Specifier on result picks algorithm *)
 Hash the <result: sha256> from the <data>.
 Hash the <result: sha512> from the <data>.
 Hash the <result: md5> from the <data>.
 ```
 
-Implementation:
+Implementation reads from `result.specifiers[0]`:
 
 ```rust
 fn execute_hash(input: &Value) -> Result<Value, String> {
-    // Qualifier comes through as "qualifier" field
-    let algorithm = input.get("qualifier")
+    // Specifier is now in result.specifiers (not a flat "qualifier" key)
+    let algorithm = input.get("result")
+        .and_then(|r| r.get("specifiers"))
+        .and_then(|s| s.as_array())
+        .and_then(|arr| arr.first())
         .and_then(|v| v.as_str())
         .unwrap_or("sha256");
 
@@ -610,10 +702,11 @@ Transform the <user> into the <dto>.        (* Map to different type *)
 Transform the <text> as <Base64: encoding>. (* Encode as format *)
 ```
 
-Implementation:
+The `preposition` field is now always present as a top-level string in the input JSON:
 
 ```rust
 fn execute_transform(input: &Value) -> Result<Value, String> {
+    // Preposition is a top-level string field
     let preposition = input.get("preposition")
         .and_then(|v| v.as_str())
         .unwrap_or("from");
@@ -630,13 +723,21 @@ fn execute_transform(input: &Value) -> Result<Value, String> {
 
 ### Contextual Actions
 
-Actions can access the execution context for richer behavior:
+Actions can access the execution context for richer behavior via `_context`:
 
 ```rust
 fn execute_action(input: &Value) -> Result<Value, String> {
-    // Access context variables
+    // _context carries request and feature set information
     let request_id = input.get("_context")
         .and_then(|ctx| ctx.get("requestId"))
+        .and_then(|v| v.as_str());
+
+    let feature_set = input.get("_context")
+        .and_then(|ctx| ctx.get("featureSet"))
+        .and_then(|v| v.as_str());
+
+    let business_activity = input.get("_context")
+        .and_then(|ctx| ctx.get("businessActivity"))
         .and_then(|v| v.as_str());
 
     // Access environment
@@ -644,6 +745,105 @@ fn execute_action(input: &Value) -> Result<Value, String> {
 
     // Use context in execution
     // ...
+}
+```
+
+### Emitting Domain Events
+
+Actions can emit domain events by returning `_events` in the response JSON. The runtime dispatches these events to the ARO event bus after the action completes:
+
+```rust
+fn execute_hash(input: &Value) -> Result<Value, String> {
+    // ... compute hash ...
+
+    Ok(json!({
+        "hash": hash_string,
+        "algorithm": algorithm,
+        "_events": [
+            {
+                "type": "HashComputed",
+                "data": {
+                    "algorithm": algorithm,
+                    "encodingUsed": encoding
+                }
+            }
+        ]
+    }))
+}
+```
+
+In ARO, a `HashComputed Handler` feature set would then be triggered automatically:
+
+```aro
+(Log Hash Audit: HashComputed Handler) {
+    Extract the <algorithm> from the <event: algorithm>.
+    Log "Hash computed using: " ++ <algorithm> to the <console>.
+    Return an <OK: status> for the <audit>.
+}
+```
+
+### Services via `aro_plugin_execute`
+
+System objects and services provided by plugins are also dispatched through `aro_plugin_execute`, using a `service:<method>` action name convention. There is no separate `_call` function:
+
+```rust
+// Service calls arrive as "service:<method>"
+pub extern "C" fn aro_plugin_execute(
+    action_ptr: *const c_char,
+    input_ptr: *const c_char,
+    result_ptr: *mut *mut c_char
+) -> i32 {
+    let action = unsafe { CStr::from_ptr(action_ptr).to_str().unwrap_or("") };
+
+    let result = if action.starts_with("service:") {
+        let method = &action["service:".len()..];
+        execute_service_method(method, &input)
+    } else {
+        match action {
+            "hash" | "digest" => execute_hash(&input),
+            _ => Err(format!("Unknown action: {}", action))
+        }
+    };
+    // ...
+}
+```
+
+### Subscribing to Events
+
+Plugins can subscribe to domain events by exporting `aro_plugin_on_event`. The runtime calls this function whenever a matching event is emitted:
+
+```rust
+/// Called by the ARO runtime when a domain event is emitted.
+/// Return 0 on success, non-zero on error.
+#[no_mangle]
+pub extern "C" fn aro_plugin_on_event(
+    event_type_ptr: *const c_char,
+    event_json_ptr: *const c_char,
+    result_ptr: *mut *mut c_char
+) -> i32 {
+    let event_type = unsafe { CStr::from_ptr(event_type_ptr).to_str().unwrap_or("") };
+    let event_json = unsafe { CStr::from_ptr(event_json_ptr).to_str().unwrap_or("{}") };
+
+    let event: Value = serde_json::from_str(event_json).unwrap_or(json!({}));
+
+    match event_type {
+        "UserCreated" => handle_user_created(&event),
+        "HashComputed" => handle_hash_computed(&event),
+        _ => { /* ignore unknown events */ }
+    }
+
+    unsafe { *result_ptr = CString::new("{}").unwrap().into_raw(); }
+    0
+}
+```
+
+Declare the events your plugin subscribes to in `aro_plugin_info`:
+
+```json
+{
+  "name": "audit-plugin",
+  "version": "1.0.0",
+  "subscribes": ["UserCreated", "HashComputed"]
 }
 ```
 
@@ -720,9 +920,13 @@ mod tests {
 
     #[test]
     fn test_hash_sha256() {
+        // Use the ARO-0073 input structure: result/source descriptors + _with
         let input = json!({
-            "object": "hello world",
-            "qualifier": "sha256"
+            "result": { "base": "hash", "specifiers": ["sha256"] },
+            "source": { "base": "hello world", "specifiers": [] },
+            "preposition": "from",
+            "_context": { "requestId": "test-1", "featureSet": "TestHash", "businessActivity": "Test" },
+            "_with": {}
         });
 
         let result = execute_hash(&input).unwrap();
@@ -736,17 +940,23 @@ mod tests {
         let plaintext = "secret message";
         let key = "test-key-32-bytes-for-aes-256!!";
 
-        // Encrypt
+        // Encrypt — key comes from _with, not flat
         let encrypt_input = json!({
-            "object": plaintext,
-            "key": key
+            "result": { "base": "encrypted", "specifiers": [] },
+            "source": { "base": plaintext, "specifiers": [] },
+            "preposition": "with",
+            "_context": { "requestId": "test-2", "featureSet": "TestEncrypt", "businessActivity": "Test" },
+            "_with": { "key": key }
         });
         let encrypted = execute_encrypt(&encrypt_input).unwrap();
 
-        // Decrypt
+        // Decrypt — key also comes from _with
         let decrypt_input = json!({
-            "object": encrypted["encrypted"],
-            "key": key
+            "result": { "base": "decrypted", "specifiers": [] },
+            "source": { "base": encrypted["encrypted"], "specifiers": [] },
+            "preposition": "from",
+            "_context": { "requestId": "test-3", "featureSet": "TestDecrypt", "businessActivity": "Test" },
+            "_with": { "key": key }
         });
         let decrypted = execute_decrypt(&decrypt_input).unwrap();
 
@@ -808,7 +1018,7 @@ Compute the <total: sum> from the <values>.       (* Sum of numbers *)
 
 ### Declaring Qualifiers
 
-Qualifiers are declared in `aro_plugin_info()` alongside actions:
+Qualifiers are declared in `aro_plugin_info()` alongside actions. Use `accepts_parameters: true` for qualifiers that accept a `_with` clause:
 
 ```json
 {
@@ -835,6 +1045,12 @@ Qualifiers are declared in `aro_plugin_info()` alongside actions:
       "name": "sum",
       "inputTypes": ["List"],
       "description": "Sums numeric list elements"
+    },
+    {
+      "name": "take",
+      "inputTypes": ["List"],
+      "accepts_parameters": true,
+      "description": "Takes the first N elements from a list"
     }
   ]
 }
@@ -848,9 +1064,11 @@ Qualifiers are declared in `aro_plugin_info()` alongside actions:
 - `List` - Arrays/lists
 - `Object` - Dictionaries/objects
 
+**`accepts_parameters`:** When `true`, the qualifier receives a `_with` object in the input JSON containing any parameters passed in the ARO `with` clause.
+
 ### Implementing the Qualifier Function
 
-Plugins provide a `aro_plugin_qualifier` function for executing qualifier transformations:
+Plugins provide an `aro_plugin_qualifier` function for executing qualifier transformations:
 
 **C ABI Interface:**
 ```c
@@ -863,15 +1081,60 @@ char* aro_plugin_qualifier(const char* qualifier, const char* input_json);
 ```json
 {
   "value": [1, 2, 3, 4, 5],
-  "type": "List"
+  "type": "List",
+  "_with": {
+    "n": 3
+  }
 }
+```
+
+The `_with` field is always present (as an empty object `{}` when no parameters are provided). For qualifiers with `accepts_parameters: true`, the caller passes parameters via a `with` clause in ARO code:
+
+```aro
+(* Qualifier with parameters *)
+Compute the <first-three: Collections.take> from the <numbers> with { n: 3 }.
 ```
 
 **Output JSON Format:**
 ```json
-{"result": 3}          // Success: transformed value
-{"error": "message"}   // Failure: error message
+{"result": [1, 2, 3]}  // Success: transformed value
+{"error": "message"}    // Failure: error message
 ```
+
+### Qualifier Chaining
+
+Qualifiers can be chained using pipe syntax. The output of each qualifier feeds into the next, evaluated left to right:
+
+```aro
+(* Chain sort then take-3 *)
+Compute the <top-three: Collections.sort | Collections.take> from the <scores> with { n: 3 }.
+
+(* Chain reverse then pick-random *)
+Compute the <choice: Collections.reverse | Collections.pick-random> from the <items>.
+```
+
+Each qualifier in the chain receives the result of the previous one as its `value`. The `_with` parameters are passed to all qualifiers in the chain.
+
+### Qualifier Conflict Detection
+
+If two loaded plugins register a qualifier under the same `namespace.qualifier` identifier, the runtime raises a load-time error:
+
+```
+Error: Qualifier conflict — both 'plugin-stats' and 'plugin-math' register 'stats.sort'.
+       Use plugin handle aliasing in plugin.yaml to resolve.
+```
+
+To resolve conflicts, alias one plugin's handle in your application's `plugin.yaml`:
+
+```yaml
+dependencies:
+  - name: plugin-stats
+    handle: Stats        # canonical handle
+  - name: plugin-math
+    handle: Math         # renamed to avoid collision with Stats.sort
+```
+
+With aliasing, `Stats.sort` and `Math.sort` can coexist without conflict.
 
 ### Example: Swift Implementation
 
@@ -892,6 +1155,8 @@ public func aroPluginQualifier(
     }
 
     let value = input["value"]
+    // _with is always present; use it for parameterised qualifiers
+    let withParams = input["_with"] as? [String: Any] ?? [:]
     let result: [String: Any]
 
     switch qualifier {
@@ -910,6 +1175,14 @@ public func aroPluginQualifier(
         } else {
             return strdup("{\"error\":\"reverse requires List or String\"}")
         }
+
+    case "take":
+        // Parameterised qualifier: requires accepts_parameters: true in aro_plugin_info
+        guard let array = value as? [Any] else {
+            return strdup("{\"error\":\"take requires a list\"}")
+        }
+        let n = withParams["n"] as? Int ?? 1
+        result = ["result": Array(array.prefix(n))]
 
     default:
         return strdup("{\"error\":\"Unknown qualifier: \(qualifier)\"}")
@@ -957,6 +1230,8 @@ def aro_plugin_qualifier(qualifier: str, input_json: str) -> str:
     params = json.loads(input_json)
     value = params.get("value")
     value_type = params.get("type", "Unknown")
+    # _with is always present; access parameters from it (never flat)
+    with_params = params.get("_with", {})
 
     if qualifier == "sort":
         if not isinstance(value, list):
@@ -979,6 +1254,13 @@ def aro_plugin_qualifier(qualifier: str, input_json: str) -> str:
         if not isinstance(value, list):
             return json.dumps({"error": "sum requires a list"})
         return json.dumps({"result": sum(v for v in value if isinstance(v, (int, float)))})
+
+    elif qualifier == "take":
+        # Parameterised qualifier — accepts_parameters: true in aro_plugin_info
+        if not isinstance(value, list):
+            return json.dumps({"error": "take requires a list"})
+        n = with_params.get("n", 1)
+        return json.dumps({"result": value[:n]})
 
     else:
         return json.dumps({"error": f"Unknown qualifier: {qualifier}"})
@@ -1094,8 +1376,24 @@ Custom actions are the most powerful form of ARO extension. They let you add new
 
 - **Declare actions** in `plugin.yaml` with role, verbs, and prepositions
 - **Return metadata** from `aro_plugin_info()` with full action specifications
-- **Implement execution** in `aro_plugin_execute()` handling all registered verbs
+- **Implement execution** in `aro_plugin_execute()` handling all registered verbs — this function is **optional** for qualifier-only or system-object-only plugins
 - **Use natural syntax** like `Hash the <result> from the <data>`
+
+**ARO-0073 input JSON** passes richer data to every plugin call:
+- `result` and `source` are full descriptor objects (`base` + `specifiers`), not flat strings
+- `preposition` is an explicit top-level field
+- `_context` carries `requestId`, `featureSet`, and `businessActivity`
+- `_with` is always a **nested object** — parameters are never merged flat into the top level
+
+**Qualifier enhancements:**
+- Qualifiers that accept parameters declare `accepts_parameters: true`; the `_with` object is passed in the qualifier input
+- Qualifiers can be chained with pipe syntax: `<result: stats.sort | list.take>`
+- Namespace conflicts (two plugins registering the same `namespace.qualifier`) are detected at load time and must be resolved with handle aliasing
+
+**Event integration:**
+- Actions can return `_events: [{type, data}]` to emit domain events after execution
+- Plugins can subscribe to events via `aro_plugin_on_event` and declare `subscribes` in `aro_plugin_info`
+- Service methods route through `aro_plugin_execute("service:<method>", ...)` — no separate call function
 
 Custom actions work best for:
 - Core data transformations (hash, encrypt, compress)

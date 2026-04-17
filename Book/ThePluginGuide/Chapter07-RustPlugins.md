@@ -55,6 +55,7 @@ csv = "1.3"
 [profile.release]
 lto = true                 # Link-time optimization
 opt-level = "z"            # Optimize for size (or "3" for speed)
+panic = "abort"            # Prevents unwinding across FFI boundary
 ```
 
 Key configuration:
@@ -62,6 +63,7 @@ Key configuration:
 - **`crate-type = ["cdylib"]`**: Builds a C-compatible dynamic library (`.dylib`/`.so`/`.dll`)
 - **`lto = true`**: Enables link-time optimization for smaller, faster binaries
 - **`opt-level`**: `"z"` for size, `"3"` for maximum speed
+- **`panic = "abort"`**: Prevents Rust panics from unwinding across the FFI boundary, which is undefined behavior. With this setting a panic terminates the process cleanly rather than attempting C++ stack unwinding.
 
 ### plugin.yaml
 
@@ -83,7 +85,30 @@ provides:
 
 ## 7.3 The FFI Interface
 
-Rust plugins communicate with ARO through a C-compatible FFI (Foreign Function Interface). Three attributes make this work:
+Rust plugins communicate with ARO through a C-compatible FFI (Foreign Function Interface). Three attributes make this work.
+
+### Required and Optional Exports
+
+Every Rust plugin **must** export:
+
+| Symbol | Signature | Required? |
+|--------|-----------|-----------|
+| `aro_plugin_info` | `() -> *mut c_char` | **Yes** |
+| `aro_plugin_free` | `(*mut c_char)` | **Yes** |
+
+The remaining exports are optional depending on what the plugin provides:
+
+| Symbol | Signature | When needed |
+|--------|-----------|-------------|
+| `aro_plugin_init` | `()` | Stateful plugins needing one-time setup |
+| `aro_plugin_shutdown` | `()` | Plugins that need cleanup on unload |
+| `aro_plugin_execute` | `(*const c_char, *const c_char) -> *mut c_char` | Plugins providing actions or services |
+| `aro_plugin_qualifier` | `(*const c_char, *const c_char) -> *mut c_char` | Plugins providing qualifiers |
+| `aro_plugin_on_event` | `(*const c_char, *const c_char)` | Plugins subscribing to events |
+
+**`aro_plugin_execute` is now optional**—qualifier-only plugins no longer need to implement a stub. The old service ABI (a separate `_call` function with an out-pointer and `i32` return code) is removed; services now route through `aro_plugin_execute("service:<method>", input)`.
+
+### The Three FFI Attributes
 
 ### `#[no_mangle]`
 
@@ -152,6 +177,7 @@ once_cell = "1.19"
 [profile.release]
 lto = true
 opt-level = 3
+panic = "abort"    # Abort on panic rather than unwind — safe for FFI
 ```
 
 ### Step 3: Implement the Plugin
@@ -217,13 +243,34 @@ pub extern "C" fn aro_plugin_info() -> *mut c_char {
     CString::new(info.to_string()).unwrap().into_raw()
 }
 
+// MARK: - Lifecycle Hooks (Optional)
+
+/// Called once after the plugin is loaded, before any action is invoked.
+/// Use this for one-time setup: opening DB connections, loading models, etc.
+/// Returns void — this is NOT the old service-discovery init.
+#[no_mangle]
+pub extern "C" fn aro_plugin_init() {
+    // One-time initialization
+}
+
+/// Called when the plugin is about to be unloaded.
+#[no_mangle]
+pub extern "C" fn aro_plugin_shutdown() {
+    // Cleanup resources
+}
+
 // MARK: - Main Entry Point
 
-/// Execute a plugin action
+/// Execute a plugin action.
+///
+/// This function is OPTIONAL — only needed if the plugin provides actions or services.
+/// Qualifier-only plugins do not need to implement it.
 ///
 /// # Arguments
-/// * `action` - The action name (e.g., "validate-email")
-/// * `input_json` - JSON string with input parameters
+/// * `action`     - The action name (e.g., "validate-email")
+/// * `input_json` - JSON string with input. Parameters from `with { }` are nested
+///                  under `"_with"`. Execution context is under `"_context"`.
+///                  Result and source descriptors are under `"result"` and `"source"`.
 ///
 /// # Returns
 /// JSON string with the result. Caller must free using `aro_plugin_free`.
@@ -642,8 +689,10 @@ For maximum performance:
 [profile.release]
 lto = "fat"           # Full link-time optimization
 codegen-units = 1     # Single codegen unit for better optimization
-panic = "abort"       # Smaller binary, no unwinding
+panic = "abort"       # Smaller binary, no unwinding — also required for safe FFI
 ```
+
+`panic = "abort"` is recommended for all ARO plugins regardless of performance goals. Rust panics must never unwind across the FFI boundary; `panic = "abort"` makes any panic terminate the process cleanly rather than triggering undefined behavior.
 
 ## 7.6 Memory Safety Across FFI
 
@@ -705,17 +754,19 @@ pub extern "C" fn aro_plugin_free(ptr: *mut c_char) {
 
 ### Rule: No Panics Across FFI
 
-Panics in Rust are undefined behavior when they cross FFI boundaries:
+Panics in Rust are undefined behavior when they unwind across FFI boundaries. The canonical solution is to set `panic = "abort"` in your `[profile.release]` section (see section 7.2)—this turns any panic into a clean process abort rather than an unwind.
+
+For debug builds and as a belt-and-suspenders practice, also avoid `.unwrap()` and `.expect()` in FFI-exported functions:
 
 ```rust
-// WRONG: panic! will cause undefined behavior
+// AVOID: unwrap() can panic
 #[no_mangle]
 pub extern "C" fn dangerous(input: *const c_char) -> *mut c_char {
     let s = unsafe { CStr::from_ptr(input).to_str().unwrap() }; // May panic!
     // ...
 }
 
-// CORRECT: Handle errors gracefully
+// PREFERRED: Handle errors with match or ?
 #[no_mangle]
 pub extern "C" fn safe(input: *const c_char) -> *mut c_char {
     if input.is_null() {
@@ -731,16 +782,19 @@ pub extern "C" fn safe(input: *const c_char) -> *mut c_char {
 }
 ```
 
-Use `catch_unwind` for extra safety:
+If you need an additional safety net for third-party code that might panic, use `catch_unwind`:
 
 ```rust
 use std::panic;
 
 #[no_mangle]
-pub extern "C" fn protected_function(...) -> *mut c_char {
+pub extern "C" fn protected_function(
+    action: *const c_char,
+    input: *const c_char,
+) -> *mut c_char {
     let result = panic::catch_unwind(|| {
-        // Your code here - panics are caught
-        process_data(...)
+        // Third-party code that might panic is caught here
+        process_data(action, input)
     });
 
     match result {
@@ -1028,8 +1082,12 @@ pub extern "C" fn aro_plugin_execute(...) -> *mut c_char {
 Rust plugins bring systems-programming power to ARO:
 
 - **FFI Interface**: `#[no_mangle]` + `extern "C"` + C types
-- **Cargo.toml**: Set `crate-type = ["cdylib"]` for dynamic libraries
-- **Memory Safety**: Validate pointers, never panic across FFI, document ownership
+- **Cargo.toml**: Set `crate-type = ["cdylib"]` and `panic = "abort"` in `[profile.release]`
+- **`aro_plugin_info`** is **required**—declares all actions, services, and qualifiers
+- **`aro_plugin_execute`** is **optional**—only needed for actions and services; takes 2 params `(action, input) -> *mut c_char`
+- **`aro_plugin_init` / `aro_plugin_shutdown`** are optional `void` lifecycle hooks for stateful plugins
+- **Input JSON**: `with { }` parameters arrive nested under `"_with"`; execution context under `"_context"`
+- **Memory Safety**: Validate pointers, use `panic = "abort"`, document ownership
 - **Performance**: Use `once_cell` for lazy statics, enable LTO, profile your code
 - **Testing**: Rust's test framework works seamlessly with plugin code
 

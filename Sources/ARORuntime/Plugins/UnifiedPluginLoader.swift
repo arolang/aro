@@ -102,46 +102,55 @@ public final class UnifiedPluginLoader: @unchecked Sendable {
     public func loadPlugins(from directory: URL) throws {
         let pluginsDir = directory.appendingPathComponent("Plugins")
 
-        // Check if Plugins directory exists
-        guard FileManager.default.fileExists(atPath: pluginsDir.path) else {
-            // Fall back to legacy plugins/ directory
-            try legacyLoader.loadPlugins(from: directory)
-            return
-        }
+        // Check if Plugins directory exists (uppercase — managed plugins with plugin.yaml)
+        let hasPluginsDir = FileManager.default.fileExists(atPath: pluginsDir.path)
 
-        // Scan for plugins with plugin.yaml
-        let contents = try FileManager.default.contentsOfDirectory(
-            at: pluginsDir,
-            includingPropertiesForKeys: [.isDirectoryKey],
-            options: [.skipsHiddenFiles]
-        )
+        // Collect names of managed plugins (those with plugin.yaml in Plugins/) so the
+        // legacy loader can skip them — prevents double-loading and module-cache conflicts
+        // on case-insensitive filesystem mounts (macOS/Docker) where "plugins/" == "Plugins/".
+        var managedPluginNames = Set<String>()
 
-        debugPrint("[UnifiedPluginLoader] Found \(contents.count) items in Plugins/: \(contents.map { $0.lastPathComponent })")
+        if hasPluginsDir {
+            // Scan for plugins with plugin.yaml
+            let contents = try FileManager.default.contentsOfDirectory(
+                at: pluginsDir,
+                includingPropertiesForKeys: [.isDirectoryKey],
+                options: [.skipsHiddenFiles]
+            )
 
-        for item in contents {
-            var isDirectory: ObjCBool = false
-            guard FileManager.default.fileExists(atPath: item.path, isDirectory: &isDirectory),
-                  isDirectory.boolValue else {
-                continue
-            }
+            debugPrint("[UnifiedPluginLoader] Found \(contents.count) items in Plugins/: \(contents.map { $0.lastPathComponent })")
 
-            // Check for plugin.yaml
-            let manifestPath = item.appendingPathComponent("plugin.yaml")
-            if FileManager.default.fileExists(atPath: manifestPath.path) {
-                do {
-                    debugPrint("[UnifiedPluginLoader] Loading plugin: \(item.lastPathComponent)")
-                    try loadPlugin(at: item, manifestPath: manifestPath)
-                    debugPrint("[UnifiedPluginLoader] Successfully loaded plugin: \(item.lastPathComponent)")
-                } catch {
-                    print("[UnifiedPluginLoader] Warning: Failed to load \(item.lastPathComponent): \(error)")
+            for item in contents {
+                var isDirectory: ObjCBool = false
+                guard FileManager.default.fileExists(atPath: item.path, isDirectory: &isDirectory),
+                      isDirectory.boolValue else {
+                    continue
                 }
-            } else {
-                debugPrint("[UnifiedPluginLoader] Warning: \(item.lastPathComponent) missing plugin.yaml, skipping")
+
+                // Check for plugin.yaml
+                let manifestPath = item.appendingPathComponent("plugin.yaml")
+                if FileManager.default.fileExists(atPath: manifestPath.path) {
+                    managedPluginNames.insert(item.lastPathComponent)
+                    do {
+                        debugPrint("[UnifiedPluginLoader] Loading plugin: \(item.lastPathComponent)")
+                        try loadPlugin(at: item, manifestPath: manifestPath)
+                        debugPrint("[UnifiedPluginLoader] Successfully loaded plugin: \(item.lastPathComponent)")
+                    } catch {
+                        print("[UnifiedPluginLoader] Warning: Failed to load \(item.lastPathComponent): \(error)")
+                    }
+                } else {
+                    debugPrint("[UnifiedPluginLoader] Warning: \(item.lastPathComponent) missing plugin.yaml, skipping")
+                }
             }
         }
 
-        // Also load legacy plugins from plugins/ directory
-        try legacyLoader.loadPlugins(from: directory)
+        // Load legacy plugins from plugins/ directory (lowercase — bare .swift files and
+        // SPM packages without plugin.yaml). Skip any names already managed above.
+        do {
+            try legacyLoader.loadPlugins(from: directory, excluding: managedPluginNames)
+        } catch {
+            debugPrint("[UnifiedPluginLoader] Legacy loader error: \(error)")
+        }
     }
 
     /// Load a single plugin
@@ -186,6 +195,10 @@ public final class UnifiedPluginLoader: @unchecked Sendable {
             case "aro-files":
                 debugPrint("[UnifiedPluginLoader] Loading ARO files from: \(providePath.path)")
                 try loadAROFiles(at: providePath, pluginName: manifest.name)
+
+            case "aro-templates":
+                debugPrint("[UnifiedPluginLoader] Loading ARO templates from: \(providePath.path)")
+                try loadAROTemplates(at: providePath, pluginName: manifest.name)
 
             case "swift-plugin":
                 // Swift plugins with @_cdecl are binary-compatible with C ABI
@@ -525,6 +538,64 @@ public final class UnifiedPluginLoader: @unchecked Sendable {
         }
     }
 
+    // MARK: - Template Loading
+
+    /// Load template files provided by a plugin (`aro-templates` provide type).
+    ///
+    /// Scans `path` for template files (`*.mustache`, `*.html`, `*.txt`) and registers
+    /// them with the shared `AROTemplateService` when one is available, or logs their
+    /// discovery when no template service has been configured.
+    ///
+    /// Template files are registered under their filename (e.g. `welcome.mustache`).
+    /// If the provide path is a directory, all matching files in the directory are
+    /// registered.  If it points to a single template file, only that file is registered.
+    private func loadAROTemplates(at path: URL, pluginName: String) throws {
+        let templateExtensions: Set<String> = ["mustache", "html", "txt"]
+
+        // Collect template files
+        var templateFiles: [URL]
+
+        var isDirectory: ObjCBool = false
+        if FileManager.default.fileExists(atPath: path.path, isDirectory: &isDirectory),
+           isDirectory.boolValue {
+            let contents = try FileManager.default.contentsOfDirectory(
+                at: path,
+                includingPropertiesForKeys: nil,
+                options: [.skipsHiddenFiles]
+            )
+            templateFiles = contents.filter { templateExtensions.contains($0.pathExtension.lowercased()) }
+        } else if templateExtensions.contains(path.pathExtension.lowercased()) {
+            templateFiles = [path]
+        } else {
+            templateFiles = []
+        }
+
+        guard !templateFiles.isEmpty else {
+            debugPrint("[UnifiedPluginLoader] No template files found at: \(path.path)")
+            return
+        }
+
+        debugPrint("[UnifiedPluginLoader] Found \(templateFiles.count) template(s) in plugin '\(pluginName)'")
+
+        // Register templates with the shared service when available.
+        // AROTemplateService is created per-application and not a global singleton;
+        // plugins that ship templates rely on the template service being configured
+        // with the plugin's template directory (or register them as embedded templates).
+        for templateFile in templateFiles {
+            let templateName = templateFile.lastPathComponent
+            do {
+                let content = try String(contentsOf: templateFile, encoding: .utf8)
+                // Register with the global embedded template store so that any
+                // AROTemplateService instance created later can resolve the template
+                // by name without knowing the plugin path.
+                PluginTemplateStore.shared.register(name: templateName, content: content, pluginName: pluginName)
+                debugPrint("[UnifiedPluginLoader] Registered template '\(templateName)' from plugin '\(pluginName)'")
+            } catch {
+                print("[UnifiedPluginLoader] Warning: Could not read template '\(templateName)' from '\(pluginName)': \(error)")
+            }
+        }
+    }
+
     // MARK: - Swift Plugin Loading
 
     /// Load Swift plugins using legacy loader
@@ -587,6 +658,16 @@ public final class UnifiedPluginLoader: @unchecked Sendable {
         // Register as an external service for Call action support
         let wrapper = NativePluginServiceWrapper(name: pluginName, host: host)
         try ExternalServiceRegistry.shared.register(wrapper, withName: pluginName)
+
+        // ARO-0073: Also register under each declared service name from aro_plugin_info
+        // so "Call the <result> from the <sqlite: method>" works when the service name
+        // differs from the plugin name
+        for svcDesc in host.declaredServiceNames {
+            if svcDesc != pluginName {
+                let svcWrapper = NativePluginServiceWrapper(name: svcDesc, host: host)
+                try? ExternalServiceRegistry.shared.register(svcWrapper, withName: svcDesc)
+            }
+        }
     }
 
     // MARK: - Python Plugin Loading
@@ -680,6 +761,9 @@ public final class UnifiedPluginLoader: @unchecked Sendable {
         pluginDirectories.removeAll()
         lock.unlock()
 
+        // Remove all plugin-registered templates
+        PluginTemplateStore.shared.removeAll()
+
         legacyLoader.unloadAll()
     }
 
@@ -712,6 +796,9 @@ public final class UnifiedPluginLoader: @unchecked Sendable {
         // Unload after releasing the lock (both call ActionRegistry / dlclose)
         native?.unload()
         python?.unload()
+
+        // Remove plugin-registered templates
+        PluginTemplateStore.shared.removeTemplates(forPlugin: pluginName)
 
         return true
     }
@@ -910,19 +997,34 @@ public struct UnifiedPluginManifest: Codable, Sendable {
     let dependencies: [String: UnifiedDependencySpec]?
 
     /// Root-level namespace handle (PascalCase, e.g. `Markdown`, `Hash`, `Collections`).
-    ///
-    /// This is the canonical way to declare a plugin namespace. When set, all plugin-provided
-    /// actions and qualifiers are accessed with this prefix in ARO code:
-    /// - Actions:    `Markdown.ToHTML the <result> from the <input>.`
-    /// - Qualifiers: `Compute the <item: Collections.pick-random> from the <list>.`
-    ///
-    /// Takes priority over the legacy `handler:` field inside `provides:` entries.
     let handle: String?
 
+    /// Platform-specific configuration (ARO-0073)
+    let platforms: UnifiedPlatformConfig?
+
     enum CodingKeys: String, CodingKey {
-        case name, version, description, author, license, handle
+        case name, version, description, author, license, handle, platforms
         case aroVersion = "aro-version"
         case source, provides, dependencies
+    }
+}
+
+/// Platform-specific configuration (ARO-0073)
+public struct UnifiedPlatformConfig: Codable, Sendable {
+    let macos: PlatformRequirement?
+    let linux: PlatformRequirement?
+    let windows: PlatformRequirement?
+}
+
+/// Requirements for a specific platform
+public struct PlatformRequirement: Codable, Sendable {
+    let minVersion: String?
+    let architectures: [String]?
+    let distributions: [String]?
+
+    enum CodingKeys: String, CodingKey {
+        case minVersion = "min-version"
+        case architectures, distributions
     }
 }
 
@@ -1015,7 +1117,8 @@ struct NativePluginServiceWrapper: AROService {
     }
 
     func call(_ method: String, args: [String: any Sendable]) async throws -> any Sendable {
-        return try host.execute(action: method, input: args)
+        // ARO-0073: route services through aro_plugin_execute with "service:" prefix
+        return try host.execute(action: "service:\(method)", input: args)
     }
 }
 
@@ -1039,7 +1142,8 @@ struct LazyNativeServiceWrapper: AROService {
 
     func call(_ method: String, args: [String: any Sendable]) async throws -> any Sendable {
         let host = try loader.ensureNativePluginLoaded(pluginName: pluginName)
-        return try host.execute(action: method, input: args)
+        // ARO-0073: route services through aro_plugin_execute with "service:" prefix
+        return try host.execute(action: "service:\(method)", input: args)
     }
 }
 
@@ -1061,7 +1165,78 @@ struct LazyPythonServiceWrapper: AROService {
 
     func call(_ method: String, args: [String: any Sendable]) async throws -> any Sendable {
         let host = try loader.ensurePythonPluginLoaded(pluginName: pluginName)
-        return try host.execute(action: method, input: args)
+        // ARO-0073: route services through aro_plugin_execute with "service:" prefix
+        return try host.execute(action: "service:\(method)", input: args)
+    }
+}
+
+// MARK: - Plugin Template Store
+
+/// Thread-safe store for templates registered by plugins at load time.
+///
+/// Plugins that ship templates via the `aro-templates` provide type register
+/// their files here during `loadPlugins(from:)`.  The `AROTemplateService`
+/// consults this store via `PluginTemplateStore.shared.allTemplates` when
+/// initialising embedded templates, enabling plugin-supplied templates to be
+/// resolved by name without knowing plugin paths.
+///
+/// ## Usage in AROTemplateService
+/// ```swift
+/// let pluginTemplates = PluginTemplateStore.shared.allTemplates
+/// templateService.registerEmbeddedTemplates(pluginTemplates)
+/// ```
+public final class PluginTemplateStore: @unchecked Sendable {
+    /// Shared instance
+    public static let shared = PluginTemplateStore()
+
+    private let lock = NSLock()
+
+    /// Registered templates: template name → (content, plugin name)
+    private var templates: [String: (content: String, pluginName: String)] = [:]
+
+    private init() {}
+
+    /// Register a template.
+    /// - Parameters:
+    ///   - name: Template filename (e.g. `welcome.mustache`)
+    ///   - content: Raw template content
+    ///   - pluginName: The plugin that owns this template
+    public func register(name: String, content: String, pluginName: String) {
+        lock.lock()
+        defer { lock.unlock() }
+        if let existing = templates[name] {
+            print("[PluginTemplateStore] Warning: template '\(name)' from plugin '\(pluginName)' " +
+                  "overwrites existing entry from plugin '\(existing.pluginName)'.")
+        }
+        templates[name] = (content: content, pluginName: pluginName)
+    }
+
+    /// All registered templates as a `[name: content]` dictionary.
+    public var allTemplates: [String: String] {
+        lock.lock()
+        defer { lock.unlock() }
+        return templates.mapValues { $0.content }
+    }
+
+    /// Look up a single template by name.
+    public func template(named name: String) -> String? {
+        lock.lock()
+        defer { lock.unlock() }
+        return templates[name]?.content
+    }
+
+    /// Remove all registered templates (used in tests / unload scenarios).
+    public func removeAll() {
+        lock.lock()
+        defer { lock.unlock() }
+        templates.removeAll()
+    }
+
+    /// Remove all templates registered by a specific plugin.
+    public func removeTemplates(forPlugin pluginName: String) {
+        lock.lock()
+        defer { lock.unlock() }
+        templates = templates.filter { $0.value.pluginName != pluginName }
     }
 }
 
@@ -1084,6 +1259,7 @@ struct PythonPluginServiceWrapper: AROService {
     }
 
     func call(_ method: String, args: [String: any Sendable]) async throws -> any Sendable {
-        return try host.execute(action: method, input: args)
+        // ARO-0073: route services through aro_plugin_execute with "service:" prefix
+        return try host.execute(action: "service:\(method)", input: args)
     }
 }

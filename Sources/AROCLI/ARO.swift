@@ -43,9 +43,11 @@ struct ARO: AsyncParsableCommand {
             CheckCommand.self,
             TestCommand.self,
             ReplCommand.self,
+            NewCommand.self,
             AddCommand.self,
             RemoveCommand.self,
             PluginsCommand.self,
+            ActionsCommand.self,
         ]
         #if !os(Windows)
         commands.append(LSPCommand.self)

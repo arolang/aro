@@ -1311,6 +1311,25 @@ public final class Parser {
             }
         }
 
+        // Qualifier chaining: <result: stats.sort | list.take>
+        // The | token separates chained qualifiers evaluated left-to-right.
+        while check(.bar) {
+            advance() // consume |
+            var nextQualifier = try parseCompoundIdentifier()
+            // Parse dot-separated qualifier path (e.g., list.take)
+            while check(.dot) {
+                let nextIdx = current + 1
+                if nextIdx < tokens.count, tokens[nextIdx].kind.isIdentifier {
+                    advance() // consume dot
+                    nextQualifier += "."
+                    nextQualifier += try parseCompoundIdentifier()
+                } else {
+                    break
+                }
+            }
+            typeStr += "|" + nextQualifier
+        }
+
         return typeStr
     }
 
