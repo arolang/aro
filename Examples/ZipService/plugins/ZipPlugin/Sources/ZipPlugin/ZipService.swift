@@ -14,82 +14,22 @@
 
 import Foundation
 import Zip
-import AROPluginSDK
+import AROPluginKit
 
-// MARK: - Plugin Info
+// MARK: - Plugin Registration
 
-/// Returns full plugin metadata as JSON.
-/// Declares this plugin provides a "zip" service with compress/decompress/list methods.
-@_cdecl("aro_plugin_info")
-public func aroPluginInfo() -> UnsafeMutablePointer<CChar>? {
-    let info = """
-    {
-      "name": "ZipPlugin",
-      "version": "1.0.0",
-      "handle": "Zip",
-      "actions": [],
-      "qualifiers": [],
-      "services": [
-        {
-          "name": "zip",
-          "methods": ["compress", "decompress", "list"]
+@AROExport
+private let plugin = AROPlugin(name: "ZipPlugin", version: "1.0.0", handle: "Zip")
+    .service("zip", methods: ["compress", "decompress", "list"]) { method, input in
+        let args = input.with
+
+        do {
+            let result = try executeMethod(method, args: args)
+            return .success(result)
+        } catch {
+            return .failure(.executionFailed, String(describing: error))
         }
-      ]
     }
-    """
-    return aroStrdup(info)
-}
-
-// MARK: - Lifecycle Hooks
-
-/// Called once when the plugin is loaded. No setup required for the Zip library.
-@_cdecl("aro_plugin_init")
-public func aroPluginInit() {
-    // No global state to initialise
-}
-
-/// Called when the plugin is unloaded. No teardown required.
-@_cdecl("aro_plugin_shutdown")
-public func aroPluginShutdown() {
-    // No global state to release
-}
-
-// MARK: - Execute
-
-/// Main dispatch function. Routes service actions via the "service:" prefix.
-/// Action format: "service:<method>", e.g. "service:compress", "service:decompress", "service:list"
-@_cdecl("aro_plugin_execute")
-public func aroPluginExecute(
-    _ actionPtr: UnsafePointer<CChar>,
-    _ inputJSONPtr: UnsafePointer<CChar>
-) -> UnsafeMutablePointer<CChar>? {
-    let action = String(cString: actionPtr)
-    let input  = ActionInput(aroParseJSON(inputJSONPtr))
-
-    // Route service actions via "service:<method>" prefix
-    guard action.hasPrefix("service:") else {
-        return ActionOutput.failure(.unsupported, "Unknown action: \(action)").toCString()
-    }
-    let method = String(action.dropFirst("service:".count))
-
-    // Parameters come from the "_with" clause
-    let args = input.with
-
-    do {
-        let result = try executeMethod(method, args: args)
-        return ActionOutput.success(result).toCString()
-    } catch {
-        return ActionOutput.failure(.executionFailed, String(describing: error)).toCString()
-    }
-}
-
-// MARK: - Free
-
-/// Frees memory allocated by this plugin.
-@_cdecl("aro_plugin_free")
-public func aroPluginFree(_ ptr: UnsafeMutablePointer<CChar>?) {
-    free(ptr)
-}
 
 // MARK: - Zip Logic
 

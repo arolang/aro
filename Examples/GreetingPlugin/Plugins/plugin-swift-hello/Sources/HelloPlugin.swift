@@ -8,9 +8,10 @@
 // The SDK auto-generates all C ABI exports.
 
 import Foundation
-import AROPluginSDK
+import AROPluginKit
 
 /// Plugin registration — this is the ONLY setup needed.
+@AROExport
 private let plugin = AROPlugin(name: "plugin-swift-hello", version: "1.0.0", handle: "Greeting")
     .action("Greet", verbs: ["greet"], role: "own", prepositions: ["with"],
             description: "Generate a greeting message") { input in
@@ -29,7 +30,3 @@ private let plugin = AROPlugin(name: "plugin-swift-hello", version: "1.0.0", han
         return .success(["farewell": "Goodbye, \(name)!"])
     }
 
-// Static initializer — registers the plugin at dylib load time
-private let _: Void = {
-    AROPluginExport.register(plugin)
-}()

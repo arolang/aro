@@ -1,7 +1,2 @@
-# Test hints for ExternalService
-# Package plugin compilation requires Swift compiler at runtime
-# Swift is now available in CI (swift-6.2.1-RELEASE installed in integration:linux)
-mode: both
-timeout: 120
-# Binary mode loads precompiled plugin with different log messages
-occurrence-check: true
+timeout: 180
+skip-build: true

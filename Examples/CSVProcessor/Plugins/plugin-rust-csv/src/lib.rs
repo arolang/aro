@@ -1,90 +1,26 @@
 //! ARO Plugin - Rust CSV Parser
 //!
 //! This plugin provides CSV parsing and formatting functionality for ARO.
-//! It implements the ARO native plugin interface (C ABI) using the ARO Plugin SDK.
+//! It uses the ARO Plugin SDK macros for zero-boilerplate C ABI generation.
 //!
 //! See: https://github.com/arolang/aro-plugin-sdk-rust
 
-use std::os::raw::c_char;
-
 use aro_plugin_sdk::prelude::*;
 
-/// Get plugin information
-///
-/// Returns JSON string with plugin metadata and custom action definitions.
-/// Caller must free the returned string using `aro_plugin_free`.
-#[no_mangle]
-pub extern "C" fn aro_plugin_info() -> *mut c_char {
-    ffi::to_c_string(json!({
-        "name": "plugin-rust-csv",
-        "version": "1.0.0",
-        "handle": "CSV",
-        "actions": [
-            {
-                "name": "ParseCSV",
-                "verbs": ["parsecsv", "readcsv"],
-                "role": "own",
-                "prepositions": ["from", "with"],
-                "description": "Parse a CSV string into an array of rows"
-            },
-            {
-                "name": "FormatCSV",
-                "verbs": ["formatcsv", "writecsv"],
-                "role": "own",
-                "prepositions": ["from", "with"],
-                "description": "Format an array of rows as a CSV string"
-            },
-            {
-                "name": "CSVToJSON",
-                "verbs": ["csvtojson"],
-                "role": "own",
-                "prepositions": ["from"],
-                "description": "Convert a CSV string to an array of JSON objects using the first row as headers"
-            }
-        ]
-    }).to_string())
-}
-
-/// Lifecycle hook called once when the plugin is loaded
-#[no_mangle]
-pub extern "C" fn aro_plugin_init() {}
-
-/// Lifecycle hook called once when the plugin is unloaded
-#[no_mangle]
-pub extern "C" fn aro_plugin_shutdown() {}
-
-/// Execute a plugin action
-///
-/// # Arguments
-/// * `action` - The action name (e.g., "parse-csv")
-/// * `input_json` - JSON string with input parameters
-///
-/// # Returns
-/// JSON string with the result. Caller must free using `aro_plugin_free`.
-#[no_mangle]
-pub extern "C" fn aro_plugin_execute(
-    action: *const c_char,
-    input_json: *const c_char,
-) -> *mut c_char {
-    ffi::wrap_execute(action, input_json, |action, input| {
-        match action {
-            "parse-csv" | "parsecsv" | "readcsv" => parse_csv(&input),
-            "format-csv" | "formatcsv" | "writecsv" => format_csv(&input),
-            "csv-to-json" | "csvtojson" => csv_to_json(&input),
-            _ => Err(PluginError::internal(format!("Unknown action: {action}"))),
-        }
-    })
-}
-
-/// Free memory allocated by the plugin
-#[no_mangle]
-pub extern "C" fn aro_plugin_free(ptr: *mut c_char) {
-    ffi::free_c_string(ptr);
+aro_export! {
+    name: "plugin-rust-csv",
+    version: "1.0.0",
+    handle: "CSV",
+    actions: [parse_csv, format_csv, csv_to_json],
+    qualifiers: [],
 }
 
 // MARK: - Actions
 
 /// Parse CSV string into array of arrays
+#[action(name = "ParseCSV", verbs = ["parsecsv", "readcsv"], role = "own",
+         prepositions = ["from", "with"],
+         description = "Parse a CSV string into an array of rows")]
 fn parse_csv(input: &Input) -> PluginResult<Output> {
     let csv_data = input
         .string("data")
@@ -124,6 +60,9 @@ fn parse_csv(input: &Input) -> PluginResult<Output> {
 }
 
 /// Format array of arrays as CSV string
+#[action(name = "FormatCSV", verbs = ["formatcsv", "writecsv"], role = "own",
+         prepositions = ["from", "with"],
+         description = "Format an array of rows as a CSV string")]
 fn format_csv(input: &Input) -> PluginResult<Output> {
     let rows = input
         .array("rows")
@@ -167,6 +106,9 @@ fn format_csv(input: &Input) -> PluginResult<Output> {
 }
 
 /// Convert CSV to JSON array of objects
+#[action(name = "CSVToJSON", verbs = ["csvtojson"], role = "own",
+         prepositions = ["from"],
+         description = "Convert a CSV string to an array of JSON objects using the first row as headers")]
 fn csv_to_json(input: &Input) -> PluginResult<Output> {
     let csv_data = input
         .string("data")

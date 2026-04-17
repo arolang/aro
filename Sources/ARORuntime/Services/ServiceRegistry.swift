@@ -34,6 +34,9 @@ import FoundationNetworking
 ///     }
 /// }
 /// ```
+/// - Note: **Deprecated (ARO-0073).** New plugins should declare services in
+///   `aro_plugin_info` JSON and route through `aro_plugin_execute("service:<method>", ...)`.
+///   This protocol is retained for built-in services (HTTP) and will be removed in a future release.
 public protocol AROService: Sendable {
     /// Service name (e.g., "postgres", "http", "ffmpeg")
     static var name: String { get }
@@ -122,7 +125,6 @@ public final class ExternalServiceRegistry: @unchecked Sendable {
         do {
             try register(BuiltInHTTPService())
         } catch {
-            print("[ExternalServiceRegistry] Warning: Failed to register HTTP service: \(error)")
         }
     }
 

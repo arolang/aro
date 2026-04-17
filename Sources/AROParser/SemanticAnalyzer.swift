@@ -210,6 +210,8 @@ public struct AnalyzedProgram: Sendable {
             if activity.contains(" Handler") &&
                !isSocket && !isWS && !isFile &&
                !activity.contains("KeyPress Handler") &&
+               !activity.contains("StateTransition Handler") &&
+               !activity.contains("StateObserver") &&
                !activity.contains("Application-End") {
                 domain.append(fs)
             }

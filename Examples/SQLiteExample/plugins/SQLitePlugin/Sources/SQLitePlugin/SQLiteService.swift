@@ -12,7 +12,7 @@
 
 import Foundation
 import SQLite
-import AROPluginSDK
+import AROPluginKit
 
 // MARK: - State Management
 
@@ -20,95 +20,39 @@ import AROPluginSDK
 private var database: Connection?
 private let dbQueue = DispatchQueue(label: "sqlite.plugin")
 
-// MARK: - Plugin Info
+// MARK: - Plugin Registration
 
-/// Returns full plugin metadata as JSON.
-/// Declares this plugin provides a "sqlite" service with query/execute methods.
-@_cdecl("aro_plugin_info")
-public func aroPluginInfo() -> UnsafeMutablePointer<CChar>? {
-    let info = """
-    {
-      "name": "SQLitePlugin",
-      "version": "1.0.0",
-      "handle": "SQLite",
-      "actions": [],
-      "qualifiers": [],
-      "services": [
-        {
-          "name": "sqlite",
-          "methods": ["query", "execute"]
+@AROExport
+private let plugin = AROPlugin(name: "SQLitePlugin", version: "1.0.0", handle: "SQLite")
+    .service("sqlite", methods: ["query", "execute"]) { method, input in
+        // SQL is passed in "_with.sql" or top-level "sql"
+        let sql = input.with.string("sql") ?? input.string("sql")
+
+        guard let sql else {
+            return .failure(.invalidInput, "Missing required argument: sql")
         }
-      ]
-    }
-    """
-    return aroStrdup(info)
-}
 
-// MARK: - Lifecycle Hooks
-
-/// Called once when the plugin is loaded. Opens the in-memory database connection.
-@_cdecl("aro_plugin_init")
-public func aroPluginInit() {
-    dbQueue.sync {
-        if database == nil {
-            database = try? Connection(.inMemory)
+        do {
+            let result: [String: Any] = try dbQueue.sync {
+                try executeMethod(method, sql: sql)
+            }
+            return .success(result)
+        } catch {
+            return .failure(.executionFailed, String(describing: error))
         }
     }
-}
-
-/// Called when the plugin is unloaded. Releases the database connection.
-@_cdecl("aro_plugin_shutdown")
-public func aroPluginShutdown() {
-    dbQueue.sync {
-        database = nil
-    }
-}
-
-// MARK: - Execute
-
-/// Main dispatch function. Routes service actions via the "service:" prefix.
-/// Action format: "service:<method>", e.g. "service:query", "service:execute"
-@_cdecl("aro_plugin_execute")
-public func aroPluginExecute(
-    _ actionPtr: UnsafePointer<CChar>,
-    _ inputJSONPtr: UnsafePointer<CChar>
-) -> UnsafeMutablePointer<CChar>? {
-    let action = String(cString: actionPtr)
-    let input  = ActionInput(aroParseJSON(inputJSONPtr))
-
-    // Route service actions via "service:<method>" prefix
-    guard action.hasPrefix("service:") else {
-        return ActionOutput.failure(.unsupported, "Unknown action: \(action)").toCString()
-    }
-    let method = String(action.dropFirst("service:".count))
-
-    // SQL is passed in "_with.sql" or top-level "sql"
-    let sql = input.with.string("sql") ?? input.string("sql")
-
-    guard let sql else {
-        return ActionOutput.failure(.invalidInput, "Missing required argument: sql").toCString()
-    }
-
-    // Execute in thread-safe manner
-    let result: [String: Any]
-    do {
-        result = try dbQueue.sync {
-            try executeMethod(method, sql: sql)
+    .onInit {
+        dbQueue.sync {
+            if database == nil {
+                database = try? Connection(.inMemory)
+            }
         }
-    } catch {
-        return ActionOutput.failure(.executionFailed, String(describing: error)).toCString()
     }
-
-    return ActionOutput.success(result).toCString()
-}
-
-// MARK: - Free
-
-/// Frees memory allocated by this plugin.
-@_cdecl("aro_plugin_free")
-public func aroPluginFree(_ ptr: UnsafeMutablePointer<CChar>?) {
-    free(ptr)
-}
+    .onShutdown {
+        dbQueue.sync {
+            database = nil
+        }
+    }
 
 // MARK: - SQL Logic
 

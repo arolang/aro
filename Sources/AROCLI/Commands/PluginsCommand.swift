@@ -515,9 +515,9 @@ struct RebuildPlugins: ParsableCommand {
             options: [.skipsHiddenFiles]
         )
 
-        let pluginDirs = try contents.filter { item in
+        let pluginDirs = contents.filter { item in
             var isDir: ObjCBool = false
-            FileManager.default.fileExists(atPath: item.path, isDirectory: &isDir)
+            _ = FileManager.default.fileExists(atPath: item.path, isDirectory: &isDir)
             return isDir.boolValue &&
                    FileManager.default.fileExists(atPath: item.appendingPathComponent("plugin.yaml").path)
         }

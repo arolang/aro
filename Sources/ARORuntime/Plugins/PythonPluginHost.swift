@@ -61,6 +61,9 @@ public final class PythonPluginHost: @unchecked Sendable {
     /// Registered actions
     private var actions: Set<String> = []
 
+    /// Maps verb → canonical action name for structured action descriptors (SDK format)
+    private var verbToActionName: [String: String] = [:]
+
     /// Qualifier registrations from this plugin
     private var qualifierRegistrations: [QualifierRegistration] = []
 
@@ -163,10 +166,31 @@ public final class PythonPluginHost: @unchecked Sendable {
             }
         }
 
+        // Parse actions: supports both flat [String] (legacy) and structured [[String: Any]] (SDK)
+        var parsedActions: [String] = []
+        if let flatActions = json["actions"] as? [String] {
+            parsedActions = flatActions
+        } else if let structuredActions = json["actions"] as? [[String: Any]] {
+            for actionObj in structuredActions {
+                let actionName = actionObj["name"] as? String
+                if let verbs = actionObj["verbs"] as? [String] {
+                    parsedActions.append(contentsOf: verbs)
+                    // Map each verb back to the canonical action name for aro_action_<name> lookup
+                    if let actionName = actionName {
+                        for verb in verbs {
+                            verbToActionName[verb] = actionName
+                        }
+                    }
+                } else if let name = actionName {
+                    parsedActions.append(name)
+                }
+            }
+        }
+
         pluginInfo = PythonPluginInfo(
             name: json["name"] as? String ?? pluginName,
             version: json["version"] as? String ?? "1.0.0",
-            actions: json["actions"] as? [String] ?? [],
+            actions: parsedActions,
             qualifiers: qualifierDescriptors
         )
 
@@ -197,8 +221,9 @@ public final class PythonPluginHost: @unchecked Sendable {
         // Escape JSON for Python string (using base64 to avoid escaping issues)
         let base64Input = inputData.base64EncodedString()
 
-        // Convert action name to snake_case for Python function
-        let pythonFuncName = toSnakeCase(action)
+        // Resolve verb → canonical action name (SDK format), then convert to snake_case
+        let resolvedAction = verbToActionName[action] ?? action
+        let pythonFuncName = toSnakeCase(resolvedAction)
 
         // Create execution script
         let script = """
@@ -328,11 +353,31 @@ public final class PythonPluginHost: @unchecked Sendable {
     // MARK: - Python Discovery
 
     private static func findPython() -> String {
-        // Try common Python paths
+        // First, resolve python3 via which — picks up the user's preferred Python
+        // (e.g., Homebrew, pyenv, framework install) which likely has the ARO SDK
+        let whichProcess = Process()
+        whichProcess.executableURL = URL(fileURLWithPath: "/usr/bin/which")
+        whichProcess.arguments = ["python3"]
+        let pipe = Pipe()
+        whichProcess.standardOutput = pipe
+        whichProcess.standardError = FileHandle.nullDevice
+        if let _ = try? whichProcess.run() {
+            whichProcess.waitUntilExit()
+            if whichProcess.terminationStatus == 0,
+               let path = String(data: pipe.fileHandleForReading.readDataToEndOfFile(), encoding: .utf8)?
+                   .trimmingCharacters(in: .whitespacesAndNewlines),
+               !path.isEmpty,
+               FileManager.default.isExecutableFile(atPath: path) {
+                return path
+            }
+        }
+
+        // Try common Python paths as fallback
         let candidates = [
-            "/usr/bin/python3",
-            "/usr/local/bin/python3",
+            "/Library/Frameworks/Python.framework/Versions/Current/bin/python3",
             "/opt/homebrew/bin/python3",
+            "/usr/local/bin/python3",
+            "/usr/bin/python3",
             "/usr/bin/python",
         ]
 

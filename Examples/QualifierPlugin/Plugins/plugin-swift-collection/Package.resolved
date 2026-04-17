@@ -6,7 +6,16 @@
       "location" : "https://github.com/arolang/aro-plugin-sdk-swift.git",
       "state" : {
         "branch" : "main",
-        "revision" : "276727edca1522e2cfc21d8aa86d2db264154dda"
+        "revision" : "0a3cdab73a7f7664693aad93373ad4690d404b73"
+      }
+    },
+    {
+      "identity" : "swift-syntax",
+      "kind" : "remoteSourceControl",
+      "location" : "https://github.com/swiftlang/swift-syntax.git",
+      "state" : {
+        "revision" : "f99ae8aa18f0cf0d53481901f88a0991dc3bd4a2",
+        "version" : "601.0.1"
       }
     }
   ],

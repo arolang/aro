@@ -1,3 +1,4 @@
-timeout: 30
+timeout: 120
 strip-prefix: true
 random-output: true
+occurrence-check: true

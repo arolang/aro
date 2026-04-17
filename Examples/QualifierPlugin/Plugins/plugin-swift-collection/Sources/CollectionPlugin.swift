@@ -8,11 +8,12 @@
 // The SDK auto-generates all C ABI exports.
 
 import Foundation
-import AROPluginSDK
+import AROPluginKit
 
 /// Plugin registration — this is the ONLY setup needed.
 /// The SDK generates aro_plugin_info, aro_plugin_qualifier,
 /// aro_plugin_free, aro_plugin_init, and aro_plugin_shutdown.
+@AROExport
 private let plugin = AROPlugin(name: "plugin-swift-collection", version: "1.0.0", handle: "Collections")
     .qualifier("pick-random", inputTypes: ["List"], description: "Pick a random element from a list") { params in
         guard let array = params.arrayValue, !array.isEmpty else {
@@ -40,13 +41,3 @@ private let plugin = AROPlugin(name: "plugin-swift-collection", version: "1.0.0"
         return .failure("reverse requires a list or string")
     }
 
-// Register with the SDK — this wires up all C ABI exports automatically
-@_cdecl("_aro_plugin_register")
-public func register() {
-    AROPluginExport.register(plugin)
-}
-
-// Static initializer to ensure registration happens at load time
-private let _: Void = {
-    AROPluginExport.register(plugin)
-}()

@@ -1,3 +1,4 @@
 # Test hints for CSVProcessor
 # Requires managed plugin: https://github.com/arolang/plugin-rust-csv
 mode: both
+occurrence-check: true

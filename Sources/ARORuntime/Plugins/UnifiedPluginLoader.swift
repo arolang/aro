@@ -102,46 +102,55 @@ public final class UnifiedPluginLoader: @unchecked Sendable {
     public func loadPlugins(from directory: URL) throws {
         let pluginsDir = directory.appendingPathComponent("Plugins")
 
-        // Check if Plugins directory exists
-        guard FileManager.default.fileExists(atPath: pluginsDir.path) else {
-            // Fall back to legacy plugins/ directory
-            try legacyLoader.loadPlugins(from: directory)
-            return
-        }
+        // Check if Plugins directory exists (uppercase — managed plugins with plugin.yaml)
+        let hasPluginsDir = FileManager.default.fileExists(atPath: pluginsDir.path)
 
-        // Scan for plugins with plugin.yaml
-        let contents = try FileManager.default.contentsOfDirectory(
-            at: pluginsDir,
-            includingPropertiesForKeys: [.isDirectoryKey],
-            options: [.skipsHiddenFiles]
-        )
+        // Collect names of managed plugins (those with plugin.yaml in Plugins/) so the
+        // legacy loader can skip them — prevents double-loading and module-cache conflicts
+        // on case-insensitive filesystem mounts (macOS/Docker) where "plugins/" == "Plugins/".
+        var managedPluginNames = Set<String>()
 
-        debugPrint("[UnifiedPluginLoader] Found \(contents.count) items in Plugins/: \(contents.map { $0.lastPathComponent })")
+        if hasPluginsDir {
+            // Scan for plugins with plugin.yaml
+            let contents = try FileManager.default.contentsOfDirectory(
+                at: pluginsDir,
+                includingPropertiesForKeys: [.isDirectoryKey],
+                options: [.skipsHiddenFiles]
+            )
 
-        for item in contents {
-            var isDirectory: ObjCBool = false
-            guard FileManager.default.fileExists(atPath: item.path, isDirectory: &isDirectory),
-                  isDirectory.boolValue else {
-                continue
-            }
+            debugPrint("[UnifiedPluginLoader] Found \(contents.count) items in Plugins/: \(contents.map { $0.lastPathComponent })")
 
-            // Check for plugin.yaml
-            let manifestPath = item.appendingPathComponent("plugin.yaml")
-            if FileManager.default.fileExists(atPath: manifestPath.path) {
-                do {
-                    debugPrint("[UnifiedPluginLoader] Loading plugin: \(item.lastPathComponent)")
-                    try loadPlugin(at: item, manifestPath: manifestPath)
-                    debugPrint("[UnifiedPluginLoader] Successfully loaded plugin: \(item.lastPathComponent)")
-                } catch {
-                    print("[UnifiedPluginLoader] Warning: Failed to load \(item.lastPathComponent): \(error)")
+            for item in contents {
+                var isDirectory: ObjCBool = false
+                guard FileManager.default.fileExists(atPath: item.path, isDirectory: &isDirectory),
+                      isDirectory.boolValue else {
+                    continue
                 }
-            } else {
-                debugPrint("[UnifiedPluginLoader] Warning: \(item.lastPathComponent) missing plugin.yaml, skipping")
+
+                // Check for plugin.yaml
+                let manifestPath = item.appendingPathComponent("plugin.yaml")
+                if FileManager.default.fileExists(atPath: manifestPath.path) {
+                    managedPluginNames.insert(item.lastPathComponent)
+                    do {
+                        debugPrint("[UnifiedPluginLoader] Loading plugin: \(item.lastPathComponent)")
+                        try loadPlugin(at: item, manifestPath: manifestPath)
+                        debugPrint("[UnifiedPluginLoader] Successfully loaded plugin: \(item.lastPathComponent)")
+                    } catch {
+                        print("[UnifiedPluginLoader] Warning: Failed to load \(item.lastPathComponent): \(error)")
+                    }
+                } else {
+                    debugPrint("[UnifiedPluginLoader] Warning: \(item.lastPathComponent) missing plugin.yaml, skipping")
+                }
             }
         }
 
-        // Also load legacy plugins from plugins/ directory
-        try legacyLoader.loadPlugins(from: directory)
+        // Load legacy plugins from plugins/ directory (lowercase — bare .swift files and
+        // SPM packages without plugin.yaml). Skip any names already managed above.
+        do {
+            try legacyLoader.loadPlugins(from: directory, excluding: managedPluginNames)
+        } catch {
+            debugPrint("[UnifiedPluginLoader] Legacy loader error: \(error)")
+        }
     }
 
     /// Load a single plugin
@@ -649,6 +658,16 @@ public final class UnifiedPluginLoader: @unchecked Sendable {
         // Register as an external service for Call action support
         let wrapper = NativePluginServiceWrapper(name: pluginName, host: host)
         try ExternalServiceRegistry.shared.register(wrapper, withName: pluginName)
+
+        // ARO-0073: Also register under each declared service name from aro_plugin_info
+        // so "Call the <result> from the <sqlite: method>" works when the service name
+        // differs from the plugin name
+        for svcDesc in host.declaredServiceNames {
+            if svcDesc != pluginName {
+                let svcWrapper = NativePluginServiceWrapper(name: svcDesc, host: host)
+                try? ExternalServiceRegistry.shared.register(svcWrapper, withName: svcDesc)
+            }
+        }
     }
 
     // MARK: - Python Plugin Loading
@@ -978,19 +997,34 @@ public struct UnifiedPluginManifest: Codable, Sendable {
     let dependencies: [String: UnifiedDependencySpec]?
 
     /// Root-level namespace handle (PascalCase, e.g. `Markdown`, `Hash`, `Collections`).
-    ///
-    /// This is the canonical way to declare a plugin namespace. When set, all plugin-provided
-    /// actions and qualifiers are accessed with this prefix in ARO code:
-    /// - Actions:    `Markdown.ToHTML the <result> from the <input>.`
-    /// - Qualifiers: `Compute the <item: Collections.pick-random> from the <list>.`
-    ///
-    /// Takes priority over the legacy `handler:` field inside `provides:` entries.
     let handle: String?
 
+    /// Platform-specific configuration (ARO-0073)
+    let platforms: UnifiedPlatformConfig?
+
     enum CodingKeys: String, CodingKey {
-        case name, version, description, author, license, handle
+        case name, version, description, author, license, handle, platforms
         case aroVersion = "aro-version"
         case source, provides, dependencies
+    }
+}
+
+/// Platform-specific configuration (ARO-0073)
+public struct UnifiedPlatformConfig: Codable, Sendable {
+    let macos: PlatformRequirement?
+    let linux: PlatformRequirement?
+    let windows: PlatformRequirement?
+}
+
+/// Requirements for a specific platform
+public struct PlatformRequirement: Codable, Sendable {
+    let minVersion: String?
+    let architectures: [String]?
+    let distributions: [String]?
+
+    enum CodingKeys: String, CodingKey {
+        case minVersion = "min-version"
+        case architectures, distributions
     }
 }
 
@@ -1083,7 +1117,8 @@ struct NativePluginServiceWrapper: AROService {
     }
 
     func call(_ method: String, args: [String: any Sendable]) async throws -> any Sendable {
-        return try host.execute(action: method, input: args)
+        // ARO-0073: route services through aro_plugin_execute with "service:" prefix
+        return try host.execute(action: "service:\(method)", input: args)
     }
 }
 
@@ -1107,7 +1142,8 @@ struct LazyNativeServiceWrapper: AROService {
 
     func call(_ method: String, args: [String: any Sendable]) async throws -> any Sendable {
         let host = try loader.ensureNativePluginLoaded(pluginName: pluginName)
-        return try host.execute(action: method, input: args)
+        // ARO-0073: route services through aro_plugin_execute with "service:" prefix
+        return try host.execute(action: "service:\(method)", input: args)
     }
 }
 
@@ -1129,7 +1165,8 @@ struct LazyPythonServiceWrapper: AROService {
 
     func call(_ method: String, args: [String: any Sendable]) async throws -> any Sendable {
         let host = try loader.ensurePythonPluginLoaded(pluginName: pluginName)
-        return try host.execute(action: method, input: args)
+        // ARO-0073: route services through aro_plugin_execute with "service:" prefix
+        return try host.execute(action: "service:\(method)", input: args)
     }
 }
 
@@ -1222,6 +1259,7 @@ struct PythonPluginServiceWrapper: AROService {
     }
 
     func call(_ method: String, args: [String: any Sendable]) async throws -> any Sendable {
-        return try host.execute(action: method, input: args)
+        // ARO-0073: route services through aro_plugin_execute with "service:" prefix
+        return try host.execute(action: "service:\(method)", input: args)
     }
 }

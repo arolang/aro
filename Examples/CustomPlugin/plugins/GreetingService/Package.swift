@@ -1,24 +1,21 @@
-// swift-tools-version: 5.9
+// swift-tools-version:5.9
 import PackageDescription
 
-// Built as a dynamic library so the ARO runtime can dlopen() it.
-
 let package = Package(
-    name: "CollectionPlugin",
+    name: "GreetingService",
     platforms: [.macOS(.v12)],
     products: [
-        .library(name: "CollectionPlugin", type: .dynamic, targets: ["CollectionPlugin"]),
+        .library(name: "GreetingService", type: .dynamic, targets: ["GreetingService"])
     ],
     dependencies: [
         .package(url: "https://github.com/arolang/aro-plugin-sdk-swift.git", branch: "main"),
     ],
     targets: [
         .target(
-            name: "CollectionPlugin",
+            name: "GreetingService",
             dependencies: [
                 .product(name: "AROPluginKit", package: "aro-plugin-sdk-swift"),
-            ],
-            path: "Sources"
-        ),
+            ]
+        )
     ]
 )

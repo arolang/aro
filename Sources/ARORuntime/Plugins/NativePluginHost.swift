@@ -90,6 +90,8 @@ public final class NativePluginHost: @unchecked Sendable {
     typealias ObjectReadFunc = @convention(c) (UnsafePointer<CChar>, UnsafePointer<CChar>) -> UnsafeMutablePointer<CChar>?
     typealias ObjectWriteFunc = @convention(c) (UnsafePointer<CChar>, UnsafePointer<CChar>, UnsafePointer<CChar>) -> UnsafeMutablePointer<CChar>?
     typealias ObjectListFunc = @convention(c) (UnsafePointer<CChar>) -> UnsafeMutablePointer<CChar>?
+    typealias InvokeFunc = @convention(c) (UnsafePointer<CChar>, UnsafePointer<CChar>) -> UnsafeMutablePointer<CChar>?
+    typealias SetInvokeFunc = @convention(c) (InvokeFunc?) -> Void
 
     private var executeFunc: ExecuteFunc?
     private var freeFunc: FreeFunc?
@@ -163,12 +165,40 @@ public final class NativePluginHost: @unchecked Sendable {
 
             libraryPath = candidates.first(where: { FileManager.default.fileExists(atPath: $0.path) })
         } else {
-            // Try common patterns
-            let candidates = [
+            // Try common patterns (pluginPath is typically the Sources/ subdirectory)
+            let pluginRoot = pluginPath.deletingLastPathComponent()
+            var candidates = [
                 pluginPath.appendingPathComponent("lib\(pluginName).\(ext)"),
                 pluginPath.appendingPathComponent("\(pluginName).\(ext)"),
                 pluginPath.appendingPathComponent("target/release/lib\(pluginName).\(ext)"),  // Rust
             ]
+
+            // Also check SPM build output (for Package.swift-based plugins).
+            // The library may live under .build/<triple>/release/ in the plugin root.
+            let spmBuildDir = pluginRoot.appendingPathComponent(".build")
+            if FileManager.default.fileExists(atPath: spmBuildDir.path) {
+                // Try .build/release/ first (simple SPM layout)
+                let releaseDir = spmBuildDir.appendingPathComponent("release")
+                candidates.append(releaseDir.appendingPathComponent("lib\(pluginName).\(ext)"))
+                candidates.append(releaseDir.appendingPathComponent("\(pluginName).\(ext)"))
+
+                // Search arch-specific dirs: .build/<triple>/release/
+                if let buildContents = try? FileManager.default.contentsOfDirectory(
+                    at: spmBuildDir, includingPropertiesForKeys: [.isDirectoryKey], options: [.skipsHiddenFiles]
+                ) {
+                    for dir in buildContents where dir.lastPathComponent.contains("-") && dir.lastPathComponent != "checkouts" {
+                        let archRelease = dir.appendingPathComponent("release")
+                        // Look for any dynamic library matching the extension
+                        if let libs = try? FileManager.default.contentsOfDirectory(
+                            at: archRelease, includingPropertiesForKeys: nil, options: [.skipsHiddenFiles]
+                        ) {
+                            for lib in libs where lib.pathExtension == ext {
+                                candidates.append(lib)
+                            }
+                        }
+                    }
+                }
+            }
 
             libraryPath = candidates.first(where: { FileManager.default.fileExists(atPath: $0.path) })
         }
@@ -196,7 +226,30 @@ public final class NativePluginHost: @unchecked Sendable {
         }
         libraryHandle = UnsafeMutableRawPointer(handle)
         #else
-        guard let handle = dlopen(libraryPath.path, RTLD_NOW | RTLD_LOCAL) else {
+        // On Linux, Swift-built .so files can crash the dynamic linker with RTLD_NOW
+        // due to TLS exhaustion.  Use RTLD_LAZY | RTLD_GLOBAL so symbol resolution is
+        // deferred and the plugin can share the host process's Swift runtime.
+        #if os(Linux)
+        let dlopenFlags = RTLD_LAZY | RTLD_GLOBAL
+        #else
+        let dlopenFlags = RTLD_NOW | RTLD_LOCAL
+        #endif
+
+        #if os(Linux)
+        // Pre-load dependency libraries (e.g. AROPluginSDK, AROPluginKit) from the same
+        // directory with RTLD_GLOBAL so their symbols merge with the host process's Swift
+        // runtime. Without this, Swift-built plugins crash on Linux (TLS exhaustion).
+        let libDir = libraryPath.deletingLastPathComponent()
+        if let siblings = try? FileManager.default.contentsOfDirectory(
+            at: libDir, includingPropertiesForKeys: nil, options: [.skipsHiddenFiles]
+        ) {
+            for dep in siblings where dep.pathExtension == ext && dep != libraryPath {
+                _ = dlopen(dep.path, Int32(dlopenFlags))
+            }
+        }
+        #endif
+
+        guard let handle = dlopen(libraryPath.path, Int32(dlopenFlags)) else {
             let error = String(cString: dlerror())
             throw NativePluginError.loadFailed(pluginName, message: error)
         }
@@ -242,13 +295,32 @@ public final class NativePluginHost: @unchecked Sendable {
             return outputPath
         }
 
-        // Check for Swift source files
+        // Check for Swift source files — try standalone swiftc first (fast, produces a simple
+        // C-ABI .so that loads safely via dlopen on all platforms).
         let swiftFiles = findSourceFiles(withExtension: "swift")
         if !swiftFiles.isEmpty {
             debugPrint("[NativePluginHost] Found Swift files: \(swiftFiles.map { $0.lastPathComponent })")
             let outputPath = pluginPath.appendingPathComponent("lib\(pluginName).\(ext)")
-            try compileSwiftPlugin(sources: swiftFiles, output: outputPath)
-            return outputPath
+            do {
+                try compileSwiftPlugin(sources: swiftFiles, output: outputPath)
+                return outputPath
+            } catch {
+                debugPrint("[NativePluginHost] Standalone swiftc failed (\(error)), trying Package.swift...")
+                // Clean up partial output so SPM doesn't complain about unhandled files
+                try? FileManager.default.removeItem(at: outputPath)
+            }
+        }
+
+        // Fallback: check for Package.swift (Swift package plugin with SPM dependencies)
+        let packageSwiftCandidates = [
+            pluginPath.appendingPathComponent("Package.swift"),
+            pluginPath.deletingLastPathComponent().appendingPathComponent("Package.swift"),
+        ]
+
+        if let packageSwift = packageSwiftCandidates.first(where: { FileManager.default.fileExists(atPath: $0.path) }) {
+            let packageDir = packageSwift.deletingLastPathComponent()
+            debugPrint("[NativePluginHost] Found Package.swift at \(packageSwift.path), building Swift package plugin: \(pluginName)")
+            return try compileSwiftPackagePlugin(packageDir: packageDir, ext: ext)
         }
 
         debugPrint("[NativePluginHost] No compilable sources found for plugin: \(pluginName)")
@@ -336,6 +408,124 @@ public final class NativePluginHost: @unchecked Sendable {
         }
 
         debugPrint("[NativePluginHost] Swift plugin compiled to: \(output.path)")
+    }
+
+    /// Compile Swift plugin using Package.swift (swift build)
+    private func compileSwiftPackagePlugin(packageDir: URL, ext: String) throws -> URL? {
+        // Find swift executable
+        var swiftPath: String? = nil
+        if let swiftEnv = ProcessInfo.processInfo.environment["SWIFT_PATH"],
+           !swiftEnv.isEmpty,
+           FileManager.default.isExecutableFile(atPath: swiftEnv) {
+            swiftPath = swiftEnv
+        }
+
+        if swiftPath == nil {
+            let whichProcess = Process()
+            whichProcess.executableURL = URL(fileURLWithPath: "/usr/bin/which")
+            whichProcess.arguments = ["swift"]
+            let pipe = Pipe()
+            whichProcess.standardOutput = pipe
+            whichProcess.standardError = FileHandle.nullDevice
+            if let _ = try? whichProcess.run() {
+                whichProcess.waitUntilExit()
+                if whichProcess.terminationStatus == 0,
+                   let path = String(data: pipe.fileHandleForReading.readDataToEndOfFile(), encoding: .utf8)?
+                       .trimmingCharacters(in: .whitespacesAndNewlines),
+                   !path.isEmpty {
+                    swiftPath = path
+                }
+            }
+        }
+
+        if swiftPath == nil {
+            let commonPaths = [
+                "/usr/bin/swift",
+                "/usr/share/swift/usr/bin/swift",
+                "/opt/swift/usr/bin/swift",
+                "/opt/homebrew/bin/swift",
+                "/usr/local/bin/swift",
+            ]
+            swiftPath = commonPaths.first(where: { FileManager.default.isExecutableFile(atPath: $0) })
+        }
+
+        guard let swiftPath = swiftPath else {
+            throw NativePluginError.compilationFailed(pluginName, message: "swift not found")
+        }
+
+        debugPrint("[NativePluginHost] Building Swift package plugin with \(swiftPath) in \(packageDir.path)")
+
+        let process = Process()
+        process.executableURL = URL(fileURLWithPath: swiftPath)
+        process.arguments = ["build", "-c", "release"]
+        process.currentDirectoryURL = packageDir
+
+        // Capture both stdout and stderr so we can report the full error on failure.
+        let outPipe = Pipe()
+        let errorPipe = Pipe()
+        process.standardOutput = outPipe
+        process.standardError = errorPipe
+
+        try process.run()
+        process.waitUntilExit()
+        let outData = outPipe.fileHandleForReading.readDataToEndOfFile()
+        let errorData = errorPipe.fileHandleForReading.readDataToEndOfFile()
+
+        if process.terminationStatus != 0 {
+            let stderrStr = String(data: errorData, encoding: .utf8) ?? ""
+            let stdoutStr = String(data: outData, encoding: .utf8) ?? ""
+            let combined = [stderrStr, stdoutStr].filter { !$0.isEmpty }.joined(separator: "\n")
+            let errorMessage = combined.isEmpty ? "exit code \(process.terminationStatus), reason: \(process.terminationReason.rawValue)" : combined
+            debugPrint("[NativePluginHost] Swift package build failed: \(errorMessage)")
+            throw NativePluginError.compilationFailed(pluginName, message: "swift build failed: \(errorMessage)")
+        }
+
+        // Use `swift build --show-bin-path` to find the actual output directory
+        // (on Linux this may be .build/x86_64-unknown-linux-gnu/release/ rather than .build/release/)
+        var binDir: URL? = nil
+        let binPathProcess = Process()
+        binPathProcess.executableURL = URL(fileURLWithPath: swiftPath)
+        binPathProcess.arguments = ["build", "-c", "release", "--show-bin-path"]
+        binPathProcess.currentDirectoryURL = packageDir
+        let binPathPipe = Pipe()
+        binPathProcess.standardOutput = binPathPipe
+        binPathProcess.standardError = FileHandle.nullDevice
+        if let _ = try? binPathProcess.run() {
+            binPathProcess.waitUntilExit()
+            if binPathProcess.terminationStatus == 0,
+               let path = String(data: binPathPipe.fileHandleForReading.readDataToEndOfFile(), encoding: .utf8)?
+                   .trimmingCharacters(in: .whitespacesAndNewlines),
+               !path.isEmpty {
+                binDir = URL(fileURLWithPath: path)
+            }
+        }
+
+        // Fallback to .build/release/ if --show-bin-path didn't work
+        let searchDirs = [
+            binDir,
+            packageDir.appendingPathComponent(".build/release"),
+        ].compactMap { $0 }
+
+        for releaseDir in searchDirs {
+            guard let contents = try? FileManager.default.contentsOfDirectory(
+                at: releaseDir,
+                includingPropertiesForKeys: nil,
+                options: [.skipsHiddenFiles]
+            ) else { continue }
+
+            let libFiles = contents.filter { $0.pathExtension == ext }
+            if let lib = libFiles.first(where: { $0.lastPathComponent.lowercased().contains(pluginName.lowercased().replacingOccurrences(of: "-", with: "")) }) ?? libFiles.first {
+                // Return the library in-place from the build directory.
+                // Do NOT copy it out — the RPATH in the .so references sibling
+                // dependencies (e.g. AROPluginKit) that live in the same build dir.
+                // Copying breaks those references and causes dlopen to crash.
+                debugPrint("[NativePluginHost] Swift package plugin built: \(lib.path)")
+                return lib
+            }
+        }
+
+        debugPrint("[NativePluginHost] Swift package built but no dynamic library found")
+        return nil
     }
 
     /// Compile Rust plugin using cargo
@@ -505,14 +695,16 @@ public final class NativePluginHost: @unchecked Sendable {
         args.append("-o")
         args.append(output.path)
 
-        // Add include paths for SDK headers (check include/ in plugin root and parent)
-        let includeDir = pluginPath.appendingPathComponent("include")
+        // Add include paths: check for include/ directory in plugin root (parent of source path)
+        let pluginRoot = pluginPath.deletingLastPathComponent()
+        let includeDir = pluginRoot.appendingPathComponent("include")
         if FileManager.default.fileExists(atPath: includeDir.path) {
-            args.insert(contentsOf: ["-I", includeDir.path], at: 1)
+            args.append("-I\(includeDir.path)")
         }
-        let parentIncludeDir = pluginPath.deletingLastPathComponent().appendingPathComponent("include")
-        if FileManager.default.fileExists(atPath: parentIncludeDir.path) {
-            args.insert(contentsOf: ["-I", parentIncludeDir.path], at: 1)
+        // Also check for include/ in the source directory itself
+        let localIncludeDir = pluginPath.appendingPathComponent("include")
+        if FileManager.default.fileExists(atPath: localIncludeDir.path) {
+            args.append("-I\(localIncludeDir.path)")
         }
 
         let process = Process()
@@ -595,6 +787,32 @@ public final class NativePluginHost: @unchecked Sendable {
         }
         if let listSymbol = resolveSymbol("aro_object_list") {
             objectListFunc = unsafeBitCast(listSymbol, to: ObjectListFunc.self)
+        }
+
+        // --- Optional: aro_plugin_set_invoke (for plugin-to-runtime invocation) ---
+        if let setInvokeSymbol = resolveSymbol("aro_plugin_set_invoke") {
+            let setInvokeFn = unsafeBitCast(setInvokeSymbol, to: SetInvokeFunc.self)
+            // Pass the invoke callback if one has been registered by the runtime
+            if NativePluginHost.invokeCallback != nil {
+                let callback: InvokeFunc = { featureSetPtr, inputPtr in
+                    guard let invoke = NativePluginHost.invokeCallback else { return nil }
+                    let featureSet = String(cString: featureSetPtr)
+                    let inputJSON = String(cString: inputPtr)
+                    let resultJSON = invoke(featureSet, inputJSON)
+                    return resultJSON.withCString { strdup($0) }
+                }
+                setInvokeFn(callback)
+                debugPrint("[NativePluginHost] Passed invoke callback to \(pluginName)")
+            }
+        }
+
+        // ARO-0073: Call aro_plugin_register (if exported) to trigger plugin's
+        // file-scope initialization before querying aro_plugin_info.
+        // Swift SDK plugins need this because file-scope let is lazy.
+        if let registerSymbol = resolveSymbol("aro_plugin_register") {
+            let registerFn = unsafeBitCast(registerSymbol, to: InitFunc.self)
+            registerFn()
+            debugPrint("[NativePluginHost] Called aro_plugin_register for \(pluginName)")
         }
 
         // Load and parse plugin info JSON
@@ -1067,6 +1285,11 @@ public final class NativePluginHost: @unchecked Sendable {
     /// The callback takes a feature set name and input JSON string, returns result JSON.
     public static func setInvokeCallback(_ callback: @escaping (_ featureSet: String, _ inputJSON: String) -> String) {
         invokeCallback = callback
+    }
+
+    /// Service names declared in aro_plugin_info (ARO-0073)
+    public var declaredServiceNames: [String] {
+        pluginInfo?.services.map { $0.name } ?? []
     }
 
     // MARK: - Helpers

@@ -239,19 +239,13 @@ struct RunCommand: AsyncParsableCommand {
             print()
         }
 
-        // Load plugins from plugins/ directory (local plugins)
-        do {
-            try PluginLoader.shared.loadPlugins(from: appConfig.rootPath)
-        } catch {
-            print("Warning: Failed to load local plugins: \(error)")
-        }
-
-        // Load managed plugins from Plugins/ directory (installed via aro add)
-        // Use UnifiedPluginLoader to handle all plugin types (native, Python, ARO files)
+        // Load all plugins: managed Plugins/ (with plugin.yaml) and legacy plugins/ (bare .swift, SPM).
+        // UnifiedPluginLoader handles both and passes managed names to the legacy loader so
+        // plugins aren't double-loaded (which causes TLS/module-cache crashes on Linux).
         do {
             try UnifiedPluginLoader.shared.loadPlugins(from: appConfig.rootPath)
         } catch {
-            print("Warning: Failed to load managed plugins: \(error)")
+            print("Warning: Failed to load plugins: \(error)")
         }
 
         if verbose {
