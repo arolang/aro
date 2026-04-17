@@ -181,107 +181,91 @@ build:
         </p>
 
         <h3>Swift Plugins</h3>
+        <p>Use the <code>AROPluginKit</code> SDK with the <code>@AROExport</code> macro:</p>
         <pre><code><span class="code-comment">// Sources/CSVParser.swift</span>
-import Foundation
+import AROPluginKit
 
-<span class="code-keyword">@_cdecl</span>(<span class="code-string">"aro_plugin_info"</span>)
-public func pluginInfo() -> UnsafePointer&lt;CChar&gt; {
-    let info = <span class="code-string">"""
-    {"name":"csv-parser","version":"1.0.0","actions":["ParseCSV"]}
-    """</span>
-    return (info as NSString).utf8String!
-}
-
-<span class="code-keyword">@_cdecl</span>(<span class="code-string">"aro_plugin_execute"</span>)
-public func execute(
-    action: UnsafePointer&lt;CChar&gt;,
-    input: UnsafePointer&lt;CChar&gt;
-) -> UnsafeMutablePointer&lt;CChar&gt; {
-    let actionName = String(cString: action)
-    let inputJson = String(cString: input)
-
-    <span class="code-comment">// Parse input, execute action, return result</span>
-    let result = processCSV(inputJson)
-    return strdup(result)
-}
-
-<span class="code-keyword">@_cdecl</span>(<span class="code-string">"aro_plugin_free"</span>)
-public func freeResult(ptr: UnsafeMutablePointer&lt;CChar&gt;) {
-    free(ptr)
-}</code></pre>
+<span class="code-keyword">@AROExport</span>
+private let plugin = AROPlugin(name: <span class="code-string">"csv-parser"</span>, version: <span class="code-string">"1.0.0"</span>, handle: <span class="code-string">"CSV"</span>)
+    .action(<span class="code-string">"ParseCSV"</span>, verbs: [<span class="code-string">"parsecsv"</span>], role: <span class="code-string">"own"</span>,
+            prepositions: [<span class="code-string">"from"</span>]) { input in
+        let data = input.string(<span class="code-string">"data"</span>) ?? <span class="code-string">""</span>
+        let rows = parseCSV(data)
+        return .success([<span class="code-string">"rows"</span>: rows, <span class="code-string">"count"</span>: rows.count])
+    }</code></pre>
 
         <h3>Rust Plugins</h3>
+        <p>Use <code>#[action]</code> and <code>aro_export!</code> macros from the SDK:</p>
         <pre><code><span class="code-comment">// src/lib.rs</span>
-use std::ffi::{CStr, CString};
-use std::os::raw::c_char;
+use aro_plugin_sdk::prelude::*;
 
-<span class="code-keyword">#[no_mangle]</span>
-pub extern <span class="code-string">"C"</span> fn aro_plugin_info() -> *const c_char {
-    let info = r#"{"name":"csv-parser-rs","version":"1.0.0","actions":["ParseCSV"]}"#;
-    CString::new(info).unwrap().into_raw()
+<span class="code-keyword">#[action</span>(name = <span class="code-string">"ParseCSV"</span>, verbs = [<span class="code-string">"parsecsv"</span>], role = <span class="code-string">"own"</span>,
+         prepositions = [<span class="code-string">"from"</span>], description = <span class="code-string">"Parse CSV data"</span>)<span class="code-keyword">]</span>
+fn parse_csv(input: &amp;Input) -> PluginResult&lt;Output&gt; {
+    let data = input.string(<span class="code-string">"data"</span>)
+        .ok_or_else(|| PluginError::missing(<span class="code-string">"data"</span>))?;
+    let rows = parse(data);
+    Ok(Output::new().set(<span class="code-string">"rows"</span>, json!(rows)))
 }
 
-<span class="code-keyword">#[no_mangle]</span>
-pub extern <span class="code-string">"C"</span> fn aro_plugin_execute(
-    action: *const c_char,
-    input: *const c_char
-) -> *mut c_char {
-    let action = unsafe { CStr::from_ptr(action).to_str().unwrap() };
-    let input = unsafe { CStr::from_ptr(input).to_str().unwrap() };
-
-    <span class="code-comment">// Process and return result</span>
-    let result = process_csv(input);
-    CString::new(result).unwrap().into_raw()
-}
-
-<span class="code-keyword">#[no_mangle]</span>
-pub extern <span class="code-string">"C"</span> fn aro_plugin_free(ptr: *mut c_char) {
-    unsafe { drop(CString::from_raw(ptr)); }
+<span class="code-keyword">aro_export!</span> {
+    name: <span class="code-string">"csv-parser-rs"</span>,
+    version: <span class="code-string">"1.0.0"</span>,
+    handle: <span class="code-string">"CSV"</span>,
+    actions: [parse_csv],
+    qualifiers: [],
 }</code></pre>
 
         <h3>Python Plugins</h3>
-        <pre><code><span class="code-comment"># src/csv_tools.py</span>
-import json
-import csv
-from io import StringIO
+        <p>Use <code>@plugin</code> and <code>@action</code> decorators:</p>
+        <pre><code><span class="code-comment"># src/plugin.py</span>
+from aro_plugin_sdk import plugin, action, export_abi, run, AROInput
 
-def aro_plugin_info():
-    return {
-        <span class="code-string">"name"</span>: <span class="code-string">"csv-tools-py"</span>,
-        <span class="code-string">"version"</span>: <span class="code-string">"1.0.0"</span>,
-        <span class="code-string">"language"</span>: <span class="code-string">"python"</span>,
-        <span class="code-string">"actions"</span>: [<span class="code-string">"ParseCSV"</span>, <span class="code-string">"AnalyzeCSV"</span>]
-    }
+<span class="code-keyword">@plugin</span>(name=<span class="code-string">"csv-tools-py"</span>, version=<span class="code-string">"1.0.0"</span>, handle=<span class="code-string">"CSV"</span>)
+class CSVPlugin:
+    pass
 
-def aro_action_parse_csv(input_json):
-    params = json.loads(input_json)
-    content = params[<span class="code-string">"content"</span>]
+<span class="code-keyword">@action</span>(name=<span class="code-string">"parse-csv"</span>, verbs=[<span class="code-string">"parsecsv"</span>], role=<span class="code-string">"own"</span>,
+        prepositions=[<span class="code-string">"from"</span>], description=<span class="code-string">"Parse CSV data"</span>)
+def handle_parse_csv(input: AROInput):
+    content = input.string(<span class="code-string">"data"</span>)
+    rows = parse_csv(content)
+    return {<span class="code-string">"rows"</span>: rows, <span class="code-string">"count"</span>: len(rows)}
 
-    reader = csv.DictReader(StringIO(content))
-    rows = list(reader)
+export_abi(globals())
 
-    return json.dumps({<span class="code-string">"rows"</span>: rows})
+if __name__ == <span class="code-string">"__main__"</span>:
+    run()</code></pre>
 
-def aro_action_analyze_csv(input_json):
-    params = json.loads(input_json)
-    <span class="code-comment"># Use pandas for analysis</span>
-    import pandas as pd
-    df = pd.read_csv(StringIO(params[<span class="code-string">"content"</span>]))
-    return json.dumps(df.describe().to_dict())</code></pre>
+        <h3>C Plugins</h3>
+        <p>Use <code>ARO_PLUGIN()</code> and <code>ARO_ACTION()</code> macros from the single-header SDK:</p>
+        <pre><code><span class="code-comment">/* src/csv_plugin.c */</span>
+#define ARO_PLUGIN_SDK_IMPLEMENTATION
+#include <span class="code-string">"aro_plugin_sdk.h"</span>
 
-        <h2>Plugin FFI Protocol</h2>
+<span class="code-keyword">ARO_PLUGIN</span>(<span class="code-string">"csv-parser-c"</span>, <span class="code-string">"1.0.0"</span>)
+<span class="code-keyword">ARO_HANDLE</span>(<span class="code-string">"CSV"</span>)
+
+<span class="code-keyword">ARO_ACTION</span>(<span class="code-string">"ParseCSV"</span>, <span class="code-string">"own"</span>, <span class="code-string">"from"</span>) {
+    const char* data = aro_input_string(ctx, <span class="code-string">"data"</span>);
+    <span class="code-comment">/* parse CSV and populate output */</span>
+    return aro_ok(ctx);
+}</code></pre>
+
+        <h2>Plugin SDK Registration</h2>
         <p>
-            All native plugins must implement three C-compatible functions:
+            Each language has an idiomatic SDK that generates the required C ABI exports automatically:
         </p>
 
         <table>
             <thead>
-                <tr><th>Function</th><th>Purpose</th></tr>
+                <tr><th>Language</th><th>Registration</th><th>SDK</th></tr>
             </thead>
             <tbody>
-                <tr><td><code>aro_plugin_info()</code></td><td>Returns JSON with plugin metadata</td></tr>
-                <tr><td><code>aro_plugin_execute(action, input)</code></td><td>Executes an action with JSON input/output</td></tr>
-                <tr><td><code>aro_plugin_free(ptr)</code></td><td>Frees memory allocated by the plugin</td></tr>
+                <tr><td><strong>Swift</strong></td><td><code>@AROExport</code> macro</td><td><code>AROPluginKit</code> (SPM)</td></tr>
+                <tr><td><strong>Rust</strong></td><td><code>#[action]</code> + <code>aro_export!</code></td><td><code>aro-plugin-sdk</code> (crate)</td></tr>
+                <tr><td><strong>C / C++</strong></td><td><code>ARO_PLUGIN()</code> + <code>ARO_ACTION()</code></td><td><code>aro_plugin_sdk.h</code> (header)</td></tr>
+                <tr><td><strong>Python</strong></td><td><code>@plugin</code> + <code>@action</code> + <code>export_abi()</code></td><td><code>aro-plugin-sdk</code> (pip)</td></tr>
             </tbody>
         </table>
 
